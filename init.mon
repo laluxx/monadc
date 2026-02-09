@@ -1,0 +1,42 @@
+;; (define i 20)                   ; Inferred Int
+;; (define f 40.0)                 ; Inferred Float
+;; (define c 'c')                  ; Inferred Char
+;; (define s "string")             ; Inferred String
+;; (define b 0xFF)                 ; Inferred Hex (255)
+;; (define h 0b1010)               ; Inferred Bin (10)
+;; (define o 0o755)                ; Inferred Oct (493)
+;; (define [i :: Int] 20)          ; Typed Int
+;; (define [f :: Float] 40.0)      ; Typed Float
+;; (define [c :: Char] 'c')        ; Typed Char
+;; (define [s :: String] "string") ; Typed String
+;; (define [b :: Hex] 0xFF)        ; Typed Hex (255)
+;; (define [h :: Bin] 0b1010)      ; Typed Bin (10)
+;; (define [o :: Oct] 0o755)       ; Typed Oct (493)
+
+;; ;; Write it in a generic way
+;; (define (double x)
+;;   (* x x))
+
+;; ;; Based on use
+;; (double 3)
+;; (double 2.5)
+
+;; ;; [[https://en.wikipedia.org/wiki/Parametric_polymorphism][Parametric polymorphism]]
+;; ;;  It will under the hood generate 2 functions,
+;; ;;  because i've use it on an int and float
+;; ;;  If i were to use it on other types too,
+;; ;;  it would generate more.
+
+;; (define (double [x :: Int] -> Int)
+;;   (* x x))
+
+;; (define (double [x :: Float] -> Float)
+;;   (* x x))
+
+
+
+(show (+ 3.0 0.5))
+(show (- 1 3))
+(show "Hello, World")
+(show '(+ 2 2))
+(show '(+ 2 2))
