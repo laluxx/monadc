@@ -1,6 +1,5 @@
 #ifndef READER_H
 #define READER_H
-
 #include <stddef.h>
 #include <stdbool.h>
 
@@ -10,6 +9,7 @@ typedef enum {
     AST_NUMBER,
     AST_SYMBOL,
     AST_STRING,
+    AST_CHAR,
     AST_LIST,
 } ASTType;
 
@@ -19,17 +19,20 @@ typedef struct AST {
         double number;
         char *symbol;
         char *string;
+        char character;
         struct {
             struct AST **items;
             size_t count;
             size_t capacity;
         } list;
     };
+    char *literal_str; // stores original literal for numbers (e.g. "0xFF")
 } AST;
 
-AST *ast_new_number(double value);
+AST *ast_new_number(double value, const char *literal);
 AST *ast_new_symbol(const char *name);
 AST *ast_new_string(const char *value);
+AST *ast_new_char(char value);
 AST *ast_new_list(void);
 void ast_list_append(AST *list, AST *item);
 void ast_free(AST *ast);
@@ -46,6 +49,7 @@ typedef enum {
     TOK_SYMBOL,
     TOK_NUMBER,
     TOK_STRING,
+    TOK_CHAR,
     TOK_QUOTE,
 } TokenType;
 

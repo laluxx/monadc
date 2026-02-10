@@ -1,19 +1,223 @@
-;; (define i 20)                   ; Inferred Int
-;; (define f 40.0)                 ; Inferred Float
-;; (define c 'c')                  ; Inferred Char
-;; (define s "string")             ; Inferred String
-;; (define b 0xFF)                 ; Inferred Hex (255)
-;; (define h 0b1010)               ; Inferred Bin (10)
-;; (define o 0o755)                ; Inferred Oct (493)
+;;; Variables
+
+(define i 20)                   ; Inferred Int
+(define f 40.0)                 ; Inferred Float
+(define c 'c')                  ; Inferred Char
+(define s "string")             ; Inferred String
+(define h 0xFF)                 ; Inferred Hex (255)
+(define b 0b1010)               ; Inferred Bin (10)
+(define o 0o755)                ; Inferred Oct (493)
 ;; (define [i :: Int] 20)          ; Typed Int
 ;; (define [f :: Float] 40.0)      ; Typed Float
-;; (define [c :: Char] 'c')        ; Typed Char
+;; (define [c :: Char] 'A')        ; Typed Char
 ;; (define [s :: String] "string") ; Typed String
-;; (define [b :: Hex] 0xFF)        ; Typed Hex (255)
-;; (define [h :: Bin] 0b1010)      ; Typed Bin (10)
+;; (define [h :: Hex] 0xFF)        ; Typed Hex (255)
+;; (define [b :: Bin] 0b1010)      ; Typed Bin (10)
 ;; (define [o :: Oct] 0o755)       ; Typed Oct (493)
 
-;; ;; Write it in a generic way
+;; TODO
+;; (show "Value of i is _ f is _ and o is _" i f o)
+
+(show f)
+(show c)
+(show s)
+(show h)
+(show b)
+(show o)
+
+;; (define (main -> Int)
+;;   "Program's entry pont."
+;;   (show "Hello, World"))
+
+(show "Test Showing Int + <T>")
+(show (+ i i))
+(show (+ i f))
+(show (+ i c))
+;; (show (+ i s))
+(show (+ i h))
+(show (+ i b))
+(show (+ i o))
+
+(show "Test Showing Float + <T>")
+(show (+ f i))
+(show (+ f f))
+(show (+ f c))
+;; (show (+ f s))
+(show (+ f h))
+(show (+ f b))
+(show (+ f o))
+
+(show "Testing Showing Char + <T>")
+(show (+ c i))
+(show (+ c f))
+(show (+ c c))
+;; (show (+ c s))
+(show (+ c h))
+(show (+ c b))
+(show (+ c o))
+
+(show "Testing Showing String + <T>")
+;; (show (+ s i))
+;; (show (+ s f))
+;; (show (+ s c))
+;; (show (+ s s))
+;; (show (+ s h))
+;; (show (+ s b))
+;; (show (+ s o))
+
+(show "Testing Showing Hex + <T>")
+(show (+ h i))
+(show (+ h f))
+(show (+ h c))
+;; (show (+ h s))
+(show (+ h h))
+;; (show (+ h b))
+;; (show (+ h o))
+
+(show "Testing Showing Bin + <T>")
+(show (+ b i))
+(show (+ b f))
+(show (+ b c))
+;; (show (+ b s))
+;; (show (+ b h))
+(show (+ b b))
+;; (show (+ b o))
+
+(show "Testing Showing Oct + <T>")
+(show (+ o i))
+(show (+ o f))
+(show (+ o c))
+;; (show (+ o s))
+;; (show (+ o h))
+;; (show (+ o b))
+(show (+ o o))
+
+
+;; (show (+ 3.0 0.5))
+;; (show (- 1 3))
+;; (show "Hello, World")
+;; (show '(+ 2 2))
+;; (show '(+ 2 2))
+
+;;; Casting
+;; Applying types as functions
+;; result in a cast (for builtin types)
+
+
+;; (define (id x) x)
+
+;; (define (fid [f :: Fn] -> Fn)
+;;   f)
+
+
+;; (moogle ([f :: Fn] -> x)); -> [apply :: Fn]
+
+;; ((moogle ([f :: Fn] -> x)) double 3)
+;; (apply double 3)
+
+;; (define (apply [f :: Fn] -> x)
+;;   (f x))
+
+
+;; (Int +); -> 43
+;; (Int apply); -> 550
+
+;; (Fn 20)        ; => (lambda () 20)     (From Int)
+;; (Fn 40.3)      ; => (lambda () 40.3)   (From Float)
+;; (Fn 'A')       ; => (lambda () 'A')    (From Char)
+;; (Fn "hi")      ; => (lambda () "Hi")   (From String)
+;; (Fn 0xFF)      ; => (lambda () 0xFF)   (From Hex)
+;; (Fn 0b1010)    ; => (lambda () 0b1010) (From Bin)
+;; (Fn 0o755)     ; => (lambda () 0o755)  (From Oct)
+;; (Fn +)         ; => +                  (From Fn)
+
+;; (Int 20)        ; => 20       (From Int)
+;; (Int 40.3)      ; => 40       (From Float)
+;; (Int 'A')       ; => 65       (From Char)
+;; (Int "hi")      ; => 209      (From String)
+;; (Int 0xFF)      ; => 255      (From Hex)
+;; (Int 0b1010)    ; => 10       (From Bin)
+;; (Int 0o755)     ; => 493      (From Oct)
+
+;; (Float 20)      ; => 20.0     (From Int)
+;; (Float 40.3)    ; => 40.3     (From Float)
+;; (Float 'A')     ; => 65.0     (From Char)
+;; (Float "hi")    ; => 209.0    (From String)
+;; (Float 0xFF)    ; => 255.0    (From Hex)
+;; (Float 0b1010)  ; => 10.0     (From Bin)
+;; (Float 0o755)   ; => 493.0    (From Oct)
+
+;; (Char 65)       ; => 'A'      (From Int)
+;; (Char 66.3)     ; => 'B'      (From Float)
+;; (Char 'A')      ; => 'A'      (From Char)
+;; (Char "hi")     ; => 'Ñ'      (From String)
+;; (Char 0xFF)     ; => 'ÿ'      (From Hex)
+;; (Char 0b1010)   ; => '\n'     (From Bin)
+;; (Char 0o755)    ; => 'ǭ'      (From Oct)
+
+;; (String 65)     ; => "A"      (From Int)
+;; (String 66.3)   ; => "B"      (From Float)
+;; (String 'A')    ; => "A"      (From Char)
+;; (String "hi")   ; => "hi"     (From String)
+;; (String 0xFF)   ; => "0xFF"   (From Hex)
+;; (String 0b1010) ; => "0b1010" (From Bin)
+;; (String 0o755)  ; => "0o755"  (From Oct)
+
+;; (Hex 65)        ; => 0x41     (From Int)
+;; (Hex 66.3)      ; => 0x42     (From Float)
+;; (Hex 'A')       ; => 0x41     (From Char)
+;; (Hex "hi")      ; => 0xd1     (From String)
+;; (Hex 0xFF)      ; => 0xFF     (From Hex)
+;; (Hex 0b1010)    ; => 0xa      (From Bin)
+;; (Hex 0o755)     ; => 0x1ed    (From Oct)
+
+;; (Bin 65)        ; => 0b1000001   (From Int)
+;; (Bin 66.3)      ; => 0b1000010   (From Float)
+;; (Bin 'A')       ; => 0b1000001   (From Char)
+;; (Bin "hi")      ; => 0b11010001  (From String)
+;; (Bin 0xFF)      ; => 0b11111111  (From Hex)
+;; (Bin 0b1010)    ; => 0b1010      (From Bin)
+;; (Bin 0o755)     ; => 0b111101101 (From Oct)
+
+;; (Oct 65)        ; => 0o101    (From Int)
+;; (Oct 66.3)      ; => 0o50     (From Float)
+;; (Oct 'A')       ; => 0o101    (From Char)
+;; (Oct "hi")      ; => 0o321    (From String)
+;; (Oct 0xFF)      ; => 0o377    (From Hex)
+;; (Oct 0b1010)    ; => 0o12     (From Bin)
+;; (Oct 0o755)     ; => 0o755    (From Oct)
+
+;;; Functions
+
+;; (define x 30
+;;   "doc")
+
+;; (define (double x)
+;;   "doc"
+;;   (* x x))
+
+;; (define double (lambda (x) "doc" (* x x)))
+
+;; Since we use HM type system
+;; we can infer function names based on type.
+;; (define (int->hex [x :: Int] -> Hex)
+;;   (Hex x))
+
+
+;; (define (last coll)
+;;   (match coll
+;;     [] -> (error "Empty collection")
+;;     [x] -> x
+;;     [_|xs] -> (last xs)))
+
+;; (define (last coll -> [a :: Maybe])
+;;   (match coll
+;;     [] -> Nothing
+;;     [x] -> [x :: Just]
+;;     [_|xs] -> (last xs)))
+
+
+;; Write it in a generic way
 ;; (define (double x)
 ;;   (* x x))
 
@@ -33,10 +237,16 @@
 ;; (define (double [x :: Float] -> Float)
 ;;   (* x x))
 
+;;; Layout
 
+;; (layout Point
+;;   [x :: F32]
+;;   [y :: F32])
 
-(show (+ 3.0 0.5))
-(show (- 1 3))
-(show "Hello, World")
-(show '(+ 2 2))
-(show '(+ 2 2))
+;; (define p (Point 33 22)); will be inferred as [p :: Point]
+;; (define [p :: Point] (Point 33 22)); Manually typed
+
+;; ; This is always possible even if it doesn't derive Show
+;; (show Point); => (layout Point
+;; ;                  [x :: F32]
+;; ;                  [y :: F32])

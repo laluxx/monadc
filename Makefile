@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c99 -g $(shell llvm-config --cflags)
-LDFLAGS = $(shell llvm-config --ldflags --libs core)
+LDFLAGS = -lm $(shell llvm-config --ldflags --libs core)
 TARGET = mc
 
 SRCS = $(wildcard *.c)
