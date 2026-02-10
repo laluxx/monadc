@@ -1,4 +1,4 @@
-#include "symtable.h"
+#include "env.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -14,21 +14,21 @@ static unsigned int hash(const char *str) {
     return hash;
 }
 
-SymbolTable *symtable_create(void) {
-    SymbolTable *table = malloc(sizeof(SymbolTable));
+Env *env_create(void) {
+    Env *table = malloc(sizeof(Env));
     table->size = INITIAL_SIZE;
     table->count = 0;
-    table->buckets = calloc(table->size, sizeof(SymbolEntry*));
+    table->buckets = calloc(table->size, sizeof(EnvEntry*));
     return table;
 }
 
-void symtable_free(SymbolTable *table) {
+void env_free(Env *table) {
     if (!table) return;
 
     for (size_t i = 0; i < table->size; i++) {
-        SymbolEntry *entry = table->buckets[i];
+        EnvEntry *entry = table->buckets[i];
         while (entry) {
-            SymbolEntry *next = entry->next;
+            EnvEntry *next = entry->next;
             free(entry->name);
             type_free(entry->type);
             free(entry);
@@ -39,11 +39,11 @@ void symtable_free(SymbolTable *table) {
     free(table);
 }
 
-void symtable_insert(SymbolTable *table, const char *name, Type *type, LLVMValueRef value) {
+void env_insert(Env *table, const char *name, Type *type, LLVMValueRef value) {
     unsigned int index = hash(name) % table->size;
 
     // Check if already exists and update
-    SymbolEntry *entry = table->buckets[index];
+    EnvEntry *entry = table->buckets[index];
     while (entry) {
         if (strcmp(entry->name, name) == 0) {
             // Update existing entry
@@ -56,7 +56,7 @@ void symtable_insert(SymbolTable *table, const char *name, Type *type, LLVMValue
     }
 
     // Create new entry
-    SymbolEntry *new_entry = malloc(sizeof(SymbolEntry));
+    EnvEntry *new_entry = malloc(sizeof(EnvEntry));
     new_entry->name = strdup(name);
     new_entry->type = type;
     new_entry->value = value;
@@ -66,9 +66,9 @@ void symtable_insert(SymbolTable *table, const char *name, Type *type, LLVMValue
     table->count++;
 }
 
-SymbolEntry *symtable_lookup(SymbolTable *table, const char *name) {
+EnvEntry *env_lookup(Env *table, const char *name) {
     unsigned int index = hash(name) % table->size;
-    SymbolEntry *entry = table->buckets[index];
+    EnvEntry *entry = table->buckets[index];
 
     while (entry) {
         if (strcmp(entry->name, name) == 0) {
@@ -79,10 +79,10 @@ SymbolEntry *symtable_lookup(SymbolTable *table, const char *name) {
     return NULL;
 }
 
-void symtable_print(SymbolTable *table) {
-    printf("Symbol Table (%zu entries):\n", table->count);
+void env_print(Env *table) {
+    printf("Env (%zu entries):\n", table->count);
     for (size_t i = 0; i < table->size; i++) {
-        SymbolEntry *entry = table->buckets[i];
+        EnvEntry *entry = table->buckets[i];
         while (entry) {
             printf("  %s :: %s\n", entry->name, type_to_string(entry->type));
             entry = entry->next;

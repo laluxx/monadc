@@ -6,7 +6,7 @@
 #include "reader.h"
 #include "cli.h"
 #include "types.h"
-#include "symtable.h"
+#include "env.h"
 
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
@@ -125,7 +125,7 @@ typedef struct {
     LLVMModuleRef module;
     LLVMBuilderRef builder;
     LLVMContextRef context;
-    SymbolTable *symtable;
+    Env *env;
     // Created only when first needed
     LLVMValueRef fmt_str;   // "%s\n"
     LLVMValueRef fmt_char;  // "%c\n"
@@ -138,7 +138,7 @@ void codegen_init(CodegenContext *ctx, const char *module_name) {
     ctx->context = LLVMContextCreate();
     ctx->module = LLVMModuleCreateWithNameInContext(module_name, ctx->context);
     ctx->builder = LLVMCreateBuilderInContext(ctx->context);
-    ctx->symtable = symtable_create();
+    ctx->env = env_create();
     // Initialize format strings to NULL - will be created lazily
     ctx->fmt_str  = NULL;
     ctx->fmt_char  = NULL;
@@ -178,7 +178,7 @@ void codegen_dispose(CodegenContext *ctx) {
     LLVMDisposeBuilder(ctx->builder);
     LLVMDisposeModule(ctx->module);
     LLVMContextDispose(ctx->context);
-    symtable_free(ctx->symtable);
+    env_free(ctx->env);
 }
 
 /// Runtime Functions Declaration
@@ -338,7 +338,7 @@ LLVMValueRef codegen_expr_loc(CodegenContext *ctx, ASTWithLoc *ast_loc) {
 
     case AST_SYMBOL: {
         // Look up symbol in symbol table
-        SymbolEntry *entry = symtable_lookup(ctx->symtable, ast->symbol);
+        EnvEntry *entry = env_lookup(ctx->env, ast->symbol);
         if (!entry) {
             compiler_error(line, column, "unbound variable: %s", ast->symbol);
         }
@@ -448,7 +448,7 @@ LLVMValueRef codegen_expr_loc(CodegenContext *ctx, ASTWithLoc *ast_loc) {
                 LLVMBuildStore(ctx->builder, stored_value, var);
 
                 // Insert into symbol table - store the alloca pointer, not the loaded value
-                symtable_insert(ctx->symtable, var_name, final_type, var);
+                env_insert(ctx->env, var_name, final_type, var);
 
                 printf("Defined %s :: %s\n", var_name, type_to_string(final_type));
 
@@ -501,8 +501,8 @@ LLVMValueRef codegen_expr_loc(CodegenContext *ctx, ASTWithLoc *ast_loc) {
                 }
                 // Handle symbols (variables)
                 else if (arg->type == AST_SYMBOL) {
-                    SymbolEntry *entry =
-                        symtable_lookup(ctx->symtable, arg->symbol);
+                    EnvEntry *entry =
+                        env_lookup(ctx->env, arg->symbol);
                     if (!entry) {
                         compiler_error(line, column, "unbound variable: %s",
                                        arg->symbol);
@@ -1063,7 +1063,7 @@ void compile(CompilerFlags *flags) {
     }
 
     printf("\nSymbol Table:\n");
-    symtable_print(ctx.symtable);
+    env_print(ctx.env);
 
     free(base_name);
     for (size_t i = 0; i < exprs.count; i++) {
