@@ -1,0 +1,32 @@
+#+title: TODO.org
+
+* Env [1/2]
+- [ ] A way to dump an enviroment to a loadable file.env 
+- [X] store the minimum and maximum arity of functions
+
+TODO The REPL is very buggy:
+
+#+begin_src txt
+Monad REPL v0.1
+Type expressions to evaluate. Use Ctrl-D to exit.
+
+monad> x
+Error: unbound variable: x
+monad> (+ 3 3)
+6
+monad> +
+Error: unbound variable: +
+monad> (+)
+Error: '+' requires at least 1 argument(s), got 0
+monad> (+ 1)
+Error: failed to get function address for __repl_expr_1
+monad> (define x 3)
+x :: Int
+Error: failed to get function address for __repl_expr_1
+monad> x
+Error: failed to get function address for __repl_expr_1
+monad> 
+monad> (+ 3 3)
+Error: failed to get function address for __repl_expr_1
+monad> 
+#+end_src

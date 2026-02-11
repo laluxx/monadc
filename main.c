@@ -2,11 +2,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-#include <stdarg.h>
 #include "reader.h"
 #include "cli.h"
 #include "types.h"
 #include "env.h"
+#include "repl.h"
 
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
@@ -36,89 +36,6 @@ static char *read_file(const char *path) {
     return source;
 }
 
-/// Error reporting
-
-static const char *current_filename = NULL;
-static const char *current_source = NULL;
-
-void compiler_error_range(int line, int column, int end_column, const char *fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-
-    fprintf(stderr, "%s:%d:%d: error: ", current_filename, line, column);
-    vfprintf(stderr, fmt, args);
-    fprintf(stderr, "\n");
-
-    if (current_source) {
-        const char *line_start = current_source;
-        int current_line = 1;
-
-        while (current_line < line && *line_start) {
-            if (*line_start == '\n') current_line++;
-            line_start++;
-        }
-
-        const char *line_end = line_start;
-        while (*line_end && *line_end != '\n') line_end++;
-
-        fprintf(stderr, "%5d | %.*s\n", line, (int)(line_end - line_start), line_start);
-
-        fprintf(stderr, "      | ");
-        for (int i = 1; i < column; i++) {
-            fprintf(stderr, " ");
-        }
-
-        if (end_column > column) {
-            for (int i = column; i < end_column; i++) {
-                if (i == column) {
-                    fprintf(stderr, "^");
-                } else {
-                    fprintf(stderr, "~");
-                }
-            }
-        } else {
-            fprintf(stderr, "^");
-        }
-        fprintf(stderr, "\n");
-    }
-
-    va_end(args);
-    exit(1);
-}
-
-void compiler_error(int line, int column, const char *fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-
-    fprintf(stderr, "%s:%d:%d: error: ", current_filename, line, column);
-    vfprintf(stderr, fmt, args);
-    fprintf(stderr, "\n");
-
-    if (current_source) {
-        const char *line_start = current_source;
-        int current_line = 1;
-
-        while (current_line < line && *line_start) {
-            if (*line_start == '\n') current_line++;
-            line_start++;
-        }
-
-        const char *line_end = line_start;
-        while (*line_end && *line_end != '\n') line_end++;
-
-        fprintf(stderr, "%5d | %.*s\n", line, (int)(line_end - line_start), line_start);
-
-        fprintf(stderr, "      | ");
-        for (int i = 1; i < column; i++) {
-            fprintf(stderr, " ");
-        }
-        fprintf(stderr, "^\n");
-    }
-
-    va_end(args);
-    exit(1);
-}
-
 /// Codegen Context
 
 typedef struct {
@@ -131,8 +48,10 @@ typedef struct {
     LLVMValueRef fmt_char;  // "%c\n"
     LLVMValueRef fmt_int;   // "%ld\n"
     LLVMValueRef fmt_float; // "%g\n"
+    LLVMValueRef fmt_hex;   // "0x%lX\n"
+    LLVMValueRef fmt_bin;   // handled specially
+    LLVMValueRef fmt_oct;   // "0o%lo\n"
 } CodegenContext;
-
 
 void codegen_init(CodegenContext *ctx, const char *module_name) {
     ctx->context = LLVMContextCreate();
@@ -140,10 +59,13 @@ void codegen_init(CodegenContext *ctx, const char *module_name) {
     ctx->builder = LLVMCreateBuilderInContext(ctx->context);
     ctx->env = env_create();
     // Initialize format strings to NULL - will be created lazily
-    ctx->fmt_str  = NULL;
+    ctx->fmt_str   = NULL;
     ctx->fmt_char  = NULL;
     ctx->fmt_int   = NULL;
     ctx->fmt_float = NULL;
+    ctx->fmt_hex   = NULL;
+    ctx->fmt_bin   = NULL;
+    ctx->fmt_oct   = NULL;
 }
 
 LLVMValueRef get_fmt_str(CodegenContext *ctx) {
@@ -174,6 +96,20 @@ LLVMValueRef get_fmt_float(CodegenContext *ctx) {
     return ctx->fmt_float;
 }
 
+LLVMValueRef get_fmt_hex(CodegenContext *ctx) {
+    if (!ctx->fmt_hex) {
+        ctx->fmt_hex = LLVMBuildGlobalStringPtr(ctx->builder, "0x%lX\n", "fmt_hex");
+    }
+    return ctx->fmt_hex;
+}
+
+LLVMValueRef get_fmt_oct(CodegenContext *ctx) {
+    if (!ctx->fmt_oct) {
+        ctx->fmt_oct = LLVMBuildGlobalStringPtr(ctx->builder, "0o%lo\n", "fmt_oct");
+    }
+    return ctx->fmt_oct;
+}
+
 void codegen_dispose(CodegenContext *ctx) {
     LLVMDisposeBuilder(ctx->builder);
     LLVMDisposeModule(ctx->module);
@@ -198,6 +134,137 @@ LLVMValueRef get_or_declare_printf(CodegenContext *ctx) {
     );
     printf_fn = LLVMAddFunction(ctx->module, "printf", printf_type);
     return printf_fn;
+}
+
+
+// Declares (or retrieves) a hand-rolled print_binary(long) helper
+// emitted once into the module as an LLVM function.
+LLVMValueRef get_or_declare_print_binary(CodegenContext *ctx) {
+    LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, "__print_binary");
+    if (fn) return fn;
+
+    // long __print_binary(long n)
+    LLVMTypeRef param = LLVMInt64TypeInContext(ctx->context);
+    LLVMTypeRef fn_type = LLVMFunctionType(
+        LLVMInt64TypeInContext(ctx->context), &param, 1, 0);
+    fn = LLVMAddFunction(ctx->module, "__print_binary", fn_type);
+
+    LLVMBasicBlockRef saved = LLVMGetInsertBlock(ctx->builder);
+
+    LLVMBasicBlockRef entry = LLVMAppendBasicBlockInContext(ctx->context, fn, "entry");
+    LLVMPositionBuilderAtEnd(ctx->builder, entry);
+
+    LLVMValueRef n = LLVMGetParam(fn, 0);
+    LLVMValueRef printf_fn = get_or_declare_printf(ctx);
+
+    // print "0b" prefix
+    LLVMValueRef prefix = LLVMBuildGlobalStringPtr(ctx->builder, "0b", "bin_prefix");
+    LLVMValueRef prefix_args[] = { prefix };
+    LLVMBuildCall2(ctx->builder,
+        LLVMGlobalGetValueType(printf_fn), printf_fn, prefix_args, 1, "");
+
+    // We emit a loop: find highest set bit, then print each bit MSB-first.
+    // bit_index counts from 63 down to 0, we skip leading zeros.
+    // For simplicity, use a recursive-style unrolled approach via a small
+    // alloca'd index variable.
+
+    LLVMValueRef idx_ptr = LLVMBuildAlloca(ctx->builder,
+        LLVMInt32TypeInContext(ctx->context), "idx");
+    LLVMBuildStore(ctx->builder,
+        LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 63, 0), idx_ptr);
+
+    LLVMValueRef started_ptr = LLVMBuildAlloca(ctx->builder,
+        LLVMInt32TypeInContext(ctx->context), "started");
+    LLVMBuildStore(ctx->builder,
+        LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0), started_ptr);
+
+    LLVMBasicBlockRef loop_cond = LLVMAppendBasicBlockInContext(ctx->context, fn, "loop_cond");
+    LLVMBasicBlockRef loop_body = LLVMAppendBasicBlockInContext(ctx->context, fn, "loop_body");
+    LLVMBasicBlockRef loop_end  = LLVMAppendBasicBlockInContext(ctx->context, fn, "loop_end");
+
+    LLVMBuildBr(ctx->builder, loop_cond);
+
+    // loop_cond: idx >= 0
+    LLVMPositionBuilderAtEnd(ctx->builder, loop_cond);
+    LLVMValueRef idx_val = LLVMBuildLoad2(ctx->builder,
+        LLVMInt32TypeInContext(ctx->context), idx_ptr, "idx_val");
+    LLVMValueRef cond = LLVMBuildICmp(ctx->builder, LLVMIntSGE, idx_val,
+        LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0), "cond");
+    LLVMBuildCondBr(ctx->builder, cond, loop_body, loop_end);
+
+    // loop_body
+    LLVMPositionBuilderAtEnd(ctx->builder, loop_body);
+    LLVMValueRef idx_val2 = LLVMBuildLoad2(ctx->builder,
+        LLVMInt32TypeInContext(ctx->context), idx_ptr, "idx_val2");
+    LLVMValueRef idx64 = LLVMBuildSExt(ctx->builder, idx_val2,
+        LLVMInt64TypeInContext(ctx->context), "idx64");
+    LLVMValueRef bit = LLVMBuildLShr(ctx->builder, n, idx64, "bit");
+    LLVMValueRef bit1 = LLVMBuildAnd(ctx->builder, bit,
+        LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 1, 0), "bit1");
+
+    LLVMValueRef started_val = LLVMBuildLoad2(ctx->builder,
+        LLVMInt32TypeInContext(ctx->context), started_ptr, "started_val");
+
+    // print if bit==1 or already started (to avoid leading zeros)
+    // is_one = (bit1 == 1)
+    LLVMValueRef is_one = LLVMBuildICmp(ctx->builder, LLVMIntEQ, bit1,
+        LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 1, 0), "is_one");
+    // is_started = (started_val != 0)
+    LLVMValueRef is_started = LLVMBuildICmp(ctx->builder, LLVMIntNE, started_val,
+        LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0), "is_started");
+    LLVMValueRef should_print = LLVMBuildOr(ctx->builder, is_one, is_started, "should_print");
+
+    LLVMBasicBlockRef print_bb  = LLVMAppendBasicBlockInContext(ctx->context, fn, "print_bit");
+    LLVMBasicBlockRef skip_bb   = LLVMAppendBasicBlockInContext(ctx->context, fn, "skip_bit");
+    LLVMBuildCondBr(ctx->builder, should_print, print_bb, skip_bb);
+
+    LLVMPositionBuilderAtEnd(ctx->builder, print_bb);
+    // mark started
+    LLVMBuildStore(ctx->builder,
+        LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 1, 0), started_ptr);
+    // print the bit character
+    LLVMValueRef fmt_ld = LLVMBuildGlobalStringPtr(ctx->builder, "%ld", "fmt_ld");
+    LLVMValueRef print_args[] = { fmt_ld, bit1 };
+    LLVMBuildCall2(ctx->builder,
+        LLVMGlobalGetValueType(printf_fn), printf_fn, print_args, 2, "");
+    LLVMBuildBr(ctx->builder, skip_bb);
+
+    LLVMPositionBuilderAtEnd(ctx->builder, skip_bb);
+    // decrement idx
+    LLVMValueRef idx_val3 = LLVMBuildLoad2(ctx->builder,
+        LLVMInt32TypeInContext(ctx->context), idx_ptr, "idx_val3");
+    LLVMValueRef new_idx = LLVMBuildSub(ctx->builder, idx_val3,
+        LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 1, 0), "new_idx");
+    LLVMBuildStore(ctx->builder, new_idx, idx_ptr);
+    LLVMBuildBr(ctx->builder, loop_cond);
+
+    // loop_end: if never started, print "0", then print newline
+    LLVMPositionBuilderAtEnd(ctx->builder, loop_end);
+    LLVMValueRef started_final = LLVMBuildLoad2(ctx->builder,
+        LLVMInt32TypeInContext(ctx->context), started_ptr, "started_final");
+    LLVMValueRef never_started = LLVMBuildICmp(ctx->builder, LLVMIntEQ, started_final,
+        LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0), "never_started");
+
+    LLVMBasicBlockRef zero_bb   = LLVMAppendBasicBlockInContext(ctx->context, fn, "print_zero");
+    LLVMBasicBlockRef newline_bb = LLVMAppendBasicBlockInContext(ctx->context, fn, "print_newline");
+    LLVMBuildCondBr(ctx->builder, never_started, zero_bb, newline_bb);
+
+    LLVMPositionBuilderAtEnd(ctx->builder, zero_bb);
+    LLVMValueRef zero_str = LLVMBuildGlobalStringPtr(ctx->builder, "0", "zero_str");
+    LLVMValueRef zero_args[] = { zero_str };
+    LLVMBuildCall2(ctx->builder,
+        LLVMGlobalGetValueType(printf_fn), printf_fn, zero_args, 1, "");
+    LLVMBuildBr(ctx->builder, newline_bb);
+
+    LLVMPositionBuilderAtEnd(ctx->builder, newline_bb);
+    LLVMValueRef nl = LLVMBuildGlobalStringPtr(ctx->builder, "\n", "nl");
+    LLVMValueRef nl_args[] = { nl };
+    LLVMBuildCall2(ctx->builder,
+        LLVMGlobalGetValueType(printf_fn), printf_fn, nl_args, 1, "");
+    LLVMBuildRet(ctx->builder, LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0));
+
+    if (saved) LLVMPositionBuilderAtEnd(ctx->builder, saved);
+    return fn;
 }
 
 /// Type to LLVM Type conversion
@@ -239,19 +306,15 @@ bool type_is_float(Type *t) {
     return t->kind == TYPE_FLOAT;
 }
 
-/// AST with location and type tracking
+/// Codegen with type tracking
 
 typedef struct {
-    AST *ast;
-    int line;
-    int column;
-    int end_column;
-    Type *type;  // Type of this expression
-    char *literal_str;  // Original literal string for type inference
-} ASTWithLoc;
+    LLVMValueRef value;
+    Type *type;
+} CodegenResult;
 
 // Forward declaration
-LLVMValueRef codegen_expr_loc(CodegenContext *ctx, ASTWithLoc *ast_loc);
+CodegenResult codegen_expr(CodegenContext *ctx, AST *ast);
 
 /// Helper to print an AST at runtime (for quoted expressions)
 
@@ -308,54 +371,79 @@ void codegen_print_ast(CodegenContext *ctx, AST *ast) {
         LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, rparen_args, 1, "");
         break;
     }
+
+    default:
+        break;
     }
 }
 
 /// Codegen
 
-LLVMValueRef codegen_expr_loc(CodegenContext *ctx, ASTWithLoc *ast_loc) {
-    AST *ast = ast_loc->ast;
-    int line = ast_loc->line;
-    int column = ast_loc->column;
+CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
+    CodegenResult result = {NULL, NULL};
 
     switch (ast->type) {
     case AST_NUMBER: {
-        Type *num_type = infer_literal_type(ast->number, ast_loc->literal_str);
-        ast_loc->type = num_type;
+        // DEBUG
+        fprintf(stderr, ">>> CODEGEN NUMBER: literal_str='%s', number=%g\n",
+                ast->literal_str ? ast->literal_str : "NULL", ast->number);
+
+        Type *num_type = infer_literal_type(ast->number, ast->literal_str);
+
+        // DEBUG
+        fprintf(stderr, ">>> INFERRED TYPE: %s\n", type_to_string(num_type));
+
+        result.type = num_type;
 
         if (type_is_float(num_type)) {
-            return LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), ast->number);
+            result.value = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), ast->number);
         } else {
-            // Integer types
-            return LLVMConstInt(LLVMInt64TypeInContext(ctx->context), (long long)ast->number, 0);
+            result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), (long long)ast->number, 0);
         }
+        return result;
     }
+    /* case AST_NUMBER: { */
+    /*     Type *num_type = infer_literal_type(ast->number, ast->literal_str); */
+    /*     result.type = num_type; */
+
+    /*     if (type_is_float(num_type)) { */
+    /*         result.value = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), ast->number); */
+    /*     } else { */
+    /*         result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), (long long)ast->number, 0); */
+    /*     } */
+    /*     return result; */
+    /* } */
 
     case AST_CHAR: {
-        ast_loc->type = type_char();
-        return LLVMConstInt(LLVMInt8TypeInContext(ctx->context), ast->character, 0);
+        result.type = type_char();
+        result.value = LLVMConstInt(LLVMInt8TypeInContext(ctx->context), ast->character, 0);
+        return result;
     }
 
     case AST_SYMBOL: {
-        // Look up symbol in symbol table
         EnvEntry *entry = env_lookup(ctx->env, ast->symbol);
         if (!entry) {
-            compiler_error(line, column, "unbound variable: %s", ast->symbol);
+            fprintf(stderr, "%s:%d:%d: error: unbound variable: %s\n",
+                    parser_get_filename(), ast->line, ast->column, ast->symbol);
+            exit(1);
         }
-        ast_loc->type = entry->type;
-        // Load the value from the alloca
-        return LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, entry->type),
-                             entry->value, ast->symbol);
+        result.type = entry->type;
+        result.value = LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, entry->type),
+                                      entry->value, ast->symbol);
+        return result;
     }
 
     case AST_STRING: {
-        ast_loc->type = type_string();
-        return LLVMBuildGlobalStringPtr(ctx->builder, ast->string, "str");
+        result.type = type_string();
+        result.value = LLVMBuildGlobalStringPtr(ctx->builder, ast->string, "str");
+        return result;
     }
 
     case AST_LIST: {
         if (ast->list.count == 0) {
-            compiler_error(line, column, "empty list not supported");
+            fprintf(stderr, "%s:%d:%d: error: empty list not supported\n",
+                    parser_get_filename(), ast->line, ast->column);
+            exit(1);
         }
 
         AST *head = ast->list.items[0];
@@ -364,8 +452,9 @@ LLVMValueRef codegen_expr_loc(CodegenContext *ctx, ASTWithLoc *ast_loc) {
             // Handle 'define' special form
             if (strcmp(head->symbol, "define") == 0) {
                 if (ast->list.count < 3) {
-                    compiler_error_range(line, column + 1, ast_loc->end_column,
-                                       "'define' requires at least 2 arguments");
+                    fprintf(stderr, "%s:%d:%d: error: 'define' requires at least 2 arguments\n",
+                            parser_get_filename(), ast->line, ast->column);
+                    exit(1);
                 }
 
                 AST *name_expr = ast->list.items[1];
@@ -382,31 +471,170 @@ LLVMValueRef codegen_expr_loc(CodegenContext *ctx, ASTWithLoc *ast_loc) {
                             var_name = name_expr->list.items[0]->symbol;
                         }
                     } else {
-                        compiler_error(line, column, "'define' name must be symbol or type annotation");
+                        fprintf(stderr, "%s:%d:%d: error: 'define' name must be symbol or type annotation\n",
+                                parser_get_filename(), ast->line, ast->column);
+                        exit(1);
                     }
                 } else if (name_expr->type == AST_SYMBOL) {
                     var_name = name_expr->symbol;
                 } else {
-                    compiler_error(line, column, "'define' name must be symbol or type annotation");
+                    fprintf(stderr, "%s:%d:%d: error: 'define' name must be symbol or type annotation\n",
+                            parser_get_filename(), ast->line, ast->column);
+                    exit(1);
                 }
 
                 if (!var_name) {
-                    compiler_error(line, column, "'define' invalid name format");
+                    fprintf(stderr, "%s:%d:%d: error: 'define' invalid name format\n",
+                            parser_get_filename(), ast->line, ast->column);
+                    exit(1);
                 }
 
-                // Create ASTWithLoc for value with literal string preservation
-                ASTWithLoc value_loc = {value_expr, line, column, ast_loc->end_column, NULL, NULL};
+                // Check if value is a lambda - codegen it as a function
+                if (value_expr->type == AST_LAMBDA) {
+                    // Extract lambda info
+                    AST *lambda = value_expr;
 
-                // If it's a number literal, use the stored literal string
-                if (value_expr->type == AST_NUMBER && value_expr->literal_str) {
-                    value_loc.literal_str = strdup(value_expr->literal_str);
+                    // Build parameter types
+                    LLVMTypeRef *param_types = malloc(sizeof(LLVMTypeRef) * lambda->lambda.param_count);
+                    EnvParam *env_params = malloc(sizeof(EnvParam) * lambda->lambda.param_count);
+
+                    for (int i = 0; i < lambda->lambda.param_count; i++) {
+                        ASTParam *param = &lambda->lambda.params[i];
+
+                        // Parse parameter type
+                        Type *param_type = NULL;
+                        if (param->type_name) {
+                            if (strcmp(param->type_name, "Int")         == 0) param_type = type_int();
+                            else if (strcmp(param->type_name, "Float")  == 0) param_type = type_float();
+                            else if (strcmp(param->type_name, "Char")   == 0) param_type = type_char();
+                            else if (strcmp(param->type_name, "String") == 0) param_type = type_string();
+                            else if (strcmp(param->type_name, "Bool")   == 0) param_type = type_bool();
+                            else if (strcmp(param->type_name, "Hex")    == 0) param_type = type_hex();
+                            else if (strcmp(param->type_name, "Bin")    == 0) param_type = type_bin();
+                            else if (strcmp(param->type_name, "Oct")    == 0) param_type = type_oct();
+                            else {
+                                fprintf(stderr, "%s:%d:%d: error: unknown type '%s'\n",
+                                        parser_get_filename(), lambda->line, lambda->column, param->type_name);
+                                exit(1);
+                            }
+                        } else {
+                            // Default to polymorphic (float for now)
+                            param_type = type_float();
+                        }
+
+                        param_types[i] = type_to_llvm(ctx, param_type);
+                        env_params[i].name = strdup(param->name);
+                        env_params[i].type = param_type;
+                    }
+
+                    // Determine return type
+                    Type *ret_type = NULL;
+                    if (lambda->lambda.return_type) {
+                        if (strcmp(lambda->lambda.return_type, "Int")         == 0) ret_type = type_int();
+                        else if (strcmp(lambda->lambda.return_type, "Float")  == 0) ret_type = type_float();
+                        else if (strcmp(lambda->lambda.return_type, "Char")   == 0) ret_type = type_char();
+                        else if (strcmp(lambda->lambda.return_type, "String") == 0) ret_type = type_string();
+                        else if (strcmp(lambda->lambda.return_type, "Bool")   == 0) ret_type = type_bool();
+                        else if (strcmp(lambda->lambda.return_type, "Hex")    == 0) ret_type = type_hex();
+                        else if (strcmp(lambda->lambda.return_type, "Bin")    == 0) ret_type = type_bin();
+                        else if (strcmp(lambda->lambda.return_type, "Oct")    == 0) ret_type = type_oct();
+
+                        else {
+                            fprintf(stderr, "%s:%d:%d: error: unknown return type '%s'\n",
+                                    parser_get_filename(), lambda->line, lambda->column, lambda->lambda.return_type);
+                            exit(1);
+                        }
+                    } else {
+                        ret_type = type_float(); // default
+                    }
+
+                    LLVMTypeRef ret_llvm_type = type_to_llvm(ctx, ret_type);
+
+                    // Create function type
+                    LLVMTypeRef func_type = LLVMFunctionType(ret_llvm_type, param_types,
+                                                             lambda->lambda.param_count, 0);
+
+                    // Create function
+                    LLVMValueRef func = LLVMAddFunction(ctx->module, var_name, func_type);
+
+                    // Create entry block
+                    LLVMBasicBlockRef entry_block = LLVMAppendBasicBlockInContext(ctx->context, func, "entry");
+
+                    // Save current insert point
+                    LLVMBasicBlockRef saved_block = LLVMGetInsertBlock(ctx->builder);
+
+                    // Position at function entry
+                    LLVMPositionBuilderAtEnd(ctx->builder, entry_block);
+
+                    // Create a new scope for function parameters
+                    Env *saved_env = ctx->env;
+                    ctx->env = env_create();
+
+                    // Add parameters to the function's environment
+                    for (int i = 0; i < lambda->lambda.param_count; i++) {
+                        LLVMValueRef param = LLVMGetParam(func, i);
+                        LLVMSetValueName2(param, lambda->lambda.params[i].name,
+                                         strlen(lambda->lambda.params[i].name));
+
+                        // Create alloca for parameter and store it
+                        LLVMValueRef param_alloca = LLVMBuildAlloca(ctx->builder,
+                                                                    param_types[i],
+                                                                    lambda->lambda.params[i].name);
+                        LLVMBuildStore(ctx->builder, param, param_alloca);
+
+                        env_insert(ctx->env, lambda->lambda.params[i].name,
+                                   type_clone(env_params[i].type), param_alloca);
+                    }
+
+                    // Codegen function body
+                    CodegenResult body_result = codegen_expr(ctx, lambda->lambda.body);
+
+                    // Convert return value to correct type if needed
+                    LLVMValueRef ret_value = body_result.value;
+                    if (body_result.type && ret_type) {
+                        if (type_is_integer(ret_type) && type_is_float(body_result.type)) {
+                            ret_value = LLVMBuildFPToSI(ctx->builder, body_result.value,
+                                                       ret_llvm_type, "ret_conv");
+                        } else if (type_is_float(ret_type) && type_is_integer(body_result.type)) {
+                            ret_value = LLVMBuildSIToFP(ctx->builder, body_result.value,
+                                                       ret_llvm_type, "ret_conv");
+                        }
+                    }
+
+                    LLVMBuildRet(ctx->builder, ret_value);
+
+                    // Restore environment and insert point
+                    env_free(ctx->env);
+                    ctx->env = saved_env;
+
+                    if (saved_block) {
+                        LLVMPositionBuilderAtEnd(ctx->builder, saved_block);
+                    }
+
+                    // Insert function into symbol table
+                    env_insert_func(ctx->env, var_name, env_params, lambda->lambda.param_count,
+                                   ret_type, func, lambda->lambda.docstring);
+
+                    printf("Defined %s :: Fn (", var_name);
+                    for (int i = 0; i < lambda->lambda.param_count; i++) {
+                        if (i > 0) printf(" ");
+                        printf("%s", lambda->lambda.params[i].name);
+                    }
+                    printf(") -> %s\n", type_to_string(ret_type));
+
+                    free(param_types);
+
+                    // Return a dummy value
+                    result.type = type_float();
+                    result.value = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0);
+                    return result;
                 }
 
                 // Codegen the value
-                LLVMValueRef value = codegen_expr_loc(ctx, &value_loc);
+                CodegenResult value_result = codegen_expr(ctx, value_expr);
 
                 // Infer or verify type
-                Type *inferred_type = value_loc.type;
+                Type *inferred_type = value_result.type;
                 if (!inferred_type) {
                     if (value_expr->type == AST_CHAR) {
                         inferred_type = type_char();
@@ -424,54 +652,45 @@ LLVMValueRef codegen_expr_loc(CodegenContext *ctx, ASTWithLoc *ast_loc) {
                 LLVMValueRef var = LLVMBuildAlloca(ctx->builder, llvm_type, var_name);
 
                 // Convert value if needed
-                LLVMValueRef stored_value = value;
+                LLVMValueRef stored_value = value_result.value;
 
                 // Handle type conversions
                 if (type_is_integer(final_type) && type_is_float(inferred_type)) {
-                    // Float to integer
-                    stored_value = LLVMBuildFPToSI(ctx->builder, value,
+                    stored_value = LLVMBuildFPToSI(ctx->builder, value_result.value,
                                                    LLVMInt64TypeInContext(ctx->context), "toint");
                 } else if (type_is_float(final_type) && type_is_integer(inferred_type)) {
-                    // Integer to float
-                    stored_value = LLVMBuildSIToFP(ctx->builder, value,
+                    stored_value = LLVMBuildSIToFP(ctx->builder, value_result.value,
                                                    LLVMDoubleTypeInContext(ctx->context), "tofloat");
                 } else if (final_type->kind == TYPE_CHAR && inferred_type->kind != TYPE_CHAR) {
                     if (type_is_float(inferred_type)) {
-                        stored_value = LLVMBuildFPToSI(ctx->builder, value,
+                        stored_value = LLVMBuildFPToSI(ctx->builder, value_result.value,
                                                        LLVMInt8TypeInContext(ctx->context), "tochar");
                     } else if (type_is_integer(inferred_type)) {
-                        stored_value = LLVMBuildTrunc(ctx->builder, value,
+                        stored_value = LLVMBuildTrunc(ctx->builder, value_result.value,
                                                       LLVMInt8TypeInContext(ctx->context), "tochar");
                     }
                 }
 
                 LLVMBuildStore(ctx->builder, stored_value, var);
 
-                // Insert into symbol table - store the alloca pointer, not the loaded value
+                // Insert into symbol table
                 env_insert(ctx->env, var_name, final_type, var);
 
                 printf("Defined %s :: %s\n", var_name, type_to_string(final_type));
 
-                // Free temporary literal string if allocated
-                if (value_loc.literal_str) {
-                    free(value_loc.literal_str);
-                }
-
-                // Return the stored value
-                ast_loc->type = final_type;
-                return stored_value;
+                result.type = final_type;
+                result.value = stored_value;
+                return result;
             }
 
-            // Handle `show' function
+            // Handle 'show' function
             if (strcmp(head->symbol, "show") == 0) {
                 if (ast->list.count != 2) {
-                    compiler_error_range(line, column + 1, ast_loc->end_column,
-                                         "'show' requires 1 argument, got %zu",
-                                         ast->list.count - 1);
+                    fprintf(stderr, "%s:%d:%d: error: 'show' requires 1 argument, got %zu\n",
+                            parser_get_filename(), ast->line, ast->column, ast->list.count - 1);
+                    exit(1);
                 }
 
-                ASTWithLoc arg_loc = {ast->list.items[1],  line, column,
-                    ast_loc->end_column, NULL, NULL};
                 AST *arg = ast->list.items[1];
                 LLVMValueRef printf_fn = get_or_declare_printf(ctx);
 
@@ -485,81 +704,93 @@ LLVMValueRef codegen_expr_loc(CodegenContext *ctx, ASTWithLoc *ast_loc) {
                 }
                 // Handle string literals
                 else if (arg->type == AST_STRING) {
-                    LLVMValueRef str =
-                        LLVMBuildGlobalStringPtr(ctx->builder, arg->string, "str");
+                    LLVMValueRef str = LLVMBuildGlobalStringPtr(ctx->builder, arg->string, "str");
                     LLVMValueRef args[] = {get_fmt_str(ctx), str};
                     LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
                                    printf_fn, args, 2, "");
                 }
                 // Handle character literals
                 else if (arg->type == AST_CHAR) {
-                    LLVMValueRef ch = LLVMConstInt(
-                        LLVMInt8TypeInContext(ctx->context), arg->character, 0);
+                    LLVMValueRef ch = LLVMConstInt(LLVMInt8TypeInContext(ctx->context), arg->character, 0);
                     LLVMValueRef args[] = {get_fmt_char(ctx), ch};
                     LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
                                    printf_fn, args, 2, "");
                 }
                 // Handle symbols (variables)
                 else if (arg->type == AST_SYMBOL) {
-                    EnvEntry *entry =
-                        env_lookup(ctx->env, arg->symbol);
+                    EnvEntry *entry = env_lookup(ctx->env, arg->symbol);
                     if (!entry) {
-                        compiler_error(line, column, "unbound variable: %s",
-                                       arg->symbol);
+                        fprintf(stderr, "%s:%d:%d: error: unbound variable: %s\n",
+                                parser_get_filename(), ast->line, ast->column, arg->symbol);
+                        exit(1);
                     }
 
-                    // Load the value from alloca
-                    LLVMValueRef loaded_value =
-                        LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, entry->type),
-                                       entry->value, arg->symbol);
+                    LLVMValueRef loaded_value = LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, entry->type),
+                                                               entry->value, arg->symbol);
 
-                    // Print based on type
                     if (entry->type->kind == TYPE_CHAR) {
                         LLVMValueRef args[] = {get_fmt_char(ctx), loaded_value};
-                        LLVMBuildCall2(ctx->builder,
-                                       LLVMGlobalGetValueType(printf_fn), printf_fn,
-                                       args, 2, "");
+                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, "");
                     } else if (entry->type->kind == TYPE_STRING) {
                         LLVMValueRef args[] = {get_fmt_str(ctx), loaded_value};
-                        LLVMBuildCall2(ctx->builder,
-                                       LLVMGlobalGetValueType(printf_fn), printf_fn,
-                                       args, 2, "");
-                    } else if (entry->type->kind == TYPE_INT ||
-                               entry->type->kind == TYPE_HEX ||
-                               entry->type->kind == TYPE_BIN ||
-                               entry->type->kind == TYPE_OCT) {
+                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, "");
+                    } else if (entry->type->kind == TYPE_HEX) {
+                        LLVMValueRef args[] = {get_fmt_hex(ctx), loaded_value};
+                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, "");
+                    } else if (entry->type->kind == TYPE_BIN) {
+                        LLVMValueRef fn_bin = get_or_declare_print_binary(ctx);
+                        LLVMValueRef args[] = {loaded_value};
+                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(fn_bin), fn_bin, args, 1, "");
+                    } else if (entry->type->kind == TYPE_OCT) {
+                        LLVMValueRef args[] = {get_fmt_oct(ctx), loaded_value};
+                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, "");
+                    } else if (entry->type->kind == TYPE_INT) {
                         LLVMValueRef args[] = {get_fmt_int(ctx), loaded_value};
-                        LLVMBuildCall2(ctx->builder,
-                                       LLVMGlobalGetValueType(printf_fn), printf_fn,
-                                       args, 2, "");
+                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, "");
+                    /* } else if (entry->type->kind == TYPE_INT || */
+                    /*            entry->type->kind == TYPE_HEX || */
+                    /*            entry->type->kind == TYPE_BIN || */
+                    /*            entry->type->kind == TYPE_OCT) { */
+                    /*     LLVMValueRef args[] = {get_fmt_int(ctx), loaded_value}; */
+                    /*     LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, ""); */
                     } else {
                         LLVMValueRef args[] = {get_fmt_float(ctx), loaded_value};
-                        LLVMBuildCall2(ctx->builder,
-                                       LLVMGlobalGetValueType(printf_fn), printf_fn,
-                                       args, 2, "");
+                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, "");
                     }
                 }
                 // Handle expressions
                 else {
-                    LLVMValueRef result = codegen_expr_loc(ctx, &arg_loc);
-                    Type *result_type = arg_loc.type;
+                    CodegenResult arg_result = codegen_expr(ctx, arg);
 
-                    if (result_type && type_is_integer(result_type)) {
-                        LLVMValueRef args[] = {get_fmt_int(ctx), result};
-                        LLVMBuildCall2(ctx->builder,
-                                       LLVMGlobalGetValueType(printf_fn), printf_fn,
-                                       args, 2, "");
+                    if (arg_result.type && arg_result.type->kind == TYPE_HEX) {
+                        LLVMValueRef args[] = {get_fmt_hex(ctx), arg_result.value};
+                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, "");
+                    } else if (arg_result.type && arg_result.type->kind == TYPE_BIN) {
+                        LLVMValueRef fn_bin = get_or_declare_print_binary(ctx);
+                        LLVMValueRef args[] = {arg_result.value};
+                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(fn_bin), fn_bin, args, 1, "");
+                    } else if (arg_result.type && arg_result.type->kind == TYPE_OCT) {
+                        LLVMValueRef args[] = {get_fmt_oct(ctx), arg_result.value};
+                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, "");
+                    } else if (arg_result.type && type_is_integer(arg_result.type)) {
+                        LLVMValueRef args[] = {get_fmt_int(ctx), arg_result.value};
+                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, "");
                     } else {
-                        LLVMValueRef args[] = {get_fmt_float(ctx), result};
-                        LLVMBuildCall2(ctx->builder,
-                                       LLVMGlobalGetValueType(printf_fn), printf_fn,
-                                       args, 2, "");
+                        LLVMValueRef args[] = {get_fmt_float(ctx), arg_result.value};
+                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, "");
                     }
+                    /* if (arg_result.type && type_is_integer(arg_result.type)) { */
+                    /*     LLVMValueRef args[] = {get_fmt_int(ctx), arg_result.value}; */
+                    /*     LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, ""); */
+                    /* } else { */
+                    /*     LLVMValueRef args[] = {get_fmt_float(ctx), arg_result.value}; */
+                    /*     LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, ""); */
+                    /* } */
                 }
 
-                // Return 0.0 as a dummy value
-                ast_loc->type = type_float();
-                return LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0);
+                result.type = type_float();
+                result.value = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0);
+                return result;
             }
 
             // Arithmetic operators
@@ -571,45 +802,33 @@ LLVMValueRef codegen_expr_loc(CodegenContext *ctx, ASTWithLoc *ast_loc) {
                 const char *op = head->symbol;
 
                 if (ast->list.count < 2) {
-                    compiler_error_range(ast_loc->line, ast_loc->column + 1, ast_loc->end_column,
-                                       "'%s' requires at least 1 argument", op);
+                    fprintf(stderr, "%s:%d:%d: error: '%s' requires at least 1 argument\n",
+                            parser_get_filename(), ast->line, ast->column, op);
+                    exit(1);
                 }
-
-                // Calculate operator position (after opening paren of this list)
-                int op_column = ast_loc->column + 1;
-                int op_end_column = op_column + strlen(op);
 
                 // Process first argument
-                ASTWithLoc first_loc = {ast->list.items[1], line, column, ast_loc->end_column, NULL, NULL};
-                if (ast->list.items[1]->type == AST_NUMBER) {
-                    char temp[64];
-                    snprintf(temp, sizeof(temp), "%g", ast->list.items[1]->number);
-                    first_loc.literal_str = strdup(temp);
-                }
+                CodegenResult first = codegen_expr(ctx, ast->list.items[1]);
+                Type *result_type = first.type;
+                LLVMValueRef result_value = first.value;
 
-                LLVMValueRef result = codegen_expr_loc(ctx, &first_loc);
-                Type *result_type = first_loc.type;
-
-                if (first_loc.literal_str) {
-                    free(first_loc.literal_str);
-                }
-
-                // Check if first arg is numeric
                 if (!type_is_numeric(result_type)) {
-                    compiler_error_range(ast_loc->line, op_column, ast_loc->end_column - 1,
-                                       "cannot perform arithmetic on type %s",
-                                       type_to_string(result_type));
+                    fprintf(stderr, "%s:%d:%d: error: cannot perform arithmetic on type %s\n",
+                            parser_get_filename(), ast->line, ast->column, type_to_string(result_type));
+                    exit(1);
                 }
 
                 // Handle unary minus
                 if (strcmp(op, "-") == 0 && ast->list.count == 2) {
                     if (type_is_float(result_type)) {
-                        ast_loc->type = result_type;
-                        return LLVMBuildFNeg(ctx->builder, result, "negtmp");
+                        result.type = result_type;
+                        result.value = LLVMBuildFNeg(ctx->builder, result_value, "negtmp");
+                        return result;
                     } else {
-                        ast_loc->type = result_type;
+                        result.type = result_type;
                         LLVMValueRef zero = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0);
-                        return LLVMBuildSub(ctx->builder, zero, result, "negtmp");
+                        result.value = LLVMBuildSub(ctx->builder, zero, result_value, "negtmp");
+                        return result;
                     }
                 }
 
@@ -617,107 +836,87 @@ LLVMValueRef codegen_expr_loc(CodegenContext *ctx, ASTWithLoc *ast_loc) {
                 if (strcmp(op, "/") == 0 && ast->list.count == 2) {
                     if (type_is_float(result_type)) {
                         LLVMValueRef one = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 1.0);
-                        ast_loc->type = result_type;
-                        return LLVMBuildFDiv(ctx->builder, one, result, "invtmp");
+                        result.type = result_type;
+                        result.value = LLVMBuildFDiv(ctx->builder, one, result_value, "invtmp");
+                        return result;
                     } else {
-                        // For integers, convert to float
-                        LLVMValueRef result_f = LLVMBuildSIToFP(ctx->builder, result,
+                        LLVMValueRef result_f = LLVMBuildSIToFP(ctx->builder, result_value,
                                                                 LLVMDoubleTypeInContext(ctx->context), "tofloat");
                         LLVMValueRef one = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 1.0);
-                        ast_loc->type = type_float();
-                        return LLVMBuildFDiv(ctx->builder, one, result_f, "invtmp");
+                        result.type = type_float();
+                        result.value = LLVMBuildFDiv(ctx->builder, one, result_f, "invtmp");
+                        return result;
                     }
                 }
 
                 // Binary operations
                 for (size_t i = 2; i < ast->list.count; i++) {
-                    ASTWithLoc arg_loc = {ast->list.items[i], line, column, ast_loc->end_column, NULL, NULL};
-                    if (ast->list.items[i]->type == AST_NUMBER) {
-                        char temp[64];
-                        snprintf(temp, sizeof(temp), "%g", ast->list.items[i]->number);
-                        arg_loc.literal_str = strdup(temp);
-                    }
+                    CodegenResult rhs = codegen_expr(ctx, ast->list.items[i]);
 
-                    LLVMValueRef rhs = codegen_expr_loc(ctx, &arg_loc);
-                    Type *rhs_type = arg_loc.type;
-
-                    if (arg_loc.literal_str) {
-                        free(arg_loc.literal_str);
-                    }
-
-                    // Type checking
-                    if (!type_is_numeric(rhs_type)) {
-                        compiler_error_range(ast_loc->line, op_column, ast_loc->end_column - 1,
-                                           "cannot perform arithmetic on type %s",
-                                           type_to_string(rhs_type));
+                    if (!type_is_numeric(rhs.type)) {
+                        fprintf(stderr, "%s:%d:%d: error: cannot perform arithmetic on type %s\n",
+                                parser_get_filename(), ast->line, ast->column, type_to_string(rhs.type));
+                        exit(1);
                     }
 
                     // Check for incompatible type mixing
                     if ((result_type->kind == TYPE_HEX || result_type->kind == TYPE_BIN || result_type->kind == TYPE_OCT) &&
-                        (rhs_type->kind == TYPE_HEX || rhs_type->kind == TYPE_BIN || rhs_type->kind == TYPE_OCT) &&
-                        result_type->kind != rhs_type->kind) {
-                        compiler_error_range(ast_loc->line, op_column, ast_loc->end_column - 1,
-                                           "cannot mix %s and %s in arithmetic - ambiguous result type",
-                                           type_to_string(result_type), type_to_string(rhs_type));
+                        (rhs.type->kind == TYPE_HEX || rhs.type->kind == TYPE_BIN || rhs.type->kind == TYPE_OCT) &&
+                        result_type->kind != rhs.type->kind) {
+                        fprintf(stderr, "%s:%d:%d: error: cannot mix %s and %s in arithmetic - ambiguous result type\n",
+                                parser_get_filename(), ast->line, ast->column,
+                                type_to_string(result_type), type_to_string(rhs.type));
+                        exit(1);
                     }
 
                     // Determine result type
-                    // Float + anything = Float
-                    // Int-like + Int-like of same type = that type
-                    // Int + Hex/Bin/Oct = Int (special types cast to Int when mixed with Int)
-                    // Char + anything integer = Int (chars promote to Int in arithmetic)
                     Type *new_result_type;
-                    if (type_is_float(result_type) || type_is_float(rhs_type)) {
+                    if (type_is_float(result_type) || type_is_float(rhs.type)) {
                         new_result_type = type_float();
-                    } else if (result_type->kind == TYPE_CHAR || rhs_type->kind == TYPE_CHAR) {
-                        // Char arithmetic promotes to Int (like C)
+                    } else if (result_type->kind == TYPE_CHAR || rhs.type->kind == TYPE_CHAR) {
                         new_result_type = type_int();
-                    } else if (result_type->kind == rhs_type->kind) {
+                    } else if (result_type->kind == rhs.type->kind) {
                         new_result_type = result_type;
-                    } else if (result_type->kind == TYPE_INT || rhs_type->kind == TYPE_INT) {
+                    } else if (result_type->kind == TYPE_INT || rhs.type->kind == TYPE_INT) {
                         new_result_type = type_int();
                     } else {
-                        // This shouldn't happen due to earlier check, but just in case
                         new_result_type = type_int();
                     }
 
                     // Convert operands if needed
-                    LLVMValueRef lhs_converted = result;
-                    LLVMValueRef rhs_converted = rhs;
+                    LLVMValueRef lhs_converted = result_value;
+                    LLVMValueRef rhs_converted = rhs.value;
 
                     if (type_is_float(new_result_type)) {
                         if (type_is_integer(result_type)) {
                             if (result_type->kind == TYPE_CHAR) {
-                                // Extend char to i64 first, then to float
-                                LLVMValueRef extended = LLVMBuildSExt(ctx->builder, result,
+                                LLVMValueRef extended = LLVMBuildSExt(ctx->builder, result_value,
                                                                       LLVMInt64TypeInContext(ctx->context), "ext");
                                 lhs_converted = LLVMBuildSIToFP(ctx->builder, extended,
                                                                LLVMDoubleTypeInContext(ctx->context), "tofloat");
                             } else {
-                                lhs_converted = LLVMBuildSIToFP(ctx->builder, result,
+                                lhs_converted = LLVMBuildSIToFP(ctx->builder, result_value,
                                                                LLVMDoubleTypeInContext(ctx->context), "tofloat");
                             }
                         }
-                        if (type_is_integer(rhs_type)) {
-                            if (rhs_type->kind == TYPE_CHAR) {
-                                // Extend char to i64 first, then to float
-                                LLVMValueRef extended = LLVMBuildSExt(ctx->builder, rhs,
+                        if (type_is_integer(rhs.type)) {
+                            if (rhs.type->kind == TYPE_CHAR) {
+                                LLVMValueRef extended = LLVMBuildSExt(ctx->builder, rhs.value,
                                                                       LLVMInt64TypeInContext(ctx->context), "ext");
                                 rhs_converted = LLVMBuildSIToFP(ctx->builder, extended,
                                                                LLVMDoubleTypeInContext(ctx->context), "tofloat");
                             } else {
-                                rhs_converted = LLVMBuildSIToFP(ctx->builder, rhs,
+                                rhs_converted = LLVMBuildSIToFP(ctx->builder, rhs.value,
                                                                LLVMDoubleTypeInContext(ctx->context), "tofloat");
                             }
                         }
                     } else {
-                        // Integer arithmetic - extend chars to i64
                         if (result_type->kind == TYPE_CHAR) {
-                            lhs_converted = LLVMBuildSExt(ctx->builder, result,
+                            lhs_converted = LLVMBuildSExt(ctx->builder, result_value,
                                                          LLVMInt64TypeInContext(ctx->context), "ext");
                         }
-                        if (rhs_type->kind == TYPE_CHAR) {
-                            rhs_converted = LLVMBuildSExt(ctx->builder, rhs,
+                        if (rhs.type->kind == TYPE_CHAR) {
+                            rhs_converted = LLVMBuildSExt(ctx->builder, rhs.value,
                                                          LLVMInt64TypeInContext(ctx->context), "ext");
                         }
                     }
@@ -725,209 +924,135 @@ LLVMValueRef codegen_expr_loc(CodegenContext *ctx, ASTWithLoc *ast_loc) {
                     // Perform operation
                     if (type_is_float(new_result_type)) {
                         if (strcmp(op, "+") == 0) {
-                            result = LLVMBuildFAdd(ctx->builder, lhs_converted, rhs_converted, "addtmp");
+                            result_value = LLVMBuildFAdd(ctx->builder, lhs_converted, rhs_converted, "addtmp");
                         } else if (strcmp(op, "-") == 0) {
-                            result = LLVMBuildFSub(ctx->builder, lhs_converted, rhs_converted, "subtmp");
+                            result_value = LLVMBuildFSub(ctx->builder, lhs_converted, rhs_converted, "subtmp");
                         } else if (strcmp(op, "*") == 0) {
-                            result = LLVMBuildFMul(ctx->builder, lhs_converted, rhs_converted, "multmp");
+                            result_value = LLVMBuildFMul(ctx->builder, lhs_converted, rhs_converted, "multmp");
                         } else if (strcmp(op, "/") == 0) {
-                            result = LLVMBuildFDiv(ctx->builder, lhs_converted, rhs_converted, "divtmp");
+                            result_value = LLVMBuildFDiv(ctx->builder, lhs_converted, rhs_converted, "divtmp");
                         }
                     } else {
-                        // Integer arithmetic
                         if (strcmp(op, "+") == 0) {
-                            result = LLVMBuildAdd(ctx->builder, lhs_converted, rhs_converted, "addtmp");
+                            result_value = LLVMBuildAdd(ctx->builder, lhs_converted, rhs_converted, "addtmp");
                         } else if (strcmp(op, "-") == 0) {
-                            result = LLVMBuildSub(ctx->builder, lhs_converted, rhs_converted, "subtmp");
+                            result_value = LLVMBuildSub(ctx->builder, lhs_converted, rhs_converted, "subtmp");
                         } else if (strcmp(op, "*") == 0) {
-                            result = LLVMBuildMul(ctx->builder, lhs_converted, rhs_converted, "multmp");
+                            result_value = LLVMBuildMul(ctx->builder, lhs_converted, rhs_converted, "multmp");
                         } else if (strcmp(op, "/") == 0) {
-                            result = LLVMBuildSDiv(ctx->builder, lhs_converted, rhs_converted, "divtmp");
+                            result_value = LLVMBuildSDiv(ctx->builder, lhs_converted, rhs_converted, "divtmp");
                         }
                     }
 
                     result_type = new_result_type;
                 }
 
-                ast_loc->type = result_type;
+                result.type = result_type;
+                result.value = result_value;
                 return result;
             }
 
-            compiler_error_range(line, column + 1, ast_loc->end_column,
-                               "unknown function: %s", head->symbol);
+            // Check if it's a user-defined function or variable
+            EnvEntry *entry = env_lookup(ctx->env, head->symbol);
+
+            // If it's a variable being used in function position, that's an error
+            if (entry && entry->kind == ENV_VAR) {
+                fprintf(stderr, "%s:%d:%d: error: '%s' is a variable, not a function\n",
+                        parser_get_filename(), ast->line, ast->column, head->symbol);
+                exit(1);
+            }
+
+            // Function call - FIXED VERSION
+            if (entry && entry->kind == ENV_FUNC) {
+                // Check argument count
+                size_t arg_count = ast->list.count - 1;
+                if ((int)arg_count != entry->param_count) {
+                    fprintf(stderr, "%s:%d:%d: error: function '%s' expects %d arguments, got %zu\n",
+                            parser_get_filename(), ast->line, ast->column,
+                            head->symbol, entry->param_count, arg_count);
+                    exit(1);
+                }
+
+                // Codegen arguments with proper type conversion
+                LLVMValueRef *args = malloc(sizeof(LLVMValueRef) * arg_count);
+                for (size_t i = 0; i < arg_count; i++) {
+                    CodegenResult arg_result = codegen_expr(ctx, ast->list.items[i + 1]);
+
+                    // Get expected parameter type
+                    Type *expected_type = entry->params[i].type;
+                    Type *actual_type = arg_result.type;
+
+                    LLVMValueRef converted_arg = arg_result.value;
+
+                    // Perform type conversion if types don't match
+                    if (expected_type && actual_type && expected_type->kind != actual_type->kind) {
+                        LLVMTypeRef expected_llvm = type_to_llvm(ctx, expected_type);
+
+                        // Float to Integer conversion
+                        if (type_is_integer(expected_type) && type_is_float(actual_type)) {
+                            converted_arg = LLVMBuildFPToSI(ctx->builder, arg_result.value,
+                                                           expected_llvm, "arg_conv");
+                        }
+                        // Integer to Float conversion
+                        else if (type_is_float(expected_type) && type_is_integer(actual_type)) {
+                            if (actual_type->kind == TYPE_CHAR) {
+                                // Char needs to be extended to i64 first, then converted to float
+                                LLVMValueRef extended = LLVMBuildSExt(ctx->builder, arg_result.value,
+                                                                      LLVMInt64TypeInContext(ctx->context), "ext");
+                                converted_arg = LLVMBuildSIToFP(ctx->builder, extended,
+                                                               expected_llvm, "arg_conv");
+                            } else {
+                                converted_arg = LLVMBuildSIToFP(ctx->builder, arg_result.value,
+                                                               expected_llvm, "arg_conv");
+                            }
+                        }
+                        // Integer to Char conversion
+                        else if (expected_type->kind == TYPE_CHAR && type_is_integer(actual_type)) {
+                            converted_arg = LLVMBuildTrunc(ctx->builder, arg_result.value,
+                                                          expected_llvm, "arg_conv");
+                        }
+                        // Char to Integer conversion
+                        else if (type_is_integer(expected_type) && actual_type->kind == TYPE_CHAR) {
+                            converted_arg = LLVMBuildSExt(ctx->builder, arg_result.value,
+                                                         expected_llvm, "arg_conv");
+                        }
+                        // Between different integer types (hex, bin, oct, int)
+                        else if (type_is_integer(expected_type) && type_is_integer(actual_type)) {
+                            // All integer types use i64, so no conversion needed
+                            // But we keep this branch for clarity
+                            converted_arg = arg_result.value;
+                        }
+                    }
+
+                    args[i] = converted_arg;
+                }
+
+                // Call the function
+                result.value = LLVMBuildCall2(ctx->builder,
+                                             LLVMGlobalGetValueType(entry->func_ref),
+                                             entry->func_ref,
+                                             args, arg_count, "calltmp");
+                result.type = entry->return_type;
+
+                free(args);
+                return result;
+            }
+
+            fprintf(stderr, "%s:%d:%d: error: unknown function: %s\n",
+                    parser_get_filename(), ast->line, ast->column, head->symbol);
+            exit(1);
         }
 
-        compiler_error(line, column, "function call requires symbol in head position");
+        fprintf(stderr, "%s:%d:%d: error: function call requires symbol in head position\n",
+                parser_get_filename(), ast->line, ast->column);
+        exit(1);
     }
 
     default:
-        compiler_error(line, column, "unknown AST type: %d", ast->type);
+        fprintf(stderr, "%s:%d:%d: error: unknown AST type: %d\n",
+                parser_get_filename(), ast->line, ast->column, ast->type);
+        exit(1);
     }
-}
-
-/// Parser code (moved from reader.c for location tracking)
-
-typedef struct {
-    Lexer *lexer;
-    Token current;
-} Parser;
-
-static void parser_init(Parser *p, Lexer *lex) {
-    p->lexer = lex;
-    p->current = lexer_next_token(lex);
-}
-
-static ASTWithLoc parse_expr(Parser *p);
-
-static ASTWithLoc parse_list(Parser *p) {
-    int start_line = p->current.line;
-    int start_column = p->current.column;
-
-    AST *list = ast_new_list();
-
-    p->current = lexer_next_token(p->lexer);
-
-    while (p->current.type != TOK_RPAREN && p->current.type != TOK_EOF) {
-        ASTWithLoc item = parse_expr(p);
-        ast_list_append(list, item.ast);
-    }
-
-    if (p->current.type != TOK_RPAREN) {
-        compiler_error(p->current.line, p->current.column, "expected ')'");
-    }
-
-    int end_column = p->current.column + 1;
-
-    p->current = lexer_next_token(p->lexer);
-
-    ASTWithLoc result = {list, start_line, start_column, end_column, NULL, NULL};
-    return result;
-}
-
-static ASTWithLoc parse_bracket_list(Parser *p) {
-    int start_line = p->current.line;
-    int start_column = p->current.column;
-
-    AST *list = ast_new_list();
-
-    p->current = lexer_next_token(p->lexer);
-
-    while (p->current.type != TOK_RBRACKET && p->current.type != TOK_EOF) {
-        ASTWithLoc item = parse_expr(p);
-        ast_list_append(list, item.ast);
-    }
-
-    if (p->current.type != TOK_RBRACKET) {
-        compiler_error(p->current.line, p->current.column, "expected ']'");
-    }
-
-    int end_column = p->current.column + 1;
-
-    p->current = lexer_next_token(p->lexer);
-
-    ASTWithLoc result = {list, start_line, start_column, end_column, NULL, NULL};
-    return result;
-}
-
-static ASTWithLoc parse_expr(Parser *p) {
-    Token tok = p->current;
-
-    switch (tok.type) {
-    case TOK_NUMBER: {
-        int end_col = tok.column + (tok.value ? strlen(tok.value) : 1);
-
-        // Parse the number value
-        double value;
-        if (tok.value[0] == '0' && (tok.value[1] == 'x' || tok.value[1] == 'X')) {
-            value = (double)strtol(tok.value, NULL, 16);
-        } else if (tok.value[0] == '0' && (tok.value[1] == 'b' || tok.value[1] == 'B')) {
-            value = (double)strtol(tok.value + 2, NULL, 2);
-        } else if (tok.value[0] == '0' && (tok.value[1] == 'o' || tok.value[1] == 'O')) {
-            value = (double)strtol(tok.value + 2, NULL, 8);
-        } else {
-            value = atof(tok.value);
-        }
-
-        p->current = lexer_next_token(p->lexer);
-
-        // Store the literal string for type inference
-        char *literal_str = tok.value ? strdup(tok.value) : NULL;
-        ASTWithLoc result = {ast_new_number(value, tok.value), tok.line, tok.column, end_col, NULL, literal_str};
-        return result;
-    }
-
-    case TOK_SYMBOL: {
-        int end_col = tok.column + (tok.value ? strlen(tok.value) : 1);
-        p->current = lexer_next_token(p->lexer);
-        ASTWithLoc result = {ast_new_symbol(tok.value), tok.line, tok.column, end_col, NULL, NULL};
-        return result;
-    }
-
-    case TOK_STRING: {
-        int end_col = tok.column + (tok.value ? strlen(tok.value) : 1) + 2;
-        p->current = lexer_next_token(p->lexer);
-        ASTWithLoc result = {ast_new_string(tok.value), tok.line, tok.column, end_col, NULL, NULL};
-        return result;
-    }
-
-    case TOK_CHAR: {
-        int end_col = tok.column + 3;
-        p->current = lexer_next_token(p->lexer);
-        ASTWithLoc result = {ast_new_char(tok.value[0]), tok.line, tok.column, end_col, NULL, NULL};
-        return result;
-    }
-
-    case TOK_LPAREN:
-        return parse_list(p);
-
-    case TOK_LBRACKET:
-        return parse_bracket_list(p);
-
-    case TOK_QUOTE: {
-        int quote_line = tok.line;
-        int quote_column = tok.column;
-        p->current = lexer_next_token(p->lexer);
-        ASTWithLoc quoted = parse_expr(p);
-        AST *list = ast_new_list();
-        ast_list_append(list, ast_new_symbol("quote"));
-        ast_list_append(list, quoted.ast);
-        ASTWithLoc result = {list, quote_line, quote_column, quoted.end_column, NULL, NULL};
-        return result;
-    }
-
-    default:
-        compiler_error(tok.line, tok.column, "unexpected token type: %d", tok.type);
-    }
-}
-
-typedef struct {
-    ASTWithLoc *exprs;
-    size_t count;
-} ASTList;
-
-ASTList parse_all(const char *source) {
-    Lexer lex;
-    lexer_init(&lex, source);
-
-    ASTList list = {0};
-    list.exprs = NULL;
-    list.count = 0;
-    size_t capacity = 0;
-
-    Parser p;
-    parser_init(&p, &lex);
-
-    while (p.current.type != TOK_EOF) {
-        ASTWithLoc expr = parse_expr(&p);
-
-        if (list.count >= capacity) {
-            capacity = capacity == 0 ? 4 : capacity * 2;
-            list.exprs = realloc(list.exprs, sizeof(ASTWithLoc) * capacity);
-        }
-        list.exprs[list.count++] = expr;
-    }
-
-    return list;
 }
 
 /// Compile
@@ -935,13 +1060,14 @@ ASTList parse_all(const char *source) {
 void compile(CompilerFlags *flags) {
     char *source = read_file(flags->input_file);
 
-    current_filename = flags->input_file;
-    current_source = source;
+    // Set parser context for error reporting
+    parser_set_context(flags->input_file, source);
 
     ASTList exprs = parse_all(source);
 
     if (exprs.count == 0) {
-        compiler_error(1, 1, "no expression(s) found");
+        fprintf(stderr, "%s:1:1: error: no expression(s) found\n", flags->input_file);
+        exit(1);
     }
 
     printf("Compiling %zu expression(s)\n", exprs.count);
@@ -958,22 +1084,28 @@ void compile(CompilerFlags *flags) {
     LLVMBasicBlockRef entry = LLVMAppendBasicBlockInContext(ctx.context, main_fn, "entry");
     LLVMPositionBuilderAtEnd(ctx.builder, entry);
 
-    LLVMValueRef result = NULL;
+    CodegenResult result = {NULL, NULL};
     for (size_t i = 0; i < exprs.count; i++) {
-        result = codegen_expr_loc(&ctx, &exprs.exprs[i]);
+        /* printf("DEBUG: Expression %zu at line %d, column %d:\n", */
+        /*        i, exprs.exprs[i]->line, exprs.exprs[i]->column); */
+        printf("  ");
+        ast_print(exprs.exprs[i]);
+        printf("\n");
+        result = codegen_expr(&ctx, exprs.exprs[i]);
     }
 
-    if (!result) {
-        result = LLVMConstReal(LLVMDoubleTypeInContext(ctx.context), 0.0);
+    if (!result.value) {
+        result.value = LLVMConstReal(LLVMDoubleTypeInContext(ctx.context), 0.0);
+        result.type = type_float();
     }
 
     // Convert result to i32 based on its type
     LLVMValueRef result_i32;
-    if (exprs.exprs[exprs.count - 1].type && type_is_integer(exprs.exprs[exprs.count - 1].type)) {
-        result_i32 = LLVMBuildTrunc(ctx.builder, result,
+    if (result.type && type_is_integer(result.type)) {
+        result_i32 = LLVMBuildTrunc(ctx.builder, result.value,
                                     LLVMInt32TypeInContext(ctx.context), "result");
     } else {
-        result_i32 = LLVMBuildFPToSI(ctx.builder, result,
+        result_i32 = LLVMBuildFPToSI(ctx.builder, result.value,
                                      LLVMInt32TypeInContext(ctx.context), "result");
     }
 
@@ -1067,10 +1199,7 @@ void compile(CompilerFlags *flags) {
 
     free(base_name);
     for (size_t i = 0; i < exprs.count; i++) {
-        ast_free(exprs.exprs[i].ast);
-        if (exprs.exprs[i].literal_str) {
-            free(exprs.exprs[i].literal_str);
-        }
+        ast_free(exprs.exprs[i]);
     }
     free(exprs.exprs);
     free(source);
@@ -1079,6 +1208,12 @@ void compile(CompilerFlags *flags) {
 
 int main(int argc, char **argv) {
     CompilerFlags flags = parse_flags(argc, argv);
+
+    if (flags.start_repl) {
+        repl_run();
+        return 0;
+    }
+
     compile(&flags);
     return 0;
 }

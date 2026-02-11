@@ -5,19 +5,29 @@
 #include <libgen.h>
 
 void print_usage(const char *prog) {
-    fprintf(stderr, "Usage: %s <file.mon> [options]\n", prog);
+    fprintf(stderr, "Usage: %s [options] [<file.mon>]\n", prog);
     fprintf(stderr, "Options:\n");
+    fprintf(stderr, "  -i             Start interactive REPL\n");
     fprintf(stderr, "  -o <file>      Output file name (default: input name)\n");
     fprintf(stderr, "  --emit-ir      Emit LLVM IR (.ll)\n");
     fprintf(stderr, "  --emit-bc      Emit LLVM bitcode (.bc)\n");
     fprintf(stderr, "  --emit-asm     Emit assembly (.s)\n");
     fprintf(stderr, "  --emit-obj     Emit object file (.o)\n");
-    fprintf(stderr, "Default: emit executable (ELF)\n");
+    fprintf(stderr, "Default: compile to executable (ELF)\n");
 }
 
 CompilerFlags parse_flags(int argc, char **argv) {
     CompilerFlags flags = {0};
 
+    // Check for REPL flag first
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-i") == 0) {
+            flags.start_repl = true;
+            return flags;
+        }
+    }
+
+    // Otherwise, we need a file
     if (argc < 2) {
         print_usage(argv[0]);
         exit(1);
@@ -55,6 +65,7 @@ char *get_base_executable_name(const char *path) {
     char *base = basename(path_copy);
     char *dot = strrchr(base, '.');
     if (dot) *dot = '\0';
+
     char *result = strdup(base);
     free(path_copy);
     return result;

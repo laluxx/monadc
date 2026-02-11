@@ -4,12 +4,12 @@
 #include <stdbool.h>
 
 /// Compiler Flags
-
 typedef struct {
     bool emit_ir;
     bool emit_bc;
     bool emit_asm;
     bool emit_obj;
+    bool start_repl;
     char *output_name;
     char *input_file;
 } CompilerFlags;
