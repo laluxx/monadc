@@ -100,18 +100,22 @@ void env_insert_with_doc(Env *table, const char *name, Type *type,
 }
 
 void env_insert_builtin(Env *table, const char *name,
-                         int arity_min, int arity_max) {
+                         int arity_min, int arity_max,
+                         const char *docstring) {
     EnvEntry *e = find(table, name);
     if (e) {
         e->kind      = ENV_BUILTIN;
         e->arity_min = arity_min;
         e->arity_max = arity_max;
+        free(e->docstring);
+        e->docstring = docstring ? strdup(docstring) : NULL;
         return;
     }
     e = new_entry(name);
     e->kind      = ENV_BUILTIN;
     e->arity_min = arity_min;
     e->arity_max = arity_max;
+    e->docstring = docstring ? strdup(docstring) : NULL;
     chain(table, e);
 }
 

@@ -1,4 +1,5 @@
 #include "reader.h"
+#include "features.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -163,6 +164,21 @@ AST *ast_new_lambda(ASTParam *params, int param_count,
     return a;
 }
 
+AST *ast_new_asm(AST **instructions, size_t instruction_count) {
+    AST *a = calloc(1, sizeof(AST));
+    a->type = AST_ASM;
+    a->asm_block.instructions = instructions;
+    a->asm_block.instruction_count = instruction_count;
+    return a;
+}
+
+AST *ast_new_keyword(const char *name) {
+    AST *a = calloc(1, sizeof(AST));
+    a->type = AST_KEYWORD;
+    a->keyword = my_strdup(name);
+    return a;
+}
+
 void ast_list_append(AST *list, AST *item) {
     if (list->list.count >= list->list.capacity) {
         list->list.capacity *= 2;
@@ -175,13 +191,20 @@ void ast_list_append(AST *list, AST *item) {
 void ast_free(AST *ast) {
     if (!ast) return;
     switch (ast->type) {
-    case AST_SYMBOL: free(ast->symbol); break;
-    case AST_STRING: free(ast->string); break;
+    case AST_SYMBOL:
+        free(ast->symbol);
+        break;
+
+    case AST_STRING:
+        free(ast->string);
+        break;
+
     case AST_LIST:
         for (size_t i = 0; i < ast->list.count; i++)
             ast_free(ast->list.items[i]);
         free(ast->list.items);
         break;
+
     case AST_LAMBDA:
         if (ast->lambda.params) {
             for (int i = 0; i < ast->lambda.param_count; i++) {
@@ -194,7 +217,22 @@ void ast_free(AST *ast) {
         free(ast->lambda.docstring);
         ast_free(ast->lambda.body);
         break;
-    default: break;
+
+    case AST_ASM:
+        if (ast->asm_block.instructions) {
+            for (size_t i = 0; i < ast->asm_block.instruction_count; i++) {
+                ast_free(ast->asm_block.instructions[i]);
+            }
+            free(ast->asm_block.instructions);
+        }
+        break;
+
+    case AST_KEYWORD:
+        free(ast->keyword);
+        break;
+
+    default:
+        break;
     }
     free(ast->literal_str);
     free(ast);
@@ -232,6 +270,17 @@ void ast_print(AST *ast) {
         printf(" ");
         ast_print(ast->lambda.body);
         printf(")");
+        break;
+    case AST_ASM:
+        printf("(asm");
+        for (size_t i = 0; i < ast->asm_block.instruction_count; i++) {
+            printf(" ");
+            ast_print(ast->asm_block.instructions[i]);
+        }
+        printf(")");
+        break;
+    case AST_KEYWORD:
+        printf(":%s", ast->keyword);
         break;
     }
 }
@@ -279,7 +328,7 @@ static bool is_symbol_char(char c) {
     return (c>='a'&&c<='z') || (c>='A'&&c<='Z') || (c>='0'&&c<='9') ||
            c=='-' || c=='+' || c=='*' || c=='/' ||
            c=='<' || c=='>' || c=='=' || c=='!' ||
-           c=='?' || c=='_' || c==':';
+           c=='?' || c=='_' || c==':' || c=='%';
 }
 
 Token lexer_next_token(Lexer *lex) {
@@ -298,11 +347,42 @@ Token lexer_next_token(Lexer *lex) {
 
     if (c == '\0') { tok.type = TOK_EOF; return tok; }
 
+    // Feature directives: #+ and #---
+    if (c == '#') {
+        if (peek_ahead(lex, 1) == '+') {
+            advance(lex); // skip '#'
+            advance(lex); // skip '+'
+            tok.type = TOK_FEATURE_BEGIN;
+            return tok;
+        }
+        if (peek_ahead(lex, 1) == '-' && peek_ahead(lex, 2) == '-' &&
+            peek_ahead(lex, 3) == '-') {
+            advance(lex); // skip '#'
+            advance(lex); // skip '-'
+            advance(lex); // skip '-'
+            advance(lex); // skip '-'
+            tok.type = TOK_FEATURE_END;
+            return tok;
+        }
+    }
+
     // Arrow  ->
     if (c == '-' && peek_ahead(lex, 1) == '>') {
         advance(lex); advance(lex);
         tok.type  = TOK_ARROW;
         tok.value = my_strdup("->");
+        return tok;
+    }
+
+    // Keyword :name
+    if (c == ':' && peek_ahead(lex, 1) != ':' && peek_ahead(lex, 1) != '\0' &&
+        is_symbol_char(peek_ahead(lex, 1))) {
+
+        advance(lex); // skip ':'
+        size_t start = lex->pos;
+        while (is_symbol_char(peek(lex))) advance(lex);
+        tok.value = my_strndup(lex->source + start, lex->pos - start);
+        tok.type  = TOK_KEYWORD;
         return tok;
     }
 
@@ -639,6 +719,46 @@ static AST *parse_list(Parser *p) {
         }
     }
 
+    // Detect (asm mnemonic operand1 operand2 ...)
+    // Flat syntax: all tokens are part of one instruction line
+    if (p->current.type == TOK_SYMBOL &&
+        strcmp(p->current.value, "asm") == 0) {
+
+        int asm_start_line = p->current.line;
+        int asm_start_column = p->current.column;
+
+        p->current = lexer_next_token(p->lexer);
+
+        // Collect all tokens as a single flat instruction
+        AST *inst_list = ast_new_list();
+
+        while (p->current.type != TOK_RPAREN &&
+               p->current.type != TOK_EOF) {
+
+            AST *token = parse_expr(p);
+            ast_list_append(inst_list, token);
+        }
+
+        if (p->current.type != TOK_RPAREN) {
+            compiler_error(p->current.line, p->current.column,
+                         "Expected ')' to close asm block");
+        }
+
+        int end_column = p->current.column + 1;
+        p->current = lexer_next_token(p->lexer);
+
+        // Wrap the single instruction in an array
+        AST **instructions = malloc(sizeof(AST *));
+        instructions[0] = inst_list;
+
+        AST *asm_node = ast_new_asm(instructions, 1);
+        asm_node->line = asm_start_line;
+        asm_node->column = asm_start_column;
+        asm_node->end_column = end_column;
+
+        ast_free(list);
+        return asm_node;
+    }
     // Normal list parsing
     while (p->current.type != TOK_RPAREN &&
            p->current.type != TOK_EOF) {
@@ -766,9 +886,99 @@ static AST *parse_expr(Parser *p) {
         ast->end_column = end_col;
         return ast;
     }
+    case TOK_KEYWORD: {
+        int end_col = tok.column + (tok.value ? strlen(tok.value) : 1) + 1; // +1 for ':'
+        p->current = lexer_next_token(p->lexer);
+        AST *ast = ast_new_keyword(tok.value);
+        ast->line = tok.line;
+        ast->column = tok.column;
+        ast->end_column = end_col;
+        return ast;
+    }
     default:
         compiler_error(tok.line, tok.column, "unexpected token type: %d", tok.type);
     }
+}
+
+// Helper to skip an expression without parsing it
+static void skip_expr(Parser *p) {
+    if (p->current.type == TOK_LPAREN) {
+        p->current = lexer_next_token(p->lexer);
+        int depth = 1;
+        while (depth > 0 && p->current.type != TOK_EOF) {
+            if (p->current.type == TOK_LPAREN) depth++;
+            if (p->current.type == TOK_RPAREN) depth--;
+            p->current = lexer_next_token(p->lexer);
+        }
+    } else if (p->current.type == TOK_LBRACKET) {
+        p->current = lexer_next_token(p->lexer);
+        int depth = 1;
+        while (depth > 0 && p->current.type != TOK_EOF) {
+            if (p->current.type == TOK_LBRACKET) depth++;
+            if (p->current.type == TOK_RBRACKET) depth--;
+            p->current = lexer_next_token(p->lexer);
+        }
+    } else {
+        // Skip single token (number, string, symbol, etc)
+        p->current = lexer_next_token(p->lexer);
+    }
+}
+
+// Check if a feature is active
+static bool is_feature_active(const char *feature_name) {
+    return has_feature(feature_name);
+}
+
+// Parse feature blocks - #--- closes ALL nested blocks at current level
+static void parse_feature_blocks(Parser *p, AST ***exprs, size_t *count, size_t *capacity, bool parent_enabled) {
+    while (p->current.type == TOK_FEATURE_BEGIN) {
+        // Read feature name
+        p->current = lexer_next_token(p->lexer);
+
+        if (p->current.type != TOK_KEYWORD && p->current.type != TOK_SYMBOL) {
+            compiler_error(p->current.line, p->current.column,
+                          "Expected feature name after #+");
+        }
+
+        const char *feature_name = p->current.value;
+        // Feature is only enabled if parent is also enabled (for nesting)
+        bool feature_enabled = parent_enabled && is_feature_active(feature_name);
+
+        // Skip the feature name
+        p->current = lexer_next_token(p->lexer);
+
+        // Parse content for this feature block
+        while (p->current.type != TOK_EOF &&
+               p->current.type != TOK_FEATURE_END) {
+
+            // If we hit another #+, it's a sibling block at same level
+            if (p->current.type == TOK_FEATURE_BEGIN) {
+                break;
+            }
+
+            if (feature_enabled) {
+                AST *expr = parse_expr(p);
+
+                if (*count >= *capacity) {
+                    *capacity = *capacity == 0 ? 4 : *capacity * 2;
+                    *exprs = realloc(*exprs, sizeof(AST *) * *capacity);
+                }
+                (*exprs)[(*count)++] = expr;
+            } else {
+                // Skip the expression
+                skip_expr(p);
+            }
+        }
+    }
+
+    // Must end with #---
+    if (p->current.type != TOK_FEATURE_END) {
+        compiler_error(p->current.line, p->current.column,
+                      "Expected #--- to close feature block");
+    }
+
+    // Consume the #---
+    p->current = lexer_next_token(p->lexer);
 }
 
 ASTList parse_all(const char *source) {
@@ -784,13 +994,17 @@ ASTList parse_all(const char *source) {
     parser_init(&p, &lex);
 
     while (p.current.type != TOK_EOF) {
-        AST *expr = parse_expr(&p);
+        if (p.current.type == TOK_FEATURE_BEGIN) {
+            parse_feature_blocks(&p, &list.exprs, &list.count, &capacity, true);  // parent_enabled = true at top level
+        } else {
+            AST *expr = parse_expr(&p);
 
-        if (list.count >= capacity) {
-            capacity = capacity == 0 ? 4 : capacity * 2;
-            list.exprs = realloc(list.exprs, sizeof(AST *) * capacity);
+            if (list.count >= capacity) {
+                capacity = capacity == 0 ? 4 : capacity * 2;
+                list.exprs = realloc(list.exprs, sizeof(AST *) * capacity);
+            }
+            list.exprs[list.count++] = expr;
         }
-        list.exprs[list.count++] = expr;
     }
 
     return list;

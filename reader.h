@@ -11,7 +11,9 @@ typedef enum {
     AST_STRING,
     AST_CHAR,
     AST_LIST,
-    AST_LAMBDA, // (lambda ([x :: T] -> ... -> Ret<T>) "doc" body)
+    AST_KEYWORD,  // :keyword
+    AST_LAMBDA,   // (lambda ([x :: T] -> ... -> Ret<T>) "doc" body)
+    AST_ASM,      // (asm instruction operand1 operand2 ...)
 } ASTType;
 
 // A single parsed function parameter: name + optional type annotation
@@ -27,6 +29,7 @@ typedef struct AST {
         char *symbol;
         char *string;
         char character;
+        char *keyword;  // keyword name (without the ':')
         // AST_LIST
         struct {
             struct AST **items;
@@ -41,8 +44,14 @@ typedef struct AST {
             char *docstring;   // NULL if absent
             struct AST *body;  // body expression
         } lambda;
+        // AST_ASM - inline assembly block
+        struct {
+            struct AST **instructions; // list of AST lists (instruction + operands)
+            size_t instruction_count;
+        } asm_block;
     };
     char *literal_str; // original literal string for numbers (e.g. "0xFF")
+
     // Location tracking
     int line;
     int column;
@@ -53,11 +62,13 @@ AST *ast_new_number(double value, const char *literal);
 AST *ast_new_symbol(const char *name);
 AST *ast_new_string(const char *value);
 AST *ast_new_char(char value);
+AST *ast_new_keyword(const char *name);
 AST *ast_new_list(void);
 AST *ast_new_lambda(ASTParam *params, int param_count,
                      const char *return_type,
                      const char *docstring,
                      AST *body);
+AST *ast_new_asm(AST **instructions, size_t instruction_count);
 
 void ast_list_append(AST *list, AST *item);
 void ast_free(AST *ast);
@@ -75,8 +86,11 @@ typedef enum {
     TOK_NUMBER,
     TOK_STRING,
     TOK_CHAR,
+    TOK_KEYWORD,
     TOK_QUOTE,
     TOK_ARROW,
+    TOK_FEATURE_BEGIN,  // #+
+    TOK_FEATURE_END,    // #---
 } TokenType;
 
 typedef struct {
@@ -105,10 +119,13 @@ typedef struct {
 
 // Set the current file being parsed (for error messages)
 void parser_set_context(const char *filename, const char *source);
+
 // Parse all expressions from source
 ASTList parse_all(const char *source);
+
 // Parse a single expression (for REPL)
 AST *parse(const char *source);
+
 const char *parser_get_filename(void);
 
 #endif

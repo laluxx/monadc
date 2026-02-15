@@ -1,12 +1,12 @@
 ;;; Variables
 
-;; (define i 20)                   ; Inferred Int
-;; (define f 40.0)                 ; Inferred Float
-;; (define c 'c')                  ; Inferred Char
-;; (define s "string")             ; Inferred String
-;; (define h 0xFF)                 ; Inferred Hex (255)
-;; (define b 0b1010)               ; Inferred Bin (10)
-;; (define o 0o755)                ; Inferred Oct (493)
+(define i 20)                   ; Inferred Int
+(define f 40.0)                 ; Inferred Float
+(define c 'c')                  ; Inferred Char
+(define s "string")             ; Inferred String
+(define h 0xFF)                 ; Inferred Hex (255)
+(define b 0b1010)               ; Inferred Bin (10)
+(define o 0o755)                ; Inferred Oct (493)
 (define [i :: Int] 20)          ; Typed Int
 (define [f :: Float] 40.0)      ; Typed Float
 (define [c :: Char] 'A')        ; Typed Char
@@ -16,7 +16,7 @@
 (define [o :: Oct] 0o755)       ; Typed Oct (493)
 
 ;; TODO
-;; (show "Value of i is _ f is _ and o is _" i f o)
+;; (show "Value of i is _, f is _, and o is _." i f o)
 
 (show f)
 (show c)
@@ -28,6 +28,16 @@
 ;; (define (main -> Int)
 ;;   "Program's entry pont."
 ;;   (show "Hello, World"))
+
+
+
+;; (define (pure rec fib n)
+;;   "Generate the N fibonacci number."
+;;   (if (<= n 2)
+;;       1
+;;       (+ (fib (- n 1)) (fib (- n 2)))))
+
+
 
 (show "Test Showing Int + <T>")
 (show (+ i i))
@@ -92,11 +102,12 @@
 ;; (show (+ o b))
 (show (+ o o))
 
-;; (show (+ 3.0 0.5))
-;; (show (- 1 3))
-;; (show "Hello, World")
-;; (show '(+ 2 2))
-;; (show '(+ 2 2))
+(show "DEBUGGING")
+(show '(+ 2 3))
+(show '(:a :b :c))
+(show (quote (+ 2 3)))
+(show (quote (:a :b :c)))
+
 
 ;;; Functions
 
@@ -104,7 +115,6 @@
   "doc")
 
 (define square (lambda ([x :: Int] -> Int) "doc" (* x x)))
-
 
 (define (multi [x :: Int] -> [y :: Int] -> Int)
   "Multiply X and Y as Ints"
@@ -139,6 +149,12 @@
   "Multiply X and Y as Hexs, return Int"
   (* x y))
 
+;;;;; Variadic parameters
+
+;; (define (add . nums)
+;;   (apply + nums))
+
+
 (show "Shwing result of multh")
 (define result (multh h h))
 (define result2 (multhi h h))
@@ -151,13 +167,374 @@
 (show 10)
 ;; (show 1e6)
 (show "ALSO HERE")
-;; (show (Int (+ b b)))
-
+(show (+ b b))
+(show (Int (+ b b)))
+;; (show (Int multh))
 
 (define [decimal :: Float] 0.132093)
-;; (define [frac :: Fraction] 1/3) TODO
+;; (define [frac :: Ratio] 1/3); NOTE It really means [[https://en.wikipedia.org/wiki/Rational_number][Rational]]
 
-; if i call this resulti it segfault
+
+;;; Types
+
+;;;; Vector
+
+;; One important property of vectors is homogeneity, allows to:
+;;  - Store data contiguously in memory (cache-friendly)
+;;  - Use SIMD instructions (do 4 operations at once)
+;;  - Compile to tight loops without runtime type dispatch
+;;  - Call into C without copying/converting
+;;
+;; Without homogeneity, we lose all of this.
+;; You're just writing syntactic sugar over lists.
+
+;; (define v #[1 2 3 4]); NOTE we can infer the type
+;; (define [v :: Vec :: Int] #[1 2 3 4])
+;; (+ 1 v); => #[2 3 4 5]
+;; (* 2 v); => #[2 4 6 8]
+;; (* v v); => #[1 4 9 16]
+
+;; Recycling Rules:
+
+;; longer vector length not a multiple of shorter vector
+;; (+ #[1 2 3 4] #[10 20]); => #[11 22 13 24]
+
+;; Scalar recycling
+;; (+ #[1 2 3 4] 10); => #[11 12 13 14]
+
+;; Boolean Masking:
+
+;; (define v #[10 20 30 40 50])
+
+;; Comparison returns boolean vector
+;; (define mask (> v 25)); => #[#f #f #t #t #t]
+
+;; Use mask to select elements
+;; (v mask); => #[30 40 50]
+
+;; Compound conditions ?
+;; (v (and (> v 20) (< v 40)))  ;; #[30]
+
+;; Indexing and Slicing:
+
+;; (define v #[10 20 30 40 50])
+
+;; Single index
+;; (v 0)        ;; 10
+;; (v -1)       ;; 50 (negative = from end)
+
+;; Range slices
+;; (v (range 1 3))   ; #[20 30 40] (inclusive)             (1:3)
+;; (v (range 1 4 2)) ; #[20 40]    (start end step)        (1:4:2)
+;; (v (range _ _ 2)) ; #[10 30 50] (every 2nd)             (::2)
+;; (v (range 3 _))   ; #[40 50]    (from index 3 to end)   (3:)
+;; (v (range_ 2))    ; #[10 20]    (from start to index 2) (:2)
+
+;;;; Matrix
+
+;; Matrices are actually multidimensional vectors,
+;; they share ALL properties, for example homogeneity.
+
+;;;;; 1D
+
+;; 1D Matrices are just regular Vectors
+;; (define m1D #[1 2 3]); Inferred as [m1D :: Vector :: Int]
+
+;; (m1D 2); => 2
+
+;;;;; 2D
+
+;; (This syntax works because you _never_ want a Vector of arrays)
+;;          v
+;; (define m2D #[[1 2 3] [4 5 6] [7 8 9]]); Inferred as [m2D :: Mat :: [3x3] :: Int]
+;; ;; Or    v
+;; (define m2D #[1 2 3
+;;               4 5 6
+;;               7 8 9]); Inferred as [m2D :: Mat :: [3x3] :: Int]
+
+; 1D [1x3]
+;; (m2D 3); => #[7 8 9]
+
+;; ; Scalar
+;; (m2D 3 2); => 8
+
+;;;;; 3D
+
+;; Manually typed
+;; (define [m :: Mat :: [3x3x3] :: Int] #[1 2 3  10 11 12  19 20 21
+;;                                        4 5 6  13 14 15  22 23 24
+;;                                        7 8 9  16 17 18  25 26 27])
+;; ;; Or inferred:
+;; (define m #[1 2 3  10 11 12  19 20 21
+;;             4 5 6  13 14 15  22 23 24
+;;             7 8 9  16 17 18  25 26 27]); inferred as [m :: Mat :: [3x3x3] :: Int]
+
+; 2D [3x3]
+;; (m 3); => #[19 20 21
+;; ;           22 23 24
+;; ;           25 26 27]
+
+;; ; 1D [1x3]
+;; (m 3 3); => #[25 26 27]
+
+; Scalar
+;; (m 3 3 3); => 27
+
+
+;;;;; 4D
+
+;; (define m4D #[1   2   3   4   5    21  22  23  24  25   41  42  43  44  45
+;;               6   7   8   9   10   26  27  28  29  30   46  47  48  49  50
+;;               11  12  13  14  15   31  32  33  34  35   51  52  53  54  55
+;;               16  17  18  19  20   36  37  38  39  40   56  57  58  59  60
+
+;;               61  62  63  64  65   81  82  83  84  85   101 102 103 104 105
+;;               66  67  68  69  70   86  87  88  89  90   106 107 108 109 110
+;;               71  72  73  74  75   91  92  93  94  95   111 112 113 114 115
+;;               76  77  78  79  80   96  97  98  99  100  116 117 118 119 120
+
+;;               121 122 123 124 125  141 142 143 144 145  161 162 163 164 165
+;;               126 127 128 129 130  146 147 148 149 150  166 167 168 169 170
+;;               131 132 133 134 135  151 152 153 154 155  171 172 173 174 175
+;;               136 137 138 139 140  156 157 158 159 160  176 177 178 179 180]); Inferred as [Mat :: [3x3x4x5] :: Int]
+
+;; NOTICE How for every additional index we pass, it removes 1 from the original matrix dimension.
+
+; 3D [3x4x5]
+;; (m4D 2); => #[61 62 63 64 65  81 82 83 84 85   101 102 103 104 105
+;             66 67 68 69 70  86 87 88 89 90   106 107 108 109 110
+;             71 72 73 74 75  91 92 93 94 95   111 112 113 114 115
+;             76 77 78 79 80  96 97 98 99 100  116 117 118 119 120]
+
+
+; 2D [4x5]
+;; (m4D 2 3); => #[101 102 103 104 105
+;               106 107 108 109 110
+;               111 112 113 114 115
+;               116 117 118 119 120]
+
+; 1D [1x5]
+;; (m4D 2 3 4); => #[116 117 118 119 120]
+
+; scalar
+;; (m4D 2 3 4 5); => 120
+
+;;;;; 5D
+
+;; (define m5D #[1   2   3    4   5   6    7   8   9
+;;               10  11  12   13  14  15   16  17  18
+;;               19  20  21   22  23  24   25  26  27
+
+;;               28  29  30   31  32  33   34  35  36
+;;               37  38  39   40  41  42   43  44  45
+;;               46  47  48   49  50  51   52  53  54
+
+
+;;               55  56  57   58  59  60   61  62  63
+;;               64  65  66   67  68  69   70  71  72
+;;               73  74  75   76  77  78   79  80  81
+
+;;               82  83  84   85  86  87   88  89  90
+;;               91  92  93   94  95  96   97  98  99
+;;               100 101 102  103 104 105  106 107 108]); Inferred as [Mat :: [2x2x3x3x3] :: Int]
+
+
+; 4D Vector [2x3x3x3]
+;; (m5D 2); => #[55  56  57   58  59  60   61  62  63
+;             64  65  66   67  68  69   70  71  72
+;             73  74  75   76  77  78   79  80  81
+;
+;             82  83  84   85  86  87   88  89  90
+;             91  92  93   94  95  96   97  98  99
+;             100 101 102  103 104 105  106 107 108]
+
+
+; 3D Vector [3x3x3]
+;; (m5D 2 2); => #[82  83  84   85  86  87   88  89  90
+;               91  92  93   94  95  96   97  98  99
+;               100 101 102  103 104 105  106 107 108]
+
+; 2D Vector [3x3]
+;; (m5D 2 2 3); => #[88  89  90
+;                 97  98  99
+;                 106 107 108]
+
+; 1D Vector [1x3]
+;; (m5D 2 2 3 3); => #[106 107 108]
+
+; Scalar
+;; (m5D 2 2 3 3 2); => 107
+
+;; TODO Filling:
+
+;; (define m (fill [Mat :: [3x3x3] :: Int]))
+;; (define m (fill (matrix-3x3x3-int-type)))
+
+;;; Infix Function Call
+
+;; it's purely a reader-level transformation that expands to normal
+;; Lisp syntax before macroexpansion, So macros will work normally.
+
+;; (define players #{"Alice" "Bob" "Kelly"})
+;; (define new-players ["Tim" "Sue" "Greg"])
+;; (define more-new-players ["Codeko" "Me" "Meow"])
+
+;; (new-players `into` players); => (into players new-players)
+;; (more-new-players `into` new-players `into` players); => (into (into players new-players) more-new-players)
+
+
+;;;; Map
+
+;; Maps are commonly used for two purposes - to manage an association of keys to values
+;; and to represent domain application data.
+;; The first use case is often referred to as dictionaries or hash maps in other languages.
+
+;;;;; Creating a literal map
+
+;; Maps are represented as alternating keys and values surrounded by ={= and =}=.
+
+;; (define scores {"Fred"   1400
+;;                 "Bob"    1240
+;;                 "Angela" 1024}); Inferred as [scores :: Map]
+
+;; When Monad prints a map at the REPL, it will put `,’s between each key/value pair.
+;; These are purely used for readability - commas are treated as whitespace in Monad.
+;; Feel free to use them in cases where they help you!
+
+;; same as the last one!
+;; (define scores {"Fred" 1400, "Bob" 1240, "Angela" 1024})
+
+;;;;; Adding new key-value pairs
+
+;; New values are added to maps with the assoc (short for "associate") function:
+
+;; (assoc scores "Sally" 0); => {"Angela" 1024, "Bob" 1240, "Fred" 1400, "Sally" 0}
+
+;; If the key used in assoc already exists, the value is replaced.
+
+;; (assoc scores "Bob" 0); => {"Angela" 1024, "Bob" 0, "Fred" 1400}
+
+;;;;; Removing key-value pairs
+
+;; The complementary operation for removing key-value pairs is dissoc ("dissociate"):
+
+;; (dissoc scores "Bob"); => {"Angela" 1024, "Fred" 1400}
+
+;;;;; Looking up by key
+
+;; There are several ways to look up a value in a map. The most obvious is the function get:
+
+;; (get scores "Angela"); => 1024
+
+;; When the map in question is being treated as a constant lookup table,
+;; it’s common to invoke the map itself, treating it as a function:
+
+;; (define  directions {:north 0
+;;                      :east  1
+;;                      :south 2
+;;                      :west  3})
+
+;; (directions :north); => 0
+
+;;;;; Looking up with a default
+
+;; If you want to do a lookup and fall back to a default value
+;; when the key is not found, specify the default as an extra parameter:
+
+;; (scores "Sam" 0); => 0
+
+;; (directions :northwest -1); => -1
+
+;; Using a default is also helpful to distinguish between
+;; a missing key and an existing key with a nil value.
+
+;;;;; Checking contains
+
+;; There are two other functions that are helpful
+;; in checking whether a map contains an entry.
+
+;; (contains? scores "Fred"); => true
+
+;; (find scores "Fred"); => ["Fred" 1400]
+
+;; The =contains?= function is a predicate for checking containment.
+;; The find function finds the key/value entry in a map, not just the value.
+
+;;;;; Keys or values
+
+;; You can also get just the keys or just the values in a map:
+
+;; (keys scores); => ("Fred" "Bob" "Angela")
+
+;; (vals scores); => (1400 1240 1024)
+
+;;;;; Building a map
+
+;; The zipmap function can be used to "zip" together two sequences (the keys and vals) into a map:
+
+;; (define players #{"Alice" "Bob" "Kelly"})
+;; (zipmap players (repeat 0)); => {"Kelly" 0, "Bob" 0, "Alice" 0}
+
+
+;;;;; Combining maps
+
+;; The =merge= function can be used to combine multiple maps into a single map:
+
+;; (define new-scores {"Angela" 300 "Jeff" 900})
+
+;; (merge scores new-scores); => {"Fred" 1400, "Bob" 1240, "Jeff" 900, "Angela" 300}
+
+;; We merged two maps here but you can pass more as well.
+
+;; If both maps contain the same key, the rightmost one wins.
+;; Alternately, you can use =merge-with= to supply a function to invoke when there is a conflict:
+
+;; (define new-scores {"Fred" 550 "Angela" 900 "Sam" 1000})
+;; (merge-with + scores new-scores); => {"Sam" 1000, "Fred" 1950, "Bob" 1240, "Angela" 1924}
+
+;; In the case of a conflict, the function is called on both values to get the new value.
+
+;;;; Set
+
+;; Sets are like mathematical sets - unordered and with no duplicates.
+;; Sets are ideal for efficiently checking whether a collection
+;; contains an element, or to remove any arbitrary element.
+
+;; (empty-set); => #{}
+;; (set? (empty-set)); => True
+;; #{:a :b :c :d}; => #{:d :a :b :c}
+;; (set :a :b :c :d); => #{:d :a :b :c}
+
+;; You can get a set of the values in a collection using the set function:
+;; (set [1 2 3 2 1 2 3]); => #{1 2 3}
+
+;; Sets are collections:
+;; (def s #{:a :b :c :d})
+;; (conj s :e); => #{:d :a :b :e :c}
+;; (count s); => 4
+;; (seq s); => (:d :a :b :c)
+;; (= (conj s :e) #{:a :b :c :d :e}); => True
+
+;; Sets support 'removal' with disj, as well as contains? and get,
+;; the latter returning the object that is held in the set which compares equal to the key, if found:
+
+;; (disj s :d); => #{:a :b :c}
+;; (contains? s :b); => true
+;; (get s :a); => :a
+
+;; Sets are functions of their members, using get:
+;; (s :b); => :b
+;; (s :k); => nil
+
+
+;; (def players #{"Alice" "Bob" "Kelly"})
+;; (def new-players ["Tim" "Sue" "Greg"])
+
+
+;; TODO Provide basic set operations like union, difference, intersection,
+;; as well as some pseudo-relational algebra support for 'relations',
+;; which are simply sets of maps - select, index, rename, join.
+
 
 ;; (define (multhi [x :: Hex] -> [y :: Hex] -> Int)
 ;;   "Multiply X and Y as Hexs, return Int"
@@ -180,26 +557,141 @@
 ;;   "Multiply X and Y as Hexs"
 ;;   (* x y))
 
-
-
-(show "Testing calling user define functions")
-(show (square 10))
-(show (multi f f))
-(show (multf i i))
-(show (multc 'A' 'A'))
-(show (multh 0xFF 0xFF))
-;; (doc 'multi)
+;; (show "Testing calling user define functions")
+;; (show (square 10))
+;; (show (multi f f))
+;; (show (multf i i))
+;; (show (multc 'A' 'A'))
+;; (show (multh 0xFF 0xFF))
+;; ;; (doc 'multi)
 
 
 ;;; Asm
 
-;; The major-mode will do asm syntax highlighting inside this expression
+;; 1. Define variables in lisp with define.
+;; 2. Use them in asm blocks naturally,
+;; 3. Commas omitted to make asm more lispy.
+;; 4. Last instruction's value is returned.
+;; 5. Multiple returns => List.
 
-;; (asm
-;;   push %rbp
-;;   mov  %rsp, %rbp
-;;   pop  %rbp
-;; )
+;; The major-mode does asm syntax highlighting inside the expression
+
+;; TODO Parametric polymorphism
+;; (define (add x y)
+;;   (asm add x y))
+
+;; (define (add [x :: Int] -> [y :: Int] -> Int)
+;;   (asm add %rdi, %rsi))
+
+(define (add [x :: Int] -> [y :: Int] -> Int)
+  (asm add x y))
+
+(define (rdtsc -> Int)
+  (asm rdtsc
+       shl 32   %rdx
+       or  %rdx %rax))
+
+(define (get-pid -> Int)
+  (asm mov 39 %rax
+       syscall))
+
+
+;; Gray code conversion
+(define (binary-to-gray [x :: Bin] -> Bin)
+  "Convert binary to gray code"
+  (asm mov x    %rax
+       mov %rax %rcx
+       shr 1    %rcx
+       xor %rcx %rax))
+
+(show "Binary to gray:")
+(show (binary-to-gray 0b111111))
+
+;; Reverse gray code
+;; (define (gray-to-binary [x :: Int] -> Int)
+;;   "Convert gray to binary"
+;;   (asm mov x %rax
+;;        mov %rax %rcx
+;;        shr 1 %rcx
+;;        xor %rcx %rax
+;;        mov %rax %rcx
+;;        shr 2 %rcx
+;;        xor %rcx %rax
+;;        mov %rax %rcx
+;;        shr 4 %rcx
+;;        xor %rcx %rax
+;;        mov %rax %rcx
+;;        shr 8 %rcx
+;;        xor %rcx %rax
+;;        mov %rax %rcx
+;;        shr 16 %rcx
+;;        xor %rcx %rax
+;;        mov %rax %rcx
+;;        shr 32 %rcx
+;;        xor %rcx %rax))
+
+;; Morton code (Z-order curve) - interleave bits
+;; (define (morton-encode [x :: Int] [y :: Int] -> Int)
+;;   "Interleave bits of x and y"
+;;   (asm mov x %rax
+;;        mov y %rcx
+;;        pdep 0x5555555555555555 %rax %rax
+;;        pdep 0xAAAAAAAAAAAAAAAA %rcx %rcx
+;;        or %rcx %rax))
+
+
+
+(show "HERE ASM")
+(show (rdtsc))
+(show (get-pid))
+
+
+
+(show (add 2 2))
+(show (add 0xFF 1))
+(show (add 1 9))
+(show (add 3 9))
+;; (show (add 100 20))
+;; (show (add -10 39))
+
+
+;; Naked function
+;; (define (add [x :: Int] -> [y :: Int] -> Int)
+;;   :naked True
+;;   (asm
+;;     push %rbp          ; prologue
+;;     mov  %rsp %rbp
+;;     mov  x    %rax     ; x is first  param (in rdi)
+;;     add  y    %rax     ; y is second param (in rsi)
+;;     pop  %rbp          ; epilogue
+;;     ret))              ; return
+
+;;; Loops
+
+;; (for [i 0 10]
+;;   (show "iter n _" i))
+
+;; ;; With step:
+;; (for [i 0 10 2]
+;;   (show "iter n _" i))
+
+
+;;; List comprehention
+
+;; (define xs ((square x) | x <- (1..10))); => (1 4 9 16 25 36 49 64 81 100)
+;; (define ys ((x y) | x <- (1..3) y <- ('a'..'c'))); => ((1 'a') (1 'b') (1 'c') (2 'a') (2 'b') (2 'c') (3 'a') (3 'b') (3 'c'))
+;; (define zs ((x y) | x <- (1..3) y <- (x..3))); => ((1 1) (1 2) (1 3) (2 2) (2 3) (3 3))
+;; (define evens (x | x <- (1..20), (even x))); => (2 4 6 8 10 12 14 16 18 20)
+;; (define triples ((a b c) | a <- (1..20)
+;;                            b <- (a..20)
+;;                            c <- (b..20),
+;;                            (== (square c) (+ (square a) (square b))))); => ((3 4 5) (5 12 13) (6 8 10) (8 15 17) (9 12 15) (12 16 20))
+
+;; (define xs (1..))
+;; (take 10 xs)
+;; (drop 20 xs)
+
+
 
 ;;; Types as types
 
@@ -211,13 +703,78 @@
 ;; ;; NOTE Returning the String type itself
 ;; (define (string-type -> [String :: T])
 ;;   "Return the String type"
-;;   (String))
+;;   String)
 
 ;; (cast-with-type (string-type) 3); => "3"
 
-;; Applying a type as function call has 2 different behaviors
-;; - if called with arguments it will cast those arguments
-;; - if called without arguments it will return the type itself
+;; ;; Applying a builtin type as function
+;; ;; - if called with arguments it will cast those arguments
+;; ;; - if called without arguments it will 0 initialize
+
+;; (Int)    ; => 0
+;; (Hex)    ; => 0x0
+;; (Oct)    ; => 0o0
+;; (Bin)    ; => 0b0
+;; (Float)  ; => 0.0
+;; (Char)   ; => ''
+;; (String) ; => ""
+;; (Fn)     ; => (lambda ())
+;; (Ratio)  ; => 0/0
+
+;;;; Type literal
+
+;; ;; Type literals are self evauluating,
+;; ;; they evaluate to themself.
+
+;; T            ; => T
+;; Arr          ; => Arr
+;; List         ; => List
+;; Bool         ; => Bool
+;; Int          ; => Int
+;; Float        ; => Float
+;; Hex          ; => Hex
+;; Oct          ; => Oct
+;; Bin          ; => Bin
+;; [Vec :: Int] ; => [Vec :: Int]
+;; ;; TODO..
+
+;; ;; We can store types in vectors or lists, or anything really.
+
+;; ;; An array of 4 Int Vector types:
+;; [[Vec :: Int] [Vec :: Int] [Vec :: Int] [Vec :: Int]]
+
+;; ;; An array of 4 T types:
+;; [T T T T]
+
+;; ;; An array of 3 Bool types:
+
+;; [Bool Bool Bool]
+;; ;; A list of 3 different Matrix types:
+;; ([Mat :: [3x3x3] :: Int] [Mat :: [2x2] :: Float] [Mat :: [2x2x3x3x3] :: Int])
+
+
+;;; Regex
+
+;; ;; Regex literal:
+;; #""
+
+;;; Regex function name
+
+;; (define (#"(?<x>\d+)\+(?<y>\d+)" -> Int)
+;;   (+ x y)); x and y bound from named captures
+
+;; (define (#"(?<x>\d+)\+" [y :: Int] -> Int)
+;;   (+ x y)); x bound from named capture, y as normal parameter
+
+;; ;; Usage:
+;; (42+3)   ; => 45
+;; (10+20)  ; => 30
+
+;; (1+ 2)   ; => 3
+;; (33+ 2)  ; => 35
+
+;; Any integer addition expression E.g. (42+3) will now work!
+;; The function is generated automatically based on usage.
 
 ;;; Typed expressions
 
@@ -230,21 +787,21 @@
 ;; (define (fid [f :: Fn] -> Fn)
 ;;   f)
 
-;; (moogle ([f :: Fn] -> x)); -> [apply :: Fn]
+;; (moogle ([f :: Fn] -> a)); -> [apply :: Fn]
 
-;; ((moogle ([f :: Fn] -> x)) double 3)
+;; ((moogle ([f :: Fn] -> a)) double 3)
 ;; (apply double 3)
 
-;; (define (apply [f :: Fn] -> x)
+;; (define (apply [f :: Fn] -> a)
 ;;   (f x))
 
 
 ;; (Int +); -> 43
 ;; (Int apply); -> 550
 
-;;; TODO Casting
+;;; Casting
 ;; Applying types as functions
-;; result in a cast (for builtin types)
+;; result in a cast (only for builtin types)
 
 ;; (Int 20)        ; => 20       (From Int) [id]
 ;; (Int 40.3)      ; => 40       (From Float)
@@ -254,7 +811,7 @@
 ;; (Int 0b1010)    ; => 10       (From Bin)
 ;; (Int 0o755)     ; => 493      (From Oct)
 ;; (Int +)         ; => #hash    (From Fn)
-;; (Int 1/3)       ; => 0        (From Fraction)
+;; (Int 1/3)       ; => 0        (From Ratio)
 
 ;; (Float 20)      ; => 20.0     (From Int)
 ;; (Float 40.3)    ; => 40.3     (From Float) [id]
@@ -264,7 +821,7 @@
 ;; (Float 0b1010)  ; => 10.0     (From Bin)
 ;; (Float 0o755)   ; => 493.0    (From Oct)
 ;; (Float +)       ; => C ERROR  (From Fn)
-;; (Float 1/3)     ; => 0.33333  (From Fraction)
+;; (Float 1/3)     ; => 0.33333  (From Ratio)
 
 ;; (Char 65)       ; => 'A'      (From Int)
 ;; (Char 66.3)     ; => 'B'      (From Float)
@@ -274,7 +831,7 @@
 ;; (Char 0b1010)   ; => '\n'     (From Bin)
 ;; (Char 0o755)    ; => 'ǭ'      (From Oct)
 ;; (Char +)        ; => C ERROR  (From Fn)
-;; (Char 1/3)      ; => C ERROR  (From Fraction)
+;; (Char 1/3)      ; => C ERROR  (From Ratio)
 
 ;; (String 65)     ; => "A"      (From Int)
 ;; (String 66.3)   ; => "B"      (From Float)
@@ -284,7 +841,7 @@
 ;; (String 0b1010) ; => "0b1010" (From Bin)
 ;; (String 0o755)  ; => "0o755"  (From Oct)
 ;; (String +)      ; => "+"      (From Fn)
-;; (String 1/3)    ; => "1/3"    (From Fraction)
+;; (String 1/3)    ; => "1/3"    (From Ratio)
 
 ;; (Hex 65)        ; => 0x41     (From Int)
 ;; (Hex 66.3)      ; => 0x42     (From Float)
@@ -294,7 +851,7 @@
 ;; (Hex 0b1010)    ; => 0xa      (From Bin)
 ;; (Hex 0o755)     ; => 0x1ed    (From Oct)
 ;; (Hex +)         ; => #hash    (From Fn)
-;; (Hex 1/3)       ; => C ERROR  (From Fraction)
+;; (Hex 1/3)       ; => C ERROR  (From Ratio)
 
 ;; (Bin 65)        ; => 0b1000001   (From Int)
 ;; (Bin 66.3)      ; => 0b1000010   (From Float)
@@ -304,7 +861,7 @@
 ;; (Bin 0b1010)    ; => 0b1010      (From Bin) [id]
 ;; (Bin 0o755)     ; => 0b111101101 (From Oct)
 ;; (Bin +)         ; => #hash       (From Fn)
-;; (Bin 1/3)       ; => C ERROR     (From Fraction)
+;; (Bin 1/3)       ; => C ERROR     (From Ratio)
 
 ;; (Oct 65)        ; => 0o101    (From Int)
 ;; (Oct 66.3)      ; => 0o50     (From Float)
@@ -314,7 +871,7 @@
 ;; (Oct 0b1010)    ; => 0o12     (From Bin)
 ;; (Oct 0o755)     ; => 0o755    (From Oct) [id]
 ;; (Oct +)         ; => #hash    (From Fn)
-;; (Oct 1/3)       ; => C ERROR  (From Fraction)
+;; (Oct 1/3)       ; => C ERROR  (From Ratio)
 
 ;; (Fn 20)        ; => (lambda () 20)     (From Int)
 ;; (Fn 40.3)      ; => (lambda () 40.3)   (From Float)
@@ -324,17 +881,17 @@
 ;; (Fn 0b1010)    ; => (lambda () 0b1010) (From Bin)
 ;; (Fn 0o755)     ; => (lambda () 0o755)  (From Oct)
 ;; (Fn +)         ; => +                  (From Fn) [id]
-;; (Fn 1/3)       ; => (lambda () 1/3)    (From Fraction)
+;; (Fn 1/3)       ; => (lambda () 1/3)    (From Ratio)
 
-;; (Fraction 20)        ; => 20/1     (From Int)
-;; (Fraction 40.3)      ; => C ERROR  (From Float)
-;; (Fraction 'A')       ; => 65/1     (From Char)
-;; (Fraction "hi")      ; => 209/1    (From String)
-;; (Fraction 0xFF)      ; => 255/1    (From Hex)
-;; (Fraction 0b1010)    ; => 10/1     (From Bin)
-;; (Fraction 0o755)     ; => 493/1    (From Oct)
-;; (Fraction +)         ; => C ERROR  (From Fn)
-;; (Fraction 1/3)       ; => 1/3      (From Fraction) [id]
+;; (Ratio 20)        ; => 20/1     (From Int)
+;; (Ratio 40.3)      ; => C ERROR  (From Float)
+;; (Ratio 'A')       ; => 65/1     (From Char)
+;; (Ratio "hi")      ; => 209/1    (From String)
+;; (Ratio 0xFF)      ; => 255/1    (From Hex)
+;; (Ratio 0b1010)    ; => 10/1     (From Bin)
+;; (Ratio 0o755)     ; => 493/1    (From Oct)
+;; (Ratio +)         ; => C ERROR  (From Fn)
+;; (Ratio 1/3)       ; => 1/3      (From Ratio) [id]
 
 
 ;; Since we use HM type system
@@ -379,19 +936,77 @@
 ;;; Layout
 
 ;; (layout Point
-;;   [x :: F32]
-;;   [y :: F32])
+;;   "A 2D point in Cartesian coordinates."
+;;   [x :: Float "The X coordinate (horizontal)"]
+;;   [y :: Float "The Y coordinate (vertical)"])
 
-;; (define p (Point 33 22)); will be inferred as [p :: Point]
-;; (define [p :: Point] (Point 33 22)); Manually typed
-
-;; ; This is always possible even if it doesn't derive Show
+;; ;; NOTICE how it doesn't show docstrings.
 ;; (show Point); => (layout Point
 ;; ;                  [x :: F32]
 ;; ;                  [y :: F32])
 
+;; ;; Instance methods for the `Point' layout
+;; ;; instance itself doesn't need a docstring, it's just a container
+;; (instance Point
+;;   ;; But individual methods can have docstrings
+;;   (define (incX [delta :: Float])
+;;     "Move the point horizontally by delta units."
+;;     (+= self.x delta))
+
+;;   (define (incY [delta :: Float])
+;;     "Move the point vertically by delta units."
+;;     (+= self.y delta))
+;; )
+
+;; (define p (Point 1 2)); Inferred as [p :: Point]
+;; (define [p :: Point] (Point 1 2)); Manually typed
+
+;; ;; Always available
+;; (p x) ; => 1
+;; (p y) ; => 2
+;; p.x   ; => 1
+;; p.y   ; => 2
+
+;; ;; Methods
+;; (p.incX); => 2
+;; (p.incY); => 3
+
+;; (doc Point)      ; => "A 2D point in Cartesian coordinates."
+;; (doc Point.incX) ; => "Move the point horizontally by delta units."
+;; (doc p.incX)     ; => Same as above ^ methods are attached to instances
+;; (doc Point.x)    ; => "The X coordinate (horizontal)"
+;; (doc p.x)        ; => same as above ^
+
+;;; Features
+
+(show "testing new function")
+(show '(:F1 :F2 :F2))
+;; (define [list :: List] '(1 2 3 4))
+(define [list :: List] '(1 2.1 'a' "ciao" 0xFF 2 3 44 5))
+(show list)
+
+(show "TESTING conditional compilation")
+(show *features*)
+
+#+WINDOWS
+(show "We are on windows!")
+#---
+
+#+LINUX
+(show "We are on linux!")
+#---
+
+#+LINUX
+#+X86-64
+(show "We are on linux x86-64")
+#+X86-32
+(show "We are on linux x86-32")
+#---
+
 
 ;;; Repl output
+
+;;;; Functions
 
 ;; [+ :: Fn (=> _ _ . _)]
 ;; [cons :: Fn (_ _)]

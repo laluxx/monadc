@@ -585,19 +585,19 @@ static LLVMValueRef codegen_expr(REPLContext *ctx, ASTWithType *ast_typed) {
 
 /// Register built-in operators in the environment
 
-static void register_builtins(REPLContext *ctx) {
-    // Arithmetic: 1 arg (unary) up to unlimited args
-    env_insert_builtin(ctx->env, "+", 1, -1);
-    env_insert_builtin(ctx->env, "-", 1, -1);
-    env_insert_builtin(ctx->env, "*", 1, -1);
-    env_insert_builtin(ctx->env, "/", 1, -1);
-    // show: exactly 1 arg
-    env_insert_builtin(ctx->env, "show",  1,  1);
-    // quote: exactly 1 arg
-    env_insert_builtin(ctx->env, "quote", 1,  1);
-    // define is a special form — mark it so completion finds it
-    env_insert_builtin(ctx->env, "define", 2, -1);
-}
+/* static void register_builtins(REPLContext *ctx) { */
+/*     // Arithmetic: 1 arg (unary) up to unlimited args */
+/*     env_insert_builtin(ctx->env, "+", 1, -1); */
+/*     env_insert_builtin(ctx->env, "-", 1, -1); */
+/*     env_insert_builtin(ctx->env, "*", 1, -1); */
+/*     env_insert_builtin(ctx->env, "/", 1, -1); */
+/*     // show: exactly 1 arg */
+/*     env_insert_builtin(ctx->env, "show",  1,  1); */
+/*     // quote: exactly 1 arg */
+/*     env_insert_builtin(ctx->env, "quote", 1,  1); */
+/*     // define is a special form — mark it so completion finds it */
+/*     env_insert_builtin(ctx->env, "define", 2, -1); */
+/* } */
 
 /// REPL Initialization
 
@@ -638,7 +638,7 @@ void repl_init(REPLContext *ctx) {
 
     LLVMBuildRetVoid(ctx->builder);
 
-    register_builtins(ctx);
+    /* TODO register_builtins(ctx); */
 
     printf("Monad REPL v0.1\n");
     printf("Type expressions to evaluate. Use Ctrl-D to exit.\n\n");

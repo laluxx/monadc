@@ -12,14 +12,21 @@ static Type *make_type(TypeKind kind) {
     return t;
 }
 
-Type *type_int    (void) { return make_type(TYPE_INT);    }
-Type *type_float  (void) { return make_type(TYPE_FLOAT);  }
-Type *type_char   (void) { return make_type(TYPE_CHAR);   }
-Type *type_string (void) { return make_type(TYPE_STRING); }
-Type *type_bool   (void) { return make_type(TYPE_BOOL);   }
-Type *type_hex    (void) { return make_type(TYPE_HEX);    }
-Type *type_bin    (void) { return make_type(TYPE_BIN);    }
-Type *type_oct    (void) { return make_type(TYPE_OCT);    }
+Type *type_int    (void) { return make_type(TYPE_INT);     }
+Type *type_float  (void) { return make_type(TYPE_FLOAT);   }
+Type *type_char   (void) { return make_type(TYPE_CHAR);    }
+Type *type_string (void) { return make_type(TYPE_STRING);  }
+Type *type_bool   (void) { return make_type(TYPE_BOOL);    }
+Type *type_hex    (void) { return make_type(TYPE_HEX);     }
+Type *type_bin    (void) { return make_type(TYPE_BIN);     }
+Type *type_oct    (void) { return make_type(TYPE_OCT);     }
+Type *type_keyword(void) { return make_type(TYPE_KEYWORD); }
+
+Type *type_list(Type *element_type) {
+    Type *t = make_type(TYPE_LIST);
+    t->element_type = element_type;
+    return t;
+}
 
 Type *type_fn(FnParam *params, int param_count, Type *return_type) {
     Type *t        = make_type(TYPE_FN);
@@ -61,15 +68,17 @@ Type *type_fn_builtin(int min_args, int opt_args, bool variadic) {
 Type *type_clone(Type *t) {
     if (!t) return NULL;
     switch (t->kind) {
-        case TYPE_INT:    return type_int();
-        case TYPE_FLOAT:  return type_float();
-        case TYPE_CHAR:   return type_char();
-        case TYPE_STRING: return type_string();
-        case TYPE_BOOL:   return type_bool();
-        case TYPE_HEX:    return type_hex();
-        case TYPE_BIN:    return type_bin();
-        case TYPE_OCT:    return type_oct();
-        default:          return make_type(t->kind);
+        case TYPE_INT:     return type_int();
+        case TYPE_FLOAT:   return type_float();
+        case TYPE_CHAR:    return type_char();
+        case TYPE_STRING:  return type_string();
+        case TYPE_BOOL:    return type_bool();
+        case TYPE_HEX:     return type_hex();
+        case TYPE_BIN:     return type_bin();
+        case TYPE_OCT:     return type_oct();
+        case TYPE_KEYWORD: return type_keyword();
+        case TYPE_LIST:    return type_list(type_clone(t->element_type));
+        default:           return make_type(t->kind);
     }
 }
 
@@ -84,6 +93,9 @@ void type_free(Type *t) {
             free(t->params);
         }
         type_free(t->return_type);
+    }
+    if (t->kind == TYPE_LIST) {
+        type_free(t->element_type);
     }
     free(t);
 }
@@ -103,7 +115,17 @@ const char *type_to_string(Type *t) {
     case TYPE_HEX:     return "Hex";
     case TYPE_BIN:     return "Bin";
     case TYPE_OCT:     return "Oct";
+    case TYPE_KEYWORD: return "Keyword";
     case TYPE_UNKNOWN: return "?";
+
+    case TYPE_LIST: {
+        if (t->element_type) {
+            snprintf(buf, sizeof(buf), "List<%s>", type_to_string(t->element_type));
+        } else {
+            snprintf(buf, sizeof(buf), "List<?>");
+        }
+        return buf;
+    }
 
     case TYPE_FN: {
         if (t->param_count == 0) {
@@ -187,14 +209,16 @@ Type *parse_type_annotation(AST *ast) {
                 AST *type_node = ast->list.items[i + 1];
                 if (type_node->type != AST_SYMBOL) return NULL;
                 const char *tn = type_node->symbol;
-                if (strcmp(tn, "Int")    == 0) return type_int();
-                if (strcmp(tn, "Float")  == 0) return type_float();
-                if (strcmp(tn, "Char")   == 0) return type_char();
-                if (strcmp(tn, "String") == 0) return type_string();
-                if (strcmp(tn, "Bool")   == 0) return type_bool();
-                if (strcmp(tn, "Hex")    == 0) return type_hex();
-                if (strcmp(tn, "Bin")    == 0) return type_bin();
-                if (strcmp(tn, "Oct")    == 0) return type_oct();
+                if (strcmp(tn, "Int")     == 0) return type_int();
+                if (strcmp(tn, "Float")   == 0) return type_float();
+                if (strcmp(tn, "Char")    == 0) return type_char();
+                if (strcmp(tn, "String")  == 0) return type_string();
+                if (strcmp(tn, "Bool")    == 0) return type_bool();
+                if (strcmp(tn, "Hex")     == 0) return type_hex();
+                if (strcmp(tn, "Bin")     == 0) return type_bin();
+                if (strcmp(tn, "Oct")     == 0) return type_oct();
+                if (strcmp(tn, "Keyword") == 0) return type_keyword();
+                if (strcmp(tn, "List")    == 0) return type_list(NULL); // polymorphic list
             }
             return NULL;
         }

@@ -49,11 +49,13 @@ void env_free(Env *table);
 
 void env_insert(Env *table, const char *name, Type *type,
                      LLVMValueRef value);
+
 void env_insert_with_doc(Env *table, const char *name, Type *type,
                                LLVMValueRef value, const char *docstring);
 
 void env_insert_builtin(Env *table, const char *name,
-                              int arity_min, int arity_max);
+                              int arity_min, int arity_max,
+                              const char *docstring);
 
 void env_insert_func(Env *table, const char *name,
                           EnvParam *params, int param_count,
@@ -61,8 +63,8 @@ void env_insert_func(Env *table, const char *name,
                           const char *docstring);
 
 EnvEntry *env_lookup(Env *table, const char *name);
-void env_print(Env *table);
 
+void env_print(Env *table);
 void env_print_entry(EnvEntry *e);
 
 #endif

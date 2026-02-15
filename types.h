@@ -13,28 +13,33 @@ typedef enum {
     TYPE_HEX,
     TYPE_BIN,
     TYPE_OCT,
+    TYPE_LIST,
+    TYPE_KEYWORD,
     TYPE_FN,
     TYPE_UNKNOWN,
 } TypeKind;
 
 /// A single function parameter descriptor
+
 typedef struct FnParam {
     char *name;        // parameter name (may be NULL for builtins)
     struct Type *type; // parameter type (NULL = polymorphic '_')
-    bool optional;     // #:optional
+    bool optional;     // => (#:optional)
     bool rest;         // variadic rest '. _'
 } FnParam;
 
 typedef struct Type {
     TypeKind kind;
-
     // TYPE_FN fields
-    struct FnParam *params;   // array of parameters
+    struct FnParam *params;      // array of parameters
     int             param_count;
-    struct Type    *return_type;  // NULL = unknown/polymorphic
+    struct Type    *return_type; // NULL = unknown/polymorphic
+    // TYPE_LIST fields
+    struct Type *element_type;   // element type for lists (NULL = polymorphic)
 } Type;
 
 /// Constructors
+
 Type *type_int(void);
 Type *type_float(void);
 Type *type_char(void);
@@ -43,6 +48,8 @@ Type *type_bool(void);
 Type *type_hex(void);
 Type *type_bin(void);
 Type *type_oct(void);
+Type *type_list(Type *element_type);
+Type *type_keyword(void);
 Type *type_fn(FnParam *params, int param_count, Type *return_type);
 
 // Build a builtin Fn type with raw arity info (no names).
