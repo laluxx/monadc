@@ -1,5 +1,6 @@
 #ifndef READER_H
 #define READER_H
+
 #include <stddef.h>
 #include <stdbool.h>
 
@@ -12,6 +13,8 @@ typedef enum {
     AST_CHAR,
     AST_LIST,
     AST_KEYWORD,  // :keyword
+    AST_RATIO,    // ratio literal (1/3)
+    AST_ARRAY,    // array literal [1 2 3]
     AST_LAMBDA,   // (lambda ([x :: T] -> ... -> Ret<T>) "doc" body)
     AST_ASM,      // (asm instruction operand1 operand2 ...)
 } ASTType;
@@ -30,12 +33,27 @@ typedef struct AST {
         char *string;
         char character;
         char *keyword;  // keyword name (without the ':')
+
+        // AST_RATIO
+        struct {
+            long long numerator;
+            long long denominator;
+        } ratio;
+
         // AST_LIST
         struct {
             struct AST **items;
             size_t count;
             size_t capacity;
         } list;
+
+        // AST_ARRAY
+        struct {
+            struct AST **elements;
+            size_t element_count;
+            size_t element_capacity;
+        } array;
+
         // AST_LAMBDA
         struct {
             ASTParam *params;  // parameter list
@@ -44,12 +62,14 @@ typedef struct AST {
             char *docstring;   // NULL if absent
             struct AST *body;  // body expression
         } lambda;
+
         // AST_ASM - inline assembly block
         struct {
             struct AST **instructions; // list of AST lists (instruction + operands)
             size_t instruction_count;
         } asm_block;
     };
+
     char *literal_str; // original literal string for numbers (e.g. "0xFF")
 
     // Location tracking
@@ -63,6 +83,8 @@ AST *ast_new_symbol(const char *name);
 AST *ast_new_string(const char *value);
 AST *ast_new_char(char value);
 AST *ast_new_keyword(const char *name);
+AST *ast_new_ratio(long long numerator, long long denominator);
+AST *ast_new_array(void);
 AST *ast_new_list(void);
 AST *ast_new_lambda(ASTParam *params, int param_count,
                      const char *return_type,
@@ -71,6 +93,7 @@ AST *ast_new_lambda(ASTParam *params, int param_count,
 AST *ast_new_asm(AST **instructions, size_t instruction_count);
 
 void ast_list_append(AST *list, AST *item);
+void ast_array_append(AST *array, AST *item);
 void ast_free(AST *ast);
 void ast_print(AST *ast);
 

@@ -146,8 +146,7 @@ EnvEntry *env_lookup(Env *table, const char *name) {
     return find(table, name);
 }
 
-/// env_print_entry  — the Scheme-style arity display
-
+// Guile Scheme style arity display
 void env_print_entry(EnvEntry *e) {
     switch (e->kind) {
 

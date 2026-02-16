@@ -15,12 +15,13 @@ typedef enum {
     TYPE_OCT,
     TYPE_LIST,
     TYPE_KEYWORD,
+    TYPE_RATIO,
+    TYPE_ARR,
     TYPE_FN,
     TYPE_UNKNOWN,
 } TypeKind;
 
 /// A single function parameter descriptor
-
 typedef struct FnParam {
     char *name;        // parameter name (may be NULL for builtins)
     struct Type *type; // parameter type (NULL = polymorphic '_')
@@ -31,11 +32,14 @@ typedef struct FnParam {
 typedef struct Type {
     TypeKind kind;
     // TYPE_FN fields
-    struct FnParam *params;      // array of parameters
-    int             param_count;
-    struct Type    *return_type; // NULL = unknown/polymorphic
+    struct FnParam *params;        // array of parameters
+    int param_count;
+    struct Type *return_type;      // NULL = unknown/polymorphic
     // TYPE_LIST fields
-    struct Type *element_type;   // element type for lists (NULL = polymorphic)
+    struct Type *element_type;     // element type for lists (NULL = polymorphic)
+    // TYPE_ARR fields
+    struct Type *arr_element_type; // element type for arrays
+    int arr_size;                  // size of array (-1 = unknown/inferred)
 } Type;
 
 /// Constructors
@@ -50,6 +54,9 @@ Type *type_bin(void);
 Type *type_oct(void);
 Type *type_list(Type *element_type);
 Type *type_keyword(void);
+Type *type_ratio(void);
+Type *type_arr(Type *element_type, int size);
+
 Type *type_fn(FnParam *params, int param_count, Type *return_type);
 
 // Build a builtin Fn type with raw arity info (no names).
@@ -57,17 +64,19 @@ Type *type_fn(FnParam *params, int param_count, Type *return_type);
 // opt_args  = optional positional args  (-1 = not applicable)
 // variadic  = true if it accepts a rest arg
 Type *type_fn_builtin(int min_args, int opt_args, bool variadic);
+
 Type *type_clone(Type *t);
 void type_free(Type *t);
 
 // Pretty-print a type.
 // For TYPE_FN produces:  Fn (_ _)  /  Fn (#:optional _ _)  / Fn (_ . _)  etc.
+// For TYPE_ARR produces: Arr :: Int :: 3
 const char *type_to_string(Type *t);
 
 // Infer the concrete type of a numeric literal from its value + original string.
 Type *infer_literal_type(double value, const char *literal_str);
 
-// Parse a bracket type annotation  [name :: TypeName]
+// Parse a bracket type annotation  [name :: TypeName] or [name :: Arr :: Int :: 3]
 // Returns the Type, or NULL if not a valid annotation.
 struct AST;
 Type *parse_type_annotation(struct AST *ast);

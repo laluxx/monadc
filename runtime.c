@@ -169,6 +169,27 @@ void rt_print_value(RuntimeValue *val) {
         case RT_LIST:
             rt_print_list(val->data.list_val);
             break;
+        case RT_RATIO:
+            if (val->data.ratio_val.denominator == 1) {
+                printf("%ld", val->data.ratio_val.numerator);
+            } else {
+                printf("%ld/%ld", val->data.ratio_val.numerator,
+                       val->data.ratio_val.denominator);
+            }
+            break;
+
+        case RT_ARRAY:
+            printf("[");
+            for (size_t i = 0; i < val->data.array_val.length; i++) {
+                if (i > 0) printf(" ");
+                if (val->data.array_val.elements[i]) {
+                    rt_print_value(val->data.array_val.elements[i]);
+                } else {
+                    printf("nil");
+                }
+            }
+            printf("]");
+            break;
         case RT_NIL:
             printf("nil");
             break;
@@ -210,6 +231,17 @@ void rt_value_free(RuntimeValue *val) {
         case RT_LIST:
             rt_list_free(val->data.list_val);
             break;
+        case RT_RATIO:
+            // No dynamic memory to free
+            break;
+        case RT_ARRAY:
+            if (val->data.array_val.elements) {
+                for (size_t i = 0; i < val->data.array_val.length; i++) {
+                    rt_value_free(val->data.array_val.elements[i]);
+                }
+                free(val->data.array_val.elements);
+            }
+            break;
         default:
             break;
     }
@@ -229,6 +261,121 @@ void rt_list_free(RuntimeList *list) {
     }
 
     free(list);
+}
+
+/// Arrays and Ratios
+
+
+// GCD helper for ratio simplification
+static int64_t gcd(int64_t a, int64_t b) {
+    if (a < 0) a = -a;
+    if (b < 0) b = -b;
+    while (b != 0) {
+        int64_t temp = b;
+        b = a % b;
+        a = temp;
+    }
+    return a;
+}
+
+// Create a ratio value (automatically simplifies)
+RuntimeValue *rt_value_ratio(int64_t numerator, int64_t denominator) {
+    if (denominator == 0) {
+        fprintf(stderr, "Error: division by zero in ratio\n");
+        exit(1);
+    }
+
+    // Normalize: ensure denominator is positive
+    if (denominator < 0) {
+        numerator = -numerator;
+        denominator = -denominator;
+    }
+
+    // Simplify
+    int64_t g = gcd(numerator, denominator);
+    if (g > 1) {
+        numerator /= g;
+        denominator /= g;
+    }
+
+    RuntimeValue *v = malloc(sizeof(RuntimeValue));
+    v->type = RT_RATIO;
+    v->data.ratio_val.numerator = numerator;
+    v->data.ratio_val.denominator = denominator;
+    return v;
+}
+
+// Ratio arithmetic operations
+RuntimeValue *rt_ratio_add(RuntimeValue *a, RuntimeValue *b) {
+    if (a->type != RT_RATIO || b->type != RT_RATIO) {
+        fprintf(stderr, "Error: ratio operation on non-ratio values\n");
+        exit(1);
+    }
+
+    // a/b + c/d = (ad + bc) / bd
+    int64_t num = a->data.ratio_val.numerator * b->data.ratio_val.denominator +
+                  b->data.ratio_val.numerator * a->data.ratio_val.denominator;
+    int64_t denom = a->data.ratio_val.denominator * b->data.ratio_val.denominator;
+
+    return rt_value_ratio(num, denom);
+}
+
+RuntimeValue *rt_ratio_sub(RuntimeValue *a, RuntimeValue *b) {
+    if (a->type != RT_RATIO || b->type != RT_RATIO) {
+        fprintf(stderr, "Error: ratio operation on non-ratio values\n");
+        exit(1);
+    }
+
+    // a/b - c/d = (ad - bc) / bd
+    int64_t num = a->data.ratio_val.numerator * b->data.ratio_val.denominator -
+                  b->data.ratio_val.numerator * a->data.ratio_val.denominator;
+    int64_t denom = a->data.ratio_val.denominator * b->data.ratio_val.denominator;
+
+    return rt_value_ratio(num, denom);
+}
+
+RuntimeValue *rt_ratio_mul(RuntimeValue *a, RuntimeValue *b) {
+    if (a->type != RT_RATIO || b->type != RT_RATIO) {
+        fprintf(stderr, "Error: ratio operation on non-ratio values\n");
+        exit(1);
+    }
+
+    // (a/b) * (c/d) = ac / bd
+    int64_t num = a->data.ratio_val.numerator * b->data.ratio_val.numerator;
+    int64_t denom = a->data.ratio_val.denominator * b->data.ratio_val.denominator;
+
+    return rt_value_ratio(num, denom);
+}
+
+RuntimeValue *rt_ratio_div(RuntimeValue *a, RuntimeValue *b) {
+    if (a->type != RT_RATIO || b->type != RT_RATIO) {
+        fprintf(stderr, "Error: ratio operation on non-ratio values\n");
+        exit(1);
+    }
+
+    // (a/b) / (c/d) = ad / bc
+    int64_t num = a->data.ratio_val.numerator * b->data.ratio_val.denominator;
+    int64_t denom = a->data.ratio_val.denominator * b->data.ratio_val.numerator;
+
+    return rt_value_ratio(num, denom);
+}
+
+// Convert ratio to int (returns numerator / denominator)
+int64_t rt_ratio_to_int(RuntimeValue *ratio) {
+    if (ratio->type != RT_RATIO) {
+        fprintf(stderr, "Error: not a ratio\n");
+        exit(1);
+    }
+    return ratio->data.ratio_val.numerator / ratio->data.ratio_val.denominator;
+}
+
+// Convert ratio to float
+double rt_ratio_to_float(RuntimeValue *ratio) {
+    if (ratio->type != RT_RATIO) {
+        fprintf(stderr, "Error: not a ratio\n");
+        exit(1);
+    }
+    return (double)ratio->data.ratio_val.numerator / (double)ratio->data.ratio_val.denominator;
 }
 
 /// LLVM Integration
@@ -322,6 +469,34 @@ void declare_runtime_functions(CodegenContext *ctx) {
     LLVMTypeRef rt_print_list_params[] = {ptr_type};
     LLVMTypeRef rt_print_list_type = LLVMFunctionType(LLVMVoidTypeInContext(ctx->context), rt_print_list_params, 1, 0);
     LLVMAddFunction(ctx->module, "rt_print_list", rt_print_list_type);
+
+//// Ratio
+
+    // RuntimeValue *rt_value_ratio(int64_t num, int64_t denom)
+    LLVMTypeRef ratio_params[] = {i64_type, i64_type};
+    LLVMTypeRef ratio_type = LLVMFunctionType(ptr_type, ratio_params, 2, 0);
+    LLVMAddFunction(ctx->module, "rt_value_ratio", ratio_type);
+
+    // Ratio arithmetic
+    LLVMTypeRef ratio_op_params[] = {ptr_type, ptr_type};
+    LLVMTypeRef ratio_op_type = LLVMFunctionType(ptr_type, ratio_op_params, 2, 0);
+
+    LLVMAddFunction(ctx->module, "rt_ratio_add", ratio_op_type);
+    LLVMAddFunction(ctx->module, "rt_ratio_sub", ratio_op_type);
+    LLVMAddFunction(ctx->module, "rt_ratio_mul", ratio_op_type);
+    LLVMAddFunction(ctx->module, "rt_ratio_div", ratio_op_type);
+
+    // Ratio conversions
+    LLVMTypeRef ratio_to_int_params[] = {ptr_type};
+    LLVMTypeRef ratio_to_int_type = LLVMFunctionType(i64_type,
+                                                      ratio_to_int_params, 1, 0);
+    LLVMAddFunction(ctx->module, "rt_ratio_to_int", ratio_to_int_type);
+
+    LLVMTypeRef ratio_to_float_params[] = {ptr_type};
+    LLVMTypeRef ratio_to_float_type = LLVMFunctionType(
+        LLVMDoubleTypeInContext(ctx->context), ratio_to_float_params, 1, 0);
+    LLVMAddFunction(ctx->module, "rt_ratio_to_float", ratio_to_float_type);
+
 }
 
 // Helper functions to get runtime function references
@@ -352,6 +527,17 @@ GET_RUNTIME_FUNCTION(rt_value_list)
 GET_RUNTIME_FUNCTION(rt_value_nil)
 GET_RUNTIME_FUNCTION(rt_print_value)
 GET_RUNTIME_FUNCTION(rt_print_list)
+
+//// Ratio
+
+GET_RUNTIME_FUNCTION(rt_value_ratio)
+GET_RUNTIME_FUNCTION(rt_value_array)
+GET_RUNTIME_FUNCTION(rt_ratio_add)
+GET_RUNTIME_FUNCTION(rt_ratio_sub)
+GET_RUNTIME_FUNCTION(rt_ratio_mul)
+GET_RUNTIME_FUNCTION(rt_ratio_div)
+GET_RUNTIME_FUNCTION(rt_ratio_to_int)
+GET_RUNTIME_FUNCTION(rt_ratio_to_float)
 
 LLVMTypeRef get_rt_value_type(CodegenContext *ctx) {
     // RuntimeValue* is represented as i8*

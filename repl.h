@@ -11,13 +11,11 @@ typedef struct {
     LLVMContextRef context;
     LLVMExecutionEngineRef engine;
     Env *env;
-
     // Format strings (lazy initialization)
     LLVMValueRef fmt_str;
     LLVMValueRef fmt_char;
     LLVMValueRef fmt_int;
     LLVMValueRef fmt_float;
-
     // Expression counter for unique naming
     unsigned int expr_count;
 } REPLContext;

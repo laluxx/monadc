@@ -45,21 +45,13 @@ LLVMValueRef get_fmt_float_no_newline(CodegenContext *ctx);
 LLVMValueRef get_or_declare_printf(CodegenContext *ctx);
 LLVMValueRef get_or_declare_print_binary(CodegenContext *ctx);
 
-// Type conversion
 LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *type);
-
-// Type checking
 bool type_is_numeric(Type *t);
 bool type_is_integer(Type *t);
 bool type_is_float(Type *t);
 
-// AST printing at compile time (for quoted expressions)
 void codegen_print_ast(CodegenContext *ctx, AST *ast);
-
-// Main codegen function
 CodegenResult codegen_expr(CodegenContext *ctx, AST *ast);
-
-// Builtin registration
 void register_builtins(CodegenContext *ctx);
 
 #endif // CODEGEN_H

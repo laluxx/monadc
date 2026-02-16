@@ -179,6 +179,32 @@ AST *ast_new_keyword(const char *name) {
     return a;
 }
 
+AST *ast_new_ratio(long long numerator, long long denominator) {
+    AST *a = calloc(1, sizeof(AST));
+    a->type = AST_RATIO;
+    a->ratio.numerator = numerator;
+    a->ratio.denominator = denominator;
+    return a;
+}
+
+AST *ast_new_array(void) {
+    AST *a = calloc(1, sizeof(AST));
+    a->type = AST_ARRAY;
+    a->array.element_capacity = 4;
+    a->array.elements = malloc(sizeof(AST *) * 4);
+    a->array.element_count = 0;
+    return a;
+}
+
+void ast_array_append(AST *array, AST *item) {
+    if (array->array.element_count >= array->array.element_capacity) {
+        array->array.element_capacity *= 2;
+        array->array.elements = realloc(array->array.elements,
+                                       sizeof(AST *) * array->array.element_capacity);
+    }
+    array->array.elements[array->array.element_count++] = item;
+}
+
 void ast_list_append(AST *list, AST *item) {
     if (list->list.count >= list->list.capacity) {
         list->list.capacity *= 2;
@@ -203,6 +229,16 @@ void ast_free(AST *ast) {
         for (size_t i = 0; i < ast->list.count; i++)
             ast_free(ast->list.items[i]);
         free(ast->list.items);
+        break;
+
+    case AST_RATIO:
+        // No dynamic memory to free
+        break;
+
+    case AST_ARRAY:
+        for (size_t i = 0; i < ast->array.element_count; i++)
+            ast_free(ast->array.elements[i]);
+        free(ast->array.elements);
         break;
 
     case AST_LAMBDA:
@@ -253,6 +289,20 @@ void ast_print(AST *ast) {
         }
         printf(")");
         break;
+
+    case AST_RATIO:
+        printf("%lld/%lld", ast->ratio.numerator, ast->ratio.denominator);
+        break;
+
+    case AST_ARRAY:
+        printf("[");
+        for (size_t i = 0; i < ast->array.element_count; i++) {
+            if (i > 0) printf(" ");
+            ast_print(ast->array.elements[i]);
+        }
+        printf("]");
+        break;
+
     case AST_LAMBDA:
         printf("(lambda (");
         for (int i = 0; i < ast->lambda.param_count; i++) {
@@ -488,9 +538,22 @@ Token lexer_next_token(Lexer *lex) {
     if (is_digit(c)) {
         size_t start = lex->pos;
         while (is_digit(peek(lex)) || peek(lex) == '.') advance(lex);
+
+        // Check for ratio (/)
+        if (peek(lex) == '/') {
+            advance(lex); // consume '/'
+            if (!is_digit(peek(lex))) {
+                fprintf(stderr, "Invalid ratio: missing denominator\n");
+                exit(1);
+            }
+            while (is_digit(peek(lex))) advance(lex);
+        }
+
         tok.value = my_strndup(lex->source+start, lex->pos-start);
-        tok.type  = TOK_NUMBER; return tok;
+        tok.type  = TOK_NUMBER;
+        return tok;
     }
+
 
     // Symbol
     if (is_symbol_char(c)) {
@@ -798,10 +861,38 @@ static AST *parse_bracket_list(Parser *p) {
     int end_column = p->current.column + 1;
     p->current = lexer_next_token(p->lexer);
 
-    list->line = start_line;
-    list->column = start_column;
-    list->end_column = end_column;
-    return list;
+    // Check if this contains :: which indicates a type annotation
+    // Type annotations should stay as lists
+    bool has_double_colon = false;
+    for (size_t i = 0; i < list->list.count; i++) {
+        if (list->list.items[i]->type == AST_SYMBOL &&
+            strcmp(list->list.items[i]->symbol, "::") == 0) {
+            has_double_colon = true;
+            break;
+        }
+    }
+
+    if (has_double_colon) {
+        // Keep as list for type annotation
+        list->line = start_line;
+        list->column = start_column;
+        list->end_column = end_column;
+        return list;
+    }
+
+    // Otherwise, convert to array
+    AST *array = ast_new_array();
+    for (size_t i = 0; i < list->list.count; i++) {
+        ast_array_append(array, list->list.items[i]);
+    }
+
+    free(list->list.items);
+    free(list);
+
+    array->line = start_line;
+    array->column = start_column;
+    array->end_column = end_column;
+    return array;
 }
 
 static double parse_number_str(const char *s) {
@@ -817,17 +908,26 @@ static AST *parse_expr(Parser *p) {
     switch (tok.type) {
     case TOK_NUMBER: {
         int end_col = tok.column + (tok.value ? strlen(tok.value) : 1);
-
-        // DEBUG
-        fprintf(stderr, ">>> PARSE NUMBER: tok.value='%s'\n", tok.value ? tok.value : "NULL");
-
         p->current = lexer_next_token(p->lexer);
+
+        // Check if it's a ratio (contains '/')
+        if (tok.value && strchr(tok.value, '/')) {
+            char *slash = strchr(tok.value, '/');
+            *slash = '\0'; // temporarily split
+            long long num = atoll(tok.value);
+            long long denom = atoll(slash + 1);
+            *slash = '/'; // restore
+
+            AST *ast = ast_new_ratio(num, denom);
+            ast->line = tok.line;
+            ast->column = tok.column;
+            ast->end_column = end_col;
+            ast->literal_str = strdup(tok.value);
+            return ast;
+        }
+
+        // Regular number
         AST *ast = ast_new_number(parse_number_str(tok.value), tok.value);
-
-        // DEBUG
-        fprintf(stderr, ">>> AST CREATED: literal_str='%s', number=%g\n",
-                ast->literal_str ? ast->literal_str : "NULL", ast->number);
-
         ast->line = tok.line;
         ast->column = tok.column;
         ast->end_column = end_col;

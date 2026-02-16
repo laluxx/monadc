@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <llvm-c/Core.h>
 #include "codegen.h"
-// Runtime value types
+
 typedef enum {
     RT_INT,
     RT_FLOAT,
@@ -13,6 +13,8 @@ typedef enum {
     RT_STRING,
     RT_KEYWORD,
     RT_LIST,
+    RT_RATIO,
+    RT_ARRAY,
     RT_NIL
 } RuntimeValueType;
 
@@ -27,6 +29,18 @@ typedef struct RuntimeValue {
         char *string_val;
         char *keyword_val;
         struct RuntimeList *list_val;
+
+        // Ratio value
+        struct {
+            int64_t numerator;
+            int64_t denominator;
+        } ratio_val;
+
+        // Array value
+        struct {
+            struct RuntimeValue **elements;
+            size_t length;
+        } array_val;
     } data;
 } RuntimeValue;
 
@@ -74,6 +88,35 @@ void rt_print_list(RuntimeList *list);
 // Memory management
 void rt_value_free(RuntimeValue *val);
 void rt_list_free(RuntimeList *list);
+
+/// Arrays and Ratios
+
+RuntimeValue *rt_value_ratio(int64_t numerator, int64_t denominator);
+RuntimeValue *rt_value_array(size_t length);
+void rt_array_set(RuntimeValue *array, size_t index, RuntimeValue *value);
+RuntimeValue *rt_array_get(RuntimeValue *array, size_t index);
+int64_t rt_array_length(RuntimeValue *array);
+
+RuntimeValue *rt_ratio_add(RuntimeValue *a, RuntimeValue *b);
+RuntimeValue *rt_ratio_sub(RuntimeValue *a, RuntimeValue *b);
+RuntimeValue *rt_ratio_mul(RuntimeValue *a, RuntimeValue *b);
+RuntimeValue *rt_ratio_div(RuntimeValue *a, RuntimeValue *b);
+int64_t rt_ratio_to_int(RuntimeValue *ratio);
+double rt_ratio_to_float(RuntimeValue *ratio);
+
+// Helper functions for LLVM
+LLVMValueRef get_rt_value_ratio(CodegenContext *ctx);
+LLVMValueRef get_rt_value_array(CodegenContext *ctx);
+LLVMValueRef get_rt_array_set(CodegenContext *ctx);
+LLVMValueRef get_rt_array_get(CodegenContext *ctx);
+LLVMValueRef get_rt_array_length(CodegenContext *ctx);
+LLVMValueRef get_rt_ratio_add(CodegenContext *ctx);
+LLVMValueRef get_rt_ratio_sub(CodegenContext *ctx);
+LLVMValueRef get_rt_ratio_mul(CodegenContext *ctx);
+LLVMValueRef get_rt_ratio_div(CodegenContext *ctx);
+LLVMValueRef get_rt_ratio_to_int(CodegenContext *ctx);
+LLVMValueRef get_rt_ratio_to_float(CodegenContext *ctx);
+
 
 /// LLVM Integration
 

@@ -15,6 +15,7 @@
 (define [b :: Bin] 0b1010)      ; Typed Bin (10)
 (define [o :: Oct] 0o755)       ; Typed Oct (493)
 
+
 ;; TODO
 ;; (show "Value of i is _, f is _, and o is _." i f o)
 
@@ -31,12 +32,12 @@
 
 
 
-;; (define (pure rec fib n)
+;; TODO IF, PURE, REC
+;; (define (pure rec fib [n :: Int] -> Int)
 ;;   "Generate the N fibonacci number."
 ;;   (if (<= n 2)
 ;;       1
 ;;       (+ (fib (- n 1)) (fib (- n 2)))))
-
 
 
 (show "Test Showing Int + <T>")
@@ -166,18 +167,133 @@
 (show 0o755)
 (show 10)
 ;; (show 1e6)
+
 (show "ALSO HERE")
 (show (+ b b))
 (show (Int (+ b b)))
 ;; (show (Int multh))
 
 (define [decimal :: Float] 0.132093)
-;; (define [frac :: Ratio] 1/3); NOTE It really means [[https://en.wikipedia.org/wiki/Rational_number][Rational]]
+
+
+
+
+;; TODO
+;; (define (return-int -> Int) 3)
+;; (define [test :: String] (return-int)); This should not be allowed
+;; (show "showing test var")
+;; (show test); Segfault!
 
 
 ;;; Types
 
-;;;; Vector
+;;;; Rationals
+
+(show "TESTING rationals")
+(define frac 1/3); Inferred as [frac :: Ratio]
+(define [frac :: Ratio] 1/3); NOTE It really means [[https://en.wikipedia.org/wiki/Rational_number][Rational]]
+(show (+ frac frac frac)); => 1 (Int)
+(show (+ frac frac frac frac)); => 4/3
+(show (+ 1/2 1/2)); => 1
+(show 1/3)
+
+;;;; Arrays
+
+(show "TESTING Arrays")
+(show [1 2 3 4 5 6]); TODO...
+
+(define [empty-arr :: Arr :: Int :: 3] []); ALLOWED! 0 initialized by default
+(show empty-arr); => [0 0 0]
+;; (define x []); CORRECT C ERROR!
+
+;;;;; Int Array
+
+(define [iarr :: Arr :: Int :: 3] [1 2 3])
+(define iarr [1 2 3])
+(show "Testing iarr")
+(show iarr)
+
+;;;;; Float Array
+
+(define [farr :: Arr :: Float :: 3] [0.1 0.2 0.3])
+(define farr [0.1 0.2 0.3]); Inferred as [farr :: Arr :: Float :: 3]
+(show "Testing farr")
+(show farr)
+
+;;;;; Char Array
+
+(define [carr :: Arr :: Char :: 3] ['a' 'b' 'c'])
+(define carr ['a' 'b' 'c'])
+(show "Testing carr")
+(show carr)
+
+;;;;; String Array
+
+(define [sarr :: Arr :: String :: 3] ["a" "b" "c"])
+(define sarr ["a" "b" "c"]); Inferred as [sarr :: Arr :: String  :: 3]
+(show "Testing sarr")
+(show sarr)
+
+;;;;; Hex Array
+
+(define [harr :: Arr :: Hex :: 3] [0xFF 0x1 0x2])
+(define harr [0xFF 0x1 0x2]); Inferred as [harr :: Arr :: Hex :: 3]
+(show "Testing harr")
+(show harr)
+
+;;;;; Bin Array
+
+(define [barr :: Arr :: Bin :: 3] [0b0 0b1 0o10])
+(define barr [0b0 0b1 0o10]); Inferred as [barr :: Arr :: Bin :: 3]
+(show "Testing barr")
+(show barr)
+
+;;;;; Oct Array
+
+(define [oarr :: Arr :: Oct :: 3] [0o1 0o2 0o3])
+(define oarr [0o1 0o2 0o3]); Inferred as [oarr :: Arr :: Oct :: 3]
+(show "Testing oarr")
+(show oarr)
+
+;;;;; Fn Array
+
+;; (we should store pointers to Functions)
+
+;; (define [fnarr :: Arr :: Fn :: 3] [+ / -]); => ERROR! Segfault.
+;; (define fnarr [+ / -]); Inferred as [fnarr :: Arr :: Fn :: 3]
+;; (show "Testing fnarr")
+;; (show fnarr)
+
+;;;;; Ratio Array
+
+(define [rarr :: Arr :: Ratio :: 3] [1/1 1/2 1/3])
+(define rarr [1/1 1/2 1/3])
+(show "Testing rarr")
+(show rarr)
+
+;;;;; Arr Array
+
+(define [aarr :: Arr :: Arr :: 3] [[1] [2] [3]])
+(define aarr [[1] [2] [3]])
+(show "Testing aarr")
+(show aarr); => [  ] WRONG! it should be [[1] [2] [3]]
+
+;;;;; Keyword Array
+
+(define [karr :: Arr :: Keyword :: 3] [:a :b :c])
+(show "Testing karr")
+(show karr)
+
+;;;; TODO Dynamic arrays
+
+;; (define x ~[]); ALLOWED! Inferred as [x :: Dyn :: ?]
+;; It will be a runtime data structure.
+;; The first time we `push' something, it will only accept stuff of that type from now on,
+
+;; (define xs ~[1 2 3]); Inferred as [x :: Dyn :: Int]
+;; (define [xs :: Dyn :: Int] ~[1 2 3])
+
+;;;; TODO Vector
 
 ;; One important property of vectors is homogeneity, allows to:
 ;;  - Store data contiguously in memory (cache-friendly)
@@ -230,7 +346,7 @@
 ;; (v (range 3 _))   ; #[40 50]    (from index 3 to end)   (3:)
 ;; (v (range_ 2))    ; #[10 20]    (from start to index 2) (:2)
 
-;;;; Matrix
+;;;; TODO Matrix
 
 ;; Matrices are actually multidimensional vectors,
 ;; they share ALL properties, for example homogeneity.
@@ -370,20 +486,7 @@
 ;; (define m (fill [Mat :: [3x3x3] :: Int]))
 ;; (define m (fill (matrix-3x3x3-int-type)))
 
-;;; Infix Function Call
-
-;; it's purely a reader-level transformation that expands to normal
-;; Lisp syntax before macroexpansion, So macros will work normally.
-
-;; (define players #{"Alice" "Bob" "Kelly"})
-;; (define new-players ["Tim" "Sue" "Greg"])
-;; (define more-new-players ["Codeko" "Me" "Meow"])
-
-;; (new-players `into` players); => (into players new-players)
-;; (more-new-players `into` new-players `into` players); => (into (into players new-players) more-new-players)
-
-
-;;;; Map
+;;;; TODO Map
 
 ;; Maps are commonly used for two purposes - to manage an association of keys to values
 ;; and to represent domain application data.
@@ -494,7 +597,7 @@
 
 ;; In the case of a conflict, the function is called on both values to get the new value.
 
-;;;; Set
+;;;; TODO Set
 
 ;; Sets are like mathematical sets - unordered and with no duplicates.
 ;; Sets are ideal for efficiently checking whether a collection
@@ -540,9 +643,22 @@
 ;;   "Multiply X and Y as Hexs, return Int"
 ;;   (* x y))
 
-;;; Optional parameters
 
-;; ;; Here Y is optiona because it's after => (defaults to False)
+;;; TODO Infix Function Call
+
+;; it's purely a reader-level transformation that expands to normal
+;; Lisp syntax before macroexpansion, So macros will work normally.
+
+;; (define players #{"Alice" "Bob" "Kelly"})
+;; (define new-players ["Tim" "Sue" "Greg"])
+;; (define more-new-players ["Codeko" "Me" "Meow"])
+
+;; (new-players `into` players); => (into players new-players)
+;; (more-new-players `into` new-players `into` players); => (into (into players new-players) more-new-players)
+
+;;; TODO Optional parameters
+
+;; Here Y is optiona because it's after => (defaults to False)
 ;; (define (multh [x :: Hex] => [y :: Hex] -> Int)
 ;;   "Multiply X and Y as Hexs"
 ;;   (* x y))
@@ -564,7 +680,6 @@
 ;; (show (multc 'A' 'A'))
 ;; (show (multh 0xFF 0xFF))
 ;; ;; (doc 'multi)
-
 
 ;;; Asm
 
@@ -591,55 +706,17 @@
        shl 32   %rdx
        or  %rdx %rax))
 
+#+X86-64
 (define (get-pid -> Int)
   (asm mov 39 %rax
        syscall))
+#---
 
-
-;; Gray code conversion
-(define (binary-to-gray [x :: Bin] -> Bin)
-  "Convert binary to gray code"
-  (asm mov x    %rax
-       mov %rax %rcx
-       shr 1    %rcx
-       xor %rcx %rax))
-
-(show "Binary to gray:")
-(show (binary-to-gray 0b111111))
-
-;; Reverse gray code
-;; (define (gray-to-binary [x :: Int] -> Int)
-;;   "Convert gray to binary"
-;;   (asm mov x %rax
-;;        mov %rax %rcx
-;;        shr 1 %rcx
-;;        xor %rcx %rax
-;;        mov %rax %rcx
-;;        shr 2 %rcx
-;;        xor %rcx %rax
-;;        mov %rax %rcx
-;;        shr 4 %rcx
-;;        xor %rcx %rax
-;;        mov %rax %rcx
-;;        shr 8 %rcx
-;;        xor %rcx %rax
-;;        mov %rax %rcx
-;;        shr 16 %rcx
-;;        xor %rcx %rax
-;;        mov %rax %rcx
-;;        shr 32 %rcx
-;;        xor %rcx %rax))
-
-;; Morton code (Z-order curve) - interleave bits
-;; (define (morton-encode [x :: Int] [y :: Int] -> Int)
-;;   "Interleave bits of x and y"
-;;   (asm mov x %rax
-;;        mov y %rcx
-;;        pdep 0x5555555555555555 %rax %rax
-;;        pdep 0xAAAAAAAAAAAAAAAA %rcx %rcx
-;;        or %rcx %rax))
-
-
+;; #+ARM32
+;; (define (get-pid -> Int)
+;;   (asm mov r7 #20; TODO Support # for ARM
+;;        swi #0))
+;; #---
 
 (show "HERE ASM")
 (show (rdtsc))
@@ -657,6 +734,7 @@
 
 ;; Naked function
 ;; (define (add [x :: Int] -> [y :: Int] -> Int)
+;;   :doc "Documentation for this shit."
 ;;   :naked True
 ;;   (asm
 ;;     push %rbp          ; prologue
@@ -666,7 +744,7 @@
 ;;     pop  %rbp          ; epilogue
 ;;     ret))              ; return
 
-;;; Loops
+;;; TODO Loops
 
 ;; (for [i 0 10]
 ;;   (show "iter n _" i))
@@ -676,7 +754,7 @@
 ;;   (show "iter n _" i))
 
 
-;;; List comprehention
+;;; TODO List comprehention
 
 ;; (define xs ((square x) | x <- (1..10))); => (1 4 9 16 25 36 49 64 81 100)
 ;; (define ys ((x y) | x <- (1..3) y <- ('a'..'c'))); => ((1 'a') (1 'b') (1 'c') (2 'a') (2 'b') (2 'c') (3 'a') (3 'b') (3 'c'))
@@ -692,8 +770,7 @@
 ;; (drop 20 xs)
 
 
-
-;;; Types as types
+;;; TODO Types as types
 
 ;; ;; NOTE Returning the casted result of x
 ;; (define (cast-with-type [t :: T] -> [x :: Int] -> t)
@@ -781,7 +858,6 @@
 ; This is sayn the expression (+ b b) is of type Bin
 ;; [(+ b b) :: Bin]
 
-
 ;; (define (id x) x)
 
 ;; (define (fid [f :: Fn] -> Fn)
@@ -812,6 +888,7 @@
 ;; (Int 0o755)     ; => 493      (From Oct)
 ;; (Int +)         ; => #hash    (From Fn)
 ;; (Int 1/3)       ; => 0        (From Ratio)
+;; (Int [1.0])     ; => [1]      (From Arr)
 
 ;; (Float 20)      ; => 20.0     (From Int)
 ;; (Float 40.3)    ; => 40.3     (From Float) [id]
@@ -822,6 +899,7 @@
 ;; (Float 0o755)   ; => 493.0    (From Oct)
 ;; (Float +)       ; => C ERROR  (From Fn)
 ;; (Float 1/3)     ; => 0.33333  (From Ratio)
+;; (Float [1])     ; => [1.0]    (From Arr)
 
 ;; (Char 65)       ; => 'A'      (From Int)
 ;; (Char 66.3)     ; => 'B'      (From Float)
@@ -832,6 +910,7 @@
 ;; (Char 0o755)    ; => 'ǭ'      (From Oct)
 ;; (Char +)        ; => C ERROR  (From Fn)
 ;; (Char 1/3)      ; => C ERROR  (From Ratio)
+;; (Char [1])      ; => C ERROR  (From Arr)
 
 ;; (String 65)     ; => "A"      (From Int)
 ;; (String 66.3)   ; => "B"      (From Float)
@@ -842,6 +921,7 @@
 ;; (String 0o755)  ; => "0o755"  (From Oct)
 ;; (String +)      ; => "+"      (From Fn)
 ;; (String 1/3)    ; => "1/3"    (From Ratio)
+;; (String [1])    ; => ["1"]    (From Arr)
 
 ;; (Hex 65)        ; => 0x41     (From Int)
 ;; (Hex 66.3)      ; => 0x42     (From Float)
@@ -852,6 +932,7 @@
 ;; (Hex 0o755)     ; => 0x1ed    (From Oct)
 ;; (Hex +)         ; => #hash    (From Fn)
 ;; (Hex 1/3)       ; => C ERROR  (From Ratio)
+;; (Hex [1])       ; => [0x1]    (From Arr)
 
 ;; (Bin 65)        ; => 0b1000001   (From Int)
 ;; (Bin 66.3)      ; => 0b1000010   (From Float)
@@ -862,6 +943,7 @@
 ;; (Bin 0o755)     ; => 0b111101101 (From Oct)
 ;; (Bin +)         ; => #hash       (From Fn)
 ;; (Bin 1/3)       ; => C ERROR     (From Ratio)
+;; (Bin [1])       ; => [0b1]       (From Arr)
 
 ;; (Oct 65)        ; => 0o101    (From Int)
 ;; (Oct 66.3)      ; => 0o50     (From Float)
@@ -872,16 +954,18 @@
 ;; (Oct 0o755)     ; => 0o755    (From Oct) [id]
 ;; (Oct +)         ; => #hash    (From Fn)
 ;; (Oct 1/3)       ; => C ERROR  (From Ratio)
+;; (Oct [1])       ; => [0x1]    (From Arr)
 
-;; (Fn 20)        ; => (lambda () 20)     (From Int)
-;; (Fn 40.3)      ; => (lambda () 40.3)   (From Float)
-;; (Fn 'A')       ; => (lambda () 'A')    (From Char)
-;; (Fn "hi")      ; => (lambda () "Hi")   (From String)
-;; (Fn 0xFF)      ; => (lambda () 0xFF)   (From Hex)
-;; (Fn 0b1010)    ; => (lambda () 0b1010) (From Bin)
-;; (Fn 0o755)     ; => (lambda () 0o755)  (From Oct)
-;; (Fn +)         ; => +                  (From Fn) [id]
-;; (Fn 1/3)       ; => (lambda () 1/3)    (From Ratio)
+;; (Fn 20)        ; => (lambda () 20)      (From Int)
+;; (Fn 40.3)      ; => (lambda () 40.3)    (From Float)
+;; (Fn 'A')       ; => (lambda () 'A')     (From Char)
+;; (Fn "hi")      ; => (lambda () "Hi")    (From String)
+;; (Fn 0xFF)      ; => (lambda () 0xFF)    (From Hex)
+;; (Fn 0b1010)    ; => (lambda () 0b1010)  (From Bin)
+;; (Fn 0o755)     ; => (lambda () 0o755)   (From Oct)
+;; (Fn +)         ; => +                   (From Fn) [id]
+;; (Fn 1/3)       ; => (lambda () 1/3)     (From Ratio)
+;; (Fn [1])       ; => (lambda () [1])     (From Arr)
 
 ;; (Ratio 20)        ; => 20/1     (From Int)
 ;; (Ratio 40.3)      ; => C ERROR  (From Float)
@@ -892,6 +976,18 @@
 ;; (Ratio 0o755)     ; => 493/1    (From Oct)
 ;; (Ratio +)         ; => C ERROR  (From Fn)
 ;; (Ratio 1/3)       ; => 1/3      (From Ratio) [id]
+;; (Ratio [1])       ; => [1/1]    (From Arr)
+
+;; (Arr 20)        ; => [20]     (From Int)
+;; (Arr 40.3)      ; => [40.3]   (From Float)
+;; (Arr 'A')       ; => ['A']    (From Char)
+;; (Arr "hi")      ; => ["hi"]   (From String)
+;; (Arr 0xFF)      ; => [0xFF]   (From Hex)
+;; (Arr 0b1010)    ; => [0b1010] (From Bin)
+;; (Arr 0o755)     ; => [0o755]  (From Oct)
+;; (Arr +)         ; => [+]      (From Fn)
+;; (Arr 1/3)       ; => [1/3]    (From Ratio)
+;; (Arr [1])       ; => [1]      (From Arr) [id]
 
 
 ;; Since we use HM type system
@@ -899,17 +995,23 @@
 ;; (define (int->hex [x :: Int] -> Hex)
 ;;   (Hex x))
 
-
-;; (define (last coll)
-;;   (match coll
+; Generic coll ╮     ╭ Generic Type
+;              v     v
+;; (define (last [a] -> a)
+;;   (match; Without a variable name here, it will match based on positional binding
 ;;     [] -> (error "Empty collection")
 ;;     [x] -> x
 ;;     [_|xs] -> (last xs)))
 
-;; (define (last coll -> [a :: Maybe])
+;; NOTE You are allowed to match (without specifying the variable to match) ONLY
+;; inside functions with at least one aprameter, C ERROR otherwise.
+;; It should trow a C ERROR also if you try to bind more than the parameters you have.
+
+
+;; (define (last [coll :: [a]] -> [a :: Maybe])
 ;;   (match coll
 ;;     [] -> Nothing
-;;     [x] -> [x :: Just]
+;;     [x] -> (Just x)
 ;;     [_|xs] -> (last xs)))
 
 

@@ -1,16 +1,10 @@
 #+title: TODO.org
 
-Allow unicode functions name, that mixed with `infix` functions creates beatiful dsl languages,
-then in the emacs mode add a function to insert functio names 
+Allow unicode functions name, that mixed with `infix` functions creates beatiful DSLs,
+then in the emacs major-mode add a function to insert function names with completion.
 
 * Repl [0/1]
 - [ ] If the repl input has no (), everything is implicitly inside a list, so =+ 1 1 1= works!
-
-* Errors [0/1]
-- [ ] Think, think!
-
-* Warnings [0/1]
-- [ ] Think, think!
 
 * Env [1/2]
 - [ ] A way to dump an enviroment to a loadable file.env 

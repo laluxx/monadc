@@ -9,6 +9,7 @@
 static Type *make_type(TypeKind kind) {
     Type *t = calloc(1, sizeof(Type));
     t->kind = kind;
+    t->arr_size = -1; // default for non-array types
     return t;
 }
 
@@ -21,10 +22,18 @@ Type *type_hex    (void) { return make_type(TYPE_HEX);     }
 Type *type_bin    (void) { return make_type(TYPE_BIN);     }
 Type *type_oct    (void) { return make_type(TYPE_OCT);     }
 Type *type_keyword(void) { return make_type(TYPE_KEYWORD); }
+Type *type_ratio  (void) { return make_type(TYPE_RATIO);   }
 
 Type *type_list(Type *element_type) {
     Type *t = make_type(TYPE_LIST);
     t->element_type = element_type;
+    return t;
+}
+
+Type *type_arr(Type *element_type, int size) {
+    Type *t = make_type(TYPE_ARR);
+    t->arr_element_type = element_type;
+    t->arr_size = size;
     return t;
 }
 
@@ -77,7 +86,9 @@ Type *type_clone(Type *t) {
         case TYPE_BIN:     return type_bin();
         case TYPE_OCT:     return type_oct();
         case TYPE_KEYWORD: return type_keyword();
+        case TYPE_RATIO:   return type_ratio();
         case TYPE_LIST:    return type_list(type_clone(t->element_type));
+        case TYPE_ARR:     return type_arr(type_clone(t->arr_element_type), t->arr_size);
         default:           return make_type(t->kind);
     }
 }
@@ -96,6 +107,9 @@ void type_free(Type *t) {
     }
     if (t->kind == TYPE_LIST) {
         type_free(t->element_type);
+    }
+    if (t->kind == TYPE_ARR) {
+        type_free(t->arr_element_type);
     }
     free(t);
 }
@@ -116,6 +130,7 @@ const char *type_to_string(Type *t) {
     case TYPE_BIN:     return "Bin";
     case TYPE_OCT:     return "Oct";
     case TYPE_KEYWORD: return "Keyword";
+    case TYPE_RATIO:   return "Ratio";
     case TYPE_UNKNOWN: return "?";
 
     case TYPE_LIST: {
@@ -123,6 +138,20 @@ const char *type_to_string(Type *t) {
             snprintf(buf, sizeof(buf), "List<%s>", type_to_string(t->element_type));
         } else {
             snprintf(buf, sizeof(buf), "List<?>");
+        }
+        return buf;
+    }
+
+    case TYPE_ARR: {
+        if (t->arr_element_type && t->arr_size >= 0) {
+            snprintf(buf, sizeof(buf), "Arr :: %s :: %d",
+                     type_to_string(t->arr_element_type), t->arr_size);
+        } else if (t->arr_element_type) {
+            snprintf(buf, sizeof(buf), "Arr :: %s", type_to_string(t->arr_element_type));
+        } else if (t->arr_size >= 0) {
+            snprintf(buf, sizeof(buf), "Arr :: ? :: %d", t->arr_size);
+        } else {
+            snprintf(buf, sizeof(buf), "Arr");
         }
         return buf;
     }
@@ -171,6 +200,27 @@ Type *infer_literal_type(double value, const char *literal_str) {
         return type_float();
     }
 
+    // Ratio: contains '/' but not in hex/bin/oct context
+    // Must check this BEFORE other checks
+    const char *slash = strchr(literal_str, '/');
+    if (slash && slash > literal_str && *(slash + 1) != '\0') {
+        // Make sure it's not a comment or something else
+        // Check that there are digits on both sides
+        bool has_digit_before = false;
+        bool has_digit_after = false;
+
+        for (const char *p = literal_str; p < slash; p++) {
+            if (*p >= '0' && *p <= '9') has_digit_before = true;
+        }
+        for (const char *p = slash + 1; *p; p++) {
+            if (*p >= '0' && *p <= '9') has_digit_after = true;
+        }
+
+        if (has_digit_before && has_digit_after) {
+            return type_ratio();
+        }
+    }
+
     // Hex
     if (literal_str[0] == '0' &&
         (literal_str[1] == 'x' || literal_str[1] == 'X'))
@@ -195,12 +245,12 @@ Type *infer_literal_type(double value, const char *literal_str) {
     return type_int();
 }
 
-// Parse type annotation [name :: TypeName] or [TypeName]
+// Parse type annotation [name :: TypeName] or [name :: Arr :: Int :: 3]
 Type *parse_type_annotation(AST *ast) {
     if (!ast || ast->type != AST_LIST) return NULL;
 
     // Walk the list looking for "::" then the type name after it.
-    // Form: [name :: TypeName]  or just [TypeName]
+    // Form: [name :: TypeName]  or  [name :: Arr :: Int :: 3]
     for (size_t i = 0; i < ast->list.count; i++) {
         AST *item = ast->list.items[i];
         if (item->type == AST_SYMBOL && strcmp(item->symbol, "::") == 0) {
@@ -209,6 +259,46 @@ Type *parse_type_annotation(AST *ast) {
                 AST *type_node = ast->list.items[i + 1];
                 if (type_node->type != AST_SYMBOL) return NULL;
                 const char *tn = type_node->symbol;
+
+                // Check for Arr type with element type and size
+                if (strcmp(tn, "Arr") == 0) {
+                    // Parse: Arr :: ElementType :: Size
+                    Type *elem_type = NULL;
+                    int size = -1;
+
+                    // Look for next ::
+                    if (i + 2 < ast->list.count &&
+                        ast->list.items[i + 2]->type == AST_SYMBOL &&
+                        strcmp(ast->list.items[i + 2]->symbol, "::") == 0) {
+
+                        if (i + 3 < ast->list.count &&
+                            ast->list.items[i + 3]->type == AST_SYMBOL) {
+                            const char *elem_name = ast->list.items[i + 3]->symbol;
+
+                            if (strcmp(elem_name, "Int") == 0) elem_type = type_int();
+                            else if (strcmp(elem_name, "Float") == 0) elem_type = type_float();
+                            else if (strcmp(elem_name, "Char") == 0) elem_type = type_char();
+                            else if (strcmp(elem_name, "String") == 0) elem_type = type_string();
+                            else if (strcmp(elem_name, "Keyword") == 0) elem_type = type_keyword();
+                            else if (strcmp(elem_name, "Ratio") == 0) elem_type = type_ratio();
+
+                            // Look for size after element type
+                            if (i + 4 < ast->list.count &&
+                                ast->list.items[i + 4]->type == AST_SYMBOL &&
+                                strcmp(ast->list.items[i + 4]->symbol, "::") == 0) {
+
+                                if (i + 5 < ast->list.count &&
+                                    ast->list.items[i + 5]->type == AST_NUMBER) {
+                                    size = (int)ast->list.items[i + 5]->number;
+                                }
+                            }
+                        }
+                    }
+
+                    return type_arr(elem_type, size);
+                }
+
+                // Standard types
                 if (strcmp(tn, "Int")     == 0) return type_int();
                 if (strcmp(tn, "Float")   == 0) return type_float();
                 if (strcmp(tn, "Char")    == 0) return type_char();
@@ -218,6 +308,7 @@ Type *parse_type_annotation(AST *ast) {
                 if (strcmp(tn, "Bin")     == 0) return type_bin();
                 if (strcmp(tn, "Oct")     == 0) return type_oct();
                 if (strcmp(tn, "Keyword") == 0) return type_keyword();
+                if (strcmp(tn, "Ratio")   == 0) return type_ratio();
                 if (strcmp(tn, "List")    == 0) return type_list(NULL); // polymorphic list
             }
             return NULL;

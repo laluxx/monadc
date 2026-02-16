@@ -15,7 +15,6 @@
 #include <llvm-c/BitWriter.h>
 #include <llvm-c/TargetMachine.h>
 
-
 void codegen_init(CodegenContext *ctx, const char *module_name) {
     ctx->context = LLVMContextCreate();
     ctx->module = LLVMModuleCreateWithNameInContext(module_name, ctx->context);
@@ -248,6 +247,7 @@ LLVMValueRef get_or_declare_print_binary(CodegenContext *ctx) {
 
 /// Type to LLVM Type conversion
 
+
 LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *type) {
     switch (type->kind) {
     case TYPE_INT:
@@ -260,10 +260,20 @@ LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *type) {
     case TYPE_CHAR:
         return LLVMInt8TypeInContext(ctx->context);
     case TYPE_STRING:
-    case TYPE_KEYWORD:  // <-- ADD THIS
+    case TYPE_KEYWORD:
         return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-    case TYPE_LIST:     // <-- ADD THIS
-        return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0); // generic pointer for now
+    case TYPE_LIST:
+        return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0); // RuntimeList*
+    case TYPE_RATIO:
+        return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0); // RuntimeValue* for Ratio
+    case TYPE_ARR:
+        // Arrays are stack-allocated - return array type
+        if (type->arr_element_type && type->arr_size > 0) {
+            LLVMTypeRef elem_type = type_to_llvm(ctx, type->arr_element_type);
+            return LLVMArrayType(elem_type, type->arr_size);
+        }
+        // Fallback for unknown size
+        return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
     case TYPE_BOOL:
         return LLVMInt1TypeInContext(ctx->context);
     default:
@@ -274,9 +284,9 @@ LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *type) {
 /// Type checking for operations
 
 bool type_is_numeric(Type *t) {
-    return t->kind == TYPE_INT || t->kind == TYPE_FLOAT ||
-           t->kind == TYPE_HEX || t->kind == TYPE_BIN || t->kind == TYPE_OCT ||
-           t->kind == TYPE_CHAR;
+    return t->kind == TYPE_INT  || t->kind == TYPE_FLOAT ||
+           t->kind == TYPE_HEX  || t->kind == TYPE_BIN   || t->kind == TYPE_OCT ||
+           t->kind == TYPE_CHAR || t->kind == TYPE_RATIO;
 }
 
 bool type_is_integer(Type *t) {
@@ -467,6 +477,54 @@ static LLVMValueRef ast_to_runtime_value(CodegenContext *ctx, AST *ast_elem) {
     return rt_val;
 }
 
+static LLVMValueRef codegen_to_runtime_value(CodegenContext *ctx,
+                                             LLVMValueRef value,
+                                             Type *type) {
+    if (!type) return get_rt_value_nil(ctx);
+
+    switch (type->kind) {
+        case TYPE_INT:
+        case TYPE_HEX:
+        case TYPE_BIN:
+        case TYPE_OCT: {
+            LLVMValueRef fn = get_rt_value_int(ctx);
+            LLVMValueRef args[] = {value};
+            return LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(fn),
+                                 fn, args, 1, "rtval");
+        }
+
+        case TYPE_FLOAT: {
+            LLVMValueRef fn = get_rt_value_float(ctx);
+            LLVMValueRef args[] = {value};
+            return LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(fn),
+                                 fn, args, 1, "rtval");
+        }
+
+        case TYPE_CHAR: {
+            LLVMValueRef fn = get_rt_value_char(ctx);
+            LLVMValueRef args[] = {value};
+            return LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(fn),
+                                 fn, args, 1, "rtval");
+        }
+
+        case TYPE_STRING: {
+            LLVMValueRef fn = get_rt_value_string(ctx);
+            LLVMValueRef args[] = {value};
+            return LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(fn),
+                                 fn, args, 1, "rtval");
+        }
+
+        case TYPE_RATIO:
+        case TYPE_ARR:
+        case TYPE_LIST:
+            // Already RuntimeValue*
+            return value;
+
+        default:
+            return get_rt_value_nil(ctx);
+    }
+}
+
 CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     CodegenResult result = {NULL, NULL};
 
@@ -536,6 +594,72 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
         return result;
     }
 
+    case AST_RATIO: {
+        // Create runtime ratio value
+        LLVMValueRef fn = get_rt_value_ratio(ctx);
+        LLVMValueRef num = LLVMConstInt(LLVMInt64TypeInContext(ctx->context),
+                                        ast->ratio.numerator, 1);
+        LLVMValueRef denom = LLVMConstInt(LLVMInt64TypeInContext(ctx->context),
+                                          ast->ratio.denominator, 1);
+        LLVMValueRef args[] = {num, denom};
+
+        result.type = type_ratio();
+        result.value = LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(fn),
+                                      fn, args, 2, "ratio");
+        return result;
+    }
+    case AST_ARRAY: {
+        // Infer element type from first element - preserve literal types!
+        Type *elem_type = NULL;
+        if (ast->array.element_count > 0) {
+            CodegenResult first = codegen_expr(ctx, ast->array.elements[0]);
+            elem_type = first.type;
+
+            // IMPORTANT: Clone the type so each array has its own type object
+            if (elem_type) {
+                elem_type = type_clone(elem_type);
+            }
+        } else {
+            // Empty array - default to Int
+            elem_type = type_int();
+        }
+
+        // Create array type
+        result.type = type_arr(elem_type, (int)ast->array.element_count);
+        LLVMTypeRef arr_type = type_to_llvm(ctx, result.type);
+
+        // Allocate array on stack
+        result.value = LLVMBuildAlloca(ctx->builder, arr_type, "array");
+
+        // Initialize each element
+        for (size_t i = 0; i < ast->array.element_count; i++) {
+            CodegenResult elem = codegen_expr(ctx, ast->array.elements[i]);
+
+            // Convert element to correct type if needed
+            LLVMValueRef elem_val = elem.value;
+            if (elem.type && elem_type) {
+                if (type_is_integer(elem_type) && type_is_float(elem.type)) {
+                    elem_val = LLVMBuildFPToSI(ctx->builder, elem.value,
+                                               type_to_llvm(ctx, elem_type), "to_int");
+                } else if (type_is_float(elem_type) && type_is_integer(elem.type)) {
+                    elem_val = LLVMBuildSIToFP(ctx->builder, elem.value,
+                                               type_to_llvm(ctx, elem_type), "to_float");
+                }
+            }
+
+            // Get pointer to element
+            LLVMValueRef zero = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0);
+            LLVMValueRef idx = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), i, 0);
+            LLVMValueRef indices[] = {zero, idx};
+            LLVMValueRef elem_ptr = LLVMBuildGEP2(ctx->builder, arr_type,
+                                                  result.value, indices, 2, "elem_ptr");
+
+            // Store element
+            LLVMBuildStore(ctx->builder, elem_val, elem_ptr);
+        }
+
+        return result;
+    }
     case AST_LIST: {
         if (ast->list.count == 0) {
             fprintf(stderr, "%s:%d:%d: error: empty list not supported\n",
@@ -767,10 +891,43 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 }
 
                 // Codegen the value
-                CodegenResult value_result = codegen_expr(ctx, value_expr);
+                // Special handling for empty arrays - DISALLOW without type annotation
+                CodegenResult value_result;
+                if (value_expr->type == AST_ARRAY && value_expr->array.element_count == 0) {
+                    if (!explicit_type || explicit_type->kind != TYPE_ARR) {
+                        fprintf(stderr, "%s:%d:%d: error: cannot infer type of empty array - explicit type annotation required\n",
+                                parser_get_filename(), ast->line, ast->column);
+                        exit(1);
+                    }
+                    // Don't call codegen_expr for empty arrays - we'll handle them below in zero-init
+                    value_result.type = explicit_type;
+                    value_result.value = NULL;
+                } else {
+                    // Normal codegen for non-empty values
+                    value_result = codegen_expr(ctx, value_expr);
+                }
+
+
+                // Validate array size if type annotation specifies size
+                if (explicit_type && explicit_type->kind == TYPE_ARR &&
+                    explicit_type->arr_size >= 0 && value_result.type &&
+                    value_result.type->kind == TYPE_ARR) {
+
+                    int declared_size = explicit_type->arr_size;
+                    int actual_size = value_result.type->arr_size;
+
+                    // Allow empty initialization (will zero-init)
+                    if (actual_size > 0 && actual_size != declared_size) {
+                        fprintf(stderr, "%s:%d:%d: error: array size mismatch - declared size %d but got %d elements\n",
+                                parser_get_filename(), ast->line, ast->column,
+                                declared_size, actual_size);
+                        exit(1);
+                    }
+                }
 
                 // Infer or verify type
                 Type *inferred_type = value_result.type;
+
                 if (!inferred_type) {
                     if (value_expr->type == AST_CHAR) {
                         inferred_type = type_char();
@@ -783,7 +940,59 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
                 Type *final_type = explicit_type ? explicit_type : inferred_type;
 
-                // Create an alloca for the variable
+                // SPECIAL CASE: Arrays are already allocas from codegen_expr
+                // Don't create a new alloca and store - just use the existing one
+                if (final_type->kind == TYPE_ARR) {
+                    // Handle empty array initialization with explicit type
+                    if (value_expr->type == AST_ARRAY && value_expr->array.element_count == 0 &&
+                        explicit_type && explicit_type->arr_size > 0) {
+                        // Create zero-initialized array
+                        LLVMTypeRef arr_type = type_to_llvm(ctx, final_type);
+                        LLVMValueRef arr = LLVMBuildAlloca(ctx->builder, arr_type, var_name);
+
+                        // Zero-initialize the array
+                        LLVMTypeRef elem_type_llvm = type_to_llvm(ctx, final_type->arr_element_type);
+                        LLVMValueRef zero_val;
+
+                        if (type_is_float(final_type->arr_element_type)) {
+                            zero_val = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0);
+                        } else if (final_type->arr_element_type->kind == TYPE_STRING ||
+                                   final_type->arr_element_type->kind == TYPE_KEYWORD ||
+                                   final_type->arr_element_type->kind == TYPE_RATIO) {
+                            zero_val = LLVMConstPointerNull(elem_type_llvm);
+                        } else {
+                            zero_val = LLVMConstInt(elem_type_llvm, 0, 0);
+                        }
+
+                        for (int i = 0; i < final_type->arr_size; i++) {
+                            LLVMValueRef zero = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0);
+                            LLVMValueRef idx = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), i, 0);
+                            LLVMValueRef indices[] = {zero, idx};
+                            LLVMValueRef elem_ptr = LLVMBuildGEP2(ctx->builder, arr_type,
+                                                                  arr, indices, 2, "elem_ptr");
+                            LLVMBuildStore(ctx->builder, zero_val, elem_ptr);
+                        }
+
+                        env_insert(ctx->env, var_name, final_type, arr);
+                        printf("Defined %s :: %s (zero-initialized)\n", var_name, type_to_string(final_type));
+
+                        result.type = final_type;
+                        result.value = arr;
+                        return result;
+                    }
+
+                    // value_result.value is already a pointer to the stack array
+                    // Just insert it directly into the environment
+                    env_insert(ctx->env, var_name, final_type, value_result.value);
+
+                    printf("Defined %s :: %s\n", var_name, type_to_string(final_type));
+
+                    result.type = final_type;
+                    result.value = value_result.value;
+                    return result;
+                }
+
+                // For non-array types, create an alloca and store normally
                 LLVMTypeRef llvm_type = type_to_llvm(ctx, final_type);
                 LLVMValueRef var = LLVMBuildAlloca(ctx->builder, llvm_type, var_name);
 
@@ -818,7 +1027,6 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 result.value = stored_value;
                 return result;
             }
-
 
             // Handle 'quote' special form
             if (strcmp(head->symbol, "quote") == 0) {
@@ -950,6 +1158,97 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         exit(1);
                     }
 
+                    // SPECIAL CASE: Arrays must be handled BEFORE loading
+                    // Because arrays are pointers to stack allocations, not scalar values
+                    if (entry->type->kind == TYPE_ARR) {
+                        LLVMTypeRef arr_type = type_to_llvm(ctx, entry->type);
+
+                        // Print opening bracket
+                        LLVMValueRef open = LLVMBuildGlobalStringPtr(ctx->builder, "[", "open");
+                        LLVMValueRef open_args[] = {open};
+                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                       printf_fn, open_args, 1, "");
+
+                        // Print each element with TYPE PRESERVATION
+                        for (int i = 0; i < entry->type->arr_size; i++) {
+                            if (i > 0) {
+                                LLVMValueRef space = LLVMBuildGlobalStringPtr(ctx->builder, " ", "space");
+                                LLVMValueRef space_args[] = {space};
+                                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                               printf_fn, space_args, 1, "");
+                            }
+
+                            // Get pointer to element: &array[0][i]
+                            LLVMValueRef zero = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0);
+                            LLVMValueRef idx = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), i, 0);
+                            LLVMValueRef indices[] = {zero, idx};
+                            LLVMValueRef elem_ptr = LLVMBuildGEP2(ctx->builder, arr_type,
+                                                                  entry->value, indices, 2, "elem_ptr");
+
+                            // Load the element value
+                            LLVMTypeRef elem_type_llvm = type_to_llvm(ctx, entry->type->arr_element_type);
+                            LLVMValueRef elem = LLVMBuildLoad2(ctx->builder, elem_type_llvm, elem_ptr, "elem");
+
+                            // Print element based on EXACT type (not just type_is_integer)
+                            Type *elem_type = entry->type->arr_element_type;
+
+                            if (elem_type->kind == TYPE_CHAR) {
+                                LLVMValueRef fmt = LLVMBuildGlobalStringPtr(ctx->builder, "'%c'", "fmt_char_q");
+                                LLVMValueRef elem_args[] = {fmt, elem};
+                                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                               printf_fn, elem_args, 2, "");
+                            } else if (elem_type->kind == TYPE_STRING) {
+                                LLVMValueRef fmt = LLVMBuildGlobalStringPtr(ctx->builder, "\"%s\"", "fmt_str_q");
+                                LLVMValueRef elem_args[] = {fmt, elem};
+                                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                               printf_fn, elem_args, 2, "");
+                            } else if (elem_type->kind == TYPE_KEYWORD) {
+                                LLVMValueRef elem_args[] = {get_fmt_str_no_newline(ctx), elem};
+                                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                               printf_fn, elem_args, 2, "");
+                            } else if (elem_type->kind == TYPE_HEX) {
+                                LLVMValueRef fmt = LLVMBuildGlobalStringPtr(ctx->builder, "0x%lX", "fmt_hex_nn");
+                                LLVMValueRef elem_args[] = {fmt, elem};
+                                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                               printf_fn, elem_args, 2, "");
+                            } else if (elem_type->kind == TYPE_BIN) {
+                                LLVMValueRef fn_bin = get_or_declare_print_binary(ctx);
+                                LLVMValueRef args[] = {elem};
+                                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(fn_bin),
+                                               fn_bin, args, 1, "");
+                            } else if (elem_type->kind == TYPE_OCT) {
+                                LLVMValueRef fmt = LLVMBuildGlobalStringPtr(ctx->builder, "0o%lo", "fmt_oct_nn");
+                                LLVMValueRef elem_args[] = {fmt, elem};
+                                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                               printf_fn, elem_args, 2, "");
+                            } else if (elem_type->kind == TYPE_RATIO) {
+                                LLVMValueRef print_fn = get_rt_print_value(ctx);
+                                LLVMValueRef args[] = {elem};
+                                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(print_fn),
+                                               print_fn, args, 1, "");
+                            } else if (elem_type->kind == TYPE_INT) {
+                                LLVMValueRef elem_args[] = {get_fmt_int_no_newline(ctx), elem};
+                                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                               printf_fn, elem_args, 2, "");
+                            } else if (elem_type->kind == TYPE_FLOAT) {
+                                LLVMValueRef elem_args[] = {get_fmt_float_no_newline(ctx), elem};
+                                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                               printf_fn, elem_args, 2, "");
+                            }
+                        }
+
+                        // Print closing bracket and newline
+                        LLVMValueRef close = LLVMBuildGlobalStringPtr(ctx->builder, "]\n", "close");
+                        LLVMValueRef close_args[] = {close};
+                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                       printf_fn, close_args, 1, "");
+
+                        result.type = type_float();
+                        result.value = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0);
+                        return result;
+                    }
+
+                    // For all other types, load the value normally
                     LLVMValueRef loaded_value = LLVMBuildLoad2(ctx->builder,
                                                                type_to_llvm(ctx, entry->type),
                                                                entry->value, arg->symbol);
@@ -957,6 +1256,18 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     // Handle list type - use runtime printer
                     if (entry->type->kind == TYPE_LIST) {
                         LLVMValueRef print_fn = get_rt_print_list(ctx);
+                        LLVMValueRef args[] = {loaded_value};
+                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(print_fn),
+                                       print_fn, args, 1, "");
+
+                        LLVMValueRef newline = LLVMBuildGlobalStringPtr(ctx->builder, "\n", "newline");
+                        LLVMValueRef nl_args[] = {newline};
+                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                       printf_fn, nl_args, 1, "");
+                    }
+                    // Handle ratio type
+                    else if (entry->type->kind == TYPE_RATIO) {
+                        LLVMValueRef print_fn = get_rt_print_value(ctx);
                         LLVMValueRef args[] = {loaded_value};
                         LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(print_fn),
                                        print_fn, args, 1, "");
@@ -1021,8 +1332,116 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     return result;
                 }
 
-                // Handle expressions
+                // Handle expressions (not symbols)
                 CodegenResult arg_result = codegen_expr(ctx, arg);
+
+                // Handle Ratio type
+                if (arg_result.type && arg_result.type->kind == TYPE_RATIO) {
+                    LLVMValueRef print_fn = get_rt_print_value(ctx);
+                    LLVMValueRef args[] = {arg_result.value};
+                    LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(print_fn),
+                                   print_fn, args, 1, "");
+
+                    LLVMValueRef newline = LLVMBuildGlobalStringPtr(ctx->builder, "\n", "newline");
+                    LLVMValueRef nl_args[] = {newline};
+                    LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                   printf_fn, nl_args, 1, "");
+
+                    result.type = type_float();
+                    result.value = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0);
+                    return result;
+                }
+
+                // Handle Array type (from expressions like [1 2 3])
+                if (arg_result.type && arg_result.type->kind == TYPE_ARR) {
+                    LLVMTypeRef arr_type = type_to_llvm(ctx, arg_result.type);
+
+                    // Print opening bracket
+                    LLVMValueRef open = LLVMBuildGlobalStringPtr(ctx->builder, "[", "open");
+                    LLVMValueRef open_args[] = {open};
+                    LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                  printf_fn, open_args, 1, "");
+
+                    // Print each element with type preservation
+                    for (int i = 0; i < arg_result.type->arr_size; i++) {
+                        if (i > 0) {
+                            LLVMValueRef space = LLVMBuildGlobalStringPtr(ctx->builder, " ", "space");
+                            LLVMValueRef space_args[] = {space};
+                            LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                          printf_fn, space_args, 1, "");
+                        }
+
+                        // Get element pointer: &array[0][i]
+                        LLVMValueRef zero = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0);
+                        LLVMValueRef idx = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), i, 0);
+                        LLVMValueRef indices[] = {zero, idx};
+                        LLVMValueRef elem_ptr = LLVMBuildGEP2(ctx->builder, arr_type,
+                                                             arg_result.value, indices, 2, "elem_ptr");
+
+                        // Load element
+                        LLVMTypeRef elem_type_llvm = type_to_llvm(ctx, arg_result.type->arr_element_type);
+                        LLVMValueRef elem = LLVMBuildLoad2(ctx->builder, elem_type_llvm, elem_ptr, "elem");
+
+                        // Print element based on ACTUAL type (not converted to Int)
+                        Type *elem_type = arg_result.type->arr_element_type;
+
+                        if (elem_type->kind == TYPE_CHAR) {
+                            LLVMValueRef fmt = LLVMBuildGlobalStringPtr(ctx->builder, "'%c'", "fmt_char_q");
+                            LLVMValueRef elem_args[] = {fmt, elem};
+                            LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                          printf_fn, elem_args, 2, "");
+                        } else if (elem_type->kind == TYPE_STRING) {
+                            LLVMValueRef fmt = LLVMBuildGlobalStringPtr(ctx->builder, "\"%s\"", "fmt_str_q");
+                            LLVMValueRef elem_args[] = {fmt, elem};
+                            LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                          printf_fn, elem_args, 2, "");
+                        } else if (elem_type->kind == TYPE_KEYWORD) {
+                            LLVMValueRef elem_args[] = {get_fmt_str_no_newline(ctx), elem};
+                            LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                          printf_fn, elem_args, 2, "");
+                        } else if (elem_type->kind == TYPE_HEX) {
+                            LLVMValueRef fmt = LLVMBuildGlobalStringPtr(ctx->builder, "0x%lX", "fmt_hex_nn");
+                            LLVMValueRef elem_args[] = {fmt, elem};
+                            LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                          printf_fn, elem_args, 2, "");
+                        } else if (elem_type->kind == TYPE_BIN) {
+                            // Simplified: just print with 0b prefix and the number
+                            // Full binary would require the helper function
+                            LLVMValueRef fn_bin = get_or_declare_print_binary(ctx);
+                            LLVMValueRef args[] = {elem};
+                            LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(fn_bin),
+                                          fn_bin, args, 1, "");
+                        } else if (elem_type->kind == TYPE_OCT) {
+                            LLVMValueRef fmt = LLVMBuildGlobalStringPtr(ctx->builder, "0o%lo", "fmt_oct_nn");
+                            LLVMValueRef elem_args[] = {fmt, elem};
+                            LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                          printf_fn, elem_args, 2, "");
+                        } else if (elem_type->kind == TYPE_RATIO) {
+                            LLVMValueRef print_fn = get_rt_print_value(ctx);
+                            LLVMValueRef args[] = {elem};
+                            LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(print_fn),
+                                          print_fn, args, 1, "");
+                        } else if (type_is_integer(elem_type)) {
+                            LLVMValueRef elem_args[] = {get_fmt_int_no_newline(ctx), elem};
+                            LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                          printf_fn, elem_args, 2, "");
+                        } else if (type_is_float(elem_type)) {
+                            LLVMValueRef elem_args[] = {get_fmt_float_no_newline(ctx), elem};
+                            LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                          printf_fn, elem_args, 2, "");
+                        }
+                    }
+
+                    // Print closing bracket and newline
+                    LLVMValueRef close = LLVMBuildGlobalStringPtr(ctx->builder, "]\n", "close");
+                    LLVMValueRef close_args[] = {close};
+                    LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                  printf_fn, close_args, 1, "");
+
+                    result.type = type_float();
+                    result.value = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0);
+                    return result;
+                }
 
                 // Handle list type in expressions
                 if (arg_result.type && arg_result.type->kind == TYPE_LIST) {
@@ -1127,6 +1546,34 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         result.value = LLVMBuildFDiv(ctx->builder, one, result_f, "invtmp");
                         return result;
                     }
+                }
+
+                // Check if we're dealing with ratios
+                if (result_type->kind == TYPE_RATIO) {
+                    // Use ratio arithmetic
+                    for (size_t i = 2; i < ast->list.count; i++) {
+                        CodegenResult rhs = codegen_expr(ctx, ast->list.items[i]);
+
+                        if (rhs.type->kind != TYPE_RATIO) {
+                            fprintf(stderr, "Error: cannot mix Ratio with other numeric types\n");
+                            exit(1);
+                        }
+
+                        LLVMValueRef fn = NULL;
+                        if (strcmp(op, "+") == 0) fn = get_rt_ratio_add(ctx);
+                        else if (strcmp(op, "-") == 0) fn = get_rt_ratio_sub(ctx);
+                        else if (strcmp(op, "*") == 0) fn = get_rt_ratio_mul(ctx);
+                        else if (strcmp(op, "/") == 0) fn = get_rt_ratio_div(ctx);
+
+                        LLVMValueRef args[] = {result_value, rhs.value};
+                        result_value = LLVMBuildCall2(ctx->builder,
+                                                      LLVMGlobalGetValueType(fn),
+                                                      fn, args, 2, "ratio_op");
+                    }
+
+                    result.type = result_type;
+                    result.value = result_value;
+                    return result;
                 }
 
                 // Binary operations
@@ -1636,6 +2083,34 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     }
                     as_double = LLVMBuildSIToFP(ctx->builder, as_i64,
                         LLVMDoubleTypeInContext(ctx->context), "to_double");
+                }
+
+                if (strcmp(cast_target, "Ratio") == 0) {
+                    if (ast->list.count != 2) {
+                        fprintf(stderr, "%s:%d:%d: error: Ratio is not 2 items\n",
+                                parser_get_filename(), ast->line, ast->column);
+                    }
+
+                    CodegenResult arg_result = codegen_expr(ctx, ast->list.items[1]);
+
+                    // Convert to ratio
+                    if (arg_result.type->kind == TYPE_RATIO) {
+                        // Already a ratio
+                        result = arg_result;
+                    } else if (type_is_integer(arg_result.type)) {
+                        // Integer to ratio: n/1
+                        LLVMValueRef fn = get_rt_value_ratio(ctx);
+                        LLVMValueRef one = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 1, 0);
+                        LLVMValueRef args[] = {arg_result.value, one};
+                        result.type = type_ratio();
+                        result.value = LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(fn),
+                                                      fn, args, 2, "ratio");
+                    } else {
+                        fprintf(stderr, "%s:%d:%d: error: Cannot convert to Ratio\n",
+                                parser_get_filename(), ast->line, ast->column);
+                    }
+
+                    return result;
                 }
 
                 if (strcmp(cast_target, "Int") == 0) {
