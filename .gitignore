@@ -1,5 +1,6 @@
 monad
 Main
-Main.ll
-Math.ll
+libmonad.so
+libmonad.a
 *.o
+**/*.ll

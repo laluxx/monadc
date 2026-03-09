@@ -14,10 +14,16 @@
 ;;; Code:
 
 (module Ascii
-  [lowercase   uppercase  letters
-   digits      hexdigits  octdigits
-   punctuation whitespace printable
-   upcase      downcase   capitalize])
+  [nul            bel               bs
+   tab            lf                cr
+   esc            space             del
+   lowercase      uppercase         letters
+   digits         hexdigits         octdigits
+   punctuation    whitespace        printable
+   char-downcase  case-delta        char-upcase
+   char-lower?    char-upper?       char-alphabetic?
+   char-numeric?  char-whitespace?  char-alphanumeric?
+   upcase         downcase          capitalize])
 
 (define lowercase   "abcdefghijklmnopqrstuvwxyz")
 (define uppercase   "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -29,23 +35,116 @@
 (define whitespace  " \t\n\r\x0B\x0C")
 (define printable   "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ \t\n\r\x0B\x0C")
 
+(define nul   0)    ; \0
+(define bel   7)    ; \a bell
+(define bs    8)    ; \b backspace
+(define tab   9)    ; \t
+(define lf    10)   ; \n line feed
+(define cr    13)   ; \r carriage return
+(define esc   27)   ; escape
+(define space 32)   ; space
+(define del   127)  ; delete/rubout
+
+(define case-delta (- 'a' 'A')); => 32
+
+
+(define (char-upcase [c :: Char] -> Char)
+  "Convert C to upper case."
+  (if (and (>= c 'a') (<= c 'z'))
+    (- c case-delta)
+    c))
+
+(define (char-downcase [c :: Char] -> Char)
+  "Convert C to lower case."
+  (if (and (>= c 'A') (<= c 'Z'))
+    (+ c case-delta)
+    c))
+
+
 (define (upcase [input :: String] -> String)
   "Convert INPUT to upper case."
-  (undefined))
+  (define [result :: String] (make-string (string-length input) 'a'))
+  (for [i 0 (string-length input)]
+    (string-set! result i (char-upcase (string-ref input i))))
+  result)
+
 
 (define (downcase [input :: String] -> String)
   "Convert INPUT to lower case."
-  (undefined))
+  (define [result :: String] (make-string (string-length input) 'a'))
+  (for [i 0 (string-length input)]
+    (string-set! result i (char-downcase (string-ref input i))))
+  result)
+
 
 (define (capitalize [input :: String] -> String)
   "Capitalize INPUT."
-  (undefined))
+  (define [result :: String] (make-string (string-length input) 'a'))
+  (for [i 0 (string-length input)]
+    (string-set! result i
+      (if (= i 0)
+        (char-upcase (string-ref input i))
+        (char-downcase (string-ref input i)))))
+  result)
+
+
+(define (char-lower? [c :: Char] -> Bool)
+  "Return True if C is a lowercase letter."
+  (and (>= c 'a') (<= c 'z')))
+
+
+(define (char-upper? [c :: Char] -> Bool)
+  "Return True if C is an uppercase letter."
+  (and (>= c 'A') (<= c 'Z')))
+
+
+(define (char-alphabetic? [c :: Char] -> Bool)
+  "Return True if C is a letter."
+  (or (char-lower? c) (char-upper? c)))
+
+
+(define (char-numeric? [c :: Char] -> Bool)
+  "Return True if C is a digit."
+  (and (>= c '0') (<= c '9')))
+
+
+(define (char-alphanumeric? [c :: Char] -> Bool)
+  "Return True if C is a letter or digit."
+  (or (char-alphabetic? c) (char-numeric? c)))
+
+
+(define (char-whitespace? [c :: Char] -> Bool)
+  "Return True if C is a whitespace character."
+  (or (= c ' ') (= c  '\t') (= c '\n') (= c '\r')))
 
 (tests
-  (assert-eq lowercase "abcdefghijklmnopqrstuvwxyz"                           "lowercase")
-  (assert-eq uppercase "ABCDEFGHIJKLMNOPQRSTUVWXYZ"                           "uppercase")
-  (assert-eq letters   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" "letters")
-  (assert-eq digits    "0123456789"                                           "digits")
-  (assert-eq hexdigits "0123456789abcdefABCDEF"                               "hexdigits")
-  (assert-eq octdigits "01234567"                                             "octdigits"))
+  (assert-eq lowercase "abcdefghijklmnopqrstuvwxyz"                            "lowercase")
+  (assert-eq uppercase "ABCDEFGHIJKLMNOPQRSTUVWXYZ"                            "uppercase")
+  (assert-eq letters   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"  "letters")
+  (assert-eq digits    "0123456789"                                            "digits")
+  (assert-eq hexdigits "0123456789abcdefABCDEF"                                "hexdigits")
+  (assert-eq octdigits "01234567"                                              "octdigits")
+  (assert-eq case-delta 32                                                     "case-delta")
+  (assert-eq (char-upcase   'a') 'A'                                           "char-upcase a")
+  (assert-eq (char-upcase   'z') 'Z'                                           "char-upcase z")
+  (assert-eq (char-upcase   'A') 'A'                                           "char-upcase noop")
+  (assert-eq (char-downcase 'A') 'a'                                           "char-downcase A")
+  (assert-eq (char-downcase 'Z') 'z'                                           "char-downcase Z")
+  (assert-eq (char-downcase 'a') 'a'                                           "char-downcase noop")
+  (assert-eq (upcase     "meow!")        "MEOW!"                               "upcase")
+  (assert-eq (downcase   "DOWNCASE!")    "downcase!"                           "downcase")
+  (assert-eq (capitalize "caPiTaliZED!") "Capitalized!"                        "capitalize")
+  (assert-eq (char-lower?        'a')    1                                     "char-lower? a")
+  (assert-eq (char-lower?        'A')    0                                     "char-lower? A")
+  (assert-eq (char-upper?        'A')    1                                     "char-upper? A")
+  (assert-eq (char-upper?        'a')    0                                     "char-upper? a")
+  (assert-eq (char-alphabetic?   'a')    1                                     "char-alphabetic? a")
+  (assert-eq (char-alphabetic?   '0')    0                                     "char-alphabetic? 0")
+  (assert-eq (char-numeric?      '5')    1                                     "char-numeric? 5")
+  (assert-eq (char-numeric?      'a')    0                                     "char-numeric? a")
+  (assert-eq (char-alphanumeric? 'a')    1                                     "char-alphanumeric? a")
+  (assert-eq (char-alphanumeric? '5')    1                                     "char-alphanumeric? 5")
+  (assert-eq (char-alphanumeric? '!')    0                                     "char-alphanumeric? !")
+  (assert-eq (char-whitespace?   ' ')    1                                     "char-whitespace? space")
+  (assert-eq (char-whitespace?   'a')    0                                     "char-whitespace? a"))
 

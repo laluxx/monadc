@@ -155,18 +155,40 @@ AST *ast_new_lambda(ASTParam *params, int param_count,
                     const char *docstring,
                     const char *alias_name,
                     bool naked,
-                    AST *body) {
+                    AST *body,
+                    AST **body_exprs,
+                    int body_count) {
     AST *a = calloc(1, sizeof(AST));
-    a->type               = AST_LAMBDA;
-    a->lambda.params      = params;
-    a->lambda.param_count = param_count;
-    a->lambda.return_type = return_type ? my_strdup(return_type) : NULL;
-    a->lambda.docstring   = docstring   ? my_strdup(docstring)   : NULL;
-    a->lambda.alias_name  = alias_name  ? my_strdup(alias_name)  : NULL;
-    a->lambda.naked       = naked;
-    a->lambda.body        = body;
+    a->type                = AST_LAMBDA;
+    a->lambda.params       = params;
+    a->lambda.param_count  = param_count;
+    a->lambda.return_type  = return_type ? my_strdup(return_type) : NULL;
+    a->lambda.docstring    = docstring   ? my_strdup(docstring)   : NULL;
+    a->lambda.alias_name   = alias_name  ? my_strdup(alias_name)  : NULL;
+    a->lambda.naked        = naked;
+    a->lambda.body         = body;        // points to body_exprs[body_count-1]
+    a->lambda.body_exprs   = body_exprs;  // owned array
+    a->lambda.body_count   = body_count;
     return a;
 }
+
+/* AST *ast_new_lambda(ASTParam *params, int param_count, */
+/*                     const char *return_type, */
+/*                     const char *docstring, */
+/*                     const char *alias_name, */
+/*                     bool naked, */
+/*                     AST *body) { */
+/*     AST *a = calloc(1, sizeof(AST)); */
+/*     a->type               = AST_LAMBDA; */
+/*     a->lambda.params      = params; */
+/*     a->lambda.param_count = param_count; */
+/*     a->lambda.return_type = return_type ? my_strdup(return_type) : NULL; */
+/*     a->lambda.docstring   = docstring   ? my_strdup(docstring)   : NULL; */
+/*     a->lambda.alias_name  = alias_name  ? my_strdup(alias_name)  : NULL; */
+/*     a->lambda.naked       = naked; */
+/*     a->lambda.body        = body; */
+/*     return a; */
+/* } */
 
 AST *ast_new_asm(AST **instructions, size_t instruction_count) {
     AST *a = calloc(1, sizeof(AST));
@@ -253,19 +275,39 @@ void ast_free(AST *ast) {
         free(ast->array.elements);
         break;
 
-    case AST_LAMBDA:
-        if (ast->lambda.params) {
-            for (int i = 0; i < ast->lambda.param_count; i++) {
-                free(ast->lambda.params[i].name);
-                free(ast->lambda.params[i].type_name);
-            }
-            free(ast->lambda.params);
+case AST_LAMBDA:
+    if (ast->lambda.params) {
+        for (int i = 0; i < ast->lambda.param_count; i++) {
+            free(ast->lambda.params[i].name);
+            free(ast->lambda.params[i].type_name);
         }
-        free(ast->lambda.return_type);
-        free(ast->lambda.docstring);
-        free(ast->lambda.alias_name);
-        ast_free(ast->lambda.body);
-        break;
+        free(ast->lambda.params);
+    }
+    free(ast->lambda.return_type);
+    free(ast->lambda.docstring);
+    free(ast->lambda.alias_name);
+    // Free each body expression individually
+    if (ast->lambda.body_exprs) {
+        for (int i = 0; i < ast->lambda.body_count; i++)
+            ast_free(ast->lambda.body_exprs[i]);
+        free(ast->lambda.body_exprs);
+    }
+    // body points into body_exprs so do NOT free it separately
+    break;
+
+    /* case AST_LAMBDA: */
+    /*     if (ast->lambda.params) { */
+    /*         for (int i = 0; i < ast->lambda.param_count; i++) { */
+    /*             free(ast->lambda.params[i].name); */
+    /*             free(ast->lambda.params[i].type_name); */
+    /*         } */
+    /*         free(ast->lambda.params); */
+    /*     } */
+    /*     free(ast->lambda.return_type); */
+    /*     free(ast->lambda.docstring); */
+    /*     free(ast->lambda.alias_name); */
+    /*     ast_free(ast->lambda.body); */
+    /*     break; */
 
     case AST_ASM:
         if (ast->asm_block.instructions) {
@@ -724,7 +766,7 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
 static AST *parse_lambda(Parser *p) {
     if (p->current.type != TOK_LPAREN) {
         compiler_error(p->current.line, p->current.column,
-                     "Expected '(' after 'lambda'");
+                       "Expected '(' after 'lambda'");
     }
     p->current = lexer_next_token(p->lexer);
 
@@ -739,10 +781,50 @@ static AST *parse_lambda(Parser *p) {
         p->current = lexer_next_token(p->lexer);
     }
 
-    AST *body = parse_expr(p);
+    // Collect multiple body expressions — last one is the return value
+    AST **body_exprs = NULL;
+    int   body_count = 0;
+    while (p->current.type != TOK_RPAREN &&
+           p->current.type != TOK_EOF    &&
+           p->current.type != TOK_KEYWORD) {
+        body_exprs = realloc(body_exprs, sizeof(AST*) * (body_count + 1));
+        body_exprs[body_count++] = parse_expr(p);
+    }
+    if (body_count == 0) {
+        compiler_error(p->current.line, p->current.column,
+                       "lambda body cannot be empty");
+    }
+    AST *body = body_exprs[body_count - 1];
 
-    return ast_new_lambda(params, count, ret_type, docstring, NULL, false, body);
+    AST *result = ast_new_lambda(params, count, ret_type, docstring, NULL, false,
+                                  body, body_exprs, body_count);
+    free(docstring);
+    free(ret_type);
+    return result;
 }
+
+/* static AST *parse_lambda(Parser *p) { */
+/*     if (p->current.type != TOK_LPAREN) { */
+/*         compiler_error(p->current.line, p->current.column, */
+/*                      "Expected '(' after 'lambda'"); */
+/*     } */
+/*     p->current = lexer_next_token(p->lexer); */
+
+/*     ASTParam *params   = NULL; */
+/*     int       count    = 0; */
+/*     char     *ret_type = NULL; */
+/*     parse_fn_signature(p, &params, &count, &ret_type); */
+
+/*     char *docstring = NULL; */
+/*     if (p->current.type == TOK_STRING) { */
+/*         docstring  = my_strdup(p->current.value); */
+/*         p->current = lexer_next_token(p->lexer); */
+/*     } */
+
+/*     AST *body = parse_expr(p); */
+
+/*     return ast_new_lambda(params, count, ret_type, docstring, NULL, false, body); */
+/* } */
 
 
 typedef struct {
@@ -898,7 +980,21 @@ static AST *parse_list(Parser *p) {
             DefineMetadata meta = parse_define_metadata(p);
 
             // Body
-            AST *body = parse_expr(p);
+            /* AST *body = parse_expr(p); */
+            AST **body_exprs = NULL;
+            int   body_count = 0;
+            while (p->current.type != TOK_RPAREN &&
+                   p->current.type != TOK_EOF    &&
+                   p->current.type != TOK_KEYWORD) {
+                body_exprs = realloc(body_exprs, sizeof(AST*) * (body_count + 1));
+                body_exprs[body_count++] = parse_expr(p);
+            }
+            if (body_count == 0) {
+                compiler_error(p->current.line, p->current.column,
+                               "function body cannot be empty");
+            }
+            AST *body = body_exprs[body_count - 1]; // last expr = return value
+
 
             // Parse optional metadata AFTER body
             DefineMetadata meta2 = parse_define_metadata(p);
@@ -949,8 +1045,11 @@ static AST *parse_list(Parser *p) {
 
 
             // Build (define fname (lambda ...))
+            /* AST *lambda = ast_new_lambda(params, count, ret_type, */
+            /*                              meta.docstring, meta.alias_name, meta.naked, body); */
             AST *lambda = ast_new_lambda(params, count, ret_type,
-                                         meta.docstring, meta.alias_name, meta.naked, body);
+                                         meta.docstring, meta.alias_name, meta.naked,
+                                         body, body_exprs, body_count);
 
             free(meta.docstring);
             free(meta.alias_name);

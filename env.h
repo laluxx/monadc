@@ -45,9 +45,11 @@ typedef struct Env {
     EnvEntry **buckets;
     size_t size;
     size_t count;
+    struct Env *parent;
 } Env;
 
 Env *env_create(void);
+Env *env_create_child(Env *parent);
 void env_free(Env *table);
 
 void env_insert(Env *table, const char *name, Type *type,

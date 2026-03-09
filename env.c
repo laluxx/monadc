@@ -14,12 +14,27 @@ static unsigned int hash(const char *str) {
 }
 
 Env *env_create(void) {
-    Env *t    = malloc(sizeof(Env));
-    t->size   = INITIAL_SIZE;
-    t->count  = 0;
+    Env *t     = malloc(sizeof(Env));
+    t->size    = INITIAL_SIZE;
+    t->count   = 0;
     t->buckets = calloc(t->size, sizeof(EnvEntry *));
+    t->parent  = NULL;  // add this
     return t;
 }
+
+Env *env_create_child(Env *parent) {
+    Env *t    = env_create();
+    t->parent = parent;
+    return t;
+}
+
+/* Env *env_create(void) { */
+/*     Env *t    = malloc(sizeof(Env)); */
+/*     t->size   = INITIAL_SIZE; */
+/*     t->count  = 0; */
+/*     t->buckets = calloc(t->size, sizeof(EnvEntry *)); */
+/*     return t; */
+/* } */
 
 static void free_entry_fields(EnvEntry *e) {
     free(e->name);
@@ -174,8 +189,17 @@ void env_insert_func(Env *table, const char *name,
 }
 
 EnvEntry *env_lookup(Env *table, const char *name) {
-    return find(table, name);
+    while (table) {
+        EnvEntry *e = find(table, name);
+        if (e) return e;
+        table = table->parent;
+    }
+    return NULL;
 }
+
+/* EnvEntry *env_lookup(Env *table, const char *name) { */
+/*     return find(table, name); */
+/* } */
 
 // Guile Scheme style arity display
 void env_print_entry(EnvEntry *e) {
