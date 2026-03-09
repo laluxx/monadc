@@ -2,6 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include "reader.h"
 #include "cli.h"
 #include "types.h"
@@ -10,6 +13,8 @@
 #include "features.h"
 #include "runtime.h"
 #include "codegen.h"
+#include "module.h"
+#include "buildsystem.h"
 
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
@@ -18,240 +23,659 @@
 #include <llvm-c/BitWriter.h>
 #include <llvm-c/TargetMachine.h>
 
+// In-memory compiled-module registry
+
+typedef struct CompiledExport {
+    char         *local_name;
+    char         *mangled_name;
+    EnvEntryKind  kind;
+    Type         *type;         // VAR: variable type; FUNC: unused (use return_type)
+    Type         *return_type;  // FUNC only
+    EnvParam     *params;       // FUNC only, owned
+    int           param_count;
+    LLVMValueRef  func_ref;     // FUNC only — valid only when not skipped
+} CompiledExport;
+
+typedef struct CompiledModule {
+    char           *module_name;
+    char           *obj_path;
+    bool            was_skipped;    // compiled from .o timestamp, no LLVMValueRef
+    CompiledExport *exports;
+    size_t          export_count;
+    size_t          export_cap;
+    struct CompiledModule *next;
+} CompiledModule;
+
+static CompiledModule *g_compiled = NULL;
+
+static CompiledModule *registry_find(const char *name) {
+    for (CompiledModule *m = g_compiled; m; m = m->next)
+        if (strcmp(m->module_name, name) == 0) return m;
+    return NULL;
+}
+
+static CompiledModule *registry_new(const char *name, const char *obj,
+                                     bool skipped) {
+    CompiledModule *m = calloc(1, sizeof(CompiledModule));
+    m->module_name  = strdup(name);
+    m->obj_path     = strdup(obj);
+    m->was_skipped  = skipped;
+    m->export_cap   = 8;
+    m->exports      = malloc(sizeof(CompiledExport) * 8);
+    m->next         = g_compiled;
+    g_compiled      = m;
+    return m;
+}
+
+static void registry_grow(CompiledModule *m) {
+    if (m->export_count < m->export_cap) return;
+    m->export_cap *= 2;
+    m->exports = realloc(m->exports, sizeof(CompiledExport) * m->export_cap);
+}
+
+static void registry_push_var(CompiledModule *m, const char *local,
+                               const char *mangled, Type *type) {
+    registry_grow(m);
+    CompiledExport *e = &m->exports[m->export_count++];
+    memset(e, 0, sizeof(*e));
+    e->local_name   = strdup(local);
+    e->mangled_name = strdup(mangled);
+    e->kind         = ENV_VAR;
+    e->type         = type_clone(type);
+}
+
+static void registry_push_func(CompiledModule *m, const char *local,
+                                const char *mangled, Type *ret,
+                                EnvParam *params, int pc, LLVMValueRef fn) {
+    registry_grow(m);
+    CompiledExport *e = &m->exports[m->export_count++];
+    memset(e, 0, sizeof(*e));
+    e->local_name   = strdup(local);
+    e->mangled_name = strdup(mangled);
+    e->kind         = ENV_FUNC;
+    e->return_type  = type_clone(ret);
+    e->param_count  = pc;
+    e->func_ref     = fn;
+    if (pc > 0 && params) {
+        e->params = malloc(sizeof(EnvParam) * pc);
+        for (int i = 0; i < pc; i++) {
+            e->params[i].name = strdup(params[i].name ? params[i].name : "_");
+            e->params[i].type = type_clone(params[i].type);
+        }
+    }
+}
+
+static void registry_free_all(void) {
+    CompiledModule *m = g_compiled;
+    while (m) {
+        CompiledModule *next = m->next;
+        free(m->module_name);
+        free(m->obj_path);
+        for (size_t i = 0; i < m->export_count; i++) {
+            CompiledExport *e = &m->exports[i];
+            free(e->local_name);
+            free(e->mangled_name);
+            type_free(e->type);
+            type_free(e->return_type);
+            if (e->params) {
+                for (int j = 0; j < e->param_count; j++) {
+                    free(e->params[j].name);
+                    type_free(e->params[j].type);
+                }
+                free(e->params);
+            }
+        }
+        free(m->exports);
+        free(m);
+        m = next;
+    }
+    g_compiled = NULL;
+}
+
 /// Helpers
 
 static char *read_file(const char *path) {
     FILE *f = fopen(path, "r");
-    if (!f) {
-        fprintf(stderr, "Cannot open file: %s\n", path);
-        exit(1);
-    }
-
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    char *source = malloc(size + 1);
-    fread(source, 1, size, f);
-    source[size] = '\0';
-    fclose(f);
-
-    return source;
+    if (!f) { fprintf(stderr, "Cannot open file: %s\n", path); exit(1); }
+    fseek(f, 0, SEEK_END); long sz = ftell(f); fseek(f, 0, SEEK_SET);
+    char *src = malloc(sz + 1);
+    fread(src, 1, sz, f); src[sz] = '\0'; fclose(f);
+    return src;
 }
 
-/// Compile
+static time_t file_mtime(const char *path) {
+    struct stat st;
+    return (stat(path, &st) == 0) ? st.st_mtime : 0;
+}
 
-void compile(CompilerFlags *flags) {
-    char *source = read_file(flags->input_file);
+static bool file_exists(const char *path) {
+    return access(path, F_OK) == 0;
+}
 
-    // Set parser context for error reporting
-    parser_set_context(flags->input_file, source);
+static char *base_no_ext(const char *path) {
+    char *b = strdup(path);
+    char *dot = strrchr(b, '.');
+    if (dot) *dot = '\0';
+    return b;
+}
 
-    // Detect and register platform features BEFORE PARSING!
-    AST *features_ast = detect_features();
+static char *path_to_module_name(const char *path) {
+    char *b = base_no_ext(path);
+    for (char *p = b; *p; p++) if (*p == '/') *p = '.';
+    char *start = b;
+    if (start[0] == '.' && start[1] == '/') start += 2;
+    char *r = strdup(start);
+    free(b);
+    return r;
+}
 
-    // Print detected features
-    printf("Detected platform features: ");
-    ast_print(features_ast);
-    printf("\n\n");
+// "Math" + "phi" -> "Math__phi"
+static char *mangle(const char *mod, const char *local) {
+    size_t ml = strlen(mod), ll = strlen(local);
+    char *r = malloc(ml + 2 + ll + 1);
+    for (size_t i = 0; i < ml; i++)
+        r[i] = (mod[i] == '.') ? '_' : mod[i];
+    r[ml] = r[ml+1] = '_';
+    memcpy(r + ml + 2, local, ll + 1);
+    return r;
+}
 
+static bool emit_object(LLVMModuleRef mod, const char *obj_path) {
+    char *triple = LLVMGetDefaultTargetTriple();
+    char *error  = NULL;
+    LLVMTargetRef target;
+    if (LLVMGetTargetFromTriple(triple, &target, &error) != 0) {
+        fprintf(stderr, "target error: %s\n", error);
+        LLVMDisposeMessage(error); LLVMDisposeMessage(triple); return false;
+    }
+    LLVMTargetMachineRef tm = LLVMCreateTargetMachine(
+        target, triple, "generic", "",
+        LLVMCodeGenLevelDefault, LLVMRelocPIC, LLVMCodeModelDefault);
+    char buf[512]; strncpy(buf, obj_path, sizeof(buf)-1); buf[511] = '\0';
+    bool ok = true;
+    if (LLVMTargetMachineEmitToFile(tm, mod, buf, LLVMObjectFile, &error) != 0) {
+        fprintf(stderr, "emit error for %s: %s\n", obj_path, error);
+        LLVMDisposeMessage(error); ok = false;
+    }
+    LLVMDisposeTargetMachine(tm);
+    LLVMDisposeMessage(triple);
+    return ok;
+}
+
+static void declare_externals(CodegenContext *ctx,
+                               CompiledModule *dep,
+                               ImportDecl *import) {
+    for (size_t i = 0; i < dep->export_count; i++) {
+        CompiledExport *e = &dep->exports[i];
+
+        bool do_import = false;
+        switch (import->mode) {
+        case IMPORT_QUALIFIED:
+        case IMPORT_UNQUALIFIED: do_import = true; break;
+        case IMPORT_SELECTIVE:
+            do_import =  import_decl_includes_symbol(import, e->local_name); break;
+        case IMPORT_HIDING:
+            do_import = !import_decl_includes_symbol(import, e->local_name); break;
+        }
+        if (!do_import) continue;
+
+        if (e->kind == ENV_VAR) {
+            LLVMTypeRef lt = type_to_llvm(ctx, e->type);
+            LLVMValueRef gv = LLVMGetNamedGlobal(ctx->module, e->mangled_name);
+            if (!gv) {
+                gv = LLVMAddGlobal(ctx->module, lt, e->mangled_name);
+                LLVMSetLinkage(gv, LLVMExternalLinkage);
+            }
+
+            // Build the dot-qualified name: Alias.symbol or ModuleName.symbol
+            const char *last_dot = strrchr(dep->module_name, '.');
+            const char *mod_last = last_dot ? last_dot + 1 : dep->module_name;
+            const char *prefix   = import->alias ? import->alias : mod_last;
+            {
+                char qn[512];
+                snprintf(qn, sizeof(qn), "%s.%s", prefix, e->local_name);
+                env_insert_from_module(ctx->env, qn, dep->module_name,
+                                       type_clone(e->type), gv, true);
+            }
+            if (import->mode != IMPORT_QUALIFIED)
+                env_insert_from_module(ctx->env, e->local_name, dep->module_name,
+                                       type_clone(e->type), gv, true);
+
+        } else { // FUNC
+            LLVMTypeRef *pt = e->param_count > 0
+                ? malloc(sizeof(LLVMTypeRef) * e->param_count) : NULL;
+            for (int j = 0; j < e->param_count; j++)
+                pt[j] = type_to_llvm(ctx, e->params[j].type);
+            LLVMTypeRef fnt = LLVMFunctionType(
+                type_to_llvm(ctx, e->return_type), pt, e->param_count, 0);
+            if (pt) free(pt);
+
+            LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, e->mangled_name);
+            if (!fn) {
+                fn = LLVMAddFunction(ctx->module, e->mangled_name, fnt);
+                LLVMSetLinkage(fn, LLVMExternalLinkage);
+            }
+
+            {
+                const char *last_dot2 = strrchr(dep->module_name, '.');
+                const char *mod_last2 = last_dot2 ? last_dot2 + 1 : dep->module_name;
+                const char *prefix2   = import->alias ? import->alias : mod_last2;
+                char qn[512];
+                snprintf(qn, sizeof(qn), "%s.%s", prefix2, e->local_name);
+                env_insert_func(ctx->env, qn,
+                                clone_params(e->params, e->param_count),
+                                e->param_count, type_clone(e->return_type), fn, NULL);
+                EnvEntry *ent = env_lookup(ctx->env, qn);
+                if (ent) ent->module_name = strdup(dep->module_name);
+            }
+
+            if (import->mode != IMPORT_QUALIFIED) {
+                env_insert_func(ctx->env, e->local_name,
+                                clone_params(e->params, e->param_count),
+                                e->param_count, type_clone(e->return_type), fn, NULL);
+                EnvEntry *ent = env_lookup(ctx->env, e->local_name);
+                if (ent) ent->module_name = strdup(dep->module_name);
+            }
+        }
+    }
+}
+
+static CompiledModule *compile_one(const char *source_path,
+                                    CompilerFlags *flags,
+                                    bool is_main_module);
+
+static CompiledModule *compile_one(const char *source_path,
+                                    CompilerFlags *flags,
+                                    bool is_main_module) {
+    // Defensively own the path — callers may free dep_src right after returning
+    char *my_source_path = strdup(source_path);
+
+    char *base     = base_no_ext(my_source_path);
+    char *obj_path = malloc(strlen(base) + 3);
+    sprintf(obj_path, "%s.o", base);
+
+    // Incremental check for library modules
+    if (!is_main_module) {
+        char *guessed = path_to_module_name(my_source_path);
+        CompiledModule *cached = registry_find(guessed);
+        free(guessed);
+        if (cached) {
+            free(base); free(obj_path); free(my_source_path);
+            return cached;
+        }
+    }
+
+    // Check if we can skip emitting a new .o (but we still run full codegen
+    // to populate the registry with correct types — it's cheap without emit)
+    time_t src_t = file_mtime(my_source_path);
+    time_t obj_t = file_mtime(obj_path);
+    bool skip_emit = !is_main_module && (obj_t > 0 && obj_t > src_t);
+
+    if (skip_emit)
+        printf("[skip]    %s (.o is up to date)\n", my_source_path);
+    else
+        printf("[compile] %s\n", my_source_path);
+
+    // Read + parse
+    char *source = read_file(my_source_path);
+    parser_set_context(my_source_path, source);
     ASTList exprs = parse_all(source);
-
     if (exprs.count == 0) {
-        fprintf(stderr, "%s:1:1: error: no expression(s) found\n", flags->input_file);
+        fprintf(stderr, "%s: error: no expressions found\n", my_source_path);
         exit(1);
     }
 
-    printf("Compiling %zu expression(s)\n", exprs.count);
+/// Phase 1: Module + import declarations
+
+    ModuleContext *mod_ctx = module_context_create();
+    module_context_set_file(mod_ctx, my_source_path);
+    ModuleDecl *module_decl = NULL;
+    size_t first_code = 0;
+
+    for (size_t i = 0; i < exprs.count; i++) {
+        AST *expr = exprs.exprs[i];
+        if (expr->type != AST_LIST || expr->list.count == 0 ||
+            expr->list.items[0]->type != AST_SYMBOL) break;
+        const char *head = expr->list.items[0]->symbol;
+        if (strcmp(head, "module") == 0) {
+            if (module_decl) {
+                fprintf(stderr, "%s:%d: error: duplicate module declaration\n",
+                        my_source_path, expr->line); exit(1);
+            }
+            module_decl = parse_module_decl(expr);
+            if (!module_decl) {
+                fprintf(stderr, "%s:%d: error: invalid module declaration\n",
+                        my_source_path, expr->line); exit(1);
+            }
+            module_context_set_decl(mod_ctx, module_decl);
+            first_code = i + 1;
+        } else if (strcmp(head, "import") == 0) {
+            ImportDecl *imp = parse_import_decl(expr);
+            if (!imp) {
+                fprintf(stderr, "%s:%d: error: invalid import\n",
+                        my_source_path, expr->line); exit(1);
+            }
+            module_context_add_import(mod_ctx, imp);
+            first_code = i + 1;
+        } else {
+            break;
+        }
+    }
+
+    if (!module_decl) {
+        char *guessed = path_to_module_name(my_source_path);
+        module_decl = module_decl_create(guessed, EXPORT_ALL);
+        if (!module_decl) {
+            free(guessed);
+            module_decl = module_decl_create("Main", EXPORT_ALL);
+        } else {
+            free(guessed);
+        }
+        module_context_set_decl(mod_ctx, module_decl);
+    }
+    const char *mod_name = module_decl->name;
+    printf("  module: %s\n", mod_name);
+
+/// Phase 2: Recursively compile dependencies
+
+    for (size_t i = 0; i < mod_ctx->import_count; i++) {
+        ImportDecl *imp = mod_ctx->imports[i];
+        char *dep_src = module_name_to_path(imp->module_name);
+        if (!file_exists(dep_src)) {
+            fprintf(stderr, "error: cannot find module '%s' (tried: %s)",
+                    imp->module_name, dep_src);
+            free(dep_src); exit(1);
+        }
+        // dep_src is freed here after compile_one returns; compile_one
+        // strdups it internally so this is safe
+        compile_one(dep_src, flags, false);
+        free(dep_src);
+        parser_set_context(my_source_path, source);
+    }
+
+/// Phase 3: LLVM setup
 
     LLVMInitializeNativeTarget();
     LLVMInitializeNativeAsmPrinter();
     LLVMInitializeNativeAsmParser();
 
     CodegenContext ctx;
-    codegen_init(&ctx, "monad_module");
-
+    codegen_init(&ctx, mod_name);
+    ctx.module_ctx = mod_ctx;
     register_builtins(&ctx);
     declare_runtime_functions(&ctx);
 
-    LLVMTypeRef main_type = LLVMFunctionType(LLVMInt32TypeInContext(ctx.context), NULL, 0, 0);
-    LLVMValueRef main_fn = LLVMAddFunction(ctx.module, "main", main_type);
-    LLVMBasicBlockRef entry = LLVMAppendBasicBlockInContext(ctx.context, main_fn, "entry");
-    LLVMPositionBuilderAtEnd(ctx.builder, entry);
+/// Phase 4: Declare externals from compiled deps
 
-    // Convert features AST to runtime list
-    LLVMValueRef list_fn = get_rt_list_create(&ctx);
-    LLVMValueRef features_list = LLVMBuildCall2(ctx.builder,
-    LLVMGlobalGetValueType(list_fn), list_fn, NULL, 0, "features_list");
-
-    // Append each feature keyword to the runtime list
-    for (size_t i = 0; i < features_ast->list.count; i++) {
-        AST *feature = features_ast->list.items[i];
-        if (feature->type == AST_KEYWORD) {
-            LLVMValueRef kw_fn = get_rt_value_keyword(&ctx);
-            LLVMValueRef kw_str = LLVMBuildGlobalStringPtr(ctx.builder,
-                                                           feature->keyword, "feat_kw");
-            LLVMValueRef kw_args[] = {kw_str};
-            LLVMValueRef rt_kw = LLVMBuildCall2(ctx.builder, LLVMGlobalGetValueType(kw_fn),
-                                                kw_fn, kw_args, 1, "feat_val");
-
-            LLVMValueRef append_fn = get_rt_list_append(&ctx);
-            LLVMValueRef append_args[] = {features_list, rt_kw};
-            LLVMBuildCall2(ctx.builder, LLVMGlobalGetValueType(append_fn),
-                           append_fn, append_args, 2, "");
+    for (size_t i = 0; i < mod_ctx->import_count; i++) {
+        ImportDecl *imp = mod_ctx->imports[i];
+        CompiledModule *dep = registry_find(imp->module_name);
+        if (!dep) {
+            fprintf(stderr, "internal error: '%s' not in registry after compile\n",
+                    imp->module_name); exit(1);
         }
+        declare_externals(&ctx, dep, imp);
     }
 
-    // Register *features* in the environment
-    Type *features_type = type_list(type_keyword());
-    LLVMTypeRef features_llvm_type = type_to_llvm(&ctx, features_type);
-    LLVMValueRef features_var = LLVMBuildAlloca(ctx.builder, features_llvm_type, "*features*");
-    LLVMBuildStore(ctx.builder, features_list, features_var);
-    env_insert(ctx.env, "*features*", features_type, features_var);
+/// Phase 5: Create init/main function and position builder
+// (Must happen BEFORE any IR-building calls like features setup)
 
-    // Clean up the AST
-    ast_free(features_ast);
+    char init_name[256];
+    snprintf(init_name, sizeof(init_name), "__init_%s", mod_name);
+    for (char *p = init_name; *p; p++) if (*p == '.') *p = '_';
 
-
-    CodegenResult result = {NULL, NULL};
-    for (size_t i = 0; i < exprs.count; i++) {
-        /* printf("DEBUG: Expression %zu at line %d, column %d:\n", */
-        /*        i, exprs.exprs[i]->line, exprs.exprs[i]->column); */
-        printf("  ");
-        ast_print(exprs.exprs[i]);
-        printf("\n");
-        result = codegen_expr(&ctx, exprs.exprs[i]);
-    }
-
-    if (!result.value) {
-        result.value = LLVMConstReal(LLVMDoubleTypeInContext(ctx.context), 0.0);
-        result.type = type_float();
-    }
-
-    // Convert result to i32 based on its type
-    LLVMValueRef result_i32;
-    if (result.type && type_is_integer(result.type)) {
-        result_i32 = LLVMBuildTrunc(ctx.builder, result.value,
-                                    LLVMInt32TypeInContext(ctx.context), "result");
+    LLVMValueRef init_fn;
+    if (is_main_module) {
+        LLVMTypeRef mt = LLVMFunctionType(
+            LLVMInt32TypeInContext(ctx.context), NULL, 0, 0);
+        init_fn = LLVMAddFunction(ctx.module, "main", mt);
     } else {
-        result_i32 = LLVMBuildFPToSI(ctx.builder, result.value,
-                                     LLVMInt32TypeInContext(ctx.context), "result");
+        LLVMTypeRef vt = LLVMFunctionType(
+            LLVMVoidTypeInContext(ctx.context), NULL, 0, 0);
+        init_fn = LLVMAddFunction(ctx.module, init_name, vt);
     }
+    LLVMBasicBlockRef entry_blk = LLVMAppendBasicBlockInContext(
+        ctx.context, init_fn, "entry");
+    LLVMPositionBuilderAtEnd(ctx.builder, entry_blk);
+    ctx.init_fn = init_fn;
 
-    LLVMBuildRet(ctx.builder, result_i32);
+/// Phase 6: *features* global (builder is now positioned — safe to emit IR)
 
-    char *error = NULL;
-    LLVMVerifyModule(ctx.module, LLVMAbortProcessAction, &error);
-    LLVMDisposeMessage(error);
+    AST *feat_ast = detect_features();
+    LLVMValueRef lf = get_rt_list_create(&ctx);
+    LLVMValueRef feat_list = LLVMBuildCall2(ctx.builder,
+        LLVMGlobalGetValueType(lf), lf, NULL, 0, "feats");
+    for (size_t i = 0; i < feat_ast->list.count; i++) {
+        AST *fk = feat_ast->list.items[i];
+        if (fk->type == AST_KEYWORD) {
+            LLVMValueRef kwf = get_rt_value_keyword(&ctx);
+            LLVMValueRef kws = LLVMBuildGlobalStringPtr(ctx.builder,
+                                                        fk->keyword, "fk");
+            LLVMValueRef ka[] = {kws};
+            LLVMValueRef kv   = LLVMBuildCall2(ctx.builder,
+                LLVMGlobalGetValueType(kwf), kwf, ka, 1, "kv");
+            LLVMValueRef af   = get_rt_list_append(&ctx);
+            LLVMValueRef aa[] = {feat_list, kv};
+            LLVMBuildCall2(ctx.builder, LLVMGlobalGetValueType(af),
+                           af, aa, 2, "");
+        }
+    }
+    ast_free(feat_ast);
+    Type *ft = type_list(type_keyword());
+    LLVMTypeRef flt = type_to_llvm(&ctx, ft);
+    LLVMValueRef fgv = LLVMAddGlobal(ctx.module, flt, "__features__");
+    LLVMSetInitializer(fgv, LLVMConstNull(flt));
+    LLVMSetLinkage(fgv, LLVMInternalLinkage);
+    LLVMBuildStore(ctx.builder, feat_list, fgv);
+    env_insert(ctx.env, "*features*", ft, fgv);
 
-    char *base_name = flags->output_name ? strdup(flags->output_name) : get_base_executable_name(flags->input_file);
+/// Phase 7: Codegen top-level expressions
 
-    if (flags->emit_ir) {
-        char ir_file[256];
-        snprintf(ir_file, sizeof(ir_file), "%s.ll", base_name);
-        if (LLVMPrintModuleToFile(ctx.module, ir_file, &error) != 0) {
-            fprintf(stderr, "Failed to write IR: %s\n", error);
-            LLVMDisposeMessage(error);
-        } else {
-            printf("Wrote IR to %s\n", ir_file);
+    // For the main module: call each imported library's init function first
+    // so their top-level variable stores (e.g. phi = 3.14) run before we use them.
+    if (is_main_module) {
+        for (size_t i = 0; i < mod_ctx->import_count; i++) {
+            ImportDecl *imp = mod_ctx->imports[i];
+            // Build the init function name the same way compile_one does
+            char dep_init[256];
+            snprintf(dep_init, sizeof(dep_init), "__init_%s", imp->module_name);
+            for (char *p = dep_init; *p; p++) if (*p == '.') *p = '_';
+
+            // Declare it as extern void fn(void) if not already present
+            LLVMTypeRef dep_init_t = LLVMFunctionType(
+                LLVMVoidTypeInContext(ctx.context), NULL, 0, 0);
+            LLVMValueRef dep_fn = LLVMGetNamedFunction(ctx.module, dep_init);
+            if (!dep_fn) {
+                dep_fn = LLVMAddFunction(ctx.module, dep_init, dep_init_t);
+                LLVMSetLinkage(dep_fn, LLVMExternalLinkage);
+            }
+            LLVMBuildCall2(ctx.builder, dep_init_t, dep_fn, NULL, 0, "");
         }
     }
 
-    if (flags->emit_bc) {
-        char bc_file[256];
-        snprintf(bc_file, sizeof(bc_file), "%s.bc", base_name);
-        if (LLVMWriteBitcodeToFile(ctx.module, bc_file) != 0) {
-            fprintf(stderr, "Failed to write bitcode\n");
-        } else {
-            printf("Wrote bitcode to %s\n", bc_file);
-        }
-    }
-
-    // ALWAYS generate object file and executable
-    // Flags just control additional outputs
-    {
-        LLVMTargetRef target;
-        char *triple = LLVMGetDefaultTargetTriple();
-
-        if (LLVMGetTargetFromTriple(triple, &target, &error) != 0) {
-            fprintf(stderr, "Failed to get target: %s\n", error);
-            LLVMDisposeMessage(error);
-            exit(1);
-        }
-
-        LLVMTargetMachineRef machine = LLVMCreateTargetMachine(
-            target, triple, "generic", "",
-            LLVMCodeGenLevelDefault, LLVMRelocPIC, LLVMCodeModelDefault
-        );
-
-        if (flags->emit_asm) {
-            char asm_file[256];
-            snprintf(asm_file, sizeof(asm_file), "%s.s", base_name);
-            if (LLVMTargetMachineEmitToFile(machine, ctx.module, asm_file,
-                                            LLVMAssemblyFile, &error) != 0) {
-                fprintf(stderr, "Failed to emit assembly: %s\n", error);
-                LLVMDisposeMessage(error);
-            } else {
-                printf("Wrote assembly to %s\n", asm_file);
+    CodegenResult last = {NULL, NULL};
+    for (size_t i = first_code; i < exprs.count; i++) {
+        AST *expr = exprs.exprs[i];
+        if (expr->type == AST_LIST && expr->list.count > 0 &&
+            expr->list.items[0]->type == AST_SYMBOL) {
+            const char *h = expr->list.items[0]->symbol;
+            if (strcmp(h, "module") == 0) {
+                fprintf(stderr, "%s:%d: error: 'module' must be first\n",
+                        my_source_path, expr->line); exit(1);
+            }
+            if (strcmp(h, "import") == 0) {
+                fprintf(stderr, "%s:%d: error: 'import' must precede code\n",
+                        my_source_path, expr->line); exit(1);
             }
         }
+        last = codegen_expr(&ctx, expr);
+    }
 
-        char obj_file[256];
-        snprintf(obj_file, sizeof(obj_file), "%s.o", base_name);
+/// Phase 8: Terminate function
 
-        if (LLVMTargetMachineEmitToFile(machine, ctx.module, obj_file,
-                                        LLVMObjectFile, &error) != 0) {
-            fprintf(stderr, "Failed to emit object file: %s\n", error);
-            LLVMDisposeMessage(error);
-        } else {
-            if (flags->emit_obj) {
-                printf("Wrote object file to %s\n", obj_file);
+    if (is_main_module) {
+        LLVMValueRef rc = LLVMConstInt(LLVMInt32TypeInContext(ctx.context), 0, 0);
+        if (last.value && last.type && type_is_integer(last.type))
+            rc = LLVMBuildTrunc(ctx.builder, last.value,
+                                LLVMInt32TypeInContext(ctx.context), "rc");
+        LLVMBuildRet(ctx.builder, rc);
+    } else {
+        LLVMBuildRetVoid(ctx.builder);
+    }
+
+/// Phase 9: Build registry entry + rename LLVM symbols to mangled names
+
+    CompiledModule *cm = registry_new(mod_name, obj_path, false);
+
+    for (size_t bi = 0; bi < ctx.env->size; bi++) {
+        EnvEntry *ent = ctx.env->buckets[bi];
+        while (ent) {
+            if (ent->kind == ENV_BUILTIN || ent->module_name != NULL ||
+                ent->name[0] == '*') { ent = ent->next; continue; }
+            if (!module_decl_is_exported(module_decl, ent->name)) {
+                ent = ent->next; continue;
             }
 
-            // ALWAYS link to executable (even if --emit-obj was specified)
+            char *ms = mangle(mod_name, ent->name);
 
-            char cmd[1024];
-            snprintf(cmd, sizeof(cmd),
-                     "gcc %s runtime.o -o %s `llvm-config --ldflags --libs "
-                     "core` -lm -no-pie",
-                     obj_file, base_name);
-
-            int ret = system(cmd);
-            if (ret == 0) {
-                printf("Created executable: %s\n", base_name);
-                // Only remove .o if user didn't request --emit-obj
-                if (!flags->emit_obj) {
-                    remove(obj_file);
+            if (ent->kind == ENV_FUNC) {
+                registry_push_func(cm, ent->name, ms,
+                                   ent->return_type,
+                                   ent->params, ent->param_count,
+                                   ent->func_ref);
+                if (ent->func_ref) {
+                    const char *cur = LLVMGetValueName(ent->func_ref);
+                    if (!cur || strcmp(cur, ms) != 0)
+                        LLVMSetValueName2(ent->func_ref, ms, strlen(ms));
                 }
             } else {
-                fprintf(stderr, "Failed to link executable\n");
+                if (!ent->type) { free(ms); ent = ent->next; continue; }
+                registry_push_var(cm, ent->name, ms, ent->type);
+                LLVMValueRef gv = ent->value;
+                if (gv && LLVMIsAGlobalVariable(gv)) {
+                    const char *cur = LLVMGetValueName(gv);
+                    if (!cur || strcmp(cur, ms) != 0)
+                        LLVMSetValueName2(gv, ms, strlen(ms));
+                    LLVMSetLinkage(gv, LLVMExternalLinkage);
+                }
             }
+            free(ms);
+            ent = ent->next;
         }
-
-        LLVMDisposeTargetMachine(machine);
-        LLVMDisposeMessage(triple);
     }
 
-    printf("\nSymbol Table:\n");
-    env_print(ctx.env);
+/// Phase 10: Verify + optional IR/asm output
 
-    free(base_name);
-    for (size_t i = 0; i < exprs.count; i++) {
-        ast_free(exprs.exprs[i]);
+    char *error = NULL;
+    if (LLVMVerifyModule(ctx.module, LLVMPrintMessageAction, &error) != 0) {
+        fprintf(stderr, "IR verification failed for %s:\n%s\n",
+                my_source_path, error ? error : "");
+        LLVMDisposeMessage(error); exit(1);
     }
+    if (error) LLVMDisposeMessage(error);
+
+    if (flags->emit_ir) {
+        char ir[512]; snprintf(ir, sizeof(ir), "%s.ll", base);
+        error = NULL; LLVMPrintModuleToFile(ctx.module, ir, &error);
+        if (error) LLVMDisposeMessage(error);
+        else printf("  wrote IR: %s\n", ir);
+    }
+    if (flags->emit_asm) {
+        char as[512]; snprintf(as, sizeof(as), "%s.s", base);
+        char *triple = LLVMGetDefaultTargetTriple();
+        LLVMTargetRef tgt; error = NULL;
+        LLVMGetTargetFromTriple(triple, &tgt, &error);
+        if (error) LLVMDisposeMessage(error);
+        LLVMTargetMachineRef mach = LLVMCreateTargetMachine(
+            tgt, triple, "generic", "",
+            LLVMCodeGenLevelDefault, LLVMRelocPIC, LLVMCodeModelDefault);
+        char asbuf[512]; strncpy(asbuf, as, 511);
+        error = NULL;
+        LLVMTargetMachineEmitToFile(mach, ctx.module, asbuf,
+                                    LLVMAssemblyFile, &error);
+        if (error) LLVMDisposeMessage(error);
+        LLVMDisposeTargetMachine(mach); LLVMDisposeMessage(triple);
+    }
+
+/// Phase 11: Emit object file (skipped if .o is already up to date)
+
+    if (!skip_emit) {
+        if (!emit_object(ctx.module, obj_path)) {
+            fprintf(stderr, "failed to emit object for %s\n", my_source_path);
+            exit(1);
+        }
+        printf("  wrote object: %s\n", obj_path);
+    }
+
+///// Cleanup
+
+    codegen_dispose(&ctx);
+    module_context_free(mod_ctx);
+    for (size_t i = 0; i < exprs.count; i++) ast_free(exprs.exprs[i]);
     free(exprs.exprs);
     free(source);
-    codegen_dispose(&ctx);
+    free(obj_path);
+    free(base);
+    free(my_source_path);
+    type_alias_free_all();  // clear aliases between compilations
+    return cm;
+}
+
+static void compile(CompilerFlags *flags) {
+    compile_one(flags->input_file, flags, true);
+
+    // Collect .o files: registry is prepend (newest first), reverse to get
+    // deps first so linker resolves symbols correctly
+    size_t n = 0;
+    for (CompiledModule *m = g_compiled; m; m = m->next) n++;
+
+    const char **objs = malloc(sizeof(char *) * n);
+    size_t idx = n;
+    for (CompiledModule *m = g_compiled; m; m = m->next)
+        objs[--idx] = m->obj_path;
+
+    char *exec_name = flags->output_name
+        ? strdup(flags->output_name)
+        : get_base_executable_name(flags->input_file);
+
+    char cmd[4096];
+    int w = snprintf(cmd, sizeof(cmd), "gcc");
+    for (size_t i = 0; i < n; i++)
+        w += snprintf(cmd + w, sizeof(cmd) - w, " %s", objs[i]);
+
+    w += snprintf(cmd + w, sizeof(cmd) - w,
+                  " -o %s /usr/local/lib/libmonad.a"
+                  " `llvm-config --ldflags --libs core` -lm -no-pie", exec_name);
+
+
+    printf("\n[link] %s\n", cmd);
+    int rc = system(cmd);
+    if (rc == 0) {
+        /* printf("[done] %s", exec_name); */
+        printf("[done] %s\n", exec_name);
+        if (!flags->emit_obj)
+            for (size_t i = 0; i < n; i++) remove(objs[i]);
+    } else {
+        fprintf(stderr, "[error] linking failed\n");
+    }
+
+    free(objs);
+    free(exec_name);
+    registry_free_all();
 }
 
 int main(int argc, char **argv) {
     CompilerFlags flags = parse_flags(argc, argv);
-
-    if (flags.start_repl) {
-        repl_run();
+    switch (flags.mode) {
+    case CMD_REPL:    repl_run();                  return 0;
+    case CMD_NEW:     cmd_new(flags.package_name); return 0;
+    case CMD_BUILD:   cmd_build();                 return 0;
+    case CMD_RUN:     cmd_run();                   return 0;
+    case CMD_CLEAN:   cmd_clean();                 return 0;
+    case CMD_INSTALL: cmd_install();               return 0;
+    case CMD_COMPILE:
+    default:
+        compile(&flags);
         return 0;
     }
-
-    compile(&flags);
-    return 0;
 }

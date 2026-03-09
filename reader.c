@@ -153,16 +153,32 @@ AST *ast_new_list(void) {
 AST *ast_new_lambda(ASTParam *params, int param_count,
                     const char *return_type,
                     const char *docstring,
+                    const char *alias_name,
                     AST *body) {
     AST *a = calloc(1, sizeof(AST));
     a->type                = AST_LAMBDA;
     a->lambda.params       = params;
     a->lambda.param_count  = param_count;
-    a->lambda.return_type  = return_type ? my_strdup(return_type) : NULL;
-    a->lambda.docstring    = docstring   ? my_strdup(docstring)   : NULL;
+    a->lambda.return_type  = return_type  ? my_strdup(return_type)  : NULL;
+    a->lambda.docstring    = docstring    ? my_strdup(docstring)    : NULL;
+    a->lambda.alias_name   = alias_name   ? my_strdup(alias_name)   : NULL;
     a->lambda.body         = body;
     return a;
 }
+
+/* AST *ast_new_lambda(ASTParam *params, int param_count, */
+/*                     const char *return_type, */
+/*                     const char *docstring, */
+/*                     AST *body) { */
+/*     AST *a = calloc(1, sizeof(AST)); */
+/*     a->type                = AST_LAMBDA; */
+/*     a->lambda.params       = params; */
+/*     a->lambda.param_count  = param_count; */
+/*     a->lambda.return_type  = return_type ? my_strdup(return_type) : NULL; */
+/*     a->lambda.docstring    = docstring   ? my_strdup(docstring)   : NULL; */
+/*     a->lambda.body         = body; */
+/*     return a; */
+/* } */
 
 AST *ast_new_asm(AST **instructions, size_t instruction_count) {
     AST *a = calloc(1, sizeof(AST));
@@ -193,6 +209,14 @@ AST *ast_new_array(void) {
     a->array.element_capacity = 4;
     a->array.elements = malloc(sizeof(AST *) * 4);
     a->array.element_count = 0;
+    return a;
+}
+
+AST *ast_new_type_alias(const char *alias_name, const char *target_name) {
+    AST *a = calloc(1, sizeof(AST));
+    a->type = AST_TYPE_ALIAS;
+    a->type_alias.alias_name  = my_strdup(alias_name);
+    a->type_alias.target_name = my_strdup(target_name);
     return a;
 }
 
@@ -251,6 +275,7 @@ void ast_free(AST *ast) {
         }
         free(ast->lambda.return_type);
         free(ast->lambda.docstring);
+        free(ast->lambda.alias_name);
         ast_free(ast->lambda.body);
         break;
 
@@ -265,6 +290,11 @@ void ast_free(AST *ast) {
 
     case AST_KEYWORD:
         free(ast->keyword);
+        break;
+
+    case AST_TYPE_ALIAS:
+        free(ast->type_alias.alias_name);
+        free(ast->type_alias.target_name);
         break;
 
     default:
@@ -332,6 +362,9 @@ void ast_print(AST *ast) {
     case AST_KEYWORD:
         printf(":%s", ast->keyword);
         break;
+    case AST_TYPE_ALIAS:
+        printf("(type %s %s)", ast->type_alias.alias_name, ast->type_alias.target_name);
+        break;
     }
 }
 
@@ -374,12 +407,49 @@ static bool is_digit(char c)     { return c >= '0' && c <= '9'; }
 static bool is_hex_digit(char c) {
     return is_digit(c) || (c>='a'&&c<='f') || (c>='A'&&c<='F');
 }
-static bool is_symbol_char(char c) {
-    return (c>='a'&&c<='z') || (c>='A'&&c<='Z') || (c>='0'&&c<='9') ||
+
+/* A '.' is allowed INSIDE a symbol (for module-qualified access like M.phi
+   or multi-part module names like Std.Math) but only when it is followed by
+   a letter or digit – this prevents it from being mistaken for a decimal
+   point in numeric literals, which are handled before symbols anyway. */
+static bool is_symbol_start(unsigned char c) {
+    return (c>='a'&&c<='z') || (c>='A'&&c<='Z') ||
            c=='-' || c=='+' || c=='*' || c=='/' ||
            c=='<' || c=='>' || c=='=' || c=='!' ||
-           c=='?' || c=='_' || c==':' || c=='%';
+           c=='?' || c=='_' || c==':' || c=='%' ||
+           c > 127;  // UTF-8 multi-byte sequences
 }
+
+static bool is_symbol_char(unsigned char c) {
+    return is_symbol_start(c) || (c>='0'&&c<='9') || c=='.';
+}
+
+
+/* static bool is_symbol_start(char c) { */
+/*     return (c>='a'&&c<='z') || (c>='A'&&c<='Z') || */
+/*            c=='-' || c=='+' || c=='*' || c=='/' || */
+/*            c=='<' || c=='>' || c=='=' || c=='!' || */
+/*            c=='?' || c=='_' || c==':' || c=='%'; */
+/* } */
+
+/* static bool is_symbol_char(char c) { */
+/*     return is_symbol_start(c) || (c>='0'&&c<='9') || c=='.'; */
+/* } */
+
+/* When we are inside a symbol and see '.', only consume it if the next
+   character is also a valid symbol character (letter/digit).  This avoids
+   eating the '.' that belongs to ratio denominators or trailing punctuation. */
+static bool is_symbol_dot_continuation(Lexer *lex) {
+    unsigned char next = (unsigned char)lex->source[lex->pos + 1];
+    return (next>='a'&&next<='z') || (next>='A'&&next<='Z') ||
+           (next>='0'&&next<='9') || next=='_' || next > 127;
+}
+
+/* static bool is_symbol_dot_continuation(Lexer *lex) { */
+/*     /\* current char is '.' at lex->pos; peek ahead one more *\/ */
+/*     char next = lex->source[lex->pos + 1]; */
+/*     return (next>='a'&&next<='z') || (next>='A'&&next<='Z') || (next>='0'&&next<='9') || next=='_'; */
+/* } */
 
 Token lexer_next_token(Lexer *lex) {
     Token tok = {0};
@@ -424,9 +494,9 @@ Token lexer_next_token(Lexer *lex) {
         return tok;
     }
 
-    // Keyword :name
+    // Keyword :name  (colon NOT followed by another colon)
     if (c == ':' && peek_ahead(lex, 1) != ':' && peek_ahead(lex, 1) != '\0' &&
-        is_symbol_char(peek_ahead(lex, 1))) {
+        is_symbol_start(peek_ahead(lex, 1))) {
 
         advance(lex); // skip ':'
         size_t start = lex->pos;
@@ -554,11 +624,35 @@ Token lexer_next_token(Lexer *lex) {
         return tok;
     }
 
-
-    // Symbol
-    if (is_symbol_char(c)) {
+    // Symbol  (letters, operator chars, digits mid-token, and '.' mid-token)
+    if (is_symbol_start((unsigned char)c)) {
         size_t start = lex->pos;
-        while (is_symbol_char(peek(lex))) advance(lex);
+        advance(lex); // consume the first character
+
+        /* Continue consuming symbol characters.  For '.', only consume it
+           when it is followed by a letter/digit (module-access dot), not
+           when it might be trailing punctuation. */
+        while (true) {
+            char nc = peek(lex);
+            if (nc == '\0') break;
+            if (nc == '.') {
+                /* peek at the character after the dot */
+                char after = lex->source[lex->pos + 1];
+                if ((after>='a'&&after<='z') || (after>='A'&&after<='Z') ||
+                    (after>='0'&&after<='9') || after=='_') {
+                    advance(lex); // consume '.'
+                    continue;
+                } else {
+                    break; // trailing dot – stop here
+                }
+            }
+            if (is_symbol_char(nc) && nc != '.') {
+                advance(lex);
+            } else {
+                break;
+            }
+        }
+
         tok.value = my_strndup(lex->source+start, lex->pos-start);
         tok.type  = TOK_SYMBOL; return tok;
     }
@@ -671,7 +765,70 @@ static AST *parse_lambda(Parser *p) {
 
     AST *body = parse_expr(p);
 
-    return ast_new_lambda(params, count, ret_type, docstring, body);
+    return ast_new_lambda(params, count, ret_type, docstring, NULL, body);
+}
+
+
+typedef struct {
+    char *docstring;
+    char *alias_name;
+    size_t consumed;   // how many items were consumed
+} DefineMetadata;
+
+// Scans items[start .. end-1] for optional metadata before the body.
+// The LAST item is always the body — we scan everything before it.
+static DefineMetadata parse_define_metadata(Parser *p) {
+    DefineMetadata m = {NULL, NULL, 0};
+
+    // We peek at the current token repeatedly.
+    // Metadata items are:
+    //   "string"        -> docstring (only if no :doc seen yet)
+    //   :doc "string"   -> docstring
+    //   :alias symbol   -> alias
+    // Anything else = stop, that's the body.
+
+    while (true) {
+        // Plain string docstring
+        if (p->current.type == TOK_STRING && !m.docstring) {
+            // But only if the token AFTER it is not TOK_RPAREN alone
+            // (i.e. there's still a body coming) — we peek by trying:
+            // Actually we just consume it; the body must follow.
+            m.docstring = my_strdup(p->current.value);
+            p->current  = lexer_next_token(p->lexer);
+            m.consumed++;
+            continue;
+        }
+
+        // :doc "string"
+        if (p->current.type == TOK_KEYWORD &&
+            strcmp(p->current.value, "doc") == 0) {
+            p->current = lexer_next_token(p->lexer);
+            if (p->current.type == TOK_STRING) {
+                free(m.docstring);  // override if already set
+                m.docstring = my_strdup(p->current.value);
+                p->current  = lexer_next_token(p->lexer);
+            }
+            m.consumed++;
+            continue;
+        }
+
+        // :alias symbol
+        if (p->current.type == TOK_KEYWORD &&
+            strcmp(p->current.value, "alias") == 0) {
+            p->current = lexer_next_token(p->lexer);
+            if (p->current.type == TOK_SYMBOL) {
+                free(m.alias_name);
+                m.alias_name = my_strdup(p->current.value);
+                p->current   = lexer_next_token(p->lexer);
+            }
+            m.consumed++;
+            continue;
+        }
+
+        break;  // not a metadata token — must be the body
+    }
+
+    return m;
 }
 
 static AST *parse_list(Parser *p) {
@@ -712,50 +869,117 @@ static AST *parse_list(Parser *p) {
         p->current = lexer_next_token(p->lexer);
 
         // Check if next token is '(' (function definition)
+        /* if (p->current.type == TOK_LPAREN) { */
+        /*     // Parse as (define (fname signature...) docstring? body) */
+        /*     p->current = lexer_next_token(p->lexer); // consume '(' */
+
+        /*     // Get function name */
+        /*     if (p->current.type != TOK_SYMBOL) { */
+        /*         compiler_error(p->current.line, p->current.column, */
+        /*                      "Expected function name after (define ("); */
+        /*     } */
+        /*     AST *fname = ast_new_symbol(p->current.value); */
+        /*     fname->line = p->current.line; */
+        /*     fname->column = p->current.column; */
+        /*     fname->end_column = p->current.column + strlen(p->current.value); */
+        /*     p->current = lexer_next_token(p->lexer); */
+
+        /*     // Parse signature */
+        /*     ASTParam *params = NULL; */
+        /*     int count = 0; */
+        /*     char *ret_type = NULL; */
+        /*     parse_fn_signature(p, &params, &count, &ret_type); */
+
+        /*     // Optional docstring */
+        /*     char *docstring = NULL; */
+        /*     if (p->current.type == TOK_STRING) { */
+        /*         docstring = my_strdup(p->current.value); */
+        /*         p->current = lexer_next_token(p->lexer); */
+        /*     } */
+
+        /*     // Body */
+        /*     AST *body = parse_expr(p); */
+
+        /*     // Expect closing ')' for the define */
+        /*     if (p->current.type != TOK_RPAREN) { */
+        /*         compiler_error(p->current.line, p->current.column, */
+        /*                      "Expected ')' after define body"); */
+        /*     } */
+
+        /*     int end_column = p->current.column + 1; */
+        /*     p->current = lexer_next_token(p->lexer); */
+
+        /*     // Build (define fname (lambda ...)) */
+        /*     /\* AST *lambda = ast_new_lambda(params, count, ret_type, docstring, body); *\/ */
+        /*     AST *lambda = ast_new_lambda(params, count, ret_type, */
+        /*                                  meta.docstring, meta.alias_name, body); */
+        /*     lambda->line = fname->line; */
+        /*     lambda->column = fname->column; */
+        /*     lambda->end_column = end_column; */
+
+        /*     AST *result = ast_new_list(); */
+        /*     ast_list_append(result, ast_new_symbol("define")); */
+        /*     ast_list_append(result, fname); */
+        /*     ast_list_append(result, lambda); */
+
+        /*     result->line = start_line; */
+        /*     result->column = start_column; */
+        /*     result->end_column = end_column; */
+
+        /*     ast_free(list); */
+        /*     return result; */
+
+        // Check if next token is '(' (function definition)
         if (p->current.type == TOK_LPAREN) {
-            // Parse as (define (fname signature...) docstring? body)
+            // Parse as (define (fname signature...) metadata? body)
             p->current = lexer_next_token(p->lexer); // consume '('
 
             // Get function name
             if (p->current.type != TOK_SYMBOL) {
                 compiler_error(p->current.line, p->current.column,
-                             "Expected function name after (define (");
+                               "Expected function name after (define (");
             }
             AST *fname = ast_new_symbol(p->current.value);
-            fname->line = p->current.line;
-            fname->column = p->current.column;
+            fname->line       = p->current.line;
+            fname->column     = p->current.column;
             fname->end_column = p->current.column + strlen(p->current.value);
             p->current = lexer_next_token(p->lexer);
 
             // Parse signature
             ASTParam *params = NULL;
-            int count = 0;
-            char *ret_type = NULL;
+            int       count  = 0;
+            char     *ret_type = NULL;
             parse_fn_signature(p, &params, &count, &ret_type);
 
-            // Optional docstring
-            char *docstring = NULL;
-            if (p->current.type == TOK_STRING) {
-                docstring = my_strdup(p->current.value);
-                p->current = lexer_next_token(p->lexer);
-            }
+            // Parse optional metadata BEFORE body
+            DefineMetadata meta = parse_define_metadata(p);
 
             // Body
             AST *body = parse_expr(p);
 
+            // Parse optional metadata AFTER body
+            DefineMetadata meta2 = parse_define_metadata(p);
+            if (meta2.docstring)  { free(meta.docstring);  meta.docstring  = meta2.docstring;  meta2.docstring  = NULL; }
+            if (meta2.alias_name) { free(meta.alias_name); meta.alias_name = meta2.alias_name; meta2.alias_name = NULL; }
+            free(meta2.docstring);
+            free(meta2.alias_name);
+
             // Expect closing ')' for the define
             if (p->current.type != TOK_RPAREN) {
                 compiler_error(p->current.line, p->current.column,
-                             "Expected ')' after define body");
+                               "Expected ')' after define body");
             }
-
             int end_column = p->current.column + 1;
             p->current = lexer_next_token(p->lexer);
 
             // Build (define fname (lambda ...))
-            AST *lambda = ast_new_lambda(params, count, ret_type, docstring, body);
-            lambda->line = fname->line;
-            lambda->column = fname->column;
+            AST *lambda = ast_new_lambda(params, count, ret_type,
+                                         meta.docstring, meta.alias_name, body);
+            free(meta.docstring);
+            free(meta.alias_name);
+
+            lambda->line       = fname->line;
+            lambda->column     = fname->column;
             lambda->end_column = end_column;
 
             AST *result = ast_new_list();
@@ -763,22 +987,64 @@ static AST *parse_list(Parser *p) {
             ast_list_append(result, fname);
             ast_list_append(result, lambda);
 
-            result->line = start_line;
-            result->column = start_column;
+            result->line       = start_line;
+            result->column     = start_column;
             result->end_column = end_column;
 
             ast_free(list);
             return result;
+
         } else {
-            // Not a function definition, it's (define name value)
-            // Put the 'define' symbol into the list and continue normal parsing
-            AST *define_sym = ast_new_symbol(define_token.value);
-            define_sym->line = define_token.line;
-            define_sym->column = define_token.column;
-            define_sym->end_column = define_token.column + strlen(define_token.value);
-            ast_list_append(list, define_sym);
-            // Continue parsing the rest (current token is already the next one after 'define')
-            // Fall through to normal list parsing
+            // (define name value [:doc ""] [:alias sym])
+            AST *name_ast;
+
+            if (p->current.type == TOK_LBRACKET) {
+                name_ast = parse_expr(p);
+            } else if (p->current.type == TOK_SYMBOL) {
+                name_ast = ast_new_symbol(p->current.value);
+                name_ast->line   = p->current.line;
+                name_ast->column = p->current.column;
+                p->current = lexer_next_token(p->lexer);
+            } else {
+                compiler_error(p->current.line, p->current.column,
+                               "Expected variable name after define");
+            }
+
+            // Parse the value FIRST — no pre-value metadata scan
+            AST *value_ast = parse_expr(p);
+
+            // THEN parse metadata after the value
+            DefineMetadata meta = parse_define_metadata(p);
+
+            if (p->current.type != TOK_RPAREN) {
+                compiler_error(p->current.line, p->current.column,
+                               "Expected ')' to close define");
+            }
+            int end_col = p->current.column + 1;
+            p->current = lexer_next_token(p->lexer);
+
+            AST *result = ast_new_list();
+            ast_list_append(result, ast_new_symbol("define"));
+            ast_list_append(result, name_ast);
+            ast_list_append(result, value_ast);
+
+            if (meta.docstring || meta.alias_name) {
+                ast_list_append(result,
+                                meta.docstring  ? ast_new_string(meta.docstring)
+                                : ast_new_symbol("__no_doc__"));
+                ast_list_append(result,
+                                meta.alias_name ? ast_new_symbol(meta.alias_name)
+                                : ast_new_symbol("__no_alias__"));
+            }
+
+            free(meta.docstring);
+            free(meta.alias_name);
+
+            ast_free(list);
+            result->line       = start_line;
+            result->column     = start_column;
+            result->end_column = end_col;
+            return result;
         }
     }
 
@@ -822,6 +1088,46 @@ static AST *parse_list(Parser *p) {
         ast_free(list);
         return asm_node;
     }
+
+    // Type alias
+    if (p->current.type == TOK_SYMBOL &&
+        strcmp(p->current.value, "type") == 0) {
+
+        int tline = p->current.line, tcol = p->current.column;
+        p->current = lexer_next_token(p->lexer); // consume 'type'
+
+        if (p->current.type != TOK_SYMBOL) {
+            compiler_error(p->current.line, p->current.column,
+                           "Expected alias name after 'type'");
+        }
+        char *alias_name = my_strdup(p->current.value);
+        p->current = lexer_next_token(p->lexer);
+
+        if (p->current.type != TOK_SYMBOL) {
+            compiler_error(p->current.line, p->current.column,
+                           "Expected target type name after alias name");
+        }
+        char *target_name = my_strdup(p->current.value);
+        p->current = lexer_next_token(p->lexer);
+
+        if (p->current.type != TOK_RPAREN) {
+            compiler_error(p->current.line, p->current.column,
+                           "Expected ')' to close type alias");
+        }
+        int end_col = p->current.column + 1;
+        p->current = lexer_next_token(p->lexer);
+
+        ast_free(list);
+        AST *node = ast_new_type_alias(alias_name, target_name);
+        free(alias_name);
+        free(target_name);
+        node->line = tline;
+        node->column = tcol;
+        node->end_column = end_col;
+        return node;
+    }
+
+
     // Normal list parsing
     while (p->current.type != TOK_RPAREN &&
            p->current.type != TOK_EOF) {
@@ -1095,7 +1401,7 @@ ASTList parse_all(const char *source) {
 
     while (p.current.type != TOK_EOF) {
         if (p.current.type == TOK_FEATURE_BEGIN) {
-            parse_feature_blocks(&p, &list.exprs, &list.count, &capacity, true);  // parent_enabled = true at top level
+            parse_feature_blocks(&p, &list.exprs, &list.count, &capacity, true);
         } else {
             AST *expr = parse_expr(&p);
 

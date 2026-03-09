@@ -1,16 +1,21 @@
 #ifndef CODEGEN_H
 #define CODEGEN_H
-
 #include <llvm-c/Core.h>
 #include "reader.h"
 #include "types.h"
 #include "env.h"
+
+// Forward declaration
+typedef struct ModuleContext ModuleContext;
 
 typedef struct {
     LLVMModuleRef module;
     LLVMBuilderRef builder;
     LLVMContextRef context;
     Env *env;
+    ModuleContext *module_ctx;  // Module system context
+    bool is_top_level;          // Are we generating top-level (global init) code?
+    LLVMValueRef init_fn;       // The __module_init_<name> function for side-effects
     // Cached format strings
     LLVMValueRef fmt_str;
     LLVMValueRef fmt_char;
@@ -51,7 +56,19 @@ bool type_is_integer(Type *t);
 bool type_is_float(Type *t);
 
 void codegen_print_ast(CodegenContext *ctx, AST *ast);
+EnvParam *clone_params(EnvParam *src, int count);
 CodegenResult codegen_expr(CodegenContext *ctx, AST *ast);
 void register_builtins(CodegenContext *ctx);
+
+// Declare an external symbol (from another module) into this module's env.
+// Creates an LLVMAddGlobal / LLVMAddFunction declaration and inserts it.
+void codegen_declare_external_var(CodegenContext *ctx,
+                                  const char *mangled_name,
+                                  Type *type);
+
+void codegen_declare_external_func(CodegenContext *ctx,
+                                   const char *mangled_name,
+                                   EnvParam *params, int param_count,
+                                   Type *return_type);
 
 #endif // CODEGEN_H

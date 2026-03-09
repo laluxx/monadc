@@ -9,6 +9,7 @@ typedef enum {
     TYPE_FLOAT,
     TYPE_CHAR,
     TYPE_STRING,
+    TYPE_SYMBOL,
     TYPE_BOOL,
     TYPE_HEX,
     TYPE_BIN,
@@ -48,6 +49,7 @@ Type *type_int(void);
 Type *type_float(void);
 Type *type_char(void);
 Type *type_string(void);
+Type *type_symbol(void);
 Type *type_bool(void);
 Type *type_hex(void);
 Type *type_bin(void);
@@ -80,5 +82,12 @@ Type *infer_literal_type(double value, const char *literal_str);
 // Returns the Type, or NULL if not a valid annotation.
 struct AST;
 Type *parse_type_annotation(struct AST *ast);
+
+
+/// Type alias
+
+void  type_alias_register(const char *alias_name, const char *target_name);
+Type *type_from_name(const char *name);   // resolves aliases too
+void  type_alias_free_all(void);          // call at program exit / between compiles
 
 #endif

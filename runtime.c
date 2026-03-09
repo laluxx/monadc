@@ -122,6 +122,13 @@ RuntimeValue *rt_value_string(const char *val) {
     return v;
 }
 
+RuntimeValue *rt_value_symbol(const char *val) {
+    RuntimeValue *v = malloc(sizeof(RuntimeValue));
+    v->type = RT_SYMBOL;
+    v->data.symbol_val = strdup(val);
+    return v;
+}
+
 RuntimeValue *rt_value_keyword(const char *val) {
     RuntimeValue *v = malloc(sizeof(RuntimeValue));
     v->type = RT_KEYWORD;
@@ -162,6 +169,9 @@ void rt_print_value(RuntimeValue *val) {
             break;
         case RT_STRING:
             printf("\"%s\"", val->data.string_val);
+            break;
+        case RT_SYMBOL:
+            printf("%s", val->data.symbol_val);  // bare, no quotes, no colon
             break;
         case RT_KEYWORD:
             printf(":%s", val->data.keyword_val);
@@ -224,6 +234,9 @@ void rt_value_free(RuntimeValue *val) {
     switch (val->type) {
         case RT_STRING:
             free(val->data.string_val);
+            break;
+        case RT_SYMBOL:
+            free(val->data.symbol_val);
             break;
         case RT_KEYWORD:
             free(val->data.keyword_val);
@@ -446,6 +459,11 @@ void declare_runtime_functions(CodegenContext *ctx) {
     LLVMTypeRef rt_value_string_type = LLVMFunctionType(ptr_type, rt_value_string_params, 1, 0);
     LLVMAddFunction(ctx->module, "rt_value_string", rt_value_string_type);
 
+    // RuntimeValue *rt_value_symbol(const char *val)
+    LLVMTypeRef rt_value_symbol_params[] = {ptr_type};
+    LLVMTypeRef rt_value_symbol_type = LLVMFunctionType(ptr_type, rt_value_symbol_params, 1, 0);
+    LLVMAddFunction(ctx->module, "rt_value_symbol", rt_value_symbol_type);
+
     // RuntimeValue *rt_value_keyword(const char *val)
     LLVMTypeRef rt_value_keyword_params[] = {ptr_type};
     LLVMTypeRef rt_value_keyword_type = LLVMFunctionType(ptr_type, rt_value_keyword_params, 1, 0);
@@ -522,6 +540,7 @@ GET_RUNTIME_FUNCTION(rt_value_int)
 GET_RUNTIME_FUNCTION(rt_value_float)
 GET_RUNTIME_FUNCTION(rt_value_char)
 GET_RUNTIME_FUNCTION(rt_value_string)
+GET_RUNTIME_FUNCTION(rt_value_symbol)
 GET_RUNTIME_FUNCTION(rt_value_keyword)
 GET_RUNTIME_FUNCTION(rt_value_list)
 GET_RUNTIME_FUNCTION(rt_value_nil)

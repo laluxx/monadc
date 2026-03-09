@@ -1422,12 +1422,12 @@ ENOMEM
 (define sw 1920)
 (define sh 1080)
 
-(define (main -> I32)
+(define (main -> Int)
   (InitWindow sw sh "Title")
-  (while (not (WindowShouldClose))
+  (unless (WindowShouldClose)
     (BeginDrawing)
     (ClearBackground BLACK)
-    (DrawText "Hello Raylib!" {sw / 2} {sh / 2} 20 LIGHTGRAY)
+    (DrawText "Hello Raylib!" (sw `/` 2) (sh `/` 2) 20 LIGHTGRAY)
     (EndDrawing)
     )
   (CloseWindow 0)
@@ -1524,7 +1524,7 @@ ENOMEM
 #+begin_src scheme
 ;; File: kernel/memory.m
 ;; Module declaration with explicit exports
-(module kernel.memory
+(module Memory
   [alloc-pagefree-page map-page])
 
 ;; Private definitions (not in export list)

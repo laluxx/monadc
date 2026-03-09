@@ -35,6 +35,9 @@ typedef struct EnvEntry {
     int param_count;
     Type *return_type;
 
+    char *module_name; // Which module this symbol belongs to (NULL for local)
+    bool is_exported;  // Whether this symbol is exported
+
     struct EnvEntry *next;
 } EnvEntry;
 
@@ -61,6 +64,9 @@ void env_insert_func(Env *table, const char *name,
                           EnvParam *params, int param_count,
                           Type *return_type, LLVMValueRef func_ref,
                           const char *docstring);
+
+void env_insert_from_module(Env *table, const char *name, const char *module_name,
+                            Type *type, LLVMValueRef value, bool is_exported);
 
 EnvEntry *env_lookup(Env *table, const char *name);
 

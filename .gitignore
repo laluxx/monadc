@@ -1,4 +1,4 @@
 monad
-init
-init.ll
+Main
+Main.ll
 *.o

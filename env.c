@@ -24,6 +24,7 @@ Env *env_create(void) {
 static void free_entry_fields(EnvEntry *e) {
     free(e->name);
     free(e->docstring);
+    free(e->module_name);
     type_free(e->type);
     type_free(e->return_type);
     if (e->params) {
@@ -85,10 +86,13 @@ void env_insert_with_doc(Env *table, const char *name, Type *type,
     if (e) {
         type_free(e->type);
         free(e->docstring);
+        free(e->module_name);
         e->kind      = ENV_VAR;
         e->type      = type;
         e->value     = value;
         e->docstring = docstring ? strdup(docstring) : NULL;
+        e->module_name = NULL;
+        e->is_exported = true; //  local symbols are "exported" by default
         return;
     }
     e = new_entry(name);
@@ -96,6 +100,31 @@ void env_insert_with_doc(Env *table, const char *name, Type *type,
     e->type      = type;
     e->value     = value;
     e->docstring = docstring ? strdup(docstring) : NULL;
+    e->module_name = NULL;
+    e->is_exported = true;
+    chain(table, e);
+}
+
+void env_insert_from_module(Env *table, const char *name, const char *module_name,
+                            Type *type, LLVMValueRef value, bool is_exported) {
+    EnvEntry *e = find(table, name);
+    if (e) {
+        type_free(e->type);
+        free(e->docstring);
+        free(e->module_name);
+        e->kind      = ENV_VAR;
+        e->type      = type;
+        e->value     = value;
+        e->module_name = module_name ? strdup(module_name) : NULL;
+        e->is_exported = is_exported;
+        return;
+    }
+    e = new_entry(name);
+    e->kind      = ENV_VAR;
+    e->type      = type;
+    e->value     = value;
+    e->module_name = module_name ? strdup(module_name) : NULL;
+    e->is_exported = is_exported;
     chain(table, e);
 }
 
@@ -139,7 +168,9 @@ void env_insert_func(Env *table, const char *name,
     e->arity_min   = param_count;
     e->arity_max   = param_count;
     e->docstring   = docstring ? strdup(docstring) : NULL;
-    e->type        = type_fn(NULL, 0, NULL); // placeholder Fn type
+    e->type        = type_fn(NULL, 0, NULL);
+    e->module_name = NULL;
+    e->is_exported = true;
 }
 
 EnvEntry *env_lookup(Env *table, const char *name) {
@@ -148,43 +179,38 @@ EnvEntry *env_lookup(Env *table, const char *name) {
 
 // Guile Scheme style arity display
 void env_print_entry(EnvEntry *e) {
-    switch (e->kind) {
+    const char *export_mark = e->is_exported ? "" : " (private)";
+    const char *module_prefix = e->module_name ? e->module_name : "";
+    const char *module_sep = e->module_name ? ":" : "";
 
+    switch (e->kind) {
     case ENV_VAR:
-        printf("[%s :: %s]", e->name,
-               e->type ? type_to_string(e->type) : "?");
+        printf("[%s%s%s :: %s]%s", module_prefix, module_sep, e->name,
+               e->type ? type_to_string(e->type) : "?", export_mark);
         if (e->docstring)
             printf("  ; %s", e->docstring);
         printf("\n");
         break;
 
     case ENV_BUILTIN: {
-        // Build arity signature from arity_min / arity_max
-        // arity_max == -1  means variadic
         char sig[256] = {0};
-
         if (e->arity_min <= 0 && e->arity_max == -1) {
-            // fully variadic: list-style  Fn _
             strcpy(sig, "_");
         } else {
-            // required args
             for (int i = 0; i < e->arity_min; i++) {
                 if (i > 0) strcat(sig, " ");
                 strcat(sig, "_");
             }
             if (e->arity_max == -1) {
-                // has required args + variadic rest
                 if (e->arity_min > 0) strcat(sig, " ");
                 strcat(sig, ". _");
             } else if (e->arity_max > e->arity_min) {
-                // optional args
                 strcat(sig, " #:optional");
                 for (int i = e->arity_min; i < e->arity_max; i++)
                     strcat(sig, " _");
             }
         }
-
-        printf("[%s :: Fn (%s)]", e->name, sig);
+        printf("[%s%s%s :: Fn (%s)]%s", module_prefix, module_sep, e->name, sig, export_mark);
         if (e->docstring) printf("  ; %s", e->docstring);
         printf("\n");
         break;
@@ -200,9 +226,9 @@ void env_print_entry(EnvEntry *e) {
                 strcat(sig, "_");
             }
         }
-        // append return type
         const char *ret = e->return_type ? type_to_string(e->return_type) : "?";
-        printf("[%s :: Fn (%s) -> %s]", e->name, sig, ret);
+        printf("[%s%s%s :: Fn (%s) -> %s]%s",
+               module_prefix, module_sep, e->name, sig, ret, export_mark);
         if (e->docstring) printf("  ; %s", e->docstring);
         printf("\n");
         break;

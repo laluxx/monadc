@@ -4,6 +4,83 @@
 #include <string.h>
 #include <stdio.h>
 
+/// Type alias registry
+
+typedef struct TypeAlias {
+    char *alias_name;
+    char *target_name;
+    struct TypeAlias *next;
+} TypeAlias;
+
+static TypeAlias *g_aliases = NULL;
+
+void type_alias_register(const char *alias_name, const char *target_name) {
+    // Replace if already exists
+    for (TypeAlias *a = g_aliases; a; a = a->next) {
+        if (strcmp(a->alias_name, alias_name) == 0) {
+            free(a->target_name);
+            a->target_name = strdup(target_name);
+            return;
+        }
+    }
+    TypeAlias *a  = malloc(sizeof(TypeAlias));
+    a->alias_name  = strdup(alias_name);
+    a->target_name = strdup(target_name);
+    a->next        = g_aliases;
+    g_aliases      = a;
+}
+
+void type_alias_free_all(void) {
+    TypeAlias *a = g_aliases;
+    while (a) {
+        TypeAlias *next = a->next;
+        free(a->alias_name);
+        free(a->target_name);
+        free(a);
+        a = next;
+    }
+    g_aliases = NULL;
+}
+
+// Resolve a name to a Type*, checking aliases after builtins.
+// Always returns a fresh allocation (or NULL if unknown).
+Type *type_from_name(const char *name) {
+    if (!name) return NULL;
+
+    // Built-in types first
+    if (strcmp(name, "Int")     == 0) return type_int();
+    if (strcmp(name, "Float")   == 0) return type_float();
+    if (strcmp(name, "Char")    == 0) return type_char();
+    if (strcmp(name, "String")  == 0) return type_string();
+    if (strcmp(name, "Bool")    == 0) return type_bool();
+    if (strcmp(name, "Hex")     == 0) return type_hex();
+    if (strcmp(name, "Bin")     == 0) return type_bin();
+    if (strcmp(name, "Oct")     == 0) return type_oct();
+    if (strcmp(name, "Keyword") == 0) return type_keyword();
+    if (strcmp(name, "Ratio")   == 0) return type_ratio();
+    if (strcmp(name, "List")    == 0) return type_list(NULL);
+    if (strcmp(name, "Arr")     == 0) return type_arr(NULL, -1);
+
+    // Check alias registry (supports chained aliases: Code -> List -> ...)
+    int depth = 0;
+    const char *current = name;
+    while (depth++ < 32) {  // prevent infinite loops
+        for (TypeAlias *a = g_aliases; a; a = a->next) {
+            if (strcmp(a->alias_name, current) == 0) {
+                // Try to resolve the target as a builtin first
+                Type *t = type_from_name(a->target_name);
+                if (t) return t;
+                current = a->target_name;
+                goto next_iteration;
+            }
+        }
+        break;  // not found in aliases
+        next_iteration:;
+    }
+
+    return NULL;  // unknown type
+}
+
 /// Simple constructors
 
 static Type *make_type(TypeKind kind) {
@@ -17,6 +94,7 @@ Type *type_int    (void) { return make_type(TYPE_INT);     }
 Type *type_float  (void) { return make_type(TYPE_FLOAT);   }
 Type *type_char   (void) { return make_type(TYPE_CHAR);    }
 Type *type_string (void) { return make_type(TYPE_STRING);  }
+Type *type_symbol (void) { return make_type(TYPE_SYMBOL);  }
 Type *type_bool   (void) { return make_type(TYPE_BOOL);    }
 Type *type_hex    (void) { return make_type(TYPE_HEX);     }
 Type *type_bin    (void) { return make_type(TYPE_BIN);     }
@@ -81,6 +159,7 @@ Type *type_clone(Type *t) {
         case TYPE_FLOAT:   return type_float();
         case TYPE_CHAR:    return type_char();
         case TYPE_STRING:  return type_string();
+        case TYPE_SYMBOL:  return type_symbol();
         case TYPE_BOOL:    return type_bool();
         case TYPE_HEX:     return type_hex();
         case TYPE_BIN:     return type_bin();
@@ -125,6 +204,7 @@ const char *type_to_string(Type *t) {
     case TYPE_FLOAT:   return "Float";
     case TYPE_CHAR:    return "Char";
     case TYPE_STRING:  return "String";
+    case TYPE_SYMBOL:  return "Symbol";
     case TYPE_BOOL:    return "Bool";
     case TYPE_HEX:     return "Hex";
     case TYPE_BIN:     return "Bin";
@@ -249,70 +329,112 @@ Type *infer_literal_type(double value, const char *literal_str) {
 Type *parse_type_annotation(AST *ast) {
     if (!ast || ast->type != AST_LIST) return NULL;
 
-    // Walk the list looking for "::" then the type name after it.
-    // Form: [name :: TypeName]  or  [name :: Arr :: Int :: 3]
     for (size_t i = 0; i < ast->list.count; i++) {
         AST *item = ast->list.items[i];
         if (item->type == AST_SYMBOL && strcmp(item->symbol, "::") == 0) {
-            // next item should be the type name
-            if (i + 1 < ast->list.count) {
-                AST *type_node = ast->list.items[i + 1];
-                if (type_node->type != AST_SYMBOL) return NULL;
-                const char *tn = type_node->symbol;
+            if (i + 1 >= ast->list.count) return NULL;
+            AST *type_node = ast->list.items[i + 1];
+            if (type_node->type != AST_SYMBOL) return NULL;
+            const char *tn = type_node->symbol;
 
-                // Check for Arr type with element type and size
-                if (strcmp(tn, "Arr") == 0) {
-                    // Parse: Arr :: ElementType :: Size
-                    Type *elem_type = NULL;
-                    int size = -1;
+            // Array: [x :: Arr :: ElemType :: Size]
+            if (strcmp(tn, "Arr") == 0) {
+                Type *elem_type = NULL;
+                int   size      = -1;
 
-                    // Look for next ::
-                    if (i + 2 < ast->list.count &&
-                        ast->list.items[i + 2]->type == AST_SYMBOL &&
-                        strcmp(ast->list.items[i + 2]->symbol, "::") == 0) {
+                if (i + 2 < ast->list.count &&
+                    ast->list.items[i+2]->type == AST_SYMBOL &&
+                    strcmp(ast->list.items[i+2]->symbol, "::") == 0 &&
+                    i + 3 < ast->list.count &&
+                    ast->list.items[i+3]->type == AST_SYMBOL) {
 
-                        if (i + 3 < ast->list.count &&
-                            ast->list.items[i + 3]->type == AST_SYMBOL) {
-                            const char *elem_name = ast->list.items[i + 3]->symbol;
+                    elem_type = type_from_name(ast->list.items[i+3]->symbol);
 
-                            if (strcmp(elem_name, "Int") == 0) elem_type = type_int();
-                            else if (strcmp(elem_name, "Float") == 0) elem_type = type_float();
-                            else if (strcmp(elem_name, "Char") == 0) elem_type = type_char();
-                            else if (strcmp(elem_name, "String") == 0) elem_type = type_string();
-                            else if (strcmp(elem_name, "Keyword") == 0) elem_type = type_keyword();
-                            else if (strcmp(elem_name, "Ratio") == 0) elem_type = type_ratio();
-
-                            // Look for size after element type
-                            if (i + 4 < ast->list.count &&
-                                ast->list.items[i + 4]->type == AST_SYMBOL &&
-                                strcmp(ast->list.items[i + 4]->symbol, "::") == 0) {
-
-                                if (i + 5 < ast->list.count &&
-                                    ast->list.items[i + 5]->type == AST_NUMBER) {
-                                    size = (int)ast->list.items[i + 5]->number;
-                                }
-                            }
-                        }
+                    if (i + 4 < ast->list.count &&
+                        ast->list.items[i+4]->type == AST_SYMBOL &&
+                        strcmp(ast->list.items[i+4]->symbol, "::") == 0 &&
+                        i + 5 < ast->list.count &&
+                        ast->list.items[i+5]->type == AST_NUMBER) {
+                        size = (int)ast->list.items[i+5]->number;
                     }
-
-                    return type_arr(elem_type, size);
                 }
-
-                // Standard types
-                if (strcmp(tn, "Int")     == 0) return type_int();
-                if (strcmp(tn, "Float")   == 0) return type_float();
-                if (strcmp(tn, "Char")    == 0) return type_char();
-                if (strcmp(tn, "String")  == 0) return type_string();
-                if (strcmp(tn, "Bool")    == 0) return type_bool();
-                if (strcmp(tn, "Hex")     == 0) return type_hex();
-                if (strcmp(tn, "Bin")     == 0) return type_bin();
-                if (strcmp(tn, "Oct")     == 0) return type_oct();
-                if (strcmp(tn, "Keyword") == 0) return type_keyword();
-                if (strcmp(tn, "Ratio")   == 0) return type_ratio();
-                if (strcmp(tn, "List")    == 0) return type_list(NULL); // polymorphic list
+                return type_arr(elem_type, size);
             }
-            return NULL;
+
+            // Everything else — including aliases
+            return type_from_name(tn);
         }
     }
     return NULL;
 }
+
+/* Type *parse_type_annotation(AST *ast) { */
+/*     if (!ast || ast->type != AST_LIST) return NULL; */
+
+/*     // Walk the list looking for "::" then the type name after it. */
+/*     // Form: [name :: TypeName]  or  [name :: Arr :: Int :: 3] */
+/*     for (size_t i = 0; i < ast->list.count; i++) { */
+/*         AST *item = ast->list.items[i]; */
+/*         if (item->type == AST_SYMBOL && strcmp(item->symbol, "::") == 0) { */
+/*             // next item should be the type name */
+/*             if (i + 1 < ast->list.count) { */
+/*                 AST *type_node = ast->list.items[i + 1]; */
+/*                 if (type_node->type != AST_SYMBOL) return NULL; */
+/*                 const char *tn = type_node->symbol; */
+
+/*                 // Check for Arr type with element type and size */
+/*                 if (strcmp(tn, "Arr") == 0) { */
+/*                     // Parse: Arr :: ElementType :: Size */
+/*                     Type *elem_type = NULL; */
+/*                     int size = -1; */
+
+/*                     // Look for next :: */
+/*                     if (i + 2 < ast->list.count && */
+/*                         ast->list.items[i + 2]->type == AST_SYMBOL && */
+/*                         strcmp(ast->list.items[i + 2]->symbol, "::") == 0) { */
+
+/*                         if (i + 3 < ast->list.count && */
+/*                             ast->list.items[i + 3]->type == AST_SYMBOL) { */
+/*                             const char *elem_name = ast->list.items[i + 3]->symbol; */
+
+/*                             if (strcmp(elem_name, "Int") == 0) elem_type = type_int(); */
+/*                             else if (strcmp(elem_name, "Float") == 0) elem_type = type_float(); */
+/*                             else if (strcmp(elem_name, "Char") == 0) elem_type = type_char(); */
+/*                             else if (strcmp(elem_name, "String") == 0) elem_type = type_string(); */
+/*                             else if (strcmp(elem_name, "Keyword") == 0) elem_type = type_keyword(); */
+/*                             else if (strcmp(elem_name, "Ratio") == 0) elem_type = type_ratio(); */
+
+/*                             // Look for size after element type */
+/*                             if (i + 4 < ast->list.count && */
+/*                                 ast->list.items[i + 4]->type == AST_SYMBOL && */
+/*                                 strcmp(ast->list.items[i + 4]->symbol, "::") == 0) { */
+
+/*                                 if (i + 5 < ast->list.count && */
+/*                                     ast->list.items[i + 5]->type == AST_NUMBER) { */
+/*                                     size = (int)ast->list.items[i + 5]->number; */
+/*                                 } */
+/*                             } */
+/*                         } */
+/*                     } */
+
+/*                     return type_arr(elem_type, size); */
+/*                 } */
+
+/*                 // Standard types */
+/*                 if (strcmp(tn, "Int")     == 0) return type_int(); */
+/*                 if (strcmp(tn, "Float")   == 0) return type_float(); */
+/*                 if (strcmp(tn, "Char")    == 0) return type_char(); */
+/*                 if (strcmp(tn, "String")  == 0) return type_string(); */
+/*                 if (strcmp(tn, "Bool")    == 0) return type_bool(); */
+/*                 if (strcmp(tn, "Hex")     == 0) return type_hex(); */
+/*                 if (strcmp(tn, "Bin")     == 0) return type_bin(); */
+/*                 if (strcmp(tn, "Oct")     == 0) return type_oct(); */
+/*                 if (strcmp(tn, "Keyword") == 0) return type_keyword(); */
+/*                 if (strcmp(tn, "Ratio")   == 0) return type_ratio(); */
+/*                 if (strcmp(tn, "List")    == 0) return type_list(NULL); // polymorphic list */
+/*             } */
+/*             return NULL; */
+/*         } */
+/*     } */
+/*     return NULL; */
+/* } */

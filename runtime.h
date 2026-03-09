@@ -11,6 +11,7 @@ typedef enum {
     RT_FLOAT,
     RT_CHAR,
     RT_STRING,
+    RT_SYMBOL,
     RT_KEYWORD,
     RT_LIST,
     RT_RATIO,
@@ -27,6 +28,7 @@ typedef struct RuntimeValue {
         double float_val;
         char char_val;
         char *string_val;
+        char *symbol_val;   // RT_SYMBOL
         char *keyword_val;
         struct RuntimeList *list_val;
 
@@ -104,6 +106,12 @@ RuntimeValue *rt_ratio_div(RuntimeValue *a, RuntimeValue *b);
 int64_t rt_ratio_to_int(RuntimeValue *ratio);
 double rt_ratio_to_float(RuntimeValue *ratio);
 
+
+/// Symbols
+
+RuntimeValue *rt_value_symbol(const char *val);
+
+
 // Helper functions for LLVM
 LLVMValueRef get_rt_value_ratio(CodegenContext *ctx);
 LLVMValueRef get_rt_value_array(CodegenContext *ctx);
@@ -116,6 +124,7 @@ LLVMValueRef get_rt_ratio_mul(CodegenContext *ctx);
 LLVMValueRef get_rt_ratio_div(CodegenContext *ctx);
 LLVMValueRef get_rt_ratio_to_int(CodegenContext *ctx);
 LLVMValueRef get_rt_ratio_to_float(CodegenContext *ctx);
+LLVMValueRef get_rt_value_symbol(CodegenContext *ctx);
 
 
 /// LLVM Integration

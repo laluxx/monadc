@@ -8,6 +8,7 @@
 #include "env.h"
 #include "asm.h"
 #include "runtime.h"
+#include "module.h"
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
 #include <llvm-c/Target.h>
@@ -20,6 +21,8 @@ void codegen_init(CodegenContext *ctx, const char *module_name) {
     ctx->module = LLVMModuleCreateWithNameInContext(module_name, ctx->context);
     ctx->builder = LLVMCreateBuilderInContext(ctx->context);
     ctx->env = env_create();
+    ctx->module_ctx = NULL;
+    ctx->init_fn = NULL;
     // Initialize format strings to NULL - will be created lazily
     ctx->fmt_str   = NULL;
     ctx->fmt_char  = NULL;
@@ -260,6 +263,7 @@ LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *type) {
     case TYPE_CHAR:
         return LLVMInt8TypeInContext(ctx->context);
     case TYPE_STRING:
+    case TYPE_SYMBOL:
     case TYPE_KEYWORD:
         return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
     case TYPE_LIST:
@@ -300,6 +304,18 @@ bool type_is_float(Type *t) {
 
 // Forward declaration
 CodegenResult codegen_expr(CodegenContext *ctx, AST *ast);
+
+// Helper: are we currently emitting into a top-level main function?
+// If yes, `define` should produce globals rather than stack allocas.
+static bool is_at_top_level(CodegenContext *ctx) {
+    LLVMBasicBlockRef bb = LLVMGetInsertBlock(ctx->builder);
+    if (!bb) return false;
+    // ctx->init_fn is set by main.c before calling codegen_expr for top-level
+    if (!ctx->init_fn) return false;
+    LLVMValueRef parent = LLVMGetBasicBlockParent(bb);
+    return parent == ctx->init_fn;
+}
+
 
 /// Helper to print an AST at runtime (for quoted expressions)
 
@@ -432,13 +448,12 @@ static LLVMValueRef ast_to_runtime_value(CodegenContext *ctx, AST *ast_elem) {
         }
 
         case AST_SYMBOL: {
-            // Quoted symbols become strings
-            LLVMValueRef fn = get_rt_value_string(ctx);
+            LLVMValueRef fn  = get_rt_value_symbol(ctx);
             LLVMValueRef sym = LLVMBuildGlobalStringPtr(ctx->builder,
                                                         ast_elem->symbol, "sym");
             LLVMValueRef args[] = {sym};
             rt_val = LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(fn),
-                                   fn, args, 1, "rtval");
+                                    fn, args, 1, "rtval");
             break;
         }
 
@@ -525,6 +540,129 @@ static LLVMValueRef codegen_to_runtime_value(CodegenContext *ctx,
     }
 }
 
+bool should_export_symbol(ModuleContext *ctx, const char *symbol_name) {
+    if (!ctx || !ctx->decl) {
+        return true;  // No module declaration = export everything
+    }
+
+    return module_decl_is_exported(ctx->decl, symbol_name);
+}
+
+static EnvEntry *resolve_symbol_with_modules(CodegenContext *ctx, const char *symbol_name, AST *ast) {
+    // Check if it's a qualified symbol (contains '.' like "M.phi")
+    char *dot = strchr(symbol_name, '.');
+
+    if (dot) {
+        // Qualified symbol: Module.symbol
+        size_t prefix_len = dot - symbol_name;
+        char *module_prefix = malloc(prefix_len + 1);
+        memcpy(module_prefix, symbol_name, prefix_len);
+        module_prefix[prefix_len] = '\0';
+
+        const char *local_symbol = dot + 1;
+
+        if (!ctx->module_ctx) {
+            fprintf(stderr, "%s:%d:%d: error: qualified symbol '%s' used but no module context\n",
+                    parser_get_filename(), ast->line, ast->column, symbol_name);
+            free(module_prefix);
+            exit(1);
+        }
+
+        // Find the import with this prefix
+        ImportDecl *import = module_context_find_import(ctx->module_ctx, module_prefix);
+        if (!import) {
+            fprintf(stderr, "%s:%d:%d: error: unknown module prefix '%s'\n",
+                    parser_get_filename(), ast->line, ast->column, module_prefix);
+            free(module_prefix);
+            exit(1);
+        }
+
+        // Check if this symbol is included in the import
+        if (!import_decl_includes_symbol(import, local_symbol)) {
+            fprintf(stderr, "%s:%d:%d: error: symbol '%s' not imported from module '%s'\n",
+                    parser_get_filename(), ast->line, ast->column,
+                    local_symbol, import->module_name);
+            free(module_prefix);
+            exit(1);
+        }
+
+        // Look up the symbol in the environment
+        // For now, we look up the fully qualified name
+        EnvEntry *entry = env_lookup(ctx->env, symbol_name);
+        if (!entry) {
+            // Try looking up just the local symbol name
+            entry = env_lookup(ctx->env, local_symbol);
+        }
+
+        free(module_prefix);
+        return entry;
+    } else {
+        // Unqualified symbol - check local environment first
+        EnvEntry *entry = env_lookup(ctx->env, symbol_name);
+        if (entry) {
+            return entry;
+        }
+
+        // If not found locally and we have a module context, check imports
+        if (ctx->module_ctx) {
+            // Try to resolve through unqualified imports
+            for (size_t i = 0; i < ctx->module_ctx->import_count; i++) {
+                ImportDecl *import = ctx->module_ctx->imports[i];
+
+                // Skip qualified imports - they require explicit prefix
+                if (import->mode == IMPORT_QUALIFIED) {
+                    continue;
+                }
+
+                /* // Check if this import includes the symbol */
+                /* if (import_decl_includes_symbol(import, symbol_name)) { */
+
+                // For HIDING imports: symbol is available if NOT in the hide list
+                // For SELECTIVE imports: symbol is available if IN the list
+                // For UNQUALIFIED: always available
+                bool sym_available;
+                if (import->mode == IMPORT_HIDING) {
+                    sym_available = !import_decl_includes_symbol(import, symbol_name);
+                } else {
+                    sym_available = import_decl_includes_symbol(import, symbol_name);
+                }
+                if (sym_available) {
+                    // Try to find it in environment
+                    // First try with module prefix (if alias exists)
+                    if (import->alias) {
+                        char qualified_name[256];
+                        snprintf(qualified_name, sizeof(qualified_name), "%s.%s",
+                                import->alias, symbol_name);
+                        entry = env_lookup(ctx->env, qualified_name);
+                        if (entry) {
+                            return entry;
+                        }
+                    }
+
+                    // Also try just the symbol name
+                    entry = env_lookup(ctx->env, symbol_name);
+                    if (entry) {
+                        return entry;
+                    }
+                }
+            }
+        }
+
+        return NULL;
+    }
+}
+
+// declare_externals — inject dep's exports into the current codegen context
+EnvParam *clone_params(EnvParam *src, int count) {
+    if (count == 0 || !src) return NULL;
+    EnvParam *p = malloc(sizeof(EnvParam) * count);
+    for (int i = 0; i < count; i++) {
+        p[i].name = strdup(src[i].name ? src[i].name : "_");
+        p[i].type = type_clone(src[i].type);
+    }
+    return p;
+}
+
 CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     CodegenResult result = {NULL, NULL};
 
@@ -555,15 +693,18 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     }
 
     case AST_SYMBOL: {
-        EnvEntry *entry = env_lookup(ctx->env, ast->symbol);
+        EnvEntry *entry = resolve_symbol_with_modules(ctx, ast->symbol, ast);
+
         if (!entry) {
             fprintf(stderr, "%s:%d:%d: error: unbound variable: %s\n",
                     parser_get_filename(), ast->line, ast->column, ast->symbol);
             exit(1);
         }
-        result.type = entry->type;
-        result.value = LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, entry->type),
-                                      entry->value, ast->symbol);
+
+        result.type = type_clone(entry->type);
+        result.value =
+            LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, entry->type),
+                           entry->value, ast->symbol);
         return result;
     }
 
@@ -722,26 +863,21 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     for (int i = 0; i < lambda->lambda.param_count; i++) {
                         ASTParam *param = &lambda->lambda.params[i];
 
-                        // Parse parameter type
                         Type *param_type = NULL;
                         if (param->type_name) {
-                            if (strcmp(param->type_name, "Int")         == 0) param_type = type_int();
-                            else if (strcmp(param->type_name, "Float")  == 0) param_type = type_float();
-                            else if (strcmp(param->type_name, "Char")   == 0) param_type = type_char();
-                            else if (strcmp(param->type_name, "String") == 0) param_type = type_string();
-                            else if (strcmp(param->type_name, "Bool")   == 0) param_type = type_bool();
-                            else if (strcmp(param->type_name, "Hex")    == 0) param_type = type_hex();
-                            else if (strcmp(param->type_name, "Bin")    == 0) param_type = type_bin();
-                            else if (strcmp(param->type_name, "Oct")    == 0) param_type = type_oct();
-                            else {
-                                fprintf(stderr, "%s:%d:%d: error: unknown type '%s'\n",
-                                        parser_get_filename(), lambda->line, lambda->column, param->type_name);
+                            param_type = type_from_name(param->type_name);
+                            if (!param_type) {
+                                fprintf(stderr, "%s:%d:%d: error: unknown parameter type '%s'\n",
+                                        parser_get_filename(), lambda->line, lambda->column,
+                                        param->type_name);
                                 exit(1);
                             }
                         } else {
-                            // Default to polymorphic (float for now)
-                            param_type = type_float();
+                            param_type = type_float(); // default
                         }
+                        param_types[i] = type_to_llvm(ctx, param_type);
+                        env_params[i].name = strdup(param->name);
+                        env_params[i].type = param_type;
 
                         param_types[i] = type_to_llvm(ctx, param_type);
                         env_params[i].name = strdup(param->name);
@@ -749,24 +885,18 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     }
 
                     // Determine return type
+
                     Type *ret_type = NULL;
                     if (lambda->lambda.return_type) {
-                        if (strcmp(lambda->lambda.return_type, "Int")         == 0) ret_type = type_int();
-                        else if (strcmp(lambda->lambda.return_type, "Float")  == 0) ret_type = type_float();
-                        else if (strcmp(lambda->lambda.return_type, "Char")   == 0) ret_type = type_char();
-                        else if (strcmp(lambda->lambda.return_type, "String") == 0) ret_type = type_string();
-                        else if (strcmp(lambda->lambda.return_type, "Bool")   == 0) ret_type = type_bool();
-                        else if (strcmp(lambda->lambda.return_type, "Hex")    == 0) ret_type = type_hex();
-                        else if (strcmp(lambda->lambda.return_type, "Bin")    == 0) ret_type = type_bin();
-                        else if (strcmp(lambda->lambda.return_type, "Oct")    == 0) ret_type = type_oct();
-
-                        else {
+                        ret_type = type_from_name(lambda->lambda.return_type);
+                        if (!ret_type) {
                             fprintf(stderr, "%s:%d:%d: error: unknown return type '%s'\n",
-                                    parser_get_filename(), lambda->line, lambda->column, lambda->lambda.return_type);
+                                    parser_get_filename(), ast->line, ast->column,
+                                    lambda->lambda.return_type);
                             exit(1);
                         }
                     } else {
-                        ret_type = type_float(); // default
+                        ret_type = type_float(); // default when no annotation
                     }
 
                     LLVMTypeRef ret_llvm_type = type_to_llvm(ctx, ret_type);
@@ -806,9 +936,6 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         env_insert(ctx->env, lambda->lambda.params[i].name,
                                    type_clone(env_params[i].type), param_alloca);
                     }
-
-                    // Codegen function body
-                    /* CodegenResult body_result = codegen_expr(ctx, lambda->lambda.body); */
 
                     // Codegen function body
                     CodegenResult body_result;
@@ -875,12 +1002,35 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     env_insert_func(ctx->env, var_name, env_params, lambda->lambda.param_count,
                                    ret_type, func, lambda->lambda.docstring);
 
-                    printf("Defined %s :: Fn (", var_name);
-                    for (int i = 0; i < lambda->lambda.param_count; i++) {
-                        if (i > 0) printf(" ");
-                        printf("%s", lambda->lambda.params[i].name);
+                    if (ast->lambda.alias_name) {
+                        env_insert_func(ctx->env,
+                                        ast->lambda.alias_name,
+                                        clone_params(env_params, lambda->lambda.param_count),
+                                        lambda->lambda.param_count,
+                                        type_clone(ret_type),
+                                        func,
+                                        lambda->lambda.docstring);
+                        printf("Alias: %s -> %s\n", ast->lambda.alias_name, var_name);
                     }
-                    printf(") -> %s\n", type_to_string(ret_type));
+
+
+
+                    if (ctx->module_ctx && !should_export_symbol(ctx->module_ctx, var_name)) {
+                        printf("Defined %s :: Fn (...) -> %s (private)\n",
+                               var_name, type_to_string(ret_type));
+                    } else {
+                        printf("Defined %s :: Fn (...) -> %s\n",
+                               var_name, type_to_string(ret_type));
+                    }
+
+                    /* /\* printf("Defined %s :: Fn (", var_name); *\/ */
+
+                    /* for (int i = 0; i < lambda->lambda.param_count; i++) { */
+                    /*     if (i > 0) printf(" "); */
+                    /*     printf("%s", lambda->lambda.params[i].name); */
+                    /* } */
+                    /* printf(") -> %s\n", type_to_string(ret_type)); */
+
 
                     free(param_types);
 
@@ -946,35 +1096,25 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     // Handle empty array initialization with explicit type
                     if (value_expr->type == AST_ARRAY && value_expr->array.element_count == 0 &&
                         explicit_type && explicit_type->arr_size > 0) {
-                        // Create zero-initialized array
+
                         LLVMTypeRef arr_type = type_to_llvm(ctx, final_type);
-                        LLVMValueRef arr = LLVMBuildAlloca(ctx->builder, arr_type, var_name);
-
-                        // Zero-initialize the array
-                        LLVMTypeRef elem_type_llvm = type_to_llvm(ctx, final_type->arr_element_type);
-                        LLVMValueRef zero_val;
-
-                        if (type_is_float(final_type->arr_element_type)) {
-                            zero_val = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0);
-                        } else if (final_type->arr_element_type->kind == TYPE_STRING ||
-                                   final_type->arr_element_type->kind == TYPE_KEYWORD ||
-                                   final_type->arr_element_type->kind == TYPE_RATIO) {
-                            zero_val = LLVMConstPointerNull(elem_type_llvm);
-                        } else {
-                            zero_val = LLVMConstInt(elem_type_llvm, 0, 0);
+                        LLVMValueRef arr;
+                        if (is_at_top_level(ctx)) {
+                            arr = LLVMGetNamedGlobal(ctx->module, var_name);
+                            if (!arr) {
+                                arr = LLVMAddGlobal(ctx->module, arr_type, var_name);
+                                LLVMSetInitializer(arr, LLVMConstNull(arr_type));
+                                LLVMSetLinkage(arr, LLVMExternalLinkage);
+                            }
+                            // Constant null initializer already zeroes everything
+                            // (no element-wise stores needed for globals)
+                            env_insert(ctx->env, var_name, final_type, arr);
+                            printf("Defined %s :: %s (zero-initialized)\n", var_name, type_to_string(final_type));
+                            result.type  = final_type;
+                            result.value = arr;
+                            return result;
                         }
-
-                        for (int i = 0; i < final_type->arr_size; i++) {
-                            LLVMValueRef zero = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0);
-                            LLVMValueRef idx = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), i, 0);
-                            LLVMValueRef indices[] = {zero, idx};
-                            LLVMValueRef elem_ptr = LLVMBuildGEP2(ctx->builder, arr_type,
-                                                                  arr, indices, 2, "elem_ptr");
-                            LLVMBuildStore(ctx->builder, zero_val, elem_ptr);
-                        }
-
-                        env_insert(ctx->env, var_name, final_type, arr);
-                        printf("Defined %s :: %s (zero-initialized)\n", var_name, type_to_string(final_type));
+                        arr = LLVMBuildAlloca(ctx->builder, arr_type, var_name);
 
                         result.type = final_type;
                         result.value = arr;
@@ -992,14 +1132,12 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     return result;
                 }
 
-                // For non-array types, create an alloca and store normally
+                // For non-array types: global at module scope, alloca inside fn
                 LLVMTypeRef llvm_type = type_to_llvm(ctx, final_type);
-                LLVMValueRef var = LLVMBuildAlloca(ctx->builder, llvm_type, var_name);
 
                 // Convert value if needed
                 LLVMValueRef stored_value = value_result.value;
 
-                // Handle type conversions
                 if (type_is_integer(final_type) && type_is_float(inferred_type)) {
                     stored_value = LLVMBuildFPToSI(ctx->builder, value_result.value,
                                                    LLVMInt64TypeInContext(ctx->context), "toint");
@@ -1007,21 +1145,63 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     stored_value = LLVMBuildSIToFP(ctx->builder, value_result.value,
                                                    LLVMDoubleTypeInContext(ctx->context), "tofloat");
                 } else if (final_type->kind == TYPE_CHAR && inferred_type->kind != TYPE_CHAR) {
-                    if (type_is_float(inferred_type)) {
+                    if (type_is_float(inferred_type))
                         stored_value = LLVMBuildFPToSI(ctx->builder, value_result.value,
                                                        LLVMInt8TypeInContext(ctx->context), "tochar");
-                    } else if (type_is_integer(inferred_type)) {
+                    else if (type_is_integer(inferred_type))
                         stored_value = LLVMBuildTrunc(ctx->builder, value_result.value,
                                                       LLVMInt8TypeInContext(ctx->context), "tochar");
+                }
+
+                LLVMValueRef var;
+                if (is_at_top_level(ctx)) {
+                    // Module-level: emit as an LLVM global (will be mangled in Phase 9)
+                    var = LLVMGetNamedGlobal(ctx->module, var_name);
+                    if (!var) {
+                        var = LLVMAddGlobal(ctx->module, llvm_type, var_name);
+                        LLVMSetInitializer(var, LLVMConstNull(llvm_type));
+                        LLVMSetLinkage(var, LLVMExternalLinkage);
+                    }
+                    LLVMBuildStore(ctx->builder, stored_value, var);
+                } else {
+                    // Inside function: stack alloca
+                    var = LLVMBuildAlloca(ctx->builder, llvm_type, var_name);
+                    LLVMBuildStore(ctx->builder, stored_value, var);
+                }
+
+                env_insert(ctx->env, var_name, final_type, var);
+
+                // Check for alias (list item [3] and [4])
+                if (ast->list.count >= 5) {
+                    AST *doc_node   = ast->list.items[3];
+                    AST *alias_node = ast->list.items[4];
+
+                    // Update docstring if provided
+                    if (doc_node->type == AST_STRING) {
+                        EnvEntry *ent = env_lookup(ctx->env, var_name);
+                        if (ent) {
+                            free(ent->docstring);
+                            ent->docstring = strdup(doc_node->string);
+                        }
+                    }
+
+                    // Register alias
+                    if (alias_node->type == AST_SYMBOL &&
+                        strcmp(alias_node->symbol, "__no_alias__") != 0) {
+                        // Insert alias pointing to the same LLVM value
+                        env_insert(ctx->env, alias_node->symbol,
+                                   type_clone(final_type), var);
+                        printf("Alias: %s -> %s\n", alias_node->symbol, var_name);
                     }
                 }
 
-                LLVMBuildStore(ctx->builder, stored_value, var);
 
-                // Insert into symbol table
-                env_insert(ctx->env, var_name, final_type, var);
+                if (ctx->module_ctx && !should_export_symbol(ctx->module_ctx, var_name)) {
+                    printf("Defined %s :: %s (private)\n", var_name, type_to_string(final_type));
+                } else {
+                    printf("Defined %s :: %s\n", var_name, type_to_string(final_type));
+                }
 
-                printf("Defined %s :: %s\n", var_name, type_to_string(final_type));
 
                 result.type = final_type;
                 result.value = stored_value;
@@ -1061,12 +1241,17 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     return result;
                 }
                 else if (quoted->type == AST_SYMBOL) {
-                    // Quoted symbol becomes a string
-                    result.type = type_string();
-                    result.value = LLVMBuildGlobalStringPtr(ctx->builder,
-                                                            quoted->symbol, "quoted_sym");
+                    // Currently returns a string — fix to return a symbol:
+                    result.type  = type_symbol();
+                    LLVMValueRef fn  = get_rt_value_symbol(ctx);
+                    LLVMValueRef sym = LLVMBuildGlobalStringPtr(ctx->builder,
+                                                                quoted->symbol, "quoted_sym");
+                    LLVMValueRef args[] = {sym};
+                    result.value = LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(fn),
+                                                  fn, args, 1, "sym");
                     return result;
                 }
+
                 else if (quoted->type == AST_KEYWORD) {
                     // Keyword stays as keyword
                     char keyword_str[256];
@@ -1289,6 +1474,20 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
                                        printf_fn, args, 2, "");
                     }
+                    else if (entry->type->kind == TYPE_SYMBOL) {
+                        // TYPE_SYMBOL stores a RuntimeValue* — use rt_print_value
+                        LLVMValueRef print_fn = get_rt_print_value(ctx);
+                        LLVMValueRef args[] = {loaded_value};
+                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(print_fn),
+                                       print_fn, args, 1, "");
+
+                        // Add newline
+                        LLVMValueRef newline = LLVMBuildGlobalStringPtr(ctx->builder, "\n", "nl");
+                        LLVMValueRef nl_args[] = {newline};
+                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                       printf_fn, nl_args, 1, "");
+                    }
+
                     // Handle keyword type
                     else if (entry->type->kind == TYPE_KEYWORD) {
                         LLVMValueRef args[] = {get_fmt_str(ctx), loaded_value};
@@ -1479,6 +1678,17 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     LLVMValueRef args[] = {get_fmt_int(ctx), arg_result.value};
                     LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
                                    printf_fn, args, 2, "");
+                }
+                else if (arg_result.type && arg_result.type->kind == TYPE_SYMBOL) {
+                    LLVMValueRef print_fn = get_rt_print_value(ctx);
+                    LLVMValueRef args[] = {arg_result.value};
+                    LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(print_fn),
+                                   print_fn, args, 1, "");
+
+                    LLVMValueRef newline = LLVMBuildGlobalStringPtr(ctx->builder, "\n", "nl");
+                    LLVMValueRef nl_args[] = {newline};
+                    LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                   printf_fn, nl_args, 1, "");
                 }
                 // Handle float type (default)
                 else {
@@ -1759,7 +1969,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                                              LLVMGlobalGetValueType(entry->func_ref),
                                              entry->func_ref,
                                              args, arg_count, "calltmp");
-                result.type = entry->return_type;
+                result.type = type_clone(entry->return_type);
+
 
                 free(args);
                 return result;
@@ -2149,12 +2360,147 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
         exit(1);
     }
 
+    case AST_TYPE_ALIAS: {
+        type_alias_register(ast->type_alias.alias_name,
+                            ast->type_alias.target_name);
+        printf("Type alias: %s = %s\n", ast->type_alias.alias_name,
+               ast->type_alias.target_name);
+        result.type = type_int();
+        result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0);
+        return result;
+    }
+
     default:
         fprintf(stderr, "%s:%d:%d: error: unknown AST type: %d\n",
                 parser_get_filename(), ast->line, ast->column, ast->type);
         exit(1);
     }
 }
+
+/// Module
+
+static CodegenResult codegen_define_variable(CodegenContext *ctx,
+                                              const char *var_name,
+                                              Type *final_type,
+                                              LLVMValueRef stored_value,
+                                              int source_line,
+                                              int source_column) {
+    CodegenResult result = {NULL, NULL};
+    bool top_level = is_at_top_level(ctx);
+
+    LLVMTypeRef llvm_type = type_to_llvm(ctx, final_type);
+    LLVMValueRef var;
+
+    if (top_level) {
+        // Module-level definition: use an LLVM global variable.
+        // We give it the local name now; main.c Phase 9 will rename it to
+        // the mangled name and replace all uses.
+        var = LLVMGetNamedGlobal(ctx->module, var_name);
+        if (!var) {
+            var = LLVMAddGlobal(ctx->module, llvm_type, var_name);
+            LLVMSetInitializer(var, LLVMConstNull(llvm_type));
+            // External linkage so the linker can resolve it from other modules.
+            LLVMSetLinkage(var, LLVMExternalLinkage);
+        }
+        // Emit a store from within the init function
+        LLVMBuildStore(ctx->builder, stored_value, var);
+    } else {
+        // Inside a function: keep the stack alloca
+        var = LLVMBuildAlloca(ctx->builder, llvm_type, var_name);
+        LLVMBuildStore(ctx->builder, stored_value, var);
+    }
+
+    env_insert(ctx->env, var_name, final_type, var);
+
+    if (ctx->module_ctx && !should_export_symbol(ctx->module_ctx, var_name)) {
+        printf("Defined %s :: %s (private)\n", var_name, type_to_string(final_type));
+    } else {
+        printf("Defined %s :: %s\n", var_name, type_to_string(final_type));
+    }
+
+    result.type  = final_type;
+    result.value = stored_value;
+    return result;
+}
+
+static CodegenResult codegen_define_array_zeroinit(CodegenContext *ctx,
+                                                    const char *var_name,
+                                                    Type *final_type) {
+    CodegenResult result = {NULL, NULL};
+    bool top_level = is_at_top_level(ctx);
+    LLVMTypeRef arr_type = type_to_llvm(ctx, final_type);
+
+    LLVMValueRef arr;
+    if (top_level) {
+        arr = LLVMGetNamedGlobal(ctx->module, var_name);
+        if (!arr) {
+            arr = LLVMAddGlobal(ctx->module, arr_type, var_name);
+            // LLVMConstNull gives a zero-initialized aggregate
+            LLVMSetInitializer(arr, LLVMConstNull(arr_type));
+            LLVMSetLinkage(arr, LLVMExternalLinkage);
+        }
+        // No explicit store needed — the global is zero-initialized by default.
+        // But we still emit element-wise stores in case of non-zero init (handled
+        // in the caller; for zero-init we just use ConstNull above).
+    } else {
+        arr = LLVMBuildAlloca(ctx->builder, arr_type, var_name);
+
+        // Zero-initialize each element explicitly (for stack arrays)
+        LLVMTypeRef elem_type_llvm = type_to_llvm(ctx, final_type->arr_element_type);
+        LLVMValueRef zero_val;
+        if (type_is_float(final_type->arr_element_type)) {
+            zero_val = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0);
+        } else if (final_type->arr_element_type->kind == TYPE_STRING  ||
+                   final_type->arr_element_type->kind == TYPE_KEYWORD ||
+                   final_type->arr_element_type->kind == TYPE_RATIO) {
+            zero_val = LLVMConstPointerNull(elem_type_llvm);
+        } else {
+            zero_val = LLVMConstInt(elem_type_llvm, 0, 0);
+        }
+        for (int idx = 0; idx < final_type->arr_size; idx++) {
+            LLVMValueRef zero_i = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0);
+            LLVMValueRef elem_i = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), idx, 0);
+            LLVMValueRef indices[] = {zero_i, elem_i};
+            LLVMValueRef elem_ptr = LLVMBuildGEP2(ctx->builder, arr_type, arr,
+                                                   indices, 2, "elem_ptr");
+            LLVMBuildStore(ctx->builder, zero_val, elem_ptr);
+        }
+    }
+
+    env_insert(ctx->env, var_name, final_type, arr);
+    printf("Defined %s :: %s (zero-initialized)\n", var_name, type_to_string(final_type));
+
+    result.type  = final_type;
+    result.value = arr;
+    return result;
+}
+
+void codegen_declare_external_var(CodegenContext *ctx,
+                                  const char *mangled_name,
+                                  Type *type) {
+    if (LLVMGetNamedGlobal(ctx->module, mangled_name)) return;
+    LLVMTypeRef lt = type_to_llvm(ctx, type);
+    LLVMValueRef gv = LLVMAddGlobal(ctx->module, lt, mangled_name);
+    LLVMSetLinkage(gv, LLVMExternalLinkage);
+    // No LLVMSetInitializer — this is an extern declaration only
+}
+
+void codegen_declare_external_func(CodegenContext *ctx,
+                                   const char *mangled_name,
+                                   EnvParam *params, int param_count,
+                                   Type *return_type) {
+    if (LLVMGetNamedFunction(ctx->module, mangled_name)) return;
+    LLVMTypeRef *ptypes = malloc(sizeof(LLVMTypeRef) * (param_count + 1));
+    for (int i = 0; i < param_count; i++)
+        ptypes[i] = type_to_llvm(ctx, params[i].type);
+    LLVMTypeRef ft = LLVMFunctionType(type_to_llvm(ctx, return_type),
+                                      ptypes, param_count, 0);
+    LLVMValueRef fn = LLVMAddFunction(ctx->module, mangled_name, ft);
+    LLVMSetLinkage(fn, LLVMExternalLinkage);
+    free(ptypes);
+}
+
+
 
 void register_builtins(CodegenContext *ctx) {
     // Arithmetic operators

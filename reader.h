@@ -17,6 +17,7 @@ typedef enum {
     AST_ARRAY,    // array literal [1 2 3]
     AST_LAMBDA,   // (lambda ([x :: T] -> ... -> Ret<T>) "doc" body)
     AST_ASM,      // (asm instruction operand1 operand2 ...)
+    AST_TYPE_ALIAS,
 } ASTType;
 
 // A single parsed function parameter: name + optional type annotation
@@ -60,6 +61,7 @@ typedef struct AST {
             int param_count;
             char *return_type; // return type name, NULL if absent
             char *docstring;   // NULL if absent
+            char *alias_name;  // NULL if absent
             struct AST *body;  // body expression
         } lambda;
 
@@ -68,6 +70,12 @@ typedef struct AST {
             struct AST **instructions; // list of AST lists (instruction + operands)
             size_t instruction_count;
         } asm_block;
+
+        // AST_TYPE_ALIAS
+        struct {
+            char *alias_name;   // "Code"
+            char *target_name;  // "List"
+        } type_alias;
     };
 
     char *literal_str; // original literal string for numbers (e.g. "0xFF")
@@ -86,11 +94,18 @@ AST *ast_new_keyword(const char *name);
 AST *ast_new_ratio(long long numerator, long long denominator);
 AST *ast_new_array(void);
 AST *ast_new_list(void);
+/* AST *ast_new_lambda(ASTParam *params, int param_count, */
+/*                      const char *return_type, */
+/*                      const char *docstring, */
+/*                      AST *body); */
 AST *ast_new_lambda(ASTParam *params, int param_count,
-                     const char *return_type,
-                     const char *docstring,
-                     AST *body);
+                    const char *return_type,
+                    const char *docstring,
+                    const char *alias_name,
+                    AST *body);
 AST *ast_new_asm(AST **instructions, size_t instruction_count);
+AST *ast_new_type_alias(const char *alias_name, const char *target_name);
+
 
 void ast_list_append(AST *list, AST *item);
 void ast_array_append(AST *array, AST *item);

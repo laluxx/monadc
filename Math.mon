@@ -1,0 +1,22 @@
+(module Math [sqrt square add phi])
+
+(define phi 3.14)
+
+(define x 30)
+
+;; Private helper (not exported)
+(define (helper [x :: Int] -> Int)
+  (* x 2)); Here it let me chose between the global one and the parameters one instead it should go to the parameter one without showing the picker
+
+(show x); Here it automatically brings me to the global x CORRECT
+;; Exported functions
+
+(define (square [x :: Float] -> Float)
+  "Square a number"
+  (* x x))
+
+(define (sqrt -> Float) 3.2); example, we don't have if yet
+
+(define (add [a :: Float] -> [b :: Float] -> Float)
+  "Add two numbers"
+  (+ a b))

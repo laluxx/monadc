@@ -11,6 +11,8 @@
 
 ;;; Code:
 
+(module html)
+
 ;; Define a reusable component
 (defcomponent user-greeting (name)
   `(div :class "greeting"

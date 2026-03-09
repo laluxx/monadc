@@ -1,3 +1,37 @@
+;;; Modules
+
+;; 1. Module names MUST be capitalized.
+;; 2. :as import alises MUST be capitalized.
+;; 3. File names must match their module name.
+;; 4. The name of the file that exports Main can be named anything.
+
+(module Main); Automatically exports everything
+
+(import qualified Math)
+;; (import Math hiding [square])
+;; (import Math)
+;; (import qualified Math :as M)
+
+(show "Showing phi from Math")
+(show Math.phi)
+(show "Showing (square 3) from Math")
+(show (Math.square 3))
+;; (show "Showing (Math.helper 9) from Math")
+;; (show (Math.helper 9)); ERROR helper is not exported from Math
+(show "Showing (sqrt) from Math")
+(show (Math.sqrt))
+
+;; (module Main [])      ; Doesn't export anything
+;; (module Main [f1 f2]) ; Exports only f1 and f2
+
+;; qualified requires prefix (math:) to access imported symbols,
+;; it does not bring symbols into the current namespace.
+;; (import qualified Std.Math :as Math)
+;; (import Std.Math :as Math); Here you can either (sqrt 3) or (Math:sqrt 3)
+
+;; (import Math [sqrt log]); import ONLY sqrt and log
+;; (import Math hiding [sqrt log]); import everything EXCEPT sqrt and log
+
 ;;; Variables
 
 (define i 20)                   ; Inferred Int
@@ -15,7 +49,6 @@
 (define [b :: Bin] 0b1010)      ; Typed Bin (10)
 (define [o :: Oct] 0o755)       ; Typed Oct (493)
 
-
 ;; TODO
 ;; (show "Value of i is _, f is _, and o is _." i f o)
 
@@ -31,9 +64,8 @@
 ;;   (show "Hello, World"))
 
 
-
 ;; TODO IF, PURE, REC
-;; (define (pure rec fib [n :: Int] -> Int)
+;; (define (rec fib [n :: Int] -> Int)
 ;;   "Generate the N fibonacci number."
 ;;   (if (<= n 2)
 ;;       1
@@ -115,7 +147,9 @@
 (define x 30
   "doc")
 
-(define square (lambda ([x :: Int] -> Int) "doc" (* x x)))
+(define [name :: Int] 30)
+
+;; (define square (lambda ([x :: Int] -> Int) "doc" (* x x)))
 
 (define (multi [x :: Int] -> [y :: Int] -> Int)
   "Multiply X and Y as Ints"
@@ -130,7 +164,7 @@
   (* x y))
 
 (define (multo [x :: Oct] -> [y :: Oct] -> Oct)
-  "Multiply X and Y as Hexs, return Oct"
+  "Multiply X and Y as Hexs, return Oct."
   (* x y))
 
 (define (multb [x :: Bin] -> [y :: Bin] -> Bin)
@@ -176,8 +210,6 @@
 (define [decimal :: Float] 0.132093)
 
 
-
-
 ;; TODO
 ;; (define (return-int -> Int) 3)
 ;; (define [test :: String] (return-int)); This should not be allowed
@@ -186,6 +218,35 @@
 
 
 ;;; Types
+
+;;;; Lists
+
+(define l '(1 2 3)); Inferred as
+(define [l :: List] '(1 2 3)); Manually typed
+
+(type Code List); Alias Code to List, Code is just a List!
+
+(define (return-code -> Code)
+  '(+ 3 3 3 3))
+
+(show (return-code))
+
+(define symbol 'symbol); TODO
+(show symbol)
+
+(define var 3
+  :doc "This is the docstring."
+  :alias 🐜)
+
+(show "Testing type alias")
+(show (+ var 🐜))
+
+
+
+;; (define (compose [x :: Relation] -> [y :: Relation] -> Relation)
+;;   :doc "Compose relation X with relation Y."
+;;   :alias ∘
+;;   (undefined))
 
 ;;;; Rationals
 
@@ -204,7 +265,7 @@
 
 (define [empty-arr :: Arr :: Int :: 3] []); ALLOWED! 0 initialized by default
 (show empty-arr); => [0 0 0]
-;; (define x []); CORRECT C ERROR!
+;; (define x []); C ERROR!
 
 ;;;;; Int Array
 
@@ -603,6 +664,8 @@
 ;; Sets are ideal for efficiently checking whether a collection
 ;; contains an element, or to remove any arbitrary element.
 
+;; Support [[https://en.wikipedia.org/wiki/Set-builder_notation][Set-builder notation]] similarry to [[https://en.wikipedia.org/wiki/List_comprehension][list comprehension]]
+
 ;; (empty-set); => #{}
 ;; (set? (empty-set)); => True
 ;; #{:a :b :c :d}; => #{:d :a :b :c}
@@ -643,6 +706,146 @@
 ;;   "Multiply X and Y as Hexs, return Int"
 ;;   (* x y))
 
+;;;; Pair
+
+;; (define ordered-pair (1,2)); Inferred as [ordered-pair :: Ordpair]
+;; (define [ordered-pair :: Pair :: Ordered] (1,2)); Manually typed
+
+;; NOTE Ordered by itself is not a type, It's more like an enum.
+
+;; The standard Kuratowski definition defines an ordered pair as
+;; (a,b) = {{a},{a,b}}, which satisfies the crucial property that
+;; (a,b) = (c,d) if and only if a = c and b = d.
+
+;; using pure set theory to distinguish the first element from the second,
+;; even if they are identical.
+
+;;;;; Structure:
+;; The pair is defined as a set containing two elements:
+;; a [[https://en.wikipedia.org/wiki/Singleton_(mathematics)][singleton set]] of the first element {a} and a doubleton set of both elements {a,b}.
+
+;;;;; Order Dependence:
+;; If a != b, the first element a is identified by being the only element
+;; present in only one of the inner sets, specifically the one that is a singleton, {a}.
+
+;;;;; Purpose:
+;; It allows for the construction of [[https://en.wikipedia.org/wiki/Cartesian_product][Cartesian products]] and mathematical
+;; relations within formal set theories like [[https://en.wikipedia.org/wiki/Zermelo%E2%80%93Fraenkel_set_theory][Zermelo–Fraenkel set theory]] (ZF).
+
+;;;;; Equality Property:
+;; It satisfies
+;; (a,b) = (c,d) <=> a = c and b = d, ensuring that
+;; (a,b) != (b,a) unless a = b.
+
+
+;; (define unordered-pair {1,2}); Inferred as [unordered-pair :: Pair :: Unordered]
+;; (define [unordered-pair :: Pair :: Unordered] {1,2}); Manually typed
+
+
+;;;; TODO Relation
+
+;; [y :: Oct] Functions parameters are themselfs relations
+;   ^ Here we are saying the symbol =y= is of type Oct
+
+;; (define ages {("Alice"   , 30)
+;;               ("Bob"     , 25)
+;;               ("Charlie" , 30)}); Inferred as [ages :: Relation]
+
+;; (define [ages :: Relation] {("Alice"   , 30)
+;;                             ("Bob"     , 25)
+;;                             ("Charlie" , 30)}); Manually typed
+
+;;;;; domain
+;; Get all first elements from a relation
+
+;; (domain ages); => {"Alice" "Bob" "Charlie"}
+
+;; Functions are relations too ([[https://en.wikipedia.org/wiki/Morphism][morphisms]]), we can get the domain for them too.
+;; (domain multo); => {Oct × Oct} This is a [[https://en.wikipedia.org/wiki/Cartesian_product][certesian product]]
+
+;; We can also get the domain of a type relation. Since they are.. relations.
+;; (domain [x :: Int]); -> {x}  (a Singleton containing the x symbol name)
+
+;;;;; codomain
+;; Get all second elements from a relation
+
+;; The [[https://en.wikipedia.org/wiki/Codomain][codomain]] of a relation is also called the range of the relation.
+;; (codomain ages); => {30 25} NOTICE How 30 appears only once.
+;; (codomain multo); => {Oct}  A set containing the output type of the function.
+;; (codomain [x :: Int]); => {Int}
+
+;;;;; image
+;; For a given element x, return the SET of all elements y
+;; that are related to x in the relation.
+;; If x is not in the domain, returns the empty set {}.
+
+;; (image ages "Alice")   ; => {30}
+;; (image ages "Bob")     ; => {25}
+;; (image ages "Charlie") ; => {30}
+;; (image ages "David")   ; => {} - Not present in the relation.
+
+;; We can also get the image of functions, since they are relations.
+
+;; For unary functions:
+;; (define (double [x :: Int] -> Int) (* x 2))
+;; (image double 5); => {10}  (output as a set)
+
+;; For non-unary functions:
+;; (image multo 0xFF); => {(lambda ([y :: Oct]) (* 0xFF y))}
+
+;; NOTICE How images of non-unary functions always produce
+;; a singleton containing the continuation.
+
+;;;;; preimage
+
+;; preimage: given a y, find ALL x related to it
+
+;; (preimage ages 30)   ; => {"Alice", "Charlie"} - Who is 30?
+;; (preimage ages 25)   ; => {"Bob"}              - Who is 25?
+;; (preimage ages 40)   ; => {}                   - Nobody is 40
+
+;; (preimage double 6)  ; => {3}
+;; (preimage double 30) ; => {15}
+;; (preimage double 7)  ; => {} - no integer gives 7 when doubled (3.5 would, but Int only)
+
+;;;;; compose
+
+;; R ∘ S: (a,c) exists if (a,b) in R and (b,c) in S
+
+;; (define life-stages {(30 , "young-adult")
+;;                      (25 , "adult")
+;;                      (40 , "middle-age")})
+
+;; (ages `∘` life-stages); => {("Alice"   , "young-adult")
+;;                     ;     ("Bob"     , "adult")
+;;                     ;     ("Charlie" , "young-adult")}
+
+;;;;; transpose
+;; Reverse all pairs: (b,a) for each (a,b)
+
+
+
+
+;; union       - All pairs in either relation
+;; intersection- Pairs in both relations
+;; difference  - Pairs in first but not second
+
+;; select      - Filter pairs by a predicate
+;; project     - Keep only specific components
+
+;; restrict    - Keep only pairs with domain in a set
+;; corestrict  - Keep only pairs with codomain in a set
+
+;; is-function? - Check if relation is a function (each x maps to unique y)
+;; is-injective?- Check if relation is injective (each y has unique x)
+;; is-surjective?- Check if relation covers entire codomain
+
+
+
+;; (define (relate [domain :: Set] -> [codomain :: Set] -> Set)
+;;   )
+
+
 
 ;;; TODO Infix Function Call
 
@@ -655,6 +858,8 @@
 
 ;; (new-players `into` players); => (into players new-players)
 ;; (more-new-players `into` new-players `into` players); => (into (into players new-players) more-new-players)
+
+
 
 ;;; TODO Optional parameters
 
@@ -711,16 +916,27 @@
   (asm mov 39 %rax
        syscall))
 #---
-
 ;; #+ARM32
 ;; (define (get-pid -> Int)
 ;;   (asm mov r7 #20; TODO Support # for ARM
 ;;        swi #0))
 ;; #---
 
+;; Naked function
+;; (define (add [x :: Int] -> [y :: Int] -> Int)
+;;   :doc "Documentation for this Scheiße."
+;;   :naked True
+;;   (asm
+;;     push %rbp          ; prologue
+;;     mov  %rsp %rbp
+;;     mov  x    %rax     ; x is first  param (in rdi)
+;;     add  y    %rax     ; y is second param (in rsi)
+;;     pop  %rbp          ; epilogue
+;;     ret))              ; return
+
 (show "HERE ASM")
 (show (rdtsc))
-(show (get-pid))
+;; (show (get-pid))
 
 
 
@@ -732,17 +948,6 @@
 ;; (show (add -10 39))
 
 
-;; Naked function
-;; (define (add [x :: Int] -> [y :: Int] -> Int)
-;;   :doc "Documentation for this shit."
-;;   :naked True
-;;   (asm
-;;     push %rbp          ; prologue
-;;     mov  %rsp %rbp
-;;     mov  x    %rax     ; x is first  param (in rdi)
-;;     add  y    %rax     ; y is second param (in rsi)
-;;     pop  %rbp          ; epilogue
-;;     ret))              ; return
 
 ;;; TODO Loops
 
@@ -768,6 +973,7 @@
 ;; (define xs (1..))
 ;; (take 10 xs)
 ;; (drop 20 xs)
+
 
 
 ;;; TODO Types as types
@@ -797,6 +1003,14 @@
 ;; (String) ; => ""
 ;; (Fn)     ; => (lambda ())
 ;; (Ratio)  ; => 0/0
+
+;; Function that returns a type based on input
+;; (define (array-of [n :: Int] -> [t :: T] -> T)
+;;   (if (> n 0)
+;;       [Arr :: t :: n]
+;;       [Empty-Type]))
+
+;; (define [my-arr :: (array-of 3 Int)] [1 2 3])
 
 ;;;; Type literal
 
@@ -1035,7 +1249,31 @@
 ;; (define (double [x :: Float] -> Float)
 ;;   (* x x))
 
-;;; Layout
+;;; Algebraic Data Types
+
+;; A type with three constructors
+;; (data Color Red | Green | Blue
+;;   deriving [show])
+
+;; Implicitly:
+;; [Red :: Color] [Green :: Color] [Blue :: Color]
+
+;; Usage
+;; (define [my-color :: Color] Red); Manually Annotated
+;; (define my-color Red); Inferred as [my-color :: Color]
+
+;; NOTE The compile enforces exhaustive pattern matching.
+;; (match my-color
+;;   Red   -> "stop"
+;;   Green -> "go"
+;;   Blue  -> "ocean")
+                                             ; A Shape is a
+;; (data Shape Circle Double                    ; Circle with radius (AND)
+;;           | Rectangle Double Double          ; OR Rectangle with width AND height
+;;           | Triangle Double Double Double)   ; OR Triangle with side1 AND side2 AND side3
+
+;;; Layouts
+
 
 ;; (layout Point
 ;;   "A 2D point in Cartesian coordinates."
@@ -1104,6 +1342,15 @@
 #+X86-32
 (show "We are on linux x86-32")
 #---
+
+;;; TODO Adresses
+
+;; &x; => 0x70A392F  [&x :: Hex]
+
+;;; TODO Parametric polymorphism
+
+;; (define (id x) x); Should infer ∀α. α -> α
+
 
 
 ;;; Repl output
