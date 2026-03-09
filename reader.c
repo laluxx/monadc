@@ -154,31 +154,19 @@ AST *ast_new_lambda(ASTParam *params, int param_count,
                     const char *return_type,
                     const char *docstring,
                     const char *alias_name,
+                    bool naked,
                     AST *body) {
     AST *a = calloc(1, sizeof(AST));
-    a->type                = AST_LAMBDA;
-    a->lambda.params       = params;
-    a->lambda.param_count  = param_count;
-    a->lambda.return_type  = return_type  ? my_strdup(return_type)  : NULL;
-    a->lambda.docstring    = docstring    ? my_strdup(docstring)    : NULL;
-    a->lambda.alias_name   = alias_name   ? my_strdup(alias_name)   : NULL;
-    a->lambda.body         = body;
+    a->type               = AST_LAMBDA;
+    a->lambda.params      = params;
+    a->lambda.param_count = param_count;
+    a->lambda.return_type = return_type ? my_strdup(return_type) : NULL;
+    a->lambda.docstring   = docstring   ? my_strdup(docstring)   : NULL;
+    a->lambda.alias_name  = alias_name  ? my_strdup(alias_name)  : NULL;
+    a->lambda.naked       = naked;
+    a->lambda.body        = body;
     return a;
 }
-
-/* AST *ast_new_lambda(ASTParam *params, int param_count, */
-/*                     const char *return_type, */
-/*                     const char *docstring, */
-/*                     AST *body) { */
-/*     AST *a = calloc(1, sizeof(AST)); */
-/*     a->type                = AST_LAMBDA; */
-/*     a->lambda.params       = params; */
-/*     a->lambda.param_count  = param_count; */
-/*     a->lambda.return_type  = return_type ? my_strdup(return_type) : NULL; */
-/*     a->lambda.docstring    = docstring   ? my_strdup(docstring)   : NULL; */
-/*     a->lambda.body         = body; */
-/*     return a; */
-/* } */
 
 AST *ast_new_asm(AST **instructions, size_t instruction_count) {
     AST *a = calloc(1, sizeof(AST));
@@ -424,18 +412,6 @@ static bool is_symbol_char(unsigned char c) {
     return is_symbol_start(c) || (c>='0'&&c<='9') || c=='.';
 }
 
-
-/* static bool is_symbol_start(char c) { */
-/*     return (c>='a'&&c<='z') || (c>='A'&&c<='Z') || */
-/*            c=='-' || c=='+' || c=='*' || c=='/' || */
-/*            c=='<' || c=='>' || c=='=' || c=='!' || */
-/*            c=='?' || c=='_' || c==':' || c=='%'; */
-/* } */
-
-/* static bool is_symbol_char(char c) { */
-/*     return is_symbol_start(c) || (c>='0'&&c<='9') || c=='.'; */
-/* } */
-
 /* When we are inside a symbol and see '.', only consume it if the next
    character is also a valid symbol character (letter/digit).  This avoids
    eating the '.' that belongs to ratio denominators or trailing punctuation. */
@@ -444,12 +420,6 @@ static bool is_symbol_dot_continuation(Lexer *lex) {
     return (next>='a'&&next<='z') || (next>='A'&&next<='Z') ||
            (next>='0'&&next<='9') || next=='_' || next > 127;
 }
-
-/* static bool is_symbol_dot_continuation(Lexer *lex) { */
-/*     /\* current char is '.' at lex->pos; peek ahead one more *\/ */
-/*     char next = lex->source[lex->pos + 1]; */
-/*     return (next>='a'&&next<='z') || (next>='A'&&next<='Z') || (next>='0'&&next<='9') || next=='_'; */
-/* } */
 
 Token lexer_next_token(Lexer *lex) {
     Token tok = {0};
@@ -765,13 +735,15 @@ static AST *parse_lambda(Parser *p) {
 
     AST *body = parse_expr(p);
 
-    return ast_new_lambda(params, count, ret_type, docstring, NULL, body);
+    return ast_new_lambda(params, count, ret_type, docstring, NULL, false, body);
 }
 
 
 typedef struct {
     char *docstring;
     char *alias_name;
+    bool naked;
+    bool naked_set;    // whether :naked was explicitly provided
     size_t consumed;   // how many items were consumed
 } DefineMetadata;
 
@@ -825,6 +797,32 @@ static DefineMetadata parse_define_metadata(Parser *p) {
             continue;
         }
 
+        // :naked True / :naked False
+        if (p->current.type == TOK_KEYWORD &&
+            strcmp(p->current.value, "naked") == 0) {
+            fprintf(stderr, "DEBUG: found :naked keyword\n");
+            p->current = lexer_next_token(p->lexer);
+            if (p->current.type == TOK_SYMBOL) {
+                if (strcmp(p->current.value, "True") == 0) {
+                    m.naked     = true;
+                    m.naked_set = true;
+                    p->current  = lexer_next_token(p->lexer);
+                } else if (strcmp(p->current.value, "False") == 0) {
+                    m.naked     = false;
+                    m.naked_set = true;
+                    p->current  = lexer_next_token(p->lexer);
+                } else {
+                    compiler_error(p->current.line, p->current.column,
+                                   ":naked requires True or False");
+                }
+            } else {
+                compiler_error(p->current.line, p->current.column,
+                               ":naked requires True or False");
+            }
+            m.consumed++;
+            continue;
+        }
+
         break;  // not a metadata token — must be the body
     }
 
@@ -869,67 +867,6 @@ static AST *parse_list(Parser *p) {
         p->current = lexer_next_token(p->lexer);
 
         // Check if next token is '(' (function definition)
-        /* if (p->current.type == TOK_LPAREN) { */
-        /*     // Parse as (define (fname signature...) docstring? body) */
-        /*     p->current = lexer_next_token(p->lexer); // consume '(' */
-
-        /*     // Get function name */
-        /*     if (p->current.type != TOK_SYMBOL) { */
-        /*         compiler_error(p->current.line, p->current.column, */
-        /*                      "Expected function name after (define ("); */
-        /*     } */
-        /*     AST *fname = ast_new_symbol(p->current.value); */
-        /*     fname->line = p->current.line; */
-        /*     fname->column = p->current.column; */
-        /*     fname->end_column = p->current.column + strlen(p->current.value); */
-        /*     p->current = lexer_next_token(p->lexer); */
-
-        /*     // Parse signature */
-        /*     ASTParam *params = NULL; */
-        /*     int count = 0; */
-        /*     char *ret_type = NULL; */
-        /*     parse_fn_signature(p, &params, &count, &ret_type); */
-
-        /*     // Optional docstring */
-        /*     char *docstring = NULL; */
-        /*     if (p->current.type == TOK_STRING) { */
-        /*         docstring = my_strdup(p->current.value); */
-        /*         p->current = lexer_next_token(p->lexer); */
-        /*     } */
-
-        /*     // Body */
-        /*     AST *body = parse_expr(p); */
-
-        /*     // Expect closing ')' for the define */
-        /*     if (p->current.type != TOK_RPAREN) { */
-        /*         compiler_error(p->current.line, p->current.column, */
-        /*                      "Expected ')' after define body"); */
-        /*     } */
-
-        /*     int end_column = p->current.column + 1; */
-        /*     p->current = lexer_next_token(p->lexer); */
-
-        /*     // Build (define fname (lambda ...)) */
-        /*     /\* AST *lambda = ast_new_lambda(params, count, ret_type, docstring, body); *\/ */
-        /*     AST *lambda = ast_new_lambda(params, count, ret_type, */
-        /*                                  meta.docstring, meta.alias_name, body); */
-        /*     lambda->line = fname->line; */
-        /*     lambda->column = fname->column; */
-        /*     lambda->end_column = end_column; */
-
-        /*     AST *result = ast_new_list(); */
-        /*     ast_list_append(result, ast_new_symbol("define")); */
-        /*     ast_list_append(result, fname); */
-        /*     ast_list_append(result, lambda); */
-
-        /*     result->line = start_line; */
-        /*     result->column = start_column; */
-        /*     result->end_column = end_column; */
-
-        /*     ast_free(list); */
-        /*     return result; */
-
-        // Check if next token is '(' (function definition)
         if (p->current.type == TOK_LPAREN) {
             // Parse as (define (fname signature...) metadata? body)
             p->current = lexer_next_token(p->lexer); // consume '('
@@ -961,6 +898,7 @@ static AST *parse_list(Parser *p) {
             DefineMetadata meta2 = parse_define_metadata(p);
             if (meta2.docstring)  { free(meta.docstring);  meta.docstring  = meta2.docstring;  meta2.docstring  = NULL; }
             if (meta2.alias_name) { free(meta.alias_name); meta.alias_name = meta2.alias_name; meta2.alias_name = NULL; }
+            if (meta2.naked_set)  { meta.naked = meta2.naked; meta.naked_set = true;}
             free(meta2.docstring);
             free(meta2.alias_name);
 
@@ -972,9 +910,42 @@ static AST *parse_list(Parser *p) {
             int end_column = p->current.column + 1;
             p->current = lexer_next_token(p->lexer);
 
+            fprintf(stderr, "DEBUG: lambda naked=%d alias=%s doc=%s\n",
+                    meta.naked,
+                    meta.alias_name ? meta.alias_name : "null",
+                    meta.docstring  ? meta.docstring  : "null");
+
+
+
+            // Validate naked functions have at least one (asm ...) block
+            if (meta.naked) {
+                bool has_asm = false;
+
+                if (body->type == AST_ASM) {
+                    has_asm = true;
+                } else if (body->type == AST_LIST) {
+                    for (size_t i = 0; i < body->list.count; i++) {
+                        if (body->list.items[i]->type == AST_ASM) {
+                            has_asm = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!has_asm) {
+                    compiler_error(body->line, body->column,
+                                   "naked function '%s' must contain at least one "
+                                   "(asm ...) block to manage the prologue and epilogue manually. ",
+                                   fname->symbol);
+                }
+            }
+
+
+
             // Build (define fname (lambda ...))
             AST *lambda = ast_new_lambda(params, count, ret_type,
-                                         meta.docstring, meta.alias_name, body);
+                                         meta.docstring, meta.alias_name, meta.naked, body);
+
             free(meta.docstring);
             free(meta.alias_name);
 

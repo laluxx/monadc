@@ -62,6 +62,7 @@ typedef struct AST {
             char *return_type; // return type name, NULL if absent
             char *docstring;   // NULL if absent
             char *alias_name;  // NULL if absent
+            bool naked;
             struct AST *body;  // body expression
         } lambda;
 
@@ -95,13 +96,15 @@ AST *ast_new_ratio(long long numerator, long long denominator);
 AST *ast_new_array(void);
 AST *ast_new_list(void);
 /* AST *ast_new_lambda(ASTParam *params, int param_count, */
-/*                      const char *return_type, */
-/*                      const char *docstring, */
-/*                      AST *body); */
+/*                     const char *return_type, */
+/*                     const char *docstring, */
+/*                     const char *alias_name, */
+/*                     AST *body); */
 AST *ast_new_lambda(ASTParam *params, int param_count,
                     const char *return_type,
                     const char *docstring,
                     const char *alias_name,
+                    bool naked,
                     AST *body);
 AST *ast_new_asm(AST **instructions, size_t instruction_count);
 AST *ast_new_type_alias(const char *alias_name, const char *target_name);

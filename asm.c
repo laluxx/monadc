@@ -56,27 +56,37 @@ static int find_param_index(const char *name, EnvParam *params, int param_count)
 // Convert AST symbol to LLVM placeholder or keep as-is
 static char *process_operand(AST *operand, AsmContext *ctx, int *placeholder_num) {
     if (operand->type == AST_SYMBOL) {
-        // Check if it's a parameter
         int param_idx = find_param_index(operand->symbol, ctx->params, ctx->param_count);
         if (param_idx >= 0) {
-            // Replace with LLVM placeholder: $0, $1, $2, etc.
-            // Placeholders are numbered: 0 = output, 1 = first input, 2 = second input, etc.
-            char buf[16];
-            snprintf(buf, sizeof(buf), "$%d", param_idx + 1);  // +1 because $0 is output
-            return strdup(buf);
+            if (ctx->naked) {
+                // Naked: substitute real ABI register directly
+                // Reset and walk allocator to get the right register for this param
+                RegisterAllocator ra;
+                reg_alloc_init(&ra);
+                const char *reg = NULL;
+                for (int i = 0; i <= param_idx; i++) {
+                    reg = reg_alloc_get(&ra, i, ctx->params[i].type);
+                }
+                return strdup(reg ? reg : "%rdi");
+            } else {
+                // Normal: use LLVM placeholder
+                char buf[16];
+                snprintf(buf, sizeof(buf), "$%d", param_idx + 1);
+                return strdup(buf);
+            }
         }
-        // Not a parameter, keep as-is (might be a register name or label)
         return strdup(operand->symbol);
     } else if (operand->type == AST_NUMBER) {
-        // Immediate value - use $$ to escape the $ in LLVM inline asm
         char buf[64];
-        snprintf(buf, sizeof(buf), "$$%lld", (long long)operand->number);
+        if (ctx->naked) {
+            snprintf(buf, sizeof(buf), "$%lld", (long long)operand->number);
+        } else {
+            snprintf(buf, sizeof(buf), "$$%lld", (long long)operand->number);
+        }
         return strdup(buf);
     } else if (operand->type == AST_STRING) {
-        // String operand (rare, but possible)
         return strdup(operand->string);
     }
-
     return strdup("???");
 }
 
@@ -321,7 +331,9 @@ void free_asm_instructions(AsmInstruction *instructions, int count) {
 }
 
 // Build the AT&T syntax assembly string
-static char *build_asm_string(AsmInstruction *instructions, int count, Type *return_type) {
+/* static char *build_asm_string(AsmInstruction *instructions, int count, Type *return_type) { */
+static char *build_asm_string(AsmInstruction *instructions, int count,
+                               Type *return_type, bool naked) {
     // Estimate buffer size
     size_t bufsize = 1024;
     char *asm_str = malloc(bufsize);
@@ -339,12 +351,16 @@ static char *build_asm_string(AsmInstruction *instructions, int count, Type *ret
         // But with constraint "=r,0,r": $0=output, $1=first input (=output), $2=second input
         // AT&T syntax: add source, dest
         // We want: add $2, $1 (add second param TO first param which is output)
-        bool is_two_operand = (strcmp(instructions[i].mnemonic, "add") == 0 ||
-                               strcmp(instructions[i].mnemonic, "sub") == 0 ||
-                               strcmp(instructions[i].mnemonic, "imul") == 0 ||
-                               strcmp(instructions[i].mnemonic, "and") == 0 ||
-                               strcmp(instructions[i].mnemonic, "or") == 0 ||
-                               strcmp(instructions[i].mnemonic, "xor") == 0);
+        // The swap is only needed for non-naked (LLVM placeholder) mode
+        // because of the matching constraint "=r,0,r" requiring output==input[0]
+        // For naked functions, operands are real registers — no swap needed
+        bool is_two_operand = !naked && (
+            strcmp(instructions[i].mnemonic, "add" ) == 0  ||
+            strcmp(instructions[i].mnemonic, "sub" ) == 0  ||
+            strcmp(instructions[i].mnemonic, "imul") == 0  ||
+            strcmp(instructions[i].mnemonic, "and" ) == 0  ||
+            strcmp(instructions[i].mnemonic, "or"  ) == 0  ||
+            strcmp(instructions[i].mnemonic, "xor" ) == 0  );
 
         if (is_two_operand && instructions[i].operand_count == 2) {
             // Swap operands: user wrote (add x y) → add $1, $2
@@ -379,75 +395,65 @@ LLVMValueRef codegen_inline_asm(LLVMContextRef context,
                                  int instruction_count,
                                  Type *return_type,
                                  LLVMValueRef *params,
-                                 int param_count) {
-    // Build assembly string (already has LLVM placeholders like $1, $2)
-    char *asm_str = build_asm_string(instructions, instruction_count, return_type);
+                                 int param_count,
+                                 bool naked) {          // <-- add
+    char *asm_str = build_asm_string(instructions, instruction_count, return_type, naked);
 
-    // DEBUG
     fprintf(stderr, "=== INLINE ASM ===\n");
     fprintf(stderr, "Assembly: %s\n", asm_str);
-    fprintf(stderr, "Param count: %d\n", param_count);
+    fprintf(stderr, "Naked: %s\n", naked ? "yes" : "no");
 
-    // Determine return type
     LLVMTypeRef llvm_ret_type;
-    if (return_type->kind == TYPE_FLOAT) {
-        llvm_ret_type = LLVMDoubleTypeInContext(context);
-    } else if (return_type->kind == TYPE_CHAR) {
-        llvm_ret_type = LLVMInt8TypeInContext(context);
-    } else {
-        llvm_ret_type = LLVMInt64TypeInContext(context);
+    if (return_type->kind == TYPE_FLOAT)     llvm_ret_type = LLVMDoubleTypeInContext(context);
+    else if (return_type->kind == TYPE_CHAR) llvm_ret_type = LLVMInt8TypeInContext(context);
+    else                                     llvm_ret_type = LLVMInt64TypeInContext(context);
+
+    if (naked) {
+        // Raw asm: no inputs, no outputs, no constraints
+        // Just side-effecting assembly that manages its own registers
+        LLVMTypeRef void_fn_type = LLVMFunctionType(
+            LLVMVoidTypeInContext(context), NULL, 0, 0);
+
+        LLVMValueRef asm_fn = LLVMGetInlineAsm(
+            void_fn_type,
+            asm_str, strlen(asm_str),
+            "", 0,   // no constraints
+            1,       // hasSideEffects
+            0,
+            LLVMInlineAsmDialectATT,
+            0);
+
+        LLVMBuildCall2(builder, void_fn_type, asm_fn, NULL, 0, "");
+        free(asm_str);
+        // Return dummy — caller will emit unreachable
+        return LLVMConstInt(llvm_ret_type, 0, 0);
     }
 
-    // Build constraints string
-    // For AT&T two-operand instructions (add, sub, etc.), the destination is both input and output
-    // We need to use matching constraint "=0" to say output is same as input 0
-    // Or use early-clobber "+r" to say it's read-write
+    // Normal (non-naked) path — unchanged
     char constraints[256];
+    if (return_type->kind == TYPE_FLOAT) strcpy(constraints, "=x");
+    else                                 strcpy(constraints, "=r");
 
-    if (return_type->kind == TYPE_FLOAT) {
-        strcpy(constraints, "=x");  // Output in XMM register
-    } else {
-        strcpy(constraints, "=r");  // Output in general purpose register
-    }
-
-    // For the first input, use constraint "0" meaning it matches output position 0
-    // This tells LLVM: the first input is also the output register
-    if (param_count >= 1) {
-        strcat(constraints, ",0");  // First param matches output ($0 = $1)
-    }
-
-    // Remaining inputs are separate
-    for (int i = 1; i < param_count; i++) {
-        strcat(constraints, ",r");  // Each additional input in any register
-    }
+    if (param_count >= 1) strcat(constraints, ",0");
+    for (int i = 1; i < param_count; i++) strcat(constraints, ",r");
 
     fprintf(stderr, "Constraints: %s\n", constraints);
     fprintf(stderr, "==================\n");
 
-    // Build function type for inline asm
     LLVMTypeRef *param_types = malloc(sizeof(LLVMTypeRef) * param_count);
-    for (int i = 0; i < param_count; i++) {
+    for (int i = 0; i < param_count; i++)
         param_types[i] = LLVMTypeOf(params[i]);
-    }
 
     LLVMTypeRef asm_fn_type = LLVMFunctionType(llvm_ret_type, param_types, param_count, 0);
-
-    // Create inline asm
     LLVMValueRef asm_fn = LLVMGetInlineAsm(
         asm_fn_type,
         asm_str, strlen(asm_str),
         constraints, strlen(constraints),
-        1,  // hasSideEffects
-        0,  // isAlignStack
-        LLVMInlineAsmDialectATT,
-        0   // canThrow
-    );
+        1, 0, LLVMInlineAsmDialectATT, 0);
 
-    // Call inline asm
-    LLVMValueRef result = LLVMBuildCall2(builder, asm_fn_type, asm_fn, params, param_count, "asm_result");
-
+    LLVMValueRef result = LLVMBuildCall2(builder, asm_fn_type, asm_fn,
+                                         params, param_count, "asm_result");
     free(asm_str);
     free(param_types);
-
     return result;
 }

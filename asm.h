@@ -32,6 +32,7 @@ typedef struct {
     EnvParam *params; // function parameters
     int param_count;
     RegisterAllocator *reg_alloc;
+    bool naked;
 } AsmContext;
 
 // Preprocess AST_ASM node:
@@ -42,13 +43,14 @@ AsmInstruction *preprocess_asm(AST *asm_node, AsmContext *ctx, int *out_count);
 // Free preprocessed instructions
 void free_asm_instructions(AsmInstruction *instructions, int count);
 
-// Generate LLVM inline assembly from preprocessed instructions
 LLVMValueRef codegen_inline_asm(LLVMContextRef context,
-                                 LLVMBuilderRef builder,
-                                 AsmInstruction *instructions,
-                                 int instruction_count,
-                                 Type *return_type,
-                                 LLVMValueRef *params,
-                                 int param_count);
+                                LLVMBuilderRef builder,
+                                AsmInstruction *instructions,
+                                int instruction_count,
+                                Type *return_type,
+                                LLVMValueRef *params,
+                                int param_count,
+                                bool naked);
+
 
 #endif

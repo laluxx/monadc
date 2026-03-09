@@ -241,9 +241,7 @@
 (show "Testing type alias")
 (show (+ var 🐜))
 
-
-
-;; (define (compose [x :: Relation] -> [y :: Relation] -> Relation)
+;; (define (compose [x :: Int] -> [y :: Int] -> Int)
 ;;   :doc "Compose relation X with relation Y."
 ;;   :alias ∘
 ;;   (undefined))
@@ -903,8 +901,8 @@
 ;; (define (add [x :: Int] -> [y :: Int] -> Int)
 ;;   (asm add %rdi, %rsi))
 
-(define (add [x :: Int] -> [y :: Int] -> Int)
-  (asm add x y))
+;; (define (add [x :: Int] -> [y :: Int] -> Int)
+;;   (asm add x y))
 
 (define (rdtsc -> Int)
   (asm rdtsc
@@ -923,27 +921,36 @@
 ;; #---
 
 ;; Naked function
-;; (define (add [x :: Int] -> [y :: Int] -> Int)
-;;   :doc "Documentation for this Scheiße."
-;;   :naked True
-;;   (asm
-;;     push %rbp          ; prologue
-;;     mov  %rsp %rbp
-;;     mov  x    %rax     ; x is first  param (in rdi)
-;;     add  y    %rax     ; y is second param (in rsi)
-;;     pop  %rbp          ; epilogue
-;;     ret))              ; return
+(define (addnaked [x :: Int] -> [y :: Int] -> Int)
+  :doc "Documentation for this Scheiße."
+  :naked True
+  (asm
+    push %rbp          ; prologue
+    mov  %rsp %rbp
+    mov  x    %rax     ; x is first  param (in rdi)
+    add  y    %rax     ; y is second param (in rsi)
+    pop  %rbp          ; epilogue
+    ret))              ; return
+
+(define (addnonaked [x :: Int] -> [y :: Int] -> Int)
+  :naked False
+  (asm add x y))
 
 (show "HERE ASM")
+(show "testing naked function")
+(show (addnaked 60 70))
+(show "testing non naked function")
+(show (addnonaked 20 15))
+
 (show (rdtsc))
 ;; (show (get-pid))
 
 
 
-(show (add 2 2))
-(show (add 0xFF 1))
-(show (add 1 9))
-(show (add 3 9))
+(show (addnaked 2 2))
+(show (addnaked 0xFF 1))
+(show (addnaked 1 9))
+(show (addnaked 3 9))
 ;; (show (add 100 20))
 ;; (show (add -10 39))
 
@@ -1342,6 +1349,18 @@
 #+X86-32
 (show "We are on linux x86-32")
 #---
+
+;;; Lazyness
+
+;; I'm thinking of making lists lazy by default
+;; but only lists.
+
+;; (define big-list (0..9999999))
+;; (take 10 big-list)
+;; (define (undefined))
+
+
+
 
 ;;; TODO Adresses
 

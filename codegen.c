@@ -614,9 +614,7 @@ static EnvEntry *resolve_symbol_with_modules(CodegenContext *ctx, const char *sy
                     continue;
                 }
 
-                /* // Check if this import includes the symbol */
-                /* if (import_decl_includes_symbol(import, symbol_name)) { */
-
+                // Check if this import includes the symbol
                 // For HIDING imports: symbol is available if NOT in the hide list
                 // For SELECTIVE imports: symbol is available if IN the list
                 // For UNQUALIFIED: always available
@@ -908,6 +906,27 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     // Create function
                     LLVMValueRef func = LLVMAddFunction(ctx->module, var_name, func_type);
 
+
+                    // Apply naked attribute if requested
+                    if (lambda->lambda.naked) {
+                        unsigned kind = LLVMGetEnumAttributeKindForName("naked", 5);
+                        fprintf(stderr, "DEBUG: naked attribute kind=%u\n", kind);
+                        if (kind != 0) {
+                            LLVMAttributeRef attr = LLVMCreateEnumAttribute(ctx->context, kind, 0);
+                            LLVMAddAttributeAtIndex(func, LLVMAttributeFunctionIndex, attr);
+                        } else {
+                            // Fallback: string attribute
+                            LLVMAttributeRef attr = LLVMCreateStringAttribute(
+                                                                              ctx->context,
+                                                                              "naked", 5,
+                                                                              "", 0);
+                            LLVMAddAttributeAtIndex(func, LLVMAttributeFunctionIndex, attr);
+                        }
+                    }
+
+                    LLVMDumpValue(func);
+
+
                     // Create entry block
                     LLVMBasicBlockRef entry_block = LLVMAppendBasicBlockInContext(ctx->context, func, "entry");
 
@@ -925,14 +944,16 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     for (int i = 0; i < lambda->lambda.param_count; i++) {
                         LLVMValueRef param = LLVMGetParam(func, i);
                         LLVMSetValueName2(param, lambda->lambda.params[i].name,
-                                         strlen(lambda->lambda.params[i].name));
+                                          strlen(lambda->lambda.params[i].name));
 
-                        // Create alloca for parameter and store it
+                        if (lambda->lambda.naked) {
+                            continue;  // no alloca, no store, no env insert
+                        }
+
                         LLVMValueRef param_alloca = LLVMBuildAlloca(ctx->builder,
                                                                     param_types[i],
                                                                     lambda->lambda.params[i].name);
                         LLVMBuildStore(ctx->builder, param, param_alloca);
-
                         env_insert(ctx->env, lambda->lambda.params[i].name,
                                    type_clone(env_params[i].type), param_alloca);
                     }
@@ -940,39 +961,39 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     // Codegen function body
                     CodegenResult body_result;
 
-                    // Check if body is inline assembly
                     if (lambda->lambda.body->type == AST_ASM) {
-                        // Preprocess ASM
                         RegisterAllocator reg_alloc;
                         reg_alloc_init(&reg_alloc);
-
-                        AsmContext asm_ctx = {.params = env_params,
-                            .param_count =
-                            lambda->lambda.param_count,
-                            .reg_alloc = &reg_alloc};
-
+                        AsmContext asm_ctx = {
+                            .params      = env_params,
+                            .param_count = lambda->lambda.param_count,
+                            .reg_alloc   = &reg_alloc,
+                            .naked       = lambda->lambda.naked
+                        };
                         int asm_inst_count;
                         AsmInstruction *asm_instructions = preprocess_asm(
                             lambda->lambda.body, &asm_ctx, &asm_inst_count);
 
-                        // Collect parameter values
-                        LLVMValueRef *param_values = malloc(
-                            sizeof(LLVMValueRef) * lambda->lambda.param_count);
-                        for (int i = 0; i < lambda->lambda.param_count; i++) {
-                            param_values[i] = LLVMGetParam(func, i);
+                        if (lambda->lambda.naked) {
+                            body_result.value = codegen_inline_asm(
+                                ctx->context, ctx->builder,
+                                asm_instructions, asm_inst_count,
+                                ret_type, NULL, 0, true);
+                        } else {
+                            LLVMValueRef *param_values = malloc(
+                                sizeof(LLVMValueRef) * lambda->lambda.param_count);
+                            for (int i = 0; i < lambda->lambda.param_count; i++)
+                                param_values[i] = LLVMGetParam(func, i);
+                            body_result.value = codegen_inline_asm(
+                                ctx->context, ctx->builder,
+                                asm_instructions, asm_inst_count,
+                                ret_type, param_values,
+                                lambda->lambda.param_count, false);
+                            free(param_values);
                         }
-
-                        // Generate inline asm
-                        body_result.value = codegen_inline_asm(
-                            ctx->context, ctx->builder, asm_instructions,
-                            asm_inst_count, ret_type, param_values,
-                            lambda->lambda.param_count);
                         body_result.type = ret_type;
-
-                        free(param_values);
                         free_asm_instructions(asm_instructions, asm_inst_count);
                     } else {
-                        // Normal codegen
                         body_result = codegen_expr(ctx, lambda->lambda.body);
                     }
 
@@ -988,7 +1009,12 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         }
                     }
 
-                    LLVMBuildRet(ctx->builder, ret_value);
+                    // Naked functions contain their own ret in the asm block
+                    if (lambda->lambda.naked) {
+                        LLVMBuildUnreachable(ctx->builder);
+                    } else {
+                        LLVMBuildRet(ctx->builder, ret_value);
+                    }
 
                     // Restore environment and insert point
                     env_free(ctx->env);
@@ -1014,7 +1040,6 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     }
 
 
-
                     if (ctx->module_ctx && !should_export_symbol(ctx->module_ctx, var_name)) {
                         printf("Defined %s :: Fn (...) -> %s (private)\n",
                                var_name, type_to_string(ret_type));
@@ -1030,7 +1055,6 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     /*     printf("%s", lambda->lambda.params[i].name); */
                     /* } */
                     /* printf(") -> %s\n", type_to_string(ret_type)); */
-
 
                     free(param_types);
 
