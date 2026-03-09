@@ -1714,6 +1714,16 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
                                    printf_fn, nl_args, 1, "");
                 }
+                else if (arg_result.type && arg_result.type->kind == TYPE_STRING) {
+                    LLVMValueRef args[] = {get_fmt_str(ctx), arg_result.value};
+                    LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                   printf_fn, args, 2, "");
+                }
+                else if (arg_result.type && arg_result.type->kind == TYPE_CHAR) {
+                    LLVMValueRef args[] = {get_fmt_char(ctx), arg_result.value};
+                    LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                   printf_fn, args, 2, "");
+                }
                 // Handle float type (default)
                 else {
                     LLVMValueRef args[] = {get_fmt_float(ctx), arg_result.value};
@@ -1725,6 +1735,244 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 result.value = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0);
                 return result;
             }
+
+            if (strcmp(head->symbol, "doc") == 0) {
+                if (ast->list.count != 2) {
+                    fprintf(stderr, "%s:%d:%d: error: 'doc' requires 1 argument\n",
+                            parser_get_filename(), ast->line, ast->column);
+                    exit(1);
+                }
+
+                AST *arg = ast->list.items[1];
+                if (arg->type != AST_SYMBOL) {
+                    fprintf(stderr, "%s:%d:%d: error: 'doc' argument must be a symbol\n",
+                            parser_get_filename(), ast->line, ast->column);
+                    exit(1);
+                }
+
+                EnvEntry *entry = env_lookup(ctx->env, arg->symbol);
+                if (!entry) {
+                    fprintf(stderr, "%s:%d:%d: error: 'doc' unbound variable: %s\n",
+                            parser_get_filename(), ast->line, ast->column, arg->symbol);
+                    exit(1);
+                }
+
+                /* const char *docstring = entry->docstring ? entry->docstring : ""; */
+                const char *docstring = (entry->docstring && strlen(entry->docstring) > 0)
+                    ? entry->docstring
+                    : "(no documentation)";
+
+
+                result.type  = type_string();
+                result.value = LLVMBuildGlobalStringPtr(ctx->builder, docstring, "docstr");
+                return result;
+            }
+
+            if (strcmp(head->symbol, "assert-eq") == 0) {
+                if (ast->list.count != 4) {
+                    fprintf(stderr, "%s:%d:%d: error: 'assert-eq' requires 3 arguments: actual expected label\n",
+                            parser_get_filename(), ast->line, ast->column);
+                    exit(1);
+                }
+
+                CodegenResult actual   = codegen_expr(ctx, ast->list.items[1]);
+                CodegenResult expected = codegen_expr(ctx, ast->list.items[2]);
+                AST *label_ast         = ast->list.items[3];
+
+                const char *label = (label_ast->type == AST_STRING)
+                    ? label_ast->string : "unnamed";
+
+                LLVMValueRef printf_fn = get_or_declare_printf(ctx);
+
+                // Compare based on type
+                LLVMValueRef cond = NULL;
+                if (actual.type->kind == TYPE_STRING) {
+                    // strcmp-based comparison
+                    LLVMValueRef strcmp_fn = LLVMGetNamedFunction(ctx->module, "strcmp");
+                    if (!strcmp_fn) {
+                        LLVMTypeRef p = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                        LLVMTypeRef params[] = {p, p};
+                        LLVMTypeRef ft = LLVMFunctionType(LLVMInt32TypeInContext(ctx->context), params, 2, 0);
+                        strcmp_fn = LLVMAddFunction(ctx->module, "strcmp", ft);
+                    }
+                    LLVMValueRef args[] = {actual.value, expected.value};
+                    LLVMValueRef cmp = LLVMBuildCall2(ctx->builder,
+                                                      LLVMGlobalGetValueType(strcmp_fn),
+                                                      strcmp_fn, args, 2, "strcmp");
+                    cond = LLVMBuildICmp(ctx->builder, LLVMIntEQ, cmp,
+                                         LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0), "eq");
+                } else if (type_is_float(actual.type)) {
+                    cond = LLVMBuildFCmp(ctx->builder, LLVMRealOEQ,
+                                         actual.value, expected.value, "eq");
+                } else {
+                    cond = LLVMBuildICmp(ctx->builder, LLVMIntEQ,
+                                         actual.value, expected.value, "eq");
+                }
+
+                // Emit pass/fail branches
+                LLVMValueRef func        = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder));
+                LLVMBasicBlockRef pass_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "assert_pass");
+                LLVMBasicBlockRef fail_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "assert_fail");
+                LLVMBasicBlockRef cont_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "assert_cont");
+
+                LLVMBuildCondBr(ctx->builder, cond, pass_bb, fail_bb);
+
+                // Pass branch
+                LLVMPositionBuilderAtEnd(ctx->builder, pass_bb);
+                char pass_msg[512];
+                snprintf(pass_msg, sizeof(pass_msg), "  \x1b[32m✓\x1b[0m %s\n", label);
+                LLVMValueRef pass_str = LLVMBuildGlobalStringPtr(ctx->builder, pass_msg, "pass_msg");
+                LLVMValueRef pass_args[] = {pass_str};
+                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                               printf_fn, pass_args, 1, "");
+                LLVMBuildBr(ctx->builder, cont_bb);
+
+                // Fail branch
+                LLVMPositionBuilderAtEnd(ctx->builder, fail_bb);
+                char fail_msg[512];
+                snprintf(fail_msg, sizeof(fail_msg), "  \x1b[31m✗ %s FAILED\x1b[0m\n", label);
+                LLVMValueRef fail_str = LLVMBuildGlobalStringPtr(ctx->builder, fail_msg, "fail_msg");
+                LLVMValueRef fail_args[] = {fail_str};
+                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                               printf_fn, fail_args, 1, "");
+                LLVMBuildBr(ctx->builder, cont_bb);
+
+
+                LLVMPositionBuilderAtEnd(ctx->builder, cont_bb);
+
+                result.type  = type_int();
+                result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0);
+                return result;
+            }
+
+            if (strcmp(head->symbol, "undefined") == 0) {
+                // Guard: only valid inside a function body
+                LLVMValueRef cur_fn = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder));
+                if (cur_fn == ctx->init_fn) {
+                    fprintf(stderr, "%s:%d:%d: error: 'undefined' is only valid inside a function body\n",
+                            parser_get_filename(), ast->line, ast->column);
+                    exit(1);
+                }
+
+                // Emit: fprintf(stderr, "<file>:<line>:<col>: error: called undefined\n")
+                LLVMValueRef stderr_fn = LLVMGetNamedFunction(ctx->module, "fprintf");
+                if (!stderr_fn) {
+                    LLVMTypeRef fprintf_params[] = {
+                        LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0),
+                        LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0)
+                    };
+                    LLVMTypeRef fprintf_type = LLVMFunctionType(
+                        LLVMInt32TypeInContext(ctx->context), fprintf_params, 2, true);
+                    stderr_fn = LLVMAddFunction(ctx->module, "fprintf", fprintf_type);
+                    LLVMSetLinkage(stderr_fn, LLVMExternalLinkage);
+                }
+
+                // Declare stderr via __acrt_iob_func or just use a format string to stdout
+                // Simplest portable approach: use printf to stderr via fd 2 — but easiest
+                // is just printf since we already use it everywhere for errors at runtime
+                LLVMValueRef printf_fn = get_or_declare_printf(ctx);
+                const char *fn_name = LLVMGetValueName(cur_fn);
+                char msg[512];
+                snprintf(msg, sizeof(msg),
+                         "%s:%d:%d: error: called undefined function '%s'\n",
+                         parser_get_filename(), ast->line, ast->column, fn_name);
+                LLVMValueRef msg_str = LLVMBuildGlobalStringPtr(ctx->builder, msg, "undef_msg");
+                LLVMValueRef msg_args[] = {msg_str};
+                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                               printf_fn, msg_args, 1, "");
+
+                // Call abort()
+                LLVMValueRef abort_fn = LLVMGetNamedFunction(ctx->module, "abort");
+                if (!abort_fn) {
+                    LLVMTypeRef abort_ft = LLVMFunctionType(
+                        LLVMVoidTypeInContext(ctx->context), NULL, 0, 0);
+                    abort_fn = LLVMAddFunction(ctx->module, "abort", abort_ft);
+                    LLVMSetLinkage(abort_fn, LLVMExternalLinkage);
+                }
+                LLVMTypeRef abort_ft = LLVMFunctionType(
+                    LLVMVoidTypeInContext(ctx->context), NULL, 0, 0);
+                LLVMBuildCall2(ctx->builder, abort_ft, abort_fn, NULL, 0, "");
+                LLVMBuildUnreachable(ctx->builder);
+
+                // Move builder into a dead block so subsequent IR (e.g. ret)
+                // doesn't get emitted after the terminator
+                LLVMBasicBlockRef dead_bb = LLVMAppendBasicBlockInContext(
+                    ctx->context, cur_fn, "undef_dead");
+                LLVMPositionBuilderAtEnd(ctx->builder, dead_bb);
+
+                // Return undef of the correct return type — never actually reached
+                LLVMTypeRef fn_type  = LLVMGlobalGetValueType(cur_fn);
+                LLVMTypeRef ret_type = LLVMGetReturnType(fn_type);
+                LLVMValueRef undef_val = (LLVMGetTypeKind(ret_type) == LLVMVoidTypeKind)
+                    ? LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0)
+                    : LLVMGetUndef(ret_type);
+
+                result.value = undef_val;
+                result.type  = type_int(); // never reached, type doesn't matter
+                return result;
+            }
+
+
+            /* if (strcmp(head->symbol, "undefined") == 0) { */
+            /*   // Print error message */
+            /*   LLVMValueRef printf_fn = get_or_declare_printf(ctx); */
+            /*   char msg[512]; */
+            /*   snprintf(msg, sizeof(msg), */
+            /*            "\x1b[31merror\x1b[0m: called undefined at %s:%d:%d\n", */
+            /*            parser_get_filename(), ast->line, ast->column); */
+            /*   LLVMValueRef msg_str = */
+            /*       LLVMBuildGlobalStringPtr(ctx->builder, msg, "undef_msg"); */
+            /*   LLVMValueRef msg_args[] = {msg_str}; */
+            /*   LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), */
+            /*                  printf_fn, msg_args, 1, ""); */
+
+            /*   // Call abort() */
+            /*   LLVMValueRef abort_fn = */
+            /*       LLVMGetNamedFunction(ctx->module, "abort"); */
+            /*   if (!abort_fn) { */
+            /*     LLVMTypeRef abort_ft = LLVMFunctionType( */
+            /*         LLVMVoidTypeInContext(ctx->context), NULL, 0, 0); */
+            /*     abort_fn = LLVMAddFunction(ctx->module, "abort", abort_ft); */
+            /*     LLVMSetLinkage(abort_fn, LLVMExternalLinkage); */
+            /*   } */
+            /*   LLVMTypeRef abort_ft = LLVMFunctionType( */
+            /*       LLVMVoidTypeInContext(ctx->context), NULL, 0, 0); */
+            /*   LLVMBuildCall2(ctx->builder, abort_ft, abort_fn, NULL, 0, ""); */
+            /*   LLVMBuildUnreachable(ctx->builder); */
+
+            /*   // Move builder to a dead block — any IR emitted after us */
+            /*   // (like ret) goes here and remains valid since it's unreachable */
+            /*   /\* LLVMValueRef cur_fn = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder)); *\/ */
+            /*   // Only valid inside a function body, not at top level */
+            /*   LLVMValueRef cur_fn = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder)); */
+            /*   if (cur_fn == ctx->init_fn) { */
+            /*       fprintf(stderr, "%s:%d:%d: error: 'undefined' is only valid inside a function body\n", */
+            /*               parser_get_filename(), ast->line, ast->column); */
+            /*       exit(1); */
+            /*   } */
+
+            /*   LLVMBasicBlockRef dead_bb = LLVMAppendBasicBlockInContext( */
+            /*       ctx->context, cur_fn, "undef_dead"); */
+            /*   LLVMPositionBuilderAtEnd(ctx->builder, dead_bb); */
+
+            /*   // Get the function's return type via LLVMGlobalGetValueType */
+            /*   // (safe for opaque pointers in LLVM 15+, unlike */
+            /*   // LLVMGetElementType) */
+            /*   LLVMTypeRef fn_type = LLVMGlobalGetValueType(cur_fn); */
+            /*   LLVMTypeRef ret_type = LLVMGetReturnType(fn_type); */
+
+            /*   LLVMValueRef undef_val; */
+            /*   if (LLVMGetTypeKind(ret_type) == LLVMVoidTypeKind) { */
+            /*     undef_val = */
+            /*         LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0); */
+            /*   } else { */
+            /*     undef_val = LLVMGetUndef(ret_type); */
+            /*   } */
+
+            /*   result.value = undef_val; */
+            /*   result.type = type_int(); // never reached, type doesn't matter */
+            /*   return result; */
+            /* } */
 
             // Arithmetic operators
             if (strcmp(head->symbol, "+") == 0 ||
@@ -2393,6 +2641,38 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
         result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0);
         return result;
     }
+
+    case AST_TESTS: {
+        // Only emit tests if test mode is enabled
+        if (!ctx->test_mode) {
+            result.type  = type_int();
+            result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0);
+            return result;
+        }
+
+        LLVMValueRef printf_fn = get_or_declare_printf(ctx);
+
+        // Print module test header
+        const char *mod_name = (ctx->module_ctx && ctx->module_ctx->decl)
+            ? ctx->module_ctx->decl->name : "?";
+
+        char header[256];
+        snprintf(header, sizeof(header), "Testing %s:\n", mod_name);
+        LLVMValueRef hdr = LLVMBuildGlobalStringPtr(ctx->builder, header, "test_hdr");
+        LLVMValueRef hdr_args[] = {hdr};
+        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                       printf_fn, hdr_args, 1, "");
+
+        // Codegen each assertion
+        for (int i = 0; i < ast->tests.count; i++) {
+            codegen_expr(ctx, ast->tests.assertions[i]);
+        }
+
+        result.type  = type_int();
+        result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0);
+        return result;
+    }
+
 
     default:
         fprintf(stderr, "%s:%d:%d: error: unknown AST type: %d\n",

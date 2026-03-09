@@ -10,6 +10,7 @@ typedef enum {
     CMD_RUN,
     CMD_CLEAN,
     CMD_INSTALL,
+    CMD_TEST,
 } CommandMode;
 
 typedef struct {
@@ -19,6 +20,8 @@ typedef struct {
     bool emit_asm;
     bool emit_obj;
     bool start_repl;
+    bool test_mode;      // emit test blocks
+    bool test_run;       // run and delete test binary (monad test)
     char *output_name;
     char *input_file;
     char *package_name;
@@ -33,5 +36,6 @@ void cmd_build(void);
 void cmd_run(void);
 void cmd_clean(void);
 void cmd_install(void);
+void cmd_test(const char *input_file);
 
 #endif

@@ -1,0 +1,52 @@
+;;; Ascii.mon --- ASCII character class constants
+
+;; Author: Laluxx
+;; Version: 0.0.1
+;; Keywords: text ascii rfc20 string constants
+;; Reference:
+;; - https://www.rfc-editor.org/rfc/rfc20.html
+
+;;; Commentary:
+
+;; ASCII character class constants following RFC 20.
+;; Provides string constants for common character classes.
+
+;;; Code:
+
+(module Ascii
+  [lowercase   uppercase  letters
+   digits      hexdigits  octdigits
+   punctuation whitespace printable
+   upcase      downcase   capitalize])
+
+(define lowercase   "abcdefghijklmnopqrstuvwxyz")
+(define uppercase   "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+(define letters     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+(define digits      "0123456789")
+(define hexdigits   "0123456789abcdefABCDEF")
+(define octdigits   "01234567")
+(define punctuation "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")
+(define whitespace  " \t\n\r\x0B\x0C")
+(define printable   "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ \t\n\r\x0B\x0C")
+
+
+(define (upcase [input :: String] -> String)
+  "Convert INPUT to upper case."
+  (undefined))
+
+(define (downcase [input :: String] -> String)
+  "Convert INPUT to lower case."
+  (undefined))
+
+(define (capitalize [input :: String] -> String)
+  "Capitalize INPUT."
+  (undefined))
+
+(tests
+  (assert-eq lowercase "abcdefghijklmnopqrstuvwxyz"                           "lowercase")
+  (assert-eq uppercase "ABCDEFGHIJKLMNOPQRSTUVWXYZ"                           "uppercase")
+  (assert-eq letters   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" "letters")
+  (assert-eq digits    "0123456789"                                           "digits")
+  (assert-eq hexdigits "0123456789abcdefABCDEF"                               "hexdigits")
+  (assert-eq octdigits "01234567"                                             "octdigits"))
+

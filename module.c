@@ -316,33 +316,98 @@ ModuleDecl *module_registry_find(ModuleRegistry *registry, const char *name) {
 
 /// Module file path resolution
 
-char *module_name_to_path(const char *module_name) {
-    // Convert "Std.Math" to "Std/Math.mon" or "Std/Math.monad"
-    size_t len = strlen(module_name);
-    char *path = malloc(len + 7); // +7 for ".monad" + null terminator
+#include <dirent.h>
+#include <sys/stat.h>
 
-    strcpy(path, module_name);
+// Recursively search dir for <module_name>.mon
+// Returns a strdup'd path on success, NULL if not found
+static char *find_mon_recursive(const char *dir, const char *module_name) {
+    char target[512];
+    snprintf(target, sizeof(target), "%s.mon", module_name);
 
-    // Replace dots with slashes
-    for (char *p = path; *p; p++) {
-        if (*p == '.') {
-            *p = '/';
+    DIR *d = opendir(dir);
+    if (!d) return NULL;
+
+    char *result = NULL;
+    struct dirent *ent;
+    while ((ent = readdir(d)) != NULL && !result) {
+        if (ent->d_name[0] == '.') continue;
+
+        char full[1024];
+        snprintf(full, sizeof(full), "%s/%s", dir, ent->d_name);
+
+        if (strcmp(ent->d_name, target) == 0) {
+            result = strdup(full);
+        } else {
+            struct stat st;
+            if (stat(full, &st) == 0 && S_ISDIR(st.st_mode))
+                result = find_mon_recursive(full, module_name);
         }
     }
 
-    // Try .mon first (preferred extension)
-    strcat(path, ".mon");
+    closedir(d);
+    return result;
+}
 
-    // Check if .mon file exists
-    if (access(path, F_OK) == 0) {
-        return path;
+char *module_name_to_path(const char *module_name) {
+    // Convert dots to slashes for nested module names
+    char rel[512];
+    size_t len = strlen(module_name);
+    for (size_t i = 0; i < len; i++)
+        rel[i] = (module_name[i] == '.') ? '/' : module_name[i];
+    rel[len] = '\0';
+
+    char candidate[1024];
+
+    // 1. Local: ./ModuleName.mon
+    snprintf(candidate, sizeof(candidate), "%s.mon", rel);
+    if (access(candidate, F_OK) == 0) return strdup(candidate);
+
+    // 2. $MONAD_CORE env var (development without installing)
+    const char *env_core = getenv("MONAD_CORE");
+    if (env_core) {
+        char *found = find_mon_recursive(env_core, module_name);
+        if (found) return found;
     }
 
-    // If not, try .monad
-    strcpy(path + strlen(path) - 4, ".monad");
+    // 3. Installed core: recursive search under /usr/local/lib/monad/core/
+    {
+        char *found = find_mon_recursive("/usr/local/lib/monad/core", module_name);
+        if (found) return found;
+    }
 
-    return path;
+    // Not found — return local path as before (caller will error)
+    snprintf(candidate, sizeof(candidate), "%s.mon", rel);
+    return strdup(candidate);
 }
+
+/* char *module_name_to_path(const char *module_name) { */
+/*     // Convert "Std.Math" to "Std/Math.mon" or "Std/Math.monad" */
+/*     size_t len = strlen(module_name); */
+/*     char *path = malloc(len + 7); // +7 for ".monad" + null terminator */
+
+/*     strcpy(path, module_name); */
+
+/*     // Replace dots with slashes */
+/*     for (char *p = path; *p; p++) { */
+/*         if (*p == '.') { */
+/*             *p = '/'; */
+/*         } */
+/*     } */
+
+/*     // Try .mon first (preferred extension) */
+/*     strcat(path, ".mon"); */
+
+/*     // Check if .mon file exists */
+/*     if (access(path, F_OK) == 0) { */
+/*         return path; */
+/*     } */
+
+/*     // If not, try .monad */
+/*     strcpy(path + strlen(path) - 4, ".monad"); */
+
+/*     return path; */
+/* } */
 
 /// Parse module and import declarations
 

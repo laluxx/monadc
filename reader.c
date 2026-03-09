@@ -285,6 +285,12 @@ void ast_free(AST *ast) {
         free(ast->type_alias.target_name);
         break;
 
+    case AST_TESTS:
+        for (int i = 0; i < ast->tests.count; i++)
+            ast_free(ast->tests.assertions[i]);
+        free(ast->tests.assertions);
+        break;
+
     default:
         break;
     }
@@ -1098,6 +1104,34 @@ static AST *parse_list(Parser *p) {
         return node;
     }
 
+    if (p->current.type == TOK_SYMBOL &&
+        strcmp(p->current.value, "tests") == 0) {
+        p->current = lexer_next_token(p->lexer);
+
+        AST *node = calloc(1, sizeof(AST));
+        node->type = AST_TESTS;
+        node->tests.assertions = NULL;
+        node->tests.count = 0;
+
+        while (p->current.type != TOK_RPAREN && p->current.type != TOK_EOF) {
+            AST *assertion = parse_expr(p);
+            node->tests.count++;
+            node->tests.assertions = realloc(node->tests.assertions,
+                                             sizeof(AST*) * node->tests.count);
+            node->tests.assertions[node->tests.count - 1] = assertion;
+        }
+
+        if (p->current.type != TOK_RPAREN) {
+            compiler_error(p->current.line, p->current.column,
+                           "Expected ')' to close tests block");
+        }
+        p->current = lexer_next_token(p->lexer);
+
+        ast_free(list);
+        node->line = start_line;
+        node->column = start_column;
+        return node;
+    }
 
     // Normal list parsing
     while (p->current.type != TOK_RPAREN &&

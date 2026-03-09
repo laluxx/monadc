@@ -6,6 +6,7 @@ PREFIX  = /usr/local
 BINDIR  = $(PREFIX)/bin
 LIBDIR  = $(PREFIX)/lib
 INCDIR  = $(PREFIX)/include/monad
+COREDIR = $(PREFIX)/lib/monad/core
 
 DEBUG_CFLAGS   = -g -DDEBUG
 RELEASE_CFLAGS = -DNDEBUG -O2
@@ -41,7 +42,7 @@ $(TARGET): $(OBJS) $(RUNTIME_LIB)
 clean:
 	rm -f $(OBJS) $(RUNTIME_OBJ) $(RUNTIME_LIB) $(TARGET)
 
-# Install: monad binary + static archive (for linking compiled .mon programs)
+# Install: monad binary + static archive + core (for linking compiled .mon programs)
 install: $(RUNTIME_LIB) $(TARGET)
 	install -d $(BINDIR)
 	install -m 755 $(TARGET) $(BINDIR)/$(TARGET)
@@ -49,10 +50,31 @@ install: $(RUNTIME_LIB) $(TARGET)
 	install -m 644 $(RUNTIME_LIB) $(LIBDIR)/$(RUNTIME_LIB)
 	install -d $(INCDIR)
 	install -m 644 runtime.h $(INCDIR)/runtime.h
+# Install core modules
+	find core -name "*.mon" | while read f; do \
+		dir=$$(dirname "$$f"); \
+		install -d $(COREDIR)/$${dir#core/}; \
+		install -m 644 "$$f" $(COREDIR)/$${dir#core/}/; \
+	done
 
 uninstall:
 	rm -f $(BINDIR)/$(TARGET)
 	rm -f $(LIBDIR)/$(RUNTIME_LIB)
 	rm -rf $(INCDIR)
+	rm -rf $(PREFIX)/lib/monad/core
+
+
+# install: $(RUNTIME_LIB) $(TARGET)
+# 	install -d $(BINDIR)
+# 	install -m 755 $(TARGET) $(BINDIR)/$(TARGET)
+# 	install -d $(LIBDIR)
+# 	install -m 644 $(RUNTIME_LIB) $(LIBDIR)/$(RUNTIME_LIB)
+# 	install -d $(INCDIR)
+# 	install -m 644 runtime.h $(INCDIR)/runtime.h
+
+# uninstall:
+# 	rm -f $(BINDIR)/$(TARGET)
+# 	rm -f $(LIBDIR)/$(RUNTIME_LIB)
+# 	rm -rf $(INCDIR)
 
 .PHONY: all clean release install uninstall

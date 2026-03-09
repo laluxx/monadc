@@ -280,9 +280,46 @@ static void declare_externals(CodegenContext *ctx,
     }
 }
 
-static CompiledModule *compile_one(const char *source_path,
-                                    CompilerFlags *flags,
-                                    bool is_main_module);
+static char *get_obj_path(const char *source_path) {
+    const char *home = getenv("HOME");
+
+    // Check system core
+    const char *system_core = "/usr/local/lib/monad/core/";
+    // Check env core
+    const char *env_core = getenv("MONAD_CORE");
+
+    const char *core_prefix = NULL;
+    if (strncmp(source_path, system_core, strlen(system_core)) == 0)
+        core_prefix = system_core;
+    else if (env_core && strncmp(source_path, env_core, strlen(env_core)) == 0)
+        core_prefix = env_core;
+
+    if (core_prefix && home) {
+        const char *rel = source_path + strlen(core_prefix);
+        char *base = base_no_ext(rel);
+
+        // Replace slashes with underscores for flat cache layout
+        for (char *p = base; *p; p++) if (*p == '/') *p = '_';
+
+        char cache_dir[1024];
+        snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/monad/core", home);
+        char mkdir_cmd[1024];
+        snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p %s", cache_dir);
+        system(mkdir_cmd);
+
+        char obj[1024];
+        snprintf(obj, sizeof(obj), "%s/%s.o", cache_dir, base);
+        free(base);
+        return strdup(obj);
+    }
+
+    // Normal case
+    char *base = base_no_ext(source_path);
+    char *obj  = malloc(strlen(base) + 3);
+    sprintf(obj, "%s.o", base);
+    free(base);
+    return obj;
+}
 
 static CompiledModule *compile_one(const char *source_path,
                                     CompilerFlags *flags,
@@ -291,8 +328,10 @@ static CompiledModule *compile_one(const char *source_path,
     char *my_source_path = strdup(source_path);
 
     char *base     = base_no_ext(my_source_path);
-    char *obj_path = malloc(strlen(base) + 3);
-    sprintf(obj_path, "%s.o", base);
+    /* char *obj_path = malloc(strlen(base) + 3); */
+    /* sprintf(obj_path, "%s.o", base); */
+    char *obj_path = get_obj_path(my_source_path);
+
 
     // Incremental check for library modules
     if (!is_main_module) {
@@ -402,6 +441,7 @@ static CompiledModule *compile_one(const char *source_path,
     CodegenContext ctx;
     codegen_init(&ctx, mod_name);
     ctx.module_ctx = mod_ctx;
+    ctx.test_mode  = flags->test_mode;
     register_builtins(&ctx);
     declare_runtime_functions(&ctx);
 
@@ -634,9 +674,27 @@ static void compile(CompilerFlags *flags) {
     for (CompiledModule *m = g_compiled; m; m = m->next)
         objs[--idx] = m->obj_path;
 
-    char *exec_name = flags->output_name
+
+    char *exec_base = flags->output_name
         ? strdup(flags->output_name)
         : get_base_executable_name(flags->input_file);
+
+    // Append _test suffix for test-run mode
+    char *exec_name;
+    if (flags->test_run) {
+        exec_name = malloc(strlen(exec_base) + 6);
+        sprintf(exec_name, "%s_test", exec_base);
+        free(exec_base);
+    } else {
+        exec_name = exec_base;
+    }
+
+
+    /* char *exec_name = flags->output_name */
+    /*     ? strdup(flags->output_name) */
+    /*     : get_base_executable_name(flags->input_file); */
+
+
 
     char cmd[4096];
     int w = snprintf(cmd, sizeof(cmd), "gcc");
@@ -667,15 +725,33 @@ static void compile(CompilerFlags *flags) {
 int main(int argc, char **argv) {
     CompilerFlags flags = parse_flags(argc, argv);
     switch (flags.mode) {
-    case CMD_REPL:    repl_run();                  return 0;
-    case CMD_NEW:     cmd_new(flags.package_name); return 0;
-    case CMD_BUILD:   cmd_build();                 return 0;
-    case CMD_RUN:     cmd_run();                   return 0;
-    case CMD_CLEAN:   cmd_clean();                 return 0;
-    case CMD_INSTALL: cmd_install();               return 0;
+    case CMD_REPL:    repl_run();                        return 0;
+    case CMD_NEW:     cmd_new(flags.package_name);       return 0;
+    case CMD_BUILD:   cmd_build();                       return 0;
+    case CMD_RUN:     cmd_run();                         return 0;
+    case CMD_CLEAN:   cmd_clean();                       return 0;
+    case CMD_INSTALL: cmd_install();                     return 0;
+    case CMD_TEST:    cmd_test(flags.input_file);        return 0;
     case CMD_COMPILE:
     default:
         compile(&flags);
         return 0;
     }
 }
+
+
+/* int main(int argc, char **argv) { */
+/*     CompilerFlags flags = parse_flags(argc, argv); */
+/*     switch (flags.mode) { */
+/*     case CMD_REPL:    repl_run();                  return 0; */
+/*     case CMD_NEW:     cmd_new(flags.package_name); return 0; */
+/*     case CMD_BUILD:   cmd_build();                 return 0; */
+/*     case CMD_RUN:     cmd_run();                   return 0; */
+/*     case CMD_CLEAN:   cmd_clean();                 return 0; */
+/*     case CMD_INSTALL: cmd_install();               return 0; */
+/*     case CMD_COMPILE: */
+/*     default: */
+/*         compile(&flags); */
+/*         return 0; */
+/*     } */
+/* } */

@@ -24,6 +24,7 @@ typedef struct {
     LLVMValueRef fmt_hex;
     LLVMValueRef fmt_bin;
     LLVMValueRef fmt_oct;
+    bool test_mode;
 } CodegenContext;
 
 typedef struct {

@@ -10,9 +10,7 @@
 #include <dirent.h>
 #include <errno.h>
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Internal helpers
-// ─────────────────────────────────────────────────────────────────────────────
+/// Internal helpers
 
 static void make_dir(const char *path) {
     if (mkdir(path, 0755) != 0 && errno != EEXIST) {
@@ -178,10 +176,13 @@ void print_usage(const char *prog) {
     fprintf(stderr, "       %s build\n", prog);
     fprintf(stderr, "       %s run\n", prog);
     fprintf(stderr, "       %s clean\n", prog);
-    fprintf(stderr, "       %s install\n\n", prog);
+    fprintf(stderr, "       %s install\n", prog);
+    fprintf(stderr, "       %s test <file.mon>\n", prog);
+    fprintf(stderr, "       %s --test <file.mon>\n\n", prog);
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "  -i             Start interactive REPL\n");
     fprintf(stderr, "  -o <file>      Output file name\n");
+    fprintf(stderr, "  --test         Compile and embed tests (keep binary)\n");
     fprintf(stderr, "  --emit-ir      Emit LLVM IR (.ll)\n");
     fprintf(stderr, "  --emit-bc      Emit LLVM bitcode (.bc)\n");
     fprintf(stderr, "  --emit-asm     Emit assembly (.s)\n");
@@ -196,9 +197,10 @@ CompilerFlags parse_flags(int argc, char **argv) {
 
     if (argc < 2) { print_usage(argv[0]); exit(1); }
 
-    if      (strcmp(argv[1], "new")     == 0) {
-        flags.mode = CMD_NEW;
+    // Subcommands
+    if (strcmp(argv[1], "new") == 0) {
         if (argc < 3) { fprintf(stderr, "Usage: %s new <name>\n", argv[0]); exit(1); }
+        flags.mode         = CMD_NEW;
         flags.package_name = argv[2];
         return flags;
     }
@@ -208,6 +210,50 @@ CompilerFlags parse_flags(int argc, char **argv) {
     if (strcmp(argv[1], "install") == 0) { flags.mode = CMD_INSTALL; return flags; }
     if (strcmp(argv[1], "-i")      == 0) { flags.mode = CMD_REPL; flags.start_repl = true; return flags; }
 
+    // monad test <file.mon>  ->  compile with tests, run _test binary, delete it
+    if (strcmp(argv[1], "test") == 0) {
+        if (argc < 3) { fprintf(stderr, "Usage: %s test <file.mon>\n", argv[0]); exit(1); }
+        flags.mode       = CMD_TEST;
+        flags.test_mode  = true;
+        flags.test_run   = true;
+        flags.input_file = argv[2];
+        return flags;
+    }
+
+    // monad --test <file.mon>  ->  compile with tests embedded, keep binary
+    if (strcmp(argv[1], "--test") == 0) {
+        if (argc < 3) { fprintf(stderr, "Usage: %s --test <file.mon>\n", argv[0]); exit(1); }
+        flags.test_mode  = true;
+        flags.input_file = argv[2];
+        int start = 3;
+        for (int i = start; i < argc; i++) {
+            if      (!strcmp(argv[i], "--emit-ir"))  flags.emit_ir  = true;
+            else if (!strcmp(argv[i], "--emit-bc"))  flags.emit_bc  = true;
+            else if (!strcmp(argv[i], "--emit-asm")) flags.emit_asm = true;
+            else if (!strcmp(argv[i], "--emit-obj")) flags.emit_obj = true;
+            else if (!strcmp(argv[i], "-Wall"))   {}
+            else if (!strcmp(argv[i], "-Wextra")) {}
+            else if (!strcmp(argv[i], "-o")) {
+                if (i + 1 >= argc) { fprintf(stderr, "-o requires an argument\n"); exit(1); }
+                flags.output_name = argv[++i];
+            } else {
+                fprintf(stderr, "Unknown flag: %s\n", argv[i]);
+                print_usage(argv[0]); exit(1);
+            }
+        }
+        return flags;
+    }
+
+    // Internal flag used by cmd_test — compile with tests + _test suffix
+    if (strcmp(argv[1], "--test-run") == 0) {
+        if (argc < 3) { fprintf(stderr, "Usage: %s --test-run <file.mon>\n", argv[0]); exit(1); }
+        flags.test_mode  = true;
+        flags.test_run   = true;
+        flags.input_file = argv[2];
+        return flags;
+    }
+
+    // monad <file.mon> [flags...]  →  normal compile
     flags.input_file = argv[1];
     for (int i = 2; i < argc; i++) {
         if      (!strcmp(argv[i], "--emit-ir"))  flags.emit_ir  = true;
@@ -234,10 +280,6 @@ char *get_base_executable_name(const char *path) {
     char *result = strdup(base); free(copy);
     return result;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// cmd_new
-// ─────────────────────────────────────────────────────────────────────────────
 
 void cmd_new(const char *package_name) {
     char *author = git_config("user.name");
@@ -469,10 +511,6 @@ static int do_build(const BuildInfo *bi) {
     return system(cmd);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// cmd_build
-// ─────────────────────────────────────────────────────────────────────────────
-
 void cmd_build(void) {
     BuildInfo bi = resolve_build_info();
     printf("╭─ Build %s\n╰", bi.pkg_name);
@@ -488,10 +526,6 @@ void cmd_build(void) {
     build_info_free(&bi);
     exit(rc == 0 ? 0 : 1);
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// cmd_run
-// ─────────────────────────────────────────────────────────────────────────────
 
 void cmd_run(void) {
     BuildInfo bi = resolve_build_info();
@@ -515,10 +549,6 @@ void cmd_run(void) {
     build_info_free(&bi);
     exit(rc == 0 ? 0 : 1);
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// cmd_clean
-// ─────────────────────────────────────────────────────────────────────────────
 
 static void clean_ext_in_dir(const char *dir, const char *ext) {
     DIR *d = opendir(dir);
@@ -581,10 +611,6 @@ void cmd_clean(void) {
     build_info_free(&bi);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// cmd_install
-// ─────────────────────────────────────────────────────────────────────────────
-
 void cmd_install(void) {
     BuildInfo bi = resolve_build_info();
 
@@ -638,3 +664,69 @@ void cmd_install(void) {
     build_info_free(&bi);
     exit(rc == 0 ? 0 : 1);
 }
+
+
+void cmd_test(const char *input_file) {
+    char self[1024] = "monad";
+    {
+        char buf[1024] = {0};
+        ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+        if (n > 0) strncpy(self, buf, sizeof(self) - 1);
+    }
+
+    // Use --test-run so compile() appends _test to the binary name
+    char cmd[4096];
+    snprintf(cmd, sizeof(cmd), "%s --test-run %s", self, input_file);
+    int rc = system(cmd);
+    if (rc != 0) { fprintf(stderr, "test build failed\n"); exit(1); }
+
+    // Derive and run the _test binary
+    char *base = get_base_executable_name(input_file);
+    char test_bin[1024];
+    snprintf(test_bin, sizeof(test_bin), "./%s_test", base);
+
+    printf("\n");
+    rc = system(test_bin);
+
+    // Clean up
+    remove(test_bin + 2);
+    char obj[1024];
+    snprintf(obj, sizeof(obj), "%s_test.o", base);
+    remove(obj);
+
+    free(base);
+    exit(rc == 0 ? 0 : 1);
+}
+
+/* void cmd_test(const char *input_file) { */
+/*     // Build the _test binary by invoking the compiler with --test */
+/*     char self[1024] = "monad"; */
+/*     { */
+/*         char buf[1024] = {0}; */
+/*         ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1); */
+/*         if (n > 0) strncpy(self, buf, sizeof(self) - 1); */
+/*     } */
+
+/*     char cmd[4096]; */
+/*     snprintf(cmd, sizeof(cmd), "%s --test %s", self, input_file); */
+/*     int rc = system(cmd); */
+/*     if (rc != 0) { fprintf(stderr, "test build failed\n"); exit(1); } */
+
+/*     // Derive the _test binary name */
+/*     char *base = get_base_executable_name(input_file); */
+/*     char test_bin[1024]; */
+/*     snprintf(test_bin, sizeof(test_bin), "./%s_test", base); */
+
+/*     // Run it */
+/*     printf("\n"); */
+/*     rc = system(test_bin); */
+
+/*     // Clean up — remove _test binary and its .o */
+/*     remove(test_bin + 2);   // strip "./" */
+/*     char obj[1024]; */
+/*     snprintf(obj, sizeof(obj), "%s_test.o", base); */
+/*     remove(obj); */
+
+/*     free(base); */
+/*     exit(rc == 0 ? 0 : 1); */
+/* } */

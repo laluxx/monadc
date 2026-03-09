@@ -18,6 +18,7 @@ typedef enum {
     AST_LAMBDA,   // (lambda ([x :: T] -> ... -> Ret<T>) "doc" body)
     AST_ASM,      // (asm instruction operand1 operand2 ...)
     AST_TYPE_ALIAS,
+    AST_TESTS,
 } ASTType;
 
 // A single parsed function parameter: name + optional type annotation
@@ -77,6 +78,11 @@ typedef struct AST {
             char *alias_name;   // "Code"
             char *target_name;  // "List"
         } type_alias;
+
+        struct {
+            struct AST **assertions;
+            int count;
+        } tests;
     };
 
     char *literal_str; // original literal string for numbers (e.g. "0xFF")

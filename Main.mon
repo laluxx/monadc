@@ -8,6 +8,14 @@
 (module Main); Automatically exports everything
 
 (import qualified Math)
+
+
+(import Ascii)
+
+(show "Testing ascii")
+(show lowercase)
+;; (test Ascii)
+
 ;; (import Math hiding [square])
 ;; (import Math)
 ;; (import qualified Math :as M)
@@ -238,8 +246,12 @@
   :doc "This is the docstring."
   :alias 🐜)
 
+(show (doc var))
+
 (show "Testing type alias")
 (show (+ var 🐜))
+
+;; (show (capitalize "ciao")) ERROR
 
 ;; (define (compose [x :: Int] -> [y :: Int] -> Int)
 ;;   :doc "Compose relation X with relation Y."
@@ -1369,7 +1381,6 @@
 ;;; TODO Parametric polymorphism
 
 ;; (define (id x) x); Should infer ∀α. α -> α
-
 
 
 ;;; Repl output
