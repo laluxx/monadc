@@ -968,14 +968,21 @@
 
 
 
-;;; TODO Loops
+;;; Loops
 
-;; (for [i 0 10]
-;;   (show "iter n _" i))
+;;;; For
 
-;; ;; With step:
-;; (for [i 0 10 2]
-;;   (show "iter n _" i))
+;; Without step, default to 1
+(for [i 0 10]
+  (show "iter n _" i))
+
+;; With step 2
+(for [i 0 10 2]
+  (show "iter n _" i))
+
+;; Without binding
+(for [10]
+  (show "looping 10 times!"))
 
 
 ;;; TODO List comprehention

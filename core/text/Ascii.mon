@@ -29,7 +29,6 @@
 (define whitespace  " \t\n\r\x0B\x0C")
 (define printable   "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ \t\n\r\x0B\x0C")
 
-
 (define (upcase [input :: String] -> String)
   "Convert INPUT to upper case."
   (undefined))

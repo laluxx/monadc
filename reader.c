@@ -1133,6 +1133,8 @@ static AST *parse_list(Parser *p) {
         return node;
     }
 
+
+
     // Normal list parsing
     while (p->current.type != TOK_RPAREN &&
            p->current.type != TOK_EOF) {
