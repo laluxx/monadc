@@ -27,5 +27,6 @@ char  *repl_completion_generator(const char *text, int state);
  * Returns true on success.
  */
 bool repl_compile_module(CodegenContext *ctx, ImportDecl *imp);
+const char **repl_get_compiled_obj_paths(void);
 
 #endif

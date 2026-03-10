@@ -132,6 +132,17 @@ static void registry_free_all(void) {
     g_compiled = NULL;
 }
 
+const char **repl_get_compiled_obj_paths(void) {
+    size_t n = 0;
+    for (CompiledModule *m = g_compiled; m; m = m->next) n++;
+    const char **arr = malloc(sizeof(char *) * (n + 1));
+    size_t i = 0;
+    for (CompiledModule *m = g_compiled; m; m = m->next)
+        arr[i++] = m->obj_path;
+    arr[i] = NULL;
+    return arr;
+}
+
 /// Helpers
 
 static char *read_file(const char *path) {
@@ -219,29 +230,23 @@ static void declare_externals(CodegenContext *ctx,
         }
         if (!do_import) continue;
 
+        /* Qualified name: Alias.symbol or LastComponent.symbol */
+        const char *last_dot = strrchr(dep->module_name, '.');
+        const char *mod_last = last_dot ? last_dot + 1 : dep->module_name;
+        const char *prefix   = import->alias ? import->alias : mod_last;
+        char qn[512];
+        snprintf(qn, sizeof(qn), "%s.%s", prefix, e->local_name);
+
         if (e->kind == ENV_VAR) {
-            LLVMTypeRef lt = type_to_llvm(ctx, e->type);
+            LLVMTypeRef  lt = type_to_llvm(ctx, e->type);
             LLVMValueRef gv = LLVMGetNamedGlobal(ctx->module, e->mangled_name);
             if (!gv) {
                 gv = LLVMAddGlobal(ctx->module, lt, e->mangled_name);
                 LLVMSetLinkage(gv, LLVMExternalLinkage);
             }
-
-            // Build the dot-qualified name: Alias.symbol or ModuleName.symbol
-            const char *last_dot = strrchr(dep->module_name, '.');
-            const char *mod_last = last_dot ? last_dot + 1 : dep->module_name;
-            const char *prefix   = import->alias ? import->alias : mod_last;
-            {
-                char qn[512];
-                snprintf(qn, sizeof(qn), "%s.%s", prefix, e->local_name);
-                env_insert_from_module(ctx->env, qn, dep->module_name,
-                                       type_clone(e->type), gv, true);
-            }
-            if (import->mode != IMPORT_QUALIFIED)
-                env_insert_from_module(ctx->env, e->local_name, dep->module_name,
-                                       type_clone(e->type), gv, true);
-
-        } else { // FUNC
+            env_insert_from_module(ctx->env, qn, dep->module_name,
+                                   type_clone(e->type), gv, true);
+        } else { /* FUNC */
             LLVMTypeRef *pt = e->param_count > 0
                 ? malloc(sizeof(LLVMTypeRef) * e->param_count) : NULL;
             for (int j = 0; j < e->param_count; j++)
@@ -255,30 +260,92 @@ static void declare_externals(CodegenContext *ctx,
                 fn = LLVMAddFunction(ctx->module, e->mangled_name, fnt);
                 LLVMSetLinkage(fn, LLVMExternalLinkage);
             }
-
-            {
-                const char *last_dot2 = strrchr(dep->module_name, '.');
-                const char *mod_last2 = last_dot2 ? last_dot2 + 1 : dep->module_name;
-                const char *prefix2   = import->alias ? import->alias : mod_last2;
-                char qn[512];
-                snprintf(qn, sizeof(qn), "%s.%s", prefix2, e->local_name);
-                env_insert_func(ctx->env, qn,
-                                clone_params(e->params, e->param_count),
-                                e->param_count, type_clone(e->return_type), fn, NULL);
-                EnvEntry *ent = env_lookup(ctx->env, qn);
-                if (ent) ent->module_name = strdup(dep->module_name);
-            }
-
-            if (import->mode != IMPORT_QUALIFIED) {
-                env_insert_func(ctx->env, e->local_name,
-                                clone_params(e->params, e->param_count),
-                                e->param_count, type_clone(e->return_type), fn, NULL);
-                EnvEntry *ent = env_lookup(ctx->env, e->local_name);
-                if (ent) ent->module_name = strdup(dep->module_name);
-            }
+            env_insert_func(ctx->env, qn,
+                            clone_params(e->params, e->param_count),
+                            e->param_count, type_clone(e->return_type), fn, NULL);
+            EnvEntry *ent = env_lookup(ctx->env, qn);
+            if (ent) ent->module_name = strdup(dep->module_name);
         }
     }
 }
+
+/* static void declare_externals(CodegenContext *ctx, */
+/*                                CompiledModule *dep, */
+/*                                ImportDecl *import) { */
+/*     for (size_t i = 0; i < dep->export_count; i++) { */
+/*         CompiledExport *e = &dep->exports[i]; */
+
+/*         bool do_import = false; */
+/*         switch (import->mode) { */
+/*         case IMPORT_QUALIFIED: */
+/*         case IMPORT_UNQUALIFIED: do_import = true; break; */
+/*         case IMPORT_SELECTIVE: */
+/*             do_import =  import_decl_includes_symbol(import, e->local_name); break; */
+/*         case IMPORT_HIDING: */
+/*             do_import = !import_decl_includes_symbol(import, e->local_name); break; */
+/*         } */
+/*         if (!do_import) continue; */
+
+/*         if (e->kind == ENV_VAR) { */
+/*             LLVMTypeRef lt = type_to_llvm(ctx, e->type); */
+/*             LLVMValueRef gv = LLVMGetNamedGlobal(ctx->module, e->mangled_name); */
+/*             if (!gv) { */
+/*                 gv = LLVMAddGlobal(ctx->module, lt, e->mangled_name); */
+/*                 LLVMSetLinkage(gv, LLVMExternalLinkage); */
+/*             } */
+
+/*             // Build the dot-qualified name: Alias.symbol or ModuleName.symbol */
+/*             const char *last_dot = strrchr(dep->module_name, '.'); */
+/*             const char *mod_last = last_dot ? last_dot + 1 : dep->module_name; */
+/*             const char *prefix   = import->alias ? import->alias : mod_last; */
+/*             { */
+/*                 char qn[512]; */
+/*                 snprintf(qn, sizeof(qn), "%s.%s", prefix, e->local_name); */
+/*                 env_insert_from_module(ctx->env, qn, dep->module_name, */
+/*                                        type_clone(e->type), gv, true); */
+/*             } */
+/*             if (import->mode != IMPORT_QUALIFIED) */
+/*                 env_insert_from_module(ctx->env, e->local_name, dep->module_name, */
+/*                                        type_clone(e->type), gv, true); */
+
+/*         } else { // FUNC */
+/*             LLVMTypeRef *pt = e->param_count > 0 */
+/*                 ? malloc(sizeof(LLVMTypeRef) * e->param_count) : NULL; */
+/*             for (int j = 0; j < e->param_count; j++) */
+/*                 pt[j] = type_to_llvm(ctx, e->params[j].type); */
+/*             LLVMTypeRef fnt = LLVMFunctionType( */
+/*                 type_to_llvm(ctx, e->return_type), pt, e->param_count, 0); */
+/*             if (pt) free(pt); */
+
+/*             LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, e->mangled_name); */
+/*             if (!fn) { */
+/*                 fn = LLVMAddFunction(ctx->module, e->mangled_name, fnt); */
+/*                 LLVMSetLinkage(fn, LLVMExternalLinkage); */
+/*             } */
+
+/*             { */
+/*                 const char *last_dot2 = strrchr(dep->module_name, '.'); */
+/*                 const char *mod_last2 = last_dot2 ? last_dot2 + 1 : dep->module_name; */
+/*                 const char *prefix2   = import->alias ? import->alias : mod_last2; */
+/*                 char qn[512]; */
+/*                 snprintf(qn, sizeof(qn), "%s.%s", prefix2, e->local_name); */
+/*                 env_insert_func(ctx->env, qn, */
+/*                                 clone_params(e->params, e->param_count), */
+/*                                 e->param_count, type_clone(e->return_type), fn, NULL); */
+/*                 EnvEntry *ent = env_lookup(ctx->env, qn); */
+/*                 if (ent) ent->module_name = strdup(dep->module_name); */
+/*             } */
+
+/*             if (import->mode != IMPORT_QUALIFIED) { */
+/*                 env_insert_func(ctx->env, e->local_name, */
+/*                                 clone_params(e->params, e->param_count), */
+/*                                 e->param_count, type_clone(e->return_type), fn, NULL); */
+/*                 EnvEntry *ent = env_lookup(ctx->env, e->local_name); */
+/*                 if (ent) ent->module_name = strdup(dep->module_name); */
+/*             } */
+/*         } */
+/*     } */
+/* } */
 
 static char *get_obj_path(const char *source_path) {
     const char *home = getenv("HOME");

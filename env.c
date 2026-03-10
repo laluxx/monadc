@@ -78,10 +78,26 @@ static EnvEntry *new_entry(const char *name) {
 
 static void chain(Env *table, EnvEntry *e) {
     unsigned int idx = hash(e->name) % table->size;
+    /* Check for duplicate name in this bucket before inserting */
+    for (EnvEntry *existing = table->buckets[idx]; existing; existing = existing->next) {
+        if (strcmp(existing->name, e->name) == 0) {
+            /* Name already exists — free the new entry and return */
+            free_entry_fields(e);
+            free(e);
+            return;
+        }
+    }
     e->next = table->buckets[idx];
     table->buckets[idx] = e;
     table->count++;
 }
+
+/* static void chain(Env *table, EnvEntry *e) { */
+/*     unsigned int idx = hash(e->name) % table->size; */
+/*     e->next = table->buckets[idx]; */
+/*     table->buckets[idx] = e; */
+/*     table->count++; */
+/* } */
 
 void env_insert(Env *table, const char *name, Type *type, LLVMValueRef value) {
     env_insert_with_doc(table, name, type, value, NULL);
@@ -181,85 +197,189 @@ void env_insert_func(Env *table, const char *name,
 }
 
 EnvEntry *env_lookup(Env *table, const char *name) {
-    while (table) {
-        EnvEntry *e = find(table, name);
+    Env *t = table;
+    while (t) {
+        EnvEntry *e = find(t, name);
         if (e) return e;
-        table = table->parent;
+        t = t->parent;
+    }
+
+    /* Fallback: search for any entry whose qualified name is
+     * "SomeModule.name" — allows unqualified use of imported symbols
+     * without storing duplicate bare-name entries.                    */
+    size_t nlen = strlen(name);
+    t = table;
+    while (t) {
+        for (size_t i = 0; i < t->size; i++) {
+            for (EnvEntry *e = t->buckets[i]; e; e = e->next) {
+                if (!e->module_name) continue;
+                /* e->name should be "Module.foo" — check suffix */
+                size_t mlen = strlen(e->module_name);
+                if (strlen(e->name) == mlen + 1 + nlen &&
+                    e->name[mlen] == '.' &&
+                    strcmp(e->name + mlen + 1, name) == 0)
+                    return e;
+            }
+        }
+        t = t->parent;
     }
     return NULL;
 }
 
-/* EnvEntry *env_lookup(Env *table, const char *name) { */
-/*     return find(table, name); */
-/* } */
+static void build_bracket(EnvEntry *e, char *buf, size_t sz) {
+    char sig[256] = {0};
 
-// Guile Scheme style arity display
-void env_print_entry(EnvEntry *e) {
-    const char *export_mark = e->is_exported ? "" : " (private)";
-    const char *module_prefix = e->module_name ? e->module_name : "";
-    const char *module_sep = e->module_name ? ":" : "";
+    /* Name: if the name already starts with "ModuleName." don't prepend module again */
+    char name_buf[256];
+    if (e->module_name) {
+        /* Check if name is already prefixed with "ModuleName." */
+        size_t mlen = strlen(e->module_name);
+        if (strncmp(e->name, e->module_name, mlen) == 0 && e->name[mlen] == '.') {
+            /* name is already "Module.foo" — just use it as-is */
+            snprintf(name_buf, sizeof(name_buf), "%s", e->name);
+        } else {
+            snprintf(name_buf, sizeof(name_buf), "%s.%s", e->module_name, e->name);
+        }
+    } else {
+        snprintf(name_buf, sizeof(name_buf), "%s", e->name);
+    }
 
     switch (e->kind) {
+
     case ENV_VAR:
-        printf("[%s%s%s :: %s]%s", module_prefix, module_sep, e->name,
-               e->type ? type_to_string(e->type) : "?", export_mark);
-        if (e->docstring)
-            printf("  ; %s", e->docstring);
-        printf("\n");
-        break;
+        snprintf(buf, sz, "[%s :: %s]",
+                 name_buf,
+                 e->type ? type_to_string(e->type) : "?");
+        return;
 
     case ENV_BUILTIN: {
-        char sig[256] = {0};
-        if (e->arity_min <= 0 && e->arity_max == -1) {
-            strcpy(sig, "_");
-        } else {
-            for (int i = 0; i < e->arity_min; i++) {
-                if (i > 0) strcat(sig, " ");
-                strcat(sig, "_");
-            }
-            if (e->arity_max == -1) {
-                if (e->arity_min > 0) strcat(sig, " ");
-                strcat(sig, ". _");
-            } else if (e->arity_max > e->arity_min) {
-                strcat(sig, " #:optional");
-                for (int i = e->arity_min; i < e->arity_max; i++)
-                    strcat(sig, " _");
-            }
+        int mn = e->arity_min > 0 ? e->arity_min : 0;
+        int mx = e->arity_max;
+        if (mn == 0 && mx == -1) {
+            snprintf(buf, sz, "[%s :: Fn _]", name_buf);
+            return;
         }
-        printf("[%s%s%s :: Fn (%s)]%s", module_prefix, module_sep, e->name, sig, export_mark);
-        if (e->docstring) printf("  ; %s", e->docstring);
-        printf("\n");
-        break;
+        for (int i = 0; i < mn; i++) {
+            if (i > 0) strncat(sig, " ", sizeof(sig) - strlen(sig) - 1);
+            strncat(sig, "_", sizeof(sig) - strlen(sig) - 1);
+        }
+        if (mx > mn && mx != -1) {
+            strncat(sig, mn > 0 ? " =>" : "=>", sizeof(sig) - strlen(sig) - 1);
+            for (int i = mn; i < mx; i++)
+                strncat(sig, " _", sizeof(sig) - strlen(sig) - 1);
+        }
+        if (mx == -1 && mn > 0)
+            strncat(sig, " => _ . _", sizeof(sig) - strlen(sig) - 1);
+        snprintf(buf, sz, "[%s :: Fn (%s)]", name_buf, sig);
+        return;
     }
 
     case ENV_FUNC: {
-        char sig[256] = {0};
         for (int i = 0; i < e->param_count; i++) {
-            if (i > 0) strcat(sig, " ");
-            if (e->params[i].name) {
-                strcat(sig, e->params[i].name);
-            } else {
-                strcat(sig, "_");
-            }
+            if (i > 0) strncat(sig, " ", sizeof(sig) - strlen(sig) - 1);
+            strncat(sig, (e->params[i].name && e->params[i].name[0])
+                         ? e->params[i].name : "_",
+                    sizeof(sig) - strlen(sig) - 1);
         }
         const char *ret = e->return_type ? type_to_string(e->return_type) : "?";
-        printf("[%s%s%s :: Fn (%s) -> %s]%s",
-               module_prefix, module_sep, e->name, sig, ret, export_mark);
-        if (e->docstring) printf("  ; %s", e->docstring);
-        printf("\n");
-        break;
+        if (sig[0])
+            snprintf(buf, sz, "[%s :: Fn (%s) -> %s]", name_buf, sig, ret);
+        else
+            snprintf(buf, sz, "[%s :: Fn -> %s]", name_buf, ret);
+        return;
     }
     }
 }
 
-void env_print(Env *table) {
-    printf("Env (%zu entries):\n", table->count);
-    for (size_t i = 0; i < table->size; i++) {
-        EnvEntry *e = table->buckets[i];
-        while (e) {
-            printf("  ");
-            env_print_entry(e);
-            e = e->next;
-        }
+static int cmp_env_entry(const void *a, const void *b) {
+    EnvEntry *ea = *(EnvEntry **)a;
+    EnvEntry *eb = *(EnvEntry **)b;
+    if (ea->kind == ENV_BUILTIN && eb->kind != ENV_BUILTIN) return  1;
+    if (ea->kind != ENV_BUILTIN && eb->kind == ENV_BUILTIN) return -1;
+    int ma = ea->module_name ? 1 : 0;
+    int mb = eb->module_name ? 1 : 0;
+    if (ma != mb) return ma - mb;
+    if (ea->module_name && eb->module_name) {
+        int mc = strcmp(ea->module_name, eb->module_name);
+        if (mc) return mc;
     }
+    return strcmp(ea->name, eb->name);
+}
+
+void env_print(Env *table) {
+    /* Collect all named entries */
+    int total = 0;
+    for (size_t i = 0; i < table->size; i++)
+        for (EnvEntry *e = table->buckets[i]; e; e = e->next)
+            if (e->name) total++;
+
+    if (total == 0) { printf("  (empty)\n"); return; }
+
+    EnvEntry **entries = malloc(total * sizeof(EnvEntry *));
+    int n = 0;
+    for (size_t i = 0; i < table->size; i++)
+        for (EnvEntry *e = table->buckets[i]; e; e = e->next)
+            if (e->name) entries[n++] = e;
+
+    qsort(entries, n, sizeof(EnvEntry *), cmp_env_entry);
+
+    /* Build all bracket strings */
+    char **brackets = malloc(n * sizeof(char *));
+    for (int i = 0; i < n; i++) {
+        brackets[i] = malloc(512);
+        build_bracket(entries[i], brackets[i], 512);
+    }
+
+    /* Print section by section, computing max_w per section */
+    int i = 0;
+    while (i < n) {
+        /* Find end of this section (same module group) */
+        int section_start = i;
+        const char *sec_mod = entries[i]->module_name;
+        int         sec_kind = entries[i]->kind;
+        int j = i;
+        while (j < n) {
+            EnvEntry *ej = entries[j];
+            bool same = (sec_kind == ENV_BUILTIN)
+                        ? (ej->kind == ENV_BUILTIN)
+                        : (ej->kind != ENV_BUILTIN &&
+                           ((sec_mod == NULL && ej->module_name == NULL) ||
+                            (sec_mod && ej->module_name &&
+                             strcmp(sec_mod, ej->module_name) == 0)));
+            if (!same) break;
+            j++;
+        }
+        int section_end = j; /* exclusive */
+
+        /* Compute max bracket width for this section */
+        size_t max_w = 0;
+        for (int k = section_start; k < section_end; k++) {
+            size_t w = strlen(brackets[k]);
+            if (w > max_w) max_w = w;
+        }
+
+        /* Section header */
+        if (sec_kind == ENV_BUILTIN)
+            printf("\n  \033[2m-- builtins --\033[0m\n");
+        else if (sec_mod)
+            printf("\n  \033[34m-- %s --\033[0m\n", sec_mod);
+        else
+            printf("\n  \033[2m-- local --\033[0m\n");
+
+        /* Print entries */
+        for (int k = section_start; k < section_end; k++) {
+            EnvEntry *e = entries[k];
+            if (e->docstring && e->docstring[0])
+                printf("  %-*s  \"%s\"\n", (int)max_w, brackets[k], e->docstring);
+            else
+                printf("  %s\n", brackets[k]);
+            free(brackets[k]);
+        }
+
+        i = section_end;
+    }
+
+    printf("\n  \033[2m%d bindings\033[0m\n", total);
+    free(brackets);
+    free(entries);
 }

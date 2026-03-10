@@ -49,26 +49,22 @@ static jmp_buf g_repl_escape;
 static bool    g_in_eval = false;
 
 /* Catch SIGSEGV/SIGBUS from JIT-compiled code and longjmp back to the
- * eval loop so the REPL stays alive instead of crashing the process.
- * We reinstall SA_RESETHAND so a double-fault in host code still aborts. */
+ * eval loop so the REPL stays alive instead of crashing the process. */
 static void repl_signal_handler(int sig) {
-    (void)sig;
+    /* Reinstall ourselves immediately so the next crash is also caught */
+    signal(SIGSEGV, repl_signal_handler);
+    signal(SIGBUS,  repl_signal_handler);
     if (g_in_eval) {
-        fprintf(stderr, "\nError: runtime crash (signal %d) in JIT code\n", sig);
-        /* Restore default handler before longjmp so a future crash in
-         * non-JIT code still terminates normally */
-        signal(SIGSEGV, SIG_DFL);
-        signal(SIGBUS,  SIG_DFL);
+        g_in_eval = false;  /* prevent re-entrancy */
+        /* Use write() — async-signal-safe, unlike fprintf */
+        const char msg[] = "\nError: runtime crash (SIGSEGV) in JIT code\n";
+        write(STDERR_FILENO, msg, sizeof(msg) - 1);
         longjmp(g_repl_escape, 99);
     }
-    /* Not in eval: re-raise so the process terminates with a core dump */
+    /* Not in eval: restore default and re-raise for core dump */
     signal(sig, SIG_DFL);
     raise(sig);
 }
-
-#define exit(code) \
-    do { if (g_in_eval) longjmp(g_repl_escape, (code) ? (code) : 1); \
-         else _Exit(code); } while(0)
 
 /* -------------------------------------------------------------------------
  * Globals
@@ -175,6 +171,7 @@ static void register_imported_sym(const char *name, void *addr) {
     g_imported_count++;
 }
 
+static void *lookup_imported_sym(const char *name) __attribute__((unused));
 static void *lookup_imported_sym(const char *name) {
     for (int i = 0; i < g_imported_count; i++)
         if (strcmp(g_imported[i].name, name) == 0)
@@ -425,7 +422,7 @@ static void build_proc_description(EnvEntry *e, char *buf, size_t sz) {
  *   NULL type  — imported function result whose type wasn't propagated.
  *                Treat as RuntimeValue* and call rt_print_value_newline.
  * ------------------------------------------------------------------------- */
-static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t) {
+static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t, bool list_is_rv) {
     if (!val) return;
 
     LLVMValueRef pf  = get_or_declare_printf(&ctx->cg);
@@ -439,19 +436,6 @@ static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t) {
             LLVMVoidTypeInContext(ctx->cg.context), &ptr, 1, 0); \
         LLVMValueRef _a[] = {(v)}; \
         LLVMBuildCall2(ctx->cg.builder, _ft, _pfn, _a, 1, ""); \
-    } while(0)
-
-    /* Emit call to rt_print_list(list) + printf("\n") — val must be RuntimeList* */
-#define EMIT_LIST_PRINT(v) \
-    do { \
-        LLVMValueRef _pfn = get_rt_print_list(&ctx->cg); \
-        LLVMTypeRef  _ft  = LLVMFunctionType( \
-            LLVMVoidTypeInContext(ctx->cg.context), &ptr, 1, 0); \
-        LLVMValueRef _a[] = {(v)}; \
-        LLVMBuildCall2(ctx->cg.builder, _ft, _pfn, _a, 1, ""); \
-        LLVMValueRef _nl = LLVMBuildGlobalStringPtr(ctx->cg.builder, "\n", "nl"); \
-        LLVMValueRef _na[] = {_nl}; \
-        LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, _na, 1, ""); \
     } while(0)
 
     /* NULL type: best-effort — assume RuntimeValue* (covers imported functions) */
@@ -491,13 +475,34 @@ static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t) {
         break; }
 
     case TYPE_LIST:
-        /* val is RuntimeList* — use rt_print_list, NOT rt_print_value_newline */
-        EMIT_LIST_PRINT(val);
+        /* Two cases:
+         *  list_is_rv=true  → val is RuntimeValue* (imported fn like cadr)
+         *                     → call rt_print_value_newline directly
+         *  list_is_rv=false → val is RuntimeList* (quote, (list), cons…)
+         *                     → box via rt_value_list then print              */
+        if (list_is_rv) {
+            EMIT_RV_PRINT(val);
+        } else {
+            LLVMValueRef box_fn  = get_rt_value_list(&ctx->cg);
+            LLVMTypeRef  ft2     = LLVMFunctionType(ptr, &ptr, 1, 0);
+            LLVMValueRef bargs[] = {val};
+            LLVMValueRef boxed   = LLVMBuildCall2(ctx->cg.builder, ft2,
+                                                  box_fn, bargs, 1, "boxed_list");
+            EMIT_RV_PRINT(boxed);
+        }
+        break;
+
+    case TYPE_KEYWORD:
+        /* Keywords are stored as bare char* (e.g. ":foo") by codegen — same
+         * representation as TYPE_STRING.  Use printf, not rt_print_value_newline. */
+        {
+            LLVMValueRef a[] = {get_fmt_str(&ctx->cg), val};
+            LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, a, 2, "");
+        }
         break;
 
     case TYPE_RATIO:
     case TYPE_SYMBOL:
-    case TYPE_KEYWORD:
     case TYPE_UNKNOWN:
         /* val is RuntimeValue* */
         EMIT_RV_PRINT(val);
@@ -566,7 +571,6 @@ static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t) {
     }
 
 #undef EMIT_RV_PRINT
-#undef EMIT_LIST_PRINT
 }
 
 /* -------------------------------------------------------------------------
@@ -653,6 +657,15 @@ static time_t file_mtime_r(const char *p) {
     struct stat st; return stat(p, &st) == 0 ? st.st_mtime : 0;
 }
 
+static bool module_already_loaded(REPLContext *ctx, const char *mod_name) {
+    Env *env = ctx->cg.env;
+    for (size_t bi = 0; bi < env->size; bi++)
+        for (EnvEntry *e = env->buckets[bi]; e; e = e->next)
+            if (e->module_name && strcmp(e->module_name, mod_name) == 0)
+                return true;
+    return false;
+}
+
 static bool handle_import(REPLContext *ctx, AST *ast) {
     if (ast->list.count < 2 || ast->list.items[1]->type != AST_SYMBOL) {
         fprintf(stderr, "Error: import requires a module name symbol\n");
@@ -663,67 +676,50 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
 
     const char *mod_name = imp->module_name;
 
-    /* Step 1: Run the full compiler pipeline (compile_one + declare_externals).
-     * This populates ctx->cg.env with typed entries for every export. */
+    if (module_already_loaded(ctx, mod_name)) {
+        printf("Module '%s' already loaded.\n", mod_name);
+        return true;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Step 1: Compile the module (populates env with typed exports)       */
+    /* ------------------------------------------------------------------ */
     if (!repl_compile_module(&ctx->cg, imp)) {
         fprintf(stderr, "Error: failed to compile module '%s'\n", mod_name);
         return false;
     }
 
-    /* Step 2: Build a .so from the cached .o so we can dlopen it and get
-     * real host addresses for every exported symbol.                       */
-
-    /* Locate the .o that compile_one wrote */
-    char *src_path = module_name_to_path(mod_name);
-    char obj_path[512], so_path[512];
-
-    /* Mirror get_obj_path() logic: core modules go to ~/.cache/monad/core/ */
-    const char *home = getenv("HOME");
-    const char *sys_core = "/usr/local/lib/monad/core/";
-    if (home && src_path && strncmp(src_path, sys_core, strlen(sys_core)) == 0) {
-        const char *rel = src_path + strlen(sys_core);
-        char base[512]; strncpy(base, rel, sizeof(base)-1);
-        /* strip extension */
-        char *dot = strrchr(base, '.'); if (dot) *dot = '\0';
-        /* flatten slashes */
-        for (char *p = base; *p; p++) if (*p == '/') *p = '_';
-        snprintf(obj_path, sizeof(obj_path), "%s/.cache/monad/core/%s.o", home, base);
-    } else {
-        /* local module: .o sits next to the source */
-        char base[512];
-        strncpy(base, src_path ? src_path : mod_name, sizeof(base)-1);
-        char *dot = strrchr(base, '.'); if (dot) *dot = '\0';
-        snprintf(obj_path, sizeof(obj_path), "%s.o", base);
-    }
-    free(src_path);
-
+    /* ------------------------------------------------------------------ */
+    /* Step 2: Build .so from the exact .o files the compiler registered.  */
+    /*                                                                     */
+    /* repl_get_compiled_obj_paths() returns every .o that compile_one()   */
+    /* produced, in order, with deduplication already handled by the       */
+    /* registry.  No find glob, no path exclusions, no duplicates.         */
+    /* ------------------------------------------------------------------ */
+    char so_path[512];
     snprintf(so_path, sizeof(so_path), "/tmp/__mrepl_%s.so", mod_name);
+    if (file_exists_r(so_path)) remove(so_path);
 
-    if (!file_exists_r(obj_path)) {
-        fprintf(stderr, "Error: object file not found: %s\n", obj_path);
-        return false;
-    }
+    {
+        const char **all_objs = repl_get_compiled_obj_paths();
 
-    /* Rebuild .so if stale */
-    if (!file_exists_r(so_path) || file_mtime_r(obj_path) > file_mtime_r(so_path)) {
-        char cmd[2048];
-        /* Do NOT link libmonad.a here — runtime symbols are already in
-         * the host monad binary.  We use --unresolved-symbols=ignore-all
-         * so the link succeeds; dlopen(RTLD_GLOBAL) resolves them from
-         * the host process at load time.                                 */
-        snprintf(cmd, sizeof(cmd),
-                 "gcc -shared -fPIC -o %s %s"
-                 " -Wl,--unresolved-symbols=ignore-all -lm 2>&1",
-                 so_path, obj_path);
+        char cmd[16384];
+        int w = snprintf(cmd, sizeof(cmd), "gcc -shared -fPIC -o %s", so_path);
+        for (int i = 0; all_objs[i]; i++)
+            w += snprintf(cmd + w, sizeof(cmd) - w, " %s", all_objs[i]);
+        w += snprintf(cmd + w, sizeof(cmd) - w,
+                      " -Wl,--unresolved-symbols=ignore-all -lm 2>&1");
+        free(all_objs);
+
         if (system(cmd) != 0) {
             fprintf(stderr, "Error: failed to link .so for '%s'\n", mod_name);
             return false;
         }
     }
 
-    /* Step 3: dlopen so the symbols live in the host process.
-     * First re-open the main binary with RTLD_GLOBAL so its symbols
-     * (rt_list_create etc.) are visible when the .so is loaded.     */
+    /* ------------------------------------------------------------------ */
+    /* Step 3: dlopen — make symbols live in the host process              */
+    /* ------------------------------------------------------------------ */
     { void *self = dlopen(NULL, RTLD_NOW | RTLD_GLOBAL); (void)self; }
     void *handle = dlopen(so_path, RTLD_NOW | RTLD_GLOBAL);
     if (!handle) {
@@ -731,25 +727,26 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
         return false;
     }
 
-    /* Run module init so top-level stores execute (e.g. lowercase = "abc...") */
+    /* Run module init so top-level stores execute */
     char init_name[256];
     snprintf(init_name, sizeof(init_name), "__init_%s", mod_name);
     for (char *p = init_name + 8; *p; p++) if (*p == '.') *p = '_';
     void (*init_fn)(void) = (void(*)(void))dlsym(handle, init_name);
     if (init_fn) init_fn();
 
-    /* Step 4: Walk the .so exports and register addresses in g_imported[].
-     * We use the same mangle prefix as the compiler: ModName__ */
+    /* ------------------------------------------------------------------ */
+    /* Step 4: Register symbol addresses from the .so                      */
+    /* ------------------------------------------------------------------ */
     char prefix[256];
     size_t ml = strlen(mod_name);
     for (size_t i = 0; i < ml; i++)
         prefix[i] = (mod_name[i] == '.') ? '_' : mod_name[i];
-    prefix[ml] = prefix[ml+1] = '_'; prefix[ml+2] = '\0';
+    prefix[ml] = prefix[ml+1] = '_';
+    prefix[ml+2] = '\0';
     size_t prefix_len = ml + 2;
 
     char nm_cmd[512];
-    snprintf(nm_cmd, sizeof(nm_cmd),
-             "nm -D --defined-only %s 2>/dev/null", so_path);
+    snprintf(nm_cmd, sizeof(nm_cmd), "nm -D --defined-only %s 2>/dev/null", so_path);
     FILE *nm = popen(nm_cmd, "r");
     int count = 0;
     if (nm) {
@@ -757,7 +754,7 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
         while (fgets(line, sizeof(line), nm)) {
             char addr_s[32], tc[4], sym[256];
             if (sscanf(line, "%31s %3s %255s", addr_s, tc, sym) != 3) continue;
-            if (tc[0]!='T' && tc[0]!='D' && tc[0]!='B') continue;
+            if (tc[0] != 'T' && tc[0] != 'D' && tc[0] != 'B') continue;
             if (strncmp(sym, prefix, prefix_len) != 0) continue;
             void *addr = dlsym(handle, sym);
             if (!addr) continue;
@@ -767,105 +764,87 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
         pclose(nm);
     }
 
-    /* Step 5: Harvest docstrings from the source file.
-     * The manifest / .o carry no docstring info, but the source is still
-     * on disk.  We re-parse each top-level (define (fn ...) "docstring" ...)
-     * form and write the docstring into the already-populated env entry so
-     * (doc list-reverse) etc. work correctly.
-     *
-     * We only patch ENV_FUNC entries whose module_name matches mod_name.
-     */
-    {
-        char *src = module_name_to_path(mod_name);
-        if (src && file_exists_r(src)) {
-            FILE *sf = fopen(src, "r");
-            if (sf) {
-                fseek(sf, 0, SEEK_END);
-                long fsz = ftell(sf);
-                rewind(sf);
-                char *src_buf = malloc(fsz + 1);
-                if (src_buf && fsz > 0) {
-                    fread(src_buf, 1, fsz, sf);
-                    src_buf[fsz] = '\0';
-                    fclose(sf);
+    /* ------------------------------------------------------------------ */
+    /* Step 5: Harvest docstrings from source and patch env entries        */
+    /* ------------------------------------------------------------------ */
+    char *doc_src = module_name_to_path(mod_name);
+    if (doc_src && file_exists_r(doc_src)) {
+        FILE *sf = fopen(doc_src, "r");
+        if (sf) {
+            fseek(sf, 0, SEEK_END);
+            long fsz = ftell(sf);
+            rewind(sf);
+            char *src_buf = malloc(fsz + 1);
+            if (src_buf && fsz > 0) {
+                fread(src_buf, 1, fsz, sf);
+                src_buf[fsz] = '\0';
+                fclose(sf);
 
-                    /* Parse top-level forms one at a time using the same
-                     * parser that the compiler uses.  We advance through the
-                     * source string and call parse() repeatedly.            */
-                    const char *cursor = src_buf;
-                    while (*cursor) {
-                        /* Skip whitespace and comments */
-                        while (*cursor && (isspace((unsigned char)*cursor) ||
-                               (*cursor == ';'))) {
-                            if (*cursor == ';')
-                                while (*cursor && *cursor != '\n') cursor++;
-                            else
-                                cursor++;
-                        }
-                        if (!*cursor) break;
-
-                        parser_set_context(src, cursor);
-                        AST *form = parse(cursor);
-                        if (!form) break;
-
-                        /* Advance cursor past this form (approximate: find
-                         * the closing paren at depth 0)                    */
-                        if (*cursor == '(') {
-                            int depth = 0;
-                            while (*cursor) {
-                                if (*cursor == '(') depth++;
-                                else if (*cursor == ')') { depth--; if (depth == 0) { cursor++; break; } }
-                                cursor++;
-                            }
-                        } else {
-                            /* Non-list form: skip to next whitespace */
-                            while (*cursor && !isspace((unsigned char)*cursor)) cursor++;
-                        }
-
-                        /* We only care about: (define (name ...) "docstring" ...) */
-                        if (form->type == AST_LIST && form->list.count >= 3 &&
-                            form->list.items[0]->type == AST_SYMBOL &&
-                            strcmp(form->list.items[0]->symbol, "define") == 0) {
-
-                            AST *lam = form->list.items[2];
-                            if (lam->type == AST_LAMBDA &&
-                                lam->lambda.docstring && lam->lambda.docstring[0]) {
-
-                                AST *name_node = form->list.items[1];
-                                const char *fn_name = NULL;
-                                if (name_node->type == AST_LIST &&
-                                    name_node->list.count > 0 &&
-                                    name_node->list.items[0]->type == AST_SYMBOL) {
-                                    fn_name = name_node->list.items[0]->symbol;
-                                } else if (name_node->type == AST_SYMBOL) {
-                                    fn_name = name_node->symbol;
-                                }
-
-                                if (fn_name) {
-                                    EnvEntry *ent = env_lookup(ctx->cg.env, fn_name);
-                                    if (ent && ent->module_name &&
-                                        strcmp(ent->module_name, mod_name) == 0) {
-                                        free(ent->docstring);
-                                        ent->docstring = strdup(lam->lambda.docstring);
-                                    }
-                                }
-                            }
-                        }
-                        ast_free(form);
+                const char *cursor = src_buf;
+                while (*cursor) {
+                    while (*cursor && (isspace((unsigned char)*cursor) || *cursor == ';')) {
+                        if (*cursor == ';') while (*cursor && *cursor != '\n') cursor++;
+                        else cursor++;
                     }
-                    free(src_buf);
-                } else {
-                    if (src_buf) free(src_buf);
-                    fclose(sf);
+                    if (!*cursor) break;
+
+                    parser_set_context(doc_src, cursor);
+                    AST *form = parse(cursor);
+                    if (!form) break;
+
+                    if (*cursor == '(') {
+                        int depth = 0;
+                        while (*cursor) {
+                            if      (*cursor == '(') depth++;
+                            else if (*cursor == ')') { depth--; if (depth == 0) { cursor++; break; } }
+                            cursor++;
+                        }
+                    } else {
+                        while (*cursor && !isspace((unsigned char)*cursor)) cursor++;
+                    }
+
+                    if (form->type == AST_LIST && form->list.count >= 3 &&
+                        form->list.items[0]->type == AST_SYMBOL &&
+                        strcmp(form->list.items[0]->symbol, "define") == 0) {
+
+                        AST *lam = form->list.items[2];
+                        if (lam->type == AST_LAMBDA &&
+                            lam->lambda.docstring && lam->lambda.docstring[0]) {
+
+                            AST *name_node = form->list.items[1];
+                            const char *fn_name = NULL;
+                            if (name_node->type == AST_LIST &&
+                                name_node->list.count > 0 &&
+                                name_node->list.items[0]->type == AST_SYMBOL)
+                                fn_name = name_node->list.items[0]->symbol;
+                            else if (name_node->type == AST_SYMBOL)
+                                fn_name = name_node->symbol;
+
+                            if (fn_name) {
+                                EnvEntry *ent = env_lookup(ctx->cg.env, fn_name);
+                                if (ent && ent->module_name &&
+                                    strcmp(ent->module_name, mod_name) == 0) {
+                                    free(ent->docstring);
+                                    ent->docstring = strdup(lam->lambda.docstring);
+                                }
+                            }
+                        }
+                    }
+                    ast_free(form);
                 }
+                free(src_buf);
+            } else {
+                if (src_buf) free(src_buf);
+                fclose(sf);
             }
         }
-        free(src);
     }
+    free(doc_src);
 
     printf("Imported %d symbol(s) from '%s'.\n", count, mod_name);
     return true;
 }
+
 
 /// API
 
@@ -877,12 +856,13 @@ void repl_init(REPLContext *ctx) {
 
     rt_sym_table_init();
 
-    /* Install signal handlers so JIT crashes don't kill the process */
+    /* Install signal handlers so JIT crashes don't kill the process.
+     * No SA_RESETHAND — we want the handler to persist across crashes. */
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = repl_signal_handler;
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_RESETHAND; /* auto-restore default after first delivery */
+    sa.sa_flags = 0;  /* persistent, no SA_RESETHAND */
     sigaction(SIGSEGV, &sa, NULL);
     sigaction(SIGBUS,  &sa, NULL);
 
@@ -896,6 +876,8 @@ void repl_init(REPLContext *ctx) {
     ctx->cg.fmt_str = ctx->cg.fmt_char = ctx->cg.fmt_int =
     ctx->cg.fmt_float = ctx->cg.fmt_hex = ctx->cg.fmt_bin =
     ctx->cg.fmt_oct = NULL;
+    ctx->cg.error_jmp_set = false;
+    memset(ctx->cg.error_msg, 0, sizeof(ctx->cg.error_msg));
 
     /* Bootstrap engine from an empty module */
     LLVMModuleRef boot = LLVMModuleCreateWithNameInContext(
@@ -925,21 +907,251 @@ void repl_dispose(REPLContext *ctx) {
     env_free(ctx->cg.env);
 }
 
-/* -------------------------------------------------------------------------
- * repl_eval_line — parse one line, codegen it, JIT-run it.
- *
- * Changes vs original:
- *   - Bare symbol that resolves to ENV_FUNC or ENV_BUILTIN: don't call
- *     codegen_expr (which would crash or produce meaningless IR), instead
- *     emit a proc-description string directly via emit_proc_print.
- *   - emit_auto_print now also handles NULL type (imported fn results).
- * ------------------------------------------------------------------------- */
+int cmp_entry(const void *a, const void *b) {
+    EnvEntry *ea = *(EnvEntry **)a;
+    EnvEntry *eb = *(EnvEntry **)b;
+    if (ea->kind == ENV_BUILTIN && eb->kind != ENV_BUILTIN) return  1;
+    if (ea->kind != ENV_BUILTIN && eb->kind == ENV_BUILTIN) return -1;
+    int ma = ea->module_name ? 1 : 0;
+    int mb = eb->module_name ? 1 : 0;
+    if (ma != mb) return ma - mb;
+    if (ea->module_name && eb->module_name) {
+        int mc = strcmp(ea->module_name, eb->module_name);
+        if (mc) return mc;
+    }
+    return strcmp(ea->name, eb->name);
+}
+
 bool repl_eval_line(REPLContext *ctx, const char *line) {
     if (!line) return true;
     const char *p = line;
     while (*p && isspace((unsigned char)*p)) p++;
     if (!*p) return true;
 
+    // ,command dispatch
+    if (*p == ',') {
+        const char *cmd = p + 1;
+
+        if (strncmp(cmd, "env", 3) == 0 && (!cmd[3] || isspace((unsigned char)cmd[3]))) {
+            env_print(ctx->cg.env);
+            return true;
+        }
+
+        if (strncmp(cmd, "load", 4) == 0 && (cmd[4] == ' ' || cmd[4] == '\t')) {
+            const char *path = cmd + 5;
+            while (*path && isspace((unsigned char)*path)) path++;
+
+            /* Strip trailing whitespace/newline */
+            char fpath[512];
+            strncpy(fpath, path, sizeof(fpath) - 1);
+            fpath[sizeof(fpath) - 1] = '\0';
+            char *end = fpath + strlen(fpath) - 1;
+            while (end > fpath && isspace((unsigned char)*end)) *end-- = '\0';
+
+            FILE *f = fopen(fpath, "r");
+            if (!f) {
+                fprintf(stderr, "Error: cannot open file: %s\n", fpath);
+                return false;
+            }
+
+            /* Peek for a (module Name [...]) declaration */
+            fseek(f, 0, SEEK_END);
+            long fsz = ftell(f);
+            rewind(f);
+            char *src = malloc(fsz + 1);
+            if (!src) { fclose(f); fprintf(stderr, "Error: out of memory\n"); return false; }
+            fread(src, 1, fsz, f);
+            src[fsz] = '\0';
+            fclose(f);
+
+            /* Scan for first non-comment, non-whitespace form */
+            const char *cursor = src;
+            char *found_module = NULL;
+            while (*cursor) {
+                while (*cursor && isspace((unsigned char)*cursor)) cursor++;
+                if (!*cursor) break;
+                if (*cursor == ';') { while (*cursor && *cursor != '\n') cursor++; continue; }
+
+                parser_set_context(fpath, cursor);
+                AST *form = parse(cursor);
+                if (form && form->type == AST_LIST && form->list.count >= 2 &&
+                    form->list.items[0]->type == AST_SYMBOL &&
+                    strcmp(form->list.items[0]->symbol, "module") == 0 &&
+                    form->list.items[1]->type == AST_SYMBOL) {
+                    found_module = strdup(form->list.items[1]->symbol);
+                    ast_free(form);
+                } else {
+                    if (form) ast_free(form);
+                }
+                break;  /* only need the first form */
+            }
+            free(src);
+
+            if (found_module) {
+                /* File has a module declaration — use the proper import pipeline.
+                 * This ensures correct module_name tagging, dedup, dlopen, etc. */
+                printf("Loading module '%s' from '%s'\n", found_module, fpath);
+
+                /* Build a synthetic (import ModuleName) AST and call handle_import */
+                const char *import_src = found_module;
+                char import_expr[256];
+                snprintf(import_expr, sizeof(import_expr), "(import %s)", found_module);
+                free(found_module);
+
+                parser_set_context("<load>", import_expr);
+                AST *imp_ast = parse(import_expr);
+                if (!imp_ast) {
+                    fprintf(stderr, "Error: failed to build import for module\n");
+                    return false;
+                }
+                bool ok = handle_import(ctx, imp_ast);
+                ast_free(imp_ast);
+                return ok;
+            }
+
+            /* No module declaration — plain file, evaluate forms directly as local */
+            FILE *f2 = fopen(fpath, "r");
+            if (!f2) { fprintf(stderr, "Error: cannot open file: %s\n", fpath); return false; }
+            fseek(f2, 0, SEEK_END);
+            fsz = ftell(f2);
+            rewind(f2);
+            src = malloc(fsz + 1);
+            if (!src) { fclose(f2); fprintf(stderr, "Error: out of memory\n"); return false; }
+            fread(src, 1, fsz, f2);
+            src[fsz] = '\0';
+            fclose(f2);
+
+            cursor = src;
+            int loaded = 0, failed = 0, skipped = 0;
+
+            while (*cursor) {
+                while (*cursor && isspace((unsigned char)*cursor)) cursor++;
+                if (!*cursor) break;
+                if (*cursor == ';') { while (*cursor && *cursor != '\n') cursor++; continue; }
+
+                parser_set_context(fpath, cursor);
+                AST *form = parse(cursor);
+                if (!form) break;
+
+                if (*cursor == '(') {
+                    int depth = 0;
+                    while (*cursor) {
+                        if      (*cursor == '(') depth++;
+                        else if (*cursor == ')') { depth--; if (depth == 0) { cursor++; break; } }
+                        cursor++;
+                    }
+                } else {
+                    while (*cursor && !isspace((unsigned char)*cursor)) cursor++;
+                }
+
+                if (form->type != AST_LIST || form->list.count < 1 ||
+                    form->list.items[0]->type != AST_SYMBOL) {
+                    ast_free(form); skipped++; continue;
+                }
+
+                const char *head = form->list.items[0]->symbol;
+
+                if (strcmp(head, "tests") == 0) {
+                    ast_free(form); skipped++; continue;
+                }
+
+                if (strcmp(head, "import") == 0) {
+                    handle_import(ctx, form);
+                    ast_free(form); skipped++; continue;
+                }
+
+                char mod_name[64];
+                snprintf(mod_name,       sizeof(mod_name),       "__repl_%u", ctx->expr_count);
+                snprintf(g_wrapper_name, sizeof(g_wrapper_name), WRAPPER_FMT, ctx->expr_count);
+                fresh_module(ctx, mod_name);
+                open_wrapper(ctx);
+
+                ctx->cg.error_jmp_set = true;
+                if (setjmp(ctx->cg.error_jmp) != 0) {
+                    ctx->cg.error_jmp_set = false;
+                    ast_free(form);
+                    recover_module(ctx);
+                    failed++;
+                    continue;
+                }
+
+                CodegenResult res = codegen_expr(&ctx->cg, form);
+                ctx->cg.error_jmp_set = false;
+                ast_free(form);
+
+                if (!res.value) { recover_module(ctx); failed++; continue; }
+
+                g_in_eval = true;
+                bool ran = false;
+                if (setjmp(g_repl_escape) == 0)
+                    ran = close_and_run(ctx);
+                g_in_eval = false;
+
+                if (ran) {
+                    ctx->expr_count++;
+                    char next[64];
+                    snprintf(next, sizeof(next), "__repl_%u", ctx->expr_count);
+                    fresh_module(ctx, next);
+                    loaded++;
+                } else {
+                    recover_module(ctx);
+                    failed++;
+                }
+            }
+
+            free(src);
+            printf("Loaded '%s': %d ok, %d skipped, %d failed.\n",
+                   fpath, loaded, skipped, failed);
+            return failed == 0;
+        }
+
+        if (strncmp(cmd, "complete", 8) == 0 && isspace((unsigned char)cmd[8])) {
+            const char *prefix = cmd + 9;
+            while (*prefix && isspace((unsigned char)*prefix)) prefix++;
+            size_t plen = strlen(prefix);
+
+            printf("__COMPLETIONS__\n");
+
+            Env *env = ctx->cg.env;
+            for (size_t bi = 0; bi < env->size; bi++)
+                for (EnvEntry *e = env->buckets[bi]; e; e = e->next)
+                    if (e->name && strncmp(e->name, prefix, plen) == 0)
+                        printf("%s\n", e->name);
+
+            static const char *kws[] = {
+                "Int","Float","Char","String","Hex","Bin","Oct","Bool",
+                "define","show","if","for","quote","begin","set!","and","or","not",
+                "import","cons","car","cdr","list","append","list-ref","list-length",
+                "make-list","equal?","list-empty?","list-copy","append!",
+                "string-length","string-ref","string-set!","make-string","show-value",
+                NULL
+            };
+            for (int i = 0; kws[i]; i++)
+                if (strncmp(kws[i], prefix, plen) == 0)
+                    printf("%s\n", kws[i]);
+
+            printf("__END__\n");
+            fflush(stdout);
+            return true;
+        }
+
+        if (strncmp(cmd, "help", 4) == 0) {
+            printf("REPL commands:\n");
+            printf("  ,env              dump all bindings\n");
+            printf("  ,complete <pfx>   list completions for prefix\n");
+            printf("  ,load <path>      load and evaluate a source file\n");
+            printf("  ,help             show this help\n");
+            return true;
+        }
+
+        fprintf(stderr, "Unknown command: ,%s\n", cmd);
+        fprintf(stderr, "Try ,help for a list of commands.\n");
+        return false;
+    }
+
+    /* -----------------------------------------------------------------------
+     * Parse
+     * ----------------------------------------------------------------------- */
     parser_set_context("<input>", line);
     AST *ast = parse(line);
     if (!ast) { fprintf(stderr, "Error: parse failed\n"); return false; }
@@ -956,23 +1168,21 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
     bool silent = expr_is_silent(ast);
 
     /* -----------------------------------------------------------------------
-     * Fast path: bare symbol that names a function or builtin.
-     * codegen_expr would try to load/call it as a value which is wrong.
-     * Instead we build a trivial wrapper that just prints the description.
-     * --------------------------------------------------------------------- */
+     * Fast path: bare symbol that names a function or builtin — just print
+     * its description, no codegen needed.
+     * ----------------------------------------------------------------------- */
     if (!silent && ast->type == AST_SYMBOL) {
         EnvEntry *e = env_lookup(ctx->cg.env, ast->symbol);
         if (e && (e->kind == ENV_FUNC || e->kind == ENV_BUILTIN)) {
             char mod_name[64];
-            snprintf(mod_name,       sizeof(mod_name),       "__repl_%u",  ctx->expr_count);
-            snprintf(g_wrapper_name, sizeof(g_wrapper_name), WRAPPER_FMT,  ctx->expr_count);
+            snprintf(mod_name,       sizeof(mod_name),       "__repl_%u", ctx->expr_count);
+            snprintf(g_wrapper_name, sizeof(g_wrapper_name), WRAPPER_FMT, ctx->expr_count);
             fresh_module(ctx, mod_name);
             open_wrapper(ctx);
             emit_proc_print(ctx, e);
             ast_free(ast);
 
-            signal(SIGSEGV, repl_signal_handler);
-            signal(SIGBUS,  repl_signal_handler);
+            /* JIT crash recovery only — codegen didn't run so no error_jmp needed */
             g_in_eval = true;
             bool ran = false;
             if (setjmp(g_repl_escape) == 0)
@@ -987,54 +1197,68 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
         }
     }
 
-    /* Unique names per expression — MCJIT caches by name, reusing the same
-     * name would return the first compiled wrapper's address every time. */
+    /* -----------------------------------------------------------------------
+     * Normal path: codegen + JIT
+     * ----------------------------------------------------------------------- */
     char mod_name[64];
-    snprintf(mod_name,      sizeof(mod_name),      "__repl_%u",      ctx->expr_count);
+    snprintf(mod_name,       sizeof(mod_name),       "__repl_%u", ctx->expr_count);
     snprintf(g_wrapper_name, sizeof(g_wrapper_name), WRAPPER_FMT, ctx->expr_count);
     fresh_module(ctx, mod_name);
     open_wrapper(ctx);
 
-    /* Codegen with error recovery */
-    CodegenResult res = {NULL, NULL};
-    bool ok = true;
-
-    /* Keep g_in_eval=true through the entire codegen + JIT execution so
-     * the SIGSEGV handler can longjmp back here on JIT crashes.
-     * SA_RESETHAND clears the handler on delivery, so reinstall each time. */
-    signal(SIGSEGV, repl_signal_handler);
-    signal(SIGBUS,  repl_signal_handler);
-    g_in_eval = true;
-
-    if (setjmp(g_repl_escape) == 0) {
-        res = codegen_expr(&ctx->cg, ast);
-        if (!res.value) ok = false;
-
-        if (ok) {
-            ast_free(ast);
-            ast = NULL;
-
-            if (!silent)
-                emit_auto_print(ctx, res.value, res.type);
-
-            bool ran = close_and_run(ctx);
-            g_in_eval = false;
-            if (ran) ctx->expr_count++;
-
-            char next[64];
-            snprintf(next, sizeof(next), "__repl_%u", ctx->expr_count);
-            fresh_module(ctx, next);
-            return ran;
-        }
-    } else {
-        /* longjmp from either exit() or signal handler */
-        ok = false;
+    /* --- Phase 1: codegen (errors longjmp via CODEGEN_ERROR) --- */
+    ctx->cg.error_jmp_set = true;
+    if (setjmp(ctx->cg.error_jmp) != 0) {
+        /* CODEGEN_ERROR fired — message already printed */
+        ctx->cg.error_jmp_set = false;
+        if (ast) { ast_free(ast); ast = NULL; }
+        recover_module(ctx);
+        return false;
     }
 
+    CodegenResult res = codegen_expr(&ctx->cg, ast);
+    ctx->cg.error_jmp_set = false;  /* disarm — codegen succeeded */
+
+    if (!res.value) {
+        /* codegen returned NULL without calling CODEGEN_ERROR (shouldn't
+         * happen after the macro conversion, but be defensive) */
+        if (ast) { ast_free(ast); }
+        recover_module(ctx);
+        return false;
+    }
+
+    /* --- Phase 2: emit auto-print --- */
+    bool list_is_rv = false;
+    if (res.type && res.type->kind == TYPE_LIST &&
+        ast->type == AST_LIST && ast->list.count > 0 &&
+        ast->list.items[0]->type == AST_SYMBOL) {
+        EnvEntry *ce = env_lookup(ctx->cg.env, ast->list.items[0]->symbol);
+        if (ce && ce->module_name)
+            list_is_rv = true;
+    }
+
+    ast_free(ast);
+    ast = NULL;
+
+    if (!silent)
+        emit_auto_print(ctx, res.value, res.type, list_is_rv);
+
+    /* --- Phase 3: JIT compile + run (crashes caught by signal handler) --- */
+    g_in_eval = true;
+    bool ran = false;
+    if (setjmp(g_repl_escape) == 0)
+        ran = close_and_run(ctx);
     g_in_eval = false;
-    if (ast) { ast_free(ast); ast = NULL; }
-    recover_module(ctx);
-    return false;
+
+    if (ran) {
+        ctx->expr_count++;
+        char next[64];
+        snprintf(next, sizeof(next), "__repl_%u", ctx->expr_count);
+        fresh_module(ctx, next);
+    } else {
+        recover_module(ctx);
+    }
+    return ran;
 }
 
 /// readline completion
@@ -1106,16 +1330,110 @@ char **repl_completion(const char *text, int start, int end) {
     return rl_completion_matches(text, repl_completion_generator);
 }
 
+/* -------------------------------------------------------------------------
+ * Electric pair mode — mirrors Emacs electric-pair-mode:
+ *
+ *  Typing ( inserts ()   cursor between them
+ *  Typing [ inserts []   cursor between them
+ *  Typing { inserts {}   cursor between them
+ *  Typing " inserts ""   cursor between them; skip if next char is "
+ *
+ *  NOTE: ' is intentionally NOT electric — it is the quote shorthand.
+ *
+ *  Backspace at (|) / [|] / {|} / "|"  deletes the whole pair.
+ *  Backspace elsewhere behaves normally.
+ *  Both C-h (ASCII 8) and DEL (127 / actual Backspace) are bound.
+ * ------------------------------------------------------------------------- */
+
+static int electric_insert_pair(int count, int key) {
+    (void)count;
+    char close;
+    switch (key) {
+        case '(': close = ')'; break;
+        case '[': close = ']'; break;
+        case '{': close = '}'; break;
+        case '"': close = '"'; break;
+        default:  rl_insert(1, key); return 0;
+    }
+
+    /* For ": if next char is already the close, skip over it */
+    if (key == '"' && rl_point < rl_end &&
+        rl_line_buffer[rl_point] == close) {
+        rl_point++;
+        return 0;
+    }
+
+    rl_insert(1, key);
+    rl_insert(1, close);
+    rl_point--;
+    return 0;
+}
+
+static int electric_backspace(int count, int key) {
+    (void)count; (void)key;
+
+    if (rl_point > 0 && rl_point < rl_end) {
+        char prev = rl_line_buffer[rl_point - 1];
+        char next = rl_line_buffer[rl_point];
+        int is_pair = (prev == '(' && next == ')') ||
+                      (prev == '[' && next == ']') ||
+                      (prev == '{' && next == '}') ||
+                      (prev == '"' && next == '"');
+        if (is_pair) {
+            rl_delete(1, 0);
+            rl_rubout(1, '\b');
+            return 0;
+        }
+    }
+    rl_rubout(1, '\b');
+    return 0;
+}
+
+static void setup_electric_pairs(void) {
+    rl_bind_key('(',    electric_insert_pair);
+    rl_bind_key('[',    electric_insert_pair);
+    rl_bind_key('{',    electric_insert_pair);
+    rl_bind_key('"',    electric_insert_pair);
+    /* C-h (ASCII 8) — traditional backspace */
+    rl_bind_key('\b',   electric_backspace);
+    /* DEL (127) — the actual Backspace key on most terminals.
+     * rl_bind_key() clips its argument to 0-127 but key 127 sits exactly
+     * at the boundary; some readline builds mis-handle it.  Use
+     * rl_bind_keyseq() with the raw escape sequence to be safe. */
+    rl_bind_keyseq("\\177", electric_backspace);   /* \177 = octal 127 = DEL */
+    /* Also bind the VT220 / xterm "Backspace sends ^?" sequence */
+    rl_bind_keyseq("\\C-?", electric_backspace);
+}
+
+/* -------------------------------------------------------------------------
+ * Colored prompt.
+ *
+ * On success: "Monad \033[32mλ\033[0m "  (green λ)
+ * On error:   "Monad \033[31mλ\033[0m "  (red λ)
+ *
+ * readline requires RL_PROMPT_START_IGNORE / RL_PROMPT_END_IGNORE wrappers
+ * (\001 and \002) around invisible escape sequences so it can measure the
+ * visible width correctly.
+ * ------------------------------------------------------------------------- */
+#define PROMPT_OK    "\001\033[34m\002Monad\001\033[0m\002 \001\033[32m\002λ\001\033[0m\002 "
+#define PROMPT_ERROR "\001\033[34m\002Monad\001\033[0m\002 \001\033[31m\002λ\001\033[0m\002 "
+
 void repl_run(void) {
     REPLContext ctx;
     repl_init(&ctx);
     g_repl_ctx = &ctx;
     rl_attempted_completion_function = repl_completion;
+    setup_electric_pairs();
 
+    const char *prompt = PROMPT_OK;
     char *line;
-    while ((line = readline("monad> ")) != NULL) {
-        if (*line) add_history(line);
-        repl_eval_line(&ctx, line);
+    while ((line = readline(prompt)) != NULL) {
+        if (*line) {
+            add_history(line);
+            bool ok = repl_eval_line(&ctx, line);
+            prompt = ok ? PROMPT_OK : PROMPT_ERROR;
+        }
+        /* empty input: leave prompt colour unchanged */
         free(line);
     }
     printf("\n");

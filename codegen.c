@@ -16,6 +16,21 @@
 #include <llvm-c/BitWriter.h>
 #include <llvm-c/TargetMachine.h>
 
+/* Replace all exit(1) calls in codegen.
+ * If a recovery point is set (we're inside repl_eval_line), longjmp back.
+ * Otherwise fall back to real exit so the standalone compiler still works. */
+#define CODEGEN_ERROR(ctx, fmt, ...) \
+    do { \
+        snprintf((ctx)->error_msg, sizeof((ctx)->error_msg), fmt, ##__VA_ARGS__); \
+        fprintf(stderr, "%s\n", (ctx)->error_msg); \
+        if ((ctx)->error_jmp_set) { \
+            (ctx)->error_jmp_set = false; \
+            longjmp((ctx)->error_jmp, 1); \
+        } \
+        exit(1); \
+    } while(0)
+
+
 void codegen_init(CodegenContext *ctx, const char *module_name) {
     ctx->context = LLVMContextCreate();
     ctx->module = LLVMModuleCreateWithNameInContext(module_name, ctx->context);
@@ -31,6 +46,8 @@ void codegen_init(CodegenContext *ctx, const char *module_name) {
     ctx->fmt_hex   = NULL;
     ctx->fmt_bin   = NULL;
     ctx->fmt_oct   = NULL;
+    ctx->error_jmp_set = false;
+    memset(ctx->error_msg, 0, sizeof(ctx->error_msg));
 }
 
 LLVMValueRef get_fmt_str(CodegenContext *ctx) {
@@ -563,28 +580,25 @@ static EnvEntry *resolve_symbol_with_modules(CodegenContext *ctx, const char *sy
         const char *local_symbol = dot + 1;
 
         if (!ctx->module_ctx) {
-            fprintf(stderr, "%s:%d:%d: error: qualified symbol '%s' used but no module context\n",
-                    parser_get_filename(), ast->line, ast->column, symbol_name);
             free(module_prefix);
-            exit(1);
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: qualified symbol '%s' used but no module context",
+                    parser_get_filename(), ast->line, ast->column, symbol_name);
         }
 
         // Find the import with this prefix
         ImportDecl *import = module_context_find_import(ctx->module_ctx, module_prefix);
         if (!import) {
-            fprintf(stderr, "%s:%d:%d: error: unknown module prefix '%s'\n",
-                    parser_get_filename(), ast->line, ast->column, module_prefix);
             free(module_prefix);
-            exit(1);
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown module prefix '%s'",
+                    parser_get_filename(), ast->line, ast->column, module_prefix);
         }
 
         // Check if this symbol is included in the import
         if (!import_decl_includes_symbol(import, local_symbol)) {
-            fprintf(stderr, "%s:%d:%d: error: symbol '%s' not imported from module '%s'\n",
+            free(module_prefix);
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: symbol '%s' not imported from module '%s'",
                     parser_get_filename(), ast->line, ast->column,
                     local_symbol, import->module_name);
-            free(module_prefix);
-            exit(1);
         }
 
         // Look up the symbol in the environment
@@ -873,9 +887,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
         EnvEntry *entry = resolve_symbol_with_modules(ctx, ast->symbol, ast);
         if (!entry) {
-            fprintf(stderr, "%s:%d:%d: error: unbound variable: %s\n",
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: unbound variable: %s",
                     parser_get_filename(), ast->line, ast->column, ast->symbol);
-            exit(1);
         }
         result.type = type_clone(entry->type);
         result.value = LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, entry->type),
@@ -893,9 +906,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
         // Inline assembly - should only appear as function body
         // We need to know the current function's parameters
 
-        fprintf(stderr, "%s:%d:%d: error: inline asm can only be used as a function body\n",
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: inline asm can only be used as a function body",
                 parser_get_filename(), ast->line, ast->column);
-        exit(1);
     }
 
     case AST_KEYWORD: {
@@ -978,9 +990,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     }
     case AST_LIST: {
         if (ast->list.count == 0) {
-            fprintf(stderr, "%s:%d:%d: error: empty list not supported\n",
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: empty list not supported",
                     parser_get_filename(), ast->line, ast->column);
-            exit(1);
         }
 
         AST *head = ast->list.items[0];
@@ -989,9 +1000,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             // Handle 'define' special form
             if (strcmp(head->symbol, "define") == 0) {
                 if (ast->list.count < 3) {
-                    fprintf(stderr, "%s:%d:%d: error: 'define' requires at least 2 arguments\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'define' requires at least 2 arguments",
                             parser_get_filename(), ast->line, ast->column);
-                    exit(1);
                 }
 
                 AST *name_expr = ast->list.items[1];
@@ -1008,22 +1018,19 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                             var_name = name_expr->list.items[0]->symbol;
                         }
                     } else {
-                        fprintf(stderr, "%s:%d:%d: error: 'define' name must be symbol or type annotation\n",
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'define' name must be symbol or type annotation",
                                 parser_get_filename(), ast->line, ast->column);
-                        exit(1);
                     }
                 } else if (name_expr->type == AST_SYMBOL) {
                     var_name = name_expr->symbol;
                 } else {
-                    fprintf(stderr, "%s:%d:%d: error: 'define' name must be symbol or type annotation\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'define' name must be symbol or type annotation",
                             parser_get_filename(), ast->line, ast->column);
-                    exit(1);
                 }
 
                 if (!var_name) {
-                    fprintf(stderr, "%s:%d:%d: error: 'define' invalid name format\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'define' invalid name format",
                             parser_get_filename(), ast->line, ast->column);
-                    exit(1);
                 }
 
                 // Check if value is a lambda - codegen it as a function
@@ -1042,10 +1049,9 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         if (param->type_name) {
                             param_type = type_from_name(param->type_name);
                             if (!param_type) {
-                                fprintf(stderr, "%s:%d:%d: error: unknown parameter type '%s'\n",
+                                CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown parameter type '%s'",
                                         parser_get_filename(), lambda->line, lambda->column,
                                         param->type_name);
-                                exit(1);
                             }
                         } else {
                             /* param_type = type_float(); // default */
@@ -1067,10 +1073,9 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     if (lambda->lambda.return_type) {
                         ret_type = type_from_name(lambda->lambda.return_type);
                         if (!ret_type) {
-                            fprintf(stderr, "%s:%d:%d: error: unknown return type '%s'\n",
+                            CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown return type '%s'",
                                     parser_get_filename(), ast->line, ast->column,
                                     lambda->lambda.return_type);
-                            exit(1);
                         }
                     } else {
                         ret_type = type_float(); // default when no annotation
@@ -1274,9 +1279,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 CodegenResult value_result;
                 if (value_expr->type == AST_ARRAY && value_expr->array.element_count == 0) {
                     if (!explicit_type || explicit_type->kind != TYPE_ARR) {
-                        fprintf(stderr, "%s:%d:%d: error: cannot infer type of empty array - explicit type annotation required\n",
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot infer type of empty array - explicit type annotation required",
                                 parser_get_filename(), ast->line, ast->column);
-                        exit(1);
                     }
                     // Don't call codegen_expr for empty arrays - we'll handle them below in zero-init
                     value_result.type = explicit_type;
@@ -1297,10 +1301,9 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
                     // Allow empty initialization (will zero-init)
                     if (actual_size > 0 && actual_size != declared_size) {
-                        fprintf(stderr, "%s:%d:%d: error: array size mismatch - declared size %d but got %d elements\n",
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: array size mismatch - declared size %d but got %d elements",
                                 parser_get_filename(), ast->line, ast->column,
                                 declared_size, actual_size);
-                        exit(1);
                     }
                 }
 
@@ -1449,9 +1452,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             // Handle 'quote' special form
             if (strcmp(head->symbol, "quote") == 0) {
                 if (ast->list.count != 2) {
-                    fprintf(stderr, "%s:%d:%d: error: 'quote' requires 1 argument\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'quote' requires 1 argument",
                             parser_get_filename(), ast->line, ast->column);
-                    exit(1);
                 }
 
                 AST *quoted = ast->list.items[1];
@@ -1508,9 +1510,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             // Handle 'show' function
             if (strcmp(head->symbol, "show") == 0) {
                 if (ast->list.count < 2) {
-                    fprintf(stderr, "%s:%d:%d: error: 'show' requires at least 1 argument\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'show' requires at least 1 argument",
                             parser_get_filename(), ast->line, ast->column);
-                    exit(1);
                 }
 
                 LLVMValueRef printf_fn = get_or_declare_printf(ctx);
@@ -1630,9 +1631,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 if (arg->type == AST_SYMBOL) {
                     EnvEntry *entry = env_lookup(ctx->env, arg->symbol);
                     if (!entry) {
-                        fprintf(stderr, "%s:%d:%d: error: unbound variable: %s\n",
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: unbound variable: %s",
                                 parser_get_filename(), ast->line, ast->column, arg->symbol);
-                        exit(1);
                     }
 
                     // Arrays need special treatment — they're pointers to stack allocations
@@ -1730,23 +1730,20 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
             if (strcmp(head->symbol, "doc") == 0) {
                 if (ast->list.count != 2) {
-                    fprintf(stderr, "%s:%d:%d: error: 'doc' requires 1 argument\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'doc' requires 1 argument",
                             parser_get_filename(), ast->line, ast->column);
-                    exit(1);
                 }
 
                 AST *arg = ast->list.items[1];
                 if (arg->type != AST_SYMBOL) {
-                    fprintf(stderr, "%s:%d:%d: error: 'doc' argument must be a symbol\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'doc' argument must be a symbol",
                             parser_get_filename(), ast->line, ast->column);
-                    exit(1);
                 }
 
                 EnvEntry *entry = env_lookup(ctx->env, arg->symbol);
                 if (!entry) {
-                    fprintf(stderr, "%s:%d:%d: error: 'doc' unbound variable: %s\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'doc' unbound variable: %s",
                             parser_get_filename(), ast->line, ast->column, arg->symbol);
-                    exit(1);
                 }
 
                 /* const char *docstring = entry->docstring ? entry->docstring : ""; */
@@ -1762,9 +1759,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
             if (strcmp(head->symbol, "assert-eq") == 0) {
                 if (ast->list.count != 4) {
-                    fprintf(stderr, "%s:%d:%d: error: 'assert-eq' requires 3 arguments: actual expected label\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'assert-eq' requires 3 arguments: actual expected label",
                             parser_get_filename(), ast->line, ast->column);
-                    exit(1);
                 }
 
                 CodegenResult actual   = codegen_expr(ctx, ast->list.items[1]);
@@ -1843,9 +1839,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 // Guard: only valid inside a function body
                 LLVMValueRef cur_fn = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder));
                 if (cur_fn == ctx->init_fn) {
-                    fprintf(stderr, "%s:%d:%d: error: 'undefined' is only valid inside a function body\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'undefined' is only valid inside a function body",
                             parser_get_filename(), ast->line, ast->column);
-                    exit(1);
                 }
 
                 // Emit: fprintf(stderr, "<file>:<line>:<col>: error: called undefined\n")
@@ -1908,9 +1903,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
             if (strcmp(head->symbol, "string-length") == 0) {
                 if (ast->list.count != 2) {
-                    fprintf(stderr, "%s:%d:%d: error: 'string-length' requires 1 argument\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'string-length' requires 1 argument",
                             parser_get_filename(), ast->line, ast->column);
-                    exit(1);
                 }
 
                 // Declare strlen
@@ -1933,9 +1927,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
             if (strcmp(head->symbol, "string-ref") == 0) {
                 if (ast->list.count != 3) {
-                    fprintf(stderr, "%s:%d:%d: error: 'string-ref' requires 2 arguments\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'string-ref' requires 2 arguments",
                             parser_get_filename(), ast->line, ast->column);
-                    exit(1);
                 }
 
                 CodegenResult str_r = codegen_expr(ctx, ast->list.items[1]);
@@ -1955,9 +1948,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
             if (strcmp(head->symbol, "string-set!") == 0) {
                 if (ast->list.count != 4) {
-                    fprintf(stderr, "%s:%d:%d: error: 'string-set!' requires 3 arguments: string index char\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'string-set!' requires 3 arguments: string index char",
                             parser_get_filename(), ast->line, ast->column);
-                    exit(1);
                 }
 
                 CodegenResult str_r  = codegen_expr(ctx, ast->list.items[1]);
@@ -1987,9 +1979,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
             if (strcmp(head->symbol, "make-string") == 0) {
                 if (ast->list.count != 3) {
-                    fprintf(stderr, "%s:%d:%d: error: 'make-string' requires 2 arguments: length fill-char\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'make-string' requires 2 arguments: length fill-char",
                             parser_get_filename(), ast->line, ast->column);
-                    exit(1);
                 }
 
                 // Declare calloc
@@ -2251,23 +2242,20 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
             if (strcmp(head->symbol, "set!") == 0) {
                 if (ast->list.count != 3) {
-                    fprintf(stderr, "%s:%d:%d: error: 'set!' requires 2 arguments\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'set!' requires 2 arguments",
                             parser_get_filename(), ast->line, ast->column);
-                    exit(1);
                 }
 
                 AST *name_ast = ast->list.items[1];
                 if (name_ast->type != AST_SYMBOL) {
-                    fprintf(stderr, "%s:%d:%d: error: 'set!' target must be a symbol\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'set!' target must be a symbol",
                             parser_get_filename(), ast->line, ast->column);
-                    exit(1);
                 }
 
                 EnvEntry *entry = env_lookup(ctx->env, name_ast->symbol);
                 if (!entry) {
-                    fprintf(stderr, "%s:%d:%d: error: unbound variable: %s\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: unbound variable: %s",
                             parser_get_filename(), ast->line, ast->column, name_ast->symbol);
-                    exit(1);
                 }
 
                 CodegenResult val = codegen_expr(ctx, ast->list.items[2]);
@@ -2291,9 +2279,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
             if (strcmp(head->symbol, "and") == 0) {
                 if (ast->list.count < 3) {
-                    fprintf(stderr, "%s:%d:%d: error: 'and' requires at least 2 arguments\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'and' requires at least 2 arguments",
                             parser_get_filename(), ast->line, ast->column);
-                    exit(1);
                 }
 
                 LLVMTypeRef i1  = LLVMInt1TypeInContext(ctx->context);
@@ -2326,9 +2313,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
             if (strcmp(head->symbol, "or") == 0) {
                 if (ast->list.count < 3) {
-                    fprintf(stderr, "%s:%d:%d: error: 'or' requires at least 2 arguments\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'or' requires at least 2 arguments",
                             parser_get_filename(), ast->line, ast->column);
-                    exit(1);
                 }
 
                 LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
@@ -2367,9 +2353,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
             if (strcmp(head->symbol, "if") == 0) {
                 if (ast->list.count < 3 || ast->list.count > 4) {
-                    fprintf(stderr, "%s:%d:%d: error: 'if' requires 2 or 3 arguments\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'if' requires 2 or 3 arguments",
                             parser_get_filename(), ast->line, ast->column);
-                    exit(1);
                 }
 
                 // Condition
@@ -2503,9 +2488,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
             if (strcmp(head->symbol, "for") == 0) {
                 if (ast->list.count != 3) {
-                    fprintf(stderr, "%s:%d:%d: error: 'for' requires a binding and a body\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'for' requires a binding and a body",
                             parser_get_filename(), ast->line, ast->column);
-                    exit(1);
                 }
 
                 AST *binding = ast->list.items[1];
@@ -2515,9 +2499,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 if (binding->type != AST_ARRAY ||
                     binding->array.element_count < 1 ||
                     binding->array.element_count > 4) {
-                    fprintf(stderr, "%s:%d:%d: error: 'for' binding must be [n], [var start end], or [var start end step]\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'for' binding must be [n], [var start end], or [var start end step]",
                             parser_get_filename(), ast->line, ast->column);
-                    exit(1);
                 }
 
                 LLVMValueRef start_val;
@@ -2539,9 +2522,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     negative_step = false;
                 } else {
                     if (binding->array.elements[0]->type != AST_SYMBOL) {
-                        fprintf(stderr, "%s:%d:%d: error: 'for' loop variable must be a symbol\n",
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'for' loop variable must be a symbol",
                                 parser_get_filename(), ast->line, ast->column);
-                        exit(1);
                     }
 
                     CodegenResult start_r = codegen_expr(ctx, binding->array.elements[1]);
@@ -2624,9 +2606,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 strcmp(head->symbol, "=")  == 0 || strcmp(head->symbol, "!=") == 0) {
 
                 if (ast->list.count != 3) {
-                    fprintf(stderr, "%s:%d:%d: error: '%s' requires 2 arguments\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' requires 2 arguments",
                             parser_get_filename(), ast->line, ast->column, head->symbol);
-                    exit(1);
                 }
 
                 CodegenResult lhs = codegen_expr(ctx, ast->list.items[1]);
@@ -2679,9 +2660,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 const char *op = head->symbol;
 
                 if (ast->list.count < 2) {
-                    fprintf(stderr, "%s:%d:%d: error: '%s' requires at least 1 argument\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' requires at least 1 argument",
                             parser_get_filename(), ast->line, ast->column, op);
-                    exit(1);
                 }
 
                 CodegenResult first = codegen_expr(ctx, ast->list.items[1]);
@@ -2689,9 +2669,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 LLVMValueRef  result_value = first.value;
 
                 if (!type_is_numeric(result_type)) {
-                    fprintf(stderr, "%s:%d:%d: error: cannot perform arithmetic on type %s\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot perform arithmetic on type %s",
                             parser_get_filename(), ast->line, ast->column, type_to_string(result_type));
-                    exit(1);
                 }
 
                 // Coerce Char to Int upfront
@@ -2731,9 +2710,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     for (size_t i = 2; i < ast->list.count; i++) {
                         CodegenResult rhs = codegen_expr(ctx, ast->list.items[i]);
                         if (rhs.type->kind != TYPE_RATIO) {
-                            fprintf(stderr, "%s:%d:%d: error: cannot mix Ratio with other numeric types\n",
+                            CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot mix Ratio with other numeric types",
                                     parser_get_filename(), ast->line, ast->column);
-                            exit(1);
                         }
                         LLVMValueRef fn = NULL;
                         if      (strcmp(op, "+") == 0) fn = get_rt_ratio_add(ctx);
@@ -2755,9 +2733,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     CodegenResult rhs = codegen_expr(ctx, ast->list.items[i]);
 
                     if (!type_is_numeric(rhs.type)) {
-                        fprintf(stderr, "%s:%d:%d: error: cannot perform arithmetic on type %s\n",
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot perform arithmetic on type %s",
                                 parser_get_filename(), ast->line, ast->column, type_to_string(rhs.type));
-                        exit(1);
                     }
 
                     // Coerce Char rhs to Int
@@ -2771,10 +2748,9 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     if ((result_type->kind == TYPE_HEX || result_type->kind == TYPE_BIN || result_type->kind == TYPE_OCT) &&
                         (rhs.type->kind  == TYPE_HEX || rhs.type->kind  == TYPE_BIN || rhs.type->kind  == TYPE_OCT) &&
                         result_type->kind != rhs.type->kind) {
-                        fprintf(stderr, "%s:%d:%d: error: cannot mix %s and %s in arithmetic\n",
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot mix %s and %s in arithmetic",
                                 parser_get_filename(), ast->line, ast->column,
                                 type_to_string(result_type), type_to_string(rhs.type));
-                        exit(1);
                     }
 
                     // Determine result type
@@ -2825,9 +2801,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
             // If it's a variable being used in function position, that's an error
             if (entry && entry->kind == ENV_VAR) {
-                fprintf(stderr, "%s:%d:%d: error: '%s' is a variable, not a function\n",
+                CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' is a variable, not a function",
                         parser_get_filename(), ast->line, ast->column, head->symbol);
-                exit(1);
             }
 
             // Function call - FIXED VERSION
@@ -2835,10 +2810,9 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 // Check argument count
                 size_t arg_count = ast->list.count - 1;
                 if ((int)arg_count != entry->param_count) {
-                    fprintf(stderr, "%s:%d:%d: error: function '%s' expects %d arguments, got %zu\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: function '%s' expects %d arguments, got %zu",
                             parser_get_filename(), ast->line, ast->column,
                             head->symbol, entry->param_count, arg_count);
-                    exit(1);
                 }
 
                 LLVMValueRef *args = malloc(sizeof(LLVMValueRef) * arg_count);
@@ -2929,9 +2903,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
             if (cast_target) {
                 if (ast->list.count != 2) {
-                    fprintf(stderr, "%s:%d:%d: error: type cast '%s' requires exactly 1 argument\n",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: type cast '%s' requires exactly 1 argument",
                             parser_get_filename(), ast->line, ast->column, cast_target);
-                    exit(1);
                 }
 
                 AST *arg = ast->list.items[1];
@@ -3291,14 +3264,12 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 return result;
             }
 
-            fprintf(stderr, "%s:%d:%d: error: unknown function: %s\n",
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown function: %s",
                     parser_get_filename(), ast->line, ast->column, head->symbol);
-            exit(1);
         }
 
-        fprintf(stderr, "%s:%d:%d: error: function call requires symbol in head position\n",
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: function call requires symbol in head position",
                 parser_get_filename(), ast->line, ast->column);
-        exit(1);
     }
 
     case AST_TYPE_ALIAS: {
@@ -3343,9 +3314,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     }
 
     default:
-        fprintf(stderr, "%s:%d:%d: error: unknown AST type: %d\n",
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown AST type: %d",
                 parser_get_filename(), ast->line, ast->column, ast->type);
-        exit(1);
     }
 }
 

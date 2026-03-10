@@ -1,13 +1,13 @@
 #ifndef CODEGEN_H
 #define CODEGEN_H
 #include <llvm-c/Core.h>
+#include <setjmp.h>
 #include "reader.h"
 #include "types.h"
 #include "env.h"
 
 // Forward declaration
 typedef struct ModuleContext ModuleContext;
-
 typedef struct {
     LLVMModuleRef module;
     LLVMBuilderRef builder;
@@ -25,6 +25,11 @@ typedef struct {
     LLVMValueRef fmt_bin;
     LLVMValueRef fmt_oct;
     bool test_mode;
+
+    /* Error recovery — set by CODEGEN_ERROR, caught by codegen_expr callers */
+    jmp_buf  error_jmp;
+    bool     error_jmp_set;   /* true while a recovery point is active      */
+    char     error_msg[512];  /* last error message, for display             */
 } CodegenContext;
 
 typedef struct {

@@ -22,6 +22,7 @@
 
 (show "Showing phi from Math")
 (show Math.phi)
+(show phi)
 (show "Showing (square 3) from Math")
 (show (Math.square 3))
 ;; (show "Showing (Math.helper 9) from Math")
