@@ -1,0 +1,196 @@
+;;; String.mon --- String manipulation and query
+
+;; Author: Laluxx
+;; Version: 0.0.1
+;; Keywords: text string manipulation search
+
+;;; Commentary:
+
+;; String manipulation functions following Guile Scheme conventions.
+;; Builds on the Ascii module for character-level operations.
+;; Strings in Monad are mutable UTF-8 byte sequences allocated on the heap.
+
+;;; Code:
+
+(module String
+  [string-empty?    string-contains?  string-prefix?   string-suffix?
+   string-copy      string-append     substring
+   string-trim      string-trim-right string-trim-both
+   string-pad-left  string-pad-right
+   upcase           downcase          capitalize])
+
+(import Ascii)
+
+;;;; Queries
+
+(define (string-empty? [s :: String] -> Bool)
+  "Return True if S is the empty string."
+  (= (string-length s) 0))
+
+(define (string-prefix? [prefix :: String] -> [s :: String] -> Bool)
+  "Return True if S starts with PREFIX."
+  (define [plen   :: Int]  (string-length prefix))
+  (define [slen   :: Int]  (string-length s))
+  (define [result :: Bool] (and (<= plen slen) True))
+  (if (<= plen slen)
+    (for [i 0 plen]
+      (if (!= (string-ref prefix i) (string-ref s i))
+        (set! result False))))
+  result)
+
+(define (string-suffix? [suffix :: String] -> [s :: String] -> Bool)
+  "Return True if S ends with SUFFIX."
+  (define [suflen :: Int]  (string-length suffix))
+  (define [slen   :: Int]  (string-length s))
+  (define [offset :: Int]  (- slen suflen))
+  (define [result :: Bool] (and (<= suflen slen) True))
+  (if (<= suflen slen)
+    (for [i 0 suflen]
+      (if (!= (string-ref suffix i) (string-ref s (+ offset i)))
+        (set! result False))))
+  result)
+
+(define (string-contains? [s :: String] -> [sub :: String] -> Bool)
+  "Return True if S contains SUB."
+  (define [slen   :: Int]  (string-length s))
+  (define [sublen :: Int]  (string-length sub))
+  (define [result :: Bool] False)
+  (define [limit  :: Int]  (- slen sublen))
+  (define [match  :: Bool] True)
+  (if (<= sublen slen)
+    (for [i 0 (+ limit 1)]
+      (begin
+        (set! match True)
+        (for [j 0 sublen]
+          (if (!= (string-ref s (+ i j)) (string-ref sub j))
+            (set! match False)))
+        (if match
+          (set! result True)))))
+  result)
+
+;;;; Copying and construction
+
+(define (string-copy [s :: String] -> String)
+  "Return a fresh mutable copy of S."
+  (define [len    :: Int]    (string-length s))
+  (define [result :: String] (make-string len 'a'))
+  (for [i 0 len]
+    (string-set! result i (string-ref s i)))
+  result)
+
+(define (string-append [a :: String] -> [b :: String] -> String)
+  "Return a new string that is A followed by B."
+  (define [alen   :: Int]    (string-length a))
+  (define [blen   :: Int]    (string-length b))
+  (define [result :: String] (make-string (+ alen blen) 'a'))
+  (for [i 0 alen]
+    (string-set! result i (string-ref a i)))
+  (for [i 0 blen]
+    (string-set! result (+ alen i) (string-ref b i)))
+  result)
+
+(define (substring [s :: String] -> [start :: Int] -> [end :: Int] -> String)
+  "Return a new string containing chars of S from START to END."
+  (define [len    :: Int]    (- end start))
+  (define [result :: String] (make-string len 'a'))
+  (for [i 0 len]
+    (string-set! result i (string-ref s (+ start i))))
+  result)
+
+;;;; Trimming
+
+(define (string-trim [s :: String] -> String)
+  "Return S with leading whitespace removed."
+  (define [len   :: Int] (string-length s))
+  (define [start :: Int] 0)
+  (for [i 0 len]
+    (if (and (= start i) (char-whitespace? (string-ref s i)))
+      (set! start (+ start 1))))
+  (substring s start len))
+
+(define (string-trim-right [s :: String] -> String)
+  "Return S with trailing whitespace removed."
+  (define [len :: Int] (string-length s))
+  (define [end :: Int] len)
+  (for [i 0 len]
+    (if (char-whitespace? (string-ref s (- len (+ i 1))))
+      (if (= end (- len i))
+        (set! end (- end 1)))))
+  (substring s 0 end))
+
+(define (string-trim-both [s :: String] -> String)
+  "Return S with leading and trailing whitespace removed."
+  (string-trim (string-trim-right s)))
+
+;;;; Padding
+
+(define (string-pad-left [s :: String] -> [n :: Int] -> [c :: Char] -> String)
+  "Pad S on the left with C to length N."
+  (define [len    :: Int]    (string-length s))
+  (if (<= n len)
+    s
+    (begin
+      (define [pad    :: Int]    (- n len))
+      (define [result :: String] (make-string n c))
+      (for [i 0 len]
+        (string-set! result (+ pad i) (string-ref s i)))
+      result)))
+
+(define (string-pad-right [s :: String] -> [n :: Int] -> [c :: Char] -> String)
+  "Pad S on the right with C to length N."
+  (define [len    :: Int]    (string-length s))
+  (if (<= n len)
+    s
+    (begin
+      (define [result :: String] (make-string n c))
+      (for [i 0 len]
+        (string-set! result i (string-ref s i)))
+      result)))
+
+;;;; Case conversion
+
+(define (upcase [input :: String] -> String)
+  "Convert INPUT to upper case."
+  (define [result :: String] (make-string (string-length input) 'a'))
+  (for [i 0 (string-length input)]
+    (string-set! result i (char-upcase (string-ref input i))))
+  result)
+
+(define (downcase [input :: String] -> String)
+  "Convert INPUT to lower case."
+  (define [result :: String] (make-string (string-length input) 'a'))
+  (for [i 0 (string-length input)]
+    (string-set! result i (char-downcase (string-ref input i))))
+  result)
+
+(define (capitalize [input :: String] -> String)
+  "Capitalize INPUT."
+  (define [result :: String] (make-string (string-length input) 'a'))
+  (for [i 0 (string-length input)]
+    (string-set! result i
+      (if (= i 0)
+        (char-upcase   (string-ref input i))
+        (char-downcase (string-ref input i)))))
+  result)
+
+(tests
+  (assert-eq (string-empty?     "")                     True            "string-empty? empty")
+  (assert-eq (string-empty?     "hello")                False           "string-empty? nonempty")
+  (assert-eq (string-prefix?    "he"  "hello")          True            "string-prefix? yes")
+  (assert-eq (string-prefix?    "wo"  "hello")          False           "string-prefix? no")
+  (assert-eq (string-prefix?    "hello" "hi")           False           "string-prefix? too long")
+  (assert-eq (string-suffix?    "lo"  "hello")          True            "string-suffix? yes")
+  (assert-eq (string-suffix?    "he"  "hello")          False           "string-suffix? no")
+  (assert-eq (string-contains?  "hello world" "world")  True            "string-contains? yes")
+  (assert-eq (string-contains?  "hello world" "xyz")    False           "string-contains? no")
+  (assert-eq (string-copy       "hello")                "hello"         "string-copy")
+  (assert-eq (string-append     "hello" " world")       "hello world"   "string-append")
+  (assert-eq (substring         "hello" 1 4)            "ell"           "substring")
+  (assert-eq (string-trim       "  hello  ")            "hello  "       "string-trim")
+  (assert-eq (string-trim-right "  hello  ")            "  hello"       "string-trim-right")
+  (assert-eq (string-trim-both  "  hello  ")            "hello"         "string-trim-both")
+  (assert-eq (string-pad-left   "hi" 5 '-')             "---hi"         "string-pad-left")
+  (assert-eq (string-pad-right  "hi" 5 '-')             "hi---"         "string-pad-right")
+  (assert-eq (upcase            "meow!")                "MEOW!"         "upcase")
+  (assert-eq (downcase          "DOWNCASE!")            "downcase!"     "downcase")
+  (assert-eq (capitalize        "caPiTaliZED!")         "Capitalized!"  "capitalize"))

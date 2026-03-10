@@ -22,8 +22,7 @@
    punctuation    whitespace        printable
    char-downcase  case-delta        char-upcase
    char-lower?    char-upper?       char-alphabetic?
-   char-numeric?  char-whitespace?  char-alphanumeric?
-   upcase         downcase          capitalize])
+   char-numeric?  char-whitespace?  char-alphanumeric?])
 
 (define lowercase   "abcdefghijklmnopqrstuvwxyz")
 (define uppercase   "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -59,34 +58,6 @@
   (if (and (>= c 'A') (<= c 'Z'))
     (+ c case-delta)
     c))
-
-
-(define (upcase [input :: String] -> String)
-  "Convert INPUT to upper case."
-  (define [result :: String] (make-string (string-length input) 'a'))
-  (for [i 0 (string-length input)]
-    (string-set! result i (char-upcase (string-ref input i))))
-  result)
-
-
-(define (downcase [input :: String] -> String)
-  "Convert INPUT to lower case."
-  (define [result :: String] (make-string (string-length input) 'a'))
-  (for [i 0 (string-length input)]
-    (string-set! result i (char-downcase (string-ref input i))))
-  result)
-
-
-(define (capitalize [input :: String] -> String)
-  "Capitalize INPUT."
-  (define [result :: String] (make-string (string-length input) 'a'))
-  (for [i 0 (string-length input)]
-    (string-set! result i
-      (if (= i 0)
-        (char-upcase (string-ref input i))
-        (char-downcase (string-ref input i)))))
-  result)
-
 
 (define (char-lower? [c :: Char] -> Bool)
   "Return True if C is a lowercase letter."
@@ -125,15 +96,12 @@
   (assert-eq hexdigits "0123456789abcdefABCDEF"                                "hexdigits")
   (assert-eq octdigits "01234567"                                              "octdigits")
   (assert-eq case-delta 32                                                     "case-delta")
-  (assert-eq (char-upcase   'a') 'A'                                           "char-upcase a")
-  (assert-eq (char-upcase   'z') 'Z'                                           "char-upcase z")
-  (assert-eq (char-upcase   'A') 'A'                                           "char-upcase noop")
-  (assert-eq (char-downcase 'A') 'a'                                           "char-downcase A")
-  (assert-eq (char-downcase 'Z') 'z'                                           "char-downcase Z")
-  (assert-eq (char-downcase 'a') 'a'                                           "char-downcase noop")
-  (assert-eq (upcase     "meow!")        "MEOW!"                               "upcase")
-  (assert-eq (downcase   "DOWNCASE!")    "downcase!"                           "downcase")
-  (assert-eq (capitalize "caPiTaliZED!") "Capitalized!"                        "capitalize")
+  (assert-eq (char-upcase        'a')   'A'                                    "char-upcase a")
+  (assert-eq (char-upcase        'z')   'Z'                                    "char-upcase z")
+  (assert-eq (char-upcase        'A')   'A'                                    "char-upcase noop")
+  (assert-eq (char-downcase      'A')   'a'                                    "char-downcase A")
+  (assert-eq (char-downcase      'Z')   'z'                                    "char-downcase Z")
+  (assert-eq (char-downcase      'a')   'a'                                    "char-downcase noop")
   (assert-eq (char-lower?        'a')    1                                     "char-lower? a")
   (assert-eq (char-lower?        'A')    0                                     "char-lower? A")
   (assert-eq (char-upper?        'A')    1                                     "char-upper? A")

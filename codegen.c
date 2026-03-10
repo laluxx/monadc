@@ -740,6 +740,12 @@ static LLVMValueRef get_or_declare_strdup(CodegenContext *ctx) {
     return fn;
 }
 
+static void build_br_if_no_terminator(LLVMBuilderRef builder, LLVMBasicBlockRef dest) {
+    LLVMBasicBlockRef cur = LLVMGetInsertBlock(builder);
+    if (cur && !LLVMGetBasicBlockTerminator(cur))
+        LLVMBuildBr(builder, dest);
+}
+
 CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     CodegenResult result = {NULL, NULL};
 
@@ -770,18 +776,27 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     }
 
     case AST_SYMBOL: {
-        EnvEntry *entry = resolve_symbol_with_modules(ctx, ast->symbol, ast);
+        // Boolean literals
+        if (strcmp(ast->symbol, "True") == 0) {
+            result.value = LLVMConstInt(LLVMInt1TypeInContext(ctx->context), 1, 0);
+            result.type  = type_bool();
+            return result;
+        }
+        if (strcmp(ast->symbol, "False") == 0) {
+            result.value = LLVMConstInt(LLVMInt1TypeInContext(ctx->context), 0, 0);
+            result.type  = type_bool();
+            return result;
+        }
 
+        EnvEntry *entry = resolve_symbol_with_modules(ctx, ast->symbol, ast);
         if (!entry) {
             fprintf(stderr, "%s:%d:%d: error: unbound variable: %s\n",
                     parser_get_filename(), ast->line, ast->column, ast->symbol);
             exit(1);
         }
-
         result.type = type_clone(entry->type);
-        result.value =
-            LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, entry->type),
-                           entry->value, ast->symbol);
+        result.value = LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, entry->type),
+                                      entry->value, ast->symbol);
         return result;
     }
 
@@ -2089,91 +2104,226 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 LLVMBasicBlockRef merge_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "ifmerge");
                 LLVMBuildCondBr(ctx->builder, cond_val, then_bb, else_bb);
 
-                // Codegen then — stay in then_bb for now, don't branch yet
+                // Then branch
                 LLVMPositionBuilderAtEnd(ctx->builder, then_bb);
                 CodegenResult then_result = codegen_expr(ctx, ast->list.items[2]);
+                LLVMBasicBlockRef then_end_bb = LLVMGetInsertBlock(ctx->builder);
 
-                // Codegen else — stay in else_bb for now, don't branch yet
+                // Else branch
                 LLVMPositionBuilderAtEnd(ctx->builder, else_bb);
                 CodegenResult else_result = {NULL, NULL};
                 if (ast->list.count == 4)
                     else_result = codegen_expr(ctx, ast->list.items[3]);
+                LLVMBasicBlockRef else_end_bb = LLVMGetInsertBlock(ctx->builder);
 
-                // No else or missing values — emit branches and return dummy
+                // No else or no values — branch both to merge, return dummy
                 if (ast->list.count != 4 || !then_result.value || !else_result.value
                     || !then_result.type || !else_result.type) {
-                    LLVMPositionBuilderAtEnd(ctx->builder, then_bb);
-                    LLVMBuildBr(ctx->builder, merge_bb);
-                    LLVMPositionBuilderAtEnd(ctx->builder, else_bb);
-                    LLVMBuildBr(ctx->builder, merge_bb);
+                    LLVMPositionBuilderAtEnd(ctx->builder, then_end_bb);
+                    build_br_if_no_terminator(ctx->builder, merge_bb);
+                    LLVMPositionBuilderAtEnd(ctx->builder, else_end_bb);
+                    build_br_if_no_terminator(ctx->builder, merge_bb);
                     LLVMPositionBuilderAtEnd(ctx->builder, merge_bb);
                     result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0);
                     result.type  = type_int();
                     return result;
                 }
 
-                // Determine common type
-                bool then_is_char  = then_result.type->kind == TYPE_CHAR;
-                bool else_is_char  = else_result.type->kind == TYPE_CHAR;
-                bool then_is_float = type_is_float(then_result.type);
-                bool else_is_float = type_is_float(else_result.type);
-                bool then_is_int   = type_is_integer(then_result.type);
-                bool else_is_int   = type_is_integer(else_result.type);
+                // Classify branch types
+                bool then_is_char   = then_result.type->kind == TYPE_CHAR;
+                bool else_is_char   = else_result.type->kind == TYPE_CHAR;
+                bool then_is_float  = type_is_float(then_result.type);
+                bool else_is_float  = type_is_float(else_result.type);
+                bool then_is_int    = type_is_integer(then_result.type);
+                bool else_is_int    = type_is_integer(else_result.type);
+                bool then_is_string = then_result.type->kind == TYPE_STRING;
+                bool else_is_string = else_result.type->kind == TYPE_STRING;
+                bool then_is_bool   = then_result.type->kind == TYPE_BOOL;
+                bool else_is_bool   = else_result.type->kind == TYPE_BOOL;
 
+                // Determine common PHI type
                 LLVMTypeRef phi_llvm_type;
                 Type       *phi_type;
-                if (then_is_char || else_is_char) {
+
+                if (then_is_string || else_is_string) {
+                    phi_llvm_type = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                    phi_type      = type_string();
+                } else if (then_is_char || else_is_char) {
                     phi_llvm_type = LLVMInt8TypeInContext(ctx->context);
                     phi_type      = type_char();
                 } else if (then_is_float || else_is_float) {
                     phi_llvm_type = LLVMDoubleTypeInContext(ctx->context);
                     phi_type      = type_float();
+                } else if (then_is_bool && else_is_bool) {
+                    phi_llvm_type = LLVMInt1TypeInContext(ctx->context);
+                    phi_type      = type_bool();
                 } else {
                     phi_llvm_type = LLVMInt64TypeInContext(ctx->context);
                     phi_type      = type_int();
                 }
 
-                // Emit coercions + branch in then_bb
-                LLVMPositionBuilderAtEnd(ctx->builder, then_bb);
+                // Coerce then value and branch to merge
+                LLVMPositionBuilderAtEnd(ctx->builder, then_end_bb);
                 LLVMValueRef then_val = then_result.value;
-                if (then_is_char || else_is_char) {
-                    if (!then_is_char && then_is_int)
-                        then_val = LLVMBuildTrunc(ctx->builder, then_val, phi_llvm_type, "to_char");
-                } else if (then_is_float || else_is_float) {
-                    if (then_is_int)
-                        then_val = LLVMBuildSIToFP(ctx->builder, then_val, phi_llvm_type, "to_float");
-                } else {
-                    if (LLVMTypeOf(then_val) != phi_llvm_type)
-                        then_val = LLVMBuildZExt(ctx->builder, then_val, phi_llvm_type, "ext");
+                if (!LLVMGetBasicBlockTerminator(then_end_bb)) {
+                    if (then_is_string || else_is_string) {
+                        // no coercion needed for pointers
+                    } else if (then_is_char || else_is_char) {
+                        if (!then_is_char && then_is_int)
+                            then_val = LLVMBuildTrunc(ctx->builder, then_val, phi_llvm_type, "to_char");
+                    } else if (then_is_float || else_is_float) {
+                        if (then_is_int)
+                            then_val = LLVMBuildSIToFP(ctx->builder, then_val, phi_llvm_type, "to_float");
+                    } else {
+                        if (LLVMTypeOf(then_val) != phi_llvm_type)
+                            then_val = LLVMBuildZExt(ctx->builder, then_val, phi_llvm_type, "ext");
+                    }
+                    LLVMBuildBr(ctx->builder, merge_bb);
                 }
-                LLVMBuildBr(ctx->builder, merge_bb);
-                LLVMBasicBlockRef then_end_bb = LLVMGetInsertBlock(ctx->builder);
+                LLVMBasicBlockRef then_phi_bb = LLVMGetInsertBlock(ctx->builder);
 
-                // Emit coercions + branch in else_bb
-                LLVMPositionBuilderAtEnd(ctx->builder, else_bb);
+                // Coerce else value and branch to merge
+                LLVMPositionBuilderAtEnd(ctx->builder, else_end_bb);
                 LLVMValueRef else_val = else_result.value;
-                if (then_is_char || else_is_char) {
-                    if (!else_is_char && else_is_int)
-                        else_val = LLVMBuildTrunc(ctx->builder, else_val, phi_llvm_type, "to_char");
-                } else if (then_is_float || else_is_float) {
-                    if (else_is_int)
-                        else_val = LLVMBuildSIToFP(ctx->builder, else_val, phi_llvm_type, "to_float");
-                } else {
-                    if (LLVMTypeOf(else_val) != phi_llvm_type)
-                        else_val = LLVMBuildZExt(ctx->builder, else_val, phi_llvm_type, "ext");
+                if (!LLVMGetBasicBlockTerminator(else_end_bb)) {
+                    if (then_is_string || else_is_string) {
+                        // no coercion needed for pointers
+                    } else if (then_is_char || else_is_char) {
+                        if (!else_is_char && else_is_int)
+                            else_val = LLVMBuildTrunc(ctx->builder, else_val, phi_llvm_type, "to_char");
+                    } else if (then_is_float || else_is_float) {
+                        if (else_is_int)
+                            else_val = LLVMBuildSIToFP(ctx->builder, else_val, phi_llvm_type, "to_float");
+                    } else {
+                        if (LLVMTypeOf(else_val) != phi_llvm_type)
+                            else_val = LLVMBuildZExt(ctx->builder, else_val, phi_llvm_type, "ext");
+                    }
+                    LLVMBuildBr(ctx->builder, merge_bb);
                 }
-                LLVMBuildBr(ctx->builder, merge_bb);
-                LLVMBasicBlockRef else_end_bb = LLVMGetInsertBlock(ctx->builder);
+                LLVMBasicBlockRef else_phi_bb = LLVMGetInsertBlock(ctx->builder);
 
                 // Merge + PHI
                 LLVMPositionBuilderAtEnd(ctx->builder, merge_bb);
                 LLVMValueRef phi = LLVMBuildPhi(ctx->builder, phi_llvm_type, "iftmp");
-                LLVMAddIncoming(phi, &then_val, &then_end_bb, 1);
-                LLVMAddIncoming(phi, &else_val, &else_end_bb, 1);
+                LLVMAddIncoming(phi, &then_val, &then_phi_bb, 1);
+                LLVMAddIncoming(phi, &else_val, &else_phi_bb, 1);
                 result.value = phi;
                 result.type  = phi_type;
                 return result;
             }
+
+            /* if (strcmp(head->symbol, "if") == 0) { */
+            /*     if (ast->list.count < 3 || ast->list.count > 4) { */
+            /*         fprintf(stderr, "%s:%d:%d: error: 'if' requires 2 or 3 arguments\n", */
+            /*                 parser_get_filename(), ast->line, ast->column); */
+            /*         exit(1); */
+            /*     } */
+
+            /*     CodegenResult cond_result = codegen_expr(ctx, ast->list.items[1]); */
+            /*     LLVMValueRef cond_val; */
+            /*     if (type_is_float(cond_result.type)) { */
+            /*         cond_val = LLVMBuildFCmp(ctx->builder, LLVMRealONE, */
+            /*                                  cond_result.value, */
+            /*                                  LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0), */
+            /*                                  "ifcond"); */
+            /*     } else { */
+            /*         cond_val = LLVMBuildICmp(ctx->builder, LLVMIntNE, */
+            /*                                  cond_result.value, */
+            /*                                  LLVMConstInt(LLVMTypeOf(cond_result.value), 0, 0), */
+            /*                                  "ifcond"); */
+            /*     } */
+
+            /*     LLVMValueRef      func     = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder)); */
+            /*     LLVMBasicBlockRef then_bb  = LLVMAppendBasicBlockInContext(ctx->context, func, "then"); */
+            /*     LLVMBasicBlockRef else_bb  = LLVMAppendBasicBlockInContext(ctx->context, func, "else"); */
+            /*     LLVMBasicBlockRef merge_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "ifmerge"); */
+            /*     LLVMBuildCondBr(ctx->builder, cond_val, then_bb, else_bb); */
+
+            /*     // Codegen then branch */
+            /*     LLVMPositionBuilderAtEnd(ctx->builder, then_bb); */
+            /*     CodegenResult then_result = codegen_expr(ctx, ast->list.items[2]); */
+            /*     LLVMBasicBlockRef then_end_bb = LLVMGetInsertBlock(ctx->builder); */
+            /*     build_br_if_no_terminator(ctx->builder, merge_bb); */
+
+            /*     // Codegen else branch */
+            /*     LLVMPositionBuilderAtEnd(ctx->builder, else_bb); */
+            /*     CodegenResult else_result = {NULL, NULL}; */
+            /*     if (ast->list.count == 4) */
+            /*         else_result = codegen_expr(ctx, ast->list.items[3]); */
+            /*     LLVMBasicBlockRef else_end_bb = LLVMGetInsertBlock(ctx->builder); */
+            /*     build_br_if_no_terminator(ctx->builder, merge_bb); */
+
+            /*     // Position at merge */
+            /*     LLVMPositionBuilderAtEnd(ctx->builder, merge_bb); */
+
+            /*     // No else or missing values — return dummy */
+            /*     if (ast->list.count != 4 || !then_result.value || !else_result.value */
+            /*         || !then_result.type || !else_result.type) { */
+            /*         result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0); */
+            /*         result.type  = type_int(); */
+            /*         return result; */
+            /*     } */
+
+            /*     // Determine common type */
+            /*     bool then_is_char  = then_result.type->kind == TYPE_CHAR; */
+            /*     bool else_is_char  = else_result.type->kind == TYPE_CHAR; */
+            /*     bool then_is_float = type_is_float(then_result.type); */
+            /*     bool else_is_float = type_is_float(else_result.type); */
+            /*     bool then_is_int   = type_is_integer(then_result.type); */
+            /*     bool else_is_int   = type_is_integer(else_result.type); */
+
+            /*     LLVMTypeRef phi_llvm_type; */
+            /*     Type       *phi_type; */
+            /*     if (then_is_char || else_is_char) { */
+            /*         phi_llvm_type = LLVMInt8TypeInContext(ctx->context); */
+            /*         phi_type      = type_char(); */
+            /*     } else if (then_is_float || else_is_float) { */
+            /*         phi_llvm_type = LLVMDoubleTypeInContext(ctx->context); */
+            /*         phi_type      = type_float(); */
+            /*     } else { */
+            /*         phi_llvm_type = LLVMInt64TypeInContext(ctx->context); */
+            /*         phi_type      = type_int(); */
+            /*     } */
+
+            /*     // Coerce then value — emit in then_end_bb */
+            /*     LLVMPositionBuilderAtEnd(ctx->builder, then_end_bb); */
+            /*     LLVMValueRef then_val = then_result.value; */
+            /*     if (then_is_char || else_is_char) { */
+            /*         if (!then_is_char && then_is_int) */
+            /*             then_val = LLVMBuildTrunc(ctx->builder, then_val, phi_llvm_type, "to_char"); */
+            /*     } else if (then_is_float || else_is_float) { */
+            /*         if (then_is_int) */
+            /*             then_val = LLVMBuildSIToFP(ctx->builder, then_val, phi_llvm_type, "to_float"); */
+            /*     } else { */
+            /*         if (LLVMTypeOf(then_val) != phi_llvm_type) */
+            /*             then_val = LLVMBuildZExt(ctx->builder, then_val, phi_llvm_type, "ext"); */
+            /*     } */
+            /*     LLVMBasicBlockRef then_phi_bb = LLVMGetInsertBlock(ctx->builder); */
+
+            /*     // Coerce else value — emit in else_end_bb */
+            /*     LLVMPositionBuilderAtEnd(ctx->builder, else_end_bb); */
+            /*     LLVMValueRef else_val = else_result.value; */
+            /*     if (then_is_char || else_is_char) { */
+            /*         if (!else_is_char && else_is_int) */
+            /*             else_val = LLVMBuildTrunc(ctx->builder, else_val, phi_llvm_type, "to_char"); */
+            /*     } else if (then_is_float || else_is_float) { */
+            /*         if (else_is_int) */
+            /*             else_val = LLVMBuildSIToFP(ctx->builder, else_val, phi_llvm_type, "to_float"); */
+            /*     } else { */
+            /*         if (LLVMTypeOf(else_val) != phi_llvm_type) */
+            /*             else_val = LLVMBuildZExt(ctx->builder, else_val, phi_llvm_type, "ext"); */
+            /*     } */
+            /*     LLVMBasicBlockRef else_phi_bb = LLVMGetInsertBlock(ctx->builder); */
+
+            /*     // Merge + PHI */
+            /*     LLVMPositionBuilderAtEnd(ctx->builder, merge_bb); */
+            /*     LLVMValueRef phi = LLVMBuildPhi(ctx->builder, phi_llvm_type, "iftmp"); */
+            /*     LLVMAddIncoming(phi, &then_val, &then_phi_bb, 1); */
+            /*     LLVMAddIncoming(phi, &else_val, &else_phi_bb, 1); */
+            /*     result.value = phi; */
+            /*     result.type  = phi_type; */
+            /*     return result; */
+            /* } */
 
             if (strcmp(head->symbol, "for") == 0) {
                 if (ast->list.count != 3) {
@@ -2202,18 +2352,16 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 bool         negative_step;
 
                 if (binding->array.element_count == 1) {
-                    // (for [n] body) — repeat n times, no named loop variable
                     CodegenResult count_r = codegen_expr(ctx, binding->array.elements[0]);
-                    start_val    = LLVMConstInt(i64, 0, 0);
-                    end_val      = type_is_float(count_r.type)
+                    start_val     = LLVMConstInt(i64, 0, 0);
+                    end_val       = type_is_float(count_r.type)
                         ? LLVMBuildFPToSI(ctx->builder, count_r.value, i64, "count")
                         : count_r.value;
-                    step_val     = LLVMConstInt(i64, 1, 0);
-                    var_name     = "__for_i";
-                    has_var      = false;
+                    step_val      = LLVMConstInt(i64, 1, 0);
+                    var_name      = "__for_i";
+                    has_var       = false;
                     negative_step = false;
                 } else {
-                    // (for [var start end] body) or (for [var start end step] body)
                     if (binding->array.elements[0]->type != AST_SYMBOL) {
                         fprintf(stderr, "%s:%d:%d: error: 'for' loop variable must be a symbol\n",
                                 parser_get_filename(), ast->line, ast->column);
@@ -2240,14 +2388,13 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         ? LLVMBuildFPToSI(ctx->builder, step_r.value, i64, "step")
                         : step_r.value;
 
-                    var_name = binding->array.elements[0]->symbol;
-                    has_var  = true;
+                    var_name      = binding->array.elements[0]->symbol;
+                    has_var       = true;
                     negative_step = (binding->array.element_count == 4 &&
                                      binding->array.elements[3]->type == AST_NUMBER &&
                                      binding->array.elements[3]->number < 0);
                 }
 
-                // Alloca for loop variable
                 LLVMValueRef i_ptr = LLVMBuildAlloca(ctx->builder, i64, var_name);
                 LLVMBuildStore(ctx->builder, start_val, i_ptr);
 
@@ -2265,10 +2412,9 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     : LLVMBuildICmp(ctx->builder, LLVMIntSLT, i_val, end_val, "for_cond");
                 LLVMBuildCondBr(ctx->builder, cond_val, body_bb, after_bb);
 
-                // Body — push loop var into new scope only if it has a name
+                // Body
                 LLVMPositionBuilderAtEnd(ctx->builder, body_bb);
                 Env *saved_env = ctx->env;
-                /* ctx->env = env_create(); */
                 ctx->env = env_create_child(saved_env);
                 if (has_var)
                     env_insert(ctx->env, var_name, type_int(), i_ptr);
@@ -2278,7 +2424,13 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 env_free(ctx->env);
                 ctx->env = saved_env;
 
-                // Increment
+                // Emit increment in current block (wherever body left us)
+                // If body ended with a terminator (e.g. nested for's after_bb already branched),
+                // we need a fresh block for the increment
+                if (LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder))) {
+                    LLVMBasicBlockRef inc_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "for_inc");
+                    LLVMPositionBuilderAtEnd(ctx->builder, inc_bb);
+                }
                 LLVMValueRef i_cur  = LLVMBuildLoad2(ctx->builder, i64, i_ptr, "i_cur");
                 LLVMValueRef i_next = LLVMBuildAdd(ctx->builder, i_cur, step_val, "i_next");
                 LLVMBuildStore(ctx->builder, i_next, i_ptr);
