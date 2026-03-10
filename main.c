@@ -722,6 +722,41 @@ static void compile(CompilerFlags *flags) {
     registry_free_all();
 }
 
+bool repl_compile_module(CodegenContext *ctx, ImportDecl *imp) {
+    const char *mod_name = imp->module_name;
+
+    char *src_path = module_name_to_path(mod_name);
+    if (!src_path) {
+        fprintf(stderr, "import error: cannot resolve module '%s'\n", mod_name);
+        return false;
+    }
+    if (!file_exists(src_path)) {
+        fprintf(stderr, "import error: cannot find '%s' (tried: %s)\n",
+                mod_name, src_path);
+        free(src_path);
+        return false;
+    }
+
+    /* Use dummy flags — no special emit, not a main module */
+    CompilerFlags flags = {0};
+    flags.emit_obj  = true;   /* ensure .o is written so deps link later */
+    flags.test_mode = false;
+
+    /* compile_one populates the global g_compiled registry */
+    CompiledModule *cm = compile_one(src_path, &flags, false);
+    free(src_path);
+
+    if (!cm) {
+        fprintf(stderr, "import error: compile_one failed for '%s'\n", mod_name);
+        return false;
+    }
+
+    /* Inject the module's exports into the REPL's env + current LLVM module */
+    declare_externals(ctx, cm, imp);
+    return true;
+}
+
+
 int main(int argc, char **argv) {
     CompilerFlags flags = parse_flags(argc, argv);
     switch (flags.mode) {
@@ -738,20 +773,3 @@ int main(int argc, char **argv) {
         return 0;
     }
 }
-
-
-/* int main(int argc, char **argv) { */
-/*     CompilerFlags flags = parse_flags(argc, argv); */
-/*     switch (flags.mode) { */
-/*     case CMD_REPL:    repl_run();                  return 0; */
-/*     case CMD_NEW:     cmd_new(flags.package_name); return 0; */
-/*     case CMD_BUILD:   cmd_build();                 return 0; */
-/*     case CMD_RUN:     cmd_run();                   return 0; */
-/*     case CMD_CLEAN:   cmd_clean();                 return 0; */
-/*     case CMD_INSTALL: cmd_install();               return 0; */
-/*     case CMD_COMPILE: */
-/*     default: */
-/*         compile(&flags); */
-/*         return 0; */
-/*     } */
-/* } */

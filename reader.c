@@ -1043,13 +1043,6 @@ static AST *parse_list(Parser *p) {
             int end_column = p->current.column + 1;
             p->current = lexer_next_token(p->lexer);
 
-            fprintf(stderr, "DEBUG: lambda naked=%d alias=%s doc=%s\n",
-                    meta.naked,
-                    meta.alias_name ? meta.alias_name : "null",
-                    meta.docstring  ? meta.docstring  : "null");
-
-
-
             // Validate naked functions have at least one (asm ...) block
             if (meta.naked) {
                 bool has_asm = false;

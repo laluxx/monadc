@@ -1,12 +1,36 @@
+/*
+ * repl.c
+ *
+ * Architecture:
+ *   - One LLVMContext + one Env live for the whole session.
+ *   - One MCJIT ExecutionEngine accumulates modules (one per expression).
+ *   - fresh_module(): creates a new LLVMModule + builder, declares runtime
+ *     functions, re-declares all env globals/funcs as extern so the verifier
+ *     is happy, then registers every declaration's address with the engine
+ *     via LLVMAddGlobalMapping so the JIT can actually call them.
+ *   - codegen_expr() from codegen.c is called directly — no reimplementation.
+ *   - exit() is shadowed by a macro that longjmps back to the eval loop so
+ *     errors don't kill the process.
+ */
+
 #include "repl.h"
 #include "reader.h"
-#include "types.h"
+#include "codegen.h"
+#include "runtime.h"
 #include "env.h"
+#include "types.h"
+#include "module.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
 #include <ctype.h>
+#include <setjmp.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <dlfcn.h>
+
 #include <readline/readline.h>
 #include <readline/history.h>
 
@@ -14,576 +38,491 @@
 #include <llvm-c/ExecutionEngine.h>
 #include <llvm-c/Target.h>
 #include <llvm-c/Analysis.h>
+#include <llvm-c/TargetMachine.h>
 
-// Global REPL context for readline completion
-static REPLContext *global_repl_ctx = NULL;
+/* -------------------------------------------------------------------------
+ * Error recovery: shadow exit() so codegen errors don't kill the process.
+ * Only active while g_in_eval is true.
+ * ------------------------------------------------------------------------- */
+static jmp_buf g_repl_escape;
+static bool    g_in_eval = false;
 
-/// Helper: Get or create format strings
-/// These live as module-level globals so they survive across wrapper functions.
+#define exit(code) \
+    do { if (g_in_eval) longjmp(g_repl_escape, (code) ? (code) : 1); \
+         else _Exit(code); } while(0)
 
-static LLVMValueRef get_fmt_str(REPLContext *ctx) {
-    if (!ctx->fmt_str)
-        ctx->fmt_str = LLVMBuildGlobalStringPtr(ctx->builder, "%s\n", "fmt_str");
-    return ctx->fmt_str;
+/* -------------------------------------------------------------------------
+ * Globals
+ * ------------------------------------------------------------------------- */
+/* Wrapper name is unique per expression to prevent MCJIT from returning
+ * the cached address of the *first* compiled wrapper on every subsequent
+ * LLVMGetFunctionAddress call.  Format: __repl_wrap_N */
+#define WRAPPER_FMT  "__repl_wrap_%u"
+static char g_wrapper_name[64] = "__repl_wrap_0";
+
+static REPLContext *g_repl_ctx = NULL;
+
+/* -------------------------------------------------------------------------
+ * Runtime symbol table
+ *
+ * Every runtime function that generated code may call must be registered
+ * with LLVMAddGlobalMapping on the specific LLVMValueRef declaration inside
+ * the *current* module.  We cannot do this once at boot — each fresh_module()
+ * creates new LLVMValueRefs via declare_runtime_functions(), and those new
+ * values must be mapped individually.
+ *
+ * We keep a flat table of { name -> host address } and call
+ * map_runtime_in_module() after every declare_runtime_functions() call.
+ * ------------------------------------------------------------------------- */
+typedef struct { const char *name; void *addr; } RTSym;
+
+/* Populate the table lazily once using dlsym(RTLD_DEFAULT). */
+static RTSym g_rt_syms[256];
+static int   g_rt_sym_count = 0;
+
+static void rt_sym_table_init(void) {
+    if (g_rt_sym_count > 0) return;
+
+#define ADD(n) do { \
+    void *a = dlsym(RTLD_DEFAULT, #n); \
+    if (a) { g_rt_syms[g_rt_sym_count].name = #n; \
+              g_rt_syms[g_rt_sym_count].addr = a; \
+              g_rt_sym_count++; } \
+    } while(0)
+
+    /* Runtime list */
+    ADD(rt_list_create); ADD(rt_list_cons); ADD(rt_list_append);
+    ADD(rt_list_car);    ADD(rt_list_cdr);  ADD(rt_list_nth);
+    ADD(rt_list_length); ADD(rt_list_is_empty);
+    ADD(rt_make_list);   ADD(rt_list_append_lists); ADD(rt_list_copy);
+    ADD(rt_equal_p);
+    /* Unboxing */
+    ADD(rt_unbox_int);    ADD(rt_unbox_float); ADD(rt_unbox_char);
+    ADD(rt_unbox_string); ADD(rt_unbox_list);  ADD(rt_value_is_nil);
+    ADD(rt_print_value_newline);
+    /* Value constructors */
+    ADD(rt_value_int);   ADD(rt_value_float);   ADD(rt_value_char);
+    ADD(rt_value_string);ADD(rt_value_symbol);  ADD(rt_value_keyword);
+    ADD(rt_value_array); ADD(rt_array_set);      ADD(rt_array_get);
+    ADD(rt_array_length);
+    ADD(rt_value_list);  ADD(rt_value_nil);
+    ADD(rt_print_value); ADD(rt_print_list);
+    /* Ratio */
+    ADD(rt_value_ratio);
+    ADD(rt_ratio_add); ADD(rt_ratio_sub); ADD(rt_ratio_mul); ADD(rt_ratio_div);
+    ADD(rt_ratio_to_int); ADD(rt_ratio_to_float);
+    /* C stdlib used by codegen */
+    ADD(printf); ADD(sprintf); ADD(fprintf);
+    ADD(strlen);  ADD(strcmp);  ADD(strdup);
+    ADD(malloc);  ADD(calloc);  ADD(memset); ADD(free); ADD(abort);
+#undef ADD
 }
 
-static LLVMValueRef get_fmt_char(REPLContext *ctx) {
-    if (!ctx->fmt_char)
-        ctx->fmt_char = LLVMBuildGlobalStringPtr(ctx->builder, "%c\n", "fmt_char");
-    return ctx->fmt_char;
-}
-
-static LLVMValueRef get_fmt_int(REPLContext *ctx) {
-    if (!ctx->fmt_int)
-        ctx->fmt_int = LLVMBuildGlobalStringPtr(ctx->builder, "%ld\n", "fmt_int");
-    return ctx->fmt_int;
-}
-
-static LLVMValueRef get_fmt_float(REPLContext *ctx) {
-    if (!ctx->fmt_float)
-        ctx->fmt_float = LLVMBuildGlobalStringPtr(ctx->builder, "%g\n", "fmt_float");
-    return ctx->fmt_float;
-}
-
-/// Helper: Declare printf
-
-static LLVMValueRef get_or_declare_printf(REPLContext *ctx) {
-    LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, "printf");
-    if (fn) return fn;
-    LLVMTypeRef args[]  = {LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0)};
-    LLVMTypeRef fn_type = LLVMFunctionType(LLVMInt32TypeInContext(ctx->context), args, 1, true);
-    return LLVMAddFunction(ctx->module, "printf", fn_type);
-}
-
-/// Type helpers
-
-static bool type_is_numeric(Type *t) {
-    return t->kind == TYPE_INT   || t->kind == TYPE_FLOAT ||
-           t->kind == TYPE_HEX   || t->kind == TYPE_BIN   ||
-           t->kind == TYPE_OCT   || t->kind == TYPE_CHAR;
-}
-
-static bool type_is_integer(Type *t) {
-    return t->kind == TYPE_INT  || t->kind == TYPE_HEX ||
-           t->kind == TYPE_BIN  || t->kind == TYPE_OCT ||
-           t->kind == TYPE_CHAR;
-}
-
-static bool type_is_float(Type *t) {
-    return t->kind == TYPE_FLOAT;
-}
-
-static LLVMTypeRef type_to_llvm(REPLContext *ctx, Type *type) {
-    switch (type->kind) {
-    case TYPE_INT: case TYPE_HEX: case TYPE_BIN: case TYPE_OCT:
-        return LLVMInt64TypeInContext(ctx->context);
-    case TYPE_FLOAT:
-        return LLVMDoubleTypeInContext(ctx->context);
-    case TYPE_CHAR:
-        return LLVMInt8TypeInContext(ctx->context);
-    case TYPE_STRING:
-        return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-    case TYPE_BOOL:
-        return LLVMInt1TypeInContext(ctx->context);
-    default:
-        return LLVMDoubleTypeInContext(ctx->context);
+/*
+ * For every name in g_rt_syms, look up the matching LLVMValueRef in `mod`
+ * (put there by declare_runtime_functions) and register its host address
+ * with the engine.
+ */
+static void map_runtime_in_module(LLVMExecutionEngineRef engine,
+                                  LLVMModuleRef mod) {
+    for (int i = 0; i < g_rt_sym_count; i++) {
+        LLVMValueRef fn = LLVMGetNamedFunction(mod, g_rt_syms[i].name);
+        if (fn) LLVMAddGlobalMapping(engine, fn, g_rt_syms[i].addr);
     }
 }
 
-/// ASTWithType
+/* -------------------------------------------------------------------------
+ * Re-declare env globals/funcs as extern in the current module
+ *
+ * LLVM verifier rejects IR that references globals from a different module.
+ * We add extern declarations so the verifier passes, and the JIT resolves
+ * them through the engine's accumulated symbol table.
+ * ------------------------------------------------------------------------- */
+/*
+ * Imported-symbol address table.
+ * When handle_import runs repl_compile_module + dlopen, it registers each
+ * mangled symbol name and its host address here.  redeclare_env_symbols then
+ * calls LLVMAddGlobalMapping so MCJIT can resolve them.
+ */
+typedef struct { char name[256]; void *addr; } ImportedSym;
+#define MAX_IMPORTED 4096
+static ImportedSym g_imported[MAX_IMPORTED];
+static int         g_imported_count = 0;
 
-typedef struct {
-    AST  *ast;
-    Type *type;
-    char *literal_str;
-} ASTWithType;
+static void register_imported_sym(const char *name, void *addr) {
+    if (g_imported_count >= MAX_IMPORTED) return;
+    strncpy(g_imported[g_imported_count].name, name, 255);
+    g_imported[g_imported_count].addr = addr;
+    g_imported_count++;
+}
 
-// Forward declaration
-static LLVMValueRef codegen_expr(REPLContext *ctx, ASTWithType *ast_typed);
+static void *lookup_imported_sym(const char *name) {
+    for (int i = 0; i < g_imported_count; i++)
+        if (strcmp(g_imported[i].name, name) == 0)
+            return g_imported[i].addr;
+    return NULL;
+}
 
-/// Print an AST value at runtime (for quoted expressions)
+static void redeclare_env_symbols(REPLContext *ctx) {
+    Env *env = ctx->cg.env;
 
-static void codegen_print_ast(REPLContext *ctx, AST *ast) {
-    LLVMValueRef printf_fn = get_or_declare_printf(ctx);
+    for (size_t bi = 0; bi < env->size; bi++) {
+        for (EnvEntry *e = env->buckets[bi]; e; e = e->next) {
 
-    switch (ast->type) {
-    case AST_NUMBER: {
-        LLVMValueRef num  = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), ast->number);
-        LLVMValueRef args[] = {get_fmt_float(ctx), num};
-        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, "");
-        break;
-    }
-    case AST_SYMBOL: {
-        LLVMValueRef sym  = LLVMBuildGlobalStringPtr(ctx->builder, ast->symbol, "sym");
-        LLVMValueRef args[] = {get_fmt_str(ctx), sym};
-        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, "");
-        break;
-    }
-    case AST_STRING: {
-        LLVMValueRef str  = LLVMBuildGlobalStringPtr(ctx->builder, ast->string, "str");
-        LLVMValueRef fmt  = LLVMBuildGlobalStringPtr(ctx->builder, "\"%s\"\n", "fmt");
-        LLVMValueRef args[] = {fmt, str};
-        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, "");
-        break;
-    }
-    case AST_CHAR: {
-        LLVMValueRef ch   = LLVMConstInt(LLVMInt8TypeInContext(ctx->context), ast->character, 0);
-        LLVMValueRef fmt  = LLVMBuildGlobalStringPtr(ctx->builder, "'%c'\n", "fmt");
-        LLVMValueRef args[] = {fmt, ch};
-        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, "");
-        break;
-    }
-    case AST_LIST: {
-        LLVMValueRef lp   = LLVMBuildGlobalStringPtr(ctx->builder, "(", "lp");
-        LLVMValueRef largs[] = {lp};
-        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, largs, 1, "");
-        for (size_t i = 0; i < ast->list.count; i++) {
-            if (i > 0) {
-                LLVMValueRef sp = LLVMBuildGlobalStringPtr(ctx->builder, " ", "sp");
-                LLVMValueRef sargs[] = {sp};
-                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, sargs, 1, "");
+            if (e->kind == ENV_VAR && e->value &&
+                LLVMIsAGlobalVariable(e->value)) {
+
+                const char *name = LLVMGetValueName(e->value);
+                if (!name || !*name) name = e->name;
+                if (LLVMGetNamedGlobal(ctx->cg.module, name)) continue;
+
+                LLVMTypeRef  lt = type_to_llvm(&ctx->cg, e->type);
+                LLVMValueRef gv = LLVMAddGlobal(ctx->cg.module, lt, name);
+                LLVMSetLinkage(gv, LLVMExternalLinkage);
+                e->value = gv;
             }
-            codegen_print_ast(ctx, ast->list.items[i]);
+
+            else if (e->kind == ENV_FUNC && e->func_ref) {
+                /* Use the mangled name stored on the LLVMValueRef */
+                const char *name = LLVMGetValueName(e->func_ref);
+                if (!name || !*name) name = e->name;
+                if (LLVMGetNamedFunction(ctx->cg.module, name)) continue;
+
+                LLVMTypeRef *pt = e->param_count > 0
+                    ? malloc(sizeof(LLVMTypeRef) * e->param_count) : NULL;
+                for (int i = 0; i < e->param_count; i++)
+                    pt[i] = type_to_llvm(&ctx->cg, e->params[i].type);
+                LLVMTypeRef ft = LLVMFunctionType(
+                    type_to_llvm(&ctx->cg, e->return_type),
+                    pt, e->param_count, 0);
+                if (pt) free(pt);
+
+                LLVMValueRef fn = LLVMAddFunction(ctx->cg.module, name, ft);
+                LLVMSetLinkage(fn, LLVMExternalLinkage);
+                e->func_ref = fn;
+            }
         }
-        LLVMValueRef rp   = LLVMBuildGlobalStringPtr(ctx->builder, ")\n", "rp");
-        LLVMValueRef rargs[] = {rp};
-        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, rargs, 1, "");
-        break;
-    }
     }
 }
 
-/// Check arity against env entry, print error and return false on mismatch.
-/// argc = number of arguments (not counting the function name itself).
+/*
+ * map_imported_in_module — called in close_and_run after LLVMAddModule.
+ *
+ * Registers addresses for:
+ *   (a) runtime functions (g_rt_syms) — same as map_runtime_in_module but
+ *       we now do both in one post-AddModule pass.
+ *   (b) imported module symbols (g_imported) — functions/globals from
+ *       dlopen'd modules.
+ *
+ * We look up each symbol by name in the module that was just handed to the
+ * engine.  If it exists, we call LLVMAddGlobalMapping.  This is the correct
+ * order: map AFTER AddModule, not before.
+ */
+static void map_imported_in_module(LLVMExecutionEngineRef engine,
+                                   LLVMModuleRef mod) {
+    for (int i = 0; i < g_imported_count; i++) {
+        const char *name = g_imported[i].name;
+        void       *addr = g_imported[i].addr;
+        if (!addr) continue;
 
-static bool check_arity(const char *name, EnvEntry *entry, size_t argc) {
-    if (!entry) return true;  // unknown, let codegen handle it
-    int min = entry->arity_min;
-    int max = entry->arity_max;
-    if (min < 0) return true; // not constrained
-    if ((int)argc < min) {
-        fprintf(stderr, "Error: '%s' requires at least %d argument(s), got %zu\n",
-                name, min, argc);
+        /* Try as function first, then global variable */
+        LLVMValueRef ref = LLVMGetNamedFunction(mod, name);
+        if (!ref) ref = LLVMGetNamedGlobal(mod, name);
+        if (ref) {
+            LLVMAddGlobalMapping(engine, ref, addr);
+            if (getenv("REPL_DUMP_IR"))
+                fprintf(stderr, "[map] %s -> %p\n", name, addr);
+        }
+    }
+}
+
+
+/// Module lifecycle
+
+static void fresh_module(REPLContext *ctx, const char *mod_name) {
+    if (ctx->cg.builder) {
+        LLVMDisposeBuilder(ctx->cg.builder);
+        ctx->cg.builder = NULL;
+    }
+    /* Previous module was handed to the engine — do NOT dispose it. */
+
+    ctx->cg.module  = LLVMModuleCreateWithNameInContext(mod_name,
+                                                        ctx->cg.context);
+    ctx->cg.builder = LLVMCreateBuilderInContext(ctx->cg.context);
+
+    /* Reset cached format strings */
+    ctx->cg.fmt_str = ctx->cg.fmt_char = ctx->cg.fmt_int =
+    ctx->cg.fmt_float = ctx->cg.fmt_hex = ctx->cg.fmt_bin =
+    ctx->cg.fmt_oct = NULL;
+
+    /* 1. Declare runtime functions in this module */
+    declare_runtime_functions(&ctx->cg);
+
+    /* 2. Re-declare env globals/funcs from previous modules (declarations only).
+     * LLVMAddGlobalMapping is called in close_and_run AFTER LLVMAddModule —
+     * MCJIT requires mappings to be registered after the module is added.   */
+    redeclare_env_symbols(ctx);
+}
+
+static void open_wrapper(REPLContext *ctx) {
+    LLVMTypeRef  ft  = LLVMFunctionType(
+        LLVMVoidTypeInContext(ctx->cg.context), NULL, 0, 0);
+    LLVMValueRef wfn = LLVMAddFunction(ctx->cg.module, g_wrapper_name, ft);
+    LLVMBasicBlockRef bb = LLVMAppendBasicBlockInContext(
+        ctx->cg.context, wfn, "entry");
+    LLVMPositionBuilderAtEnd(ctx->cg.builder, bb);
+    ctx->cg.init_fn = wfn;
+}
+
+/// Auto-print
+
+static bool expr_is_silent(AST *ast) {
+    if (!ast || ast->type != AST_LIST || ast->list.count == 0) return false;
+    if (ast->list.items[0]->type != AST_SYMBOL)               return false;
+    const char *s = ast->list.items[0]->symbol;
+    return strcmp(s, "define") == 0 ||
+           strcmp(s, "show")   == 0 ||
+           strcmp(s, "for")    == 0;
+}
+
+static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t) {
+    if (!val || !t) return;
+    LLVMValueRef pf = get_or_declare_printf(&ctx->cg);
+
+    switch (t->kind) {
+    case TYPE_FLOAT: {
+        LLVMValueRef a[] = {get_fmt_float(&ctx->cg), val};
+        LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, a, 2, "");
+        break; }
+    case TYPE_INT: case TYPE_HEX: case TYPE_BIN: case TYPE_OCT: {
+        LLVMValueRef a[] = {get_fmt_int(&ctx->cg), val};
+        LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, a, 2, "");
+        break; }
+    case TYPE_CHAR: {
+        LLVMValueRef a[] = {get_fmt_char(&ctx->cg), val};
+        LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, a, 2, "");
+        break; }
+    case TYPE_STRING: {
+        /* String literals: codegen returns bare char* via LLVMBuildGlobalStringPtr */
+        LLVMValueRef a[] = {get_fmt_str(&ctx->cg), val};
+        LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, a, 2, "");
+        break; }
+    case TYPE_KEYWORD:
+    case TYPE_SYMBOL: {
+        /* Symbols/keywords: codegen returns RuntimeValue* — delegate to rt_print_value_newline */
+        LLVMValueRef pfn = get_rt_print_value_newline(&ctx->cg);
+        LLVMTypeRef  ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->cg.context),0);
+        LLVMTypeRef  ft2 = LLVMFunctionType(
+            LLVMVoidTypeInContext(ctx->cg.context), &ptr, 1, 0);
+        LLVMValueRef a[] = {val};
+        LLVMBuildCall2(ctx->cg.builder, ft2, pfn, a, 1, "");
+        break; }
+    case TYPE_BOOL: {
+        LLVMValueRef ts = LLVMBuildGlobalStringPtr(ctx->cg.builder,"True\n","ts");
+        LLVMValueRef fs = LLVMBuildGlobalStringPtr(ctx->cg.builder,"False\n","fs");
+        LLVMValueRef s  = LLVMBuildSelect(ctx->cg.builder, val, ts, fs, "bs");
+        LLVMValueRef a[] = {s};
+        LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, a, 1, "");
+        break; }
+    case TYPE_LIST:
+    case TYPE_RATIO:
+    case TYPE_UNKNOWN: {
+        /* val is RuntimeValue* — rt_print_value_newline handles all boxed types */
+        LLVMValueRef pfn = get_rt_print_value_newline(&ctx->cg);
+        LLVMTypeRef  ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->cg.context),0);
+        LLVMTypeRef  ft2 = LLVMFunctionType(
+            LLVMVoidTypeInContext(ctx->cg.context), &ptr, 1, 0);
+        LLVMValueRef a[] = {val};
+        LLVMBuildCall2(ctx->cg.builder, ft2, pfn, a, 1, "");
+        break; }
+    default: break;
+    }
+}
+
+/// JIT compile and run
+
+static bool close_and_run(REPLContext *ctx) {
+    LLVMBuildRetVoid(ctx->cg.builder);
+
+    LLVMValueRef wfn = LLVMGetNamedFunction(ctx->cg.module, g_wrapper_name);
+    if (LLVMVerifyFunction(wfn, LLVMPrintMessageAction) != 0) {
+        fprintf(stderr, "Error: IR verification failed\n");
         return false;
     }
-    if (max >= 0 && (int)argc > max) {
-        fprintf(stderr, "Error: '%s' requires at most %d argument(s), got %zu\n",
-                name, max, argc);
+    char *err = NULL;
+    if (LLVMVerifyModule(ctx->cg.module, LLVMPrintMessageAction, &err) != 0) {
+        fprintf(stderr, "Error: module verification: %s\n", err ? err : "");
+        LLVMDisposeMessage(err);
         return false;
     }
+    if (err) LLVMDisposeMessage(err);
+
+    if (getenv("REPL_DUMP_IR")) {
+        char *ir = LLVMPrintModuleToString(ctx->cg.module);
+        fprintf(stderr, "=== IR ===\n%s\n=== END IR ===\n", ir);
+        LLVMDisposeMessage(ir);
+    }
+    LLVMModuleRef mod = ctx->cg.module;  /* save before handing to engine */
+    LLVMAddModule(ctx->engine, mod);
+    ctx->cg.module = NULL;   /* engine owns it now */
+
+    /* Register all symbol addresses NOW — MCJIT requires mappings to be
+     * set after the module is added to the engine, not before.          */
+    map_runtime_in_module(ctx->engine, mod);
+    map_imported_in_module(ctx->engine, mod);
+
+    void (*fn)(void) = (void(*)(void))
+        LLVMGetFunctionAddress(ctx->engine, g_wrapper_name);
+    if (!fn) {
+        fprintf(stderr, "Error: JIT could not find %s\n", g_wrapper_name);
+        return false;
+    }
+    if (getenv("REPL_DUMP_IR"))
+        fprintf(stderr, "[jit] %s -> %p\n", g_wrapper_name, (void*)fn);
+    fn();
     return true;
 }
 
-/// Code generation
-
-static LLVMValueRef codegen_expr(REPLContext *ctx, ASTWithType *ast_typed) {
-    AST *ast = ast_typed->ast;
-
-    switch (ast->type) {
-
-    case AST_NUMBER: {
-        Type *num_type = infer_literal_type(ast->number, ast_typed->literal_str);
-        ast_typed->type = num_type;
-        if (type_is_float(num_type))
-            return LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), ast->number);
-        else
-            return LLVMConstInt(LLVMInt64TypeInContext(ctx->context),
-                                (long long)ast->number, 0);
+// Discard a broken module and recover a clean state
+static void recover_module(REPLContext *ctx) {
+    if (ctx->cg.module) {
+        LLVMDisposeModule(ctx->cg.module);
+        ctx->cg.module = NULL;
     }
-
-    case AST_CHAR: {
-        ast_typed->type = type_char();
-        return LLVMConstInt(LLVMInt8TypeInContext(ctx->context), ast->character, 0);
-    }
-
-    case AST_SYMBOL: {
-        EnvEntry *entry = env_lookup(ctx->env, ast->symbol);
-        if (!entry || entry->kind != ENV_VAR) {
-            fprintf(stderr, "Error: unbound variable: %s\n", ast->symbol);
-            return NULL;
-        }
-        ast_typed->type = entry->type;
-        return LLVMBuildLoad2(ctx->builder,
-                              type_to_llvm(ctx, entry->type),
-                              entry->value, ast->symbol);
-    }
-
-    case AST_STRING: {
-        ast_typed->type = type_string();
-        return LLVMBuildGlobalStringPtr(ctx->builder, ast->string, "str");
-    }
-
-    case AST_LIST: {
-        if (ast->list.count == 0) {
-            fprintf(stderr, "Error: empty list\n");
-            return NULL;
-        }
-
-        AST *head = ast->list.items[0];
-
-        if (head->type != AST_SYMBOL) {
-            fprintf(stderr, "Error: function call requires a symbol in head position\n");
-            return NULL;
-        }
-
-        const char *sym  = head->symbol;
-        size_t       argc = ast->list.count - 1;
-
-        // ----------------------------------------------------------------
-        // Special form: quote
-        // ----------------------------------------------------------------
-        if (strcmp(sym, "quote") == 0) {
-            if (argc != 1) {
-                fprintf(stderr, "Error: 'quote' requires exactly 1 argument\n");
-                return NULL;
-            }
-            codegen_print_ast(ctx, ast->list.items[1]);
-            ast_typed->type = type_float();
-            return LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0);
-        }
-
-        // ----------------------------------------------------------------
-        // Special form: define
-        // ----------------------------------------------------------------
-        if (strcmp(sym, "define") == 0) {
-            if (argc < 2) {
-                fprintf(stderr, "Error: 'define' requires at least 2 arguments\n");
-                return NULL;
-            }
-
-            AST *name_expr  = ast->list.items[1];
-            AST *value_expr = ast->list.items[2];
-
-            // --- Variable definition: (define name value)
-            //                      or (define [name :: Type] value)
-            if (name_expr->type == AST_SYMBOL ||
-                (name_expr->type == AST_LIST)) {
-
-                char *var_name      = NULL;
-                Type *explicit_type = NULL;
-
-                if (name_expr->type == AST_LIST) {
-                    explicit_type = parse_type_annotation(name_expr);
-                    if (explicit_type && name_expr->list.count > 0 &&
-                        name_expr->list.items[0]->type == AST_SYMBOL) {
-                        var_name = name_expr->list.items[0]->symbol;
-                    } else {
-                        fprintf(stderr, "Error: bad type annotation in 'define'\n");
-                        return NULL;
-                    }
-                } else {
-                    var_name = name_expr->symbol;
-                }
-
-                if (!var_name) {
-                    fprintf(stderr, "Error: 'define' invalid name\n");
-                    return NULL;
-                }
-
-                ASTWithType val_typed = {value_expr, NULL, NULL};
-                if (value_expr->type == AST_NUMBER && value_expr->literal_str)
-                    val_typed.literal_str = strdup(value_expr->literal_str);
-
-                LLVMValueRef value = codegen_expr(ctx, &val_typed);
-                if (val_typed.literal_str) free(val_typed.literal_str);
-                if (!value) return NULL;
-
-                Type *inferred = val_typed.type;
-                if (!inferred) {
-                    if      (value_expr->type == AST_CHAR)   inferred = type_char();
-                    else if (value_expr->type == AST_STRING) inferred = type_string();
-                    else                                      inferred = type_float();
-                }
-
-                Type *final_type = explicit_type ? explicit_type : inferred;
-
-                // Variables are stored as LLVM globals so they persist across
-                // separately JIT-compiled wrapper functions.
-                LLVMTypeRef  llvm_type = type_to_llvm(ctx, final_type);
-                LLVMValueRef global    = LLVMGetNamedGlobal(ctx->module, var_name);
-                if (!global) {
-                    global = LLVMAddGlobal(ctx->module, llvm_type, var_name);
-                    LLVMSetInitializer(global, LLVMConstNull(llvm_type));
-                    LLVMSetLinkage(global, LLVMExternalLinkage);
-                }
-
-                // Type conversions
-                LLVMValueRef stored = value;
-                if (type_is_integer(final_type) && type_is_float(inferred)) {
-                    stored = LLVMBuildFPToSI(ctx->builder, value,
-                                             LLVMInt64TypeInContext(ctx->context), "toint");
-                } else if (type_is_float(final_type) && type_is_integer(inferred)) {
-                    stored = LLVMBuildSIToFP(ctx->builder, value,
-                                             LLVMDoubleTypeInContext(ctx->context), "tofloat");
-                } else if (final_type->kind == TYPE_CHAR && inferred->kind != TYPE_CHAR) {
-                    if (type_is_float(inferred))
-                        stored = LLVMBuildFPToSI(ctx->builder, value,
-                                                 LLVMInt8TypeInContext(ctx->context), "tochar");
-                    else if (type_is_integer(inferred))
-                        stored = LLVMBuildTrunc(ctx->builder, value,
-                                                LLVMInt8TypeInContext(ctx->context), "tochar");
-                }
-
-                LLVMBuildStore(ctx->builder, stored, global);
-                env_insert(ctx->env, var_name, final_type, global);
-
-                printf("%s :: %s\n", var_name, type_to_string(final_type));
-                ast_typed->type = final_type;
-                return stored;
-            }
-
-            fprintf(stderr, "Error: 'define' name must be a symbol or type annotation\n");
-            return NULL;
-        }
-
-        // ----------------------------------------------------------------
-        // Special form: show
-        // ----------------------------------------------------------------
-        if (strcmp(sym, "show") == 0) {
-            EnvEntry *e = env_lookup(ctx->env, "show");
-            if (!check_arity("show", e, argc)) return NULL;
-
-            AST          *arg       = ast->list.items[1];
-            LLVMValueRef  printf_fn = get_or_declare_printf(ctx);
-
-            if (arg->type == AST_LIST && arg->list.count > 0 &&
-                arg->list.items[0]->type == AST_SYMBOL &&
-                strcmp(arg->list.items[0]->symbol, "quote") == 0) {
-                if (arg->list.count == 2)
-                    codegen_print_ast(ctx, arg->list.items[1]);
-            } else if (arg->type == AST_STRING) {
-                LLVMValueRef str  = LLVMBuildGlobalStringPtr(ctx->builder, arg->string, "str");
-                LLVMValueRef args[] = {get_fmt_str(ctx), str};
-                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
-                               printf_fn, args, 2, "");
-            } else if (arg->type == AST_CHAR) {
-                LLVMValueRef ch   = LLVMConstInt(LLVMInt8TypeInContext(ctx->context),
-                                                  arg->character, 0);
-                LLVMValueRef args[] = {get_fmt_char(ctx), ch};
-                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
-                               printf_fn, args, 2, "");
-            } else if (arg->type == AST_SYMBOL) {
-                EnvEntry *entry = env_lookup(ctx->env, arg->symbol);
-                if (!entry || entry->kind != ENV_VAR) {
-                    fprintf(stderr, "Error: unbound variable: %s\n", arg->symbol);
-                    return NULL;
-                }
-                LLVMValueRef loaded = LLVMBuildLoad2(ctx->builder,
-                                                      type_to_llvm(ctx, entry->type),
-                                                      entry->value, arg->symbol);
-                LLVMValueRef fmt_args[2];
-                if (entry->type->kind == TYPE_CHAR) {
-                    fmt_args[0] = get_fmt_char(ctx);
-                } else if (entry->type->kind == TYPE_STRING) {
-                    fmt_args[0] = get_fmt_str(ctx);
-                } else if (type_is_integer(entry->type)) {
-                    fmt_args[0] = get_fmt_int(ctx);
-                } else {
-                    fmt_args[0] = get_fmt_float(ctx);
-                }
-                fmt_args[1] = loaded;
-                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
-                               printf_fn, fmt_args, 2, "");
-            } else {
-                ASTWithType arg_typed = {arg, NULL, NULL};
-                LLVMValueRef result   = codegen_expr(ctx, &arg_typed);
-                if (!result) return NULL;
-                LLVMValueRef fmt_args[2];
-                if (arg_typed.type && type_is_integer(arg_typed.type))
-                    fmt_args[0] = get_fmt_int(ctx);
-                else
-                    fmt_args[0] = get_fmt_float(ctx);
-                fmt_args[1] = result;
-                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
-                               printf_fn, fmt_args, 2, "");
-            }
-
-            ast_typed->type = type_float();
-            return LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0);
-        }
-
-        // ----------------------------------------------------------------
-        // Arithmetic builtins: + - * /
-        // ----------------------------------------------------------------
-        if (strcmp(sym, "+") == 0 || strcmp(sym, "-") == 0 ||
-            strcmp(sym, "*") == 0 || strcmp(sym, "/") == 0) {
-
-            EnvEntry *e = env_lookup(ctx->env, sym);
-            if (!check_arity(sym, e, argc)) return NULL;
-
-            // First operand
-            ASTWithType first_typed = {ast->list.items[1], NULL, NULL};
-            if (ast->list.items[1]->type == AST_NUMBER) {
-                char tmp[64];
-                snprintf(tmp, sizeof(tmp), "%g", ast->list.items[1]->number);
-                first_typed.literal_str = strdup(tmp);
-            }
-            LLVMValueRef result = codegen_expr(ctx, &first_typed);
-            if (first_typed.literal_str) free(first_typed.literal_str);
-            if (!result) return NULL;
-
-            Type *result_type = first_typed.type;
-            if (!type_is_numeric(result_type)) {
-                fprintf(stderr, "Error: cannot perform arithmetic on type %s\n",
-                        type_to_string(result_type));
-                return NULL;
-            }
-
-            // Unary minus
-            if (strcmp(sym, "-") == 0 && argc == 1) {
-                ast_typed->type = result_type;
-                if (type_is_float(result_type))
-                    return LLVMBuildFNeg(ctx->builder, result, "negtmp");
-                else {
-                    LLVMValueRef zero = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0);
-                    return LLVMBuildSub(ctx->builder, zero, result, "negtmp");
-                }
-            }
-
-            // Unary reciprocal
-            if (strcmp(sym, "/") == 0 && argc == 1) {
-                if (type_is_float(result_type)) {
-                    LLVMValueRef one = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 1.0);
-                    ast_typed->type  = result_type;
-                    return LLVMBuildFDiv(ctx->builder, one, result, "invtmp");
-                } else {
-                    LLVMValueRef rf  = LLVMBuildSIToFP(ctx->builder, result,
-                                                        LLVMDoubleTypeInContext(ctx->context), "tof");
-                    LLVMValueRef one = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 1.0);
-                    ast_typed->type  = type_float();
-                    return LLVMBuildFDiv(ctx->builder, one, rf, "invtmp");
-                }
-            }
-
-            // Binary fold
-            for (size_t i = 2; i <= argc; i++) {
-                ASTWithType rhs_typed = {ast->list.items[i], NULL, NULL};
-                if (ast->list.items[i]->type == AST_NUMBER) {
-                    char tmp[64];
-                    snprintf(tmp, sizeof(tmp), "%g", ast->list.items[i]->number);
-                    rhs_typed.literal_str = strdup(tmp);
-                }
-                LLVMValueRef rhs = codegen_expr(ctx, &rhs_typed);
-                if (rhs_typed.literal_str) free(rhs_typed.literal_str);
-                if (!rhs) return NULL;
-
-                Type *rhs_type = rhs_typed.type;
-                if (!type_is_numeric(rhs_type)) {
-                    fprintf(stderr, "Error: cannot perform arithmetic on type %s\n",
-                            type_to_string(rhs_type));
-                    return NULL;
-                }
-
-                // Forbid mixing distinct special integer bases
-                if ((result_type->kind == TYPE_HEX || result_type->kind == TYPE_BIN ||
-                     result_type->kind == TYPE_OCT) &&
-                    (rhs_type->kind   == TYPE_HEX || rhs_type->kind   == TYPE_BIN ||
-                     rhs_type->kind   == TYPE_OCT) &&
-                    result_type->kind != rhs_type->kind) {
-                    fprintf(stderr, "Error: cannot mix %s and %s in arithmetic\n",
-                            type_to_string(result_type), type_to_string(rhs_type));
-                    return NULL;
-                }
-
-                // Determine promoted type
-                Type *new_type;
-                if (type_is_float(result_type) || type_is_float(rhs_type))
-                    new_type = type_float();
-                else if (result_type->kind == TYPE_CHAR || rhs_type->kind == TYPE_CHAR)
-                    new_type = type_int();
-                else if (result_type->kind == rhs_type->kind)
-                    new_type = result_type;
-                else
-                    new_type = type_int();
-
-                // Widen operands
-                LLVMValueRef lv = result, rv = rhs;
-                if (type_is_float(new_type)) {
-                    if (type_is_integer(result_type)) {
-                        if (result_type->kind == TYPE_CHAR) {
-                            LLVMValueRef ext = LLVMBuildSExt(ctx->builder, result,
-                                                              LLVMInt64TypeInContext(ctx->context), "ext");
-                            lv = LLVMBuildSIToFP(ctx->builder, ext,
-                                                  LLVMDoubleTypeInContext(ctx->context), "tof");
-                        } else {
-                            lv = LLVMBuildSIToFP(ctx->builder, result,
-                                                  LLVMDoubleTypeInContext(ctx->context), "tof");
-                        }
-                    }
-                    if (type_is_integer(rhs_type)) {
-                        if (rhs_type->kind == TYPE_CHAR) {
-                            LLVMValueRef ext = LLVMBuildSExt(ctx->builder, rhs,
-                                                              LLVMInt64TypeInContext(ctx->context), "ext");
-                            rv = LLVMBuildSIToFP(ctx->builder, ext,
-                                                  LLVMDoubleTypeInContext(ctx->context), "tof");
-                        } else {
-                            rv = LLVMBuildSIToFP(ctx->builder, rhs,
-                                                  LLVMDoubleTypeInContext(ctx->context), "tof");
-                        }
-                    }
-                } else {
-                    if (result_type->kind == TYPE_CHAR)
-                        lv = LLVMBuildSExt(ctx->builder, result,
-                                           LLVMInt64TypeInContext(ctx->context), "ext");
-                    if (rhs_type->kind == TYPE_CHAR)
-                        rv = LLVMBuildSExt(ctx->builder, rhs,
-                                           LLVMInt64TypeInContext(ctx->context), "ext");
-                }
-
-                // Emit instruction
-                if (type_is_float(new_type)) {
-                    if      (strcmp(sym, "+") == 0) result = LLVMBuildFAdd(ctx->builder, lv, rv, "add");
-                    else if (strcmp(sym, "-") == 0) result = LLVMBuildFSub(ctx->builder, lv, rv, "sub");
-                    else if (strcmp(sym, "*") == 0) result = LLVMBuildFMul(ctx->builder, lv, rv, "mul");
-                    else                            result = LLVMBuildFDiv(ctx->builder, lv, rv, "div");
-                } else {
-                    if      (strcmp(sym, "+") == 0) result = LLVMBuildAdd (ctx->builder, lv, rv, "add");
-                    else if (strcmp(sym, "-") == 0) result = LLVMBuildSub (ctx->builder, lv, rv, "sub");
-                    else if (strcmp(sym, "*") == 0) result = LLVMBuildMul (ctx->builder, lv, rv, "mul");
-                    else                            result = LLVMBuildSDiv(ctx->builder, lv, rv, "div");
-                }
-                result_type = new_type;
-            }
-
-            ast_typed->type = result_type;
-            return result;
-        }
-
-        // ----------------------------------------------------------------
-        // User-defined function call
-        // ----------------------------------------------------------------
-        {
-            EnvEntry *entry = env_lookup(ctx->env, sym);
-            if (!entry || entry->kind != ENV_FUNC) {
-                fprintf(stderr, "Error: unknown function: %s\n", sym);
-                return NULL;
-            }
-            if (!check_arity(sym, entry, argc)) return NULL;
-
-            LLVMValueRef *arg_vals = malloc(sizeof(LLVMValueRef) * argc);
-            for (size_t i = 0; i < argc; i++) {
-                ASTWithType at = {ast->list.items[i + 1], NULL, NULL};
-                arg_vals[i]    = codegen_expr(ctx, &at);
-                if (!arg_vals[i]) { free(arg_vals); return NULL; }
-            }
-
-            LLVMTypeRef  fn_type = LLVMGlobalGetValueType(entry->func_ref);
-            LLVMValueRef call    = LLVMBuildCall2(ctx->builder, fn_type,
-                                                   entry->func_ref,
-                                                   arg_vals, (unsigned)argc, "call");
-            free(arg_vals);
-            ast_typed->type = entry->return_type;
-            return call;
-        }
-    } // AST_LIST
-
-    default:
-        fprintf(stderr, "Error: unknown AST node type %d\n", ast->type);
-        return NULL;
-    }
+    char name[64];
+    snprintf(name, sizeof(name), "__repl_%u_r", ctx->expr_count);
+    fresh_module(ctx, name);
 }
 
-/// REPL Initialization
+/// Import support
+
+// Compile the module to a shared library, dlopen it, run its init function,
+// then use nm to discover exported symbols and inject them into the env.
+
+static bool file_exists_r(const char *p) { return access(p, F_OK) == 0; }
+static time_t file_mtime_r(const char *p) {
+    struct stat st; return stat(p, &st) == 0 ? st.st_mtime : 0;
+}
+
+static bool handle_import(REPLContext *ctx, AST *ast) {
+    if (ast->list.count < 2 || ast->list.items[1]->type != AST_SYMBOL) {
+        fprintf(stderr, "Error: import requires a module name symbol\n");
+        return false;
+    }
+    ImportDecl *imp = parse_import_decl(ast);
+    if (!imp) { fprintf(stderr, "Error: invalid import\n"); return false; }
+
+    const char *mod_name = imp->module_name;
+
+    /* Step 1: Run the full compiler pipeline (compile_one + declare_externals).
+     * This populates ctx->cg.env with typed entries for every export. */
+    if (!repl_compile_module(&ctx->cg, imp)) {
+        fprintf(stderr, "Error: failed to compile module '%s'\n", mod_name);
+        return false;
+    }
+
+    /* Step 2: Build a .so from the cached .o so we can dlopen it and get
+     * real host addresses for every exported symbol.                       */
+
+    /* Locate the .o that compile_one wrote */
+    char *src_path = module_name_to_path(mod_name);
+    char obj_path[512], so_path[512];
+
+    /* Mirror get_obj_path() logic: core modules go to ~/.cache/monad/core/ */
+    const char *home = getenv("HOME");
+    const char *sys_core = "/usr/local/lib/monad/core/";
+    if (home && src_path && strncmp(src_path, sys_core, strlen(sys_core)) == 0) {
+        const char *rel = src_path + strlen(sys_core);
+        char base[512]; strncpy(base, rel, sizeof(base)-1);
+        /* strip extension */
+        char *dot = strrchr(base, '.'); if (dot) *dot = '\0';
+        /* flatten slashes */
+        for (char *p = base; *p; p++) if (*p == '/') *p = '_';
+        snprintf(obj_path, sizeof(obj_path), "%s/.cache/monad/core/%s.o", home, base);
+    } else {
+        /* local module: .o sits next to the source */
+        char base[512];
+        strncpy(base, src_path ? src_path : mod_name, sizeof(base)-1);
+        char *dot = strrchr(base, '.'); if (dot) *dot = '\0';
+        snprintf(obj_path, sizeof(obj_path), "%s.o", base);
+    }
+    free(src_path);
+
+    snprintf(so_path, sizeof(so_path), "/tmp/__mrepl_%s.so", mod_name);
+
+    if (!file_exists_r(obj_path)) {
+        fprintf(stderr, "Error: object file not found: %s\n", obj_path);
+        return false;
+    }
+
+    /* Rebuild .so if stale */
+    if (!file_exists_r(so_path) || file_mtime_r(obj_path) > file_mtime_r(so_path)) {
+        char cmd[2048];
+        /* Do NOT link libmonad.a here — runtime symbols are already in
+         * the host monad binary.  We use --unresolved-symbols=ignore-all
+         * so the link succeeds; dlopen(RTLD_GLOBAL) resolves them from
+         * the host process at load time.                                 */
+        snprintf(cmd, sizeof(cmd),
+                 "gcc -shared -fPIC -o %s %s"
+                 " -Wl,--unresolved-symbols=ignore-all -lm 2>&1",
+                 so_path, obj_path);
+        if (system(cmd) != 0) {
+            fprintf(stderr, "Error: failed to link .so for '%s'\n", mod_name);
+            return false;
+        }
+    }
+
+    /* Step 3: dlopen so the symbols live in the host process.
+     * First re-open the main binary with RTLD_GLOBAL so its symbols
+     * (rt_list_create etc.) are visible when the .so is loaded.     */
+    { void *self = dlopen(NULL, RTLD_NOW | RTLD_GLOBAL); (void)self; }
+    void *handle = dlopen(so_path, RTLD_NOW | RTLD_GLOBAL);
+    if (!handle) {
+        fprintf(stderr, "Error: dlopen %s: %s\n", so_path, dlerror());
+        return false;
+    }
+
+    /* Run module init so top-level stores execute (e.g. lowercase = "abc...") */
+    char init_name[256];
+    snprintf(init_name, sizeof(init_name), "__init_%s", mod_name);
+    for (char *p = init_name + 8; *p; p++) if (*p == '.') *p = '_';
+    void (*init_fn)(void) = (void(*)(void))dlsym(handle, init_name);
+    if (init_fn) init_fn();
+
+    /* Step 4: Walk the .so exports and register addresses in g_imported[].
+     * We use the same mangle prefix as the compiler: ModName__ */
+    char prefix[256];
+    size_t ml = strlen(mod_name);
+    for (size_t i = 0; i < ml; i++)
+        prefix[i] = (mod_name[i] == '.') ? '_' : mod_name[i];
+    prefix[ml] = prefix[ml+1] = '_'; prefix[ml+2] = '\0';
+    size_t prefix_len = ml + 2;
+
+    char nm_cmd[512];
+    snprintf(nm_cmd, sizeof(nm_cmd),
+             "nm -D --defined-only %s 2>/dev/null", so_path);
+    FILE *nm = popen(nm_cmd, "r");
+    int count = 0;
+    if (nm) {
+        char line[512];
+        while (fgets(line, sizeof(line), nm)) {
+            char addr_s[32], tc[4], sym[256];
+            if (sscanf(line, "%31s %3s %255s", addr_s, tc, sym) != 3) continue;
+            if (tc[0]!='T' && tc[0]!='D' && tc[0]!='B') continue;
+            if (strncmp(sym, prefix, prefix_len) != 0) continue;
+            void *addr = dlsym(handle, sym);
+            if (!addr) continue;
+            register_imported_sym(sym, addr);
+            count++;
+        }
+        pclose(nm);
+    }
+
+    printf("Imported %d symbol(s) from '%s'.\n", count, mod_name);
+    return true;
+}
+
+/// API
 
 void repl_init(REPLContext *ctx) {
     LLVMInitializeNativeTarget();
@@ -591,188 +530,151 @@ void repl_init(REPLContext *ctx) {
     LLVMInitializeNativeAsmParser();
     LLVMLinkInMCJIT();
 
-    ctx->context = LLVMContextCreate();
-    ctx->module  = LLVMModuleCreateWithNameInContext("repl_module", ctx->context);
-    ctx->builder = LLVMCreateBuilderInContext(ctx->context);
-    ctx->env     = env_create();
+    rt_sym_table_init();
 
-    ctx->fmt_str = ctx->fmt_char = ctx->fmt_int = ctx->fmt_float = NULL;
+    ctx->cg.context    = LLVMContextCreate();
+    ctx->cg.module     = NULL;
+    ctx->cg.builder    = NULL;
+    ctx->cg.env        = env_create();
+    ctx->cg.module_ctx = NULL;
+    ctx->cg.init_fn    = NULL;
+    ctx->cg.test_mode  = false;
+    ctx->cg.fmt_str = ctx->cg.fmt_char = ctx->cg.fmt_int =
+    ctx->cg.fmt_float = ctx->cg.fmt_hex = ctx->cg.fmt_bin =
+    ctx->cg.fmt_oct = NULL;
+
+    /* Bootstrap engine from an empty module */
+    LLVMModuleRef boot = LLVMModuleCreateWithNameInContext(
+        "__repl_boot", ctx->cg.context);
+    char *error = NULL;
+    if (LLVMCreateExecutionEngineForModule(&ctx->engine, boot, &error) != 0) {
+        fprintf(stderr, "REPL: engine creation failed: %s\n", error);
+        LLVMDisposeMessage(error);
+        _Exit(1);
+    }
+    /* boot is owned by engine now */
+
+    register_builtins(&ctx->cg);
     ctx->expr_count = 0;
 
-    char *error = NULL;
-    if (LLVMCreateExecutionEngineForModule(&ctx->engine, ctx->module, &error) != 0) {
-        fprintf(stderr, "Failed to create execution engine: %s\n", error);
-        LLVMDisposeMessage(error);
-        exit(1);
-    }
-
-    // We need a dummy builder position so format string globals can be emitted
-    // before any wrapper function exists.  Create a tiny init function, emit
-    // globals there, then we can re-position per wrapper.
-    LLVMTypeRef  init_type = LLVMFunctionType(LLVMVoidTypeInContext(ctx->context), NULL, 0, 0);
-    LLVMValueRef init_fn   = LLVMAddFunction(ctx->module, "__repl_init_globals", init_type);
-    LLVMBasicBlockRef init_bb = LLVMAppendBasicBlockInContext(ctx->context, init_fn, "entry");
-    LLVMPositionBuilderAtEnd(ctx->builder, init_bb);
-
-    // Force format strings to be created now (into the module as globals)
-    get_fmt_str(ctx);
-    get_fmt_char(ctx);
-    get_fmt_int(ctx);
-    get_fmt_float(ctx);
-
-    LLVMBuildRetVoid(ctx->builder);
-
-    /* TODO register_builtins(ctx); */
+    /* First real module */
+    fresh_module(ctx, "__repl_0");
 
     printf("Monad REPL v0.1\n");
-    printf("Type expressions to evaluate. Use Ctrl-D to exit.\n\n");
+    printf("Type expressions to evaluate, Ctrl-D to exit.\n\n");
 }
-
-/// REPL Cleanup
 
 void repl_dispose(REPLContext *ctx) {
+    if (ctx->cg.builder) LLVMDisposeBuilder(ctx->cg.builder);
+    if (ctx->cg.module)  LLVMDisposeModule(ctx->cg.module);
     LLVMDisposeExecutionEngine(ctx->engine);
-    LLVMDisposeBuilder(ctx->builder);
-    LLVMContextDispose(ctx->context);
-    env_free(ctx->env);
+    env_free(ctx->cg.env);
 }
-
-/// Evaluate one line
 
 bool repl_eval_line(REPLContext *ctx, const char *line) {
-    if (!line || !*line) return true;
-
+    if (!line) return true;
     const char *p = line;
-    while (*p && isspace(*p)) p++;
+    while (*p && isspace((unsigned char)*p)) p++;
     if (!*p) return true;
 
+    parser_set_context("<input>", line);
     AST *ast = parse(line);
-    if (!ast) {
-        fprintf(stderr, "Error: failed to parse expression\n");
-        return false;
-    }
+    if (!ast) { fprintf(stderr, "Error: parse failed\n"); return false; }
 
-    bool should_print =
-        !(ast->type == AST_LIST && ast->list.count > 0 &&
-          ast->list.items[0]->type == AST_SYMBOL &&
-          (strcmp(ast->list.items[0]->symbol, "define") == 0 ||
-           strcmp(ast->list.items[0]->symbol, "show")   == 0));
-
-    // Build a self-contained wrapper function for this expression
-    char func_name[64];
-    snprintf(func_name, sizeof(func_name), "__repl_expr_%u", ctx->expr_count);
-
-    LLVMTypeRef  void_type   = LLVMVoidTypeInContext(ctx->context);
-    LLVMTypeRef  func_type   = LLVMFunctionType(void_type, NULL, 0, 0);
-    LLVMValueRef wrapper_fn  = LLVMAddFunction(ctx->module, func_name, func_type);
-    LLVMBasicBlockRef bb     = LLVMAppendBasicBlockInContext(ctx->context, wrapper_fn, "entry");
-    LLVMPositionBuilderAtEnd(ctx->builder, bb);
-
-    ASTWithType ast_typed = {ast, NULL, NULL};
-    if (ast->type == AST_NUMBER && ast->literal_str)
-        ast_typed.literal_str = strdup(ast->literal_str);
-
-    LLVMValueRef result = codegen_expr(ctx, &ast_typed);
-    if (ast_typed.literal_str) free(ast_typed.literal_str);
-
-    if (!result) {
+    /* Special: (import ...) */
+    if (ast->type == AST_LIST && ast->list.count >= 1 &&
+        ast->list.items[0]->type == AST_SYMBOL &&
+        strcmp(ast->list.items[0]->symbol, "import") == 0) {
+        bool ok = handle_import(ctx, ast);
         ast_free(ast);
-        LLVMDeleteFunction(wrapper_fn);
-        return false;
+        return ok;
     }
 
-    if (should_print) {
-        LLVMValueRef printf_fn = get_or_declare_printf(ctx);
-        Type        *rt        = ast_typed.type ? ast_typed.type : type_float();
+    bool silent = expr_is_silent(ast);
 
-        LLVMValueRef fmt_args[2];
-        if (rt->kind == TYPE_CHAR) {
-            fmt_args[0] = get_fmt_char(ctx);
-        } else if (rt->kind == TYPE_STRING) {
-            fmt_args[0] = get_fmt_str(ctx);
-        } else if (type_is_integer(rt)) {
-            fmt_args[0] = get_fmt_int(ctx);
-        } else {
-            fmt_args[0] = get_fmt_float(ctx);
-        }
-        fmt_args[1] = result;
-        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
-                       printf_fn, fmt_args, 2, "");
+    /* Unique names per expression — MCJIT caches by name, reusing the same
+     * name would return the first compiled wrapper's address every time. */
+    char mod_name[64];
+    snprintf(mod_name,      sizeof(mod_name),      "__repl_%u",      ctx->expr_count);
+    snprintf(g_wrapper_name, sizeof(g_wrapper_name), WRAPPER_FMT, ctx->expr_count);
+    fresh_module(ctx, mod_name);
+    open_wrapper(ctx);
+
+    /* Codegen with error recovery */
+    CodegenResult res = {NULL, NULL};
+    bool ok = true;
+
+    g_in_eval = true;
+    if (setjmp(g_repl_escape) == 0) {
+        res = codegen_expr(&ctx->cg, ast);
+        if (!res.value) ok = false;
+    } else {
+        ok = false;
     }
-
-    LLVMBuildRetVoid(ctx->builder);   // terminator — always required
-
-    if (LLVMVerifyFunction(wrapper_fn, LLVMPrintMessageAction) != 0) {
-        fprintf(stderr, "Error: IR verification failed\n");
-        ast_free(ast);
-        return false;
-    }
-
-    void (*func_ptr)(void) =
-        (void (*)(void))LLVMGetFunctionAddress(ctx->engine, func_name);
-
-    if (!func_ptr) {
-        fprintf(stderr, "Error: failed to get function address for %s\n", func_name);
-        ast_free(ast);
-        return false;
-    }
-
-    func_ptr();
+    g_in_eval = false;
 
     ast_free(ast);
-    ctx->expr_count++;
-    return true;
+
+    if (!ok) {
+        recover_module(ctx);
+        return false;
+    }
+
+    if (!silent && res.type)
+        emit_auto_print(ctx, res.value, res.type);
+
+    bool ran = close_and_run(ctx);
+    if (ran) ctx->expr_count++;
+
+    /* Prepare module for next expression */
+    char next[64];
+    snprintf(next, sizeof(next), "__repl_%u", ctx->expr_count);
+    fresh_module(ctx, next);
+
+    return ran;
 }
 
-/// Readline completion
+/// readline completion
 
 char *repl_completion_generator(const char *text, int state) {
-    static size_t    bucket_index;
-    static EnvEntry *current_entry;
+    static size_t    bi;
+    static EnvEntry *cur;
     static size_t    len;
+    static int       ki;
 
-    if (!global_repl_ctx || !global_repl_ctx->env) return NULL;
+    static const char *kws[] = {
+        "Int","Float","Char","String","Hex","Bin","Oct","Bool",
+        "define","show","if","for","quote","begin","set!","and","or","not",
+        "import","cons","car","cdr","list","append","list-ref","list-length",
+        "make-list","equal?","list-empty?","list-copy","append!",
+        "string-length","string-ref","string-set!","make-string","show-value",
+        NULL
+    };
 
-    if (!state) {
-        bucket_index  = 0;
-        current_entry = NULL;
-        len           = strlen(text);
-    }
+    if (!g_repl_ctx) return NULL;
 
-    Env *env = global_repl_ctx->env;
+    if (!state) { bi = 0; cur = NULL; len = strlen(text); ki = 0; }
 
-    if (current_entry)
-        current_entry = current_entry->next;
+    Env *env = g_repl_ctx->cg.env;
+    if (cur) cur = cur->next;
 
-    while (bucket_index < env->size) {
-        if (!current_entry) {
-            current_entry = env->buckets[bucket_index];
-            if (!current_entry) { bucket_index++; continue; }
-        }
-        while (current_entry) {
-            const char *name = current_entry->name;
-            if (strncmp(name, text, len) == 0) {
-                char *r = strdup(name);
-                current_entry = current_entry->next;
+    while (bi < env->size) {
+        if (!cur) { cur = env->buckets[bi]; if (!cur) { bi++; continue; } }
+        while (cur) {
+            if (strncmp(cur->name, text, len) == 0) {
+                char *r = strdup(cur->name);
+                cur = cur->next;
                 return r;
             }
-            current_entry = current_entry->next;
+            cur = cur->next;
         }
-        bucket_index++;
+        bi++;
     }
 
-    // Type keywords not already in the env
-    static const char *keywords[] = {
-        "Int", "Float", "Char", "String", "Hex", "Bin", "Oct", "Bool", NULL
-    };
-    static int kw_idx;
-    if (!state) kw_idx = 0;
-    while (keywords[kw_idx]) {
-        const char *kw = keywords[kw_idx++];
-        if (strncmp(kw, text, len) == 0)
-            return strdup(kw);
+    while (kws[ki]) {
+        const char *k = kws[ki++];
+        if (strncmp(k, text, len) == 0) return strdup(k);
     }
-
     return NULL;
 }
 
@@ -782,13 +684,10 @@ char **repl_completion(const char *text, int start, int end) {
     return rl_completion_matches(text, repl_completion_generator);
 }
 
-/// Main loop
-
 void repl_run(void) {
     REPLContext ctx;
     repl_init(&ctx);
-
-    global_repl_ctx = &ctx;
+    g_repl_ctx = &ctx;
     rl_attempted_completion_function = repl_completion;
 
     char *line;
@@ -797,7 +696,6 @@ void repl_run(void) {
         repl_eval_line(&ctx, line);
         free(line);
     }
-
     printf("\n");
     repl_dispose(&ctx);
 }

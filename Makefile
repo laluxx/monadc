@@ -26,15 +26,16 @@ all: $(RUNTIME_LIB) $(TARGET)
 release: CFLAGS += $(RELEASE_CFLAGS)
 release: $(RUNTIME_LIB) $(TARGET)
 
+
 $(RUNTIME_OBJ): $(RUNTIME_SRC)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -fPIC -c $< -o $@
 
 $(RUNTIME_LIB): $(RUNTIME_OBJ)
 	ar rcs $@ $^
 
 # Compiler binary: statically absorbs runtime, no .so dependency at runtime
 $(TARGET): $(OBJS) $(RUNTIME_LIB)
-	$(CC) $(CFLAGS) -o $@ $(OBJS) $(RUNTIME_LIB) $(LDFLAGS)
+	$(CC) $(CFLAGS) -rdynamic -o $@ $(OBJS) $(RUNTIME_LIB) $(LDFLAGS)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -62,19 +63,5 @@ uninstall:
 	rm -f $(LIBDIR)/$(RUNTIME_LIB)
 	rm -rf $(INCDIR)
 	rm -rf $(PREFIX)/lib/monad/core
-
-
-# install: $(RUNTIME_LIB) $(TARGET)
-# 	install -d $(BINDIR)
-# 	install -m 755 $(TARGET) $(BINDIR)/$(TARGET)
-# 	install -d $(LIBDIR)
-# 	install -m 644 $(RUNTIME_LIB) $(LIBDIR)/$(RUNTIME_LIB)
-# 	install -d $(INCDIR)
-# 	install -m 644 runtime.h $(INCDIR)/runtime.h
-
-# uninstall:
-# 	rm -f $(BINDIR)/$(TARGET)
-# 	rm -f $(LIBDIR)/$(RUNTIME_LIB)
-# 	rm -rf $(INCDIR)
 
 .PHONY: all clean release install uninstall

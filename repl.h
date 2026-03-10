@@ -3,28 +3,29 @@
 
 #include <stdbool.h>
 #include <llvm-c/ExecutionEngine.h>
+#include "codegen.h"
 #include "env.h"
+#include "module.h"
 
 typedef struct {
-    LLVMModuleRef module;
-    LLVMBuilderRef builder;
-    LLVMContextRef context;
-    LLVMExecutionEngineRef engine;
-    Env *env;
-    // Format strings (lazy initialization)
-    LLVMValueRef fmt_str;
-    LLVMValueRef fmt_char;
-    LLVMValueRef fmt_int;
-    LLVMValueRef fmt_float;
-    // Expression counter for unique naming
-    unsigned int expr_count;
+    LLVMExecutionEngineRef engine;   /* persistent across expressions   */
+    CodegenContext         cg;       /* module/builder replaced per expr */
+    unsigned int           expr_count;
 } REPLContext;
 
-void repl_init(REPLContext *ctx);
-void repl_dispose(REPLContext *ctx);
-bool repl_eval_line(REPLContext *ctx, const char *line);
-void repl_run(void);
+void  repl_init(REPLContext *ctx);
+void  repl_dispose(REPLContext *ctx);
+bool  repl_eval_line(REPLContext *ctx, const char *line);
+void  repl_run(void);
+
 char **repl_completion(const char *text, int start, int end);
-char *repl_completion_generator(const char *text, int state);
+char  *repl_completion_generator(const char *text, int state);
+
+/*
+ * Implemented in main.c — runs compile_one() on the module named by `imp`,
+ * then calls declare_externals() to inject its exports into ctx->env.
+ * Returns true on success.
+ */
+bool repl_compile_module(CodegenContext *ctx, ImportDecl *imp);
 
 #endif

@@ -28,14 +28,6 @@ Env *env_create_child(Env *parent) {
     return t;
 }
 
-/* Env *env_create(void) { */
-/*     Env *t    = malloc(sizeof(Env)); */
-/*     t->size   = INITIAL_SIZE; */
-/*     t->count  = 0; */
-/*     t->buckets = calloc(t->size, sizeof(EnvEntry *)); */
-/*     return t; */
-/* } */
-
 static void free_entry_fields(EnvEntry *e) {
     free(e->name);
     free(e->docstring);

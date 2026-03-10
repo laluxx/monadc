@@ -628,6 +628,28 @@ void declare_runtime_functions(CodegenContext *ctx) {
     LLVMTypeRef rt_value_keyword_type = LLVMFunctionType(ptr_type, rt_value_keyword_params, 1, 0);
     LLVMAddFunction(ctx->module, "rt_value_keyword", rt_value_keyword_type);
 
+    // RuntimeValue *rt_value_array(size_t length)
+    LLVMTypeRef rt_value_array_params[] = {i64_type};
+    LLVMAddFunction(ctx->module, "rt_value_array",
+        LLVMFunctionType(ptr_type, rt_value_array_params, 1, 0));
+
+    // void rt_array_set(RuntimeValue *array, size_t index, RuntimeValue *value)
+    LLVMTypeRef rt_array_set_params[] = {ptr_type, i64_type, ptr_type};
+    LLVMAddFunction(ctx->module, "rt_array_set",
+        LLVMFunctionType(LLVMVoidTypeInContext(ctx->context),
+                         rt_array_set_params, 3, 0));
+
+    // RuntimeValue *rt_array_get(RuntimeValue *array, size_t index)
+    LLVMTypeRef rt_array_get_params[] = {ptr_type, i64_type};
+    LLVMAddFunction(ctx->module, "rt_array_get",
+        LLVMFunctionType(ptr_type, rt_array_get_params, 2, 0));
+
+    // int64_t rt_array_length(RuntimeValue *array)
+    LLVMTypeRef rt_array_length_params[] = {ptr_type};
+    LLVMAddFunction(ctx->module, "rt_array_length",
+        LLVMFunctionType(i64_type, rt_array_length_params, 1, 0));
+
+
     // RuntimeValue *rt_value_list(RuntimeList *val)
     LLVMTypeRef rt_value_list_params[] = {ptr_type};
     LLVMTypeRef rt_value_list_type = LLVMFunctionType(ptr_type, rt_value_list_params, 1, 0);

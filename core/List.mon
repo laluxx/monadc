@@ -55,7 +55,6 @@
   result)
 
 
-
 (define (list-index [xs :: List] -> val -> Int)
   "Return index of first element equal to VAL, or -1."
   (define [result :: Int] -1)
