@@ -275,7 +275,7 @@ void ast_free(AST *ast) {
         free(ast->array.elements);
         break;
 
-case AST_LAMBDA:
+    case AST_LAMBDA:
     if (ast->lambda.params) {
         for (int i = 0; i < ast->lambda.param_count; i++) {
             free(ast->lambda.params[i].name);
@@ -294,20 +294,6 @@ case AST_LAMBDA:
     }
     // body points into body_exprs so do NOT free it separately
     break;
-
-    /* case AST_LAMBDA: */
-    /*     if (ast->lambda.params) { */
-    /*         for (int i = 0; i < ast->lambda.param_count; i++) { */
-    /*             free(ast->lambda.params[i].name); */
-    /*             free(ast->lambda.params[i].type_name); */
-    /*         } */
-    /*         free(ast->lambda.params); */
-    /*     } */
-    /*     free(ast->lambda.return_type); */
-    /*     free(ast->lambda.docstring); */
-    /*     free(ast->lambda.alias_name); */
-    /*     ast_free(ast->lambda.body); */
-    /*     break; */
 
     case AST_ASM:
         if (ast->asm_block.instructions) {
@@ -714,25 +700,23 @@ static ASTParam parse_one_param(Parser *p) {
 
 static void parse_fn_signature(Parser *p, ASTParam **out_params,
                                int *out_count, char **out_return_type) {
-    ASTParam *params = NULL;
-    int count = 0;
-    int capacity = 0;
-    char *ret_type = NULL;
+    ASTParam *params   = NULL;
+    int       count    = 0;
+    int       capacity = 0;
+    char     *ret_type = NULL;
 
     while (p->current.type != TOK_RPAREN &&
            p->current.type != TOK_EOF) {
 
         if (p->current.type == TOK_LBRACKET) {
+            // Typed parameter: [name :: Type]
             p->current = lexer_next_token(p->lexer);
-
             ASTParam param = parse_one_param(p);
-
             if (p->current.type != TOK_RBRACKET) {
                 compiler_error(p->current.line, p->current.column,
-                             "Expected ']' after parameter");
+                               "Expected ']' after parameter");
             }
             p->current = lexer_next_token(p->lexer);
-
             if (count >= capacity) {
                 capacity = capacity == 0 ? 4 : capacity * 2;
                 params   = realloc(params, sizeof(ASTParam) * capacity);
@@ -740,21 +724,41 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
             params[count++] = param;
 
         } else if (p->current.type == TOK_ARROW) {
+            // Skip ->
             p->current = lexer_next_token(p->lexer);
 
         } else if (p->current.type == TOK_SYMBOL) {
-            ret_type   = my_strdup(p->current.value);
+            // Bare symbol — either a generic parameter or the return type.
+            // If the token after it is -> or [ or another bare symbol,
+            // it's a generic parameter. If it's ) it's the return type.
+            char *sym  = my_strdup(p->current.value);
             p->current = lexer_next_token(p->lexer);
+
+            if (p->current.type == TOK_ARROW    ||
+                p->current.type == TOK_LBRACKET ||
+                p->current.type == TOK_SYMBOL) {
+                // Generic/polymorphic parameter — no type annotation
+                if (count >= capacity) {
+                    capacity = capacity == 0 ? 4 : capacity * 2;
+                    params   = realloc(params, sizeof(ASTParam) * capacity);
+                }
+                params[count].name      = sym;
+                params[count].type_name = NULL; // NULL = polymorphic
+                count++;
+            } else {
+                // Return type
+                ret_type = sym;
+            }
 
         } else {
             compiler_error(p->current.line, p->current.column,
-                         "Unexpected token in function signature");
+                           "Unexpected token in function signature");
         }
     }
 
     if (p->current.type != TOK_RPAREN) {
         compiler_error(p->current.line, p->current.column,
-                     "Expected ')' to close function signature");
+                       "Expected ')' to close function signature");
     }
     p->current = lexer_next_token(p->lexer);
 
@@ -762,6 +766,57 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
     *out_count       = count;
     *out_return_type = ret_type;
 }
+
+/* static void parse_fn_signature(Parser *p, ASTParam **out_params, */
+/*                                int *out_count, char **out_return_type) { */
+/*     ASTParam *params = NULL; */
+/*     int count = 0; */
+/*     int capacity = 0; */
+/*     char *ret_type = NULL; */
+
+/*     while (p->current.type != TOK_RPAREN && */
+/*            p->current.type != TOK_EOF) { */
+
+/*         if (p->current.type == TOK_LBRACKET) { */
+/*             p->current = lexer_next_token(p->lexer); */
+
+/*             ASTParam param = parse_one_param(p); */
+
+/*             if (p->current.type != TOK_RBRACKET) { */
+/*                 compiler_error(p->current.line, p->current.column, */
+/*                              "Expected ']' after parameter"); */
+/*             } */
+/*             p->current = lexer_next_token(p->lexer); */
+
+/*             if (count >= capacity) { */
+/*                 capacity = capacity == 0 ? 4 : capacity * 2; */
+/*                 params   = realloc(params, sizeof(ASTParam) * capacity); */
+/*             } */
+/*             params[count++] = param; */
+
+/*         } else if (p->current.type == TOK_ARROW) { */
+/*             p->current = lexer_next_token(p->lexer); */
+
+/*         } else if (p->current.type == TOK_SYMBOL) { */
+/*             ret_type   = my_strdup(p->current.value); */
+/*             p->current = lexer_next_token(p->lexer); */
+
+/*         } else { */
+/*             compiler_error(p->current.line, p->current.column, */
+/*                          "Unexpected token in function signature"); */
+/*         } */
+/*     } */
+
+/*     if (p->current.type != TOK_RPAREN) { */
+/*         compiler_error(p->current.line, p->current.column, */
+/*                      "Expected ')' to close function signature"); */
+/*     } */
+/*     p->current = lexer_next_token(p->lexer); */
+
+/*     *out_params      = params; */
+/*     *out_count       = count; */
+/*     *out_return_type = ret_type; */
+/* } */
 
 static AST *parse_lambda(Parser *p) {
     if (p->current.type != TOK_LPAREN) {
@@ -802,30 +857,6 @@ static AST *parse_lambda(Parser *p) {
     free(ret_type);
     return result;
 }
-
-/* static AST *parse_lambda(Parser *p) { */
-/*     if (p->current.type != TOK_LPAREN) { */
-/*         compiler_error(p->current.line, p->current.column, */
-/*                      "Expected '(' after 'lambda'"); */
-/*     } */
-/*     p->current = lexer_next_token(p->lexer); */
-
-/*     ASTParam *params   = NULL; */
-/*     int       count    = 0; */
-/*     char     *ret_type = NULL; */
-/*     parse_fn_signature(p, &params, &count, &ret_type); */
-
-/*     char *docstring = NULL; */
-/*     if (p->current.type == TOK_STRING) { */
-/*         docstring  = my_strdup(p->current.value); */
-/*         p->current = lexer_next_token(p->lexer); */
-/*     } */
-
-/*     AST *body = parse_expr(p); */
-
-/*     return ast_new_lambda(params, count, ret_type, docstring, NULL, false, body); */
-/* } */
-
 
 typedef struct {
     char *docstring;

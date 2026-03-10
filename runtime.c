@@ -92,6 +92,62 @@ int rt_list_is_empty(RuntimeList *list) {
     return (list == NULL || list->head == NULL) ? 1 : 0;
 }
 
+// rt_make_list — create a list of n copies of fill_val
+RuntimeList *rt_make_list(int64_t n, RuntimeValue *fill_val) {
+    RuntimeList *list = rt_list_create();
+    for (int64_t i = 0; i < n; i++)
+        rt_list_append(list, fill_val);
+    return list;
+}
+
+// rt_list_append_lists — pure concat, returns new list
+RuntimeList *rt_list_append_lists(RuntimeList *a, RuntimeList *b) {
+    RuntimeList *out = rt_list_create();
+    RuntimeListNode *cur = a->head;
+    while (cur) { rt_list_append(out, cur->value); cur = cur->next; }
+    cur = b->head;
+    while (cur) { rt_list_append(out, cur->value); cur = cur->next; }
+    return out;
+}
+
+// rt_list_copy — shallow copy
+RuntimeList *rt_list_copy(RuntimeList *src) {
+    RuntimeList *out = rt_list_create();
+    RuntimeListNode *cur = src->head;
+    while (cur) { rt_list_append(out, cur->value); cur = cur->next; }
+    return out;
+}
+
+int rt_equal_p(RuntimeValue *a, RuntimeValue *b) {
+    if (!a && !b) return 1;
+    if (!a || !b) return 0;
+    if (a->type == RT_NIL && b->type == RT_NIL) return 1;
+    if (a->type != b->type) return 0;
+    switch (a->type) {
+        case RT_INT:    return a->data.int_val == b->data.int_val;
+        case RT_FLOAT:  return a->data.float_val == b->data.float_val;
+        case RT_CHAR:   return a->data.char_val == b->data.char_val;
+        case RT_STRING: return strcmp(a->data.string_val, b->data.string_val) == 0;
+        case RT_NIL:    return 1;
+        case RT_LIST: {
+            RuntimeList *la = a->data.list_val;
+            RuntimeList *lb = b->data.list_val;
+            if (!la && !lb) return 1;
+            if (!la || !lb) return 0;
+            if (la->length != lb->length) return 0;
+            RuntimeListNode *na = la->head;
+            RuntimeListNode *nb = lb->head;
+            while (na && nb) {
+                if (!rt_equal_p(na->value, nb->value)) return 0;
+                na = na->next;
+                nb = nb->next;
+            }
+            return 1;
+        }
+        default: return 0;
+    }
+}
+
 /// Runtime Value Construction
 
 RuntimeValue *rt_value_int(int64_t val) {
@@ -147,6 +203,52 @@ RuntimeValue *rt_value_nil(void) {
     RuntimeValue *v = malloc(sizeof(RuntimeValue));
     v->type = RT_NIL;
     return v;
+}
+
+/// Unboxing
+
+int64_t rt_unbox_int(RuntimeValue *v) {
+    if (!v || v->type == RT_NIL) return 0;
+    if (v->type == RT_INT)   return v->data.int_val;
+    if (v->type == RT_FLOAT) return (int64_t)v->data.float_val;
+    if (v->type == RT_CHAR)  return (int64_t)v->data.char_val;
+    return 0;
+}
+
+double rt_unbox_float(RuntimeValue *v) {
+    if (!v || v->type == RT_NIL) return 0.0;
+    if (v->type == RT_FLOAT) return v->data.float_val;
+    if (v->type == RT_INT)   return (double)v->data.int_val;
+    if (v->type == RT_CHAR)  return (double)v->data.char_val;
+    return 0.0;
+}
+
+char rt_unbox_char(RuntimeValue *v) {
+    if (!v || v->type == RT_NIL) return 0;
+    if (v->type == RT_CHAR) return v->data.char_val;
+    if (v->type == RT_INT)  return (char)v->data.int_val;
+    return 0;
+}
+
+char *rt_unbox_string(RuntimeValue *v) {
+    if (!v || v->type == RT_NIL) return "";
+    if (v->type == RT_STRING) return v->data.string_val;
+    return "";
+}
+
+RuntimeList *rt_unbox_list(RuntimeValue *v) {
+    if (!v || v->type == RT_NIL) return rt_list_create();
+    if (v->type == RT_LIST) return v->data.list_val;
+    return rt_list_create();
+}
+
+int rt_value_is_nil(RuntimeValue *v) {
+    return (!v || v->type == RT_NIL) ? 1 : 0;
+}
+
+void rt_print_value_newline(RuntimeValue *v) {
+    rt_print_value(v);
+    printf("\n");
 }
 
 /// Runtime Printing
@@ -439,6 +541,63 @@ void declare_runtime_functions(CodegenContext *ctx) {
     LLVMTypeRef rt_list_is_empty_type = LLVMFunctionType(i32_type, rt_list_is_empty_params, 1, 0);
     LLVMAddFunction(ctx->module, "rt_list_is_empty", rt_list_is_empty_type);
 
+
+    // RuntimeList *rt_make_list(int64_t n, RuntimeValue *fill_val)
+    LLVMTypeRef rt_make_list_params[] = {i64_type, ptr_type};
+    LLVMTypeRef rt_make_list_type = LLVMFunctionType(ptr_type, rt_make_list_params, 2, 0);
+    LLVMAddFunction(ctx->module, "rt_make_list", rt_make_list_type);
+
+    // RuntimeList *rt_list_append_lists(RuntimeList *a, RuntimeList *b)
+    LLVMTypeRef rt_list_append_lists_params[] = {ptr_type, ptr_type};
+    LLVMTypeRef rt_list_append_lists_type = LLVMFunctionType(ptr_type, rt_list_append_lists_params, 2, 0);
+    LLVMAddFunction(ctx->module, "rt_list_append_lists", rt_list_append_lists_type);
+
+    // RuntimeList *rt_list_copy(RuntimeList *src)
+    LLVMTypeRef rt_list_copy_params[] = {ptr_type};
+    LLVMTypeRef rt_list_copy_type = LLVMFunctionType(ptr_type, rt_list_copy_params, 1, 0);
+    LLVMAddFunction(ctx->module, "rt_list_copy", rt_list_copy_type);
+
+    // int rt_equal_p(RuntimeValue *a, RuntimeValue *b)
+    LLVMTypeRef rt_equal_p_params[] = {ptr_type, ptr_type};
+    LLVMAddFunction(ctx->module, "rt_equal_p",
+        LLVMFunctionType(i32_type, rt_equal_p_params, 2, 0));
+
+    // int64_t rt_unbox_int(RuntimeValue *v)
+    LLVMTypeRef rt_unbox_int_params[] = {ptr_type};
+    LLVMAddFunction(ctx->module, "rt_unbox_int",
+        LLVMFunctionType(i64_type, rt_unbox_int_params, 1, 0));
+
+    // double rt_unbox_float(RuntimeValue *v)
+    LLVMTypeRef rt_unbox_float_params[] = {ptr_type};
+    LLVMAddFunction(ctx->module, "rt_unbox_float",
+        LLVMFunctionType(double_type, rt_unbox_float_params, 1, 0));
+
+    // char rt_unbox_char(RuntimeValue *v)
+    LLVMTypeRef rt_unbox_char_params[] = {ptr_type};
+    LLVMAddFunction(ctx->module, "rt_unbox_char",
+        LLVMFunctionType(i8_type, rt_unbox_char_params, 1, 0));
+
+    // char *rt_unbox_string(RuntimeValue *v)
+    LLVMTypeRef rt_unbox_string_params[] = {ptr_type};
+    LLVMAddFunction(ctx->module, "rt_unbox_string",
+        LLVMFunctionType(ptr_type, rt_unbox_string_params, 1, 0));
+
+    // RuntimeList *rt_unbox_list(RuntimeValue *v)
+    LLVMTypeRef rt_unbox_list_params[] = {ptr_type};
+    LLVMAddFunction(ctx->module, "rt_unbox_list",
+        LLVMFunctionType(ptr_type, rt_unbox_list_params, 1, 0));
+
+    // int rt_value_is_nil(RuntimeValue *v)
+    LLVMTypeRef rt_value_is_nil_params[] = {ptr_type};
+    LLVMAddFunction(ctx->module, "rt_value_is_nil",
+        LLVMFunctionType(i32_type, rt_value_is_nil_params, 1, 0));
+
+    // void rt_print_value_newline(RuntimeValue *v)
+    LLVMTypeRef rt_print_value_newline_params[] = {ptr_type};
+    LLVMAddFunction(ctx->module, "rt_print_value_newline",
+        LLVMFunctionType(LLVMVoidTypeInContext(ctx->context),
+                         rt_print_value_newline_params, 1, 0));
+
     // RuntimeValue *rt_value_int(int64_t val)
     LLVMTypeRef rt_value_int_params[] = {i64_type};
     LLVMTypeRef rt_value_int_type = LLVMFunctionType(ptr_type, rt_value_int_params, 1, 0);
@@ -528,6 +687,8 @@ void declare_runtime_functions(CodegenContext *ctx) {
         return fn; \
     }
 
+//// List
+
 GET_RUNTIME_FUNCTION(rt_list_create)
 GET_RUNTIME_FUNCTION(rt_list_cons)
 GET_RUNTIME_FUNCTION(rt_list_append)
@@ -536,6 +697,23 @@ GET_RUNTIME_FUNCTION(rt_list_cdr)
 GET_RUNTIME_FUNCTION(rt_list_nth)
 GET_RUNTIME_FUNCTION(rt_list_length)
 GET_RUNTIME_FUNCTION(rt_list_is_empty)
+GET_RUNTIME_FUNCTION(rt_make_list)
+GET_RUNTIME_FUNCTION(rt_list_append_lists)
+GET_RUNTIME_FUNCTION(rt_list_copy)
+GET_RUNTIME_FUNCTION(rt_equal_p)
+
+//// Unboxing
+
+GET_RUNTIME_FUNCTION(rt_unbox_int)
+GET_RUNTIME_FUNCTION(rt_unbox_float)
+GET_RUNTIME_FUNCTION(rt_unbox_char)
+GET_RUNTIME_FUNCTION(rt_unbox_string)
+GET_RUNTIME_FUNCTION(rt_unbox_list)
+GET_RUNTIME_FUNCTION(rt_value_is_nil)
+GET_RUNTIME_FUNCTION(rt_print_value_newline)
+
+//// Value
+
 GET_RUNTIME_FUNCTION(rt_value_int)
 GET_RUNTIME_FUNCTION(rt_value_float)
 GET_RUNTIME_FUNCTION(rt_value_char)

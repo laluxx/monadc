@@ -90,6 +90,7 @@ static Type *make_type(TypeKind kind) {
     return t;
 }
 
+Type *type_unknown(void) { return make_type(TYPE_UNKNOWN); }
 Type *type_int    (void) { return make_type(TYPE_INT);     }
 Type *type_float  (void) { return make_type(TYPE_FLOAT);   }
 Type *type_char   (void) { return make_type(TYPE_CHAR);    }

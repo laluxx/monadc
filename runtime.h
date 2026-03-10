@@ -62,17 +62,51 @@ typedef struct RuntimeList {
 
 // These functions will be called from generated LLVM code
 
-// List construction
+
+/// List
+
+// construction
 RuntimeList *rt_list_create(void);
 RuntimeList *rt_list_cons(RuntimeValue *value, RuntimeList *list);
 void rt_list_append(RuntimeList *list, RuntimeValue *value);
 
-// List access
+// access
 RuntimeValue *rt_list_car(RuntimeList *list);    // first element
 RuntimeList *rt_list_cdr(RuntimeList *list);     // rest of list
 RuntimeValue *rt_list_nth(RuntimeList *list, int64_t index);
 int64_t rt_list_length(RuntimeList *list);
 int rt_list_is_empty(RuntimeList *list);
+
+RuntimeList *rt_make_list(int64_t n, RuntimeValue *fill_val);
+RuntimeList *rt_list_append_lists(RuntimeList *a, RuntimeList *b);
+RuntimeList *rt_list_copy(RuntimeList *src);
+
+LLVMValueRef get_rt_make_list(CodegenContext *ctx);
+LLVMValueRef get_rt_list_append_lists(CodegenContext *ctx);
+LLVMValueRef get_rt_list_copy(CodegenContext *ctx);
+
+int rt_equal_p(RuntimeValue *a, RuntimeValue *b);
+LLVMValueRef get_rt_equal_p(CodegenContext *ctx);
+
+/// Unboxing — extract raw values from RuntimeValue*
+
+int64_t      rt_unbox_int(RuntimeValue *v);
+double       rt_unbox_float(RuntimeValue *v);
+char         rt_unbox_char(RuntimeValue *v);
+char        *rt_unbox_string(RuntimeValue *v);
+RuntimeList *rt_unbox_list(RuntimeValue *v);
+int          rt_value_is_nil(RuntimeValue *v);
+void         rt_print_value_newline(RuntimeValue *v);
+
+LLVMValueRef get_rt_unbox_int(CodegenContext *ctx);
+LLVMValueRef get_rt_unbox_float(CodegenContext *ctx);
+LLVMValueRef get_rt_unbox_char(CodegenContext *ctx);
+LLVMValueRef get_rt_unbox_string(CodegenContext *ctx);
+LLVMValueRef get_rt_unbox_list(CodegenContext *ctx);
+LLVMValueRef get_rt_value_is_nil(CodegenContext *ctx);
+LLVMValueRef get_rt_print_value_newline(CodegenContext *ctx);
+
+
 
 // Value construction
 RuntimeValue *rt_value_int(int64_t val);

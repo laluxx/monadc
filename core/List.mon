@@ -1,0 +1,110 @@
+;;; List.mon --- List construction, access, and manipulation
+
+;; Author: Laluxx
+;; Version: 0.0.1
+;; Keywords: list sequence functional
+
+;;; Commentary:
+
+;; List operations following Guile Scheme conventions.
+;; Lists in Monad are heterogeneous singly-linked cons chains
+;; backed by the runtime's RuntimeList/RuntimeValue system.
+
+;;; Code:
+
+(module List
+  [caar   cadr   cdar   cddr
+   caaar  caadr  cadar  caddr
+   cdaar  cdadr  cddar  cdddr
+
+   list-tabulate  iota list-index
+   list-reverse   list-tail list?])
+
+
+(define (caar  [xs :: List] -> List) (car (car xs)))
+(define (cadr  [xs :: List] -> List) (car (cdr xs)))
+(define (cdar  [xs :: List] -> List) (cdr (car xs)))
+(define (cddr  [xs :: List] -> List) (cdr (cdr xs)))
+(define (caaar [xs :: List] -> List) (car (car (car xs))))
+(define (caadr [xs :: List] -> List) (car (car (cdr xs))))
+(define (cadar [xs :: List] -> List) (car (cdr (car xs))))
+(define (caddr [xs :: List] -> List) (car (cdr (cdr xs))))
+(define (cdaar [xs :: List] -> List) (cdr (car (car xs))))
+(define (cdadr [xs :: List] -> List) (cdr (car (cdr xs))))
+(define (cddar [xs :: List] -> List) (cdr (cdr (car xs))))
+(define (cdddr [xs :: List] -> List) (cdr (cdr (cdr xs))))
+
+
+(define (list-tail [xs :: List] -> [k :: Int] -> List)
+  "Return the sublist of XS starting at index K."
+  (define [result :: List] xs)
+  (for [i 0 k]
+    (set! result (cdr result)))
+  result)
+
+
+(define (list-reverse [xs :: List] -> List)
+  "Return a new list that is XS in reverse order."
+  (define [result :: List] (list))
+  (define [cur :: List] xs)
+  (for [(list-length xs)]
+    (begin
+      (cons (car cur) result)
+      (set! result (cons (car cur) result))
+      (set! cur (cdr cur))))
+  result)
+
+
+
+(define (list-index [xs :: List] -> val -> Int)
+  "Return index of first element equal to VAL, or -1."
+  (define [result :: Int] -1)
+  (define [cur :: List] xs)
+  (define [len :: Int] (list-length xs))
+  (for [i 0 len]
+    (begin
+      (if (and (equal? (car cur) val) (= result -1))
+        (set! result i))
+      (set! cur (cdr cur))))
+  result)
+
+
+(define (iota [count :: Int] -> List)
+  :doc "Return a list of COUNT integers starting from 0."
+  :alias ⍳
+  (define [result :: List] (list))
+  (for [i 0 count]
+    (append! result i))
+  result)
+
+
+(tests
+  ;; list-length
+  (assert-eq (list-length (list))          0  "length empty")
+  (assert-eq (list-length (cons 1 (list))) 1  "length cons 1")
+  (assert-eq (list-length (iota 5))        5  "length iota 5")
+  (assert-eq (list-length (iota 10))       10 "length iota 10")
+
+  ;; list-empty?
+  (assert-eq (list-empty? (list))     True  "empty? empty")
+  (assert-eq (list-empty? (iota 3))   False "empty? nonempty")
+
+  ;; iota
+  (assert-eq (list-length (iota 0))   0  "iota 0")
+  (assert-eq (list-length (iota 1))   1  "iota 1")
+  (assert-eq (list-length (iota 100)) 100 "iota 100")
+
+  ;; list-tail
+  (assert-eq (list-length (list-tail (iota 5) 2)) 3 "list-tail length")
+  (assert-eq (list-length (list-tail (iota 5) 0)) 5 "list-tail 0")
+  (assert-eq (list-length (list-tail (iota 5) 5)) 0 "list-tail full")
+
+  ;; list-reverse
+  (assert-eq (list-length (list-reverse (iota 5))) 5 "reverse length")
+  (assert-eq (list-empty? (list-reverse (list)))   True "reverse empty")
+
+  ;; list-index
+  (assert-eq (list-index (iota 5) 0)  0  "index first")
+  (assert-eq (list-index (iota 5) 4)  4  "index last")
+  (assert-eq (list-index (iota 5) 10) -1 "index missing"))
+

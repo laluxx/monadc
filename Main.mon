@@ -239,6 +239,24 @@
 
 (show (return-code))
 
+(show "TESTING LISTS")
+(define [xs :: List] (list))
+(show xs)
+(append! xs 1)
+(show xs)
+(append! xs 2)
+(show xs)
+(append! xs "hello")
+(show xs)
+(show (list-length xs))   ; 3
+(show (list-empty? xs))   ; False
+
+(define [ys :: List] (make-list 10 '(10 20)))
+(show ys)
+(show (car ys))
+(show (cons 10 ys))
+
+
 (define symbol 'symbol); TODO
 (show symbol)
 

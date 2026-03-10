@@ -45,6 +45,7 @@ typedef struct Type {
 
 /// Constructors
 
+Type *type_unknown(void);
 Type *type_int(void);
 Type *type_float(void);
 Type *type_char(void);
