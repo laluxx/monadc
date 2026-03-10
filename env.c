@@ -92,13 +92,6 @@ static void chain(Env *table, EnvEntry *e) {
     table->count++;
 }
 
-/* static void chain(Env *table, EnvEntry *e) { */
-/*     unsigned int idx = hash(e->name) % table->size; */
-/*     e->next = table->buckets[idx]; */
-/*     table->buckets[idx] = e; */
-/*     table->count++; */
-/* } */
-
 void env_insert(Env *table, const char *name, Type *type, LLVMValueRef value) {
     env_insert_with_doc(table, name, type, value, NULL);
 }
@@ -197,31 +190,10 @@ void env_insert_func(Env *table, const char *name,
 }
 
 EnvEntry *env_lookup(Env *table, const char *name) {
-    Env *t = table;
-    while (t) {
-        EnvEntry *e = find(t, name);
+    while (table) {
+        EnvEntry *e = find(table, name);
         if (e) return e;
-        t = t->parent;
-    }
-
-    /* Fallback: search for any entry whose qualified name is
-     * "SomeModule.name" — allows unqualified use of imported symbols
-     * without storing duplicate bare-name entries.                    */
-    size_t nlen = strlen(name);
-    t = table;
-    while (t) {
-        for (size_t i = 0; i < t->size; i++) {
-            for (EnvEntry *e = t->buckets[i]; e; e = e->next) {
-                if (!e->module_name) continue;
-                /* e->name should be "Module.foo" — check suffix */
-                size_t mlen = strlen(e->module_name);
-                if (strlen(e->name) == mlen + 1 + nlen &&
-                    e->name[mlen] == '.' &&
-                    strcmp(e->name + mlen + 1, name) == 0)
-                    return e;
-            }
-        }
-        t = t->parent;
+        table = table->parent;
     }
     return NULL;
 }
@@ -307,7 +279,10 @@ static int cmp_env_entry(const void *a, const void *b) {
 }
 
 void env_print(Env *table) {
-    /* Collect all named entries */
+    /* Collect entries, skipping unqualified aliases for module symbols.
+     * declare_externals inserts both "Module.foo" (qualified) and "foo"
+     * (unqualified) for non-qualified imports. We only display the
+     * qualified form so each symbol appears exactly once.              */
     int total = 0;
     for (size_t i = 0; i < table->size; i++)
         for (EnvEntry *e = table->buckets[i]; e; e = e->next)
@@ -317,9 +292,23 @@ void env_print(Env *table) {
 
     EnvEntry **entries = malloc(total * sizeof(EnvEntry *));
     int n = 0;
-    for (size_t i = 0; i < table->size; i++)
-        for (EnvEntry *e = table->buckets[i]; e; e = e->next)
-            if (e->name) entries[n++] = e;
+    for (size_t i = 0; i < table->size; i++) {
+        for (EnvEntry *e = table->buckets[i]; e; e = e->next) {
+            if (!e->name) continue;
+            /* Skip unqualified aliases: module entries whose name does
+             * not start with "ModuleName." are bare-name copies kept
+             * only for unqualified lookup — don't display them.        */
+            if (e->module_name) {
+                size_t mlen = strlen(e->module_name);
+                if (!(strncmp(e->name, e->module_name, mlen) == 0
+                      && e->name[mlen] == '.'))
+                    continue;
+            }
+            entries[n++] = e;
+        }
+    }
+
+    if (n == 0) { printf("  (empty)\n"); free(entries); return; }
 
     qsort(entries, n, sizeof(EnvEntry *), cmp_env_entry);
 
@@ -333,10 +322,10 @@ void env_print(Env *table) {
     /* Print section by section, computing max_w per section */
     int i = 0;
     while (i < n) {
-        /* Find end of this section (same module group) */
-        int section_start = i;
-        const char *sec_mod = entries[i]->module_name;
-        int         sec_kind = entries[i]->kind;
+        int         section_start = i;
+        const char *sec_mod       = entries[i]->module_name;
+        int         sec_kind      = entries[i]->kind;
+
         int j = i;
         while (j < n) {
             EnvEntry *ej = entries[j];
@@ -349,9 +338,9 @@ void env_print(Env *table) {
             if (!same) break;
             j++;
         }
-        int section_end = j; /* exclusive */
+        int section_end = j;
 
-        /* Compute max bracket width for this section */
+        /* Max bracket width for alignment within this section */
         size_t max_w = 0;
         for (int k = section_start; k < section_end; k++) {
             size_t w = strlen(brackets[k]);
@@ -379,7 +368,7 @@ void env_print(Env *table) {
         i = section_end;
     }
 
-    printf("\n  \033[2m%d bindings\033[0m\n", total);
+    printf("\n  \033[2m%d bindings\033[0m\n", n);
     free(brackets);
     free(entries);
 }

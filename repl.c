@@ -820,14 +820,27 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
                             else if (name_node->type == AST_SYMBOL)
                                 fn_name = name_node->symbol;
 
+
                             if (fn_name) {
-                                EnvEntry *ent = env_lookup(ctx->cg.env, fn_name);
+                                char qn[512];
+                                snprintf(qn, sizeof(qn), "%s.%s", mod_name, fn_name);
+                                EnvEntry *ent = env_lookup(ctx->cg.env, qn);
+                                if (!ent) ent = env_lookup(ctx->cg.env, fn_name);
                                 if (ent && ent->module_name &&
                                     strcmp(ent->module_name, mod_name) == 0) {
                                     free(ent->docstring);
                                     ent->docstring = strdup(lam->lambda.docstring);
                                 }
                             }
+
+                            /* if (fn_name) { */
+                            /*     EnvEntry *ent = env_lookup(ctx->cg.env, fn_name); */
+                            /*     if (ent && ent->module_name && */
+                            /*         strcmp(ent->module_name, mod_name) == 0) { */
+                            /*         free(ent->docstring); */
+                            /*         ent->docstring = strdup(lam->lambda.docstring); */
+                            /*     } */
+                            /* } */
                         }
                     }
                     ast_free(form);
