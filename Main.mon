@@ -508,6 +508,7 @@
 ; 3D [3x4x5]
 ;; (m4D 2); => #[61 62 63 64 65  81 82 83 84 85   101 102 103 104 105
 ;             66 67 68 69 70  86 87 88 89 90   106 107 108 109 110
+
 ;             71 72 73 74 75  91 92 93 94 95   111 112 113 114 115
 ;             76 77 78 79 80  96 97 98 99 100  116 117 118 119 120]
 
@@ -1321,8 +1322,8 @@
 
 ;; (layout Point
 ;;   "A 2D point in Cartesian coordinates."
-;;   [x :: Float "The X coordinate (horizontal)"]
-;;   [y :: Float "The Y coordinate (vertical)"])
+;;   [x :: Float] "The X coordinate (horizontal)"
+;;   [y :: Float] "The Y coordinate (vertical)")
 
 ;; ;; NOTICE how it doesn't show docstrings.
 ;; (show Point); => (layout Point
@@ -1412,7 +1413,7 @@
 
 ;;;; Functions
 
-;; [+ :: Fn (=> _ _ . _)]
+;; [+ :: Fn (_ => _ . _)]  ~[0x7f2dfcb50040]
 ;; [cons :: Fn (_ _)]
 ;; [not :: Fn (_)]
 ;; [make-vector :: Fn (_ => _)]
