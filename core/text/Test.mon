@@ -1,5 +1,3 @@
-
-
 (import Assert)
 
 (define (fib-slow [n :: Int] -> Int)
@@ -15,3 +13,7 @@
         a
         (fib-iter b (+ a b) (- count 1))))
   (fib-iter 0 1 n))
+
+
+(define (hello)
+  (show "hello"))

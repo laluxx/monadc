@@ -1596,25 +1596,123 @@ static void setup_electric_pairs(void) {
  * ------------------------------------------------------------------------- */
 #define PROMPT_OK    "\001\033[34m\002Monad\001\033[0m\002 \001\033[32m\002λ\001\033[0m\002 "
 #define PROMPT_ERROR "\001\033[34m\002Monad\001\033[0m\002 \001\033[31m\002λ\001\033[0m\002 "
+// When under Emacs
+#define PROMPT_OK_PLAIN    "\033[34mMonad\033[0m \033[32m\xce\xbb\033[0m "
+#define PROMPT_ERROR_PLAIN "\033[34mMonad\033[0m \033[31m\xce\xbb\033[0m "
+
+
+/* Count paren depth of a string, ignoring chars inside strings/comments */
+static int paren_depth(const char *s) {
+    int depth = 0;
+    bool in_str = false;
+    for (; *s; s++) {
+        if (in_str) {
+            if (*s == '\\') { s++; continue; }  /* skip escaped char */
+            if (*s == '"')  in_str = false;
+        } else {
+            if (*s == '"')        in_str = true;
+            else if (*s == ';')   break;          /* line comment — stop */
+            else if (*s == '(')   depth++;
+            else if (*s == ')')   depth--;
+        }
+    }
+    return depth;
+}
 
 void repl_run(void) {
     REPLContext ctx;
     repl_init(&ctx);
     g_repl_ctx = &ctx;
-    rl_attempted_completion_function = repl_completion;
-    setup_electric_pairs();
 
-    const char *prompt = PROMPT_OK;
-    char *line;
-    while ((line = readline(prompt)) != NULL) {
-        if (*line) {
-            add_history(line);
-            bool ok = repl_eval_line(&ctx, line);
-            prompt = ok ? PROMPT_OK : PROMPT_ERROR;
-        }
-        /* empty input: leave prompt colour unchanged */
-        free(line);
+    /* Emacs runs the process with INSIDE_EMACS set, or with TERM=dumb.
+     * In both cases readline is useless (no terminal, no electric pairs)
+     * and — crucially — it reads one line at a time via the pty, which
+     * breaks multiline input.  Use the plain accumulation loop instead. */
+    bool use_readline = isatty(STDIN_FILENO)
+                        && !getenv("INSIDE_EMACS")
+                        && !(getenv("TERM") && strcmp(getenv("TERM"), "dumb") == 0);
+
+    /* MONAD_NO_PROMPT=1 suppresses the prompt entirely — useful when Emacs
+     * or another tool drives the process and handles its own prompt display. */
+    bool show_prompt = !(getenv("MONAD_NO_PROMPT") &&
+                         strcmp(getenv("MONAD_NO_PROMPT"), "0") != 0);
+
+    if (use_readline) {
+        rl_attempted_completion_function = repl_completion;
+        setup_electric_pairs();
     }
+
+    /* Readline needs \001/\002 wrappers around invisible escape sequences
+     * so it can measure the visible prompt width correctly.  Emacs (and
+     * plain pipes) must never see those control characters.              */
+    const char *prompt_ok    = use_readline ? PROMPT_OK    : PROMPT_OK_PLAIN;
+    const char *prompt_error = use_readline ? PROMPT_ERROR : PROMPT_ERROR_PLAIN;
+    const char *prompt       = prompt_ok;
+
+    char  accum[65536];
+    int   accum_len = 0;
+    int   depth     = 0;
+    bool  multiline = false;
+
+    char *line;
+    while (1) {
+        if (use_readline) {
+            line = readline(multiline ? "" : prompt);
+            if (!line) break;
+        } else {
+            /* Print prompt only at the start of a new expression */
+            if (show_prompt && !multiline) {
+                fprintf(stdout, "%s", prompt);
+                fflush(stdout);
+            }
+
+            char buf[4096];
+            if (!fgets(buf, sizeof(buf), stdin)) break;
+            size_t n = strlen(buf);
+            if (n > 0 && buf[n-1] == '\n') buf[--n] = '\0';
+            line = strdup(buf);
+        }
+
+        /* Skip blank lines when not mid-expression */
+        if (!multiline && !*line) {
+            free(line);
+            continue;
+        }
+
+        int len = strlen(line);
+        if (accum_len + len + 2 < (int)sizeof(accum)) {
+            if (accum_len > 0) accum[accum_len++] = '\n';
+            memcpy(accum + accum_len, line, len);
+            accum_len += len;
+            accum[accum_len] = '\0';
+        }
+
+        depth += paren_depth(line);
+        free(line);
+
+        if (depth > 0) {
+            multiline = true;
+            continue;
+        }
+
+        multiline = false;
+        depth     = 0;
+
+        if (*accum) {
+            if (use_readline) add_history(accum);
+            bool ok = repl_eval_line(&ctx, accum);
+            prompt = ok ? prompt_ok : prompt_error;
+        }
+
+        accum_len = 0;
+        accum[0]  = '\0';
+    }
+
+    /* EOF mid-expression — evaluate whatever we have */
+    if (accum_len > 0)
+        repl_eval_line(&ctx, accum);
+
     printf("\n");
     repl_dispose(&ctx);
 }
+
