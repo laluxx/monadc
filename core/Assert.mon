@@ -1,0 +1,18 @@
+;;; Assert.mon --- TODO Write description
+
+;; Author: Laluxx
+;; Version: 0.0.1
+;; Keywords: TODO
+
+;;; Commentary:
+
+;; TODO Write commentary
+
+;;; Code:
+
+(module Assert
+  [assert])
+
+(define (assert [expr :: Bool] -> [label :: String] -> Bool)
+  (assert-eq expr True label))
+

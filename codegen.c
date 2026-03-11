@@ -1110,6 +1110,13 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
                     LLVMDumpValue(func);
 
+                    // Forward-declare into the PARENT env before codegenning the body
+                    // so recursive calls can resolve the function by name.
+                    env_insert_func(ctx->env, var_name,
+                                    clone_params(env_params, lambda->lambda.param_count),
+                                    lambda->lambda.param_count,
+                                    type_clone(ret_type), func,
+                                    lambda->lambda.docstring);
 
                     // Create entry block
                     LLVMBasicBlockRef entry_block = LLVMAppendBasicBlockInContext(ctx->context, func, "entry");
@@ -1757,22 +1764,31 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 return result;
             }
 
+
             if (strcmp(head->symbol, "assert-eq") == 0) {
                 if (ast->list.count != 4) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'assert-eq' requires 3 arguments: actual expected label",
                             parser_get_filename(), ast->line, ast->column);
                 }
 
-                CodegenResult actual   = codegen_expr(ctx, ast->list.items[1]);
-                CodegenResult expected = codegen_expr(ctx, ast->list.items[2]);
+                CodegenResult actual    = codegen_expr(ctx, ast->list.items[1]);
+                CodegenResult expected  = codegen_expr(ctx, ast->list.items[2]);
                 AST          *label_ast = ast->list.items[3];
-                const char   *label     = (label_ast->type == AST_STRING)
-                    ? label_ast->string : "unnamed";
 
                 LLVMValueRef printf_fn = get_or_declare_printf(ctx);
                 LLVMTypeRef  i64       = LLVMInt64TypeInContext(ctx->context);
 
-                // Compare based on type
+                /* Resolve label — compile-time string or runtime value */
+                LLVMValueRef label_val;
+                if (label_ast->type == AST_STRING) {
+                    label_val = LLVMBuildGlobalStringPtr(ctx->builder,
+                                                         label_ast->string, "assert_label");
+                } else {
+                    CodegenResult label_r = codegen_expr(ctx, label_ast);
+                    label_val = label_r.value;
+                }
+
+                /* Compare based on type */
                 LLVMValueRef cond = NULL;
                 if (actual.type->kind == TYPE_STRING) {
                     LLVMValueRef strcmp_fn = LLVMGetNamedFunction(ctx->module, "strcmp");
@@ -1784,15 +1800,14 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     }
                     LLVMValueRef args[] = {actual.value, expected.value};
                     LLVMValueRef cmp    = LLVMBuildCall2(ctx->builder,
-                                                         LLVMGlobalGetValueType(strcmp_fn),
-                                                         strcmp_fn, args, 2, "strcmp");
+                                                        LLVMGlobalGetValueType(strcmp_fn),
+                                                        strcmp_fn, args, 2, "strcmp");
                     cond = LLVMBuildICmp(ctx->builder, LLVMIntEQ, cmp,
-                                         LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0), "eq");
+                                        LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0), "eq");
                 } else if (type_is_float(actual.type)) {
                     cond = LLVMBuildFCmp(ctx->builder, LLVMRealOEQ,
-                                         actual.value, expected.value, "eq");
+                                        actual.value, expected.value, "eq");
                 } else {
-                    // Integer comparison — coerce both to i64 to handle i1 (Bool), i8 (Char), etc.
                     LLVMValueRef lhs = actual.value;
                     LLVMValueRef rhs = expected.value;
                     if (LLVMTypeOf(lhs) != i64)
@@ -1802,37 +1817,152 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     cond = LLVMBuildICmp(ctx->builder, LLVMIntEQ, lhs, rhs, "eq");
                 }
 
-                // Emit pass/fail branches
                 LLVMValueRef      func    = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder));
                 LLVMBasicBlockRef pass_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "assert_pass");
                 LLVMBasicBlockRef fail_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "assert_fail");
                 LLVMBasicBlockRef cont_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "assert_cont");
                 LLVMBuildCondBr(ctx->builder, cond, pass_bb, fail_bb);
 
-                // Pass branch
+                /* Pass branch — only print ✓ in test_mode */
                 LLVMPositionBuilderAtEnd(ctx->builder, pass_bb);
-                char pass_msg[512];
-                snprintf(pass_msg, sizeof(pass_msg), "  \x1b[32m✓\x1b[0m %s\n", label);
-                LLVMValueRef pass_str     = LLVMBuildGlobalStringPtr(ctx->builder, pass_msg, "pass_msg");
-                LLVMValueRef pass_args[]  = {pass_str};
-                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, pass_args, 1, "");
+                if (ctx->test_mode) {
+                    LLVMValueRef prefix  = LLVMBuildGlobalStringPtr(ctx->builder,
+                                              "  \x1b[32m✓\x1b[0m ", "pass_prefix");
+                    LLVMValueRef nl      = LLVMBuildGlobalStringPtr(ctx->builder, "\n", "nl");
+                    LLVMValueRef a1[]    = {prefix};
+                    LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                   printf_fn, a1, 1, "");
+                    LLVMValueRef a2[]    = {get_fmt_str(ctx), label_val};
+                    LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                   printf_fn, a2, 2, "");
+                    LLVMValueRef a3[]    = {nl};
+                    LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                                   printf_fn, a3, 1, "");
+                }
                 LLVMBuildBr(ctx->builder, cont_bb);
 
-                // Fail branch
+                /* Fail branch — call __monad_assert_fail(label) then unreachable */
                 LLVMPositionBuilderAtEnd(ctx->builder, fail_bb);
-                char fail_msg[512];
-                snprintf(fail_msg, sizeof(fail_msg), "  \x1b[31m✗ %s FAILED\x1b[0m\n", label);
-                LLVMValueRef fail_str     = LLVMBuildGlobalStringPtr(ctx->builder, fail_msg, "fail_msg");
-                LLVMValueRef fail_args[]  = {fail_str};
-                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, fail_args, 1, "");
-                LLVMBuildBr(ctx->builder, cont_bb);
+                {
+                    LLVMValueRef assert_fail_fn = LLVMGetNamedFunction(ctx->module, "__monad_assert_fail");
+                    if (!assert_fail_fn) {
+                        LLVMTypeRef p  = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                        LLVMTypeRef ft = LLVMFunctionType(LLVMVoidTypeInContext(ctx->context), &p, 1, 0);
+                        assert_fail_fn = LLVMAddFunction(ctx->module, "__monad_assert_fail", ft);
+                        LLVMSetLinkage(assert_fail_fn, LLVMExternalLinkage);
+                    }
+                    LLVMValueRef fail_args[] = {label_val};
+                    LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(assert_fail_fn),
+                                   assert_fail_fn, fail_args, 1, "");
+                    LLVMBuildUnreachable(ctx->builder);
+                }
 
-                // Continue
+                /* Continue */
                 LLVMPositionBuilderAtEnd(ctx->builder, cont_bb);
-                result.type  = type_int();
-                result.value = LLVMConstInt(i64, 0, 0);
+                result.type  = type_bool();
+                result.value = cond;
                 return result;
             }
+
+            /* if (strcmp(head->symbol, "assert-eq") == 0) { */
+            /*     if (ast->list.count != 4) { */
+            /*         CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'assert-eq' requires 3 arguments: actual expected label", */
+            /*                 parser_get_filename(), ast->line, ast->column); */
+            /*     } */
+
+            /*     CodegenResult actual    = codegen_expr(ctx, ast->list.items[1]); */
+            /*     CodegenResult expected  = codegen_expr(ctx, ast->list.items[2]); */
+            /*     AST          *label_ast = ast->list.items[3]; */
+
+            /*     LLVMValueRef printf_fn = get_or_declare_printf(ctx); */
+            /*     LLVMTypeRef  i64       = LLVMInt64TypeInContext(ctx->context); */
+
+            /*     /\* Resolve label — either a compile-time string or a runtime value *\/ */
+            /*     LLVMValueRef label_val; */
+            /*     if (label_ast->type == AST_STRING) { */
+            /*         label_val = LLVMBuildGlobalStringPtr(ctx->builder, */
+            /*                                              label_ast->string, "assert_label"); */
+            /*     } else { */
+            /*         CodegenResult label_r = codegen_expr(ctx, label_ast); */
+            /*         label_val = label_r.value; */
+            /*     } */
+
+            /*     /\* Compare based on type *\/ */
+            /*     LLVMValueRef cond = NULL; */
+            /*     if (actual.type->kind == TYPE_STRING) { */
+            /*         LLVMValueRef strcmp_fn = LLVMGetNamedFunction(ctx->module, "strcmp"); */
+            /*         if (!strcmp_fn) { */
+            /*             LLVMTypeRef p        = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0); */
+            /*             LLVMTypeRef params[] = {p, p}; */
+            /*             LLVMTypeRef ft       = LLVMFunctionType(LLVMInt32TypeInContext(ctx->context), params, 2, 0); */
+            /*             strcmp_fn = LLVMAddFunction(ctx->module, "strcmp", ft); */
+            /*         } */
+            /*         LLVMValueRef args[] = {actual.value, expected.value}; */
+            /*         LLVMValueRef cmp    = LLVMBuildCall2(ctx->builder, */
+            /*                                             LLVMGlobalGetValueType(strcmp_fn), */
+            /*                                             strcmp_fn, args, 2, "strcmp"); */
+            /*         cond = LLVMBuildICmp(ctx->builder, LLVMIntEQ, cmp, */
+            /*                             LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0), "eq"); */
+            /*     } else if (type_is_float(actual.type)) { */
+            /*         cond = LLVMBuildFCmp(ctx->builder, LLVMRealOEQ, */
+            /*                             actual.value, expected.value, "eq"); */
+            /*     } else { */
+            /*         LLVMValueRef lhs = actual.value; */
+            /*         LLVMValueRef rhs = expected.value; */
+            /*         if (LLVMTypeOf(lhs) != i64) */
+            /*             lhs = LLVMBuildZExt(ctx->builder, lhs, i64, "zext_lhs"); */
+            /*         if (LLVMTypeOf(rhs) != i64) */
+            /*             rhs = LLVMBuildZExt(ctx->builder, rhs, i64, "zext_rhs"); */
+            /*         cond = LLVMBuildICmp(ctx->builder, LLVMIntEQ, lhs, rhs, "eq"); */
+            /*     } */
+
+            /*     LLVMValueRef      func    = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder)); */
+            /*     LLVMBasicBlockRef pass_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "assert_pass"); */
+            /*     LLVMBasicBlockRef fail_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "assert_fail"); */
+            /*     LLVMBasicBlockRef cont_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "assert_cont"); */
+            /*     LLVMBuildCondBr(ctx->builder, cond, pass_bb, fail_bb); */
+
+            /*     /\* Pass branch — print ✓ <label> and continue *\/ */
+            /*     LLVMPositionBuilderAtEnd(ctx->builder, pass_bb); */
+            /*     { */
+            /*         LLVMValueRef prefix = LLVMBuildGlobalStringPtr(ctx->builder, */
+            /*                                  "  \x1b[32m✓\x1b[0m ", "pass_prefix"); */
+            /*         LLVMValueRef nl     = LLVMBuildGlobalStringPtr(ctx->builder, "\n", "nl"); */
+            /*         LLVMValueRef a1[]   = {prefix}; */
+            /*         LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), */
+            /*                        printf_fn, a1, 1, ""); */
+            /*         LLVMValueRef a2[]   = {get_fmt_str(ctx), label_val}; */
+            /*         LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), */
+            /*                        printf_fn, a2, 2, ""); */
+            /*         LLVMValueRef a3[]   = {nl}; */
+            /*         LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), */
+            /*                        printf_fn, a3, 1, ""); */
+            /*     } */
+            /*     LLVMBuildBr(ctx->builder, cont_bb); */
+
+            /*     /\* Fail branch — call __monad_assert_fail(label) then unreachable *\/ */
+            /*     LLVMPositionBuilderAtEnd(ctx->builder, fail_bb); */
+            /*     { */
+            /*         LLVMValueRef assert_fail_fn = LLVMGetNamedFunction(ctx->module, "__monad_assert_fail"); */
+            /*         if (!assert_fail_fn) { */
+            /*             LLVMTypeRef p  = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0); */
+            /*             LLVMTypeRef ft = LLVMFunctionType(LLVMVoidTypeInContext(ctx->context), &p, 1, 0); */
+            /*             assert_fail_fn = LLVMAddFunction(ctx->module, "__monad_assert_fail", ft); */
+            /*             LLVMSetLinkage(assert_fail_fn, LLVMExternalLinkage); */
+            /*         } */
+            /*         LLVMValueRef fail_args[] = {label_val}; */
+            /*         LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(assert_fail_fn), */
+            /*                        assert_fail_fn, fail_args, 1, ""); */
+            /*         LLVMBuildUnreachable(ctx->builder); */
+            /*     } */
+
+            /*     /\* Continue *\/ */
+            /*     LLVMPositionBuilderAtEnd(ctx->builder, cont_bb); */
+            /*     result.type  = type_int(); */
+            /*     result.value = LLVMConstInt(i64, 0, 0); */
+            /*     return result; */
+            /* } */
+
 
 
             if (strcmp(head->symbol, "undefined") == 0) {
@@ -2645,9 +2775,11 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 }
 
                 // Extend i1 to i64 so it can be used as a value
-                result.value = LLVMBuildZExt(ctx->builder, cmp,
-                                             LLVMInt64TypeInContext(ctx->context), "bool");
-                result.type  = type_int();
+                /* result.value = LLVMBuildZExt(ctx->builder, cmp, */
+                /*                              LLVMInt64TypeInContext(ctx->context), "bool"); */
+                /* result.type  = type_int(); */
+                result.value = cmp;
+                result.type  = type_bool();
                 return result;
             }
 
@@ -2854,22 +2986,30 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         } else if (expected_type->kind == TYPE_CHAR && type_is_integer(actual_type)) {
                             converted_arg = LLVMBuildTrunc(ctx->builder, arg_result.value,
                                                            expected_llvm, "arg_conv");
+
                         } else if (type_is_integer(expected_type) && actual_type->kind == TYPE_CHAR) {
                             converted_arg = LLVMBuildSExt(ctx->builder, arg_result.value,
                                                           expected_llvm, "arg_conv");
                         } else if (type_is_integer(expected_type) && type_is_integer(actual_type)) {
                             converted_arg = arg_result.value;
+                        } else if (type_is_integer(expected_type) && actual_type->kind == TYPE_CHAR) {
+                            converted_arg = LLVMBuildSExt(ctx->builder, arg_result.value,
+                                                          expected_llvm, "arg_conv");
+                        } else if (type_is_integer(expected_type) && type_is_integer(actual_type)) {
+                            converted_arg = arg_result.value;
+                        } else if (type_is_integer(expected_type) && actual_type->kind == TYPE_BOOL) {
+                            converted_arg = LLVMBuildZExt(ctx->builder, arg_result.value,
+                                                          type_to_llvm(ctx, expected_type), "bool_to_int");
+                        } else if (expected_type->kind == TYPE_BOOL && type_is_integer(actual_type)) {
+                            converted_arg = LLVMBuildICmp(ctx->builder, LLVMIntNE, arg_result.value,
+                                                          LLVMConstInt(LLVMTypeOf(arg_result.value), 0, 0),
+                                                          "int_to_bool");
                         }
+
                     }
 
                     args[i] = converted_arg;
                 }
-
-                /* result.value = LLVMBuildCall2(ctx->builder, */
-                /*                               LLVMGlobalGetValueType(entry->func_ref), */
-                /*                               entry->func_ref, */
-                /*                               args, arg_count, "calltmp"); */
-                /* result.type = type_clone(entry->return_type); */
 
                 // Build call type from entry metadata, not from the LLVM function value
                 // (LLVMGlobalGetValueType may have wrong types if function was declared with defaults)

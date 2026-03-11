@@ -1,0 +1,17 @@
+
+
+(import Assert)
+
+(define (fib-slow [n :: Int] -> Int)
+  (if (< n 2)
+      n
+      (+ (fib-slow (- n 1))
+         (fib-slow (- n 2)))))
+
+(define (fib [n :: Int] -> Int)
+  (assert (>= n 0) "n must be non-negative")
+  (define (fib-iter [a :: Int] [b :: Int] [count :: Int] -> Int)
+    (if (= count 0)
+        a
+        (fib-iter b (+ a b) (- count 1))))
+  (fib-iter 0 1 n))

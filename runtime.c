@@ -493,6 +493,15 @@ double rt_ratio_to_float(RuntimeValue *ratio) {
     return (double)ratio->data.ratio_val.numerator / (double)ratio->data.ratio_val.denominator;
 }
 
+/// Assert failure handler
+// Weak symbol — the REPL binary overrides this with its longjmp version.
+// Standalone compiled binaries use this default: print and abort.
+__attribute__((weak))
+void __monad_assert_fail(const char *label) {
+    fprintf(stderr, "\x1b[31;1mAssertion failed:\x1b[0m %s\n", label);
+    abort();
+}
+
 /// LLVM Integration
 
 void declare_runtime_functions(CodegenContext *ctx) {
@@ -695,6 +704,13 @@ void declare_runtime_functions(CodegenContext *ctx) {
     LLVMTypeRef ratio_to_float_type = LLVMFunctionType(
         LLVMDoubleTypeInContext(ctx->context), ratio_to_float_params, 1, 0);
     LLVMAddFunction(ctx->module, "rt_ratio_to_float", ratio_to_float_type);
+
+//// void __monad_assert_fail(const char *label)
+    {
+        LLVMTypeRef p  = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+        LLVMTypeRef ft = LLVMFunctionType(LLVMVoidTypeInContext(ctx->context), &p, 1, 0);
+        LLVMAddFunction(ctx->module, "__monad_assert_fail", ft);
+    }
 
 }
 

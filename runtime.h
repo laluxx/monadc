@@ -191,4 +191,7 @@ LLVMValueRef get_rt_print_list(CodegenContext *ctx);
 LLVMTypeRef get_rt_value_type(CodegenContext *ctx);
 LLVMTypeRef get_rt_list_type(CodegenContext *ctx);
 
+// Assert failure handler — weak symbol, overridden by repl.c in REPL mode
+void __monad_assert_fail(const char *label);
+
 #endif // RUNTIME_H
