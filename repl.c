@@ -41,6 +41,20 @@
 #include <llvm-c/Analysis.h>
 #include <llvm-c/TargetMachine.h>
 
+/* Arm the reader escape point. Usage:
+ *   REPL_PARSE(var, source)  — sets var to the parsed AST or NULL on error */
+#define REPL_PARSE(out, src) \
+    do { \
+        g_reader_escape_set = true; \
+        if (setjmp(g_reader_escape) != 0) { \
+            g_reader_escape_set = false; \
+            (out) = NULL; \
+        } else { \
+            (out) = parse(src); \
+            g_reader_escape_set = false; \
+        } \
+    } while(0)
+
 /* -------------------------------------------------------------------------
  * Error recovery: shadow exit() so codegen errors don't kill the process.
  * Only active while g_in_eval is true.
@@ -196,49 +210,33 @@ static void *lookup_imported_sym(const char *name) {
 
 static void redeclare_env_symbols(REPLContext *ctx) {
     Env *env = ctx->cg.env;
-
     for (size_t bi = 0; bi < env->size; bi++) {
         for (EnvEntry *e = env->buckets[bi]; e; e = e->next) {
-
             if (e->kind == ENV_VAR && e->value &&
                 LLVMIsAGlobalVariable(e->value)) {
 
-                const char *name = LLVMGetValueName(e->value);
-                if (!name || !*name) name = e->name;
+                const char *name = (e->llvm_name && e->llvm_name[0])
+                                   ? e->llvm_name : e->name;
 
-                /* FIX: always update e->value to point at the declaration
-                 * in the *current* module, even if one already exists.
-                 * Without this, e->value keeps pointing at the LLVMValueRef
-                 * from the module it was originally defined in, and codegen
-                 * emits a cross-module reference that the verifier rejects. */
                 LLVMValueRef existing = LLVMGetNamedGlobal(ctx->cg.module, name);
                 if (existing) {
                     e->value = existing;
                     continue;
                 }
-
                 LLVMTypeRef  lt = type_to_llvm(&ctx->cg, e->type);
                 LLVMValueRef gv = LLVMAddGlobal(ctx->cg.module, lt, name);
                 LLVMSetLinkage(gv, LLVMExternalLinkage);
                 e->value = gv;
             }
-
             else if (e->kind == ENV_FUNC && e->func_ref) {
-                /* Use the mangled name stored on the LLVMValueRef */
-                const char *name = LLVMGetValueName(e->func_ref);
-                if (!name || !*name) name = e->name;
+                const char *name = (e->llvm_name && e->llvm_name[0])
+                                   ? e->llvm_name : e->name;
 
-                /* FIX: always update e->func_ref to point at the declaration
-                 * in the *current* module.  The old early-continue was leaving
-                 * e->func_ref pointing at a ValueRef from __repl_0 (or
-                 * whichever module first defined the function), causing the
-                 * verifier to emit "Referencing function in another module!" */
                 LLVMValueRef existing = LLVMGetNamedFunction(ctx->cg.module, name);
                 if (existing) {
                     e->func_ref = existing;
                     continue;
                 }
-
                 LLVMTypeRef *pt = e->param_count > 0
                     ? malloc(sizeof(LLVMTypeRef) * e->param_count) : NULL;
                 for (int i = 0; i < e->param_count; i++)
@@ -247,7 +245,6 @@ static void redeclare_env_symbols(REPLContext *ctx) {
                     type_to_llvm(&ctx->cg, e->return_type),
                     pt, e->param_count, 0);
                 if (pt) free(pt);
-
                 LLVMValueRef fn = LLVMAddFunction(ctx->cg.module, name, ft);
                 LLVMSetLinkage(fn, LLVMExternalLinkage);
                 e->func_ref = fn;
@@ -427,18 +424,15 @@ static void emit_char_annotation(REPLContext *ctx, LLVMValueRef v64) {
     LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, args, 4, "");
 }
 
-static void emit_numeric_annotation(REPLContext *ctx, LLVMValueRef val) {
+static void emit_numeric_annotation(REPLContext *ctx, LLVMValueRef val, bool show_hex) {
     LLVMValueRef pf  = get_or_declare_printf(&ctx->cg);
     LLVMTypeRef  i64 = LLVMInt64TypeInContext(ctx->cg.context);
     LLVMValueRef func = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->cg.builder));
 
-    /* Ensure val is i64 */
     LLVMValueRef v = val;
     if (LLVMTypeOf(val) != i64)
         v = LLVMBuildZExt(ctx->cg.builder, val, i64, "ann_i64");
 
-    /* Build a compile-time sprintf buffer for the char name */
-    /* We need runtime branching: check n >= 0 && n <= 127 */
     LLVMValueRef lo  = LLVMConstInt(i64, 0,   0);
     LLVMValueRef hi  = LLVMConstInt(i64, 127, 0);
     LLVMValueRef ge  = LLVMBuildICmp(ctx->cg.builder, LLVMIntSGE, v, lo, "ge0");
@@ -450,29 +444,25 @@ static void emit_numeric_annotation(REPLContext *ctx, LLVMValueRef val) {
     LLVMBasicBlockRef cont_bb    = LLVMAppendBasicBlockInContext(ctx->cg.context, func, "ann_cont");
     LLVMBuildCondBr(ctx->cg.builder, in_range, range_bb, norange_bb);
 
-    /* in range: further branch on control / printable / delete */
     LLVMPositionBuilderAtEnd(ctx->cg.builder, range_bb);
     {
-        /* ctrl: n < 32 */
         LLVMValueRef c32     = LLVMConstInt(i64, 32, 0);
         LLVMValueRef is_ctrl = LLVMBuildICmp(ctx->cg.builder, LLVMIntSLT, v, c32, "is_ctrl");
         LLVMBasicBlockRef ctrl_bb  = LLVMAppendBasicBlockInContext(ctx->cg.context, func, "ann_ctrl");
         LLVMBasicBlockRef nctrl_bb = LLVMAppendBasicBlockInContext(ctx->cg.context, func, "ann_nctrl");
         LLVMBuildCondBr(ctx->cg.builder, is_ctrl, ctrl_bb, nctrl_bb);
 
-        /* control character: index into a global string table */
         LLVMPositionBuilderAtEnd(ctx->cg.builder, ctrl_bb);
         {
-            /* Emit a switch over 0..31, each case prints the named form */
             static const char *ctrl_names[32] = {
                 "\\0", "\\x01","\\x02","\\x03","\\x04","\\x05","\\x06","\\a",
                 "\\b", "\\t",  "\\n",  "\\v",  "\\f",  "\\r",  "\\x0E","\\x0F",
                 "\\x10","\\x11","\\x12","\\x13","\\x14","\\x15","\\x16","\\x17",
                 "\\x18","\\x19","\\x1A","\\x1B","\\x1C","\\x1D","\\x1E","\\x1F"
             };
-
-            LLVMValueRef fmt_with = LLVMBuildGlobalStringPtr(ctx->cg.builder,
-                " (0o%lo, 0x%lx, '%s')\n", "fmt_ctrl");
+            const char *fmt_str = show_hex ? " (0o%lo, 0x%lx, '%s')\n"
+                                           : " (0o%lo, %ld, '%s')\n";
+            LLVMValueRef fmt_with = LLVMBuildGlobalStringPtr(ctx->cg.builder, fmt_str, "fmt_ctrl");
             LLVMBasicBlockRef ctrl_cont = LLVMAppendBasicBlockInContext(ctx->cg.context, func, "ctrl_cont");
             LLVMValueRef sw = LLVMBuildSwitch(ctx->cg.builder, v, ctrl_cont, 32);
             for (int i = 0; i < 32; i++) {
@@ -488,30 +478,29 @@ static void emit_numeric_annotation(REPLContext *ctx, LLVMValueRef val) {
             LLVMBuildBr(ctx->cg.builder, cont_bb);
         }
 
-        /* not control: either printable (32-126) or delete (127) */
         LLVMPositionBuilderAtEnd(ctx->cg.builder, nctrl_bb);
         {
-            LLVMValueRef c127    = LLVMConstInt(i64, 127, 0);
-            LLVMValueRef is_del  = LLVMBuildICmp(ctx->cg.builder, LLVMIntEQ, v, c127, "is_del");
-            LLVMBasicBlockRef del_bb  = LLVMAppendBasicBlockInContext(ctx->cg.context, func, "ann_del");
-            LLVMBasicBlockRef print_bb= LLVMAppendBasicBlockInContext(ctx->cg.context, func, "ann_print");
+            LLVMValueRef c127   = LLVMConstInt(i64, 127, 0);
+            LLVMValueRef is_del = LLVMBuildICmp(ctx->cg.builder, LLVMIntEQ, v, c127, "is_del");
+            LLVMBasicBlockRef del_bb   = LLVMAppendBasicBlockInContext(ctx->cg.context, func, "ann_del");
+            LLVMBasicBlockRef print_bb = LLVMAppendBasicBlockInContext(ctx->cg.context, func, "ann_print");
             LLVMBuildCondBr(ctx->cg.builder, is_del, del_bb, print_bb);
 
-            /* delete */
             LLVMPositionBuilderAtEnd(ctx->cg.builder, del_bb);
             {
-                LLVMValueRef fmt  = LLVMBuildGlobalStringPtr(ctx->cg.builder,
-                    " (0o%lo, 0x%lx, 'delete')\n", "fmt_del");
+                const char *fmt_str = show_hex ? " (0o%lo, 0x%lx, 'delete')\n"
+                                               : " (0o%lo, %ld, 'delete')\n";
+                LLVMValueRef fmt  = LLVMBuildGlobalStringPtr(ctx->cg.builder, fmt_str, "fmt_del");
                 LLVMValueRef args[] = {fmt, v, v};
                 LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, args, 3, "");
             }
             LLVMBuildBr(ctx->cg.builder, cont_bb);
 
-            /* printable ascii 32-126 */
             LLVMPositionBuilderAtEnd(ctx->cg.builder, print_bb);
             {
-                LLVMValueRef fmt  = LLVMBuildGlobalStringPtr(ctx->cg.builder,
-                    " (0o%lo, 0x%lx, '%c')\n", "fmt_print");
+                const char *fmt_str = show_hex ? " (0o%lo, 0x%lx, '%c')\n"
+                                               : " (0o%lo, %ld, '%c')\n";
+                LLVMValueRef fmt  = LLVMBuildGlobalStringPtr(ctx->cg.builder, fmt_str, "fmt_print");
                 LLVMValueRef args[] = {fmt, v, v, v};
                 LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, args, 4, "");
             }
@@ -519,11 +508,11 @@ static void emit_numeric_annotation(REPLContext *ctx, LLVMValueRef val) {
         }
     }
 
-    /* out of range: just oct and hex */
     LLVMPositionBuilderAtEnd(ctx->cg.builder, norange_bb);
     {
-        LLVMValueRef fmt  = LLVMBuildGlobalStringPtr(ctx->cg.builder,
-            " (0o%lo, 0x%lx)\n", "fmt_norange");
+        const char *fmt_str = show_hex ? " (0o%lo, 0x%lx)\n"
+                                       : " (0o%lo, %ld)\n";
+        LLVMValueRef fmt  = LLVMBuildGlobalStringPtr(ctx->cg.builder, fmt_str, "fmt_norange");
         LLVMValueRef args[] = {fmt, v, v};
         LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, args, 3, "");
     }
@@ -584,25 +573,25 @@ static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t, bool li
     case TYPE_INT: {
         LLVMValueRef a[] = {get_fmt_int(&ctx->cg), val};
         LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, a, 2, "");
-        emit_numeric_annotation(ctx, val);
+        emit_numeric_annotation(ctx, val, true);
         break; }
     case TYPE_HEX: {
         LLVMValueRef fmt = LLVMBuildGlobalStringPtr(ctx->cg.builder, "0x%lX\n", "fmt_hex");
         LLVMValueRef a[] = {fmt, val};
         LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, a, 2, "");
-        emit_numeric_annotation(ctx, val);
+        emit_numeric_annotation(ctx, val, false);
         break; }
     case TYPE_BIN: {
         LLVMValueRef bin_fn = get_or_declare_print_binary(&ctx->cg);
         LLVMValueRef a[] = {val};
         LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(bin_fn), bin_fn, a, 1, "");
-        emit_numeric_annotation(ctx, val);
+        emit_numeric_annotation(ctx, val, true);
         break; }
     case TYPE_OCT: {
         LLVMValueRef fmt = LLVMBuildGlobalStringPtr(ctx->cg.builder, "0o%lo\n", "fmt_oct");
         LLVMValueRef a[] = {fmt, val};
         LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, a, 2, "");
-        emit_numeric_annotation(ctx, val);
+        emit_numeric_annotation(ctx, val, true);
         break; }
 
     case TYPE_CHAR: {
@@ -796,9 +785,10 @@ static void recover_module(REPLContext *ctx) {
         LLVMDisposeModule(ctx->cg.module);
         ctx->cg.module = NULL;
     }
-    char name[64];
-    snprintf(name, sizeof(name), "__repl_%u_r", ctx->expr_count);
-    fresh_module(ctx, name);
+    if (ctx->cg.builder) {
+        LLVMDisposeBuilder(ctx->cg.builder);
+        ctx->cg.builder = NULL;
+    }
 }
 
 /// Import support
@@ -943,7 +933,8 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
                     if (!*cursor) break;
 
                     parser_set_context(doc_src, cursor);
-                    AST *form = parse(cursor);
+                    AST *form = NULL;
+                    REPL_PARSE(form, cursor);
                     if (!form) break;
 
                     if (*cursor == '(') {
@@ -1080,6 +1071,38 @@ int cmp_entry(const void *a, const void *b) {
     return strcmp(ea->name, eb->name);
 }
 
+/* Strip line comments (;...\n) and blank lines from src into a fresh
+ * malloc'd buffer.  Preserves newlines so line numbers stay roughly
+ * correct.  Caller must free() the result. */
+static char *strip_comments(const char *src) {
+    size_t len = strlen(src);
+    char  *out = malloc(len + 1);
+    if (!out) return NULL;
+
+    const char *r = src;
+    char       *w = out;
+    bool in_str   = false;
+
+    while (*r) {
+        if (in_str) {
+            if (*r == '\\' && *(r+1)) { *w++ = *r++; *w++ = *r++; continue; }
+            if (*r == '"')  in_str = false;
+            *w++ = *r++;
+        } else {
+            if (*r == '"')  { in_str = true; *w++ = *r++; }
+            else if (*r == ';') {
+                /* skip to end of line, emit the newline to preserve line count */
+                while (*r && *r != '\n') r++;
+                if (*r == '\n') *w++ = *r++;
+            } else {
+                *w++ = *r++;
+            }
+        }
+    }
+    *w = '\0';
+    return out;
+}
+
 bool repl_eval_line(REPLContext *ctx, const char *line) {
     if (!line) return true;
     const char *p = line;
@@ -1131,7 +1154,8 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                 if (*cursor == ';') { while (*cursor && *cursor != '\n') cursor++; continue; }
 
                 parser_set_context(fpath, cursor);
-                AST *form = parse(cursor);
+                AST *form = NULL;
+                REPL_PARSE(form, cursor);
                 if (form && form->type == AST_LIST && form->list.count >= 2 &&
                     form->list.items[0]->type == AST_SYMBOL &&
                     strcmp(form->list.items[0]->symbol, "module") == 0 &&
@@ -1157,11 +1181,13 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                 free(found_module);
 
                 parser_set_context("<load>", import_expr);
-                AST *imp_ast = parse(import_expr);
+                AST *imp_ast = NULL;
+                REPL_PARSE(imp_ast, import_expr);
                 if (!imp_ast) {
                     fprintf(stderr, "Error: failed to build import for module\n");
                     return false;
                 }
+
                 bool ok = handle_import(ctx, imp_ast);
                 ast_free(imp_ast);
                 return ok;
@@ -1188,7 +1214,8 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                 if (*cursor == ';') { while (*cursor && *cursor != '\n') cursor++; continue; }
 
                 parser_set_context(fpath, cursor);
-                AST *form = parse(cursor);
+                AST *form = NULL;
+                REPL_PARSE(form, cursor);
                 if (!form) break;
 
                 if (*cursor == '(') {
@@ -1230,6 +1257,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                     ctx->cg.error_jmp_set = false;
                     ast_free(form);
                     recover_module(ctx);
+                    fresh_module(ctx, "__repl_recover");
                     failed++;
                     continue;
                 }
@@ -1238,7 +1266,12 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                 ctx->cg.error_jmp_set = false;
                 ast_free(form);
 
-                if (!res.value) { recover_module(ctx); failed++; continue; }
+                if (!res.value) {
+                    recover_module(ctx);
+                    fresh_module(ctx, "__repl_recover");
+                    failed++;
+                    continue;
+                }
 
                 jmp_buf assert_jmp;
                 g_assert_jmp_ptr = &assert_jmp;
@@ -1263,6 +1296,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                     loaded++;
                 } else {
                     recover_module(ctx);
+                    fresh_module(ctx, "__repl_recover");
                     failed++;
                 }
             }
@@ -1281,11 +1315,81 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
             printf("__COMPLETIONS__\n");
 
             Env *env = ctx->cg.env;
-            for (size_t bi = 0; bi < env->size; bi++)
-                for (EnvEntry *e = env->buckets[bi]; e; e = e->next)
-                    if (e->name && strncmp(e->name, prefix, plen) == 0)
-                        printf("%s\n", e->name);
+            for (size_t bi = 0; bi < env->size; bi++) {
+                for (EnvEntry *e = env->buckets[bi]; e; e = e->next) {
+                    if (!e->name) continue;
+                    if (strncmp(e->name, prefix, plen) != 0) continue;
 
+                    /* Format: name\tkind\tsignature\tdocstring */
+                    char sig[256] = "";
+
+                    switch (e->kind) {
+                    case ENV_VAR:
+                        printf("%s\tvar\t%s\t%s\n",
+                               e->name,
+                               e->type ? type_to_string(e->type) : "?",
+                               e->docstring ? e->docstring : "");
+                        break;
+
+                    case ENV_BUILTIN: {
+                        int mn = e->arity_min > 0 ? e->arity_min : 0;
+                        int mx = e->arity_max;
+                        if (mn == 0 && mx == -1) {
+                            strcpy(sig, "Fn _");
+                        } else {
+                            strcpy(sig, "Fn (");
+                            for (int i = 0; i < mn; i++) {
+                                if (i > 0) strncat(sig, " ", sizeof(sig)-strlen(sig)-1);
+                                strncat(sig, "_", sizeof(sig)-strlen(sig)-1);
+                            }
+                            if (mx > mn && mx != -1) {
+                                strncat(sig, mn > 0 ? " =>" : "=>", sizeof(sig)-strlen(sig)-1);
+                                for (int i = mn; i < mx; i++)
+                                    strncat(sig, " _", sizeof(sig)-strlen(sig)-1);
+                            }
+                            if (mx == -1 && mn > 0)
+                                strncat(sig, " => _ . _", sizeof(sig)-strlen(sig)-1);
+                            strncat(sig, ")", sizeof(sig)-strlen(sig)-1);
+                        }
+                        printf("%s\tbuiltin\t%s\t%s\n",
+                               e->name, sig,
+                               e->docstring ? e->docstring : "");
+                        break;
+                    }
+
+                    case ENV_FUNC: {
+                        /* Format: (name [p1 :: T1] [p2 :: T2] -> RetType)
+                         * Matches monad-mode's header format exactly so Emacs eldoc
+                         * can reuse the same propertize/param-highlight functions. */
+                        snprintf(sig, sizeof(sig), "(%s", e->name);
+                        for (int i = 0; i < e->param_count; i++) {
+                            const char *pn = (e->params[i].name && e->params[i].name[0])
+                                ? e->params[i].name : "_";
+                            char param[128] = "";
+                            if (e->params[i].type) {
+                                snprintf(param, sizeof(param), " [%s :: %s]",
+                                         pn, type_to_string(e->params[i].type));
+                            } else {
+                                snprintf(param, sizeof(param), " [%s]", pn);
+                            }
+                            strncat(sig, param, sizeof(sig)-strlen(sig)-1);
+                        }
+                        if (e->return_type) {
+                            strncat(sig, " -> ", sizeof(sig)-strlen(sig)-1);
+                            strncat(sig, type_to_string(e->return_type),
+                                    sizeof(sig)-strlen(sig)-1);
+                        }
+                        strncat(sig, ")", sizeof(sig)-strlen(sig)-1);
+                        printf("%s\tfunc\t%s\t%s\n",
+                               e->name, sig,
+                               e->docstring ? e->docstring : "");
+                        break;
+                    }
+                    }
+                }
+            }
+
+            /* Static keywords — no signature, no doc */
             static const char *kws[] = {
                 "Int","Float","Char","String","Hex","Bin","Oct","Bool",
                 "define","show","if","for","quote","begin","set!","and","or","not",
@@ -1296,7 +1400,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
             };
             for (int i = 0; kws[i]; i++)
                 if (strncmp(kws[i], prefix, plen) == 0)
-                    printf("%s\n", kws[i]);
+                    printf("%s\tkeyword\t\t\n", kws[i]);
 
             printf("__END__\n");
             fflush(stdout);
@@ -1317,12 +1421,21 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
         return false;
     }
 
-    /* -----------------------------------------------------------------------
-     * Parse
-     * ----------------------------------------------------------------------- */
-    parser_set_context("<input>", line);
-    AST *ast = parse(line);
-    if (!ast) { fprintf(stderr, "Error: parse failed\n"); return false; }
+ /// Parse
+
+    char *clean = strip_comments(line);
+    if (!clean) return false;
+
+    /* After stripping, the buffer may be entirely whitespace */
+    const char *chk = clean;
+    while (*chk && isspace((unsigned char)*chk)) chk++;
+    if (!*chk) { free(clean); return true; }
+
+    parser_set_context("<input>", clean);
+    AST *ast = NULL;
+    REPL_PARSE(ast, clean);
+    free(clean);
+    if (!ast) { return false; }
 
     /* Special: (import ...) */
     if (ast->type == AST_LIST && ast->list.count >= 1 &&
@@ -1383,6 +1496,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
         ctx->cg.error_jmp_set = false;
         if (ast) { ast_free(ast); ast = NULL; }
         recover_module(ctx);
+        fresh_module(ctx, "__repl_recover");
         return false;
     }
 
@@ -1394,6 +1508,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
          * happen after the macro conversion, but be defensive) */
         if (ast) { ast_free(ast); }
         recover_module(ctx);
+        fresh_module(ctx, "__repl_recover");
         return false;
     }
 
@@ -1436,6 +1551,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
         fresh_module(ctx, next);
     } else {
         recover_module(ctx);
+        fresh_module(ctx, "__repl_recover");
     }
     return ran;
 }
@@ -1602,6 +1718,8 @@ static void setup_electric_pairs(void) {
 
 
 /* Count paren depth of a string, ignoring chars inside strings/comments */
+
+
 static int paren_depth(const char *s) {
     int depth = 0;
     bool in_str = false;

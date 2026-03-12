@@ -44,7 +44,7 @@
 (define space 32)   ; space
 (define del   127)  ; delete/rubout
 
-(define case-delta (- 'a' 'A')); => 32
+(define case-delta (- 'a' 'A'))
 
 
 (define (char-upcase [c :: Char] -> Char)
@@ -68,6 +68,8 @@
   "Return True if C is an uppercase letter."
   (and (>= c 'A') (<= c 'Z')))
 
+(define (new)
+  (show "new"))
 
 (define (char-alphabetic? [c :: Char] -> Bool)
   "Return True if C is a letter."

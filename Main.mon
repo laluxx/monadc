@@ -1389,16 +1389,35 @@
 (show "We are on linux x86-32")
 #---
 
-;;; Lazyness
 
-;; I'm thinking of making lists lazy by default
-;; but only lists.
+;;; Laziness
 
-;; (define big-list (0..9999999))
-;; (take 10 big-list)
-;; (define (undefined))
+;; Lists are lazy by default. Not arrays, vectors, or maps — just lists.
+;; This matches what lists actually are: a recursive structure where the "rest"
+;; is naturally a suspended computation until you need it.
 
+;; A lazy list progresses through three phases automatically:
 
+;; Phase 1 - Pure thunks (infinite, O(1) memory)
+;; (define naturals (0..))              ; No computation yet
+
+;; Phase 2 - Partially realized + memoized
+;; (take 5 naturals)                    ; First 5 elements forced, cached
+;; Now: (0 1 2 3 4 (delay (5..)))    ; Rest still lazy
+
+;; Phase 3 - Fully eager
+;; (define first-hundred (take 100 naturals)) ; Forces all 100
+;; Now: '(0 1 2 3 4 5 ... 99)        ; Converted to eager array
+
+;; The list self-optimizes: lazy when sparse, eager when dense.
+;; Infinite lists never reach phase 3 — they stay in their efficient
+;; lazy representation forever.
+
+;;; Garbage Collection
+
+;; Reference counting
+;; Only for lists and dynamic array
+;; Cycle detection.
 
 
 ;;; TODO Adresses
@@ -1408,6 +1427,8 @@
 ;;; TODO Parametric polymorphism
 
 ;; (define (id x) x); Should infer ∀α. α -> α
+
+dlskajd
 
 
 ;;; Repl output

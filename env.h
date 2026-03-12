@@ -37,6 +37,7 @@ typedef struct EnvEntry {
 
     char *module_name; // Which module this symbol belongs to (NULL for local)
     bool is_exported;  // Whether this symbol is exported
+    char *llvm_name;   /* mangled LLVM symbol name, snapshot while module is alive */
 
     struct EnvEntry *next;
 } EnvEntry;

@@ -936,6 +936,76 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                                       fn, args, 2, "ratio");
         return result;
     }
+
+    case AST_ADDRESS_OF: {
+        AST *operand = ast->list.items[0];
+        if (operand->type == AST_SYMBOL) {
+            EnvEntry *entry = env_lookup(ctx->env, operand->symbol);
+            if (!entry) {
+                CODEGEN_ERROR(ctx, "%s:%d:%d: error: unbound variable: %s",
+                              parser_get_filename(), ast->line, ast->column, operand->symbol);
+                return result;
+            }
+            LLVMValueRef addr;
+            LLVMTypeRef  i64 = LLVMInt64TypeInContext(ctx->context);
+            if (entry->kind == ENV_FUNC) {
+                addr = LLVMBuildPtrToInt(ctx->builder, entry->func_ref, i64, "fn_addr");
+            } else if (entry->kind == ENV_VAR) {
+                addr = LLVMBuildPtrToInt(ctx->builder, entry->value, i64, "var_addr");
+            } else if (entry->kind == ENV_BUILTIN) {
+                CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot take address of builtin '%s'",
+                              parser_get_filename(), ast->line, ast->column, operand->symbol);
+                return result;
+            } else {
+                CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot take address of '%s'",
+                              parser_get_filename(), ast->line, ast->column, operand->symbol);
+                return result;
+            }
+            result.value = addr;
+            result.type  = type_hex();
+            return result;
+        }
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: '&' operand must be a symbol",
+                      parser_get_filename(), ast->line, ast->column);
+        return result;
+    }
+
+    /* case AST_ADDRESS_OF: { */
+    /*     AST *operand = ast->list.items[0]; */
+
+    /*     if (operand->type == AST_SYMBOL) { */
+    /*         EnvEntry *entry = env_lookup(ctx->env, operand->symbol); */
+    /*         if (!entry) { */
+    /*             CODEGEN_ERROR(ctx, "%s:%d:%d: error: unbound variable: %s", */
+    /*                           parser_get_filename(), ast->line, ast->column, operand->symbol); */
+    /*         } */
+
+    /*         LLVMValueRef addr; */
+    /*         LLVMTypeRef  i64 = LLVMInt64TypeInContext(ctx->context); */
+
+    /*         if (entry->kind == ENV_FUNC) { */
+    /*             /\* Function pointer — ptrtoint of the function value *\/ */
+    /*             addr = LLVMBuildPtrToInt(ctx->builder, entry->func_ref, i64, "fn_addr"); */
+    /*         } else if (entry->kind == ENV_VAR) { */
+    /*             /\* Variable — ptrtoint of the alloca/global pointer *\/ */
+    /*             addr = LLVMBuildPtrToInt(ctx->builder, entry->value, i64, "var_addr"); */
+    /*         } else if (entry->kind == ENV_BUILTIN) { */
+    /*             CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot take address of builtin '%s'", */
+    /*                           parser_get_filename(), ast->line, ast->column, operand->symbol); */
+    /*         } else { */
+    /*             CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot take address of '%s'", */
+    /*                           parser_get_filename(), ast->line, ast->column, operand->symbol); */
+    /*         } */
+
+    /*         result.value = addr; */
+    /*         result.type  = type_hex();   /\* addresses display as hex naturally *\/ */
+    /*         return result; */
+    /*     } */
+
+    /*     CODEGEN_ERROR(ctx, "%s:%d:%d: error: '&' operand must be a symbol", */
+    /*                   parser_get_filename(), ast->line, ast->column); */
+    /* } */
+
     case AST_ARRAY: {
         // Infer element type from first element - preserve literal types!
         Type *elem_type = NULL;
@@ -1117,6 +1187,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                                     lambda->lambda.param_count,
                                     type_clone(ret_type), func,
                                     lambda->lambda.docstring);
+                    EnvEntry *e1161 = env_lookup(ctx->env, var_name);
+                    if (e1161) e1161->llvm_name = strdup(LLVMGetValueName(func));
 
                     // Create entry block
                     LLVMBasicBlockRef entry_block = LLVMAppendBasicBlockInContext(ctx->context, func, "entry");
@@ -1418,6 +1490,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 }
 
                 env_insert(ctx->env, var_name, final_type, var);
+                EnvEntry *e1479 = env_lookup(ctx->env, var_name);
+                if (e1479) e1479->llvm_name = strdup(LLVMGetValueName(var));
 
                 // Check for alias (list item [3] and [4])
                 if (ast->list.count >= 5) {
@@ -1863,107 +1937,6 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 result.value = cond;
                 return result;
             }
-
-            /* if (strcmp(head->symbol, "assert-eq") == 0) { */
-            /*     if (ast->list.count != 4) { */
-            /*         CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'assert-eq' requires 3 arguments: actual expected label", */
-            /*                 parser_get_filename(), ast->line, ast->column); */
-            /*     } */
-
-            /*     CodegenResult actual    = codegen_expr(ctx, ast->list.items[1]); */
-            /*     CodegenResult expected  = codegen_expr(ctx, ast->list.items[2]); */
-            /*     AST          *label_ast = ast->list.items[3]; */
-
-            /*     LLVMValueRef printf_fn = get_or_declare_printf(ctx); */
-            /*     LLVMTypeRef  i64       = LLVMInt64TypeInContext(ctx->context); */
-
-            /*     /\* Resolve label — either a compile-time string or a runtime value *\/ */
-            /*     LLVMValueRef label_val; */
-            /*     if (label_ast->type == AST_STRING) { */
-            /*         label_val = LLVMBuildGlobalStringPtr(ctx->builder, */
-            /*                                              label_ast->string, "assert_label"); */
-            /*     } else { */
-            /*         CodegenResult label_r = codegen_expr(ctx, label_ast); */
-            /*         label_val = label_r.value; */
-            /*     } */
-
-            /*     /\* Compare based on type *\/ */
-            /*     LLVMValueRef cond = NULL; */
-            /*     if (actual.type->kind == TYPE_STRING) { */
-            /*         LLVMValueRef strcmp_fn = LLVMGetNamedFunction(ctx->module, "strcmp"); */
-            /*         if (!strcmp_fn) { */
-            /*             LLVMTypeRef p        = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0); */
-            /*             LLVMTypeRef params[] = {p, p}; */
-            /*             LLVMTypeRef ft       = LLVMFunctionType(LLVMInt32TypeInContext(ctx->context), params, 2, 0); */
-            /*             strcmp_fn = LLVMAddFunction(ctx->module, "strcmp", ft); */
-            /*         } */
-            /*         LLVMValueRef args[] = {actual.value, expected.value}; */
-            /*         LLVMValueRef cmp    = LLVMBuildCall2(ctx->builder, */
-            /*                                             LLVMGlobalGetValueType(strcmp_fn), */
-            /*                                             strcmp_fn, args, 2, "strcmp"); */
-            /*         cond = LLVMBuildICmp(ctx->builder, LLVMIntEQ, cmp, */
-            /*                             LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0), "eq"); */
-            /*     } else if (type_is_float(actual.type)) { */
-            /*         cond = LLVMBuildFCmp(ctx->builder, LLVMRealOEQ, */
-            /*                             actual.value, expected.value, "eq"); */
-            /*     } else { */
-            /*         LLVMValueRef lhs = actual.value; */
-            /*         LLVMValueRef rhs = expected.value; */
-            /*         if (LLVMTypeOf(lhs) != i64) */
-            /*             lhs = LLVMBuildZExt(ctx->builder, lhs, i64, "zext_lhs"); */
-            /*         if (LLVMTypeOf(rhs) != i64) */
-            /*             rhs = LLVMBuildZExt(ctx->builder, rhs, i64, "zext_rhs"); */
-            /*         cond = LLVMBuildICmp(ctx->builder, LLVMIntEQ, lhs, rhs, "eq"); */
-            /*     } */
-
-            /*     LLVMValueRef      func    = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder)); */
-            /*     LLVMBasicBlockRef pass_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "assert_pass"); */
-            /*     LLVMBasicBlockRef fail_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "assert_fail"); */
-            /*     LLVMBasicBlockRef cont_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "assert_cont"); */
-            /*     LLVMBuildCondBr(ctx->builder, cond, pass_bb, fail_bb); */
-
-            /*     /\* Pass branch — print ✓ <label> and continue *\/ */
-            /*     LLVMPositionBuilderAtEnd(ctx->builder, pass_bb); */
-            /*     { */
-            /*         LLVMValueRef prefix = LLVMBuildGlobalStringPtr(ctx->builder, */
-            /*                                  "  \x1b[32m✓\x1b[0m ", "pass_prefix"); */
-            /*         LLVMValueRef nl     = LLVMBuildGlobalStringPtr(ctx->builder, "\n", "nl"); */
-            /*         LLVMValueRef a1[]   = {prefix}; */
-            /*         LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), */
-            /*                        printf_fn, a1, 1, ""); */
-            /*         LLVMValueRef a2[]   = {get_fmt_str(ctx), label_val}; */
-            /*         LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), */
-            /*                        printf_fn, a2, 2, ""); */
-            /*         LLVMValueRef a3[]   = {nl}; */
-            /*         LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), */
-            /*                        printf_fn, a3, 1, ""); */
-            /*     } */
-            /*     LLVMBuildBr(ctx->builder, cont_bb); */
-
-            /*     /\* Fail branch — call __monad_assert_fail(label) then unreachable *\/ */
-            /*     LLVMPositionBuilderAtEnd(ctx->builder, fail_bb); */
-            /*     { */
-            /*         LLVMValueRef assert_fail_fn = LLVMGetNamedFunction(ctx->module, "__monad_assert_fail"); */
-            /*         if (!assert_fail_fn) { */
-            /*             LLVMTypeRef p  = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0); */
-            /*             LLVMTypeRef ft = LLVMFunctionType(LLVMVoidTypeInContext(ctx->context), &p, 1, 0); */
-            /*             assert_fail_fn = LLVMAddFunction(ctx->module, "__monad_assert_fail", ft); */
-            /*             LLVMSetLinkage(assert_fail_fn, LLVMExternalLinkage); */
-            /*         } */
-            /*         LLVMValueRef fail_args[] = {label_val}; */
-            /*         LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(assert_fail_fn), */
-            /*                        assert_fail_fn, fail_args, 1, ""); */
-            /*         LLVMBuildUnreachable(ctx->builder); */
-            /*     } */
-
-            /*     /\* Continue *\/ */
-            /*     LLVMPositionBuilderAtEnd(ctx->builder, cont_bb); */
-            /*     result.type  = type_int(); */
-            /*     result.value = LLVMConstInt(i64, 0, 0); */
-            /*     return result; */
-            /* } */
-
-
 
             if (strcmp(head->symbol, "undefined") == 0) {
                 // Guard: only valid inside a function body

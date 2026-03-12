@@ -43,6 +43,7 @@ static void free_entry_fields(EnvEntry *e) {
     }
 }
 
+// TODO Free llvm_name
 void env_free(Env *table) {
     if (!table) return;
     for (size_t i = 0; i < table->size; i++) {

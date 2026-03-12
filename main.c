@@ -245,9 +245,15 @@ static void declare_externals(CodegenContext *ctx,
             }
             env_insert_from_module(ctx->env, qn, dep->module_name,
                                    type_clone(e->type), gv, true);
-            if (import->mode != IMPORT_QUALIFIED)
+            EnvEntry *eq = env_lookup(ctx->env, qn);
+            if (eq) eq->llvm_name = strdup(e->mangled_name);
+
+            if (import->mode != IMPORT_QUALIFIED) {
                 env_insert_from_module(ctx->env, e->local_name, dep->module_name,
                                        type_clone(e->type), gv, true);
+                EnvEntry *el = env_lookup(ctx->env, e->local_name);
+                if (el) el->llvm_name = strdup(e->mangled_name);
+            }
         } else { /* FUNC */
             LLVMTypeRef *pt = e->param_count > 0
                 ? malloc(sizeof(LLVMTypeRef) * e->param_count) : NULL;
@@ -256,7 +262,6 @@ static void declare_externals(CodegenContext *ctx,
             LLVMTypeRef fnt = LLVMFunctionType(
                 type_to_llvm(ctx, e->return_type), pt, e->param_count, 0);
             if (pt) free(pt);
-
             LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, e->mangled_name);
             if (!fn) {
                 fn = LLVMAddFunction(ctx->module, e->mangled_name, fnt);
@@ -266,14 +271,16 @@ static void declare_externals(CodegenContext *ctx,
                             clone_params(e->params, e->param_count),
                             e->param_count, type_clone(e->return_type), fn, NULL);
             EnvEntry *ent = env_lookup(ctx->env, qn);
-            if (ent) ent->module_name = strdup(dep->module_name);
+            if (ent) { ent->module_name = strdup(dep->module_name);
+                       ent->llvm_name   = strdup(e->mangled_name); }
 
             if (import->mode != IMPORT_QUALIFIED) {
                 env_insert_func(ctx->env, e->local_name,
                                 clone_params(e->params, e->param_count),
                                 e->param_count, type_clone(e->return_type), fn, NULL);
                 EnvEntry *ent2 = env_lookup(ctx->env, e->local_name);
-                if (ent2) ent2->module_name = strdup(dep->module_name);
+                if (ent2) { ent2->module_name = strdup(dep->module_name);
+                            ent2->llvm_name   = strdup(e->mangled_name); }
             }
         }
     }

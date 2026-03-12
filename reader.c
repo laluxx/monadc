@@ -5,6 +5,28 @@
 #include <string.h>
 #include <stdarg.h>
 
+/* Replace all exit(1) calls in the reader/parser.
+ * If a recovery point is set (we're inside repl_eval_line), longjmp back.
+ * Otherwise fall back to real exit so the standalone compiler still works. */
+
+jmp_buf  g_reader_escape;
+bool     g_reader_escape_set = false;
+char     g_reader_error_msg[512];
+
+#define READER_ERROR(line, col, fmt, ...) \
+    do { \
+        snprintf(g_reader_error_msg, sizeof(g_reader_error_msg), \
+                 "%s:%d:%d: error: " fmt, \
+                 current_filename ? current_filename : "<input>", \
+                 (line), (col), ##__VA_ARGS__); \
+        fprintf(stderr, "%s\n", g_reader_error_msg); \
+        if (g_reader_escape_set) { \
+            g_reader_escape_set = false; \
+            longjmp(g_reader_escape, 1); \
+        } \
+        exit(1); \
+    } while(0)
+
 /// Error reporting context
 
 static const char *current_filename = NULL;
@@ -67,35 +89,64 @@ static void compiler_error_range(int line, int column, int end_column, const cha
 static void compiler_error(int line, int column, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
+    vsnprintf(g_reader_error_msg, sizeof(g_reader_error_msg), fmt, args);
+    va_end(args);
 
-    fprintf(stderr, "%s:%d:%d: error: ", current_filename ? current_filename : "<input>", line, column);
-    vfprintf(stderr, fmt, args);
-    fprintf(stderr, "\n");
-
+    /* print source context */
+    fprintf(stderr, "%s:%d:%d: error: %s\n",
+            current_filename ? current_filename : "<input>",
+            line, column, g_reader_error_msg);
     if (current_source) {
-        const char *line_start = current_source;
-        int current_line = 1;
-
-        while (current_line < line && *line_start) {
-            if (*line_start == '\n') current_line++;
-            line_start++;
-        }
-
-        const char *line_end = line_start;
-        while (*line_end && *line_end != '\n') line_end++;
-
-        fprintf(stderr, "%5d | %.*s\n", line, (int)(line_end - line_start), line_start);
-
+        const char *ls = current_source;
+        int cl = 1;
+        while (cl < line && *ls) { if (*ls=='\n') cl++; ls++; }
+        const char *le = ls;
+        while (*le && *le != '\n') le++;
+        fprintf(stderr, "%5d | %.*s\n", line, (int)(le-ls), ls);
         fprintf(stderr, "      | ");
-        for (int i = 1; i < column; i++) {
-            fprintf(stderr, " ");
-        }
+        for (int i = 1; i < column; i++) fprintf(stderr, " ");
         fprintf(stderr, "^\n");
     }
 
-    va_end(args);
+    if (g_reader_escape_set) {
+        g_reader_escape_set = false;
+        longjmp(g_reader_escape, 1);
+    }
     exit(1);
 }
+
+/* static void compiler_error(int line, int column, const char *fmt, ...) { */
+/*     va_list args; */
+/*     va_start(args, fmt); */
+
+/*     fprintf(stderr, "%s:%d:%d: error: ", current_filename ? current_filename : "<input>", line, column); */
+/*     vfprintf(stderr, fmt, args); */
+/*     fprintf(stderr, "\n"); */
+
+/*     if (current_source) { */
+/*         const char *line_start = current_source; */
+/*         int current_line = 1; */
+
+/*         while (current_line < line && *line_start) { */
+/*             if (*line_start == '\n') current_line++; */
+/*             line_start++; */
+/*         } */
+
+/*         const char *line_end = line_start; */
+/*         while (*line_end && *line_end != '\n') line_end++; */
+
+/*         fprintf(stderr, "%5d | %.*s\n", line, (int)(line_end - line_start), line_start); */
+
+/*         fprintf(stderr, "      | "); */
+/*         for (int i = 1; i < column; i++) { */
+/*             fprintf(stderr, " "); */
+/*         } */
+/*         fprintf(stderr, "^\n"); */
+/*     } */
+
+/*     va_end(args); */
+/*     exit(1); */
+/* } */
 
 /// Helpers
 
@@ -230,6 +281,26 @@ AST *ast_new_type_alias(const char *alias_name, const char *target_name) {
     return a;
 }
 
+AST *ast_new_address_of(AST *operand) {
+    AST *a = calloc(1, sizeof(AST));
+    a->type = AST_ADDRESS_OF;
+    a->list.items = malloc(sizeof(AST*) * 1);
+    a->list.items[0] = operand;
+    a->list.count = 1;
+    a->list.capacity = 1;
+    return a;
+}
+
+AST *ast_new_range(AST *start, AST *step, AST *end, bool is_array) {
+    AST *a = calloc(1, sizeof(AST));
+    a->type        = AST_RANGE;
+    a->range.start = start;
+    a->range.step  = step;
+    a->range.end   = end;
+    a->range.is_array = is_array;
+    return a;
+}
+
 void ast_array_append(AST *array, AST *item) {
     if (array->array.element_count >= array->array.element_capacity) {
         array->array.element_capacity *= 2;
@@ -319,6 +390,17 @@ void ast_free(AST *ast) {
         free(ast->tests.assertions);
         break;
 
+    case AST_ADDRESS_OF:
+        ast_free(ast->list.items[0]);
+        free(ast->list.items);
+        break;
+
+    case AST_RANGE:
+        ast_free(ast->range.start);
+        ast_free(ast->range.step);
+        ast_free(ast->range.end);
+        break;
+
     default:
         break;
     }
@@ -386,6 +468,18 @@ void ast_print(AST *ast) {
         break;
     case AST_TYPE_ALIAS:
         printf("(type %s %s)", ast->type_alias.alias_name, ast->type_alias.target_name);
+        break;
+    case AST_ADDRESS_OF:
+        printf("&");
+        ast_print(ast->list.items[0]);
+        break;
+    case AST_RANGE:
+        printf(ast->range.is_array ? "[" : "(");
+        ast_print(ast->range.start);
+        if (ast->range.step) { printf(","); ast_print(ast->range.step); }
+        printf("..");
+        if (ast->range.end) ast_print(ast->range.end);
+        printf(ast->range.is_array ? "]" : ")");
         break;
     }
 }
@@ -532,7 +626,8 @@ Token lexer_next_token(Lexer *lex) {
                     }
                     advance(lex);
                     if (peek(lex) != '\'') {
-                        fprintf(stderr, "Unterminated char literal\n"); exit(1);
+                        /* fprintf(stderr, "Unterminated char literal\n"); exit(1); */
+                        READER_ERROR(lex->line, lex->column, "unterminated character literal");
                     }
                     advance(lex);
                     tok.value    = malloc(2);
@@ -547,7 +642,8 @@ Token lexer_next_token(Lexer *lex) {
                     char ch = peek(lex);
                     advance(lex);
                     if (peek(lex) != '\'') {
-                        fprintf(stderr, "Unterminated char literal\n"); exit(1);
+                        /* fprintf(stderr, "Unterminated char literal\n"); exit(1); */
+                        READER_ERROR(lex->line, lex->column, "unterminated character literal");
                     }
                     advance(lex);
                     tok.value    = malloc(2);
@@ -608,6 +704,16 @@ Token lexer_next_token(Lexer *lex) {
         tok.type  = TOK_NUMBER; return tok;
     }
 
+
+    // .. range operator, must be checked before '.' in numbers
+    if (c == '.' && peek_ahead(lex, 1) == '.') {
+        advance(lex); advance(lex);
+        tok.type  = TOK_DOTDOT;
+        tok.value = my_strdup("..");
+        return tok;
+    }
+
+
     // Decimal number
     if (is_digit(c)) {
         size_t start = lex->pos;
@@ -625,6 +731,14 @@ Token lexer_next_token(Lexer *lex) {
 
         tok.value = my_strndup(lex->source+start, lex->pos-start);
         tok.type  = TOK_NUMBER;
+        return tok;
+    }
+
+    // & prefix — address-of reader macro
+    if (c == '&') {
+        advance(lex);
+        tok.type  = TOK_SYMBOL;
+        tok.value = my_strdup("&");
         return tok;
     }
 
@@ -661,8 +775,9 @@ Token lexer_next_token(Lexer *lex) {
         tok.type  = TOK_SYMBOL; return tok;
     }
 
-    fprintf(stderr, "Unexpected character '%c' at %d:%d\n", c, lex->line, lex->column);
-    exit(1);
+    /* fprintf(stderr, "Unexpected character '%c' at %d:%d\n", c, lex->line, lex->column); */
+    /* exit(1); */
+    READER_ERROR(lex->line, lex->column, "unexpected character '%c'", c);
 }
 
 /// Parser
@@ -1257,25 +1372,84 @@ static AST *parse_list(Parser *p) {
     }
 
 
+    // Normal list — but check for range after first element
+    // (start..end) or (start,step..end) or (start..)
+    {
+        // peek: is first non-whitespace token a number/symbol followed by .. ?
+        // We parse first element then check
+        if (p->current.type == TOK_RPAREN || p->current.type == TOK_EOF) {
+            /* empty list () */
+        } else {
+            AST *first = parse_expr(p);
 
-    // Normal list parsing
-    while (p->current.type != TOK_RPAREN &&
-           p->current.type != TOK_EOF) {
-        AST *item = parse_expr(p);
-        ast_list_append(list, item);
+            /* step syntax: (1,3..10) — comma between start and step */
+            AST *step = NULL;
+            /* comma is lexed as a symbol in your lexer */
+            if (p->current.type == TOK_SYMBOL &&
+                strcmp(p->current.value, ",") == 0) {
+                p->current = lexer_next_token(p->lexer);
+                step = parse_expr(p);
+            }
+
+            if (p->current.type == TOK_DOTDOT) {
+                /* RANGE */
+                p->current = lexer_next_token(p->lexer);
+                AST *end = NULL;
+                if (p->current.type != TOK_RPAREN && p->current.type != TOK_EOF)
+                    end = parse_expr(p);
+                if (p->current.type != TOK_RPAREN)
+                    compiler_error(p->current.line, p->current.column, "Expected ')'");
+                int end_col = p->current.column + 1;
+                p->current = lexer_next_token(p->lexer);
+                ast_free(list);
+                AST *node = ast_new_range(first, step, end, false);
+                node->line = start_line; node->column = start_column;
+                node->end_column = end_col;
+                return node;
+            }
+
+            /* Not a range — proceed as normal list with first already parsed */
+            ast_list_append(list, first);
+            if (step) {
+                /* step was parsed but no .., treat comma+step as error or
+                   just add them as list elements — but comma isn't valid
+                   in a normal list so error */
+                compiler_error(p->current.line, p->current.column,
+                               "Unexpected ',' in list — did you mean a range (start,step..end)?");
+            }
+        }
+
+        while (p->current.type != TOK_RPAREN && p->current.type != TOK_EOF) {
+            ast_list_append(list, parse_expr(p));
+        }
+        if (p->current.type != TOK_RPAREN)
+            compiler_error(p->current.line, p->current.column, "Expected ')'");
+        int end_column = p->current.column + 1;
+        p->current = lexer_next_token(p->lexer);
+        list->line = start_line; list->column = start_column;
+        list->end_column = end_column;
+        return list;
     }
 
-    if (p->current.type != TOK_RPAREN) {
-        compiler_error(p->current.line, p->current.column, "Expected ')'");
-    }
 
-    int end_column = p->current.column + 1;
-    p->current = lexer_next_token(p->lexer);
+    /* // Normal list parsing */
+    /* while (p->current.type != TOK_RPAREN && */
+    /*        p->current.type != TOK_EOF) { */
+    /*     AST *item = parse_expr(p); */
+    /*     ast_list_append(list, item); */
+    /* } */
 
-    list->line = start_line;
-    list->column = start_column;
-    list->end_column = end_column;
-    return list;
+    /* if (p->current.type != TOK_RPAREN) { */
+    /*     compiler_error(p->current.line, p->current.column, "Expected ')'"); */
+    /* } */
+
+    /* int end_column = p->current.column + 1; */
+    /* p->current = lexer_next_token(p->lexer); */
+
+    /* list->line = start_line; */
+    /* list->column = start_column; */
+    /* list->end_column = end_column; */
+    /* return list; */
 }
 
 static AST *parse_bracket_list(Parser *p) {
@@ -1285,20 +1459,58 @@ static AST *parse_bracket_list(Parser *p) {
     AST *list = ast_new_list();
     p->current = lexer_next_token(p->lexer);
 
-    while (p->current.type != TOK_RBRACKET &&
-           p->current.type != TOK_EOF) {
-        ast_list_append(list, parse_expr(p));
+    /* Range detection: [start..end] or [start,step..end] */
+    if (p->current.type != TOK_RBRACKET && p->current.type != TOK_EOF) {
+        AST *first = parse_expr(p);
+
+        AST *step = NULL;
+        if (p->current.type == TOK_SYMBOL &&
+            strcmp(p->current.value, ",") == 0) {
+            p->current = lexer_next_token(p->lexer);
+            step = parse_expr(p);
+        }
+
+        if (p->current.type == TOK_DOTDOT) {
+            p->current = lexer_next_token(p->lexer);
+            AST *end = NULL;
+            if (p->current.type != TOK_RBRACKET && p->current.type != TOK_EOF)
+                end = parse_expr(p);
+            if (!end) {
+                ast_free(first);
+                ast_free(step);
+                ast_free(list);
+                READER_ERROR(p->current.line, p->current.column,
+                    "Can't do infinite arrays. Are you trying to blow up the stack?");
+            }
+            if (p->current.type != TOK_RBRACKET)
+                compiler_error(p->current.line, p->current.column, "Expected ']'");
+            int end_col = p->current.column + 1;
+            p->current = lexer_next_token(p->lexer);
+            ast_free(list);
+            AST *node = ast_new_range(first, step, end, true);
+            node->line = start_line;
+            node->column = start_column;
+            node->end_column = end_col;
+            return node;
+        }
+
+        /* Not a range — add first (and step if somehow parsed) back to list */
+        ast_list_append(list, first);
+        if (step) {
+            compiler_error(p->current.line, p->current.column,
+                           "Unexpected ',' — did you mean a range [start,step..end]?");
+        }
     }
 
+    while (p->current.type != TOK_RBRACKET && p->current.type != TOK_EOF) {
+        ast_list_append(list, parse_expr(p));
+    }
     if (p->current.type != TOK_RBRACKET) {
         compiler_error(p->current.line, p->current.column, "Expected ']'");
     }
-
     int end_column = p->current.column + 1;
     p->current = lexer_next_token(p->lexer);
 
-    // Check if this contains :: which indicates a type annotation
-    // Type annotations should stay as lists
     bool has_double_colon = false;
     for (size_t i = 0; i < list->list.count; i++) {
         if (list->list.items[i]->type == AST_SYMBOL &&
@@ -1307,29 +1519,76 @@ static AST *parse_bracket_list(Parser *p) {
             break;
         }
     }
-
     if (has_double_colon) {
-        // Keep as list for type annotation
         list->line = start_line;
         list->column = start_column;
         list->end_column = end_column;
         return list;
     }
 
-    // Otherwise, convert to array
     AST *array = ast_new_array();
-    for (size_t i = 0; i < list->list.count; i++) {
+    for (size_t i = 0; i < list->list.count; i++)
         ast_array_append(array, list->list.items[i]);
-    }
-
     free(list->list.items);
     free(list);
-
     array->line = start_line;
     array->column = start_column;
     array->end_column = end_column;
     return array;
 }
+
+/* static AST *parse_bracket_list(Parser *p) { */
+/*     int start_line = p->current.line; */
+/*     int start_column = p->current.column; */
+
+/*     AST *list = ast_new_list(); */
+/*     p->current = lexer_next_token(p->lexer); */
+
+/*     while (p->current.type != TOK_RBRACKET && */
+/*            p->current.type != TOK_EOF) { */
+/*         ast_list_append(list, parse_expr(p)); */
+/*     } */
+
+/*     if (p->current.type != TOK_RBRACKET) { */
+/*         compiler_error(p->current.line, p->current.column, "Expected ']'"); */
+/*     } */
+
+/*     int end_column = p->current.column + 1; */
+/*     p->current = lexer_next_token(p->lexer); */
+
+/*     // Check if this contains :: which indicates a type annotation */
+/*     // Type annotations should stay as lists */
+/*     bool has_double_colon = false; */
+/*     for (size_t i = 0; i < list->list.count; i++) { */
+/*         if (list->list.items[i]->type == AST_SYMBOL && */
+/*             strcmp(list->list.items[i]->symbol, "::") == 0) { */
+/*             has_double_colon = true; */
+/*             break; */
+/*         } */
+/*     } */
+
+/*     if (has_double_colon) { */
+/*         // Keep as list for type annotation */
+/*         list->line = start_line; */
+/*         list->column = start_column; */
+/*         list->end_column = end_column; */
+/*         return list; */
+/*     } */
+
+/*     // Otherwise, convert to array */
+/*     AST *array = ast_new_array(); */
+/*     for (size_t i = 0; i < list->list.count; i++) { */
+/*         ast_array_append(array, list->list.items[i]); */
+/*     } */
+
+/*     free(list->list.items); */
+/*     free(list); */
+
+/*     array->line = start_line; */
+/*     array->column = start_column; */
+/*     array->end_column = end_column; */
+/*     return array; */
+/* } */
 
 static double parse_number_str(const char *s) {
     if (s[0]=='0' && (s[1]=='x'||s[1]=='X')) return (double)strtol(s,NULL,16);
@@ -1369,15 +1628,36 @@ static AST *parse_expr(Parser *p) {
         ast->end_column = end_col;
         return ast;
     }
+    /* case TOK_SYMBOL: { */
+    /*     int end_col = tok.column + (tok.value ? strlen(tok.value) : 1); */
+    /*     p->current = lexer_next_token(p->lexer); */
+    /*     AST *ast = ast_new_symbol(tok.value); */
+    /*     ast->line = tok.line; */
+    /*     ast->column = tok.column; */
+    /*     ast->end_column = end_col; */
+    /*     return ast; */
+    /* } */
     case TOK_SYMBOL: {
+        // & reader macro — address-of
+        if (tok.value && strcmp(tok.value, "&") == 0) {
+            int addr_line = tok.line, addr_col = tok.column;
+            p->current = lexer_next_token(p->lexer);
+            AST *operand = parse_expr(p);
+            AST *node = ast_new_address_of(operand);
+            node->line       = addr_line;
+            node->column     = addr_col;
+            node->end_column = operand->end_column;
+            return node;
+        }
         int end_col = tok.column + (tok.value ? strlen(tok.value) : 1);
         p->current = lexer_next_token(p->lexer);
         AST *ast = ast_new_symbol(tok.value);
-        ast->line = tok.line;
-        ast->column = tok.column;
+        ast->line       = tok.line;
+        ast->column     = tok.column;
         ast->end_column = end_col;
         return ast;
     }
+
     case TOK_STRING: {
         int end_col = tok.column + (tok.value ? strlen(tok.value) : 1) + 2;
         p->current = lexer_next_token(p->lexer);
@@ -1431,6 +1711,7 @@ static AST *parse_expr(Parser *p) {
         ast->end_column = end_col;
         return ast;
     }
+
     default:
         compiler_error(tok.line, tok.column, "unexpected token type: %d", tok.type);
     }

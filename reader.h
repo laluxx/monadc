@@ -12,13 +12,15 @@ typedef enum {
     AST_STRING,
     AST_CHAR,
     AST_LIST,
-    AST_KEYWORD,  // :keyword
-    AST_RATIO,    // ratio literal (1/3)
-    AST_ARRAY,    // array literal [1 2 3]
-    AST_LAMBDA,   // (lambda ([x :: T] -> ... -> Ret<T>) "doc" body)
-    AST_ASM,      // (asm instruction operand1 operand2 ...)
-    AST_TYPE_ALIAS,
-    AST_TESTS,
+    AST_KEYWORD,    // :keyword
+    AST_RATIO,      // ratio literal (1/3)
+    AST_ARRAY,      // array literal [1 2 3]
+    AST_LAMBDA,     // (lambda ([x :: T] -> ... -> Ret<T>) "doc" body)
+    AST_ASM,        // (asm instruction operand1 operand2 ...)
+    AST_TYPE_ALIAS, // (type Code List)
+    AST_TESTS,      // (tests ...)
+    AST_ADDRESS_OF, // &expr
+    AST_RANGE,      // (0..10) [0..10] [1,3..40] (0..)
 } ASTType;
 
 // A single parsed function parameter: name + optional type annotation
@@ -85,6 +87,15 @@ typedef struct AST {
             struct AST **assertions;
             int count;
         } tests;
+
+        // AST_RANGE
+        struct {
+            struct AST *start;   // always present
+            struct AST *step;    // NULL if not specified
+            struct AST *end;     // NULL if infinite
+            bool is_array;       // true = [...], false = (...)
+        } range;
+
     };
 
     char *literal_str; // original literal string for numbers (e.g. "0xFF")
@@ -111,14 +122,10 @@ AST *ast_new_lambda(ASTParam *params, int param_count,
                     AST *body,
                     AST **body_exprs,
                     int body_count);
-/* AST *ast_new_lambda(ASTParam *params, int param_count, */
-/*                     const char *return_type, */
-/*                     const char *docstring, */
-/*                     const char *alias_name, */
-/*                     bool naked, */
-/*                     AST *body); */
 AST *ast_new_asm(AST **instructions, size_t instruction_count);
 AST *ast_new_type_alias(const char *alias_name, const char *target_name);
+AST *ast_new_address_of(AST *operand);
+AST *ast_new_range(AST *start, AST *step, AST *end, bool is_array);
 
 
 void ast_list_append(AST *list, AST *item);
@@ -143,6 +150,7 @@ typedef enum {
     TOK_ARROW,
     TOK_FEATURE_BEGIN,  // #+
     TOK_FEATURE_END,    // #---
+    TOK_DOTDOT,         // ..
 } TokenType;
 
 typedef struct {
@@ -179,5 +187,13 @@ ASTList parse_all(const char *source);
 AST *parse(const char *source);
 
 const char *parser_get_filename(void);
+
+/// ERROR Handling
+
+#include <setjmp.h>
+#include <stdbool.h>
+extern jmp_buf  g_reader_escape;
+extern bool     g_reader_escape_set;
+extern char     g_reader_error_msg[512];
 
 #endif
