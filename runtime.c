@@ -255,27 +255,6 @@ RuntimeList *rt_list_cons(RuntimeValue *head_val, RuntimeList *tail_list) {
     return lst;
 }
 
-
-/* RuntimeList *rt_list_cons(RuntimeValue *head_val, RuntimeList *tail_list) { */
-/*     ConsCell *c   = alloc_cons_cell(); */
-/*     c->head_fn     = NULL; */
-/*     c->head_env    = NULL; */
-/*     c->head_val    = head_val; */
-/*     c->head_forced = 1; */
-/*     c->tail_fn     = NULL; */
-/*     c->tail_env    = NULL; */
-/*     // Store the tail list pointer directly as an RT_LIST RuntimeValue */
-/*     RuntimeValue *tv = alloc_value(); */
-/*     tv->type           = RT_LIST; */
-/*     tv->data.list_val  = tail_list; */
-/*     c->tail_val    = tv; */
-/*     c->tail_forced = 1; */
-
-/*     RuntimeList *lst = alloc_list_wrapper(); */
-/*     lst->cell = c; */
-/*     return lst; */
-/* } */
-
 RuntimeValue *rt_list_car(RuntimeList *list) {
     if (rt_list_is_empty_list(list)) return rt_value_nil();
     return _force_head(list->cell);
@@ -384,101 +363,8 @@ void rt_list_append(RuntimeList *list, RuntimeValue *value) {
     }
 }
 
-/* void rt_list_append(RuntimeList *list, RuntimeValue *value) { */
-/*     if (!list) return; */
-
-/*     // New tail cons cell — strictly forced immediately */
-/*     ConsCell *new_c   = alloc_cons_cell(); */
-/*     new_c->head_fn     = NULL; new_c->head_env = NULL; */
-/*     new_c->head_val    = value; new_c->head_forced = 1; */
-/*     new_c->tail_fn     = NULL; new_c->tail_env = NULL; */
-/*     new_c->tail_val    = NULL; new_c->tail_forced = 1; // NULL = end */
-
-/*     RuntimeList *new_cell = alloc_list_wrapper(); */
-/*     new_cell->cell = new_c; */
-
-/*     if (rt_list_is_empty_list(list)) { */
-/*         // Promote the empty-list wrapper in-place by swapping its cell pointer. */
-/*         // Safe because _empty_list is a static singleton — we only mutate the */
-/*         // caller's RuntimeList*, not the global singleton. */
-/*         list->cell = new_c; */
-/*         return; */
-/*     } */
-
-/*     // Walk to last cell whose tail is NULL (end-of-list sentinel) */
-/*     RuntimeList *cur = list; */
-/*     while (1) { */
-/*         ConsCell *cc = cur->cell; */
-/*         if (!cc) break; */
-
-/*         // If tail not yet forced, force it to find the end */
-/*         if (!cc->tail_forced) { */
-/*             RuntimeValue *tv = _force_tail(cc); */
-/*             if (!tv || tv->type == RT_NIL) { */
-/*                 // Attach here */
-/*                 RuntimeValue *link = alloc_value(); */
-/*                 link->type          = RT_LIST; */
-/*                 link->data.list_val = new_cell; */
-/*                 cc->tail_val    = link; */
-/*                 cc->tail_forced = 1; */
-/*                 return; */
-/*             } */
-/*             if (tv->type == RT_LIST) { */
-/*                 RuntimeList *next = tv->data.list_val; */
-/*                 if (rt_list_is_empty_list(next)) { */
-/*                     RuntimeValue *link = alloc_value(); */
-/*                     link->type          = RT_LIST; */
-/*                     link->data.list_val = new_cell; */
-/*                     cc->tail_val    = link; */
-/*                     cc->tail_forced = 1; */
-/*                     return; */
-/*                 } */
-/*                 cur = next; */
-/*                 continue; */
-/*             } */
-/*             // Some other terminal */
-/*             RuntimeValue *link = alloc_value(); */
-/*             link->type          = RT_LIST; */
-/*             link->data.list_val = new_cell; */
-/*             cc->tail_val    = link; */
-/*             cc->tail_forced = 1; */
-/*             return; */
-/*         } */
-
-/*         // Tail already forced */
-/*         RuntimeValue *tv = cc->tail_val; */
-/*         if (!tv || tv->type == RT_NIL) { */
-/*             RuntimeValue *link = alloc_value(); */
-/*             link->type          = RT_LIST; */
-/*             link->data.list_val = new_cell; */
-/*             cc->tail_val    = link; */
-/*             cc->tail_forced = 1; */
-/*             return; */
-/*         } */
-/*         if (tv->type == RT_LIST) { */
-/*             RuntimeList *next = tv->data.list_val; */
-/*             if (rt_list_is_empty_list(next)) { */
-/*                 RuntimeValue *link = alloc_value(); */
-/*                 link->type          = RT_LIST; */
-/*                 link->data.list_val = new_cell; */
-/*                 cc->tail_val    = link; */
-/*                 cc->tail_forced = 1; */
-/*                 return; */
-/*             } */
-/*             cur = next; */
-/*             continue; */
-/*         } */
-/*         // Terminal non-list tail */
-/*         RuntimeValue *link = alloc_value(); */
-/*         link->type          = RT_LIST; */
-/*         link->data.list_val = new_cell; */
-/*         cc->tail_val    = link; */
-/*         cc->tail_forced = 1; */
-/*         return; */
-/*     } */
-/* } */
-
 ///  Pure lazy append
+
 typedef struct { RuntimeList *rest; RuntimeList *b; } AppendEnv;
 static RuntimeValue *_rt_append_tail_fn(void *e);
 
@@ -530,17 +416,6 @@ RuntimeList *rt_list_copy(RuntimeList *src) {
     return out;
 }
 
-/* RuntimeList *rt_list_copy(RuntimeList *src) { */
-/*     if (rt_list_is_empty_list(src)) return rt_list_empty(); */
-/*     RuntimeList *out = rt_list_empty(); */
-/*     RuntimeList *cur = src; */
-/*     while (!rt_list_is_empty_list(cur)) { */
-/*         rt_list_append(out, rt_list_car(cur)); */
-/*         cur = rt_list_cdr(cur); */
-/*     } */
-/*     return out; */
-/* } */
-
 RuntimeList *rt_make_list(int64_t n, RuntimeValue *fill_val) {
     RuntimeList *out = heap_list_wrapper();
     out->cell = NULL;
@@ -549,26 +424,13 @@ RuntimeList *rt_make_list(int64_t n, RuntimeValue *fill_val) {
     return out;
 }
 
-/* RuntimeList *rt_make_list(int64_t n, RuntimeValue *fill_val) { */
-/*     RuntimeList *out = rt_list_empty(); */
-/*     for (int64_t i = 0; i < n; i++) */
-/*         rt_list_append(out, fill_val); */
-/*     return out; */
-/* } */
-
-//  Range / infinite list constructors — fully fused, no separate env malloc
-//
-//  Each generator stores its state directly inside the ConsCell's tail_env.
-//  Because tail_env is a void*, and our env structs are ≤ 16 bytes, we
-//  arena_alloc them once and they live until the arena is reset.
-
 // --- [lo .. hi] range ---
 typedef struct { int64_t lo; int64_t hi; } RangeEnv;
 
+
 static RuntimeValue *_rt_range_tail_fn(void *e) {
     RangeEnv *env = (RangeEnv *)e;
-    // no free — arena owns it
-    RuntimeValue *rv = alloc_value();
+    RuntimeValue *rv = malloc(sizeof(RuntimeValue)); // was: alloc_value()
     rv->type          = RT_LIST;
     rv->data.list_val = rt_list_range(env->lo, env->hi);
     return rv;
@@ -582,17 +444,15 @@ static RuntimeValue *_rt_int_head_fn(void *e) {
 
 RuntimeList *rt_list_range(int64_t lo, int64_t hi) {
     if (lo > hi) return rt_list_empty();
-
-    // Fused cell: head is rt_value_int(lo) — may return cached pointer
     RuntimeValue *head_val = rt_value_int(lo);
 
-    ConsCell *c    = alloc_cons_cell();
+    ConsCell *c    = heap_cons_cell();
     c->head_fn     = NULL;
     c->head_env    = NULL;
     c->head_val    = head_val;
     c->head_forced = 1;
 
-    RangeEnv *env  = arena_alloc(&g_eval_arena, sizeof(RangeEnv));
+    RangeEnv *env  = malloc(sizeof(RangeEnv)); // was: arena_alloc
     env->lo        = lo + 1;
     env->hi        = hi;
     c->tail_fn     = _rt_range_tail_fn;
@@ -600,7 +460,7 @@ RuntimeList *rt_list_range(int64_t lo, int64_t hi) {
     c->tail_val    = NULL;
     c->tail_forced = 0;
 
-    RuntimeList *lst = alloc_list_wrapper();
+    RuntimeList *lst = heap_list_wrapper();
     lst->cell = c;
     return lst;
 }
@@ -608,32 +468,34 @@ RuntimeList *rt_list_range(int64_t lo, int64_t hi) {
 // --- [lo ..] infinite ---
 typedef struct { int64_t n; } FromEnv;
 
+
 static RuntimeValue *_rt_from_tail_fn(void *e) {
     FromEnv *env = (FromEnv *)e;
-    // no free — arena owns it
-    RuntimeValue *rv = alloc_value();
+    RuntimeList *result = rt_list_from(env->n); // now heap-allocates recursively
+    RuntimeValue *rv = malloc(sizeof(RuntimeValue)); // was: alloc_value()
     rv->type          = RT_LIST;
-    rv->data.list_val = rt_list_from(env->n);
+    rv->data.list_val = result;
     return rv;
 }
 
+// --- [lo ..] infinite ---
 RuntimeList *rt_list_from(int64_t lo) {
     RuntimeValue *head_val = rt_value_int(lo);
 
-    ConsCell *c    = alloc_cons_cell();
+    ConsCell *c    = heap_cons_cell();        // was: alloc_cons_cell()
     c->head_fn     = NULL;
     c->head_env    = NULL;
     c->head_val    = head_val;
     c->head_forced = 1;
 
-    FromEnv *env   = arena_alloc(&g_eval_arena, sizeof(FromEnv));
+    FromEnv *env   = malloc(sizeof(FromEnv)); // was: arena_alloc(...)
     env->n         = lo + 1;
     c->tail_fn     = _rt_from_tail_fn;
     c->tail_env    = env;
     c->tail_val    = NULL;
     c->tail_forced = 0;
 
-    RuntimeList *lst = alloc_list_wrapper();
+    RuntimeList *lst = heap_list_wrapper();   // was: alloc_list_wrapper()
     lst->cell = c;
     return lst;
 }
@@ -641,10 +503,10 @@ RuntimeList *rt_list_from(int64_t lo) {
 // --- [lo, next ..] arithmetic sequence ---
 typedef struct { int64_t n; int64_t step; } FromStepEnv;
 
+
 static RuntimeValue *_rt_from_step_tail_fn(void *e) {
     FromStepEnv *env = (FromStepEnv *)e;
-    // no free — arena owns it
-    RuntimeValue *rv = alloc_value();
+    RuntimeValue *rv = malloc(sizeof(RuntimeValue)); // was: alloc_value()
     rv->type          = RT_LIST;
     rv->data.list_val = rt_list_from_step(env->n, env->step);
     return rv;
@@ -653,13 +515,13 @@ static RuntimeValue *_rt_from_step_tail_fn(void *e) {
 RuntimeList *rt_list_from_step(int64_t lo, int64_t step) {
     RuntimeValue *head_val = rt_value_int(lo);
 
-    ConsCell *c    = alloc_cons_cell();
+    ConsCell *c    = heap_cons_cell();
     c->head_fn     = NULL;
     c->head_env    = NULL;
     c->head_val    = head_val;
     c->head_forced = 1;
 
-    FromStepEnv *env = arena_alloc(&g_eval_arena, sizeof(FromStepEnv));
+    FromStepEnv *env = malloc(sizeof(FromStepEnv)); // was: arena_alloc
     env->n           = lo + step;
     env->step        = step;
     c->tail_fn       = _rt_from_step_tail_fn;
@@ -667,7 +529,7 @@ RuntimeList *rt_list_from_step(int64_t lo, int64_t step) {
     c->tail_val      = NULL;
     c->tail_forced   = 0;
 
-    RuntimeList *lst = alloc_list_wrapper();
+    RuntimeList *lst = heap_list_wrapper();
     lst->cell = c;
     return lst;
 }
@@ -685,17 +547,6 @@ RuntimeList *rt_list_take(RuntimeList *list, int64_t n) {
     }
     return out;
 }
-
-/* RuntimeList *rt_list_take(RuntimeList *list, int64_t n) { */
-/*     if (n <= 0 || rt_list_is_empty_list(list)) return rt_list_empty(); */
-/*     RuntimeList *out = rt_list_empty(); */
-/*     RuntimeList *cur = list; */
-/*     for (int64_t i = 0; i < n && !rt_list_is_empty_list(cur); i++) { */
-/*         rt_list_append(out, rt_list_car(cur)); */
-/*         cur = rt_list_cdr(cur); */
-/*     } */
-/*     return out; */
-/* } */
 
 char *rt_string_take(const char *s, int64_t n) {
     if (!s) return strdup("");
@@ -795,11 +646,11 @@ void rt_print_value_newline(RuntimeValue *v) {
     printf("\n");
 }
 
-//  Value construction
+///  Value construction
 //
 //  HOT PATH (arena):  int, float, char, list, nil, thunk
 //  LONG-LIVED (heap): string, symbol, keyword, ratio, array
-
+//
 RuntimeValue *rt_value_int(int64_t val) {
     // Step 2: integer interning — zero allocations for 0..65536
     int_cache_init();
@@ -952,81 +803,6 @@ void rt_print_list_unbounded(RuntimeList *list) {
     }
     printf(")\n");
 }
-
-/* void rt_print_list_unbounded(RuntimeList *list) { */
-/*     rt_interrupted = 0; */
-/*     printf("("); */
-/*     int first = 1; */
-/*     RuntimeList *cur = list; */
-
-/*     int cycle = 0; */
-
-/*     while (cur && !rt_list_is_empty_list(cur)) { */
-/*         if (rt_interrupted) { printf(" ..."); break; } */
-/*         if (!first) printf(" "); */
-/*         first = 0; */
-
-/*         // Force head and print it immediately */
-/*         RuntimeValue *h = _force_head(cur->cell); */
-/*         rt_print_value(h); */
-
-/*         // Force the tail pointer — we need this to survive the reset */
-/*         RuntimeValue *tv = _force_tail(cur->cell); */
-/*         RuntimeList *next = NULL; */
-/*         if (tv && tv->type == RT_LIST) */
-/*             next = tv->data.list_val; */
-
-/*         // Every 1024 elements: reset the arena, then re-seed it with */
-/*         // a fresh list wrapper pointing at the next element's generator. */
-/*         // The generator state (FromEnv etc) was already captured in the */
-/*         // tail thunk — but that env is also in the arena, so we need to */
-/*         // copy the next element's seed value to the stack before reset. */
-/*         if (++cycle >= 1024 && next && !rt_list_is_empty_list(next)) { */
-/*             // Extract the next head fn+env and tail fn+env from the cell */
-/*             // onto the C stack before we wipe the arena */
-/*             ConsCell *nc = next->cell; */
-/*             ThunkFn  hfn  = nc->head_fn; */
-/*             void    *henv = nc->head_env; */
-/*             int      hforced = nc->head_forced; */
-/*             RuntimeValue *hval = nc->head_val;  // may be in int cache = safe */
-/*             ThunkFn  tfn  = nc->tail_fn; */
-/*             void    *tenv = nc->tail_env;        // THIS IS IN THE ARENA */
-
-/*             // If tenv points into the arena we must copy it to the stack. */
-/*             // For FromEnv it's just one int64_t.  We use a union on the */
-/*             // stack big enough for any of our env structs. */
-/*             typedef struct { int64_t a; int64_t b; } EnvCopy; */
-/*             EnvCopy env_copy = {0, 0}; */
-/*             if (tenv) memcpy(&env_copy, tenv, sizeof(EnvCopy)); */
-
-/*             arena_reset(&g_eval_arena); */
-/*             cycle = 0; */
-
-/*             // Rebuild the single next ConsCell from stack data */
-/*             ConsCell *fresh_c = arena_alloc(&g_eval_arena, sizeof(ConsCell)); */
-/*             fresh_c->head_fn     = hfn; */
-/*             fresh_c->head_env    = henv;   // NULL for forced heads (int cache) */
-/*             fresh_c->head_val    = hval; */
-/*             fresh_c->head_forced = hforced; */
-
-/*             // Rebuild tenv in the arena from our stack copy */
-/*             EnvCopy *fresh_env = arena_alloc(&g_eval_arena, sizeof(EnvCopy)); */
-/*             *fresh_env = env_copy; */
-/*             fresh_c->tail_fn     = tfn; */
-/*             fresh_c->tail_env    = fresh_env; */
-/*             fresh_c->tail_val    = NULL; */
-/*             fresh_c->tail_forced = 0; */
-
-/*             RuntimeList *fresh_lst = arena_alloc(&g_eval_arena, sizeof(RuntimeList)); */
-/*             fresh_lst->cell = fresh_c; */
-/*             cur = fresh_lst; */
-/*             continue; */
-/*         } */
-
-/*         cur = next ? next : rt_list_empty(); */
-/*     } */
-/*     printf(")\n"); */
-/* } */
 
 void rt_print_list(RuntimeList *list) {
     rt_print_list_unbounded(list);
