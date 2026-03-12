@@ -61,6 +61,15 @@
  * ------------------------------------------------------------------------- */
 static jmp_buf g_repl_escape;
 static bool    g_in_eval = false;
+static volatile sig_atomic_t g_interrupted = 0;
+
+static void repl_sigint_handler(int sig) {
+    (void)sig;
+    g_interrupted = 1;
+    rt_interrupted = 1;
+    // NO arena_reset here — the arena is still live on the call stack
+    write(STDERR_FILENO, "\n", 1);
+}
 
 /* Catch SIGSEGV/SIGBUS from JIT-compiled code and longjmp back to the
  * eval loop so the REPL stays alive instead of crashing the process. */
@@ -80,7 +89,7 @@ static void repl_signal_handler(int sig) {
     raise(sig);
 }
 
-/* at top of repl.c, change: */
+
 static sigjmp_buf *g_assert_jmp_ptr = NULL;
 
 void __monad_assert_fail(const char *label) {
@@ -131,11 +140,16 @@ static void rt_sym_table_init(void) {
     } while(0)
 
     /* Runtime list */
-    ADD(rt_list_create); ADD(rt_list_cons); ADD(rt_list_append);
-    ADD(rt_list_car);    ADD(rt_list_cdr);  ADD(rt_list_nth);
-    ADD(rt_list_length); ADD(rt_list_is_empty);
-    ADD(rt_make_list);   ADD(rt_list_append_lists); ADD(rt_list_copy);
-    ADD(rt_equal_p);
+    ADD(rt_list_car);     ADD(rt_list_cdr);          ADD(rt_list_nth);
+    ADD(rt_list_length);  ADD(rt_list_append_lists); ADD(rt_list_copy);
+    ADD(rt_make_list);    ADD(rt_list_empty);        ADD(rt_thunk_of_value);
+    ADD(rt_equal_p);      ADD(rt_list_lazy_cons);    ADD(rt_list_is_empty_list);
+    ADD(rt_thunk_create); ADD(rt_force);             ADD(rt_list_range);
+    ADD(rt_list_from);    ADD(rt_list_from_step);    ADD(rt_list_take);
+    ADD(rt_list_drop);    ADD(rt_value_thunk);       ADD(rt_print_list_limited);
+
+    ADD(rt_string_take);
+
     /* Unboxing */
     ADD(rt_unbox_int);    ADD(rt_unbox_float); ADD(rt_unbox_char);
     ADD(rt_unbox_string); ADD(rt_unbox_list);  ADD(rt_value_is_nil);
@@ -776,6 +790,7 @@ static bool close_and_run(REPLContext *ctx) {
     if (getenv("REPL_DUMP_IR"))
         fprintf(stderr, "[jit] %s -> %p\n", g_wrapper_name, (void*)fn);
     fn();
+    arena_reset(&g_eval_arena);
     return true;
 }
 
@@ -1015,6 +1030,14 @@ void repl_init(REPLContext *ctx) {
     sigaction(SIGSEGV, &sa, NULL);
     sigaction(SIGBUS,  &sa, NULL);
 
+    struct sigaction sa_int;
+    memset(&sa_int, 0, sizeof(sa_int));
+    sa_int.sa_handler = repl_sigint_handler;
+    sigemptyset(&sa_int.sa_mask);
+    sa_int.sa_flags = 0;
+    sigaction(SIGINT, &sa_int, NULL);
+
+
     ctx->cg.context    = LLVMContextCreate();
     ctx->cg.module     = NULL;
     ctx->cg.builder    = NULL;
@@ -1040,6 +1063,7 @@ void repl_init(REPLContext *ctx) {
     /* boot is owned by engine now */
 
     register_builtins(&ctx->cg);
+    arena_init(&g_eval_arena, 4 * 1024 * 1024);
     ctx->expr_count = 0;
 
     /* First real module */
@@ -1122,7 +1146,6 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
             const char *path = cmd + 5;
             while (*path && isspace((unsigned char)*path)) path++;
 
-            /* Strip trailing whitespace/newline */
             char fpath[512];
             strncpy(fpath, path, sizeof(fpath) - 1);
             fpath[sizeof(fpath) - 1] = '\0';
@@ -1135,7 +1158,6 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                 return false;
             }
 
-            /* Peek for a (module Name [...]) declaration */
             fseek(f, 0, SEEK_END);
             long fsz = ftell(f);
             rewind(f);
@@ -1145,7 +1167,6 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
             src[fsz] = '\0';
             fclose(f);
 
-            /* Scan for first non-comment, non-whitespace form */
             const char *cursor = src;
             char *found_module = NULL;
             while (*cursor) {
@@ -1165,17 +1186,12 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                 } else {
                     if (form) ast_free(form);
                 }
-                break;  /* only need the first form */
+                break;
             }
             free(src);
 
             if (found_module) {
-                /* File has a module declaration — use the proper import pipeline.
-                 * This ensures correct module_name tagging, dedup, dlopen, etc. */
                 printf("Loading module '%s' from '%s'\n", found_module, fpath);
-
-                /* Build a synthetic (import ModuleName) AST and call handle_import */
-                const char *import_src = found_module;
                 char import_expr[256];
                 snprintf(import_expr, sizeof(import_expr), "(import %s)", found_module);
                 free(found_module);
@@ -1187,13 +1203,11 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                     fprintf(stderr, "Error: failed to build import for module\n");
                     return false;
                 }
-
                 bool ok = handle_import(ctx, imp_ast);
                 ast_free(imp_ast);
                 return ok;
             }
 
-            /* No module declaration — plain file, evaluate forms directly as local */
             FILE *f2 = fopen(fpath, "r");
             if (!f2) { fprintf(stderr, "Error: cannot open file: %s\n", fpath); return false; }
             fseek(f2, 0, SEEK_END);
@@ -1239,7 +1253,6 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                 if (strcmp(head, "tests") == 0) {
                     ast_free(form); skipped++; continue;
                 }
-
                 if (strcmp(head, "import") == 0) {
                     handle_import(ctx, form);
                     ast_free(form); skipped++; continue;
@@ -1247,7 +1260,6 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
 
                 char mod_name[64];
                 snprintf(mod_name,       sizeof(mod_name),       "__repl_%u", ctx->expr_count);
-                /* snprintf(g_wrapper_name, sizeof(g_wrapper_name), WRAPPER_FMT, ctx->expr_count); */
                 snprintf(g_wrapper_name, sizeof(g_wrapper_name), WRAPPER_FMT, g_wrapper_seq++);
                 fresh_module(ctx, mod_name);
                 open_wrapper(ctx);
@@ -1280,13 +1292,16 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                 if (setjmp(assert_jmp) != 0) {
                     g_assert_jmp_ptr = NULL;
                     g_in_eval = false;
+                    rt_interrupted = 0;
                     recover_module(ctx);
+                    free(src);
                     return false;
                 }
                 if (setjmp(g_repl_escape) == 0)
                     ran = close_and_run(ctx);
                 g_in_eval = false;
                 g_assert_jmp_ptr = NULL;
+                rt_interrupted = 0;
 
                 if (ran) {
                     ctx->expr_count++;
@@ -1320,9 +1335,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                     if (!e->name) continue;
                     if (strncmp(e->name, prefix, plen) != 0) continue;
 
-                    /* Format: name\tkind\tsignature\tdocstring */
                     char sig[256] = "";
-
                     switch (e->kind) {
                     case ENV_VAR:
                         printf("%s\tvar\t%s\t%s\n",
@@ -1330,7 +1343,6 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                                e->type ? type_to_string(e->type) : "?",
                                e->docstring ? e->docstring : "");
                         break;
-
                     case ENV_BUILTIN: {
                         int mn = e->arity_min > 0 ? e->arity_min : 0;
                         int mx = e->arity_max;
@@ -1356,22 +1368,17 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                                e->docstring ? e->docstring : "");
                         break;
                     }
-
                     case ENV_FUNC: {
-                        /* Format: (name [p1 :: T1] [p2 :: T2] -> RetType)
-                         * Matches monad-mode's header format exactly so Emacs eldoc
-                         * can reuse the same propertize/param-highlight functions. */
                         snprintf(sig, sizeof(sig), "(%s", e->name);
                         for (int i = 0; i < e->param_count; i++) {
                             const char *pn = (e->params[i].name && e->params[i].name[0])
                                 ? e->params[i].name : "_";
                             char param[128] = "";
-                            if (e->params[i].type) {
+                            if (e->params[i].type)
                                 snprintf(param, sizeof(param), " [%s :: %s]",
                                          pn, type_to_string(e->params[i].type));
-                            } else {
+                            else
                                 snprintf(param, sizeof(param), " [%s]", pn);
-                            }
                             strncat(sig, param, sizeof(sig)-strlen(sig)-1);
                         }
                         if (e->return_type) {
@@ -1389,7 +1396,6 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                 }
             }
 
-            /* Static keywords — no signature, no doc */
             static const char *kws[] = {
                 "Int","Float","Char","String","Hex","Bin","Oct","Bool",
                 "define","show","if","for","quote","begin","set!","and","or","not",
@@ -1421,12 +1427,11 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
         return false;
     }
 
- /// Parse
+    /// Parse
 
     char *clean = strip_comments(line);
     if (!clean) return false;
 
-    /* After stripping, the buffer may be entirely whitespace */
     const char *chk = clean;
     while (*chk && isspace((unsigned char)*chk)) chk++;
     if (!*chk) { free(clean); return true; }
@@ -1435,7 +1440,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
     AST *ast = NULL;
     REPL_PARSE(ast, clean);
     free(clean);
-    if (!ast) { return false; }
+    if (!ast) return false;
 
     /* Special: (import ...) */
     if (ast->type == AST_LIST && ast->list.count >= 1 &&
@@ -1449,27 +1454,25 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
     bool silent = expr_is_silent(ast);
 
     /* -----------------------------------------------------------------------
-     * Fast path: bare symbol that names a function or builtin — just print
-     * its description, no codegen needed.
+     * Fast path: bare symbol naming a function or builtin
      * ----------------------------------------------------------------------- */
     if (!silent && ast->type == AST_SYMBOL) {
         EnvEntry *e = env_lookup(ctx->cg.env, ast->symbol);
         if (e && (e->kind == ENV_FUNC || e->kind == ENV_BUILTIN)) {
             char mod_name[64];
             snprintf(mod_name,       sizeof(mod_name),       "__repl_%u", ctx->expr_count);
-            /* snprintf(g_wrapper_name, sizeof(g_wrapper_name), WRAPPER_FMT, ctx->expr_count); */
             snprintf(g_wrapper_name, sizeof(g_wrapper_name), WRAPPER_FMT, g_wrapper_seq++);
             fresh_module(ctx, mod_name);
             open_wrapper(ctx);
             emit_proc_print(ctx, e);
             ast_free(ast);
 
-            /* JIT crash recovery only — codegen didn't run so no error_jmp needed */
             g_in_eval = true;
             bool ran = false;
             if (setjmp(g_repl_escape) == 0)
                 ran = close_and_run(ctx);
             g_in_eval = false;
+            rt_interrupted = 0;
 
             if (ran) ctx->expr_count++;
             char next[64];
@@ -1484,15 +1487,13 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
      * ----------------------------------------------------------------------- */
     char mod_name[64];
     snprintf(mod_name,       sizeof(mod_name),       "__repl_%u", ctx->expr_count);
-    /* snprintf(g_wrapper_name, sizeof(g_wrapper_name), WRAPPER_FMT, ctx->expr_count); */
     snprintf(g_wrapper_name, sizeof(g_wrapper_name), WRAPPER_FMT, g_wrapper_seq++);
     fresh_module(ctx, mod_name);
     open_wrapper(ctx);
 
-    /* --- Phase 1: codegen (errors longjmp via CODEGEN_ERROR) --- */
+    /* Phase 1: codegen */
     ctx->cg.error_jmp_set = true;
     if (setjmp(ctx->cg.error_jmp) != 0) {
-        /* CODEGEN_ERROR fired — message already printed */
         ctx->cg.error_jmp_set = false;
         if (ast) { ast_free(ast); ast = NULL; }
         recover_module(ctx);
@@ -1501,18 +1502,16 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
     }
 
     CodegenResult res = codegen_expr(&ctx->cg, ast);
-    ctx->cg.error_jmp_set = false;  /* disarm — codegen succeeded */
+    ctx->cg.error_jmp_set = false;
 
     if (!res.value) {
-        /* codegen returned NULL without calling CODEGEN_ERROR (shouldn't
-         * happen after the macro conversion, but be defensive) */
-        if (ast) { ast_free(ast); }
+        if (ast) ast_free(ast);
         recover_module(ctx);
         fresh_module(ctx, "__repl_recover");
         return false;
     }
 
-    /* --- Phase 2: emit auto-print --- */
+    /* Phase 2: emit auto-print */
     bool list_is_rv = false;
     if (res.type && res.type->kind == TYPE_LIST &&
         ast->type == AST_LIST && ast->list.count > 0 &&
@@ -1528,7 +1527,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
     if (!silent)
         emit_auto_print(ctx, res.value, res.type, list_is_rv);
 
-    /* --- Phase 3: JIT compile + run (crashes caught by signal handler) --- */
+    /* Phase 3: JIT compile + run */
     jmp_buf assert_jmp;
     g_assert_jmp_ptr = &assert_jmp;
     g_in_eval = true;
@@ -1536,6 +1535,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
     if (setjmp(assert_jmp) != 0) {
         g_assert_jmp_ptr = NULL;
         g_in_eval = false;
+        rt_interrupted = 0;
         recover_module(ctx);
         return false;
     }
@@ -1543,6 +1543,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
         ran = close_and_run(ctx);
     g_in_eval = false;
     g_assert_jmp_ptr = NULL;
+    rt_interrupted = 0;
 
     if (ran) {
         ctx->expr_count++;
@@ -1819,7 +1820,16 @@ void repl_run(void) {
         if (*accum) {
             if (use_readline) add_history(accum);
             bool ok = repl_eval_line(&ctx, accum);
-            prompt = ok ? prompt_ok : prompt_error;
+            if (g_interrupted) {
+                g_interrupted = 0;
+                if (use_readline) {
+                    rl_free_line_state();
+                    rl_cleanup_after_signal();
+                }
+                prompt = prompt_error;
+            } else {
+                prompt = ok ? prompt_ok : prompt_error;
+            }
         }
 
         accum_len = 0;

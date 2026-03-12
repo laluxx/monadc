@@ -485,27 +485,34 @@ static CompiledModule *compile_one(const char *source_path,
     LLVMPositionBuilderAtEnd(ctx.builder, entry_blk);
     ctx.init_fn = init_fn;
 
-/// Phase 6: *features* global (builder is now positioned — safe to emit IR)
+/// Phase 6: *features* global
 
     AST *feat_ast = detect_features();
-    LLVMValueRef lf = get_rt_list_create(&ctx);
+
+    // Build the list back-to-front as a proper cons chain.
+    // rt_list_append has undefined behaviour on the new fused ConsCell
+    // implementation for strict lists — use rt_list_cons instead.
+    LLVMValueRef empty_fn = get_rt_list_empty(&ctx);
     LLVMValueRef feat_list = LLVMBuildCall2(ctx.builder,
-        LLVMGlobalGetValueType(lf), lf, NULL, 0, "feats");
-    for (size_t i = 0; i < feat_ast->list.count; i++) {
+        LLVMGlobalGetValueType(empty_fn), empty_fn, NULL, 0, "feats");
+
+    for (int i = (int)feat_ast->list.count - 1; i >= 0; i--) {
         AST *fk = feat_ast->list.items[i];
-        if (fk->type == AST_KEYWORD) {
-            LLVMValueRef kwf = get_rt_value_keyword(&ctx);
-            LLVMValueRef kws = LLVMBuildGlobalStringPtr(ctx.builder,
-                                                        fk->keyword, "fk");
-            LLVMValueRef ka[] = {kws};
-            LLVMValueRef kv   = LLVMBuildCall2(ctx.builder,
-                LLVMGlobalGetValueType(kwf), kwf, ka, 1, "kv");
-            LLVMValueRef af   = get_rt_list_append(&ctx);
-            LLVMValueRef aa[] = {feat_list, kv};
-            LLVMBuildCall2(ctx.builder, LLVMGlobalGetValueType(af),
-                           af, aa, 2, "");
-        }
+        if (fk->type != AST_KEYWORD) continue;
+
+        LLVMValueRef kwf = get_rt_value_keyword(&ctx);
+        LLVMValueRef kws = LLVMBuildGlobalStringPtr(ctx.builder, fk->keyword, "fk");
+        LLVMValueRef ka[] = {kws};
+        LLVMValueRef kv   = LLVMBuildCall2(ctx.builder,
+            LLVMGlobalGetValueType(kwf), kwf, ka, 1, "kv");
+
+        LLVMValueRef cons_fn = get_rt_list_cons(&ctx);
+        LLVMTypeRef  ptr     = LLVMPointerType(LLVMInt8TypeInContext(ctx.context), 0);
+        LLVMTypeRef  cons_ft = LLVMFunctionType(ptr, (LLVMTypeRef[]){ptr, ptr}, 2, 0);
+        LLVMValueRef ca[]    = {kv, feat_list};
+        feat_list = LLVMBuildCall2(ctx.builder, cons_ft, cons_fn, ca, 2, "feat_list");
     }
+
     ast_free(feat_ast);
     Type *ft = type_list(type_keyword());
     LLVMTypeRef flt = type_to_llvm(&ctx, ft);
@@ -514,6 +521,36 @@ static CompiledModule *compile_one(const char *source_path,
     LLVMSetLinkage(fgv, LLVMInternalLinkage);
     LLVMBuildStore(ctx.builder, feat_list, fgv);
     env_insert(ctx.env, "*features*", ft, fgv);
+
+/* /// Phase 6: *features* global (builder is now positioned — safe to emit IR) */
+
+/*     AST *feat_ast = detect_features(); */
+/*     LLVMValueRef lf = get_rt_list_empty(&ctx); */
+/*     LLVMValueRef feat_list = LLVMBuildCall2(ctx.builder, */
+/*         LLVMGlobalGetValueType(lf), lf, NULL, 0, "feats"); */
+/*     for (size_t i = 0; i < feat_ast->list.count; i++) { */
+/*         AST *fk = feat_ast->list.items[i]; */
+/*         if (fk->type == AST_KEYWORD) { */
+/*             LLVMValueRef kwf = get_rt_value_keyword(&ctx); */
+/*             LLVMValueRef kws = LLVMBuildGlobalStringPtr(ctx.builder, */
+/*                                                         fk->keyword, "fk"); */
+/*             LLVMValueRef ka[] = {kws}; */
+/*             LLVMValueRef kv   = LLVMBuildCall2(ctx.builder, */
+/*                 LLVMGlobalGetValueType(kwf), kwf, ka, 1, "kv"); */
+/*             LLVMValueRef af   = get_rt_list_append(&ctx); */
+/*             LLVMValueRef aa[] = {feat_list, kv}; */
+/*             LLVMBuildCall2(ctx.builder, LLVMGlobalGetValueType(af), */
+/*                            af, aa, 2, ""); */
+/*         } */
+/*     } */
+/*     ast_free(feat_ast); */
+/*     Type *ft = type_list(type_keyword()); */
+/*     LLVMTypeRef flt = type_to_llvm(&ctx, ft); */
+/*     LLVMValueRef fgv = LLVMAddGlobal(ctx.module, flt, "__features__"); */
+/*     LLVMSetInitializer(fgv, LLVMConstNull(flt)); */
+/*     LLVMSetLinkage(fgv, LLVMInternalLinkage); */
+/*     LLVMBuildStore(ctx.builder, feat_list, fgv); */
+/*     env_insert(ctx.env, "*features*", ft, fgv); */
 
 /// Phase 7: Codegen top-level expressions
 

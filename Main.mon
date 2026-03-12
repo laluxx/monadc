@@ -964,6 +964,7 @@
     pop  %rbp          ; epilogue
     ret))              ; return
 
+
 (define (addnonaked [x :: Int] -> [y :: Int] -> Int)
   :naked False
   (asm add x y))
@@ -1420,7 +1421,8 @@
 ;; Cycle detection.
 
 
-;;; TODO Adresses
+;;; DONE Adresses
+  ;;CLOSED: [2026-03-12 Thu 02:05]
 
 ;; &x; => 0x70A392F  [&x :: Hex]
 
@@ -1428,7 +1430,6 @@
 
 ;; (define (id x) x); Should infer ∀α. α -> α
 
-dlskajd
 
 
 ;;; Repl output

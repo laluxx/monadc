@@ -699,7 +699,8 @@ Token lexer_next_token(Lexer *lex) {
     if (c == '-' && is_digit(peek_ahead(lex, 1))) {
         size_t start = lex->pos;
         advance(lex);
-        while (is_digit(peek(lex)) || peek(lex) == '.') advance(lex);
+        while (is_digit(peek(lex)) ||
+              (peek(lex) == '.' && peek_ahead(lex, 1) != '.')) advance(lex);
         tok.value = my_strndup(lex->source+start, lex->pos-start);
         tok.type  = TOK_NUMBER; return tok;
     }
@@ -717,8 +718,8 @@ Token lexer_next_token(Lexer *lex) {
     // Decimal number
     if (is_digit(c)) {
         size_t start = lex->pos;
-        while (is_digit(peek(lex)) || peek(lex) == '.') advance(lex);
-
+        while (is_digit(peek(lex)) ||
+               (peek(lex) == '.' && peek_ahead(lex, 1) != '.')) advance(lex);
         // Check for ratio (/)
         if (peek(lex) == '/') {
             advance(lex); // consume '/'

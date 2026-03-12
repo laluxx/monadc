@@ -17,8 +17,8 @@ OBJS = $(SRCS:.c=.o)
 
 # Static archive — no rpath/ldconfig needed, works from any directory
 RUNTIME_LIB = libmonad.a
-RUNTIME_SRC = runtime.c
-RUNTIME_OBJ = runtime.o
+RUNTIME_SRC = runtime.c arena.c
+RUNTIME_OBJ = runtime.o arena.o
 
 all: CFLAGS += $(DEBUG_CFLAGS)
 all: $(RUNTIME_LIB) $(TARGET)
@@ -27,8 +27,10 @@ release: CFLAGS += $(RELEASE_CFLAGS)
 release: $(RUNTIME_LIB) $(TARGET)
 
 
-$(RUNTIME_OBJ): $(RUNTIME_SRC)
+$(RUNTIME_OBJ): %.o: %.c
 	$(CC) $(CFLAGS) -fPIC -c $< -o $@
+# $(RUNTIME_OBJ): $(RUNTIME_SRC)
+# 	$(CC) $(CFLAGS) -fPIC -c $< -o $@
 
 $(RUNTIME_LIB): $(RUNTIME_OBJ)
 	ar rcs $@ $^

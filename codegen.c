@@ -477,9 +477,10 @@ static LLVMValueRef ast_to_runtime_value(CodegenContext *ctx, AST *ast_elem) {
 
         case AST_LIST: {
             // Recursively create a runtime list
-            LLVMValueRef list_fn = get_rt_list_create(ctx);
+            LLVMValueRef list_fn = get_rt_list_new(ctx);
             LLVMValueRef list = LLVMBuildCall2(ctx->builder,
-                LLVMGlobalGetValueType(list_fn), list_fn, NULL, 0, "sublist");
+                   LLVMGlobalGetValueType(list_fn), list_fn, NULL, 0, "sublist");
+
 
             for (size_t i = 0; i < ast_elem->list.count; i++) {
                 LLVMValueRef elem_val = ast_to_runtime_value(ctx, ast_elem->list.items[i]);
@@ -970,42 +971,6 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
         return result;
     }
 
-    /* case AST_ADDRESS_OF: { */
-    /*     AST *operand = ast->list.items[0]; */
-
-    /*     if (operand->type == AST_SYMBOL) { */
-    /*         EnvEntry *entry = env_lookup(ctx->env, operand->symbol); */
-    /*         if (!entry) { */
-    /*             CODEGEN_ERROR(ctx, "%s:%d:%d: error: unbound variable: %s", */
-    /*                           parser_get_filename(), ast->line, ast->column, operand->symbol); */
-    /*         } */
-
-    /*         LLVMValueRef addr; */
-    /*         LLVMTypeRef  i64 = LLVMInt64TypeInContext(ctx->context); */
-
-    /*         if (entry->kind == ENV_FUNC) { */
-    /*             /\* Function pointer — ptrtoint of the function value *\/ */
-    /*             addr = LLVMBuildPtrToInt(ctx->builder, entry->func_ref, i64, "fn_addr"); */
-    /*         } else if (entry->kind == ENV_VAR) { */
-    /*             /\* Variable — ptrtoint of the alloca/global pointer *\/ */
-    /*             addr = LLVMBuildPtrToInt(ctx->builder, entry->value, i64, "var_addr"); */
-    /*         } else if (entry->kind == ENV_BUILTIN) { */
-    /*             CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot take address of builtin '%s'", */
-    /*                           parser_get_filename(), ast->line, ast->column, operand->symbol); */
-    /*         } else { */
-    /*             CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot take address of '%s'", */
-    /*                           parser_get_filename(), ast->line, ast->column, operand->symbol); */
-    /*         } */
-
-    /*         result.value = addr; */
-    /*         result.type  = type_hex();   /\* addresses display as hex naturally *\/ */
-    /*         return result; */
-    /*     } */
-
-    /*     CODEGEN_ERROR(ctx, "%s:%d:%d: error: '&' operand must be a symbol", */
-    /*                   parser_get_filename(), ast->line, ast->column); */
-    /* } */
-
     case AST_ARRAY: {
         // Infer element type from first element - preserve literal types!
         Type *elem_type = NULL;
@@ -1058,6 +1023,153 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
         return result;
     }
+
+
+    case AST_RANGE: {
+        LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+        LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+
+        CodegenResult start_r = codegen_expr(ctx, ast->range.start);
+        LLVMValueRef start_val = type_is_float(start_r.type)
+            ? LLVMBuildFPToSI(ctx->builder, start_r.value, i64, "range_start")
+            : start_r.value;
+
+        // ----------------------------------------------------------------
+        // [lo .. hi]  — bracket syntax with end => eager stack array
+        // ----------------------------------------------------------------
+        if (ast->range.is_array) {
+            // Parser already errors on infinite [lo..], so end is always present.
+            CodegenResult end_r = codegen_expr(ctx, ast->range.end);
+            LLVMValueRef end_val = type_is_float(end_r.type)
+                ? LLVMBuildFPToSI(ctx->builder, end_r.value, i64, "range_end")
+                : end_r.value;
+
+            LLVMValueRef step_val;
+            if (ast->range.step != NULL) {
+                CodegenResult step_r = codegen_expr(ctx, ast->range.step);
+                LLVMValueRef next_val = type_is_float(step_r.type)
+                    ? LLVMBuildFPToSI(ctx->builder, step_r.value, i64, "range_next")
+                    : step_r.value;
+                step_val = LLVMBuildSub(ctx->builder, next_val, start_val, "range_step");
+            } else {
+                step_val = LLVMConstInt(i64, 1, 0);
+            }
+
+            // count = (end - start) / step + 1
+            LLVMValueRef one   = LLVMConstInt(i64, 1, 0);
+            LLVMValueRef diff  = LLVMBuildSub(ctx->builder, end_val, start_val, "diff");
+            LLVMValueRef count = LLVMBuildAdd(ctx->builder,
+                                              LLVMBuildSDiv(ctx->builder, diff, step_val, "divn"),
+                                              one, "count");
+
+            // Stack-allocate count × i64
+            LLVMValueRef alloc = LLVMBuildArrayAlloca(ctx->builder, i64, count, "range_arr");
+
+            // Loop: for i = 0; i < count; i++   arr[i] = start + i * step
+            LLVMValueRef func    = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder));
+            LLVMBasicBlockRef loop_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "arr_loop");
+            LLVMBasicBlockRef body_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "arr_body");
+            LLVMBasicBlockRef cont_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "arr_cont");
+
+            LLVMValueRef idx_ptr = LLVMBuildAlloca(ctx->builder, i64, "idx_ptr");
+            LLVMBuildStore(ctx->builder, LLVMConstInt(i64, 0, 0), idx_ptr);
+            LLVMBuildBr(ctx->builder, loop_bb);
+
+            // loop header — check i < count
+            LLVMPositionBuilderAtEnd(ctx->builder, loop_bb);
+            LLVMValueRef idx  = LLVMBuildLoad2(ctx->builder, i64, idx_ptr, "idx");
+            LLVMValueRef cond = LLVMBuildICmp(ctx->builder, LLVMIntSLT, idx, count, "cond");
+            LLVMBuildCondBr(ctx->builder, cond, body_bb, cont_bb);
+
+            // loop body — store start + idx * step
+            LLVMPositionBuilderAtEnd(ctx->builder, body_bb);
+            LLVMValueRef idx2  = LLVMBuildLoad2(ctx->builder, i64, idx_ptr, "idx2");
+            LLVMValueRef elem  = LLVMBuildAdd(ctx->builder, start_val,
+                                              LLVMBuildMul(ctx->builder, idx2, step_val, "scaled"),
+                                              "elem");
+            LLVMValueRef gep   = LLVMBuildGEP2(ctx->builder, i64, alloc, &idx2, 1, "gep");
+            LLVMBuildStore(ctx->builder, elem, gep);
+            LLVMValueRef next  = LLVMBuildAdd(ctx->builder, idx2, one, "next");
+            LLVMBuildStore(ctx->builder, next, idx_ptr);
+            LLVMBuildBr(ctx->builder, loop_bb);
+
+            LLVMPositionBuilderAtEnd(ctx->builder, cont_bb);
+
+            result.value = alloc;
+            result.type  = type_arr(type_int(), 0);  // 0 = dynamic size
+            return result;
+        }
+
+        // ----------------------------------------------------------------
+        // (lo ..)  /  (lo, next ..)  /  (lo .. hi)  /  (lo, next .. hi)
+        // — paren syntax => lazy list
+        // ----------------------------------------------------------------
+        if (ast->range.end == NULL) {
+            // Infinite
+            if (ast->range.step != NULL) {
+                CodegenResult step_r = codegen_expr(ctx, ast->range.step);
+                LLVMValueRef next_val = type_is_float(step_r.type)
+                    ? LLVMBuildFPToSI(ctx->builder, step_r.value, i64, "range_next")
+                    : step_r.value;
+                LLVMValueRef step_val = LLVMBuildSub(ctx->builder, next_val, start_val, "range_step");
+
+                LLVMValueRef fn = get_rt_list_from_step(ctx);
+                LLVMTypeRef ft_args[] = {i64, i64};
+                LLVMValueRef args[] = {start_val, step_val};
+                result.value = LLVMBuildCall2(ctx->builder,
+                                              LLVMFunctionType(ptr, ft_args, 2, 0), fn, args, 2, "list_from_step");
+            } else {
+                LLVMValueRef fn = get_rt_list_from(ctx);
+                LLVMTypeRef ft_args[] = {i64};
+                LLVMValueRef args[] = {start_val};
+                result.value = LLVMBuildCall2(ctx->builder,
+                                              LLVMFunctionType(ptr, ft_args, 1, 0), fn, args, 1, "list_from");
+            }
+        } else {
+            // Finite
+            CodegenResult end_r = codegen_expr(ctx, ast->range.end);
+            LLVMValueRef end_val = type_is_float(end_r.type)
+                ? LLVMBuildFPToSI(ctx->builder, end_r.value, i64, "range_end")
+                : end_r.value;
+
+            if (ast->range.step != NULL) {
+                CodegenResult step_r = codegen_expr(ctx, ast->range.step);
+                LLVMValueRef next_val = type_is_float(step_r.type)
+                    ? LLVMBuildFPToSI(ctx->builder, step_r.value, i64, "range_next")
+                    : step_r.value;
+                LLVMValueRef step_val = LLVMBuildSub(ctx->builder, next_val, start_val, "range_step");
+
+                // count = (end - start) / step + 1
+                LLVMValueRef one   = LLVMConstInt(i64, 1, 0);
+                LLVMValueRef diff  = LLVMBuildSub(ctx->builder, end_val, start_val, "diff");
+                LLVMValueRef count = LLVMBuildAdd(ctx->builder,
+                                                  LLVMBuildSDiv(ctx->builder, diff, step_val, "divn"),
+                                                  one, "n");
+
+                LLVMValueRef from_fn = get_rt_list_from_step(ctx);
+                LLVMTypeRef ft_from_args[] = {i64, i64};
+                LLVMValueRef from_args[] = {start_val, step_val};
+                LLVMValueRef inf = LLVMBuildCall2(ctx->builder,
+                                                  LLVMFunctionType(ptr, ft_from_args, 2, 0), from_fn, from_args, 2, "inf");
+
+                LLVMValueRef take_fn = get_rt_list_take(ctx);
+                LLVMTypeRef ft_take_args[] = {ptr, i64};
+                LLVMValueRef take_args[] = {inf, count};
+                result.value = LLVMBuildCall2(ctx->builder,
+                                              LLVMFunctionType(ptr, ft_take_args, 2, 0), take_fn, take_args, 2, "range_step");
+            } else {
+                LLVMValueRef fn = get_rt_list_range(ctx);
+                LLVMTypeRef ft_args[] = {i64, i64};
+                LLVMValueRef args[] = {start_val, end_val};
+                result.value = LLVMBuildCall2(ctx->builder,
+                                              LLVMFunctionType(ptr, ft_args, 2, 0), fn, args, 2, "range");
+            }
+        }
+
+        result.type = type_list(NULL);
+        return result;
+    }
+
     case AST_LIST: {
         if (ast->list.count == 0) {
             CODEGEN_ERROR(ctx, "%s:%d:%d: error: empty list not supported",
@@ -1542,7 +1654,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 // Handle different quoted types
                 if (quoted->type == AST_LIST) {
                     // Create runtime list
-                    LLVMValueRef list_fn = get_rt_list_create(ctx);
+                    LLVMValueRef list_fn = get_rt_list_new(ctx);
                     LLVMValueRef list = LLVMBuildCall2(ctx->builder,
                                                        LLVMGlobalGetValueType(list_fn), list_fn, NULL, 0, "list");
 
@@ -2140,10 +2252,10 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             }
 
 
-            // (list) -> List  — empty list
+            // (list) -> List  — new list (empty list)
             if (strcmp(head->symbol, "list") == 0) {
                 LLVMTypeRef  ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-                LLVMValueRef fn  = get_rt_list_create(ctx);
+                LLVMValueRef fn  = get_rt_list_new(ctx);  // was get_rt_list_empty
                 LLVMTypeRef  ft  = LLVMFunctionType(ptr, NULL, 0, 0);
                 result.value = LLVMBuildCall2(ctx->builder, ft, fn, NULL, 0, "list");
                 result.type  = type_list(NULL);
@@ -2205,6 +2317,53 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 result.type  = type_unknown();
                 return result;
             }
+
+            // (take n xs) -> List
+            if (strcmp(head->symbol, "take") == 0) {
+                LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+                CodegenResult n_r    = codegen_expr(ctx, ast->list.items[1]);
+                CodegenResult list_r = codegen_expr(ctx, ast->list.items[2]);
+                LLVMValueRef n_val = type_is_float(n_r.type)
+                    ? LLVMBuildFPToSI(ctx->builder, n_r.value, i64, "n") : n_r.value;
+
+                if (list_r.type && list_r.type->kind == TYPE_STRING) {
+                    LLVMValueRef fn = get_rt_string_take(ctx);
+                    LLVMTypeRef ft_args[] = {ptr, i64};
+                    LLVMTypeRef ft = LLVMFunctionType(ptr, ft_args, 2, 0);
+                    LLVMValueRef args[] = {list_r.value, n_val};
+                    result.value = LLVMBuildCall2(ctx->builder, ft, fn, args, 2, "take_str");
+                    result.type  = type_string();
+                    return result;
+                }
+
+                LLVMValueRef fn = get_rt_list_take(ctx);
+                LLVMTypeRef ft_args[] = {ptr, i64};
+                LLVMTypeRef ft = LLVMFunctionType(ptr, ft_args, 2, 0);
+                LLVMValueRef args[] = {list_r.value, n_val};
+                result.value = LLVMBuildCall2(ctx->builder, ft, fn, args, 2, "take");
+                result.type  = type_list(NULL);
+                return result;
+            }
+
+
+            // (drop n xs) -> List
+            if (strcmp(head->symbol, "drop") == 0) {
+                LLVMTypeRef  ptr     = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMTypeRef  i64     = LLVMInt64TypeInContext(ctx->context);
+                CodegenResult n_r    = codegen_expr(ctx, ast->list.items[1]);
+                CodegenResult list_r = codegen_expr(ctx, ast->list.items[2]);
+                LLVMValueRef  n_val  = type_is_float(n_r.type)
+                    ? LLVMBuildFPToSI(ctx->builder, n_r.value, i64, "n") : n_r.value;
+                LLVMValueRef  fn     = get_rt_list_drop(ctx);
+                LLVMTypeRef   ft_args[] = {ptr, i64};
+                LLVMTypeRef   ft     = LLVMFunctionType(ptr, ft_args, 2, 0);
+                LLVMValueRef  args[] = {list_r.value, n_val};
+                result.value = LLVMBuildCall2(ctx->builder, ft, fn, args, 2, "drop");
+                result.type  = type_list(NULL);
+                return result;
+            }
+
 
             // (show-value v) — print any RuntimeValue* with newline
             if (strcmp(head->symbol, "show-value") == 0) {
@@ -3644,4 +3803,7 @@ void register_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "round", 1,  0, "Round to nearest integer");
     env_insert_builtin(ctx->env, "min",   2, -1, "Minimum value");
     env_insert_builtin(ctx->env, "max",   2, -1, "Maximum value");
+
+    env_insert_builtin(ctx->env, "take", 2, 0, "Take n elements from a (possibly infinite) list");
+    env_insert_builtin(ctx->env, "drop", 2, 0, "Drop n elements from a list");
 }

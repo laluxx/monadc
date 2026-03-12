@@ -1,214 +1,754 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "arena.h"
 #include "runtime.h"
 
-/// Runtime List Implementation
+static inline ConsCell     *heap_cons_cell(void)    { return malloc(sizeof(ConsCell));     }
+static inline RuntimeList  *heap_list_wrapper(void) { return malloc(sizeof(RuntimeList));  }
+static inline RuntimeValue *heap_value(void)        { return malloc(sizeof(RuntimeValue)); }
 
-RuntimeList *rt_list_create(void) {
-    RuntimeList *list = malloc(sizeof(RuntimeList));
-    list->head = NULL;
-    list->length = 0;
-    return list;
+
+volatile int rt_interrupted = 0;
+
+//  Global evaluation arena
+//
+//  All hot-path allocations (thunks, list cells, env structs, int/float/char
+//  RuntimeValues) come from here.  The REPL resets this after every expression
+//  so memory is reclaimed in bulk — zero per-object free overhead.
+//
+//  Initialised by:
+//    repl_init()          -> arena_init(&g_eval_arena, 4 * 1024 * 1024)
+//    compile_one()        -> arena_init(&g_eval_arena, 4 * 1024 * 1024)
+//
+//  Reset by:
+//    repl_eval_line()     -> arena_reset(&g_eval_arena)  (all 4 call sites)
+//    repl_sigint_handler  -> arena_reset(&g_eval_arena)
+Arena g_eval_arena;
+
+//  Step 2 — Integer interning cache
+//
+//  For the extremely common case of small integers (0..INT_CACHE_MAX inclusive)
+//  we return a pointer into a static array that is initialised once.
+//  rt_value_int() for these values does zero allocations.
+#define INT_CACHE_MIN 0
+#define INT_CACHE_MAX 65536
+#define INT_CACHE_SIZE (INT_CACHE_MAX - INT_CACHE_MIN + 1)
+
+static RuntimeValue  g_int_cache_storage[INT_CACHE_SIZE];
+static int           g_int_cache_ready = 0;
+
+static void int_cache_init(void) {
+    if (g_int_cache_ready) return;
+    for (int i = 0; i < INT_CACHE_SIZE; i++) {
+        g_int_cache_storage[i].type         = RT_INT;
+        g_int_cache_storage[i].data.int_val = (int64_t)(i + INT_CACHE_MIN);
+    }
+    g_int_cache_ready = 1;
 }
 
-RuntimeList *rt_list_cons(RuntimeValue *value, RuntimeList *list) {
-    RuntimeListNode *new_node = malloc(sizeof(RuntimeListNode));
-    new_node->value = value;
-    new_node->next = list->head;
+//  Step 3 — Fused ConsCell
+//
+//  Instead of:
+//    RuntimeList  (2 pointers)  ->  malloc
+//    RuntimeThunk (head)        ->  malloc
+//    RuntimeThunk (tail)        ->  malloc
+//    FromEnv / RangeEnv         ->  malloc
+//    RuntimeValue (int result)  ->  malloc
+//
+//  We allocate ONE ConsCell per cons node (two inlined thunks) from the arena.
+//  RuntimeList becomes a thin wrapper: just a ConsCell pointer.
+//
+//  NULL cell  =>  empty list.
 
-    RuntimeList *new_list = malloc(sizeof(RuntimeList));
-    new_list->head = new_node;
-    new_list->length = list->length + 1;
+// Forward declarations needed by ConsCell forcing helpers
+static RuntimeValue *_force_head(ConsCell *c);
+static RuntimeValue *_force_tail(ConsCell *c);
 
-    return new_list;
+//  Empty list singleton — stack allocated, never freed, never in arena.
+static RuntimeList _empty_list_val = { NULL };
+static RuntimeList *_empty_list    = &_empty_list_val;
+
+///  Internal allocation helpers
+
+static inline ConsCell *alloc_cons_cell(void) {
+    return arena_alloc(&g_eval_arena, sizeof(ConsCell));
 }
 
-void rt_list_append(RuntimeList *list, RuntimeValue *value) {
-    RuntimeListNode *new_node = malloc(sizeof(RuntimeListNode));
-    new_node->value = value;
-    new_node->next = NULL;
+static inline RuntimeList *alloc_list_wrapper(void) {
+    return arena_alloc(&g_eval_arena, sizeof(RuntimeList));
+}
 
-    if (list->head == NULL) {
-        list->head = new_node;
-    } else {
-        RuntimeListNode *current = list->head;
-        while (current->next != NULL) {
-            current = current->next;
-        }
-        current->next = new_node;
+static inline RuntimeValue *alloc_value(void) {
+    return arena_alloc(&g_eval_arena, sizeof(RuntimeValue));
+}
+
+///  Thunk forcing
+// two specialised versions for head and tail (Step 3)
+
+static RuntimeValue *_force_head(ConsCell *c) {
+    if (c->head_forced) return c->head_val;
+    RuntimeValue *result = c->head_fn(c->head_env);
+    // Unwrap nested RT_THUNK wrappers
+    while (result && result->type == RT_THUNK) {
+        RuntimeThunk *inner = result->data.thunk_val;
+        if (inner->forced) { result = inner->value; break; }
+        result        = inner->fn(inner->env);
+        inner->value  = result;
+        inner->forced = 1;
+    }
+    c->head_val    = result;
+    c->head_forced = 1;
+    return result;
+}
+
+static RuntimeValue *_force_tail(ConsCell *c) {
+    if (c->tail_forced) return c->tail_val;
+    RuntimeValue *result = c->tail_fn(c->tail_env);
+    while (result && result->type == RT_THUNK) {
+        RuntimeThunk *inner = result->data.thunk_val;
+        if (inner->forced) { result = inner->value; break; }
+        result        = inner->fn(inner->env);
+        inner->value  = result;
+        inner->forced = 1;
+    }
+    c->tail_val    = result;
+    c->tail_forced = 1;
+    return result;
+}
+
+//  Legacy RuntimeThunk API  (used by rt_force, rt_thunk_of_value, etc.)
+//  These are kept for compatibility with generated code that calls rt_force().
+RuntimeThunk *rt_thunk_of_value(RuntimeValue *val) {
+    RuntimeThunk *t = arena_alloc(&g_eval_arena, sizeof(RuntimeThunk));
+    t->fn     = NULL;
+    t->env    = NULL;
+    t->value  = val;
+    t->forced = 1;
+    return t;
+}
+
+RuntimeThunk *rt_thunk_create(ThunkFn fn, void *env) {
+    RuntimeThunk *t = arena_alloc(&g_eval_arena, sizeof(RuntimeThunk));
+    t->fn     = fn;
+    t->env    = env;
+    t->value  = NULL;
+    t->forced = 0;
+    return t;
+}
+
+RuntimeValue *rt_force(RuntimeThunk *thunk) {
+    if (!thunk) return rt_value_nil();
+    if (thunk->forced) return thunk->value;
+
+    RuntimeValue *result = thunk->fn(thunk->env);
+
+    while (result && result->type == RT_THUNK) {
+        RuntimeThunk *inner = result->data.thunk_val;
+        if (inner->forced) { result = inner->value; break; }
+        result        = inner->fn(inner->env);
+        inner->value  = result;
+        inner->forced = 1;
     }
 
-    list->length++;
+    thunk->value  = result;
+    thunk->forced = 1;
+    return result;
 }
+
+///  Lazy list public API
+
+RuntimeList *rt_list_empty(void) {
+    return _empty_list;
+}
+
+RuntimeList *rt_list_new(void) {
+    RuntimeList *lst = heap_list_wrapper();
+    lst->cell = NULL;
+    return lst;
+}
+
+int rt_list_is_empty_list(RuntimeList *list) {
+    return (!list || list->cell == NULL) ? 1 : 0;
+}
+
+// Low-level lazy cons: caller supplies already-constructed thunk function +
+// env for both head and tail.  Used by the range generators below.
+// Returns a RuntimeList* pointing at a freshly arena-allocated ConsCell.
+static RuntimeList *lazy_cons_fns(ThunkFn hfn, void *henv,
+                                  ThunkFn tfn, void *tenv) {
+    ConsCell *c   = alloc_cons_cell();
+    c->head_fn     = hfn;
+    c->head_env    = henv;
+    c->head_val    = NULL;
+    c->head_forced = 0;
+    c->tail_fn     = tfn;
+    c->tail_env    = tenv;
+    c->tail_val    = NULL;
+    c->tail_forced = 0;
+
+    RuntimeList *lst = alloc_list_wrapper();
+    lst->cell = c;
+    return lst;
+}
+
+// Public: takes pre-built legacy RuntimeThunk* for compatibility with codegen
+// that still calls rt_list_lazy_cons directly.
+RuntimeList *rt_list_lazy_cons(RuntimeThunk *head_thunk, RuntimeThunk *tail_thunk) {
+    ConsCell *c   = alloc_cons_cell();
+
+    // Head — if already forced, short-circuit
+    if (head_thunk && head_thunk->forced) {
+        c->head_fn     = NULL;
+        c->head_env    = NULL;
+        c->head_val    = head_thunk->value;
+        c->head_forced = 1;
+    } else if (head_thunk) {
+        c->head_fn     = head_thunk->fn;
+        c->head_env    = head_thunk->env;
+        c->head_val    = NULL;
+        c->head_forced = 0;
+    } else {
+        c->head_fn = NULL; c->head_env = NULL;
+        c->head_val = NULL; c->head_forced = 0;
+    }
+
+    // Tail
+    if (tail_thunk && tail_thunk->forced) {
+        c->tail_fn     = NULL;
+        c->tail_env    = NULL;
+        c->tail_val    = tail_thunk->value;
+        c->tail_forced = 1;
+    } else if (tail_thunk) {
+        c->tail_fn     = tail_thunk->fn;
+        c->tail_env    = tail_thunk->env;
+        c->tail_val    = NULL;
+        c->tail_forced = 0;
+    } else {
+        c->tail_fn = NULL; c->tail_env = NULL;
+        c->tail_val = NULL; c->tail_forced = 1; // NULL tail = end of list
+    }
+
+    RuntimeList *lst = alloc_list_wrapper();
+    lst->cell = c;
+    return lst;
+}
+
+// Strict cons: head is already evaluated, tail is already a RuntimeList*.
+RuntimeList *rt_list_cons(RuntimeValue *head_val, RuntimeList *tail_list) {
+    ConsCell *c    = heap_cons_cell();
+    c->head_fn     = NULL;
+    c->head_env    = NULL;
+    c->head_val    = head_val;
+    c->head_forced = 1;
+    c->tail_fn     = NULL;
+    c->tail_env    = NULL;
+
+    RuntimeValue *tv  = heap_value();
+    tv->type          = RT_LIST;
+    tv->data.list_val = tail_list;
+    c->tail_val    = tv;
+    c->tail_forced = 1;
+
+    RuntimeList *lst = heap_list_wrapper();
+    lst->cell = c;
+    return lst;
+}
+
+
+/* RuntimeList *rt_list_cons(RuntimeValue *head_val, RuntimeList *tail_list) { */
+/*     ConsCell *c   = alloc_cons_cell(); */
+/*     c->head_fn     = NULL; */
+/*     c->head_env    = NULL; */
+/*     c->head_val    = head_val; */
+/*     c->head_forced = 1; */
+/*     c->tail_fn     = NULL; */
+/*     c->tail_env    = NULL; */
+/*     // Store the tail list pointer directly as an RT_LIST RuntimeValue */
+/*     RuntimeValue *tv = alloc_value(); */
+/*     tv->type           = RT_LIST; */
+/*     tv->data.list_val  = tail_list; */
+/*     c->tail_val    = tv; */
+/*     c->tail_forced = 1; */
+
+/*     RuntimeList *lst = alloc_list_wrapper(); */
+/*     lst->cell = c; */
+/*     return lst; */
+/* } */
 
 RuntimeValue *rt_list_car(RuntimeList *list) {
-    if (list == NULL || list->head == NULL) {
-        return rt_value_nil();
-    }
-    return list->head->value;
+    if (rt_list_is_empty_list(list)) return rt_value_nil();
+    return _force_head(list->cell);
 }
 
 RuntimeList *rt_list_cdr(RuntimeList *list) {
-    if (list == NULL || list->head == NULL) {
-        return rt_list_create();
-    }
+    if (rt_list_is_empty_list(list)) return rt_list_empty();
 
-    RuntimeList *new_list = malloc(sizeof(RuntimeList));
-    new_list->head = list->head->next;
-    new_list->length = list->length > 0 ? list->length - 1 : 0;
-
-    return new_list;
+    RuntimeValue *tv = _force_tail(list->cell);
+    if (!tv || tv->type == RT_NIL)  return rt_list_empty();
+    if (tv->type == RT_LIST)        return tv->data.list_val;
+    return rt_list_empty();
 }
 
 RuntimeValue *rt_list_nth(RuntimeList *list, int64_t index) {
-    if (list == NULL || list->head == NULL || index < 0) {
-        return rt_value_nil();
+    if (index < 0) return rt_value_nil();
+    RuntimeList *cur = list;
+    for (int64_t i = 0; i < index; i++) {
+        if (rt_list_is_empty_list(cur)) return rt_value_nil();
+        cur = rt_list_cdr(cur);
     }
-
-    RuntimeListNode *current = list->head;
-    int64_t i = 0;
-
-    while (current != NULL && i < index) {
-        current = current->next;
-        i++;
-    }
-
-    if (current == NULL) {
-        return rt_value_nil();
-    }
-
-    return current->value;
+    return rt_list_car(cur);
 }
 
 int64_t rt_list_length(RuntimeList *list) {
-    if (list == NULL) {
-        return 0;
+    int64_t len = 0;
+    RuntimeList *cur = list;
+    while (!rt_list_is_empty_list(cur)) {
+        len++;
+        cur = rt_list_cdr(cur);
     }
-    return list->length;
+    return len;
 }
 
-int rt_list_is_empty(RuntimeList *list) {
-    return (list == NULL || list->head == NULL) ? 1 : 0;
+// Destructive append of an already-evaluated value.
+// Walks the spine and attaches a new strict cons cell at the end.
+// Used by printing helpers and rt_list_take.
+
+
+void rt_list_append(RuntimeList *list, RuntimeValue *value) {
+    if (!list) return;
+
+    ConsCell *new_c    = heap_cons_cell();
+    new_c->head_fn     = NULL;
+    new_c->head_env    = NULL;
+    new_c->head_val    = value;
+    new_c->head_forced = 1;
+    new_c->tail_fn     = NULL;
+    new_c->tail_env    = NULL;
+    new_c->tail_val    = NULL;
+    new_c->tail_forced = 1;
+
+    RuntimeList *new_cell = heap_list_wrapper();
+    new_cell->cell = new_c;
+
+    // If list is empty (cell == NULL), seed it in-place.
+    // IMPORTANT: callers must NEVER pass the global _empty_list singleton here —
+    // they must pass their own heap_list_wrapper() with cell=NULL.
+    if (list->cell == NULL) {
+        list->cell = new_c;
+        return;
+    }
+
+    RuntimeList *cur = list;
+    while (1) {
+        ConsCell *cc = cur->cell;
+        if (!cc) break;
+
+        if (!cc->tail_forced) {
+            RuntimeValue *tv = _force_tail(cc);
+            if (!tv || tv->type == RT_NIL ||
+                (tv->type == RT_LIST && rt_list_is_empty_list(tv->data.list_val))) {
+                RuntimeValue *link  = heap_value();
+                link->type          = RT_LIST;
+                link->data.list_val = new_cell;
+                cc->tail_val    = link;
+                cc->tail_forced = 1;
+                return;
+            }
+            if (tv->type == RT_LIST) { cur = tv->data.list_val; continue; }
+            RuntimeValue *link  = heap_value();
+            link->type          = RT_LIST;
+            link->data.list_val = new_cell;
+            cc->tail_val    = link;
+            cc->tail_forced = 1;
+            return;
+        }
+
+        RuntimeValue *tv = cc->tail_val;
+        if (!tv || tv->type == RT_NIL ||
+            (tv->type == RT_LIST && rt_list_is_empty_list(tv->data.list_val))) {
+            RuntimeValue *link  = heap_value();
+            link->type          = RT_LIST;
+            link->data.list_val = new_cell;
+            cc->tail_val    = link;
+            cc->tail_forced = 1;
+            return;
+        }
+        if (tv->type == RT_LIST) { cur = tv->data.list_val; continue; }
+        RuntimeValue *link  = heap_value();
+        link->type          = RT_LIST;
+        link->data.list_val = new_cell;
+        cc->tail_val    = link;
+        cc->tail_forced = 1;
+        return;
+    }
 }
 
-// rt_make_list — create a list of n copies of fill_val
-RuntimeList *rt_make_list(int64_t n, RuntimeValue *fill_val) {
-    RuntimeList *list = rt_list_create();
-    for (int64_t i = 0; i < n; i++)
-        rt_list_append(list, fill_val);
-    return list;
-}
+/* void rt_list_append(RuntimeList *list, RuntimeValue *value) { */
+/*     if (!list) return; */
 
-// rt_list_append_lists — pure concat, returns new list
+/*     // New tail cons cell — strictly forced immediately */
+/*     ConsCell *new_c   = alloc_cons_cell(); */
+/*     new_c->head_fn     = NULL; new_c->head_env = NULL; */
+/*     new_c->head_val    = value; new_c->head_forced = 1; */
+/*     new_c->tail_fn     = NULL; new_c->tail_env = NULL; */
+/*     new_c->tail_val    = NULL; new_c->tail_forced = 1; // NULL = end */
+
+/*     RuntimeList *new_cell = alloc_list_wrapper(); */
+/*     new_cell->cell = new_c; */
+
+/*     if (rt_list_is_empty_list(list)) { */
+/*         // Promote the empty-list wrapper in-place by swapping its cell pointer. */
+/*         // Safe because _empty_list is a static singleton — we only mutate the */
+/*         // caller's RuntimeList*, not the global singleton. */
+/*         list->cell = new_c; */
+/*         return; */
+/*     } */
+
+/*     // Walk to last cell whose tail is NULL (end-of-list sentinel) */
+/*     RuntimeList *cur = list; */
+/*     while (1) { */
+/*         ConsCell *cc = cur->cell; */
+/*         if (!cc) break; */
+
+/*         // If tail not yet forced, force it to find the end */
+/*         if (!cc->tail_forced) { */
+/*             RuntimeValue *tv = _force_tail(cc); */
+/*             if (!tv || tv->type == RT_NIL) { */
+/*                 // Attach here */
+/*                 RuntimeValue *link = alloc_value(); */
+/*                 link->type          = RT_LIST; */
+/*                 link->data.list_val = new_cell; */
+/*                 cc->tail_val    = link; */
+/*                 cc->tail_forced = 1; */
+/*                 return; */
+/*             } */
+/*             if (tv->type == RT_LIST) { */
+/*                 RuntimeList *next = tv->data.list_val; */
+/*                 if (rt_list_is_empty_list(next)) { */
+/*                     RuntimeValue *link = alloc_value(); */
+/*                     link->type          = RT_LIST; */
+/*                     link->data.list_val = new_cell; */
+/*                     cc->tail_val    = link; */
+/*                     cc->tail_forced = 1; */
+/*                     return; */
+/*                 } */
+/*                 cur = next; */
+/*                 continue; */
+/*             } */
+/*             // Some other terminal */
+/*             RuntimeValue *link = alloc_value(); */
+/*             link->type          = RT_LIST; */
+/*             link->data.list_val = new_cell; */
+/*             cc->tail_val    = link; */
+/*             cc->tail_forced = 1; */
+/*             return; */
+/*         } */
+
+/*         // Tail already forced */
+/*         RuntimeValue *tv = cc->tail_val; */
+/*         if (!tv || tv->type == RT_NIL) { */
+/*             RuntimeValue *link = alloc_value(); */
+/*             link->type          = RT_LIST; */
+/*             link->data.list_val = new_cell; */
+/*             cc->tail_val    = link; */
+/*             cc->tail_forced = 1; */
+/*             return; */
+/*         } */
+/*         if (tv->type == RT_LIST) { */
+/*             RuntimeList *next = tv->data.list_val; */
+/*             if (rt_list_is_empty_list(next)) { */
+/*                 RuntimeValue *link = alloc_value(); */
+/*                 link->type          = RT_LIST; */
+/*                 link->data.list_val = new_cell; */
+/*                 cc->tail_val    = link; */
+/*                 cc->tail_forced = 1; */
+/*                 return; */
+/*             } */
+/*             cur = next; */
+/*             continue; */
+/*         } */
+/*         // Terminal non-list tail */
+/*         RuntimeValue *link = alloc_value(); */
+/*         link->type          = RT_LIST; */
+/*         link->data.list_val = new_cell; */
+/*         cc->tail_val    = link; */
+/*         cc->tail_forced = 1; */
+/*         return; */
+/*     } */
+/* } */
+
+///  Pure lazy append
+typedef struct { RuntimeList *rest; RuntimeList *b; } AppendEnv;
+static RuntimeValue *_rt_append_tail_fn(void *e);
+
 RuntimeList *rt_list_append_lists(RuntimeList *a, RuntimeList *b) {
-    RuntimeList *out = rt_list_create();
-    RuntimeListNode *cur = a->head;
-    while (cur) { rt_list_append(out, cur->value); cur = cur->next; }
-    cur = b->head;
-    while (cur) { rt_list_append(out, cur->value); cur = cur->next; }
+    if (rt_list_is_empty_list(a)) return b;
+
+    // Head: share directly — it's immutable after creation
+    // We need to wrap the head as a thunk fn for lazy_cons_fns.
+    // Simplest: build a fused cell where head is already forced.
+    ConsCell *c   = alloc_cons_cell();
+    // Copy head from a
+    c->head_fn     = NULL;
+    c->head_env    = NULL;
+    c->head_val    = _force_head(a->cell);
+    c->head_forced = 1;
+
+    // Lazy tail
+    AppendEnv *env = arena_alloc(&g_eval_arena, sizeof(AppendEnv));
+    env->rest = rt_list_cdr(a);
+    env->b    = b;
+    c->tail_fn     = _rt_append_tail_fn;
+    c->tail_env    = env;
+    c->tail_val    = NULL;
+    c->tail_forced = 0;
+
+    RuntimeList *lst = alloc_list_wrapper();
+    lst->cell = c;
+    return lst;
+}
+
+static RuntimeValue *_rt_append_tail_fn(void *e) {
+    AppendEnv   *env    = (AppendEnv *)e;
+    // no free — arena owns env
+    RuntimeList *result = rt_list_append_lists(env->rest, env->b);
+    RuntimeValue *rv = alloc_value();
+    rv->type           = RT_LIST;
+    rv->data.list_val  = result;
+    return rv;
+}
+
+RuntimeList *rt_list_copy(RuntimeList *src) {
+    RuntimeList *out = heap_list_wrapper();
+    out->cell = NULL;
+    RuntimeList *cur = src;
+    while (!rt_list_is_empty_list(cur)) {
+        rt_list_append(out, rt_list_car(cur));
+        cur = rt_list_cdr(cur);
+    }
     return out;
 }
 
-// rt_list_copy — shallow copy
-RuntimeList *rt_list_copy(RuntimeList *src) {
-    RuntimeList *out = rt_list_create();
-    RuntimeListNode *cur = src->head;
-    while (cur) { rt_list_append(out, cur->value); cur = cur->next; }
+/* RuntimeList *rt_list_copy(RuntimeList *src) { */
+/*     if (rt_list_is_empty_list(src)) return rt_list_empty(); */
+/*     RuntimeList *out = rt_list_empty(); */
+/*     RuntimeList *cur = src; */
+/*     while (!rt_list_is_empty_list(cur)) { */
+/*         rt_list_append(out, rt_list_car(cur)); */
+/*         cur = rt_list_cdr(cur); */
+/*     } */
+/*     return out; */
+/* } */
+
+RuntimeList *rt_make_list(int64_t n, RuntimeValue *fill_val) {
+    RuntimeList *out = heap_list_wrapper();
+    out->cell = NULL;
+    for (int64_t i = 0; i < n; i++)
+        rt_list_append(out, fill_val);
     return out;
 }
+
+/* RuntimeList *rt_make_list(int64_t n, RuntimeValue *fill_val) { */
+/*     RuntimeList *out = rt_list_empty(); */
+/*     for (int64_t i = 0; i < n; i++) */
+/*         rt_list_append(out, fill_val); */
+/*     return out; */
+/* } */
+
+//  Range / infinite list constructors — fully fused, no separate env malloc
+//
+//  Each generator stores its state directly inside the ConsCell's tail_env.
+//  Because tail_env is a void*, and our env structs are ≤ 16 bytes, we
+//  arena_alloc them once and they live until the arena is reset.
+
+// --- [lo .. hi] range ---
+typedef struct { int64_t lo; int64_t hi; } RangeEnv;
+
+static RuntimeValue *_rt_range_tail_fn(void *e) {
+    RangeEnv *env = (RangeEnv *)e;
+    // no free — arena owns it
+    RuntimeValue *rv = alloc_value();
+    rv->type          = RT_LIST;
+    rv->data.list_val = rt_list_range(env->lo, env->hi);
+    return rv;
+}
+
+// Head thunk function: env is a pointer to int64_t (the value itself)
+static RuntimeValue *_rt_int_head_fn(void *e) {
+    int64_t *p = (int64_t *)e;
+    return rt_value_int(*p);
+}
+
+RuntimeList *rt_list_range(int64_t lo, int64_t hi) {
+    if (lo > hi) return rt_list_empty();
+
+    // Fused cell: head is rt_value_int(lo) — may return cached pointer
+    RuntimeValue *head_val = rt_value_int(lo);
+
+    ConsCell *c    = alloc_cons_cell();
+    c->head_fn     = NULL;
+    c->head_env    = NULL;
+    c->head_val    = head_val;
+    c->head_forced = 1;
+
+    RangeEnv *env  = arena_alloc(&g_eval_arena, sizeof(RangeEnv));
+    env->lo        = lo + 1;
+    env->hi        = hi;
+    c->tail_fn     = _rt_range_tail_fn;
+    c->tail_env    = env;
+    c->tail_val    = NULL;
+    c->tail_forced = 0;
+
+    RuntimeList *lst = alloc_list_wrapper();
+    lst->cell = c;
+    return lst;
+}
+
+// --- [lo ..] infinite ---
+typedef struct { int64_t n; } FromEnv;
+
+static RuntimeValue *_rt_from_tail_fn(void *e) {
+    FromEnv *env = (FromEnv *)e;
+    // no free — arena owns it
+    RuntimeValue *rv = alloc_value();
+    rv->type          = RT_LIST;
+    rv->data.list_val = rt_list_from(env->n);
+    return rv;
+}
+
+RuntimeList *rt_list_from(int64_t lo) {
+    RuntimeValue *head_val = rt_value_int(lo);
+
+    ConsCell *c    = alloc_cons_cell();
+    c->head_fn     = NULL;
+    c->head_env    = NULL;
+    c->head_val    = head_val;
+    c->head_forced = 1;
+
+    FromEnv *env   = arena_alloc(&g_eval_arena, sizeof(FromEnv));
+    env->n         = lo + 1;
+    c->tail_fn     = _rt_from_tail_fn;
+    c->tail_env    = env;
+    c->tail_val    = NULL;
+    c->tail_forced = 0;
+
+    RuntimeList *lst = alloc_list_wrapper();
+    lst->cell = c;
+    return lst;
+}
+
+// --- [lo, next ..] arithmetic sequence ---
+typedef struct { int64_t n; int64_t step; } FromStepEnv;
+
+static RuntimeValue *_rt_from_step_tail_fn(void *e) {
+    FromStepEnv *env = (FromStepEnv *)e;
+    // no free — arena owns it
+    RuntimeValue *rv = alloc_value();
+    rv->type          = RT_LIST;
+    rv->data.list_val = rt_list_from_step(env->n, env->step);
+    return rv;
+}
+
+RuntimeList *rt_list_from_step(int64_t lo, int64_t step) {
+    RuntimeValue *head_val = rt_value_int(lo);
+
+    ConsCell *c    = alloc_cons_cell();
+    c->head_fn     = NULL;
+    c->head_env    = NULL;
+    c->head_val    = head_val;
+    c->head_forced = 1;
+
+    FromStepEnv *env = arena_alloc(&g_eval_arena, sizeof(FromStepEnv));
+    env->n           = lo + step;
+    env->step        = step;
+    c->tail_fn       = _rt_from_step_tail_fn;
+    c->tail_env      = env;
+    c->tail_val      = NULL;
+    c->tail_forced   = 0;
+
+    RuntimeList *lst = alloc_list_wrapper();
+    lst->cell = c;
+    return lst;
+}
+
+// --- take / drop ---
+
+RuntimeList *rt_list_take(RuntimeList *list, int64_t n) {
+    if (n <= 0 || rt_list_is_empty_list(list)) return rt_list_empty();
+    RuntimeList *out = heap_list_wrapper();
+    out->cell = NULL;
+    RuntimeList *cur = list;
+    for (int64_t i = 0; i < n && !rt_list_is_empty_list(cur); i++) {
+        rt_list_append(out, rt_list_car(cur));
+        cur = rt_list_cdr(cur);
+    }
+    return out;
+}
+
+/* RuntimeList *rt_list_take(RuntimeList *list, int64_t n) { */
+/*     if (n <= 0 || rt_list_is_empty_list(list)) return rt_list_empty(); */
+/*     RuntimeList *out = rt_list_empty(); */
+/*     RuntimeList *cur = list; */
+/*     for (int64_t i = 0; i < n && !rt_list_is_empty_list(cur); i++) { */
+/*         rt_list_append(out, rt_list_car(cur)); */
+/*         cur = rt_list_cdr(cur); */
+/*     } */
+/*     return out; */
+/* } */
+
+char *rt_string_take(const char *s, int64_t n) {
+    if (!s) return strdup("");
+    int64_t len = (int64_t)strlen(s);
+    if (n < 0) n = 0;
+    if (n > len) n = len;
+    char *result = malloc(n + 1);
+    memcpy(result, s, n);
+    result[n] = '\0';
+    return result;
+}
+
+RuntimeList *rt_list_drop(RuntimeList *list, int64_t n) {
+    RuntimeList *cur = list;
+    for (int64_t i = 0; i < n && !rt_list_is_empty_list(cur); i++)
+        cur = rt_list_cdr(cur);
+    return cur;
+}
+
+///  Equality
 
 int rt_equal_p(RuntimeValue *a, RuntimeValue *b) {
     if (!a && !b) return 1;
     if (!a || !b) return 0;
+    if (a->type == RT_THUNK) a = rt_force(a->data.thunk_val);
+    if (b->type == RT_THUNK) b = rt_force(b->data.thunk_val);
     if (a->type == RT_NIL && b->type == RT_NIL) return 1;
     if (a->type != b->type) return 0;
     switch (a->type) {
-        case RT_INT:    return a->data.int_val == b->data.int_val;
+        case RT_INT:    return a->data.int_val   == b->data.int_val;
         case RT_FLOAT:  return a->data.float_val == b->data.float_val;
-        case RT_CHAR:   return a->data.char_val == b->data.char_val;
+        case RT_CHAR:   return a->data.char_val  == b->data.char_val;
         case RT_STRING: return strcmp(a->data.string_val, b->data.string_val) == 0;
         case RT_NIL:    return 1;
         case RT_LIST: {
             RuntimeList *la = a->data.list_val;
             RuntimeList *lb = b->data.list_val;
-            if (!la && !lb) return 1;
-            if (!la || !lb) return 0;
-            if (la->length != lb->length) return 0;
-            RuntimeListNode *na = la->head;
-            RuntimeListNode *nb = lb->head;
-            while (na && nb) {
-                if (!rt_equal_p(na->value, nb->value)) return 0;
-                na = na->next;
-                nb = nb->next;
+            while (!rt_list_is_empty_list(la) && !rt_list_is_empty_list(lb)) {
+                if (!rt_equal_p(rt_list_car(la), rt_list_car(lb))) return 0;
+                la = rt_list_cdr(la);
+                lb = rt_list_cdr(lb);
             }
-            return 1;
+            return rt_list_is_empty_list(la) && rt_list_is_empty_list(lb);
         }
         default: return 0;
     }
 }
 
-/// Runtime Value Construction
-
-RuntimeValue *rt_value_int(int64_t val) {
-    RuntimeValue *v = malloc(sizeof(RuntimeValue));
-    v->type = RT_INT;
-    v->data.int_val = val;
-    return v;
-}
-
-RuntimeValue *rt_value_float(double val) {
-    RuntimeValue *v = malloc(sizeof(RuntimeValue));
-    v->type = RT_FLOAT;
-    v->data.float_val = val;
-    return v;
-}
-
-RuntimeValue *rt_value_char(char val) {
-    RuntimeValue *v = malloc(sizeof(RuntimeValue));
-    v->type = RT_CHAR;
-    v->data.char_val = val;
-    return v;
-}
-
-RuntimeValue *rt_value_string(const char *val) {
-    RuntimeValue *v = malloc(sizeof(RuntimeValue));
-    v->type = RT_STRING;
-    v->data.string_val = strdup(val);
-    return v;
-}
-
-RuntimeValue *rt_value_symbol(const char *val) {
-    RuntimeValue *v = malloc(sizeof(RuntimeValue));
-    v->type = RT_SYMBOL;
-    v->data.symbol_val = strdup(val);
-    return v;
-}
-
-RuntimeValue *rt_value_keyword(const char *val) {
-    RuntimeValue *v = malloc(sizeof(RuntimeValue));
-    v->type = RT_KEYWORD;
-    v->data.keyword_val = strdup(val);
-    return v;
-}
-
-RuntimeValue *rt_value_list(RuntimeList *val) {
-    RuntimeValue *v = malloc(sizeof(RuntimeValue));
-    v->type = RT_LIST;
-    v->data.list_val = val;
-    return v;
-}
-
-RuntimeValue *rt_value_nil(void) {
-    RuntimeValue *v = malloc(sizeof(RuntimeValue));
-    v->type = RT_NIL;
-    return v;
-}
-
-/// Unboxing
+///  Unboxing
 
 int64_t rt_unbox_int(RuntimeValue *v) {
     if (!v || v->type == RT_NIL) return 0;
+    if (v->type == RT_THUNK) v = rt_force(v->data.thunk_val);
     if (v->type == RT_INT)   return v->data.int_val;
     if (v->type == RT_FLOAT) return (int64_t)v->data.float_val;
     if (v->type == RT_CHAR)  return (int64_t)v->data.char_val;
@@ -217,6 +757,7 @@ int64_t rt_unbox_int(RuntimeValue *v) {
 
 double rt_unbox_float(RuntimeValue *v) {
     if (!v || v->type == RT_NIL) return 0.0;
+    if (v->type == RT_THUNK) v = rt_force(v->data.thunk_val);
     if (v->type == RT_FLOAT) return v->data.float_val;
     if (v->type == RT_INT)   return (double)v->data.int_val;
     if (v->type == RT_CHAR)  return (double)v->data.char_val;
@@ -225,6 +766,7 @@ double rt_unbox_float(RuntimeValue *v) {
 
 char rt_unbox_char(RuntimeValue *v) {
     if (!v || v->type == RT_NIL) return 0;
+    if (v->type == RT_THUNK) v = rt_force(v->data.thunk_val);
     if (v->type == RT_CHAR) return v->data.char_val;
     if (v->type == RT_INT)  return (char)v->data.int_val;
     return 0;
@@ -232,14 +774,16 @@ char rt_unbox_char(RuntimeValue *v) {
 
 char *rt_unbox_string(RuntimeValue *v) {
     if (!v || v->type == RT_NIL) return "";
+    if (v->type == RT_THUNK) v = rt_force(v->data.thunk_val);
     if (v->type == RT_STRING) return v->data.string_val;
     return "";
 }
 
 RuntimeList *rt_unbox_list(RuntimeValue *v) {
-    if (!v || v->type == RT_NIL) return rt_list_create();
+    if (!v || v->type == RT_NIL) return rt_list_empty();
+    if (v->type == RT_THUNK) v = rt_force(v->data.thunk_val);
     if (v->type == RT_LIST) return v->data.list_val;
-    return rt_list_create();
+    return rt_list_empty();
 }
 
 int rt_value_is_nil(RuntimeValue *v) {
@@ -251,496 +795,521 @@ void rt_print_value_newline(RuntimeValue *v) {
     printf("\n");
 }
 
-/// Runtime Printing
+//  Value construction
+//
+//  HOT PATH (arena):  int, float, char, list, nil, thunk
+//  LONG-LIVED (heap): string, symbol, keyword, ratio, array
+
+RuntimeValue *rt_value_int(int64_t val) {
+    // Step 2: integer interning — zero allocations for 0..65536
+    int_cache_init();
+    if (val >= INT_CACHE_MIN && val <= INT_CACHE_MAX)
+        return &g_int_cache_storage[val - INT_CACHE_MIN];
+    RuntimeValue *v = alloc_value();
+    v->type = RT_INT; v->data.int_val = val; return v;
+}
+
+RuntimeValue *rt_value_float(double val) {
+    RuntimeValue *v = alloc_value();
+    v->type = RT_FLOAT; v->data.float_val = val; return v;
+}
+
+RuntimeValue *rt_value_char(char val) {
+    RuntimeValue *v = alloc_value();
+    v->type = RT_CHAR; v->data.char_val = val; return v;
+}
+
+RuntimeValue *rt_value_list(RuntimeList *val) {
+    RuntimeValue *v = alloc_value();
+    v->type = RT_LIST; v->data.list_val = val; return v;
+}
+
+RuntimeValue *rt_value_nil(void) {
+    RuntimeValue *v = alloc_value();
+    v->type = RT_NIL; return v;
+}
+
+RuntimeValue *rt_value_thunk(RuntimeThunk *thunk) {
+    RuntimeValue *v = alloc_value();
+    v->type = RT_THUNK; v->data.thunk_val = thunk; return v;
+}
+
+// Heap-allocated (long-lived)
+RuntimeValue *rt_value_string(const char *val) {
+    RuntimeValue *v = malloc(sizeof(RuntimeValue));
+    v->type = RT_STRING; v->data.string_val = strdup(val); return v;
+}
+RuntimeValue *rt_value_symbol(const char *val) {
+    RuntimeValue *v = malloc(sizeof(RuntimeValue));
+    v->type = RT_SYMBOL; v->data.symbol_val = strdup(val); return v;
+}
+RuntimeValue *rt_value_keyword(const char *val) {
+    RuntimeValue *v = malloc(sizeof(RuntimeValue));
+    v->type = RT_KEYWORD; v->data.keyword_val = strdup(val); return v;
+}
+
+///  Printing
 
 void rt_print_value(RuntimeValue *val) {
-    if (val == NULL) {
-        printf("nil");
-        return;
+    if (!val) { printf("nil"); return; }
+    if (val->type == RT_THUNK) {
+        val = rt_force(val->data.thunk_val);
+        if (!val) { printf("nil"); return; }
     }
-
     switch (val->type) {
-        case RT_INT:
-            printf("%ld", val->data.int_val);
-            break;
-        case RT_FLOAT:
-            printf("%g", val->data.float_val);
-            break;
-        case RT_CHAR:
-            printf("'%c'", val->data.char_val);
-            break;
-        case RT_STRING:
-            printf("\"%s\"", val->data.string_val);
-            break;
-        case RT_SYMBOL:
-            printf("%s", val->data.symbol_val);  // bare, no quotes, no colon
-            break;
-        case RT_KEYWORD:
-            printf(":%s", val->data.keyword_val);
-            break;
-        case RT_LIST:
-            rt_print_list(val->data.list_val);
-            break;
+        case RT_INT:     printf("%ld",  val->data.int_val);   break;
+        case RT_FLOAT:   printf("%g",   val->data.float_val); break;
+        case RT_CHAR:    printf("'%c'", val->data.char_val);  break;
+        case RT_STRING:  printf("\"%s\"", val->data.string_val); break;
+        case RT_SYMBOL:  printf("%s",   val->data.symbol_val);   break;
+        case RT_KEYWORD: printf(":%s",  val->data.keyword_val);  break;
+        case RT_LIST:    rt_print_list(val->data.list_val);       break;
         case RT_RATIO:
-            if (val->data.ratio_val.denominator == 1) {
+            if (val->data.ratio_val.denominator == 1)
                 printf("%ld", val->data.ratio_val.numerator);
-            } else {
+            else
                 printf("%ld/%ld", val->data.ratio_val.numerator,
-                       val->data.ratio_val.denominator);
-            }
+                                  val->data.ratio_val.denominator);
             break;
-
         case RT_ARRAY:
             printf("[");
             for (size_t i = 0; i < val->data.array_val.length; i++) {
                 if (i > 0) printf(" ");
-                if (val->data.array_val.elements[i]) {
-                    rt_print_value(val->data.array_val.elements[i]);
-                } else {
-                    printf("nil");
-                }
+                rt_print_value(val->data.array_val.elements[i]
+                               ? val->data.array_val.elements[i]
+                               : rt_value_nil());
             }
             printf("]");
             break;
-        case RT_NIL:
-            printf("nil");
-            break;
+        case RT_NIL:   printf("nil"); break;
+        case RT_THUNK: printf("<thunk>"); break;
     }
 }
+
+void rt_print_list_unbounded(RuntimeList *list) {
+    rt_interrupted = 0;
+    printf("(");
+    int first = 1;
+    RuntimeList *cur = list;
+    int cycle = 0;
+
+    while (cur && !rt_list_is_empty_list(cur)) {
+        if (rt_interrupted) { printf(" ..."); break; }
+        if (!first) printf(" ");
+        first = 0;
+
+        RuntimeValue *h = _force_head(cur->cell);
+        rt_print_value(h);
+
+        RuntimeValue *tv = _force_tail(cur->cell);
+        RuntimeList *next = NULL;
+        if (tv && tv->type == RT_LIST)
+            next = tv->data.list_val;
+
+        if (++cycle >= 1024 && next && !rt_list_is_empty_list(next)) {
+            ConsCell *nc = next->cell;
+
+            // Only reset the arena for lazy generators (tail_fn != NULL).
+            // Strict lists have tail_fn == NULL and their tail_val pointers
+            // live in the arena — resetting would dangle them.
+            if (nc->tail_fn != NULL) {
+                ThunkFn      hfn     = nc->head_fn;
+                void        *henv    = nc->head_env;
+                int          hforced = nc->head_forced;
+                RuntimeValue *hval   = nc->head_val;
+                ThunkFn      tfn     = nc->tail_fn;
+                void        *tenv    = nc->tail_env;
+
+                typedef struct { int64_t a; int64_t b; } EnvCopy;
+                EnvCopy env_copy = {0, 0};
+                if (tenv) memcpy(&env_copy, tenv, sizeof(EnvCopy));
+
+                arena_reset(&g_eval_arena);
+                cycle = 0;
+
+                ConsCell *fresh_c    = arena_alloc(&g_eval_arena, sizeof(ConsCell));
+                fresh_c->head_fn     = hfn;
+                fresh_c->head_env    = henv;
+                fresh_c->head_val    = hval;
+                fresh_c->head_forced = hforced;
+
+                EnvCopy *fresh_env   = arena_alloc(&g_eval_arena, sizeof(EnvCopy));
+                *fresh_env           = env_copy;
+                fresh_c->tail_fn     = tfn;
+                fresh_c->tail_env    = fresh_env;
+                fresh_c->tail_val    = NULL;
+                fresh_c->tail_forced = 0;
+
+                RuntimeList *fresh_lst = arena_alloc(&g_eval_arena, sizeof(RuntimeList));
+                fresh_lst->cell = fresh_c;
+                cur = fresh_lst;
+                continue;
+            }
+            // Strict list: fall through, no reset
+        }
+
+        cur = next ? next : rt_list_empty();
+    }
+    printf(")\n");
+}
+
+/* void rt_print_list_unbounded(RuntimeList *list) { */
+/*     rt_interrupted = 0; */
+/*     printf("("); */
+/*     int first = 1; */
+/*     RuntimeList *cur = list; */
+
+/*     int cycle = 0; */
+
+/*     while (cur && !rt_list_is_empty_list(cur)) { */
+/*         if (rt_interrupted) { printf(" ..."); break; } */
+/*         if (!first) printf(" "); */
+/*         first = 0; */
+
+/*         // Force head and print it immediately */
+/*         RuntimeValue *h = _force_head(cur->cell); */
+/*         rt_print_value(h); */
+
+/*         // Force the tail pointer — we need this to survive the reset */
+/*         RuntimeValue *tv = _force_tail(cur->cell); */
+/*         RuntimeList *next = NULL; */
+/*         if (tv && tv->type == RT_LIST) */
+/*             next = tv->data.list_val; */
+
+/*         // Every 1024 elements: reset the arena, then re-seed it with */
+/*         // a fresh list wrapper pointing at the next element's generator. */
+/*         // The generator state (FromEnv etc) was already captured in the */
+/*         // tail thunk — but that env is also in the arena, so we need to */
+/*         // copy the next element's seed value to the stack before reset. */
+/*         if (++cycle >= 1024 && next && !rt_list_is_empty_list(next)) { */
+/*             // Extract the next head fn+env and tail fn+env from the cell */
+/*             // onto the C stack before we wipe the arena */
+/*             ConsCell *nc = next->cell; */
+/*             ThunkFn  hfn  = nc->head_fn; */
+/*             void    *henv = nc->head_env; */
+/*             int      hforced = nc->head_forced; */
+/*             RuntimeValue *hval = nc->head_val;  // may be in int cache = safe */
+/*             ThunkFn  tfn  = nc->tail_fn; */
+/*             void    *tenv = nc->tail_env;        // THIS IS IN THE ARENA */
+
+/*             // If tenv points into the arena we must copy it to the stack. */
+/*             // For FromEnv it's just one int64_t.  We use a union on the */
+/*             // stack big enough for any of our env structs. */
+/*             typedef struct { int64_t a; int64_t b; } EnvCopy; */
+/*             EnvCopy env_copy = {0, 0}; */
+/*             if (tenv) memcpy(&env_copy, tenv, sizeof(EnvCopy)); */
+
+/*             arena_reset(&g_eval_arena); */
+/*             cycle = 0; */
+
+/*             // Rebuild the single next ConsCell from stack data */
+/*             ConsCell *fresh_c = arena_alloc(&g_eval_arena, sizeof(ConsCell)); */
+/*             fresh_c->head_fn     = hfn; */
+/*             fresh_c->head_env    = henv;   // NULL for forced heads (int cache) */
+/*             fresh_c->head_val    = hval; */
+/*             fresh_c->head_forced = hforced; */
+
+/*             // Rebuild tenv in the arena from our stack copy */
+/*             EnvCopy *fresh_env = arena_alloc(&g_eval_arena, sizeof(EnvCopy)); */
+/*             *fresh_env = env_copy; */
+/*             fresh_c->tail_fn     = tfn; */
+/*             fresh_c->tail_env    = fresh_env; */
+/*             fresh_c->tail_val    = NULL; */
+/*             fresh_c->tail_forced = 0; */
+
+/*             RuntimeList *fresh_lst = arena_alloc(&g_eval_arena, sizeof(RuntimeList)); */
+/*             fresh_lst->cell = fresh_c; */
+/*             cur = fresh_lst; */
+/*             continue; */
+/*         } */
+
+/*         cur = next ? next : rt_list_empty(); */
+/*     } */
+/*     printf(")\n"); */
+/* } */
 
 void rt_print_list(RuntimeList *list) {
-    printf("(");
-
-    if (list != NULL && list->head != NULL) {
-        RuntimeListNode *current = list->head;
-        int first = 1;
-
-        while (current != NULL) {
-            if (!first) {
-                printf(" ");
-            }
-            rt_print_value(current->value);
-            current = current->next;
-            first = 0;
-        }
-    }
-
-    printf(")");
+    rt_print_list_unbounded(list);
 }
 
-/// Memory Management
+///  Memory management
+//
+//  With the arena, hot-path objects are reclaimed wholesale on arena_reset().
+//  The free() functions below only need to handle heap-allocated data that
+//  lives OUTSIDE the arena (string contents, array element arrays, etc.).
+//  They are kept for API compatibility but are mostly no-ops on the hot path.
+//
+void rt_thunk_free(RuntimeThunk *thunk) {
+    // Arena-allocated — no-op. Kept for API compatibility.
+    (void)thunk;
+}
 
 void rt_value_free(RuntimeValue *val) {
-    if (val == NULL) return;
-
+    if (!val) return;
+    // Only free the heap-allocated payload inside the value.
+    // The RuntimeValue struct itself is arena memory — do NOT free(val).
     switch (val->type) {
-        case RT_STRING:
-            free(val->data.string_val);
-            break;
-        case RT_SYMBOL:
-            free(val->data.symbol_val);
-            break;
-        case RT_KEYWORD:
-            free(val->data.keyword_val);
-            break;
-        case RT_LIST:
-            rt_list_free(val->data.list_val);
-            break;
-        case RT_RATIO:
-            // No dynamic memory to free
-            break;
+        case RT_STRING:  free(val->data.string_val);  break;
+        case RT_SYMBOL:  free(val->data.symbol_val);  break;
+        case RT_KEYWORD: free(val->data.keyword_val); break;
         case RT_ARRAY:
             if (val->data.array_val.elements) {
-                for (size_t i = 0; i < val->data.array_val.length; i++) {
+                for (size_t i = 0; i < val->data.array_val.length; i++)
                     rt_value_free(val->data.array_val.elements[i]);
-                }
                 free(val->data.array_val.elements);
             }
             break;
-        default:
-            break;
+        default: break;
     }
-
-    free(val);
+    // Do NOT free(val) — arena owns the struct
 }
 
 void rt_list_free(RuntimeList *list) {
-    if (list == NULL) return;
-
-    RuntimeListNode *current = list->head;
-    while (current != NULL) {
-        RuntimeListNode *next = current->next;
-        rt_value_free(current->value);
-        free(current);
-        current = next;
-    }
-
-    free(list);
+    // Arena-allocated — no-op. Kept for API compatibility.
+    (void)list;
 }
 
-/// Arrays and Ratios
+///  Ratio / Array
+// (heap-allocated — long-lived, not on hot path)
 
-
-// GCD helper for ratio simplification
 static int64_t gcd(int64_t a, int64_t b) {
     if (a < 0) a = -a;
     if (b < 0) b = -b;
-    while (b != 0) {
-        int64_t temp = b;
-        b = a % b;
-        a = temp;
-    }
+    while (b) { int64_t t = b; b = a % b; a = t; }
     return a;
 }
 
-// Create a ratio value (automatically simplifies)
-RuntimeValue *rt_value_ratio(int64_t numerator, int64_t denominator) {
-    if (denominator == 0) {
-        fprintf(stderr, "Error: division by zero in ratio\n");
-        exit(1);
-    }
-
-    // Normalize: ensure denominator is positive
-    if (denominator < 0) {
-        numerator = -numerator;
-        denominator = -denominator;
-    }
-
-    // Simplify
-    int64_t g = gcd(numerator, denominator);
-    if (g > 1) {
-        numerator /= g;
-        denominator /= g;
-    }
-
+RuntimeValue *rt_value_ratio(int64_t n, int64_t d) {
+    if (d == 0) { fprintf(stderr, "Error: division by zero\n"); exit(1); }
+    if (d < 0)  { n = -n; d = -d; }
+    int64_t g = gcd(n, d);
+    if (g > 1) { n /= g; d /= g; }
     RuntimeValue *v = malloc(sizeof(RuntimeValue));
     v->type = RT_RATIO;
-    v->data.ratio_val.numerator = numerator;
-    v->data.ratio_val.denominator = denominator;
+    v->data.ratio_val.numerator   = n;
+    v->data.ratio_val.denominator = d;
     return v;
 }
 
-// Ratio arithmetic operations
+RuntimeValue *rt_value_array(size_t length) {
+    RuntimeValue *v = malloc(sizeof(RuntimeValue));
+    v->type = RT_ARRAY;
+    v->data.array_val.length   = length;
+    v->data.array_val.elements = calloc(length, sizeof(RuntimeValue *));
+    return v;
+}
+
+void rt_array_set(RuntimeValue *array, size_t index, RuntimeValue *value) {
+    if (!array || array->type != RT_ARRAY) return;
+    if (index >= array->data.array_val.length) {
+        fprintf(stderr, "Error: array index out of bounds\n"); exit(1);
+    }
+    array->data.array_val.elements[index] = value;
+}
+
+RuntimeValue *rt_array_get(RuntimeValue *array, size_t index) {
+    if (!array || array->type != RT_ARRAY) return rt_value_nil();
+    if (index >= array->data.array_val.length) return rt_value_nil();
+    RuntimeValue *v = array->data.array_val.elements[index];
+    return v ? v : rt_value_nil();
+}
+
+int64_t rt_array_length(RuntimeValue *array) {
+    if (!array || array->type != RT_ARRAY) return 0;
+    return (int64_t)array->data.array_val.length;
+}
+
 RuntimeValue *rt_ratio_add(RuntimeValue *a, RuntimeValue *b) {
-    if (a->type != RT_RATIO || b->type != RT_RATIO) {
-        fprintf(stderr, "Error: ratio operation on non-ratio values\n");
-        exit(1);
-    }
-
-    // a/b + c/d = (ad + bc) / bd
-    int64_t num = a->data.ratio_val.numerator * b->data.ratio_val.denominator +
-                  b->data.ratio_val.numerator * a->data.ratio_val.denominator;
-    int64_t denom = a->data.ratio_val.denominator * b->data.ratio_val.denominator;
-
-    return rt_value_ratio(num, denom);
+    int64_t n = a->data.ratio_val.numerator   * b->data.ratio_val.denominator
+              + b->data.ratio_val.numerator   * a->data.ratio_val.denominator;
+    int64_t d = a->data.ratio_val.denominator * b->data.ratio_val.denominator;
+    return rt_value_ratio(n, d);
 }
-
 RuntimeValue *rt_ratio_sub(RuntimeValue *a, RuntimeValue *b) {
-    if (a->type != RT_RATIO || b->type != RT_RATIO) {
-        fprintf(stderr, "Error: ratio operation on non-ratio values\n");
-        exit(1);
-    }
-
-    // a/b - c/d = (ad - bc) / bd
-    int64_t num = a->data.ratio_val.numerator * b->data.ratio_val.denominator -
-                  b->data.ratio_val.numerator * a->data.ratio_val.denominator;
-    int64_t denom = a->data.ratio_val.denominator * b->data.ratio_val.denominator;
-
-    return rt_value_ratio(num, denom);
+    int64_t n = a->data.ratio_val.numerator   * b->data.ratio_val.denominator
+              - b->data.ratio_val.numerator   * a->data.ratio_val.denominator;
+    int64_t d = a->data.ratio_val.denominator * b->data.ratio_val.denominator;
+    return rt_value_ratio(n, d);
 }
-
 RuntimeValue *rt_ratio_mul(RuntimeValue *a, RuntimeValue *b) {
-    if (a->type != RT_RATIO || b->type != RT_RATIO) {
-        fprintf(stderr, "Error: ratio operation on non-ratio values\n");
-        exit(1);
-    }
-
-    // (a/b) * (c/d) = ac / bd
-    int64_t num = a->data.ratio_val.numerator * b->data.ratio_val.numerator;
-    int64_t denom = a->data.ratio_val.denominator * b->data.ratio_val.denominator;
-
-    return rt_value_ratio(num, denom);
+    return rt_value_ratio(a->data.ratio_val.numerator   * b->data.ratio_val.numerator,
+                          a->data.ratio_val.denominator * b->data.ratio_val.denominator);
 }
-
 RuntimeValue *rt_ratio_div(RuntimeValue *a, RuntimeValue *b) {
-    if (a->type != RT_RATIO || b->type != RT_RATIO) {
-        fprintf(stderr, "Error: ratio operation on non-ratio values\n");
-        exit(1);
-    }
-
-    // (a/b) / (c/d) = ad / bc
-    int64_t num = a->data.ratio_val.numerator * b->data.ratio_val.denominator;
-    int64_t denom = a->data.ratio_val.denominator * b->data.ratio_val.numerator;
-
-    return rt_value_ratio(num, denom);
+    return rt_value_ratio(a->data.ratio_val.numerator   * b->data.ratio_val.denominator,
+                          a->data.ratio_val.denominator * b->data.ratio_val.numerator);
+}
+int64_t rt_ratio_to_int(RuntimeValue *r) {
+    return r->data.ratio_val.numerator / r->data.ratio_val.denominator;
+}
+double rt_ratio_to_float(RuntimeValue *r) {
+    return (double)r->data.ratio_val.numerator / (double)r->data.ratio_val.denominator;
 }
 
-// Convert ratio to int (returns numerator / denominator)
-int64_t rt_ratio_to_int(RuntimeValue *ratio) {
-    if (ratio->type != RT_RATIO) {
-        fprintf(stderr, "Error: not a ratio\n");
-        exit(1);
-    }
-    return ratio->data.ratio_val.numerator / ratio->data.ratio_val.denominator;
-}
+//  Assert failure handler
 
-// Convert ratio to float
-double rt_ratio_to_float(RuntimeValue *ratio) {
-    if (ratio->type != RT_RATIO) {
-        fprintf(stderr, "Error: not a ratio\n");
-        exit(1);
-    }
-    return (double)ratio->data.ratio_val.numerator / (double)ratio->data.ratio_val.denominator;
-}
-
-/// Assert failure handler
-// Weak symbol — the REPL binary overrides this with its longjmp version.
-// Standalone compiled binaries use this default: print and abort.
 __attribute__((weak))
 void __monad_assert_fail(const char *label) {
     fprintf(stderr, "\x1b[31;1mAssertion failed:\x1b[0m %s\n", label);
     abort();
 }
 
-/// LLVM Integration
+///  LLVM Integration — declare_runtime_functions
 
 void declare_runtime_functions(CodegenContext *ctx) {
-    LLVMTypeRef ptr_type    = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-    LLVMTypeRef i64_type    = LLVMInt64TypeInContext(ctx->context);
-    LLVMTypeRef i32_type    = LLVMInt32TypeInContext(ctx->context);
-    LLVMTypeRef i8_type     = LLVMInt8TypeInContext(ctx->context);
-    LLVMTypeRef double_type = LLVMDoubleTypeInContext(ctx->context);
+    LLVMTypeRef ptr    = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+    LLVMTypeRef i64    = LLVMInt64TypeInContext(ctx->context);
+    LLVMTypeRef i32    = LLVMInt32TypeInContext(ctx->context);
+    LLVMTypeRef i8     = LLVMInt8TypeInContext(ctx->context);
+    LLVMTypeRef dbl    = LLVMDoubleTypeInContext(ctx->context);
+    LLVMTypeRef void_t = LLVMVoidTypeInContext(ctx->context);
 
-    // RuntimeList *rt_list_create(void)
-    LLVMTypeRef rt_list_create_type = LLVMFunctionType(ptr_type, NULL, 0, 0);
-    LLVMAddFunction(ctx->module, "rt_list_create", rt_list_create_type);
+#define DECL(name, ret, ...) \
+    do { \
+        LLVMTypeRef _p[] = { __VA_ARGS__ }; \
+        int _n = sizeof(_p)/sizeof(_p[0]); \
+        LLVMAddFunction(ctx->module, name, LLVMFunctionType(ret, _n ? _p : NULL, _n, 0)); \
+    } while(0)
+#define DECL0(name, ret) \
+    LLVMAddFunction(ctx->module, name, LLVMFunctionType(ret, NULL, 0, 0))
 
-    // RuntimeList *rt_list_cons(RuntimeValue *value, RuntimeList *list)
-    LLVMTypeRef rt_list_cons_params[] = {ptr_type, ptr_type};
-    LLVMTypeRef rt_list_cons_type = LLVMFunctionType(ptr_type, rt_list_cons_params, 2, 0);
-    LLVMAddFunction(ctx->module, "rt_list_cons", rt_list_cons_type);
+    // --- Thunks ---
+    DECL("rt_thunk_of_value", ptr, ptr);
+    DECL("rt_thunk_create", ptr, ptr, ptr);
+    DECL("rt_force", ptr, ptr);
 
-    // void rt_list_append(RuntimeList *list, RuntimeValue *value)
-    LLVMTypeRef rt_list_append_params[] = {ptr_type, ptr_type};
-    LLVMTypeRef rt_list_append_type = LLVMFunctionType(LLVMVoidTypeInContext(ctx->context), rt_list_append_params, 2, 0);
-    LLVMAddFunction(ctx->module, "rt_list_append", rt_list_append_type);
+    // --- List constructors ---
+    DECL0("rt_list_new", ptr);
+    DECL0("rt_list_empty", ptr);
+    DECL("rt_list_lazy_cons", ptr, ptr, ptr);
+    DECL("rt_list_cons", ptr, ptr, ptr);
+    DECL("rt_list_is_empty_list", i32, ptr);
 
-    // RuntimeValue *rt_list_car(RuntimeList *list)
-    LLVMTypeRef rt_list_car_params[] = {ptr_type};
-    LLVMTypeRef rt_list_car_type = LLVMFunctionType(ptr_type, rt_list_car_params, 1, 0);
-    LLVMAddFunction(ctx->module, "rt_list_car", rt_list_car_type);
+    // --- List accessors ---
+    DECL("rt_list_car",    ptr, ptr);
+    DECL("rt_list_cdr",    ptr, ptr);
+    DECL("rt_list_nth",    ptr, ptr, i64);
+    DECL("rt_list_length", i64, ptr);
 
-    // RuntimeList *rt_list_cdr(RuntimeList *list)
-    LLVMTypeRef rt_list_cdr_params[] = {ptr_type};
-    LLVMTypeRef rt_list_cdr_type = LLVMFunctionType(ptr_type, rt_list_cdr_params, 1, 0);
-    LLVMAddFunction(ctx->module, "rt_list_cdr", rt_list_cdr_type);
+    // --- List mutation/construction ---
+    DECL("rt_list_append",       void_t, ptr, ptr);
+    DECL("rt_list_append_lists", ptr, ptr, ptr);
+    DECL("rt_list_copy",         ptr, ptr);
+    DECL("rt_make_list",         ptr, i64, ptr);
 
-    // RuntimeValue *rt_list_nth(RuntimeList *list, int64_t index)
-    LLVMTypeRef rt_list_nth_params[] = {ptr_type, i64_type};
-    LLVMTypeRef rt_list_nth_type = LLVMFunctionType(ptr_type, rt_list_nth_params, 2, 0);
-    LLVMAddFunction(ctx->module, "rt_list_nth", rt_list_nth_type);
+    // --- Range / infinite lists ---
+    DECL("rt_list_range",     ptr, i64, i64);
+    DECL("rt_list_from",      ptr, i64);
+    DECL("rt_list_from_step", ptr, i64, i64);
+    DECL("rt_list_take",      ptr, ptr, i64);
+    DECL("rt_list_drop",      ptr, ptr, i64);
 
-    // int64_t rt_list_length(RuntimeList *list)
-    LLVMTypeRef rt_list_length_params[] = {ptr_type};
-    LLVMTypeRef rt_list_length_type = LLVMFunctionType(i64_type, rt_list_length_params, 1, 0);
-    LLVMAddFunction(ctx->module, "rt_list_length", rt_list_length_type);
+    // --- Equality ---
+    DECL("rt_equal_p", i32, ptr, ptr);
 
-    // int rt_list_is_empty(RuntimeList *list)
-    LLVMTypeRef rt_list_is_empty_params[] = {ptr_type};
-    LLVMTypeRef rt_list_is_empty_type = LLVMFunctionType(i32_type, rt_list_is_empty_params, 1, 0);
-    LLVMAddFunction(ctx->module, "rt_list_is_empty", rt_list_is_empty_type);
+    // --- Unboxing ---
+    DECL("rt_unbox_int",    i64,    ptr);
+    DECL("rt_unbox_float",  dbl,    ptr);
+    DECL("rt_unbox_char",   i8,     ptr);
+    DECL("rt_unbox_string", ptr,    ptr);
+    DECL("rt_unbox_list",   ptr,    ptr);
+    DECL("rt_value_is_nil", i32,    ptr);
+    DECL("rt_print_value_newline", void_t, ptr);
 
+    // --- Value construction ---
+    DECL("rt_value_int",     ptr, i64);
+    DECL("rt_value_float",   ptr, dbl);
+    DECL("rt_value_char",    ptr, i8);
+    DECL("rt_value_string",  ptr, ptr);
+    DECL("rt_value_symbol",  ptr, ptr);
+    DECL("rt_value_keyword", ptr, ptr);
+    DECL("rt_value_list",    ptr, ptr);
+    DECL0("rt_value_nil",    ptr);
+    DECL("rt_value_thunk",   ptr, ptr);
 
-    // RuntimeList *rt_make_list(int64_t n, RuntimeValue *fill_val)
-    LLVMTypeRef rt_make_list_params[] = {i64_type, ptr_type};
-    LLVMTypeRef rt_make_list_type = LLVMFunctionType(ptr_type, rt_make_list_params, 2, 0);
-    LLVMAddFunction(ctx->module, "rt_make_list", rt_make_list_type);
+    // --- Ratio ---
+    DECL("rt_value_ratio",   ptr, i64, i64);
+    DECL("rt_ratio_add",     ptr, ptr, ptr);
+    DECL("rt_ratio_sub",     ptr, ptr, ptr);
+    DECL("rt_ratio_mul",     ptr, ptr, ptr);
+    DECL("rt_ratio_div",     ptr, ptr, ptr);
+    DECL("rt_ratio_to_int",  i64, ptr);
+    DECL("rt_ratio_to_float", dbl, ptr);
 
-    // RuntimeList *rt_list_append_lists(RuntimeList *a, RuntimeList *b)
-    LLVMTypeRef rt_list_append_lists_params[] = {ptr_type, ptr_type};
-    LLVMTypeRef rt_list_append_lists_type = LLVMFunctionType(ptr_type, rt_list_append_lists_params, 2, 0);
-    LLVMAddFunction(ctx->module, "rt_list_append_lists", rt_list_append_lists_type);
+    // --- Array ---
+    DECL("rt_value_array",  ptr, i64);
+    DECL("rt_array_set",    void_t, ptr, i64, ptr);
+    DECL("rt_array_get",    ptr, ptr, i64);
+    DECL("rt_array_length", i64, ptr);
 
-    // RuntimeList *rt_list_copy(RuntimeList *src)
-    LLVMTypeRef rt_list_copy_params[] = {ptr_type};
-    LLVMTypeRef rt_list_copy_type = LLVMFunctionType(ptr_type, rt_list_copy_params, 1, 0);
-    LLVMAddFunction(ctx->module, "rt_list_copy", rt_list_copy_type);
+    // --- Print ---
+    DECL("rt_print_value",         void_t, ptr);
+    DECL("rt_print_list",          void_t, ptr);
+    DECL("rt_print_list_limited",  void_t, ptr, i64);
 
-    // int rt_equal_p(RuntimeValue *a, RuntimeValue *b)
-    LLVMTypeRef rt_equal_p_params[] = {ptr_type, ptr_type};
-    LLVMAddFunction(ctx->module, "rt_equal_p",
-        LLVMFunctionType(i32_type, rt_equal_p_params, 2, 0));
-
-    // int64_t rt_unbox_int(RuntimeValue *v)
-    LLVMTypeRef rt_unbox_int_params[] = {ptr_type};
-    LLVMAddFunction(ctx->module, "rt_unbox_int",
-        LLVMFunctionType(i64_type, rt_unbox_int_params, 1, 0));
-
-    // double rt_unbox_float(RuntimeValue *v)
-    LLVMTypeRef rt_unbox_float_params[] = {ptr_type};
-    LLVMAddFunction(ctx->module, "rt_unbox_float",
-        LLVMFunctionType(double_type, rt_unbox_float_params, 1, 0));
-
-    // char rt_unbox_char(RuntimeValue *v)
-    LLVMTypeRef rt_unbox_char_params[] = {ptr_type};
-    LLVMAddFunction(ctx->module, "rt_unbox_char",
-        LLVMFunctionType(i8_type, rt_unbox_char_params, 1, 0));
-
-    // char *rt_unbox_string(RuntimeValue *v)
-    LLVMTypeRef rt_unbox_string_params[] = {ptr_type};
-    LLVMAddFunction(ctx->module, "rt_unbox_string",
-        LLVMFunctionType(ptr_type, rt_unbox_string_params, 1, 0));
-
-    // RuntimeList *rt_unbox_list(RuntimeValue *v)
-    LLVMTypeRef rt_unbox_list_params[] = {ptr_type};
-    LLVMAddFunction(ctx->module, "rt_unbox_list",
-        LLVMFunctionType(ptr_type, rt_unbox_list_params, 1, 0));
-
-    // int rt_value_is_nil(RuntimeValue *v)
-    LLVMTypeRef rt_value_is_nil_params[] = {ptr_type};
-    LLVMAddFunction(ctx->module, "rt_value_is_nil",
-        LLVMFunctionType(i32_type, rt_value_is_nil_params, 1, 0));
-
-    // void rt_print_value_newline(RuntimeValue *v)
-    LLVMTypeRef rt_print_value_newline_params[] = {ptr_type};
-    LLVMAddFunction(ctx->module, "rt_print_value_newline",
-        LLVMFunctionType(LLVMVoidTypeInContext(ctx->context),
-                         rt_print_value_newline_params, 1, 0));
-
-    // RuntimeValue *rt_value_int(int64_t val)
-    LLVMTypeRef rt_value_int_params[] = {i64_type};
-    LLVMTypeRef rt_value_int_type = LLVMFunctionType(ptr_type, rt_value_int_params, 1, 0);
-    LLVMAddFunction(ctx->module, "rt_value_int", rt_value_int_type);
-
-    // RuntimeValue *rt_value_float(double val)
-    LLVMTypeRef rt_value_float_params[] = {double_type};
-    LLVMTypeRef rt_value_float_type = LLVMFunctionType(ptr_type, rt_value_float_params, 1, 0);
-    LLVMAddFunction(ctx->module, "rt_value_float", rt_value_float_type);
-
-    // RuntimeValue *rt_value_char(char val)
-    LLVMTypeRef rt_value_char_params[] = {i8_type};
-    LLVMTypeRef rt_value_char_type = LLVMFunctionType(ptr_type, rt_value_char_params, 1, 0);
-    LLVMAddFunction(ctx->module, "rt_value_char", rt_value_char_type);
-
-    // RuntimeValue *rt_value_string(const char *val)
-    LLVMTypeRef rt_value_string_params[] = {ptr_type};
-    LLVMTypeRef rt_value_string_type = LLVMFunctionType(ptr_type, rt_value_string_params, 1, 0);
-    LLVMAddFunction(ctx->module, "rt_value_string", rt_value_string_type);
-
-    // RuntimeValue *rt_value_symbol(const char *val)
-    LLVMTypeRef rt_value_symbol_params[] = {ptr_type};
-    LLVMTypeRef rt_value_symbol_type = LLVMFunctionType(ptr_type, rt_value_symbol_params, 1, 0);
-    LLVMAddFunction(ctx->module, "rt_value_symbol", rt_value_symbol_type);
-
-    // RuntimeValue *rt_value_keyword(const char *val)
-    LLVMTypeRef rt_value_keyword_params[] = {ptr_type};
-    LLVMTypeRef rt_value_keyword_type = LLVMFunctionType(ptr_type, rt_value_keyword_params, 1, 0);
-    LLVMAddFunction(ctx->module, "rt_value_keyword", rt_value_keyword_type);
-
-    // RuntimeValue *rt_value_array(size_t length)
-    LLVMTypeRef rt_value_array_params[] = {i64_type};
-    LLVMAddFunction(ctx->module, "rt_value_array",
-        LLVMFunctionType(ptr_type, rt_value_array_params, 1, 0));
-
-    // void rt_array_set(RuntimeValue *array, size_t index, RuntimeValue *value)
-    LLVMTypeRef rt_array_set_params[] = {ptr_type, i64_type, ptr_type};
-    LLVMAddFunction(ctx->module, "rt_array_set",
-        LLVMFunctionType(LLVMVoidTypeInContext(ctx->context),
-                         rt_array_set_params, 3, 0));
-
-    // RuntimeValue *rt_array_get(RuntimeValue *array, size_t index)
-    LLVMTypeRef rt_array_get_params[] = {ptr_type, i64_type};
-    LLVMAddFunction(ctx->module, "rt_array_get",
-        LLVMFunctionType(ptr_type, rt_array_get_params, 2, 0));
-
-    // int64_t rt_array_length(RuntimeValue *array)
-    LLVMTypeRef rt_array_length_params[] = {ptr_type};
-    LLVMAddFunction(ctx->module, "rt_array_length",
-        LLVMFunctionType(i64_type, rt_array_length_params, 1, 0));
-
-
-    // RuntimeValue *rt_value_list(RuntimeList *val)
-    LLVMTypeRef rt_value_list_params[] = {ptr_type};
-    LLVMTypeRef rt_value_list_type = LLVMFunctionType(ptr_type, rt_value_list_params, 1, 0);
-    LLVMAddFunction(ctx->module, "rt_value_list", rt_value_list_type);
-
-    // RuntimeValue *rt_value_nil(void)
-    LLVMTypeRef rt_value_nil_type = LLVMFunctionType(ptr_type, NULL, 0, 0);
-    LLVMAddFunction(ctx->module, "rt_value_nil", rt_value_nil_type);
-
-    // void rt_print_value(RuntimeValue *val)
-    LLVMTypeRef rt_print_value_params[] = {ptr_type};
-    LLVMTypeRef rt_print_value_type = LLVMFunctionType(LLVMVoidTypeInContext(ctx->context), rt_print_value_params, 1, 0);
-    LLVMAddFunction(ctx->module, "rt_print_value", rt_print_value_type);
-
-    // void rt_print_list(RuntimeList *list)
-    LLVMTypeRef rt_print_list_params[] = {ptr_type};
-    LLVMTypeRef rt_print_list_type = LLVMFunctionType(LLVMVoidTypeInContext(ctx->context), rt_print_list_params, 1, 0);
-    LLVMAddFunction(ctx->module, "rt_print_list", rt_print_list_type);
-
-//// Ratio
-
-    // RuntimeValue *rt_value_ratio(int64_t num, int64_t denom)
-    LLVMTypeRef ratio_params[] = {i64_type, i64_type};
-    LLVMTypeRef ratio_type = LLVMFunctionType(ptr_type, ratio_params, 2, 0);
-    LLVMAddFunction(ctx->module, "rt_value_ratio", ratio_type);
-
-    // Ratio arithmetic
-    LLVMTypeRef ratio_op_params[] = {ptr_type, ptr_type};
-    LLVMTypeRef ratio_op_type = LLVMFunctionType(ptr_type, ratio_op_params, 2, 0);
-
-    LLVMAddFunction(ctx->module, "rt_ratio_add", ratio_op_type);
-    LLVMAddFunction(ctx->module, "rt_ratio_sub", ratio_op_type);
-    LLVMAddFunction(ctx->module, "rt_ratio_mul", ratio_op_type);
-    LLVMAddFunction(ctx->module, "rt_ratio_div", ratio_op_type);
-
-    // Ratio conversions
-    LLVMTypeRef ratio_to_int_params[] = {ptr_type};
-    LLVMTypeRef ratio_to_int_type = LLVMFunctionType(i64_type,
-                                                      ratio_to_int_params, 1, 0);
-    LLVMAddFunction(ctx->module, "rt_ratio_to_int", ratio_to_int_type);
-
-    LLVMTypeRef ratio_to_float_params[] = {ptr_type};
-    LLVMTypeRef ratio_to_float_type = LLVMFunctionType(
-        LLVMDoubleTypeInContext(ctx->context), ratio_to_float_params, 1, 0);
-    LLVMAddFunction(ctx->module, "rt_ratio_to_float", ratio_to_float_type);
-
-//// void __monad_assert_fail(const char *label)
+    // --- Assert ---
     {
-        LLVMTypeRef p  = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-        LLVMTypeRef ft = LLVMFunctionType(LLVMVoidTypeInContext(ctx->context), &p, 1, 0);
+        LLVMTypeRef ft = LLVMFunctionType(void_t, &ptr, 1, 0);
         LLVMAddFunction(ctx->module, "__monad_assert_fail", ft);
     }
 
+#undef DECL
+#undef DECL0
 }
 
-// Helper functions to get runtime function references
+LLVMValueRef get_rt_string_take(CodegenContext *ctx) {
+    LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, "rt_string_take");
+    if (!fn) {
+        LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+        LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+        LLVMTypeRef args[] = {ptr, i64};
+        LLVMTypeRef ft = LLVMFunctionType(ptr, args, 2, 0);
+        fn = LLVMAddFunction(ctx->module, "rt_string_take", ft);
+    }
+    return fn;
+}
+
+///  GET_RUNTIME_FUNCTION macro + definitions
+
 #define GET_RUNTIME_FUNCTION(name) \
     LLVMValueRef get_##name(CodegenContext *ctx) { \
         LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, #name); \
-        if (!fn) { \
-            fprintf(stderr, "Runtime function " #name " not found\n"); \
-            exit(1); \
-        } \
+        if (!fn) { fprintf(stderr, "Runtime function " #name " not found\n"); exit(1); } \
         return fn; \
     }
 
-//// List
+GET_RUNTIME_FUNCTION(rt_thunk_of_value)
+GET_RUNTIME_FUNCTION(rt_thunk_create)
+GET_RUNTIME_FUNCTION(rt_force)
 
-GET_RUNTIME_FUNCTION(rt_list_create)
+GET_RUNTIME_FUNCTION(rt_list_new)
+GET_RUNTIME_FUNCTION(rt_list_empty)
+GET_RUNTIME_FUNCTION(rt_list_lazy_cons)
 GET_RUNTIME_FUNCTION(rt_list_cons)
-GET_RUNTIME_FUNCTION(rt_list_append)
+GET_RUNTIME_FUNCTION(rt_list_is_empty_list)
+
+LLVMValueRef get_rt_list_is_empty(CodegenContext *ctx) {
+    LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, "rt_list_is_empty_list");
+    if (!fn) { fprintf(stderr, "Runtime function rt_list_is_empty_list not found\n"); exit(1); }
+    return fn;
+}
+
 GET_RUNTIME_FUNCTION(rt_list_car)
 GET_RUNTIME_FUNCTION(rt_list_cdr)
 GET_RUNTIME_FUNCTION(rt_list_nth)
 GET_RUNTIME_FUNCTION(rt_list_length)
-GET_RUNTIME_FUNCTION(rt_list_is_empty)
-GET_RUNTIME_FUNCTION(rt_make_list)
+GET_RUNTIME_FUNCTION(rt_list_append)
 GET_RUNTIME_FUNCTION(rt_list_append_lists)
 GET_RUNTIME_FUNCTION(rt_list_copy)
-GET_RUNTIME_FUNCTION(rt_equal_p)
+GET_RUNTIME_FUNCTION(rt_make_list)
 
-//// Unboxing
+GET_RUNTIME_FUNCTION(rt_list_range)
+GET_RUNTIME_FUNCTION(rt_list_from)
+GET_RUNTIME_FUNCTION(rt_list_from_step)
+GET_RUNTIME_FUNCTION(rt_list_take)
+GET_RUNTIME_FUNCTION(rt_list_drop)
+
+GET_RUNTIME_FUNCTION(rt_equal_p)
 
 GET_RUNTIME_FUNCTION(rt_unbox_int)
 GET_RUNTIME_FUNCTION(rt_unbox_float)
@@ -750,8 +1319,6 @@ GET_RUNTIME_FUNCTION(rt_unbox_list)
 GET_RUNTIME_FUNCTION(rt_value_is_nil)
 GET_RUNTIME_FUNCTION(rt_print_value_newline)
 
-//// Value
-
 GET_RUNTIME_FUNCTION(rt_value_int)
 GET_RUNTIME_FUNCTION(rt_value_float)
 GET_RUNTIME_FUNCTION(rt_value_char)
@@ -760,13 +1327,12 @@ GET_RUNTIME_FUNCTION(rt_value_symbol)
 GET_RUNTIME_FUNCTION(rt_value_keyword)
 GET_RUNTIME_FUNCTION(rt_value_list)
 GET_RUNTIME_FUNCTION(rt_value_nil)
+GET_RUNTIME_FUNCTION(rt_value_thunk)
+
 GET_RUNTIME_FUNCTION(rt_print_value)
 GET_RUNTIME_FUNCTION(rt_print_list)
 
-//// Ratio
-
 GET_RUNTIME_FUNCTION(rt_value_ratio)
-GET_RUNTIME_FUNCTION(rt_value_array)
 GET_RUNTIME_FUNCTION(rt_ratio_add)
 GET_RUNTIME_FUNCTION(rt_ratio_sub)
 GET_RUNTIME_FUNCTION(rt_ratio_mul)
@@ -774,12 +1340,15 @@ GET_RUNTIME_FUNCTION(rt_ratio_div)
 GET_RUNTIME_FUNCTION(rt_ratio_to_int)
 GET_RUNTIME_FUNCTION(rt_ratio_to_float)
 
+GET_RUNTIME_FUNCTION(rt_value_array)
+GET_RUNTIME_FUNCTION(rt_array_set)
+GET_RUNTIME_FUNCTION(rt_array_get)
+GET_RUNTIME_FUNCTION(rt_array_length)
+
 LLVMTypeRef get_rt_value_type(CodegenContext *ctx) {
-    // RuntimeValue* is represented as i8*
     return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
 }
 
 LLVMTypeRef get_rt_list_type(CodegenContext *ctx) {
-    // RuntimeList* is represented as i8*
     return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
 }
