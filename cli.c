@@ -674,59 +674,36 @@ void cmd_test(const char *input_file) {
         if (n > 0) strncpy(self, buf, sizeof(self) - 1);
     }
 
-    // Use --test-run so compile() appends _test to the binary name
+    // Build the test binary (--test-run appends _test to the name)
     char cmd[4096];
     snprintf(cmd, sizeof(cmd), "%s --test-run %s", self, input_file);
-    int rc = system(cmd);
-    if (rc != 0) { fprintf(stderr, "test build failed\n"); exit(1); }
+    int build_rc = system(cmd);
+    if (!WIFEXITED(build_rc) || WEXITSTATUS(build_rc) != 0) {
+        fprintf(stderr, "test build failed\n");
+        exit(1);
+    }
 
     // Derive and run the _test binary
     char *base = get_base_executable_name(input_file);
     char test_bin[1024];
     snprintf(test_bin, sizeof(test_bin), "./%s_test", base);
-
     printf("\n");
-    rc = system(test_bin);
+    int run_rc = system(test_bin);
 
-    // Clean up
-    remove(test_bin + 2);
+    // Clean up before exiting
+    remove(test_bin + 2);  // skip "./"
     char obj[1024];
     snprintf(obj, sizeof(obj), "%s_test.o", base);
     remove(obj);
-
     free(base);
-    exit(rc == 0 ? 0 : 1);
+
+    // Only failure is SIGABRT from __monad_assert_fail calling abort().
+    // Normal exit with any code (including 1 from last assert-eq i1 result)
+    // is a pass — we only care about signals.
+    if (WIFSIGNALED(run_rc)) {
+        fprintf(stderr, "test failed (signal %d)\n", WTERMSIG(run_rc));
+        exit(1);
+    }
+    exit(0);
 }
 
-/* void cmd_test(const char *input_file) { */
-/*     // Build the _test binary by invoking the compiler with --test */
-/*     char self[1024] = "monad"; */
-/*     { */
-/*         char buf[1024] = {0}; */
-/*         ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1); */
-/*         if (n > 0) strncpy(self, buf, sizeof(self) - 1); */
-/*     } */
-
-/*     char cmd[4096]; */
-/*     snprintf(cmd, sizeof(cmd), "%s --test %s", self, input_file); */
-/*     int rc = system(cmd); */
-/*     if (rc != 0) { fprintf(stderr, "test build failed\n"); exit(1); } */
-
-/*     // Derive the _test binary name */
-/*     char *base = get_base_executable_name(input_file); */
-/*     char test_bin[1024]; */
-/*     snprintf(test_bin, sizeof(test_bin), "./%s_test", base); */
-
-/*     // Run it */
-/*     printf("\n"); */
-/*     rc = system(test_bin); */
-
-/*     // Clean up — remove _test binary and its .o */
-/*     remove(test_bin + 2);   // strip "./" */
-/*     char obj[1024]; */
-/*     snprintf(obj, sizeof(obj), "%s_test.o", base); */
-/*     remove(obj); */
-
-/*     free(base); */
-/*     exit(rc == 0 ? 0 : 1); */
-/* } */

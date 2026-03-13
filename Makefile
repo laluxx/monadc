@@ -1,6 +1,6 @@
 CC      = gcc
 CFLAGS  = -Wall -Wextra -std=c99 $(shell llvm-config --cflags)
-LDFLAGS = -lm -lreadline $(shell llvm-config --ldflags --libs core)
+LDFLAGS = -lm -lreadline -lgmp $(shell llvm-config --ldflags --libs core)
 TARGET  = monad
 PREFIX  = /usr/local
 BINDIR  = $(PREFIX)/bin

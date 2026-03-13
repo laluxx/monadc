@@ -953,6 +953,7 @@
 ;; #---
 
 ;; Naked function
+
 (define (addnaked [x :: Int] -> [y :: Int] -> Int)
   :doc "Documentation for this Scheiße."
   :naked True

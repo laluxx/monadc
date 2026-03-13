@@ -733,12 +733,6 @@ static void compile(CompilerFlags *flags) {
     }
 
 
-    /* char *exec_name = flags->output_name */
-    /*     ? strdup(flags->output_name) */
-    /*     : get_base_executable_name(flags->input_file); */
-
-
-
     char cmd[4096];
     int w = snprintf(cmd, sizeof(cmd), "gcc");
     for (size_t i = 0; i < n; i++)
@@ -746,7 +740,7 @@ static void compile(CompilerFlags *flags) {
 
     w += snprintf(cmd + w, sizeof(cmd) - w,
                   " -o %s /usr/local/lib/libmonad.a"
-                  " `llvm-config --ldflags --libs core` -lm -no-pie", exec_name);
+                  " `llvm-config --ldflags --libs core` -lm -lgmp -no-pie", exec_name);
 
 
     printf("\n[link] %s\n", cmd);

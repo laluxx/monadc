@@ -31,8 +31,9 @@ typedef struct EnvEntry {
 
     // Functions (ENV_FUNC)
     LLVMValueRef func_ref;
-    EnvParam *params; // array of named+typed params
+    EnvParam *params;  // array of named+typed params
     int param_count;
+    int lifted_count;  // number of hidden captured params (lambda lifting)
     Type *return_type;
 
     char *module_name; // Which module this symbol belongs to (NULL for local)

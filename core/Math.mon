@@ -1,0 +1,327 @@
+;;; Math.mon --- Mathematical functions and constants
+;; Author: Laluxx
+;; Version: 0.0.1
+;; Keywords: math arithmetic trigonometry number-theory
+;;; Commentary:
+;; A batteries-included math module for Monad.
+;; Covers arithmetic helpers, number theory, powers,
+;; infinite sequences, and common higher-order numeric utilities.
+;;; Code:
+
+(module Math
+  [double  square  cube  abs  sign
+   add     sub     mul   div-safe
+   inc     dec
+   zero?   positive?  negative?
+   even?   odd?       divisible?
+   gcd     lcm        factorial  fib
+   prime?  prime-check?
+   clamp   min2  max2
+   pow     sqrt-int
+   naturals  positives  evens  odds
+   sum  product  sum-range  product-range
+   pi  e  tau  phi])
+
+;;; Arithmetic helpers
+
+(define (inc [x :: Int] -> Int)
+  "Return X + 1."
+  (+ x 1))
+
+(define (dec [x :: Int] -> Int)
+  "Return X - 1."
+  (- x 1))
+
+(define (double [x :: Int] -> Int)
+  "Return 2 * X."
+  (* 2 x))
+
+(define (square [x :: Int] -> Int)
+  "Return X * X."
+  (* x x))
+
+(define (cube [x :: Int] -> Int)
+  "Return X * X * X."
+  (* x (* x x)))
+
+(define (abs [x :: Int] -> Int)
+  "Return the absolute value of X."
+  (if (< x 0) (- 0 x) x))
+
+(define (sign [x :: Int] -> Int)
+  "Return -1, 0, or 1 depending on the sign of X."
+  (cond
+    [(< x 0) -1]
+    [(> x 0)  1]
+    [else     0]))
+
+;; TODO Those should not be needed because + and - should
+;; be able to be passed as functions to higher order functions.
+
+(define (add [x :: Int] [y :: Int] -> Int)
+  "Return X + Y."
+  (+ x y))
+
+(define (sub [x :: Int] [y :: Int] -> Int)
+  "Return X - Y."
+  (- x y))
+
+(define (mul [x :: Int] [y :: Int] -> Int)
+  "Return X * Y."
+  (* x y))
+
+(define (div-safe [x :: Int] [y :: Int] -> Int)
+  "Return X / Y, or 0 if Y is zero."
+  (if (= y 0) 0 (/ x y)))
+
+;;; Predicates
+
+(define (zero? [x :: Int] -> Bool)
+  "Return True if X is zero."
+  (= x 0))
+
+(define (positive? [x :: Int] -> Bool)
+  "Return True if X is strictly positive."
+  (> x 0))
+
+(define (negative? [x :: Int] -> Bool)
+  "Return True if X is strictly negative."
+  (< x 0))
+
+(define (even? [x :: Int] -> Bool)
+  "Return True if X is even."
+  (= (mod x 2) 0))
+
+(define (odd? [x :: Int] -> Bool)
+  "Return True if X is odd."
+  (= (mod x 2) 1))
+
+(define (divisible? [x :: Int] [y :: Int] -> Bool)
+  "Return True if X is divisible by Y."
+  (= (mod x y) 0))
+
+;;; Number theory
+
+(define (gcd [a :: Int] [b :: Int] -> Int)
+  "Return the greatest common divisor of A and B (Euclidean algorithm)."
+  (if (= b 0) a (gcd b (mod a b))))
+
+(define (lcm [a :: Int] [b :: Int] -> Int)
+  "Return the least common multiple of A and B."
+  (/ (* a b) (gcd a b)))
+
+(define (factorial [n :: Int] -> Int)
+  "Return N! iteratively. Returns 1 for N <= 0."
+  (define (fact-iter [acc :: Int] [k :: Int] -> Int)
+    (if (<= k 0) acc (fact-iter (* acc k) (- k 1))))
+  (fact-iter 1 n))
+
+(define (fib [n :: Int] -> Int)
+  "Return the Nth Fibonacci number (0-indexed). O(n) iterative."
+  (define (fib-iter [a :: Int] [b :: Int] [count :: Int] -> Int)
+    (if (= count 0) a (fib-iter b (+ a b) (- count 1))))
+  (fib-iter 0 1 n))
+
+(define (prime-check? [n :: Int] [i :: Int] -> Bool)
+  "Return True if N has no divisor from I up to sqrt(N)."
+  (cond
+    [(> (* i i) n)   True]
+    [(= (mod n i) 0) False]
+    [else            (prime-check? n (+ i 2))]))
+
+(define (prime? [n :: Int] -> Bool)
+  "Return True if N is a prime number."
+  (cond
+    [(< n 2)          False]
+    [(= n 2)          True]
+    [(= (mod n 2) 0)  False]
+    [else             (prime-check? n 3)]))
+
+;;; Rounding and clamping
+
+(define (clamp [x :: Int] [lo :: Int] [hi :: Int] -> Int)
+  "Clamp X to the range [LO, HI]."
+  (cond
+    [(< x lo) lo]
+    [(> x hi) hi]
+    [else     x]))
+
+(define (min2 [a :: Int] [b :: Int] -> Int)
+  "Return the smaller of A and B."
+  (if (< a b) a b))
+
+(define (max2 [a :: Int] [b :: Int] -> Int)
+  "Return the larger of A and B."
+  (if (> a b) a b))
+
+;;; Powers and roots
+
+(define (pow [base :: Int] [exp :: Int] -> Int)
+  "Return BASE raised to EXP via fast exponentiation. EXP must be >= 0."
+  (cond
+    [(= exp 0)          1]
+    [(= (mod exp 2) 0)  (square (pow base (/ exp 2)))]
+    [else               (* base (pow base (- exp 1)))]))
+
+(define (sqrt-int [n :: Int] -> Int)
+  "Return the integer square root of N (floor of sqrt). O(sqrt N)."
+  (define (sqrt-iter [i :: Int] -> Int)
+    (if (> (* i i) n) (- i 1) (sqrt-iter (+ i 1))))
+  (sqrt-iter 0))
+
+;;; Constants
+
+(define [pi  :: Float] 3.141592653589793)
+(define [e   :: Float] 2.718281828459045)
+(define [tau :: Float] 6.283185307179586)
+(define [phi :: Float] 1.6180339887498949)
+
+;;; Infinite sequences
+
+(define [naturals  :: List] '(0..))
+(define [positives :: List] '(1..))
+(define [evens     :: List] '(0,2..))
+(define [odds      :: List] '(1,3..))
+
+;;; Summation and product
+
+(define (sum [xs :: List] -> Int)
+  "Return the sum of all integers in XS."
+  (foldl add 0 xs))
+
+(define (product [xs :: List] -> Int)
+  "Return the product of all integers in XS."
+  (foldl mul 1 xs))
+
+(define (sum-range [lo :: Int] [hi :: Int] -> Int)
+  "Return the sum of integers from LO to HI inclusive. O(1) via Gauss."
+  (/ (* (+ (- hi lo) 1) (+ lo hi)) 2))
+
+(define (product-range [lo :: Int] [hi :: Int] -> Int)
+  "Return the product of integers from LO to HI inclusive."
+  (define (iter [acc :: Int] [k :: Int] -> Int)
+    (if (> k hi) acc (iter (* acc k) (+ k 1))))
+  (iter 1 lo))
+
+(tests
+  ;; inc / dec
+  (assert-eq (inc 0)   1   "inc 0")
+  (assert-eq (inc 9)   10  "inc 9")
+  (assert-eq (dec 1)   0   "dec 1")
+  (assert-eq (dec 10)  9   "dec 10")
+
+  ;; double / square / cube
+  (assert-eq (double 0)   0   "double 0")
+  (assert-eq (double 5)   10  "double 5")
+  (assert-eq (square 0)   0   "square 0")
+  (assert-eq (square 4)   16  "square 4")
+  (assert-eq (square 10)  100 "square 10")
+  (assert-eq (cube 2)     8   "cube 2")
+  (assert-eq (cube 3)     27  "cube 3")
+
+  ;; abs / sign
+  (assert-eq (abs 5)    5  "abs positive")
+  (assert-eq (abs -5)   5  "abs negative")
+  (assert-eq (abs 0)    0  "abs zero")
+  (assert-eq (sign 5)   1  "sign positive")
+  (assert-eq (sign -3) -1  "sign negative")
+  (assert-eq (sign 0)   0  "sign zero")
+
+  ;; predicates
+  (assert-eq (zero? 0)         1 "zero? 0")
+  (assert-eq (zero? 1)         0 "zero? 1")
+  (assert-eq (positive? 1)     1 "positive? 1")
+  (assert-eq (positive? 0)     0 "positive? 0")
+  (assert-eq (positive? -1)    0 "positive? -1")
+  (assert-eq (negative? -1)    1 "negative? -1")
+  (assert-eq (negative? 0)     0 "negative? 0")
+  (assert-eq (even? 0)         1 "even? 0")
+  (assert-eq (even? 2)         1 "even? 2")
+  (assert-eq (even? 3)         0 "even? 3")
+  (assert-eq (odd? 1)          1 "odd? 1")
+  (assert-eq (odd? 2)          0 "odd? 2")
+  (assert-eq (divisible? 10 5) 1 "divisible? 10 5")
+  (assert-eq (divisible? 10 3) 0 "divisible? 10 3")
+
+  ;; gcd / lcm
+  (assert-eq (gcd 12 8)  4  "gcd 12 8")
+  (assert-eq (gcd 7  3)  1  "gcd 7 3 coprime")
+  (assert-eq (gcd 0  5)  5  "gcd 0 5")
+  (assert-eq (lcm 4  6)  12 "lcm 4 6")
+  (assert-eq (lcm 7  3)  21 "lcm 7 3 coprime")
+
+  ;; factorial
+  (assert-eq (factorial 0)  1       "factorial 0")
+  (assert-eq (factorial 1)  1       "factorial 1")
+  (assert-eq (factorial 5)  120     "factorial 5")
+  (assert-eq (factorial 10) 3628800 "factorial 10")
+
+  ;; fib
+  (assert-eq (fib 0)  0   "fib 0")
+  (assert-eq (fib 1)  1   "fib 1")
+  (assert-eq (fib 7)  13  "fib 7")
+  (assert-eq (fib 10) 55  "fib 10")
+  (assert-eq (fib 20) 6765 "fib 20")
+
+  ;; prime?
+  (assert-eq (prime? 0)   0 "prime? 0")
+  (assert-eq (prime? 1)   0 "prime? 1")
+  (assert-eq (prime? 2)   1 "prime? 2")
+  (assert-eq (prime? 3)   1 "prime? 3")
+  (assert-eq (prime? 4)   0 "prime? 4")
+  (assert-eq (prime? 17)  1 "prime? 17")
+  (assert-eq (prime? 18)  0 "prime? 18")
+  (assert-eq (prime? 97)  1 "prime? 97")
+
+  ;; clamp / min2 / max2
+  (assert-eq (clamp 5 0 10)   5  "clamp in range")
+  (assert-eq (clamp -1 0 10)  0  "clamp below")
+  (assert-eq (clamp 11 0 10)  10 "clamp above")
+  (assert-eq (min2 3 7)       3  "min2")
+  (assert-eq (min2 7 3)       3  "min2 reversed")
+  (assert-eq (max2 3 7)       7  "max2")
+  (assert-eq (max2 7 3)       7  "max2 reversed")
+
+  ;; pow
+  (assert-eq (pow 2 0)   1    "pow 2^0")
+  (assert-eq (pow 2 1)   2    "pow 2^1")
+  (assert-eq (pow 2 10)  1024 "pow 2^10")
+  (assert-eq (pow 3 3)   27   "pow 3^3")
+  (assert-eq (pow 10 3)  1000 "pow 10^3")
+
+  ;; sqrt-int
+  (assert-eq (sqrt-int 0)   0  "sqrt-int 0")
+  (assert-eq (sqrt-int 1)   1  "sqrt-int 1")
+  (assert-eq (sqrt-int 4)   2  "sqrt-int 4")
+  (assert-eq (sqrt-int 9)   3  "sqrt-int 9")
+  (assert-eq (sqrt-int 10)  3  "sqrt-int 10 floor")
+  (assert-eq (sqrt-int 100) 10 "sqrt-int 100")
+
+  ;; sum / product
+  (assert-eq (sum     '(1 2 3 4 5)) 15  "sum list")
+  (assert-eq (product '(1 2 3 4 5)) 120 "product list")
+
+  ;; sum-range / product-range
+  (assert-eq (sum-range 1 10)    55   "sum-range 1..10")
+  (assert-eq (sum-range 1 100)   5050 "sum-range 1..100")
+  (assert-eq (sum-range 5 5)     5    "sum-range singleton")
+  (assert-eq (product-range 1 5) 120  "product-range 1..5")
+  (assert-eq (product-range 5 5) 5    "product-range singleton")
+
+  ;; naturals / positives / evens / odds
+  (assert-eq (list-ref (take 5 naturals)  0) 0 "naturals first")
+  (assert-eq (list-ref (take 5 naturals)  4) 4 "naturals fifth")
+  (assert-eq (list-ref (take 5 positives) 0) 1 "positives first")
+  (assert-eq (list-ref (take 5 positives) 4) 5 "positives fifth")
+  (assert-eq (list-ref (take 5 evens)     0) 0 "evens first")
+  (assert-eq (list-ref (take 5 evens)     1) 2 "evens second")
+  (assert-eq (list-ref (take 5 evens)     4) 8 "evens fifth")
+  (assert-eq (list-ref (take 5 odds)      0) 1 "odds first")
+  (assert-eq (list-ref (take 5 odds)      1) 3 "odds second")
+  (assert-eq (list-ref (take 5 odds)      4) 9 "odds fifth")
+
+  ;; sum of squares / filter pipelines
+  (assert-eq (sum (map square '(1..10)))          385  "sum of squares 1..10")
+  (assert-eq (sum (filter even? '(1..20)))        110  "sum of evens 1..20")
+  (assert-eq (sum (filter odd?  '(1..10)))        25   "sum of odds 1..10")
+  (assert-eq (sum (map double (take 5 naturals))) 20   "sum doubled naturals"))

@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <llvm-c/Core.h>
+#include <gmp.h>
 #include "arena.h"
 #include "codegen.h"
 
@@ -32,7 +33,8 @@ typedef enum {
     RT_RATIO,
     RT_ARRAY,
     RT_NIL,
-    RT_THUNK
+    RT_THUNK,
+    RT_BIGNUM,
 } RuntimeValueType;
 
 //  Forward declarations
@@ -63,6 +65,7 @@ typedef struct RuntimeValue {
         char        *keyword_val;
         struct RuntimeList  *list_val;
         RuntimeThunk        *thunk_val;
+        mpz_t bignum_val;  // arbitrary precision integer
 
         struct {
             int64_t numerator;
@@ -192,7 +195,7 @@ void rt_print_value(RuntimeValue *val);
 void rt_print_list(RuntimeList *list);
 void rt_print_list_unbounded(RuntimeList *list);
 
-///  Memory management
+/// Memory management
 //
 //  With the arena these are mostly no-ops on the hot path.
 //  rt_value_free still frees heap-owned string payloads.
@@ -203,6 +206,35 @@ void rt_thunk_free(RuntimeThunk *thunk);
 
 //  Assert failure handler (weak — overridden by repl.c)
 void __monad_assert_fail(const char *label);
+
+/// Bignum
+
+RuntimeValue *rt_value_bignum_from_str(const char *s);
+RuntimeValue *rt_value_bignum_from_i64(int64_t n);
+RuntimeValue *rt_promote_to_bignum(RuntimeValue *v);
+int           rt_value_is_bignum(RuntimeValue *v);
+
+RuntimeValue *rt_bignum_add(RuntimeValue *a, RuntimeValue *b);
+RuntimeValue *rt_bignum_sub(RuntimeValue *a, RuntimeValue *b);
+RuntimeValue *rt_bignum_mul(RuntimeValue *a, RuntimeValue *b);
+RuntimeValue *rt_bignum_div(RuntimeValue *a, RuntimeValue *b);
+
+
+/// Higher-order list operations
+
+// Callback type for unary and binary RuntimeValue* functions
+typedef RuntimeValue *(*RT_UnaryFn)(RuntimeValue *);
+typedef RuntimeValue *(*RT_BinaryFn)(RuntimeValue *, RuntimeValue *);
+typedef int           (*RT_PredFn)(RuntimeValue *);
+
+RuntimeList  *rt_list_map(RuntimeList *list, RT_UnaryFn fn);
+RuntimeValue *rt_list_foldl(RuntimeList *list, RuntimeValue *init, RT_BinaryFn fn);
+RuntimeValue *rt_list_foldr(RuntimeList *list, RuntimeValue *init, RT_BinaryFn fn);
+RuntimeList  *rt_list_filter(RuntimeList *list, RT_UnaryFn pred);
+RuntimeList  *rt_list_zip(RuntimeList *a, RuntimeList *b);
+RuntimeList  *rt_list_zipwith(RuntimeList *a, RuntimeList *b, RT_BinaryFn fn);
+
+
 
 ///  LLVM Integration
 
@@ -270,5 +302,14 @@ LLVMValueRef get_rt_list_is_empty_list(CodegenContext *ctx);
 
 LLVMTypeRef get_rt_value_type(CodegenContext *ctx);
 LLVMTypeRef get_rt_list_type(CodegenContext *ctx);
+
+LLVMValueRef get_rt_list_map(CodegenContext *ctx);
+LLVMValueRef get_rt_list_foldl(CodegenContext *ctx);
+LLVMValueRef get_rt_list_foldr(CodegenContext *ctx);
+LLVMValueRef get_rt_list_filter(CodegenContext *ctx);
+LLVMValueRef get_rt_list_zip(CodegenContext *ctx);
+LLVMValueRef get_rt_list_zipwith(CodegenContext *ctx);
+
+
 
 #endif // RUNTIME_H

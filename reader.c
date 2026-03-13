@@ -608,6 +608,7 @@ Token lexer_next_token(Lexer *lex) {
     if (c == ')') { advance(lex); tok.type = TOK_RPAREN;   return tok; }
     if (c == '[') { advance(lex); tok.type = TOK_LBRACKET; return tok; }
     if (c == ']') { advance(lex); tok.type = TOK_RBRACKET; return tok; }
+    if (c == ',') { advance(lex); tok.type = TOK_SYMBOL; tok.value = my_strdup(","); return tok; }
 
     // Character literal or quote
     if (c == '\'') {
@@ -1064,6 +1065,240 @@ static DefineMetadata parse_define_metadata(Parser *p) {
     return m;
 }
 
+// Desugar (cond [test body...] ...) into nested if/let expressions.
+// Called after consuming 'cond', current token is first clause's '['.
+static AST *parse_cond(Parser *p) {
+
+    // No clauses -> error
+    if (p->current.type == TOK_RPAREN || p->current.type == TOK_EOF) {
+        compiler_error(p->current.line, p->current.column,
+                       "'cond' requires at least one clause");
+    }
+
+    // Each clause must be a bracket list: [test body...] or [else body...]
+    if (p->current.type != TOK_LBRACKET) {
+        compiler_error(p->current.line, p->current.column,
+                       "'cond' clauses must use bracket syntax [test body...]");
+    }
+
+    int clause_line = p->current.line;
+    int clause_col  = p->current.column;
+
+    // Consume '['
+    p->current = lexer_next_token(p->lexer);
+
+    // Check for 'else'
+    bool is_else = (p->current.type == TOK_SYMBOL &&
+                    strcmp(p->current.value, "else") == 0);
+
+    if (is_else) {
+        p->current = lexer_next_token(p->lexer); // consume 'else'
+
+        // Collect body expressions
+        AST **body = NULL;
+        int   body_count = 0;
+        while (p->current.type != TOK_RBRACKET &&
+               p->current.type != TOK_EOF) {
+            body = realloc(body, sizeof(AST*) * (body_count + 1));
+            body[body_count++] = parse_expr(p);
+        }
+        if (p->current.type != TOK_RBRACKET)
+            compiler_error(p->current.line, p->current.column,
+                           "Expected ']' to close 'else' clause");
+        p->current = lexer_next_token(p->lexer); // consume ']'
+
+        // Expect closing ')' of cond
+        if (p->current.type != TOK_RPAREN)
+            compiler_error(p->current.line, p->current.column,
+                           "Expected ')' after 'else' clause — 'else' must be last");
+        p->current = lexer_next_token(p->lexer); // consume ')'
+
+        if (body_count == 0)
+            compiler_error(clause_line, clause_col,
+                           "'else' clause requires at least one expression");
+
+        // Single body expr — return it directly
+        if (body_count == 1) {
+            AST *r = body[0];
+            free(body);
+            return r;
+        }
+
+        // Multiple body exprs — wrap in a list (implicit begin via last-expr semantics)
+        AST *begin = ast_new_list();
+        ast_list_append(begin, ast_new_symbol("begin"));
+        for (int i = 0; i < body_count; i++)
+            ast_list_append(begin, body[i]);
+        free(body);
+        begin->line   = clause_line;
+        begin->column = clause_col;
+        return begin;
+    }
+
+    // Normal clause: parse test expression
+    AST *test = parse_expr(p);
+
+    // Short form: [test] with no body — return test value itself
+    if (p->current.type == TOK_RBRACKET) {
+        p->current = lexer_next_token(p->lexer); // consume ']'
+
+        // Desugar remaining clauses
+        AST *rest = NULL;
+        if (p->current.type != TOK_RPAREN)
+            rest = parse_cond(p);
+        else
+            p->current = lexer_next_token(p->lexer); // consume ')'
+
+        if (!rest) {
+            // (cond [test]) — just return test
+            return test;
+        }
+
+        // (cond [test] rest...) — (if test test rest)
+        // But we must not evaluate test twice — wrap in let
+        // (let ([_c test]) (if _c _c rest))
+        static int cond_tmp_counter = 0;
+        char tmp_name[32];
+        snprintf(tmp_name, sizeof(tmp_name), "__cond_tmp_%d", cond_tmp_counter++);
+
+        AST *let_binding = ast_new_list();
+        ast_list_append(let_binding, ast_new_symbol(tmp_name));
+        ast_list_append(let_binding, test);
+
+        AST *bindings = ast_new_list();
+        ast_list_append(bindings, let_binding);
+
+        AST *tmp_ref1 = ast_new_symbol(tmp_name);
+        AST *tmp_ref2 = ast_new_symbol(tmp_name);
+
+        AST *if_node = ast_new_list();
+        ast_list_append(if_node, ast_new_symbol("if"));
+        ast_list_append(if_node, tmp_ref1);
+        ast_list_append(if_node, tmp_ref2);
+        ast_list_append(if_node, rest);
+
+        AST *let_node = ast_new_list();
+        ast_list_append(let_node, ast_new_symbol("let"));
+        ast_list_append(let_node, bindings);
+        ast_list_append(let_node, if_node);
+        let_node->line   = clause_line;
+        let_node->column = clause_col;
+        return let_node;
+    }
+
+    // Check for => operator
+    bool is_arrow = (p->current.type == TOK_SYMBOL &&
+                     strcmp(p->current.value, "=>") == 0);
+
+    if (is_arrow) {
+        p->current = lexer_next_token(p->lexer); // consume '=>'
+
+        AST *fn = parse_expr(p);
+
+        if (p->current.type != TOK_RBRACKET)
+            compiler_error(p->current.line, p->current.column,
+                           "Expected ']' after function in '=>' clause");
+        p->current = lexer_next_token(p->lexer); // consume ']'
+
+        // Desugar rest
+        AST *rest = NULL;
+        if (p->current.type != TOK_RPAREN)
+            rest = parse_cond(p);
+        else
+            p->current = lexer_next_token(p->lexer); // consume ')'
+
+        // Desugar to: (let ([__cond_tmp_N test]) (if __cond_tmp_N (fn __cond_tmp_N) rest))
+        static int arrow_tmp_counter = 0;
+        char tmp_name[32];
+        snprintf(tmp_name, sizeof(tmp_name), "__cond_arrow_%d", arrow_tmp_counter++);
+
+        AST *let_binding = ast_new_list();
+        ast_list_append(let_binding, ast_new_symbol(tmp_name));
+        ast_list_append(let_binding, test);
+
+        AST *bindings = ast_new_list();
+        ast_list_append(bindings, let_binding);
+
+        AST *tmp_ref  = ast_new_symbol(tmp_name);
+        AST *tmp_ref2 = ast_new_symbol(tmp_name);
+
+        // (fn __cond_arrow_N)
+        AST *call = ast_new_list();
+        ast_list_append(call, fn);
+        ast_list_append(call, tmp_ref2);
+        call->line   = clause_line;
+        call->column = clause_col;
+
+        // (if __cond_arrow_N (fn __cond_arrow_N) rest)
+        AST *if_node = ast_new_list();
+        ast_list_append(if_node, ast_new_symbol("if"));
+        ast_list_append(if_node, tmp_ref);
+        ast_list_append(if_node, call);
+        if (rest)
+            ast_list_append(if_node, rest);
+        if_node->line   = clause_line;
+        if_node->column = clause_col;
+
+        // (let ([tmp test]) if_node)
+        AST *let_node = ast_new_list();
+        ast_list_append(let_node, ast_new_symbol("let"));
+        ast_list_append(let_node, bindings);
+        ast_list_append(let_node, if_node);
+        let_node->line   = clause_line;
+        let_node->column = clause_col;
+        return let_node;
+    }
+
+    // Normal clause: [test body...]
+    AST **body = NULL;
+    int   body_count = 0;
+    while (p->current.type != TOK_RBRACKET &&
+           p->current.type != TOK_EOF) {
+        body = realloc(body, sizeof(AST*) * (body_count + 1));
+        body[body_count++] = parse_expr(p);
+    }
+    if (p->current.type != TOK_RBRACKET)
+        compiler_error(p->current.line, p->current.column,
+                       "Expected ']' to close cond clause");
+    p->current = lexer_next_token(p->lexer); // consume ']'
+
+    // Desugar remaining clauses
+    AST *rest = NULL;
+    if (p->current.type != TOK_RPAREN)
+        rest = parse_cond(p);
+    else
+        p->current = lexer_next_token(p->lexer); // consume ')'
+
+    // Build then-branch
+    AST *then;
+    if (body_count == 0) {
+        // [test] with no body — already handled above, but guard anyway
+        then = test;
+    } else if (body_count == 1) {
+        then = body[0];
+        free(body);
+    } else {
+        then = ast_new_list();
+        ast_list_append(then, ast_new_symbol("begin"));
+        for (int i = 0; i < body_count; i++)
+            ast_list_append(then, body[i]);
+        free(body);
+        then->line   = clause_line;
+        then->column = clause_col;
+    }
+
+    // (if test then rest)
+    AST *if_node = ast_new_list();
+    ast_list_append(if_node, ast_new_symbol("if"));
+    ast_list_append(if_node, test);
+    ast_list_append(if_node, then);
+    if (rest)
+        ast_list_append(if_node, rest);
+    if_node->line   = clause_line;
+    if_node->column = clause_col;
+    return if_node;
+}
+
 static AST *parse_list(Parser *p) {
     int start_line = p->current.line;
     int start_column = p->current.column;
@@ -1091,6 +1326,17 @@ static AST *parse_list(Parser *p) {
         lam->column = start_column;
         lam->end_column = end_column;
         return lam;
+    }
+
+    // Detect (cond [clause...] ...)
+    if (p->current.type == TOK_SYMBOL &&
+        strcmp(p->current.value, "cond") == 0) {
+        p->current = lexer_next_token(p->lexer);
+        ast_free(list);
+        AST *result = parse_cond(p);
+        result->line   = start_line;
+        result->column = start_column;
+        return result;
     }
 
     // Detect (define (fname params...) body) - short-form function definition

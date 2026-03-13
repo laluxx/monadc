@@ -79,18 +79,18 @@
 
 (tests
   ;; list-length
-  (assert-eq (list-length (list))          0  "length empty")
-  (assert-eq (list-length (cons 1 (list))) 1  "length cons 1")
-  (assert-eq (list-length (iota 5))        5  "length iota 5")
-  (assert-eq (list-length (iota 10))       10 "length iota 10")
+  (assert-eq (list-length (list))          0   "length empty")
+  (assert-eq (list-length (cons 1 (list))) 1   "length cons 1")
+  (assert-eq (list-length (iota 5))        5   "length iota 5")
+  (assert-eq (list-length (iota 10))       10  "length iota 10")
 
   ;; list-empty?
   (assert-eq (list-empty? (list))     True  "empty? empty")
   (assert-eq (list-empty? (iota 3))   False "empty? nonempty")
 
   ;; iota
-  (assert-eq (list-length (iota 0))   0  "iota 0")
-  (assert-eq (list-length (iota 1))   1  "iota 1")
+  (assert-eq (list-length (iota 0))   0   "iota 0")
+  (assert-eq (list-length (iota 1))   1   "iota 1")
   (assert-eq (list-length (iota 100)) 100 "iota 100")
 
   ;; list-tail
@@ -99,11 +99,253 @@
   (assert-eq (list-length (list-tail (iota 5) 5)) 0 "list-tail full")
 
   ;; list-reverse
-  (assert-eq (list-length (list-reverse (iota 5))) 5 "reverse length")
+  (assert-eq (list-length (list-reverse (iota 5))) 5    "reverse length")
   (assert-eq (list-empty? (list-reverse (list)))   True "reverse empty")
 
   ;; list-index
   (assert-eq (list-index (iota 5) 0)  0  "index first")
   (assert-eq (list-index (iota 5) 4)  4  "index last")
-  (assert-eq (list-index (iota 5) 10) -1 "index missing"))
+  (assert-eq (list-index (iota 5) 10) -1 "index missing")
+
+  ;; ── HOF helpers used in tests ────────────────────────────────────────────
+
+  (define (double [x :: Int] -> Int)
+    (* 2 x))
+
+  (define (square [x :: Int] -> Int)
+    (* x x))
+
+  (define (add [x :: Int] [y :: Int] -> Int)
+    (+ x y))
+
+  (define (mul [x :: Int] [y :: Int] -> Int)
+    (* x y))
+
+  (define (sub [x :: Int] [y :: Int] -> Int)
+    (- x y))
+
+  (define (positive? [x :: Int] -> Int)
+    (> x 0))
+
+  (define (even? [x :: Int] -> Int)
+    (= (mod x 2) 0))
+
+  (define (odd? [x :: Int] -> Int)
+    (= (mod x 2) 1))
+
+  ;; ── lazy ranges ──────────────────────────────────────────────────────
+
+  ;; finite range length
+  (assert-eq (list-length (take 10 '(0..9)))   10 "range 0..9 length")
+  (assert-eq (list-length (take 1  '(0..0)))   1  "range singleton")
+  (assert-eq (list-length (take 5  '(1..5)))   5  "range 1..5 length")
+
+  ;; finite range values
+  (assert-eq (list-ref '(1..5) 0) 1 "range first element")
+  (assert-eq (list-ref '(1..5) 4) 5 "range last element")
+  (assert-eq (list-ref '(0..9) 5) 5 "range mid element")
+
+  ;; stepped range
+  (assert-eq (list-ref '(0,2..8) 0) 0 "stepped range start")
+  (assert-eq (list-ref '(0,2..8) 1) 2 "stepped range step")
+  (assert-eq (list-ref '(0,2..8) 4) 8 "stepped range end")
+
+  ;; infinite list with take
+  (assert-eq (list-length (take 0   '(1..))) 0   "take 0 infinite")
+  (assert-eq (list-length (take 1   '(1..))) 1   "take 1 infinite")
+  (assert-eq (list-length (take 100 '(1..))) 100 "take 100 infinite")
+  (assert-eq (list-ref (take 10 '(1..)) 0)  1    "infinite first")
+  (assert-eq (list-ref (take 10 '(1..)) 9)  10   "infinite tenth")
+
+  ;; drop
+  (assert-eq (list-length (drop 3 '(1..5)))    2 "drop length")
+  (assert-eq (list-ref    (drop 3 '(1..5)) 0)  4 "drop first element")
+  (assert-eq (list-length (drop 0 '(1..5)))    5 "drop 0")
+
+  ;; ── map ──────────────────────────────────────────────────────────────
+
+  ;; basic map
+  (assert-eq (list-length (map double '(1 2 3 4 5))) 5  "map length")
+  (assert-eq (list-ref    (map double '(1 2 3 4 5)) 0)  2  "map first")
+  (assert-eq (list-ref    (map double '(1 2 3 4 5)) 4)  10 "map last")
+
+  ;; map empty
+  (assert-eq (list-length (map double (list))) 0 "map empty list")
+
+  ;; map identity (square of iota)
+  (assert-eq (list-ref (map square (iota 5)) 0) 0 "map square 0")
+  (assert-eq (list-ref (map square (iota 5)) 1) 1 "map square 1")
+  (assert-eq (list-ref (map square (iota 5)) 4) 16 "map square 4")
+
+  ;; chained map
+  (assert-eq (list-ref (map double (map double '(1 2 3))) 0) 4  "chained map first")
+  (assert-eq (list-ref (map double (map double '(1 2 3))) 2) 12 "chained map last")
+
+  ;; map over finite range
+  (assert-eq (list-length (map double '(1..10))) 10 "map range length")
+  (assert-eq (list-ref    (map double '(1..10)) 0)   2  "map range first")
+  (assert-eq (list-ref    (map double '(1..10)) 9)   20 "map range last")
+
+  ;; map over infinite list (lazy)
+  (assert-eq (list-length (take 5 (map double '(1..)))) 5  "map infinite length")
+  (assert-eq (list-ref    (take 5 (map square '(1..))) 0)  1  "map square inf first")
+  (assert-eq (list-ref    (take 5 (map square '(1..))) 4)  25 "map square inf fifth")
+
+  ;; ── filter ───────────────────────────────────────────────────────────
+
+  ;; basic filter
+  (assert-eq (list-length (filter positive? '(-2 -1 0 1 2 3))) 3 "filter positive length")
+  (assert-eq (list-ref    (filter positive? '(-2 -1 0 1 2 3)) 0) 1 "filter positive first")
+
+  ;; filter even
+  (assert-eq (list-length (filter even? '(1 2 3 4 5 6 7 8 9 10))) 5 "filter even length")
+  (assert-eq (list-ref    (filter even? '(1 2 3 4 5 6 7 8 9 10)) 0) 2 "filter even first")
+  (assert-eq (list-ref    (filter even? '(1 2 3 4 5 6 7 8 9 10)) 4) 10 "filter even last")
+
+  ;; filter odd
+  (assert-eq (list-length (filter odd? '(1 2 3 4 5 6 7 8 9 10))) 5 "filter odd length")
+  (assert-eq (list-ref    (filter odd? '(1 2 3 4 5 6 7 8 9 10)) 0) 1 "filter odd first")
+
+  ;; filter empty result
+  (assert-eq (list-length (filter positive? '(-3 -2 -1))) 0 "filter all negative")
+
+  ;; filter all pass
+  (assert-eq (list-length (filter positive? '(1 2 3 4 5))) 5 "filter all pass")
+
+  ;; filter on range (lazy)
+  (assert-eq (list-length (take 5 (filter even? '(0..)))) 5 "filter even infinite length")
+  (assert-eq (list-ref    (take 5 (filter even? '(0..))) 0) 0 "filter even inf first")
+  (assert-eq (list-ref    (take 5 (filter even? '(0..))) 1) 2 "filter even inf second")
+  (assert-eq (list-ref    (take 5 (filter even? '(0..))) 4) 8 "filter even inf fifth")
+
+  ;; ── foldl ────────────────────────────────────────────────────────────
+
+  ;; sum
+  (assert-eq (foldl add 0 '(1 2 3 4 5))   15  "foldl sum")
+  (assert-eq (foldl add 0 (list))          0   "foldl sum empty")
+  (assert-eq (foldl add 0 '(1..100))       5050 "foldl sum 1..100")
+
+  ;; product
+  (assert-eq (foldl mul 1 '(1 2 3 4 5))   120 "foldl product")
+  (assert-eq (foldl mul 1 '(1..5))         120 "foldl product range")
+  (assert-eq (foldl mul 1 (list))           1  "foldl product empty")
+
+  ;; foldl with sub — left-associative
+  (assert-eq (foldl sub 0 '(1 2 3 4 5))   -15 "foldl sub left-assoc")
+
+  ;; foldl init dominates on empty
+  (assert-eq (foldl add 42 (list))         42  "foldl init on empty")
+
+  ;; ── foldr ────────────────────────────────────────────────────────────
+
+  ;; sum (same as foldl for add)
+  (assert-eq (foldr add 0 '(1 2 3 4 5))   15  "foldr sum")
+  (assert-eq (foldr add 0 (list))           0  "foldr sum empty")
+
+  ;; foldr with sub — right-associative, different from foldl
+  (assert-eq (foldr sub 0 '(1 2 3 4 5))   3   "foldr sub right-assoc")
+
+  ;; foldr init on empty
+  (assert-eq (foldr mul 99 (list))         99  "foldr init on empty")
+
+  ;; ── zip ──────────────────────────────────────────────────────────────
+
+  ;; basic zip length
+  (assert-eq (list-length (zip '(1 2 3) '(4 5 6)))     3 "zip length equal")
+  (assert-eq (list-length (zip '(1 2 3 4 5) '(10 20))) 2 "zip truncates to shorter")
+  (assert-eq (list-length (zip (list) '(1 2 3)))        0 "zip empty left")
+  (assert-eq (list-length (zip '(1 2 3) (list)))        0 "zip empty right")
+
+  ;; zip pair contents — each element is a 2-list (a b)
+  (assert-eq (car  (list-ref (zip '(1 2 3) '(4 5 6)) 0)) 1 "zip pair first-left")
+  (assert-eq (cadr (list-ref (zip '(1 2 3) '(4 5 6)) 0)) 4 "zip pair first-right")
+  (assert-eq (car  (list-ref (zip '(1 2 3) '(4 5 6)) 2)) 3 "zip pair last-left")
+  (assert-eq (cadr (list-ref (zip '(1 2 3) '(4 5 6)) 2)) 6 "zip pair last-right")
+
+  ;; zip with infinite list (lazy)
+  (assert-eq (list-length (take 5 (zip '(1..) '(1..))))  5 "zip two infinite length")
+  (assert-eq (car (list-ref (take 3 (zip '(1..) '(10..))) 0)) 1  "zip inf left first")
+  (assert-eq (cadr (list-ref (take 3 (zip '(1..) '(10..))) 0)) 10 "zip inf right first")
+
+  ;; ── zipwith ──────────────────────────────────────────────────────────
+
+  ;; pairwise add
+  (assert-eq (list-length (zipwith add '(1 2 3) '(4 5 6))) 3  "zipwith length")
+  (assert-eq (list-ref    (zipwith add '(1 2 3) '(4 5 6)) 0)  5  "zipwith first")
+  (assert-eq (list-ref    (zipwith add '(1 2 3) '(4 5 6)) 2)  9  "zipwith last")
+
+  ;; pairwise mul
+  (assert-eq (list-ref (zipwith mul '(1 2 3) '(4 5 6)) 0)  4  "zipwith mul first")
+  (assert-eq (list-ref (zipwith mul '(1 2 3) '(4 5 6)) 1)  10 "zipwith mul second")
+  (assert-eq (list-ref (zipwith mul '(1 2 3) '(4 5 6)) 2)  18 "zipwith mul third")
+
+  ;; truncates to shorter
+  (assert-eq (list-length (zipwith add '(1 2 3 4 5) '(10 20))) 2 "zipwith truncates")
+
+  ;; empty
+  (assert-eq (list-length (zipwith add (list) '(1 2 3))) 0 "zipwith empty left")
+
+  ;; dot product: foldl + zipwith
+  (assert-eq (foldl add 0 (zipwith mul '(1 2 3) '(4 5 6))) 32 "dot product")
+  (assert-eq (foldl add 0 (zipwith mul '(1 2 3 4) '(1 2 3 4))) 30 "dot product squares")
+
+  ;; zipwith over infinite lists
+  (assert-eq (list-ref (take 5 (zipwith add '(1..) '(1..))) 0) 2  "zipwith inf first")
+  (assert-eq (list-ref (take 5 (zipwith add '(1..) '(1..))) 4) 10 "zipwith inf fifth")
+
+  ;; ── combined pipelines ───────────────────────────────────────────────
+
+  ;; sum of squares 1..10
+  (assert-eq (foldl add 0 (map square '(1..10))) 385 "sum of squares 1..10")
+
+  ;; sum of even numbers 1..20
+  (assert-eq (foldl add 0 (filter even? '(1..20))) 110 "sum of evens 1..20")
+
+  ;; count of positives via filter + list-length
+  (assert-eq (list-length (filter positive? '(-5 -4 -3 -2 -1 0 1 2 3 4 5))) 5
+             "count positives")
+
+  ;; map then filter
+  (assert-eq (list-length (filter positive? (map sub '(1 2 3 4 5)))) 0
+             "map sub then filter positive (all zero or negative)")
+
+  ;; double then sum
+  (assert-eq (foldl add 0 (map double '(1 2 3 4 5))) 30 "double then sum")
+
+  ;; take from mapped infinite
+  (assert-eq (foldl add 0 (take 10 (map double '(1..)))) 110 "sum first 10 doubles"))
+
+
+;; (tests
+;;   ;; list-length
+;;   (assert-eq (list-length (list))          0  "length empty")
+;;   (assert-eq (list-length (cons 1 (list))) 1  "length cons 1")
+;;   (assert-eq (list-length (iota 5))        5  "length iota 5")
+;;   (assert-eq (list-length (iota 10))       10 "length iota 10")
+
+;;   ;; list-empty?
+;;   (assert-eq (list-empty? (list))     True  "empty? empty")
+;;   (assert-eq (list-empty? (iota 3))   False "empty? nonempty")
+
+;;   ;; iota
+;;   (assert-eq (list-length (iota 0))   0  "iota 0")
+;;   (assert-eq (list-length (iota 1))   1  "iota 1")
+;;   (assert-eq (list-length (iota 100)) 100 "iota 100")
+
+;;   ;; list-tail
+;;   (assert-eq (list-length (list-tail (iota 5) 2)) 3 "list-tail length")
+;;   (assert-eq (list-length (list-tail (iota 5) 0)) 5 "list-tail 0")
+;;   (assert-eq (list-length (list-tail (iota 5) 5)) 0 "list-tail full")
+
+;;   ;; list-reverse
+;;   (assert-eq (list-length (list-reverse (iota 5))) 5 "reverse length")
+;;   (assert-eq (list-empty? (list-reverse (list)))   True "reverse empty")
+
+;;   ;; list-index
+;;   (assert-eq (list-index (iota 5) 0)  0  "index first")
+;;   (assert-eq (list-index (iota 5) 4)  4  "index last")
+;;   (assert-eq (list-index (iota 5) 10) -1 "index missing")
+
+
+;; )
 
