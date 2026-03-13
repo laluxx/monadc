@@ -4188,6 +4188,82 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     parser_get_filename(), ast->line, ast->column, head->symbol);
         }
 
+        // Handle ((lambda ...) args...) — immediately invoked lambda (let desugaring)
+        if (head->type == AST_LAMBDA) {
+            static int anon_count = 0;
+            char anon_name[64];
+            snprintf(anon_name, sizeof(anon_name), "__anon_%d", anon_count++);
+
+            // Codegen args first to infer types
+            int arg_count = ast->list.count - 1;
+            CodegenResult *arg_results = malloc(sizeof(CodegenResult) * (arg_count ? arg_count : 1));
+            for (int i = 0; i < arg_count; i++) {
+                arg_results[i] = codegen_expr(ctx, ast->list.items[i + 1]);
+                // Patch lambda param type from inferred arg type
+                if (i < head->lambda.param_count &&
+                    head->lambda.params[i].type_name == NULL &&
+                    arg_results[i].type) {
+                    head->lambda.params[i].type_name = strdup(type_to_string(arg_results[i].type));
+                }
+            }
+
+            // Also infer return type from body if not annotated
+            if (head->lambda.return_type == NULL) {
+                Env *tmp_env = env_create_child(ctx->env);
+                Env *saved_env = ctx->env;
+                ctx->env = tmp_env;
+                for (int i = 0; i < arg_count && i < head->lambda.param_count; i++) {
+                    LLVMTypeRef pt = type_to_llvm(ctx, arg_results[i].type);
+                    LLVMValueRef tmp_alloca = LLVMBuildAlloca(ctx->builder, pt,
+                                                              head->lambda.params[i].name);
+                    LLVMBuildStore(ctx->builder, arg_results[i].value, tmp_alloca);
+                    env_insert(ctx->env, head->lambda.params[i].name,
+                               type_clone(arg_results[i].type), tmp_alloca);
+                }
+                CodegenResult peek = {NULL, NULL};
+                for (int i = 0; i < head->lambda.body_count; i++)
+                    peek = codegen_expr(ctx, head->lambda.body_exprs[i]);
+                if (peek.type)
+                    head->lambda.return_type = strdup(type_to_string(peek.type));
+                ctx->env = saved_env;
+                env_free(tmp_env);
+            }
+
+            AST *name_node = ast_new_symbol(anon_name);
+            AST *define_node = ast_new_list();
+            ast_list_append(define_node, ast_new_symbol("define"));
+            ast_list_append(define_node, name_node);
+            ast_list_append(define_node, head);
+
+            codegen_expr(ctx, define_node);
+
+            EnvEntry *entry = env_lookup(ctx->env, anon_name);
+            if (!entry) {
+                CODEGEN_ERROR(ctx, "%s:%d:%d: error: failed to codegen anonymous lambda",
+                              parser_get_filename(), ast->line, ast->column);
+            }
+
+            LLVMValueRef *args = malloc(sizeof(LLVMValueRef) * (arg_count ? arg_count : 1));
+            for (int i = 0; i < arg_count; i++)
+                args[i] = arg_results[i].value;
+
+            LLVMTypeRef *param_llvm_types = malloc(sizeof(LLVMTypeRef) * (arg_count ? arg_count : 1));
+            for (int i = 0; i < arg_count; i++)
+                param_llvm_types[i] = type_to_llvm(ctx, entry->params[i].type);
+            LLVMTypeRef call_ft = LLVMFunctionType(
+                type_to_llvm(ctx, entry->return_type),
+                param_llvm_types, arg_count, 0);
+            free(param_llvm_types);
+
+            result.value = LLVMBuildCall2(ctx->builder, call_ft,
+                                          entry->func_ref, args, arg_count, "let_call");
+            result.type  = type_clone(entry->return_type);
+            free(args);
+            free(arg_results);
+            return result;
+        }
+
+
         CODEGEN_ERROR(ctx, "%s:%d:%d: error: function call requires symbol in head position",
                 parser_get_filename(), ast->line, ast->column);
     }

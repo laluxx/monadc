@@ -1,11 +1,15 @@
 ;;; Math.mon --- Mathematical functions and constants
+
 ;; Author: Laluxx
 ;; Version: 0.0.1
 ;; Keywords: math arithmetic trigonometry number-theory
+
 ;;; Commentary:
+
 ;; A batteries-included math module for Monad.
 ;; Covers arithmetic helpers, number theory, powers,
 ;; infinite sequences, and common higher-order numeric utilities.
+
 ;;; Code:
 
 (module Math

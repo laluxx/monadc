@@ -7,8 +7,6 @@
 
 (module Main); Automatically exports everything
 
-(import qualified Math)
-
 
 (import Ascii)
 
@@ -19,16 +17,6 @@
 ;; (import Math hiding [square])
 ;; (import Math)
 ;; (import qualified Math :as M)
-
-(show "Showing phi from Math")
-(show Math.phi)
-;; (show phi) => ERROR unbound variable
-(show "Showing (square 3) from Math")
-(show (Math.square 3))
-;; (show "Showing (Math.helper 9) from Math")
-;; (show (Math.helper 9)); ERROR helper is not exported from Math
-(show "Showing (sqrt) from Math")
-(show (Math.sqrt))
 
 ;; (module Main [])      ; Doesn't export anything
 ;; (module Main [f1 f2]) ; Exports only f1 and f2

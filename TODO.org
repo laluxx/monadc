@@ -3,3 +3,25 @@
 * Env [0/1]
 - [ ] A way to dump an enviroment to a loadable file.env 
 
+
+#+begin_src monad
+(cons 120 10)
+>>> CODEGEN NUMBER: literal_str='120', number=120
+>>> INFERRED TYPE: Int
+>>> CODEGEN NUMBER: literal_str='10', number=10
+>>> INFERRED TYPE: Int
+Call parameter type does not match function signature!
+i64 10
+ ptr  %cons = call ptr @rt_list_cons(ptr %boxed_int, i64 10)
+Error: IR verification failed
+
+(cons '(1) '(20))
+((1)
+ 20)
+
+
+(cons '1 '(20))
+>>> CODEGEN NUMBER: literal_str='1', number=1
+>>> INFERRED TYPE: Int
+(1 20)
+#+end_src
