@@ -110,6 +110,9 @@ typedef struct RuntimeList {
     ConsCell *cell;
 } RuntimeList;
 
+RuntimeValue *rt_ast_to_runtime_value(AST *ast);
+LLVMValueRef get_rt_ast_to_runtime_value(CodegenContext *ctx);
+
 ///  Thunk construction helpers (legacy API — arena-allocated)
 
 RuntimeThunk *rt_thunk_of_value(RuntimeValue *val);

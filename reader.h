@@ -188,6 +188,8 @@ AST *parse(const char *source);
 
 const char *parser_get_filename(void);
 
+char *ast_to_string(AST *ast);
+
 /// ERROR Handling
 
 #include <setjmp.h>

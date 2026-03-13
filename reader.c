@@ -5,6 +5,8 @@
 #include <string.h>
 #include <stdarg.h>
 
+// TODO AST->JSON
+
 /* Replace all exit(1) calls in the reader/parser.
  * If a recovery point is set (we're inside repl_eval_line), longjmp back.
  * Otherwise fall back to real exit so the standalone compiler still works. */

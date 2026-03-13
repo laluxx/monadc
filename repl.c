@@ -140,6 +140,7 @@ static void rt_sym_table_init(void) {
     } while(0)
 
     /* Runtime list */
+    ADD(rt_ast_to_runtime_value);
     ADD(rt_list_car);     ADD(rt_list_cdr);          ADD(rt_list_nth);
     ADD(rt_list_length);  ADD(rt_list_append_lists); ADD(rt_list_copy);
     ADD(rt_make_list);    ADD(rt_list_empty);        ADD(rt_thunk_of_value);

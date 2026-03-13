@@ -500,6 +500,54 @@ static LLVMValueRef ast_to_runtime_value(CodegenContext *ctx, AST *ast_elem) {
             break;
         }
 
+    case AST_LAMBDA: {
+            LLVMValueRef list_fn = get_rt_list_new(ctx);
+            LLVMValueRef list = LLVMBuildCall2(ctx->builder,
+                   LLVMGlobalGetValueType(list_fn), list_fn, NULL, 0, "lam_list");
+
+            // symbol 'lambda'
+            LLVMValueRef sym_fn = get_rt_value_symbol(ctx);
+            LLVMValueRef lam_sym = LLVMBuildGlobalStringPtr(ctx->builder, "lambda", "lam_sym");
+            LLVMValueRef lam_sym_val_args[] = {lam_sym};
+            LLVMValueRef lam_sym_val = LLVMBuildCall2(ctx->builder,
+                   LLVMGlobalGetValueType(sym_fn), sym_fn, lam_sym_val_args, 1, "");
+            LLVMValueRef append_fn = get_rt_list_append(ctx);
+            LLVMValueRef app_args[] = {list, lam_sym_val};
+            LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(append_fn), append_fn, app_args, 2, "");
+
+            // params sublist
+            LLVMValueRef params_list = LLVMBuildCall2(ctx->builder,
+                   LLVMGlobalGetValueType(list_fn), list_fn, NULL, 0, "params_list");
+            for (int i = 0; i < ast_elem->lambda.param_count; i++) {
+                LLVMValueRef psym = LLVMBuildGlobalStringPtr(ctx->builder,
+                                       ast_elem->lambda.params[i].name, "pname");
+                LLVMValueRef psym_val_args[] = {psym};
+                LLVMValueRef psym_val = LLVMBuildCall2(ctx->builder,
+                       LLVMGlobalGetValueType(sym_fn), sym_fn, psym_val_args, 1, "");
+                LLVMValueRef pa[] = {params_list, psym_val};
+                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(append_fn), append_fn, pa, 2, "");
+            }
+            LLVMValueRef params_rv_fn = get_rt_value_list(ctx);
+            LLVMValueRef params_rv_args[] = {params_list};
+            LLVMValueRef params_rv = LLVMBuildCall2(ctx->builder,
+                   LLVMGlobalGetValueType(params_rv_fn), params_rv_fn, params_rv_args, 1, "");
+            LLVMValueRef pa2[] = {list, params_rv};
+            LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(append_fn), append_fn, pa2, 2, "");
+
+            // body exprs
+            for (int i = 0; i < ast_elem->lambda.body_count; i++) {
+                LLVMValueRef body_val = ast_to_runtime_value(ctx, ast_elem->lambda.body_exprs[i]);
+                LLVMValueRef ba[] = {list, body_val};
+                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(append_fn), append_fn, ba, 2, "");
+            }
+
+            LLVMValueRef wrap_fn = get_rt_value_list(ctx);
+            LLVMValueRef wrap_args[] = {list};
+            rt_val = LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(wrap_fn),
+                                    wrap_fn, wrap_args, 1, "lam_rtval");
+            break;
+        }
+
         default:
             // For unsupported types, create nil
             LLVMValueRef fn = get_rt_value_nil(ctx);
@@ -2087,6 +2135,32 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     // For other types (numbers, strings, chars), just evaluate them
                     return codegen_expr(ctx, quoted);
                 }
+            }
+
+            if (strcmp(head->symbol, "expand") == 0) {
+                if (ast->list.count < 2) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: expand requires one argument",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                AST *arg = ast->list.items[1];
+                // Unwrap quote
+                if (arg->type == AST_LIST && arg->list.count == 2 &&
+                    arg->list.items[0]->type == AST_SYMBOL &&
+                    strcmp(arg->list.items[0]->symbol, "quote") == 0) {
+                    arg = arg->list.items[1];
+                }
+
+                // Call rt_ast_to_runtime_value RIGHT NOW at codegen time
+                // before the AST gets freed
+                RuntimeValue *rv = rt_ast_to_runtime_value(arg);
+
+                // Embed the resulting RuntimeValue* as a constant pointer in the IR
+                LLVMTypeRef  ptr     = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMTypeRef  i64     = LLVMInt64TypeInContext(ctx->context);
+                LLVMValueRef addr    = LLVMConstInt(i64, (uint64_t)(uintptr_t)rv, 0);
+                result.value = LLVMBuildIntToPtr(ctx->builder, addr, ptr, "expanded");
+                result.type  = type_unknown();
+                return result;
             }
 
             // Handle 'show' function

@@ -702,7 +702,158 @@ RuntimeValue *rt_value_keyword(const char *val) {
 
 ///  Printing
 
-void rt_print_value(RuntimeValue *val) {
+// Forward declarations
+static void rt_print_value_indent(RuntimeValue *val, int indent);
+static void rt_print_list_indent(RuntimeList *list, int indent);
+
+// Estimate if a value prints short enough to stay inline
+static bool rt_value_is_short(RuntimeValue *val, int budget) {
+    if (!val || budget <= 0) return false;
+    switch (val->type) {
+        case RT_INT:    return true;
+        case RT_FLOAT:  return true;
+        case RT_SYMBOL: return (int)strlen(val->data.symbol_val) < budget;
+        case RT_STRING: return (int)strlen(val->data.string_val) + 2 < budget;
+        case RT_NIL:    return true;
+        case RT_LIST: {
+            // Short if all elements are atoms and total is under budget
+            RuntimeList *cur = val->data.list_val;
+            int total = 2; // parens
+            while (!rt_list_is_empty_list(cur)) {
+                RuntimeValue *h = rt_list_car(cur);
+                if (!h) return false;
+                if (h->type == RT_LIST) {
+                    // Allow one level of nesting if it's short
+                    if (!rt_value_is_short(h, budget / 2)) return false;
+                    total += budget / 2;
+                } else if (h->type == RT_SYMBOL) {
+                    total += strlen(h->data.symbol_val) + 1;
+                } else if (h->type == RT_INT || h->type == RT_FLOAT) {
+                    total += 8;
+                } else {
+                    return false;
+                }
+                if (total >= budget) return false;
+                cur = rt_list_cdr(cur);
+            }
+            return total < budget;
+        }
+        default: return false;
+    }
+}
+
+static void rt_print_list_indent(RuntimeList *list, int indent) {
+    if (rt_list_is_empty_list(list)) { printf("()"); return; }
+
+    // Collect elements
+    RuntimeValue *elems[4096];
+    int count = 0;
+    RuntimeList *cur = list;
+    while (!rt_list_is_empty_list(cur) && count < 4095) {
+        if (rt_interrupted) { printf(" ..."); return; }
+        elems[count++] = rt_list_car(cur);
+        cur = rt_list_cdr(cur);
+    }
+    bool truncated = !rt_list_is_empty_list(cur);
+
+    int inner = indent + 2;
+
+    // Check if head is a special form symbol
+    bool is_lambda = (count >= 1 && elems[0] &&
+                      elems[0]->type == RT_SYMBOL &&
+                      strcmp(elems[0]->data.symbol_val, "lambda") == 0);
+    bool is_if     = (count >= 1 && elems[0] &&
+                      elems[0]->type == RT_SYMBOL &&
+                      strcmp(elems[0]->data.symbol_val, "if") == 0);
+    bool is_define = (count >= 1 && elems[0] &&
+                      elems[0]->type == RT_SYMBOL &&
+                      strcmp(elems[0]->data.symbol_val, "define") == 0);
+
+    // Check if any element is a list
+    bool has_list = false;
+    for (int i = 0; i < count; i++)
+        if (elems[i] && elems[i]->type == RT_LIST)
+            has_list = true;
+
+    if (!has_list) {
+        // All atoms — single line
+        printf("(");
+        for (int i = 0; i < count; i++) {
+            if (i > 0) printf(" ");
+            rt_print_value_indent(elems[i], inner);
+        }
+        if (truncated) printf(" ...");
+        printf(")");
+        return;
+    }
+
+    if (is_lambda && count >= 3) {
+        // (lambda (params) body...)
+        // Print as: (lambda (params)
+        //             body...)
+        printf("(lambda ");
+        rt_print_value_indent(elems[1], inner);  // params list on same line
+        for (int i = 2; i < count; i++) {
+            printf("\n");
+            for (int s = 0; s < inner; s++) printf(" ");
+            rt_print_value_indent(elems[i], inner);
+        }
+        if (truncated) printf(" ...");
+        printf(")");
+        return;
+    }
+
+    if (is_if && count >= 3) {
+        // (if test then else?)
+        // Print as: (if test
+        //              then
+        //              else)
+        printf("(if ");
+        rt_print_value_indent(elems[1], inner);  // test on same line
+        for (int i = 2; i < count; i++) {
+            printf("\n");
+            for (int s = 0; s < inner; s++) printf(" ");
+            rt_print_value_indent(elems[i], inner);
+        }
+        if (truncated) printf(" ...");
+        printf(")");
+        return;
+    }
+
+    if (is_define && count >= 3) {
+        // (define name value)
+        printf("(define ");
+        rt_print_value_indent(elems[1], inner);
+        for (int i = 2; i < count; i++) {
+            printf("\n");
+            for (int s = 0; s < inner; s++) printf(" ");
+            rt_print_value_indent(elems[i], inner);
+        }
+        if (truncated) printf(" ...");
+        printf(")");
+        return;
+    }
+
+    // General case: first element on same line, nested lists indented only if long
+    printf("(");
+    rt_print_value_indent(elems[0], inner);
+    for (int i = 1; i < count; i++) {
+        if (elems[i] && elems[i]->type == RT_LIST &&
+            !rt_value_is_short(elems[i], 40)) {
+            printf("\n");
+            for (int s = 0; s < inner; s++) printf(" ");
+            rt_print_value_indent(elems[i], inner);
+        } else {
+            printf(" ");
+            rt_print_value_indent(elems[i], inner);
+        }
+    }
+
+    if (truncated) printf(" ...");
+    printf(")");
+}
+
+static void rt_print_value_indent(RuntimeValue *val, int indent) {
     if (!val) { printf("nil"); return; }
     if (val->type == RT_THUNK) {
         val = rt_force(val->data.thunk_val);
@@ -715,7 +866,8 @@ void rt_print_value(RuntimeValue *val) {
         case RT_STRING:  printf("\"%s\"", val->data.string_val); break;
         case RT_SYMBOL:  printf("%s",   val->data.symbol_val);   break;
         case RT_KEYWORD: printf(":%s",  val->data.keyword_val);  break;
-        case RT_LIST:    rt_print_list(val->data.list_val);       break;
+        case RT_NIL:     printf("nil"); break;
+        case RT_LIST:    rt_print_list_indent(val->data.list_val, indent); break;
         case RT_RATIO:
             if (val->data.ratio_val.denominator == 1)
                 printf("%ld", val->data.ratio_val.numerator);
@@ -727,9 +879,9 @@ void rt_print_value(RuntimeValue *val) {
             printf("[");
             for (size_t i = 0; i < val->data.array_val.length; i++) {
                 if (i > 0) printf(" ");
-                rt_print_value(val->data.array_val.elements[i]
-                               ? val->data.array_val.elements[i]
-                               : rt_value_nil());
+                rt_print_value_indent(val->data.array_val.elements[i]
+                                      ? val->data.array_val.elements[i]
+                                      : rt_value_nil(), indent);
             }
             printf("]");
             break;
@@ -739,81 +891,141 @@ void rt_print_value(RuntimeValue *val) {
             free(s);
             break;
         }
-        case RT_NIL:   printf("nil"); break;
         case RT_THUNK: printf("<thunk>"); break;
     }
 }
 
+void rt_print_value(RuntimeValue *val) {
+    rt_print_value_indent(val, 0);
+}
+
 void rt_print_list_unbounded(RuntimeList *list) {
     rt_interrupted = 0;
-    printf("(");
-    int first = 1;
-    RuntimeList *cur = list;
-    int cycle = 0;
-
-    while (cur && !rt_list_is_empty_list(cur)) {
-        if (rt_interrupted) { printf(" ..."); break; }
-        if (!first) printf(" ");
-        first = 0;
-
-        RuntimeValue *h = _force_head(cur->cell);
-        rt_print_value(h);
-
-        RuntimeValue *tv = _force_tail(cur->cell);
-        RuntimeList *next = NULL;
-        if (tv && tv->type == RT_LIST)
-            next = tv->data.list_val;
-
-        if (++cycle >= 1024 && next && !rt_list_is_empty_list(next)) {
-            ConsCell *nc = next->cell;
-
-            // Only reset the arena for lazy generators (tail_fn != NULL).
-            // Strict lists have tail_fn == NULL and their tail_val pointers
-            // live in the arena — resetting would dangle them.
-            if (nc->tail_fn != NULL) {
-                ThunkFn      hfn     = nc->head_fn;
-                void        *henv    = nc->head_env;
-                int          hforced = nc->head_forced;
-                RuntimeValue *hval   = nc->head_val;
-                ThunkFn      tfn     = nc->tail_fn;
-                void        *tenv    = nc->tail_env;
-
-                typedef struct { int64_t a; int64_t b; } EnvCopy;
-                EnvCopy env_copy = {0, 0};
-                if (tenv) memcpy(&env_copy, tenv, sizeof(EnvCopy));
-
-                arena_reset(&g_eval_arena);
-                cycle = 0;
-
-                ConsCell *fresh_c    = arena_alloc(&g_eval_arena, sizeof(ConsCell));
-                fresh_c->head_fn     = hfn;
-                fresh_c->head_env    = henv;
-                fresh_c->head_val    = hval;
-                fresh_c->head_forced = hforced;
-
-                EnvCopy *fresh_env   = arena_alloc(&g_eval_arena, sizeof(EnvCopy));
-                *fresh_env           = env_copy;
-                fresh_c->tail_fn     = tfn;
-                fresh_c->tail_env    = fresh_env;
-                fresh_c->tail_val    = NULL;
-                fresh_c->tail_forced = 0;
-
-                RuntimeList *fresh_lst = arena_alloc(&g_eval_arena, sizeof(RuntimeList));
-                fresh_lst->cell = fresh_c;
-                cur = fresh_lst;
-                continue;
-            }
-            // Strict list: fall through, no reset
-        }
-
-        cur = next ? next : rt_list_empty();
-    }
-    printf(")\n");
+    rt_print_list_indent(list, 0);
+    printf("\n");
 }
 
 void rt_print_list(RuntimeList *list) {
     rt_print_list_unbounded(list);
 }
+
+void rt_print_expanded(RuntimeValue *val) {
+    rt_print_value_indent(val, 0);
+    printf("\n");
+}
+
+/* void rt_print_value(RuntimeValue *val) { */
+/*     if (!val) { printf("nil"); return; } */
+/*     if (val->type == RT_THUNK) { */
+/*         val = rt_force(val->data.thunk_val); */
+/*         if (!val) { printf("nil"); return; } */
+/*     } */
+/*     switch (val->type) { */
+/*         case RT_INT:     printf("%ld",  val->data.int_val);   break; */
+/*         case RT_FLOAT:   printf("%g",   val->data.float_val); break; */
+/*         case RT_CHAR:    printf("'%c'", val->data.char_val);  break; */
+/*         case RT_STRING:  printf("\"%s\"", val->data.string_val); break; */
+/*         case RT_SYMBOL:  printf("%s",   val->data.symbol_val);   break; */
+/*         case RT_KEYWORD: printf(":%s",  val->data.keyword_val);  break; */
+/*         case RT_LIST:    rt_print_list(val->data.list_val);       break; */
+/*         case RT_RATIO: */
+/*             if (val->data.ratio_val.denominator == 1) */
+/*                 printf("%ld", val->data.ratio_val.numerator); */
+/*             else */
+/*                 printf("%ld/%ld", val->data.ratio_val.numerator, */
+/*                                   val->data.ratio_val.denominator); */
+/*             break; */
+/*         case RT_ARRAY: */
+/*             printf("["); */
+/*             for (size_t i = 0; i < val->data.array_val.length; i++) { */
+/*                 if (i > 0) printf(" "); */
+/*                 rt_print_value(val->data.array_val.elements[i] */
+/*                                ? val->data.array_val.elements[i] */
+/*                                : rt_value_nil()); */
+/*             } */
+/*             printf("]"); */
+/*             break; */
+/*         case RT_BIGNUM: { */
+/*             char *s = mpz_get_str(NULL, 10, val->data.bignum_val); */
+/*             printf("%s", s); */
+/*             free(s); */
+/*             break; */
+/*         } */
+/*         case RT_NIL:   printf("nil"); break; */
+/*         case RT_THUNK: printf("<thunk>"); break; */
+/*     } */
+/* } */
+
+/* void rt_print_list_unbounded(RuntimeList *list) { */
+/*     rt_interrupted = 0; */
+/*     printf("("); */
+/*     int first = 1; */
+/*     RuntimeList *cur = list; */
+/*     int cycle = 0; */
+
+/*     while (cur && !rt_list_is_empty_list(cur)) { */
+/*         if (rt_interrupted) { printf(" ..."); break; } */
+/*         if (!first) printf(" "); */
+/*         first = 0; */
+
+/*         RuntimeValue *h = _force_head(cur->cell); */
+/*         rt_print_value(h); */
+
+/*         RuntimeValue *tv = _force_tail(cur->cell); */
+/*         RuntimeList *next = NULL; */
+/*         if (tv && tv->type == RT_LIST) */
+/*             next = tv->data.list_val; */
+
+/*         if (++cycle >= 1024 && next && !rt_list_is_empty_list(next)) { */
+/*             ConsCell *nc = next->cell; */
+
+/*             // Only reset the arena for lazy generators (tail_fn != NULL). */
+/*             // Strict lists have tail_fn == NULL and their tail_val pointers */
+/*             // live in the arena — resetting would dangle them. */
+/*             if (nc->tail_fn != NULL) { */
+/*                 ThunkFn      hfn     = nc->head_fn; */
+/*                 void        *henv    = nc->head_env; */
+/*                 int          hforced = nc->head_forced; */
+/*                 RuntimeValue *hval   = nc->head_val; */
+/*                 ThunkFn      tfn     = nc->tail_fn; */
+/*                 void        *tenv    = nc->tail_env; */
+
+/*                 typedef struct { int64_t a; int64_t b; } EnvCopy; */
+/*                 EnvCopy env_copy = {0, 0}; */
+/*                 if (tenv) memcpy(&env_copy, tenv, sizeof(EnvCopy)); */
+
+/*                 arena_reset(&g_eval_arena); */
+/*                 cycle = 0; */
+
+/*                 ConsCell *fresh_c    = arena_alloc(&g_eval_arena, sizeof(ConsCell)); */
+/*                 fresh_c->head_fn     = hfn; */
+/*                 fresh_c->head_env    = henv; */
+/*                 fresh_c->head_val    = hval; */
+/*                 fresh_c->head_forced = hforced; */
+
+/*                 EnvCopy *fresh_env   = arena_alloc(&g_eval_arena, sizeof(EnvCopy)); */
+/*                 *fresh_env           = env_copy; */
+/*                 fresh_c->tail_fn     = tfn; */
+/*                 fresh_c->tail_env    = fresh_env; */
+/*                 fresh_c->tail_val    = NULL; */
+/*                 fresh_c->tail_forced = 0; */
+
+/*                 RuntimeList *fresh_lst = arena_alloc(&g_eval_arena, sizeof(RuntimeList)); */
+/*                 fresh_lst->cell = fresh_c; */
+/*                 cur = fresh_lst; */
+/*                 continue; */
+/*             } */
+/*             // Strict list: fall through, no reset */
+/*         } */
+
+/*         cur = next ? next : rt_list_empty(); */
+/*     } */
+/*     printf(")\n"); */
+/* } */
+
+/* void rt_print_list(RuntimeList *list) { */
+/*     rt_print_list_unbounded(list); */
+/* } */
 
 ///  Memory management
 //
@@ -1013,20 +1225,6 @@ static RuntimeValue *_rt_lazy_filter_tail_fn(void *e) {
     return rv;
 }
 
-/* RuntimeList *art_list_filter(RuntimeList *list, RT_UnaryFn pred) { */
-/*     RuntimeList *out = heap_list_wrapper(); */
-/*     out->cell = NULL; */
-/*     RuntimeList *cur = list; */
-/*     while (!rt_list_is_empty_list(cur)) { */
-/*         RuntimeValue *val    = rt_list_car(cur); */
-/*         RuntimeValue *result = pred(val); */
-/*         if (rt_unbox_int(result) != 0) */
-/*             rt_list_append(out, val); */
-/*         cur = rt_list_cdr(cur); */
-/*     } */
-/*     return out; */
-/* } */
-
 RuntimeList *rt_list_zip(RuntimeList *a, RuntimeList *b) {
     RuntimeList *out = heap_list_wrapper();
     out->cell = NULL;
@@ -1136,12 +1334,140 @@ double rt_ratio_to_float(RuntimeValue *r) {
 }
 
 //  Assert failure handler
-
 __attribute__((weak))
 void __monad_assert_fail(const char *label) {
     fprintf(stderr, "\x1b[31;1mAssertion failed:\x1b[0m %s\n", label);
     abort();
 }
+
+
+// Called directly from JIT code — builds a RuntimeValue* list from an AST*
+// entirely in C so all allocations use heap (survive arena reset).
+
+#define HEAP_VAL()      ((RuntimeValue*)malloc(sizeof(RuntimeValue)))
+#define HEAP_LIST()     ({ RuntimeList *_l = malloc(sizeof(RuntimeList)); _l->cell = NULL; _l; })
+#define WRAP_LIST(lst)  ({ RuntimeValue *_v = HEAP_VAL(); _v->type = RT_LIST; _v->data.list_val = (lst); _v; })
+#define HEAP_SYM(s)     ({ RuntimeValue *_v = HEAP_VAL(); _v->type = RT_SYMBOL; _v->data.symbol_val = strdup(s); _v; })
+
+static void heap_list_append(RuntimeList *list, RuntimeValue *value) {
+    ConsCell *new_c    = malloc(sizeof(ConsCell));
+    new_c->head_fn     = NULL;
+    new_c->head_env    = NULL;
+    new_c->head_val    = value;
+    new_c->head_forced = 1;
+    new_c->tail_fn     = NULL;
+    new_c->tail_env    = NULL;
+    new_c->tail_val    = NULL;
+    new_c->tail_forced = 1;
+
+    if (list->cell == NULL) {
+        list->cell = new_c;
+        return;
+    }
+
+    RuntimeList *cur = list;
+    while (1) {
+        ConsCell *cc = cur->cell;
+        if (!cc) break;
+        RuntimeValue *tv = cc->tail_val;
+        if (!tv || tv->type == RT_NIL ||
+            (tv->type == RT_LIST && rt_list_is_empty_list(tv->data.list_val))) {
+            RuntimeValue *link  = malloc(sizeof(RuntimeValue));
+            link->type          = RT_LIST;
+            link->data.list_val = malloc(sizeof(RuntimeList));
+            link->data.list_val->cell = new_c;
+            cc->tail_val    = link;
+            cc->tail_forced = 1;
+            return;
+        }
+        if (tv->type == RT_LIST) { cur = tv->data.list_val; continue; }
+        break;
+    }
+}
+
+RuntimeValue *rt_ast_to_runtime_value(AST *ast) {
+    if (!ast) {
+        RuntimeValue *v = HEAP_VAL();
+        v->type = RT_NIL;
+        return v;
+    }
+
+    switch (ast->type) {
+        case AST_NUMBER: {
+            Type *t = infer_literal_type(ast->number, ast->literal_str);
+            RuntimeValue *v = HEAP_VAL();
+            if (type_is_float(t)) {
+                v->type = RT_FLOAT;
+                v->data.float_val = ast->number;
+            } else {
+                v->type = RT_INT;
+                v->data.int_val = (int64_t)ast->number;
+            }
+            return v;
+        }
+        case AST_SYMBOL:  return HEAP_SYM(ast->symbol);
+        case AST_STRING: {
+            RuntimeValue *v = HEAP_VAL();
+            v->type = RT_STRING;
+            v->data.string_val = strdup(ast->string);
+            return v;
+        }
+        case AST_CHAR: {
+            RuntimeValue *v = HEAP_VAL();
+            v->type = RT_CHAR;
+            v->data.char_val = ast->character;
+            return v;
+        }
+        case AST_KEYWORD: {
+            RuntimeValue *v = HEAP_VAL();
+            v->type = RT_KEYWORD;
+            v->data.keyword_val = strdup(ast->keyword);
+            return v;
+        }
+        case AST_RATIO: {
+            RuntimeValue *v = HEAP_VAL();
+            v->type = RT_RATIO;
+            v->data.ratio_val.numerator   = ast->ratio.numerator;
+            v->data.ratio_val.denominator = ast->ratio.denominator;
+            return v;
+        }
+        case AST_LIST: {
+            RuntimeList *lst = HEAP_LIST();
+            for (size_t i = 0; i < ast->list.count; i++)
+                heap_list_append(lst, rt_ast_to_runtime_value(ast->list.items[i]));
+            return WRAP_LIST(lst);
+        }
+        case AST_ARRAY: {
+            RuntimeList *lst = HEAP_LIST();
+            for (size_t i = 0; i < ast->array.element_count; i++)
+                heap_list_append(lst, rt_ast_to_runtime_value(ast->array.elements[i]));
+            return WRAP_LIST(lst);
+        }
+        case AST_LAMBDA: {
+            RuntimeList *lst = HEAP_LIST();
+            heap_list_append(lst, HEAP_SYM("lambda"));
+
+            // params sublist
+            RuntimeList *params = HEAP_LIST();
+            for (int i = 0; i < ast->lambda.param_count; i++)
+                heap_list_append(params, HEAP_SYM(ast->lambda.params[i].name));
+            heap_list_append(lst, WRAP_LIST(params));
+
+            // body exprs
+            for (int i = 0; i < ast->lambda.body_count; i++)
+                heap_list_append(lst, rt_ast_to_runtime_value(ast->lambda.body_exprs[i]));
+            return WRAP_LIST(lst);
+        }
+        default: {
+            return HEAP_SYM("<unknown>");
+        }
+    }
+}
+
+#undef HEAP_VAL
+#undef HEAP_LIST
+#undef WRAP_LIST
+#undef HEAP_SYM
 
 ///  LLVM Integration — declare_runtime_functions
 
@@ -1161,6 +1487,8 @@ void declare_runtime_functions(CodegenContext *ctx) {
     } while(0)
 #define DECL0(name, ret) \
     LLVMAddFunction(ctx->module, name, LLVMFunctionType(ret, NULL, 0, 0))
+
+    DECL("rt_ast_to_runtime_value", ptr, ptr);
 
     // --- Thunks ---
     DECL("rt_thunk_of_value", ptr, ptr);
@@ -1290,6 +1618,8 @@ LLVMValueRef get_rt_list_is_empty(CodegenContext *ctx) {
     if (!fn) { fprintf(stderr, "Runtime function rt_list_is_empty_list not found\n"); exit(1); }
     return fn;
 }
+
+GET_RUNTIME_FUNCTION(rt_ast_to_runtime_value)
 
 GET_RUNTIME_FUNCTION(rt_list_car)
 GET_RUNTIME_FUNCTION(rt_list_cdr)
