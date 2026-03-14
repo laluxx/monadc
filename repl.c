@@ -270,22 +270,6 @@ static void redeclare_env_symbols(REPLContext *ctx) {
     Env *env = ctx->cg.env;
     for (size_t bi = 0; bi < env->size; bi++) {
         for (EnvEntry *e = env->buckets[bi]; e; e = e->next) {
-            /* if (e->kind == ENV_VAR && e->value && */
-            /*     LLVMIsAGlobalVariable(e->value)) { */
-
-            /*     const char *name = (e->llvm_name && e->llvm_name[0]) */
-            /*                        ? e->llvm_name : e->name; */
-
-            /*     LLVMValueRef existing = LLVMGetNamedGlobal(ctx->cg.module, name); */
-            /*     if (existing) { */
-            /*         e->value = existing; */
-            /*         continue; */
-            /*     } */
-            /*     LLVMTypeRef  lt = type_to_llvm(&ctx->cg, e->type); */
-            /*     LLVMValueRef gv = LLVMAddGlobal(ctx->cg.module, lt, name); */
-            /*     LLVMSetLinkage(gv, LLVMExternalLinkage); */
-            /*     e->value = gv; */
-            /* } */
             if (e->kind == ENV_VAR && e->value &&
                 LLVMIsAGlobalVariable(e->value)) {
 
@@ -1125,6 +1109,226 @@ static bool module_already_loaded(REPLContext *ctx, const char *mod_name) {
     return false;
 }
 
+
+/* -------------------------------------------------------------------------
+ * harvest_source_for_module
+ *
+ * Walk every top-level form in src_buf (the content of the module source
+ * file at src_path).  For each (define name ...) found — whether at the
+ * top level or nested one level inside a (module Name ...) wrapper — patch
+ * the matching env entry with source_text and docstring.
+ *
+ * The cursor is advanced with a string-aware depth-walker so that string
+ * values containing parentheses don't confuse the parser.
+ * ------------------------------------------------------------------------- */
+static void harvest_patch_entry(Env *env, const char *mod_name,
+                                const char *fn_name,
+                                const char *form_src, size_t form_len,
+                                AST *form)
+{
+    char qn[512];
+    snprintf(qn, sizeof(qn), "%s.%s", mod_name, fn_name);
+
+    /* Patch both the qualified entry and the bare-name entry — they are
+     * separate EnvEntry structs inserted by declare_externals, and (code)
+     * may look up either one depending on how the user wrote the name.   */
+    EnvEntry *entries[2] = {
+        env_lookup(env, qn),
+        env_lookup(env, fn_name),
+    };
+
+    for (int i = 0; i < 2; i++) {
+        EnvEntry *ent = entries[i];
+        if (!ent) continue;
+        if (!ent->module_name || strcmp(ent->module_name, mod_name) != 0) continue;
+
+        if (!ent->source_text && form_len > 0)
+            ent->source_text = strndup(form_src, form_len);
+
+        if (!ent->docstring && form->list.count >= 3) {
+            AST *lam = form->list.items[2];
+            if (lam->type == AST_LAMBDA &&
+                lam->lambda.docstring && lam->lambda.docstring[0])
+                ent->docstring = strdup(lam->lambda.docstring);
+        }
+    }
+}
+
+/* static void harvest_patch_entry(Env *env, const char *mod_name, */
+/*                                 const char *fn_name, */
+/*                                 const char *form_src, size_t form_len, */
+/*                                 AST *form) */
+/* { */
+/*     fprintf(stderr, "[harvest] trying fn_name='%s' mod_name='%s'\n", fn_name, mod_name); */
+/*     char qn[512]; */
+/*     snprintf(qn, sizeof(qn), "%s.%s", mod_name, fn_name); */
+/*     EnvEntry *ent = env_lookup(env, qn); */
+/*     fprintf(stderr, "[harvest] lookup '%s' -> %s\n", qn, ent ? "FOUND" : "null"); */
+/*     if (!ent) ent = env_lookup(env, fn_name); */
+/*     fprintf(stderr, "[harvest] lookup '%s' -> %s\n", fn_name, ent ? "FOUND" : "null"); */
+/*     if (!ent) { fprintf(stderr, "[harvest] MISS - no entry\n"); return; } */
+/*     fprintf(stderr, "[harvest] ent->module_name='%s'\n", ent->module_name ? ent->module_name : "NULL"); */
+/*     if (!ent->module_name || strcmp(ent->module_name, mod_name) != 0) { */
+/*         fprintf(stderr, "[harvest] MISS - module_name mismatch\n"); */
+/*         return; */
+/*     } */
+/*     fprintf(stderr, "[harvest] SET source_text for '%s'\n", fn_name); */
+/*     if (!ent->source_text && form_len > 0) */
+/*         ent->source_text = strndup(form_src, form_len); */
+
+/*     if (!ent->source_text && form_len > 0) { */
+/*         ent->source_text = strndup(form_src, form_len); */
+/*         fprintf(stderr, "[harvest] SET source_text for '%s' -> ptr=%p\n", fn_name, (void*)ent->source_text); */
+/*     } else { */
+/*         fprintf(stderr, "[harvest] SKIP source_text for '%s' (already set, ptr=%p)\n", fn_name, (void*)ent->source_text); */
+/*     } */
+
+/*     if (!ent->docstring && form->list.count >= 3) { */
+/*         AST *lam = form->list.items[2]; */
+/*         if (lam->type == AST_LAMBDA && */
+/*             lam->lambda.docstring && lam->lambda.docstring[0]) { */
+/*             ent->docstring = strdup(lam->lambda.docstring); */
+/*         } */
+/*     } */
+/* } */
+
+/* Advance *pp past one complete top-level form, respecting strings.
+ * Returns a pointer to the start of the form (after leading whitespace),
+ * or NULL if no form is found. Sets *len to the byte length of the form. */
+static const char *advance_form(const char **pp, size_t *len)
+{
+    const char *p = *pp;
+
+    /* Skip whitespace and line comments */
+    while (*p) {
+        while (*p && isspace((unsigned char)*p)) p++;
+        if (*p == ';') { while (*p && *p != '\n') p++; continue; }
+        break;
+    }
+    if (!*p) { *pp = p; return NULL; }
+
+    const char *start = p;
+
+    if (*p == '(') {
+        int depth = 0;
+        bool in_str = false;
+        while (*p) {
+            if (in_str) {
+                if (*p == '\\') { p++; if (*p) p++; continue; }
+                if (*p == '"')  { in_str = false; p++; continue; }
+                p++;
+            } else {
+                if (*p == '"')  { in_str = true;  p++; continue; }
+                if (*p == '(')  { depth++; p++; continue; }
+                if (*p == ')') {
+                    depth--;
+                    p++;
+                    if (depth == 0) break;
+                    continue;
+                }
+                p++;
+            }
+        }
+    } else {
+        /* Atom */
+        while (*p && !isspace((unsigned char)*p)) p++;
+    }
+
+    *len = (size_t)(p - start);
+    *pp  = p;
+    return start;
+}
+
+/* Walk one parsed AST node: if it's a (define ...), patch the entry.
+ * If it's a (module Name ...) or (begin ...), recurse into children. */
+static void harvest_one_form(Env *env, const char *mod_name,
+                             AST *form,
+                             const char *form_src, size_t form_len)
+{
+    if (!form || form->type != AST_LIST || form->list.count < 1) return;
+    AST *head = form->list.items[0];
+    if (!head || head->type != AST_SYMBOL) return;
+
+    if (strcmp(head->symbol, "define") == 0 && form->list.count >= 2) {
+        AST *name_node = form->list.items[1];
+        const char *fn_name = NULL;
+        if (name_node->type == AST_SYMBOL)
+            fn_name = name_node->symbol;
+        else if (name_node->type == AST_LIST &&
+                 name_node->list.count > 0 &&
+                 name_node->list.items[0]->type == AST_SYMBOL)
+            fn_name = name_node->list.items[0]->symbol;
+        if (fn_name)
+            harvest_patch_entry(env, mod_name, fn_name,
+                                form_src, form_len, form);
+        return;
+    }
+
+    /* (module Name body...) or (begin body...) — recurse into children */
+    if ((strcmp(head->symbol, "module") == 0 ||
+         strcmp(head->symbol, "begin")  == 0) &&
+        form->list.count >= 2)
+    {
+        /* We don't have per-child source offsets here, so we re-parse the
+         * form_src to find each child's source range.  form_src is the
+         * text of the outer (module ...) form.  We skip past "(module Name"
+         * and then walk child forms with advance_form. */
+        const char *p = form_src;
+        /* Skip the opening ( and the keyword */
+        if (*p == '(') p++;
+        while (*p && !isspace((unsigned char)*p)) p++; /* skip "module"/"begin" */
+        /* For (module Name ...), skip the Name token too */
+        if (strcmp(head->symbol, "module") == 0) {
+            while (*p && isspace((unsigned char)*p)) p++;
+            while (*p && !isspace((unsigned char)*p) && *p != ')') p++;
+        }
+        /* Now p is at the start of the child forms */
+        while (*p) {
+            size_t child_len = 0;
+            const char *child_src = advance_form(&p, &child_len);
+            if (!child_src) break;
+            if (*child_src != '(') continue; /* skip atoms */
+            /* We need a parsed AST for the child to check for define/lambda */
+            char *child_copy = strndup(child_src, child_len);
+            if (!child_copy) continue;
+            parser_set_context("<module>", child_copy);
+            AST *child_ast = NULL;
+            REPL_PARSE(child_ast, child_copy);
+            if (child_ast) {
+                harvest_one_form(env, mod_name, child_ast,
+                                 child_src, child_len);
+                ast_free(child_ast);
+            }
+            free(child_copy);
+        }
+    }
+}
+
+static void harvest_source_for_module(Env *env, const char *mod_name,
+                                      const char *src_path,
+                                      const char *src_buf)
+{
+    const char *p = src_buf;
+    while (*p) {
+        size_t form_len = 0;
+        const char *form_src = advance_form(&p, &form_len);
+        if (!form_src) break;
+        if (*form_src != '(') continue;
+
+        char *form_copy = strndup(form_src, form_len);
+        if (!form_copy) continue;
+
+        parser_set_context(src_path, form_copy);
+        AST *form = NULL;
+        REPL_PARSE(form, form_copy);
+        if (form) {
+            harvest_one_form(env, mod_name, form, form_src, form_len);
+            ast_free(form);
+        }
+        free(form_copy);
+    }
+}
+
 static bool handle_import(REPLContext *ctx, AST *ast) {
     if (ast->list.count < 2 || ast->list.items[1]->type != AST_SYMBOL) {
         fprintf(stderr, "Error: import requires a module name symbol\n");
@@ -1223,12 +1427,114 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
         pclose(nm);
     }
 
+    /* /\* ------------------------------------------------------------------ *\/ */
+    /* /\* Step 5: Harvest docstrings from source and patch env entries        *\/ */
+    /* /\* ------------------------------------------------------------------ *\/ */
+    /* char *doc_src = module_name_to_path(mod_name); */
+    /* if (doc_src && file_exists_r(doc_src)) { */
+    /*     FILE *sf = fopen(doc_src, "r"); */
+    /*     if (sf) { */
+    /*         fseek(sf, 0, SEEK_END); */
+    /*         long fsz = ftell(sf); */
+    /*         rewind(sf); */
+    /*         char *src_buf = malloc(fsz + 1); */
+    /*         if (src_buf && fsz > 0) { */
+    /*             fread(src_buf, 1, fsz, sf); */
+    /*             src_buf[fsz] = '\0'; */
+    /*             fclose(sf); */
+
+    /*             const char *cursor = src_buf; */
+    /*             while (*cursor) { */
+    /*                 while (*cursor && (isspace((unsigned char)*cursor) || *cursor == ';')) { */
+    /*                     if (*cursor == ';') while (*cursor && *cursor != '\n') cursor++; */
+    /*                     else cursor++; */
+    /*                 } */
+    /*                 if (!*cursor) break; */
+
+    /*                 const char *form_start = cursor; */
+    /*                 parser_set_context(doc_src, cursor); */
+    /*                 AST *form = NULL; */
+    /*                 REPL_PARSE(form, cursor); */
+    /*                 if (!form) break; */
+
+    /*                 if (*cursor == '(') { */
+    /*                     int depth = 0; */
+    /*                     while (*cursor) { */
+    /*                         if      (*cursor == '(') depth++; */
+    /*                         else if (*cursor == ')') { depth--; if (depth == 0) { cursor++; break; } } */
+    /*                         cursor++; */
+    /*                     } */
+    /*                 } else { */
+    /*                     while (*cursor && !isspace((unsigned char)*cursor)) cursor++; */
+    /*                 } */
+
+
+    /*                 if (form->type == AST_LIST && form->list.count >= 2 && */
+    /*                     form->list.items[0]->type == AST_SYMBOL && */
+    /*                     strcmp(form->list.items[0]->symbol, "define") == 0) { */
+
+    /*                     AST *name_node = form->list.items[1]; */
+    /*                     const char *fn_name = NULL; */
+    /*                     if (name_node->type == AST_LIST && */
+    /*                         name_node->list.count > 0 && */
+    /*                         name_node->list.items[0]->type == AST_SYMBOL) */
+    /*                         fn_name = name_node->list.items[0]->symbol; */
+    /*                     else if (name_node->type == AST_SYMBOL) */
+    /*                         fn_name = name_node->symbol; */
+
+    /*                     if (fn_name) { */
+    /*                         char qn[512]; */
+    /*                         snprintf(qn, sizeof(qn), "%s.%s", mod_name, fn_name); */
+    /*                         EnvEntry *ent = env_lookup(ctx->cg.env, qn); */
+    /*                         if (!ent) ent = env_lookup(ctx->cg.env, fn_name); */
+    /*                         if (ent && ent->module_name && */
+    /*                             strcmp(ent->module_name, mod_name) == 0) { */
+    /*                             // Harvest source text */
+    /*                             if (!ent->source_text) { */
+    /*                                 size_t src_len = cursor - form_start; */
+    /*                                 ent->source_text = strndup(form_start, src_len); */
+    /*                             } */
+    /*                             // Harvest docstring */
+    /*                             if (form->list.count >= 3) { */
+    /*                                 AST *lam = form->list.items[2]; */
+    /*                                 if (lam->type == AST_LAMBDA && */
+    /*                                     lam->lambda.docstring && lam->lambda.docstring[0]) { */
+    /*                                     free(ent->docstring); */
+    /*                                     ent->docstring = strdup(lam->lambda.docstring); */
+    /*                                 } */
+    /*                             } */
+    /*                         } */
+    /*                     } */
+    /*                 } */
+    /*                 ast_free(form); */
+
+
+    /*             } */
+    /*             free(src_buf); */
+    /*         } else { */
+    /*             if (src_buf) free(src_buf); */
+    /*             fclose(sf); */
+    /*         } */
+    /*     } */
+    /* } */
+    /* free(doc_src); */
+
     /* ------------------------------------------------------------------ */
-    /* Step 5: Harvest docstrings from source and patch env entries        */
+    /* Step 5: Harvest source_text + docstrings from the module source.   */
+    /*                                                                    */
+    /* We re-open the source file and walk every top-level form.  For     */
+    /* each (define name ...) we find, we look up the env entry and patch */
+    /* source_text (the pretty-printed source) and docstring (if the body */
+    /* is a lambda with a docstring).  This makes (code fn) and (doc fn)  */
+    /* work for imported symbols.                                         */
+    /*                                                                    */
+    /* The cursor is advanced with a paren-aware walker that respects     */
+    /* string literals, so forms whose values contain ( or ) are handled  */
+    /* correctly.                                                         */
     /* ------------------------------------------------------------------ */
-    char *doc_src = module_name_to_path(mod_name);
-    if (doc_src && file_exists_r(doc_src)) {
-        FILE *sf = fopen(doc_src, "r");
+    {
+        char *src_path = module_name_to_path(mod_name);
+        FILE *sf = src_path ? fopen(src_path, "r") : NULL;
         if (sf) {
             fseek(sf, 0, SEEK_END);
             long fsz = ftell(sf);
@@ -1238,72 +1544,16 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
                 fread(src_buf, 1, fsz, sf);
                 src_buf[fsz] = '\0';
                 fclose(sf);
-
-                const char *cursor = src_buf;
-                while (*cursor) {
-                    while (*cursor && (isspace((unsigned char)*cursor) || *cursor == ';')) {
-                        if (*cursor == ';') while (*cursor && *cursor != '\n') cursor++;
-                        else cursor++;
-                    }
-                    if (!*cursor) break;
-
-                    parser_set_context(doc_src, cursor);
-                    AST *form = NULL;
-                    REPL_PARSE(form, cursor);
-                    if (!form) break;
-
-                    if (*cursor == '(') {
-                        int depth = 0;
-                        while (*cursor) {
-                            if      (*cursor == '(') depth++;
-                            else if (*cursor == ')') { depth--; if (depth == 0) { cursor++; break; } }
-                            cursor++;
-                        }
-                    } else {
-                        while (*cursor && !isspace((unsigned char)*cursor)) cursor++;
-                    }
-
-                    if (form->type == AST_LIST && form->list.count >= 3 &&
-                        form->list.items[0]->type == AST_SYMBOL &&
-                        strcmp(form->list.items[0]->symbol, "define") == 0) {
-
-                        AST *lam = form->list.items[2];
-                        if (lam->type == AST_LAMBDA &&
-                            lam->lambda.docstring && lam->lambda.docstring[0]) {
-
-                            AST *name_node = form->list.items[1];
-                            const char *fn_name = NULL;
-                            if (name_node->type == AST_LIST &&
-                                name_node->list.count > 0 &&
-                                name_node->list.items[0]->type == AST_SYMBOL)
-                                fn_name = name_node->list.items[0]->symbol;
-                            else if (name_node->type == AST_SYMBOL)
-                                fn_name = name_node->symbol;
-
-
-                            if (fn_name) {
-                                char qn[512];
-                                snprintf(qn, sizeof(qn), "%s.%s", mod_name, fn_name);
-                                EnvEntry *ent = env_lookup(ctx->cg.env, qn);
-                                if (!ent) ent = env_lookup(ctx->cg.env, fn_name);
-                                if (ent && ent->module_name &&
-                                    strcmp(ent->module_name, mod_name) == 0) {
-                                    free(ent->docstring);
-                                    ent->docstring = strdup(lam->lambda.docstring);
-                                }
-                            }
-                        }
-                    }
-                    ast_free(form);
-                }
+                harvest_source_for_module(ctx->cg.env, mod_name,
+                                          src_path, src_buf);
                 free(src_buf);
             } else {
                 if (src_buf) free(src_buf);
                 fclose(sf);
             }
         }
+        free(src_path);
     }
-    free(doc_src);
 
     printf("Imported %d symbol(s) from '%s'.\n", count, mod_name);
     return true;
@@ -1467,6 +1717,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
             src[fsz] = '\0';
             fclose(f);
 
+            /* ---- detect module declaration in first form ---- */
             const char *cursor = src;
             char *found_module = NULL;
             while (*cursor) {
@@ -1508,6 +1759,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                 return ok;
             }
 
+            /* ---- re-open for the actual load loop ---- */
             FILE *f2 = fopen(fpath, "r");
             if (!f2) { fprintf(stderr, "Error: cannot open file: %s\n", fpath); return false; }
             fseek(f2, 0, SEEK_END);
@@ -1523,25 +1775,47 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
             int loaded = 0, failed = 0, skipped = 0;
 
             while (*cursor) {
+                /* skip whitespace and line comments */
                 while (*cursor && isspace((unsigned char)*cursor)) cursor++;
                 if (!*cursor) break;
                 if (*cursor == ';') { while (*cursor && *cursor != '\n') cursor++; continue; }
 
-                parser_set_context(fpath, cursor);
-                AST *form = NULL;
-                REPL_PARSE(form, cursor);
-                if (!form) break;
+                const char *form_start = cursor;
 
+                /* ---- string-aware depth walker to find form_end ---- */
                 if (*cursor == '(') {
                     int depth = 0;
+                    bool in_str = false;
                     while (*cursor) {
-                        if      (*cursor == '(') depth++;
-                        else if (*cursor == ')') { depth--; if (depth == 0) { cursor++; break; } }
-                        cursor++;
+                        if (in_str) {
+                            if (*cursor == '\\') { cursor++; if (*cursor) cursor++; continue; }
+                            if (*cursor == '"')  { in_str = false; cursor++; continue; }
+                            cursor++;
+                        } else {
+                            if (*cursor == '"')  { in_str = true;  cursor++; continue; }
+                            if (*cursor == '(')  { depth++; cursor++; continue; }
+                            if (*cursor == ')') {
+                                depth--;
+                                cursor++;
+                                if (depth == 0) break;
+                                continue;
+                            }
+                            cursor++;
+                        }
                     }
                 } else {
                     while (*cursor && !isspace((unsigned char)*cursor)) cursor++;
                 }
+                const char *form_end = cursor;
+
+                /* ---- parse the form we just measured ---- */
+                char *form_copy = strndup(form_start, form_end - form_start);
+                if (!form_copy) continue;
+                parser_set_context(fpath, form_copy);
+                AST *form = NULL;
+                REPL_PARSE(form, form_copy);
+                free(form_copy);
+                if (!form) break;
 
                 if (form->type != AST_LIST || form->list.count < 1 ||
                     form->list.items[0]->type != AST_SYMBOL) {
@@ -1558,6 +1832,28 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                     ast_free(form); skipped++; continue;
                 }
 
+                /* ---- harvest source_text and docstring before codegen ---- */
+                char harvested_name[256] = {0};
+                char *harvested_doc = NULL;
+                bool is_define = (strcmp(head, "define") == 0 && form->list.count >= 2);
+                bool is_layout = (form->type == AST_LAYOUT);
+
+                if (is_define) {
+                    AST *name_expr = form->list.items[1];
+                    if (name_expr->type == AST_SYMBOL)
+                        strncpy(harvested_name, name_expr->symbol, 255);
+                    else if (name_expr->type == AST_LIST && name_expr->list.count > 0 &&
+                             name_expr->list.items[0]->type == AST_SYMBOL)
+                        strncpy(harvested_name, name_expr->list.items[0]->symbol, 255);
+
+                    if (form->list.count >= 3) {
+                        AST *body = form->list.items[2];
+                        if (body->type == AST_LAMBDA &&
+                            body->lambda.docstring && body->lambda.docstring[0])
+                            harvested_doc = strdup(body->lambda.docstring);
+                    }
+                }
+
                 char mod_name[64];
                 snprintf(mod_name,       sizeof(mod_name),       "__repl_%u", ctx->expr_count);
                 snprintf(g_wrapper_name, sizeof(g_wrapper_name), WRAPPER_FMT, g_wrapper_seq++);
@@ -1568,6 +1864,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                 if (setjmp(ctx->cg.error_jmp) != 0) {
                     ctx->cg.error_jmp_set = false;
                     ast_free(form);
+                    free(harvested_doc);
                     recover_module(ctx);
                     fresh_module(ctx, "__repl_recover");
                     failed++;
@@ -1577,6 +1874,44 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                 CodegenResult res = codegen_expr(&ctx->cg, form);
                 ctx->cg.error_jmp_set = false;
                 ast_free(form);
+
+                /* ---- patch env entry with source_text + docstring ---- */
+                if (is_define && harvested_name[0]) {
+                    EnvEntry *e = env_lookup(ctx->cg.env, harvested_name);
+                    if (e) {
+                        if (!e->source_text)
+                            e->source_text = strndup(form_start, form_end - form_start);
+                        if (!e->docstring && harvested_doc) {
+                            e->docstring = harvested_doc;
+                            harvested_doc = NULL;
+                        }
+                    }
+                }
+                if (is_layout) {
+                    /* layout name is in form->layout.name but form is freed —
+                     * we can recover it from the env: the most recently added
+                     * ENV_LAYOUT entry without source_text is ours.
+                     * Simpler: re-derive from form_start which still points
+                     * into src (valid until free(src) below). */
+                    /* parse just the layout name from form_start */
+                    const char *lp = form_start;
+                    if (*lp == '(') lp++;
+                    while (*lp && isspace((unsigned char)*lp)) lp++;
+                    while (*lp && !isspace((unsigned char)*lp)) lp++; /* skip "layout" */
+                    while (*lp && isspace((unsigned char)*lp)) lp++;
+                    const char *lname_start = lp;
+                    while (*lp && !isspace((unsigned char)*lp) && *lp != ')') lp++;
+                    char lname[256] = {0};
+                    strncpy(lname, lname_start, (size_t)(lp - lname_start) < 255
+                                                ? (size_t)(lp - lname_start) : 255);
+                    if (lname[0]) {
+                        EnvEntry *e = env_lookup(ctx->cg.env, lname);
+                        if (e && e->kind == ENV_LAYOUT && !e->source_text)
+                            e->source_text = strndup(form_start, form_end - form_start);
+                    }
+                }
+                free(harvested_doc);
+                harvested_doc = NULL;
 
                 if (!res.value) {
                     recover_module(ctx);
@@ -1757,7 +2092,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
      * Fast path: bare layout name — print its definition
      * ----------------------------------------------------------------------- */
     if (!silent && ast->type == AST_SYMBOL) {
-        Type *lay = layout_lookup(ast->symbol);
+        Type *lay = env_lookup_layout(ctx->cg.env, ast->symbol);
         if (lay && lay->kind == TYPE_LAYOUT) {
             printf("(layout %s\n", lay->layout_name);
             for (int i = 0; i < lay->layout_field_count; i++) {
@@ -1831,6 +2166,11 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
         return false;
     }
 
+    bool ast_was_layout = (ast->type == AST_LAYOUT);
+    char layout_name_buf[256] = {0};
+    if (ast_was_layout)
+        strncpy(layout_name_buf, ast->layout.name, sizeof(layout_name_buf) - 1);
+
     // Store source text for (code fn) reflection
     char *source_copy = NULL;
     if (ast->type == AST_LIST && ast->list.count >= 3 &&
@@ -1903,8 +2243,20 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
     g_assert_jmp_ptr = NULL;
     rt_interrupted = 0;
 
+    /* if (ran) { */
+    /*     ctx->expr_count++; */
+    /*     char next[64]; */
+    /*     snprintf(next, sizeof(next), "__repl_%u", ctx->expr_count); */
+    /*     fresh_module(ctx, next); */
+    /* } else { */
     if (ran) {
         ctx->expr_count++;
+        // Attach source text to layout env entry for (code Layout) reflection
+        if (ast_was_layout) {
+            EnvEntry *e = env_lookup(ctx->cg.env, layout_name_buf);
+            if (e && e->kind == ENV_LAYOUT && !e->source_text)
+                e->source_text = strdup(line);
+        }
         char next[64];
         snprintf(next, sizeof(next), "__repl_%u", ctx->expr_count);
         fresh_module(ctx, next);

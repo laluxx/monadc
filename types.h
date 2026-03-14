@@ -113,10 +113,6 @@ void  type_alias_free_all(void);          // call at program exit / between comp
 
 /// Layout
 
-// Layout registry
-void  layout_register(const char *name, Type *t);  // takes ownership of t
-Type *layout_lookup(const char *name);             // returns borrowed ptr
-void  layout_free_all(void);
 int layout_compute_offsets(LayoutField *fields, int count, bool packed, int (*elem_size_fn)(const char *type_name));
 
 #endif

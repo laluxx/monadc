@@ -9,6 +9,7 @@ typedef enum {
     ENV_VAR,      // a variable
     ENV_BUILTIN,  // a built-in
     ENV_FUNC,     // a user-defined function
+    ENV_LAYOUT,   // a layout type definition
 } EnvEntryKind;
 
 typedef struct EnvParam {
@@ -80,5 +81,9 @@ EnvEntry *env_lookup(Env *table, const char *name);
 
 void env_print(Env *table);
 void env_print_entry(EnvEntry *e);
+
+void env_insert_layout(Env *table, const char *name, Type *layout_type,
+                       const char *source_text);
+Type *env_lookup_layout(Env *table, const char *name);
 
 #endif

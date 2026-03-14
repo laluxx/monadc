@@ -68,8 +68,6 @@
   "Return True if C is an uppercase letter."
   (and (>= c 'A') (<= c 'Z')))
 
-(define (new)
-  (show "new"))
 
 (define (char-alphabetic? [c :: Char] -> Bool)
   "Return True if C is a letter."

@@ -32,6 +32,7 @@ static void free_entry_fields(EnvEntry *e) {
     free(e->name);
     free(e->docstring);
     free(e->module_name);
+    free(e->source_text);
     type_free(e->type);
     type_free(e->return_type);
     if (e->params) {
@@ -97,6 +98,32 @@ void env_insert(Env *table, const char *name, Type *type, LLVMValueRef value) {
     env_insert_with_doc(table, name, type, value, NULL);
 }
 
+void env_insert_layout(Env *table, const char *name, Type *layout_type,
+                       const char *source_text) {
+    EnvEntry *e = find(table, name);
+    if (e) {
+        type_free(e->type);
+        free(e->source_text);
+        e->kind        = ENV_LAYOUT;
+        e->type        = layout_type;
+        e->source_text = source_text ? strdup(source_text) : NULL;
+        e->is_exported = true;
+        return;
+    }
+    e = new_entry(name);
+    e->kind        = ENV_LAYOUT;
+    e->type        = layout_type;
+    e->source_text = source_text ? strdup(source_text) : NULL;
+    e->is_exported = true;
+    chain(table, e);
+}
+
+Type *env_lookup_layout(Env *table, const char *name) {
+    EnvEntry *e = env_lookup(table, name);
+    if (e && e->kind == ENV_LAYOUT) return e->type;
+    return NULL;
+}
+
 void env_insert_with_doc(Env *table, const char *name, Type *type,
                           LLVMValueRef value, const char *docstring) {
     EnvEntry *e = find(table, name);
@@ -126,20 +153,23 @@ void env_insert_from_module(Env *table, const char *name, const char *module_nam
                             Type *type, LLVMValueRef value, bool is_exported) {
     EnvEntry *e = find(table, name);
     if (e) {
+        char *saved_source = e->source_text;
+        e->source_text = NULL;
         type_free(e->type);
         free(e->docstring);
         free(e->module_name);
-        e->kind      = ENV_VAR;
-        e->type      = type;
-        e->value     = value;
+        e->kind        = ENV_VAR;
+        e->type        = type;
+        e->value       = value;
         e->module_name = module_name ? strdup(module_name) : NULL;
         e->is_exported = is_exported;
+        e->source_text = saved_source;
         return;
     }
     e = new_entry(name);
-    e->kind      = ENV_VAR;
-    e->type      = type;
-    e->value     = value;
+    e->kind        = ENV_VAR;
+    e->type        = type;
+    e->value       = value;
     e->module_name = module_name ? strdup(module_name) : NULL;
     e->is_exported = is_exported;
     chain(table, e);
@@ -171,8 +201,11 @@ void env_insert_func(Env *table, const char *name,
                      const char *docstring) {
     EnvEntry *e = find(table, name);
     if (e) {
+        char *saved_source = e->source_text;
+        e->source_text = NULL;
         free_entry_fields(e);
-        e->name = strdup(name);
+        e->name        = strdup(name);
+        e->source_text = saved_source;
     } else {
         e = new_entry(name);
         chain(table, e);
@@ -218,6 +251,12 @@ static void build_bracket(EnvEntry *e, char *buf, size_t sz) {
     }
 
     switch (e->kind) {
+
+    case ENV_LAYOUT: {
+        int field_count = e->type ? e->type->layout_field_count : 0;
+        snprintf(buf, sz, "[%s :: Layout (%d fields)]", name_buf, field_count);
+        return;
+    }
 
     case ENV_VAR:
         snprintf(buf, sz, "[%s :: %s]",

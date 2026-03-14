@@ -14,15 +14,6 @@ typedef struct TypeAlias {
 
 static TypeAlias *g_aliases = NULL;
 
-typedef struct LayoutEntry {
-    char               *name;
-    Type               *type;  // owned
-    struct LayoutEntry *next;
-} LayoutEntry;
-
-static LayoutEntry *g_layouts = NULL;
-
-
 void type_alias_register(const char *alias_name, const char *target_name) {
     // Replace if already exists
     for (TypeAlias *a = g_aliases; a; a = a->next) {
@@ -50,41 +41,6 @@ void type_alias_free_all(void) {
     }
     g_aliases = NULL;
 }
-
-void layout_register(const char *name, Type *t) {
-    // Replace if exists
-    for (LayoutEntry *e = g_layouts; e; e = e->next) {
-        if (strcmp(e->name, name) == 0) {
-            type_free(e->type);
-            e->type = t;
-            return;
-        }
-    }
-    LayoutEntry *e = malloc(sizeof(LayoutEntry));
-    e->name = strdup(name);
-    e->type = t;
-    e->next = g_layouts;
-    g_layouts = e;
-}
-
-Type *layout_lookup(const char *name) {
-    for (LayoutEntry *e = g_layouts; e; e = e->next)
-        if (strcmp(e->name, name) == 0) return e->type;
-    return NULL;
-}
-
-void layout_free_all(void) {
-    LayoutEntry *e = g_layouts;
-    while (e) {
-        LayoutEntry *next = e->next;
-        free(e->name);
-        type_free(e->type);
-        free(e);
-        e = next;
-    }
-    g_layouts = NULL;
-}
-
 
 // Resolve a name to a Type*, checking aliases after builtins.
 // Always returns a fresh allocation (or NULL if unknown).
@@ -121,10 +77,6 @@ Type *type_from_name(const char *name) {
         break;  // not found in aliases
         next_iteration:;
     }
-
-    // Check layout registry
-    Type *lt = layout_lookup(name);
-    if (lt) return lt;  // borrowed — caller must NOT free this
 
     return NULL;  // unknown type
 }

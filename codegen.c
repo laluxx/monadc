@@ -1275,7 +1275,7 @@ void codegen_layout(CodegenContext *ctx, AST *ast) {
             ft = type_from_name(af->type_name);
             if (!ft) {
                 // Try layout registry (nested struct)
-                ft = layout_lookup(af->type_name);
+                ft = env_lookup_layout(ctx->env, af->type_name);
                 if (ft) ft = type_clone(ft);  // clone so ownership is clear
             }
             if (!ft) {
@@ -1308,7 +1308,7 @@ void codegen_layout(CodegenContext *ctx, AST *ast) {
                                     total_size,
                                     ast->layout.packed,
                                     ast->layout.align);
-    layout_register(ast->layout.name, layout_type);
+    env_insert_layout(ctx->env, ast->layout.name, layout_type, NULL);
 
     // 4. Force creation of the LLVM named struct type now
     type_to_llvm(ctx, layout_type);
@@ -2658,24 +2658,29 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             if (strcmp(head->symbol, "code") == 0) {
                 if (ast->list.count != 2 ||
                     ast->list.items[1]->type != AST_SYMBOL) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'code' requires a function name",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'code' requires a symbol name",
                                   parser_get_filename(), ast->line, ast->column);
                 }
                 const char *fn_name = ast->list.items[1]->symbol;
                 EnvEntry *e = env_lookup(ctx->env, fn_name);
                 if (!e) {
+                    // Also check layout env
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: unbound symbol: %s",
                                   parser_get_filename(), ast->line, ast->column, fn_name);
                 }
-                const char *src = (e->source_text && e->source_text[0])
-                                  ? e->source_text : "";
-
-                // Parse the stored source back into an AST and convert to RuntimeValue
-                AST *src_ast = parse(src);
-                LLVMTypeRef  ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-                LLVMTypeRef  i64 = LLVMInt64TypeInContext(ctx->context);
+                if (!e->source_text || !e->source_text[0]) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: no source available for '%s'",
+                                  parser_get_filename(), ast->line, ast->column, fn_name);
+                }
+                AST *src_ast = parse(e->source_text);
+                if (!src_ast) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: failed to parse source for '%s'",
+                                  parser_get_filename(), ast->line, ast->column, fn_name);
+                }
                 RuntimeValue *rv = rt_ast_to_runtime_value(src_ast);
                 ast_free(src_ast);
+                LLVMTypeRef  ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMTypeRef  i64 = LLVMInt64TypeInContext(ctx->context);
                 LLVMValueRef addr = LLVMConstInt(i64, (uint64_t)(uintptr_t)rv, 0);
                 result.value = LLVMBuildIntToPtr(ctx->builder, addr, ptr, "code_rv");
                 result.type  = type_unknown();
@@ -4608,7 +4613,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
             // Layout constructor: (Point 3.0 4.0) or (Point) for zero-init
             {
-                Type *lay = layout_lookup(head->symbol);
+                Type *lay = env_lookup_layout(ctx->env, head->symbol);
                 if (lay && lay->kind == TYPE_LAYOUT) {
 
                     // Get the bare struct type (NOT the pointer wrapper from type_to_llvm)
