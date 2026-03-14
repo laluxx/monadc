@@ -392,6 +392,7 @@ static void open_wrapper(REPLContext *ctx) {
 static bool expr_is_silent(AST *ast) {
     if (!ast) return false;
     if (ast->type == AST_LAYOUT) return true;
+    if (ast->type == AST_TYPE_ALIAS) return true;   // ← add this
     if (ast->type != AST_LIST || ast->list.count == 0) return false;
     if (ast->list.items[0]->type != AST_SYMBOL) return false;
     const char *s = ast->list.items[0]->symbol;
@@ -1600,6 +1601,7 @@ void repl_init(REPLContext *ctx) {
     ctx->cg.fmt_oct = NULL;
     ctx->cg.error_jmp_set = false;
     memset(ctx->cg.error_msg, 0, sizeof(ctx->cg.error_msg));
+    ctx->cg.current_function_name = NULL;
 
     /* Bootstrap engine from an empty module */
     LLVMModuleRef boot = LLVMModuleCreateWithNameInContext(

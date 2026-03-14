@@ -1393,10 +1393,19 @@ RuntimeValue *rt_ast_to_runtime_value(AST *ast) {
     }
 
     switch (ast->type) {
-        case AST_NUMBER: {
-            Type *t = infer_literal_type(ast->number, ast->literal_str);
+    case AST_NUMBER: {
+            bool is_float = false;
+            if (ast->literal_str) {
+                const char *s = ast->literal_str;
+                while (*s) {
+                    if (*s == '.' || *s == 'e' || *s == 'E') { is_float = true; break; }
+                    s++;
+                }
+            } else {
+                is_float = (ast->number != (double)(int64_t)ast->number);
+            }
             RuntimeValue *v = HEAP_VAL();
-            if (type_is_float(t)) {
+            if (is_float) {
                 v->type = RT_FLOAT;
                 v->data.float_val = ast->number;
             } else {

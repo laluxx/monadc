@@ -9,6 +9,7 @@
 #include "asm.h"
 #include "runtime.h"
 #include "module.h"
+#include <ctype.h>
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
 #include <llvm-c/Target.h>
@@ -268,6 +269,7 @@ LLVMValueRef get_or_declare_print_binary(CodegenContext *ctx) {
 /// Type to LLVM Type conversion
 
 LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *t) {
+    if (!t) return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
     switch (t->kind) {
     case TYPE_INT:
     case TYPE_HEX:
@@ -1253,8 +1255,14 @@ static int layout_field_byte_size(CodegenContext *ctx, Type *t) {
 }
 
 void codegen_layout(CodegenContext *ctx, AST *ast) {
-    // ast->type == AST_LAYOUT
+    const char *name = ast->layout.name;
+    if (!name || !isupper((unsigned char)name[0])) {
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: layout name '%s' must start with an uppercase letter",
+                      parser_get_filename(), ast->line, ast->column,
+                      name ? name : "");
+    }
 
+    // ast->type == AST_LAYOUT
     // 1. Resolve each field's type
     LayoutField *fields = malloc(sizeof(LayoutField) * (ast->layout.field_count ? ast->layout.field_count : 1));
 
@@ -1319,6 +1327,34 @@ void codegen_layout(CodegenContext *ctx, AST *ast) {
            ast->layout.align  ? ", aligned" : "");
 }
 
+static void check_predicate_name(CodegenContext *ctx, const char *name,
+                                  Type *return_type, AST *ast) {
+    if (!name || !return_type) return;
+    if (return_type->kind != TYPE_BOOL) return;
+    size_t len = strlen(name);
+    if (len == 0 || name[len - 1] == '?') return;
+    CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' returns Bool, making it a predicate "
+                  "— predicate functions must end with '?', rename to '%s?'",
+                  parser_get_filename(), ast->line, ast->column,
+                  name, name);
+}
+
+static bool name_is_impure(const char *name) {
+    if (!name || !*name) return false;
+    return name[strlen(name) - 1] == '!';
+}
+
+static void check_purity(CodegenContext *ctx, const char *caller,
+                         const char *callee, AST *ast) {
+    if (!caller || !callee) return;
+    if (name_is_impure(callee) && !name_is_impure(caller)) {
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: pure function '%s' calls impure "
+                      "function '%s' — rename to '%s!'",
+                      parser_get_filename(), ast->line, ast->column,
+                      caller, callee, caller);
+    }
+}
+
 CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     CodegenResult result = {NULL, NULL};
 
@@ -1347,6 +1383,12 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     }
 
     case AST_SYMBOL: {
+        if (strcmp(ast->symbol, "nil") == 0) {
+            LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+            result.value    = LLVMConstPointerNull(ptr);
+            result.type     = type_unknown();
+            return result;
+        }
         // Boolean literals
         if (strcmp(ast->symbol, "True") == 0) {
             result.value = LLVMConstInt(LLVMInt1TypeInContext(ctx->context), 1, 0);
@@ -1370,7 +1412,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             const char *field_name = dot + 1;
 
             EnvEntry *base_entry = env_lookup(ctx->env, var_name);
-            if (base_entry && base_entry->type->kind == TYPE_LAYOUT) {
+            if (base_entry && base_entry->type && base_entry->type->kind == TYPE_LAYOUT) {
                 Type *lay = base_entry->type;
                 int field_idx = -1;
                 for (int i = 0; i < lay->layout_field_count; i++) {
@@ -1434,7 +1476,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                           parser_get_filename(), ast->line, ast->column, ast->symbol);
         }
 
-        if (entry->type->kind == TYPE_LAYOUT) {
+        if (entry->type && entry->type->kind == TYPE_LAYOUT) {
             LLVMTypeRef  ptr_t  = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
             LLVMValueRef get_fn = LLVMGetNamedFunction(ctx->module, "__layout_ptr_get");
             if (!get_fn) {
@@ -1449,6 +1491,15 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 LLVMFunctionType(ptr_t, &ptr_t, 1, 0),
                 get_fn, &name_str, 1, "lay_ptr");
             return result;
+        }
+
+        if (entry->kind == ENV_BUILTIN) {
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' is a built-in and cannot be passed as a value",
+                          parser_get_filename(), ast->line, ast->column, ast->symbol);
+        }
+        if (!entry->type) {
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' has no type information",
+                          parser_get_filename(), ast->line, ast->column, ast->symbol);
         }
 
         result.type  = type_clone(entry->type);
@@ -1739,6 +1790,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
         AST *head = ast->list.items[0];
 
         if (head->type == AST_SYMBOL) {
+            check_purity(ctx, ctx->current_function_name, head->symbol, ast);
             // Handle 'define' special form
             if (strcmp(head->symbol, "define") == 0) {
                 if (ast->list.count < 3) {
@@ -1985,9 +2037,13 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         body_result.type = ret_type;
                         free_asm_instructions(asm_instructions, asm_inst_count);
                     } else {
+                        const char *prev_fn_name = ctx->current_function_name;
+                        ctx->current_function_name = var_name;
                         for (int i = 0; i < lambda->lambda.body_count; i++) {
                             body_result = codegen_expr(ctx, lambda->lambda.body_exprs[i]);
                         }
+                        ctx->current_function_name = prev_fn_name;
+
                         if (!body_result.type) {
                             body_result.type  = type_clone(ret_type);
                             body_result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0);
@@ -2065,8 +2121,11 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         printf("Alias: %s -> %s\n", ast->lambda.alias_name, var_name);
                     }
 
-
+                    ctx->current_function_name = NULL;
+                    check_predicate_name(ctx, var_name, ret_type, ast);
                     if (ctx->module_ctx && !should_export_symbol(ctx->module_ctx, var_name)) {
+
+
                         printf("Defined %s :: Fn (...) -> %s (private)\n",
                                var_name, type_to_string(ret_type));
                     } else {
@@ -2312,6 +2371,39 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 return result;
             }
 
+            if (strcmp(head->symbol, "nil?") == 0) {
+                if (ast->list.count != 2) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'nil?' requires exactly 1 argument",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                CodegenResult arg = codegen_expr(ctx, ast->list.items[1]);
+                if (!arg.value) return result;
+
+                LLVMTypeRef  i1  = LLVMInt1TypeInContext(ctx->context);
+                LLVMTypeRef  ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+
+                /* Integers, bools, floats — never nil by definition */
+                if (arg.type && (arg.type->kind == TYPE_INT  ||
+                                 arg.type->kind == TYPE_FLOAT ||
+                                 arg.type->kind == TYPE_BOOL  ||
+                                 arg.type->kind == TYPE_CHAR)) {
+                    result.value = LLVMConstInt(i1, 0, 0);  /* always False */
+                    result.type  = type_bool();
+                    return result;
+                }
+
+                /* Pointer-like value — do the actual null check */
+                LLVMValueRef val = arg.value;
+                if (LLVMTypeOf(val) != ptr)
+                    val = LLVMBuildBitCast(ctx->builder, val, ptr, "nil_cast");
+
+                result.value = LLVMBuildICmp(ctx->builder, LLVMIntEQ, val,
+                                             LLVMConstPointerNull(ptr), "is_nil");
+                result.type  = type_bool();
+                return result;
+            }
+
+
             // Handle 'quote' special form
             if (strcmp(head->symbol, "quote") == 0) {
                 if (ast->list.count != 2) {
@@ -2534,7 +2626,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     }
 
                     // Arrays need special treatment — they're pointers to stack allocations
-                    if (entry->type->kind == TYPE_ARR) {
+                    if (entry->type && entry->type->kind == TYPE_ARR) {
                         LLVMTypeRef arr_type = type_to_llvm(ctx, entry->type);
                         LLVMValueRef open = LLVMBuildGlobalStringPtr(ctx->builder, "[", "open");
                         LLVMValueRef open_args[] = {open};
@@ -3474,7 +3566,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         CODEGEN_ERROR(ctx, "%s:%d:%d: error: unbound variable: %s",
                                       parser_get_filename(), ast->line, ast->column, var_name);
                     }
-                    if (base_entry->type->kind != TYPE_LAYOUT) {
+                    if (base_entry->type && base_entry->type->kind != TYPE_LAYOUT) {
                         CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' is not a layout type",
                                       parser_get_filename(), ast->line, ast->column, var_name);
                     }
@@ -4759,7 +4851,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     const char *field_name = dot + 1;
 
                     EnvEntry *base_entry = env_lookup(ctx->env, var_name);
-                    if (base_entry && base_entry->type->kind == TYPE_LAYOUT) {
+                    if (base_entry && base_entry->type && base_entry->type->kind == TYPE_LAYOUT) {
                         Type *lay = base_entry->type;
 
                         int field_idx = -1;
@@ -4905,12 +4997,16 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     }
 
     case AST_TYPE_ALIAS: {
-        type_alias_register(ast->type_alias.alias_name,
-                            ast->type_alias.target_name);
-        printf("Type alias: %s = %s\n", ast->type_alias.alias_name,
-               ast->type_alias.target_name);
-        result.type = type_int();
-        result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0);
+        const char *alias_name = ast->type_alias.alias_name;
+        if (!alias_name || !isupper((unsigned char)alias_name[0])) {
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: type alias '%s' must start with an uppercase letter",
+                          parser_get_filename(), ast->line, ast->column,
+                          alias_name ? alias_name : "");
+        }
+        type_alias_register(alias_name, ast->type_alias.target_name);
+        printf("Type alias: %s = %s\n", alias_name, ast->type_alias.target_name);
+        result.type  = NULL;
+        result.value = NULL;
         return result;
     }
 
@@ -5082,6 +5178,7 @@ void codegen_declare_external_func(CodegenContext *ctx,
 }
 
 void register_builtins(CodegenContext *ctx) {
+    env_insert_builtin(ctx->env, "nil?", 1, 1, "Return True if value is nil (null pointer)");
     // Arithmetic operators
     env_insert_builtin(ctx->env, "+",  1, -1, "Add numbers");
     env_insert_builtin(ctx->env, "-",  1, -1, "Subtract or negate numbers");

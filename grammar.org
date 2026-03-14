@@ -736,7 +736,6 @@ Use =layout= when:
 - SIMD-aligned data for performance
 - You need precise control over every byte
 
-
 * Variables and Binding
 
 ** Define
@@ -1450,7 +1449,6 @@ ENOMEM
    - Type checking happens at compile time
    
    No runtime overhead, C functions are called directly with the C ABI.
-
 
 
 * Macros

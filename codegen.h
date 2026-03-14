@@ -25,6 +25,8 @@ typedef struct {
     LLVMValueRef fmt_bin;
     LLVMValueRef fmt_oct;
     bool test_mode;
+    const char *current_function_name;  // NULL at top level, set when inside a define
+
 
     /* Error recovery — set by CODEGEN_ERROR, caught by codegen_expr callers */
     jmp_buf  error_jmp;
