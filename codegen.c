@@ -1327,16 +1327,31 @@ void codegen_layout(CodegenContext *ctx, AST *ast) {
            ast->layout.align  ? ", aligned" : "");
 }
 
+
 static void check_predicate_name(CodegenContext *ctx, const char *name,
                                   Type *return_type, AST *ast) {
     if (!name || !return_type) return;
-    if (return_type->kind != TYPE_BOOL) return;
     size_t len = strlen(name);
-    if (len == 0 || name[len - 1] == '?') return;
-    CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' returns Bool, making it a predicate "
-                  "— predicate functions must end with '?', rename to '%s?'",
-                  parser_get_filename(), ast->line, ast->column,
-                  name, name);
+    bool ends_with_q  = (len > 0 && name[len - 1] == '?');
+    bool ends_with_qi = (len > 1 && name[len - 2] == '?' && name[len - 1] == '!');
+    bool returns_bool = (return_type->kind == TYPE_BOOL);
+
+    if (returns_bool && !ends_with_q && !ends_with_qi) {
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' returns Bool, making it a "
+                      "predicate — predicate functions must end with '?', "
+                      "rename to '%s?'",
+                      parser_get_filename(), ast->line, ast->column,
+                      name, name);
+    }
+
+    if (!returns_bool && ends_with_q && !ends_with_qi) {
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' ends with '?' making it "
+                      "is a predicate, but it returns %s — predicates must "
+                      "return Bool, either fix the return type or rename to "
+                      "remove the '?'",
+                      parser_get_filename(), ast->line, ast->column,
+                      name, type_to_string(return_type));
+    }
 }
 
 static bool name_is_impure(const char *name) {
