@@ -566,6 +566,290 @@ RuntimeList *rt_list_drop(RuntimeList *list, int64_t n) {
     return cur;
 }
 
+
+/// Set — heap-allocated open-addressing hash set
+
+// Sentinel: a static TOMBSTONE pointer marks deleted slots.
+// Load factor threshold: 0.7 (count + tombstones).
+// Capacity is always a power of two so slot = hash & (cap-1).
+
+#define SET_INITIAL_CAP 8
+#define SET_LOAD_NUM    7
+#define SET_LOAD_DEN    10
+
+static RuntimeValue _tombstone_val = { .type = RT_NIL };
+static RuntimeValue *TOMBSTONE = &_tombstone_val;
+
+static uint64_t fnv1a(const char *s) {
+    uint64_t h = 14695981039346656037ULL;
+    for (; *s; s++) { h ^= (uint8_t)*s; h *= 1099511628211ULL; }
+    return h;
+}
+
+static uint64_t rt_hash_value(RuntimeValue *v) {
+    if (!v || v->type == RT_NIL) return 0;
+
+    switch (v->type) {
+
+    case RT_INT:
+        return (uint64_t)v->data.int_val * 2654435761ULL;
+
+    case RT_FLOAT: {
+        uint64_t bits;
+        memcpy(&bits, &v->data.float_val, sizeof(bits));
+        return bits * 2654435761ULL;
+    }
+
+    case RT_CHAR:
+        return (uint64_t)(unsigned char)v->data.char_val * 2654435761ULL;
+
+    case RT_STRING:
+        return fnv1a(v->data.string_val);
+
+    case RT_SYMBOL:
+        return fnv1a(v->data.symbol_val);
+
+    case RT_KEYWORD:
+        return fnv1a(v->data.keyword_val);
+
+    case RT_RATIO:
+        return (uint64_t)v->data.ratio_val.numerator   * 2654435761ULL
+             ^ (uint64_t)v->data.ratio_val.denominator * 40503ULL;
+
+    case RT_LIST: {
+        uint64_t h = 0;
+        RuntimeList *cur = v->data.list_val;
+        int limit = 8;
+        while (!rt_list_is_empty_list(cur) && limit-- > 0) {
+            h = h * 31 + rt_hash_value(rt_list_car(cur));
+            cur = rt_list_cdr(cur);
+        }
+        return h;
+    }
+
+    case RT_SET: {
+        uint64_t h = 0;
+        RuntimeSet *s = v->data.set_val;
+        if (!s) return 0;
+        for (size_t i = 0; i < s->capacity; i++) {
+            RuntimeValue *elem = s->buckets[i];
+            if (elem && elem != TOMBSTONE)
+                h ^= rt_hash_value(elem);
+        }
+        return h;
+    }
+
+    default:
+        return (uint64_t)(uintptr_t)v;
+    }
+}
+
+static RuntimeSet *set_alloc(size_t cap) {
+    RuntimeSet *s   = malloc(sizeof(RuntimeSet));
+    s->buckets      = calloc(cap, sizeof(RuntimeValue *));
+    s->capacity     = cap;
+    s->count        = 0;
+    s->tombstones   = 0;
+    return s;
+}
+
+static void set_insert_noresize(RuntimeSet *s, RuntimeValue *val) {
+    uint64_t h    = rt_hash_value(val);
+    size_t   mask = s->capacity - 1;
+    size_t   idx  = (size_t)(h & mask);
+    size_t   first_tomb = SIZE_MAX;
+
+    for (size_t i = 0; i < s->capacity; i++) {
+        size_t slot = (idx + i) & mask;
+        RuntimeValue *cur = s->buckets[slot];
+
+        if (!cur) {
+            /* empty slot */
+            size_t write = (first_tomb != SIZE_MAX) ? first_tomb : slot;
+            s->buckets[write] = val;
+            s->count++;
+            if (first_tomb != SIZE_MAX) s->tombstones--;
+            return;
+        }
+        if (cur == TOMBSTONE) {
+            if (first_tomb == SIZE_MAX) first_tomb = slot;
+            continue;
+        }
+        if (rt_equal_p(cur, val)) return; /* already present */
+    }
+    /* table full (shouldn't happen if resize works) */
+    if (first_tomb != SIZE_MAX) {
+        s->buckets[first_tomb] = val;
+        s->count++;
+        s->tombstones--;
+    }
+}
+
+static void set_resize(RuntimeSet *s) {
+    size_t     new_cap  = s->capacity * 2;
+    RuntimeValue **old  = s->buckets;
+    size_t     old_cap  = s->capacity;
+
+    s->buckets    = calloc(new_cap, sizeof(RuntimeValue *));
+    s->capacity   = new_cap;
+    s->count      = 0;
+    s->tombstones = 0;
+
+    for (size_t i = 0; i < old_cap; i++) {
+        RuntimeValue *v = old[i];
+        if (v && v != TOMBSTONE)
+            set_insert_noresize(s, v);
+    }
+    free(old);
+}
+
+RuntimeSet *rt_set_new(void) {
+    return set_alloc(SET_INITIAL_CAP);
+}
+
+RuntimeSet *rt_set_conj(RuntimeSet *s, RuntimeValue *val) {
+    if (!val || val->type == RT_NIL) return s;
+
+    /* Copy — sets are immutable, conj returns a new set */
+    RuntimeSet *copy = set_alloc(s->capacity);
+    copy->count      = 0;
+    copy->tombstones = 0;
+    for (size_t i = 0; i < s->capacity; i++) {
+        RuntimeValue *v = s->buckets[i];
+        if (v && v != TOMBSTONE)
+            set_insert_noresize(copy, v);
+    }
+    /* resize if needed then insert */
+    if ((copy->count + copy->tombstones + 1) * SET_LOAD_DEN
+         >= copy->capacity * SET_LOAD_NUM)
+        set_resize(copy);
+    set_insert_noresize(copy, val);
+    return copy;
+}
+
+int rt_set_contains(RuntimeSet *s, RuntimeValue *val) {
+    if (!s || !val) return 0;
+    uint64_t h    = rt_hash_value(val);
+    size_t   mask = s->capacity - 1;
+    size_t   idx  = (size_t)(h & mask);
+
+    for (size_t i = 0; i < s->capacity; i++) {
+        size_t        slot = (idx + i) & mask;
+        RuntimeValue *cur  = s->buckets[slot];
+        if (!cur)          return 0;
+        if (cur == TOMBSTONE) continue;
+        if (rt_equal_p(cur, val)) return 1;
+    }
+    return 0;
+}
+
+RuntimeValue *rt_set_get(RuntimeSet *s, RuntimeValue *key) {
+    if (!s || !key) return rt_value_nil();
+    uint64_t h    = rt_hash_value(key);
+    size_t   mask = s->capacity - 1;
+    size_t   idx  = (size_t)(h & mask);
+
+    for (size_t i = 0; i < s->capacity; i++) {
+        size_t        slot = (idx + i) & mask;
+        RuntimeValue *cur  = s->buckets[slot];
+        if (!cur)          return rt_value_nil();
+        if (cur == TOMBSTONE) continue;
+        if (rt_equal_p(cur, key)) return cur;
+    }
+    return rt_value_nil();
+}
+
+
+RuntimeSet *rt_set_disj(RuntimeSet *s, RuntimeValue *val) {
+    if (!s || !val) return s;
+    if (!rt_set_contains(s, val)) return s;
+
+    /* Copy without the element */
+    RuntimeSet *copy = set_alloc(s->capacity);
+    copy->count      = 0;
+    copy->tombstones = 0;
+    for (size_t i = 0; i < s->capacity; i++) {
+        RuntimeValue *v = s->buckets[i];
+        if (v && v != TOMBSTONE && !rt_equal_p(v, val))
+            set_insert_noresize(copy, v);
+    }
+    return copy;
+}
+
+
+int64_t rt_set_count(RuntimeSet *s) {
+    return s ? (int64_t)s->count : 0;
+}
+
+RuntimeList *rt_set_seq(RuntimeSet *s) {
+    RuntimeList *out = heap_list_wrapper();
+    out->cell = NULL;
+    if (!s) return out;
+    for (size_t i = 0; i < s->capacity; i++) {
+        RuntimeValue *v = s->buckets[i];
+        if (v && v != TOMBSTONE)
+            rt_list_append(out, v);
+    }
+    return out;
+}
+
+int rt_set_equal(RuntimeSet *a, RuntimeSet *b) {
+    if (!a && !b) return 1;
+    if (!a || !b) return 0;
+    if (a->count != b->count) return 0;
+    for (size_t i = 0; i < a->capacity; i++) {
+        RuntimeValue *v = a->buckets[i];
+        if (v && v != TOMBSTONE)
+            if (!rt_set_contains(b, v)) return 0;
+    }
+    return 1;
+}
+
+RuntimeSet *rt_set_of(RuntimeValue **vals, size_t n) {
+    RuntimeSet *s = rt_set_new();
+    for (size_t i = 0; i < n; i++)
+        rt_set_conj(s, vals[i]);
+    return s;
+}
+
+RuntimeSet *rt_set_from_list(RuntimeList *list) {
+    RuntimeSet  *s   = rt_set_new();
+    RuntimeList *cur = list;
+    while (!rt_list_is_empty_list(cur)) {
+        s = rt_set_conj(s, rt_list_car(cur));
+        cur = rt_list_cdr(cur);
+    }
+    return s;
+}
+
+RuntimeSet *rt_set_from_array(RuntimeValue *array_rv) {
+    RuntimeSet *s = rt_set_new();
+    if (!array_rv || array_rv->type != RT_ARRAY) return s;
+    for (size_t i = 0; i < array_rv->data.array_val.length; i++) {
+        RuntimeValue *v = array_rv->data.array_val.elements[i];
+        if (v) s = rt_set_conj(s, v);
+    }
+    return s;
+}
+
+void rt_set_free(RuntimeSet *s) {
+    if (!s) return;
+    free(s->buckets);
+    free(s);
+}
+
+RuntimeValue *rt_value_set(RuntimeSet *s) {
+    RuntimeValue *v = malloc(sizeof(RuntimeValue));
+    v->type         = RT_SET;
+    v->data.set_val = s;
+    return v;
+}
+
+RuntimeSet *rt_unbox_set(RuntimeValue *v) {
+    if (!v || v->type != RT_SET) return rt_set_new();
+    return v->data.set_val;
+}
+
 ///  Equality
 
 int rt_equal_p(RuntimeValue *a, RuntimeValue *b) {
@@ -576,11 +860,14 @@ int rt_equal_p(RuntimeValue *a, RuntimeValue *b) {
     if (a->type == RT_NIL && b->type == RT_NIL) return 1;
     if (a->type != b->type) return 0;
     switch (a->type) {
-        case RT_INT:    return a->data.int_val   == b->data.int_val;
-        case RT_FLOAT:  return a->data.float_val == b->data.float_val;
-        case RT_CHAR:   return a->data.char_val  == b->data.char_val;
-        case RT_STRING: return strcmp(a->data.string_val, b->data.string_val) == 0;
-        case RT_NIL:    return 1;
+        case RT_INT:     return a->data.int_val   == b->data.int_val;
+        case RT_FLOAT:   return a->data.float_val == b->data.float_val;
+        case RT_CHAR:    return a->data.char_val  == b->data.char_val;
+        case RT_STRING:  return strcmp(a->data.string_val,  b->data.string_val)  == 0;
+        case RT_SYMBOL:  return strcmp(a->data.symbol_val,  b->data.symbol_val)  == 0;
+        case RT_KEYWORD: return strcmp(a->data.keyword_val, b->data.keyword_val) == 0;
+        case RT_NIL:     return 1;
+        case RT_SET:     return rt_set_equal(a->data.set_val, b->data.set_val);
         case RT_LIST: {
             RuntimeList *la = a->data.list_val;
             RuntimeList *lb = b->data.list_val;
@@ -865,7 +1152,7 @@ static void rt_print_value_indent(RuntimeValue *val, int indent) {
         case RT_CHAR:    printf("'%c'", val->data.char_val);  break;
         case RT_STRING:  printf("\"%s\"", val->data.string_val); break;
         case RT_SYMBOL:  printf("%s",   val->data.symbol_val);   break;
-        case RT_KEYWORD: printf(":%s",  val->data.keyword_val);  break;
+        case RT_KEYWORD: printf("%s",  val->data.keyword_val);  break;
         case RT_NIL:     printf("nil"); break;
         case RT_LIST:    rt_print_list_indent(val->data.list_val, indent); break;
         case RT_RATIO:
@@ -885,6 +1172,21 @@ static void rt_print_value_indent(RuntimeValue *val, int indent) {
             }
             printf("]");
             break;
+        case RT_SET: {
+            RuntimeSet *s = val->data.set_val;
+            printf("{");
+            int first = 1;
+            for (size_t i = 0; i < s->capacity; i++) {
+                RuntimeValue *elem = s->buckets[i];
+                if (elem && elem != TOMBSTONE) {
+                    if (!first) printf(" ");
+                    rt_print_value_indent(elem, indent);
+                    first = 0;
+                }
+            }
+            printf("}");
+            break;
+        }
         case RT_BIGNUM: {
             char *s = mpz_get_str(NULL, 10, val->data.bignum_val);
             printf("%s", s);
@@ -1611,6 +1913,19 @@ void declare_runtime_functions(CodegenContext *ctx) {
     DECL("rt_array_get",    ptr, ptr, i64);
     DECL("rt_array_length", i64, ptr);
 
+    DECL0("rt_set_new",        ptr);
+    DECL("rt_set_of",          ptr, ptr, i64);
+    DECL("rt_set_from_list",   ptr, ptr);
+    DECL("rt_set_from_array",  ptr, ptr);
+    DECL("rt_set_contains",    i32, ptr, ptr);
+    DECL("rt_set_conj",        ptr, ptr, ptr);
+    DECL("rt_set_disj",        ptr, ptr, ptr);
+    DECL("rt_set_get",         ptr, ptr, ptr);
+    DECL("rt_set_count",       i64, ptr);
+    DECL("rt_set_seq",         ptr, ptr);
+    DECL("rt_value_set",       ptr, ptr);
+    DECL("rt_unbox_set",       ptr, ptr);
+
     // --- Print ---
     DECL("rt_print_value",         void_t, ptr);
     DECL("rt_print_list",          void_t, ptr);
@@ -1722,6 +2037,20 @@ GET_RUNTIME_FUNCTION(rt_list_foldr)
 GET_RUNTIME_FUNCTION(rt_list_filter)
 GET_RUNTIME_FUNCTION(rt_list_zip)
 GET_RUNTIME_FUNCTION(rt_list_zipwith)
+
+GET_RUNTIME_FUNCTION(rt_set_new)
+GET_RUNTIME_FUNCTION(rt_set_of)
+GET_RUNTIME_FUNCTION(rt_set_from_list)
+GET_RUNTIME_FUNCTION(rt_set_from_array)
+GET_RUNTIME_FUNCTION(rt_set_contains)
+GET_RUNTIME_FUNCTION(rt_set_conj)
+GET_RUNTIME_FUNCTION(rt_set_disj)
+GET_RUNTIME_FUNCTION(rt_set_get)
+GET_RUNTIME_FUNCTION(rt_set_count)
+GET_RUNTIME_FUNCTION(rt_set_seq)
+GET_RUNTIME_FUNCTION(rt_value_set)
+GET_RUNTIME_FUNCTION(rt_unbox_set)
+
 
 LLVMTypeRef get_rt_value_type(CodegenContext *ctx) {
     return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);

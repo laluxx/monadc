@@ -693,7 +693,7 @@
 ;; (set [1 2 3 2 1 2 3]); => {1 2 3}
 
 ;; Sets are collections:
-;; (def s {:a :b :c :d})
+;; (define s {:a :b :c :d})
 ;; (conj s :e); => {:d :a :b :e :c}
 ;; (count s); => 4
 ;; (seq s); => (:d :a :b :c)
@@ -711,8 +711,8 @@
 ;; (s :k); => nil
 
 
-;; (def players {"Alice" "Bob" "Kelly"})
-;; (def new-players ["Tim" "Sue" "Greg"])
+;; (define players {"Alice" "Bob" "Kelly"})
+;; (define new-players ["Tim" "Sue" "Greg"])
 
 
 ;; TODO Provide basic set operations like union, difference, intersection,
@@ -722,7 +722,7 @@
 
 ;; (define (multhi [x :: Hex] -> [y :: Hex] -> Int)
 ;;   "Multiply X and Y as Hexs, return Int"
-;;   (* x y))
+  ;; (* x y))
 
 ;;;; Pair
 

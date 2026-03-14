@@ -102,6 +102,7 @@ Type *type_bin    (void) { return make_type(TYPE_BIN);     }
 Type *type_oct    (void) { return make_type(TYPE_OCT);     }
 Type *type_keyword(void) { return make_type(TYPE_KEYWORD); }
 Type *type_ratio  (void) { return make_type(TYPE_RATIO);   }
+Type *type_set    (void) { return make_type(TYPE_SET);     }
 
 Type *type_list(Type *element_type) {
     Type *t = make_type(TYPE_LIST);
@@ -241,6 +242,7 @@ const char *type_to_string(Type *t) {
     case TYPE_OCT:     return "Oct";
     case TYPE_KEYWORD: return "Keyword";
     case TYPE_RATIO:   return "Ratio";
+    case TYPE_SET:     return "Set";
     case TYPE_UNKNOWN: return "?";
 
     case TYPE_LIST: {

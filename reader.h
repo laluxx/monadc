@@ -22,6 +22,7 @@ typedef enum {
     AST_ADDRESS_OF, // &expr
     AST_RANGE,      // (0..10) [0..10] [1,3..40] (0..)
     AST_LAYOUT,     // (layout Name [field :: Type] ... :packed True :align 16)
+    AST_SET,        // {val val val}
 } ASTType;
 
 // A single parsed function parameter: name + optional type annotation
@@ -115,6 +116,12 @@ typedef struct AST {
             int             align;    // :align N, 0 = natural
         } layout;
 
+        // AST_SET
+        struct {
+            struct AST **elements;
+            size_t       element_count;
+            size_t       element_capacity;
+        } set;
     };
 
     char *literal_str; // original literal string for numbers (e.g. "0xFF")
@@ -148,6 +155,7 @@ AST *ast_new_range(AST *start, AST *step, AST *end, bool is_array);
 AST *ast_new_layout(const char *name,
                     ASTLayoutField *fields, int field_count,
                     bool packed, int align);
+AST *ast_new_set(void);
 
 
 void ast_list_append(AST *list, AST *item);
@@ -168,11 +176,13 @@ typedef enum {
     TOK_STRING,
     TOK_CHAR,
     TOK_KEYWORD,
-    TOK_QUOTE,
-    TOK_ARROW,
+    TOK_QUOTE,          // '
+    TOK_ARROW,          // ->
     TOK_FEATURE_BEGIN,  // #+
     TOK_FEATURE_END,    // #---
     TOK_DOTDOT,         // ..
+    TOK_LBRACE,         // {
+    TOK_RBRACE,         // }
 } TokenType;
 
 typedef struct {

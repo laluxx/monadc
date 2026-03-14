@@ -41,3 +41,23 @@ Error: IR verification failed
 >>> INFERRED TYPE: Int
 (1 20)
 #+end_src
+
+
+* On Pragmatic Purity
+
+why is mutation forbidden even locally? If a function always returns the same output
+for the same input, and nothing escapes, why does internal mutation matter?
+
+The key insight: unobservable implementation details don't affect purity.
+   - Local variables (even mutable) are born and die within the function
+   - Memory allocation addresses can't be observed if pointers don't escape
+   - Same input → same output is all that matters
+
+This leads to a simple rule:
+    - Local mutation/allocation → pure (implementation detail)
+    - Global mutation/allocation → impure (observable side effect)
+
+The language remains deterministic and optimizable (CSE works!)
+while giving programmers imperative flexibility when they need it.
+Pure at the boundaries, imperative under the hood.
+

@@ -179,7 +179,7 @@ static void rt_sym_table_init(void) {
               g_rt_sym_count++; } \
     } while(0)
 
-    /* Runtime list */
+    // Runtime list
     ADD(rt_ast_to_runtime_value);
     ADD(rt_list_car);     ADD(rt_list_cdr);          ADD(rt_list_nth);
     ADD(rt_list_length);  ADD(rt_list_append_lists); ADD(rt_list_copy);
@@ -188,8 +188,13 @@ static void rt_sym_table_init(void) {
     ADD(rt_thunk_create); ADD(rt_force);             ADD(rt_list_range);
     ADD(rt_list_from);    ADD(rt_list_from_step);    ADD(rt_list_take);
     ADD(rt_list_drop);    ADD(rt_value_thunk);       ADD(rt_print_list_limited);
-
     ADD(rt_string_take);
+
+    // Set
+    ADD(rt_set_new);        ADD(rt_set_of);       ADD(rt_set_from_list);
+    ADD(rt_set_from_array); ADD(rt_set_contains); ADD(rt_set_conj);
+    ADD(rt_set_disj);       ADD(rt_set_get);      ADD(rt_set_count);
+    ADD(rt_set_seq);        ADD(rt_value_set);    ADD(rt_unbox_set);
 
     ADD(__layout_ptr_set);
     ADD(__layout_ptr_get);
@@ -712,6 +717,7 @@ static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t, bool li
         }
         break;
 
+    case TYPE_SET:
     case TYPE_RATIO:
     case TYPE_SYMBOL:
     case TYPE_UNKNOWN:

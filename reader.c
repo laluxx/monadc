@@ -283,6 +283,15 @@ AST *ast_new_layout(const char *name,
     return a;
 }
 
+AST *ast_new_set(void) {
+    AST *a = calloc(1, sizeof(AST));
+    a->type              = AST_SET;
+    a->set.element_capacity = 4;
+    a->set.elements      = malloc(sizeof(AST*) * 4);
+    a->set.element_count = 0;
+    return a;
+}
+
 void ast_array_append(AST *array, AST *item) {
     if (array->array.element_count >= array->array.element_capacity) {
         array->array.element_capacity *= 2;
@@ -391,6 +400,12 @@ void ast_free(AST *ast) {
             free(ast->layout.fields[i].array_elem);
         }
         free(ast->layout.fields);
+        break;
+
+    case AST_SET:
+        for (size_t i = 0; i < ast->set.element_count; i++)
+            ast_free(ast->set.elements[i]);
+        free(ast->set.elements);
         break;
 
     default:
@@ -615,6 +630,8 @@ Token lexer_next_token(Lexer *lex) {
     if (c == ')') { advance(lex); tok.type = TOK_RPAREN;   return tok; }
     if (c == '[') { advance(lex); tok.type = TOK_LBRACKET; return tok; }
     if (c == ']') { advance(lex); tok.type = TOK_RBRACKET; return tok; }
+    if (c == '{') { advance(lex); tok.type = TOK_LBRACE;   return tok; }
+    if (c == '}') { advance(lex); tok.type = TOK_RBRACE;   return tok; }
     if (c == ',') { advance(lex); tok.type = TOK_SYMBOL; tok.value = my_strdup(","); return tok; }
 
     // Character literal or quote
@@ -1884,6 +1901,34 @@ static double parse_number_str(const char *s) {
     return atof(s);
 }
 
+static AST *parse_set(Parser *p) {
+    int start_line = p->current.line;
+    int start_col  = p->current.column;
+    p->current = lexer_next_token(p->lexer); /* consume '{' */
+
+    AST *node = ast_new_set();
+    while (p->current.type != TOK_RBRACE &&
+           p->current.type != TOK_EOF) {
+        AST *elem = parse_expr(p);
+        if (node->set.element_count >= node->set.element_capacity) {
+            node->set.element_capacity *= 2;
+            node->set.elements = realloc(node->set.elements,
+                sizeof(AST*) * node->set.element_capacity);
+        }
+        node->set.elements[node->set.element_count++] = elem;
+    }
+    if (p->current.type != TOK_RBRACE)
+        compiler_error(p->current.line, p->current.column,
+                       "Expected '}' to close set literal");
+    int end_col = p->current.column + 1;
+    p->current = lexer_next_token(p->lexer);
+
+    node->line       = start_line;
+    node->column     = start_col;
+    node->end_column = end_col;
+    return node;
+}
+
 static AST *parse_expr(Parser *p) {
     Token tok = p->current;
 
@@ -1958,6 +2003,8 @@ static AST *parse_expr(Parser *p) {
         return parse_list(p);
     case TOK_LBRACKET:
         return parse_bracket_list(p);
+    case TOK_LBRACE:
+        return parse_set(p);
     case TOK_QUOTE: {
         int quote_line = tok.line;
         int quote_column = tok.column;
@@ -2011,6 +2058,14 @@ static void skip_expr(Parser *p) {
         while (depth > 0 && p->current.type != TOK_EOF) {
             if (p->current.type == TOK_LBRACKET) depth++;
             if (p->current.type == TOK_RBRACKET) depth--;
+            p->current = lexer_next_token(p->lexer);
+        }
+    } else if (p->current.type == TOK_LBRACE) {
+        p->current = lexer_next_token(p->lexer);
+        int depth = 1;
+        while (depth > 0 && p->current.type != TOK_EOF) {
+            if (p->current.type == TOK_LBRACE) depth++;
+            if (p->current.type == TOK_RBRACE) depth--;
             p->current = lexer_next_token(p->lexer);
         }
     } else {
