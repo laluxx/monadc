@@ -1364,16 +1364,22 @@ static void check_purity(CodegenContext *ctx, const char *caller,
                          const char *callee, AST *ast) {
     if (!caller || !callee) return;
     if (!name_is_impure(callee)) return;
-    if (name_is_impure(caller)) return;
 
-    if ((strcmp(callee, "set!")        == 0 ||
-         strcmp(callee, "string-set!") == 0 ||
-         strcmp(callee, "array-set!")  == 0) &&
-        ast->list.count >= 2)
-    {
+    /* Build the suggested impure name for the caller:
+     * foo  -> foo!
+     * foo? -> foo?!  (impure predicate)              */
+    char impure_name[256];
+    snprintf(impure_name, sizeof(impure_name), "%s!", caller);
+
+    bool is_mutation = (strcmp(callee, "set!")        == 0 ||
+                        strcmp(callee, "string-set!") == 0 ||
+                        strcmp(callee, "array-set!")  == 0);
+
+    if (is_mutation && ast->list.count >= 2) {
         AST *target = ast->list.items[1];
         const char *target_name = NULL;
         char base_name[256] = {0};
+
         if (target->type == AST_SYMBOL) {
             const char *dot = strchr(target->symbol, '.');
             if (dot) {
@@ -1384,25 +1390,36 @@ static void check_purity(CodegenContext *ctx, const char *caller,
                 target_name = target->symbol;
             }
         }
-        if (target_name && env_is_local(ctx->env, target_name))
-            return;  /* local mutation — pure function stays pure */
 
-        /* Global mutation — emit a specific error */
-        if (target_name) {
-            CODEGEN_ERROR(ctx, "%s:%d:%d: error: pure function '%s' mutates global "
-                          "variable '%s' via '%s' — global mutation is a side effect, "
-                          "rename to '%s!' to declare it impure",
-                          parser_get_filename(), ast->line, ast->column,
-                          caller, target_name, callee, caller);
+        if (target_name && env_is_local(ctx->env, target_name)) {
+            if (name_is_impure(caller)) {
+                size_t clen = strlen(caller);
+                CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' only mutates local "
+                              "variables — local mutation is pure, the '!' "
+                              "suffix is unnecessary, rename to '%.*s'",
+                              parser_get_filename(), ast->line, ast->column,
+                              caller, (int)(clen - 1), caller);
+            }
+            return;
         }
+
+        if (!name_is_impure(caller) && target_name) {
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: pure function '%s' mutates "
+                          "global variable '%s' via '%s' — global mutation is "
+                          "a side effect, rename to '%s' to declare it impure",
+                          parser_get_filename(), ast->line, ast->column,
+                          caller, target_name, callee, impure_name);
+        }
+        return;
     }
 
-    CODEGEN_ERROR(ctx, "%s:%d:%d: error: pure function '%s' calls impure "
-                  "function '%s' — rename to '%s!'",
-                  parser_get_filename(), ast->line, ast->column,
-                  caller, callee, caller);
+    if (!name_is_impure(caller)) {
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: pure function '%s' calls impure "
+                      "function '%s' — rename to '%s' to declare it impure",
+                      parser_get_filename(), ast->line, ast->column,
+                      caller, callee, impure_name);
+    }
 }
-
 
 CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     CodegenResult result = {NULL, NULL};

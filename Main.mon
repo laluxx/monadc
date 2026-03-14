@@ -684,25 +684,25 @@
 
 ;; Support [[https://en.wikipedia.org/wiki/Set-builder_notation][Set-builder notation]] similarry to [[https://en.wikipedia.org/wiki/List_comprehension][list comprehension]]
 
-;; (empty-set); => #{}
-;; (set? (empty-set)); => True
-;; #{:a :b :c :d}; => #{:d :a :b :c}
-;; (set :a :b :c :d); => #{:d :a :b :c}
+;; (set); => {}
+;; (set? (set)); => True
+;; {:a :b :c :d}; => {:d :a :b :c}
+;; (set :a :b :c :d); => {:d :a :b :c}
 
 ;; You can get a set of the values in a collection using the set function:
-;; (set [1 2 3 2 1 2 3]); => #{1 2 3}
+;; (set [1 2 3 2 1 2 3]); => {1 2 3}
 
 ;; Sets are collections:
-;; (def s #{:a :b :c :d})
-;; (conj s :e); => #{:d :a :b :e :c}
+;; (def s {:a :b :c :d})
+;; (conj s :e); => {:d :a :b :e :c}
 ;; (count s); => 4
 ;; (seq s); => (:d :a :b :c)
-;; (= (conj s :e) #{:a :b :c :d :e}); => True
+;; (= (conj s :e) {:a :b :c :d :e}); => True
 
 ;; Sets support 'removal' with disj, as well as contains? and get,
 ;; the latter returning the object that is held in the set which compares equal to the key, if found:
 
-;; (disj s :d); => #{:a :b :c}
+;; (disj s :d); => {:a :b :c}
 ;; (contains? s :b); => true
 ;; (get s :a); => :a
 
@@ -711,7 +711,7 @@
 ;; (s :k); => nil
 
 
-;; (def players #{"Alice" "Bob" "Kelly"})
+;; (def players {"Alice" "Bob" "Kelly"})
 ;; (def new-players ["Tim" "Sue" "Greg"])
 
 
@@ -870,7 +870,7 @@
 ;; it's purely a reader-level transformation that expands to normal
 ;; Lisp syntax before macroexpansion, So macros will work normally.
 
-;; (define players #{"Alice" "Bob" "Kelly"})
+;; (define players {"Alice" "Bob" "Kelly"})
 ;; (define new-players ["Tim" "Sue" "Greg"])
 ;; (define more-new-players ["Codeko" "Me" "Meow"])
 
