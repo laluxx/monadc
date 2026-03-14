@@ -2048,13 +2048,11 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     }
 
                     // Insert function into symbol table
-                    /* env_insert_func(ctx->env, var_name, env_params, lambda->lambda.param_count, */
-                    /*                ret_type, func, lambda->lambda.docstring); */
                     env_insert_func(ctx->env, var_name, env_params, total_params,
                                    ret_type, func, lambda->lambda.docstring);
                     EnvEntry *efinal = env_lookup(ctx->env, var_name);
                     if (efinal) efinal->lifted_count = lifted_count;
-
+                    if (efinal) efinal->source_ast = ast;  // borrow — ast lives in the parse tree
 
                     if (ast->lambda.alias_name) {
                         env_insert_func(ctx->env,
@@ -2654,6 +2652,33 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
                 result.type  = type_string();
                 result.value = LLVMBuildGlobalStringPtr(ctx->builder, docstring, "docstr");
+                return result;
+            }
+
+            if (strcmp(head->symbol, "code") == 0) {
+                if (ast->list.count != 2 ||
+                    ast->list.items[1]->type != AST_SYMBOL) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'code' requires a function name",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                const char *fn_name = ast->list.items[1]->symbol;
+                EnvEntry *e = env_lookup(ctx->env, fn_name);
+                if (!e) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: unbound symbol: %s",
+                                  parser_get_filename(), ast->line, ast->column, fn_name);
+                }
+                const char *src = (e->source_text && e->source_text[0])
+                                  ? e->source_text : "";
+
+                // Parse the stored source back into an AST and convert to RuntimeValue
+                AST *src_ast = parse(src);
+                LLVMTypeRef  ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMTypeRef  i64 = LLVMInt64TypeInContext(ctx->context);
+                RuntimeValue *rv = rt_ast_to_runtime_value(src_ast);
+                ast_free(src_ast);
+                LLVMValueRef addr = LLVMConstInt(i64, (uint64_t)(uintptr_t)rv, 0);
+                result.value = LLVMBuildIntToPtr(ctx->builder, addr, ptr, "code_rv");
+                result.type  = type_unknown();
                 return result;
             }
 
@@ -5067,6 +5092,8 @@ void register_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "<=", 2, -1, "Less than or equal");
     env_insert_builtin(ctx->env, ">",  2, -1, "Greater than");
     env_insert_builtin(ctx->env, ">=", 2, -1, "Greater than or equal");
+
+    env_insert_builtin(ctx->env, "code", 1, 0, "Return the source AST of a defined function");
 
     // List operations
     env_insert_builtin(ctx->env, "list",    0, -1, "Create a list from arguments");

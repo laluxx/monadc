@@ -1831,8 +1831,36 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
         return false;
     }
 
+    // Store source text for (code fn) reflection
+    char *source_copy = NULL;
+    if (ast->type == AST_LIST && ast->list.count >= 3 &&
+        ast->list.items[0]->type == AST_SYMBOL &&
+        strcmp(ast->list.items[0]->symbol, "define") == 0) {
+        source_copy = strdup(line);  // raw input line
+    }
+
     CodegenResult res = codegen_expr(&ctx->cg, ast);
     ctx->cg.error_jmp_set = false;
+
+    if (source_copy && ast && ast->type == AST_LIST && ast->list.count >= 3) {
+        AST *name_expr = ast->list.items[1];
+        const char *fn_name = NULL;
+        if (name_expr->type == AST_SYMBOL)
+            fn_name = name_expr->symbol;
+        else if (name_expr->type == AST_LIST && name_expr->list.count > 0 &&
+                 name_expr->list.items[0]->type == AST_SYMBOL)
+            fn_name = name_expr->list.items[0]->symbol;
+        if (fn_name) {
+            EnvEntry *e = env_lookup(ctx->cg.env, fn_name);
+            if (e) {
+                free(e->source_text);
+                e->source_text = source_copy;
+                source_copy = NULL;
+            }
+        }
+    }
+    free(source_copy);
+
 
     if (!res.value) {
         if (ast) ast_free(ast);

@@ -1,9 +1,13 @@
 #+title: TODO.org
 
-* TODO Env [0/2]
+* TODO Env [0/4]
+- [ ] Enforce ! for purity mark functions in the env as pure/unpure
+- [ ] eval
 - [ ] A way to dump an enviroment to a loadable file.env 
 - [ ] (type code List) is allowed it should be a compile time ERROR
 
+
+A module that implements a DSL to write SPIRV
 
 
 Point.x should return the Float type itself, once we can return types.
@@ -17,7 +21,6 @@ Point
 Point.x
 <input>:1:1: error: qualified symbol 'Point.x' used but no module context
 #+end_src
-
 
 #+begin_src monad
 (cons 120 10)

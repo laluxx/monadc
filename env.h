@@ -3,6 +3,7 @@
 
 #include <llvm-c/Core.h>
 #include "types.h"
+#include "reader.h"
 
 typedef enum {
     ENV_VAR,      // a variable
@@ -38,7 +39,10 @@ typedef struct EnvEntry {
 
     char *module_name; // Which module this symbol belongs to (NULL for local)
     bool is_exported;  // Whether this symbol is exported
-    char *llvm_name;   /* mangled LLVM symbol name, snapshot while module is alive */
+    char *llvm_name;   // mangled LLVM symbol name, snapshot while module is alive
+
+    AST *source_ast;   // original define AST, NULL if not available
+    char *source_text; // original define Source code, NULL if not available
 
     struct EnvEntry *next;
 } EnvEntry;
