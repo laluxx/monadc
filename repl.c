@@ -270,8 +270,8 @@ static void redeclare_env_symbols(REPLContext *ctx) {
     Env *env = ctx->cg.env;
     for (size_t bi = 0; bi < env->size; bi++) {
         for (EnvEntry *e = env->buckets[bi]; e; e = e->next) {
-            if (e->kind == ENV_VAR && e->value &&
-                LLVMIsAGlobalVariable(e->value)) {
+            if (e->kind == ENV_VAR &&
+                (!e->value || LLVMIsAGlobalVariable(e->value))) {
 
                 const char *name = (e->llvm_name && e->llvm_name[0])
                                    ? e->llvm_name : e->name;
@@ -1039,11 +1039,18 @@ static void emit_proc_print(REPLContext *ctx, EnvEntry *e) {
 static bool close_and_run(REPLContext *ctx) {
     LLVMBuildRetVoid(ctx->cg.builder);
 
+    if (getenv("REPL_DUMP_IR")) {
+        char *ir = LLVMPrintModuleToString(ctx->cg.module);
+        fprintf(stderr, "=== IR ===\n%s=== END IR ===\n", ir);
+        LLVMDisposeMessage(ir);
+    }
+
     LLVMValueRef wfn = LLVMGetNamedFunction(ctx->cg.module, g_wrapper_name);
     if (LLVMVerifyFunction(wfn, LLVMPrintMessageAction) != 0) {
         fprintf(stderr, "Error: IR verification failed\n");
         return false;
     }
+
     char *err = NULL;
     if (LLVMVerifyModule(ctx->cg.module, LLVMPrintMessageAction, &err) != 0) {
         fprintf(stderr, "Error: module verification: %s\n", err ? err : "");
@@ -1052,19 +1059,29 @@ static bool close_and_run(REPLContext *ctx) {
     }
     if (err) LLVMDisposeMessage(err);
 
-    if (getenv("REPL_DUMP_IR")) {
-        char *ir = LLVMPrintModuleToString(ctx->cg.module);
-        fprintf(stderr, "=== IR ===\n%s\n=== END IR ===\n", ir);
-        LLVMDisposeMessage(ir);
-    }
-    LLVMModuleRef mod = ctx->cg.module;  /* save before handing to engine */
+    LLVMModuleRef mod = ctx->cg.module;
     LLVMAddModule(ctx->engine, mod);
-    ctx->cg.module = NULL;   /* engine owns it now */
+    ctx->cg.module = NULL;
 
-    /* Register all symbol addresses NOW — MCJIT requires mappings to be
-     * set after the module is added to the engine, not before.          */
     map_runtime_in_module(ctx->engine, mod);
     map_imported_in_module(ctx->engine, mod);
+
+    /* Map env globals so the JIT can resolve cross-module references
+     * like @counter defined in a previous module.                    */
+    Env *env = ctx->cg.env;
+    for (size_t bi = 0; bi < env->size; bi++) {
+        for (EnvEntry *e = env->buckets[bi]; e; e = e->next) {
+            if (e->kind != ENV_VAR || !e->value) continue;
+            if (LLVMGetValueKind(e->value) != LLVMGlobalVariableValueKind) continue;
+            const char *gname = (e->llvm_name && e->llvm_name[0])
+                                ? e->llvm_name : e->name;
+            LLVMValueRef in_mod = LLVMGetNamedGlobal(mod, gname);
+            if (!in_mod) continue;
+            uint64_t addr = LLVMGetGlobalValueAddress(ctx->engine, gname);
+            if (addr)
+                LLVMAddGlobalMapping(ctx->engine, in_mod, (void*)(uintptr_t)addr);
+        }
+    }
 
     void (*fn)(void) = (void(*)(void))
         LLVMGetFunctionAddress(ctx->engine, g_wrapper_name);
@@ -1072,8 +1089,7 @@ static bool close_and_run(REPLContext *ctx) {
         fprintf(stderr, "Error: JIT could not find %s\n", g_wrapper_name);
         return false;
     }
-    if (getenv("REPL_DUMP_IR"))
-        fprintf(stderr, "[jit] %s -> %p\n", g_wrapper_name, (void*)fn);
+
     fn();
     arena_reset(&g_eval_arena);
     return true;
@@ -1154,44 +1170,6 @@ static void harvest_patch_entry(Env *env, const char *mod_name,
         }
     }
 }
-
-/* static void harvest_patch_entry(Env *env, const char *mod_name, */
-/*                                 const char *fn_name, */
-/*                                 const char *form_src, size_t form_len, */
-/*                                 AST *form) */
-/* { */
-/*     fprintf(stderr, "[harvest] trying fn_name='%s' mod_name='%s'\n", fn_name, mod_name); */
-/*     char qn[512]; */
-/*     snprintf(qn, sizeof(qn), "%s.%s", mod_name, fn_name); */
-/*     EnvEntry *ent = env_lookup(env, qn); */
-/*     fprintf(stderr, "[harvest] lookup '%s' -> %s\n", qn, ent ? "FOUND" : "null"); */
-/*     if (!ent) ent = env_lookup(env, fn_name); */
-/*     fprintf(stderr, "[harvest] lookup '%s' -> %s\n", fn_name, ent ? "FOUND" : "null"); */
-/*     if (!ent) { fprintf(stderr, "[harvest] MISS - no entry\n"); return; } */
-/*     fprintf(stderr, "[harvest] ent->module_name='%s'\n", ent->module_name ? ent->module_name : "NULL"); */
-/*     if (!ent->module_name || strcmp(ent->module_name, mod_name) != 0) { */
-/*         fprintf(stderr, "[harvest] MISS - module_name mismatch\n"); */
-/*         return; */
-/*     } */
-/*     fprintf(stderr, "[harvest] SET source_text for '%s'\n", fn_name); */
-/*     if (!ent->source_text && form_len > 0) */
-/*         ent->source_text = strndup(form_src, form_len); */
-
-/*     if (!ent->source_text && form_len > 0) { */
-/*         ent->source_text = strndup(form_src, form_len); */
-/*         fprintf(stderr, "[harvest] SET source_text for '%s' -> ptr=%p\n", fn_name, (void*)ent->source_text); */
-/*     } else { */
-/*         fprintf(stderr, "[harvest] SKIP source_text for '%s' (already set, ptr=%p)\n", fn_name, (void*)ent->source_text); */
-/*     } */
-
-/*     if (!ent->docstring && form->list.count >= 3) { */
-/*         AST *lam = form->list.items[2]; */
-/*         if (lam->type == AST_LAMBDA && */
-/*             lam->lambda.docstring && lam->lambda.docstring[0]) { */
-/*             ent->docstring = strdup(lam->lambda.docstring); */
-/*         } */
-/*     } */
-/* } */
 
 /* Advance *pp past one complete top-level form, respecting strings.
  * Returns a pointer to the start of the form (after leading whitespace),
@@ -1427,98 +1405,6 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
         }
         pclose(nm);
     }
-
-    /* /\* ------------------------------------------------------------------ *\/ */
-    /* /\* Step 5: Harvest docstrings from source and patch env entries        *\/ */
-    /* /\* ------------------------------------------------------------------ *\/ */
-    /* char *doc_src = module_name_to_path(mod_name); */
-    /* if (doc_src && file_exists_r(doc_src)) { */
-    /*     FILE *sf = fopen(doc_src, "r"); */
-    /*     if (sf) { */
-    /*         fseek(sf, 0, SEEK_END); */
-    /*         long fsz = ftell(sf); */
-    /*         rewind(sf); */
-    /*         char *src_buf = malloc(fsz + 1); */
-    /*         if (src_buf && fsz > 0) { */
-    /*             fread(src_buf, 1, fsz, sf); */
-    /*             src_buf[fsz] = '\0'; */
-    /*             fclose(sf); */
-
-    /*             const char *cursor = src_buf; */
-    /*             while (*cursor) { */
-    /*                 while (*cursor && (isspace((unsigned char)*cursor) || *cursor == ';')) { */
-    /*                     if (*cursor == ';') while (*cursor && *cursor != '\n') cursor++; */
-    /*                     else cursor++; */
-    /*                 } */
-    /*                 if (!*cursor) break; */
-
-    /*                 const char *form_start = cursor; */
-    /*                 parser_set_context(doc_src, cursor); */
-    /*                 AST *form = NULL; */
-    /*                 REPL_PARSE(form, cursor); */
-    /*                 if (!form) break; */
-
-    /*                 if (*cursor == '(') { */
-    /*                     int depth = 0; */
-    /*                     while (*cursor) { */
-    /*                         if      (*cursor == '(') depth++; */
-    /*                         else if (*cursor == ')') { depth--; if (depth == 0) { cursor++; break; } } */
-    /*                         cursor++; */
-    /*                     } */
-    /*                 } else { */
-    /*                     while (*cursor && !isspace((unsigned char)*cursor)) cursor++; */
-    /*                 } */
-
-
-    /*                 if (form->type == AST_LIST && form->list.count >= 2 && */
-    /*                     form->list.items[0]->type == AST_SYMBOL && */
-    /*                     strcmp(form->list.items[0]->symbol, "define") == 0) { */
-
-    /*                     AST *name_node = form->list.items[1]; */
-    /*                     const char *fn_name = NULL; */
-    /*                     if (name_node->type == AST_LIST && */
-    /*                         name_node->list.count > 0 && */
-    /*                         name_node->list.items[0]->type == AST_SYMBOL) */
-    /*                         fn_name = name_node->list.items[0]->symbol; */
-    /*                     else if (name_node->type == AST_SYMBOL) */
-    /*                         fn_name = name_node->symbol; */
-
-    /*                     if (fn_name) { */
-    /*                         char qn[512]; */
-    /*                         snprintf(qn, sizeof(qn), "%s.%s", mod_name, fn_name); */
-    /*                         EnvEntry *ent = env_lookup(ctx->cg.env, qn); */
-    /*                         if (!ent) ent = env_lookup(ctx->cg.env, fn_name); */
-    /*                         if (ent && ent->module_name && */
-    /*                             strcmp(ent->module_name, mod_name) == 0) { */
-    /*                             // Harvest source text */
-    /*                             if (!ent->source_text) { */
-    /*                                 size_t src_len = cursor - form_start; */
-    /*                                 ent->source_text = strndup(form_start, src_len); */
-    /*                             } */
-    /*                             // Harvest docstring */
-    /*                             if (form->list.count >= 3) { */
-    /*                                 AST *lam = form->list.items[2]; */
-    /*                                 if (lam->type == AST_LAMBDA && */
-    /*                                     lam->lambda.docstring && lam->lambda.docstring[0]) { */
-    /*                                     free(ent->docstring); */
-    /*                                     ent->docstring = strdup(lam->lambda.docstring); */
-    /*                                 } */
-    /*                             } */
-    /*                         } */
-    /*                     } */
-    /*                 } */
-    /*                 ast_free(form); */
-
-
-    /*             } */
-    /*             free(src_buf); */
-    /*         } else { */
-    /*             if (src_buf) free(src_buf); */
-    /*             fclose(sf); */
-    /*         } */
-    /*     } */
-    /* } */
-    /* free(doc_src); */
 
     /* ------------------------------------------------------------------ */
     /* Step 5: Harvest source_text + docstrings from the module source.   */

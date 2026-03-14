@@ -1,10 +1,8 @@
 #+title: TODO.org
 
-* TODO Env [0/4]
-- [ ] Enforce ! for purity mark functions in the env as pure/unpure
+* TODO Env [0/2]
 - [ ] eval
 - [ ] A way to dump an enviroment to a loadable file.env 
-- [ ] (type code List) is allowed it should be a compile time ERROR
 
 
 A module that implements a DSL to write SPIRV

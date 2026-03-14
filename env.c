@@ -70,6 +70,18 @@ static EnvEntry *find(Env *table, const char *name) {
     return NULL;
 }
 
+bool env_is_local(Env *table, const char *name) {
+    /* Walk the scope chain. If we find the name in a child env (one that
+     * has a parent), it's a local variable. If we only find it in the
+     * root env (no parent), it's global.                                */
+    while (table) {
+        EnvEntry *e = find(table, name);
+        if (e) return (table->parent != NULL);
+        table = table->parent;
+    }
+    return false;  /* not found at all — treat as global to be safe */
+}
+
 static EnvEntry *new_entry(const char *name) {
     EnvEntry *e  = calloc(1, sizeof(EnvEntry));
     e->name      = strdup(name);

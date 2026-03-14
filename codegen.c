@@ -1344,16 +1344,50 @@ static bool name_is_impure(const char *name) {
     return name[strlen(name) - 1] == '!';
 }
 
+
 static void check_purity(CodegenContext *ctx, const char *caller,
                          const char *callee, AST *ast) {
     if (!caller || !callee) return;
-    if (name_is_impure(callee) && !name_is_impure(caller)) {
-        CODEGEN_ERROR(ctx, "%s:%d:%d: error: pure function '%s' calls impure "
-                      "function '%s' — rename to '%s!'",
-                      parser_get_filename(), ast->line, ast->column,
-                      caller, callee, caller);
+    if (!name_is_impure(callee)) return;
+    if (name_is_impure(caller)) return;
+
+    if ((strcmp(callee, "set!")        == 0 ||
+         strcmp(callee, "string-set!") == 0 ||
+         strcmp(callee, "array-set!")  == 0) &&
+        ast->list.count >= 2)
+    {
+        AST *target = ast->list.items[1];
+        const char *target_name = NULL;
+        char base_name[256] = {0};
+        if (target->type == AST_SYMBOL) {
+            const char *dot = strchr(target->symbol, '.');
+            if (dot) {
+                size_t len = dot - target->symbol;
+                strncpy(base_name, target->symbol, len < 255 ? len : 255);
+                target_name = base_name;
+            } else {
+                target_name = target->symbol;
+            }
+        }
+        if (target_name && env_is_local(ctx->env, target_name))
+            return;  /* local mutation — pure function stays pure */
+
+        /* Global mutation — emit a specific error */
+        if (target_name) {
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: pure function '%s' mutates global "
+                          "variable '%s' via '%s' — global mutation is a side effect, "
+                          "rename to '%s!' to declare it impure",
+                          parser_get_filename(), ast->line, ast->column,
+                          caller, target_name, callee, caller);
+        }
     }
+
+    CODEGEN_ERROR(ctx, "%s:%d:%d: error: pure function '%s' calls impure "
+                  "function '%s' — rename to '%s!'",
+                  parser_get_filename(), ast->line, ast->column,
+                  caller, callee, caller);
 }
+
 
 CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     CodegenResult result = {NULL, NULL};
@@ -1501,6 +1535,10 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' has no type information",
                           parser_get_filename(), ast->line, ast->column, ast->symbol);
         }
+
+        fprintf(stderr, "[symbol load] name='%s' entry=%p entry->value=%p is_global=%d\n",
+                ast->symbol, (void*)entry, (void*)entry->value,
+                entry->value ? (LLVMIsAGlobalVariable(entry->value) != NULL) : -1);
 
         result.type  = type_clone(entry->type);
         result.value = LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, entry->type),
@@ -3597,28 +3635,21 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     }
 
                     LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-
-                    LLVMValueRef get_fn   = LLVMGetNamedFunction(ctx->module, "__layout_ptr_get");
+                    LLVMValueRef get_fn = LLVMGetNamedFunction(ctx->module, "__layout_ptr_get");
                     if (!get_fn) {
-                        LLVMTypeRef ft = LLVMFunctionType(ptr_t, &ptr_t, 1, 0);
-                        get_fn = LLVMAddFunction(ctx->module, "__layout_ptr_get", ft);
+                        LLVMTypeRef gft = LLVMFunctionType(ptr_t, &ptr_t, 1, 0);
+                        get_fn = LLVMAddFunction(ctx->module, "__layout_ptr_get", gft);
                         LLVMSetLinkage(get_fn, LLVMExternalLinkage);
                     }
                     LLVMValueRef name_str2 = LLVMBuildGlobalStringPtr(ctx->builder, var_name, "lay_name");
                     LLVMValueRef heap_ptr  = LLVMBuildCall2(ctx->builder,
                                                             LLVMFunctionType(ptr_t, &ptr_t, 1, 0),
                                                             get_fn, &name_str2, 1, "lay_ptr");
-                    LLVMValueRef zero      = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0);
-                    LLVMValueRef fidx      = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), field_idx, 0);
-                    LLVMValueRef indices[] = {zero, fidx};
+                    LLVMValueRef gep_zero  = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0);
+                    LLVMValueRef gep_fidx  = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), field_idx, 0);
+                    LLVMValueRef gep_idx[] = {gep_zero, gep_fidx};
                     LLVMValueRef gep       = LLVMBuildGEP2(ctx->builder, struct_llvm,
-                                                           heap_ptr, indices, 2, "fld_ptr");
-
-                    /* LLVMValueRef zero        = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0); */
-                    /* LLVMValueRef fidx        = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), field_idx, 0); */
-                    /* LLVMValueRef indices[]   = {zero, fidx}; */
-                    /* LLVMValueRef gep         = LLVMBuildGEP2(ctx->builder, struct_llvm, */
-                    /*                                          base_entry->value, indices, 2, "fld_ptr"); */
+                                                           heap_ptr, gep_idx, 2, "fld_ptr");
 
                     LLVMValueRef stored = val.value;
                     if (type_is_integer(ft) && type_is_float(val.type))
@@ -3639,6 +3670,41 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                                   parser_get_filename(), ast->line, ast->column, name_ast->symbol);
                 }
 
+                /* Resolve the store target pointer.
+                 *
+                 * Locals (allocas) always live in the current function/module —
+                 * entry->value is valid, use it directly.
+                 *
+                 * Globals may have a stale entry->value pointing into a dead module
+                 * (e.g. after a failed compile + recover_module).  Always re-resolve
+                 * globals by name from the current module.  If not yet declared here,
+                 * add an extern declaration on the spot.                             */
+                LLVMValueRef target;
+                bool is_global = (entry->value &&
+                                  LLVMGetValueKind(entry->value) == LLVMGlobalVariableValueKind);
+
+                if (is_global) {
+                    const char *gname = (entry->llvm_name && entry->llvm_name[0])
+                        ? entry->llvm_name : entry->name;
+                    target = LLVMGetNamedGlobal(ctx->module, gname);
+                    if (!target) {
+                        /* Declare extern in this module */
+                        LLVMTypeRef lt = type_to_llvm(ctx, entry->type);
+                        target = LLVMAddGlobal(ctx->module, lt, gname);
+                        LLVMSetLinkage(target, LLVMExternalLinkage);
+                    }
+                    /* Keep entry in sync so subsequent loads in this module
+                     * also get the correct in-module declaration.           */
+                    entry->value = target;
+                } else {
+                    /* Local alloca — always valid in the current function */
+                    target = entry->value;
+                    if (!target) {
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'set!' target '%s' has no value",
+                                      parser_get_filename(), ast->line, ast->column, name_ast->symbol);
+                    }
+                }
+
                 CodegenResult val = codegen_expr(ctx, ast->list.items[2]);
 
                 LLVMValueRef stored = val.value;
@@ -3650,7 +3716,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                                              type_to_llvm(ctx, entry->type), "set_conv");
                 }
 
-                LLVMBuildStore(ctx->builder, stored, entry->value);
+                LLVMBuildStore(ctx->builder, stored, target);
                 result.value = stored;
                 result.type  = type_clone(entry->type);
                 return result;

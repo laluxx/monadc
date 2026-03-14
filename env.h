@@ -86,4 +86,6 @@ void env_insert_layout(Env *table, const char *name, Type *layout_type,
                        const char *source_text);
 Type *env_lookup_layout(Env *table, const char *name);
 
+bool env_is_local(Env *table, const char *name);
+
 #endif
