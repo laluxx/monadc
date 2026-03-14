@@ -193,8 +193,9 @@ static void rt_sym_table_init(void) {
     // Set
     ADD(rt_set_new);        ADD(rt_set_of);       ADD(rt_set_from_list);
     ADD(rt_set_from_array); ADD(rt_set_contains); ADD(rt_set_conj);
-    ADD(rt_set_disj);       ADD(rt_set_get);      ADD(rt_set_count);
-    ADD(rt_set_seq);        ADD(rt_value_set);    ADD(rt_unbox_set);
+    ADD(rt_set_disj);       ADD(rt_set_conj_mut); ADD(rt_set_disj_mut);
+    ADD(rt_set_get);        ADD(rt_set_count);    ADD(rt_set_seq);
+    ADD(rt_value_set);      ADD(rt_unbox_set);
 
     ADD(__layout_ptr_set);
     ADD(__layout_ptr_get);

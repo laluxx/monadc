@@ -707,25 +707,6 @@ RuntimeSet *rt_set_new(void) {
     return set_alloc(SET_INITIAL_CAP);
 }
 
-RuntimeSet *rt_set_conj(RuntimeSet *s, RuntimeValue *val) {
-    if (!val || val->type == RT_NIL) return s;
-
-    /* Copy — sets are immutable, conj returns a new set */
-    RuntimeSet *copy = set_alloc(s->capacity);
-    copy->count      = 0;
-    copy->tombstones = 0;
-    for (size_t i = 0; i < s->capacity; i++) {
-        RuntimeValue *v = s->buckets[i];
-        if (v && v != TOMBSTONE)
-            set_insert_noresize(copy, v);
-    }
-    /* resize if needed then insert */
-    if ((copy->count + copy->tombstones + 1) * SET_LOAD_DEN
-         >= copy->capacity * SET_LOAD_NUM)
-        set_resize(copy);
-    set_insert_noresize(copy, val);
-    return copy;
-}
 
 int rt_set_contains(RuntimeSet *s, RuntimeValue *val) {
     if (!s || !val) return 0;
@@ -760,21 +741,65 @@ RuntimeValue *rt_set_get(RuntimeSet *s, RuntimeValue *key) {
 }
 
 
-RuntimeSet *rt_set_disj(RuntimeSet *s, RuntimeValue *val) {
-    if (!s || !val) return s;
-    if (!rt_set_contains(s, val)) return s;
+/* Internal: insert val into s without copying. Resizes in place if needed.
+ * Returns s. Caller owns s.                                               */
+static RuntimeSet *set_insert(RuntimeSet *s, RuntimeValue *val) {
+    if (!val || val->type == RT_NIL) return s;
+    if ((s->count + s->tombstones + 1) * SET_LOAD_DEN
+         >= s->capacity * SET_LOAD_NUM)
+        set_resize(s);
+    set_insert_noresize(s, val);
+    return s;
+}
 
-    /* Copy without the element */
+/* Internal: remove val from s without copying.
+ * Returns s. Caller owns s.                                               */
+static RuntimeSet *set_remove(RuntimeSet *s, RuntimeValue *val) {
+    if (!s || !val) return s;
+    uint64_t h    = rt_hash_value(val);
+    size_t   mask = s->capacity - 1;
+    size_t   idx  = (size_t)(h & mask);
+    for (size_t i = 0; i < s->capacity; i++) {
+        size_t        slot = (idx + i) & mask;
+        RuntimeValue *cur  = s->buckets[slot];
+        if (!cur) return s;
+        if (cur == TOMBSTONE) continue;
+        if (rt_equal_p(cur, val)) {
+            s->buckets[slot] = TOMBSTONE;
+            s->count--;
+            s->tombstones++;
+            return s;
+        }
+    }
+    return s;
+}
+
+/* Internal: shallow copy of s into a new set of the same capacity. */
+static RuntimeSet *set_copy(RuntimeSet *s) {
     RuntimeSet *copy = set_alloc(s->capacity);
-    copy->count      = 0;
-    copy->tombstones = 0;
     for (size_t i = 0; i < s->capacity; i++) {
         RuntimeValue *v = s->buckets[i];
-        if (v && v != TOMBSTONE && !rt_equal_p(v, val))
+        if (v && v != TOMBSTONE)
             set_insert_noresize(copy, v);
     }
     return copy;
 }
+
+/* Immutable — return a new set */
+RuntimeSet *rt_set_conj(RuntimeSet *s, RuntimeValue *val)
+ {return set_insert(set_copy(s), val);}
+
+RuntimeSet *rt_set_disj(RuntimeSet *s, RuntimeValue *val)
+{if (!rt_set_contains(s, val)) return s;
+    return set_remove(set_copy(s), val);}
+
+/* Mutable — modify in place, return s */
+RuntimeSet *rt_set_conj_mut(RuntimeSet *s, RuntimeValue *val)
+{return set_insert(s, val);}
+
+RuntimeSet *rt_set_disj_mut(RuntimeSet *s, RuntimeValue *val)
+{return set_remove(s, val);}
+
 
 
 int64_t rt_set_count(RuntimeSet *s) {
@@ -816,7 +841,7 @@ RuntimeSet *rt_set_from_list(RuntimeList *list) {
     RuntimeSet  *s   = rt_set_new();
     RuntimeList *cur = list;
     while (!rt_list_is_empty_list(cur)) {
-        s = rt_set_conj(s, rt_list_car(cur));
+        set_insert(s, rt_list_car(cur));
         cur = rt_list_cdr(cur);
     }
     return s;
@@ -827,7 +852,7 @@ RuntimeSet *rt_set_from_array(RuntimeValue *array_rv) {
     if (!array_rv || array_rv->type != RT_ARRAY) return s;
     for (size_t i = 0; i < array_rv->data.array_val.length; i++) {
         RuntimeValue *v = array_rv->data.array_val.elements[i];
-        if (v) s = rt_set_conj(s, v);
+        if (v) set_insert(s, v);
     }
     return s;
 }
@@ -1920,6 +1945,8 @@ void declare_runtime_functions(CodegenContext *ctx) {
     DECL("rt_set_contains",    i32, ptr, ptr);
     DECL("rt_set_conj",        ptr, ptr, ptr);
     DECL("rt_set_disj",        ptr, ptr, ptr);
+    DECL("rt_set_conj_mut", ptr, ptr, ptr);
+    DECL("rt_set_disj_mut", ptr, ptr, ptr);
     DECL("rt_set_get",         ptr, ptr, ptr);
     DECL("rt_set_count",       i64, ptr);
     DECL("rt_set_seq",         ptr, ptr);
@@ -2045,6 +2072,8 @@ GET_RUNTIME_FUNCTION(rt_set_from_array)
 GET_RUNTIME_FUNCTION(rt_set_contains)
 GET_RUNTIME_FUNCTION(rt_set_conj)
 GET_RUNTIME_FUNCTION(rt_set_disj)
+GET_RUNTIME_FUNCTION(rt_set_conj_mut)
+GET_RUNTIME_FUNCTION(rt_set_disj_mut)
 GET_RUNTIME_FUNCTION(rt_set_get)
 GET_RUNTIME_FUNCTION(rt_set_count)
 GET_RUNTIME_FUNCTION(rt_set_seq)

@@ -1438,6 +1438,46 @@ static void check_purity(CodegenContext *ctx, const char *caller,
     }
 }
 
+// Helper: emit a set conj/disj call.
+// fn_getter: get_rt_set_conj / get_rt_set_disj / mut variants
+// name:      for LLVM value names
+static CodegenResult codegen_set_op(CodegenContext *ctx, AST *ast,
+                                    LLVMValueRef (*fn_getter)(CodegenContext *),
+                                    const char *op_name) {
+    CodegenResult result = {NULL, NULL};
+    if (ast->list.count != 3) {
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' requires 2 arguments (set val)",
+                      parser_get_filename(), ast->line, ast->column, op_name);
+    }
+
+    LLVMTypeRef  ptr    = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+    CodegenResult set_r = codegen_expr(ctx, ast->list.items[1]);
+    CodegenResult val_r = codegen_expr(ctx, ast->list.items[2]);
+
+    LLVMValueRef boxed   = codegen_box(ctx, val_r.value, val_r.type);
+    LLVMValueRef raw_set = set_r.value;
+
+    if (set_r.type && set_r.type->kind == TYPE_SET) {
+        LLVMValueRef ub_fn = get_rt_unbox_set(ctx);
+        LLVMTypeRef  ft    = LLVMFunctionType(ptr, &ptr, 1, 0);
+        LLVMValueRef ua[]  = {raw_set};
+        raw_set = LLVMBuildCall2(ctx->builder, ft, ub_fn, ua, 1, "rawset");
+    }
+
+    LLVMValueRef op_fn   = fn_getter(ctx);
+    LLVMTypeRef  op_p[]  = {ptr, ptr};
+    LLVMTypeRef  op_ft   = LLVMFunctionType(ptr, op_p, 2, 0);
+    LLVMValueRef op_a[]  = {raw_set, boxed};
+    LLVMValueRef new_set = LLVMBuildCall2(ctx->builder, op_ft, op_fn, op_a, 2, op_name);
+
+    LLVMValueRef wrap_fn = get_rt_value_set(ctx);
+    LLVMTypeRef  wft     = LLVMFunctionType(ptr, &ptr, 1, 0);
+    LLVMValueRef wa[]    = {new_set};
+    result.value = LLVMBuildCall2(ctx->builder, wft, wrap_fn, wa, 1, "setval");
+    result.type  = type_set();
+    return result;
+}
+
 CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     CodegenResult result = {NULL, NULL};
 
@@ -4138,15 +4178,6 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         LLVMTypeRef  ft = LLVMFunctionType(ptr, ft_args, 1, 0);
                         LLVMValueRef args[] = {arg.value};
                         set = LLVMBuildCall2(ctx->builder, ft, fn, args, 1, "set");
-                    /* } else if (arg.type && arg.type->kind == TYPE_ARR) { */
-                    /*     LLVMValueRef box_fn = get_rt_value_array(ctx); */
-                    /*     /\* arrays are stack pointers — box first *\/ */
-                    /*     LLVMValueRef fn = get_rt_set_from_array(ctx); */
-                    /*     LLVMTypeRef  ft_args[] = {ptr}; */
-                    /*     LLVMTypeRef  ft = LLVMFunctionType(ptr, ft_args, 1, 0); */
-                    /*     LLVMValueRef args[] = {arg.value}; */
-                    /*     set = LLVMBuildCall2(ctx->builder, ft, fn, args, 1, "set"); */
-                    /* } */
                     } else if (arg.type && arg.type->kind == TYPE_ARR) {
                         LLVMTypeRef i64      = LLVMInt64TypeInContext(ctx->context);
                         LLVMTypeRef arr_llvm = type_to_llvm(ctx, arg.type);
@@ -4209,64 +4240,76 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 return result;
             }
 
-            if (strcmp(head->symbol, "conj") == 0) {
-                if (ast->list.count != 3) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'conj' requires 2 arguments (set val)",
-                                  parser_get_filename(), ast->line, ast->column);
-                }
-                LLVMTypeRef  ptr     = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-                CodegenResult set_r  = codegen_expr(ctx, ast->list.items[1]);
-                CodegenResult val_r  = codegen_expr(ctx, ast->list.items[2]);
-                LLVMValueRef  boxed  = codegen_box(ctx, val_r.value, val_r.type);
-                LLVMValueRef  raw_set = set_r.value;
-                /* unbox set if wrapped */
-                if (set_r.type && set_r.type->kind == TYPE_SET) {
-                    LLVMValueRef ub_fn = get_rt_unbox_set(ctx);
-                    LLVMTypeRef  ft    = LLVMFunctionType(ptr, &ptr, 1, 0);
-                    LLVMValueRef ua[]  = {raw_set};
-                    raw_set = LLVMBuildCall2(ctx->builder, ft, ub_fn, ua, 1, "rawset");
-                }
-                LLVMValueRef conj_fn  = get_rt_set_conj(ctx);
-                LLVMTypeRef  cp[]     = {ptr, ptr};
-                LLVMTypeRef  cft      = LLVMFunctionType(ptr, cp, 2, 0);
-                LLVMValueRef ca[]     = {raw_set, boxed};
-                LLVMValueRef new_set  = LLVMBuildCall2(ctx->builder, cft, conj_fn, ca, 2, "set");
-                LLVMValueRef wrap_fn  = get_rt_value_set(ctx);
-                LLVMTypeRef  wft      = LLVMFunctionType(ptr, &ptr, 1, 0);
-                LLVMValueRef wa[]     = {new_set};
-                result.value = LLVMBuildCall2(ctx->builder, wft, wrap_fn, wa, 1, "setval");
-                result.type  = type_set();
-                return result;
-            }
+            if (strcmp(head->symbol, "conj") == 0)
+                return codegen_set_op(ctx, ast, get_rt_set_conj, "conj");
 
-            if (strcmp(head->symbol, "disj") == 0) {
-                if (ast->list.count != 3) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'disj' requires 2 arguments (set val)",
-                                  parser_get_filename(), ast->line, ast->column);
-                }
-                LLVMTypeRef  ptr     = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-                CodegenResult set_r  = codegen_expr(ctx, ast->list.items[1]);
-                CodegenResult val_r  = codegen_expr(ctx, ast->list.items[2]);
-                LLVMValueRef  boxed  = codegen_box(ctx, val_r.value, val_r.type);
-                LLVMValueRef  raw_set = set_r.value;
-                if (set_r.type && set_r.type->kind == TYPE_SET) {
-                    LLVMValueRef ub_fn = get_rt_unbox_set(ctx);
-                    LLVMTypeRef  ft    = LLVMFunctionType(ptr, &ptr, 1, 0);
-                    LLVMValueRef ua[]  = {raw_set};
-                    raw_set = LLVMBuildCall2(ctx->builder, ft, ub_fn, ua, 1, "rawset");
-                }
-                LLVMValueRef disj_fn = get_rt_set_disj(ctx);
-                LLVMTypeRef  dp[]    = {ptr, ptr};
-                LLVMTypeRef  dft     = LLVMFunctionType(ptr, dp, 2, 0);
-                LLVMValueRef da[]    = {raw_set, boxed};
-                LLVMValueRef new_set = LLVMBuildCall2(ctx->builder, dft, disj_fn, da, 2, "set");
-                LLVMValueRef wrap_fn = get_rt_value_set(ctx);
-                LLVMTypeRef  wft     = LLVMFunctionType(ptr, &ptr, 1, 0);
-                LLVMValueRef wa[]    = {new_set};
-                result.value = LLVMBuildCall2(ctx->builder, wft, wrap_fn, wa, 1, "setval");
-                result.type  = type_set();
-                return result;
-            }
+            if (strcmp(head->symbol, "disj") == 0)
+                return codegen_set_op(ctx, ast, get_rt_set_disj, "disj");
+
+            if (strcmp(head->symbol, "conj!") == 0)
+                return codegen_set_op(ctx, ast, get_rt_set_conj_mut, "conj!");
+
+            if (strcmp(head->symbol, "disj!") == 0)
+                return codegen_set_op(ctx, ast, get_rt_set_disj_mut, "disj!");
+
+            /* if (strcmp(head->symbol, "conj") == 0) { */
+            /*     if (ast->list.count != 3) { */
+            /*         CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'conj' requires 2 arguments (set val)", */
+            /*                       parser_get_filename(), ast->line, ast->column); */
+            /*     } */
+            /*     LLVMTypeRef  ptr     = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0); */
+            /*     CodegenResult set_r  = codegen_expr(ctx, ast->list.items[1]); */
+            /*     CodegenResult val_r  = codegen_expr(ctx, ast->list.items[2]); */
+            /*     LLVMValueRef  boxed  = codegen_box(ctx, val_r.value, val_r.type); */
+            /*     LLVMValueRef  raw_set = set_r.value; */
+            /*     /\* unbox set if wrapped *\/ */
+            /*     if (set_r.type && set_r.type->kind == TYPE_SET) { */
+            /*         LLVMValueRef ub_fn = get_rt_unbox_set(ctx); */
+            /*         LLVMTypeRef  ft    = LLVMFunctionType(ptr, &ptr, 1, 0); */
+            /*         LLVMValueRef ua[]  = {raw_set}; */
+            /*         raw_set = LLVMBuildCall2(ctx->builder, ft, ub_fn, ua, 1, "rawset"); */
+            /*     } */
+            /*     LLVMValueRef conj_fn  = get_rt_set_conj(ctx); */
+            /*     LLVMTypeRef  cp[]     = {ptr, ptr}; */
+            /*     LLVMTypeRef  cft      = LLVMFunctionType(ptr, cp, 2, 0); */
+            /*     LLVMValueRef ca[]     = {raw_set, boxed}; */
+            /*     LLVMValueRef new_set  = LLVMBuildCall2(ctx->builder, cft, conj_fn, ca, 2, "set"); */
+            /*     LLVMValueRef wrap_fn  = get_rt_value_set(ctx); */
+            /*     LLVMTypeRef  wft      = LLVMFunctionType(ptr, &ptr, 1, 0); */
+            /*     LLVMValueRef wa[]     = {new_set}; */
+            /*     result.value = LLVMBuildCall2(ctx->builder, wft, wrap_fn, wa, 1, "setval"); */
+            /*     result.type  = type_set(); */
+            /*     return result; */
+            /* } */
+
+            /* if (strcmp(head->symbol, "disj") == 0) { */
+            /*     if (ast->list.count != 3) { */
+            /*         CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'disj' requires 2 arguments (set val)", */
+            /*                       parser_get_filename(), ast->line, ast->column); */
+            /*     } */
+            /*     LLVMTypeRef  ptr     = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0); */
+            /*     CodegenResult set_r  = codegen_expr(ctx, ast->list.items[1]); */
+            /*     CodegenResult val_r  = codegen_expr(ctx, ast->list.items[2]); */
+            /*     LLVMValueRef  boxed  = codegen_box(ctx, val_r.value, val_r.type); */
+            /*     LLVMValueRef  raw_set = set_r.value; */
+            /*     if (set_r.type && set_r.type->kind == TYPE_SET) { */
+            /*         LLVMValueRef ub_fn = get_rt_unbox_set(ctx); */
+            /*         LLVMTypeRef  ft    = LLVMFunctionType(ptr, &ptr, 1, 0); */
+            /*         LLVMValueRef ua[]  = {raw_set}; */
+            /*         raw_set = LLVMBuildCall2(ctx->builder, ft, ub_fn, ua, 1, "rawset"); */
+            /*     } */
+            /*     LLVMValueRef disj_fn = get_rt_set_disj(ctx); */
+            /*     LLVMTypeRef  dp[]    = {ptr, ptr}; */
+            /*     LLVMTypeRef  dft     = LLVMFunctionType(ptr, dp, 2, 0); */
+            /*     LLVMValueRef da[]    = {raw_set, boxed}; */
+            /*     LLVMValueRef new_set = LLVMBuildCall2(ctx->builder, dft, disj_fn, da, 2, "set"); */
+            /*     LLVMValueRef wrap_fn = get_rt_value_set(ctx); */
+            /*     LLVMTypeRef  wft     = LLVMFunctionType(ptr, &ptr, 1, 0); */
+            /*     LLVMValueRef wa[]    = {new_set}; */
+            /*     result.value = LLVMBuildCall2(ctx->builder, wft, wrap_fn, wa, 1, "setval"); */
+            /*     result.type  = type_set(); */
+            /*     return result; */
+            /* } */
 
             if (strcmp(head->symbol, "contains?") == 0) {
                 if (ast->list.count != 3) {
@@ -5653,6 +5696,8 @@ void register_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "set?",      1,  0, "Test if value is a set");
     env_insert_builtin(ctx->env, "conj",      2,  0, "Add an element to a set");
     env_insert_builtin(ctx->env, "disj",      2,  0, "Remove an element from a set");
+    env_insert_builtin(ctx->env, "conj!",     2,  0, "Mutate a set by adding an element in place");
+    env_insert_builtin(ctx->env, "disj!",     2,  0, "Mutate a set by removing an element in place");
     env_insert_builtin(ctx->env, "contains?", 2,  0, "Test if a set contains an element");
     env_insert_builtin(ctx->env, "count",     1,  0, "Get number of elements in a set");
 
