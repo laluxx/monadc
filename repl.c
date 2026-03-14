@@ -111,6 +111,46 @@ static unsigned int g_wrapper_seq = 0;
 
 static REPLContext *g_repl_ctx = NULL;
 
+// Host-side table mapping variable name -> malloc'd layout heap pointer
+typedef struct { char name[256]; void *ptr; } LayoutPtr;
+#define MAX_LAYOUT_PTRS 1024
+static LayoutPtr g_layout_ptrs[MAX_LAYOUT_PTRS];
+static int       g_layout_ptr_count = 0;
+
+static void layout_ptr_set(const char *name, void *ptr) {
+    for (int i = 0; i < g_layout_ptr_count; i++) {
+        if (strcmp(g_layout_ptrs[i].name, name) == 0) {
+            g_layout_ptrs[i].ptr = ptr;
+            return;
+        }
+    }
+    if (g_layout_ptr_count < MAX_LAYOUT_PTRS) {
+        strncpy(g_layout_ptrs[g_layout_ptr_count].name, name, 255);
+        g_layout_ptrs[g_layout_ptr_count].ptr = ptr;
+        g_layout_ptr_count++;
+    }
+}
+
+static void *layout_ptr_get(const char *name) {
+    for (int i = 0; i < g_layout_ptr_count; i++)
+        if (strcmp(g_layout_ptrs[i].name, name) == 0)
+            return g_layout_ptrs[i].ptr;
+    return NULL;
+}
+
+// Called from JIT-compiled code to register a layout heap pointer
+void __layout_ptr_set(const char *name, void *ptr) {
+    layout_ptr_set(name, ptr);
+}
+
+
+// Called from JIT-compiled code to retrieve a layout heap pointer
+void *__layout_ptr_get(const char *name) {
+    void *result = layout_ptr_get(name);
+    return result;
+}
+
+
 /* -------------------------------------------------------------------------
  * Runtime symbol table
  *
@@ -150,6 +190,9 @@ static void rt_sym_table_init(void) {
     ADD(rt_list_drop);    ADD(rt_value_thunk);       ADD(rt_print_list_limited);
 
     ADD(rt_string_take);
+
+    ADD(__layout_ptr_set);
+    ADD(__layout_ptr_get);
 
     /* Unboxing */
     ADD(rt_unbox_int);    ADD(rt_unbox_float); ADD(rt_unbox_char);
@@ -227,6 +270,22 @@ static void redeclare_env_symbols(REPLContext *ctx) {
     Env *env = ctx->cg.env;
     for (size_t bi = 0; bi < env->size; bi++) {
         for (EnvEntry *e = env->buckets[bi]; e; e = e->next) {
+            /* if (e->kind == ENV_VAR && e->value && */
+            /*     LLVMIsAGlobalVariable(e->value)) { */
+
+            /*     const char *name = (e->llvm_name && e->llvm_name[0]) */
+            /*                        ? e->llvm_name : e->name; */
+
+            /*     LLVMValueRef existing = LLVMGetNamedGlobal(ctx->cg.module, name); */
+            /*     if (existing) { */
+            /*         e->value = existing; */
+            /*         continue; */
+            /*     } */
+            /*     LLVMTypeRef  lt = type_to_llvm(&ctx->cg, e->type); */
+            /*     LLVMValueRef gv = LLVMAddGlobal(ctx->cg.module, lt, name); */
+            /*     LLVMSetLinkage(gv, LLVMExternalLinkage); */
+            /*     e->value = gv; */
+            /* } */
             if (e->kind == ENV_VAR && e->value &&
                 LLVMIsAGlobalVariable(e->value)) {
 
@@ -238,7 +297,14 @@ static void redeclare_env_symbols(REPLContext *ctx) {
                     e->value = existing;
                     continue;
                 }
-                LLVMTypeRef  lt = type_to_llvm(&ctx->cg, e->type);
+
+                // Layout variables are stored as i8* globals (holding heap ptr)
+                LLVMTypeRef lt;
+                if (e->type && e->type->kind == TYPE_LAYOUT) {
+                    lt = LLVMPointerType(LLVMInt8TypeInContext(ctx->cg.context), 0);
+                } else {
+                    lt = type_to_llvm(&ctx->cg, e->type);
+                }
                 LLVMValueRef gv = LLVMAddGlobal(ctx->cg.module, lt, name);
                 LLVMSetLinkage(gv, LLVMExternalLinkage);
                 e->value = gv;
@@ -340,8 +406,10 @@ static void open_wrapper(REPLContext *ctx) {
 /// Auto-print
 
 static bool expr_is_silent(AST *ast) {
-    if (!ast || ast->type != AST_LIST || ast->list.count == 0) return false;
-    if (ast->list.items[0]->type != AST_SYMBOL)               return false;
+    if (!ast) return false;
+    if (ast->type == AST_LAYOUT) return true;
+    if (ast->type != AST_LIST || ast->list.count == 0) return false;
+    if (ast->list.items[0]->type != AST_SYMBOL) return false;
     const char *s = ast->list.items[0]->symbol;
     return strcmp(s, "define") == 0 ||
            strcmp(s, "show")   == 0 ||
@@ -722,6 +790,237 @@ static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t, bool li
         { LLVMValueRef s = LLVMBuildGlobalStringPtr(ctx->cg.builder, "]\n", "cb");
           LLVMValueRef a[] = {s};
           LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, a, 1, ""); }
+        break;
+    }
+
+    case TYPE_LAYOUT: {
+        char struct_name[256];
+        snprintf(struct_name, sizeof(struct_name), "layout.%s", t->layout_name);
+        LLVMTypeRef struct_llvm = LLVMGetTypeByName2(ctx->cg.context, struct_name);
+        if (!struct_llvm) break;
+
+        int max_name_len = 0;
+        for (int i = 0; i < t->layout_field_count; i++) {
+            int n = (int)strlen(t->layout_fields[i].name);
+            if (n > max_name_len) max_name_len = n;
+        }
+
+        // We can't know value widths at IR-gen time, so we use a two-pass
+        // approach: emit a sprintf into a temp buffer, measure with strlen,
+        // track max across fields, then print aligned.
+        // Since this is complex in IR, we use a simpler approach:
+        // print each field into a host-side buffer at JIT runtime via a
+        // helper function. Instead, we use printf with %*#g and let the
+        // caller figure out width by printing name+value into fixed buf.
+        //
+        // Simplest practical approach: use snprintf at codegen time on
+        // constant values — but values aren't constant. So: emit the
+        // struct name line, then for each field emit "[name value]" with
+        // the value printed via printf, using max_name_len for name padding
+        // and a runtime-computed value width via two printf calls (one to
+        // a buffer, one to stdout). This is complex.
+        //
+        // Practical compromise: use a fixed value column of max(12, longest_name+2)
+        // but make the ] position dynamic by printing into a stack buffer
+        // and then printing that buffer.
+
+        // Print "(StructName \n"
+
+        char open_buf[128];
+        snprintf(open_buf, sizeof(open_buf), "(%s", t->layout_name);
+        LLVMValueRef open_s = LLVMBuildGlobalStringPtr(ctx->cg.builder, open_buf, "lay_open");
+        LLVMValueRef oa[] = {open_s};
+        LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, oa, 1, "");
+
+        int indent = (int)strlen(t->layout_name) + 2;
+
+        // Declare snprintf
+        LLVMValueRef snprintf_fn = LLVMGetNamedFunction(ctx->cg.module, "snprintf");
+        if (!snprintf_fn) {
+            LLVMTypeRef i32 = LLVMInt32TypeInContext(ctx->cg.context);
+            LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->cg.context), 0);
+            LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->cg.context);
+            LLVMTypeRef params[] = {ptr, i64, ptr};
+            LLVMTypeRef ft = LLVMFunctionType(i32, params, 3, true);
+            snprintf_fn = LLVMAddFunction(ctx->cg.module, "snprintf", ft);
+            LLVMSetLinkage(snprintf_fn, LLVMExternalLinkage);
+        }
+        LLVMValueRef strlen_fn = LLVMGetNamedFunction(ctx->cg.module, "strlen");
+        if (!strlen_fn) {
+            LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->cg.context), 0);
+            LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->cg.context);
+            LLVMTypeRef ft = LLVMFunctionType(i64, &ptr, 1, 0);
+            strlen_fn = LLVMAddFunction(ctx->cg.module, "strlen", ft);
+            LLVMSetLinkage(strlen_fn, LLVMExternalLinkage);
+        }
+
+        // For each field: snprintf value into a 64-byte stack buffer,
+        // then print "[name<pad> <valbuf><pad>]" aligned by value length.
+        // We track max_val_len across fields using alloca'd variables.
+        LLVMTypeRef  i32 = LLVMInt32TypeInContext(ctx->cg.context);
+        LLVMTypeRef  i64 = LLVMInt64TypeInContext(ctx->cg.context);
+        LLVMTypeRef  ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->cg.context), 0);
+
+        // Allocate one 64-byte buffer per field for value strings
+        // and store their lengths
+        LLVMValueRef *val_bufs   = malloc(sizeof(LLVMValueRef) * t->layout_field_count);
+        LLVMValueRef *val_lens   = malloc(sizeof(LLVMValueRef) * t->layout_field_count);
+
+        LLVMValueRef max_len_ptr = LLVMBuildAlloca(ctx->cg.builder, i32, "max_val_len");
+        LLVMBuildStore(ctx->cg.builder,
+                       LLVMConstInt(i32, 1, 0), max_len_ptr);
+
+        LLVMValueRef func = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->cg.builder));
+
+        for (int i = 0; i < t->layout_field_count; i++) {
+            val_bufs[i] = LLVMBuildArrayAlloca(ctx->cg.builder,
+                              LLVMInt8TypeInContext(ctx->cg.context),
+                              LLVMConstInt(i32, 64, 0), "vbuf");
+
+            LLVMValueRef zero_idx = LLVMConstInt(i64, 0, 0);
+            LLVMValueRef fidx_v   = LLVMConstInt(i32, i, 0);
+            LLVMValueRef idxs[]   = {LLVMConstInt(i32, 0, 0), fidx_v};
+            LLVMValueRef gep      = LLVMBuildGEP2(ctx->cg.builder, struct_llvm, val, idxs, 2, "fp");
+            Type *ft_field        = t->layout_fields[i].type;
+            LLVMTypeRef ft_llvm   = type_to_llvm(&ctx->cg, ft_field);
+            LLVMValueRef fval     = LLVMBuildLoad2(ctx->cg.builder, ft_llvm, gep, "fv");
+
+            // snprintf value into buffer
+            LLVMValueRef buf_size = LLVMConstInt(i64, 64, 0);
+            if (ft_field->kind == TYPE_FLOAT) {
+                LLVMValueRef fmt_s = LLVMBuildGlobalStringPtr(ctx->cg.builder, "%g", "fmtf");
+                LLVMTypeRef  sn_params[] = {ptr, i64, ptr, LLVMDoubleTypeInContext(ctx->cg.context)};
+                LLVMTypeRef  sn_ft = LLVMFunctionType(i32, sn_params, 4, false);
+                LLVMValueRef sargs[] = {val_bufs[i], buf_size, fmt_s, fval};
+                LLVMBuildCall2(ctx->cg.builder, sn_ft, snprintf_fn, sargs, 4, "");
+                // If no '.' or 'e' in result, append ".0" to show it's a float
+                LLVMValueRef strchr_fn = LLVMGetNamedFunction(ctx->cg.module, "strchr");
+                if (!strchr_fn) {
+                    LLVMTypeRef sc_params[] = {ptr, i32};
+                    LLVMTypeRef sc_ft = LLVMFunctionType(ptr, sc_params, 2, false);
+                    strchr_fn = LLVMAddFunction(ctx->cg.module, "strchr", sc_ft);
+                    LLVMSetLinkage(strchr_fn, LLVMExternalLinkage);
+                }
+                LLVMValueRef strcat_fn = LLVMGetNamedFunction(ctx->cg.module, "strcat");
+                if (!strcat_fn) {
+                    LLVMTypeRef sc_params[] = {ptr, ptr};
+                    LLVMTypeRef sc_ft = LLVMFunctionType(ptr, sc_params, 2, false);
+                    strcat_fn = LLVMAddFunction(ctx->cg.module, "strcat", sc_ft);
+                    LLVMSetLinkage(strcat_fn, LLVMExternalLinkage);
+                }
+                // has_dot = strchr(buf, '.') != NULL
+                LLVMValueRef dot_char = LLVMConstInt(i32, '.', 0);
+                LLVMValueRef sc_args1[] = {val_bufs[i], dot_char};
+                LLVMTypeRef  sc_ft1_p[] = {ptr, i32};
+                LLVMValueRef has_dot = LLVMBuildCall2(ctx->cg.builder,
+                    LLVMFunctionType(ptr, sc_ft1_p, 2, false),
+                    strchr_fn, sc_args1, 2, "has_dot");
+                // has_e = strchr(buf, 'e') != NULL
+                LLVMValueRef e_char = LLVMConstInt(i32, 'e', 0);
+                LLVMValueRef sc_args2[] = {val_bufs[i], e_char};
+                LLVMValueRef has_e = LLVMBuildCall2(ctx->cg.builder,
+                    LLVMFunctionType(ptr, sc_ft1_p, 2, false),
+                    strchr_fn, sc_args2, 2, "has_e");
+                // null ptr = 0
+                LLVMValueRef null_ptr = LLVMConstPointerNull(ptr);
+                LLVMValueRef no_dot = LLVMBuildICmp(ctx->cg.builder, LLVMIntEQ, has_dot, null_ptr, "no_dot");
+                LLVMValueRef no_e   = LLVMBuildICmp(ctx->cg.builder, LLVMIntEQ, has_e,   null_ptr, "no_e");
+                LLVMValueRef needs_dot = LLVMBuildAnd(ctx->cg.builder, no_dot, no_e, "needs_dot");
+                LLVMBasicBlockRef append_bb = LLVMAppendBasicBlockInContext(ctx->cg.context, func, "append_dot");
+                LLVMBasicBlockRef skip_bb   = LLVMAppendBasicBlockInContext(ctx->cg.context, func, "skip_dot");
+                LLVMBuildCondBr(ctx->cg.builder, needs_dot, append_bb, skip_bb);
+                LLVMPositionBuilderAtEnd(ctx->cg.builder, append_bb);
+                LLVMValueRef dot_str = LLVMBuildGlobalStringPtr(ctx->cg.builder, ".0", "dot_str");
+                LLVMValueRef cat_args[] = {val_bufs[i], dot_str};
+                LLVMTypeRef  cat_ft_p[] = {ptr, ptr};
+                LLVMBuildCall2(ctx->cg.builder,
+                    LLVMFunctionType(ptr, cat_ft_p, 2, false),
+                    strcat_fn, cat_args, 2, "");
+                LLVMBuildBr(ctx->cg.builder, skip_bb);
+                LLVMPositionBuilderAtEnd(ctx->cg.builder, skip_bb);
+            } else if (ft_field->kind == TYPE_CHAR) {
+                LLVMValueRef fmt_s = LLVMBuildGlobalStringPtr(ctx->cg.builder, "%c", "fmtc");
+                LLVMValueRef sargs[] = {val_bufs[i], buf_size, fmt_s, fval};
+                LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(snprintf_fn),
+                               snprintf_fn, sargs, 4, "");
+            } else if (ft_field->kind == TYPE_STRING) {
+                LLVMValueRef fmt_s = LLVMBuildGlobalStringPtr(ctx->cg.builder, "\"%s\"", "fmts");
+                LLVMValueRef sargs[] = {val_bufs[i], buf_size, fmt_s, fval};
+                LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(snprintf_fn),
+                               snprintf_fn, sargs, 4, "");
+            } else if (ft_field->kind == TYPE_ARR) {
+                // Print array fields as "[...]"
+                LLVMValueRef fmt_s = LLVMBuildGlobalStringPtr(ctx->cg.builder, "[array]", "fmtarr");
+                LLVMTypeRef  sn_p[] = {ptr, i64, ptr};
+                LLVMBuildCall2(ctx->cg.builder,
+                    LLVMFunctionType(i32, sn_p, 3, false),
+                    snprintf_fn,
+                    (LLVMValueRef[]){val_bufs[i], buf_size, fmt_s}, 3, "");
+            } else {
+                LLVMTypeRef i64t = LLVMInt64TypeInContext(ctx->cg.context);
+                if (LLVMTypeOf(fval) != i64t)
+                    fval = LLVMBuildZExt(ctx->cg.builder, fval, i64t, "wi");
+                LLVMValueRef fmt_s = LLVMBuildGlobalStringPtr(ctx->cg.builder, "%ld", "fmti");
+                LLVMTypeRef  sn_p[] = {ptr, i64, ptr, i64t};
+                LLVMBuildCall2(ctx->cg.builder,
+                    LLVMFunctionType(i32, sn_p, 4, false),
+                    snprintf_fn,
+                    (LLVMValueRef[]){val_bufs[i], buf_size, fmt_s, fval}, 4, "");
+            }
+
+            // strlen of the buffer
+            LLVMValueRef slen_args[] = {val_bufs[i]};
+            LLVMValueRef slen = LLVMBuildCall2(ctx->cg.builder,
+                                    LLVMGlobalGetValueType(strlen_fn),
+                                    strlen_fn, slen_args, 1, "slen");
+            LLVMValueRef slen32 = LLVMBuildTrunc(ctx->cg.builder, slen, i32, "slen32");
+            val_lens[i] = slen32;
+
+            // update max_len_ptr if slen32 > current max
+            LLVMValueRef cur_max = LLVMBuildLoad2(ctx->cg.builder, i32, max_len_ptr, "cur_max");
+            LLVMValueRef is_bigger = LLVMBuildICmp(ctx->cg.builder, LLVMIntSGT,
+                                                   slen32, cur_max, "is_bigger");
+            LLVMBasicBlockRef update_bb = LLVMAppendBasicBlockInContext(ctx->cg.context, func, "upd");
+            LLVMBasicBlockRef cont_bb   = LLVMAppendBasicBlockInContext(ctx->cg.context, func, "cont");
+            LLVMBuildCondBr(ctx->cg.builder, is_bigger, update_bb, cont_bb);
+            LLVMPositionBuilderAtEnd(ctx->cg.builder, update_bb);
+            LLVMBuildStore(ctx->cg.builder, slen32, max_len_ptr);
+            LLVMBuildBr(ctx->cg.builder, cont_bb);
+            LLVMPositionBuilderAtEnd(ctx->cg.builder, cont_bb);
+        }
+
+        // Now print each field using max_val_len for alignment
+        LLVMValueRef max_len = LLVMBuildLoad2(ctx->cg.builder, i32, max_len_ptr, "max_len");
+
+        for (int i = 0; i < t->layout_field_count; i++) {
+            // prefix: indent + "[" + name padded to max_name_len + " "
+            char prefix_buf[256];
+            if (i == 0) {
+                snprintf(prefix_buf, sizeof(prefix_buf), " [%-*s ",
+                         max_name_len, t->layout_fields[i].name);
+            } else {
+                snprintf(prefix_buf, sizeof(prefix_buf), "%*s[%-*s ",
+                         indent, "", max_name_len, t->layout_fields[i].name);
+            }
+
+            LLVMValueRef pre_s = LLVMBuildGlobalStringPtr(ctx->cg.builder, prefix_buf, "lay_pre");
+            LLVMValueRef pa[] = {pre_s};
+            LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, pa, 1, "");
+
+            // print value from buffer
+            LLVMValueRef fmt_s = LLVMBuildGlobalStringPtr(ctx->cg.builder, "%-*s", "fmtv");
+            LLVMValueRef vargs[] = {fmt_s, max_len, val_bufs[i]};
+            LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, vargs, 3, "");
+
+            // closing bracket + newline
+            const char *suffix = (i < t->layout_field_count - 1) ? "]\n" : "])\n";
+            LLVMValueRef suf_s = LLVMBuildGlobalStringPtr(ctx->cg.builder, suffix, "lay_suf");
+            LLVMValueRef sa[] = {suf_s};
+            LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, sa, 1, "");
+        }
+
+        free(val_bufs);
+        free(val_lens);
         break;
     }
 
@@ -1453,6 +1752,36 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
     }
 
     bool silent = expr_is_silent(ast);
+
+    /* -----------------------------------------------------------------------
+     * Fast path: bare layout name — print its definition
+     * ----------------------------------------------------------------------- */
+    if (!silent && ast->type == AST_SYMBOL) {
+        Type *lay = layout_lookup(ast->symbol);
+        if (lay && lay->kind == TYPE_LAYOUT) {
+            printf("(layout %s\n", lay->layout_name);
+            for (int i = 0; i < lay->layout_field_count; i++) {
+                LayoutField *f = &lay->layout_fields[i];
+                if (f->type && f->type->kind == TYPE_ARR) {
+                    printf("  [%s :: [%s %d]]",
+                           f->name,
+                           f->type->arr_element_type
+                               ? type_to_string(f->type->arr_element_type) : "?",
+                           f->type->arr_size);
+                } else {
+                    printf("  [%s :: %s]",
+                           f->name,
+                           f->type ? type_to_string(f->type) : "?");
+                }
+                if (i < lay->layout_field_count - 1) printf("\n");
+            }
+            if (lay->layout_packed) printf("\n  :packed True");
+            if (lay->layout_align)  printf("\n  :align %d", lay->layout_align);
+            printf(")\n");
+            ast_free(ast);
+            return true;
+        }
+    }
 
     /* -----------------------------------------------------------------------
      * Fast path: bare symbol naming a function or builtin

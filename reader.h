@@ -21,6 +21,7 @@ typedef enum {
     AST_TESTS,      // (tests ...)
     AST_ADDRESS_OF, // &expr
     AST_RANGE,      // (0..10) [0..10] [1,3..40] (0..)
+    AST_LAYOUT,     // (layout Name [field :: Type] ... :packed True :align 16)
 } ASTType;
 
 // A single parsed function parameter: name + optional type annotation
@@ -28,6 +29,15 @@ typedef struct ASTParam {
     char *name;       // parameter name
     char *type_name;  // type annotation string, NULL if absent
 } ASTParam;
+
+// A single field in a layout definition
+typedef struct ASTLayoutField {
+    char *name;        // field name
+    char *type_name;   // base type (e.g. "Float", "Point") — NULL if array
+    bool  is_array;    // true if [ElemType Size] sugar was used
+    char *array_elem;  // element type name, NULL if not array
+    int   array_size;  // array size, -1 if not specified
+} ASTLayoutField;
 
 typedef struct AST {
     ASTType type;
@@ -96,6 +106,15 @@ typedef struct AST {
             bool is_array;       // true = [...], false = (...)
         } range;
 
+        // AST_LAYOUT
+        struct {
+            char           *name;
+            ASTLayoutField *fields;
+            int             field_count;
+            bool            packed;   // :packed True/False
+            int             align;    // :align N, 0 = natural
+        } layout;
+
     };
 
     char *literal_str; // original literal string for numbers (e.g. "0xFF")
@@ -126,6 +145,9 @@ AST *ast_new_asm(AST **instructions, size_t instruction_count);
 AST *ast_new_type_alias(const char *alias_name, const char *target_name);
 AST *ast_new_address_of(AST *operand);
 AST *ast_new_range(AST *start, AST *step, AST *end, bool is_array);
+AST *ast_new_layout(const char *name,
+                    ASTLayoutField *fields, int field_count,
+                    bool packed, int align);
 
 
 void ast_list_append(AST *list, AST *item);

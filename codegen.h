@@ -56,7 +56,7 @@ LLVMValueRef get_fmt_float_no_newline(CodegenContext *ctx);
 LLVMValueRef get_or_declare_printf(CodegenContext *ctx);
 LLVMValueRef get_or_declare_print_binary(CodegenContext *ctx);
 
-LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *type);
+LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *t);
 bool type_is_numeric(Type *t);
 bool type_is_integer(Type *t);
 bool type_is_float(Type *t);
@@ -76,5 +76,9 @@ void codegen_declare_external_func(CodegenContext *ctx,
                                    const char *mangled_name,
                                    EnvParam *params, int param_count,
                                    Type *return_type);
+
+// Build and register an LLVM struct type from an AST_LAYOUT node.
+// Resolves field types, computes offsets, calls layout_register.
+void codegen_layout(CodegenContext *ctx, AST *ast);
 
 #endif // CODEGEN_H

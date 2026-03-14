@@ -1458,6 +1458,41 @@ RuntimeValue *rt_ast_to_runtime_value(AST *ast) {
                 heap_list_append(lst, rt_ast_to_runtime_value(ast->lambda.body_exprs[i]));
             return WRAP_LIST(lst);
         }
+
+        case AST_LAYOUT: {
+            RuntimeList *lst = HEAP_LIST();
+            heap_list_append(lst, HEAP_SYM("layout"));
+            heap_list_append(lst, HEAP_SYM(ast->layout.name));
+            for (int i = 0; i < ast->layout.field_count; i++) {
+                ASTLayoutField *f = &ast->layout.fields[i];
+                RuntimeList *field = HEAP_LIST();
+                heap_list_append(field, HEAP_SYM(f->name));
+                heap_list_append(field, HEAP_SYM("::"));
+                if (f->is_array) {
+                    RuntimeList *arr = HEAP_LIST();
+                    heap_list_append(arr, HEAP_SYM(f->array_elem ? f->array_elem : "?"));
+                    char size_buf[32];
+                    snprintf(size_buf, sizeof(size_buf), "%d", f->array_size);
+                    heap_list_append(arr, HEAP_SYM(size_buf));
+                    heap_list_append(field, WRAP_LIST(arr));
+                } else {
+                    heap_list_append(field, HEAP_SYM(f->type_name ? f->type_name : "?"));
+                }
+                heap_list_append(lst, WRAP_LIST(field));
+            }
+            if (ast->layout.packed) {
+                heap_list_append(lst, HEAP_SYM(":packed"));
+                heap_list_append(lst, HEAP_SYM("True"));
+            }
+            if (ast->layout.align) {
+                char align_buf[32];
+                snprintf(align_buf, sizeof(align_buf), "%d", ast->layout.align);
+                heap_list_append(lst, HEAP_SYM(":align"));
+                heap_list_append(lst, HEAP_SYM(align_buf));
+            }
+            return WRAP_LIST(lst);
+        }
+
         default: {
             return HEAP_SYM("<unknown>");
         }

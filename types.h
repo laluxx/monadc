@@ -19,6 +19,7 @@ typedef enum {
     TYPE_RATIO,
     TYPE_ARR,
     TYPE_FN,
+    TYPE_LAYOUT,
     TYPE_UNKNOWN,
 } TypeKind;
 
@@ -29,6 +30,14 @@ typedef struct FnParam {
     bool optional;     // => (#:optional)
     bool rest;         // variadic rest '. _'
 } FnParam;
+
+// One field inside a TYPE_LAYOUT
+typedef struct LayoutField {
+    char        *name;   // field name
+    struct Type *type;   // resolved type of the field
+    int          offset; // byte offset within the struct
+    int          size;   // byte size of this field
+} LayoutField;
 
 typedef struct Type {
     TypeKind kind;
@@ -41,6 +50,13 @@ typedef struct Type {
     // TYPE_ARR fields
     struct Type *arr_element_type; // element type for arrays
     int arr_size;                  // size of array (-1 = unknown/inferred)
+    // TYPE_LAYOUT fields
+    char        *layout_name;
+    LayoutField *layout_fields;
+    int          layout_field_count;
+    int          layout_total_size;  // total size in bytes (after padding)
+    bool         layout_packed;
+    int          layout_align;       // 0 = natural
 } Type;
 
 /// Constructors
@@ -59,6 +75,10 @@ Type *type_list(Type *element_type);
 Type *type_keyword(void);
 Type *type_ratio(void);
 Type *type_arr(Type *element_type, int size);
+Type *type_layout(const char *name,
+                  LayoutField *fields, int field_count,
+                  int total_size, bool packed, int align);
+
 
 Type *type_fn(FnParam *params, int param_count, Type *return_type);
 
@@ -90,5 +110,13 @@ Type *parse_type_annotation(struct AST *ast);
 void  type_alias_register(const char *alias_name, const char *target_name);
 Type *type_from_name(const char *name);   // resolves aliases too
 void  type_alias_free_all(void);          // call at program exit / between compiles
+
+/// Layout
+
+// Layout registry
+void  layout_register(const char *name, Type *t);  // takes ownership of t
+Type *layout_lookup(const char *name);             // returns borrowed ptr
+void  layout_free_all(void);
+int layout_compute_offsets(LayoutField *fields, int count, bool packed, int (*elem_size_fn)(const char *type_name));
 
 #endif

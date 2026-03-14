@@ -117,39 +117,6 @@ static void compiler_error(int line, int column, const char *fmt, ...) {
     exit(1);
 }
 
-/* static void compiler_error(int line, int column, const char *fmt, ...) { */
-/*     va_list args; */
-/*     va_start(args, fmt); */
-
-/*     fprintf(stderr, "%s:%d:%d: error: ", current_filename ? current_filename : "<input>", line, column); */
-/*     vfprintf(stderr, fmt, args); */
-/*     fprintf(stderr, "\n"); */
-
-/*     if (current_source) { */
-/*         const char *line_start = current_source; */
-/*         int current_line = 1; */
-
-/*         while (current_line < line && *line_start) { */
-/*             if (*line_start == '\n') current_line++; */
-/*             line_start++; */
-/*         } */
-
-/*         const char *line_end = line_start; */
-/*         while (*line_end && *line_end != '\n') line_end++; */
-
-/*         fprintf(stderr, "%5d | %.*s\n", line, (int)(line_end - line_start), line_start); */
-
-/*         fprintf(stderr, "      | "); */
-/*         for (int i = 1; i < column; i++) { */
-/*             fprintf(stderr, " "); */
-/*         } */
-/*         fprintf(stderr, "^\n"); */
-/*     } */
-
-/*     va_end(args); */
-/*     exit(1); */
-/* } */
-
 /// Helpers
 
 static char *my_strndup(const char *s, size_t n) {
@@ -303,6 +270,19 @@ AST *ast_new_range(AST *start, AST *step, AST *end, bool is_array) {
     return a;
 }
 
+AST *ast_new_layout(const char *name,
+                    ASTLayoutField *fields, int field_count,
+                    bool packed, int align) {
+    AST *a = calloc(1, sizeof(AST));
+    a->type                = AST_LAYOUT;
+    a->layout.name         = my_strdup(name);
+    a->layout.fields       = fields;
+    a->layout.field_count  = field_count;
+    a->layout.packed       = packed;
+    a->layout.align        = align;
+    return a;
+}
+
 void ast_array_append(AST *array, AST *item) {
     if (array->array.element_count >= array->array.element_capacity) {
         array->array.element_capacity *= 2;
@@ -403,6 +383,16 @@ void ast_free(AST *ast) {
         ast_free(ast->range.end);
         break;
 
+    case AST_LAYOUT:
+        free(ast->layout.name);
+        for (int i = 0; i < ast->layout.field_count; i++) {
+            free(ast->layout.fields[i].name);
+            free(ast->layout.fields[i].type_name);
+            free(ast->layout.fields[i].array_elem);
+        }
+        free(ast->layout.fields);
+        break;
+
     default:
         break;
     }
@@ -482,6 +472,21 @@ void ast_print(AST *ast) {
         printf("..");
         if (ast->range.end) ast_print(ast->range.end);
         printf(ast->range.is_array ? "]" : ")");
+        break;
+    case AST_LAYOUT:
+        printf("(layout %s", ast->layout.name);
+        for (int i = 0; i < ast->layout.field_count; i++) {
+            ASTLayoutField *f = &ast->layout.fields[i];
+            if (f->is_array)
+                printf(" [%s :: [%s %d]]", f->name,
+                       f->array_elem ? f->array_elem : "?", f->array_size);
+            else
+                printf(" [%s :: %s]", f->name,
+                       f->type_name ? f->type_name : "?");
+        }
+        if (ast->layout.packed) printf(" :packed True");
+        if (ast->layout.align)  printf(" :align %d", ast->layout.align);
+        printf(")");
         break;
     }
 }
@@ -885,57 +890,6 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
     *out_count       = count;
     *out_return_type = ret_type;
 }
-
-/* static void parse_fn_signature(Parser *p, ASTParam **out_params, */
-/*                                int *out_count, char **out_return_type) { */
-/*     ASTParam *params = NULL; */
-/*     int count = 0; */
-/*     int capacity = 0; */
-/*     char *ret_type = NULL; */
-
-/*     while (p->current.type != TOK_RPAREN && */
-/*            p->current.type != TOK_EOF) { */
-
-/*         if (p->current.type == TOK_LBRACKET) { */
-/*             p->current = lexer_next_token(p->lexer); */
-
-/*             ASTParam param = parse_one_param(p); */
-
-/*             if (p->current.type != TOK_RBRACKET) { */
-/*                 compiler_error(p->current.line, p->current.column, */
-/*                              "Expected ']' after parameter"); */
-/*             } */
-/*             p->current = lexer_next_token(p->lexer); */
-
-/*             if (count >= capacity) { */
-/*                 capacity = capacity == 0 ? 4 : capacity * 2; */
-/*                 params   = realloc(params, sizeof(ASTParam) * capacity); */
-/*             } */
-/*             params[count++] = param; */
-
-/*         } else if (p->current.type == TOK_ARROW) { */
-/*             p->current = lexer_next_token(p->lexer); */
-
-/*         } else if (p->current.type == TOK_SYMBOL) { */
-/*             ret_type   = my_strdup(p->current.value); */
-/*             p->current = lexer_next_token(p->lexer); */
-
-/*         } else { */
-/*             compiler_error(p->current.line, p->current.column, */
-/*                          "Unexpected token in function signature"); */
-/*         } */
-/*     } */
-
-/*     if (p->current.type != TOK_RPAREN) { */
-/*         compiler_error(p->current.line, p->current.column, */
-/*                      "Expected ')' to close function signature"); */
-/*     } */
-/*     p->current = lexer_next_token(p->lexer); */
-
-/*     *out_params      = params; */
-/*     *out_count       = count; */
-/*     *out_return_type = ret_type; */
-/* } */
 
 static AST *parse_lambda(Parser *p) {
     if (p->current.type != TOK_LPAREN) {
@@ -1623,6 +1577,131 @@ static AST *parse_list(Parser *p) {
         return node;
     }
 
+    // (layout Name [field :: Type] ... :packed True/False :align N)
+    if (p->current.type == TOK_SYMBOL &&
+        strcmp(p->current.value, "layout") == 0) {
+
+        int lay_line = p->current.line, lay_col = p->current.column;
+        p->current = lexer_next_token(p->lexer); // consume 'layout'
+
+        if (p->current.type != TOK_SYMBOL)
+            compiler_error(p->current.line, p->current.column,
+                           "Expected struct name after 'layout'");
+        char *lay_name = my_strdup(p->current.value);
+        p->current = lexer_next_token(p->lexer);
+
+        ASTLayoutField *fields   = NULL;
+        int             nfields  = 0;
+        bool            packed   = false;
+        int             align    = 0;
+
+        while (p->current.type != TOK_RPAREN &&
+               p->current.type != TOK_EOF) {
+
+            // :packed True/False
+            if (p->current.type == TOK_KEYWORD &&
+                strcmp(p->current.value, "packed") == 0) {
+                p->current = lexer_next_token(p->lexer);
+                if (p->current.type != TOK_SYMBOL ||
+                    (strcmp(p->current.value, "True")  != 0 &&
+                     strcmp(p->current.value, "False") != 0))
+                    compiler_error(p->current.line, p->current.column,
+                                   ":packed requires True or False");
+                packed = (strcmp(p->current.value, "True") == 0);
+                p->current = lexer_next_token(p->lexer);
+                continue;
+            }
+
+            // :align N
+            if (p->current.type == TOK_KEYWORD &&
+                strcmp(p->current.value, "align") == 0) {
+                p->current = lexer_next_token(p->lexer);
+                if (p->current.type != TOK_NUMBER)
+                    compiler_error(p->current.line, p->current.column,
+                                   ":align requires a number");
+                align = (int)atof(p->current.value);
+                p->current = lexer_next_token(p->lexer);
+                continue;
+            }
+
+            // [field :: Type]  or  [field :: [ElemType Size]]
+            if (p->current.type != TOK_LBRACKET)
+                compiler_error(p->current.line, p->current.column,
+                               "Expected '[' for layout field, got '%s'",
+                               p->current.value ? p->current.value : "?");
+            p->current = lexer_next_token(p->lexer); // consume '['
+
+            if (p->current.type != TOK_SYMBOL)
+                compiler_error(p->current.line, p->current.column,
+                               "Expected field name");
+            char *fname = my_strdup(p->current.value);
+            p->current = lexer_next_token(p->lexer);
+
+            // expect ::
+            if (p->current.type != TOK_SYMBOL ||
+                strcmp(p->current.value, "::") != 0)
+                compiler_error(p->current.line, p->current.column,
+                               "Expected '::' after field name '%s'", fname);
+            p->current = lexer_next_token(p->lexer);
+
+            ASTLayoutField field = {0};
+            field.name       = fname;
+            field.array_size = -1;
+
+            // Array sugar: [ElemType Size]
+            if (p->current.type == TOK_LBRACKET) {
+                p->current = lexer_next_token(p->lexer); // consume inner '['
+                if (p->current.type != TOK_SYMBOL)
+                    compiler_error(p->current.line, p->current.column,
+                                   "Expected element type in array field");
+                field.is_array   = true;
+                field.array_elem = my_strdup(p->current.value);
+                p->current = lexer_next_token(p->lexer);
+
+                if (p->current.type == TOK_NUMBER) {
+                    field.array_size = (int)atof(p->current.value);
+                    p->current = lexer_next_token(p->lexer);
+                }
+                if (p->current.type != TOK_RBRACKET)
+                    compiler_error(p->current.line, p->current.column,
+                                   "Expected ']' to close array type");
+                p->current = lexer_next_token(p->lexer); // consume inner ']'
+            } else {
+                // Plain type name
+                if (p->current.type != TOK_SYMBOL)
+                    compiler_error(p->current.line, p->current.column,
+                                   "Expected type name for field '%s'", fname);
+                field.type_name = my_strdup(p->current.value);
+                p->current = lexer_next_token(p->lexer);
+            }
+
+            // consume outer ']'
+            if (p->current.type != TOK_RBRACKET)
+                compiler_error(p->current.line, p->current.column,
+                               "Expected ']' to close field '%s'", fname);
+            p->current = lexer_next_token(p->lexer);
+
+            fields = realloc(fields, sizeof(ASTLayoutField) * (nfields + 1));
+            fields[nfields++] = field;
+        }
+
+        if (p->current.type != TOK_RPAREN)
+            compiler_error(p->current.line, p->current.column,
+                           "Expected ')' to close layout '%s'", lay_name);
+        int end_col = p->current.column + 1;
+        p->current = lexer_next_token(p->lexer);
+
+        ast_free(list);
+        AST *node = ast_new_layout(lay_name, fields, nfields, packed, align);
+        free(lay_name);
+        node->line       = lay_line;
+        node->column     = lay_col;
+        node->end_column = end_col;
+        return node;
+    }
+
+
+
     if (p->current.type == TOK_SYMBOL &&
         strcmp(p->current.value, "tests") == 0) {
         p->current = lexer_next_token(p->lexer);
@@ -1711,26 +1790,6 @@ static AST *parse_list(Parser *p) {
         list->end_column = end_column;
         return list;
     }
-
-
-    /* // Normal list parsing */
-    /* while (p->current.type != TOK_RPAREN && */
-    /*        p->current.type != TOK_EOF) { */
-    /*     AST *item = parse_expr(p); */
-    /*     ast_list_append(list, item); */
-    /* } */
-
-    /* if (p->current.type != TOK_RPAREN) { */
-    /*     compiler_error(p->current.line, p->current.column, "Expected ')'"); */
-    /* } */
-
-    /* int end_column = p->current.column + 1; */
-    /* p->current = lexer_next_token(p->lexer); */
-
-    /* list->line = start_line; */
-    /* list->column = start_column; */
-    /* list->end_column = end_column; */
-    /* return list; */
 }
 
 static AST *parse_bracket_list(Parser *p) {
@@ -1818,59 +1877,6 @@ static AST *parse_bracket_list(Parser *p) {
     return array;
 }
 
-/* static AST *parse_bracket_list(Parser *p) { */
-/*     int start_line = p->current.line; */
-/*     int start_column = p->current.column; */
-
-/*     AST *list = ast_new_list(); */
-/*     p->current = lexer_next_token(p->lexer); */
-
-/*     while (p->current.type != TOK_RBRACKET && */
-/*            p->current.type != TOK_EOF) { */
-/*         ast_list_append(list, parse_expr(p)); */
-/*     } */
-
-/*     if (p->current.type != TOK_RBRACKET) { */
-/*         compiler_error(p->current.line, p->current.column, "Expected ']'"); */
-/*     } */
-
-/*     int end_column = p->current.column + 1; */
-/*     p->current = lexer_next_token(p->lexer); */
-
-/*     // Check if this contains :: which indicates a type annotation */
-/*     // Type annotations should stay as lists */
-/*     bool has_double_colon = false; */
-/*     for (size_t i = 0; i < list->list.count; i++) { */
-/*         if (list->list.items[i]->type == AST_SYMBOL && */
-/*             strcmp(list->list.items[i]->symbol, "::") == 0) { */
-/*             has_double_colon = true; */
-/*             break; */
-/*         } */
-/*     } */
-
-/*     if (has_double_colon) { */
-/*         // Keep as list for type annotation */
-/*         list->line = start_line; */
-/*         list->column = start_column; */
-/*         list->end_column = end_column; */
-/*         return list; */
-/*     } */
-
-/*     // Otherwise, convert to array */
-/*     AST *array = ast_new_array(); */
-/*     for (size_t i = 0; i < list->list.count; i++) { */
-/*         ast_array_append(array, list->list.items[i]); */
-/*     } */
-
-/*     free(list->list.items); */
-/*     free(list); */
-
-/*     array->line = start_line; */
-/*     array->column = start_column; */
-/*     array->end_column = end_column; */
-/*     return array; */
-/* } */
-
 static double parse_number_str(const char *s) {
     if (s[0]=='0' && (s[1]=='x'||s[1]=='X')) return (double)strtol(s,NULL,16);
     if (s[0]=='0' && (s[1]=='b'||s[1]=='B')) return (double)strtol(s+2,NULL,2);
@@ -1909,15 +1915,6 @@ static AST *parse_expr(Parser *p) {
         ast->end_column = end_col;
         return ast;
     }
-    /* case TOK_SYMBOL: { */
-    /*     int end_col = tok.column + (tok.value ? strlen(tok.value) : 1); */
-    /*     p->current = lexer_next_token(p->lexer); */
-    /*     AST *ast = ast_new_symbol(tok.value); */
-    /*     ast->line = tok.line; */
-    /*     ast->column = tok.column; */
-    /*     ast->end_column = end_col; */
-    /*     return ast; */
-    /* } */
     case TOK_SYMBOL: {
         // & reader macro — address-of
         if (tok.value && strcmp(tok.value, "&") == 0) {

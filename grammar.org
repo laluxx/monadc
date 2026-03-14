@@ -256,7 +256,7 @@ I8 I16 I32 I64 I128
 U8 U16 U32 U64 U128
 
 ;; Floating-point
-F32                ; Single precision (32-bit)
+Float                ; Single precision (32-bit)
 F64                ; Double precision (64-bit)
 #+end_src
 
@@ -496,11 +496,16 @@ The typed functions compile to efficient native code.  The rest remains dynamic.
 #+begin_src scheme
 ;; 2D point - 8 bytes (2 × 4-byte floats)
 (layout Point
-  [x :: F32]
-  [y :: F32])
+  [x :: Float]
+  [y :: Float])
 
 ;; Usage
 (define p (Point 3.0 4.0))
+
+;; Non positional
+(define p (Point :x 3.0
+                 :y 4.0))
+
 p.x; => 3.0
 p.y; => 4.0
 
@@ -514,9 +519,9 @@ p.y; => 4.0
 #+begin_src scheme
 ;; Force 16-byte alignment (for SIMD)
 (layout Vec3
-  [x :: F32]
-  [y :: F32]
-  [z :: F32]
+  [x :: Float]
+  [y :: Float]
+  [z :: Float]
   :align 16)
 
 ;; Without :align, the compiler uses natural alignment
@@ -538,11 +543,11 @@ p.y; => 4.0
 #+begin_src scheme
 ;; Network packet header - no padding
 (layout PacketHeader
-  [magic :: U32]      ; 4 bytes
-  [version :: U8]     ; 1 byte
-  [flags :: U8]       ; 1 byte
-  [length :: U16]     ; 2 bytes
-  :packed)
+  [magic   :: U32]     ; 4 bytes
+  [version :: U8 ]     ; 1 byte
+  [flags   :: U8 ]     ; 1 byte
+  [length  :: U16]     ; 2 bytes
+  :packed True)
 ;; Total: exactly 8 bytes
 
 ;; Without :packed, the compiler might add padding:
@@ -567,7 +572,7 @@ p.y; => 4.0
 #+begin_src scheme
 ;; Ethernet MAC address
 (layout MacAddr
-  [bytes :: [U8 6]]
+  [bytes :: [Arr :: Int :: 6]]
   :packed)
 
 ;; IPv4 address (fixed-size array)

@@ -1,7 +1,22 @@
 #+title: TODO.org
 
-* Env [0/1]
+* TODO Env [0/2]
 - [ ] A way to dump an enviroment to a loadable file.env 
+- [ ] (type code List) is allowed it should be a compile time ERROR
+
+
+
+Point.x should return the Float type itself, once we can return types.
+
+#+begin_src monad
+Point
+(layout Point
+  [x :: Float]
+  [y :: Float])
+
+Point.x
+<input>:1:1: error: qualified symbol 'Point.x' used but no module context
+#+end_src
 
 
 #+begin_src monad

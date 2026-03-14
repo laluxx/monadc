@@ -267,8 +267,8 @@ LLVMValueRef get_or_declare_print_binary(CodegenContext *ctx) {
 
 /// Type to LLVM Type conversion
 
-LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *type) {
-    switch (type->kind) {
+LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *t) {
+    switch (t->kind) {
     case TYPE_INT:
     case TYPE_HEX:
     case TYPE_BIN:
@@ -288,12 +288,29 @@ LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *type) {
         return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0); // RuntimeValue* for Ratio
     case TYPE_ARR:
         // Arrays are stack-allocated - return array type
-        if (type->arr_element_type && type->arr_size > 0) {
-            LLVMTypeRef elem_type = type_to_llvm(ctx, type->arr_element_type);
-            return LLVMArrayType(elem_type, type->arr_size);
+        if (t->arr_element_type && t->arr_size > 0) {
+            LLVMTypeRef elem_type = type_to_llvm(ctx, t->arr_element_type);
+            return LLVMArrayType(elem_type, t->arr_size);
         }
         // Fallback for unknown size
         return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+    case TYPE_LAYOUT: {
+        char struct_name[256];
+        snprintf(struct_name, sizeof(struct_name), "layout.%s", t->layout_name);
+        LLVMTypeRef existing = LLVMGetTypeByName2(ctx->context, struct_name);
+        if (existing) return LLVMPointerType(existing, 0);  // always pointer
+
+        LLVMTypeRef *field_types = malloc(sizeof(LLVMTypeRef) *
+                                          (t->layout_field_count ? t->layout_field_count : 1));
+        for (int i = 0; i < t->layout_field_count; i++)
+            field_types[i] = type_to_llvm(ctx, t->layout_fields[i].type);
+
+        LLVMTypeRef struct_type = LLVMStructCreateNamed(ctx->context, struct_name);
+        LLVMStructSetBody(struct_type, field_types, t->layout_field_count,
+                          t->layout_packed ? 1 : 0);
+        free(field_types);
+        return LLVMPointerType(struct_type, 0);  // always pointer
+    }
     case TYPE_BOOL:
         return LLVMInt1TypeInContext(ctx->context);
     case TYPE_UNKNOWN:
@@ -301,6 +318,21 @@ LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *type) {
     default:
         return LLVMDoubleTypeInContext(ctx->context);
     }
+}
+
+// Returns the bare LLVM struct type for a layout — never the pointer wrapper.
+// Use this as the element-type argument to GEP/Load/Store on layout values.
+static LLVMTypeRef layout_struct_type(CodegenContext *ctx, Type *lay) {
+    char struct_name[256];
+    snprintf(struct_name, sizeof(struct_name), "layout.%s", lay->layout_name);
+    LLVMTypeRef st = LLVMGetTypeByName2(ctx->context, struct_name);
+    if (!st) {
+        // Force creation via type_to_llvm and strip the pointer wrapper
+        LLVMTypeRef ptr = type_to_llvm(ctx, lay);   // returns ptr-to-struct
+        (void)ptr;
+        st = LLVMGetTypeByName2(ctx->context, struct_name);
+    }
+    return st;
 }
 
 /// Type checking for operations
@@ -916,20 +948,6 @@ static LLVMValueRef codegen_fn_arg(CodegenContext *ctx, AST *node) {
     return r.value;
 }
 
-/* static LLVMValueRef codegen_fn_arg(CodegenContext *ctx, AST *node) { */
-/*     if (node->type == AST_SYMBOL) { */
-/*         EnvEntry *e = env_lookup(ctx->env, node->symbol); */
-/*         if (e && e->kind == ENV_FUNC && e->func_ref) */
-/*             return e->func_ref; */
-/*         // Fallback: look up directly in the LLVM module by name */
-/*         LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, node->symbol); */
-/*         if (fn) return fn; */
-/*     } */
-/*     CodegenResult r = codegen_expr(ctx, node); */
-/*     return r.value; */
-/* } */
-
-
 // ─── Wrapper generators ────────────────────────────────────────────────────
 //
 // These emit small LLVM functions that bridge typed user functions
@@ -1213,18 +1231,104 @@ static void collect_free_vars(AST *ast,
     }
 }
 
+// Returns byte size of a primitive type name, for offset computation.
+static int layout_field_byte_size(CodegenContext *ctx, Type *t) {
+    if (!t) return 8;
+    switch (t->kind) {
+        case TYPE_INT:
+        case TYPE_HEX:
+        case TYPE_BIN:
+        case TYPE_OCT:   return 8;
+        case TYPE_FLOAT: return 8;
+        case TYPE_CHAR:  return 1;
+        case TYPE_BOOL:  return 1;
+        case TYPE_ARR:
+            if (t->arr_element_type && t->arr_size > 0)
+                return layout_field_byte_size(ctx, t->arr_element_type) * t->arr_size;
+            return 8;
+        case TYPE_LAYOUT:
+            return t->layout_total_size > 0 ? t->layout_total_size : 8;
+        default:         return 8;
+    }
+}
+
+void codegen_layout(CodegenContext *ctx, AST *ast) {
+    // ast->type == AST_LAYOUT
+
+    // 1. Resolve each field's type
+    LayoutField *fields = malloc(sizeof(LayoutField) * (ast->layout.field_count ? ast->layout.field_count : 1));
+
+    for (int i = 0; i < ast->layout.field_count; i++) {
+        ASTLayoutField *af = &ast->layout.fields[i];
+        Type *ft = NULL;
+
+        if (af->is_array) {
+            // [ElemType Size] sugar
+            Type *elem = type_from_name(af->array_elem);
+            if (!elem) {
+                CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown array element type '%s' in layout '%s'",
+                              parser_get_filename(), ast->line, ast->column,
+                              af->array_elem, ast->layout.name);
+            }
+            ft = type_arr(elem, af->array_size);
+        } else {
+            ft = type_from_name(af->type_name);
+            if (!ft) {
+                // Try layout registry (nested struct)
+                ft = layout_lookup(af->type_name);
+                if (ft) ft = type_clone(ft);  // clone so ownership is clear
+            }
+            if (!ft) {
+                CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown type '%s' for field '%s' in layout '%s'",
+                              parser_get_filename(), ast->line, ast->column,
+                              af->type_name, af->name, ast->layout.name);
+            }
+        }
+
+        fields[i].name = strdup(af->name);
+        fields[i].type = ft;
+        fields[i].size = layout_field_byte_size(ctx, ft);
+        fields[i].offset = 0; // filled by layout_compute_offsets
+    }
+
+    // 2. Compute offsets
+    int total_size = layout_compute_offsets(fields, ast->layout.field_count,
+                                            ast->layout.packed,
+                                            NULL); // elem_size_fn not needed (sizes already set)
+
+    // Apply explicit alignment padding to total size
+    if (ast->layout.align > 1) {
+        int a = ast->layout.align;
+        total_size = (total_size + a - 1) & ~(a - 1);
+    }
+
+    // 3. Build the Type and register it
+    Type *layout_type = type_layout(ast->layout.name,
+                                    fields, ast->layout.field_count,
+                                    total_size,
+                                    ast->layout.packed,
+                                    ast->layout.align);
+    layout_register(ast->layout.name, layout_type);
+
+    // 4. Force creation of the LLVM named struct type now
+    type_to_llvm(ctx, layout_type);
+
+    printf("Layout %s :: %d bytes (%d fields%s%s)\n",
+           ast->layout.name, total_size, ast->layout.field_count,
+           ast->layout.packed ? ", packed" : "",
+           ast->layout.align  ? ", aligned" : "");
+}
+
 CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     CodegenResult result = {NULL, NULL};
 
     switch (ast->type) {
     case AST_NUMBER: {
-        // DEBUG
         fprintf(stderr, ">>> CODEGEN NUMBER: literal_str='%s', number=%g\n",
                 ast->literal_str ? ast->literal_str : "NULL", ast->number);
 
         Type *num_type = infer_literal_type(ast->number, ast->literal_str);
 
-        // DEBUG
         fprintf(stderr, ">>> INFERRED TYPE: %s\n", type_to_string(num_type));
 
         result.type = num_type;
@@ -1255,12 +1359,99 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             return result;
         }
 
+        // ── Dot-access: p.x ─────────────────────────────────────────────────
+        const char *dot = strchr(ast->symbol, '.');
+        if (dot && dot != ast->symbol) {
+            char var_name[256];
+            size_t vlen = dot - ast->symbol;
+            if (vlen >= sizeof(var_name)) vlen = sizeof(var_name) - 1;
+            memcpy(var_name, ast->symbol, vlen);
+            var_name[vlen] = '\0';
+            const char *field_name = dot + 1;
+
+            EnvEntry *base_entry = env_lookup(ctx->env, var_name);
+            if (base_entry && base_entry->type->kind == TYPE_LAYOUT) {
+                Type *lay = base_entry->type;
+                int field_idx = -1;
+                for (int i = 0; i < lay->layout_field_count; i++) {
+                    if (strcmp(lay->layout_fields[i].name, field_name) == 0) {
+                        field_idx = i;
+                        break;
+                    }
+                }
+                if (field_idx < 0) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: layout '%s' has no field '%s'",
+                                  parser_get_filename(), ast->line, ast->column,
+                                  lay->layout_name, field_name);
+                }
+                // Get the underlying struct type (strip pointer wrapping from type_to_llvm)
+                char struct_name[256];
+                snprintf(struct_name, sizeof(struct_name), "layout.%s", lay->layout_name);
+                LLVMTypeRef struct_llvm = LLVMGetTypeByName2(ctx->context, struct_name);
+                if (!struct_llvm) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: LLVM struct type for '%s' not found",
+                                  parser_get_filename(), ast->line, ast->column, lay->layout_name);
+                }
+                /* LLVMValueRef zero      = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0); */
+                /* LLVMValueRef fidx      = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), field_idx, 0); */
+                /* LLVMValueRef indices[] = {zero, fidx}; */
+                /* LLVMValueRef gep       = LLVMBuildGEP2(ctx->builder, struct_llvm, */
+                /*                                        base_entry->value, indices, 2, "fld_ptr"); */
+                /* Type *ft = lay->layout_fields[field_idx].type; */
+                /* result.value = LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, ft), gep, field_name); */
+                /* result.type  = type_clone(ft); */
+                /* return result; */
+                LLVMTypeRef  ptr_t2   = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMValueRef get_fn2  = LLVMGetNamedFunction(ctx->module, "__layout_ptr_get");
+                if (!get_fn2) {
+                    LLVMTypeRef ft2 = LLVMFunctionType(ptr_t2, &ptr_t2, 1, 0);
+                    get_fn2 = LLVMAddFunction(ctx->module, "__layout_ptr_get", ft2);
+                    LLVMSetLinkage(get_fn2, LLVMExternalLinkage);
+                }
+                LLVMValueRef vname_str = LLVMBuildGlobalStringPtr(ctx->builder, var_name, "lay_name");
+                LLVMValueRef heap_ptr2 = LLVMBuildCall2(ctx->builder,
+                                             LLVMFunctionType(ptr_t2, &ptr_t2, 1, 0),
+                                             get_fn2, &vname_str, 1, "lay_ptr");
+                LLVMValueRef zero      = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0);
+                LLVMValueRef fidx      = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), field_idx, 0);
+                LLVMValueRef indices[] = {zero, fidx};
+                LLVMValueRef gep       = LLVMBuildGEP2(ctx->builder, struct_llvm,
+                                                       heap_ptr2, indices, 2, "fld_ptr");
+                Type *ft = lay->layout_fields[field_idx].type;
+                result.value = LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, ft), gep, field_name);
+                result.type  = type_clone(ft);
+                return result;
+
+            }
+            // base exists but is not a layout — fall through to normal resolution
+            // (handles module-qualified symbols like M.phi)
+        }
+
+        // ── Normal variable / module-qualified symbol ────────────────────────
         EnvEntry *entry = resolve_symbol_with_modules(ctx, ast->symbol, ast);
         if (!entry) {
             CODEGEN_ERROR(ctx, "%s:%d:%d: error: unbound variable: %s",
-                    parser_get_filename(), ast->line, ast->column, ast->symbol);
+                          parser_get_filename(), ast->line, ast->column, ast->symbol);
         }
-        result.type = type_clone(entry->type);
+
+        if (entry->type->kind == TYPE_LAYOUT) {
+            LLVMTypeRef  ptr_t  = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+            LLVMValueRef get_fn = LLVMGetNamedFunction(ctx->module, "__layout_ptr_get");
+            if (!get_fn) {
+                LLVMTypeRef ft = LLVMFunctionType(ptr_t, &ptr_t, 1, 0);
+                get_fn = LLVMAddFunction(ctx->module, "__layout_ptr_get", ft);
+                LLVMSetLinkage(get_fn, LLVMExternalLinkage);
+            }
+            LLVMValueRef name_str = LLVMBuildGlobalStringPtr(ctx->builder,
+                                        ast->symbol, "lay_name");
+            result.type  = entry->type;
+            result.value = LLVMBuildCall2(ctx->builder,
+                LLVMFunctionType(ptr_t, &ptr_t, 1, 0),
+                get_fn, &name_str, 1, "lay_ptr");
+            return result;
+        }
+
+        result.type  = type_clone(entry->type);
         result.value = LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, entry->type),
                                       entry->value, ast->symbol);
         return result;
@@ -1689,7 +1880,6 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     // Apply naked attribute if requested
                     if (lambda->lambda.naked) {
                         unsigned kind = LLVMGetEnumAttributeKindForName("naked", 5);
-                        fprintf(stderr, "DEBUG: naked attribute kind=%u\n", kind);
                         if (kind != 0) {
                             LLVMAttributeRef attr = LLVMCreateEnumAttribute(ctx->context, kind, 0);
                             LLVMAddAttributeAtIndex(func, LLVMAttributeFunctionIndex, attr);
@@ -1992,6 +2182,51 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     return result;
                 }
 
+                if (final_type->kind == TYPE_LAYOUT) {
+                    // Register the heap pointer in the host-side table via a runtime call
+                    LLVMTypeRef  ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                    LLVMTypeRef  i8p   = ptr_t;
+
+                    // Declare __layout_ptr_set(i8* name, i8* ptr) -> void
+                    LLVMValueRef set_fn = LLVMGetNamedFunction(ctx->module, "__layout_ptr_set");
+                    if (!set_fn) {
+                        LLVMTypeRef params[] = {i8p, i8p};
+                        LLVMTypeRef ft = LLVMFunctionType(
+                            LLVMVoidTypeInContext(ctx->context), params, 2, 0);
+                        set_fn = LLVMAddFunction(ctx->module, "__layout_ptr_set", ft);
+                        LLVMSetLinkage(set_fn, LLVMExternalLinkage);
+                    }
+                    LLVMValueRef name_str = LLVMBuildGlobalStringPtr(ctx->builder, var_name, "lay_name");
+                    LLVMValueRef set_args[] = {name_str, value_result.value};
+                    LLVMTypeRef  set_params[] = {i8p, i8p};
+                    LLVMBuildCall2(ctx->builder,
+                        LLVMFunctionType(LLVMVoidTypeInContext(ctx->context), set_params, 2, 0),
+                        set_fn, set_args, 2, "");
+
+                    // Also keep a global so redeclare_env_symbols tracks it,
+                    // but we don't use it for actual pointer storage
+                    LLVMValueRef gv = LLVMGetNamedGlobal(ctx->module, var_name);
+                    if (!gv) {
+                        gv = LLVMAddGlobal(ctx->module, ptr_t, var_name);
+                        LLVMSetInitializer(gv, LLVMConstPointerNull(ptr_t));
+                        LLVMSetLinkage(gv, LLVMExternalLinkage);
+                    }
+
+                    LLVMBuildStore(ctx->builder, value_result.value, gv);
+                    Type *layout_type_copy = type_clone(final_type);
+                    char *layout_name_copy = strdup(type_to_string(final_type));
+                    env_insert(ctx->env, var_name, layout_type_copy, gv);
+
+                    EnvEntry *elayout = env_lookup(ctx->env, var_name);
+                    if (elayout) elayout->llvm_name = strdup(LLVMGetValueName(gv));
+                    printf("Defined %s :: %s\n", var_name, layout_name_copy);
+                    free(layout_name_copy);
+
+                    result.type  = layout_type_copy;
+                    result.value = value_result.value;
+                    return result;
+                }
+
                 // For non-array types: global at module scope, alloca inside fn
                 LLVMTypeRef llvm_type = type_to_llvm(ctx, final_type);
 
@@ -2285,6 +2520,15 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
                 // Symbol (variable)
                 if (arg->type == AST_SYMBOL) {
+                    // Handle dot-access: (show p.x)
+                    if (strchr(arg->symbol, '.')) {
+                        CodegenResult field_r = codegen_expr(ctx, arg);
+                        if (field_r.type)
+                            codegen_show_value(ctx, field_r.value, field_r.type, true);
+                        result.type  = type_float();
+                        result.value = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0);
+                        return result;
+                    }
                     EnvEntry *entry = env_lookup(ctx->env, arg->symbol);
                     if (!entry) {
                         CODEGEN_ERROR(ctx, "%s:%d:%d: error: unbound variable: %s",
@@ -3177,24 +3421,104 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             if (strcmp(head->symbol, "set!") == 0) {
                 if (ast->list.count != 3) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'set!' requires 2 arguments",
-                            parser_get_filename(), ast->line, ast->column);
+                                  parser_get_filename(), ast->line, ast->column);
                 }
 
                 AST *name_ast = ast->list.items[1];
                 if (name_ast->type != AST_SYMBOL) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'set!' target must be a symbol",
-                            parser_get_filename(), ast->line, ast->column);
+                                  parser_get_filename(), ast->line, ast->column);
                 }
 
+                // ── Dot-access: (set! p.x 5.0) ──────────────────────────────────────
+                const char *dot = strchr(name_ast->symbol, '.');
+                if (dot && dot != name_ast->symbol) {
+                    char var_name[256];
+                    size_t vlen = dot - name_ast->symbol;
+                    memcpy(var_name, name_ast->symbol, vlen);
+                    var_name[vlen] = '\0';
+                    const char *field_name = dot + 1;
+
+                    EnvEntry *base_entry = env_lookup(ctx->env, var_name);
+                    if (!base_entry) {
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: unbound variable: %s",
+                                      parser_get_filename(), ast->line, ast->column, var_name);
+                    }
+                    if (base_entry->type->kind != TYPE_LAYOUT) {
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' is not a layout type",
+                                      parser_get_filename(), ast->line, ast->column, var_name);
+                    }
+
+                    Type *lay = base_entry->type;
+                    int field_idx = -1;
+                    for (int i = 0; i < lay->layout_field_count; i++) {
+                        if (strcmp(lay->layout_fields[i].name, field_name) == 0) {
+                            field_idx = i;
+                            break;
+                        }
+                    }
+                    if (field_idx < 0) {
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: layout '%s' has no field '%s'",
+                                      parser_get_filename(), ast->line, ast->column,
+                                      lay->layout_name, field_name);
+                    }
+
+                    CodegenResult val = codegen_expr(ctx, ast->list.items[2]);
+                    Type *ft = lay->layout_fields[field_idx].type;
+
+                    char sname_set[256];
+                    snprintf(sname_set, sizeof(sname_set), "layout.%s", lay->layout_name);
+                    LLVMTypeRef struct_llvm = LLVMGetTypeByName2(ctx->context, sname_set);
+                    if (!struct_llvm) {
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: LLVM struct type for '%s' not found",
+                                      parser_get_filename(), ast->line, ast->column, lay->layout_name);
+                    }
+
+                    LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+
+                    LLVMValueRef get_fn   = LLVMGetNamedFunction(ctx->module, "__layout_ptr_get");
+                    if (!get_fn) {
+                        LLVMTypeRef ft = LLVMFunctionType(ptr_t, &ptr_t, 1, 0);
+                        get_fn = LLVMAddFunction(ctx->module, "__layout_ptr_get", ft);
+                        LLVMSetLinkage(get_fn, LLVMExternalLinkage);
+                    }
+                    LLVMValueRef name_str2 = LLVMBuildGlobalStringPtr(ctx->builder, var_name, "lay_name");
+                    LLVMValueRef heap_ptr  = LLVMBuildCall2(ctx->builder,
+                                                            LLVMFunctionType(ptr_t, &ptr_t, 1, 0),
+                                                            get_fn, &name_str2, 1, "lay_ptr");
+                    LLVMValueRef zero      = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0);
+                    LLVMValueRef fidx      = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), field_idx, 0);
+                    LLVMValueRef indices[] = {zero, fidx};
+                    LLVMValueRef gep       = LLVMBuildGEP2(ctx->builder, struct_llvm,
+                                                           heap_ptr, indices, 2, "fld_ptr");
+
+                    /* LLVMValueRef zero        = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0); */
+                    /* LLVMValueRef fidx        = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), field_idx, 0); */
+                    /* LLVMValueRef indices[]   = {zero, fidx}; */
+                    /* LLVMValueRef gep         = LLVMBuildGEP2(ctx->builder, struct_llvm, */
+                    /*                                          base_entry->value, indices, 2, "fld_ptr"); */
+
+                    LLVMValueRef stored = val.value;
+                    if (type_is_integer(ft) && type_is_float(val.type))
+                        stored = LLVMBuildFPToSI(ctx->builder, val.value, type_to_llvm(ctx, ft), "set_conv");
+                    else if (type_is_float(ft) && type_is_integer(val.type))
+                        stored = LLVMBuildSIToFP(ctx->builder, val.value, type_to_llvm(ctx, ft), "set_conv");
+
+                    LLVMBuildStore(ctx->builder, stored, gep);
+                    result.value = stored;
+                    result.type  = type_clone(ft);
+                    return result;
+                }
+
+                // ── Plain variable: (set! x 5.0) ────────────────────────────────────
                 EnvEntry *entry = env_lookup(ctx->env, name_ast->symbol);
                 if (!entry) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: unbound variable: %s",
-                            parser_get_filename(), ast->line, ast->column, name_ast->symbol);
+                                  parser_get_filename(), ast->line, ast->column, name_ast->symbol);
                 }
 
                 CodegenResult val = codegen_expr(ctx, ast->list.items[2]);
 
-                // Coerce if needed
                 LLVMValueRef stored = val.value;
                 if (type_is_integer(entry->type) && type_is_float(val.type)) {
                     stored = LLVMBuildFPToSI(ctx->builder, val.value,
@@ -3205,7 +3529,6 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 }
 
                 LLVMBuildStore(ctx->builder, stored, entry->value);
-
                 result.value = stored;
                 result.type  = type_clone(entry->type);
                 return result;
@@ -4258,6 +4581,215 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 return result;
             }
 
+            // Layout constructor: (Point 3.0 4.0) or (Point) for zero-init
+            {
+                Type *lay = layout_lookup(head->symbol);
+                if (lay && lay->kind == TYPE_LAYOUT) {
+
+                    // Get the bare struct type (NOT the pointer wrapper from type_to_llvm)
+                    char sname[256];
+                    snprintf(sname, sizeof(sname), "layout.%s", lay->layout_name);
+                    LLVMTypeRef struct_llvm = LLVMGetTypeByName2(ctx->context, sname);
+                    if (!struct_llvm) {
+                        // Force creation and retrieve bare type
+                        type_to_llvm(ctx, lay);
+                        struct_llvm = LLVMGetTypeByName2(ctx->context, sname);
+                    }
+
+                    // Allocate with malloc so the struct survives across REPL modules
+                    LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+                    LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+
+                    LLVMValueRef malloc_fn = LLVMGetNamedFunction(ctx->module, "malloc");
+                    if (!malloc_fn) {
+                        LLVMTypeRef ft = LLVMFunctionType(ptr, &i64, 1, 0);
+                        malloc_fn = LLVMAddFunction(ctx->module, "malloc", ft);
+                        LLVMSetLinkage(malloc_fn, LLVMExternalLinkage);
+                    }
+
+                    LLVMValueRef size     = LLVMSizeOf(struct_llvm);
+                    LLVMValueRef heap_ptr = LLVMBuildCall2(ctx->builder,
+                                                           LLVMFunctionType(ptr, &i64, 1, 0),
+                                                           malloc_fn, &size, 1, "lay_ptr");
+
+                    // Initialize fields
+                    int arg_count = (int)ast->list.count - 1;
+
+                    if (arg_count == 0) {
+                        // (Point) — zero initialize via memset
+                        LLVMValueRef memset_fn = LLVMGetNamedFunction(ctx->module, "memset");
+                        if (!memset_fn) {
+                            LLVMTypeRef i32 = LLVMInt32TypeInContext(ctx->context);
+                            LLVMTypeRef ms_params[] = {ptr, i32, i64};
+                            LLVMTypeRef ms_ft = LLVMFunctionType(ptr, ms_params, 3, 0);
+                            memset_fn = LLVMAddFunction(ctx->module, "memset", ms_ft);
+                            LLVMSetLinkage(memset_fn, LLVMExternalLinkage);
+                        }
+                        LLVMTypeRef i32 = LLVMInt32TypeInContext(ctx->context);
+                        LLVMValueRef ms_args[] = {
+                            heap_ptr,
+                            LLVMConstInt(i32, 0, 0),
+                            size
+                        };
+                        LLVMBuildCall2(ctx->builder,
+                                       LLVMFunctionType(ptr, (LLVMTypeRef[]){ptr, i32, i64}, 3, 0),
+                                       memset_fn, ms_args, 3, "");
+
+                    } else if (arg_count == lay->layout_field_count) {
+                        // Positional: (Point 3.0 4.0)
+                        for (int i = 0; i < arg_count; i++) {
+                            CodegenResult fv = codegen_expr(ctx, ast->list.items[i + 1]);
+                            LLVMValueRef zero    = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0);
+                            LLVMValueRef fidx    = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), i, 0);
+                            LLVMValueRef indices[] = {zero, fidx};
+                            LLVMValueRef gep     = LLVMBuildGEP2(ctx->builder, struct_llvm,
+                                                                 heap_ptr, indices, 2, "fptr");
+                            Type        *ft      = lay->layout_fields[i].type;
+                            LLVMValueRef stored  = fv.value;
+                            if (type_is_integer(ft) && type_is_float(fv.type))
+                                stored = LLVMBuildFPToSI(ctx->builder, fv.value, type_to_llvm(ctx, ft), "conv");
+                            else if (type_is_float(ft) && type_is_integer(fv.type))
+                                stored = LLVMBuildSIToFP(ctx->builder, fv.value, type_to_llvm(ctx, ft), "conv");
+                            LLVMBuildStore(ctx->builder, stored, gep);
+                        }
+
+                    } else {
+                        // Keyword: (Point :x 3.0 :y 4.0) — zero-init first, then fill named fields
+                        LLVMValueRef memset_fn = LLVMGetNamedFunction(ctx->module, "memset");
+                        if (!memset_fn) {
+                            LLVMTypeRef i32 = LLVMInt32TypeInContext(ctx->context);
+                            LLVMTypeRef ms_params[] = {ptr, i32, i64};
+                            LLVMTypeRef ms_ft = LLVMFunctionType(ptr, ms_params, 3, 0);
+                            memset_fn = LLVMAddFunction(ctx->module, "memset", ms_ft);
+                            LLVMSetLinkage(memset_fn, LLVMExternalLinkage);
+                        }
+                        LLVMTypeRef i32 = LLVMInt32TypeInContext(ctx->context);
+                        LLVMValueRef ms_args[] = {heap_ptr, LLVMConstInt(i32, 0, 0), size};
+                        LLVMBuildCall2(ctx->builder,
+                                       LLVMFunctionType(ptr, (LLVMTypeRef[]){ptr, i32, i64}, 3, 0),
+                                       memset_fn, ms_args, 3, "");
+
+                        int i = 1;
+                        while (i < (int)ast->list.count) {
+                            AST *kw = ast->list.items[i];
+                            if (kw->type != AST_KEYWORD) {
+                                CODEGEN_ERROR(ctx, "%s:%d:%d: error: expected keyword argument in '%s' constructor",
+                                              parser_get_filename(), kw->line, kw->column, head->symbol);
+                            }
+                            if (i + 1 >= (int)ast->list.count) {
+                                CODEGEN_ERROR(ctx, "%s:%d:%d: error: missing value for keyword :%s",
+                                              parser_get_filename(), kw->line, kw->column, kw->keyword);
+                            }
+                            int field_idx = -1;
+                            for (int j = 0; j < lay->layout_field_count; j++) {
+                                if (strcmp(lay->layout_fields[j].name, kw->keyword) == 0) {
+                                    field_idx = j;
+                                    break;
+                                }
+                            }
+                            if (field_idx < 0) {
+                                CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown field ':%s' in layout '%s'",
+                                              parser_get_filename(), kw->line, kw->column,
+                                              kw->keyword, head->symbol);
+                            }
+                            CodegenResult fv     = codegen_expr(ctx, ast->list.items[i + 1]);
+                            LLVMValueRef zero    = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0);
+                            LLVMValueRef fidx    = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), field_idx, 0);
+                            LLVMValueRef indices[] = {zero, fidx};
+                            LLVMValueRef gep     = LLVMBuildGEP2(ctx->builder, struct_llvm,
+                                                                 heap_ptr, indices, 2, "fptr");
+                            Type        *ft      = lay->layout_fields[field_idx].type;
+                            LLVMValueRef stored  = fv.value;
+                            if (type_is_integer(ft) && type_is_float(fv.type))
+                                stored = LLVMBuildFPToSI(ctx->builder, fv.value, type_to_llvm(ctx, ft), "conv");
+                            else if (type_is_float(ft) && type_is_integer(fv.type))
+                                stored = LLVMBuildSIToFP(ctx->builder, fv.value, type_to_llvm(ctx, ft), "conv");
+                            LLVMBuildStore(ctx->builder, stored, gep);
+                            i += 2;
+                        }
+                    }
+
+                    // Return the heap pointer — env_insert (in the define path) will
+                    // store this into a global so it survives across REPL modules.
+                    result.value = heap_ptr;
+                    result.type  = type_clone(lay);
+                    return result;
+                }
+            }
+
+            // Dot access: p.x
+            {
+                const char *dot = strchr(ast->symbol, '.');
+                if (dot && dot != ast->symbol) {
+                    char var_name[256];
+                    size_t vlen = dot - ast->symbol;
+                    if (vlen >= sizeof(var_name)) vlen = sizeof(var_name) - 1;
+                    memcpy(var_name, ast->symbol, vlen);
+                    var_name[vlen] = '\0';
+                    const char *field_name = dot + 1;
+
+                    EnvEntry *base_entry = env_lookup(ctx->env, var_name);
+                    if (base_entry && base_entry->type->kind == TYPE_LAYOUT) {
+                        Type *lay = base_entry->type;
+
+                        int field_idx = -1;
+                        for (int i = 0; i < lay->layout_field_count; i++) {
+                            if (strcmp(lay->layout_fields[i].name, field_name) == 0) {
+                                field_idx = i;
+                                break;
+                            }
+                        }
+                        if (field_idx < 0) {
+                            CODEGEN_ERROR(ctx, "%s:%d:%d: error: layout '%s' has no field '%s'",
+                                          parser_get_filename(), ast->line, ast->column,
+                                          lay->layout_name, field_name);
+                        }
+
+                        // Get bare struct type
+                        char sname[256];
+                        snprintf(sname, sizeof(sname), "layout.%s", lay->layout_name);
+                        LLVMTypeRef struct_llvm = LLVMGetTypeByName2(ctx->context, sname);
+                        if (!struct_llvm) {
+                            CODEGEN_ERROR(ctx, "%s:%d:%d: error: LLVM struct type for '%s' not found",
+                                          parser_get_filename(), ast->line, ast->column, lay->layout_name);
+                        }
+
+
+                        LLVMTypeRef  ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                        LLVMValueRef get_fn = LLVMGetNamedFunction(ctx->module, "__layout_ptr_get");
+                        if (!get_fn) {
+                            LLVMTypeRef ft = LLVMFunctionType(ptr_t, &ptr_t, 1, 0);
+                            get_fn = LLVMAddFunction(ctx->module, "__layout_ptr_get", ft);
+                            LLVMSetLinkage(get_fn, LLVMExternalLinkage);
+                        }
+                        LLVMValueRef name_str = LLVMBuildGlobalStringPtr(ctx->builder, var_name, "lay_name");
+                        LLVMValueRef heap_ptr = LLVMBuildCall2(ctx->builder,
+                                                               LLVMFunctionType(ptr_t, &ptr_t, 1, 0),
+                                                               get_fn, &name_str, 1, "lay_ptr");
+
+
+                        LLVMValueRef zero      = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0);
+                        LLVMValueRef fidx      = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), field_idx, 0);
+                        LLVMValueRef indices[] = {zero, fidx};
+                        LLVMValueRef gep       = LLVMBuildGEP2(ctx->builder, struct_llvm,
+                                                               heap_ptr, indices, 2, "fld_ptr");
+                        Type        *ft        = lay->layout_fields[field_idx].type;
+                        result.value = LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, ft), gep, field_name);
+                        result.type  = type_clone(ft);
+                        return result;
+                    }
+
+                    if (base_entry) {
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' is not a layout type",
+                                      parser_get_filename(), ast->line, ast->column, var_name);
+                    }
+                    if (!ctx->module_ctx) {
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: unbound variable: %s",
+                                      parser_get_filename(), ast->line, ast->column, var_name);
+                    }
+                }
+            }
+
             CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown function: %s",
                     parser_get_filename(), ast->line, ast->column, head->symbol);
         }
@@ -4378,6 +4910,13 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             codegen_expr(ctx, ast->tests.assertions[i]);
         }
 
+        result.type  = type_int();
+        result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0);
+        return result;
+    }
+
+    case AST_LAYOUT: {
+        codegen_layout(ctx, ast);
         result.type  = type_int();
         result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0);
         return result;
@@ -4511,8 +5050,6 @@ void codegen_declare_external_func(CodegenContext *ctx,
     LLVMSetLinkage(fn, LLVMExternalLinkage);
     free(ptypes);
 }
-
-
 
 void register_builtins(CodegenContext *ctx) {
     // Arithmetic operators

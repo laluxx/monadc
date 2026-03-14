@@ -14,6 +14,15 @@ typedef struct TypeAlias {
 
 static TypeAlias *g_aliases = NULL;
 
+typedef struct LayoutEntry {
+    char               *name;
+    Type               *type;  // owned
+    struct LayoutEntry *next;
+} LayoutEntry;
+
+static LayoutEntry *g_layouts = NULL;
+
+
 void type_alias_register(const char *alias_name, const char *target_name) {
     // Replace if already exists
     for (TypeAlias *a = g_aliases; a; a = a->next) {
@@ -41,6 +50,41 @@ void type_alias_free_all(void) {
     }
     g_aliases = NULL;
 }
+
+void layout_register(const char *name, Type *t) {
+    // Replace if exists
+    for (LayoutEntry *e = g_layouts; e; e = e->next) {
+        if (strcmp(e->name, name) == 0) {
+            type_free(e->type);
+            e->type = t;
+            return;
+        }
+    }
+    LayoutEntry *e = malloc(sizeof(LayoutEntry));
+    e->name = strdup(name);
+    e->type = t;
+    e->next = g_layouts;
+    g_layouts = e;
+}
+
+Type *layout_lookup(const char *name) {
+    for (LayoutEntry *e = g_layouts; e; e = e->next)
+        if (strcmp(e->name, name) == 0) return e->type;
+    return NULL;
+}
+
+void layout_free_all(void) {
+    LayoutEntry *e = g_layouts;
+    while (e) {
+        LayoutEntry *next = e->next;
+        free(e->name);
+        type_free(e->type);
+        free(e);
+        e = next;
+    }
+    g_layouts = NULL;
+}
+
 
 // Resolve a name to a Type*, checking aliases after builtins.
 // Always returns a fresh allocation (or NULL if unknown).
@@ -78,6 +122,10 @@ Type *type_from_name(const char *name) {
         next_iteration:;
     }
 
+    // Check layout registry
+    Type *lt = layout_lookup(name);
+    if (lt) return lt;  // borrowed — caller must NOT free this
+
     return NULL;  // unknown type
 }
 
@@ -113,6 +161,19 @@ Type *type_arr(Type *element_type, int size) {
     Type *t = make_type(TYPE_ARR);
     t->arr_element_type = element_type;
     t->arr_size = size;
+    return t;
+}
+
+Type *type_layout(const char *name,
+                  LayoutField *fields, int field_count,
+                  int total_size, bool packed, int align) {
+    Type *t = make_type(TYPE_LAYOUT);
+    t->layout_name        = strdup(name);
+    t->layout_fields      = fields;
+    t->layout_field_count = field_count;
+    t->layout_total_size  = total_size;
+    t->layout_packed      = packed;
+    t->layout_align       = align;
     return t;
 }
 
@@ -169,6 +230,18 @@ Type *type_clone(Type *t) {
         case TYPE_RATIO:   return type_ratio();
         case TYPE_LIST:    return type_list(type_clone(t->element_type));
         case TYPE_ARR:     return type_arr(type_clone(t->arr_element_type), t->arr_size);
+        case TYPE_LAYOUT: {
+            Type *c = calloc(1, sizeof(Type));
+            c->kind                = TYPE_LAYOUT;
+            c->layout_name         = t->layout_name ? strdup(t->layout_name) : NULL;
+            c->layout_fields       = t->layout_fields;       // shared, not deep-copied
+            c->layout_field_count  = t->layout_field_count;
+            c->layout_total_size   = t->layout_total_size;
+            c->layout_packed       = t->layout_packed;
+            c->layout_align        = t->layout_align;
+            return c;
+        }
+
         default:           return make_type(t->kind);
     }
 }
@@ -190,6 +263,10 @@ void type_free(Type *t) {
     }
     if (t->kind == TYPE_ARR) {
         type_free(t->arr_element_type);
+    }
+    if (t->kind == TYPE_LAYOUT) {
+        free(t->layout_name);
+        // layout_fields is shared with the registry — do not free it
     }
     free(t);
 }
@@ -236,6 +313,9 @@ const char *type_to_string(Type *t) {
         }
         return buf;
     }
+
+    case TYPE_LAYOUT:
+        return t->layout_name ? t->layout_name : "<layout>";
 
     case TYPE_FN: {
         if (t->param_count == 0) {
@@ -367,4 +447,31 @@ Type *parse_type_annotation(AST *ast) {
         }
     }
     return NULL;
+}
+
+// TODO
+// Compute field sizes and offsets, respecting packed/align.
+// Returns the total struct size.
+// elem_size_fn: callback that returns byte size for a type name.
+int layout_compute_offsets(LayoutField *fields, int count,
+                           bool packed,
+                           int (*elem_size_fn)(const char *type_name)) {
+    int offset = 0;
+    for (int i = 0; i < count; i++) {
+        // If size is already filled (codegen path), use it directly.
+        // If not and elem_size_fn is provided, use it.
+        int sz = fields[i].size;
+        if (sz <= 0 && elem_size_fn)
+            sz = elem_size_fn(fields[i].name);
+        if (sz <= 0) sz = 8; // fallback
+
+        if (!packed && sz > 1) {
+            int align = sz < 8 ? sz : 8;
+            offset = (offset + align - 1) & ~(align - 1);
+        }
+        fields[i].offset = offset;
+        fields[i].size   = sz;
+        offset += sz;
+    }
+    return offset;
 }
