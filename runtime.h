@@ -30,6 +30,7 @@ typedef enum {
     RT_BIGNUM,
     RT_SET,
     RT_MAP,
+    RT_CLOSURE,
 } RuntimeValueType;
 
 
@@ -56,6 +57,13 @@ typedef struct RuntimeThunk {
 
 /// RuntimeValue
 
+typedef struct {
+    void  *fn_ptr;    // LLVM-compiled function pointer
+    void **env;       // heap array of captured RuntimeValue* pointers
+    int    env_size;  // number of captured variables
+    int    arity;     // number of declared (non-captured) parameters
+} RuntimeClosure;
+
 typedef struct RuntimeValue {
     RuntimeValueType type;
     union {
@@ -70,6 +78,7 @@ typedef struct RuntimeValue {
         struct RuntimeSet   *set_val;
         struct RuntimeMap   *map_val;
         RuntimeThunk        *thunk_val;
+        RuntimeClosure      *closure_val;
 
         struct {
             int64_t numerator;
@@ -84,10 +93,18 @@ typedef struct RuntimeValue {
 } RuntimeValue;
 
 
+/// Closure
+
+RuntimeValue *rt_value_closure(void *fn_ptr, void **env, int env_size, int arity);
+RuntimeValue *rt_closure_call1(RuntimeValue *closure, RuntimeValue *arg);
+RuntimeValue *rt_closure_call2(RuntimeValue *closure, RuntimeValue *arg0, RuntimeValue *arg1);
+
 /// HOF Callback Types
 
-typedef RuntimeValue *(*RT_UnaryFn)(RuntimeValue *);
-typedef RuntimeValue *(*RT_BinaryFn)(RuntimeValue *, RuntimeValue *);
+/* typedef RuntimeValue *(*RT_UnaryFn)(RuntimeValue *); */
+/* typedef RuntimeValue *(*RT_BinaryFn)(RuntimeValue *, RuntimeValue *); */
+typedef RuntimeValue *(*RT_UnaryFn)(void *env, RuntimeValue *);
+typedef RuntimeValue *(*RT_BinaryFn)(void *env, RuntimeValue *, RuntimeValue *);
 typedef int           (*RT_PredFn)(RuntimeValue *);
 
 /// ConsCell
@@ -180,12 +197,12 @@ RuntimeList *rt_list_from_step(int64_t lo, int64_t step);
 RuntimeList *rt_list_take(RuntimeList *list, int64_t n);
 RuntimeList *rt_list_drop(RuntimeList *list, int64_t n);
 
-RuntimeList *rt_list_map(RuntimeList *list, RuntimeValue *(*fn)(RuntimeValue *));
-RuntimeValue *rt_list_foldl(RuntimeList *list, RuntimeValue *init, RuntimeValue *(*fn)(RuntimeValue *, RuntimeValue *));
-RuntimeValue *rt_list_foldr(RuntimeList *list, RuntimeValue *init, RuntimeValue *(*fn)(RuntimeValue *, RuntimeValue *));
-RuntimeList *rt_list_filter(RuntimeList *list, RuntimeValue *(*pred)(RuntimeValue *));
-RuntimeList *rt_list_zip(RuntimeList *a, RuntimeList *b);
-RuntimeList *rt_list_zipwith(RuntimeList *a, RuntimeList *b, RuntimeValue *(*fn)(RuntimeValue *, RuntimeValue *));
+RuntimeList  *rt_list_map(RuntimeList *list, void *env, RT_UnaryFn fn);
+RuntimeValue *rt_list_foldl(RuntimeList *list, RuntimeValue *init, void *env, RT_BinaryFn fn);
+RuntimeValue *rt_list_foldr(RuntimeList *list, RuntimeValue *init, void *env, RT_BinaryFn fn);
+RuntimeList  *rt_list_filter(RuntimeList *list, void *env, RT_UnaryFn pred);
+RuntimeList  *rt_list_zipwith(RuntimeList *a, RuntimeList *b, void *env, RT_BinaryFn fn);
+
 
 
 /// Set
@@ -207,9 +224,9 @@ RuntimeList  *rt_set_seq(RuntimeSet *s);
 int           rt_set_equal(RuntimeSet *a, RuntimeSet *b);
 void          rt_set_free(RuntimeSet *s);
 
-RuntimeValue *rt_set_foldl(RuntimeSet *s, RuntimeValue *init, RT_BinaryFn fn);
-RuntimeList  *rt_set_map(RuntimeSet *s, RT_UnaryFn fn);
-RuntimeSet   *rt_set_filter(RuntimeSet *s, RT_UnaryFn pred);
+RuntimeValue *rt_set_foldl(RuntimeSet *s, RuntimeValue *init, void *env, RT_BinaryFn fn);
+RuntimeList  *rt_set_map(RuntimeSet *s, void *env, RT_UnaryFn fn);
+RuntimeSet   *rt_set_filter(RuntimeSet *s, void *env, RT_UnaryFn pred);
 
 
 /// Map
@@ -331,6 +348,12 @@ char         *rt_string_take(const char *s, int64_t n);
 void declare_runtime_functions(CodegenContext *ctx);
 LLVMTypeRef get_rt_value_type(CodegenContext *ctx);
 LLVMTypeRef get_rt_list_type(CodegenContext *ctx);
+
+//// Closure
+
+LLVMValueRef get_rt_value_closure(CodegenContext *ctx);
+LLVMValueRef get_rt_closure_call1(CodegenContext *ctx);
+LLVMValueRef get_rt_closure_call2(CodegenContext *ctx);
 
 //// Thunks
 

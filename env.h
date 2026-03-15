@@ -5,6 +5,9 @@
 #include "types.h"
 #include "reader.h"
 
+/* Forward declaration — full definition in infer.h */
+struct TypeScheme;
+
 typedef enum {
     ENV_VAR,      // a variable
     ENV_BUILTIN,  // a built-in
@@ -27,6 +30,11 @@ typedef struct EnvEntry {
     LLVMValueRef value;
     bool is_mutable;
 
+    /* HM type scheme — set after inference, NULL if not yet inferred.
+     * Richer than `type`: carries quantified type variables for
+     * polymorphic definitions.  Used by infer_instantiate at call sites. */
+    struct TypeScheme *scheme;
+
     // Arity  (-1 = variadic)
     int arity_min;
     int arity_max;
@@ -36,6 +44,7 @@ typedef struct EnvEntry {
     EnvParam *params;  // array of named+typed params
     int param_count;
     int lifted_count;  // number of hidden captured params (lambda lifting)
+    bool is_closure_abi;
     Type *return_type;
 
     char *module_name; // Which module this symbol belongs to (NULL for local)
@@ -45,6 +54,7 @@ typedef struct EnvEntry {
     AST *source_ast;   // original define AST, NULL if not available
     char *source_text; // original define Source code, NULL if not available
 
+
     struct EnvEntry *next;
 } EnvEntry;
 
@@ -53,6 +63,7 @@ typedef struct Env {
     size_t size;
     size_t count;
     struct Env *parent;
+    struct InferEnv *infer_env;  // owned by root Env only; NULL on child scopes
 } Env;
 
 Env *env_create(void);
@@ -87,5 +98,20 @@ void env_insert_layout(Env *table, const char *name, Type *layout_type,
 Type *env_lookup_layout(Env *table, const char *name);
 
 bool env_is_local(Env *table, const char *name);
+
+
+void env_init_infer(Env *root);
+struct InferEnv *env_get_infer(Env *env);
+void env_set_scheme(Env *env, const char *name, struct TypeScheme *scheme);
+
+struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
+                                       AST *lambda_ast, const char *filename);
+
+bool env_hm_check_call(Env *env, const char *name, Type **arg_types, int n,
+                       const char *filename, int line, int col);
+bool env_hm_instantiate_call(Env *env, const char *name, Type **out_params,
+                              int n, Type **out_ret);
+
+
 
 #endif

@@ -34,15 +34,9 @@
   "Create a set containing exactly one element."
   (set x))
 
-;; (define (singleton? [x] -> Bool)
-;;   "Return True if x is a set containing exactly one element."
-;;   (and (set? x) (= 1 (count x))))
-
 (define (singleton? [x] -> Bool)
   "Return True if x is a set containing exactly one element."
-  (if (set? x)
-    (= 1 (count x))
-    False))
+  (and (set? x) (= 1 (count x))))
 
 ;;; Set algebra
 

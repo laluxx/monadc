@@ -41,6 +41,9 @@ typedef struct ASTLayoutField {
     int   array_size;  // array size, -1 if not specified
 } ASTLayoutField;
 
+/* Forward declaration for HM type inference */
+struct Type;
+
 typedef struct AST {
     ASTType type;
     union {
@@ -134,6 +137,9 @@ typedef struct AST {
     };
 
     char *literal_str; // original literal string for numbers (e.g. "0xFF")
+
+    // HM type inference result — set by infer_zonk_ast, NULL before inference
+    struct Type *inferred_type;
 
     // Location tracking
     int line;

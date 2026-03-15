@@ -1,6 +1,5 @@
 #ifndef TYPES_H
 #define TYPES_H
-
 #include <stdbool.h>
 #include <stddef.h>
 
@@ -23,9 +22,13 @@ typedef enum {
     TYPE_SET,
     TYPE_MAP,
     TYPE_UNKNOWN,
+    TYPE_VAR,    /* HM type variable — 'a, 'b, etc.          */
+    TYPE_ARROW,  /* function type — param → return            */
 } TypeKind;
 
+
 /// A single function parameter descriptor
+
 typedef struct FnParam {
     char *name;        // parameter name (may be NULL for builtins)
     struct Type *type; // parameter type (NULL = polymorphic '_')
@@ -41,27 +44,42 @@ typedef struct LayoutField {
     int          size;   // byte size of this field
 } LayoutField;
 
+/// Type
+
 typedef struct Type {
     TypeKind kind;
-    // TYPE_FN fields
-    struct FnParam *params;        // array of parameters
-    int param_count;
-    struct Type *return_type;      // NULL = unknown/polymorphic
-    // TYPE_LIST fields
-    struct Type *element_type;     // element type for lists (NULL = polymorphic)
-    // TYPE_ARR fields
-    struct Type *arr_element_type; // element type for arrays
-    int arr_size;                  // size of array (-1 = unknown/inferred)
-    // TYPE_LAYOUT fields
+
+    // TYPE_VAR
+    int var_id;            /* unique type-variable ID */
+
+    // TYPE_ARROW  (param -> ret)
+    struct Type *arrow_param;
+    struct Type *arrow_ret;
+
+    // TYPE_FN
+    struct FnParam *params;
+    int             param_count;
+    struct Type    *return_type;
+
+    // TYPE_LIST
+    struct Type *element_type;   /* NULL = polymorphic/unknown             */
+
+    // TYPE_ARR
+    struct Type *arr_element_type;
+    int          arr_size;
+
+    // TYPE_LAYOUT
     char        *layout_name;
     LayoutField *layout_fields;
     int          layout_field_count;
-    int          layout_total_size;  // total size in bytes (after padding)
+    int          layout_total_size;
     bool         layout_packed;
-    int          layout_align;       // 0 = natural
+    int          layout_align;
 } Type;
 
-/// Constructors
+#define list_elem element_type
+
+/// Constructors — ground types
 
 Type *type_unknown(void);
 Type *type_int(void);
@@ -73,49 +91,53 @@ Type *type_bool(void);
 Type *type_hex(void);
 Type *type_bin(void);
 Type *type_oct(void);
-Type *type_list(Type *element_type);
 Type *type_keyword(void);
 Type *type_ratio(void);
-Type *type_arr(Type *element_type, int size);
-Type *type_layout(const char *name,
-                  LayoutField *fields, int field_count,
-                  int total_size, bool packed, int align);
 Type *type_set(void);
 Type *type_map(void);
 
+
+/// Constructors — compound types
+
+Type *type_list(Type *element_type);
+Type *type_arr(Type *element_type, int size);
 Type *type_fn(FnParam *params, int param_count, Type *return_type);
-
-// Build a builtin Fn type with raw arity info (no names).
-// min_args  = required positional args
-// opt_args  = optional positional args  (-1 = not applicable)
-// variadic  = true if it accepts a rest arg
 Type *type_fn_builtin(int min_args, int opt_args, bool variadic);
+Type *type_layout(const char *name, LayoutField *fields, int field_count,
+                  int total_size, bool packed, int align);
 
-Type *type_clone(Type *t);
-void type_free(Type *t);
 
-// Pretty-print a type.
-// For TYPE_FN produces:  Fn (_ _)  /  Fn (#:optional _ _)  / Fn (_ . _)  etc.
-// For TYPE_ARR produces: Arr :: Int :: 3
+/// Constructors — HM types
+
+Type *type_var(int id);               /* fresh type variable                */
+Type *type_arrow(Type *param, Type *ret); /* function/arrow type            */
+
+
+/// Operations
+
+Type       *type_clone(Type *t);
+void        type_free(Type *t);
 const char *type_to_string(Type *t);
+bool        types_equal(Type *a, Type *b);  /* structural equality           */
 
-// Infer the concrete type of a numeric literal from its value + original string.
+
+/// Utilities
+
 Type *infer_literal_type(double value, const char *literal_str);
+Type *type_from_name(const char *name);
+void  type_alias_register(const char *alias_name, const char *target_name);
+void  type_alias_free_all(void);
 
-// Parse a bracket type annotation  [name :: TypeName] or [name :: Arr :: Int :: 3]
-// Returns the Type, or NULL if not a valid annotation.
+
+/// Annotation parsing
+
 struct AST;
 Type *parse_type_annotation(struct AST *ast);
 
 
-/// Type alias
-
-void  type_alias_register(const char *alias_name, const char *target_name);
-Type *type_from_name(const char *name);   // resolves aliases too
-void  type_alias_free_all(void);          // call at program exit / between compiles
-
 /// Layout
 
-int layout_compute_offsets(LayoutField *fields, int count, bool packed, int (*elem_size_fn)(const char *type_name));
+int layout_compute_offsets(LayoutField *fields, int count, bool packed,
+                           int (*elem_size_fn)(const char *type_name));
 
-#endif
+#endif // TYPES_H

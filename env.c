@@ -1,4 +1,5 @@
 #include "env.h"
+#include "infer.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -18,7 +19,8 @@ Env *env_create(void) {
     t->size    = INITIAL_SIZE;
     t->count   = 0;
     t->buckets = calloc(t->size, sizeof(EnvEntry *));
-    t->parent  = NULL;  // add this
+    t->parent  = NULL;
+    t->infer_env = NULL;
     return t;
 }
 
@@ -35,6 +37,8 @@ static void free_entry_fields(EnvEntry *e) {
     free(e->source_text);
     type_free(e->type);
     type_free(e->return_type);
+    scheme_free(e->scheme);
+    e->scheme = NULL;
     if (e->params) {
         for (int i = 0; i < e->param_count; i++) {
             free(e->params[i].name);
@@ -57,6 +61,10 @@ void env_free(Env *table) {
         }
     }
     free(table->buckets);
+    if (table->infer_env) {
+        infer_env_free(table->infer_env);
+        table->infer_env = NULL;
+    }
     free(table);
 }
 
@@ -215,9 +223,12 @@ void env_insert_func(Env *table, const char *name,
     if (e) {
         char *saved_source = e->source_text;
         e->source_text = NULL;
+        TypeScheme *saved_scheme = e->scheme;
+        e->scheme = NULL;              // prevent free_entry_fields from freeing it
         free_entry_fields(e);
         e->name        = strdup(name);
         e->source_text = saved_source;
+        e->scheme      = saved_scheme; // restore so the HM scheme survives
     } else {
         e = new_entry(name);
         chain(table, e);
@@ -423,4 +434,120 @@ void env_print(Env *table) {
     printf("\n  \033[2m%d bindings\033[0m\n", n);
     free(brackets);
     free(entries);
+}
+
+/// HM integration
+
+void env_init_infer(Env *root) {
+    if (root->infer_env) return;   /* idempotent */
+    root->infer_env = infer_env_create();
+    /* Bootstrap built-in type schemes into the infer env */
+    InferCtx *bctx = infer_ctx_create(root->infer_env, "<builtins>");
+    infer_register_builtins(bctx);
+    infer_ctx_free(bctx);
+}
+
+struct InferEnv *env_get_infer(Env *env) {
+    while (env) {
+        if (env->infer_env) return env->infer_env;
+        env = env->parent;
+    }
+    return NULL;
+}
+
+void env_set_scheme(Env *env, const char *name, struct TypeScheme *scheme) {
+    EnvEntry *e = env_lookup(env, name);
+    if (e) e->scheme = scheme;
+}
+
+struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
+                                       AST *lambda_ast, const char *filename) {
+    InferEnv *ienv = env_get_infer(env);
+    if (!ienv) return NULL;
+
+    InferEnv *child = infer_env_create_child(ienv);
+    InferCtx *ctx   = infer_ctx_create(child, filename ? filename : "<unknown>");
+
+    /* Pre-bind with a fresh var so recursive calls resolve */
+    Type *self_t = infer_fresh(ctx);
+    infer_env_insert(child, name, scheme_mono(self_t));
+
+    Type *inferred = infer_toplevel(ctx, lambda_ast);
+    TypeScheme *scheme = NULL;
+
+    if (!inferred || ctx->had_error) {
+        fprintf(stderr, "[hm] inference failed for '%s': %s\n",
+                name, ctx->error_msg);
+    } else {
+        infer_unify_one(ctx, self_t, inferred, lambda_ast->line, lambda_ast->column);
+        scheme = infer_generalise(ctx, inferred, ienv);
+        /* ienv owns the original scheme for future instantiation.
+         * EnvEntry gets its own clone so free_entry_fields() can
+         * safely call scheme_free() without double-freeing.        */
+        infer_env_insert(ienv, name, scheme);
+        env_set_scheme(env, name, scheme_clone(scheme));
+    }
+
+    infer_ctx_free(ctx);
+    infer_env_free(child);
+    return scheme;
+}
+
+bool env_hm_check_call(Env *env, const char *name, Type **arg_types, int n,
+                       const char *filename, int line, int col) {
+    InferEnv *ienv = env_get_infer(env);
+    if (!ienv) return true;
+
+    TypeScheme *sc = infer_env_lookup(ienv, name);
+    if (!sc) return true;
+
+    InferCtx *ctx = infer_ctx_create(ienv, filename ? filename : "<check>");
+    Type *inst = infer_instantiate(ctx, sc);
+    Type *cursor = inst;
+    bool ok = true;
+
+    for (int i = 0; i < n && cursor && cursor->kind == TYPE_ARROW; i++) {
+        Type *param = subst_apply(ctx->subst, cursor->arrow_param);
+        Type *arg   = arg_types[i];
+        if (param && param->kind != TYPE_UNKNOWN &&
+            arg   && arg->kind   != TYPE_UNKNOWN) {
+            if (!infer_unify_one(ctx, param, arg, line, col)) {
+                fprintf(stderr, "[hm] type error in call to '%s' arg %d: %s\n",
+                        name, i, ctx->error_msg);
+                ok = false;
+                break;
+            }
+        }
+        cursor = cursor->arrow_ret;
+    }
+
+    infer_ctx_free(ctx);
+    return ok;
+}
+
+bool env_hm_instantiate_call(Env *env, const char *name, Type **out_params,
+                              int n, Type **out_ret) {
+    InferEnv *ienv = env_get_infer(env);
+    if (!ienv) return false;
+
+    TypeScheme *sc = infer_env_lookup(ienv, name);
+    if (!sc) return false;
+
+    InferCtx *ctx  = infer_ctx_create(ienv, "<instantiate>");
+    Type *inst     = infer_instantiate(ctx, sc);
+    Type *cursor   = inst;
+
+    for (int i = 0; i < n; i++) {
+        if (cursor && cursor->kind == TYPE_ARROW) {
+            out_params[i] = subst_apply(ctx->subst, cursor->arrow_param);
+            cursor = cursor->arrow_ret;
+        } else {
+            out_params[i] = type_unknown();
+        }
+    }
+    if (out_ret)
+        *out_ret = subst_apply(ctx->subst, cursor ? cursor : type_unknown());
+
+    infer_ctx_free(ctx);
+    return true;
 }

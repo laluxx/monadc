@@ -20,6 +20,7 @@
 #include "env.h"
 #include "types.h"
 #include "module.h"
+#include "infer.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -202,8 +203,7 @@ static void rt_sym_table_init(void) {
     ADD(rt_set_from_array); ADD(rt_set_contains); ADD(rt_set_conj);
     ADD(rt_set_disj);       ADD(rt_set_conj_mut); ADD(rt_set_disj_mut);
     ADD(rt_set_get);        ADD(rt_set_count);    ADD(rt_set_seq);
-    ADD(rt_value_set);      ADD(rt_unbox_set);    /* ADD(rt_set_foldl); */
-    /* ADD(rt_set_map);        ADD(rt_set_filter); */
+    ADD(rt_value_set);      ADD(rt_unbox_set);
 
     /* Hardcode HOF set functions since dlsym may not find static lib symbols */
     g_rt_syms[g_rt_sym_count].name = "rt_set_foldl";
@@ -215,9 +215,6 @@ static void rt_sym_table_init(void) {
     g_rt_syms[g_rt_sym_count].name = "rt_set_filter";
     g_rt_syms[g_rt_sym_count].addr = (void *)rt_set_filter;
     g_rt_sym_count++;
-
-    fprintf(stderr, "[sym] rt_set_foldl = %p\n", dlsym(RTLD_DEFAULT, "rt_set_foldl"));
-
 
     ADD(__layout_ptr_set);
     ADD(__layout_ptr_get);
@@ -1509,6 +1506,7 @@ void repl_init(REPLContext *ctx) {
     ctx->cg.module     = NULL;
     ctx->cg.builder    = NULL;
     ctx->cg.env        = env_create();
+    env_init_infer(ctx->cg.env);
     ctx->cg.module_ctx = NULL;
     ctx->cg.init_fn    = NULL;
     ctx->cg.test_mode  = false;
@@ -1537,8 +1535,7 @@ void repl_init(REPLContext *ctx) {
     /* First real module */
     fresh_module(ctx, "__repl_0");
 
-    printf("Monad REPL v0.1\n");
-    printf("Type expressions to evaluate, Ctrl-D to exit.\n\n");
+    printf("\n");
 }
 
 void repl_dispose(REPLContext *ctx) {
@@ -1594,6 +1591,25 @@ static char *strip_comments(const char *src) {
     *w = '\0';
     return out;
 }
+
+
+static bool repl_infer(REPLContext *ctx, AST *ast) {
+    InferEnv *ienv = env_get_infer(ctx->cg.env);
+    InferCtx *ictx = infer_ctx_create(ienv, parser_get_filename());
+    Type *t = infer_toplevel(ictx, ast);
+    if (ictx->had_error) {
+        fprintf(stderr, "\x1b[31;1m[type error]\x1b[0m %s\n", ictx->error_msg);
+        infer_ctx_free(ictx);
+        return false;
+    }
+    /* For defines: env_hm_infer_define already ran during codegen and
+     * inserted the generalised scheme into both ienv and EnvEntry.
+     * Do NOT re-run generalise/insert here — that causes double-free
+     * on the second definition of the same name.                     */
+    infer_ctx_free(ictx);
+    return true;
+}
+
 
 bool repl_eval_line(REPLContext *ctx, const char *line) {
     if (!line) return true;
@@ -1789,6 +1805,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                     continue;
                 }
 
+                if (form) repl_infer(ctx, form);
                 CodegenResult res = codegen_expr(&ctx->cg, form);
                 ctx->cg.error_jmp_set = false;
                 ast_free(form);
@@ -2095,6 +2112,16 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
         ast->list.items[0]->type == AST_SYMBOL &&
         strcmp(ast->list.items[0]->symbol, "define") == 0) {
         source_copy = strdup(line);  // raw input line
+    }
+
+    /* Run HM type inference — annotates ast->inferred_type on every node.
+     * This is non-fatal: if inference fails we emit a warning but still
+     * proceed with codegen so the REPL stays usable during development.  */
+    if (ast) {
+        repl_infer(ctx, ast);
+        /* NOTE: we continue even on inference failure — codegen has its own
+         * type propagation and can often still produce correct code.
+         * Once HM is complete, this becomes a hard error.               */
     }
 
     CodegenResult res = codegen_expr(&ctx->cg, ast);

@@ -6,11 +6,13 @@
 #include "codegen.h"
 #include "env.h"
 #include "module.h"
+#include "infer.h"
 
 typedef struct {
-    LLVMExecutionEngineRef engine;   /* persistent across expressions   */
-    CodegenContext         cg;       /* module/builder replaced per expr */
+    LLVMExecutionEngineRef engine;      // persistent across expressions
+    CodegenContext         cg;          // module/builder replaced per expr
     unsigned int           expr_count;
+    InferEnv              *infer_env;   // persistent HM type environment
 } REPLContext;
 
 void  repl_init(REPLContext *ctx);

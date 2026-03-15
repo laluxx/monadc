@@ -62,6 +62,8 @@ Type *type_from_name(const char *name) {
     if (strcmp(name, "Arr")     == 0) return type_arr(NULL, -1);
     if (strcmp(name, "Set")     == 0) return type_set();
     if (strcmp(name, "Map")     == 0) return type_map();
+    if (strcmp(name, "Fn")      == 0) return type_fn(NULL, 0, NULL);// Correct for now ?
+    // NO we need proper closures
 
     // Check alias registry (supports chained aliases: Code -> List -> ...)
     int depth = 0;
@@ -141,6 +143,39 @@ Type *type_fn(FnParam *params, int param_count, Type *return_type) {
     return t;
 }
 
+Type *type_var(int id) {
+    Type *t  = make_type(TYPE_VAR);
+    t->var_id = id;
+    return t;
+}
+
+Type *type_arrow(Type *param, Type *ret) {
+    Type *t        = make_type(TYPE_ARROW);
+    t->arrow_param = param;
+    t->arrow_ret   = ret;
+    return t;
+}
+
+bool types_equal(Type *a, Type *b) {
+    if (!a && !b) return true;
+    if (!a || !b) return false;
+    if (a->kind != b->kind) return false;
+    switch (a->kind) {
+    case TYPE_VAR:
+        return a->var_id == b->var_id;
+    case TYPE_ARROW:
+        return types_equal(a->arrow_param, b->arrow_param)
+            && types_equal(a->arrow_ret,   b->arrow_ret);
+    case TYPE_LIST:
+        return types_equal(a->element_type, b->element_type);
+    case TYPE_ARR:
+        return a->arr_size == b->arr_size
+            && types_equal(a->arr_element_type, b->arr_element_type);
+    default:
+        return true;  /* ground types with equal kinds are equal */
+    }
+}
+
 Type *type_fn_builtin(int min_args, int opt_args, bool variadic) {
     int total = min_args + (opt_args > 0 ? opt_args : 0) + (variadic ? 1 : 0);
     FnParam *params = total > 0 ? calloc(total, sizeof(FnParam)) : NULL;
@@ -186,6 +221,8 @@ Type *type_clone(Type *t) {
         case TYPE_RATIO:   return type_ratio();
         case TYPE_LIST:    return type_list(type_clone(t->element_type));
         case TYPE_ARR:     return type_arr(type_clone(t->arr_element_type), t->arr_size);
+        case TYPE_VAR:     return type_var(t->var_id);
+        case TYPE_ARROW:   return type_arrow(type_clone(t->arrow_param), type_clone(t->arrow_ret));
         case TYPE_LAYOUT: {
             Type *c = calloc(1, sizeof(Type));
             c->kind                = TYPE_LAYOUT;
@@ -224,6 +261,11 @@ void type_free(Type *t) {
         free(t->layout_name);
         // layout_fields is shared with the registry — do not free it
     }
+    if (t->kind == TYPE_ARROW) {
+        type_free(t->arrow_param);
+        type_free(t->arrow_ret);
+    }
+    if (t->kind == TYPE_VAR) {}
     free(t);
 }
 
@@ -249,11 +291,28 @@ const char *type_to_string(Type *t) {
     case TYPE_MAP:     return "Map";
     case TYPE_UNKNOWN: return "?";
 
+    case TYPE_VAR: {
+        static char vbuf[32];
+        snprintf(vbuf, sizeof(vbuf), "'%c",
+                 'a' + (t->var_id % 26));
+        if (t->var_id >= 26)
+            snprintf(vbuf + 2, sizeof(vbuf) - 2, "%d", t->var_id / 26);
+        return vbuf;
+    }
+
+    case TYPE_ARROW: {
+        static char abuf[256];
+        snprintf(abuf, sizeof(abuf), "(%s → %s)",
+                 type_to_string(t->arrow_param),
+                 type_to_string(t->arrow_ret));
+        return abuf;
+    }
+
     case TYPE_LIST: {
         if (t->element_type) {
             snprintf(buf, sizeof(buf), "List<%s>", type_to_string(t->element_type));
         } else {
-            snprintf(buf, sizeof(buf), "List<?>");
+            snprintf(buf, sizeof(buf), "List");
         }
         return buf;
     }
@@ -278,7 +337,7 @@ const char *type_to_string(Type *t) {
     case TYPE_FN: {
         if (t->param_count == 0) {
             // Fn with no params — variadic list style
-            snprintf(buf, sizeof(buf), "Fn _");
+            snprintf(buf, sizeof(buf), "Fn");
             return buf;
         }
 
@@ -407,7 +466,6 @@ Type *parse_type_annotation(AST *ast) {
     return NULL;
 }
 
-// TODO
 // Compute field sizes and offsets, respecting packed/align.
 // Returns the total struct size.
 // elem_size_fn: callback that returns byte size for a type name.
