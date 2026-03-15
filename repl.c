@@ -190,6 +190,13 @@ static void rt_sym_table_init(void) {
     ADD(rt_list_drop);    ADD(rt_value_thunk);       ADD(rt_print_list_limited);
     ADD(rt_string_take);
 
+    // Map
+    ADD(rt_map_new);      ADD(rt_map_assoc);      ADD(rt_map_assoc_mut);
+    ADD(rt_map_dissoc);   ADD(rt_map_dissoc_mut); ADD(rt_map_get);
+    ADD(rt_map_contains); ADD(rt_map_find);       ADD(rt_map_count);
+    ADD(rt_map_keys);     ADD(rt_map_vals);       ADD(rt_map_merge);
+    ADD(rt_value_map);    ADD(rt_unbox_map);
+
     // Set
     ADD(rt_set_new);        ADD(rt_set_of);       ADD(rt_set_from_list);
     ADD(rt_set_from_array); ADD(rt_set_contains); ADD(rt_set_conj);
@@ -718,6 +725,7 @@ static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t, bool li
         }
         break;
 
+    case TYPE_MAP:
     case TYPE_SET:
     case TYPE_RATIO:
     case TYPE_SYMBOL:

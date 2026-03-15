@@ -29,6 +29,7 @@ typedef enum {
     RT_THUNK,
     RT_BIGNUM,
     RT_SET,
+    RT_MAP,
 } RuntimeValueType;
 
 
@@ -38,6 +39,7 @@ struct RuntimeValue;
 struct ConsCell;
 struct RuntimeList;
 struct RuntimeSet;
+struct RuntimeMap;
 
 typedef struct RuntimeValue *(*ThunkFn)(void *env);
 
@@ -66,6 +68,7 @@ typedef struct RuntimeValue {
         mpz_t         bignum_val;
         struct RuntimeList  *list_val;
         struct RuntimeSet   *set_val;
+        struct RuntimeMap   *map_val;
         RuntimeThunk        *thunk_val;
 
         struct {
@@ -123,6 +126,24 @@ typedef struct RuntimeSet {
 } RuntimeSet;
 
 
+/// RuntimeSet
+//
+// TODO Write description
+
+typedef struct RuntimeMapEntry {
+    RuntimeValue *key;
+    RuntimeValue *val;
+} RuntimeMapEntry;
+
+typedef struct RuntimeMap {
+    RuntimeMapEntry *buckets;
+    size_t           capacity;
+    size_t           count;
+    size_t           tombstones;
+} RuntimeMap;
+
+
+
 /// Thunks
 
 RuntimeThunk *rt_thunk_of_value(RuntimeValue *val);
@@ -164,6 +185,8 @@ RuntimeList *rt_list_zipwith(RuntimeList *a, RuntimeList *b, RuntimeValue *(*fn)
 
 /// Set
 
+static uint64_t rt_hash_value(RuntimeValue *v);
+
 RuntimeSet   *rt_set_new(void);
 RuntimeSet   *rt_set_of(RuntimeValue **vals, size_t n);
 RuntimeSet   *rt_set_from_list(RuntimeList *list);
@@ -178,6 +201,26 @@ int64_t       rt_set_count(RuntimeSet *s);
 RuntimeList  *rt_set_seq(RuntimeSet *s);
 int           rt_set_equal(RuntimeSet *a, RuntimeSet *b);
 void          rt_set_free(RuntimeSet *s);
+
+
+/// Map
+
+RuntimeMap   *rt_map_new(void);
+RuntimeMap   *rt_map_assoc(RuntimeMap *m, RuntimeValue *key, RuntimeValue *val);
+RuntimeMap   *rt_map_assoc_mut(RuntimeMap *m, RuntimeValue *key, RuntimeValue *val);
+RuntimeMap   *rt_map_dissoc(RuntimeMap *m, RuntimeValue *key);
+RuntimeMap   *rt_map_dissoc_mut(RuntimeMap *m, RuntimeValue *key);
+RuntimeValue *rt_map_get(RuntimeMap *m, RuntimeValue *key, RuntimeValue *default_val);
+int           rt_map_contains(RuntimeMap *m, RuntimeValue *key);
+RuntimeValue *rt_map_find(RuntimeMap *m, RuntimeValue *key);
+int64_t       rt_map_count(RuntimeMap *m);
+RuntimeList  *rt_map_keys(RuntimeMap *m);
+RuntimeList  *rt_map_vals(RuntimeMap *m);
+RuntimeMap   *rt_map_merge(RuntimeMap *a, RuntimeMap *b);
+RuntimeMap   *rt_map_merge_with(RuntimeMap *a, RuntimeMap *b, RuntimeValue *(*fn)(RuntimeValue *, RuntimeValue *));
+int           rt_map_equal(RuntimeMap *a, RuntimeMap *b);
+void          rt_map_free(RuntimeMap *m);
+
 
 
 /// Equality
@@ -202,6 +245,7 @@ RuntimeValue *rt_value_thunk(RuntimeThunk *thunk);
 RuntimeValue *rt_value_ratio(int64_t numerator, int64_t denominator);
 RuntimeValue *rt_value_array(size_t length);
 RuntimeValue *rt_value_set(RuntimeSet *s);
+RuntimeValue *rt_value_map(RuntimeMap *m);
 
 
 /// Unboxing
@@ -212,6 +256,7 @@ char         rt_unbox_char(RuntimeValue *v);
 char        *rt_unbox_string(RuntimeValue *v);
 RuntimeList *rt_unbox_list(RuntimeValue *v);
 RuntimeSet  *rt_unbox_set(RuntimeValue *v);
+RuntimeMap  *rt_unbox_map(RuntimeValue *v);
 int          rt_value_is_nil(RuntimeValue *v);
 
 
@@ -336,6 +381,23 @@ LLVMValueRef get_rt_set_count(CodegenContext *ctx);
 LLVMValueRef get_rt_set_seq(CodegenContext *ctx);
 LLVMValueRef get_rt_value_set(CodegenContext *ctx);
 LLVMValueRef get_rt_unbox_set(CodegenContext *ctx);
+
+//// Map
+
+LLVMValueRef get_rt_map_new(CodegenContext *ctx);
+LLVMValueRef get_rt_map_assoc(CodegenContext *ctx);
+LLVMValueRef get_rt_map_assoc_mut(CodegenContext *ctx);
+LLVMValueRef get_rt_map_dissoc(CodegenContext *ctx);
+LLVMValueRef get_rt_map_dissoc_mut(CodegenContext *ctx);
+LLVMValueRef get_rt_map_get(CodegenContext *ctx);
+LLVMValueRef get_rt_map_contains(CodegenContext *ctx);
+LLVMValueRef get_rt_map_find(CodegenContext *ctx);
+LLVMValueRef get_rt_map_count(CodegenContext *ctx);
+LLVMValueRef get_rt_map_keys(CodegenContext *ctx);
+LLVMValueRef get_rt_map_vals(CodegenContext *ctx);
+LLVMValueRef get_rt_map_merge(CodegenContext *ctx);
+LLVMValueRef get_rt_value_map(CodegenContext *ctx);
+LLVMValueRef get_rt_unbox_map(CodegenContext *ctx);
 
 //// Equality
 

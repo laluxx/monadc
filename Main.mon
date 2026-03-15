@@ -575,57 +575,50 @@
 
 ;; Maps are represented as alternating keys and values surrounded by ={= and =}=.
 
-;; (define scores {"Fred"   1400
-;;                 "Bob"    1240
-;;                 "Angela" 1024}); Inferred as [scores :: Map]
-
-;; When Monad prints a map at the REPL, it will put `,’s between each key/value pair.
-;; These are purely used for readability - commas are treated as whitespace in Monad.
-;; Feel free to use them in cases where they help you!
+(define scores {"Fred"   1400
+                "Bob"    1240
+                "Angela" 1024}); Inferred as [scores :: Map]
 
 ;; same as the last one!
-;; (define scores {"Fred" 1400, "Bob" 1240, "Angela" 1024})
+(define scores {"Fred" 1400 "Bob" 1240 "Angela" 1024})
 
 ;;;;; Adding new key-value pairs
 
 ;; New values are added to maps with the assoc (short for "associate") function:
 
-;; (assoc scores "Sally" 0); => {"Angela" 1024, "Bob" 1240, "Fred" 1400, "Sally" 0}
+(assoc scores "Sally" 0); => {"Angela" 1024, "Bob" 1240, "Fred" 1400, "Sally" 0}
 
 ;; If the key used in assoc already exists, the value is replaced.
 
-;; (assoc scores "Bob" 0); => {"Angela" 1024, "Bob" 0, "Fred" 1400}
+(assoc scores "Bob" 0); => {"Angela" 1024, "Bob" 0, "Fred" 1400}
 
 ;;;;; Removing key-value pairs
 
 ;; The complementary operation for removing key-value pairs is dissoc ("dissociate"):
 
-;; (dissoc scores "Bob"); => {"Angela" 1024, "Fred" 1400}
+(dissoc scores "Bob"); => {"Angela" 1024, "Fred" 1400}
 
 ;;;;; Looking up by key
 
 ;; There are several ways to look up a value in a map. The most obvious is the function get:
 
-;; (get scores "Angela"); => 1024
+(scores "Angela"); => 1024
 
-;; When the map in question is being treated as a constant lookup table,
-;; it’s common to invoke the map itself, treating it as a function:
+(define  directions {:north 0
+                     :east  1
+                     :south 2
+                     :west  3})
 
-;; (define  directions {:north 0
-;;                      :east  1
-;;                      :south 2
-;;                      :west  3})
-
-;; (directions :north); => 0
+(directions :north); => 0
 
 ;;;;; Looking up with a default
 
 ;; If you want to do a lookup and fall back to a default value
 ;; when the key is not found, specify the default as an extra parameter:
 
-;; (scores "Sam" 0); => 0
+(scores "Sam" 0); => 0
 
-;; (directions :northwest -1); => -1
+(directions :northwest -1); => -1
 
 ;; Using a default is also helpful to distinguish between
 ;; a missing key and an existing key with a nil value.
@@ -635,9 +628,9 @@
 ;; There are two other functions that are helpful
 ;; in checking whether a map contains an entry.
 
-;; (contains? scores "Fred"); => true
+(contains? scores "Fred"); => true
 
-;; (find scores "Fred"); => ["Fred" 1400]
+(find scores "Fred"); => ("Fred" 1400)
 
 ;; The =contains?= function is a predicate for checking containment.
 ;; The find function finds the key/value entry in a map, not just the value.
@@ -646,33 +639,33 @@
 
 ;; You can also get just the keys or just the values in a map:
 
-;; (keys scores); => ("Fred" "Bob" "Angela")
+(keys scores); => ("Fred" "Bob" "Angela")
 
-;; (vals scores); => (1400 1240 1024)
+(vals scores); => (1400 1240 1024)
 
 ;;;;; Building a map
 
 ;; The zipmap function can be used to "zip" together two sequences (the keys and vals) into a map:
 
-;; (define players #{"Alice" "Bob" "Kelly"})
-;; (zipmap players (repeat 0)); => {"Kelly" 0, "Bob" 0, "Alice" 0}
+(define players {"Alice" "Bob" "Kelly"})
+(zipmap players (repeat 0)); => {"Kelly" 0, "Bob" 0, "Alice" 0}
 
 
 ;;;;; Combining maps
 
 ;; The =merge= function can be used to combine multiple maps into a single map:
 
-;; (define new-scores {"Angela" 300 "Jeff" 900})
+(define new-scores {"Angela" 300 "Jeff" 900})
 
-;; (merge scores new-scores); => {"Fred" 1400, "Bob" 1240, "Jeff" 900, "Angela" 300}
+(merge scores new-scores); => {"Fred" 1400, "Bob" 1240, "Jeff" 900, "Angela" 300}
 
 ;; We merged two maps here but you can pass more as well.
 
 ;; If both maps contain the same key, the rightmost one wins.
 ;; Alternately, you can use =merge-with= to supply a function to invoke when there is a conflict:
 
-;; (define new-scores {"Fred" 550 "Angela" 900 "Sam" 1000})
-;; (merge-with + scores new-scores); => {"Sam" 1000, "Fred" 1950, "Bob" 1240, "Angela" 1924}
+(define new-scores {"Fred" 550 "Angela" 900 "Sam" 1000})
+(merge-with + scores new-scores); => {"Sam" 1000, "Fred" 1950, "Bob" 1240, "Angela" 1924}
 
 ;; In the case of a conflict, the function is called on both values to get the new value.
 
@@ -684,31 +677,30 @@
 
 ;; Support [[https://en.wikipedia.org/wiki/Set-builder_notation][Set-builder notation]] similarry to [[https://en.wikipedia.org/wiki/List_comprehension][list comprehension]]
 
-;; (set); => {}
-;; (set? (set)); => True
-;; {:a :b :c :d}; => {:d :a :b :c}
-;; (set :a :b :c :d); => {:d :a :b :c}
+(set); => {}
+(set? (set)); => True
+{:a :b :c :d}; => {:d :a :b :c}
+(set :a :b :c :d); => {:d :a :b :c}
 
 ;; You can get a set of the values in a collection using the set function:
-;; (set [1 2 3 2 1 2 3]); => {1 2 3}
+(set [1 2 3 2 1 2 3]); => {1 2 3}
 
 ;; Sets are collections:
-;; (define s {:a :b :c :d})
-;; (conj s :e); => {:d :a :b :e :c}
-;; (count s); => 4
-;; (seq s); => (:d :a :b :c)
-;; (= (conj s :e) {:a :b :c :d :e}); => True
+(define s {:a :b :c :d})
+(conj s :e); => {:d :a :b :e :c}
+(count s); => 4
+(= (conj s :e) {:a :b :c :d :e}); => True
 
 ;; Sets support 'removal' with disj, as well as contains? and get,
 ;; the latter returning the object that is held in the set which compares equal to the key, if found:
 
-;; (disj s :d); => {:a :b :c}
-;; (contains? s :b); => true
+(disj s :d); => {:a :b :c}
+(contains? s :b); => true
 ;; (get s :a); => :a
 
 ;; Sets are functions of their members, using get:
-;; (s :b); => :b
-;; (s :k); => nil
+(s :b); => :b
+(s :k); => nil
 
 
 ;; (define players {"Alice" "Bob" "Kelly"})

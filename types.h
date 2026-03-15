@@ -21,6 +21,7 @@ typedef enum {
     TYPE_FN,
     TYPE_LAYOUT,
     TYPE_SET,
+    TYPE_MAP,
     TYPE_UNKNOWN,
 } TypeKind;
 
@@ -80,7 +81,7 @@ Type *type_layout(const char *name,
                   LayoutField *fields, int field_count,
                   int total_size, bool packed, int align);
 Type *type_set(void);
-
+Type *type_map(void);
 
 Type *type_fn(FnParam *params, int param_count, Type *return_type);
 

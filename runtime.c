@@ -567,6 +567,283 @@ RuntimeList *rt_list_drop(RuntimeList *list, int64_t n) {
 }
 
 
+/// Map
+
+#define MAP_INITIAL_CAP 8
+#define MAP_LOAD_NUM    7
+#define MAP_LOAD_DEN    10
+
+static RuntimeMapEntry MAP_TOMBSTONE_ENTRY = {NULL, NULL};
+#define MAP_TOMBSTONE (&MAP_TOMBSTONE_ENTRY)
+
+static RuntimeMap *map_alloc(size_t cap) {
+    RuntimeMap *m  = malloc(sizeof(RuntimeMap));
+    m->buckets     = calloc(cap, sizeof(RuntimeMapEntry));
+    m->capacity    = cap;
+    m->count       = 0;
+    m->tombstones  = 0;
+    return m;
+}
+
+static size_t map_probe(RuntimeMap *m, RuntimeValue *key) {
+    uint64_t h    = rt_hash_value(key);
+    size_t   mask = m->capacity - 1;
+    return (size_t)(h & mask);
+}
+
+static void map_insert_noresize(RuntimeMap *m, RuntimeValue *key, RuntimeValue *val) {
+    size_t mask       = m->capacity - 1;
+    size_t idx        = map_probe(m, key);
+    size_t first_tomb = SIZE_MAX;
+
+    for (size_t i = 0; i < m->capacity; i++) {
+        size_t          slot = (idx + i) & mask;
+        RuntimeMapEntry *e   = &m->buckets[slot];
+
+        if (!e->key) {
+            size_t write = (first_tomb != SIZE_MAX) ? first_tomb : slot;
+            m->buckets[write].key = key;
+            m->buckets[write].val = val;
+            m->count++;
+            if (first_tomb != SIZE_MAX) m->tombstones--;
+            return;
+        }
+        if (e == MAP_TOMBSTONE) {
+            if (first_tomb == SIZE_MAX) first_tomb = slot;
+            continue;
+        }
+        if (rt_equal_p(e->key, key)) {
+            e->val = val;  /* update existing */
+            return;
+        }
+    }
+    if (first_tomb != SIZE_MAX) {
+        m->buckets[first_tomb].key = key;
+        m->buckets[first_tomb].val = val;
+        m->count++;
+        m->tombstones--;
+    }
+}
+
+static void map_resize(RuntimeMap *m) {
+    size_t          new_cap = m->capacity * 2;
+    RuntimeMapEntry *old    = m->buckets;
+    size_t          old_cap = m->capacity;
+
+    m->buckets    = calloc(new_cap, sizeof(RuntimeMapEntry));
+    m->capacity   = new_cap;
+    m->count      = 0;
+    m->tombstones = 0;
+
+    for (size_t i = 0; i < old_cap; i++) {
+        RuntimeMapEntry *e = &old[i];
+        if (e->key && e != MAP_TOMBSTONE)
+            map_insert_noresize(m, e->key, e->val);
+    }
+    free(old);
+}
+
+static RuntimeMap *map_insert(RuntimeMap *m, RuntimeValue *key, RuntimeValue *val) {
+    if (!key || key->type == RT_NIL) return m;
+    if ((m->count + m->tombstones + 1) * MAP_LOAD_DEN
+         >= m->capacity * MAP_LOAD_NUM)
+        map_resize(m);
+    map_insert_noresize(m, key, val);
+    return m;
+}
+
+static RuntimeMap *map_remove(RuntimeMap *m, RuntimeValue *key) {
+    if (!m || !key) return m;
+    size_t mask = m->capacity - 1;
+    size_t idx  = map_probe(m, key);
+
+    for (size_t i = 0; i < m->capacity; i++) {
+        size_t          slot = (idx + i) & mask;
+        RuntimeMapEntry *e   = &m->buckets[slot];
+        if (!e->key) return m;
+        if (e == MAP_TOMBSTONE) continue;
+        if (rt_equal_p(e->key, key)) {
+            e->key = MAP_TOMBSTONE->key;
+            e->val = MAP_TOMBSTONE->val;
+            m->buckets[slot] = *MAP_TOMBSTONE;
+            m->count--;
+            m->tombstones++;
+            return m;
+        }
+    }
+    return m;
+}
+
+static RuntimeMap *map_copy(RuntimeMap *m) {
+    RuntimeMap *copy = map_alloc(m->capacity);
+    for (size_t i = 0; i < m->capacity; i++) {
+        RuntimeMapEntry *e = &m->buckets[i];
+        if (e->key && e != MAP_TOMBSTONE)
+            map_insert_noresize(copy, e->key, e->val);
+    }
+    return copy;
+}
+
+RuntimeMap *rt_map_new(void) {
+    return map_alloc(MAP_INITIAL_CAP);
+}
+
+RuntimeMap *rt_map_assoc(RuntimeMap *m, RuntimeValue *key, RuntimeValue *val) {
+    RuntimeMap *copy = map_copy(m);
+    return map_insert(copy, key, val);
+}
+
+RuntimeMap *rt_map_assoc_mut(RuntimeMap *m, RuntimeValue *key, RuntimeValue *val) {
+    return map_insert(m, key, val);
+}
+
+RuntimeMap *rt_map_dissoc(RuntimeMap *m, RuntimeValue *key) {
+    if (!rt_map_contains(m, key)) return m;
+    return map_remove(map_copy(m), key);
+}
+
+RuntimeMap *rt_map_dissoc_mut(RuntimeMap *m, RuntimeValue *key) {
+    return map_remove(m, key);
+}
+
+RuntimeValue *rt_map_get(RuntimeMap *m, RuntimeValue *key, RuntimeValue *default_val) {
+    if (!m || !key) return default_val ? default_val : rt_value_nil();
+    size_t mask = m->capacity - 1;
+    size_t idx  = map_probe(m, key);
+
+    for (size_t i = 0; i < m->capacity; i++) {
+        size_t          slot = (idx + i) & mask;
+        RuntimeMapEntry *e   = &m->buckets[slot];
+        if (!e->key) return default_val ? default_val : rt_value_nil();
+        if (e == MAP_TOMBSTONE) continue;
+        if (rt_equal_p(e->key, key)) return e->val;
+    }
+    return default_val ? default_val : rt_value_nil();
+}
+
+int rt_map_contains(RuntimeMap *m, RuntimeValue *key) {
+    if (!m || !key) return 0;
+    size_t mask = m->capacity - 1;
+    size_t idx  = map_probe(m, key);
+
+    for (size_t i = 0; i < m->capacity; i++) {
+        size_t          slot = (idx + i) & mask;
+        RuntimeMapEntry *e   = &m->buckets[slot];
+        if (!e->key) return 0;
+        if (e == MAP_TOMBSTONE) continue;
+        if (rt_equal_p(e->key, key)) return 1;
+    }
+    return 0;
+}
+
+RuntimeValue *rt_map_find(RuntimeMap *m, RuntimeValue *key) {
+    if (!m || !key) return rt_value_nil();
+    size_t mask = m->capacity - 1;
+    size_t idx  = map_probe(m, key);
+    for (size_t i = 0; i < m->capacity; i++) {
+        size_t          slot = (idx + i) & mask;
+        RuntimeMapEntry *e   = &m->buckets[slot];
+        if (!e->key)              return rt_value_nil();
+        if (e == MAP_TOMBSTONE)   continue;
+        if (rt_equal_p(e->key, key)) {
+            RuntimeList *pair = heap_list_wrapper();
+            pair->cell = NULL;
+            rt_list_append(pair, e->key);
+            rt_list_append(pair, e->val);
+            RuntimeValue *v = malloc(sizeof(RuntimeValue));
+            v->type          = RT_LIST;
+            v->data.list_val = pair;
+            return v;
+        }
+    }
+    return rt_value_nil();
+}
+
+int64_t rt_map_count(RuntimeMap *m) {
+    return m ? (int64_t)m->count : 0;
+}
+
+RuntimeList *rt_map_keys(RuntimeMap *m) {
+    RuntimeList *out = heap_list_wrapper();
+    out->cell = NULL;
+    if (!m) return out;
+    for (size_t i = 0; i < m->capacity; i++) {
+        RuntimeMapEntry *e = &m->buckets[i];
+        if (e->key && e != MAP_TOMBSTONE)
+            rt_list_append(out, e->key);
+    }
+    return out;
+}
+
+RuntimeList *rt_map_vals(RuntimeMap *m) {
+    RuntimeList *out = heap_list_wrapper();
+    out->cell = NULL;
+    if (!m) return out;
+    for (size_t i = 0; i < m->capacity; i++) {
+        RuntimeMapEntry *e = &m->buckets[i];
+        if (e->key && e != MAP_TOMBSTONE)
+            rt_list_append(out, e->val);
+    }
+    return out;
+}
+
+RuntimeMap *rt_map_merge(RuntimeMap *a, RuntimeMap *b) {
+    RuntimeMap *out = map_copy(a);
+    for (size_t i = 0; i < b->capacity; i++) {
+        RuntimeMapEntry *e = &b->buckets[i];
+        if (e->key && e != MAP_TOMBSTONE)
+            map_insert(out, e->key, e->val);
+    }
+    return out;
+}
+
+RuntimeMap *rt_map_merge_with(RuntimeMap *a, RuntimeMap *b,
+                               RuntimeValue *(*fn)(RuntimeValue *, RuntimeValue *)) {
+    RuntimeMap *out = map_copy(a);
+    for (size_t i = 0; i < b->capacity; i++) {
+        RuntimeMapEntry *e = &b->buckets[i];
+        if (!e->key || e == MAP_TOMBSTONE) continue;
+        RuntimeValue *existing = rt_map_get(out, e->key, NULL);
+        if (existing && existing->type != RT_NIL)
+            map_insert(out, e->key, fn(existing, e->val));
+        else
+            map_insert(out, e->key, e->val);
+    }
+    return out;
+}
+
+int rt_map_equal(RuntimeMap *a, RuntimeMap *b) {
+    if (!a && !b) return 1;
+    if (!a || !b) return 0;
+    if (a->count != b->count) return 0;
+    for (size_t i = 0; i < a->capacity; i++) {
+        RuntimeMapEntry *e = &a->buckets[i];
+        if (!e->key || e == MAP_TOMBSTONE) continue;
+        RuntimeValue *bval = rt_map_get(b, e->key, NULL);
+        if (!bval || bval->type == RT_NIL) return 0;
+        if (!rt_equal_p(e->val, bval)) return 0;
+    }
+    return 1;
+}
+
+void rt_map_free(RuntimeMap *m) {
+    if (!m) return;
+    free(m->buckets);
+    free(m);
+}
+
+RuntimeValue *rt_value_map(RuntimeMap *m) {
+    RuntimeValue *v = malloc(sizeof(RuntimeValue));
+    v->type         = RT_MAP;
+    v->data.map_val = m;
+    return v;
+}
+
+RuntimeMap *rt_unbox_map(RuntimeValue *v) {
+    if (!v || v->type != RT_MAP) return rt_map_new();
+    return v->data.map_val;
+}
+
 /// Set — heap-allocated open-addressing hash set
 
 // Sentinel: a static TOMBSTONE pointer marks deleted slots.
@@ -635,6 +912,18 @@ static uint64_t rt_hash_value(RuntimeValue *v) {
             RuntimeValue *elem = s->buckets[i];
             if (elem && elem != TOMBSTONE)
                 h ^= rt_hash_value(elem);
+        }
+        return h;
+    }
+
+    case RT_MAP: {
+        uint64_t h = 0;
+        RuntimeMap *m = v->data.map_val;
+        if (!m) return 0;
+        for (size_t i = 0; i < m->capacity; i++) {
+            RuntimeMapEntry *e = &m->buckets[i];
+            if (e->key && e != MAP_TOMBSTONE)
+                h ^= rt_hash_value(e->key) * 31 + rt_hash_value(e->val);
         }
         return h;
     }
@@ -875,6 +1164,7 @@ RuntimeSet *rt_unbox_set(RuntimeValue *v) {
     return v->data.set_val;
 }
 
+
 ///  Equality
 
 int rt_equal_p(RuntimeValue *a, RuntimeValue *b) {
@@ -893,6 +1183,9 @@ int rt_equal_p(RuntimeValue *a, RuntimeValue *b) {
         case RT_KEYWORD: return strcmp(a->data.keyword_val, b->data.keyword_val) == 0;
         case RT_NIL:     return 1;
         case RT_SET:     return rt_set_equal(a->data.set_val, b->data.set_val);
+        case RT_MAP:
+            if (b->type != RT_MAP) return 0;
+            return rt_map_equal(a->data.map_val, b->data.map_val);
         case RT_LIST: {
             RuntimeList *la = a->data.list_val;
             RuntimeList *lb = b->data.list_val;
@@ -1212,6 +1505,64 @@ static void rt_print_value_indent(RuntimeValue *val, int indent) {
             printf("}");
             break;
         }
+        case RT_MAP: {
+            RuntimeMap *m = val->data.map_val;
+            if (!m || m->count == 0) { printf("#{}"); break; }
+
+            /* Collect live entries */
+            RuntimeMapEntry *entries[4096];
+            int count = 0;
+            for (size_t i = 0; i < m->capacity && count < 4095; i++) {
+                RuntimeMapEntry *e = &m->buckets[i];
+                if (e->key && e != MAP_TOMBSTONE)
+                    entries[count++] = e;
+            }
+
+            /* Measure max key width using snprintf into a scratch buffer */
+            int max_key_w = 0;
+            for (int i = 0; i < count; i++) {
+                char buf[256];
+                int  w = 0;
+                RuntimeValue *k = entries[i]->key;
+                switch (k->type) {
+                case RT_STRING:  w = snprintf(buf, sizeof(buf), "\"%s\"", k->data.string_val);  break;
+                case RT_KEYWORD: w = snprintf(buf, sizeof(buf), ":%s",    k->data.keyword_val); break;
+                case RT_SYMBOL:  w = snprintf(buf, sizeof(buf), "%s",     k->data.symbol_val);  break;
+                case RT_INT:     w = snprintf(buf, sizeof(buf), "%ld",    k->data.int_val);     break;
+                case RT_FLOAT:   w = snprintf(buf, sizeof(buf), "%g",     k->data.float_val);   break;
+                default:         w = 4; break;
+                }
+                if (w > max_key_w) max_key_w = w;
+            }
+
+            /* Print: first entry on same line as #{, rest indented to align */
+            printf("#{");
+            for (int i = 0; i < count; i++) {
+                if (i > 0) {
+                    printf("\n  ");
+                }
+                RuntimeValue *k = entries[i]->key;
+                int w = 0;
+                switch (k->type) {
+                case RT_STRING:  w = printf("\"%s\"", k->data.string_val);  break;
+                case RT_KEYWORD: w = printf(":%s",    k->data.keyword_val); break;
+                case RT_SYMBOL:  w = printf("%s",     k->data.symbol_val);  break;
+                case RT_INT:     w = printf("%ld",    k->data.int_val);     break;
+                case RT_FLOAT:   w = printf("%g",     k->data.float_val);   break;
+                default:
+                    rt_print_value_indent(k, indent);
+                    w = 4;
+                    break;
+                }
+                /* Pad key to max_key_w for value alignment */
+                for (int s = w; s < max_key_w; s++) printf(" ");
+                printf(" ");
+                rt_print_value_indent(entries[i]->val, indent + max_key_w + 3);
+            }
+            printf("}");
+            break;
+        }
+
         case RT_BIGNUM: {
             char *s = mpz_get_str(NULL, 10, val->data.bignum_val);
             printf("%s", s);
@@ -1380,6 +1731,9 @@ void rt_value_free(RuntimeValue *val) {
                     rt_value_free(val->data.array_val.elements[i]);
                 free(val->data.array_val.elements);
             }
+            break;
+        case RT_MAP:
+            rt_map_free(val->data.map_val);
             break;
         case RT_BIGNUM:
             mpz_clear(val->data.bignum_val);
@@ -1938,6 +2292,7 @@ void declare_runtime_functions(CodegenContext *ctx) {
     DECL("rt_array_get",    ptr, ptr, i64);
     DECL("rt_array_length", i64, ptr);
 
+    // --- Set ---
     DECL0("rt_set_new",        ptr);
     DECL("rt_set_of",          ptr, ptr, i64);
     DECL("rt_set_from_list",   ptr, ptr);
@@ -1945,13 +2300,29 @@ void declare_runtime_functions(CodegenContext *ctx) {
     DECL("rt_set_contains",    i32, ptr, ptr);
     DECL("rt_set_conj",        ptr, ptr, ptr);
     DECL("rt_set_disj",        ptr, ptr, ptr);
-    DECL("rt_set_conj_mut", ptr, ptr, ptr);
-    DECL("rt_set_disj_mut", ptr, ptr, ptr);
+    DECL("rt_set_conj_mut",    ptr, ptr, ptr);
+    DECL("rt_set_disj_mut",    ptr, ptr, ptr);
     DECL("rt_set_get",         ptr, ptr, ptr);
     DECL("rt_set_count",       i64, ptr);
     DECL("rt_set_seq",         ptr, ptr);
     DECL("rt_value_set",       ptr, ptr);
     DECL("rt_unbox_set",       ptr, ptr);
+
+    // --- Map ---
+    DECL0("rt_map_new",        ptr);
+    DECL("rt_map_assoc",       ptr, ptr, ptr, ptr);
+    DECL("rt_map_assoc_mut",   ptr, ptr, ptr, ptr);
+    DECL("rt_map_dissoc",      ptr, ptr, ptr);
+    DECL("rt_map_dissoc_mut",  ptr, ptr, ptr);
+    DECL("rt_map_get",         ptr, ptr, ptr, ptr);
+    DECL("rt_map_contains",    i32, ptr, ptr);
+    DECL("rt_map_find",        ptr, ptr, ptr);
+    DECL("rt_map_count",       i64, ptr);
+    DECL("rt_map_keys",        ptr, ptr);
+    DECL("rt_map_vals",        ptr, ptr);
+    DECL("rt_map_merge",       ptr, ptr, ptr);
+    DECL("rt_value_map",       ptr, ptr);
+    DECL("rt_unbox_map",       ptr, ptr);
 
     // --- Print ---
     DECL("rt_print_value",         void_t, ptr);
@@ -2079,6 +2450,22 @@ GET_RUNTIME_FUNCTION(rt_set_count)
 GET_RUNTIME_FUNCTION(rt_set_seq)
 GET_RUNTIME_FUNCTION(rt_value_set)
 GET_RUNTIME_FUNCTION(rt_unbox_set)
+
+GET_RUNTIME_FUNCTION(rt_map_new)
+GET_RUNTIME_FUNCTION(rt_map_assoc)
+GET_RUNTIME_FUNCTION(rt_map_assoc_mut)
+GET_RUNTIME_FUNCTION(rt_map_dissoc)
+GET_RUNTIME_FUNCTION(rt_map_dissoc_mut)
+GET_RUNTIME_FUNCTION(rt_map_get)
+GET_RUNTIME_FUNCTION(rt_map_contains)
+GET_RUNTIME_FUNCTION(rt_map_find)
+GET_RUNTIME_FUNCTION(rt_map_count)
+GET_RUNTIME_FUNCTION(rt_map_keys)
+GET_RUNTIME_FUNCTION(rt_map_vals)
+GET_RUNTIME_FUNCTION(rt_map_merge)
+GET_RUNTIME_FUNCTION(rt_value_map)
+GET_RUNTIME_FUNCTION(rt_unbox_map)
+
 
 
 LLVMTypeRef get_rt_value_type(CodegenContext *ctx) {

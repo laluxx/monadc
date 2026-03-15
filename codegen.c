@@ -298,6 +298,8 @@ LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *t) {
         return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
     case TYPE_SET:
         return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+    case TYPE_MAP:
+        return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
     case TYPE_LAYOUT: {
         char struct_name[256];
         snprintf(struct_name, sizeof(struct_name), "layout.%s", t->layout_name);
@@ -1478,6 +1480,70 @@ static CodegenResult codegen_set_op(CodegenContext *ctx, AST *ast,
     return result;
 }
 
+static CodegenResult codegen_map_op(CodegenContext *ctx, AST *ast,
+                                    LLVMValueRef (*fn_getter)(CodegenContext *),
+                                    const char *op_name, int expect_args) {
+    CodegenResult result = {NULL, NULL};
+    if ((int)ast->list.count != expect_args + 1) {
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' requires %d argument%s",
+                      parser_get_filename(), ast->line, ast->column,
+                      op_name, expect_args, expect_args == 1 ? "" : "s");
+    }
+    LLVMTypeRef  ptr     = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+    CodegenResult map_r  = codegen_expr(ctx, ast->list.items[1]);
+    LLVMValueRef raw_map = map_r.value;
+    if (map_r.type && map_r.type->kind == TYPE_MAP) {
+        LLVMValueRef ub_fn = get_rt_unbox_map(ctx);
+        LLVMTypeRef  ft    = LLVMFunctionType(ptr, &ptr, 1, 0);
+        LLVMValueRef ua[]  = {raw_map};
+        raw_map = LLVMBuildCall2(ctx->builder, ft, ub_fn, ua, 1, "rawmap");
+    }
+
+    LLVMValueRef op_fn = fn_getter(ctx);
+
+    if (expect_args == 1) {
+        /* unary: (keys m), (vals m), (count m) */
+        LLVMTypeRef ft_args[] = {ptr};
+        LLVMTypeRef ft = LLVMFunctionType(ptr, ft_args, 1, 0);
+        LLVMValueRef args[] = {raw_map};
+        result.value = LLVMBuildCall2(ctx->builder, ft, op_fn, args, 1, op_name);
+        result.type  = type_list(NULL);
+        return result;
+    }
+
+    if (expect_args == 2) {
+        /* binary: (dissoc m key), (contains? m key), (find m key) */
+        CodegenResult key_r = codegen_expr(ctx, ast->list.items[2]);
+        LLVMValueRef  boxed = codegen_box(ctx, key_r.value, key_r.type);
+        LLVMTypeRef   ft_args[] = {ptr, ptr};
+        LLVMTypeRef   ft = LLVMFunctionType(ptr, ft_args, 2, 0);
+        LLVMValueRef  args[] = {raw_map, boxed};
+        LLVMValueRef  new_map = LLVMBuildCall2(ctx->builder, ft, op_fn, args, 2, op_name);
+        LLVMValueRef  wrap_fn = get_rt_value_map(ctx);
+        LLVMTypeRef   wft     = LLVMFunctionType(ptr, &ptr, 1, 0);
+        LLVMValueRef  wa[]    = {new_map};
+        result.value = LLVMBuildCall2(ctx->builder, wft, wrap_fn, wa, 1, "mapval");
+        result.type  = type_map();
+        return result;
+    }
+
+    /* ternary: (assoc m key val) */
+    CodegenResult key_r = codegen_expr(ctx, ast->list.items[2]);
+    CodegenResult val_r = codegen_expr(ctx, ast->list.items[3]);
+    LLVMValueRef  bkey  = codegen_box(ctx, key_r.value, key_r.type);
+    LLVMValueRef  bval  = codegen_box(ctx, val_r.value, val_r.type);
+    LLVMTypeRef   ft_args[] = {ptr, ptr, ptr};
+    LLVMTypeRef   ft = LLVMFunctionType(ptr, ft_args, 3, 0);
+    LLVMValueRef  args[] = {raw_map, bkey, bval};
+    LLVMValueRef  new_map = LLVMBuildCall2(ctx->builder, ft, op_fn, args, 3, op_name);
+    LLVMValueRef  wrap_fn = get_rt_value_map(ctx);
+    LLVMTypeRef   wft     = LLVMFunctionType(ptr, &ptr, 1, 0);
+    LLVMValueRef  wa[]    = {new_map};
+    result.value = LLVMBuildCall2(ctx->builder, wft, wrap_fn, wa, 1, "mapval");
+    result.type  = type_map();
+    return result;
+}
+
 CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     CodegenResult result = {NULL, NULL};
 
@@ -1790,6 +1856,32 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
         return result;
     }
 
+    case AST_MAP: {
+        LLVMTypeRef  ptr    = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+        LLVMValueRef map_fn = get_rt_map_new(ctx);
+        LLVMTypeRef  map_ft = LLVMFunctionType(ptr, NULL, 0, 0);
+        LLVMValueRef map    = LLVMBuildCall2(ctx->builder, map_ft, map_fn, NULL, 0, "map");
+
+        LLVMValueRef assoc_fn = get_rt_map_assoc_mut(ctx);
+        LLVMTypeRef  ap[]     = {ptr, ptr, ptr};
+        LLVMTypeRef  aft      = LLVMFunctionType(ptr, ap, 3, 0);
+
+        for (size_t i = 0; i < ast->map.count; i++) {
+            CodegenResult k = codegen_expr(ctx, ast->map.keys[i]);
+            CodegenResult v = codegen_expr(ctx, ast->map.vals[i]);
+            LLVMValueRef bk = codegen_box(ctx, k.value, k.type);
+            LLVMValueRef bv = codegen_box(ctx, v.value, v.type);
+            LLVMValueRef aa[] = {map, bk, bv};
+            map = LLVMBuildCall2(ctx->builder, aft, assoc_fn, aa, 3, "map");
+        }
+
+        LLVMValueRef wrap_fn = get_rt_value_map(ctx);
+        LLVMTypeRef  wft     = LLVMFunctionType(ptr, &ptr, 1, 0);
+        LLVMValueRef wa[]    = {map};
+        result.value = LLVMBuildCall2(ctx->builder, wft, wrap_fn, wa, 1, "mapval");
+        result.type  = type_map();
+        return result;
+    }
 
     case AST_RANGE: {
         LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
@@ -2287,14 +2379,6 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         printf("Defined %s :: Fn (...) -> %s\n",
                                var_name, type_to_string(ret_type));
                     }
-
-                    /* /\* printf("Defined %s :: Fn (", var_name); *\/ */
-
-                    /* for (int i = 0; i < lambda->lambda.param_count; i++) { */
-                    /*     if (i > 0) printf(" "); */
-                    /*     printf("%s", lambda->lambda.params[i].name); */
-                    /* } */
-                    /* printf(") -> %s\n", type_to_string(ret_type)); */
 
                     free(param_types);
 
@@ -4252,117 +4336,6 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             if (strcmp(head->symbol, "disj!") == 0)
                 return codegen_set_op(ctx, ast, get_rt_set_disj_mut, "disj!");
 
-            /* if (strcmp(head->symbol, "conj") == 0) { */
-            /*     if (ast->list.count != 3) { */
-            /*         CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'conj' requires 2 arguments (set val)", */
-            /*                       parser_get_filename(), ast->line, ast->column); */
-            /*     } */
-            /*     LLVMTypeRef  ptr     = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0); */
-            /*     CodegenResult set_r  = codegen_expr(ctx, ast->list.items[1]); */
-            /*     CodegenResult val_r  = codegen_expr(ctx, ast->list.items[2]); */
-            /*     LLVMValueRef  boxed  = codegen_box(ctx, val_r.value, val_r.type); */
-            /*     LLVMValueRef  raw_set = set_r.value; */
-            /*     /\* unbox set if wrapped *\/ */
-            /*     if (set_r.type && set_r.type->kind == TYPE_SET) { */
-            /*         LLVMValueRef ub_fn = get_rt_unbox_set(ctx); */
-            /*         LLVMTypeRef  ft    = LLVMFunctionType(ptr, &ptr, 1, 0); */
-            /*         LLVMValueRef ua[]  = {raw_set}; */
-            /*         raw_set = LLVMBuildCall2(ctx->builder, ft, ub_fn, ua, 1, "rawset"); */
-            /*     } */
-            /*     LLVMValueRef conj_fn  = get_rt_set_conj(ctx); */
-            /*     LLVMTypeRef  cp[]     = {ptr, ptr}; */
-            /*     LLVMTypeRef  cft      = LLVMFunctionType(ptr, cp, 2, 0); */
-            /*     LLVMValueRef ca[]     = {raw_set, boxed}; */
-            /*     LLVMValueRef new_set  = LLVMBuildCall2(ctx->builder, cft, conj_fn, ca, 2, "set"); */
-            /*     LLVMValueRef wrap_fn  = get_rt_value_set(ctx); */
-            /*     LLVMTypeRef  wft      = LLVMFunctionType(ptr, &ptr, 1, 0); */
-            /*     LLVMValueRef wa[]     = {new_set}; */
-            /*     result.value = LLVMBuildCall2(ctx->builder, wft, wrap_fn, wa, 1, "setval"); */
-            /*     result.type  = type_set(); */
-            /*     return result; */
-            /* } */
-
-            /* if (strcmp(head->symbol, "disj") == 0) { */
-            /*     if (ast->list.count != 3) { */
-            /*         CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'disj' requires 2 arguments (set val)", */
-            /*                       parser_get_filename(), ast->line, ast->column); */
-            /*     } */
-            /*     LLVMTypeRef  ptr     = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0); */
-            /*     CodegenResult set_r  = codegen_expr(ctx, ast->list.items[1]); */
-            /*     CodegenResult val_r  = codegen_expr(ctx, ast->list.items[2]); */
-            /*     LLVMValueRef  boxed  = codegen_box(ctx, val_r.value, val_r.type); */
-            /*     LLVMValueRef  raw_set = set_r.value; */
-            /*     if (set_r.type && set_r.type->kind == TYPE_SET) { */
-            /*         LLVMValueRef ub_fn = get_rt_unbox_set(ctx); */
-            /*         LLVMTypeRef  ft    = LLVMFunctionType(ptr, &ptr, 1, 0); */
-            /*         LLVMValueRef ua[]  = {raw_set}; */
-            /*         raw_set = LLVMBuildCall2(ctx->builder, ft, ub_fn, ua, 1, "rawset"); */
-            /*     } */
-            /*     LLVMValueRef disj_fn = get_rt_set_disj(ctx); */
-            /*     LLVMTypeRef  dp[]    = {ptr, ptr}; */
-            /*     LLVMTypeRef  dft     = LLVMFunctionType(ptr, dp, 2, 0); */
-            /*     LLVMValueRef da[]    = {raw_set, boxed}; */
-            /*     LLVMValueRef new_set = LLVMBuildCall2(ctx->builder, dft, disj_fn, da, 2, "set"); */
-            /*     LLVMValueRef wrap_fn = get_rt_value_set(ctx); */
-            /*     LLVMTypeRef  wft     = LLVMFunctionType(ptr, &ptr, 1, 0); */
-            /*     LLVMValueRef wa[]    = {new_set}; */
-            /*     result.value = LLVMBuildCall2(ctx->builder, wft, wrap_fn, wa, 1, "setval"); */
-            /*     result.type  = type_set(); */
-            /*     return result; */
-            /* } */
-
-            if (strcmp(head->symbol, "contains?") == 0) {
-                if (ast->list.count != 3) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'contains?' requires 2 arguments (set val)",
-                                  parser_get_filename(), ast->line, ast->column);
-                }
-                LLVMTypeRef  ptr     = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-                LLVMTypeRef  i32     = LLVMInt32TypeInContext(ctx->context);
-                LLVMTypeRef  i1      = LLVMInt1TypeInContext(ctx->context);
-                CodegenResult set_r  = codegen_expr(ctx, ast->list.items[1]);
-                CodegenResult val_r  = codegen_expr(ctx, ast->list.items[2]);
-                LLVMValueRef  boxed  = codegen_box(ctx, val_r.value, val_r.type);
-                LLVMValueRef  raw_set = set_r.value;
-                if (set_r.type && set_r.type->kind == TYPE_SET) {
-                    LLVMValueRef ub_fn = get_rt_unbox_set(ctx);
-                    LLVMTypeRef  ft    = LLVMFunctionType(ptr, &ptr, 1, 0);
-                    LLVMValueRef ua[]  = {raw_set};
-                    raw_set = LLVMBuildCall2(ctx->builder, ft, ub_fn, ua, 1, "rawset");
-                }
-                LLVMValueRef  fn      = get_rt_set_contains(ctx);
-                LLVMTypeRef   cp[]    = {ptr, ptr};
-                LLVMTypeRef   cft     = LLVMFunctionType(i32, cp, 2, 0);
-                LLVMValueRef  ca[]    = {raw_set, boxed};
-                LLVMValueRef  i32val  = LLVMBuildCall2(ctx->builder, cft, fn, ca, 2, "contains");
-                result.value = LLVMBuildTrunc(ctx->builder, i32val, i1, "contains_bool");
-                result.type  = type_bool();
-                return result;
-            }
-
-            if (strcmp(head->symbol, "count") == 0) {
-                if (ast->list.count != 2) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'count' requires 1 argument",
-                                  parser_get_filename(), ast->line, ast->column);
-                }
-                LLVMTypeRef  ptr    = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-                LLVMTypeRef  i64    = LLVMInt64TypeInContext(ctx->context);
-                CodegenResult set_r = codegen_expr(ctx, ast->list.items[1]);
-                LLVMValueRef raw_set = set_r.value;
-                if (set_r.type && set_r.type->kind == TYPE_SET) {
-                    LLVMValueRef ub_fn = get_rt_unbox_set(ctx);
-                    LLVMTypeRef  ft    = LLVMFunctionType(ptr, &ptr, 1, 0);
-                    LLVMValueRef ua[]  = {raw_set};
-                    raw_set = LLVMBuildCall2(ctx->builder, ft, ub_fn, ua, 1, "rawset");
-                }
-                LLVMValueRef fn   = get_rt_set_count(ctx);
-                LLVMTypeRef  fp[] = {ptr};
-                LLVMTypeRef  fft  = LLVMFunctionType(i64, fp, 1, 0);
-                LLVMValueRef fa[] = {raw_set};
-                result.value = LLVMBuildCall2(ctx->builder, fft, fn, fa, 1, "setcount");
-                result.type  = type_int();
-                return result;
-            }
-
             if (strcmp(head->symbol, "set?") == 0) {
                 if (ast->list.count != 2) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'set?' requires 1 argument",
@@ -4381,6 +4354,235 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 return result;
             }
 
+            // Map
+            if (strcmp(head->symbol, "assoc") == 0) {
+                if (ast->list.count != 4) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'assoc' requires 3 arguments (map key val)",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                return codegen_map_op(ctx, ast, get_rt_map_assoc, "assoc", 3);
+            }
+
+            if (strcmp(head->symbol, "assoc!") == 0) {
+                if (ast->list.count != 4) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'assoc!' requires 3 arguments (map key val)",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                return codegen_map_op(ctx, ast, get_rt_map_assoc_mut, "assoc!", 3);
+            }
+
+            if (strcmp(head->symbol, "dissoc") == 0) {
+                if (ast->list.count != 3) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'dissoc' requires 2 arguments (map key)",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                return codegen_map_op(ctx, ast, get_rt_map_dissoc, "dissoc", 2);
+            }
+
+            if (strcmp(head->symbol, "dissoc!") == 0) {
+                if (ast->list.count != 3) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'dissoc!' requires 2 arguments (map key)",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                return codegen_map_op(ctx, ast, get_rt_map_dissoc_mut, "dissoc!", 2);
+            }
+
+            if (strcmp(head->symbol, "find") == 0) {
+                if (ast->list.count != 3) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'find' requires 2 arguments (map key)",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                LLVMTypeRef  ptr    = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                CodegenResult map_r = codegen_expr(ctx, ast->list.items[1]);
+                CodegenResult key_r = codegen_expr(ctx, ast->list.items[2]);
+                LLVMValueRef raw_map = map_r.value;
+                if (map_r.type && map_r.type->kind == TYPE_MAP) {
+                    LLVMValueRef ub_fn = get_rt_unbox_map(ctx);
+                    LLVMTypeRef  ft    = LLVMFunctionType(ptr, &ptr, 1, 0);
+                    LLVMValueRef ua[]  = {raw_map};
+                    raw_map = LLVMBuildCall2(ctx->builder, ft, ub_fn, ua, 1, "rawmap");
+                }
+                LLVMValueRef  boxed  = codegen_box(ctx, key_r.value, key_r.type);
+                LLVMValueRef  fn     = get_rt_map_find(ctx);
+                LLVMTypeRef   fp[]   = {ptr, ptr};
+                LLVMTypeRef   fft    = LLVMFunctionType(ptr, fp, 2, 0);
+                LLVMValueRef  fa[]   = {raw_map, boxed};
+                result.value = LLVMBuildCall2(ctx->builder, fft, fn, fa, 2, "find");
+                result.type  = type_unknown();
+                return result;
+            }
+
+            if (strcmp(head->symbol, "keys") == 0) {
+                if (ast->list.count != 2) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'keys' requires 1 argument (map)",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                LLVMTypeRef  ptr    = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                CodegenResult map_r = codegen_expr(ctx, ast->list.items[1]);
+                LLVMValueRef raw_map = map_r.value;
+                if (map_r.type && map_r.type->kind == TYPE_MAP) {
+                    LLVMValueRef ub_fn = get_rt_unbox_map(ctx);
+                    LLVMTypeRef  ft    = LLVMFunctionType(ptr, &ptr, 1, 0);
+                    LLVMValueRef ua[]  = {raw_map};
+                    raw_map = LLVMBuildCall2(ctx->builder, ft, ub_fn, ua, 1, "rawmap");
+                }
+                LLVMValueRef fn   = get_rt_map_keys(ctx);
+                LLVMTypeRef  fp[] = {ptr};
+                LLVMTypeRef  fft  = LLVMFunctionType(ptr, fp, 1, 0);
+                LLVMValueRef fa[] = {raw_map};
+                result.value = LLVMBuildCall2(ctx->builder, fft, fn, fa, 1, "keys");
+                result.type  = type_list(NULL);
+                return result;
+            }
+
+            if (strcmp(head->symbol, "vals") == 0) {
+                if (ast->list.count != 2) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'vals' requires 1 argument (map)",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                LLVMTypeRef  ptr    = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                CodegenResult map_r = codegen_expr(ctx, ast->list.items[1]);
+                LLVMValueRef raw_map = map_r.value;
+                if (map_r.type && map_r.type->kind == TYPE_MAP) {
+                    LLVMValueRef ub_fn = get_rt_unbox_map(ctx);
+                    LLVMTypeRef  ft    = LLVMFunctionType(ptr, &ptr, 1, 0);
+                    LLVMValueRef ua[]  = {raw_map};
+                    raw_map = LLVMBuildCall2(ctx->builder, ft, ub_fn, ua, 1, "rawmap");
+                }
+                LLVMValueRef fn   = get_rt_map_vals(ctx);
+                LLVMTypeRef  fp[] = {ptr};
+                LLVMTypeRef  fft  = LLVMFunctionType(ptr, fp, 1, 0);
+                LLVMValueRef fa[] = {raw_map};
+                result.value = LLVMBuildCall2(ctx->builder, fft, fn, fa, 1, "vals");
+                result.type  = type_list(NULL);
+                return result;
+            }
+
+            if (strcmp(head->symbol, "merge") == 0) {
+                if (ast->list.count != 3) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'merge' requires 2 arguments (map map)",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                LLVMTypeRef  ptr     = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                CodegenResult a_r    = codegen_expr(ctx, ast->list.items[1]);
+                CodegenResult b_r    = codegen_expr(ctx, ast->list.items[2]);
+                LLVMValueRef  raw_a  = a_r.value;
+                LLVMValueRef  raw_b  = b_r.value;
+                if (a_r.type && a_r.type->kind == TYPE_MAP) {
+                    LLVMValueRef ub = get_rt_unbox_map(ctx);
+                    LLVMTypeRef  ft = LLVMFunctionType(ptr, &ptr, 1, 0);
+                    LLVMValueRef ua[] = {raw_a};
+                    raw_a = LLVMBuildCall2(ctx->builder, ft, ub, ua, 1, "rawmap_a");
+                }
+                if (b_r.type && b_r.type->kind == TYPE_MAP) {
+                    LLVMValueRef ub = get_rt_unbox_map(ctx);
+                    LLVMTypeRef  ft = LLVMFunctionType(ptr, &ptr, 1, 0);
+                    LLVMValueRef ub_a[] = {raw_b};
+                    raw_b = LLVMBuildCall2(ctx->builder, ft, ub, ub_a, 1, "rawmap_b");
+                }
+                LLVMValueRef  fn      = get_rt_map_merge(ctx);
+                LLVMTypeRef   mp[]    = {ptr, ptr};
+                LLVMTypeRef   mft     = LLVMFunctionType(ptr, mp, 2, 0);
+                LLVMValueRef  ma[]    = {raw_a, raw_b};
+                LLVMValueRef  new_map = LLVMBuildCall2(ctx->builder, mft, fn, ma, 2, "merged");
+                LLVMValueRef  wrap_fn = get_rt_value_map(ctx);
+                LLVMTypeRef   wft     = LLVMFunctionType(ptr, &ptr, 1, 0);
+                LLVMValueRef  wa[]    = {new_map};
+                result.value = LLVMBuildCall2(ctx->builder, wft, wrap_fn, wa, 1, "mapval");
+                result.type  = type_map();
+                return result;
+            }
+
+            if (strcmp(head->symbol, "map?") == 0) {
+                if (ast->list.count != 2) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'map?' requires 1 argument",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                LLVMTypeRef  i1  = LLVMInt1TypeInContext(ctx->context);
+                CodegenResult arg = codegen_expr(ctx, ast->list.items[1]);
+                result.value = (arg.type && arg.type->kind == TYPE_MAP)
+                    ? LLVMConstInt(i1, 1, 0)
+                    : LLVMConstInt(i1, 0, 0);
+                result.type  = type_bool();
+                return result;
+            }
+
+
+            if (strcmp(head->symbol, "contains?") == 0) {
+                if (ast->list.count != 3) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'contains?' requires 2 arguments",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                LLVMTypeRef  ptr    = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMTypeRef  i32    = LLVMInt32TypeInContext(ctx->context);
+                LLVMTypeRef  i1     = LLVMInt1TypeInContext(ctx->context);
+                CodegenResult col_r = codegen_expr(ctx, ast->list.items[1]);
+                CodegenResult key_r = codegen_expr(ctx, ast->list.items[2]);
+                LLVMValueRef  boxed = codegen_box(ctx, key_r.value, key_r.type);
+                LLVMValueRef  raw   = col_r.value;
+
+                LLVMValueRef fn;
+                if (col_r.type && col_r.type->kind == TYPE_MAP) {
+                    LLVMValueRef ub_fn = get_rt_unbox_map(ctx);
+                    LLVMTypeRef  ft    = LLVMFunctionType(ptr, &ptr, 1, 0);
+                    LLVMValueRef ua[]  = {raw};
+                    raw = LLVMBuildCall2(ctx->builder, ft, ub_fn, ua, 1, "rawmap");
+                    fn  = get_rt_map_contains(ctx);
+                } else {
+                    if (col_r.type && col_r.type->kind == TYPE_SET) {
+                        LLVMValueRef ub_fn = get_rt_unbox_set(ctx);
+                        LLVMTypeRef  ft    = LLVMFunctionType(ptr, &ptr, 1, 0);
+                        LLVMValueRef ua[]  = {raw};
+                        raw = LLVMBuildCall2(ctx->builder, ft, ub_fn, ua, 1, "rawset");
+                    }
+                    fn = get_rt_set_contains(ctx);
+                }
+
+                LLVMTypeRef  cp[]   = {ptr, ptr};
+                LLVMTypeRef  cft    = LLVMFunctionType(i32, cp, 2, 0);
+                LLVMValueRef ca[]   = {raw, boxed};
+                LLVMValueRef i32val = LLVMBuildCall2(ctx->builder, cft, fn, ca, 2, "contains");
+                result.value = LLVMBuildTrunc(ctx->builder, i32val, i1, "contains_bool");
+                result.type  = type_bool();
+                return result;
+            }
+
+            if (strcmp(head->symbol, "count") == 0) {
+                if (ast->list.count != 2) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'count' requires 1 argument",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                LLVMTypeRef  ptr    = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMTypeRef  i64    = LLVMInt64TypeInContext(ctx->context);
+                CodegenResult col_r = codegen_expr(ctx, ast->list.items[1]);
+                LLVMValueRef  raw   = col_r.value;
+                LLVMValueRef  fn;
+
+                if (col_r.type && col_r.type->kind == TYPE_MAP) {
+                    LLVMValueRef ub_fn = get_rt_unbox_map(ctx);
+                    LLVMTypeRef  ft    = LLVMFunctionType(ptr, &ptr, 1, 0);
+                    LLVMValueRef ua[]  = {raw};
+                    raw = LLVMBuildCall2(ctx->builder, ft, ub_fn, ua, 1, "rawmap");
+                    fn  = get_rt_map_count(ctx);
+                } else {
+                    if (col_r.type && col_r.type->kind == TYPE_SET) {
+                        LLVMValueRef ub_fn = get_rt_unbox_set(ctx);
+                        LLVMTypeRef  ft    = LLVMFunctionType(ptr, &ptr, 1, 0);
+                        LLVMValueRef ua[]  = {raw};
+                        raw = LLVMBuildCall2(ctx->builder, ft, ub_fn, ua, 1, "rawset");
+                    }
+                    fn = get_rt_set_count(ctx);
+                }
+
+                LLVMTypeRef  fp[] = {ptr};
+                LLVMTypeRef  fft  = LLVMFunctionType(i64, fp, 1, 0);
+                LLVMValueRef fa[] = {raw};
+                result.value = LLVMBuildCall2(ctx->builder, fft, fn, fa, 1, "count");
+                result.type  = type_int();
+                return result;
+            }
+
+
             if (strcmp(head->symbol, "<")  == 0 || strcmp(head->symbol, ">")  == 0 ||
                 strcmp(head->symbol, "<=") == 0 || strcmp(head->symbol, ">=") == 0 ||
                 strcmp(head->symbol, "=")  == 0 || strcmp(head->symbol, "!=") == 0) {
@@ -4395,24 +4597,25 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 CodegenResult lhs = codegen_expr(ctx, ast->list.items[1]);
                 CodegenResult rhs = codegen_expr(ctx, ast->list.items[2]);
 
-                /* Sets and lists: use rt_equal_p for = and != */
-                bool lhs_is_ptr_type = lhs.type && (lhs.type->kind == TYPE_SET  ||
-                                                    lhs.type->kind == TYPE_LIST  ||
-                                                    lhs.type->kind == TYPE_RATIO ||
+                bool lhs_is_ptr_type = lhs.type && (lhs.type->kind == TYPE_SET     ||
+                                                    lhs.type->kind == TYPE_MAP     ||
+                                                    lhs.type->kind == TYPE_LIST    ||
+                                                    lhs.type->kind == TYPE_RATIO   ||
                                                     lhs.type->kind == TYPE_UNKNOWN);
-                bool rhs_is_ptr_type = rhs.type && (rhs.type->kind == TYPE_SET  ||
-                                                    rhs.type->kind == TYPE_LIST  ||
-                                                    rhs.type->kind == TYPE_RATIO ||
+                bool rhs_is_ptr_type = rhs.type && (rhs.type->kind == TYPE_SET     ||
+                                                    rhs.type->kind == TYPE_MAP     ||
+                                                    rhs.type->kind == TYPE_LIST    ||
+                                                    rhs.type->kind == TYPE_RATIO   ||
                                                     rhs.type->kind == TYPE_UNKNOWN);
 
+                /* Collections (set, map, list, ratio): only = and != are defined */
                 if (lhs_is_ptr_type || rhs_is_ptr_type) {
                     if (strcmp(op, "=") != 0 && strcmp(op, "!=") != 0) {
-                        Type *bad_type  = lhs_is_ptr_type ? lhs.type : rhs.type;
-                        const char *tname = bad_type ? type_to_string(bad_type) : "collection";
+                        Type       *bad   = lhs_is_ptr_type ? lhs.type : rhs.type;
+                        const char *tname = bad ? type_to_string(bad) : "collection";
                         CODEGEN_ERROR(ctx, "%s:%d:%d: error: operator '%s' is not defined for %s "
                                       "— only '=' and '!=' are supported for collections",
-                                      parser_get_filename(), ast->line, ast->column,
-                                      op, tname);
+                                      parser_get_filename(), ast->line, ast->column, op, tname);
                     }
 
                     LLVMTypeRef  ptr       = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
@@ -4435,24 +4638,23 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     return result;
                 }
 
-                /* Strings: use strcmp */
+                /* Strings: use strcmp for = and != */
                 if (lhs.type && lhs.type->kind == TYPE_STRING &&
                     (strcmp(op, "=") == 0 || strcmp(op, "!=") == 0)) {
-                    LLVMTypeRef  ptr     = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-                    LLVMTypeRef  i32     = LLVMInt32TypeInContext(ctx->context);
-                    LLVMTypeRef  i1      = LLVMInt1TypeInContext(ctx->context);
+                    LLVMTypeRef  ptr       = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                    LLVMTypeRef  i32       = LLVMInt32TypeInContext(ctx->context);
                     LLVMValueRef strcmp_fn = LLVMGetNamedFunction(ctx->module, "strcmp");
                     if (!strcmp_fn) {
                         LLVMTypeRef params[] = {ptr, ptr};
                         LLVMTypeRef ft = LLVMFunctionType(i32, params, 2, 0);
                         strcmp_fn = LLVMAddFunction(ctx->module, "strcmp", ft);
                     }
-                    LLVMValueRef args[]  = {lhs.value, rhs.value};
-                    LLVMValueRef cmp     = LLVMBuildCall2(ctx->builder,
-                                                          LLVMGlobalGetValueType(strcmp_fn),
-                                                          strcmp_fn, args, 2, "strcmp");
-                    LLVMValueRef eq      = LLVMBuildICmp(ctx->builder, LLVMIntEQ, cmp,
-                                                         LLVMConstInt(i32, 0, 0), "str_eq");
+                    LLVMValueRef args[] = {lhs.value, rhs.value};
+                    LLVMValueRef cmp    = LLVMBuildCall2(ctx->builder,
+                                                         LLVMGlobalGetValueType(strcmp_fn),
+                                                         strcmp_fn, args, 2, "strcmp");
+                    LLVMValueRef eq     = LLVMBuildICmp(ctx->builder, LLVMIntEQ, cmp,
+                                                        LLVMConstInt(i32, 0, 0), "str_eq");
                     result.value = (strcmp(op, "!=") == 0)
                         ? LLVMBuildNot(ctx->builder, eq, "str_neq")
                         : eq;
@@ -4705,6 +4907,46 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 result.type  = type_unknown();
                 return result;
             }
+
+            if (entry && entry->kind == ENV_VAR &&
+                entry->type && entry->type->kind == TYPE_MAP) {
+                /* Map used as function: (m key) -> (get m key nil)
+                 * (m key default) -> (get m key default)           */
+                if (ast->list.count < 2 || ast->list.count > 3) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: map used as function requires 1 or 2 arguments",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                LLVMTypeRef  ptr     = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMValueRef map_val = LLVMBuildLoad2(ctx->builder,
+                                                      type_to_llvm(ctx, entry->type),
+                                                      entry->value, head->symbol);
+                LLVMValueRef ub_fn   = get_rt_unbox_map(ctx);
+                LLVMTypeRef  ub_ft   = LLVMFunctionType(ptr, &ptr, 1, 0);
+                LLVMValueRef ub_a[]  = {map_val};
+                LLVMValueRef raw_map = LLVMBuildCall2(ctx->builder, ub_ft, ub_fn, ub_a, 1, "rawmap");
+
+                CodegenResult key_r  = codegen_expr(ctx, ast->list.items[1]);
+                LLVMValueRef  bkey   = codegen_box(ctx, key_r.value, key_r.type);
+
+                LLVMValueRef default_val;
+                if (ast->list.count == 3) {
+                    CodegenResult def_r = codegen_expr(ctx, ast->list.items[2]);
+                    default_val = codegen_box(ctx, def_r.value, def_r.type);
+                } else {
+                    LLVMValueRef nil_fn = get_rt_value_nil(ctx);
+                    LLVMTypeRef  nil_ft = LLVMFunctionType(ptr, NULL, 0, 0);
+                    default_val = LLVMBuildCall2(ctx->builder, nil_ft, nil_fn, NULL, 0, "nil");
+                }
+
+                LLVMValueRef  get_fn  = get_rt_map_get(ctx);
+                LLVMTypeRef   gp[]    = {ptr, ptr, ptr};
+                LLVMTypeRef   gft     = LLVMFunctionType(ptr, gp, 3, 0);
+                LLVMValueRef  ga[]    = {raw_map, bkey, default_val};
+                result.value = LLVMBuildCall2(ctx->builder, gft, get_fn, ga, 3, "mapget");
+                result.type  = type_unknown();
+                return result;
+            }
+
 
             // If it's a variable being used in function position, that's an error
             if (entry && entry->kind == ENV_VAR) {
@@ -5690,6 +5932,17 @@ void register_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, ">=", 2, -1, "Greater than or equal");
 
     env_insert_builtin(ctx->env, "code", 1, 0, "Return the source AST of a defined function");
+
+    // Map
+    env_insert_builtin(ctx->env, "map?",     1, 0, "Test if value is a map");
+    env_insert_builtin(ctx->env, "assoc",    3, 0, "Add or update a key-value pair in a map (immutable)");
+    env_insert_builtin(ctx->env, "assoc!",   3, 0, "Add or update a key-value pair in a map in place");
+    env_insert_builtin(ctx->env, "dissoc",   2, 0, "Remove a key from a map (immutable)");
+    env_insert_builtin(ctx->env, "dissoc!",  2, 0, "Remove a key from a map in place");
+    env_insert_builtin(ctx->env, "find",     2, 0, "Return (key val) pair for key in map, or nil");
+    env_insert_builtin(ctx->env, "keys",     1, 0, "Return a list of all keys in a map");
+    env_insert_builtin(ctx->env, "vals",     1, 0, "Return a list of all values in a map");
+    env_insert_builtin(ctx->env, "merge",    2, 0, "Merge two maps, rightmost wins on conflict");
 
     // Set
     env_insert_builtin(ctx->env, "set",       0, -1, "Create a set from arguments or convert a collection");

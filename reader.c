@@ -292,6 +292,16 @@ AST *ast_new_set(void) {
     return a;
 }
 
+AST *ast_new_map(void) {
+    AST *a = calloc(1, sizeof(AST));
+    a->type         = AST_MAP;
+    a->map.capacity = 4;
+    a->map.keys     = malloc(sizeof(AST*) * 4);
+    a->map.vals     = malloc(sizeof(AST*) * 4);
+    a->map.count    = 0;
+    return a;
+}
+
 void ast_array_append(AST *array, AST *item) {
     if (array->array.element_count >= array->array.element_capacity) {
         array->array.element_capacity *= 2;
@@ -406,6 +416,15 @@ void ast_free(AST *ast) {
         for (size_t i = 0; i < ast->set.element_count; i++)
             ast_free(ast->set.elements[i]);
         free(ast->set.elements);
+        break;
+
+    case AST_MAP:
+        for (size_t i = 0; i < ast->map.count; i++) {
+            ast_free(ast->map.keys[i]);
+            ast_free(ast->map.vals[i]);
+        }
+        free(ast->map.keys);
+        free(ast->map.vals);
         break;
 
     default:
@@ -630,6 +649,11 @@ Token lexer_next_token(Lexer *lex) {
     if (c == ')') { advance(lex); tok.type = TOK_RPAREN;   return tok; }
     if (c == '[') { advance(lex); tok.type = TOK_LBRACKET; return tok; }
     if (c == ']') { advance(lex); tok.type = TOK_RBRACKET; return tok; }
+    if (c == '#' && peek_ahead(lex, 1) == '{') {
+        advance(lex); advance(lex);
+        tok.type = TOK_HASH_LBRACE;
+        return tok;
+    }
     if (c == '{') { advance(lex); tok.type = TOK_LBRACE;   return tok; }
     if (c == '}') { advance(lex); tok.type = TOK_RBRACE;   return tok; }
     if (c == ',') { advance(lex); tok.type = TOK_SYMBOL; tok.value = my_strdup(","); return tok; }
@@ -1929,6 +1953,45 @@ static AST *parse_set(Parser *p) {
     return node;
 }
 
+static AST *parse_map(Parser *p) {
+    int start_line = p->current.line;
+    int start_col  = p->current.column;
+    p->current = lexer_next_token(p->lexer); /* consume '{' (after '#') */
+
+    AST *node = ast_new_map();
+    while (p->current.type != TOK_RBRACE &&
+           p->current.type != TOK_EOF) {
+        AST *key = parse_expr(p);
+        if (p->current.type == TOK_RBRACE || p->current.type == TOK_EOF) {
+            compiler_error(p->current.line, p->current.column,
+                           "map literal requires an even number of forms — "
+                           "key '%s' has no value", "?");
+        }
+        AST *val = parse_expr(p);
+
+        if (node->map.count >= node->map.capacity) {
+            node->map.capacity *= 2;
+            node->map.keys = realloc(node->map.keys,
+                                     sizeof(AST*) * node->map.capacity);
+            node->map.vals = realloc(node->map.vals,
+                                     sizeof(AST*) * node->map.capacity);
+        }
+        node->map.keys[node->map.count] = key;
+        node->map.vals[node->map.count] = val;
+        node->map.count++;
+    }
+    if (p->current.type != TOK_RBRACE)
+        compiler_error(p->current.line, p->current.column,
+                       "Expected '}' to close map literal");
+    int end_col = p->current.column + 1;
+    p->current = lexer_next_token(p->lexer);
+
+    node->line       = start_line;
+    node->column     = start_col;
+    node->end_column = end_col;
+    return node;
+}
+
 static AST *parse_expr(Parser *p) {
     Token tok = p->current;
 
@@ -2001,6 +2064,8 @@ static AST *parse_expr(Parser *p) {
     }
     case TOK_LPAREN:
         return parse_list(p);
+    case TOK_HASH_LBRACE:
+        return parse_map(p);
     case TOK_LBRACKET:
         return parse_bracket_list(p);
     case TOK_LBRACE:
@@ -2060,19 +2125,22 @@ static void skip_expr(Parser *p) {
             if (p->current.type == TOK_RBRACKET) depth--;
             p->current = lexer_next_token(p->lexer);
         }
-    } else if (p->current.type == TOK_LBRACE) {
+    } else if (p->current.type == TOK_LBRACE ||
+               p->current.type == TOK_HASH_LBRACE) {
+        /* Both {} (set) and #{} (map) close with TOK_RBRACE */
         p->current = lexer_next_token(p->lexer);
         int depth = 1;
         while (depth > 0 && p->current.type != TOK_EOF) {
-            if (p->current.type == TOK_LBRACE) depth++;
-            if (p->current.type == TOK_RBRACE) depth--;
+            if (p->current.type == TOK_LBRACE ||
+                p->current.type == TOK_HASH_LBRACE) depth++;
+            if (p->current.type == TOK_RBRACE)       depth--;
             p->current = lexer_next_token(p->lexer);
         }
     } else {
-        // Skip single token (number, string, symbol, etc)
         p->current = lexer_next_token(p->lexer);
     }
 }
+
 
 // Check if a feature is active
 static bool is_feature_active(const char *feature_name) {

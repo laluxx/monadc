@@ -60,6 +60,8 @@ Type *type_from_name(const char *name) {
     if (strcmp(name, "Ratio")   == 0) return type_ratio();
     if (strcmp(name, "List")    == 0) return type_list(NULL);
     if (strcmp(name, "Arr")     == 0) return type_arr(NULL, -1);
+    if (strcmp(name, "Set")     == 0) return type_set();
+    if (strcmp(name, "Map")     == 0) return type_map();
 
     // Check alias registry (supports chained aliases: Code -> List -> ...)
     int depth = 0;
@@ -103,6 +105,7 @@ Type *type_oct    (void) { return make_type(TYPE_OCT);     }
 Type *type_keyword(void) { return make_type(TYPE_KEYWORD); }
 Type *type_ratio  (void) { return make_type(TYPE_RATIO);   }
 Type *type_set    (void) { return make_type(TYPE_SET);     }
+Type *type_map    (void) { return make_type(TYPE_MAP);     }
 
 Type *type_list(Type *element_type) {
     Type *t = make_type(TYPE_LIST);
@@ -243,6 +246,7 @@ const char *type_to_string(Type *t) {
     case TYPE_KEYWORD: return "Keyword";
     case TYPE_RATIO:   return "Ratio";
     case TYPE_SET:     return "Set";
+    case TYPE_MAP:     return "Map";
     case TYPE_UNKNOWN: return "?";
 
     case TYPE_LIST: {
