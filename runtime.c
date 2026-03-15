@@ -1526,7 +1526,7 @@ static void rt_print_value_indent(RuntimeValue *val, int indent) {
                 RuntimeValue *k = entries[i]->key;
                 switch (k->type) {
                 case RT_STRING:  w = snprintf(buf, sizeof(buf), "\"%s\"", k->data.string_val);  break;
-                case RT_KEYWORD: w = snprintf(buf, sizeof(buf), ":%s",    k->data.keyword_val); break;
+                case RT_KEYWORD: w = snprintf(buf, sizeof(buf), "%s",     k->data.keyword_val); break;
                 case RT_SYMBOL:  w = snprintf(buf, sizeof(buf), "%s",     k->data.symbol_val);  break;
                 case RT_INT:     w = snprintf(buf, sizeof(buf), "%ld",    k->data.int_val);     break;
                 case RT_FLOAT:   w = snprintf(buf, sizeof(buf), "%g",     k->data.float_val);   break;
@@ -1545,7 +1545,7 @@ static void rt_print_value_indent(RuntimeValue *val, int indent) {
                 int w = 0;
                 switch (k->type) {
                 case RT_STRING:  w = printf("\"%s\"", k->data.string_val);  break;
-                case RT_KEYWORD: w = printf(":%s",    k->data.keyword_val); break;
+                case RT_KEYWORD: w = printf("%s",     k->data.keyword_val); break;
                 case RT_SYMBOL:  w = printf("%s",     k->data.symbol_val);  break;
                 case RT_INT:     w = printf("%ld",    k->data.int_val);     break;
                 case RT_FLOAT:   w = printf("%g",     k->data.float_val);   break;
@@ -1591,119 +1591,6 @@ void rt_print_expanded(RuntimeValue *val) {
     rt_print_value_indent(val, 0);
     printf("\n");
 }
-
-/* void rt_print_value(RuntimeValue *val) { */
-/*     if (!val) { printf("nil"); return; } */
-/*     if (val->type == RT_THUNK) { */
-/*         val = rt_force(val->data.thunk_val); */
-/*         if (!val) { printf("nil"); return; } */
-/*     } */
-/*     switch (val->type) { */
-/*         case RT_INT:     printf("%ld",  val->data.int_val);   break; */
-/*         case RT_FLOAT:   printf("%g",   val->data.float_val); break; */
-/*         case RT_CHAR:    printf("'%c'", val->data.char_val);  break; */
-/*         case RT_STRING:  printf("\"%s\"", val->data.string_val); break; */
-/*         case RT_SYMBOL:  printf("%s",   val->data.symbol_val);   break; */
-/*         case RT_KEYWORD: printf(":%s",  val->data.keyword_val);  break; */
-/*         case RT_LIST:    rt_print_list(val->data.list_val);       break; */
-/*         case RT_RATIO: */
-/*             if (val->data.ratio_val.denominator == 1) */
-/*                 printf("%ld", val->data.ratio_val.numerator); */
-/*             else */
-/*                 printf("%ld/%ld", val->data.ratio_val.numerator, */
-/*                                   val->data.ratio_val.denominator); */
-/*             break; */
-/*         case RT_ARRAY: */
-/*             printf("["); */
-/*             for (size_t i = 0; i < val->data.array_val.length; i++) { */
-/*                 if (i > 0) printf(" "); */
-/*                 rt_print_value(val->data.array_val.elements[i] */
-/*                                ? val->data.array_val.elements[i] */
-/*                                : rt_value_nil()); */
-/*             } */
-/*             printf("]"); */
-/*             break; */
-/*         case RT_BIGNUM: { */
-/*             char *s = mpz_get_str(NULL, 10, val->data.bignum_val); */
-/*             printf("%s", s); */
-/*             free(s); */
-/*             break; */
-/*         } */
-/*         case RT_NIL:   printf("nil"); break; */
-/*         case RT_THUNK: printf("<thunk>"); break; */
-/*     } */
-/* } */
-
-/* void rt_print_list_unbounded(RuntimeList *list) { */
-/*     rt_interrupted = 0; */
-/*     printf("("); */
-/*     int first = 1; */
-/*     RuntimeList *cur = list; */
-/*     int cycle = 0; */
-
-/*     while (cur && !rt_list_is_empty_list(cur)) { */
-/*         if (rt_interrupted) { printf(" ..."); break; } */
-/*         if (!first) printf(" "); */
-/*         first = 0; */
-
-/*         RuntimeValue *h = _force_head(cur->cell); */
-/*         rt_print_value(h); */
-
-/*         RuntimeValue *tv = _force_tail(cur->cell); */
-/*         RuntimeList *next = NULL; */
-/*         if (tv && tv->type == RT_LIST) */
-/*             next = tv->data.list_val; */
-
-/*         if (++cycle >= 1024 && next && !rt_list_is_empty_list(next)) { */
-/*             ConsCell *nc = next->cell; */
-
-/*             // Only reset the arena for lazy generators (tail_fn != NULL). */
-/*             // Strict lists have tail_fn == NULL and their tail_val pointers */
-/*             // live in the arena — resetting would dangle them. */
-/*             if (nc->tail_fn != NULL) { */
-/*                 ThunkFn      hfn     = nc->head_fn; */
-/*                 void        *henv    = nc->head_env; */
-/*                 int          hforced = nc->head_forced; */
-/*                 RuntimeValue *hval   = nc->head_val; */
-/*                 ThunkFn      tfn     = nc->tail_fn; */
-/*                 void        *tenv    = nc->tail_env; */
-
-/*                 typedef struct { int64_t a; int64_t b; } EnvCopy; */
-/*                 EnvCopy env_copy = {0, 0}; */
-/*                 if (tenv) memcpy(&env_copy, tenv, sizeof(EnvCopy)); */
-
-/*                 arena_reset(&g_eval_arena); */
-/*                 cycle = 0; */
-
-/*                 ConsCell *fresh_c    = arena_alloc(&g_eval_arena, sizeof(ConsCell)); */
-/*                 fresh_c->head_fn     = hfn; */
-/*                 fresh_c->head_env    = henv; */
-/*                 fresh_c->head_val    = hval; */
-/*                 fresh_c->head_forced = hforced; */
-
-/*                 EnvCopy *fresh_env   = arena_alloc(&g_eval_arena, sizeof(EnvCopy)); */
-/*                 *fresh_env           = env_copy; */
-/*                 fresh_c->tail_fn     = tfn; */
-/*                 fresh_c->tail_env    = fresh_env; */
-/*                 fresh_c->tail_val    = NULL; */
-/*                 fresh_c->tail_forced = 0; */
-
-/*                 RuntimeList *fresh_lst = arena_alloc(&g_eval_arena, sizeof(RuntimeList)); */
-/*                 fresh_lst->cell = fresh_c; */
-/*                 cur = fresh_lst; */
-/*                 continue; */
-/*             } */
-/*             // Strict list: fall through, no reset */
-/*         } */
-
-/*         cur = next ? next : rt_list_empty(); */
-/*     } */
-/*     printf(")\n"); */
-/* } */
-
-/* void rt_print_list(RuntimeList *list) { */
-/*     rt_print_list_unbounded(list); */
-/* } */
 
 ///  Memory management
 //
