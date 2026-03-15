@@ -1,8 +1,9 @@
 #+title: TODO.org
 
-* TODO Env [0/2]
+* TODO Env [0/4]
 - [ ] eval
 - [ ] A way to dump an enviroment to a loadable file.env 
+- [ ] Proper Monomorphization
 - [ ] Connect to a running process with the repl
       We should embed the env into the executable i guess
 

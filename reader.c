@@ -874,13 +874,12 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
            p->current.type != TOK_EOF) {
 
         if (p->current.type == TOK_LBRACKET) {
-            // Typed parameter: [name :: Type]
+            /* Typed or annotated parameter: [name] or [name :: Type] */
             p->current = lexer_next_token(p->lexer);
             ASTParam param = parse_one_param(p);
-            if (p->current.type != TOK_RBRACKET) {
+            if (p->current.type != TOK_RBRACKET)
                 compiler_error(p->current.line, p->current.column,
                                "Expected ']' after parameter");
-            }
             p->current = lexer_next_token(p->lexer);
             if (count >= capacity) {
                 capacity = capacity == 0 ? 4 : capacity * 2;
@@ -889,31 +888,44 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
             params[count++] = param;
 
         } else if (p->current.type == TOK_ARROW) {
-            // Skip ->
+            /* Consume -> and continue — bare symbol after -> may be
+             * return type only if it's the very last token before )  */
             p->current = lexer_next_token(p->lexer);
+
+            /* If next token is a symbol, peek one more ahead */
+            if (p->current.type == TOK_SYMBOL) {
+                char *sym  = my_strdup(p->current.value);
+                p->current = lexer_next_token(p->lexer);
+
+                if (p->current.type == TOK_RPAREN ||
+                    p->current.type == TOK_EOF) {
+                    /* Last token before ) — it's the return type */
+                    free(ret_type);
+                    ret_type = sym;
+                } else {
+                    /* More tokens follow — it's another parameter */
+                    if (count >= capacity) {
+                        capacity = capacity == 0 ? 4 : capacity * 2;
+                        params   = realloc(params, sizeof(ASTParam) * capacity);
+                    }
+                    params[count].name      = sym;
+                    params[count].type_name = NULL;
+                    count++;
+                }
+            }
+            /* If next token is [ or another ->, just continue the loop */
 
         } else if (p->current.type == TOK_SYMBOL) {
-            // Bare symbol — either a generic parameter or the return type.
-            // If the token after it is -> or [ or another bare symbol,
-            // it's a generic parameter. If it's ) it's the return type.
+            /* Bare symbol NOT after -> — always a parameter */
             char *sym  = my_strdup(p->current.value);
             p->current = lexer_next_token(p->lexer);
-
-            if (p->current.type == TOK_ARROW    ||
-                p->current.type == TOK_LBRACKET ||
-                p->current.type == TOK_SYMBOL) {
-                // Generic/polymorphic parameter — no type annotation
-                if (count >= capacity) {
-                    capacity = capacity == 0 ? 4 : capacity * 2;
-                    params   = realloc(params, sizeof(ASTParam) * capacity);
-                }
-                params[count].name      = sym;
-                params[count].type_name = NULL; // NULL = polymorphic
-                count++;
-            } else {
-                // Return type
-                ret_type = sym;
+            if (count >= capacity) {
+                capacity = capacity == 0 ? 4 : capacity * 2;
+                params   = realloc(params, sizeof(ASTParam) * capacity);
             }
+            params[count].name      = sym;
+            params[count].type_name = NULL;
+            count++;
 
         } else {
             compiler_error(p->current.line, p->current.column,
@@ -921,10 +933,9 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
         }
     }
 
-    if (p->current.type != TOK_RPAREN) {
+    if (p->current.type != TOK_RPAREN)
         compiler_error(p->current.line, p->current.column,
                        "Expected ')' to close function signature");
-    }
     p->current = lexer_next_token(p->lexer);
 
     *out_params      = params;

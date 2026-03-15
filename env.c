@@ -467,12 +467,15 @@ struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
 
     InferEnv *child = infer_env_create_child(ienv);
     InferCtx *ctx   = infer_ctx_create(child, filename ? filename : "<unknown>");
-
-    /* Pre-bind with a fresh var so recursive calls resolve */
+    /* Pre-bind with a fresh var so recursive calls resolve.
+     * We use a high ID so it doesn't pollute the visible var names. */
+    ctx->subst->next_id = 1000;
     Type *self_t = infer_fresh(ctx);
+    ctx->subst->next_id = 0;  /* reset so params get 'a, 'b, 'c... */
     infer_env_insert(child, name, scheme_mono(self_t));
-
     Type *inferred = infer_toplevel(ctx, lambda_ast);
+
+
     TypeScheme *scheme = NULL;
 
     if (!inferred || ctx->had_error) {
