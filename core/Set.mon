@@ -1,0 +1,142 @@
+;;; Set.mon --- Mathematical set operations
+
+;; Author: Laluxx
+;; Version: 0.0.1
+;; Keywords: set mathematics collections
+;; Reference:
+;; - https://en.wikipedia.org/wiki/Set_(mathematics)
+
+;;; Commentary:
+
+;; Mathematical set operations built on top of the primitive set type.
+;; Sets use {} literal syntax following mathematical notation.
+;; All functions are pure unless marked with !.
+
+;;; Code:
+
+(module Set
+  [singleton
+   singleton?
+   union
+   intersection
+   difference
+   symmetric-difference
+   subset?
+   proper-subset?
+   superset?
+   proper-superset?
+   disjoint?])
+
+
+;;; Construction
+
+(define (singleton [x] -> Set)
+  "Create a set containing exactly one element."
+  (set x))
+
+;; (define (singleton? [x] -> Bool)
+;;   "Return True if x is a set containing exactly one element."
+;;   (and (set? x) (= 1 (count x))))
+
+(define (singleton? [x] -> Bool)
+  "Return True if x is a set containing exactly one element."
+  (if (set? x)
+    (= 1 (count x))
+    False))
+
+;;; Set algebra
+
+(define (union [a :: Set] -> [b :: Set] -> Set)
+  "Return a set containing all elements from both a and b."
+  (foldl (lambda ([acc :: Set] [x] -> Set)
+    (conj acc x)) a b))
+
+(define (intersection [a :: Set] -> [b :: Set] -> Set)
+  "Return a set containing only elements present in both a and b."
+  (foldl (lambda ([acc :: Set] [x] -> Set)
+    (if (contains? b x) (conj acc x) acc)) (set) a))
+
+(define (difference [a :: Set] -> [b :: Set] -> Set)
+  "Return a set of elements in a that are not in b."
+  (foldl (lambda ([acc :: Set] [x] -> Set)
+    (disj acc x)) a b))
+
+(define (symmetric-difference [a :: Set] -> [b :: Set] -> Set)
+  "Return a set of elements in either a or b but not both."
+  (difference (union a b) (intersection a b)))
+
+
+;;; Set relations
+
+(define (subset? [a :: Set] -> [b :: Set] -> Bool)
+  "Return True if every element of a is in b."
+  (foldl (lambda ([acc :: Bool] [x] -> Bool)
+    (and acc (contains? b x))) True a))
+
+(define (proper-subset? [a :: Set] -> [b :: Set] -> Bool)
+  "Return True if a is a subset of b and a != b."
+  (and (subset? a b) (!= (count a) (count b))))
+
+(define (superset? [a :: Set] -> [b :: Set] -> Bool)
+  "Return True if every element of b is in a."
+  (subset? b a))
+
+(define (proper-superset? [a :: Set] -> [b :: Set] -> Bool)
+  "Return True if a is a superset of b and a != b."
+  (proper-subset? b a))
+
+(define (disjoint? [a :: Set] -> [b :: Set] -> Bool)
+  "Return True if a and b share no elements."
+  (= (count (intersection a b)) 0))
+
+
+(tests
+  ;; Construction
+  (assert-eq (singleton 1)           {1}       "singleton")
+  (assert-eq (singleton? {1})        True      "singleton? true")
+  (assert-eq (singleton? {1 2})      False     "singleton? false — two elements")
+  (assert-eq (singleton? (set))      False     "singleton? false — empty")
+  (assert-eq (singleton? 42)         False     "singleton? false — not a set")
+
+  ;; Union
+  (assert-eq (union {1 2} {2 3})     {1 2 3}   "union")
+  (assert-eq (union {1 2} (set))     {1 2}     "union with empty")
+  (assert-eq (union (set) {1 2})     {1 2}     "union empty with set")
+
+  ;; Intersection
+  (assert-eq (intersection {1 2 3} {2 3 4})  {2 3}   "intersection")
+  (assert-eq (intersection {1 2} {3 4})      (set)   "intersection disjoint")
+  (assert-eq (intersection {1 2} (set))      (set)   "intersection with empty")
+
+  ;; Difference
+  (assert-eq (difference {1 2 3} {2 3})      {1}     "difference")
+  (assert-eq (difference {1 2 3} (set))      {1 2 3} "difference with empty")
+  (assert-eq (difference (set) {1 2})        (set)   "difference empty")
+
+  ;; Symmetric difference
+  (assert-eq (symmetric-difference {1 2} {2 3})  {1 3}   "symmetric-difference")
+  (assert-eq (symmetric-difference {1 2} {1 2})  (set)   "symmetric-difference equal sets")
+
+  ;; Subset
+  (assert-eq (subset? {1 2} {1 2 3})    True    "subset?")
+  (assert-eq (subset? {1 2} {1 2})      True    "subset? equal")
+  (assert-eq (subset? {1 2 3} {1 2})    False   "subset? false")
+  (assert-eq (subset? (set) {1 2})      True    "subset? empty is subset of all")
+
+  ;; Proper subset
+  (assert-eq (proper-subset? {1 2} {1 2 3})  True    "proper-subset?")
+  (assert-eq (proper-subset? {1 2} {1 2})    False   "proper-subset? equal sets")
+  (assert-eq (proper-subset? {1 2 3} {1 2})  False   "proper-subset? false")
+
+  ;; Superset
+  (assert-eq (superset? {1 2 3} {1 2})   True    "superset?")
+  (assert-eq (superset? {1 2} {1 2 3})   False   "superset? false")
+
+  ;; Proper superset
+  (assert-eq (proper-superset? {1 2 3} {1 2})  True    "proper-superset?")
+  (assert-eq (proper-superset? {1 2} {1 2})    False   "proper-superset? equal sets")
+
+  ;; Disjoint
+  (assert-eq (disjoint? {1 2} {3 4})    True    "disjoint?")
+  (assert-eq (disjoint? {1 2} {2 3})    False   "disjoint? false")
+  (assert-eq (disjoint? (set) {1 2})    True    "disjoint? empty always disjoint"))

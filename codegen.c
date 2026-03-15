@@ -949,23 +949,48 @@ static LLVMValueRef codegen_box(CodegenContext *ctx, LLVMValueRef val, Type *typ
 // Named functions -> direct LLVM function value (no load).
 // Lambdas / other exprs -> codegen normally.
 static LLVMValueRef codegen_fn_arg(CodegenContext *ctx, AST *node) {
+    /* Named function — return direct LLVM function ref, no load */
     if (node->type == AST_SYMBOL) {
         EnvEntry *e = env_lookup(ctx->env, node->symbol);
         if (e && e->kind == ENV_FUNC && e->func_ref)
             return e->func_ref;
         LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, node->symbol);
         if (fn) return fn;
-        // last resort: try the llvm_name if it was mangled
         if (e && e->llvm_name) {
             fn = LLVMGetNamedFunction(ctx->module, e->llvm_name);
             if (fn) return fn;
         }
     }
+
+    /* Inline lambda — lift to a named function and return its ref */
+    if (node->type == AST_LAMBDA) {
+        static int lambda_lift_count = 0;
+        char name[64];
+        snprintf(name, sizeof(name), "__hof_lambda_%d", lambda_lift_count++);
+
+        AST *name_node   = ast_new_symbol(name);
+        AST *define_node = ast_new_list();
+        ast_list_append(define_node, ast_new_symbol("define"));
+        ast_list_append(define_node, name_node);
+        ast_list_append(define_node, node);
+        codegen_expr(ctx, define_node);
+
+        EnvEntry *entry = env_lookup(ctx->env, name);
+        if (entry && entry->func_ref)
+            return entry->func_ref;
+
+        LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, name);
+        if (fn) return fn;
+
+        fprintf(stderr, "codegen_fn_arg: failed to lift lambda '%s'\n", name);
+        return NULL;
+    }
+
+    /* Fallback — codegen the expression and return its value */
     CodegenResult r = codegen_expr(ctx, node);
-    if (!r.value) {
+    if (!r.value)
         fprintf(stderr, "codegen_fn_arg: could not resolve function '%s'\n",
                 node->type == AST_SYMBOL ? node->symbol : "<expr>");
-    }
     return r.value;
 }
 
@@ -2314,11 +2339,24 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                             // Char -> Int: zero-extend to i64
                             ret_value = LLVMBuildZExt(ctx->builder, body_result.value,
                                                       ret_llvm_type, "ret_int");
+                        /* } else if (ret_type->kind == TYPE_BOOL) { */
+                        /*     // Coerce any int/i64 to i1 */
+                        /*     if (LLVMTypeOf(ret_value) != LLVMInt1TypeInContext(ctx->context)) */
+                        /*         ret_value = LLVMBuildTrunc(ctx->builder, ret_value, */
+                        /*                                    LLVMInt1TypeInContext(ctx->context), "to_bool"); */
                         } else if (ret_type->kind == TYPE_BOOL) {
-                            // Coerce any int/i64 to i1
-                            if (LLVMTypeOf(ret_value) != LLVMInt1TypeInContext(ctx->context))
-                                ret_value = LLVMBuildTrunc(ctx->builder, ret_value,
-                                                           LLVMInt1TypeInContext(ctx->context), "to_bool");
+                            LLVMTypeRef i1    = LLVMInt1TypeInContext(ctx->context);
+                            LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                            if (LLVMTypeOf(ret_value) == ptr_t) {
+                                /* RuntimeValue* from foldl/unknown — unbox to i64 then trunc to i1 */
+                                LLVMTypeRef i64  = LLVMInt64TypeInContext(ctx->context);
+                                LLVMTypeRef uft  = LLVMFunctionType(i64, &ptr_t, 1, 0);
+                                ret_value = LLVMBuildCall2(ctx->builder, uft,
+                                                           get_rt_unbox_int(ctx), &ret_value, 1, "unbox_bool");
+                                ret_value = LLVMBuildTrunc(ctx->builder, ret_value, i1, "to_bool");
+                            } else if (LLVMTypeOf(ret_value) != i1) {
+                                ret_value = LLVMBuildTrunc(ctx->builder, ret_value, i1, "to_bool");
+                            }
                         } else if (type_is_integer(ret_type) &&
                                    LLVMTypeOf(ret_value) == LLVMInt1TypeInContext(ctx->context)) {
                             // comparison result (i1) returned from an Int-typed function -> zext to i64
@@ -2369,7 +2407,12 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     }
 
                     ctx->current_function_name = NULL;
-                    check_predicate_name(ctx, var_name, ret_type, ast);
+                    /* Don't check predicate naming convention for auto-lifted HOF lambdas */
+                    if (strncmp(var_name, "__hof_lambda_", 13) != 0 &&
+                        strncmp(var_name, "__anon_", 7) != 0) {
+                        check_predicate_name(ctx, var_name, ret_type, ast);
+                    }
+                    /* check_predicate_name(ctx, var_name, ret_type, ast); */
                     if (ctx->module_ctx && !should_export_symbol(ctx->module_ctx, var_name)) {
 
 
@@ -3095,6 +3138,34 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                                              get_rt_unbox_float(ctx), &rhs, 1, "unbox_rhs_f");
                     }
                     cond = LLVMBuildFCmp(ctx->builder, LLVMRealOEQ, lhs, rhs, "eq");
+                } else if (actual.type && actual.type->kind == TYPE_BOOL) {
+                    /* Bool result — compare as i1 directly, box expected if needed */
+                    LLVMTypeRef i1 = LLVMInt1TypeInContext(ctx->context);
+
+                    /* Normalize lhs to i1 */
+                    LLVMValueRef lhs_bool = lhs;
+                    if (LLVMTypeOf(lhs) == ptr) {
+                        LLVMTypeRef uft = LLVMFunctionType(i64, &ptr, 1, 0);
+                        LLVMValueRef unboxed = LLVMBuildCall2(ctx->builder, uft,
+                                                              get_rt_unbox_int(ctx), &lhs, 1, "ub_lhs");
+                        lhs_bool = LLVMBuildTrunc(ctx->builder, unboxed, i1, "lhs_bool");
+                    } else if (LLVMTypeOf(lhs) != i1) {
+                        lhs_bool = LLVMBuildTrunc(ctx->builder, lhs, i1, "lhs_bool");
+                    }
+
+                    /* Normalize rhs to i1 */
+                    LLVMValueRef rhs_bool = rhs;
+                    if (LLVMTypeOf(rhs) == ptr) {
+                        LLVMTypeRef uft = LLVMFunctionType(i64, &ptr, 1, 0);
+                        LLVMValueRef unboxed = LLVMBuildCall2(ctx->builder, uft,
+                                                              get_rt_unbox_int(ctx), &rhs, 1, "ub_rhs");
+                        rhs_bool = LLVMBuildTrunc(ctx->builder, unboxed, i1, "rhs_bool");
+                    } else if (LLVMTypeOf(rhs) != i1) {
+                        rhs_bool = LLVMBuildTrunc(ctx->builder, rhs, i1, "rhs_bool");
+                    }
+
+                    cond = LLVMBuildICmp(ctx->builder, LLVMIntEQ, lhs_bool, rhs_bool, "eq");
+
 
                 } else {
                     // Integer / ptr / bool / unknown — unbox ptrs, zext to i64, icmp
@@ -3473,6 +3544,28 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
 
             // (map fn xs) -> List
+            /* if (strcmp(head->symbol, "map") == 0) { */
+            /*     if (ast->list.count != 3) { */
+            /*         CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'map' requires 2 arguments (fn xs)", */
+            /*                       parser_get_filename(), ast->line, ast->column); */
+            /*     } */
+            /*     LLVMTypeRef   ptr    = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0); */
+            /*     LLVMValueRef  raw_fn = codegen_fn_arg(ctx, ast->list.items[1]); */
+            /*     CodegenResult list_r = codegen_expr(ctx, ast->list.items[2]); */
+
+            /*     Type *arg0_t, *arg1_t, *ret_t; */
+            /*     lookup_fn_types(ctx, ast->list.items[1], &arg0_t, &arg1_t, &ret_t); */
+            /*     LLVMValueRef wrapper = codegen_unary_wrapper(ctx, raw_fn, arg0_t, ret_t); */
+
+            /*     LLVMValueRef rt_fn    = get_rt_list_map(ctx); */
+            /*     LLVMTypeRef  ft_args[] = {ptr, ptr}; */
+            /*     LLVMTypeRef  ft       = LLVMFunctionType(ptr, ft_args, 2, 0); */
+            /*     LLVMValueRef args[]   = {list_r.value, wrapper}; */
+            /*     result.value = LLVMBuildCall2(ctx->builder, ft, rt_fn, args, 2, "map"); */
+            /*     result.type  = type_list(NULL); */
+            /*     return result; */
+            /* } */
+
             if (strcmp(head->symbol, "map") == 0) {
                 if (ast->list.count != 3) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'map' requires 2 arguments (fn xs)",
@@ -3480,22 +3573,37 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 }
                 LLVMTypeRef   ptr    = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
                 LLVMValueRef  raw_fn = codegen_fn_arg(ctx, ast->list.items[1]);
-                CodegenResult list_r = codegen_expr(ctx, ast->list.items[2]);
-
+                CodegenResult col_r  = codegen_expr(ctx, ast->list.items[2]);
                 Type *arg0_t, *arg1_t, *ret_t;
                 lookup_fn_types(ctx, ast->list.items[1], &arg0_t, &arg1_t, &ret_t);
                 LLVMValueRef wrapper = codegen_unary_wrapper(ctx, raw_fn, arg0_t, ret_t);
 
+                if (col_r.type && col_r.type->kind == TYPE_SET) {
+                    LLVMValueRef raw_set = col_r.value;
+                    LLVMValueRef ub_fn   = get_rt_unbox_set(ctx);
+                    LLVMTypeRef  ub_ft   = LLVMFunctionType(ptr, &ptr, 1, 0);
+                    LLVMValueRef ub_a[]  = {raw_set};
+                    raw_set = LLVMBuildCall2(ctx->builder, ub_ft, ub_fn, ub_a, 1, "rawset");
+                    LLVMValueRef rt_fn    = get_rt_set_map(ctx);
+                    LLVMTypeRef  ft_args[] = {ptr, ptr};
+                    LLVMTypeRef  ft        = LLVMFunctionType(ptr, ft_args, 2, 0);
+                    LLVMValueRef args[]    = {raw_set, wrapper};
+                    result.value = LLVMBuildCall2(ctx->builder, ft, rt_fn, args, 2, "set_map");
+                    result.type  = type_list(NULL);
+                    return result;
+                }
+
                 LLVMValueRef rt_fn    = get_rt_list_map(ctx);
                 LLVMTypeRef  ft_args[] = {ptr, ptr};
-                LLVMTypeRef  ft       = LLVMFunctionType(ptr, ft_args, 2, 0);
-                LLVMValueRef args[]   = {list_r.value, wrapper};
+                LLVMTypeRef  ft        = LLVMFunctionType(ptr, ft_args, 2, 0);
+                LLVMValueRef args[]    = {col_r.value, wrapper};
                 result.value = LLVMBuildCall2(ctx->builder, ft, rt_fn, args, 2, "map");
                 result.type  = type_list(NULL);
                 return result;
             }
 
             // (foldl fn init xs) -> value
+
             if (strcmp(head->symbol, "foldl") == 0) {
                 if (ast->list.count != 4) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'foldl' requires 3 arguments (fn init xs)",
@@ -3504,30 +3612,52 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 LLVMTypeRef   ptr    = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
                 LLVMValueRef  raw_fn = codegen_fn_arg(ctx, ast->list.items[1]);
                 CodegenResult init_r = codegen_expr(ctx, ast->list.items[2]);
-                CodegenResult list_r = codegen_expr(ctx, ast->list.items[3]);
+                CodegenResult col_r  = codegen_expr(ctx, ast->list.items[3]);
 
-                // box init to RuntimeValue*
+                /* Box init to RuntimeValue* */
                 LLVMValueRef init_val = init_r.value;
-                if (init_r.type && type_is_integer(init_r.type)) {
-                    LLVMTypeRef bft = LLVMFunctionType(ptr, &(LLVMTypeRef){LLVMInt64TypeInContext(ctx->context)}, 1, 0);
+                if (init_r.type && init_r.type->kind == TYPE_BOOL) {
+                    LLVMTypeRef i64  = LLVMInt64TypeInContext(ctx->context);
+                    LLVMValueRef ext = LLVMBuildZExt(ctx->builder, init_r.value, i64, "bool_ext");
+                    LLVMTypeRef bft  = LLVMFunctionType(ptr, &i64, 1, 0);
+                    init_val = LLVMBuildCall2(ctx->builder, bft,
+                                              get_rt_value_int(ctx), &ext, 1, "box_init");
+                } else if (init_r.type && type_is_integer(init_r.type)) {
+                    LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+                    LLVMTypeRef bft = LLVMFunctionType(ptr, &i64, 1, 0);
                     init_val = LLVMBuildCall2(ctx->builder, bft,
                                               get_rt_value_int(ctx), &init_r.value, 1, "box_init");
                 } else if (init_r.type && type_is_float(init_r.type)) {
-                    LLVMTypeRef bft = LLVMFunctionType(ptr, &(LLVMTypeRef){LLVMDoubleTypeInContext(ctx->context)}, 1, 0);
+                    LLVMTypeRef dbl = LLVMDoubleTypeInContext(ctx->context);
+                    LLVMTypeRef bft = LLVMFunctionType(ptr, &dbl, 1, 0);
                     init_val = LLVMBuildCall2(ctx->builder, bft,
                                               get_rt_value_float(ctx), &init_r.value, 1, "box_init");
                 }
 
-                // foldl fn is binary: (acc, elem) -> acc
-                // arg0 = accumulator type (same as init), arg1 = element type
+
                 Type *arg0_t, *arg1_t, *ret_t;
                 lookup_fn_types(ctx, ast->list.items[1], &arg0_t, &arg1_t, &ret_t);
                 LLVMValueRef wrapper = codegen_binary_wrapper(ctx, raw_fn, arg0_t, arg1_t, ret_t);
 
+                if (col_r.type && col_r.type->kind == TYPE_SET) {
+                    LLVMValueRef raw_set = col_r.value;
+                    LLVMValueRef ub_fn   = get_rt_unbox_set(ctx);
+                    LLVMTypeRef  ub_ft   = LLVMFunctionType(ptr, &ptr, 1, 0);
+                    LLVMValueRef ub_a[]  = {raw_set};
+                    raw_set = LLVMBuildCall2(ctx->builder, ub_ft, ub_fn, ub_a, 1, "rawset");
+                    LLVMValueRef rt_fn    = get_rt_set_foldl(ctx);
+                    LLVMTypeRef  ft_args[] = {ptr, ptr, ptr};
+                    LLVMTypeRef  ft        = LLVMFunctionType(ptr, ft_args, 3, 0);
+                    LLVMValueRef args[]    = {raw_set, init_val, wrapper};
+                    result.value = LLVMBuildCall2(ctx->builder, ft, rt_fn, args, 3, "set_foldl");
+                    result.type  = type_unknown();
+                    return result;
+                }
+
                 LLVMValueRef rt_fn    = get_rt_list_foldl(ctx);
                 LLVMTypeRef  ft_args[] = {ptr, ptr, ptr};
-                LLVMTypeRef  ft       = LLVMFunctionType(ptr, ft_args, 3, 0);
-                LLVMValueRef args[]   = {list_r.value, init_val, wrapper};
+                LLVMTypeRef  ft        = LLVMFunctionType(ptr, ft_args, 3, 0);
+                LLVMValueRef args[]    = {col_r.value, init_val, wrapper};
                 result.value = LLVMBuildCall2(ctx->builder, ft, rt_fn, args, 3, "foldl");
                 result.type  = type_unknown();
                 return result;
@@ -3568,30 +3698,71 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 return result;
             }
 
+
             // (filter pred xs) -> List
+            /* if (strcmp(head->symbol, "filter") == 0) { */
+            /*     if (ast->list.count != 3) { */
+            /*         CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'filter' requires 2 arguments (pred xs)", */
+            /*                       parser_get_filename(), ast->line, ast->column); */
+            /*     } */
+            /*     LLVMTypeRef   ptr    = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0); */
+            /*     LLVMValueRef  raw_fn = codegen_fn_arg(ctx, ast->list.items[1]); */
+            /*     CodegenResult list_r = codegen_expr(ctx, ast->list.items[2]); */
+
+            /*     // filter predicate: elem -> bool/int (nonzero = keep) */
+            /*     // We wrap it as a unary wrapper; the runtime RT_PredFn calls it and */
+            /*     // checks rt_unbox_int(result) != 0 */
+            /*     Type *arg0_t, *arg1_t, *ret_t; */
+            /*     lookup_fn_types(ctx, ast->list.items[1], &arg0_t, &arg1_t, &ret_t); */
+            /*     LLVMValueRef wrapper = codegen_unary_wrapper(ctx, raw_fn, arg0_t, ret_t); */
+
+            /*     // rt_list_filter expects RT_PredFn: int(*)(RuntimeValue*) */
+            /*     // but we pass a unary wrapper (ptr->ptr) and cast in runtime via unbox_int */
+            /*     // So update rt_list_filter to accept RT_UnaryFn and unbox result: */
+            /*     LLVMValueRef rt_fn    = get_rt_list_filter(ctx); */
+            /*     LLVMTypeRef  ft_args[] = {ptr, ptr}; */
+            /*     LLVMTypeRef  ft       = LLVMFunctionType(ptr, ft_args, 2, 0); */
+            /*     LLVMValueRef args[]   = {list_r.value, wrapper}; */
+            /*     result.value = LLVMBuildCall2(ctx->builder, ft, rt_fn, args, 2, "filter"); */
+            /*     result.type  = type_list(NULL); */
+            /*     return result; */
+            /* } */
+
             if (strcmp(head->symbol, "filter") == 0) {
                 if (ast->list.count != 3) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'filter' requires 2 arguments (pred xs)",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'filter' requires 2 arguments (fn xs)",
                                   parser_get_filename(), ast->line, ast->column);
                 }
                 LLVMTypeRef   ptr    = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
                 LLVMValueRef  raw_fn = codegen_fn_arg(ctx, ast->list.items[1]);
-                CodegenResult list_r = codegen_expr(ctx, ast->list.items[2]);
-
-                // filter predicate: elem -> bool/int (nonzero = keep)
-                // We wrap it as a unary wrapper; the runtime RT_PredFn calls it and
-                // checks rt_unbox_int(result) != 0
+                CodegenResult col_r  = codegen_expr(ctx, ast->list.items[2]);
                 Type *arg0_t, *arg1_t, *ret_t;
                 lookup_fn_types(ctx, ast->list.items[1], &arg0_t, &arg1_t, &ret_t);
                 LLVMValueRef wrapper = codegen_unary_wrapper(ctx, raw_fn, arg0_t, ret_t);
 
-                // rt_list_filter expects RT_PredFn: int(*)(RuntimeValue*)
-                // but we pass a unary wrapper (ptr->ptr) and cast in runtime via unbox_int
-                // So update rt_list_filter to accept RT_UnaryFn and unbox result:
+                if (col_r.type && col_r.type->kind == TYPE_SET) {
+                    LLVMValueRef raw_set = col_r.value;
+                    LLVMValueRef ub_fn   = get_rt_unbox_set(ctx);
+                    LLVMTypeRef  ub_ft   = LLVMFunctionType(ptr, &ptr, 1, 0);
+                    LLVMValueRef ub_a[]  = {raw_set};
+                    raw_set = LLVMBuildCall2(ctx->builder, ub_ft, ub_fn, ub_a, 1, "rawset");
+                    LLVMValueRef rt_fn    = get_rt_set_filter(ctx);
+                    LLVMTypeRef  ft_args[] = {ptr, ptr};
+                    LLVMTypeRef  ft        = LLVMFunctionType(ptr, ft_args, 2, 0);
+                    LLVMValueRef args[]    = {raw_set, wrapper};
+                    LLVMValueRef raw_out   = LLVMBuildCall2(ctx->builder, ft, rt_fn, args, 2, "set_filter");
+                    LLVMValueRef wrap_fn   = get_rt_value_set(ctx);
+                    LLVMTypeRef  wft       = LLVMFunctionType(ptr, &ptr, 1, 0);
+                    LLVMValueRef wa[]      = {raw_out};
+                    result.value = LLVMBuildCall2(ctx->builder, wft, wrap_fn, wa, 1, "setval");
+                    result.type  = type_set();
+                    return result;
+                }
+
                 LLVMValueRef rt_fn    = get_rt_list_filter(ctx);
                 LLVMTypeRef  ft_args[] = {ptr, ptr};
-                LLVMTypeRef  ft       = LLVMFunctionType(ptr, ft_args, 2, 0);
-                LLVMValueRef args[]   = {list_r.value, wrapper};
+                LLVMTypeRef  ft        = LLVMFunctionType(ptr, ft_args, 2, 0);
+                LLVMValueRef args[]    = {col_r.value, wrapper};
                 result.value = LLVMBuildCall2(ctx->builder, ft, rt_fn, args, 2, "filter");
                 result.type  = type_list(NULL);
                 return result;
@@ -3923,66 +4094,109 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 return result;
             }
 
+
             if (strcmp(head->symbol, "and") == 0) {
                 if (ast->list.count < 3) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'and' requires at least 2 arguments",
-                            parser_get_filename(), ast->line, ast->column);
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                LLVMTypeRef i1  = LLVMInt1TypeInContext(ctx->context);
+                LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+
+                CodegenResult first = codegen_expr(ctx, ast->list.items[1]);
+                LLVMValueRef acc;
+                if (first.type && first.type->kind == TYPE_BOOL) {
+                    acc = first.value;
+                } else if (type_is_float(first.type)) {
+                    acc = LLVMBuildFCmp(ctx->builder, LLVMRealONE, first.value,
+                                        LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0), "and0");
+                } else if (first.type && (first.type->kind == TYPE_SET   ||
+                                          first.type->kind == TYPE_MAP   ||
+                                          first.type->kind == TYPE_LIST  ||
+                                          first.type->kind == TYPE_UNKNOWN)) {
+                    /* pointer — non-null is truthy */
+                    LLVMValueRef null_ptr = LLVMConstNull(ptr);
+                    acc = LLVMBuildICmp(ctx->builder, LLVMIntNE, first.value, null_ptr, "and0");
+                } else {
+                    acc = LLVMBuildICmp(ctx->builder, LLVMIntNE, first.value,
+                                        LLVMConstInt(LLVMTypeOf(first.value), 0, 0), "and0");
                 }
 
-                LLVMTypeRef i1  = LLVMInt1TypeInContext(ctx->context);
-                LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
-
-                // Evaluate first condition
-                CodegenResult first = codegen_expr(ctx, ast->list.items[1]);
-                LLVMValueRef acc = type_is_float(first.type)
-                    ? LLVMBuildFCmp(ctx->builder, LLVMRealONE, first.value,
-                                    LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0), "and0")
-                    : LLVMBuildICmp(ctx->builder, LLVMIntNE, first.value,
-                                    LLVMConstInt(LLVMTypeOf(first.value), 0, 0), "and0");
-
-                // AND with remaining conditions
                 for (size_t i = 2; i < ast->list.count; i++) {
                     CodegenResult next = codegen_expr(ctx, ast->list.items[i]);
-                    LLVMValueRef cond = type_is_float(next.type)
-                        ? LLVMBuildFCmp(ctx->builder, LLVMRealONE, next.value,
-                                        LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0), "andi")
-                        : LLVMBuildICmp(ctx->builder, LLVMIntNE, next.value,
-                                        LLVMConstInt(LLVMTypeOf(next.value), 0, 0), "andi"); // use TypeOf not i64
+                    LLVMValueRef cond;
+                    if (next.type && next.type->kind == TYPE_BOOL) {
+                        cond = next.value;
+                    } else if (type_is_float(next.type)) {
+                        cond = LLVMBuildFCmp(ctx->builder, LLVMRealONE, next.value,
+                                             LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0), "andi");
+                    } else if (next.type && (next.type->kind == TYPE_SET   ||
+                                             next.type->kind == TYPE_MAP   ||
+                                             next.type->kind == TYPE_LIST  ||
+                                             next.type->kind == TYPE_UNKNOWN)) {
+                        LLVMValueRef null_ptr = LLVMConstNull(ptr);
+                        cond = LLVMBuildICmp(ctx->builder, LLVMIntNE, next.value, null_ptr, "andi");
+                    } else {
+                        cond = LLVMBuildICmp(ctx->builder, LLVMIntNE, next.value,
+                                             LLVMConstInt(LLVMTypeOf(next.value), 0, 0), "andi");
+                    }
                     acc = LLVMBuildAnd(ctx->builder, acc, cond, "and");
                 }
 
-                // Extend i1 to i64
-                result.value = LLVMBuildZExt(ctx->builder, acc, i64, "and_ext");
-                result.type  = type_int();
+                result.value = acc;
+                result.type  = type_bool();
                 return result;
             }
 
             if (strcmp(head->symbol, "or") == 0) {
                 if (ast->list.count < 3) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'or' requires at least 2 arguments",
-                            parser_get_filename(), ast->line, ast->column);
+                                  parser_get_filename(), ast->line, ast->column);
                 }
-
-                LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+                LLVMTypeRef i1  = LLVMInt1TypeInContext(ctx->context);
+                LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
 
                 CodegenResult first = codegen_expr(ctx, ast->list.items[1]);
-                LLVMValueRef acc = type_is_float(first.type)
-                    ? LLVMBuildFCmp(ctx->builder, LLVMRealONE, first.value,
-                                    LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0), "or0")
-                    : LLVMBuildICmp(ctx->builder, LLVMIntNE, first.value,
-                                    LLVMConstInt(LLVMTypeOf(first.value), 0, 0), "or0");
+                LLVMValueRef acc;
+                if (first.type && first.type->kind == TYPE_BOOL) {
+                    acc = first.value;
+                } else if (type_is_float(first.type)) {
+                    acc = LLVMBuildFCmp(ctx->builder, LLVMRealONE, first.value,
+                                        LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0), "or0");
+                } else if (first.type && (first.type->kind == TYPE_SET   ||
+                                          first.type->kind == TYPE_MAP   ||
+                                          first.type->kind == TYPE_LIST  ||
+                                          first.type->kind == TYPE_UNKNOWN)) {
+                    LLVMValueRef null_ptr = LLVMConstNull(ptr);
+                    acc = LLVMBuildICmp(ctx->builder, LLVMIntNE, first.value, null_ptr, "or0");
+                } else {
+                    acc = LLVMBuildICmp(ctx->builder, LLVMIntNE, first.value,
+                                        LLVMConstInt(LLVMTypeOf(first.value), 0, 0), "or0");
+                }
+
                 for (size_t i = 2; i < ast->list.count; i++) {
                     CodegenResult next = codegen_expr(ctx, ast->list.items[i]);
-                    LLVMValueRef cond = type_is_float(next.type)
-                        ? LLVMBuildFCmp(ctx->builder, LLVMRealONE, next.value,
-                                        LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0), "ori")
-                        : LLVMBuildICmp(ctx->builder, LLVMIntNE, next.value,
-                                        LLVMConstInt(LLVMTypeOf(next.value), 0, 0), "ori");
+                    LLVMValueRef cond;
+                    if (next.type && next.type->kind == TYPE_BOOL) {
+                        cond = next.value;
+                    } else if (type_is_float(next.type)) {
+                        cond = LLVMBuildFCmp(ctx->builder, LLVMRealONE, next.value,
+                                             LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0), "ori");
+                    } else if (next.type && (next.type->kind == TYPE_SET   ||
+                                             next.type->kind == TYPE_MAP   ||
+                                             next.type->kind == TYPE_LIST  ||
+                                             next.type->kind == TYPE_UNKNOWN)) {
+                        LLVMValueRef null_ptr = LLVMConstNull(ptr);
+                        cond = LLVMBuildICmp(ctx->builder, LLVMIntNE, next.value, null_ptr, "ori");
+                    } else {
+                        cond = LLVMBuildICmp(ctx->builder, LLVMIntNE, next.value,
+                                             LLVMConstInt(LLVMTypeOf(next.value), 0, 0), "ori");
+                    }
                     acc = LLVMBuildOr(ctx->builder, acc, cond, "or");
                 }
 
-                result.value = LLVMBuildZExt(ctx->builder, acc, i64, "or_ext");
-                result.type  = type_int();
+                result.value = acc;
+                result.type  = type_bool();
                 return result;
             }
 
@@ -4000,10 +4214,12 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             if (strcmp(head->symbol, "if") == 0) {
                 if (ast->list.count < 3 || ast->list.count > 4) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'if' requires 2 or 3 arguments",
-                            parser_get_filename(), ast->line, ast->column);
+                                  parser_get_filename(), ast->line, ast->column);
                 }
 
-                // Condition
+                LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+
+                /* Condition */
                 CodegenResult cond_result = codegen_expr(ctx, ast->list.items[1]);
                 LLVMValueRef cond_val;
                 if (type_is_float(cond_result.type)) {
@@ -4024,19 +4240,19 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 LLVMBasicBlockRef merge_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "ifmerge");
                 LLVMBuildCondBr(ctx->builder, cond_val, then_bb, else_bb);
 
-                // Then branch
+                /* Then branch */
                 LLVMPositionBuilderAtEnd(ctx->builder, then_bb);
                 CodegenResult then_result = codegen_expr(ctx, ast->list.items[2]);
                 LLVMBasicBlockRef then_end_bb = LLVMGetInsertBlock(ctx->builder);
 
-                // Else branch
+                /* Else branch */
                 LLVMPositionBuilderAtEnd(ctx->builder, else_bb);
                 CodegenResult else_result = {NULL, NULL};
                 if (ast->list.count == 4)
                     else_result = codegen_expr(ctx, ast->list.items[3]);
                 LLVMBasicBlockRef else_end_bb = LLVMGetInsertBlock(ctx->builder);
 
-                // No else or no values — branch both to merge, return dummy
+                /* No else or missing values — branch both to merge, return dummy */
                 if (ast->list.count != 4 || !then_result.value || !else_result.value
                     || !then_result.type || !else_result.type) {
                     LLVMPositionBuilderAtEnd(ctx->builder, then_end_bb);
@@ -4049,25 +4265,39 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     return result;
                 }
 
-                // Classify branch types
-                bool then_is_char   = then_result.type->kind == TYPE_CHAR;
-                bool else_is_char   = else_result.type->kind == TYPE_CHAR;
-                bool then_is_float  = type_is_float(then_result.type);
-                bool else_is_float  = type_is_float(else_result.type);
-                bool then_is_int    = type_is_integer(then_result.type);
-                bool else_is_int    = type_is_integer(else_result.type);
-                bool then_is_string = then_result.type->kind == TYPE_STRING;
-                bool else_is_string = else_result.type->kind == TYPE_STRING;
-                bool then_is_bool   = then_result.type->kind == TYPE_BOOL;
-                bool else_is_bool   = else_result.type->kind == TYPE_BOOL;
+                /* Classify branch types */
+                bool then_is_ptr = then_result.type->kind == TYPE_SET     ||
+                    then_result.type->kind == TYPE_MAP     ||
+                    then_result.type->kind == TYPE_LIST    ||
+                    then_result.type->kind == TYPE_STRING  ||
+                    then_result.type->kind == TYPE_SYMBOL  ||
+                    then_result.type->kind == TYPE_KEYWORD ||
+                    then_result.type->kind == TYPE_RATIO   ||
+                    then_result.type->kind == TYPE_UNKNOWN;
+                bool else_is_ptr = else_result.type->kind == TYPE_SET     ||
+                    else_result.type->kind == TYPE_MAP     ||
+                    else_result.type->kind == TYPE_LIST    ||
+                    else_result.type->kind == TYPE_STRING  ||
+                    else_result.type->kind == TYPE_SYMBOL  ||
+                    else_result.type->kind == TYPE_KEYWORD ||
+                    else_result.type->kind == TYPE_RATIO   ||
+                    else_result.type->kind == TYPE_UNKNOWN;
+                bool then_is_char  = then_result.type->kind == TYPE_CHAR;
+                bool else_is_char  = else_result.type->kind == TYPE_CHAR;
+                bool then_is_float = type_is_float(then_result.type);
+                bool else_is_float = type_is_float(else_result.type);
+                bool then_is_int   = type_is_integer(then_result.type);
+                bool else_is_int   = type_is_integer(else_result.type);
+                bool then_is_bool  = then_result.type->kind == TYPE_BOOL;
+                bool else_is_bool  = else_result.type->kind == TYPE_BOOL;
 
-                // Determine common PHI type
+                /* Determine common PHI type */
                 LLVMTypeRef phi_llvm_type;
                 Type       *phi_type;
 
-                if (then_is_string || else_is_string) {
-                    phi_llvm_type = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-                    phi_type      = type_string();
+                if (then_is_ptr || else_is_ptr) {
+                    phi_llvm_type = ptr;
+                    phi_type      = then_is_ptr ? then_result.type : else_result.type;
                 } else if (then_is_char || else_is_char) {
                     phi_llvm_type = LLVMInt8TypeInContext(ctx->context);
                     phi_type      = type_char();
@@ -4082,12 +4312,25 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     phi_type      = type_int();
                 }
 
-                // Coerce then value and branch to merge
+                /* Coerce then-value and branch to merge */
                 LLVMPositionBuilderAtEnd(ctx->builder, then_end_bb);
                 LLVMValueRef then_val = then_result.value;
                 if (!LLVMGetBasicBlockTerminator(then_end_bb)) {
-                    if (then_is_string || else_is_string) {
-                        // no coercion needed for pointers
+                    if (then_is_ptr || else_is_ptr) {
+                        /* Box scalar side if the other is a pointer */
+                        if (!then_is_ptr) {
+                            if (then_is_int) {
+                                LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+                                LLVMTypeRef bft = LLVMFunctionType(ptr, &i64, 1, 0);
+                                then_val = LLVMBuildCall2(ctx->builder, bft,
+                                                          get_rt_value_int(ctx), &then_val, 1, "box_then");
+                            } else if (then_is_float) {
+                                LLVMTypeRef dbl = LLVMDoubleTypeInContext(ctx->context);
+                                LLVMTypeRef bft = LLVMFunctionType(ptr, &dbl, 1, 0);
+                                then_val = LLVMBuildCall2(ctx->builder, bft,
+                                                          get_rt_value_float(ctx), &then_val, 1, "box_then");
+                            }
+                        }
                     } else if (then_is_char || else_is_char) {
                         if (!then_is_char && then_is_int)
                             then_val = LLVMBuildTrunc(ctx->builder, then_val, phi_llvm_type, "to_char");
@@ -4102,12 +4345,24 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 }
                 LLVMBasicBlockRef then_phi_bb = LLVMGetInsertBlock(ctx->builder);
 
-                // Coerce else value and branch to merge
+                /* Coerce else-value and branch to merge */
                 LLVMPositionBuilderAtEnd(ctx->builder, else_end_bb);
                 LLVMValueRef else_val = else_result.value;
                 if (!LLVMGetBasicBlockTerminator(else_end_bb)) {
-                    if (then_is_string || else_is_string) {
-                        // no coercion needed for pointers
+                    if (then_is_ptr || else_is_ptr) {
+                        if (!else_is_ptr) {
+                            if (else_is_int) {
+                                LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+                                LLVMTypeRef bft = LLVMFunctionType(ptr, &i64, 1, 0);
+                                else_val = LLVMBuildCall2(ctx->builder, bft,
+                                                          get_rt_value_int(ctx), &else_val, 1, "box_else");
+                            } else if (else_is_float) {
+                                LLVMTypeRef dbl = LLVMDoubleTypeInContext(ctx->context);
+                                LLVMTypeRef bft = LLVMFunctionType(ptr, &dbl, 1, 0);
+                                else_val = LLVMBuildCall2(ctx->builder, bft,
+                                                          get_rt_value_float(ctx), &else_val, 1, "box_else");
+                            }
+                        }
                     } else if (then_is_char || else_is_char) {
                         if (!else_is_char && else_is_int)
                             else_val = LLVMBuildTrunc(ctx->builder, else_val, phi_llvm_type, "to_char");
@@ -4122,7 +4377,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 }
                 LLVMBasicBlockRef else_phi_bb = LLVMGetInsertBlock(ctx->builder);
 
-                // Merge + PHI
+                /* Merge + PHI */
                 LLVMPositionBuilderAtEnd(ctx->builder, merge_bb);
                 LLVMValueRef phi = LLVMBuildPhi(ctx->builder, phi_llvm_type, "iftmp");
                 LLVMAddIncoming(phi, &then_val, &then_phi_bb, 1);

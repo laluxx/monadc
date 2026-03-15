@@ -202,7 +202,22 @@ static void rt_sym_table_init(void) {
     ADD(rt_set_from_array); ADD(rt_set_contains); ADD(rt_set_conj);
     ADD(rt_set_disj);       ADD(rt_set_conj_mut); ADD(rt_set_disj_mut);
     ADD(rt_set_get);        ADD(rt_set_count);    ADD(rt_set_seq);
-    ADD(rt_value_set);      ADD(rt_unbox_set);
+    ADD(rt_value_set);      ADD(rt_unbox_set);    /* ADD(rt_set_foldl); */
+    /* ADD(rt_set_map);        ADD(rt_set_filter); */
+
+    /* Hardcode HOF set functions since dlsym may not find static lib symbols */
+    g_rt_syms[g_rt_sym_count].name = "rt_set_foldl";
+    g_rt_syms[g_rt_sym_count].addr = (void *)rt_set_foldl;
+    g_rt_sym_count++;
+    g_rt_syms[g_rt_sym_count].name = "rt_set_map";
+    g_rt_syms[g_rt_sym_count].addr = (void *)rt_set_map;
+    g_rt_sym_count++;
+    g_rt_syms[g_rt_sym_count].name = "rt_set_filter";
+    g_rt_syms[g_rt_sym_count].addr = (void *)rt_set_filter;
+    g_rt_sym_count++;
+
+    fprintf(stderr, "[sym] rt_set_foldl = %p\n", dlsym(RTLD_DEFAULT, "rt_set_foldl"));
+
 
     ADD(__layout_ptr_set);
     ADD(__layout_ptr_get);

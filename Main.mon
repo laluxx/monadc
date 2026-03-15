@@ -575,12 +575,12 @@
 
 ;; Maps are represented as alternating keys and values surrounded by ={= and =}=.
 
-(define scores {"Fred"   1400
-                "Bob"    1240
-                "Angela" 1024}); Inferred as [scores :: Map]
+(define scores #{"Fred"   1400
+                 "Bob"    1240
+                 "Angela" 1024}); Inferred as [scores :: Map]
 
 ;; same as the last one!
-(define scores {"Fred" 1400 "Bob" 1240 "Angela" 1024})
+(define scores #{"Fred" 1400 "Bob" 1240 "Angela" 1024})
 
 ;;;;; Adding new key-value pairs
 
@@ -604,10 +604,10 @@
 
 (scores "Angela"); => 1024
 
-(define  directions {:north 0
-                     :east  1
-                     :south 2
-                     :west  3})
+(define  directions #{:north 0
+                      :east  1
+                      :south 2
+                      :west  3})
 
 (directions :north); => 0
 
@@ -648,14 +648,14 @@
 ;; The zipmap function can be used to "zip" together two sequences (the keys and vals) into a map:
 
 (define players {"Alice" "Bob" "Kelly"})
-(zipmap players (repeat 0)); => {"Kelly" 0, "Bob" 0, "Alice" 0}
+;; TODO (zipmap players (repeat 0)); => {"Kelly" 0, "Bob" 0, "Alice" 0}
 
 
 ;;;;; Combining maps
 
 ;; The =merge= function can be used to combine multiple maps into a single map:
 
-(define new-scores {"Angela" 300 "Jeff" 900})
+(define new-scores #{"Angela" 300 "Jeff" 900})
 
 (merge scores new-scores); => {"Fred" 1400, "Bob" 1240, "Jeff" 900, "Angela" 300}
 
@@ -664,8 +664,8 @@
 ;; If both maps contain the same key, the rightmost one wins.
 ;; Alternately, you can use =merge-with= to supply a function to invoke when there is a conflict:
 
-(define new-scores {"Fred" 550 "Angela" 900 "Sam" 1000})
-(merge-with + scores new-scores); => {"Sam" 1000, "Fred" 1950, "Bob" 1240, "Angela" 1924}
+(define new-scores #{"Fred" 550 "Angela" 900 "Sam" 1000})
+;; TODO (merge-with + scores new-scores); => {"Sam" 1000, "Fred" 1950, "Bob" 1240, "Angela" 1924}
 
 ;; In the case of a conflict, the function is called on both values to get the new value.
 
@@ -718,8 +718,8 @@
 
 ;;;; Pair
 
-;; (define ordered-pair (1,2)); Inferred as [ordered-pair :: Ordpair]
-;; (define [ordered-pair :: Pair :: Ordered] (1,2)); Manually typed
+(define ordered-pair (1,2)); Inferred as [ordered-pair :: Pair :: Ordered]
+(define [ordered-pair :: Pair :: Ordered] (1,2)); Manually typed
 
 ;; NOTE Ordered by itself is not a type, It's more like an enum.
 

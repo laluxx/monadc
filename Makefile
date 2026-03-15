@@ -39,6 +39,7 @@ $(RUNTIME_LIB): $(RUNTIME_OBJ)
 $(TARGET): $(OBJS) $(RUNTIME_LIB)
 	$(CC) $(CFLAGS) -rdynamic -o $@ $(OBJS) $(RUNTIME_LIB) $(LDFLAGS)
 
+
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 

@@ -84,6 +84,12 @@ typedef struct RuntimeValue {
 } RuntimeValue;
 
 
+/// HOF Callback Types
+
+typedef RuntimeValue *(*RT_UnaryFn)(RuntimeValue *);
+typedef RuntimeValue *(*RT_BinaryFn)(RuntimeValue *, RuntimeValue *);
+typedef int           (*RT_PredFn)(RuntimeValue *);
+
 /// ConsCell
 //
 //  One arena allocation per cons node.
@@ -143,7 +149,6 @@ typedef struct RuntimeMap {
 } RuntimeMap;
 
 
-
 /// Thunks
 
 RuntimeThunk *rt_thunk_of_value(RuntimeValue *val);
@@ -201,6 +206,10 @@ int64_t       rt_set_count(RuntimeSet *s);
 RuntimeList  *rt_set_seq(RuntimeSet *s);
 int           rt_set_equal(RuntimeSet *a, RuntimeSet *b);
 void          rt_set_free(RuntimeSet *s);
+
+RuntimeValue *rt_set_foldl(RuntimeSet *s, RuntimeValue *init, RT_BinaryFn fn);
+RuntimeList  *rt_set_map(RuntimeSet *s, RT_UnaryFn fn);
+RuntimeSet   *rt_set_filter(RuntimeSet *s, RT_UnaryFn pred);
 
 
 /// Map
@@ -315,14 +324,6 @@ void __monad_assert_fail(const char *label);
 RuntimeValue *rt_ast_to_runtime_value(AST *ast);
 char         *rt_string_take(const char *s, int64_t n);
 
-
-/// HOF Callback Types
-
-typedef RuntimeValue *(*RT_UnaryFn)(RuntimeValue *);
-typedef RuntimeValue *(*RT_BinaryFn)(RuntimeValue *, RuntimeValue *);
-typedef int           (*RT_PredFn)(RuntimeValue *);
-
-
 /// LLVM
 
 //// Runtime Declaration
@@ -381,6 +382,10 @@ LLVMValueRef get_rt_set_count(CodegenContext *ctx);
 LLVMValueRef get_rt_set_seq(CodegenContext *ctx);
 LLVMValueRef get_rt_value_set(CodegenContext *ctx);
 LLVMValueRef get_rt_unbox_set(CodegenContext *ctx);
+
+LLVMValueRef get_rt_set_foldl(CodegenContext *ctx);
+LLVMValueRef get_rt_set_map(CodegenContext *ctx);
+LLVMValueRef get_rt_set_filter(CodegenContext *ctx);
 
 //// Map
 

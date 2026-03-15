@@ -1029,7 +1029,6 @@ RuntimeValue *rt_set_get(RuntimeSet *s, RuntimeValue *key) {
     return rt_value_nil();
 }
 
-
 /* Internal: insert val into s without copying. Resizes in place if needed.
  * Returns s. Caller owns s.                                               */
 static RuntimeSet *set_insert(RuntimeSet *s, RuntimeValue *val) {
@@ -1144,6 +1143,45 @@ RuntimeSet *rt_set_from_array(RuntimeValue *array_rv) {
         if (v) set_insert(s, v);
     }
     return s;
+}
+
+/// Set — higher-order operations
+
+RuntimeValue *rt_set_foldl(RuntimeSet *s, RuntimeValue *init, RT_BinaryFn fn) {
+    RuntimeValue *acc = init;
+    if (!s) return acc;
+    for (size_t i = 0; i < s->capacity; i++) {
+        RuntimeValue *v = s->buckets[i];
+        if (v && v != TOMBSTONE)
+            acc = fn(acc, v);
+    }
+    return acc;
+}
+
+RuntimeList *rt_set_map(RuntimeSet *s, RT_UnaryFn fn) {
+    RuntimeList *out = heap_list_wrapper();
+    out->cell = NULL;
+    if (!s) return out;
+    for (size_t i = 0; i < s->capacity; i++) {
+        RuntimeValue *v = s->buckets[i];
+        if (v && v != TOMBSTONE)
+            rt_list_append(out, fn(v));
+    }
+    return out;
+}
+
+RuntimeSet *rt_set_filter(RuntimeSet *s, RT_UnaryFn pred) {
+    RuntimeSet *out = rt_set_new();
+    if (!s) return out;
+    for (size_t i = 0; i < s->capacity; i++) {
+        RuntimeValue *v = s->buckets[i];
+        if (v && v != TOMBSTONE) {
+            RuntimeValue *result = pred(v);
+            if (rt_unbox_int(result) != 0)
+                set_insert(out, v);
+        }
+    }
+    return out;
 }
 
 void rt_set_free(RuntimeSet *s) {
@@ -1706,18 +1744,6 @@ static RuntimeValue *_rt_lazy_map_tail_fn(void *e) {
     return rv;
 }
 
-/* RuntimeList *rt_list_map(RuntimeList *list, RT_UnaryFn fn) { */
-/*     RuntimeList *out = heap_list_wrapper(); */
-/*     out->cell = NULL; */
-/*     RuntimeList *cur = list; */
-/*     while (!rt_list_is_empty_list(cur)) { */
-/*         RuntimeValue *val    = rt_list_car(cur); */
-/*         RuntimeValue *mapped = fn(val); */
-/*         rt_list_append(out, mapped); */
-/*         cur = rt_list_cdr(cur); */
-/*     } */
-/*     return out; */
-/* } */
 
 RuntimeValue *rt_list_foldl(RuntimeList *list, RuntimeValue *init, RT_BinaryFn fn) {
     RuntimeValue *acc = init;
@@ -2194,6 +2220,9 @@ void declare_runtime_functions(CodegenContext *ctx) {
     DECL("rt_set_seq",         ptr, ptr);
     DECL("rt_value_set",       ptr, ptr);
     DECL("rt_unbox_set",       ptr, ptr);
+    DECL("rt_set_foldl",       ptr, ptr, ptr, ptr);
+    DECL("rt_set_map",         ptr, ptr, ptr);
+    DECL("rt_set_filter",      ptr, ptr, ptr);
 
     // --- Map ---
     DECL0("rt_map_new",        ptr);
@@ -2337,6 +2366,9 @@ GET_RUNTIME_FUNCTION(rt_set_count)
 GET_RUNTIME_FUNCTION(rt_set_seq)
 GET_RUNTIME_FUNCTION(rt_value_set)
 GET_RUNTIME_FUNCTION(rt_unbox_set)
+GET_RUNTIME_FUNCTION(rt_set_foldl)
+GET_RUNTIME_FUNCTION(rt_set_map)
+GET_RUNTIME_FUNCTION(rt_set_filter)
 
 GET_RUNTIME_FUNCTION(rt_map_new)
 GET_RUNTIME_FUNCTION(rt_map_assoc)
