@@ -22,8 +22,9 @@ typedef enum {
     TYPE_SET,
     TYPE_MAP,
     TYPE_UNKNOWN,
-    TYPE_VAR,    // HM type variable — 'a, 'b, etc.
-    TYPE_ARROW,  // function type — param -> return
+    TYPE_VAR,     // HM type variable — 'a, 'b, etc.
+    TYPE_ARROW,   // function type — param -> return
+    TYPE_VARIADIC // List 'a rest params.
 } TypeKind;
 
 

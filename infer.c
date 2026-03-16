@@ -708,7 +708,11 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         for (int i = 0; i < ast->lambda.param_count; i++) {
             ASTParam *p = &ast->lambda.params[i];
             Type *pt;
-            if (p->type_name) {
+            if (p->is_rest) {
+                // Rest param gets type List 'a — body sees it as a list
+                Type *elem = infer_fresh(ctx);
+                pt = type_list(elem);
+            } else if (p->type_name) {
                 pt = type_from_name(p->type_name);
                 if (!pt) pt = infer_fresh(ctx);
             } else {
@@ -828,6 +832,78 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             break;
         }
 
+        /* ---- n-ary arithmetic — (+ a b c ...) ----------------------- */
+        if (head->type == AST_SYMBOL &&
+            (strcmp(head->symbol, "+") == 0 ||
+             strcmp(head->symbol, "-") == 0 ||
+             strcmp(head->symbol, "*") == 0 ||
+             strcmp(head->symbol, "/") == 0) &&
+            ast->list.count >= 2) {
+            Type *num_t = infer_fresh(ctx);
+            for (size_t i = 1; i < ast->list.count; i++) {
+                Type *at = infer_expr(ctx, ast->list.items[i]);
+                infer_constrain(ctx, at, num_t,
+                                ast->list.items[i]->line,
+                                ast->list.items[i]->column);
+            }
+            result = num_t;
+            break;
+        }
+
+        /* ---- variadic call: look up if head is a variadic function --- */
+        if (head->type == AST_SYMBOL) {
+            TypeScheme *sc = infer_env_lookup(ctx->env, head->symbol);
+            if (sc) {
+                // Walk arrow chain to find if last param is List type
+                Type *t = subst_apply(ctx->subst, sc->type);
+                // Instantiate fresh
+                if (sc->quantified_count > 0)
+                    t = infer_instantiate(ctx, sc);
+                // Count arrow params
+                int arrow_count = 0;
+                Type *walk = t;
+                bool last_is_list = false;
+                while (walk && walk->kind == TYPE_ARROW) {
+                    arrow_count++;
+                    if (walk->arrow_ret && walk->arrow_ret->kind != TYPE_ARROW) {
+                        // last param
+                        if (walk->arrow_param && walk->arrow_param->kind == TYPE_LIST)
+                            last_is_list = true;
+                    }
+                    walk = walk->arrow_ret;
+                }
+                if (last_is_list && (int)ast->list.count - 1 > arrow_count - 1) {
+                    // Variadic call — infer non-rest args normally,
+                    // constrain all rest args to the list element type
+                    Type *list_elem = infer_fresh(ctx);
+                    // re-walk to get param types
+                    Type *ft = t;
+                    int regular = arrow_count - 1;
+                    for (int i = 0; i < regular && i < (int)ast->list.count - 1; i++) {
+                        if (ft->kind == TYPE_ARROW) {
+                            Type *at = infer_expr(ctx, ast->list.items[i + 1]);
+                            infer_constrain(ctx, at, ft->arrow_param,
+                                           ast->list.items[i+1]->line,
+                                           ast->list.items[i+1]->column);
+                            ft = ft->arrow_ret;
+                        }
+                    }
+                    // Rest args
+                    for (int i = regular; i < (int)ast->list.count - 1; i++) {
+                        Type *at = infer_expr(ctx, ast->list.items[i + 1]);
+                        infer_constrain(ctx, at, list_elem,
+                                       ast->list.items[i+1]->line,
+                                       ast->list.items[i+1]->column);
+                    }
+                    // Return type is the final arrow return
+                    while (ft && ft->kind == TYPE_ARROW) ft = ft->arrow_ret;
+                    result = ft ? ft : infer_fresh(ctx);
+                    break;
+                }
+            }
+        }
+
+
         /* ---- function application ------------------------------------ */
         Type *fn_t  = infer_expr(ctx, head);
         Type *ret_t = infer_fresh(ctx);
@@ -918,12 +994,21 @@ void infer_register_builtins(InferCtx *ctx) {
         ctx->env);
     infer_env_insert(ctx->env, "filter", filter_sc);
 
-    /* Arithmetic: Int → Int → Int */
-    TypeScheme *arith_sc = scheme_mono(
-        type_arrow(type_int(), type_arrow(type_int(), type_int())));
-    infer_env_insert(ctx->env, "+",  arith_sc);
-    infer_env_insert(ctx->env, "-",  arith_sc);
-    infer_env_insert(ctx->env, "*",  arith_sc);
+    // Arithmetic: ∀a. a -> List a -> a
+    // The first arg is the accumulator, rest args come as a list.
+    // HM treats (+ x y z) as variadic — special-cased in infer_expr.
+    // Register as binary for 2-arg calls, handle n-ary in infer_expr.
+    Type *aa = infer_fresh(ctx);
+    TypeScheme *arith_sc = infer_generalise(ctx,
+        type_arrow(aa, type_arrow(aa, aa)), ctx->env);
+    infer_env_insert(ctx->env, "+", arith_sc);
+    infer_env_insert(ctx->env, "-", arith_sc);
+    infer_env_insert(ctx->env, "*", arith_sc);
+    Type *da = infer_fresh(ctx);
+    TypeScheme *div_sc = infer_generalise(ctx,
+        type_arrow(da, type_arrow(da, da)), ctx->env);
+    infer_env_insert(ctx->env, "/", div_sc);
+
 
     /* Comparison: ∀a. a → a → Bool */
     Type *ca = infer_fresh(ctx);

@@ -254,11 +254,22 @@ static LLVMValueRef codegen_specialize(CodegenContext *ctx,
 
         if (!param_type || param_type->kind == TYPE_UNKNOWN ||
             param_type->kind == TYPE_VAR) {
-            /* Polymorphic param — substitute directly from ts */
+            // Try direct substitution first (i < ts->count)
             if (i < ts->count) {
                 param_type = ts->to[i];
-            } else if (i < entry->param_count) {
-                param_type = mono_apply_subst(entry->params[i].type, ts);
+            } else {
+                // More params than type vars — all extra params get
+                // the same type as the first substitution (e.g. add x y
+                // with one type var 'b means both x and y are 'b)
+                param_type = mono_apply_subst(
+                    (i < entry->param_count) ? entry->params[i].type
+                                             : type_unknown(),
+                    ts);
+                // If still unknown, use first concrete type
+                if (!param_type || param_type->kind == TYPE_UNKNOWN ||
+                    param_type->kind == TYPE_VAR) {
+                    if (ts->count > 0) param_type = ts->to[0];
+                }
             }
         }
         if (!param_type || param_type->kind == TYPE_UNKNOWN)
@@ -1835,12 +1846,12 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
     switch (ast->type) {
     case AST_NUMBER: {
-        fprintf(stderr, ">>> CODEGEN NUMBER: literal_str='%s', number=%g\n",
-                ast->literal_str ? ast->literal_str : "NULL", ast->number);
+        /* fprintf(stderr, ">>> CODEGEN NUMBER: literal_str='%s', number=%g\n", */
+        /*         ast->literal_str ? ast->literal_str : "NULL", ast->number); */
 
         Type *num_type = infer_literal_type(ast->number, ast->literal_str);
 
-        fprintf(stderr, ">>> INFERRED TYPE: %s\n", type_to_string(num_type));
+        /* fprintf(stderr, ">>> INFERRED TYPE: %s\n", type_to_string(num_type)); */
 
         result.type = num_type;
 
@@ -2013,10 +2024,12 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
         }
 
 
+        // TODO They should work then remove this error
         if (entry->kind == ENV_BUILTIN) {
             CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' is a built-in and cannot be passed as a value",
                           parser_get_filename(), ast->line, ast->column, ast->symbol);
         }
+
         if (!entry->type) {
             CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' has no type information",
                           parser_get_filename(), ast->line, ast->column, ast->symbol);
@@ -2457,6 +2470,15 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     bool all_params_unknown = (total_params > 0);
                     for (int i = 0; i < total_params; i++) {
                         ASTParam *param = &lambda->lambda.params[i];
+                        // Rest param — receives a runtime List of extra args
+                        if (param->is_rest) {
+                            env_params[i].name = strdup(param->name);
+                            env_params[i].type = type_list(NULL);
+                            param_types[use_closure_abi ? i + 1 : i] =
+                                LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                            all_params_unknown = false;
+                            continue;
+                        }
                         Type *param_type = NULL;
                         if (param->type_name) {
                             param_type = type_from_name(param->type_name);
@@ -2678,9 +2700,55 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     LLVMValueRef ret_value;
 
                     if (is_poly_stub) {
-                        // Polymorphic stub — body never called directly.
-                        // Monomorphization generates typed specializations.
-                        ret_value = LLVMConstPointerNull(ptr_t);
+                        // Polymorphic stub — when called via closure dispatch,
+                        // unbox args, call a runtime dispatch helper, box result.
+                        // For now emit an rt_unbox_int + add + rt_value_int
+                        // for the common numeric case.
+                        // Real fix: generate a dispatch thunk per call site type.
+                        //
+                        // Emit: unbox all ptr params, do the operation, box result
+                        // This only works if all params are the same numeric type —
+                        // which is true for +, -, *, add, mul etc.
+                        LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+
+                        // Unbox all params and re-do the body with i64 types
+                        // by inserting them into a child env with TYPE_INT
+                        Env *stub_env = env_create_child(ctx->env);
+                        for (int i = 0; i < total_params; i++) {
+                            int llvm_idx = use_closure_abi ? i + 1 : i;
+                            LLVMValueRef raw_param = LLVMGetParam(func, llvm_idx);
+                            LLVMTypeRef uft = LLVMFunctionType(i64, &ptr_t, 1, 0);
+                            LLVMValueRef unboxed = LLVMBuildCall2(ctx->builder, uft,
+                                                      get_rt_unbox_int(ctx),
+                                                      &raw_param, 1, "stub_ub");
+                            LLVMValueRef alloca = LLVMBuildAlloca(ctx->builder,
+                                                                   i64, env_params[i].name);
+                            LLVMBuildStore(ctx->builder, unboxed, alloca);
+                            env_insert(stub_env, env_params[i].name, type_int(), alloca);
+                        }
+                        Env *prev_env = ctx->env;
+                        ctx->env = stub_env;
+                        const char *prev_fn = ctx->current_function_name;
+                        ctx->current_function_name = var_name;
+                        CodegenResult stub_body = {NULL, NULL};
+                        for (int i = 0; i < lambda->lambda.body_count; i++)
+                            stub_body = codegen_expr(ctx, lambda->lambda.body_exprs[i]);
+                        ctx->current_function_name = prev_fn;
+                        ctx->env = prev_env;
+                        env_free(stub_env);
+
+                        if (stub_body.value) {
+                            // Box result as int
+                            LLVMValueRef box_val = stub_body.value;
+                            if (LLVMTypeOf(box_val) != i64)
+                                box_val = LLVMBuildSExtOrBitCast(ctx->builder,
+                                                                  box_val, i64, "ext");
+                            LLVMTypeRef bft = LLVMFunctionType(ptr_t, &i64, 1, 0);
+                            ret_value = LLVMBuildCall2(ctx->builder, bft,
+                                           get_rt_value_int(ctx), &box_val, 1, "boxed");
+                        } else {
+                            ret_value = LLVMConstPointerNull(ptr_t);
+                        }
 
                     } else {
                         CodegenResult body_result = {NULL, NULL};
@@ -5366,7 +5434,6 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 return result;
             }
 
-
             // Arithmetic operators
             if (strcmp(head->symbol, "+") == 0 ||
                 strcmp(head->symbol, "-") == 0 ||
@@ -5629,11 +5696,27 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 // Check argument count
                 int declared_params = entry->param_count - entry->lifted_count;
                 size_t arg_count = ast->list.count - 1;
-                if ((int)arg_count > declared_params) {
+
+                // Find if last param is a rest param
+                bool has_rest = (entry->param_count > 0 &&
+                                 entry->source_ast &&
+                                 entry->source_ast->type == AST_LAMBDA &&
+                                 entry->source_ast->lambda.param_count > 0 &&
+                                 entry->source_ast->lambda.params[
+                                     entry->source_ast->lambda.param_count - 1
+                                 ].is_rest);
+
+                int required_params = has_rest ? declared_params - 1 : declared_params;
+
+                if (!has_rest && (int)arg_count > declared_params) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: function '%s' expects %d arguments, got %zu",
                             parser_get_filename(), ast->line, ast->column,
                             head->symbol, declared_params, arg_count);
                 }
+                if ((int)arg_count < required_params) {
+                    // Partial application — handled below
+                }
+
 
                 // Partial application — return a closure capturing supplied args
                 if ((int)arg_count < declared_params) {
@@ -5769,7 +5852,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 }
 
                 /* ── Monomorphization: specialize if polymorphic ─────────── */
-                if (entry->scheme && entry->scheme->quantified_count > 0
+                if (!has_rest &&
+                    entry->scheme && entry->scheme->quantified_count > 0
                     && entry->source_ast) {
                     // Collect concrete argument types from call site
                     int        nq      = entry->scheme->quantified_count;
@@ -5801,11 +5885,13 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         if (!ts.to[i] || ts.to[i]->kind == TYPE_VAR ||
                             ts.to[i]->kind == TYPE_UNKNOWN ||
                             ts.to[i]->kind == TYPE_FN ||
-                            ts.to[i]->kind == TYPE_ARROW) {
+                            ts.to[i]->kind == TYPE_ARROW ||
+                            ts.to[i]->kind == TYPE_LIST) {
                             all_concrete = false;
                             break;
                         }
                     }
+
 
 
                     if (all_concrete) {
@@ -5830,27 +5916,52 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                                     CodegenResult ar = codegen_expr(ctx,
                                                           ast->list.items[i + 1]);
                                     call_args[i] = ar.value;
-                                    call_types[i] = type_to_llvm(ctx,
-                                                        spec_e->params[i].type);
+                                    // Use actual LLVM param type from the
+                                    // specialized function, not env entry
+                                    call_types[i] = LLVMTypeOf(
+                                        LLVMGetParam(spec_fn, i));
                                     // Coerce if needed
-                                    LLVMTypeRef at = LLVMTypeOf(ar.value);
-                                    LLVMTypeRef et = call_types[i];
+                                    LLVMTypeRef at   = LLVMTypeOf(ar.value);
+                                    LLVMTypeRef et   = call_types[i];
                                     LLVMTypeRef i64t = LLVMInt64TypeInContext(ctx->context);
                                     LLVMTypeRef dblt = LLVMDoubleTypeInContext(ctx->context);
+                                    LLVMTypeRef i1t  = LLVMInt1TypeInContext(ctx->context);
                                     if (at != et) {
-                                        if (et == i64t && at == LLVMInt1TypeInContext(ctx->context))
-                                            call_args[i] = LLVMBuildZExt(ctx->builder, ar.value, i64t, "coerce");
+                                        if (et == i64t && at == i1t)
+                                            call_args[i] = LLVMBuildZExt(ctx->builder,
+                                                               ar.value, i64t, "coerce");
                                         else if (et == dblt && type_is_integer(ar.type))
-                                            call_args[i] = LLVMBuildSIToFP(ctx->builder, ar.value, dblt, "coerce");
+                                            call_args[i] = LLVMBuildSIToFP(ctx->builder,
+                                                               ar.value, dblt, "coerce");
+                                        else if (et == i64t && at == dblt)
+                                            call_args[i] = LLVMBuildFPToSI(ctx->builder,
+                                                               ar.value, i64t, "coerce");
                                     }
                                 }
 
-                                LLVMTypeRef call_ft = LLVMFunctionType(
-                                    type_to_llvm(ctx, spec_e->return_type),
-                                    call_types, sargs, 0);
+                                for (int i = 0; i < sargs; i++)
+                                    fprintf(stderr, "  arg[%d] type_kind=%d llvm_type=%d\n",
+                                            i, spec_e->params[i].type->kind,
+                                            (int)LLVMGetTypeKind(call_types[i]));
+                                fprintf(stderr, "  ret type_kind=%d\n",
+                                        spec_e->return_type->kind);
 
+                                LLVMTypeRef spec_ret = type_to_llvm(ctx, spec_e->return_type);
+                                LLVMTypeRef call_ft = LLVMFunctionType(
+                                    spec_ret, call_types, sargs, 0);
+                                // Verify spec_fn return type matches
+                                LLVMTypeRef actual_ret = LLVMGetReturnType(
+                                    LLVMGlobalGetValueType(spec_fn));
+                                if (actual_ret != spec_ret) {
+                                    // Use the actual function's return type
+                                    call_ft = LLVMFunctionType(actual_ret,
+                                                               call_types, sargs, 0);
+                                    spec_ret = actual_ret;
+                                }
                                 result.value = LLVMBuildCall2(ctx->builder,
                                     call_ft, spec_fn, call_args, sargs, "mono_call");
+                                result.type  = type_clone(spec_e->return_type);
+
                                 result.type  = type_clone(spec_e->return_type);
 
                                 fprintf(stderr, "MONO [%s :: %s]\n",
@@ -5924,10 +6035,30 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 int total_args = declared_params + entry->lifted_count;
                 LLVMValueRef *args = malloc(sizeof(LLVMValueRef) * (total_args ? total_args : 1));
                 for (int i = 0; i < declared_params; i++) {
+                    if (has_rest && i == declared_params - 1) {
+                        // Collect remaining args into a runtime list
+                        LLVMTypeRef  ptr    = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                        LLVMValueRef list_fn = get_rt_list_new(ctx);
+                        LLVMTypeRef  list_ft = LLVMFunctionType(ptr, NULL, 0, 0);
+                        LLVMValueRef list    = LLVMBuildCall2(ctx->builder, list_ft,
+                                                              list_fn, NULL, 0, "rest_list");
+                        LLVMValueRef append_fn = get_rt_list_append(ctx);
+                        LLVMTypeRef  ap[]      = {ptr, ptr};
+                        LLVMTypeRef  aft       = LLVMFunctionType(
+                            LLVMVoidTypeInContext(ctx->context), ap, 2, 0);
+                        for (size_t j = i + 1; j < ast->list.count; j++) {
+                            CodegenResult er = codegen_expr(ctx, ast->list.items[j]);
+                            LLVMValueRef  bv = codegen_box(ctx, er.value, er.type);
+                            LLVMValueRef  aa[] = {list, bv};
+                            LLVMBuildCall2(ctx->builder, aft, append_fn, aa, 2, "");
+                        }
+                        args[i] = list;
+                        break;
+                    }
                     CodegenResult arg_result = codegen_expr(ctx, ast->list.items[i + 1]);
+
                     Type *expected_type = entry->params[i].type;
                     Type *actual_type   = arg_result.type;
-
 
                     LLVMValueRef converted_arg = arg_result.value;
 

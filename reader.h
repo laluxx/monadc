@@ -30,6 +30,7 @@ typedef enum {
 typedef struct ASTParam {
     char *name;       // parameter name
     char *type_name;  // type annotation string, NULL if absent
+    bool is_rest;     // Variadic . args
 } ASTParam;
 
 // A single field in a layout definition

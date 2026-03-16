@@ -351,6 +351,7 @@ AST *ast_clone(AST *ast) {
                                           ? strdup(ast->lambda.params[i].name) : NULL;
             c->lambda.params[i].type_name = ast->lambda.params[i].type_name
                                           ? strdup(ast->lambda.params[i].type_name) : NULL;
+            c->lambda.params[i].is_rest   = ast->lambda.params[i].is_rest;
         }
         c->lambda.return_type = ast->lambda.return_type ? strdup(ast->lambda.return_type) : NULL;
         c->lambda.docstring   = ast->lambda.docstring   ? strdup(ast->lambda.docstring)   : NULL;
@@ -842,6 +843,14 @@ Token lexer_next_token(Lexer *lex) {
         return tok;
     }
 
+    // Standalone . for rest params (define (f . args) ...)
+    if (c == '.' && peek_ahead(lex, 1) == ' ') {
+        advance(lex);
+        tok.type  = TOK_SYMBOL;
+        tok.value = my_strdup(".");
+        return tok;
+    }
+
 
     // Decimal number
     if (is_digit(c)) {
@@ -904,8 +913,6 @@ Token lexer_next_token(Lexer *lex) {
         tok.type  = TOK_SYMBOL; return tok;
     }
 
-    /* fprintf(stderr, "Unexpected character '%c' at %d:%d\n", c, lex->line, lex->column); */
-    /* exit(1); */
     READER_ERROR(lex->line, lex->column, "unexpected character '%c'", c);
 }
 
@@ -924,7 +931,7 @@ static void parser_init(Parser *p, Lexer *lex) {
 static AST *parse_expr(Parser *p);
 
 static ASTParam parse_one_param(Parser *p) {
-    ASTParam param = {NULL, NULL};
+    ASTParam param = {NULL, NULL, false};
 
     if (p->current.type == TOK_SYMBOL) {
         param.name = my_strdup(p->current.value);
@@ -951,7 +958,25 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
 
     while (p->current.type != TOK_RPAREN &&
            p->current.type != TOK_EOF) {
-
+        // Rest parameter: . args
+        if (p->current.type == TOK_SYMBOL &&
+            strcmp(p->current.value, ".") == 0) {
+            p->current = lexer_next_token(p->lexer);
+            if (p->current.type != TOK_SYMBOL)
+                compiler_error(p->current.line, p->current.column,
+                               "Expected parameter name after '.'");
+            if (count >= capacity) {
+                capacity = capacity == 0 ? 4 : capacity * 2;
+                params   = realloc(params, sizeof(ASTParam) * capacity);
+            }
+            params[count].name      = my_strdup(p->current.value);
+            params[count].type_name = NULL;
+            params[count].is_rest   = true;
+            count++;
+            p->current = lexer_next_token(p->lexer);
+            // Rest param must be last — skip to closing paren
+            break;
+        }
         if (p->current.type == TOK_LBRACKET) {
             /* Typed or annotated parameter: [name] or [name :: Type] */
             p->current = lexer_next_token(p->lexer);
@@ -989,11 +1014,11 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                     }
                     params[count].name      = sym;
                     params[count].type_name = NULL;
+                    params[count].is_rest   = false;
                     count++;
                 }
             }
             /* If next token is [ or another ->, just continue the loop */
-
         } else if (p->current.type == TOK_SYMBOL) {
             /* Bare symbol NOT after -> — always a parameter */
             char *sym  = my_strdup(p->current.value);
@@ -1004,7 +1029,9 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
             }
             params[count].name      = sym;
             params[count].type_name = NULL;
+            params[count].is_rest   = false;
             count++;
+
 
         } else {
             compiler_error(p->current.line, p->current.column,

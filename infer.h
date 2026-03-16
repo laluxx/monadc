@@ -16,23 +16,22 @@ typedef struct InferCtx InferCtx;
 //  gets a unique integer ID.  During unification a variable is either
 //  free (bound == NULL) or resolved (bound points to a concrete type or
 //  another variable).  The union-find structure lives in the Substitution.
-
+//
 #define INFER_MAX_VARS 4096
 
 
 /// Type Schemes
 //
-//  A type scheme ∀a b … T represents a polymorphic type.
+//  A type scheme ∀a b ... T represents a polymorphic type.
 //  quantified[] lists the IDs of the universally-quantified variables.
 //  type is the body of the scheme (may contain TYPE_VAR nodes whose IDs
 //  are in quantified[]).
 //
 //  Example:
-//    identity :: ∀a. a → a
+//    identity :: ∀a. a -> a
 //      .quantified     = {0}
 //      .quantified_count = 1
 //      .type           = Arrow(Var(0), Var(0))
-
 typedef struct TypeScheme {
     int   *quantified;
     int    quantified_count;
@@ -54,15 +53,13 @@ Type *infer_instantiate_with_subst(InferCtx *ctx, TypeScheme *scheme,
                                     TypeSubst *ts);
 
 
-
-
 /// Type Inference Environment
 //
 //  Maps names to their type schemes.  Separate from the codegen Env —
 //  the infer env is purely for type-level bookkeeping and is discarded
 //  after inference.  It forms a singly-linked scope chain exactly like
 //  the codegen Env.
-
+//
 typedef struct InferEnvEntry {
     char                 *name;
     TypeScheme           *scheme;
@@ -91,22 +88,22 @@ TypeScheme *infer_env_lookup(InferEnv *env, const char *name);
 //  union_find[id] = id means the variable is its own root (free).
 //  union_find[id] = other_id means the variable is aliased to other_id.
 //  bound[id] is non-NULL only at root nodes, and holds the concrete type.
-
+//
 typedef struct Substitution {
-    int   *union_find;   /* parent pointers for union-find          */
-    Type **bound;        /* concrete type bound at each root         */
-    int    capacity;     /* number of slots allocated                */
-    int    next_id;      /* next fresh variable ID                   */
+    int   *union_find;   // parent pointers for union-find
+    Type **bound;        // concrete type bound at each root
+    int    capacity;     // number of slots allocated
+    int    next_id;      // next fresh variable ID
 } Substitution;
 
 Substitution *subst_create(void);
 void          subst_free(Substitution *s);
-int           subst_fresh(Substitution *s);          /* allocate a new free variable   */
-int           subst_find(Substitution *s, int id);   /* path-compressed find           */
-bool          subst_union(Substitution *s, int a, int b); /* union two var roots       */
-void          subst_bind(Substitution *s, int id, Type *t); /* bind root to concrete t */
-Type         *subst_apply(Substitution *s, Type *t);  /* walk & substitute             */
-Type         *subst_apply_shallow(Substitution *s, Type *t); /* one-level dereference  */
+int           subst_fresh(Substitution *s);          // allocate a new free variable
+int           subst_find(Substitution *s, int id);   // path-compressed find
+bool          subst_union(Substitution *s, int a, int b); // union two var roots
+void          subst_bind(Substitution *s, int id, Type *t); // bind root to concrete t
+Type         *subst_apply(Substitution *s, Type *t);  // walk & substitute
+Type         *subst_apply_shallow(Substitution *s, Type *t); // one-level dereference
 
 
 /// Constraint
@@ -114,7 +111,7 @@ Type         *subst_apply_shallow(Substitution *s, Type *t); /* one-level derefe
 //  Unification constraints T1 ~ T2 are collected during inference and
 //  solved in a second pass.  Keeping them separate from the walk makes
 //  error reporting easier and allows constraint reordering in the future.
-
+//
 typedef struct TypeConstraint {
     Type *lhs;
     Type *rhs;
@@ -128,14 +125,14 @@ typedef struct TypeConstraint {
 //  Carries all mutable state needed during a single inference run.
 //  One InferCtx is created per top-level definition (or REPL expression)
 //  and discarded afterwards.
-
+//
 typedef struct InferCtx {
     Substitution    *subst;
     TypeConstraint  *constraints;
     size_t           constraint_count;
     size_t           constraint_cap;
-    InferEnv        *env;            /* current type environment          */
-    const char      *filename;       /* for error messages                */
+    InferEnv        *env;            // current type environment
+    const char      *filename;       // for error messages
     bool             had_error;
     char             error_msg[512];
 } InferCtx;
@@ -146,8 +143,8 @@ void      infer_ctx_free(InferCtx *ctx);
 
 /// Fresh Type Variables
 
-Type *infer_fresh(InferCtx *ctx);          /* allocate a fresh TYPE_VAR         */
-Type *infer_fresh_named(InferCtx *ctx, const char *hint); /* same, with debug name */
+Type *infer_fresh(InferCtx *ctx);          // allocate a fresh TYPE_VAR
+Type *infer_fresh_named(InferCtx *ctx, const char *hint); // same, with debug name
 
 
 /// Constraint Generation
@@ -165,7 +162,7 @@ bool infer_occurs(Substitution *s, int var_id, Type *t);
 //  Runs Robinson's unification algorithm over all collected constraints.
 //  Mutates ctx->subst in place.  Returns false and sets ctx->error_msg
 //  on the first type error.
-
+//
 bool infer_unify_all(InferCtx *ctx);
 bool infer_unify_one(InferCtx *ctx, Type *a, Type *b, int line, int col);
 
@@ -178,7 +175,7 @@ bool infer_unify_one(InferCtx *ctx, Type *a, Type *b, int line, int col);
 //
 //  All constraints are deferred into ctx->constraints; actual solving
 //  happens in infer_unify_all after the full expression is walked.
-
+//
 Type *infer_expr(InferCtx *ctx, AST *ast);
 
 
@@ -190,7 +187,7 @@ Type *infer_expr(InferCtx *ctx, AST *ast);
 //
 //  instantiate takes a TypeScheme and replaces each quantified variable
 //  with a fresh type variable, returning a new monomorphic Type.
-
+//
 TypeScheme *infer_generalise(InferCtx *ctx, Type *t, InferEnv *outer_env);
 Type       *infer_instantiate(InferCtx *ctx, TypeScheme *scheme);
 
@@ -206,7 +203,7 @@ void        scheme_free(TypeScheme *s);
 //
 //  Collect the set of free type-variable IDs in a type or environment.
 //  Used by generalise to determine which variables to quantify.
-
+//
 void infer_free_vars_type(Substitution *s, Type *t, int *out, int *count, int cap);
 void infer_free_vars_env(InferCtx *ctx, InferEnv *env, int *out, int *count, int cap);
 
@@ -215,7 +212,7 @@ void infer_free_vars_env(InferCtx *ctx, InferEnv *env, int *out, int *count, int
 //
 //  After unification, walk the AST and replace every inferred_type with
 //  its fully-substituted form.  This is the "zonking" pass.
-
+//
 void infer_zonk_ast(InferCtx *ctx, AST *ast);
 
 
@@ -223,7 +220,7 @@ void infer_zonk_ast(InferCtx *ctx, AST *ast);
 //
 //  Populate an InferEnv with the type schemes of all built-in functions
 //  and operators so the inferencer can type-check calls to them.
-
+//
 void infer_register_builtins(InferCtx *ctx);
 
 
