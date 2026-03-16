@@ -482,6 +482,51 @@ Type *infer_instantiate(InferCtx *ctx, TypeScheme *scheme) {
     return result;
 }
 
+Type *infer_instantiate_with_subst(InferCtx *ctx, TypeScheme *scheme,
+                                    TypeSubst *ts) {
+    ts->count = scheme->quantified_count;
+    ts->from  = malloc(sizeof(int)   * (ts->count ? ts->count : 1));
+    ts->to    = malloc(sizeof(Type*) * (ts->count ? ts->count : 1));
+
+    if (scheme->quantified_count == 0) {
+        return subst_apply(ctx->subst, scheme->type);
+    }
+
+    Substitution *s = ctx->subst;
+    int fresh_ids[INFER_MAX_VARS];
+
+    for (int i = 0; i < scheme->quantified_count; i++) {
+        fresh_ids[i] = subst_fresh(s);
+        ts->from[i]  = scheme->quantified[i];
+    }
+
+    /* Temporarily bind quantified vars to fresh vars */
+    for (int i = 0; i < scheme->quantified_count; i++) {
+        int qv   = scheme->quantified[i];
+        int root = subst_find(s, qv);
+        subst_bind(s, root, type_var(fresh_ids[i]));
+    }
+
+    Type *result = subst_apply(s, scheme->type);
+
+    /* Clear temporary bindings */
+    for (int i = 0; i < scheme->quantified_count; i++) {
+        int qv   = scheme->quantified[i];
+        int root = subst_find(s, qv);
+        s->bound[root] = NULL;
+    }
+
+    /* Record what each quantified var mapped to after unification.
+     * At call site, after unification runs, fresh_ids[i] will be
+     * bound to the concrete type — we record that mapping.        */
+    for (int i = 0; i < scheme->quantified_count; i++) {
+        ts->from[i] = scheme->quantified[i];
+        ts->to[i]   = type_var(fresh_ids[i]);  /* will be resolved after unification */
+    }
+
+    return result;
+}
+
 
 /// Scheme Constructors
 

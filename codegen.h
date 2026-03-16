@@ -1,5 +1,6 @@
 #ifndef CODEGEN_H
 #define CODEGEN_H
+
 #include <llvm-c/Core.h>
 #include <setjmp.h>
 #include "reader.h"
@@ -8,6 +9,35 @@
 
 // Forward declaration
 typedef struct ModuleContext ModuleContext;
+
+
+
+/// Monomorphization cache
+//
+// Maps (function_name, concrete_arg_types) -> specialized LLVMValueRef.
+// When a polymorphic function is called with concrete types, we either
+// find an existing specialization or generate a new one.
+//
+typedef struct MonoKey {
+    char   *fn_name;        // original function name
+    Type  **type_args;      // concrete types for each type variable
+    int     type_arg_count;
+} MonoKey;
+
+typedef struct MonoCacheEntry {
+    MonoKey       key;
+    LLVMValueRef  fn;               // specialized LLVM function
+    char         *specialized_name; // e.g. "id_Int", "id_String"
+} MonoCacheEntry;
+
+typedef struct MonoCache {
+    MonoCacheEntry *entries;
+    int             count;
+    int             capacity;
+} MonoCache;
+
+
+
 typedef struct {
     LLVMModuleRef module;
     LLVMBuilderRef builder;
@@ -27,11 +57,13 @@ typedef struct {
     bool test_mode;
     const char *current_function_name;  // NULL at top level, set when inside a define
 
+    // Monomorphization cache
+    MonoCache mono_cache;
 
     /* Error recovery — set by CODEGEN_ERROR, caught by codegen_expr callers */
     jmp_buf  error_jmp;
-    bool     error_jmp_set;   /* true while a recovery point is active      */
-    char     error_msg[512];  /* last error message, for display             */
+    bool     error_jmp_set;   // true while a recovery point is active
+    char     error_msg[512];  // last error message, for display
 } CodegenContext;
 
 typedef struct {
@@ -82,5 +114,14 @@ void codegen_declare_external_func(CodegenContext *ctx,
 // Build and register an LLVM struct type from an AST_LAYOUT node.
 // Resolves field types, computes offsets, calls layout_register.
 void codegen_layout(CodegenContext *ctx, AST *ast);
+
+
+/// Monomorphization API
+LLVMValueRef mono_cache_lookup(MonoCache *cache, const char *fn_name,
+                                Type **type_args, int type_arg_count);
+void mono_cache_insert(MonoCache *cache, const char *fn_name,
+                                Type **type_args, int type_arg_count,
+                                LLVMValueRef fn, const char *specialized_name);
+void mono_cache_free(MonoCache *cache);
 
 #endif // CODEGEN_H

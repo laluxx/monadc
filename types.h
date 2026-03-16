@@ -22,8 +22,8 @@ typedef enum {
     TYPE_SET,
     TYPE_MAP,
     TYPE_UNKNOWN,
-    TYPE_VAR,    /* HM type variable — 'a, 'b, etc.          */
-    TYPE_ARROW,  /* function type — param → return            */
+    TYPE_VAR,    // HM type variable — 'a, 'b, etc.
+    TYPE_ARROW,  // function type — param -> return
 } TypeKind;
 
 
@@ -50,7 +50,7 @@ typedef struct Type {
     TypeKind kind;
 
     // TYPE_VAR
-    int var_id;            /* unique type-variable ID */
+    int var_id;            // unique type-variable ID
 
     // TYPE_ARROW  (param -> ret)
     struct Type *arrow_param;
@@ -62,7 +62,7 @@ typedef struct Type {
     struct Type    *return_type;
 
     // TYPE_LIST
-    struct Type *element_type;   /* NULL = polymorphic/unknown             */
+    struct Type *element_type;   // NULL = polymorphic/unknown
 
     // TYPE_ARR
     struct Type *arr_element_type;
@@ -109,8 +109,8 @@ Type *type_layout(const char *name, LayoutField *fields, int field_count,
 
 /// Constructors — HM types
 
-Type *type_var(int id);               /* fresh type variable                */
-Type *type_arrow(Type *param, Type *ret); /* function/arrow type            */
+Type *type_var(int id);                   // fresh type variable
+Type *type_arrow(Type *param, Type *ret); // function/arrow type
 
 
 /// Operations
@@ -118,7 +118,7 @@ Type *type_arrow(Type *param, Type *ret); /* function/arrow type            */
 Type       *type_clone(Type *t);
 void        type_free(Type *t);
 const char *type_to_string(Type *t);
-bool        types_equal(Type *a, Type *b);  /* structural equality           */
+bool        types_equal(Type *a, Type *b);  // structural equality
 
 
 /// Utilities

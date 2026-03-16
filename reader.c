@@ -320,6 +320,85 @@ void ast_list_append(AST *list, AST *item) {
     list->list.items[list->list.count++] = item;
 }
 
+AST *ast_clone(AST *ast) {
+    if (!ast) return NULL;
+    AST *c = calloc(1, sizeof(AST));
+    *c = *ast;  /* shallow copy all fields */
+    c->literal_str = ast->literal_str ? strdup(ast->literal_str) : NULL;
+
+    switch (ast->type) {
+    case AST_SYMBOL:
+        c->symbol = ast->symbol ? strdup(ast->symbol) : NULL;
+        break;
+    case AST_STRING:
+        c->string = ast->string ? strdup(ast->string) : NULL;
+        break;
+    case AST_KEYWORD:
+        c->keyword = ast->keyword ? strdup(ast->keyword) : NULL;
+        break;
+    case AST_LIST: {
+        c->list.items    = malloc(sizeof(AST*) * (ast->list.capacity ? ast->list.capacity : 1));
+        c->list.count    = ast->list.count;
+        c->list.capacity = ast->list.capacity;
+        for (size_t i = 0; i < ast->list.count; i++)
+            c->list.items[i] = ast_clone(ast->list.items[i]);
+        break;
+    }
+    case AST_LAMBDA: {
+        c->lambda.params = malloc(sizeof(ASTParam) * (ast->lambda.param_count ? ast->lambda.param_count : 1));
+        for (int i = 0; i < ast->lambda.param_count; i++) {
+            c->lambda.params[i].name      = ast->lambda.params[i].name
+                                          ? strdup(ast->lambda.params[i].name) : NULL;
+            c->lambda.params[i].type_name = ast->lambda.params[i].type_name
+                                          ? strdup(ast->lambda.params[i].type_name) : NULL;
+        }
+        c->lambda.return_type = ast->lambda.return_type ? strdup(ast->lambda.return_type) : NULL;
+        c->lambda.docstring   = ast->lambda.docstring   ? strdup(ast->lambda.docstring)   : NULL;
+        c->lambda.alias_name  = ast->lambda.alias_name  ? strdup(ast->lambda.alias_name)  : NULL;
+        c->lambda.body        = ast_clone(ast->lambda.body);
+        c->lambda.body_exprs  = malloc(sizeof(AST*) * (ast->lambda.body_count ? ast->lambda.body_count : 1));
+        for (int i = 0; i < ast->lambda.body_count; i++)
+            c->lambda.body_exprs[i] = ast_clone(ast->lambda.body_exprs[i]);
+        break;
+    }
+    case AST_ARRAY: {
+        c->array.elements        = malloc(sizeof(AST*) * (ast->array.element_capacity ? ast->array.element_capacity : 1));
+        c->array.element_count    = ast->array.element_count;
+        c->array.element_capacity = ast->array.element_capacity;
+        for (size_t i = 0; i < ast->array.element_count; i++)
+            c->array.elements[i] = ast_clone(ast->array.elements[i]);
+        break;
+    }
+    case AST_SET: {
+        c->set.elements        = malloc(sizeof(AST*) * (ast->set.element_capacity ? ast->set.element_capacity : 1));
+        c->set.element_count    = ast->set.element_count;
+        c->set.element_capacity = ast->set.element_capacity;
+        for (size_t i = 0; i < ast->set.element_count; i++)
+            c->set.elements[i] = ast_clone(ast->set.elements[i]);
+        break;
+    }
+    case AST_MAP: {
+        c->map.keys     = malloc(sizeof(AST*) * (ast->map.capacity ? ast->map.capacity : 1));
+        c->map.vals     = malloc(sizeof(AST*) * (ast->map.capacity ? ast->map.capacity : 1));
+        c->map.count    = ast->map.count;
+        c->map.capacity = ast->map.capacity;
+        for (size_t i = 0; i < ast->map.count; i++) {
+            c->map.keys[i] = ast_clone(ast->map.keys[i]);
+            c->map.vals[i] = ast_clone(ast->map.vals[i]);
+        }
+        break;
+    }
+    case AST_RANGE:
+        c->range.start = ast_clone(ast->range.start);
+        c->range.step  = ast_clone(ast->range.step);
+        c->range.end   = ast_clone(ast->range.end);
+        break;
+    default:
+        break;
+    }
+    return c;
+}
+
 void ast_free(AST *ast) {
     if (!ast) return;
     switch (ast->type) {

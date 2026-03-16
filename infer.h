@@ -7,6 +7,8 @@
 #include "reader.h"
 #include "env.h"
 
+// Forward declaration
+typedef struct InferCtx InferCtx;
 
 /// Type Variables
 //
@@ -36,6 +38,22 @@ typedef struct TypeScheme {
     int    quantified_count;
     Type  *type;
 } TypeScheme;
+
+
+// Maps quantified type variable IDs to their concrete types at a call site.
+// Used by codegen to drive monomorphization.
+typedef struct TypeSubst {
+    int   *from;    // quantified var IDs from the scheme
+    Type **to;      // concrete types they were bound to
+    int    count;
+} TypeSubst;
+
+// Like infer_instantiate but also returns the substitution mapping.
+// Caller must free ts->from and ts->to (but not the Type* they point to).
+Type *infer_instantiate_with_subst(InferCtx *ctx, TypeScheme *scheme,
+                                    TypeSubst *ts);
+
+
 
 
 /// Type Inference Environment

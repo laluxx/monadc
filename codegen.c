@@ -50,8 +50,328 @@ void codegen_init(CodegenContext *ctx, const char *module_name) {
     ctx->fmt_bin   = NULL;
     ctx->fmt_oct   = NULL;
     ctx->error_jmp_set = false;
+    // Initialize monomorphization cache
+    ctx->mono_cache.entries  = NULL;
+    ctx->mono_cache.count    = 0;
+    ctx->mono_cache.capacity = 0;
     memset(ctx->error_msg, 0, sizeof(ctx->error_msg));
 }
+
+/// Monomorphization
+
+static bool mono_types_match(Type **a, Type **b, int count) {
+    for (int i = 0; i < count; i++) {
+        if (!a[i] || !b[i]) return false;
+        if (a[i]->kind != b[i]->kind) return false;
+        /* For ground types, kind equality is enough.
+         * For compound types we'd recurse — add as needed. */
+    }
+    return true;
+}
+
+LLVMValueRef mono_cache_lookup(MonoCache *cache, const char *fn_name,
+                                Type **type_args, int type_arg_count) {
+    for (int i = 0; i < cache->count; i++) {
+        MonoCacheEntry *e = &cache->entries[i];
+        if (strcmp(e->key.fn_name, fn_name) != 0) continue;
+        if (e->key.type_arg_count != type_arg_count) continue;
+        if (mono_types_match(e->key.type_args, type_args, type_arg_count))
+            return e->fn;
+    }
+    return NULL;
+}
+
+void mono_cache_insert(MonoCache *cache, const char *fn_name,
+                        Type **type_args, int type_arg_count,
+                        LLVMValueRef fn, const char *specialized_name) {
+    if (cache->count >= cache->capacity) {
+        cache->capacity = cache->capacity == 0 ? 16 : cache->capacity * 2;
+        cache->entries  = realloc(cache->entries,
+                                   sizeof(MonoCacheEntry) * cache->capacity);
+    }
+    MonoCacheEntry *e    = &cache->entries[cache->count++];
+    e->key.fn_name       = strdup(fn_name);
+    e->key.type_arg_count = type_arg_count;
+    e->key.type_args     = malloc(sizeof(Type*) * (type_arg_count ? type_arg_count : 1));
+    for (int i = 0; i < type_arg_count; i++)
+        e->key.type_args[i] = type_args[i];
+    e->fn                = fn;
+    e->specialized_name  = strdup(specialized_name);
+}
+
+void mono_cache_free(MonoCache *cache) {
+    for (int i = 0; i < cache->count; i++) {
+        MonoCacheEntry *e = &cache->entries[i];
+        free(e->key.fn_name);
+        free(e->key.type_args);
+        free(e->specialized_name);
+    }
+    free(cache->entries);
+    cache->entries  = NULL;
+    cache->count    = 0;
+    cache->capacity = 0;
+}
+
+//// Monomorphization helpers
+
+// Build a specialized function name from base name and concrete types.
+// e.g. "id" + [Int] -> "id_Int"
+//   "const" + [Int, String] -> "const_Int_String"
+static char *mono_make_name(const char *base, Type **types, int count) {
+    char buf[256];
+    int  pos = snprintf(buf, sizeof(buf), "%s", base);
+    for (int i = 0; i < count; i++) {
+        const char *tname = type_to_string(types[i]);
+        pos += snprintf(buf + pos, sizeof(buf) - pos, "_%s", tname);
+    }
+    return strdup(buf);
+}
+
+// Substitute TYPE_VAR nodes in a type according to a TypeSubst mapping.
+// Returns a new concrete type with all type variables replaced.
+static Type *mono_apply_subst(Type *t, TypeSubst *ts) {
+    if (!t) return NULL;
+    switch (t->kind) {
+    case TYPE_VAR:
+        for (int i = 0; i < ts->count; i++) {
+            Type *from = ts->to[i];
+            if (from && from->kind == TYPE_VAR &&
+                from->var_id == t->var_id)
+                return ts->to[i];
+            // After unification, to[i] may already be concrete
+            if (ts->from[i] == t->var_id)
+                return ts->to[i];
+        }
+        return t;
+    case TYPE_ARROW:
+        return type_arrow(mono_apply_subst(t->arrow_param, ts),
+                          mono_apply_subst(t->arrow_ret,   ts));
+    case TYPE_LIST:
+        return type_list(mono_apply_subst(t->list_elem, ts));
+    default:
+        return t;
+    }
+}
+
+//// Specialization
+
+// Recompile a polymorphic function with concrete types substituted in.
+// Returns the specialized LLVM function, or NULL on failure.
+// Results are cached in ctx->mono_cache.
+static LLVMValueRef codegen_specialize(CodegenContext *ctx,
+                                        const char    *fn_name,
+                                        EnvEntry      *entry,
+                                        TypeSubst     *ts) {
+    if (!entry || !entry->source_ast) return NULL;
+    if (ts->count == 0) return entry->func_ref; // already concrete
+
+    // Resolve concrete types for each type variable
+    Type **concrete = malloc(sizeof(Type*) * ts->count);
+    for (int i = 0; i < ts->count; i++) {
+        concrete[i] = subst_apply(
+            env_get_infer(ctx->env)
+                ? NULL  // we'll resolve via the type directly
+                : NULL,
+            ts->to[i]);
+        // ts->to[i] is already resolved after unification
+        concrete[i] = ts->to[i];
+    }
+
+    // Build specialized name
+    char *spec_name = mono_make_name(fn_name, concrete, ts->count);
+
+    // Check if already in current LLVM module
+    LLVMValueRef existing = LLVMGetNamedFunction(ctx->module, spec_name);
+    if (existing) {
+        mono_cache_insert(&ctx->mono_cache, fn_name, concrete, ts->count,
+                          existing, spec_name);
+        free(spec_name);
+        free(concrete);
+        return existing;
+    }
+
+    // Check cache — may be from a previous REPL module
+    LLVMValueRef cached = mono_cache_lookup(&ctx->mono_cache,
+                                             fn_name, concrete, ts->count);
+    if (cached) {
+        // Re-declare as external in the current module
+        EnvEntry *ce = env_lookup(ctx->env, spec_name);
+        if (ce && ce->return_type) {
+            int np = ce->param_count;
+            LLVMTypeRef *pt = malloc(sizeof(LLVMTypeRef) * (np ? np : 1));
+            for (int i = 0; i < np; i++)
+                pt[i] = type_to_llvm(ctx, ce->params[i].type);
+            LLVMTypeRef ft = LLVMFunctionType(type_to_llvm(ctx, ce->return_type),
+                                               pt, np, 0);
+            LLVMValueRef ext = LLVMAddFunction(ctx->module, spec_name, ft);
+            LLVMSetLinkage(ext, LLVMExternalLinkage);
+            free(pt);
+            free(spec_name);
+            free(concrete);
+            return ext;
+        }
+        free(spec_name);
+        free(concrete);
+        return cached;
+    }
+
+    // Get the source AST — must be a (define (name params) body) form
+    AST *source = entry->source_ast;
+    if (!source) {
+        free(spec_name);
+        free(concrete);
+        return NULL;
+    }
+
+    // Find the lambda in the source AST
+    AST *lambda = NULL;
+    if (source->type == AST_LAMBDA) {
+        /* source_ast is the lambda itself */
+        lambda = source;
+    } else if (source->type == AST_LIST && source->list.count >= 3) {
+        /* source_ast is a (define name lambda) form */
+        AST *maybe_lambda = source->list.items[2];
+        if (maybe_lambda->type == AST_LAMBDA)
+            lambda = maybe_lambda;
+    }
+    if (!lambda) {
+        free(spec_name);
+        free(concrete);
+        return NULL;
+    }
+
+    // Build concrete param types by substituting type vars
+    int total_params = lambda->lambda.param_count;
+    LLVMTypeRef *param_types = malloc(sizeof(LLVMTypeRef) * (total_params ? total_params : 1));
+    EnvParam    *env_params  = malloc(sizeof(EnvParam)    * (total_params ? total_params : 1));
+
+    for (int i = 0; i < total_params; i++) {
+        ASTParam *param = &lambda->lambda.params[i];
+        Type *param_type = NULL;
+        if (param->type_name) {
+            param_type = type_from_name(param->type_name);
+        }
+
+        if (!param_type || param_type->kind == TYPE_UNKNOWN ||
+            param_type->kind == TYPE_VAR) {
+            /* Polymorphic param — substitute directly from ts */
+            if (i < ts->count) {
+                param_type = ts->to[i];
+            } else if (i < entry->param_count) {
+                param_type = mono_apply_subst(entry->params[i].type, ts);
+            }
+        }
+        if (!param_type || param_type->kind == TYPE_UNKNOWN)
+            param_type = type_unknown();
+
+        param_types[i]     = type_to_llvm(ctx, param_type);
+        env_params[i].name = strdup(param->name);
+        env_params[i].type = param_type;
+    }
+
+    // Determine concrete return type
+    Type *ret_type = NULL;
+    if (lambda->lambda.return_type) {
+        ret_type = type_from_name(lambda->lambda.return_type);
+    }
+    if (!ret_type || ret_type->kind == TYPE_UNKNOWN ||
+        ret_type->kind == TYPE_VAR) {
+        /* Try substituting from the scheme's return type */
+        ret_type = mono_apply_subst(entry->return_type, ts);
+    }
+    /* If still unknown, infer from the body after specialization.
+     * For now use the first concrete type arg as return (handles id :: 'a -> 'a) */
+    if (!ret_type || ret_type->kind == TYPE_UNKNOWN) {
+        if (ts->count > 0 && ts->to[0])
+            ret_type = ts->to[0];
+        else
+            ret_type = type_unknown();
+    }
+
+    LLVMTypeRef ret_llvm  = type_to_llvm(ctx, ret_type);
+    LLVMTypeRef func_type = LLVMFunctionType(ret_llvm, param_types,
+                                              total_params, 0);
+    LLVMValueRef func     = LLVMAddFunction(ctx->module, spec_name, func_type);
+
+    // Register in env so recursive calls resolve
+    env_insert_func(ctx->env, spec_name,
+                    clone_params(env_params, total_params),
+                    total_params, type_clone(ret_type),
+                    func, NULL);
+    EnvEntry *spec_entry = env_lookup(ctx->env, spec_name);
+    if (spec_entry) {
+        spec_entry->lifted_count   = 0;
+        spec_entry->is_closure_abi = false;
+    }
+
+    // Compile the body
+    LLVMBasicBlockRef entry_block = LLVMAppendBasicBlockInContext(
+                                        ctx->context, func, "entry");
+    LLVMBasicBlockRef saved_block = LLVMGetInsertBlock(ctx->builder);
+    LLVMPositionBuilderAtEnd(ctx->builder, entry_block);
+
+    Env *saved_env = ctx->env;
+    ctx->env = env_create_child(saved_env);
+
+    // Bind parameters
+    for (int i = 0; i < total_params; i++) {
+        LLVMValueRef param = LLVMGetParam(func, i);
+        LLVMSetValueName2(param, lambda->lambda.params[i].name,
+                          strlen(lambda->lambda.params[i].name));
+        LLVMValueRef alloca = LLVMBuildAlloca(ctx->builder, param_types[i],
+                                               lambda->lambda.params[i].name);
+        LLVMBuildStore(ctx->builder, param, alloca);
+        env_insert(ctx->env, lambda->lambda.params[i].name,
+                   type_clone(env_params[i].type), alloca);
+    }
+
+    // Codegen body
+    CodegenResult body = {NULL, NULL};
+    const char *prev   = ctx->current_function_name;
+    ctx->current_function_name = spec_name;
+    for (int i = 0; i < lambda->lambda.body_count; i++)
+        body = codegen_expr(ctx, lambda->lambda.body_exprs[i]);
+    ctx->current_function_name = prev;
+
+    if (!body.value)
+        body.value = LLVMConstNull(ret_llvm);
+
+    // Coerce return value
+    LLVMValueRef ret_val = body.value;
+    LLVMTypeRef  actual  = LLVMTypeOf(ret_val);
+    LLVMTypeRef  i64     = LLVMInt64TypeInContext(ctx->context);
+    LLVMTypeRef  i1      = LLVMInt1TypeInContext(ctx->context);
+    LLVMTypeRef  dbl     = LLVMDoubleTypeInContext(ctx->context);
+
+    if (ret_llvm == i64 && actual == i1)
+        ret_val = LLVMBuildZExt(ctx->builder, ret_val, i64, "ret_ext");
+    else if (ret_llvm == i1 && actual == i64)
+        ret_val = LLVMBuildTrunc(ctx->builder, ret_val, i1, "ret_trunc");
+    else if (ret_llvm == dbl && type_is_integer(body.type))
+        ret_val = LLVMBuildSIToFP(ctx->builder, ret_val, dbl, "ret_conv");
+    else if (ret_llvm == i64 && type_is_float(body.type))
+        ret_val = LLVMBuildFPToSI(ctx->builder, ret_val, i64, "ret_conv");
+
+    LLVMBuildRet(ctx->builder, ret_val);
+
+    // Restore
+    env_free(ctx->env);
+    ctx->env = saved_env;
+    if (saved_block)
+        LLVMPositionBuilderAtEnd(ctx->builder, saved_block);
+
+    // Cache and return
+    mono_cache_insert(&ctx->mono_cache, fn_name, concrete, ts->count,
+                      func, spec_name);
+
+    free(param_types);
+    free(env_params);  // Note: names were strdup'd into env
+    free(spec_name);
+    free(concrete);
+    return func;
+}
+
+
 
 LLVMValueRef get_fmt_str(CodegenContext *ctx) {
     if (!ctx->fmt_str) {
@@ -115,6 +435,7 @@ void codegen_dispose(CodegenContext *ctx) {
     LLVMDisposeBuilder(ctx->builder);
     LLVMDisposeModule(ctx->module);
     LLVMContextDispose(ctx->context);
+    mono_cache_free(&ctx->mono_cache);
     env_free(ctx->env);
 }
 
@@ -328,21 +649,6 @@ LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *t) {
     default:
         return LLVMDoubleTypeInContext(ctx->context);
     }
-}
-
-// Returns the bare LLVM struct type for a layout — never the pointer wrapper.
-// Use this as the element-type argument to GEP/Load/Store on layout values.
-static LLVMTypeRef layout_struct_type(CodegenContext *ctx, Type *lay) {
-    char struct_name[256];
-    snprintf(struct_name, sizeof(struct_name), "layout.%s", lay->layout_name);
-    LLVMTypeRef st = LLVMGetTypeByName2(ctx->context, struct_name);
-    if (!st) {
-        // Force creation via type_to_llvm and strip the pointer wrapper
-        LLVMTypeRef ptr = type_to_llvm(ctx, lay);   // returns ptr-to-struct
-        (void)ptr;
-        st = LLVMGetTypeByName2(ctx->context, struct_name);
-    }
-    return st;
 }
 
 /// Type checking for operations
@@ -598,54 +904,6 @@ static LLVMValueRef ast_to_runtime_value(CodegenContext *ctx, AST *ast_elem) {
     return rt_val;
 }
 
-static LLVMValueRef codegen_to_runtime_value(CodegenContext *ctx,
-                                             LLVMValueRef value,
-                                             Type *type) {
-    if (!type) return get_rt_value_nil(ctx);
-
-    switch (type->kind) {
-        case TYPE_INT:
-        case TYPE_HEX:
-        case TYPE_BIN:
-        case TYPE_OCT: {
-            LLVMValueRef fn = get_rt_value_int(ctx);
-            LLVMValueRef args[] = {value};
-            return LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(fn),
-                                 fn, args, 1, "rtval");
-        }
-
-        case TYPE_FLOAT: {
-            LLVMValueRef fn = get_rt_value_float(ctx);
-            LLVMValueRef args[] = {value};
-            return LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(fn),
-                                 fn, args, 1, "rtval");
-        }
-
-        case TYPE_CHAR: {
-            LLVMValueRef fn = get_rt_value_char(ctx);
-            LLVMValueRef args[] = {value};
-            return LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(fn),
-                                 fn, args, 1, "rtval");
-        }
-
-        case TYPE_STRING: {
-            LLVMValueRef fn = get_rt_value_string(ctx);
-            LLVMValueRef args[] = {value};
-            return LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(fn),
-                                 fn, args, 1, "rtval");
-        }
-
-        case TYPE_RATIO:
-        case TYPE_ARR:
-        case TYPE_LIST:
-            // Already RuntimeValue*
-            return value;
-
-        default:
-            return get_rt_value_nil(ctx);
-    }
-}
-
 bool should_export_symbol(ModuleContext *ctx, const char *symbol_name) {
     if (!ctx || !ctx->decl) {
         return true;  // No module declaration = export everything
@@ -676,9 +934,12 @@ static EnvEntry *resolve_symbol_with_modules(CodegenContext *ctx, const char *sy
         // Find the import with this prefix
         ImportDecl *import = module_context_find_import(ctx->module_ctx, module_prefix);
         if (!import) {
+            char _mp_copy[256];
+            strncpy(_mp_copy, module_prefix, sizeof(_mp_copy) - 1);
+            _mp_copy[sizeof(_mp_copy)-1] = '\0';
             free(module_prefix);
             CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown module prefix '%s'",
-                    parser_get_filename(), ast->line, ast->column, module_prefix);
+                    parser_get_filename(), ast->line, ast->column, _mp_copy);
         }
 
         // Check if this symbol is included in the import
@@ -946,54 +1207,6 @@ static LLVMValueRef codegen_box(CodegenContext *ctx, LLVMValueRef val, Type *typ
     }
 }
 
-// Helper: resolve a function argument to a raw function pointer LLVMValueRef.
-// Named functions -> direct LLVM function value (no load).
-// Lambdas / other exprs -> codegen normally.
-static LLVMValueRef codegen_fn_arg(CodegenContext *ctx, AST *node) {
-    /* Named function — return direct LLVM function ref, no load */
-    if (node->type == AST_SYMBOL) {
-        EnvEntry *e = env_lookup(ctx->env, node->symbol);
-        if (e && e->kind == ENV_FUNC && e->func_ref)
-            return e->func_ref;
-        LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, node->symbol);
-        if (fn) return fn;
-        if (e && e->llvm_name) {
-            fn = LLVMGetNamedFunction(ctx->module, e->llvm_name);
-            if (fn) return fn;
-        }
-    }
-
-    /* Inline lambda — lift to a named function and return its ref */
-    if (node->type == AST_LAMBDA) {
-        static int lambda_lift_count = 0;
-        char name[64];
-        snprintf(name, sizeof(name), "__hof_lambda_%d", lambda_lift_count++);
-
-        AST *name_node   = ast_new_symbol(name);
-        AST *define_node = ast_new_list();
-        ast_list_append(define_node, ast_new_symbol("define"));
-        ast_list_append(define_node, name_node);
-        ast_list_append(define_node, node);
-        codegen_expr(ctx, define_node);
-
-        EnvEntry *entry = env_lookup(ctx->env, name);
-        if (entry && entry->func_ref)
-            return entry->func_ref;
-
-        LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, name);
-        if (fn) return fn;
-
-        fprintf(stderr, "codegen_fn_arg: failed to lift lambda '%s'\n", name);
-        return NULL;
-    }
-
-    /* Fallback — codegen the expression and return its value */
-    CodegenResult r = codegen_expr(ctx, node);
-    if (!r.value)
-        fprintf(stderr, "codegen_fn_arg: could not resolve function '%s'\n",
-                node->type == AST_SYMBOL ? node->symbol : "<expr>");
-    return r.value;
-}
 
 // ─── Wrapper generators ────────────────────────────────────────────────────
 //
@@ -1064,40 +1277,6 @@ static LLVMValueRef codegen_binary_wrapper(CodegenContext *ctx,
     if (saved) LLVMPositionBuilderAtEnd(ctx->builder, saved);
     *out_closure_env = LLVMConstPointerNull(ptr);
     return wrapper;
-}
-
-// Helper: extract arg/ret types from a named function in the env
-static void lookup_fn_types(CodegenContext *ctx, AST *fn_node,
-                             LLVMValueRef resolved_fn,
-                             Type **arg0, Type **arg1, Type **ret) {
-    *arg0 = type_unknown();
-    *arg1 = type_unknown();
-    *ret  = type_unknown();
-
-    /* Try AST symbol name first */
-    if (fn_node->type == AST_SYMBOL) {
-        EnvEntry *e = env_lookup(ctx->env, fn_node->symbol);
-        if (e && e->kind == ENV_FUNC) {
-            if (e->param_count >= 1) *arg0 = e->params[0].type;
-            if (e->param_count >= 2) *arg1 = e->params[1].type;
-            if (e->return_type)      *ret  = e->return_type;
-            return;
-        }
-    }
-
-    /* Fall back to resolved LLVM function name — handles lifted lambdas */
-    if (resolved_fn) {
-        const char *name = LLVMGetValueName(resolved_fn);
-        if (name && name[0]) {
-            EnvEntry *e = env_lookup(ctx->env, name);
-            if (e && e->kind == ENV_FUNC) {
-                int declared = e->param_count - e->lifted_count;
-                if (declared >= 1) *arg0 = e->params[0].type;
-                if (declared >= 2) *arg1 = e->params[1].type;
-                if (e->return_type) *ret  = e->return_type;
-            }
-        }
-    }
 }
 
 // Collect free variables in `ast` that are not in `bound_params`.
@@ -1481,25 +1660,6 @@ static CodegenResult codegen_map_op(CodegenContext *ctx, AST *ast,
     result.value = LLVMBuildCall2(ctx->builder, wft, wrap_fn, wa, 1, "mapval");
     result.type  = type_map();
     return result;
-}
-
-/* Helper: if fn_node is a Fn variable (stored closure), load it and
- * return the closure value in *out_clo; set *raw_fn to null ptr.
- * Otherwise leave *raw_fn as-is and *out_clo as null.              */
-static void maybe_load_closure(CodegenContext *ctx, AST *fn_node,
-                                LLVMValueRef *raw_fn,
-                                LLVMValueRef *out_clo) {
-    LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-    *out_clo = LLVMConstPointerNull(ptr);
-    if (fn_node->type != AST_SYMBOL) return;
-    EnvEntry *fe = env_lookup(ctx->env, fn_node->symbol);
-    if (!fe || fe->kind != ENV_VAR) return;
-    if (!fe->type || fe->type->kind != TYPE_FN) return;
-    /* It's a stored closure — load it and signal closure dispatch */
-    *out_clo  = LLVMBuildLoad2(ctx->builder,
-                                type_to_llvm(ctx, fe->type),
-                                fe->value, "clo_val");
-    *raw_fn   = LLVMConstPointerNull(ptr);
 }
 
 /* Generate a closure-ABI trampoline for a typed-ABI function, then wrap
@@ -2001,7 +2161,6 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
     case AST_SET: {
         LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-        LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
 
         LLVMValueRef set_fn = get_rt_set_new(ctx);
         LLVMTypeRef  set_ft = LLVMFunctionType(ptr, NULL, 0, 0);
@@ -2355,7 +2514,9 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         e_fwd->llvm_name      = strdup(LLVMGetValueName(func));
                         e_fwd->lifted_count   = 0;
                         e_fwd->is_closure_abi = use_closure_abi;
+                        e_fwd->source_ast     = ast_clone(lambda);
                     }
+
 
                     /* ── Build function body ────────────────────────────── */
                     LLVMBasicBlockRef entry_block = LLVMAppendBasicBlockInContext(ctx->context, func, "entry");
@@ -2631,10 +2792,12 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                                     ret_type, func, lambda->lambda.docstring);
                     if (hm_scheme) env_set_scheme(ctx->env, var_name, hm_scheme);
                     EnvEntry *efinal = env_lookup(ctx->env, var_name);
+
                     if (efinal) {
                         efinal->lifted_count   = 0;
                         efinal->is_closure_abi = use_closure_abi;
-                        efinal->source_ast     = ast;
+                        efinal->source_ast     = lambda;
+                        efinal->source_ast     = ast_clone(lambda);
                     }
 
                     if (ast->lambda.alias_name) {
@@ -4297,7 +4460,6 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'and' requires at least 2 arguments",
                                   parser_get_filename(), ast->line, ast->column);
                 }
-                LLVMTypeRef i1  = LLVMInt1TypeInContext(ctx->context);
                 LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
 
                 CodegenResult first = codegen_expr(ctx, ast->list.items[1]);
@@ -4350,7 +4512,6 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'or' requires at least 2 arguments",
                                   parser_get_filename(), ast->line, ast->column);
                 }
-                LLVMTypeRef i1  = LLVMInt1TypeInContext(ctx->context);
                 LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
 
                 CodegenResult first = codegen_expr(ctx, ast->list.items[1]);
@@ -4715,7 +4876,6 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         LLVMValueRef args[] = {arg.value};
                         set = LLVMBuildCall2(ctx->builder, ft, fn, args, 1, "set");
                     } else if (arg.type && arg.type->kind == TYPE_ARR) {
-                        LLVMTypeRef i64      = LLVMInt64TypeInContext(ctx->context);
                         LLVMTypeRef arr_llvm = type_to_llvm(ctx, arg.type);
                         LLVMTypeRef elem_llvm = type_to_llvm(ctx, arg.type->arr_element_type);
                         int n = arg.type->arr_size;
@@ -4793,7 +4953,6 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'set?' requires 1 argument",
                                   parser_get_filename(), ast->line, ast->column);
                 }
-                LLVMTypeRef  ptr    = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
                 LLVMTypeRef  i1     = LLVMInt1TypeInContext(ctx->context);
                 CodegenResult arg   = codegen_expr(ctx, ast->list.items[1]);
                 /* check type at compile time if known */
@@ -5459,6 +5618,107 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     free(_atypes);
                 }
 
+                /* ── Monomorphization: specialize if polymorphic ─────────── */
+                if (entry->scheme && entry->scheme->quantified_count > 0
+                    && entry->source_ast) {
+                    // Collect concrete argument types from call site
+                    int        nq      = entry->scheme->quantified_count;
+                    TypeSubst  ts;
+                    ts.count = nq;
+                    ts.from  = malloc(sizeof(int)   * nq);
+                    ts.to    = malloc(sizeof(Type*)  * nq);
+
+                    // Map each quantified var to the concrete type of the
+                    // corresponding argument
+                    for (int i = 0; i < nq && i < declared_params; i++) {
+                        ts.from[i] = entry->scheme->quantified[i];
+                        AST *arg_ast = ast->list.items[i + 1];
+                        Type *arg_type = arg_ast->inferred_type
+                                       ? arg_ast->inferred_type
+                                       : type_unknown();
+                        ts.to[i] = arg_type;
+                    }
+
+                    // Fill remaining type vars with unknown if fewer args
+                    for (int i = declared_params; i < nq; i++) {
+                        ts.from[i] = entry->scheme->quantified[i];
+                        ts.to[i]   = type_unknown();
+                    }
+
+                    // Check if all type vars are concrete
+                    bool all_concrete = true;
+                    for (int i = 0; i < nq; i++) {
+                        if (!ts.to[i] || ts.to[i]->kind == TYPE_VAR ||
+                            ts.to[i]->kind == TYPE_UNKNOWN ||
+                            ts.to[i]->kind == TYPE_FN ||
+                            ts.to[i]->kind == TYPE_ARROW) {
+                            all_concrete = false;
+                            break;
+                        }
+                    }
+
+
+                    if (all_concrete) {
+                        LLVMValueRef spec_fn = codegen_specialize(ctx,
+                                                  head->symbol, entry, &ts);
+                        if (spec_fn) {
+                            // Look up the specialized entry
+                            char *spec_name = mono_make_name(head->symbol,
+                                                 ts.to, ts.count);
+                            EnvEntry *spec_e = env_lookup(ctx->env, spec_name);
+                            free(spec_name);
+
+                            if (spec_e) {
+                                // Call the specialized function directly
+                                int sargs = spec_e->param_count;
+                                LLVMValueRef *call_args = malloc(
+                                    sizeof(LLVMValueRef) * (sargs ? sargs : 1));
+                                LLVMTypeRef *call_types = malloc(
+                                    sizeof(LLVMTypeRef) * (sargs ? sargs : 1));
+
+                                for (int i = 0; i < sargs; i++) {
+                                    CodegenResult ar = codegen_expr(ctx,
+                                                          ast->list.items[i + 1]);
+                                    call_args[i] = ar.value;
+                                    call_types[i] = type_to_llvm(ctx,
+                                                        spec_e->params[i].type);
+                                    // Coerce if needed
+                                    LLVMTypeRef at = LLVMTypeOf(ar.value);
+                                    LLVMTypeRef et = call_types[i];
+                                    LLVMTypeRef i64t = LLVMInt64TypeInContext(ctx->context);
+                                    LLVMTypeRef dblt = LLVMDoubleTypeInContext(ctx->context);
+                                    if (at != et) {
+                                        if (et == i64t && at == LLVMInt1TypeInContext(ctx->context))
+                                            call_args[i] = LLVMBuildZExt(ctx->builder, ar.value, i64t, "coerce");
+                                        else if (et == dblt && type_is_integer(ar.type))
+                                            call_args[i] = LLVMBuildSIToFP(ctx->builder, ar.value, dblt, "coerce");
+                                    }
+                                }
+
+                                LLVMTypeRef call_ft = LLVMFunctionType(
+                                    type_to_llvm(ctx, spec_e->return_type),
+                                    call_types, sargs, 0);
+
+                                result.value = LLVMBuildCall2(ctx->builder,
+                                    call_ft, spec_fn, call_args, sargs, "mono_call");
+                                result.type  = type_clone(spec_e->return_type);
+
+                                fprintf(stderr, "MONO [%s :: %s]\n",
+                                        spec_e->name ? spec_e->name : "?",
+                                        type_to_string(spec_e->return_type));
+
+                                free(call_args);
+                                free(call_types);
+                                free(ts.from);
+                                free(ts.to);
+                                return result;
+                            }
+                        }
+                    }
+                    free(ts.from);
+                    free(ts.to);
+                }
+
                 /* ── Closure ABI direct call ────────────────────────────── */
                 if (entry->is_closure_abi) {
                     LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
@@ -5633,7 +5893,6 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
                 // Special case: String cast - needs to produce a string representation
                 if (strcmp(cast_target, "String") == 0) {
-                    LLVMValueRef printf_fn = get_or_declare_printf(ctx);
 
                     // For string identity
                     if (arg->type == AST_STRING) {
@@ -6368,103 +6627,6 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
 /// Module
 
-static CodegenResult codegen_define_variable(CodegenContext *ctx,
-                                              const char *var_name,
-                                              Type *final_type,
-                                              LLVMValueRef stored_value,
-                                              int source_line,
-                                              int source_column) {
-    CodegenResult result = {NULL, NULL};
-    bool top_level = is_at_top_level(ctx);
-
-    LLVMTypeRef llvm_type = type_to_llvm(ctx, final_type);
-    LLVMValueRef var;
-
-    if (top_level) {
-        // Module-level definition: use an LLVM global variable.
-        // We give it the local name now; main.c Phase 9 will rename it to
-        // the mangled name and replace all uses.
-        var = LLVMGetNamedGlobal(ctx->module, var_name);
-        if (!var) {
-            var = LLVMAddGlobal(ctx->module, llvm_type, var_name);
-            LLVMSetInitializer(var, LLVMConstNull(llvm_type));
-            // External linkage so the linker can resolve it from other modules.
-            LLVMSetLinkage(var, LLVMExternalLinkage);
-        }
-        // Emit a store from within the init function
-        LLVMBuildStore(ctx->builder, stored_value, var);
-    } else {
-        // Inside a function: keep the stack alloca
-        var = LLVMBuildAlloca(ctx->builder, llvm_type, var_name);
-        LLVMBuildStore(ctx->builder, stored_value, var);
-    }
-
-    env_insert(ctx->env, var_name, final_type, var);
-
-    if (ctx->module_ctx && !should_export_symbol(ctx->module_ctx, var_name)) {
-        print_defined(var_name, final_type, ctx->env,
-                      ctx->module_ctx && !should_export_symbol(ctx->module_ctx, var_name));
-    } else {
-        print_defined(var_name, final_type, ctx->env,
-                      ctx->module_ctx && !should_export_symbol(ctx->module_ctx, var_name));
-    }
-
-    result.type  = final_type;
-    result.value = stored_value;
-    return result;
-}
-
-static CodegenResult codegen_define_array_zeroinit(CodegenContext *ctx,
-                                                    const char *var_name,
-                                                    Type *final_type) {
-    CodegenResult result = {NULL, NULL};
-    bool top_level = is_at_top_level(ctx);
-    LLVMTypeRef arr_type = type_to_llvm(ctx, final_type);
-
-    LLVMValueRef arr;
-    if (top_level) {
-        arr = LLVMGetNamedGlobal(ctx->module, var_name);
-        if (!arr) {
-            arr = LLVMAddGlobal(ctx->module, arr_type, var_name);
-            // LLVMConstNull gives a zero-initialized aggregate
-            LLVMSetInitializer(arr, LLVMConstNull(arr_type));
-            LLVMSetLinkage(arr, LLVMExternalLinkage);
-        }
-        // No explicit store needed — the global is zero-initialized by default.
-        // But we still emit element-wise stores in case of non-zero init (handled
-        // in the caller; for zero-init we just use ConstNull above).
-    } else {
-        arr = LLVMBuildAlloca(ctx->builder, arr_type, var_name);
-
-        // Zero-initialize each element explicitly (for stack arrays)
-        LLVMTypeRef elem_type_llvm = type_to_llvm(ctx, final_type->arr_element_type);
-        LLVMValueRef zero_val;
-        if (type_is_float(final_type->arr_element_type)) {
-            zero_val = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0);
-        } else if (final_type->arr_element_type->kind == TYPE_STRING  ||
-                   final_type->arr_element_type->kind == TYPE_KEYWORD ||
-                   final_type->arr_element_type->kind == TYPE_RATIO) {
-            zero_val = LLVMConstPointerNull(elem_type_llvm);
-        } else {
-            zero_val = LLVMConstInt(elem_type_llvm, 0, 0);
-        }
-        for (int idx = 0; idx < final_type->arr_size; idx++) {
-            LLVMValueRef zero_i = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0);
-            LLVMValueRef elem_i = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), idx, 0);
-            LLVMValueRef indices[] = {zero_i, elem_i};
-            LLVMValueRef elem_ptr = LLVMBuildGEP2(ctx->builder, arr_type, arr,
-                                                   indices, 2, "elem_ptr");
-            LLVMBuildStore(ctx->builder, zero_val, elem_ptr);
-        }
-    }
-
-    env_insert(ctx->env, var_name, final_type, arr);
-    print_defined(var_name, final_type, ctx->env, false);
-
-    result.type  = final_type;
-    result.value = arr;
-    return result;
-}
 
 void codegen_declare_external_var(CodegenContext *ctx,
                                   const char *mangled_name,

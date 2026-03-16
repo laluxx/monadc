@@ -150,11 +150,11 @@
     [(> x hi) hi]
     [else     x]))
 
-(define (min2 [a :: Int] [b :: Int] -> Int)
+(define (min [a :: Int] [b :: Int] -> Int)
   "Return the smaller of A and B."
   (if (< a b) a b))
 
-(define (max2 [a :: Int] [b :: Int] -> Int)
+(define (max [a :: Int] [b :: Int] -> Int)
   "Return the larger of A and B."
   (if (> a b) a b))
 

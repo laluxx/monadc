@@ -176,6 +176,7 @@ AST *ast_new_map(void);
 
 void ast_list_append(AST *list, AST *item);
 void ast_array_append(AST *array, AST *item);
+AST *ast_clone(AST *ast);
 void ast_free(AST *ast);
 void ast_print(AST *ast);
 
