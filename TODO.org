@@ -1,10 +1,10 @@
 #+title: TODO.org
 
-* TODO Env [0/5]
+* TODO Env [1/7]
 - [ ] eval
 - [ ] A way to dump an enviroment to a loadable file.env 
-- [ ] Proper Monomorphization
 - [ ] Matematical notation for floating points
+- [ ] => Optional arguments that default to 
 - [ ] Connect to a running process with the repl
       We should embed the env into the executable i guess
 

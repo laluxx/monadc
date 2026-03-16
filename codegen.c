@@ -2023,11 +2023,92 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             return result;
         }
 
-
-        // TODO They should work then remove this error
         if (entry->kind == ENV_BUILTIN) {
-            CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' is a built-in and cannot be passed as a value",
-                          parser_get_filename(), ast->line, ast->column, ast->symbol);
+            /* Auto-wrap builtin as a 2-arg closure trampoline.
+             * The trampoline unboxes two args, calls the builtin,
+             * and boxes the result. Works for all binary builtins. */
+            LLVMTypeRef  ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+            LLVMTypeRef  i32   = LLVMInt32TypeInContext(ctx->context);
+            LLVMTypeRef  i64   = LLVMInt64TypeInContext(ctx->context);
+            LLVMTypeRef  dbl   = LLVMDoubleTypeInContext(ctx->context);
+
+            static int builtin_wrap_count = 0;
+            char wname[64];
+            snprintf(wname, sizeof(wname), "__builtin_wrap_%s_%d",
+                     ast->symbol, builtin_wrap_count++);
+
+            // Trampoline: (ptr env, ptr a, ptr b) -> ptr
+            LLVMTypeRef  wp[]  = {ptr_t, ptr_t, ptr_t};
+            LLVMTypeRef  wft   = LLVMFunctionType(ptr_t, wp, 3, 0);
+            LLVMValueRef wfunc = LLVMAddFunction(ctx->module, wname, wft);
+
+            LLVMBasicBlockRef wentry = LLVMAppendBasicBlockInContext(
+                                           ctx->context, wfunc, "entry");
+            LLVMBasicBlockRef saved  = LLVMGetInsertBlock(ctx->builder);
+            LLVMPositionBuilderAtEnd(ctx->builder, wentry);
+
+            LLVMValueRef wa = LLVMGetParam(wfunc, 1);
+            LLVMValueRef wb = LLVMGetParam(wfunc, 2);
+
+            // Unbox both args as int (numeric builtins)
+            LLVMTypeRef uft = LLVMFunctionType(i64, &ptr_t, 1, 0);
+            LLVMValueRef ua = LLVMBuildCall2(ctx->builder, uft,
+                                  get_rt_unbox_int(ctx), &wa, 1, "ua");
+            LLVMValueRef ub = LLVMBuildCall2(ctx->builder, uft,
+                                  get_rt_unbox_int(ctx), &wb, 1, "ub");
+
+            // Perform the builtin operation
+            LLVMValueRef wr = NULL;
+            const char *sym = ast->symbol;
+            if      (strcmp(sym, "+")   == 0) wr = LLVMBuildAdd(ctx->builder, ua, ub, "r");
+            else if (strcmp(sym, "-")   == 0) wr = LLVMBuildSub(ctx->builder, ua, ub, "r");
+            else if (strcmp(sym, "*")   == 0) wr = LLVMBuildMul(ctx->builder, ua, ub, "r");
+            else if (strcmp(sym, "/")   == 0) wr = LLVMBuildSDiv(ctx->builder, ua, ub, "r");
+            else if (strcmp(sym, "mod") == 0 ||
+                     strcmp(sym, "%")   == 0) wr = LLVMBuildSRem(ctx->builder, ua, ub, "r");
+            else if (strcmp(sym, "=")   == 0) {
+                LLVMTypeRef i1 = LLVMInt1TypeInContext(ctx->context);
+                LLVMValueRef cmp = LLVMBuildICmp(ctx->builder, LLVMIntEQ, ua, ub, "cmp");
+                wr = LLVMBuildZExt(ctx->builder, cmp, i64, "r");
+            } else if (strcmp(sym, "<")  == 0) {
+                LLVMValueRef cmp = LLVMBuildICmp(ctx->builder, LLVMIntSLT, ua, ub, "cmp");
+                wr = LLVMBuildZExt(ctx->builder, cmp, i64, "r");
+            } else if (strcmp(sym, ">")  == 0) {
+                LLVMValueRef cmp = LLVMBuildICmp(ctx->builder, LLVMIntSGT, ua, ub, "cmp");
+                wr = LLVMBuildZExt(ctx->builder, cmp, i64, "r");
+            } else if (strcmp(sym, "<=") == 0) {
+                LLVMValueRef cmp = LLVMBuildICmp(ctx->builder, LLVMIntSLE, ua, ub, "cmp");
+                wr = LLVMBuildZExt(ctx->builder, cmp, i64, "r");
+            } else if (strcmp(sym, ">=") == 0) {
+                LLVMValueRef cmp = LLVMBuildICmp(ctx->builder, LLVMIntSGE, ua, ub, "cmp");
+                wr = LLVMBuildZExt(ctx->builder, cmp, i64, "r");
+            } else {
+                // Unknown builtin — return nil
+                wr = LLVMConstInt(i64, 0, 0);
+            }
+
+            // Box result
+            LLVMTypeRef bft = LLVMFunctionType(ptr_t, &i64, 1, 0);
+            LLVMValueRef boxed = LLVMBuildCall2(ctx->builder, bft,
+                                     get_rt_value_int(ctx), &wr, 1, "boxed");
+            LLVMBuildRet(ctx->builder, boxed);
+
+            if (saved) LLVMPositionBuilderAtEnd(ctx->builder, saved);
+
+            // Wrap in rt_value_closure with arity=2
+            LLVMValueRef fn_ptr = LLVMBuildBitCast(ctx->builder, wfunc, ptr_t, "fn_ptr");
+            LLVMValueRef clo_fn  = get_rt_value_closure(ctx);
+            LLVMTypeRef  cp[]    = {ptr_t, ptr_t, i32, i32};
+            LLVMTypeRef  cft     = LLVMFunctionType(ptr_t, cp, 4, 0);
+            LLVMValueRef cargs[] = {
+                fn_ptr,
+                LLVMConstPointerNull(ptr_t),
+                LLVMConstInt(i32, 0, 0),
+                LLVMConstInt(i32, 2, 0)
+            };
+            result.value = LLVMBuildCall2(ctx->builder, cft, clo_fn, cargs, 4, "builtin_clo");
+            result.type  = type_fn(NULL, 0, NULL);
+            return result;
         }
 
         if (!entry->type) {
