@@ -5629,11 +5629,135 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 // Check argument count
                 int declared_params = entry->param_count - entry->lifted_count;
                 size_t arg_count = ast->list.count - 1;
-                if ((int)arg_count != declared_params) {
+                if ((int)arg_count > declared_params) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: function '%s' expects %d arguments, got %zu",
                             parser_get_filename(), ast->line, ast->column,
-                            head->symbol, entry->param_count, arg_count);
+                            head->symbol, declared_params, arg_count);
                 }
+
+                // Partial application — return a closure capturing supplied args
+                if ((int)arg_count < declared_params) {
+                    LLVMTypeRef  ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                    LLVMTypeRef  i32   = LLVMInt32TypeInContext(ctx->context);
+                    int supplied  = (int)arg_count;
+                    int remaining = declared_params - supplied;
+
+                    // Build a partial application trampoline:
+                    // (ptr env, ptr arg_supplied...) -> ptr
+                    int tramp_params = remaining + 1;  // env + remaining args
+                    LLVMTypeRef *tramp_types = malloc(sizeof(LLVMTypeRef) * tramp_params);
+                    tramp_types[0] = ptr_t;  // env
+                    for (int i = 0; i < remaining; i++)
+                        tramp_types[i + 1] = ptr_t;  // boxed remaining args
+
+                    static int curry_count = 0;
+                    char tname[64];
+                    snprintf(tname, sizeof(tname), "__curry_%d", curry_count++);
+
+                    LLVMTypeRef  tramp_ft = LLVMFunctionType(ptr_t, tramp_types, tramp_params, 0);
+                    LLVMValueRef tramp    = LLVMAddFunction(ctx->module, tname, tramp_ft);
+                    LLVMBasicBlockRef tramp_entry = LLVMAppendBasicBlockInContext(
+                                                        ctx->context, tramp, "entry");
+                    LLVMBasicBlockRef saved_block = LLVMGetInsertBlock(ctx->builder);
+                    LLVMPositionBuilderAtEnd(ctx->builder, tramp_entry);
+
+                    // env layout: [supplied_arg0, supplied_arg1, ...]
+                    LLVMValueRef env_param = LLVMGetParam(tramp, 0);
+
+                    // Unbox supplied args from env
+                    LLVMValueRef *all_args = malloc(sizeof(LLVMValueRef) * declared_params);
+                    for (int i = 0; i < supplied; i++) {
+                        LLVMValueRef idx   = LLVMConstInt(i32, i, 0);
+                        LLVMValueRef gep   = LLVMBuildGEP2(ctx->builder, ptr_t,
+                                                            env_param, &idx, 1, "cap_ptr");
+                        LLVMValueRef boxed = LLVMBuildLoad2(ctx->builder, ptr_t, gep, "cap");
+                        Type *pt = (i < entry->param_count) ? entry->params[i].type : NULL;
+                        if (pt && type_is_integer(pt)) {
+                            LLVMTypeRef uft = LLVMFunctionType(
+                                LLVMInt64TypeInContext(ctx->context), &ptr_t, 1, 0);
+                            all_args[i] = LLVMBuildCall2(ctx->builder, uft,
+                                              get_rt_unbox_int(ctx), &boxed, 1, "ua");
+                        } else if (pt && type_is_float(pt)) {
+                            LLVMTypeRef uft = LLVMFunctionType(
+                                LLVMDoubleTypeInContext(ctx->context), &ptr_t, 1, 0);
+                            all_args[i] = LLVMBuildCall2(ctx->builder, uft,
+                                              get_rt_unbox_float(ctx), &boxed, 1, "ua");
+                        } else {
+                            all_args[i] = boxed;
+                        }
+                    }
+
+                    // Unbox remaining args from trampoline params
+                    for (int i = 0; i < remaining; i++) {
+                        LLVMValueRef boxed = LLVMGetParam(tramp, i + 1);
+                        Type *pt = (supplied + i < entry->param_count)
+                                 ? entry->params[supplied + i].type : NULL;
+                        if (pt && type_is_integer(pt)) {
+                            LLVMTypeRef uft = LLVMFunctionType(
+                                LLVMInt64TypeInContext(ctx->context), &ptr_t, 1, 0);
+                            all_args[supplied + i] = LLVMBuildCall2(ctx->builder, uft,
+                                                         get_rt_unbox_int(ctx), &boxed, 1, "ua");
+                        } else if (pt && type_is_float(pt)) {
+                            LLVMTypeRef uft = LLVMFunctionType(
+                                LLVMDoubleTypeInContext(ctx->context), &ptr_t, 1, 0);
+                            all_args[supplied + i] = LLVMBuildCall2(ctx->builder, uft,
+                                                         get_rt_unbox_float(ctx), &boxed, 1, "ua");
+                        } else {
+                            all_args[supplied + i] = boxed;
+                        }
+                    }
+
+                    // Call the real function with all args
+                    LLVMTypeRef *call_param_types = malloc(sizeof(LLVMTypeRef) * declared_params);
+                    for (int i = 0; i < declared_params; i++)
+                        call_param_types[i] = type_to_llvm(ctx, entry->params[i].type);
+                    LLVMTypeRef call_ft = LLVMFunctionType(
+                        type_to_llvm(ctx, entry->return_type),
+                        call_param_types, declared_params, 0);
+                    LLVMValueRef raw = LLVMBuildCall2(ctx->builder, call_ft,
+                                                      entry->func_ref, all_args,
+                                                      declared_params, "curry_call");
+
+                    // Box the result
+                    LLVMValueRef boxed_ret = codegen_box(ctx, raw, entry->return_type);
+                    LLVMBuildRet(ctx->builder, boxed_ret);
+
+                    if (saved_block)
+                        LLVMPositionBuilderAtEnd(ctx->builder, saved_block);
+                    free(tramp_types);
+                    free(call_param_types);
+                    free(all_args);
+
+                    // Build env array with supplied args (boxed)
+                    LLVMTypeRef  arr_t   = LLVMArrayType(ptr_t, supplied ? supplied : 1);
+                    LLVMValueRef env_arr = LLVMBuildAlloca(ctx->builder, arr_t, "curry_env");
+                    for (int i = 0; i < supplied; i++) {
+                        CodegenResult ar = codegen_expr(ctx, ast->list.items[i + 1]);
+                        LLVMValueRef  bv = codegen_box(ctx, ar.value, ar.type);
+                        LLVMValueRef zero   = LLVMConstInt(i32, 0, 0);
+                        LLVMValueRef idx    = LLVMConstInt(i32, i, 0);
+                        LLVMValueRef idxs[] = {zero, idx};
+                        LLVMValueRef slot   = LLVMBuildGEP2(ctx->builder, arr_t,
+                                                             env_arr, idxs, 2, "slot");
+                        LLVMBuildStore(ctx->builder, bv, slot);
+                    }
+                    LLVMValueRef env_ptr = LLVMBuildBitCast(ctx->builder, env_arr, ptr_t, "env_ptr");
+
+                    // Wrap trampoline + env in rt_value_closure
+                    LLVMValueRef fn_ptr  = LLVMBuildBitCast(ctx->builder, tramp, ptr_t, "fn_ptr");
+                    LLVMValueRef clo_fn  = get_rt_value_closure(ctx);
+                    LLVMTypeRef  cp[]    = {ptr_t, ptr_t, i32, i32};
+                    LLVMTypeRef  cft     = LLVMFunctionType(ptr_t, cp, 4, 0);
+                    LLVMValueRef cargs[] = {
+                        fn_ptr, env_ptr,
+                        LLVMConstInt(i32, supplied, 0),
+                        LLVMConstInt(i32, remaining, 0)
+                    };
+                    result.value = LLVMBuildCall2(ctx->builder, cft, clo_fn, cargs, 4, "curry");
+                    result.type  = type_fn(NULL, 0, NULL);
+                    return result;
+                }
+
 
                 if (entry->scheme) {
                     Type **_atypes = malloc(sizeof(Type*) * (declared_params ? declared_params : 1));
