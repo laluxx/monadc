@@ -192,24 +192,6 @@ AST *ast_new_lambda(ASTParam *params, int param_count,
     return a;
 }
 
-/* AST *ast_new_lambda(ASTParam *params, int param_count, */
-/*                     const char *return_type, */
-/*                     const char *docstring, */
-/*                     const char *alias_name, */
-/*                     bool naked, */
-/*                     AST *body) { */
-/*     AST *a = calloc(1, sizeof(AST)); */
-/*     a->type               = AST_LAMBDA; */
-/*     a->lambda.params      = params; */
-/*     a->lambda.param_count = param_count; */
-/*     a->lambda.return_type = return_type ? my_strdup(return_type) : NULL; */
-/*     a->lambda.docstring   = docstring   ? my_strdup(docstring)   : NULL; */
-/*     a->lambda.alias_name  = alias_name  ? my_strdup(alias_name)  : NULL; */
-/*     a->lambda.naked       = naked; */
-/*     a->lambda.body        = body; */
-/*     return a; */
-/* } */
-
 AST *ast_new_asm(AST **instructions, size_t instruction_count) {
     AST *a = calloc(1, sizeof(AST));
     a->type = AST_ASM;
@@ -958,22 +940,37 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
 
     while (p->current.type != TOK_RPAREN &&
            p->current.type != TOK_EOF) {
-        // Rest parameter: . args
+        // Rest parameter: . args  or  . [args :: Type]
         if (p->current.type == TOK_SYMBOL &&
             strcmp(p->current.value, ".") == 0) {
             p->current = lexer_next_token(p->lexer);
-            if (p->current.type != TOK_SYMBOL)
-                compiler_error(p->current.line, p->current.column,
-                               "Expected parameter name after '.'");
+
             if (count >= capacity) {
                 capacity = capacity == 0 ? 4 : capacity * 2;
                 params   = realloc(params, sizeof(ASTParam) * capacity);
             }
-            params[count].name      = my_strdup(p->current.value);
-            params[count].type_name = NULL;
-            params[count].is_rest   = true;
-            count++;
-            p->current = lexer_next_token(p->lexer);
+
+            if (p->current.type == TOK_LBRACKET) {
+                // Typed rest: . [args :: Type]
+                p->current = lexer_next_token(p->lexer); // consume '['
+                ASTParam param = parse_one_param(p);
+                if (p->current.type != TOK_RBRACKET)
+                    compiler_error(p->current.line, p->current.column,
+                                   "Expected ']' after typed rest parameter");
+                p->current = lexer_next_token(p->lexer); // consume ']'
+                param.is_rest   = true;
+                params[count++] = param;
+            } else if (p->current.type == TOK_SYMBOL) {
+                // Bare rest: . args
+                params[count].name      = my_strdup(p->current.value);
+                params[count].type_name = NULL;
+                params[count].is_rest   = true;
+                count++;
+                p->current = lexer_next_token(p->lexer);
+            } else {
+                compiler_error(p->current.line, p->current.column,
+                               "Expected parameter name or '[name :: Type]' after '.'");
+            }
             // Rest param must be last — skip to closing paren
             break;
         }
@@ -1036,6 +1033,17 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
         } else {
             compiler_error(p->current.line, p->current.column,
                            "Unexpected token in function signature");
+        }
+    }
+
+    // Consume optional `-> ReturnType` that follows the last parameter
+    // (common when the last param is a rest param and the loop broke early)
+    if (p->current.type == TOK_ARROW) {
+        p->current = lexer_next_token(p->lexer);
+        if (p->current.type == TOK_SYMBOL) {
+            free(ret_type);
+            ret_type   = my_strdup(p->current.value);
+            p->current = lexer_next_token(p->lexer);
         }
     }
 
@@ -1574,11 +1582,6 @@ static AST *parse_list(Parser *p) {
                 }
             }
 
-
-
-            // Build (define fname (lambda ...))
-            /* AST *lambda = ast_new_lambda(params, count, ret_type, */
-            /*                              meta.docstring, meta.alias_name, meta.naked, body); */
             AST *lambda = ast_new_lambda(params, count, ret_type,
                                          meta.docstring, meta.alias_name, meta.naked,
                                          body, body_exprs, body_count);

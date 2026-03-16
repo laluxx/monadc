@@ -10,8 +10,6 @@
 // Forward declaration
 typedef struct ModuleContext ModuleContext;
 
-
-
 /// Monomorphization cache
 //
 // Maps (function_name, concrete_arg_types) -> specialized LLVMValueRef.
@@ -35,7 +33,6 @@ typedef struct MonoCache {
     int             count;
     int             capacity;
 } MonoCache;
-
 
 
 typedef struct {

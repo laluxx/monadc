@@ -41,46 +41,55 @@
 ;;; Set algebra
 
 (define (union [a :: Set] -> [b :: Set] -> Set)
-  "Return a set containing all elements from both a and b."
+  :doc "Return a set containing all elements from both a and b."
+  :alias ∪
   (foldl (lambda ([acc :: Set] [x] -> Set)
     (conj acc x)) a b))
 
 (define (intersection [a :: Set] -> [b :: Set] -> Set)
-  "Return a set containing only elements present in both a and b."
+  :doc "Return a set containing only elements present in both a and b."
+  :alias ∩
   (foldl (lambda ([acc :: Set] [x] -> Set)
     (if (contains? b x) (conj acc x) acc)) (set) a))
 
 (define (difference [a :: Set] -> [b :: Set] -> Set)
-  "Return a set of elements in a that are not in b."
+  :doc "Return a set of elements in a that are not in b."
+  :alias \
   (foldl (lambda ([acc :: Set] [x] -> Set)
     (disj acc x)) a b))
 
 (define (symmetric-difference [a :: Set] -> [b :: Set] -> Set)
-  "Return a set of elements in either a or b but not both."
+  :doc "Return a set of elements in either a or b but not both."
+  :alias △
   (difference (union a b) (intersection a b)))
 
 
 ;;; Set relations
 
 (define (subset? [a :: Set] -> [b :: Set] -> Bool)
-  "Return True if every element of a is in b."
+  :doc "Return True if every element of a is in b."
+  :alias ⊆
   (foldl (lambda ([acc :: Bool] [x] -> Bool)
     (and acc (contains? b x))) True a))
 
 (define (proper-subset? [a :: Set] -> [b :: Set] -> Bool)
-  "Return True if a is a subset of b and a != b."
+  :doc "Return True if a is a subset of b and a != b."
+  :alias ⊂
   (and (subset? a b) (!= (count a) (count b))))
 
 (define (superset? [a :: Set] -> [b :: Set] -> Bool)
-  "Return True if every element of b is in a."
+  :doc "Return True if every element of b is in a."
+  :alias ⊇
   (subset? b a))
 
 (define (proper-superset? [a :: Set] -> [b :: Set] -> Bool)
-  "Return True if a is a superset of b and a != b."
+  :doc "Return True if a is a superset of b and a != b."
+  :alias ⊃
   (proper-subset? b a))
 
 (define (disjoint? [a :: Set] -> [b :: Set] -> Bool)
-  "Return True if a and b share no elements."
+  :doc "Return True if a and b share no elements."
+  :alias ⟂
   (= (count (intersection a b)) 0))
 
 

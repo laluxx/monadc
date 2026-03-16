@@ -62,19 +62,19 @@
 ;; TODO Those should not be needed because + and - should
 ;; be able to be passed as functions to higher order functions.
 
-(define (add [x :: Int] [y :: Int] -> Int)
+(define (add [x :: Int] -> [y :: Int] -> Int)
   "Return X + Y."
   (+ x y))
 
-(define (sub [x :: Int] [y :: Int] -> Int)
+(define (sub [x :: Int] -> [y :: Int] -> Int)
   "Return X - Y."
   (- x y))
 
-(define (mul [x :: Int] [y :: Int] -> Int)
+(define (mul [x :: Int] -> [y :: Int] -> Int)
   "Return X * Y."
   (* x y))
 
-(define (div-safe [x :: Int] [y :: Int] -> Int)
+(define (div-safe [x :: Int] -> [y :: Int] -> Int)
   "Return X / Y, or 0 if Y is zero."
   (if (= y 0) 0 (/ x y)))
 
@@ -100,17 +100,28 @@
   "Return True if X is odd."
   (= (mod x 2) 1))
 
-(define (divisible? [x :: Int] [y :: Int] -> Bool)
+(define (divisible? [x :: Int] -> [y :: Int] -> Bool)
   "Return True if X is divisible by Y."
   (= (mod x y) 0))
 
 ;;; Number theory
 
-(define (gcd [a :: Int] [b :: Int] -> Int)
+(define (gcd2 [a :: Int] -> [b :: Int] -> Int)
   "Return the greatest common divisor of A and B (Euclidean algorithm)."
   (if (= b 0) a (gcd b (mod a b))))
 
-(define (lcm [a :: Int] [b :: Int] -> Int)
+;; TODO If the function implementation is not inside a list (...)
+;; it will automatically be pattern matched
+;; (define (gcd . Int -> Int)
+;;  "Return the GCD of all provided integers."
+;;   [] -> 0
+;;   [x] -> (abs x)
+;;   [x|xs] -> (foldl (lambda (acc n) (gcd2 acc n)) x xs))
+
+
+
+
+(define (lcm [a :: Int] -> [b :: Int] -> Int)
   "Return the least common multiple of A and B."
   (/ (* a b) (gcd a b)))
 
@@ -126,7 +137,7 @@
     (if (= count 0) a (fib-iter b (+ a b) (- count 1))))
   (fib-iter 0 1 n))
 
-(define (prime-check? [n :: Int] [i :: Int] -> Bool)
+(define (prime-check? [n :: Int] -> [i :: Int] -> Bool)
   "Return True if N has no divisor from I up to sqrt(N)."
   (cond
     [(> (* i i) n)   True]
@@ -143,24 +154,24 @@
 
 ;;; Rounding and clamping
 
-(define (clamp [x :: Int] [lo :: Int] [hi :: Int] -> Int)
+(define (clamp [x :: Int] -> [lo :: Int] -> [hi :: Int] -> Int)
   "Clamp X to the range [LO, HI]."
   (cond
     [(< x lo) lo]
     [(> x hi) hi]
     [else     x]))
 
-(define (min [a :: Int] [b :: Int] -> Int)
+(define (min [a :: Int] -> [b :: Int] -> Int)
   "Return the smaller of A and B."
   (if (< a b) a b))
 
-(define (max [a :: Int] [b :: Int] -> Int)
+(define (max [a :: Int] -> [b :: Int] -> Int)
   "Return the larger of A and B."
   (if (> a b) a b))
 
 ;;; Powers and roots
 
-(define (pow [base :: Int] [exp :: Int] -> Int)
+(define (pow [base :: Int] -> [exp :: Int] -> Int)
   "Return BASE raised to EXP via fast exponentiation. EXP must be >= 0."
   (cond
     [(= exp 0)          1]
@@ -197,11 +208,11 @@
   "Return the product of all integers in XS."
   (foldl mul 1 xs))
 
-(define (sum-range [lo :: Int] [hi :: Int] -> Int)
+(define (sum-range [lo :: Int] -> [hi :: Int] -> Int)
   "Return the sum of integers from LO to HI inclusive. O(1) via Gauss."
   (/ (* (+ (- hi lo) 1) (+ lo hi)) 2))
 
-(define (product-range [lo :: Int] [hi :: Int] -> Int)
+(define (product-range [lo :: Int] -> [hi :: Int] -> Int)
   "Return the product of integers from LO to HI inclusive."
   (define (iter [acc :: Int] [k :: Int] -> Int)
     (if (> k hi) acc (iter (* acc k) (+ k 1))))
