@@ -18,7 +18,8 @@
    cdaar  cdadr  cddar  cdddr
 
    list-tabulate  iota list-index
-   list-reverse   list-tail list?])
+   list-reverse   list-tail list?
+   apply])
 
 
 (define (caar  [xs :: List] -> List) (car (car xs)))
@@ -33,6 +34,11 @@
 (define (cdadr [xs :: List] -> List) (cdr (car (cdr xs))))
 (define (cddar [xs :: List] -> List) (cdr (cdr (car xs))))
 (define (cdddr [xs :: List] -> List) (cdr (cdr (cdr xs))))
+
+
+(define (apply [f :: Fn] [xs :: List] -> a)
+  "Call f with elements of xs as arguments."
+  (foldl f (car xs) (cdr xs)))
 
 
 (define (list-tail [xs :: List] -> [k :: Int] -> List)

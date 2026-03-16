@@ -102,27 +102,11 @@ RuntimeValue *rt_value_closure(void *fn_ptr, void **env, int env_size, int arity
     return v;
 }
 
-/* All closures now have signature: (void *env, RuntimeValue *arg) -> RuntimeValue*
- * The env is the closure's captured variable array.                               */
-RuntimeValue *rt_closure_call1(RuntimeValue *closure, RuntimeValue *arg) {
-    if (!closure) { fprintf(stderr, "[clo1] NULL closure\n"); return rt_value_nil(); }
-    if (closure->type != RT_CLOSURE) {
-        fprintf(stderr, "[clo1] not a closure, type=%d\n", closure->type);
-        return rt_value_nil();
-    }
-    RuntimeClosure *c = closure->data.closure_val;
-    /* fprintf(stderr, "[clo1] fn_ptr=%p env_size=%d arity=%d arg=%p\n", */
-    /*         c->fn_ptr, c->env_size, c->arity, (void*)arg); */
-    typedef RuntimeValue *(*Fn)(void *, RuntimeValue *);
-    return ((Fn)c->fn_ptr)(c->env, arg);
-}
-
-RuntimeValue *rt_closure_call2(RuntimeValue *closure,
-                                RuntimeValue *arg0, RuntimeValue *arg1) {
+RuntimeValue *rt_closure_calln(RuntimeValue *closure, int n, RuntimeValue **args) {
     if (!closure || closure->type != RT_CLOSURE) return rt_value_nil();
     RuntimeClosure *c = closure->data.closure_val;
-    typedef RuntimeValue *(*Fn)(void *, RuntimeValue *, RuntimeValue *);
-    return ((Fn)c->fn_ptr)(c->env, arg0, arg1);
+    typedef RuntimeValue *(*Fn)(void *, int, RuntimeValue **);
+    return ((Fn)c->fn_ptr)(c->env, n, args);
 }
 
 ///  Thunk forcing
@@ -1196,7 +1180,7 @@ RuntimeValue *rt_set_foldl(RuntimeSet *s, RuntimeValue *init,
     for (size_t i = 0; i < s->capacity; i++) {
         RuntimeValue *v = s->buckets[i];
         if (v && v != TOMBSTONE)
-            acc = fn(env, acc, v);
+            { RuntimeValue *_a[] = {acc, v}; acc = fn(env, 2, _a); }
     }
     return acc;
 }
@@ -1208,7 +1192,7 @@ RuntimeList *rt_set_map(RuntimeSet *s, void *env, RT_UnaryFn fn) {
     for (size_t i = 0; i < s->capacity; i++) {
         RuntimeValue *v = s->buckets[i];
         if (v && v != TOMBSTONE)
-            rt_list_append(out, fn(env, v));
+            { RuntimeValue *_a[] = {v}; rt_list_append(out, fn(env, 1, _a)); }
     }
     return out;
 }
@@ -1219,7 +1203,7 @@ RuntimeSet *rt_set_filter(RuntimeSet *s, void *env, RT_UnaryFn pred) {
     for (size_t i = 0; i < s->capacity; i++) {
         RuntimeValue *v = s->buckets[i];
         if (v && v != TOMBSTONE) {
-            RuntimeValue *result = pred(env, v);
+            RuntimeValue *_pa[] = {v}; RuntimeValue *result = pred(env, 1, _pa);
             if (rt_unbox_int(result) != 0)
                 set_insert(out, v);
         }
@@ -1764,7 +1748,7 @@ RuntimeList *rt_list_map(RuntimeList *list, void *env, RT_UnaryFn fn) {
     ConsCell *c    = heap_cons_cell();
     c->head_fn     = NULL;
     c->head_env    = NULL;
-    c->head_val    = fn(env, rt_list_car(list));
+    { RuntimeValue *_a[] = {rt_list_car(list)}; c->head_val = fn(env, 1, _a); }
     c->head_forced = 1;
 
     LazyMapEnv *lenv = malloc(sizeof(LazyMapEnv));
@@ -1794,7 +1778,7 @@ RuntimeValue *rt_list_foldl(RuntimeList *list, RuntimeValue *init,
     RuntimeValue *acc = init;
     RuntimeList  *cur = list;
     while (!rt_list_is_empty_list(cur)) {
-        acc = fn(env, acc, rt_list_car(cur));
+        { RuntimeValue *_a[] = {acc, rt_list_car(cur)}; acc = fn(env, 2, _a); }
         cur = rt_list_cdr(cur);
     }
     return acc;
@@ -1815,7 +1799,7 @@ RuntimeValue *rt_list_foldr(RuntimeList *list, RuntimeValue *init,
     }
     RuntimeValue *acc = init;
     for (size_t i = count; i-- > 0; )
-        acc = fn(env, stack[i], acc);
+        { RuntimeValue *_a[] = {stack[i], acc}; acc = fn(env, 2, _a); }
     free(stack);
     return acc;
 }
@@ -1827,7 +1811,7 @@ RuntimeList *rt_list_filter(RuntimeList *list, void *env, RT_UnaryFn pred) {
     RuntimeList *cur = list;
     while (!rt_list_is_empty_list(cur)) {
         RuntimeValue *val    = rt_list_car(cur);
-        RuntimeValue *result = pred(env, val);
+        RuntimeValue *_pa[] = {val}; RuntimeValue *result = pred(env, 1, _pa);
         if (rt_unbox_int(result) != 0) {
             ConsCell *c    = heap_cons_cell();
             c->head_fn     = NULL;
@@ -1884,7 +1868,8 @@ RuntimeList *rt_list_zipwith(RuntimeList *a, RuntimeList *b,
     out->cell = NULL;
     RuntimeList *ca = a, *cb = b;
     while (!rt_list_is_empty_list(ca) && !rt_list_is_empty_list(cb)) {
-        RuntimeValue *val = fn(env, rt_list_car(ca), rt_list_car(cb));
+        RuntimeValue *_a[] = {rt_list_car(ca), rt_list_car(cb)};
+        RuntimeValue *val = fn(env, 2, _a);
         rt_list_append(out, val);
         ca = rt_list_cdr(ca);
         cb = rt_list_cdr(cb);
@@ -2173,8 +2158,7 @@ void declare_runtime_functions(CodegenContext *ctx) {
 
     // --- Closure ---
     DECL("rt_value_closure", ptr, ptr, ptr, i32, i32);  // fn_ptr, env, env_size, arity
-    DECL("rt_closure_call1", ptr, ptr, ptr);            // closure, arg
-    DECL("rt_closure_call2", ptr, ptr, ptr, ptr);       // closure, arg0, arg1
+    DECL("rt_closure_calln", ptr, ptr, i32, ptr);       // closure, n, args_array
 
     // --- Thunks ---
     DECL("rt_thunk_of_value", ptr, ptr);
@@ -2345,8 +2329,7 @@ LLVMValueRef get_rt_list_is_empty(CodegenContext *ctx) {
 GET_RUNTIME_FUNCTION(rt_ast_to_runtime_value)
 
 GET_RUNTIME_FUNCTION(rt_value_closure)
-GET_RUNTIME_FUNCTION(rt_closure_call1)
-GET_RUNTIME_FUNCTION(rt_closure_call2)
+GET_RUNTIME_FUNCTION(rt_closure_calln)
 
 GET_RUNTIME_FUNCTION(rt_list_car)
 GET_RUNTIME_FUNCTION(rt_list_cdr)

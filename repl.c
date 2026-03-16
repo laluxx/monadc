@@ -215,14 +215,26 @@ static void rt_sym_table_init(void) {
     g_rt_syms[g_rt_sym_count].name = "rt_set_filter";
     g_rt_syms[g_rt_sym_count].addr = (void *)rt_set_filter;
     g_rt_sym_count++;
+    g_rt_syms[g_rt_sym_count].name = "rt_closure_calln";
+    g_rt_syms[g_rt_sym_count].addr = (void *)rt_closure_calln;
+    g_rt_sym_count++;
+    g_rt_syms[g_rt_sym_count].name = "rt_value_closure";
+    g_rt_syms[g_rt_sym_count].addr = (void *)rt_value_closure;
+    g_rt_sym_count++;
+
 
     ADD(__layout_ptr_set);
     ADD(__layout_ptr_get);
+    ADD(rt_closure_calln);
+    ADD(rt_closure_call1);
+    ADD(rt_closure_call2);
+
 
     /* Unboxing */
     ADD(rt_unbox_int);    ADD(rt_unbox_float); ADD(rt_unbox_char);
     ADD(rt_unbox_string); ADD(rt_unbox_list);  ADD(rt_value_is_nil);
     ADD(rt_print_value_newline);
+
     /* Value constructors */
     ADD(rt_value_int);   ADD(rt_value_float);   ADD(rt_value_char);
     ADD(rt_value_string);ADD(rt_value_symbol);  ADD(rt_value_keyword);
@@ -327,14 +339,26 @@ static void redeclare_env_symbols(REPLContext *ctx) {
                     e->func_ref = existing;
                     continue;
                 }
-                LLVMTypeRef *pt = e->param_count > 0
-                    ? malloc(sizeof(LLVMTypeRef) * e->param_count) : NULL;
-                for (int i = 0; i < e->param_count; i++)
-                    pt[i] = type_to_llvm(&ctx->cg, e->params[i].type);
-                LLVMTypeRef ft = LLVMFunctionType(
-                    type_to_llvm(&ctx->cg, e->return_type),
-                    pt, e->param_count, 0);
-                if (pt) free(pt);
+
+                LLVMTypeRef ft;
+                if (e->is_closure_abi) {
+                    /* Closure ABI: always (ptr env, i32 n, ptr args) -> ptr */
+                    LLVMTypeRef ptr_t = LLVMPointerType(
+                        LLVMInt8TypeInContext(ctx->cg.context), 0);
+                    LLVMTypeRef i32_t = LLVMInt32TypeInContext(ctx->cg.context);
+                    LLVMTypeRef params[] = {ptr_t, i32_t, ptr_t};
+                    ft = LLVMFunctionType(ptr_t, params, 3, 0);
+                } else {
+                    LLVMTypeRef *pt = e->param_count > 0
+                        ? malloc(sizeof(LLVMTypeRef) * e->param_count) : NULL;
+                    for (int i = 0; i < e->param_count; i++)
+                        pt[i] = type_to_llvm(&ctx->cg, e->params[i].type);
+                    ft = LLVMFunctionType(
+                        type_to_llvm(&ctx->cg, e->return_type),
+                        pt, e->param_count, 0);
+                    if (pt) free(pt);
+                }
+
                 LLVMValueRef fn = LLVMAddFunction(ctx->cg.module, name, ft);
                 LLVMSetLinkage(fn, LLVMExternalLinkage);
                 e->func_ref = fn;
@@ -358,18 +382,27 @@ static void redeclare_env_symbols(REPLContext *ctx) {
  */
 static void map_imported_in_module(LLVMExecutionEngineRef engine,
                                    LLVMModuleRef mod) {
+    /* Closure runtime functions */
+    static const struct { const char *name; void *addr; } closure_syms[] = {
+        {"rt_closure_calln", (void*)rt_closure_calln},
+        {"rt_value_closure", (void*)rt_value_closure},
+        {NULL, NULL}
+    };
+    for (int i = 0; closure_syms[i].name; i++) {
+        LLVMValueRef ref = LLVMGetNamedFunction(mod, closure_syms[i].name);
+        if (ref) LLVMAddGlobalMapping(engine, ref, closure_syms[i].addr);
+    }
+
     for (int i = 0; i < g_imported_count; i++) {
         const char *name = g_imported[i].name;
         void       *addr = g_imported[i].addr;
         if (!addr) continue;
 
-        /* Try as function first, then global variable */
+        /* Try function first, then global variable */
         LLVMValueRef ref = LLVMGetNamedFunction(mod, name);
         if (!ref) ref = LLVMGetNamedGlobal(mod, name);
         if (ref) {
             LLVMAddGlobalMapping(engine, ref, addr);
-            if (getenv("REPL_DUMP_IR"))
-                fprintf(stderr, "[map] %s -> %p\n", name, addr);
         }
     }
 }
@@ -1090,20 +1123,34 @@ static bool close_and_run(REPLContext *ctx) {
     LLVMAddModule(ctx->engine, mod);
     ctx->cg.module = NULL;
 
+    /* Map runtime functions first */
     map_runtime_in_module(ctx->engine, mod);
+
+    /* Map imported module symbols (Math__fib etc.) */
     map_imported_in_module(ctx->engine, mod);
 
-    /* Map env globals so the JIT can resolve cross-module references
-     * like @counter defined in a previous module.                    */
+    /* Map REPL-defined globals from previous expressions.
+     *
+     * CRITICAL: Only map ENV_VAR globals that were defined in the REPL
+     * itself (no module_name), not imported symbols — those are already
+     * handled by map_imported_in_module above and calling
+     * LLVMGetGlobalValueAddress on them triggers spurious re-finalization
+     * of the MCJIT engine which corrupts relocation state.
+     */
     Env *env = ctx->cg.env;
     for (size_t bi = 0; bi < env->size; bi++) {
         for (EnvEntry *e = env->buckets[bi]; e; e = e->next) {
-            if (e->kind != ENV_VAR || !e->value) continue;
+            /* Only REPL-defined (non-imported) variables */
+            if (e->kind != ENV_VAR) continue;
+            if (!e->value) continue;
             if (LLVMGetValueKind(e->value) != LLVMGlobalVariableValueKind) continue;
+            if (e->module_name) continue;  /* ← KEY FIX: skip imported symbols */
+
             const char *gname = (e->llvm_name && e->llvm_name[0])
                                 ? e->llvm_name : e->name;
             LLVMValueRef in_mod = LLVMGetNamedGlobal(mod, gname);
             if (!in_mod) continue;
+
             uint64_t addr = LLVMGetGlobalValueAddress(ctx->engine, gname);
             if (addr)
                 LLVMAddGlobalMapping(ctx->engine, in_mod, (void*)(uintptr_t)addr);
@@ -1112,12 +1159,14 @@ static bool close_and_run(REPLContext *ctx) {
 
     void (*fn)(void) = (void(*)(void))
         LLVMGetFunctionAddress(ctx->engine, g_wrapper_name);
+
     if (!fn) {
         fprintf(stderr, "Error: JIT could not find %s\n", g_wrapper_name);
         return false;
     }
 
     fn();
+
     arena_reset(&g_eval_arena);
     return true;
 }

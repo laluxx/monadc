@@ -96,15 +96,14 @@ typedef struct RuntimeValue {
 /// Closure
 
 RuntimeValue *rt_value_closure(void *fn_ptr, void **env, int env_size, int arity);
-RuntimeValue *rt_closure_call1(RuntimeValue *closure, RuntimeValue *arg);
-RuntimeValue *rt_closure_call2(RuntimeValue *closure, RuntimeValue *arg0, RuntimeValue *arg1);
+RuntimeValue *rt_closure_calln(RuntimeValue *closure, int n, RuntimeValue **args);
 
 /// HOF Callback Types
 
 /* typedef RuntimeValue *(*RT_UnaryFn)(RuntimeValue *); */
 /* typedef RuntimeValue *(*RT_BinaryFn)(RuntimeValue *, RuntimeValue *); */
-typedef RuntimeValue *(*RT_UnaryFn)(void *env, RuntimeValue *);
-typedef RuntimeValue *(*RT_BinaryFn)(void *env, RuntimeValue *, RuntimeValue *);
+typedef RuntimeValue *(*RT_UnaryFn)(void *env, int n, RuntimeValue **args);
+typedef RuntimeValue *(*RT_BinaryFn)(void *env, int n, RuntimeValue **args);
 typedef int           (*RT_PredFn)(RuntimeValue *);
 
 /// ConsCell
@@ -352,8 +351,7 @@ LLVMTypeRef get_rt_list_type(CodegenContext *ctx);
 //// Closure
 
 LLVMValueRef get_rt_value_closure(CodegenContext *ctx);
-LLVMValueRef get_rt_closure_call1(CodegenContext *ctx);
-LLVMValueRef get_rt_closure_call2(CodegenContext *ctx);
+LLVMValueRef get_rt_closure_calln(CodegenContext *ctx);
 
 //// Thunks
 
