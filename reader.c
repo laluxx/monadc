@@ -1,5 +1,6 @@
 #include "reader.h"
 #include "features.h"
+#include "pmatch.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -284,6 +285,28 @@ AST *ast_new_map(void) {
     return a;
 }
 
+void ast_pattern_free(ASTPattern *p) {
+    if (!p) return;
+    free(p->var_name);
+    if (p->elements) {
+        for (int i = 0; i < p->element_count; i++)
+            ast_pattern_free(&p->elements[i]);
+        free(p->elements);
+    }
+    if (p->tail) {
+        ast_pattern_free(p->tail);
+        free(p->tail);
+    }
+}
+
+AST *ast_new_pmatch(ASTPMatchClause *clauses, int clause_count) {
+    AST *a = calloc(1, sizeof(AST));
+    a->type                = AST_PMATCH;
+    a->pmatch.clauses      = clauses;
+    a->pmatch.clause_count = clause_count;
+    return a;
+}
+
 void ast_array_append(AST *array, AST *item) {
     if (array->array.element_count >= array->array.element_capacity) {
         array->array.element_capacity *= 2;
@@ -487,6 +510,17 @@ void ast_free(AST *ast) {
         }
         free(ast->map.keys);
         free(ast->map.vals);
+        break;
+
+    case AST_PMATCH:
+        for (int i = 0; i < ast->pmatch.clause_count; i++) {
+            ASTPMatchClause *cl = &ast->pmatch.clauses[i];
+            for (int j = 0; j < cl->pattern_count; j++)
+                ast_pattern_free(&cl->patterns[j]);
+            free(cl->patterns);
+            ast_free(cl->body);
+        }
+        free(ast->pmatch.clauses);
         break;
 
     default:
@@ -719,6 +753,7 @@ Token lexer_next_token(Lexer *lex) {
     if (c == '{') { advance(lex); tok.type = TOK_LBRACE;   return tok; }
     if (c == '}') { advance(lex); tok.type = TOK_RBRACE;   return tok; }
     if (c == ',') { advance(lex); tok.type = TOK_SYMBOL; tok.value = my_strdup(","); return tok; }
+    if (c == '|') { advance(lex); tok.type = TOK_PIPE;     return tok; }
 
     // Character literal or quote
     if (c == '\'') {
@@ -900,17 +935,10 @@ Token lexer_next_token(Lexer *lex) {
 
 /// Parser
 
-typedef struct {
-    Lexer *lexer;
-    Token  current;
-} Parser;
-
 static void parser_init(Parser *p, Lexer *lex) {
     p->lexer   = lex;
     p->current = lexer_next_token(lex);
 }
-
-static AST *parse_expr(Parser *p);
 
 static ASTParam parse_one_param(Parser *p) {
     ASTParam param = {NULL, NULL, false};
@@ -958,13 +986,27 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                     compiler_error(p->current.line, p->current.column,
                                    "Expected ']' after typed rest parameter");
                 p->current = lexer_next_token(p->lexer); // consume ']'
-                param.is_rest   = true;
+                param.is_rest = true;
+                param.is_anon = false;
                 params[count++] = param;
             } else if (p->current.type == TOK_SYMBOL) {
-                // Bare rest: . args
-                params[count].name      = my_strdup(p->current.value);
-                params[count].type_name = NULL;
-                params[count].is_rest   = true;
+                bool rest_type_only = (p->current.value[0] >= 'A' &&
+                                       p->current.value[0] <= 'Z');
+                if (rest_type_only) {
+                    /* Anonymous typed rest: . Int */
+                    char gen_name[32];
+                    snprintf(gen_name, sizeof(gen_name), "__pm_args");
+                    params[count].name      = my_strdup(gen_name);
+                    params[count].type_name = my_strdup(p->current.value);
+                    params[count].is_rest   = true;
+                    params[count].is_anon   = true;
+                } else {
+                    /* Bare named rest: . args */
+                    params[count].name      = my_strdup(p->current.value);
+                    params[count].type_name = NULL;
+                    params[count].is_rest   = true;
+                    params[count].is_anon   = false;
+                }
                 count++;
                 p->current = lexer_next_token(p->lexer);
             } else {
@@ -986,6 +1028,7 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                 capacity = capacity == 0 ? 4 : capacity * 2;
                 params   = realloc(params, sizeof(ASTParam) * capacity);
             }
+            param.is_anon = false;
             params[count++] = param;
 
         } else if (p->current.type == TOK_ARROW) {
@@ -1017,16 +1060,29 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
             }
             /* If next token is [ or another ->, just continue the loop */
         } else if (p->current.type == TOK_SYMBOL) {
-            /* Bare symbol NOT after -> — always a parameter */
+            /* Bare symbol NOT after -> — could be a named param or an
+             * anonymous typed param (uppercase = type only, e.g. Int).  */
             char *sym  = my_strdup(p->current.value);
             p->current = lexer_next_token(p->lexer);
             if (count >= capacity) {
                 capacity = capacity == 0 ? 4 : capacity * 2;
                 params   = realloc(params, sizeof(ASTParam) * capacity);
             }
-            params[count].name      = sym;
-            params[count].type_name = NULL;
-            params[count].is_rest   = false;
+            /* Heuristic: starts with uppercase → type-only anonymous param */
+            bool is_type_only = (sym[0] >= 'A' && sym[0] <= 'Z');
+            if (is_type_only) {
+                char gen_name[32];
+                snprintf(gen_name, sizeof(gen_name), "__p_%d", count);
+                params[count].name      = my_strdup(gen_name);
+                params[count].type_name = sym;  /* sym is the type name */
+                params[count].is_rest   = false;
+                params[count].is_anon   = true;
+            } else {
+                params[count].name      = sym;
+                params[count].type_name = NULL;
+                params[count].is_rest   = false;
+                params[count].is_anon   = false;
+            }
             count++;
 
 
@@ -1400,6 +1456,119 @@ static AST *parse_cond(Parser *p) {
     return if_node;
 }
 
+static AST *desugar_cond_clauses(AST **clauses, int count, int line, int col) {
+    if (count == 0) {
+        // No more clauses — return 0 as fallthrough (should be unreachable
+        // since pmatch always adds a final wildcard/undefined clause)
+        return ast_new_number(0, "0");
+    }
+
+    AST *clause = clauses[0];
+    if (clause->type != AST_LIST || clause->list.count < 2)
+        return desugar_cond_clauses(clauses + 1, count - 1, line, col);
+
+    AST *guard = clause->list.items[0];
+    int  nbody = (int)clause->list.count - 1;
+
+    // else clause
+    if (guard->type == AST_SYMBOL && strcmp(guard->symbol, "else") == 0) {
+        if (nbody == 1) return ast_clone(clause->list.items[1]);
+        AST *begin = ast_new_list();
+        ast_list_append(begin, ast_new_symbol("begin"));
+        for (int i = 0; i < nbody; i++)
+            ast_list_append(begin, ast_clone(clause->list.items[1 + i]));
+        return begin;
+    }
+
+    AST *then;
+    if (nbody == 1) {
+        then = ast_clone(clause->list.items[1]);
+    } else {
+        then = ast_new_list();
+        ast_list_append(then, ast_new_symbol("begin"));
+        for (int i = 0; i < nbody; i++)
+            ast_list_append(then, ast_clone(clause->list.items[1 + i]));
+    }
+
+    AST *rest = desugar_cond_clauses(clauses + 1, count - 1, line, col);
+
+    AST *if_node = ast_new_list();
+    ast_list_append(if_node, ast_new_symbol("if"));
+    ast_list_append(if_node, ast_clone(guard));
+    ast_list_append(if_node, then);
+    ast_list_append(if_node, rest);
+    if_node->line   = line;
+    if_node->column = col;
+    return if_node;
+}
+
+AST *desugar_cond_ast(AST *cond_list) {
+    if (!cond_list || cond_list->type != AST_LIST || cond_list->list.count < 2)
+        return cond_list;
+    // items[0] is "cond", items[1..] are clauses
+    int   nclause = (int)cond_list->list.count - 1;
+    AST **clauses = &cond_list->list.items[1];
+    return desugar_cond_clauses(clauses, nclause,
+                                cond_list->line, cond_list->column);
+}
+
+
+// Desugar a synthetically built (let ([n e]...) body) AST_LIST
+// into a build_let lambda-call. The input list owns its children —
+// we steal them so do NOT free the input after calling this.
+AST *desugar_let_ast(AST *let_list) {
+    // let_list->list.items:
+    //   [0] = symbol "let"
+    //   [1] = list of binding pairs ([name expr]...)
+    //   [2..] = body expressions
+    if (!let_list || let_list->type != AST_LIST || let_list->list.count < 3)
+        return let_list;
+
+    AST *bindings_node = let_list->list.items[1];
+
+    ASTParam *params     = NULL;
+    int       param_count = 0;
+    AST     **inits      = NULL;
+    int       init_count = 0;
+
+    for (size_t i = 0; i < bindings_node->list.count; i++) {
+        AST *pair = bindings_node->list.items[i];
+        if (pair->type != AST_LIST || pair->list.count < 2) continue;
+        char *bname = my_strdup(pair->list.items[0]->symbol);
+        AST  *init  = pair->list.items[1];
+        // steal init from pair so it isn't freed with let_list
+        pair->list.items[1] = NULL;
+
+        params = realloc(params, sizeof(ASTParam) * (param_count + 1));
+        params[param_count].name      = bname;
+        params[param_count].type_name = NULL;
+        params[param_count].is_rest   = false;
+        params[param_count].is_anon   = false;
+        param_count++;
+
+        inits = realloc(inits, sizeof(AST*) * (init_count + 1));
+        inits[init_count++] = init;
+    }
+
+    int   body_count = (int)let_list->list.count - 2;
+    AST **body_exprs = malloc(sizeof(AST*) * (body_count ? body_count : 1));
+    for (int i = 0; i < body_count; i++) {
+        body_exprs[i] = let_list->list.items[2 + i];
+        // steal from let_list
+        let_list->list.items[2 + i] = NULL;
+    }
+
+    int line = let_list->line, col = let_list->column;
+    fprintf(stderr, "DEBUG desugar_let_ast: param_count=%d body_count=%d\n",
+            param_count, body_count);
+    for (int i = 0; i < param_count; i++)
+        fprintf(stderr, "  param[%d] name='%s' type_name='%s'\n",
+                i,
+                params[i].name ? params[i].name : "NULL",
+                params[i].type_name ? params[i].type_name : "NULL");
+    return build_let(params, param_count, inits, body_exprs, body_count, line, col);
+}
+
 static AST *parse_list(Parser *p) {
     int start_line = p->current.line;
     int start_column = p->current.column;
@@ -1530,17 +1699,28 @@ static AST *parse_list(Parser *p) {
             /* AST *body = parse_expr(p); */
             AST **body_exprs = NULL;
             int   body_count = 0;
-            while (p->current.type != TOK_RPAREN &&
-                   p->current.type != TOK_EOF    &&
-                   p->current.type != TOK_KEYWORD) {
-                body_exprs = realloc(body_exprs, sizeof(AST*) * (body_count + 1));
-                body_exprs[body_count++] = parse_expr(p);
+
+            // Pattern matching sugar: body does not start with (
+            if (p->current.type != TOK_LPAREN &&
+                p->current.type != TOK_RPAREN &&
+                p->current.type != TOK_EOF) {
+                AST *pm = parse_pmatch_clauses(p, count);
+                body_exprs = malloc(sizeof(AST*));
+                body_exprs[0] = pm;
+                body_count = 1;
+            } else {
+                while (p->current.type != TOK_RPAREN &&
+                       p->current.type != TOK_EOF    &&
+                       p->current.type != TOK_KEYWORD) {
+                    body_exprs = realloc(body_exprs, sizeof(AST*) * (body_count + 1));
+                    body_exprs[body_count++] = parse_expr(p);
+                }
             }
             if (body_count == 0) {
                 compiler_error(p->current.line, p->current.column,
                                "function body cannot be empty");
             }
-            AST *body = body_exprs[body_count - 1]; // last expr = return value
+            AST *body = body_exprs[body_count - 1];  // last expr = return value
 
 
             // Parse optional metadata AFTER body
@@ -2112,7 +2292,7 @@ static AST *parse_map(Parser *p) {
     return node;
 }
 
-static AST *parse_expr(Parser *p) {
+AST *parse_expr(Parser *p) {
     Token tok = p->current;
 
     switch (tok.type) {

@@ -4,6 +4,10 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+/* Forward declarations */
+struct Type;
+struct AST;
+
 /// AST
 
 typedef enum {
@@ -24,14 +28,44 @@ typedef enum {
     AST_LAYOUT,     // (layout Name [field :: Type] ... :packed True :align 16)
     AST_SET,        // {val val val}
     AST_MAP,        // #{"key" val "key" val}
+    AST_PMATCH,     // pattern matching clauses
 } ASTType;
 
 // A single parsed function parameter: name + optional type annotation
 typedef struct ASTParam {
-    char *name;       // parameter name
+    char *name;       // parameter name (generated if is_anon)
     char *type_name;  // type annotation string, NULL if absent
     bool is_rest;     // Variadic . args
+    bool is_anon;     // Name was generated, user wrote type only e.g. Int
 } ASTParam;
+
+/// Pattern matching
+
+typedef enum {
+    PAT_WILDCARD,       // _
+    PAT_VAR,            // x  (binds name)
+    PAT_LITERAL_INT,    // 0, 42, -1
+    PAT_LITERAL_FLOAT,  // 3.14
+    PAT_LIST_EMPTY,     // []
+    PAT_LIST,           // [p1 p2 ... | tail?]
+} PatternKind;
+
+typedef struct ASTPattern {
+    PatternKind kind;
+    char       *var_name;           // PAT_VAR: bound name
+    double      lit_value;          // PAT_LITERAL_INT / PAT_LITERAL_FLOAT
+    // PAT_LIST:
+    struct ASTPattern *elements;    // per-element sub-patterns
+    int                element_count;
+    struct ASTPattern *tail;        // NULL or PAT_VAR/PAT_WILDCARD after |
+} ASTPattern;
+
+// One clause: patterns (one per param) + body
+typedef struct ASTPMatchClause {
+    ASTPattern  *patterns;    // one pattern per matched param
+    int          pattern_count;
+    struct AST  *body;
+} ASTPMatchClause;
 
 // A single field in a layout definition
 typedef struct ASTLayoutField {
@@ -41,9 +75,6 @@ typedef struct ASTLayoutField {
     char *array_elem;  // element type name, NULL if not array
     int   array_size;  // array size, -1 if not specified
 } ASTLayoutField;
-
-/* Forward declaration for HM type inference */
-struct Type;
 
 typedef struct AST {
     ASTType type;
@@ -135,6 +166,12 @@ typedef struct AST {
             size_t       count;
             size_t       capacity;
         } map;
+
+        // AST_PMATCH
+        struct {
+            ASTPMatchClause *clauses;
+            int              clause_count;
+        } pmatch;
     };
 
     char *literal_str; // original literal string for numbers (e.g. "0xFF")
@@ -173,6 +210,8 @@ AST *ast_new_layout(const char *name,
                     bool packed, int align);
 AST *ast_new_set(void);
 AST *ast_new_map(void);
+AST *ast_new_pmatch(ASTPMatchClause *clauses, int clause_count);
+void ast_pattern_free(ASTPattern *p);
 
 
 void ast_list_append(AST *list, AST *item);
@@ -202,6 +241,7 @@ typedef enum {
     TOK_LBRACE,         // {
     TOK_RBRACE,         // }
     TOK_HASH_LBRACE,    // #{
+    TOK_PIPE,           // |
 } TokenType;
 
 typedef struct {
@@ -224,6 +264,13 @@ Token lexer_next_token(Lexer *lex);
 /// Parser
 
 typedef struct {
+    Lexer *lexer;
+    Token  current;
+} Parser;
+
+AST *parse_expr(Parser *p);
+
+typedef struct {
     AST **exprs;
     size_t count;
 } ASTList;
@@ -240,6 +287,9 @@ AST *parse(const char *source);
 const char *parser_get_filename(void);
 
 char *ast_to_string(AST *ast);
+AST  *desugar_cond_ast(AST *cond_list);
+AST  *desugar_let_ast(AST *let_list);
+
 
 /// ERROR Handling
 

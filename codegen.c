@@ -1,4 +1,5 @@
 #include "codegen.h"
+#include "pmatch.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -2604,9 +2605,12 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         if (param->type_name) {
                             param_type = type_from_name(param->type_name);
                             if (!param_type)
-                                CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown parameter type '%s'",
+                                CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown parameter type '%s' (param name='%s' is_rest=%d is_anon=%d)",
                                               parser_get_filename(), lambda->line, lambda->column,
-                                              param->type_name);
+                                              param->type_name,
+                                              param->name ? param->name : "NULL",
+                                              param->is_rest,
+                                              param->is_anon);
                             all_params_unknown = false;
                         } else {
                             param_type = type_unknown();
@@ -2925,8 +2929,17 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         } else {
                             const char *prev_fn   = ctx->current_function_name;
                             ctx->current_function_name = var_name;
-                            for (int i = 0; i < lambda->lambda.body_count; i++)
-                                body_result = codegen_expr(ctx, lambda->lambda.body_exprs[i]);
+                            for (int i = 0; i < lambda->lambda.body_count; i++) {
+                                AST *body_ast = lambda->lambda.body_exprs[i];
+                                if (body_ast->type == AST_PMATCH) {
+                                    body_ast = pmatch_desugar(body_ast,
+                                                              lambda->lambda.params,
+                                                              lambda->lambda.param_count);
+                                    ast_print(body_ast);
+                                    fprintf(stdout, "\n");
+                                }
+                                body_result = codegen_expr(ctx, body_ast);
+                            }
                             ctx->current_function_name = prev_fn;
                             if (!body_result.type) {
                                 body_result.type  = type_clone(ret_type);
@@ -6236,7 +6249,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
                         // Resolve the declared element type for typed rest params.
                         // entry->params[i].type is type_list(T) for `. [args :: T]`
-                        // and type_list(NULL) for bare `. args`.
+                        // and type_list(NULL) for bare rest params.
                         Type *rest_elem_type = NULL;
                         {
                             Type *rpt = entry->params[i].type;
@@ -6245,8 +6258,37 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                                 rest_elem_type = rpt->list_elem;
                         }
 
+                        // Special case: exactly one argument and it is already a
+                        // List — pass it directly as the rest param instead of
+                        // wrapping it. This handles (my-sum xs) where xs is the
+                        // tail of a previous rest param.
+                        if (ast->list.count == (size_t)(i + 2)) {
+                            CodegenResult only = codegen_expr(ctx, ast->list.items[i + 1]);
+                            if (only.type && (only.type->kind == TYPE_LIST ||
+                                              only.type->kind == TYPE_UNKNOWN)) {
+                                // Already a list (or opaque ptr) — pass directly
+                                // as the rest param without re-boxing.
+                                args[i] = only.value;
+                                break;
+                            }
+                            // Not a list — fall through to normal per-element path
+                            // by putting it back. We re-codegen below which is
+                            // slightly wasteful but correct.
+                        }
+
+                        // If there are no variadic arguments, pass an empty list
+                        if ((size_t)(i + 1) >= ast->list.count) {
+                            LLVMValueRef empty_fn = get_rt_list_new(ctx);
+                            LLVMTypeRef  ptr      = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                            LLVMTypeRef  empty_ft = LLVMFunctionType(ptr, NULL, 0, 0);
+                            args[i] = LLVMBuildCall2(ctx->builder, empty_ft,
+                                                     empty_fn, NULL, 0, "empty_rest");
+                            break;
+                        }
+
                         for (size_t j = i + 1; j < ast->list.count; j++) {
                             CodegenResult er = codegen_expr(ctx, ast->list.items[j]);
+
 
                             // Type-check each element against the declared element type.
                             if (rest_elem_type && er.type &&
@@ -6699,6 +6741,18 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         LLVMInt64TypeInContext(ctx->context), "str_hash");
                     as_double = LLVMBuildSIToFP(ctx->builder, as_i64,
                         LLVMDoubleTypeInContext(ctx->context), "to_double");
+                } else if (at->kind == TYPE_UNKNOWN ||
+                           at->kind == TYPE_LIST   ||
+                           at->kind == TYPE_RATIO  ||
+                           at->kind == TYPE_SYMBOL) {
+                    // Opaque RuntimeValue* — unbox as int
+                    LLVMTypeRef  ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                    LLVMTypeRef  uft   = LLVMFunctionType(LLVMInt64TypeInContext(ctx->context),
+                                                          &ptr_t, 1, 0);
+                    as_i64 = LLVMBuildCall2(ctx->builder, uft,
+                                 get_rt_unbox_int(ctx), &av, 1, "unbox_int");
+                    as_double = LLVMBuildSIToFP(ctx->builder, as_i64,
+                        LLVMDoubleTypeInContext(ctx->context), "to_double");
                 } else {
                     // function or unknown: FNV-1a of symbol name at compile time
                     if (arg->type == AST_SYMBOL) {
@@ -6989,10 +7043,13 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             CodegenResult *arg_results = malloc(sizeof(CodegenResult) * (arg_count ? arg_count : 1));
             for (int i = 0; i < arg_count; i++) {
                 arg_results[i] = codegen_expr(ctx, ast->list.items[i + 1]);
-                // Patch lambda param type from inferred arg type
+                // Patch lambda param type from inferred arg type,
+                // but only if the type is concrete — never patch with
+                // unknown/'?' since that will fail type_from_name later.
                 if (i < head->lambda.param_count &&
                     head->lambda.params[i].type_name == NULL &&
-                    arg_results[i].type) {
+                    arg_results[i].type &&
+                    arg_results[i].type->kind != TYPE_UNKNOWN) {
                     head->lambda.params[i].type_name = strdup(type_to_string(arg_results[i].type));
                 }
             }

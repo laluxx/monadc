@@ -62,8 +62,7 @@ Type *type_from_name(const char *name) {
     if (strcmp(name, "Arr")     == 0) return type_arr(NULL, -1);
     if (strcmp(name, "Set")     == 0) return type_set();
     if (strcmp(name, "Map")     == 0) return type_map();
-    if (strcmp(name, "Fn")      == 0) return type_fn(NULL, 0, NULL);// Correct for now ?
-    // NO we need proper closures
+    if (strcmp(name, "Fn")      == 0) return type_fn(NULL, 0, NULL);
 
     // Check alias registry (supports chained aliases: Code -> List -> ...)
     int depth = 0;
