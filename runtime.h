@@ -320,7 +320,8 @@ void rt_print_value(RuntimeValue *val);
 void rt_print_value_newline(RuntimeValue *val);
 void rt_print_list(RuntimeList *list);
 void rt_print_list_unbounded(RuntimeList *list);
-
+void __print_i128(__int128 v);
+void __print_u128(unsigned __int128 v);
 
 /// Memory Management
 
@@ -328,7 +329,6 @@ void rt_value_free(RuntimeValue *val);
 void rt_list_free(RuntimeList *list);
 void rt_thunk_free(RuntimeThunk *thunk);
 void rt_set_free(RuntimeSet *s);
-
 
 /// Assert
 
@@ -347,6 +347,10 @@ char         *rt_string_take(const char *s, int64_t n);
 void declare_runtime_functions(CodegenContext *ctx);
 LLVMTypeRef get_rt_value_type(CodegenContext *ctx);
 LLVMTypeRef get_rt_list_type(CodegenContext *ctx);
+
+LLVMValueRef get___print_i128(CodegenContext *ctx);
+LLVMValueRef get___print_u128(CodegenContext *ctx);
+
 
 //// Closure
 

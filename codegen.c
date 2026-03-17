@@ -636,6 +636,17 @@ LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *t) {
         return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
     case TYPE_COLL:
         return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+    case TYPE_F32:  return LLVMFloatTypeInContext(ctx->context);
+    case TYPE_I8:   return LLVMInt8TypeInContext(ctx->context);
+    case TYPE_U8:   return LLVMInt8TypeInContext(ctx->context);
+    case TYPE_I16:  return LLVMInt16TypeInContext(ctx->context);
+    case TYPE_U16:  return LLVMInt16TypeInContext(ctx->context);
+    case TYPE_I32:  return LLVMInt32TypeInContext(ctx->context);
+    case TYPE_U32:  return LLVMInt32TypeInContext(ctx->context);
+    case TYPE_I64:  return LLVMInt64TypeInContext(ctx->context);
+    case TYPE_U64:  return LLVMInt64TypeInContext(ctx->context);
+    case TYPE_I128: return LLVMInt128TypeInContext(ctx->context);
+    case TYPE_U128: return LLVMInt128TypeInContext(ctx->context);
     case TYPE_FN:
         return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
     case TYPE_LAYOUT: {
@@ -673,12 +684,24 @@ bool type_is_numeric(Type *t) {
 }
 
 bool type_is_integer(Type *t) {
-    return t->kind == TYPE_INT || t->kind == TYPE_HEX ||
-           t->kind == TYPE_BIN || t->kind == TYPE_OCT || t->kind == TYPE_CHAR;
+    return t->kind == TYPE_INT  || t->kind == TYPE_HEX  ||
+           t->kind == TYPE_BIN  || t->kind == TYPE_OCT  ||
+           t->kind == TYPE_CHAR ||
+           t->kind == TYPE_I8   || t->kind == TYPE_U8   ||
+           t->kind == TYPE_I16  || t->kind == TYPE_U16  ||
+           t->kind == TYPE_I32  || t->kind == TYPE_U32  ||
+           t->kind == TYPE_I64  || t->kind == TYPE_U64  ||
+           t->kind == TYPE_I128 || t->kind == TYPE_U128;
 }
 
 bool type_is_float(Type *t) {
-    return t->kind == TYPE_FLOAT;
+    return t->kind == TYPE_FLOAT || t->kind == TYPE_F32;
+}
+
+bool type_is_unsigned(Type *t) {
+    return t->kind == TYPE_U8  || t->kind == TYPE_U16 ||
+           t->kind == TYPE_U32 || t->kind == TYPE_U64 ||
+           t->kind == TYPE_U128;
 }
 
 char *mangle_unicode_name(const char *name) {
@@ -1100,8 +1123,27 @@ static void codegen_show_value(CodegenContext *ctx, LLVMValueRef val, Type *type
             LLVMValueRef nl_args[] = {nl};
             LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, nl_args, 1, "");
         }
-    } else if (type->kind == TYPE_INT) {
-        LLVMValueRef args[] = {newline ? get_fmt_int(ctx) : get_fmt_int_no_newline(ctx), val};
+    } else if (type->kind == TYPE_INT  ||
+               type->kind == TYPE_I8   || type->kind == TYPE_I16 ||
+               type->kind == TYPE_I32  || type->kind == TYPE_I64) {
+        LLVMValueRef ext = LLVMTypeOf(val) != LLVMInt64TypeInContext(ctx->context)
+            ? LLVMBuildSExt(ctx->builder, val, LLVMInt64TypeInContext(ctx->context), "ext")
+            : val;
+        LLVMValueRef args[] = {newline ? get_fmt_int(ctx) : get_fmt_int_no_newline(ctx), ext};
+        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, "");
+    } else if (type->kind == TYPE_U8  || type->kind == TYPE_U16 ||
+               type->kind == TYPE_U32 || type->kind == TYPE_U64) {
+        LLVMValueRef ext = LLVMTypeOf(val) != LLVMInt64TypeInContext(ctx->context)
+            ? LLVMBuildZExt(ctx->builder, val, LLVMInt64TypeInContext(ctx->context), "ext")
+            : val;
+        LLVMValueRef fmt = LLVMBuildGlobalStringPtr(ctx->builder,
+            newline ? "%lu\n" : "%lu", "fmt_uint");
+        LLVMValueRef args[] = {fmt, ext};
+        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, "");
+    } else if (type->kind == TYPE_F32) {
+        LLVMValueRef ext = LLVMBuildFPExt(ctx->builder, val,
+            LLVMDoubleTypeInContext(ctx->context), "f32_to_f64");
+        LLVMValueRef args[] = {newline ? get_fmt_float(ctx) : get_fmt_float_no_newline(ctx), ext};
         LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, "");
     } else if (type->kind == TYPE_LIST) {
         LLVMValueRef print_fn = get_rt_print_list(ctx);
@@ -6865,13 +6907,24 @@ if (ast->list.count >= 5) {
 
             // Type cast: (TypeName expr)
             const char *cast_target = NULL;
-            if (strcmp(head->symbol, "Int")    == 0) cast_target = "Int";
-            else if (strcmp(head->symbol, "Float")  == 0) cast_target = "Float";
-            else if (strcmp(head->symbol, "Char")   == 0) cast_target = "Char";
-            else if (strcmp(head->symbol, "String") == 0) cast_target = "String";
-            else if (strcmp(head->symbol, "Hex")    == 0) cast_target = "Hex";
-            else if (strcmp(head->symbol, "Bin")    == 0) cast_target = "Bin";
-            else if (strcmp(head->symbol, "Oct")    == 0) cast_target = "Oct";
+            if      (strcmp(head->symbol, "Int")   == 0) cast_target = "Int";
+            else if (strcmp(head->symbol, "Float") == 0) cast_target = "Float";
+            else if (strcmp(head->symbol, "Char")  == 0) cast_target = "Char";
+            else if (strcmp(head->symbol, "String")== 0) cast_target = "String";
+            else if (strcmp(head->symbol, "Hex")   == 0) cast_target = "Hex";
+            else if (strcmp(head->symbol, "Bin")   == 0) cast_target = "Bin";
+            else if (strcmp(head->symbol, "Oct")   == 0) cast_target = "Oct";
+            else if (strcmp(head->symbol, "F32")   == 0) cast_target = "F32";
+            else if (strcmp(head->symbol, "I8")    == 0) cast_target = "I8";
+            else if (strcmp(head->symbol, "U8")    == 0) cast_target = "U8";
+            else if (strcmp(head->symbol, "I16")   == 0) cast_target = "I16";
+            else if (strcmp(head->symbol, "U16")   == 0) cast_target = "U16";
+            else if (strcmp(head->symbol, "I32")   == 0) cast_target = "I32";
+            else if (strcmp(head->symbol, "U32")   == 0) cast_target = "U32";
+            else if (strcmp(head->symbol, "I64")   == 0) cast_target = "I64";
+            else if (strcmp(head->symbol, "U64")   == 0) cast_target = "U64";
+            else if (strcmp(head->symbol, "I128")  == 0) cast_target = "I128";
+            else if (strcmp(head->symbol, "U128")  == 0) cast_target = "U128";
 
             if (cast_target) {
                 if (ast->list.count != 2) {
@@ -7242,6 +7295,52 @@ if (ast->list.count >= 5) {
                 } else if (strcmp(cast_target, "Oct") == 0) {
                     result.type  = type_oct();
                     result.value = as_i64;
+                } else if (strcmp(cast_target, "F32") == 0) {
+                    LLVMValueRef f32val = as_double
+                        ? LLVMBuildFPTrunc(ctx->builder, as_double,
+                                           LLVMFloatTypeInContext(ctx->context), "to_f32")
+                        : LLVMBuildSIToFP(ctx->builder, as_i64,
+                                          LLVMFloatTypeInContext(ctx->context), "to_f32");
+                    result.type  = type_f32();
+                    result.value = f32val;
+                } else if (strcmp(cast_target, "I8")  == 0) {
+                    result.type  = type_i8();
+                    result.value = LLVMBuildTrunc(ctx->builder, as_i64,
+                                       LLVMInt8TypeInContext(ctx->context), "to_i8");
+                } else if (strcmp(cast_target, "U8")  == 0) {
+                    result.type  = type_u8();
+                    result.value = LLVMBuildTrunc(ctx->builder, as_i64,
+                                       LLVMInt8TypeInContext(ctx->context), "to_u8");
+                } else if (strcmp(cast_target, "I16") == 0) {
+                    result.type  = type_i16();
+                    result.value = LLVMBuildTrunc(ctx->builder, as_i64,
+                                       LLVMInt16TypeInContext(ctx->context), "to_i16");
+                } else if (strcmp(cast_target, "U16") == 0) {
+                    result.type  = type_u16();
+                    result.value = LLVMBuildTrunc(ctx->builder, as_i64,
+                                       LLVMInt16TypeInContext(ctx->context), "to_u16");
+                } else if (strcmp(cast_target, "I32") == 0) {
+                    result.type  = type_i32();
+                    result.value = LLVMBuildTrunc(ctx->builder, as_i64,
+                                       LLVMInt32TypeInContext(ctx->context), "to_i32");
+                } else if (strcmp(cast_target, "U32") == 0) {
+                    result.type  = type_u32();
+                    result.value = LLVMBuildTrunc(ctx->builder, as_i64,
+                                       LLVMInt32TypeInContext(ctx->context), "to_u32");
+                } else if (strcmp(cast_target, "I64") == 0) {
+                    result.type  = type_i64();
+                    result.value = as_i64;
+                } else if (strcmp(cast_target, "U64") == 0) {
+                    result.type  = type_u64();
+                    result.value = as_i64;
+                } else if (strcmp(cast_target, "I128") == 0) {
+                    result.type  = type_i128();
+                    result.value = LLVMBuildSExt(ctx->builder, as_i64,
+                                       LLVMInt128TypeInContext(ctx->context), "to_i128");
+                } else if (strcmp(cast_target, "U128") == 0) {
+                    result.type  = type_u128();
+                    result.value = LLVMBuildZExt(ctx->builder, as_i64,
+                                       LLVMInt128TypeInContext(ctx->context), "to_u128");
                 }
 
                 return result;
@@ -7793,6 +7892,17 @@ void register_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "Hex",    1, 0, "Convert to hexadecimal integer");
     env_insert_builtin(ctx->env, "Bin",    1, 0, "Convert to binary integer");
     env_insert_builtin(ctx->env, "Oct",    1, 0, "Convert to octal integer");
+    env_insert_builtin(ctx->env, "F32",    1, 0, "Convert to 32-bit float");
+    env_insert_builtin(ctx->env, "I8",     1, 0, "Convert to signed 8-bit integer");
+    env_insert_builtin(ctx->env, "U8",     1, 0, "Convert to unsigned 8-bit integer");
+    env_insert_builtin(ctx->env, "I16",    1, 0, "Convert to signed 16-bit integer");
+    env_insert_builtin(ctx->env, "U16",    1, 0, "Convert to unsigned 16-bit integer");
+    env_insert_builtin(ctx->env, "I32",    1, 0, "Convert to signed 32-bit integer");
+    env_insert_builtin(ctx->env, "U32",    1, 0, "Convert to unsigned 32-bit integer");
+    env_insert_builtin(ctx->env, "I64",    1, 0, "Convert to signed 64-bit integer");
+    env_insert_builtin(ctx->env, "U64",    1, 0, "Convert to unsigned 64-bit integer");
+    env_insert_builtin(ctx->env, "I128",   1, 0, "Convert to signed 128-bit integer");
+    env_insert_builtin(ctx->env, "U128",   1, 0, "Convert to unsigned 128-bit integer");
 
     // String operations
     env_insert_builtin(ctx->env, "concat",        2, -1, "Concatenate strings");

@@ -63,6 +63,17 @@ Type *type_from_name(const char *name) {
     if (strcmp(name, "Set")     == 0) return type_set();
     if (strcmp(name, "Map")     == 0) return type_map();
     if (strcmp(name, "Coll")    == 0) return type_coll();
+    if (strcmp(name, "F32")     == 0) return type_f32();
+    if (strcmp(name, "I8")      == 0) return type_i8();
+    if (strcmp(name, "U8")      == 0) return type_u8();
+    if (strcmp(name, "I16")     == 0) return type_i16();
+    if (strcmp(name, "U16")     == 0) return type_u16();
+    if (strcmp(name, "I32")     == 0) return type_i32();
+    if (strcmp(name, "U32")     == 0) return type_u32();
+    if (strcmp(name, "I64")     == 0) return type_i64();
+    if (strcmp(name, "U64")     == 0) return type_u64();
+    if (strcmp(name, "I128")    == 0) return type_i128();
+    if (strcmp(name, "U128")    == 0) return type_u128();
     if (strcmp(name, "Fn")      == 0) return type_fn(NULL, 0, NULL);
 
     // Check alias registry (supports chained aliases: Code -> List -> ...)
@@ -109,6 +120,17 @@ Type *type_ratio  (void) { return make_type(TYPE_RATIO);   }
 Type *type_set    (void) { return make_type(TYPE_SET);     }
 Type *type_map    (void) { return make_type(TYPE_MAP);     }
 Type *type_coll   (void) { return make_type(TYPE_COLL);    }
+Type *type_f32    (void) { return make_type(TYPE_F32);     }
+Type *type_i8     (void) { return make_type(TYPE_I8);      }
+Type *type_u8     (void) { return make_type(TYPE_U8);      }
+Type *type_i16    (void) { return make_type(TYPE_I16);     }
+Type *type_u16    (void) { return make_type(TYPE_U16);     }
+Type *type_i32    (void) { return make_type(TYPE_I32);     }
+Type *type_u32    (void) { return make_type(TYPE_U32);     }
+Type *type_i64    (void) { return make_type(TYPE_I64);     }
+Type *type_u64    (void) { return make_type(TYPE_U64);     }
+Type *type_i128   (void) { return make_type(TYPE_I128);    }
+Type *type_u128   (void) { return make_type(TYPE_U128);    }
 
 Type *type_list(Type *element_type) {
     Type *t = make_type(TYPE_LIST);
@@ -222,6 +244,17 @@ Type *type_clone(Type *t) {
         case TYPE_RATIO:   return type_ratio();
         case TYPE_LIST:    return type_list(type_clone(t->element_type));
         case TYPE_COLL:    return type_coll();
+        case TYPE_F32:     return type_f32();
+        case TYPE_I8:      return type_i8();
+        case TYPE_U8:      return type_u8();
+        case TYPE_I16:     return type_i16();
+        case TYPE_U16:     return type_u16();
+        case TYPE_I32:     return type_i32();
+        case TYPE_U32:     return type_u32();
+        case TYPE_I64:     return type_i64();
+        case TYPE_U64:     return type_u64();
+        case TYPE_I128:    return type_i128();
+        case TYPE_U128:    return type_u128();
         case TYPE_ARR:     return type_arr(type_clone(t->arr_element_type), t->arr_size);
         case TYPE_VAR:     return type_var(t->var_id);
         case TYPE_ARROW:   return type_arrow(type_clone(t->arrow_param), type_clone(t->arrow_ret));
@@ -292,6 +325,17 @@ const char *type_to_string(Type *t) {
     case TYPE_SET:     return "Set";
     case TYPE_MAP:     return "Map";
     case TYPE_COLL:    return "Coll";
+    case TYPE_F32:     return "F32";
+    case TYPE_I8:      return "I8";
+    case TYPE_U8:      return "U8";
+    case TYPE_I16:     return "I16";
+    case TYPE_U16:     return "U16";
+    case TYPE_I32:     return "I32";
+    case TYPE_U32:     return "U32";
+    case TYPE_I64:     return "I64";
+    case TYPE_U64:     return "U64";
+    case TYPE_I128:    return "I128";
+    case TYPE_U128:    return "U128";
     case TYPE_UNKNOWN: return "?";
 
     case TYPE_VAR: {

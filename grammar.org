@@ -1435,7 +1435,7 @@ ENOMEM
     (EndDrawing)
     )
   (CloseWindow 0)
-  (return 0)
+  (exit 0)
 )
 #+end_src
 

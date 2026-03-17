@@ -1962,6 +1962,28 @@ double rt_ratio_to_float(RuntimeValue *r) {
     return (double)r->data.ratio_val.numerator / (double)r->data.ratio_val.denominator;
 }
 
+static void _print_i128_digits(__int128 v) {
+    if (v > 9) _print_i128_digits(v / 10);
+    printf("%d", (int)(v % 10));
+}
+
+static void _print_u128_digits(unsigned __int128 v) {
+    if (v > 9) _print_u128_digits(v / 10);
+    printf("%d", (int)(v % 10));
+}
+
+void __print_i128(__int128 v) {
+    if (v < 0) { printf("-"); _print_i128_digits(-v); }
+    else        { _print_i128_digits(v); }
+    printf("\n");
+}
+
+void __print_u128(unsigned __int128 v) {
+    _print_u128_digits(v);
+    printf("\n");
+}
+
+
 //  Assert failure handler
 __attribute__((weak))
 void __monad_assert_fail(const char *label) {
@@ -2465,7 +2487,29 @@ GET_RUNTIME_FUNCTION(rt_map_merge)
 GET_RUNTIME_FUNCTION(rt_value_map)
 GET_RUNTIME_FUNCTION(rt_unbox_map)
 
+LLVMValueRef get___print_i128(CodegenContext *ctx) {
+    LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, "__print_i128");
+    if (!fn) {
+        LLVMTypeRef i128 = LLVMInt128TypeInContext(ctx->context);
+        LLVMTypeRef ft   = LLVMFunctionType(
+            LLVMVoidTypeInContext(ctx->context), &i128, 1, 0);
+        fn = LLVMAddFunction(ctx->module, "__print_i128", ft);
+        LLVMSetLinkage(fn, LLVMExternalLinkage);
+    }
+    return fn;
+}
 
+LLVMValueRef get___print_u128(CodegenContext *ctx) {
+    LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, "__print_u128");
+    if (!fn) {
+        LLVMTypeRef i128 = LLVMInt128TypeInContext(ctx->context);
+        LLVMTypeRef ft   = LLVMFunctionType(
+            LLVMVoidTypeInContext(ctx->context), &i128, 1, 0);
+        fn = LLVMAddFunction(ctx->module, "__print_u128", ft);
+        LLVMSetLinkage(fn, LLVMExternalLinkage);
+    }
+    return fn;
+}
 
 LLVMTypeRef get_rt_value_type(CodegenContext *ctx) {
     return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);

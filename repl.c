@@ -225,6 +225,8 @@ static void rt_sym_table_init(void) {
 
     ADD(__layout_ptr_set);
     ADD(__layout_ptr_get);
+    ADD(__print_i128);
+    ADD(__print_u128);
     ADD(rt_closure_calln);
     ADD(rt_closure_call1);
     ADD(rt_closure_call2);
@@ -704,10 +706,71 @@ static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t, bool li
         LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, a, 2, "");
         break; }
 
-    case TYPE_INT: {
-        LLVMValueRef a[] = {get_fmt_int(&ctx->cg), val};
+    case TYPE_INT:
+    case TYPE_I8:
+    case TYPE_I16:
+    case TYPE_I32:
+    case TYPE_I64: {
+        LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->cg.context);
+        LLVMValueRef v  = LLVMTypeOf(val) != i64
+            ? LLVMBuildSExt(ctx->cg.builder, val, i64, "ext")
+            : val;
+        LLVMValueRef a[] = {get_fmt_int(&ctx->cg), v};
         LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, a, 2, "");
-        emit_numeric_annotation(ctx, val, true);
+        emit_numeric_annotation(ctx, v, true);
+        break; }
+
+    case TYPE_U8:
+    case TYPE_U16:
+    case TYPE_U32:
+    case TYPE_U64: {
+        LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->cg.context);
+        LLVMValueRef v  = LLVMTypeOf(val) != i64
+            ? LLVMBuildZExt(ctx->cg.builder, val, i64, "ext")
+            : val;
+        LLVMValueRef fmt = LLVMBuildGlobalStringPtr(ctx->cg.builder, "%lu\n", "fmt_uint");
+        LLVMValueRef a[] = {fmt, v};
+        LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, a, 2, "");
+        emit_numeric_annotation(ctx, v, false);
+        break; }
+
+    case TYPE_I128:
+    case TYPE_U128: {
+        /* Split into sign + absolute value, print as decimal.
+         * Strategy: if negative (I128), negate and print with '-' prefix.
+         * Use repeated division by 10 via i64 chunks is complex in IR —
+         * simplest correct approach: declare a C helper and call it.     */
+        LLVMTypeRef  i128 = LLVMInt128TypeInContext(ctx->cg.context);
+        LLVMTypeRef  i64  = LLVMInt64TypeInContext(ctx->cg.context);
+        LLVMTypeRef  ptr  = LLVMPointerType(LLVMInt8TypeInContext(ctx->cg.context), 0);
+
+        LLVMValueRef v = LLVMTypeOf(val) != i128
+            ? (t->kind == TYPE_U128
+                ? LLVMBuildZExt(ctx->cg.builder, val, i128, "ext128")
+                : LLVMBuildSExt(ctx->cg.builder, val, i128, "ext128"))
+            : val;
+
+        /* Declare __print_i128 / __print_u128 helpers if not present */
+        const char *helper = (t->kind == TYPE_U128) ? "__print_u128" : "__print_i128";
+        LLVMValueRef hfn = LLVMGetNamedFunction(ctx->cg.module, helper);
+        if (!hfn) {
+            LLVMTypeRef ft = LLVMFunctionType(
+                LLVMVoidTypeInContext(ctx->cg.context), &i128, 1, 0);
+            hfn = LLVMAddFunction(ctx->cg.module, helper, ft);
+            LLVMSetLinkage(hfn, LLVMExternalLinkage);
+        }
+        LLVMValueRef a[] = {v};
+        LLVMBuildCall2(ctx->cg.builder,
+            LLVMFunctionType(LLVMVoidTypeInContext(ctx->cg.context), &i128, 1, 0),
+            hfn, a, 1, "");
+        break; }
+
+    case TYPE_F32: {
+        /* widen to double for printf */
+        LLVMTypeRef  dbl = LLVMDoubleTypeInContext(ctx->cg.context);
+        LLVMValueRef v   = LLVMBuildFPExt(ctx->cg.builder, val, dbl, "f32_ext");
+        LLVMValueRef a[] = {get_fmt_float(&ctx->cg), v};
+        LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, a, 2, "");
         break; }
     case TYPE_HEX: {
         LLVMValueRef fmt = LLVMBuildGlobalStringPtr(ctx->cg.builder, "0x%lX\n", "fmt_hex");

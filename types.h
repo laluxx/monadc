@@ -21,6 +21,17 @@ typedef enum {
     TYPE_LAYOUT,
     TYPE_SET,
     TYPE_MAP,
+    TYPE_F32,
+    TYPE_I8,
+    TYPE_U8,
+    TYPE_I16,
+    TYPE_U16,
+    TYPE_I32,
+    TYPE_U32,
+    TYPE_I64,
+    TYPE_U64,
+    TYPE_I128,
+    TYPE_U128,
     TYPE_UNKNOWN,
     TYPE_VAR,      // HM type variable — 'a, 'b, etc.
     TYPE_ARROW,    // function type — param -> return
@@ -98,6 +109,17 @@ Type *type_ratio(void);
 Type *type_set(void);
 Type *type_map(void);
 Type *type_coll(void);
+Type *type_f32(void);
+Type *type_i8(void);
+Type *type_u8(void);
+Type *type_i16(void);
+Type *type_u16(void);
+Type *type_i32(void);
+Type *type_u32(void);
+Type *type_i64(void);
+Type *type_u64(void);
+Type *type_i128(void);
+Type *type_u128(void);
 
 
 /// Constructors — compound types
