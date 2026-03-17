@@ -108,15 +108,15 @@
 
 (define (gcd2 [a :: Int] -> [b :: Int] -> Int)
   "Return the greatest common divisor of A and B (Euclidean algorithm)."
-  (if (= b 0) a (gcd2 b (mod a b))))
+  (if (= b 0) a (gcd b (mod a b))))
 
-
+;; TODO If the function implementation is not inside a list (...)
+;; it will automatically be pattern matched
 (define (gcd . Int -> Int)
  "Return the GCD of all provided integers."
   [] -> 0
   [x] -> (abs x)
   [x|xs] -> (foldl (lambda (acc n) (gcd2 acc n)) x xs))
-
 
 
 (define (lcm [a :: Int] -> [b :: Int] -> Int)

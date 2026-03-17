@@ -1066,6 +1066,15 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                 param.is_rest = true;
                 param.is_anon = false;
                 params[count++] = param;
+            } else if (p->current.type == TOK_ARROW ||
+                       p->current.type == TOK_RPAREN) {
+                /* Bare `.` with no name and no type — anonymous untyped rest */
+                params[count].name      = my_strdup("__pm_args");
+                params[count].type_name = NULL;
+                params[count].is_rest   = true;
+                params[count].is_anon   = true;
+                count++;
+                /* Do NOT advance — let the arrow/rparen be consumed normally */
             } else if (p->current.type == TOK_SYMBOL) {
                 bool rest_type_only = (p->current.value[0] >= 'A' &&
                                        p->current.value[0] <= 'Z');
@@ -1690,40 +1699,71 @@ static AST *parse_list(Parser *p) {
         strcmp(p->current.value, "let") == 0) {
         p->current = lexer_next_token(p->lexer);
 
-        if (p->current.type != TOK_LPAREN)
-            compiler_error(p->current.line, p->current.column, "Expected '(' after 'let'");
-        p->current = lexer_next_token(p->lexer);
+        // Support both (let ([x e] ...) body) and (let [x e] body)
+        bool single_binding = (p->current.type == TOK_LBRACKET);
+        if (!single_binding) {
+            if (p->current.type != TOK_LPAREN)
+                compiler_error(p->current.line, p->current.column,
+                               "Expected '(' or '[' after 'let'");
+            p->current = lexer_next_token(p->lexer);
+        }
 
         ASTParam *params  = NULL;
         int       param_count = 0;
         AST     **inits   = NULL;
         int       init_count = 0;
 
-        while (p->current.type != TOK_RPAREN && p->current.type != TOK_EOF) {
+        if (single_binding) {
+            // (let [x e] body) — single binding, no outer parens
             if (p->current.type != TOK_LBRACKET)
-                compiler_error(p->current.line, p->current.column, "Expected '[' in let binding");
+                compiler_error(p->current.line, p->current.column,
+                               "Expected '[' in let binding");
             p->current = lexer_next_token(p->lexer);
-
             if (p->current.type != TOK_SYMBOL)
-                compiler_error(p->current.line, p->current.column, "Expected symbol in let binding");
+                compiler_error(p->current.line, p->current.column,
+                               "Expected symbol in let binding");
             char *bname = strdup(p->current.value);
             p->current = lexer_next_token(p->lexer);
-
             AST *init_expr = parse_expr(p);
-
             if (p->current.type != TOK_RBRACKET)
-                compiler_error(p->current.line, p->current.column, "Expected ']' after let binding value");
+                compiler_error(p->current.line, p->current.column,
+                               "Expected ']' after let binding value");
             p->current = lexer_next_token(p->lexer);
-
             params = realloc(params, sizeof(ASTParam) * (param_count + 1));
             params[param_count].name      = bname;
             params[param_count].type_name = NULL;
+            params[param_count].is_rest   = false;
+            params[param_count].is_anon   = false;
             param_count++;
-
             inits = realloc(inits, sizeof(AST*) * (init_count + 1));
             inits[init_count++] = init_expr;
+        } else {
+            while (p->current.type != TOK_RPAREN && p->current.type != TOK_EOF) {
+                if (p->current.type != TOK_LBRACKET)
+                    compiler_error(p->current.line, p->current.column,
+                                   "Expected '[' in let binding");
+                p->current = lexer_next_token(p->lexer);
+                if (p->current.type != TOK_SYMBOL)
+                    compiler_error(p->current.line, p->current.column,
+                                   "Expected symbol in let binding");
+                char *bname = strdup(p->current.value);
+                p->current = lexer_next_token(p->lexer);
+                AST *init_expr = parse_expr(p);
+                if (p->current.type != TOK_RBRACKET)
+                    compiler_error(p->current.line, p->current.column,
+                                   "Expected ']' after let binding value");
+                p->current = lexer_next_token(p->lexer);
+                params = realloc(params, sizeof(ASTParam) * (param_count + 1));
+                params[param_count].name      = bname;
+                params[param_count].type_name = NULL;
+                params[param_count].is_rest   = false;
+                params[param_count].is_anon   = false;
+                param_count++;
+                inits = realloc(inits, sizeof(AST*) * (init_count + 1));
+                inits[init_count++] = init_expr;
+            }
+            p->current = lexer_next_token(p->lexer); // consume ')'
         }
-        p->current = lexer_next_token(p->lexer); // consume ')'
 
         AST **body_exprs = NULL;
         int   body_count = 0;
