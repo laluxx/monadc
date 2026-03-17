@@ -681,6 +681,20 @@ bool type_is_float(Type *t) {
     return t->kind == TYPE_FLOAT;
 }
 
+char *mangle_unicode_name(const char *name) {
+    bool is_ascii = true;
+    for (const char *cp = name; *cp; cp++) {
+        if ((unsigned char)*cp > 127) { is_ascii = false; break; }
+    }
+    if (is_ascii) return NULL;
+    char *mangled = malloc(256);
+    strcpy(mangled, "__alias_");
+    size_t mpos = strlen(mangled);
+    for (const char *cp = name; *cp && mpos < 252; cp++)
+        mpos += snprintf(mangled + mpos, 256 - mpos, "%02x", (unsigned char)*cp);
+    return mangled;
+}
+
 // Helper: are we currently emitting into a top-level main function?
 // If yes, `define` should produce globals rather than stack allocas.
 static bool is_at_top_level(CodegenContext *ctx) {
@@ -926,6 +940,17 @@ bool should_export_symbol(ModuleContext *ctx, const char *symbol_name) {
 }
 
 static EnvEntry *resolve_symbol_with_modules(CodegenContext *ctx, const char *symbol_name, AST *ast) {
+    /* For non-ASCII names, try the mangled name first to get the entry
+     * — the entry's func_ref still points to the real function         */
+    {
+        char *mangled = mangle_unicode_name(symbol_name);
+        if (mangled) {
+            EnvEntry *me = env_lookup(ctx->env, mangled);
+            free(mangled);
+            if (me) return me;
+        }
+    }
+
     // Check if it's a qualified symbol (contains '.' like "M.phi")
     char *dot = strchr(symbol_name, '.');
 
@@ -1995,9 +2020,17 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
         }
 
         if (entry->kind == ENV_FUNC) {
-            /* Function used as a value — wrap in a closure.
-             * Use wrap_func_as_closure so typed-ABI functions get a
-             * calln-ABI trampoline, making them callable via rt_closure_calln. */
+            /* For non-ASCII names, re-resolve func_ref via mangled name
+             * so the JIT can find the underlying function               */
+            char *mangled = mangle_unicode_name(ast->symbol);
+            if (mangled) {
+                char *mname = mangled;
+                EnvEntry *me = env_lookup(ctx->env, mname);
+                if (me && me->kind == ENV_FUNC && me->func_ref) {
+                    entry = me;
+                }
+                free(mangled);
+            }
             result.value = wrap_func_as_closure(ctx, entry);
             result.type  = type_fn(NULL, 0, NULL);
             return result;
@@ -2166,9 +2199,24 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
         /*         ast->symbol, (void*)entry, (void*)entry->value, */
         /*         entry->value ? (LLVMIsAGlobalVariable(entry->value) != NULL) : -1); */
 
-        result.type  = type_clone(entry->type);
+        result.type = type_clone(entry->type);
+
+        /* For non-ASCII symbol names, resolve via mangled LLVM global name */
+        LLVMValueRef load_target = entry->value;
+        {
+            char *mangled = mangle_unicode_name(ast->symbol);
+            if (mangled) {
+                LLVMValueRef mgv = LLVMGetNamedGlobal(ctx->module, mangled);
+                if (!mgv) {
+                    mgv = LLVMAddGlobal(ctx->module, type_to_llvm(ctx, entry->type), mangled);
+                    LLVMSetLinkage(mgv, LLVMExternalLinkage);
+                }
+                load_target = mgv;
+                free(mangled);
+            }
+        }
         result.value = LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, entry->type),
-                                      entry->value, ast->symbol);
+                                      load_target, ast->symbol);
         return result;
     }
 
@@ -3218,14 +3266,35 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         efinal->source_ast     = ast_clone(lambda);
                     }
 
-                    if (ast->lambda.alias_name) {
-                        env_insert_func(ctx->env, ast->lambda.alias_name,
+                    if (lambda->lambda.alias_name) {
+                        const char *alias_sym = lambda->lambda.alias_name;
+                        env_insert_func(ctx->env, alias_sym,
                                         clone_params(env_params, total_params),
                                         total_params, type_clone(ret_type),
                                         func, lambda->lambda.docstring);
                         if (hm_scheme)
-                            env_set_scheme(ctx->env, ast->lambda.alias_name, hm_scheme);
-                        printf("Alias: %s -> %s\n", ast->lambda.alias_name, var_name);
+                            env_set_scheme(ctx->env, alias_sym, hm_scheme);
+
+                        /* For non-ASCII alias names, also register under
+                         * a mangled ASCII name so LLVM JIT can find it   */
+                        char *mangled = mangle_unicode_name(alias_sym);
+                        if (mangled) {
+                            /* Declare the mangled function in this module */
+                            LLVMValueRef mfn = LLVMGetNamedFunction(ctx->module, mangled);
+                            if (!mfn) {
+                                LLVMTypeRef mft = LLVMGlobalGetValueType(func);
+                                mfn = LLVMAddFunction(ctx->module, mangled, mft);
+                                LLVMSetLinkage(mfn, LLVMExternalLinkage);
+                            }
+                            env_insert_func(ctx->env, mangled,
+                                            clone_params(env_params, total_params),
+                                            total_params, type_clone(ret_type),
+                                            func, lambda->lambda.docstring);
+                            if (hm_scheme)
+                                env_set_scheme(ctx->env, mangled, hm_scheme);
+                            free(mangled);
+                        }
+                        printf("ALIAS: %s -> %s\n", alias_sym, var_name);
                     }
 
                     ctx->current_function_name = NULL;
@@ -3414,7 +3483,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 if (evar) evar->llvm_name = strdup(LLVMGetValueName(var));
 
                 // Optional alias at items[4]
-                if (ast->list.count >= 5) {
+if (ast->list.count >= 5) {
                     AST *doc_node   = ast->list.items[3];
                     AST *alias_node = ast->list.items[4];
                     if (doc_node->type == AST_STRING) {
@@ -3423,8 +3492,29 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     }
                     if (alias_node->type == AST_SYMBOL &&
                         strcmp(alias_node->symbol, "__no_alias__") != 0) {
-                        env_insert(ctx->env, alias_node->symbol, type_clone(final_type), var);
-                        printf("Alias: %s -> %s\n", alias_node->symbol, var_name);
+                        const char *alias_sym = alias_node->symbol;
+                        /* Check if alias contains non-ASCII — if so, declare an
+                         * ASCII-mangled global that mirrors the original var     */
+                        bool is_ascii = true;
+                        for (const char *cp = alias_sym; *cp; cp++) {
+                            if ((unsigned char)*cp > 127) { is_ascii = false; break; }
+                        }
+                        if (!is_ascii) {
+                            char *mangled = mangle_unicode_name(alias_sym);
+                            LLVMValueRef alias_gv = LLVMGetNamedGlobal(ctx->module, mangled);
+                            if (!alias_gv) {
+                                alias_gv = LLVMAddGlobal(ctx->module, llvm_type, mangled);
+                                LLVMSetLinkage(alias_gv, LLVMExternalLinkage);
+                                LLVMSetInitializer(alias_gv, LLVMConstNull(llvm_type));
+                            }
+                            LLVMBuildStore(ctx->builder, stored_value, alias_gv);
+                            env_insert(ctx->env, alias_sym, type_clone(final_type), alias_gv);
+                            env_insert(ctx->env, mangled,   type_clone(final_type), alias_gv);
+                            free(mangled);
+                        } else {
+                            env_insert(ctx->env, alias_sym, type_clone(final_type), var);
+                        }
+                        printf("ALIAS: %s -> %s\n", alias_sym, var_name);
                     }
                 }
 
@@ -6046,8 +6136,18 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         parser_get_filename(), ast->line, ast->column, head->symbol);
             }
 
-            // Function call - FIXED VERSION
+            // Function call
             if (entry && entry->kind == ENV_FUNC) {
+                /* Re-resolve non-ASCII names via mangled entry */
+                {
+                    char *mangled = mangle_unicode_name(head->symbol);
+                    if (mangled) {
+                        EnvEntry *me = env_lookup(ctx->env, mangled);
+                        if (me && me->kind == ENV_FUNC && me->func_ref)
+                            entry = me;
+                        free(mangled);
+                    }
+                }
                 // Check argument count
                 int declared_params = entry->param_count - entry->lifted_count;
                 size_t arg_count = ast->list.count - 1;

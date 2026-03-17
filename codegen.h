@@ -112,6 +112,8 @@ void codegen_declare_external_func(CodegenContext *ctx,
 // Resolves field types, computes offsets, calls layout_register.
 void codegen_layout(CodegenContext *ctx, AST *ast);
 
+char *mangle_unicode_name(const char *name);
+
 
 /// Monomorphization API
 LLVMValueRef mono_cache_lookup(MonoCache *cache, const char *fn_name,

@@ -334,9 +334,16 @@ static void redeclare_env_symbols(REPLContext *ctx) {
                 const char *name = (e->llvm_name && e->llvm_name[0])
                                    ? e->llvm_name : e->name;
 
+                /* For non-ASCII names, use the mangled name for LLVM */
+                char *mangled_name = mangle_unicode_name(name);
+                if (mangled_name) {
+                    name = mangled_name;
+                }
+
                 LLVMValueRef existing = LLVMGetNamedFunction(ctx->cg.module, name);
                 if (existing) {
                     e->func_ref = existing;
+                    if (mangled_name) free(mangled_name);
                     continue;
                 }
 
@@ -362,6 +369,7 @@ static void redeclare_env_symbols(REPLContext *ctx) {
                 LLVMValueRef fn = LLVMAddFunction(ctx->cg.module, name, ft);
                 LLVMSetLinkage(fn, LLVMExternalLinkage);
                 e->func_ref = fn;
+                if (mangled_name) free(mangled_name);
             }
         }
     }
@@ -1140,11 +1148,35 @@ static bool close_and_run(REPLContext *ctx) {
     Env *env = ctx->cg.env;
     for (size_t bi = 0; bi < env->size; bi++) {
         for (EnvEntry *e = env->buckets[bi]; e; e = e->next) {
+            if (e->kind == ENV_FUNC && e->func_ref && !e->module_name) {
+                /* For non-ASCII function names, map the mangled declaration */
+                const char *fname = (e->llvm_name && e->llvm_name[0])
+                                    ? e->llvm_name : e->name;
+                char *mangled = mangle_unicode_name(fname);
+                if (mangled) {
+                    LLVMValueRef in_mod = LLVMGetNamedFunction(mod, mangled);
+                    if (in_mod && e->func_ref) {
+                        /* Get address of the real function (ASCII name) */
+                        uint64_t addr = LLVMGetFunctionAddress(ctx->engine, fname);
+                        if (!addr) {
+                            /* Try the underlying function name via env lookup */
+                            /* The func_ref points to the real function */
+                            addr = (uint64_t)(uintptr_t)LLVMGetPointerToGlobal(
+                                ctx->engine, e->func_ref);
+                        }
+                        if (addr)
+                            LLVMAddGlobalMapping(ctx->engine, in_mod,
+                                                 (void*)(uintptr_t)addr);
+                    }
+                    free(mangled);
+                }
+            }
+
             /* Only REPL-defined (non-imported) variables */
             if (e->kind != ENV_VAR) continue;
             if (!e->value) continue;
             if (LLVMGetValueKind(e->value) != LLVMGlobalVariableValueKind) continue;
-            if (e->module_name) continue;  /* ← KEY FIX: skip imported symbols */
+            if (e->module_name) continue;
 
             const char *gname = (e->llvm_name && e->llvm_name[0])
                                 ? e->llvm_name : e->name;
@@ -2046,7 +2078,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
         return false;
     }
 
-    /// Parse
+///// Parse
 
     char *clean = strip_comments(line);
     if (!clean) return false;
@@ -2054,6 +2086,65 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
     const char *chk = clean;
     while (*chk && isspace((unsigned char)*chk)) chk++;
     if (!*chk) { free(clean); return true; }
+
+    /* Auto-wrap: if the input is more than one token, wrap in (...).
+     * We skip the first complete token (respecting nested brackets and
+     * strings) and check if anything non-whitespace follows.
+     * Examples:
+     *   {1 2 3} `∪` {1 2 3 4}   =>  ({1 2 3} `∪` {1 2 3 4})
+     *   sum '(1 2 3)             =>  (sum '(1 2 3))
+     *   var                      =>  var   (unchanged)
+     *   (define x 1)             =>  (define x 1)  (unchanged)
+     */
+    {
+        const char *p = chk;
+        /* Skip first token — respecting brackets and strings */
+        if (*p == '(' || *p == '[' || *p == '{') {
+            char open  = *p;
+            char close = (*p == '(') ? ')' : (*p == '[') ? ']' : '}';
+            int  depth = 0;
+            bool in_str = false;
+            while (*p) {
+                if (in_str) {
+                    if (*p == '\\') { p++; if (*p) p++; continue; }
+                    if (*p == '"')  { in_str = false; }
+                    p++;
+                } else {
+                    if (*p == '"')        { in_str = true; p++; }
+                    else if (*p == open)  { depth++; p++; }
+                    else if (*p == close) { depth--; p++; if (depth == 0) break; }
+                    else                  p++;
+                }
+            }
+        } else if (*p == '"') {
+            p++; /* skip string */
+            while (*p && *p != '"') {
+                if (*p == '\\') { p++; if (*p) p++; } else p++;
+            }
+            if (*p) p++;
+        } else if (*p == '\'') {
+            p++; /* skip quote char, next token handled separately */
+        } else {
+            /* bare symbol / number — skip non-whitespace chars */
+            while (*p && !isspace((unsigned char)*p)) p++;
+        }
+
+        /* Skip whitespace after first token */
+        while (*p && isspace((unsigned char)*p)) p++;
+
+        /* If something follows, wrap the whole input */
+        if (*p) {
+            size_t len = strlen(clean);
+            char *autowrapped = malloc(len + 3);
+            autowrapped[0] = '(';
+            memcpy(autowrapped + 1, clean, len);
+            autowrapped[len + 1] = ')';
+            autowrapped[len + 2] = '\0';
+            free(clean);
+            clean = autowrapped;
+            chk = clean + 1;
+        }
+    }
 
     parser_set_context("<input>", clean);
     AST *ast = NULL;
@@ -2107,6 +2198,11 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
      * ----------------------------------------------------------------------- */
     if (!silent && ast->type == AST_SYMBOL) {
         EnvEntry *e = env_lookup(ctx->cg.env, ast->symbol);
+        /* For non-ASCII symbols, try mangled name lookup */
+        if (!e) {
+            char *mn = mangle_unicode_name(ast->symbol);
+            if (mn) { e = env_lookup(ctx->cg.env, mn); free(mn); }
+        }
         if (e && (e->kind == ENV_FUNC || e->kind == ENV_BUILTIN)) {
             char mod_name[64];
             snprintf(mod_name,       sizeof(mod_name),       "__repl_%u", ctx->expr_count);
