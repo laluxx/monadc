@@ -603,6 +603,47 @@ void ast_print(AST *ast) {
         if (ast->range.end) ast_print(ast->range.end);
         printf(ast->range.is_array ? "]" : ")");
         break;
+    case AST_PMATCH:
+        for (int i = 0; i < ast->pmatch.clause_count; i++) {
+            ASTPMatchClause *cl = &ast->pmatch.clauses[i];
+            if (i > 0) printf("\n  ");
+            for (int j = 0; j < cl->pattern_count; j++) {
+                if (j > 0) printf(" ");
+                ASTPattern *pat = &cl->patterns[j];
+                switch (pat->kind) {
+                case PAT_WILDCARD: printf("_"); break;
+                case PAT_VAR:      printf("%s", pat->var_name); break;
+                case PAT_LITERAL_INT:   printf("%lld", (long long)pat->lit_value); break;
+                case PAT_LITERAL_FLOAT: printf("%g",   pat->lit_value); break;
+                case PAT_LIST_EMPTY: printf("[]"); break;
+                case PAT_LIST:
+                    printf("[");
+                    for (int k = 0; k < pat->element_count; k++) {
+                        if (k > 0) printf(" ");
+                        ASTPattern *ep = &pat->elements[k];
+                        switch (ep->kind) {
+                        case PAT_WILDCARD: printf("_"); break;
+                        case PAT_VAR:      printf("%s", ep->var_name); break;
+                        case PAT_LITERAL_INT:   printf("%lld", (long long)ep->lit_value); break;
+                        case PAT_LITERAL_FLOAT: printf("%g", ep->lit_value); break;
+                        default: printf("_"); break;
+                        }
+                    }
+                    if (pat->tail) {
+                        printf("|");
+                        if (pat->tail->kind == PAT_VAR)
+                            printf("%s", pat->tail->var_name);
+                        else
+                            printf("_");
+                    }
+                    printf("]");
+                    break;
+                }
+            }
+            printf(" -> ");
+            ast_print(cl->body);
+        }
+        break;
     case AST_LAYOUT:
         printf("(layout %s", ast->layout.name);
         for (int i = 0; i < ast->layout.field_count; i++) {
@@ -894,6 +935,42 @@ Token lexer_next_token(Lexer *lex) {
         advance(lex);
         tok.type  = TOK_SYMBOL;
         tok.value = my_strdup("&");
+        return tok;
+    }
+
+    // λ — pure lambda calculus literal (UTF-8: 0xCE 0xBB)
+    // Syntax: λx.body  where x is a single param name
+    if ((unsigned char)c == 0xCE &&
+        (unsigned char)lex->source[lex->pos + 1] == 0xBB) {
+        advance(lex); // consume 0xCE
+        advance(lex); // consume 0xBB
+
+        skip_whitespace(lex);
+
+        // Read exactly one param name — stop at '.' or whitespace
+        if (!is_symbol_start((unsigned char)peek(lex))) {
+            READER_ERROR(lex->line, lex->column,
+                         "expected parameter name after λ");
+        }
+        size_t start = lex->pos;
+        while (peek(lex) != '.' && peek(lex) != ' ' &&
+               peek(lex) != '\t' && peek(lex) != '\n' &&
+               peek(lex) != '\0' &&
+               is_symbol_char((unsigned char)peek(lex))) advance(lex);
+        char *param_name = my_strndup(lex->source + start, lex->pos - start);
+
+        skip_whitespace(lex);
+
+        // Must be followed by '.' — if not, user wrote λx y. which is invalid
+        if (peek(lex) != '.') {
+            READER_ERROR(lex->line, lex->column,
+                         "λ-literal takes exactly one parameter — "
+                         "use λx.λy.body for curried functions, not λx y.body");
+        }
+        advance(lex); // consume '.'
+
+        tok.type  = TOK_LAMBDA_LIT;
+        tok.value = param_name;
         return tok;
     }
 
@@ -1705,8 +1782,14 @@ static AST *parse_list(Parser *p) {
                 p->current.type != TOK_RPAREN &&
                 p->current.type != TOK_EOF) {
                 AST *pm = parse_pmatch_clauses(p, count);
+                // Desugar immediately at parse time — consistent with how
+                // cond is desugared at parse time, so ast_clone and (code f)
+                // always see the expanded if-chain, never raw AST_PMATCH.
+                ASTParam *pm_params = params;
+                AST *desugared = pmatch_desugar(pm, pm_params, count);
+                ast_free(pm);
                 body_exprs = malloc(sizeof(AST*));
-                body_exprs[0] = pm;
+                body_exprs[0] = desugared;
                 body_count = 1;
             } else {
                 while (p->current.type != TOK_RPAREN &&
@@ -2391,6 +2474,32 @@ AST *parse_expr(Parser *p) {
         ast->column = tok.column;
         ast->end_column = end_col;
         return ast;
+    }
+    case TOK_LAMBDA_LIT: {
+        // tok.value is the single param name (e.g. "x" from λx.body)
+        int lam_line = tok.line;
+        int lam_col  = tok.column;
+        p->current   = lexer_next_token(p->lexer);
+
+        ASTParam *params  = malloc(sizeof(ASTParam));
+        params[0].name      = my_strdup(tok.value);
+        params[0].type_name = NULL;
+        params[0].is_rest   = false;
+        params[0].is_anon   = false;
+
+        // Parse body — if it starts with another λ it naturally nests:
+        // λx.λy.x → (lambda (x) (lambda (y) x))
+        AST *body = parse_expr(p);
+
+        AST **body_exprs  = malloc(sizeof(AST*));
+        body_exprs[0]     = body;
+
+        AST *lam = ast_new_lambda(params, 1,
+                                  NULL, NULL, NULL, false,
+                                  body, body_exprs, 1);
+        lam->line   = lam_line;
+        lam->column = lam_col;
+        return lam;
     }
     case TOK_KEYWORD: {
         int end_col = tok.column + (tok.value ? strlen(tok.value) : 1) + 1; // +1 for ':'

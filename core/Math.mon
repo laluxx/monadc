@@ -110,6 +110,7 @@
   "Return the greatest common divisor of A and B (Euclidean algorithm)."
   (if (= b 0) a (gcd2 b (mod a b))))
 
+
 (define (gcd . Int -> Int)
  "Return the GCD of all provided integers."
   [] -> 0

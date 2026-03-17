@@ -2124,6 +2124,42 @@ RuntimeValue *rt_ast_to_runtime_value(AST *ast) {
             return WRAP_LIST(lst);
         }
 
+        case AST_PMATCH: {
+            // Represent pmatch as a list of (pattern -> body) pairs
+            RuntimeList *lst = HEAP_LIST();
+            for (int i = 0; i < ast->pmatch.clause_count; i++) {
+                ASTPMatchClause *cl = &ast->pmatch.clauses[i];
+                RuntimeList *clause = HEAP_LIST();
+                // patterns
+                for (int j = 0; j < cl->pattern_count; j++) {
+                    ASTPattern *pat = &cl->patterns[j];
+                    RuntimeValue *pv = HEAP_VAL();
+                    pv->type = RT_SYMBOL;
+                    switch (pat->kind) {
+                    case PAT_WILDCARD: pv->data.symbol_val = strdup("_"); break;
+                    case PAT_VAR:      pv->data.symbol_val = strdup(pat->var_name); break;
+                    case PAT_LITERAL_INT: {
+                        char buf[32];
+                        snprintf(buf, sizeof(buf), "%lld", (long long)pat->lit_value);
+                        pv->data.symbol_val = strdup(buf);
+                        break;
+                    }
+                    case PAT_LIST_EMPTY:
+                        pv->data.symbol_val = strdup("[]");
+                        break;
+                    default:
+                        pv->data.symbol_val = strdup("_");
+                        break;
+                    }
+                    heap_list_append(clause, pv);
+                }
+                heap_list_append(clause, HEAP_SYM("->"));
+                heap_list_append(clause, rt_ast_to_runtime_value(cl->body));
+                heap_list_append(lst, WRAP_LIST(clause));
+            }
+            return WRAP_LIST(lst);
+        }
+
         default: {
             return HEAP_SYM("<unknown>");
         }

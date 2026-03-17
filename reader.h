@@ -29,6 +29,7 @@ typedef enum {
     AST_SET,        // {val val val}
     AST_MAP,        // #{"key" val "key" val}
     AST_PMATCH,     // pattern matching clauses
+    TOK_LAMBDA_LIT, // λx. — pure lambda calculus literal
 } ASTType;
 
 // A single parsed function parameter: name + optional type annotation
