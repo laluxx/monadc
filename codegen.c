@@ -1,5 +1,4 @@
 #include "codegen.h"
-#include "pmatch.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -635,6 +634,8 @@ LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *t) {
         return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
     case TYPE_MAP:
         return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+    case TYPE_COLL:
+        return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
     case TYPE_FN:
         return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
     case TYPE_LAYOUT: {
@@ -1104,6 +1105,18 @@ static void codegen_show_value(CodegenContext *ctx, LLVMValueRef val, Type *type
         LLVMValueRef bool_str  = LLVMBuildSelect(ctx->builder, val, true_str, false_str, "bool_str");
         LLVMValueRef args[] = {newline ? get_fmt_str(ctx) : get_fmt_str_no_newline(ctx), bool_str};
         LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, "");
+    } else if (type->kind == TYPE_COLL) {
+        LLVMValueRef print_fn = get_rt_print_value_newline(ctx);
+        LLVMTypeRef  ptr      = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+        LLVMTypeRef  ft_args[] = {ptr};
+        LLVMTypeRef  ft       = LLVMFunctionType(LLVMVoidTypeInContext(ctx->context), ft_args, 1, 0);
+        LLVMValueRef args[]   = {val};
+        LLVMBuildCall2(ctx->builder, ft, print_fn, args, 1, "");
+        if (newline) {
+            LLVMValueRef nl = LLVMBuildGlobalStringPtr(ctx->builder, "\n", "nl");
+            LLVMValueRef nl_args[] = {nl};
+            LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, nl_args, 1, "");
+        }
     } else if (type->kind == TYPE_UNKNOWN) {
         // Opaque RuntimeValue* from car/list-ref — dispatch at runtime
         LLVMValueRef print_fn = get_rt_print_value_newline(ctx);
@@ -2042,8 +2055,54 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 LLVMValueRef ua   = LLVMBuildCall2(ctx->builder, uft, get_rt_unbox_int(ctx), &ba, 1, "ua");
                 LLVMValueRef ub   = LLVMBuildCall2(ctx->builder, uft, get_rt_unbox_int(ctx), &bb, 1, "ub");
 
-                LLVMValueRef wr = NULL;
+                /* Runtime-dispatched numeric builtin wrapper.
+                 * If either argument is a float, use float arithmetic.
+                 * Otherwise use integer arithmetic.                    */
                 const char *sym = ast->symbol;
+
+                /* Check if either arg is a float by inspecting the type tag.
+                 * RuntimeValue.type is the first field (int at offset 0).   */
+                LLVMTypeRef  i32_t   = LLVMInt32TypeInContext(ctx->context);
+                LLVMValueRef rt_float_tag = LLVMConstInt(i32_t, RT_FLOAT, 0);
+
+                /* Load type tag of ba and bb */
+                LLVMValueRef tag_a = LLVMBuildLoad2(ctx->builder, i32_t, ba, "tag_a");
+                LLVMValueRef tag_b = LLVMBuildLoad2(ctx->builder, i32_t, bb, "tag_b");
+                LLVMValueRef is_float_a = LLVMBuildICmp(ctx->builder, LLVMIntEQ,
+                                                         tag_a, rt_float_tag, "ifa");
+                LLVMValueRef is_float_b = LLVMBuildICmp(ctx->builder, LLVMIntEQ,
+                                                         tag_b, rt_float_tag, "ifb");
+                LLVMValueRef use_float  = LLVMBuildOr(ctx->builder, is_float_a,
+                                                       is_float_b, "use_float");
+
+                LLVMValueRef      cur_fn2   = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder));
+                LLVMBasicBlockRef float_bb  = LLVMAppendBasicBlockInContext(ctx->context, cur_fn2, "flt");
+                LLVMBasicBlockRef int_bb    = LLVMAppendBasicBlockInContext(ctx->context, cur_fn2, "int");
+                LLVMBasicBlockRef merge_bb2 = LLVMAppendBasicBlockInContext(ctx->context, cur_fn2, "merge");
+                LLVMBuildCondBr(ctx->builder, use_float, float_bb, int_bb);
+
+                /* Float branch */
+                LLVMPositionBuilderAtEnd(ctx->builder, float_bb);
+                LLVMTypeRef  uft_f   = LLVMFunctionType(dbl, &ptr_t, 1, 0);
+                LLVMValueRef fa2     = LLVMBuildCall2(ctx->builder, uft_f,
+                                           get_rt_unbox_float(ctx), &ba, 1, "fa");
+                LLVMValueRef fb2     = LLVMBuildCall2(ctx->builder, uft_f,
+                                           get_rt_unbox_float(ctx), &bb, 1, "fb");
+                LLVMValueRef fwr = NULL;
+                if      (strcmp(sym, "+") == 0) fwr = LLVMBuildFAdd(ctx->builder, fa2, fb2, "fr");
+                else if (strcmp(sym, "-") == 0) fwr = LLVMBuildFSub(ctx->builder, fa2, fb2, "fr");
+                else if (strcmp(sym, "*") == 0) fwr = LLVMBuildFMul(ctx->builder, fa2, fb2, "fr");
+                else if (strcmp(sym, "/") == 0) fwr = LLVMBuildFDiv(ctx->builder, fa2, fb2, "fr");
+                else fwr = LLVMConstReal(dbl, 0.0);
+                LLVMTypeRef  bft_f   = LLVMFunctionType(ptr_t, &dbl, 1, 0);
+                LLVMValueRef fboxed  = LLVMBuildCall2(ctx->builder, bft_f,
+                                           get_rt_value_float(ctx), &fwr, 1, "fboxed");
+                LLVMBuildBr(ctx->builder, merge_bb2);
+                LLVMBasicBlockRef float_end = LLVMGetInsertBlock(ctx->builder);
+
+                /* Int branch */
+                LLVMPositionBuilderAtEnd(ctx->builder, int_bb);
+                LLVMValueRef wr = NULL;
                 if      (strcmp(sym, "+")   == 0) wr = LLVMBuildAdd (ctx->builder, ua, ub, "r");
                 else if (strcmp(sym, "-")   == 0) wr = LLVMBuildSub (ctx->builder, ua, ub, "r");
                 else if (strcmp(sym, "*")   == 0) wr = LLVMBuildMul (ctx->builder, ua, ub, "r");
@@ -2068,11 +2127,18 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 } else {
                     wr = LLVMConstInt(i64, 0, 0);
                 }
-
                 LLVMTypeRef  bft    = LLVMFunctionType(ptr_t, &i64, 1, 0);
-                LLVMValueRef boxed  = LLVMBuildCall2(ctx->builder, bft,
-                                          get_rt_value_int(ctx), &wr, 1, "boxed");
-                LLVMBuildRet(ctx->builder, boxed);
+                LLVMValueRef iboxed = LLVMBuildCall2(ctx->builder, bft,
+                                          get_rt_value_int(ctx), &wr, 1, "iboxed");
+                LLVMBuildBr(ctx->builder, merge_bb2);
+                LLVMBasicBlockRef int_end = LLVMGetInsertBlock(ctx->builder);
+
+                /* Merge */
+                LLVMPositionBuilderAtEnd(ctx->builder, merge_bb2);
+                LLVMValueRef phi = LLVMBuildPhi(ctx->builder, ptr_t, "boxed");
+                LLVMAddIncoming(phi, &fboxed, &float_end, 1);
+                LLVMAddIncoming(phi, &iboxed, &int_end,   1);
+                LLVMBuildRet(ctx->builder, phi);
                 if (csaved) LLVMPositionBuilderAtEnd(ctx->builder, csaved);
 
                 LLVMValueRef fn_ptr2 = LLVMBuildBitCast(ctx->builder, calln_w, ptr_t, "fn_ptr");
@@ -2624,13 +2690,23 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     } else {
                         ret_type = type_unknown();
                     }
-                    // Use HM-inferred return type if still unknown
-                    if (ret_type->kind == TYPE_UNKNOWN && hm_scheme) {
+
+                    /* Only use HM-inferred return type if no explicit annotation was given.
+                     * If the user wrote -> a (a type variable), keep it as unknown so the
+                     * function returns a boxed RuntimeValue* and preserves float/int. */
+                    bool ret_was_explicit_var = (lambda->lambda.return_type &&
+                                                 strlen(lambda->lambda.return_type) == 1 &&
+                                                 lambda->lambda.return_type[0] >= 'a' &&
+                                                 lambda->lambda.return_type[0] <= 'z');
+                    if (ret_type->kind == TYPE_UNKNOWN && hm_scheme && !ret_was_explicit_var) {
                         Type *t = hm_scheme->type;
                         while (t && t->kind == TYPE_ARROW)
                             t = t->arrow_ret;
                         if (t && t->kind != TYPE_VAR && t->kind != TYPE_UNKNOWN)
                             ret_type = type_clone(t);
+                    }
+                    if (ret_was_explicit_var) {
+                        ret_type = type_unknown();
                     }
 
 
@@ -2641,10 +2717,11 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     bool has_type_vars = hm_scheme && hm_scheme->quantified_count > 0;
                     bool is_poly_stub  = !use_closure_abi && all_params_unknown && has_type_vars;
 
-                    LLVMTypeRef ret_llvm_type = (use_closure_abi || is_poly_stub)
+                    LLVMTypeRef ret_llvm_type = (use_closure_abi || is_poly_stub ||
+                                                 ret_type->kind == TYPE_VAR     ||
+                                                 ret_type->kind == TYPE_UNKNOWN)
                                               ? ptr_t
                                               : type_to_llvm(ctx, ret_type);
-
 
                     LLVMTypeRef func_type = LLVMFunctionType(ret_llvm_type, param_types,
                                                              llvm_param_count, 0);
@@ -4296,6 +4373,33 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 CodegenResult init_r  = codegen_expr(ctx, ast->list.items[2]);
                 CodegenResult col_r   = codegen_expr(ctx, ast->list.items[3]);
 
+                /* If collection is an array, convert it to a runtime list first */
+                if (col_r.type && col_r.type->kind == TYPE_ARR) {
+                    LLVMTypeRef  arr_llvm  = type_to_llvm(ctx, col_r.type);
+                    LLVMTypeRef  elem_llvm = type_to_llvm(ctx, col_r.type->arr_element_type);
+                    int n = col_r.type->arr_size;
+                    LLVMValueRef list_fn   = get_rt_list_new(ctx);
+                    LLVMTypeRef  list_ft   = LLVMFunctionType(ptr, NULL, 0, 0);
+                    LLVMValueRef list      = LLVMBuildCall2(ctx->builder, list_ft,
+                                                            list_fn, NULL, 0, "arr_as_list");
+                    LLVMValueRef append_fn = get_rt_list_append(ctx);
+                    LLVMTypeRef  ap[]      = {ptr, ptr};
+                    LLVMTypeRef  aft       = LLVMFunctionType(LLVMVoidTypeInContext(ctx->context), ap, 2, 0);
+                    for (int ei = 0; ei < n; ei++) {
+                        LLVMValueRef zero    = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0);
+                        LLVMValueRef eidx    = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), ei, 0);
+                        LLVMValueRef idxs[]  = {zero, eidx};
+                        LLVMValueRef ep      = LLVMBuildGEP2(ctx->builder, arr_llvm,
+                                                              col_r.value, idxs, 2, "ep");
+                        LLVMValueRef ev      = LLVMBuildLoad2(ctx->builder, elem_llvm, ep, "ev");
+                        LLVMValueRef bv      = codegen_box(ctx, ev, col_r.type->arr_element_type);
+                        LLVMValueRef aa[]    = {list, bv};
+                        LLVMBuildCall2(ctx->builder, aft, append_fn, aa, 2, "");
+                    }
+                    col_r.value = list;
+                    col_r.type  = type_list(type_clone(col_r.type->arr_element_type));
+                }
+
                 LLVMValueRef init_val = init_r.value;
                 if (init_r.type && init_r.type->kind == TYPE_BOOL) {
                     LLVMTypeRef i64  = LLVMInt64TypeInContext(ctx->context);
@@ -4333,10 +4437,20 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     result.type  = type_unknown();
                     return result;
                 }
+
+                /* For Coll param: value is already a raw RuntimeList* — use directly.
+                 * Only call rt_unbox_list if we have a boxed RuntimeValue* (TYPE_UNKNOWN). */
+                LLVMValueRef coll_val = col_r.value;
+                if (col_r.type && col_r.type->kind == TYPE_UNKNOWN) {
+                    LLVMValueRef ub_fn  = get_rt_unbox_list(ctx);
+                    LLVMTypeRef  ub_ft  = LLVMFunctionType(ptr, &ptr, 1, 0);
+                    LLVMValueRef ub_a[] = {coll_val};
+                    coll_val = LLVMBuildCall2(ctx->builder, ub_ft, ub_fn, ub_a, 1, "rawcoll");
+                }
                 LLVMValueRef rt_fn    = get_rt_list_foldl(ctx);
                 LLVMTypeRef  ft_args[] = {ptr, ptr, ptr, ptr};
                 LLVMTypeRef  ft        = LLVMFunctionType(ptr, ft_args, 4, 0);
-                LLVMValueRef args[]    = {col_r.value, init_val, env_out, wrapper};
+                LLVMValueRef args[]    = {coll_val, init_val, env_out, wrapper};
                 result.value = LLVMBuildCall2(ctx->builder, ft, rt_fn, args, 4, "foldl");
                 result.type  = type_unknown();
                 return result;
@@ -5239,8 +5353,26 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 }
                 LLVMTypeRef  i1     = LLVMInt1TypeInContext(ctx->context);
                 CodegenResult arg   = codegen_expr(ctx, ast->list.items[1]);
-                /* check type at compile time if known */
                 if (arg.type && arg.type->kind == TYPE_SET) {
+                    result.value = LLVMConstInt(i1, 1, 0);
+                } else {
+                    result.value = LLVMConstInt(i1, 0, 0);
+                }
+                result.type = type_bool();
+                return result;
+            }
+
+            if (strcmp(head->symbol, "collection?") == 0) {
+                if (ast->list.count != 2) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'collection?' requires 1 argument",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                LLVMTypeRef  i1  = LLVMInt1TypeInContext(ctx->context);
+                CodegenResult arg = codegen_expr(ctx, ast->list.items[1]);
+                if (arg.type && (arg.type->kind == TYPE_LIST ||
+                                 arg.type->kind == TYPE_SET  ||
+                                 arg.type->kind == TYPE_ARR  ||
+                                 arg.type->kind == TYPE_COLL)) {
                     result.value = LLVMConstInt(i1, 1, 0);
                 } else {
                     result.value = LLVMConstInt(i1, 0, 0);
@@ -6513,7 +6645,53 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         continue;
                     }
 
-                    if (expected_type && expected_type->kind == TYPE_UNKNOWN) {
+                    if (expected_type && expected_type->kind == TYPE_COLL) {
+                        if (arg_result.type && arg_result.type->kind == TYPE_ARR) {
+                            /* Convert array to RuntimeList* before passing as Coll */
+                            LLVMTypeRef  ptr_t     = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                            LLVMTypeRef  arr_llvm  = type_to_llvm(ctx, arg_result.type);
+                            LLVMTypeRef  elem_llvm = type_to_llvm(ctx, arg_result.type->arr_element_type);
+                            int n = arg_result.type->arr_size;
+                            LLVMValueRef list_fn   = get_rt_list_new(ctx);
+                            LLVMTypeRef  list_ft   = LLVMFunctionType(ptr_t, NULL, 0, 0);
+                            LLVMValueRef list      = LLVMBuildCall2(ctx->builder, list_ft,
+                                                                    list_fn, NULL, 0, "arr_coll");
+                            LLVMValueRef append_fn = get_rt_list_append(ctx);
+                            LLVMTypeRef  ap[]      = {ptr_t, ptr_t};
+                            LLVMTypeRef  aft       = LLVMFunctionType(LLVMVoidTypeInContext(ctx->context), ap, 2, 0);
+                            LLVMTypeRef  i32       = LLVMInt32TypeInContext(ctx->context);
+                            for (int ei = 0; ei < n; ei++) {
+                                LLVMValueRef zero   = LLVMConstInt(i32, 0, 0);
+                                LLVMValueRef eidx   = LLVMConstInt(i32, ei, 0);
+                                LLVMValueRef idxs[] = {zero, eidx};
+                                LLVMValueRef ep     = LLVMBuildGEP2(ctx->builder, arr_llvm,
+                                                                     arg_result.value, idxs, 2, "ep");
+                                LLVMValueRef ev     = LLVMBuildLoad2(ctx->builder, elem_llvm, ep, "ev");
+                                LLVMValueRef bv     = codegen_box(ctx, ev, arg_result.type->arr_element_type);
+                                LLVMValueRef aa[]   = {list, bv};
+                                LLVMBuildCall2(ctx->builder, aft, append_fn, aa, 2, "");
+                            }
+                            converted_arg = list;
+                        } else if (arg_result.type && arg_result.type->kind == TYPE_SET) {
+                            /* Convert set to RuntimeList* before passing as Coll */
+                            LLVMTypeRef  ptr_t  = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                            LLVMValueRef ub_fn  = get_rt_unbox_set(ctx);
+                            LLVMTypeRef  ub_ft  = LLVMFunctionType(ptr_t, &ptr_t, 1, 0);
+                            LLVMValueRef ub_a[] = {arg_result.value};
+                            LLVMValueRef raw_set = LLVMBuildCall2(ctx->builder, ub_ft,
+                                                                   ub_fn, ub_a, 1, "rawset");
+                            LLVMValueRef seq_fn  = get_rt_set_seq(ctx);
+                            LLVMTypeRef  seq_ft  = LLVMFunctionType(ptr_t, &ptr_t, 1, 0);
+                            LLVMValueRef seq_a[] = {raw_set};
+                            converted_arg = LLVMBuildCall2(ctx->builder, seq_ft,
+                                                           seq_fn, seq_a, 1, "set_as_list");
+                        } else if (arg_result.type && (arg_result.type->kind == TYPE_LIST ||
+                                                       arg_result.type->kind == TYPE_COLL)) {
+                            converted_arg = arg_result.value;
+                        } else {
+                            converted_arg = codegen_box(ctx, arg_result.value, arg_result.type);
+                        }
+                    } else if (expected_type && expected_type->kind == TYPE_UNKNOWN) {
                         if (actual_type->kind == TYPE_UNKNOWN) {
                             converted_arg = arg_result.value;
                         } else {
@@ -7453,14 +7631,15 @@ void register_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "merge",    2, 0, "Merge two maps, rightmost wins on conflict");
 
     // Set
-    env_insert_builtin(ctx->env, "set",       0, -1, "Create a set from arguments or convert a collection");
-    env_insert_builtin(ctx->env, "set?",      1,  0, "Test if value is a set");
-    env_insert_builtin(ctx->env, "conj",      2,  0, "Add an element to a set");
-    env_insert_builtin(ctx->env, "disj",      2,  0, "Remove an element from a set");
-    env_insert_builtin(ctx->env, "conj!",     2,  0, "Mutate a set by adding an element in place");
-    env_insert_builtin(ctx->env, "disj!",     2,  0, "Mutate a set by removing an element in place");
-    env_insert_builtin(ctx->env, "contains?", 2,  0, "Test if a set contains an element");
-    env_insert_builtin(ctx->env, "count",     1,  0, "Get number of elements in a set");
+    env_insert_builtin(ctx->env, "set",         0, -1, "Create a set from arguments or convert a collection");
+    env_insert_builtin(ctx->env, "set?",        1,  0, "Test if value is a set");
+    env_insert_builtin(ctx->env, "collection?", 1,  0, "Test if value is a List, Set, or Arr");
+    env_insert_builtin(ctx->env, "conj",        2,  0, "Add an element to a set");
+    env_insert_builtin(ctx->env, "disj",        2,  0, "Remove an element from a set");
+    env_insert_builtin(ctx->env, "conj!",       2,  0, "Mutate a set by adding an element in place");
+    env_insert_builtin(ctx->env, "disj!",       2,  0, "Mutate a set by removing an element in place");
+    env_insert_builtin(ctx->env, "contains?",   2,  0, "Test if a set contains an element");
+    env_insert_builtin(ctx->env, "count",       1,  0, "Get number of elements in a set");
 
     // List operations
     env_insert_builtin(ctx->env, "list",    0, -1, "Create a list from arguments");

@@ -795,6 +795,7 @@ Token lexer_next_token(Lexer *lex) {
     if (c == '}') { advance(lex); tok.type = TOK_RBRACE;   return tok; }
     if (c == ',') { advance(lex); tok.type = TOK_SYMBOL; tok.value = my_strdup(","); return tok; }
     if (c == '|') { advance(lex); tok.type = TOK_PIPE;     return tok; }
+    if (c == '`') { advance(lex); tok.type = TOK_BACKTICK; return tok; }
 
     // Character literal or quote
     if (c == '\'') {
@@ -2233,11 +2234,57 @@ static AST *parse_list(Parser *p) {
             }
 
             /* Not a range — proceed as normal list with first already parsed */
+
+            /* ── Infix sugar: (a `f` b `g` c) ─────────────────────────────
+             * Expands left-to-right:
+             *   (a `f` b)        => (f b a)
+             *   (a `f` b `g` c)  => (g c (f b a))            */
+            if (p->current.type == TOK_BACKTICK) {
+                AST *acc = first;
+
+                while (p->current.type == TOK_BACKTICK) {
+                    p->current = lexer_next_token(p->lexer); /* consume '`' */
+
+                    if (p->current.type != TOK_SYMBOL)
+                        compiler_error(p->current.line, p->current.column,
+                                       "Expected function name between backticks");
+                    AST *fn_sym = ast_new_symbol(p->current.value);
+                    fn_sym->line   = p->current.line;
+                    fn_sym->column = p->current.column;
+                    p->current = lexer_next_token(p->lexer); /* consume fn name */
+
+                    if (p->current.type != TOK_BACKTICK)
+                        compiler_error(p->current.line, p->current.column,
+                                       "Expected closing '`' after infix function name");
+                    p->current = lexer_next_token(p->lexer); /* consume '`' */
+
+                    AST *rhs = parse_expr(p);
+
+                    /* build (fn acc rhs) */
+                    AST *call = ast_new_list();
+                    call->line   = fn_sym->line;
+                    call->column = fn_sym->column;
+                    ast_list_append(call, fn_sym);
+                    ast_list_append(call, acc);
+                    ast_list_append(call, rhs);
+                    acc = call;
+                }
+
+                /* expect closing ')' — no more elements allowed after infix chain */
+                if (p->current.type != TOK_RPAREN)
+                    compiler_error(p->current.line, p->current.column,
+                                   "Expected ')' after infix expression");
+                int end_col = p->current.column + 1;
+                p->current = lexer_next_token(p->lexer);
+                ast_free(list);
+                acc->line       = start_line;
+                acc->column     = start_column;
+                acc->end_column = end_col;
+                return acc;
+            }
+
             ast_list_append(list, first);
             if (step) {
-                /* step was parsed but no .., treat comma+step as error or
-                   just add them as list elements — but comma isn't valid
-                   in a normal list so error */
                 compiler_error(p->current.line, p->current.column,
                                "Unexpected ',' in list — did you mean a range (start,step..end)?");
             }

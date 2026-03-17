@@ -108,7 +108,7 @@
 
 (define (gcd2 [a :: Int] -> [b :: Int] -> Int)
   "Return the greatest common divisor of A and B (Euclidean algorithm)."
-  (if (= b 0) a (gcd b (mod a b))))
+  (if (= b 0) a (gcd2 b (mod a b))))
 
 ;; TODO If the function implementation is not inside a list (...)
 ;; it will automatically be pattern matched
@@ -198,13 +198,15 @@
 
 ;;; Summation and product
 
-(define (sum [xs :: List] -> Int)
-  "Return the sum of all integers in XS."
-  (foldl add 0 xs))
+(define (sum [xs :: Coll] -> a)
+  :doc "Return the sum of all nums in XS."
+  :alias ∑
+  (foldl + 0 xs))
 
-(define (product [xs :: List] -> Int)
-  "Return the product of all integers in XS."
-  (foldl mul 1 xs))
+(define (product [xs :: Coll] -> a)
+  :doc "Return the product of all nums in XS."
+  :alias ∏
+  (foldl * 1 xs))
 
 (define (sum-range [lo :: Int] -> [hi :: Int] -> Int)
   "Return the sum of integers from LO to HI inclusive. O(1) via Gauss."
@@ -290,10 +292,10 @@
   (assert-eq (clamp 5 0 10)   5  "clamp in range")
   (assert-eq (clamp -1 0 10)  0  "clamp below")
   (assert-eq (clamp 11 0 10)  10 "clamp above")
-  (assert-eq (min2 3 7)       3  "min2")
-  (assert-eq (min2 7 3)       3  "min2 reversed")
-  (assert-eq (max2 3 7)       7  "max2")
-  (assert-eq (max2 7 3)       7  "max2 reversed")
+  (assert-eq (min 3 7)        3  "min")
+  (assert-eq (min 7 3)        3  "min reversed")
+  (assert-eq (max 3 7)        7  "max")
+  (assert-eq (max 7 3)        7  "max reversed")
 
   ;; pow
   (assert-eq (pow 2 0)   1    "pow 2^0")

@@ -1,11 +1,13 @@
 #+title: TODO.org
 
-* TODO Env [0/6]
+* TODO Env [0/9]
 - [ ] eval
 - [ ] A way to dump an enviroment to a loadable file.env 
 - [ ] Matematical notation for floating points
 - [ ] => Optional arguments that default to *unspecified*
 - [ ] Default values on layouts so when they are 0 initialized they have those
+- [ ] Optimize infix function call, if the function is variadic turn =(3 `+` 4 `+` 5)= int a single call =(+ 3 4 5)= and not =(+ 5 (+ 3 4))=
+- [ ] Look into dependent types and make it a general concept that you can do in the language
 - [ ] in monad-mode add a function to type check the function and
       substitute the type of the function with the inferred one
 - [ ] Connect to a running process with the repl

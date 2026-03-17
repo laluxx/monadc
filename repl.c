@@ -1647,7 +1647,7 @@ static bool repl_infer(REPLContext *ctx, AST *ast) {
     InferCtx *ictx = infer_ctx_create(ienv, parser_get_filename());
     Type *t = infer_toplevel(ictx, ast);
     if (ictx->had_error) {
-        fprintf(stderr, "\x1b[31;1m[type error]\x1b[0m %s\n", ictx->error_msg);
+        fprintf(stderr, "%s\n", ictx->error_msg);
         infer_ctx_free(ictx);
         return false;
     }

@@ -34,7 +34,7 @@
   "Create a set containing exactly one element."
   (set x))
 
-(define (singleton? [x] -> Bool)
+(define (singleton? [x :: Set] -> Bool)
   "Return True if x is a set containing exactly one element."
   (and (set? x) (= 1 (count x))))
 
@@ -54,7 +54,7 @@
 
 (define (difference [a :: Set] -> [b :: Set] -> Set)
   :doc "Return a set of elements in a that are not in b."
-  :alias \
+  ;; :alias \
   (foldl (lambda ([acc :: Set] [x] -> Set)
     (disj acc x)) a b))
 
@@ -99,7 +99,6 @@
   (assert-eq (singleton? {1})        True      "singleton? true")
   (assert-eq (singleton? {1 2})      False     "singleton? false — two elements")
   (assert-eq (singleton? (set))      False     "singleton? false — empty")
-  (assert-eq (singleton? 42)         False     "singleton? false — not a set")
 
   ;; Union
   (assert-eq (union {1 2} {2 3})     {1 2 3}   "union")

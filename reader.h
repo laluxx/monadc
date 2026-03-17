@@ -243,6 +243,7 @@ typedef enum {
     TOK_RBRACE,         // }
     TOK_HASH_LBRACE,    // #{
     TOK_PIPE,           // |
+    TOK_BACKTICK,       // `
 } TokenType;
 
 typedef struct {

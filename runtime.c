@@ -1302,9 +1302,16 @@ char *rt_unbox_string(RuntimeValue *v) {
 }
 
 RuntimeList *rt_unbox_list(RuntimeValue *v) {
-    if (!v || v->type == RT_NIL) return rt_list_empty();
+    if (!v) return rt_list_empty();
+    int tag = (int)v->type;
+    if (tag < 0 || tag > RT_CLOSURE) {
+        /* Treat as raw RuntimeList* */
+        return (RuntimeList *)v;
+    }
+    if (v->type == RT_NIL) return rt_list_empty();
     if (v->type == RT_THUNK) v = rt_force(v->data.thunk_val);
     if (v->type == RT_LIST) return v->data.list_val;
+    if (v->type == RT_SET)  return rt_set_seq(v->data.set_val);
     return rt_list_empty();
 }
 

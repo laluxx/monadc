@@ -290,18 +290,6 @@ bool infer_unify_one(InferCtx *ctx, Type *a, Type *b, int line, int col) {
         return true;
     }
 
-    /* /\* Both ground — must match structurally *\/ */
-    /* if (a->kind != b->kind) { */
-    /*     char a_str[64], b_str[64]; */
-    /*     snprintf(a_str, sizeof(a_str), "%s", type_to_string(a)); */
-    /*     snprintf(b_str, sizeof(b_str), "%s", type_to_string(b)); */
-    /*     snprintf(ctx->error_msg, sizeof(ctx->error_msg), */
-    /*              "%s:%d:%d: type error: cannot unify %s with %s", */
-    /*              ctx->filename, line, col, a_str, b_str); */
-    /*     ctx->had_error = true; */
-    /*     return false; */
-    /* } */
-
     // Both ground — must match structurally
     if (a->kind != b->kind) {
         /* TYPE_FN (unannotated Fn) is compatible with any arrow type */
@@ -309,11 +297,18 @@ bool infer_unify_one(InferCtx *ctx, Type *a, Type *b, int line, int col) {
         if (a->kind == TYPE_ARROW && b->kind == TYPE_FN) return true;
         /* TYPE_FN ~ TYPE_FN always ok */
         if (a->kind == TYPE_FN && b->kind == TYPE_FN) return true;
+        /* TYPE_COLL is compatible with any collection type */
+        if (a->kind == TYPE_COLL && (b->kind == TYPE_LIST ||
+                                     b->kind == TYPE_SET  ||
+                                     b->kind == TYPE_ARR)) return true;
+        if (b->kind == TYPE_COLL && (a->kind == TYPE_LIST ||
+                                     a->kind == TYPE_SET  ||
+                                     a->kind == TYPE_ARR)) return true;
         char a_str[64], b_str[64];
         snprintf(a_str, sizeof(a_str), "%s", type_to_string(a));
         snprintf(b_str, sizeof(b_str), "%s", type_to_string(b));
         snprintf(ctx->error_msg, sizeof(ctx->error_msg),
-                 "%s:%d:%d: type error: cannot unify %s with %s",
+                 "%s:%d:%d: type warning: cannot unify %s with %s",
                  ctx->filename, line, col, a_str, b_str);
         ctx->had_error = true;
         return false;
@@ -960,18 +955,18 @@ void infer_register_builtins(InferCtx *ctx) {
     Type *a4 = infer_fresh(ctx);
     TypeScheme *set_pred_sc = infer_generalise(ctx,
         type_arrow(a4, type_bool()), ctx->env);
-    infer_env_insert(ctx->env, "set?",  set_pred_sc);
-    infer_env_insert(ctx->env, "map?",  set_pred_sc);
+    infer_env_insert(ctx->env, "set?",        set_pred_sc);
+    infer_env_insert(ctx->env, "map?",        set_pred_sc);
+    infer_env_insert(ctx->env, "collection?", set_pred_sc);
 
-    /* ∀a b c. (a → b → a) → a → c → a   (foldl — generic collection) */
+    /* ∀a b. (a → b → a) → a → Coll → a   (foldl — generic collection) */
     Type *acc_t  = infer_fresh(ctx);
     Type *elem_t = infer_fresh(ctx);
-    Type *coll_t = infer_fresh(ctx);
     TypeScheme *foldl_sc = infer_generalise(ctx,
         type_arrow(
             type_arrow(acc_t, type_arrow(elem_t, acc_t)),
             type_arrow(acc_t,
-                type_arrow(coll_t, acc_t))),
+                type_arrow(type_coll(), acc_t))),
         ctx->env);
     infer_env_insert(ctx->env, "foldl", foldl_sc);
 

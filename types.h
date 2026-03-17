@@ -22,9 +22,10 @@ typedef enum {
     TYPE_SET,
     TYPE_MAP,
     TYPE_UNKNOWN,
-    TYPE_VAR,     // HM type variable — 'a, 'b, etc.
-    TYPE_ARROW,   // function type — param -> return
-    TYPE_VARIADIC // List 'a rest params.
+    TYPE_VAR,      // HM type variable — 'a, 'b, etc.
+    TYPE_ARROW,    // function type — param -> return
+    TYPE_VARIADIC, // List 'a rest params.
+    TYPE_COLL,     // Abstract collection — List | Set | Arr
 } TypeKind;
 
 
@@ -96,6 +97,7 @@ Type *type_keyword(void);
 Type *type_ratio(void);
 Type *type_set(void);
 Type *type_map(void);
+Type *type_coll(void);
 
 
 /// Constructors — compound types

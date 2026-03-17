@@ -718,8 +718,8 @@
 
 ;;;; Pair
 
-(define ordered-pair (1,2)); Inferred as [ordered-pair :: Pair :: Ordered]
-(define [ordered-pair :: Pair :: Ordered] (1,2)); Manually typed
+;; (define ordered-pair (1,2)); Inferred as [ordered-pair :: Pair :: Ordered]
+;; (define [ordered-pair :: Pair :: Ordered] (1,2)); Manually typed
 
 ;; NOTE Ordered by itself is not a type, It's more like an enum.
 
@@ -862,12 +862,12 @@
 ;; it's purely a reader-level transformation that expands to normal
 ;; Lisp syntax before macroexpansion, So macros will work normally.
 
-;; (define players {"Alice" "Bob" "Kelly"})
-;; (define new-players ["Tim" "Sue" "Greg"])
-;; (define more-new-players ["Codeko" "Me" "Meow"])
+(define players {"Alice" "Bob" "Kelly"})
+(define new-players ["Tim" "Sue" "Greg"])
+(define more-new-players ["Codeko" "Me" "Meow"])
 
-;; (new-players `into` players); => (into players new-players)
-;; (more-new-players `into` new-players `into` players); => (into (into players new-players) more-new-players)
+(new-players `into` players); => (into players new-players)
+(more-new-players `into` new-players `into` players); => (into (into players new-players) more-new-players)
 
 
 

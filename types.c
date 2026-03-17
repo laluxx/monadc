@@ -62,6 +62,7 @@ Type *type_from_name(const char *name) {
     if (strcmp(name, "Arr")     == 0) return type_arr(NULL, -1);
     if (strcmp(name, "Set")     == 0) return type_set();
     if (strcmp(name, "Map")     == 0) return type_map();
+    if (strcmp(name, "Coll")    == 0) return type_coll();
     if (strcmp(name, "Fn")      == 0) return type_fn(NULL, 0, NULL);
 
     // Check alias registry (supports chained aliases: Code -> List -> ...)
@@ -107,6 +108,7 @@ Type *type_keyword(void) { return make_type(TYPE_KEYWORD); }
 Type *type_ratio  (void) { return make_type(TYPE_RATIO);   }
 Type *type_set    (void) { return make_type(TYPE_SET);     }
 Type *type_map    (void) { return make_type(TYPE_MAP);     }
+Type *type_coll   (void) { return make_type(TYPE_COLL);    }
 
 Type *type_list(Type *element_type) {
     Type *t = make_type(TYPE_LIST);
@@ -219,6 +221,7 @@ Type *type_clone(Type *t) {
         case TYPE_KEYWORD: return type_keyword();
         case TYPE_RATIO:   return type_ratio();
         case TYPE_LIST:    return type_list(type_clone(t->element_type));
+        case TYPE_COLL:    return type_coll();
         case TYPE_ARR:     return type_arr(type_clone(t->arr_element_type), t->arr_size);
         case TYPE_VAR:     return type_var(t->var_id);
         case TYPE_ARROW:   return type_arrow(type_clone(t->arrow_param), type_clone(t->arrow_ret));
@@ -288,6 +291,7 @@ const char *type_to_string(Type *t) {
     case TYPE_RATIO:   return "Ratio";
     case TYPE_SET:     return "Set";
     case TYPE_MAP:     return "Map";
+    case TYPE_COLL:    return "Coll";
     case TYPE_UNKNOWN: return "?";
 
     case TYPE_VAR: {
