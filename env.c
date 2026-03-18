@@ -31,21 +31,29 @@ Env *env_create_child(Env *parent) {
 }
 
 static void free_entry_fields(EnvEntry *e) {
-    free(e->name);
-    free(e->docstring);
-    free(e->module_name);
-    free(e->source_text);
-    type_free(e->type);
-    type_free(e->return_type);
-    scheme_free(e->scheme);
-    e->scheme = NULL;
+    free(e->name);          e->name        = NULL;
+    free(e->docstring);     e->docstring   = NULL;
+    free(e->module_name);   e->module_name = NULL;
+    free(e->source_text);   e->source_text = NULL;
+    free(e->llvm_name);     e->llvm_name   = NULL;
+    type_free(e->type);     e->type        = NULL;
+    type_free(e->return_type); e->return_type = NULL;
+    if (e->scheme) {
+        scheme_free(e->scheme);
+        e->scheme = NULL;
+    }
     if (e->params) {
         for (int i = 0; i < e->param_count; i++) {
             free(e->params[i].name);
+            e->params[i].name = NULL;
             type_free(e->params[i].type);
+            e->params[i].type = NULL;
         }
         free(e->params);
+        e->params = NULL;
     }
+    /* source_ast is owned by the define path and freed separately — do not free here */
+    /* llvm_name already freed above */
 }
 
 // TODO Free llvm_name
@@ -221,14 +229,22 @@ void env_insert_func(Env *table, const char *name,
                      const char *docstring) {
     EnvEntry *e = find(table, name);
     if (e) {
-        char *saved_source = e->source_text;
-        e->source_text = NULL;
+        char *saved_source  = e->source_text;
+        char *saved_llvm    = e->llvm_name;
+        AST  *saved_ast     = e->source_ast;
         TypeScheme *saved_scheme = e->scheme;
-        e->scheme = NULL;              // prevent free_entry_fields from freeing it
+        bool saved_is_ffi   = e->is_ffi;
+        e->source_text = NULL;
+        e->llvm_name   = NULL;
+        e->source_ast  = NULL;
+        e->scheme      = NULL;
         free_entry_fields(e);
         e->name        = strdup(name);
         e->source_text = saved_source;
-        e->scheme      = saved_scheme; // restore so the HM scheme survives
+        e->llvm_name   = saved_llvm;
+        e->source_ast  = saved_ast;
+        e->scheme      = saved_scheme;
+        e->is_ffi      = saved_is_ffi;
     } else {
         e = new_entry(name);
         chain(table, e);
@@ -457,7 +473,12 @@ struct InferEnv *env_get_infer(Env *env) {
 
 void env_set_scheme(Env *env, const char *name, struct TypeScheme *scheme) {
     EnvEntry *e = env_lookup(env, name);
-    if (e) e->scheme = scheme;
+    if (!e) return;
+    if (e->scheme) {
+        scheme_free(e->scheme);
+        e->scheme = NULL;
+    }
+    e->scheme = scheme ? scheme_clone(scheme) : NULL;
 }
 
 struct TypeScheme *env_hm_infer_define(Env *env, const char *name,

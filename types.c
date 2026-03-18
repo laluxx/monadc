@@ -75,6 +75,7 @@ Type *type_from_name(const char *name) {
     if (strcmp(name, "I128")    == 0) return type_i128();
     if (strcmp(name, "U128")    == 0) return type_u128();
     if (strcmp(name, "Fn")      == 0) return type_fn(NULL, 0, NULL);
+    if (strcmp(name, "Pointer") == 0) return type_ptr(NULL);
 
     // Check alias registry (supports chained aliases: Code -> List -> ...)
     int depth = 0;
@@ -155,6 +156,25 @@ Type *type_layout(const char *name,
     t->layout_total_size  = total_size;
     t->layout_packed      = packed;
     t->layout_align       = align;
+    return t;
+}
+
+Type *type_ptr(Type *pointee) {
+    Type *t = make_type(TYPE_PTR);
+    t->element_type = pointee;  // reuse element_type field for pointee
+    return t;
+}
+
+Type *type_layout_ref(const char *name) {
+    Type *t = calloc(1, sizeof(Type));
+    t->kind               = TYPE_LAYOUT;
+    t->layout_name        = strdup(name);
+    t->layout_fields      = NULL;
+    t->layout_field_count = 0;
+    t->layout_total_size  = 0;
+    t->layout_packed      = false;
+    t->layout_align       = 0;
+    t->arr_size           = -1;
     return t;
 }
 
@@ -256,6 +276,7 @@ Type *type_clone(Type *t) {
         case TYPE_I128:    return type_i128();
         case TYPE_U128:    return type_u128();
         case TYPE_ARR:     return type_arr(type_clone(t->arr_element_type), t->arr_size);
+        case TYPE_PTR:     return type_ptr(type_clone(t->element_type));
         case TYPE_VAR:     return type_var(t->var_id);
         case TYPE_ARROW:   return type_arrow(type_clone(t->arrow_param), type_clone(t->arrow_ret));
         case TYPE_LAYOUT: {
@@ -286,7 +307,7 @@ void type_free(Type *t) {
         }
         type_free(t->return_type);
     }
-    if (t->kind == TYPE_LIST) {
+    if (t->kind == TYPE_LIST || t->kind == TYPE_PTR) {
         type_free(t->element_type);
     }
     if (t->kind == TYPE_ARR) {
@@ -337,7 +358,12 @@ const char *type_to_string(Type *t) {
     case TYPE_I128:    return "I128";
     case TYPE_U128:    return "U128";
     case TYPE_UNKNOWN: return "?";
-
+    case TYPE_PTR: {
+        static char pbuf[256];
+        snprintf(pbuf, sizeof(pbuf), "Pointer :: %s",
+                 type_to_string(t->element_type));
+        return pbuf;
+    }
     case TYPE_VAR: {
         static char vbuf[32];
         snprintf(vbuf, sizeof(vbuf), "'%c",

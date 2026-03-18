@@ -1,6 +1,6 @@
 CC      = gcc
 CFLAGS  = -Wall -Wextra -std=c99 $(shell llvm-config --cflags)
-LDFLAGS = -lm -lreadline -lgmp $(shell llvm-config --ldflags --libs core)
+LDFLAGS = -lm -lreadline -lgmp $(shell llvm-config --ldflags --libs core) -lclang
 TARGET  = monad
 PREFIX  = /usr/local
 BINDIR  = $(PREFIX)/bin
@@ -13,6 +13,7 @@ RELEASE_CFLAGS = -DNDEBUG -O2
 
 # All .c files EXCEPT runtime.c (built separately as a static archive)
 SRCS = $(filter-out runtime.c, $(wildcard *.c))
+FFI_CFLAGS = $(shell pkg-config --cflags libclang 2>/dev/null || echo "-I/usr/lib/llvm/include")
 OBJS = $(SRCS:.c=.o)
 
 # Static archive — no rpath/ldconfig needed, works from any directory
@@ -39,6 +40,9 @@ $(RUNTIME_LIB): $(RUNTIME_OBJ)
 $(TARGET): $(OBJS) $(RUNTIME_LIB)
 	$(CC) $(CFLAGS) -rdynamic -o $@ $(OBJS) $(RUNTIME_LIB) $(LDFLAGS)
 
+
+ffi.o: ffi.c
+	$(CC) $(CFLAGS) $(FFI_CFLAGS) -c $< -o $@
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@

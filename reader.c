@@ -2167,6 +2167,75 @@ static AST *parse_list(Parser *p) {
 
 
 
+/* (include <stdio.h>) or (include "myheader.h") */
+    if (p->current.type == TOK_SYMBOL &&
+        strcmp(p->current.value, "include") == 0) {
+        int inc_line = p->current.line;
+        int inc_col  = p->current.column;
+        p->current = lexer_next_token(p->lexer); /* consume 'include' */
+
+        /* Read the header name — could be a symbol like <stdio.h>
+         * which the lexer tokenises as a comparison chain, or a string */
+        bool system_include = false;
+        char header_name[256] = {0};
+
+        if (p->current.type == TOK_STRING) {
+            /* "myheader.h" */
+            strncpy(header_name, p->current.value, sizeof(header_name) - 1);
+            system_include = false;
+            p->current = lexer_next_token(p->lexer);
+        } else if (p->current.type == TOK_SYMBOL &&
+                   p->current.value[0] == '<') {
+            /* <stdio.h> tokenised as a single symbol by some lexers */
+            const char *s = p->current.value;
+            size_t len = strlen(s);
+            if (s[len-1] == '>') {
+                /* strip < and > */
+                strncpy(header_name, s + 1, len - 2);
+                header_name[len - 2] = '\0';
+            } else {
+                strncpy(header_name, s + 1, sizeof(header_name) - 1);
+            }
+            system_include = true;
+            p->current = lexer_next_token(p->lexer);
+        } else {
+            /* Fallback: collect tokens until ) building the header name */
+            /* This handles <stdio.h> that got split across tokens */
+            char buf[256] = {0};
+            while (p->current.type != TOK_RPAREN &&
+                   p->current.type != TOK_EOF) {
+                if (p->current.value) {
+                    strncat(buf, p->current.value,
+                            sizeof(buf) - strlen(buf) - 1);
+                }
+                p->current = lexer_next_token(p->lexer);
+            }
+            /* strip < > if present */
+            if (buf[0] == '<') {
+                size_t blen = strlen(buf);
+                if (buf[blen-1] == '>') buf[blen-1] = '\0';
+                strncpy(header_name, buf + 1, sizeof(header_name) - 1);
+                system_include = true;
+            } else {
+                strncpy(header_name, buf, sizeof(header_name) - 1);
+                system_include = false;
+            }
+        }
+
+        if (p->current.type == TOK_RPAREN)
+            p->current = lexer_next_token(p->lexer);
+
+        /* Build (include "header_name" system_flag) as a list */
+        AST *result = ast_new_list();
+        ast_list_append(result, ast_new_symbol("include"));
+        ast_list_append(result, ast_new_string(header_name));
+        ast_list_append(result, ast_new_symbol(system_include ? "system" : "local"));
+        ast_free(list);
+        result->line   = inc_line;
+        result->column = inc_col;
+        return result;
+    }
+
     if (p->current.type == TOK_SYMBOL &&
         strcmp(p->current.value, "tests") == 0) {
         p->current = lexer_next_token(p->lexer);

@@ -21,6 +21,7 @@
 #include "types.h"
 #include "module.h"
 #include "infer.h"
+#include "ffi.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -344,7 +345,11 @@ static void redeclare_env_symbols(REPLContext *ctx) {
 
                 LLVMValueRef existing = LLVMGetNamedFunction(ctx->cg.module, name);
                 if (existing) {
-                    e->func_ref = existing;
+                    /* For FFI functions, do NOT update func_ref — the stored
+                     * func_ref has the correct type (i32 for Color etc.).
+                     * Just use the existing declaration as-is.            */
+                    if (!e->is_ffi)
+                        e->func_ref = existing;
                     if (mangled_name) free(mangled_name);
                     continue;
                 }
@@ -358,19 +363,51 @@ static void redeclare_env_symbols(REPLContext *ctx) {
                     LLVMTypeRef params[] = {ptr_t, i32_t, ptr_t};
                     ft = LLVMFunctionType(ptr_t, params, 3, 0);
                 } else {
-                    LLVMTypeRef *pt = e->param_count > 0
-                        ? malloc(sizeof(LLVMTypeRef) * e->param_count) : NULL;
-                    for (int i = 0; i < e->param_count; i++)
-                        pt[i] = type_to_llvm(&ctx->cg, e->params[i].type);
-                    ft = LLVMFunctionType(
-                        type_to_llvm(&ctx->cg, e->return_type),
-                        pt, e->param_count, 0);
-                    if (pt) free(pt);
+                    if (e->is_ffi) {
+                        /* For FFI functions, rebuild the type using the
+                         * same ABI rules as ffi_inject_into_env — layout
+                         * params become packed integers, not pointers.  */
+                        LLVMTypeRef *pt = e->param_count > 0
+                            ? malloc(sizeof(LLVMTypeRef) * e->param_count) : NULL;
+                        for (int i = 0; i < e->param_count; i++) {
+                            Type *ptype = e->params[i].type;
+                            if (!ptype) {
+                                pt[i] = LLVMPointerType(
+                                    LLVMInt8TypeInContext(ctx->cg.context), 0);
+                            } else if (ptype->kind == TYPE_I32 ||
+                                       ptype->kind == TYPE_U32) {
+                                pt[i] = LLVMInt32TypeInContext(ctx->cg.context);
+                            } else if (ptype->kind == TYPE_LAYOUT) {
+                                Type *full = env_lookup_layout(ctx->cg.env,
+                                                 ptype->layout_name);
+                                int sz = full ? full->layout_total_size : 0;
+                                if      (sz > 0 && sz <= 4)
+                                    pt[i] = LLVMInt32TypeInContext(ctx->cg.context);
+                                else if (sz > 4 && sz <= 8)
+                                    pt[i] = LLVMInt64TypeInContext(ctx->cg.context);
+                                else
+                                    pt[i] = LLVMPointerType(
+                                        LLVMInt8TypeInContext(ctx->cg.context), 0);
+                            } else {
+                                pt[i] = type_to_llvm(&ctx->cg, ptype);
+                            }
+                        }
+                        LLVMTypeRef ret_t = e->return_type
+                            ? type_to_llvm(&ctx->cg, e->return_type)
+                            : LLVMVoidTypeInContext(ctx->cg.context);
+                        ft = LLVMFunctionType(ret_t, pt, e->param_count, 0);
+                        if (pt) free(pt);
+                    } else {
+                        ft = LLVMGlobalGetValueType(e->func_ref);
+                    }
                 }
 
                 LLVMValueRef fn = LLVMAddFunction(ctx->cg.module, name, ft);
                 LLVMSetLinkage(fn, LLVMExternalLinkage);
-                e->func_ref = fn;
+                /* For FFI functions, do NOT update func_ref — keep the
+                 * original declaration with correct ABI types (i32 etc.) */
+                if (!e->is_ffi)
+                    e->func_ref = fn;
                 if (mangled_name) free(mangled_name);
             }
         }
@@ -417,6 +454,21 @@ static void map_imported_in_module(LLVMExecutionEngineRef engine,
     }
 }
 
+static void map_ffi_in_module(LLVMExecutionEngineRef engine,
+                               LLVMModuleRef mod,
+                               FFIContext *ffi) {
+    if (!ffi) return;
+    for (int i = 0; i < ffi->function_count; i++) {
+        const char *name = ffi->functions[i].name;
+        LLVMValueRef fn  = LLVMGetNamedFunction(mod, name);
+        if (!fn) continue;
+        /* Look up the symbol in the process — works if the .so was
+         * dlopen'd with RTLD_GLOBAL or the binary was linked with it */
+        void *addr = dlsym(RTLD_DEFAULT, name);
+        if (addr)
+            LLVMAddGlobalMapping(engine, fn, addr);
+    }
+}
 
 /// Module lifecycle
 
@@ -464,9 +516,10 @@ static bool expr_is_silent(AST *ast) {
     if (ast->type != AST_LIST || ast->list.count == 0) return false;
     if (ast->list.items[0]->type != AST_SYMBOL) return false;
     const char *s = ast->list.items[0]->symbol;
-    return strcmp(s, "define") == 0 ||
-           strcmp(s, "show")   == 0 ||
-           strcmp(s, "for")    == 0;
+    return strcmp(s, "define")  == 0 ||
+           strcmp(s, "show")    == 0 ||
+           strcmp(s, "include") == 0 ||
+           strcmp(s, "for")     == 0;
 }
 
 /* -------------------------------------------------------------------------
@@ -693,9 +746,8 @@ static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t, bool li
         LLVMBuildCall2(ctx->cg.builder, _ft, _pfn, _a, 1, ""); \
     } while(0)
 
-    /* NULL type: best-effort — assume RuntimeValue* (covers imported functions) */
+    /* NULL type signals void return — nothing to print */
     if (!t) {
-        EMIT_RV_PRINT(val);
         return;
     }
 
@@ -717,7 +769,9 @@ static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t, bool li
             : val;
         LLVMValueRef a[] = {get_fmt_int(&ctx->cg), v};
         LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, a, 2, "");
-        emit_numeric_annotation(ctx, v, true);
+        /* Skip char annotation for I8 — byte values are numeric, not chars */
+        if (t->kind != TYPE_I8)
+            emit_numeric_annotation(ctx, v, true);
         break; }
 
     case TYPE_U8:
@@ -731,7 +785,12 @@ static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t, bool li
         LLVMValueRef fmt = LLVMBuildGlobalStringPtr(ctx->cg.builder, "%lu\n", "fmt_uint");
         LLVMValueRef a[] = {fmt, v};
         LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, a, 2, "");
-        emit_numeric_annotation(ctx, v, false);
+        /* Only show char annotation for U8 — it's the only byte-sized
+         * unsigned type where the char interpretation is meaningful.
+         * Skip the annotation entirely for U8 since it shows misleading
+         * char representations for numeric byte values like 255.        */
+        if (t->kind != TYPE_U8)
+            emit_numeric_annotation(ctx, v, false);
         break; }
 
     case TYPE_I128:
@@ -910,10 +969,21 @@ static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t, bool li
     }
 
     case TYPE_LAYOUT: {
+        /* Resolve layout ref to full type if needed */
+        if (t->layout_field_count == 0 && t->layout_name) {
+            Type *full = env_lookup_layout(ctx->cg.env, t->layout_name);
+            if (full && full->layout_field_count > 0) t = full;
+        }
         char struct_name[256];
         snprintf(struct_name, sizeof(struct_name), "layout.%s", t->layout_name);
         LLVMTypeRef struct_llvm = LLVMGetTypeByName2(ctx->cg.context, struct_name);
         if (!struct_llvm) break;
+        if (t->layout_field_count == 0) break;
+
+        /* val is already a ptr to the struct data — use it directly.
+         * We do NOT call __layout_ptr_get here; that helper is only
+         * for named variables stored in the layout pointer table.    */
+        LLVMValueRef heap_ptr = val;
 
         int max_name_len = 0;
         for (int i = 0; i < t->layout_field_count; i++) {
@@ -993,10 +1063,10 @@ static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t, bool li
                               LLVMInt8TypeInContext(ctx->cg.context),
                               LLVMConstInt(i32, 64, 0), "vbuf");
 
-            LLVMValueRef zero_idx = LLVMConstInt(i64, 0, 0);
             LLVMValueRef fidx_v   = LLVMConstInt(i32, i, 0);
-            LLVMValueRef idxs[]   = {LLVMConstInt(i32, 0, 0), fidx_v};
-            LLVMValueRef gep      = LLVMBuildGEP2(ctx->cg.builder, struct_llvm, val, idxs, 2, "fp");
+            LLVMValueRef zero_idx = LLVMConstInt(i32, 0, 0);
+            LLVMValueRef idxs[]   = {zero_idx, fidx_v};
+            LLVMValueRef gep      = LLVMBuildGEP2(ctx->cg.builder, struct_llvm, heap_ptr, idxs, 2, "fp");
             Type *ft_field        = t->layout_fields[i].type;
             LLVMTypeRef ft_llvm   = type_to_llvm(&ctx->cg, ft_field);
             LLVMValueRef fval     = LLVMBuildLoad2(ctx->cg.builder, ft_llvm, gep, "fv");
@@ -1055,10 +1125,16 @@ static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t, bool li
                 LLVMBuildBr(ctx->cg.builder, skip_bb);
                 LLVMPositionBuilderAtEnd(ctx->cg.builder, skip_bb);
             } else if (ft_field->kind == TYPE_CHAR) {
-                LLVMValueRef fmt_s = LLVMBuildGlobalStringPtr(ctx->cg.builder, "%c", "fmtc");
-                LLVMValueRef sargs[] = {val_bufs[i], buf_size, fmt_s, fval};
-                LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(snprintf_fn),
-                               snprintf_fn, sargs, 4, "");
+                /* Print as decimal integer, not char — char fields in
+                 * C structs (like Color.r) are numeric, not text        */
+                LLVMTypeRef i64t = LLVMInt64TypeInContext(ctx->cg.context);
+                LLVMValueRef fval_ext = LLVMBuildZExt(ctx->cg.builder, fval, i64t, "char_ext");
+                LLVMValueRef fmt_s = LLVMBuildGlobalStringPtr(ctx->cg.builder, "%ld", "fmtc");
+                LLVMTypeRef  sn_p[] = {ptr, i64, ptr, i64t};
+                LLVMBuildCall2(ctx->cg.builder,
+                    LLVMFunctionType(i32, sn_p, 4, false),
+                    snprintf_fn,
+                    (LLVMValueRef[]){val_bufs[i], buf_size, fmt_s, fval_ext}, 4, "");
             } else if (ft_field->kind == TYPE_STRING) {
                 LLVMValueRef fmt_s = LLVMBuildGlobalStringPtr(ctx->cg.builder, "\"%s\"", "fmts");
                 LLVMValueRef sargs[] = {val_bufs[i], buf_size, fmt_s, fval};
@@ -1074,14 +1150,23 @@ static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t, bool li
                     (LLVMValueRef[]){val_bufs[i], buf_size, fmt_s}, 3, "");
             } else {
                 LLVMTypeRef i64t = LLVMInt64TypeInContext(ctx->cg.context);
-                if (LLVMTypeOf(fval) != i64t)
-                    fval = LLVMBuildZExt(ctx->cg.builder, fval, i64t, "wi");
+                LLVMValueRef fval_ext = fval;
+                if (LLVMTypeOf(fval) != i64t) {
+                    /* Use ZExt for unsigned types, SExt for signed */
+                    bool is_unsigned = (ft_field->kind == TYPE_U8  ||
+                                        ft_field->kind == TYPE_U16 ||
+                                        ft_field->kind == TYPE_U32 ||
+                                        ft_field->kind == TYPE_U64);
+                    fval_ext = is_unsigned
+                        ? LLVMBuildZExt(ctx->cg.builder, fval, i64t, "wi")
+                        : LLVMBuildSExt(ctx->cg.builder, fval, i64t, "wi");
+                }
                 LLVMValueRef fmt_s = LLVMBuildGlobalStringPtr(ctx->cg.builder, "%ld", "fmti");
                 LLVMTypeRef  sn_p[] = {ptr, i64, ptr, i64t};
                 LLVMBuildCall2(ctx->cg.builder,
                     LLVMFunctionType(i32, sn_p, 4, false),
                     snprintf_fn,
-                    (LLVMValueRef[]){val_bufs[i], buf_size, fmt_s, fval}, 4, "");
+                    (LLVMValueRef[]){val_bufs[i], buf_size, fmt_s, fval_ext}, 4, "");
             }
 
             // strlen of the buffer
@@ -1199,6 +1284,9 @@ static bool close_and_run(REPLContext *ctx) {
 
     /* Map imported module symbols (Math__fib etc.) */
     map_imported_in_module(ctx->engine, mod);
+
+    /* Map FFI symbols (raylib, SDL, etc.) */
+    map_ffi_in_module(ctx->engine, mod, ctx->cg.ffi);
 
     /* Map REPL-defined globals from previous expressions.
      *
@@ -1672,6 +1760,7 @@ void repl_init(REPLContext *ctx) {
     }
     /* boot is owned by engine now */
 
+    ctx->cg.ffi = ffi_context_create();
     register_builtins(&ctx->cg);
     arena_init(&g_eval_arena, 4 * 1024 * 1024);
     ctx->expr_count = 0;
@@ -2375,7 +2464,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
     ast_free(ast);
     ast = NULL;
 
-    if (!silent)
+    if (!silent && res.type != NULL)
         emit_auto_print(ctx, res.value, res.type, list_is_rv);
 
     /* Phase 3: JIT compile + run */
@@ -2396,12 +2485,6 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
     g_assert_jmp_ptr = NULL;
     rt_interrupted = 0;
 
-    /* if (ran) { */
-    /*     ctx->expr_count++; */
-    /*     char next[64]; */
-    /*     snprintf(next, sizeof(next), "__repl_%u", ctx->expr_count); */
-    /*     fresh_module(ctx, next); */
-    /* } else { */
     if (ran) {
         ctx->expr_count++;
         // Attach source text to layout env entry for (code Layout) reflection

@@ -1,6 +1,6 @@
 #+title: TODO.org
 
-* TODO Env [0/9]
+* TODO Env [0/10]
 - [ ] eval
 - [ ] A way to dump an enviroment to a loadable file.env 
 - [ ] Matematical notation for floating points
@@ -8,6 +8,7 @@
 - [ ] Default values on layouts so when they are 0 initialized they have those
 - [ ] Optimize infix function call, if the function is variadic turn =(3 `+` 4 `+` 5)= int a single call =(+ 3 4 5)= and not =(+ 5 (+ 3 4))=
 - [ ] Look into dependent types and make it a general concept that you can do in the language
+- [ ] :inline True or :inline False (The default) inside functions
 - [ ] in monad-mode add a function to type check the function and
       substitute the type of the function with the inferred one
 - [ ] Connect to a running process with the repl
@@ -15,9 +16,31 @@
 
 
 
+# TODO Align layouts properly
+#+begin_src monad
+Mesh
+(layout Mesh
+  [vertexCount   :: I32]
+  [triangleCount :: I32]
+  [vertices      :: Pointer :: F32]
+  [texcoords     :: Pointer :: F32]
+  [texcoords2    :: Pointer :: F32]
+  [normals       :: Pointer :: F32]
+  [tangents      :: Pointer :: F32]
+  [colors        :: String]
+  [indices       :: Pointer :: U16]
+  [animVertices  :: Pointer :: F32]
+  [animNormals   :: Pointer :: F32]
+  [boneIds       :: String]
+  [boneWeights   :: Pointer :: F32]
+  [boneMatrices  :: Matrix]
+  [boneCount     :: I32]
+  [vaoId         :: I32]
+  [vboId         :: Pointer :: U32])
+#+end_src
+
 
 A module that implements a DSL to write SPIRV
-
 
 Point.x should return the Float type itself, once we can return types.
 

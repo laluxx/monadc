@@ -45,6 +45,7 @@ typedef struct EnvEntry {
     int param_count;
     int lifted_count;  // number of hidden captured params (lambda lifting)
     bool is_closure_abi;
+    bool is_ffi;
     Type *return_type;
 
     char *module_name; // Which module this symbol belongs to (NULL for local)

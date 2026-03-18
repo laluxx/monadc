@@ -37,6 +37,7 @@ typedef enum {
     TYPE_ARROW,    // function type — param -> return
     TYPE_VARIADIC, // List 'a rest params.
     TYPE_COLL,     // Abstract collection — List | Set | Arr
+    TYPE_PTR,      // Pointer :: T        — typed pointer to T
 } TypeKind;
 
 
@@ -130,6 +131,8 @@ Type *type_fn(FnParam *params, int param_count, Type *return_type);
 Type *type_fn_builtin(int min_args, int opt_args, bool variadic);
 Type *type_layout(const char *name, LayoutField *fields, int field_count,
                   int total_size, bool packed, int align);
+Type *type_layout_ref(const char *name);
+Type *type_ptr(Type *pointee);
 
 
 /// Constructors — HM types

@@ -6,6 +6,7 @@
 #include "reader.h"
 #include "types.h"
 #include "env.h"
+#include "ffi.h"
 #include "asm.h"
 #include "runtime.h"
 #include "module.h"
@@ -50,6 +51,7 @@ void codegen_init(CodegenContext *ctx, const char *module_name) {
     ctx->fmt_bin   = NULL;
     ctx->fmt_oct   = NULL;
     ctx->error_jmp_set = false;
+    ctx->ffi = NULL;
     // Initialize monomorphization cache
     ctx->mono_cache.entries  = NULL;
     ctx->mono_cache.count    = 0;
@@ -650,24 +652,38 @@ LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *t) {
     case TYPE_FN:
         return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
     case TYPE_LAYOUT: {
+        /* Resolve name-only refs (from FFI) to the full registered layout */
+        if (t->layout_field_count == 0 && t->layout_name) {
+            Type *full = env_lookup_layout(ctx->env, t->layout_name);
+            if (full && full->layout_field_count > 0)
+                t = full;
+        }
         char struct_name[256];
         snprintf(struct_name, sizeof(struct_name), "layout.%s", t->layout_name);
+        /* Always check for existing named struct first — the LLVM context
+         * is shared across all REPL modules so the type persists */
         LLVMTypeRef existing = LLVMGetTypeByName2(ctx->context, struct_name);
-        if (existing) return LLVMPointerType(existing, 0);  // always pointer
-
+        if (existing) return LLVMPointerType(existing, 0);
+        /* If we still have no fields, return opaque pointer — do NOT
+         * create an empty named struct as it breaks GEP later */
+        if (t->layout_field_count == 0)
+            return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
         LLVMTypeRef *field_types = malloc(sizeof(LLVMTypeRef) *
-                                          (t->layout_field_count ? t->layout_field_count : 1));
+                                          t->layout_field_count);
         for (int i = 0; i < t->layout_field_count; i++)
             field_types[i] = type_to_llvm(ctx, t->layout_fields[i].type);
-
         LLVMTypeRef struct_type = LLVMStructCreateNamed(ctx->context, struct_name);
         LLVMStructSetBody(struct_type, field_types, t->layout_field_count,
                           t->layout_packed ? 1 : 0);
         free(field_types);
-        return LLVMPointerType(struct_type, 0);  // always pointer
+        return LLVMPointerType(struct_type, 0);
     }
     case TYPE_BOOL:
         return LLVMInt1TypeInContext(ctx->context);
+    case TYPE_PTR:
+        /* Typed pointer — represented as i8* in LLVM, pointee type is
+         * tracked in the type system only for user-facing display/safety */
+        return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
     case TYPE_UNKNOWN:
         return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
     default:
@@ -1928,7 +1944,6 @@ static void print_defined(const char *var_name, Type *fallback_type,
                 var_name, type_to_string(fallback_type), suffix);
     }
 }
-
 
 CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     CodegenResult result = {NULL, NULL};
@@ -3566,6 +3581,33 @@ if (ast->list.count >= 5) {
 
                 result.type  = final_type;
                 result.value = stored_value;
+                return result;
+            }
+
+            if (strcmp(head->symbol, "include") == 0) {
+                if (ast->list.count != 3) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: malformed include",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                const char *header = ast->list.items[1]->string;
+                bool system_inc    = (strcmp(ast->list.items[2]->symbol,
+                                             "system") == 0);
+                if (!ctx->ffi) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: FFI not initialised "
+                                  "(no ffi context on codegen ctx)",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                bool ok = ffi_parse_header(ctx->ffi, header, system_inc);
+                if (!ok) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: failed to parse "
+                                  "header '%s'",
+                                  parser_get_filename(), ast->line, ast->column,
+                                  header);
+                }
+                ffi_inject_into_env(ctx->ffi, ctx);
+                result.type  = type_int();
+                result.value = LLVMConstInt(
+                    LLVMInt64TypeInContext(ctx->context), 0, 0);
                 return result;
             }
 
@@ -5275,6 +5317,160 @@ if (ast->list.count >= 5) {
                 return result;
             }
 
+            if (strcmp(head->symbol, "not") == 0) {
+                if (ast->list.count != 2) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'not' requires 1 argument",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                CodegenResult arg = codegen_expr(ctx, ast->list.items[1]);
+                LLVMTypeRef  i1  = LLVMInt1TypeInContext(ctx->context);
+                LLVMValueRef val = arg.value;
+                if (arg.type && arg.type->kind == TYPE_BOOL) {
+                    result.value = LLVMBuildNot(ctx->builder, val, "not");
+                } else if (arg.type && type_is_float(arg.type)) {
+                    LLVMValueRef zero = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0);
+                    LLVMValueRef cmp  = LLVMBuildFCmp(ctx->builder, LLVMRealOEQ, val, zero, "not_f");
+                    result.value = cmp;
+                } else {
+                    LLVMValueRef zero = LLVMConstInt(LLVMTypeOf(val), 0, 0);
+                    LLVMValueRef cmp  = LLVMBuildICmp(ctx->builder, LLVMIntEQ, val, zero, "not_i");
+                    result.value = cmp;
+                }
+                result.type = type_bool();
+                return result;
+            }
+
+            if (strcmp(head->symbol, "unless") == 0) {
+                if (ast->list.count != 3) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'unless' requires 2 arguments: condition and body",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                /* (unless cond body) = (if (not cond) body) */
+                CodegenResult cond_r = codegen_expr(ctx, ast->list.items[1]);
+                LLVMValueRef cond_val = cond_r.value;
+                if (type_is_float(cond_r.type)) {
+                    cond_val = LLVMBuildFCmp(ctx->builder, LLVMRealOEQ, cond_val,
+                                             LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0),
+                                             "unless_cond");
+                } else if (cond_r.type && cond_r.type->kind == TYPE_BOOL) {
+                    cond_val = LLVMBuildNot(ctx->builder, cond_val, "unless_not");
+                } else {
+                    cond_val = LLVMBuildICmp(ctx->builder, LLVMIntEQ, cond_val,
+                                             LLVMConstInt(LLVMTypeOf(cond_val), 0, 0),
+                                             "unless_cond");
+                }
+
+                LLVMValueRef func     = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder));
+                LLVMBasicBlockRef then_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "unless_then");
+                LLVMBasicBlockRef exit_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "unless_exit");
+                LLVMBuildCondBr(ctx->builder, cond_val, then_bb, exit_bb);
+
+                LLVMPositionBuilderAtEnd(ctx->builder, then_bb);
+                Env *saved_env = ctx->env;
+                ctx->env = env_create_child(saved_env);
+                codegen_expr(ctx, ast->list.items[2]);
+                env_free(ctx->env);
+                ctx->env = saved_env;
+                if (!LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)))
+                    LLVMBuildBr(ctx->builder, exit_bb);
+
+                LLVMPositionBuilderAtEnd(ctx->builder, exit_bb);
+                result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0);
+                result.type  = type_int();
+                return result;
+            }
+
+            if (strcmp(head->symbol, "until") == 0) {
+                if (ast->list.count != 3) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'until' requires 2 arguments: condition and body",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                /* (until cond body) = (while (not cond) body) */
+                LLVMValueRef func     = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder));
+                LLVMBasicBlockRef cond_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "until_cond");
+                LLVMBasicBlockRef body_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "until_body");
+                LLVMBasicBlockRef exit_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "until_exit");
+
+                LLVMBuildBr(ctx->builder, cond_bb);
+
+                LLVMPositionBuilderAtEnd(ctx->builder, cond_bb);
+                CodegenResult cond_r = codegen_expr(ctx, ast->list.items[1]);
+                LLVMValueRef cond_val = cond_r.value;
+                if (type_is_float(cond_r.type)) {
+                    cond_val = LLVMBuildFCmp(ctx->builder, LLVMRealONE, cond_val,
+                                             LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0),
+                                             "until_cond_f");
+                } else if (cond_r.type && cond_r.type->kind != TYPE_BOOL) {
+                    cond_val = LLVMBuildICmp(ctx->builder, LLVMIntNE, cond_val,
+                                             LLVMConstInt(LLVMTypeOf(cond_val), 0, 0),
+                                             "until_cond_i");
+                }
+                /* Negate — loop while condition is FALSE */
+                LLVMValueRef neg = LLVMBuildNot(ctx->builder, cond_val, "until_neg");
+                LLVMBuildCondBr(ctx->builder, neg, body_bb, exit_bb);
+
+                LLVMPositionBuilderAtEnd(ctx->builder, body_bb);
+                Env *saved_env = ctx->env;
+                ctx->env = env_create_child(saved_env);
+                codegen_expr(ctx, ast->list.items[2]);
+                env_free(ctx->env);
+                ctx->env = saved_env;
+                if (!LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)))
+                    LLVMBuildBr(ctx->builder, cond_bb);
+
+                LLVMPositionBuilderAtEnd(ctx->builder, exit_bb);
+                result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0);
+                result.type  = type_int();
+                return result;
+            }
+
+            if (strcmp(head->symbol, "while") == 0) {
+                if (ast->list.count != 3) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'while' requires 2 arguments: condition and body",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+
+                LLVMValueRef func     = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder));
+                LLVMBasicBlockRef cond_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "while_cond");
+                LLVMBasicBlockRef body_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "while_body");
+                LLVMBasicBlockRef exit_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "while_exit");
+
+                LLVMBuildBr(ctx->builder, cond_bb);
+
+                /* Condition */
+                LLVMPositionBuilderAtEnd(ctx->builder, cond_bb);
+                CodegenResult cond_r = codegen_expr(ctx, ast->list.items[1]);
+                LLVMValueRef cond_val = cond_r.value;
+                if (type_is_float(cond_r.type)) {
+                    cond_val = LLVMBuildFCmp(ctx->builder, LLVMRealONE,
+                                             cond_val,
+                                             LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0),
+                                             "while_cond_f");
+                } else if (cond_r.type && cond_r.type->kind != TYPE_BOOL) {
+                    cond_val = LLVMBuildICmp(ctx->builder, LLVMIntNE,
+                                             cond_val,
+                                             LLVMConstInt(LLVMTypeOf(cond_val), 0, 0),
+                                             "while_cond_i");
+                }
+                LLVMBuildCondBr(ctx->builder, cond_val, body_bb, exit_bb);
+
+                /* Body */
+                LLVMPositionBuilderAtEnd(ctx->builder, body_bb);
+                Env *saved_env = ctx->env;
+                ctx->env = env_create_child(saved_env);
+                codegen_expr(ctx, ast->list.items[2]);
+                env_free(ctx->env);
+                ctx->env = saved_env;
+                if (!LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)))
+                    LLVMBuildBr(ctx->builder, cond_bb);
+
+                /* Exit */
+                LLVMPositionBuilderAtEnd(ctx->builder, exit_bb);
+                result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0);
+                result.type  = type_int();
+                return result;
+            }
+
             if (strcmp(head->symbol, "for") == 0) {
                 if (ast->list.count != 3) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'for' requires a binding and a body",
@@ -6764,7 +6960,6 @@ if (ast->list.count >= 5) {
 
                     Type *expected_type = entry->params[i].type;
                     Type *actual_type   = arg_result.type;
-
                     LLVMValueRef converted_arg = arg_result.value;
 
                     /* If expected type is Fn, wrap argument as a closure */
@@ -6839,9 +7034,30 @@ if (ast->list.count >= 5) {
                         } else {
                             converted_arg = codegen_box(ctx, arg_result.value, arg_result.type);
                         }
+                    } else if (expected_type && expected_type->kind == TYPE_LAYOUT &&
+                               actual_type   && actual_type->kind   == TYPE_LAYOUT) {
+                        /* Struct-by-value C ABI — pack struct into integer */
+                        Type *full = env_lookup_layout(ctx->env,
+                                         expected_type->layout_name);
+                        int sz = full ? full->layout_total_size : 0;
+                        if (sz > 0 && sz <= 4) {
+                            LLVMTypeRef i32 = LLVMInt32TypeInContext(ctx->context);
+                            converted_arg = LLVMBuildLoad2(ctx->builder, i32,
+                                                arg_result.value, "struct_i32");
+                        } else if (sz > 4 && sz <= 8) {
+                            LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+                            converted_arg = LLVMBuildLoad2(ctx->builder, i64,
+                                                arg_result.value, "struct_i64");
+                        } else {
+                            converted_arg = arg_result.value;
+                        }
                     } else if (expected_type && actual_type && expected_type->kind != actual_type->kind) {
                         LLVMTypeRef expected_llvm = type_to_llvm(ctx, expected_type);
-                        if (type_is_integer(expected_type) && type_is_float(actual_type)) {
+                        if (type_is_integer(expected_type) && type_is_integer(actual_type) &&
+                            LLVMTypeOf(arg_result.value) != expected_llvm) {
+                            converted_arg = LLVMBuildIntCast2(ctx->builder, arg_result.value,
+                                                              expected_llvm, 1, "int_cast");
+                        } else if (type_is_integer(expected_type) && type_is_float(actual_type)) {
                             converted_arg = LLVMBuildFPToSI(ctx->builder, arg_result.value,
                                                             expected_llvm, "arg_conv");
                         } else if (type_is_float(expected_type) && type_is_integer(actual_type)) {
@@ -6861,7 +7077,14 @@ if (ast->list.count >= 5) {
                             converted_arg = LLVMBuildSExt(ctx->builder, arg_result.value,
                                                           expected_llvm, "arg_conv");
                         } else if (type_is_integer(expected_type) && type_is_integer(actual_type)) {
-                            converted_arg = arg_result.value;
+                            /* Coerce to exact LLVM type the function expects (e.g. i64 -> i32 for C int) */
+                            LLVMTypeRef expected_llvm = type_to_llvm(ctx, expected_type);
+                            LLVMTypeRef actual_llvm   = LLVMTypeOf(arg_result.value);
+                            if (actual_llvm != expected_llvm)
+                                converted_arg = LLVMBuildIntCast2(ctx->builder, arg_result.value,
+                                                                  expected_llvm, 1, "int_cast");
+                            else
+                                converted_arg = arg_result.value;
                         } else if (type_is_integer(expected_type) && actual_type->kind == TYPE_BOOL) {
                             converted_arg = LLVMBuildZExt(ctx->builder, arg_result.value,
                                                           type_to_llvm(ctx, expected_type), "bool_to_int");
@@ -6889,18 +7112,40 @@ if (ast->list.count >= 5) {
                     args[idx] = cap_val;
                 }
 
-                LLVMTypeRef *param_llvm_types = malloc(sizeof(LLVMTypeRef) * (total_args ? total_args : 1));
-                for (int i = 0; i < total_args; i++)
-                    param_llvm_types[i] = type_to_llvm(ctx, entry->params[i].type);
-                LLVMTypeRef call_ft = LLVMFunctionType(
-                    type_to_llvm(ctx, entry->return_type),
-                    param_llvm_types,
-                    total_args, 0);
-                free(param_llvm_types);
+                LLVMTypeRef call_ft = LLVMGlobalGetValueType(entry->func_ref);
 
-                result.value = LLVMBuildCall2(ctx->builder, call_ft, entry->func_ref,
-                                              args, total_args, "calltmp");
-                result.type  = type_clone(entry->return_type);
+                /* For FFI functions, look up the declaration in the current
+                 * module by name — func_ref may point to a different module */
+                LLVMValueRef call_target = entry->func_ref;
+                if (entry->is_ffi) {
+                    const char *fname = entry->llvm_name && entry->llvm_name[0]
+                                      ? entry->llvm_name : entry->name;
+                    LLVMValueRef in_mod = LLVMGetNamedFunction(ctx->module, fname);
+                    if (!in_mod) {
+                        in_mod = LLVMAddFunction(ctx->module, fname, call_ft);
+                        LLVMSetLinkage(in_mod, LLVMExternalLinkage);
+                    }
+                    call_target = in_mod;
+                }
+
+                /* Check if function returns void */
+                LLVMTypeRef ret_llvm = LLVMGetReturnType(call_ft);
+                bool is_void_ret = (LLVMGetTypeKind(ret_llvm) == LLVMVoidTypeKind);
+
+                if (is_void_ret) {
+                    LLVMBuildCall2(ctx->builder, call_ft, call_target,
+                                   args, total_args, "");
+                    /* Return a null ptr as sentinel for void functions */
+                    LLVMTypeRef ptr_t = LLVMPointerType(
+                        LLVMInt8TypeInContext(ctx->context), 0);
+                    result.value = LLVMConstPointerNull(ptr_t);
+                    result.type  = NULL; /* NULL signals void */
+                } else {
+                    result.value = LLVMBuildCall2(ctx->builder, call_ft, call_target,
+                                                  args, total_args, "calltmp");
+                    result.type  = entry->return_type
+                                 ? type_clone(entry->return_type) : NULL;
+                }
                 free(args);
                 return result;
             }
@@ -7863,6 +8108,9 @@ void register_builtins(CodegenContext *ctx) {
 
     // Control flow
     env_insert_builtin(ctx->env, "if",     3,  0, "Conditional: (if cond then else)");
+    env_insert_builtin(ctx->env, "while",  2,  0, "Loop while condition is true: (while cond body)");
+    env_insert_builtin(ctx->env, "until",  2,  0, "Loop until condition is true: (until cond body)");
+    env_insert_builtin(ctx->env, "unless", 2,  0, "Execute body if condition is False: (unless cond body)");
     env_insert_builtin(ctx->env, "when",   2, -1, "Execute when condition is true");
     env_insert_builtin(ctx->env, "unless", 2, -1, "Execute unless condition is true");
     env_insert_builtin(ctx->env, "cond",   1, -1, "Multi-branch conditional");

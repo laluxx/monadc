@@ -60,6 +60,7 @@ typedef struct {
     /* Error recovery — set by CODEGEN_ERROR, caught by codegen_expr callers */
     jmp_buf  error_jmp;
     bool     error_jmp_set;   // true while a recovery point is active
+    struct FFIContext *ffi;   /* NULL until first (include ...) */
     char     error_msg[512];  // last error message, for display
 } CodegenContext;
 
