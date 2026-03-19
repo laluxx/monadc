@@ -898,8 +898,26 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             }
         }
 
-
         /* ---- function application ------------------------------------ */
+        /* If the head is a symbol that resolves to an Arr, Set, or Map
+         * variable, skip arrow unification — indexing is handled in
+         * codegen directly and does not have an arrow type in HM.       */
+        if (head->type == AST_SYMBOL) {
+            TypeScheme *head_sc = infer_env_lookup(ctx->env, head->symbol);
+            if (head_sc) {
+                Type *head_t = subst_apply(ctx->subst, head_sc->type);
+                if (head_t && (head_t->kind == TYPE_ARR  ||
+                               head_t->kind == TYPE_SET  ||
+                               head_t->kind == TYPE_MAP)) {
+                    /* Infer arg expressions for side-effects only */
+                    for (size_t i = 1; i < ast->list.count; i++)
+                        infer_expr(ctx, ast->list.items[i]);
+                    result = infer_fresh(ctx);
+                    break;
+                }
+            }
+        }
+
         Type *fn_t  = infer_expr(ctx, head);
         Type *ret_t = infer_fresh(ctx);
 
@@ -947,9 +965,9 @@ void infer_register_builtins(InferCtx *ctx) {
         type_arrow(type_set(), type_arrow(a3, type_bool())), ctx->env);
     infer_env_insert(ctx->env, "contains?", contains_sc);
 
-    /* Set → Int */
-    infer_env_insert(ctx->env, "count",
-        scheme_mono(type_arrow(type_set(), type_int())));
+    /* ∀a. Coll → Int  (count works on sets, maps, lists, arrays, strings) */
+    TypeScheme *count_sc = scheme_mono(type_arrow(type_coll(), type_int()));
+    infer_env_insert(ctx->env, "count", count_sc);
 
     /* ∀a. a → Bool */
     Type *a4 = infer_fresh(ctx);

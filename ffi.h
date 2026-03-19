@@ -22,6 +22,7 @@ typedef struct FFIFunction {
     int        param_count;
     bool       variadic;
     Type      *return_type;
+    char      *doc;   // extracted from trailing // or preceding /* */ comment
 } FFIFunction;
 
 /// FFI Constant (macro / enum value)

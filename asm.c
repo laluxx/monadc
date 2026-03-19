@@ -330,18 +330,79 @@ void free_asm_instructions(AsmInstruction *instructions, int count) {
     free(instructions);
 }
 
+static bool operand_is_immediate(const char *op) {
+    if (!op) return false;
+    /* LLVM placeholder: $$N or $N */
+    if (op[0] == '$') return true;
+    return false;
+}
+
+static bool operand_is_register(const char *op) {
+    if (!op) return false;
+    return op[0] == '%';
+}
+
+/* Infer AT&T size suffix from a register name, e.g. %eax->l, %rax->q, %ax->w, %al->b */
+static char reg_size_suffix(const char *reg) {
+    if (!reg || reg[0] != '%') return 'l'; /* default to 32-bit */
+    const char *r = reg + 1;
+    /* 64-bit: rax, rbx, rcx, rdx, rsi, rdi, rsp, rbp, r8..r15 */
+    if (r[0] == 'r') return 'q';
+    /* 8-bit: al, bl, cl, dl, ah, bh, ch, dh, sil, dil */
+    size_t len = strlen(r);
+    if (len == 2 && (r[1] == 'l' || r[1] == 'h')) return 'b';
+    if (len == 3 && r[2] == 'l') return 'b'; /* sil, dil, bpl, spl */
+    /* 16-bit: ax, bx, cx, dx, si, di, sp, bp */
+    if (len == 2 && r[0] != 'r') return 'w';
+    /* 32-bit: eax, ebx, ecx, edx, esi, edi, esp, ebp, r8d..r15d */
+    return 'l';
+}
+
+/* Return true if this mnemonic needs a size suffix inferred */
+static bool needs_size_suffix(const char *mn) {
+    /* Only bare mnemonics without an existing suffix need help.
+     * If the mnemonic already ends in b/w/l/q/s/d, skip it.  */
+    static const char *bare[] = {
+        "mov", "add", "sub", "and", "or", "xor", "not", "neg",
+        "cmp", "test", "inc", "dec", "imul", "idiv", "mul", "div",
+        "shl", "shr", "sal", "sar", "rol", "ror",
+        "push", "pop", "lea", "xchg", "xadd",
+        NULL
+    };
+    for (int i = 0; bare[i]; i++)
+        if (strcmp(mn, bare[i]) == 0) return true;
+    return false;
+}
+
 // Build the AT&T syntax assembly string
-/* static char *build_asm_string(AsmInstruction *instructions, int count, Type *return_type) { */
 static char *build_asm_string(AsmInstruction *instructions, int count,
                                Type *return_type, bool naked) {
     // Estimate buffer size
-    size_t bufsize = 1024;
+    size_t bufsize = 4096;
     char *asm_str = malloc(bufsize);
     asm_str[0] = '\0';
 
     for (int i = 0; i < count; i++) {
-        // Add mnemonic
-        strcat(asm_str, instructions[i].mnemonic);
+        char mnemonic_buf[64];
+        const char *mn = instructions[i].mnemonic;
+
+        /* Auto-append size suffix when naked and mnemonic is bare and has
+         * a mix of immediate + register operands (AT&T can't infer size).  */
+        if (needs_size_suffix(mn)) {
+            bool has_imm = false;
+            char suffix = 'l'; /* default 32-bit */
+            for (int j = 0; j < instructions[i].operand_count; j++) {
+                const char *op = instructions[i].operands[j];
+                if (operand_is_immediate(op)) has_imm = true;
+                if (operand_is_register(op))  suffix = reg_size_suffix(op);
+            }
+            if (has_imm) {
+                snprintf(mnemonic_buf, sizeof(mnemonic_buf), "%s%c", mn, suffix);
+                mn = mnemonic_buf;
+            }
+        }
+
+        strcat(asm_str, mn);
 
         // For AT&T two-operand instructions where destination is also source,
         // we need to swap operands because LLVM matching constraint makes
@@ -354,7 +415,11 @@ static char *build_asm_string(AsmInstruction *instructions, int count,
         // The swap is only needed for non-naked (LLVM placeholder) mode
         // because of the matching constraint "=r,0,r" requiring output==input[0]
         // For naked functions, operands are real registers — no swap needed
-        bool is_two_operand = !naked && (
+        /* Swap operands for two-operand instructions ONLY when the first
+         * operand is a register (Intel dest-first order: op dst, src).
+         * When first operand is an immediate (op imm, reg), the user
+         * already wrote AT&T src-first order — no swap needed.          */
+        bool is_two_operand = (
             strcmp(instructions[i].mnemonic, "add" ) == 0  ||
             strcmp(instructions[i].mnemonic, "sub" ) == 0  ||
             strcmp(instructions[i].mnemonic, "imul") == 0  ||
@@ -362,7 +427,10 @@ static char *build_asm_string(AsmInstruction *instructions, int count,
             strcmp(instructions[i].mnemonic, "or"  ) == 0  ||
             strcmp(instructions[i].mnemonic, "xor" ) == 0  );
 
-        if (is_two_operand && instructions[i].operand_count == 2) {
+        bool first_is_reg = (instructions[i].operand_count >= 1 &&
+                             operand_is_register(instructions[i].operands[0]));
+
+        if (is_two_operand && instructions[i].operand_count == 2 && first_is_reg) {
             // Swap operands: user wrote (add x y) → add $1, $2
             // We generate: add $2, $1 (add y to x, result in x)
             strcat(asm_str, " ");

@@ -59,7 +59,7 @@ Type *type_from_name(const char *name) {
     if (strcmp(name, "Keyword") == 0) return type_keyword();
     if (strcmp(name, "Ratio")   == 0) return type_ratio();
     if (strcmp(name, "List")    == 0) return type_list(NULL);
-    if (strcmp(name, "Arr")     == 0) return type_arr(NULL, -1);
+    if (strcmp(name, "Arr")     == 0) return type_arr_fat(NULL);
     if (strcmp(name, "Set")     == 0) return type_set();
     if (strcmp(name, "Map")     == 0) return type_map();
     if (strcmp(name, "Coll")    == 0) return type_coll();
@@ -143,6 +143,15 @@ Type *type_arr(Type *element_type, int size) {
     Type *t = make_type(TYPE_ARR);
     t->arr_element_type = element_type;
     t->arr_size = size;
+    t->arr_is_fat = false;
+    return t;
+}
+
+Type *type_arr_fat(Type *element_type) {
+    Type *t = make_type(TYPE_ARR);
+    t->arr_element_type = element_type;
+    t->arr_size = -1;
+    t->arr_is_fat = true;
     return t;
 }
 
@@ -275,7 +284,11 @@ Type *type_clone(Type *t) {
         case TYPE_U64:     return type_u64();
         case TYPE_I128:    return type_i128();
         case TYPE_U128:    return type_u128();
-        case TYPE_ARR:     return type_arr(type_clone(t->arr_element_type), t->arr_size);
+        case TYPE_ARR: {
+            Type *c = type_arr(type_clone(t->arr_element_type), t->arr_size);
+            c->arr_is_fat = t->arr_is_fat;
+            return c;
+        }
         case TYPE_PTR:     return type_ptr(type_clone(t->element_type));
         case TYPE_VAR:     return type_var(t->var_id);
         case TYPE_ARROW:   return type_arrow(type_clone(t->arrow_param), type_clone(t->arrow_ret));
@@ -375,7 +388,7 @@ const char *type_to_string(Type *t) {
 
     case TYPE_ARROW: {
         static char abuf[256];
-        snprintf(abuf, sizeof(abuf), "(%s → %s)",
+        snprintf(abuf, sizeof(abuf), "(%s -> %s)",
                  type_to_string(t->arrow_param),
                  type_to_string(t->arrow_ret));
         return abuf;

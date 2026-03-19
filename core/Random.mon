@@ -1,0 +1,166 @@
+;;; Random.mon --- Random number generation
+
+;; Author: Laluxx
+;; Version: 0.0.1
+;; Keywords: random numbers prng hardware
+;; Reference:
+;; - https://en.wikipedia.org/wiki/Xorshift
+;; - https://en.wikipedia.org/wiki/RDRAND
+
+;;; Commentary:
+
+;; Random number generation with two strategies:
+;;   1. Hardware RNG via RDRAND (x86-64) or RNDR (ARM64) for true randomness.
+;;   2. Xorshift64 PRNG seeded from rdtsc for fast pseudorandomness.
+;;
+;; The module state is a single mutable integer seeded at load time.
+;; All public functions advance this state automatically.
+;; Use `seed!` to reseed manually.
+
+;;; Code:
+
+(module Random
+  [supported?
+   seed!
+   next!
+   gen32
+   gen64
+   random
+   random-int
+   random-float
+   random-bool?
+   random-list
+   shuffle])
+
+
+;;; Hardware RNG
+
+(define (supported? -> Bool)
+  "Return True if hardware random number generation is supported on this CPU."
+  (asm mov    1    %eax
+       cpuid
+       shr    30   %ecx
+       and    1    %ecx
+       mov    %ecx %eax))
+
+(define (rdrand -> Int)
+  "Generate a 64-bit true random number using RDRAND.
+Returns 0 on failure."
+  (asm xor    %eax %eax
+       rdrand %rax))
+
+(define (rdtsc -> Int)
+  (asm rdtsc
+       shl 32   %rdx
+       or  %rdx %rax))
+
+;;; Xorshift64 PRNG
+
+(define (xorshift64 [s :: Int] -> Int)
+  "Advance xorshift64 state by one step.
+This is a full-period 64-bit PRNG with excellent statistical properties."
+  (let* ([s (s `^` (s `<<` 13))]
+         [s (s `^` (s `>>>` 7))]
+         [s (s `^` (s `<<` 17))])
+    s))
+
+;;; Module state
+
+(define [state :: Int] (if (supported?) (rdrand) (rdtsc))
+  "Current PRNG state. Seeded at module load from hardware or rdtsc.")
+
+
+;;; Public API
+
+(define (seed! [s :: Int])
+  "Reseed the PRNG with S.
+Use this for reproducible sequences in tests."
+  (set! state s))
+
+(define (next! -> Int)
+  "Advance the PRNG and return the next raw 64-bit value."
+  (let ([s (xorshift64 state)])
+    (set! state s)
+    s))
+
+(define (gen64 -> Int)
+  "Return a random 64-bit integer.
+Uses hardware RNG if available, otherwise advances the PRNG."
+  (if (supported?)
+      (rdrand)
+      (next!)))
+
+(define (gen32 -> Int)
+  "Return a random 32-bit integer in [0, 2^32)."
+  (& (gen64) 0xFFFFFFFF))
+
+(define (random -> Float)
+  "Return a random Float uniformly distributed in [0.0, 1.0)."
+  (/ (Float ((gen64) `&` 0x7FFFFFFFFFFFFFFF))
+     9.223372036854776e18))
+
+(define (random-int [min :: Int] [max :: Int] -> Int)
+  "Return a random Int uniformly distributed in [min, max] inclusive."
+  (+ min (mod ((gen64) `&` 0x7FFFFFFFFFFFFFFF)
+             (+ 1 (max `-` min)))))
+
+;; (define (random-float [min :: Float] [max :: Float] -> Float)
+;;   "Return a random Float uniformly distributed in [min, max)."
+;;   (+ min ((random) `*` (max `-` min))))
+
+(define (random-int [min :: Int] [max :: Int] -> Int)
+  "Return a random Int uniformly distributed in [min, max] inclusive."
+  (let [raw (& (gen64) 0x7FFFFFFFFFFFFFFF)]
+    (+ min (mod raw (+ 1 (max `-` min))))))
+
+
+(define (random-bool? -> Bool)
+  "Return a random Bool with equal probability."
+  (= 1 (& (gen64) 1)))
+
+(define (random-list [gen] -> [n :: Int] -> List)
+  "Return a list of N random values produced by GEN.
+GEN is a zero-argument function returning a random value, e.g. random-bool."
+  (if (<= n 0)
+      '()
+      (cons (gen) (random-list gen (- n 1)))))
+
+(define (swap! [arr :: Arr] [i :: Int] [j :: Int])
+  "Swap the elements at indices i and j in-place."
+  (let [tmp (arr i)]
+    (set! (arr i) (arr j))
+    (set! (arr j) tmp)))
+
+
+(define (shuffle [arr :: Arr] -> Arr)
+  "Return the array ARR shuffled in-place using Fisher-Yates."
+  (for [i ((count arr) `-` 1) 1 -1]
+    (swap! arr i (random-int 0 i)))
+  arr)
+
+(tests
+  ;; Type checks
+  (assert-eq (Float? (random-bool?))  True  "random-bool? returns Bool")
+  (assert-eq (Int? (gen32))          True  "gen32 returns Int")
+  (assert-eq (Int? (gen64))          True  "gen64 returns Int")
+
+  ;; Range checks
+  (assert-eq (>= (random-int 0 10) 0)   True  "random-int >= min")
+  (assert-eq (<= (random-int 0 10) 10)  True  "random-int <= max")
+  (assert-eq (>= (random) 0.0)          True  "random >= 0.0")
+  (assert-eq (< (random) 1.0)           True  "random < 1.0")
+
+  ;; Shuffle
+  (assert-eq (count (shuffle [1 2 3 4 5]))  5  "shuffle preserves count")
+  (assert-eq (count (shuffle []))           0  "shuffle empty array")
+
+  ;; Seeded reproducibility
+  (seed! 42)
+  (define [a :: Int] (next!))
+  (seed! 42)
+  (define [b :: Int] (next!))
+  (assert-eq a  b  "same seed = same sequence")
+
+  ;; random-list
+  (assert-eq (count (random-list random-bool? 10))  10  "random-list count")
+  (assert-eq (count (random-list random-bool? 0))    0  "random-list empty"))

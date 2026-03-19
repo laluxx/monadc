@@ -54,6 +54,7 @@ void ffi_context_free(FFIContext *ctx) {
     if (!ctx) return;
     for (int i = 0; i < ctx->function_count; i++) {
         free(ctx->functions[i].name);
+        free(ctx->functions[i].doc);
         for (int j = 0; j < ctx->functions[i].param_count; j++) {
             free(ctx->functions[i].params[j].name);
             type_free(ctx->functions[i].params[j].type);
@@ -463,6 +464,167 @@ char *ffi_resolve_header(const char *name, bool system) {
     return my_strdup(name);
 }
 
+/// Docstring extraction
+
+/* Extract a docstring for `fname` from the header source text.
+ * Handles three patterns:
+ *   1. Trailing //  comment on the same line as the declaration
+ *   2. Trailing / * * / comment on the same line
+ *   3. Preceding block comment / * ... * / immediately above the declaration
+ * Returns a malloc'd string or NULL. */
+static char *extract_doc_for_function(const char *src, const char *fname) {
+    if (!src || !fname) return NULL;
+
+    /* Build a pattern that matches the function declaration line:
+     * look for "fname(" not preceded by -> or * (excludes comments/calls) */
+    const char *p = src;
+    while (*p) {
+        /* Find next occurrence of fname( */
+        const char *found = strstr(p, fname);
+        if (!found) break;
+
+        /* Must be followed by '(' possibly with spaces and newlines */
+        const char *after = found + strlen(fname);
+        while (*after == ' ' || *after == '\t' || *after == '\n' ||
+               *after == '\r' || *after == '\\') after++;
+        if (*after != '(') { p = found + 1; continue; }
+
+        if (found > src) {
+            char immediately_before = *(found - 1);
+            if (immediately_before == '_' ||
+                isalnum((unsigned char)immediately_before)) {
+                p = found + 1; continue;
+            }
+            if (found >= src + 2 &&
+                *(found - 1) == ' ' && *(found - 2) == '>') {
+                p = found + 1; continue;
+            }
+        }
+
+        /* Reject if the line is a comment line — skip to next occurrence */
+        {
+            const char *ls = found;
+            while (ls > src && *(ls-1) != '\n') ls--;
+            const char *lp = ls;
+            while (*lp == ' ' || *lp == '\t') lp++;
+            if (lp[0] == '/' || lp[0] == '*' ||
+                (lp[0] == '*') ||
+                strstr(ls, "//") < found) {
+                /* Check if any // appears before fname on this line */
+                const char *sl2 = ls;
+                bool in_comment = false;
+                while (sl2 < found) {
+                    if (sl2[0] == '/' && sl2[1] == '/') { in_comment = true; break; }
+                    if (sl2[0] == '/' && sl2[1] == '*') { in_comment = true; break; }
+                    if (sl2[0] == '*' && sl2 == lp)     { in_comment = true; break; }
+                    sl2++;
+                }
+                if (in_comment) { p = found + 1; continue; }
+            }
+        }
+
+        /* Found a real declaration — find the end of this line */
+        const char *line_start = found;
+        while (line_start > src && *(line_start-1) != '\n') line_start--;
+        const char *line_end = found;
+        while (*line_end && *line_end != '\n') line_end++;
+
+        // Pattern 1 & 2: trailing // or /* comment on same line */
+        const char *comment = NULL;
+        /* Search for // after the declaration */
+        const char *sl = strstr(found, "//");
+        if (sl && sl < line_end) comment = sl + 2;
+        if (!comment) {
+            // Search for /* ... */ on same line */
+            const char *ml = strstr(found, "/*");
+            if (ml && ml < line_end) {
+                ml += 2;
+                while (*ml == ' ' || *ml == '*') ml++;
+                comment = ml;
+            }
+        }
+        if (comment) {
+            while (*comment == ' ' || *comment == '\t') comment++;
+            // Trim trailing whitespace and */ and newline */
+            const char *cend = comment;
+            while (*cend && *cend != '\n') cend++;
+            // Strip trailing */ */
+            while (cend > comment && (*(cend-1) == ' ' || *(cend-1) == '\t'
+                                      || *(cend-1) == '/' || *(cend-1) == '*'))
+                cend--;
+            if (cend > comment) return strndup(comment, cend - comment);
+        }
+
+        // Pattern 3: preceding block comment /* ... */
+        // Walk backward from line_start to find a closing */
+        {
+            /* Step 1: from line_start go backward skipping whitespace/newlines */
+            const char *back = line_start;
+            if (back > src) back--;  /* step over the \n before this line */
+            while (back > src && (*back == '\n' || *back == '\r' ||
+                                   *back == ' '  || *back == '\t'))
+                back--;
+            /* back now points at the last non-whitespace char before our line.
+             * For a block comment it should be '/' with '*' before it: ...* / */
+            if (back > src && *back == '/' && *(back-1) == '*') {
+                const char *close = back - 1; /* points at '*' of closing * / */
+                /* Step 2: find the opening / * walking backward */
+                const char *open = close - 1;
+                while (open > src) {
+                    if (*open == '*' && open > src && *(open-1) == '/') break;
+                    open--;
+                }
+                if (open > src && *(open-1) == '/') {
+                    const char *content = open + 1; /* skip the '*' of opening */
+                    /* skip whitespace/newline immediately after opening /* */
+                    while (*content == ' ' || *content == '\t' ||
+                           *content == '\n' || *content == '\r') content++;
+                    /* skip leading * on first line if present */
+                    if (*content == '*' && *(content+1) != '/') content++;
+                    while (*content == ' ' || *content == '\t') content++;
+                    /* Step 3: collect text, stripping leading ' * ' per line */
+                    char buf[2048] = {0};
+                    int  bi = 0;
+                    const char *cp = content;
+                    while (cp < close && bi < (int)sizeof(buf) - 2) {
+                        /* Skip leading whitespace, '*', newlines at line start */
+                        if (*cp == '\n' || *cp == '\r') {
+                            cp++;
+                            /* skip leading whitespace and * on next line */
+                            while (*cp == ' ' || *cp == '\t') cp++;
+                            if (*cp == '*' && *(cp+1) != '/') cp++;
+                            while (*cp == ' ' || *cp == '\t') cp++;
+                            /* empty line = keep as \n\n, continuation = space */
+                            if (*cp == '\n' || *cp == '\r') {
+                                buf[bi++] = '\n';
+                                buf[bi++] = '\n';
+                            } else {
+                                if (bi > 0 && buf[bi-1] != ' ' &&
+                                    buf[bi-1] != '\n')
+                                    buf[bi++] = ' ';
+                            }
+                            continue;
+                        }
+                        buf[bi++] = *cp++;
+                    }
+                    /* Trim trailing whitespace */
+                    while (bi > 0 && (buf[bi-1] == ' ' || buf[bi-1] == '\t'
+                                      || buf[bi-1] == '\n'))
+                        bi--;
+                    buf[bi] = '\0';
+                    if (bi > 0) return strdup(buf);
+                }
+            }
+        }
+
+        /* Found the declaration but no comment — stop */
+        fprintf(stderr, "  [%s] found decl but no comment on line: %.*s\n",
+                fname, (int)(line_end - line_start), line_start);
+        return NULL;
+    }
+    return NULL;
+}
+
 /// Main parse entry point
 
 bool ffi_parse_header(FFIContext *ctx, const char *header_path,
@@ -476,7 +638,8 @@ bool ffi_parse_header(FFIContext *ctx, const char *header_path,
         ctx->included = realloc(ctx->included,
                                 sizeof(char *) * ctx->included_cap);
     }
-    ctx->included[ctx->included_count++] = my_strdup(header_path);
+    char *resolved_path = ffi_resolve_header(header_path, system_include);
+    ctx->included[ctx->included_count++] = resolved_path;
 
     /* Build a small translation unit that just #includes the header */
     char tu_src[512];
@@ -580,18 +743,33 @@ bool ffi_parse_header(FFIContext *ctx, const char *header_path,
     clang_disposeTranslationUnit(tu);
     clang_disposeIndex(index);
 
-    /* Post-parse: extract struct-literal macros and numeric macros
-     * that clang's evaluator couldn't handle */
-    if (!system_include) {
-        ffi_parse_struct_macros(ctx, header_path);
-    } else {
-        /* For system headers, resolve the actual file path first */
-        char *resolved = ffi_resolve_header(header_path, true);
-        if (resolved) {
-            ffi_parse_struct_macros(ctx, resolved);
-            free(resolved);
+    /* Post-parse: read source text once and extract docstrings for all
+     * functions that were added during this parse. */
+    {
+        const char *resolved = ctx->included[ctx->included_count - 1];
+        FILE *sf = fopen(resolved, "r");
+        if (sf) {
+            fseek(sf, 0, SEEK_END);
+            long fsz = ftell(sf);
+            rewind(sf);
+            char *src = malloc(fsz + 1);
+            if (src) {
+                fread(src, 1, fsz, sf);
+                src[fsz] = '\0';
+                for (int i = 0; i < ctx->function_count; i++) {
+                    if (!ctx->functions[i].doc)
+                        ctx->functions[i].doc =
+                            extract_doc_for_function(src, ctx->functions[i].name);
+                }
+                free(src);
+            }
+            fclose(sf);
         }
     }
+
+    /* extract struct-literal macros and numeric macros
+     * that clang's evaluator couldn't handle */
+    ffi_parse_struct_macros(ctx, ctx->included[ctx->included_count - 1]);
 
     return true;
 }
@@ -963,11 +1141,21 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
             LLVMSetLinkage(fn_ref, LLVMExternalLinkage);
         }
 
+        // TODO HERE
+        /* fprintf(stderr, "FFI doc [%s]: %s\n", f->name, */
+        /*         f->doc ? f->doc : "(null)"); */
         env_insert_func(cg->env, f->name, ep, f->param_count,
                         f->return_type ? type_clone(f->return_type) : NULL,
-                        fn_ref, NULL);
+                        fn_ref, f->doc ? f->doc : NULL);
+
         EnvEntry *e = env_lookup(cg->env, f->name);
-        if (e) { e->is_closure_abi = false; e->lifted_count = 0; e->is_ffi = true; }
+        if (e) {
+            e->is_closure_abi = false;
+            e->lifted_count = 0; e->is_ffi = true;
+            /* Store the header path so the REPL can jump to it */
+            if (ffi->included_count > 0 && !e->header_path)
+                e->header_path = strdup(ffi->included[0]);
+        }
         if (pt) free(pt);
     }
 

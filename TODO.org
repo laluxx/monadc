@@ -1,18 +1,54 @@
 #+title: TODO.org
 
-* TODO Env [0/10]
+* TODO Env [0/14]
 - [ ] eval
 - [ ] A way to dump an enviroment to a loadable file.env 
 - [ ] Matematical notation for floating points
 - [ ] => Optional arguments that default to *unspecified*
 - [ ] Default values on layouts so when they are 0 initialized they have those
+- [ ] Auto curry only if -> is used in the function definition, not otherwise
 - [ ] Optimize infix function call, if the function is variadic turn =(3 `+` 4 `+` 5)= int a single call =(+ 3 4 5)= and not =(+ 5 (+ 3 4))=
+- [ ] Allow _ as name of parameters (defun monad-repl--eldoc-function (callback &rest _)
 - [ ] Look into dependent types and make it a general concept that you can do in the language
+- [ ] IMPORTANT C FFI Enums should probably become ADTs
 - [ ] :inline True or :inline False (The default) inside functions
+- [ ] Make lists immutable by removing all builtins that can mutate them
 - [ ] in monad-mode add a function to type check the function and
       substitute the type of the function with the inferred one
 - [ ] Connect to a running process with the repl
       We should embed the env into the executable i guess
+
+
+* TODO IMPORTANT 
+We can no longer do functions like this because of the automatic pattern matching
+#+begin_src monad
+(define (return-array [arr :: Arr] -> Arr)
+  arr)
+#+end_src
+
+* TODO Thread operator |>
+#+begin_src monad
+(define (xorshift64 [s :: Int] -> Int)
+  "Advance xorshift64 state by one step.
+This is a full-period 64-bit PRNG with excellent statistical properties."
+  (|> s (s `^` (s `<<` 13))
+        (s `^` (s `>>>` 7))
+        (s `^` (s `<<` 17))))
+
+(define (xorshift64 [s :: Int] -> Int)
+  "Advance xorshift64 state by one step.
+This is a full-period 64-bit PRNG with excellent statistical properties."
+  (|> s (_ `^` (_ `<<` 13))
+        (_ `^` (_ `>>>` 7))
+        (_ `^` (_ `<<` 17))))
+
+(define (xorshift64 [s :: Int] -> Int)
+  "Advance xorshift64 state by one step.
+This is a full-period 64-bit PRNG with excellent statistical properties."
+  (|> (_ `^` (_ `<<` 13))
+      (_ `^` (_ `>>>` 7))
+      (_ `^` (_ `<<` 17))))
+#+end_src
 
 
 

@@ -95,9 +95,21 @@ static void repl_signal_handler(int sig) {
 static sigjmp_buf *g_assert_jmp_ptr = NULL;
 
 void __monad_assert_fail(const char *label) {
-    fprintf(stderr, "\x1b[31;1mAssertion failed:\x1b[0m %s\n", label);
+    fprintf(stderr, "<input>:0:0: \x1b[31;1merror:\x1b[0m Assertion failed: %s\n", label);
     if (g_assert_jmp_ptr)
         longjmp(*g_assert_jmp_ptr, 1);
+    abort();
+}
+
+void __monad_runtime_error(const char *file, long line, long col, const char *msg) {
+    fprintf(stderr, "%s:%ld:%ld: \x1b[31;1merror:\x1b[0m %s\n",
+            file ? file : "<input>", line, col, msg);
+    if (g_assert_jmp_ptr)
+        longjmp(*g_assert_jmp_ptr, 1);
+    if (g_in_eval) {
+        g_in_eval = false;
+        longjmp(g_repl_escape, 1);
+    }
     abort();
 }
 
@@ -226,6 +238,7 @@ static void rt_sym_table_init(void) {
 
     ADD(__layout_ptr_set);
     ADD(__layout_ptr_get);
+    ADD(__monad_runtime_error);
     ADD(__print_i128);
     ADD(__print_u128);
     ADD(rt_closure_calln);
@@ -910,6 +923,65 @@ static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t, bool li
         break;
 
     case TYPE_ARR: {
+        /* Fat pointer path — val is arr.fat* */
+        if (t->arr_is_fat) {
+            LLVMValueRef sz  = arr_fat_size(&ctx->cg, val);
+            Type *et         = t->arr_element_type
+                             ? t->arr_element_type : type_int();
+            LLVMValueRef dp  = arr_fat_data(&ctx->cg, val, et);
+            LLVMTypeRef  el  = type_to_llvm(&ctx->cg, et);
+            LLVMValueRef pf2 = get_or_declare_printf(&ctx->cg);
+            LLVMValueRef open2 = LLVMBuildGlobalStringPtr(ctx->cg.builder, "[", "op");
+            LLVMValueRef oa2[] = {open2};
+            LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf2), pf2, oa2, 1, "");
+            LLVMValueRef func2 = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->cg.builder));
+            LLVMTypeRef  i64t  = LLVMInt64TypeInContext(ctx->cg.context);
+            LLVMValueRef iptr  = LLVMBuildAlloca(ctx->cg.builder, i64t, "pi");
+            LLVMBuildStore(ctx->cg.builder, LLVMConstInt(i64t, 0, 0), iptr);
+            LLVMBasicBlockRef lc = LLVMAppendBasicBlockInContext(ctx->cg.context, func2, "flc");
+            LLVMBasicBlockRef lb = LLVMAppendBasicBlockInContext(ctx->cg.context, func2, "flb");
+            LLVMBasicBlockRef la = LLVMAppendBasicBlockInContext(ctx->cg.context, func2, "fla");
+            LLVMBuildBr(ctx->cg.builder, lc);
+            LLVMPositionBuilderAtEnd(ctx->cg.builder, lc);
+            LLVMValueRef iv   = LLVMBuildLoad2(ctx->cg.builder, i64t, iptr, "iv");
+            LLVMValueRef cmp2 = LLVMBuildICmp(ctx->cg.builder, LLVMIntSLT, iv, sz, "lc");
+            LLVMBuildCondBr(ctx->cg.builder, cmp2, lb, la);
+            LLVMPositionBuilderAtEnd(ctx->cg.builder, lb);
+            LLVMValueRef iv2  = LLVMBuildLoad2(ctx->cg.builder, i64t, iptr, "iv2");
+            /* space between elements */
+            LLVMValueRef nz   = LLVMBuildICmp(ctx->cg.builder, LLVMIntNE, iv2,
+                                    LLVMConstInt(i64t, 0, 0), "nz");
+            LLVMBasicBlockRef spbb = LLVMAppendBasicBlockInContext(ctx->cg.context, func2, "sp");
+            LLVMBasicBlockRef nspbb= LLVMAppendBasicBlockInContext(ctx->cg.context, func2, "nsp");
+            LLVMBuildCondBr(ctx->cg.builder, nz, spbb, nspbb);
+            LLVMPositionBuilderAtEnd(ctx->cg.builder, spbb);
+            LLVMValueRef spstr = LLVMBuildGlobalStringPtr(ctx->cg.builder, " ", "sp");
+            LLVMValueRef spa[] = {spstr};
+            LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf2), pf2, spa, 1, "");
+            LLVMBuildBr(ctx->cg.builder, nspbb);
+            LLVMPositionBuilderAtEnd(ctx->cg.builder, nspbb);
+            LLVMValueRef iv3  = LLVMBuildLoad2(ctx->cg.builder, i64t, iptr, "iv3");
+            LLVMValueRef ep2  = LLVMBuildGEP2(ctx->cg.builder, el, dp, &iv3, 1, "ep");
+            LLVMValueRef ev2  = LLVMBuildLoad2(ctx->cg.builder, el, ep2, "ev");
+            if (type_is_float(et)) {
+                LLVMValueRef a2[] = {get_fmt_float_no_newline(&ctx->cg), ev2};
+                LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf2), pf2, a2, 2, "");
+            } else {
+                LLVMValueRef ext2 = LLVMTypeOf(ev2) != i64t
+                    ? LLVMBuildZExt(ctx->cg.builder, ev2, i64t, "wi") : ev2;
+                LLVMValueRef a2[] = {get_fmt_int_no_newline(&ctx->cg), ext2};
+                LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf2), pf2, a2, 2, "");
+            }
+            LLVMValueRef nxt  = LLVMBuildAdd(ctx->cg.builder, iv3,
+                                    LLVMConstInt(i64t, 1, 0), "nxt");
+            LLVMBuildStore(ctx->cg.builder, nxt, iptr);
+            LLVMBuildBr(ctx->cg.builder, lc);
+            LLVMPositionBuilderAtEnd(ctx->cg.builder, la);
+            LLVMValueRef cl2  = LLVMBuildGlobalStringPtr(ctx->cg.builder, "]\n", "cl");
+            LLVMValueRef cla[] = {cl2};
+            LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf2), pf2, cla, 1, "");
+            break;
+        }
         /* val is a stack-allocated [N x ElemType]*.
          * We never call rt_value_array (may not be exported).
          * Instead: print "[" then each element with printf, then "]\n".
@@ -941,9 +1013,17 @@ static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t, bool li
             }
             LLVMValueRef zero = LLVMConstInt(LLVMInt32TypeInContext(ctx->cg.context), 0, 0);
             LLVMValueRef idx  = LLVMConstInt(LLVMInt32TypeInContext(ctx->cg.context), i, 0);
-            LLVMValueRef idxs[] = {zero, idx};
-            LLVMValueRef ep = LLVMBuildGEP2(ctx->cg.builder, arr_llvm, val, idxs, 2, "ep");
-            LLVMValueRef el = LLVMBuildLoad2(ctx->cg.builder, elem_llvm, ep, "el");
+            LLVMValueRef el;
+            if (LLVMGetTypeKind(LLVMTypeOf(val)) == LLVMArrayTypeKind) {
+                /* val is a bare [N x T] value (loaded from global) —
+                 * extract element by index directly, no GEP needed */
+                el = LLVMBuildExtractValue(ctx->cg.builder, val, (unsigned)i, "el");
+            } else {
+                /* val is a pointer to [N x T] (alloca or global ptr) */
+                LLVMValueRef idxs[] = {zero, idx};
+                LLVMValueRef ep = LLVMBuildGEP2(ctx->cg.builder, arr_llvm, val, idxs, 2, "ep");
+                el = LLVMBuildLoad2(ctx->cg.builder, elem_llvm, ep, "el");
+            }
 
             if (ek == TYPE_FLOAT) {
                 LLVMValueRef a[] = {get_fmt_float_no_newline(&ctx->cg), el};
@@ -2190,9 +2270,27 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                                     sizeof(sig)-strlen(sig)-1);
                         }
                         strncat(sig, ")", sizeof(sig)-strlen(sig)-1);
-                        printf("%s\tfunc\t%s\t%s\n",
-                               e->name, sig,
-                               e->docstring ? e->docstring : "");
+                        {
+                            /* Escape newlines in docstring so the tab-separated
+                             * protocol stays on one line per entry */
+                            char esc_doc[2048] = {0};
+                            if (e->docstring) {
+                                int di = 0;
+                                for (const char *dp = e->docstring;
+                                     *dp && di < (int)sizeof(esc_doc) - 3; dp++) {
+                                    if (*dp == '\n') {
+                                        esc_doc[di++] = '\\';
+                                        esc_doc[di++] = 'n';
+                                    } else {
+                                        esc_doc[di++] = *dp;
+                                    }
+                                }
+                            }
+                            printf("%s\tfunc\t%s\t%s\t%s\n",
+                                   e->name, sig,
+                                   esc_doc,
+                                   e->header_path ? e->header_path : "");
+                        }
                         break;
                     }
                     }
@@ -2665,22 +2763,23 @@ static void setup_electric_pairs(void) {
 
 
 /* Count paren depth of a string, ignoring chars inside strings/comments */
-
-
 static int paren_depth(const char *s) {
     int depth = 0;
     bool in_str = false;
     for (; *s; s++) {
         if (in_str) {
-            if (*s == '\\') { s++; continue; }  /* skip escaped char */
+            if (*s == '\\') { s++; continue; }
             if (*s == '"')  in_str = false;
         } else {
             if (*s == '"')        in_str = true;
-            else if (*s == ';')   break;          /* line comment — stop */
+            else if (*s == ';')   break;
             else if (*s == '(')   depth++;
             else if (*s == ')')   depth--;
         }
     }
+    /* If we ended inside a string, the string is unclosed —
+     * signal that we need more input by returning a positive depth. */
+    if (in_str) return depth + 1;
     return depth;
 }
 
@@ -2696,6 +2795,7 @@ void repl_run(void) {
     bool use_readline = isatty(STDIN_FILENO)
                         && !getenv("INSIDE_EMACS")
                         && !(getenv("TERM") && strcmp(getenv("TERM"), "dumb") == 0);
+
 
     /* MONAD_NO_PROMPT=1 suppresses the prompt entirely — useful when Emacs
      * or another tool drives the process and handles its own prompt display. */
@@ -2718,6 +2818,7 @@ void repl_run(void) {
     int   accum_len = 0;
     int   depth     = 0;
     bool  multiline = false;
+    bool  in_string = false;
 
     char *line;
     while (1) {
@@ -2752,16 +2853,32 @@ void repl_run(void) {
             accum[accum_len] = '\0';
         }
 
-        depth += paren_depth(line);
+        /* Scan the line updating both depth and in_string state */
+        {
+            const char *s = line;
+            while (*s) {
+                if (in_string) {
+                    if (*s == '\\') { s++; if (*s) s++; continue; }
+                    if (*s == '"')  in_string = false;
+                } else {
+                    if (*s == '"')      in_string = true;
+                    else if (*s == ';') break;
+                    else if (*s == '(' || *s == '[' || *s == '{') depth++;
+                    else if (*s == ')' || *s == ']' || *s == '}') depth--;
+                }
+                s++;
+            }
+        }
         free(line);
 
-        if (depth > 0) {
+        if (depth > 0 || in_string) {
             multiline = true;
             continue;
         }
 
         multiline = false;
         depth     = 0;
+        in_string = false;
 
         if (*accum) {
             if (use_readline) add_history(accum);

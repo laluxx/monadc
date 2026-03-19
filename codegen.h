@@ -116,6 +116,11 @@ void codegen_layout(CodegenContext *ctx, AST *ast);
 char *mangle_unicode_name(const char *name);
 
 
+/// Fat arrays
+
+LLVMValueRef arr_fat_data(CodegenContext *ctx, LLVMValueRef fat_ptr, Type *elem_type);
+LLVMValueRef arr_fat_size(CodegenContext *ctx, LLVMValueRef fat_ptr);
+
 /// Monomorphization API
 LLVMValueRef mono_cache_lookup(MonoCache *cache, const char *fn_name,
                                 Type **type_args, int type_arg_count);

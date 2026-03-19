@@ -333,6 +333,8 @@ void rt_set_free(RuntimeSet *s);
 /// Assert
 
 void __monad_assert_fail(const char *label);
+void __monad_runtime_error(const char *file, long line, long col, const char *msg);
+
 
 
 /// AST Conversion
@@ -351,6 +353,7 @@ LLVMTypeRef get_rt_list_type(CodegenContext *ctx);
 LLVMValueRef get___print_i128(CodegenContext *ctx);
 LLVMValueRef get___print_u128(CodegenContext *ctx);
 
+LLVMValueRef get___monad_runtime_error(CodegenContext *ctx);
 
 //// Closure
 

@@ -1985,11 +1985,30 @@ void __print_u128(unsigned __int128 v) {
 
 
 //  Assert failure handler
+/* void __monad_runtime_error(const char *file, long line, long col, const char *msg) { */
+/*     fprintf(stderr, "%s:%ld:%ld: \x1b[31;1merror:\x1b[0m %s\n", */
+/*             file ? file : "<input>", line, col, msg); */
+/*     abort(); */
+/* } */
+
 __attribute__((weak))
-void __monad_assert_fail(const char *label) {
-    fprintf(stderr, "\x1b[31;1mAssertion failed:\x1b[0m %s\n", label);
+void __monad_runtime_error(const char *file, long line, long col, const char *msg) {
+    fprintf(stderr, "%s:%ld:%ld: \x1b[31;1merror:\x1b[0m %s\n",
+            file ? file : "<input>", line, col, msg);
     abort();
 }
+
+__attribute__((weak))
+void __monad_assert_fail(const char *label) {
+    fprintf(stderr, "<input>:0:0: \x1b[31;1merror:\x1b[0m Assertion failed: %s\n", label);
+    abort();
+}
+
+/* __attribute__((weak)) */
+/* void __monad_assert_fail(const char *label) { */
+/*     fprintf(stderr, "\x1b[31;1mAssertion failed:\x1b[0m %s\n", label); */
+/*     abort(); */
+/* } */
 
 
 // Called directly from JIT code — builds a RuntimeValue* list from an AST*
@@ -2486,6 +2505,20 @@ GET_RUNTIME_FUNCTION(rt_map_vals)
 GET_RUNTIME_FUNCTION(rt_map_merge)
 GET_RUNTIME_FUNCTION(rt_value_map)
 GET_RUNTIME_FUNCTION(rt_unbox_map)
+
+LLVMValueRef get___monad_runtime_error(CodegenContext *ctx) {
+    LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, "__monad_runtime_error");
+    if (!fn) {
+        LLVMTypeRef ptr_t    = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+        LLVMTypeRef i64_t    = LLVMInt64TypeInContext(ctx->context);
+        LLVMTypeRef params[] = {ptr_t, i64_t, i64_t, ptr_t};
+        LLVMTypeRef ft       = LLVMFunctionType(
+            LLVMVoidTypeInContext(ctx->context), params, 4, 0);
+        fn = LLVMAddFunction(ctx->module, "__monad_runtime_error", ft);
+        LLVMSetLinkage(fn, LLVMExternalLinkage);
+    }
+    return fn;
+}
 
 LLVMValueRef get___print_i128(CodegenContext *ctx) {
     LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, "__print_i128");

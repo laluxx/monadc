@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 /* Forward declarations */
 struct Type;
@@ -176,9 +177,14 @@ typedef struct AST {
     };
 
     char *literal_str; // original literal string for numbers (e.g. "0xFF")
+    // Raw integer value for hex/bin/oct literals that exceed double precision
+    uint64_t raw_int;
+    bool     has_raw_int;
+
 
     // HM type inference result — set by infer_zonk_ast, NULL before inference
     struct Type *inferred_type;
+
 
     // Location tracking
     int line;

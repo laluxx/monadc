@@ -53,8 +53,9 @@ typedef struct EnvEntry {
     char *llvm_name;   // mangled LLVM symbol name, snapshot while module is alive
 
     AST *source_ast;   // original define AST, NULL if not available
-    char *source_text; // original define Source code, NULL if not available
 
+    char *source_text; // original define Source code, NULL if not available
+    char *header_path; // path to C header for FFI symbols, NULL if not FFI
 
     struct EnvEntry *next;
 } EnvEntry;

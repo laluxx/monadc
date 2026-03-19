@@ -78,9 +78,10 @@ typedef struct Type {
     // TYPE_LIST
     struct Type *element_type;   // NULL = polymorphic/unknown
 
-    // TYPE_ARR
+    // TYPE_ARR — fat pointer { T* data, i64 size }
     struct Type *arr_element_type;
-    int          arr_size;
+    int          arr_size;          // -1 = unknown at compile time
+    bool         arr_is_fat;        // true = runtime fat pointer
 
     // TYPE_LAYOUT
     char        *layout_name;
@@ -127,6 +128,7 @@ Type *type_u128(void);
 
 Type *type_list(Type *element_type);
 Type *type_arr(Type *element_type, int size);
+Type *type_arr_fat(Type *element_type); // runtime fat pointer {data, size}
 Type *type_fn(FnParam *params, int param_count, Type *return_type);
 Type *type_fn_builtin(int min_args, int opt_args, bool variadic);
 Type *type_layout(const char *name, LayoutField *fields, int field_count,

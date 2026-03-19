@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#include <stdint.h>
 
 // TODO AST->JSON
 
@@ -402,6 +403,12 @@ AST *ast_clone(AST *ast) {
     default:
         break;
     }
+
+    if (ast->type == AST_NUMBER && ast->has_raw_int) {
+        fprintf(stderr, "DEBUG CLONE NUMBER: raw_int=%llu has_raw_int=%d -> clone raw_int=%llu has_raw_int=%d\n",
+                (unsigned long long)ast->raw_int, ast->has_raw_int,
+                (unsigned long long)c->raw_int, c->has_raw_int);
+    }
     return c;
 }
 
@@ -533,7 +540,12 @@ void ast_free(AST *ast) {
 void ast_print(AST *ast) {
     if (!ast) { printf("nil"); return; }
     switch (ast->type) {
-    case AST_NUMBER:  printf("%g", ast->number); break;
+    case AST_NUMBER:
+        if (ast->has_raw_int && ast->literal_str)
+            printf("%s", ast->literal_str);
+        else
+            printf("%g", ast->number);
+    break;
     case AST_SYMBOL:  printf("%s", ast->symbol); break;
     case AST_STRING:  printf("\"%s\"", ast->string); break;
     case AST_CHAR:    printf("'%c'", ast->character); break;
@@ -711,6 +723,7 @@ static bool is_symbol_start(unsigned char c) {
            c=='-' || c=='+' || c=='*' || c=='/' ||
            c=='<' || c=='>' || c=='=' || c=='!' ||
            c=='?' || c=='_' || c==':' || c=='%' ||
+           c=='^' || c=='~' ||
            c > 127;  // UTF-8 multi-byte sequences
 }
 
@@ -889,6 +902,12 @@ Token lexer_next_token(Lexer *lex) {
         advance(lex);
         while (is_digit(peek(lex)) ||
               (peek(lex) == '.' && peek_ahead(lex, 1) != '.')) advance(lex);
+        if (peek(lex) == 'e' && (is_digit(peek_ahead(lex, 1)) ||
+            peek_ahead(lex, 1) == '+' || peek_ahead(lex, 1) == '-')) {
+            advance(lex); // consume 'e'
+            if (peek(lex) == '+' || peek(lex) == '-') advance(lex);
+            while (is_digit(peek(lex))) advance(lex);
+        }
         tok.value = my_strndup(lex->source+start, lex->pos-start);
         tok.type  = TOK_NUMBER; return tok;
     }
@@ -923,6 +942,11 @@ Token lexer_next_token(Lexer *lex) {
                 fprintf(stderr, "Invalid ratio: missing denominator\n");
                 exit(1);
             }
+            while (is_digit(peek(lex))) advance(lex);
+        } else if (peek(lex) == 'e' && (is_digit(peek_ahead(lex, 1)) ||
+                   peek_ahead(lex, 1) == '+' || peek_ahead(lex, 1) == '-')) {
+            advance(lex); // consume 'e'
+            if (peek(lex) == '+' || peek(lex) == '-') advance(lex);
             while (is_digit(peek(lex))) advance(lex);
         }
 
@@ -1696,8 +1720,10 @@ static AST *parse_list(Parser *p) {
         return result;
     }
 
-    if (p->current.type == TOK_SYMBOL &&
-        strcmp(p->current.value, "let") == 0) {
+if (p->current.type == TOK_SYMBOL &&
+        (strcmp(p->current.value, "let") == 0 ||
+         strcmp(p->current.value, "let*") == 0)) {
+        bool is_sequential = (strcmp(p->current.value, "let*") == 0);
         p->current = lexer_next_token(p->lexer);
 
         // Support both (let ([x e] ...) body) and (let [x e] body)
@@ -1777,7 +1803,29 @@ static AST *parse_list(Parser *p) {
         p->current = lexer_next_token(p->lexer); // consume final ')'
 
         ast_free(list);
-        return build_let(params, param_count, inits, body_exprs, body_count, start_line, start_column);
+        if (!is_sequential || param_count <= 1) {
+            return build_let(params, param_count, inits, body_exprs, body_count, start_line, start_column);
+        }
+        /* let* — desugar into nested single-binding lets, right to left.
+         * (let* ([a e1] [b e2] [c e3]) body)
+         * => (let ([a e1]) (let ([b e2]) (let ([c e3]) body))) */
+        AST **inner_body   = body_exprs;
+        int   inner_count  = body_count;
+        for (int i = param_count - 1; i >= 0; i--) {
+            ASTParam *p_single = malloc(sizeof(ASTParam));
+            p_single[0] = params[i];
+            AST **init_single = malloc(sizeof(AST*));
+            init_single[0] = inits[i];
+            AST *nested = build_let(p_single, 1, init_single,
+                                    inner_body, inner_count,
+                                    start_line, start_column);
+            inner_body  = malloc(sizeof(AST*));
+            inner_body[0] = nested;
+            inner_count   = 1;
+        }
+        free(params);
+        free(inits);
+        return inner_body[0];
     }
 
     // Detect (define (fname params...) body) - short-form function definition
@@ -2458,10 +2506,24 @@ static AST *parse_bracket_list(Parser *p) {
 }
 
 static double parse_number_str(const char *s) {
-    if (s[0]=='0' && (s[1]=='x'||s[1]=='X')) return (double)strtol(s,NULL,16);
-    if (s[0]=='0' && (s[1]=='b'||s[1]=='B')) return (double)strtol(s+2,NULL,2);
-    if (s[0]=='0' && (s[1]=='o'||s[1]=='O')) return (double)strtol(s+2,NULL,8);
+    if (s[0]=='0' && (s[1]=='x'||s[1]=='X')) return (double)(uint64_t)strtoull(s,NULL,16);
+    if (s[0]=='0' && (s[1]=='b'||s[1]=='B')) return (double)(uint64_t)strtoull(s+2,NULL,2);
+    if (s[0]=='0' && (s[1]=='o'||s[1]=='O')) return (double)(uint64_t)strtoull(s+2,NULL,8);
     return atof(s);
+}
+
+static void set_raw_int(AST *ast, const char *s) {
+    if (!s) return;
+    if (s[0]=='0' && (s[1]=='x'||s[1]=='X')) {
+        ast->raw_int     = strtoull(s, NULL, 16);
+        ast->has_raw_int = true;
+    } else if (s[0]=='0' && (s[1]=='b'||s[1]=='B')) {
+        ast->raw_int     = strtoull(s+2, NULL, 2);
+        ast->has_raw_int = true;
+    } else if (s[0]=='0' && (s[1]=='o'||s[1]=='O')) {
+        ast->raw_int     = strtoull(s+2, NULL, 8);
+        ast->has_raw_int = true;
+    }
 }
 
 static AST *parse_set(Parser *p) {
@@ -2557,22 +2619,42 @@ AST *parse_expr(Parser *p) {
 
         // Regular number
         AST *ast = ast_new_number(parse_number_str(tok.value), tok.value);
+        set_raw_int(ast, tok.value);
         ast->line = tok.line;
         ast->column = tok.column;
         ast->end_column = end_col;
         return ast;
     }
     case TOK_SYMBOL: {
-        // & reader macro — address-of
+        // & is address-of only when the & is immediately adjacent to the next
+        // token (no whitespace between them), meaning tok.end_column == next tok.column.
+        // We detect this by comparing columns: if & is at col N and next token
+        // is also at col N+1, they are adjacent → address-of.
+        // If there's a space between them → bitwise AND symbol.
         if (tok.value && strcmp(tok.value, "&") == 0) {
-            int addr_line = tok.line, addr_col = tok.column;
+            /* Advance past & first, then check what follows */
             p->current = lexer_next_token(p->lexer);
-            AST *operand = parse_expr(p);
-            AST *node = ast_new_address_of(operand);
-            node->line       = addr_line;
-            node->column     = addr_col;
-            node->end_column = operand->end_column;
-            return node;
+            int next_col = p->current.column;
+            int amp_col  = tok.column;
+            bool adjacent = (next_col == amp_col + 1);
+            if (adjacent &&
+                (p->current.type == TOK_SYMBOL ||
+                 p->current.type == TOK_NUMBER ||
+                 p->current.type == TOK_LPAREN)) {
+                int addr_line = tok.line, addr_col = tok.column;
+                AST *operand = parse_expr(p);
+                AST *node = ast_new_address_of(operand);
+                node->line       = addr_line;
+                node->column     = addr_col;
+                node->end_column = operand->end_column;
+                return node;
+            }
+            /* Not adjacent — just a bitwise AND symbol, already advanced */
+            AST *ast = ast_new_symbol("&");
+            ast->line       = tok.line;
+            ast->column     = tok.column;
+            ast->end_column = tok.column + 1;
+            return ast;
         }
         int end_col = tok.column + (tok.value ? strlen(tok.value) : 1);
         p->current = lexer_next_token(p->lexer);
@@ -2582,7 +2664,6 @@ AST *parse_expr(Parser *p) {
         ast->end_column = end_col;
         return ast;
     }
-
     case TOK_STRING: {
         int end_col = tok.column + (tok.value ? strlen(tok.value) : 1) + 2;
         p->current = lexer_next_token(p->lexer);
