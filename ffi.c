@@ -1,12 +1,8 @@
 #include "ffi.h"
-
-/* Declared in repl.c — registers a heap pointer for __layout_ptr_get */
-extern void __layout_ptr_set(const char *name, void *ptr);
-
 #include "codegen.h"
 #include "env.h"
 #include "types.h"
-
+#include "runtime.h"
 #include <clang-c/Index.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -155,9 +151,16 @@ Type *ffi_map_c_type(const char *s) {
         char *start = base;
         if (strncmp(start, "const ",  6) == 0) start += 6;
         if (strncmp(start, "struct ", 7) == 0) start += 7;
-        /* Named struct pointer (uppercase) — return layout ref */
-        if (start[0] && isupper((unsigned char)start[0]))
-            return type_layout_ref(start);
+        /* Strip trailing spaces again after prefix removal */
+        end = start + strlen(start) - 1;
+        while (end > start && (*end == ' ' || *end == '\t')) *end-- = '\0';
+        /* Named struct pointer (uppercase) — copy to heap before passing */
+        if (start[0] && isupper((unsigned char)start[0])) {
+            char *heap_name = strdup(start);
+            Type *t = type_layout_ref(heap_name);
+            free(heap_name);
+            return t;
+        }
         /* Primitive pointer — wrap in type_ptr with mapped pointee */
         if (strcmp(start, "float")          == 0) return type_ptr(type_f32());
         if (strcmp(start, "double")         == 0) return type_ptr(type_float());
@@ -409,25 +412,34 @@ static enum CXChildVisitResult visitor(CXCursor cursor,
             clang_visitChildren(cursor, ffi_count_fields, &n_fields);
 
             if (n_fields > 0) {
+                /* Get size BEFORE any realloc that visitChildren may trigger */
+                CXType    cx_type = clang_getCursorType(cursor);
+                CXType    canon   = clang_getCanonicalType(cx_type);
+                long long sz      = clang_Type_getSizeOf(canon);
+
+                /* Build a temporary struct on the stack — do NOT take a
+                 * pointer into ffi->structs until after field_visitor runs,
+                 * because clang_visitChildren may recurse into nested struct
+                 * declarations which call ffi_add_struct → realloc,
+                 * invalidating any pointer we hold into the array.        */
+                FFIStruct tmp;
+                memset(&tmp, 0, sizeof(tmp));
+                tmp.name        = my_strdup(name);
+                tmp.field_count = n_fields;
+                tmp.fields      = calloc(n_fields, sizeof(FFIStructField));
+                tmp.packed      = false;
+                tmp.size_bytes  = (sz > 0) ? (int)sz : 0;
+
+                FieldVisitState fs = { &tmp, 0 };
+                clang_visitChildren(cursor, field_visitor, &fs);
+
+                /* Now safe to grow the array and copy in */
                 if (ffi->struct_count >= ffi->struct_cap) {
                     ffi->struct_cap *= 2;
                     ffi->structs = realloc(ffi->structs,
                                            sizeof(FFIStruct) * ffi->struct_cap);
                 }
-                FFIStruct *s   = &ffi->structs[ffi->struct_count];
-                s->name        = my_strdup(name);
-                s->field_count = n_fields;
-                s->fields      = calloc(n_fields, sizeof(FFIStructField));
-                s->packed      = false;
-
-                FieldVisitState fs = { s, 0 };
-                clang_visitChildren(cursor, field_visitor, &fs);
-
-                CXType    cx_type = clang_getCursorType(cursor);
-                CXType    canon   = clang_getCanonicalType(cx_type);
-                long long sz      = clang_Type_getSizeOf(canon);
-                s->size_bytes     = (sz > 0) ? (int)sz : 0;
-                ffi->struct_count++;
+                ffi->structs[ffi->struct_count++] = tmp;
             }
         }
         clang_disposeString(cx_name);
@@ -903,47 +915,24 @@ static void ffi_parse_struct_macros(FFIContext *ctx, const char *header_path) {
                     }
                 }
                 if (nf > 0) {
-                    /* Store each field as a separate constant: NAME_r, NAME_g etc.
-                     * AND store the struct as a packed integer if it fits.
-                     * For Color (4 x u8): pack as single u32 */
-                    if (nf == 4 && fields[0] >= 0 && fields[0] <= 255 &&
-                        fields[1] >= 0 && fields[1] <= 255 &&
-                        fields[2] >= 0 && fields[2] <= 255 &&
-                        fields[3] >= 0 && fields[3] <= 255) {
-                        /* Looks like a Color — store field breakdown only.
-                         * The packed int constant is NOT added — we want
-                         * ffi_inject_into_env to create a layout global,
-                         * not an i64 constant. */
-                        static const char *rgba[] = {"r","g","b","a"};
-                        for (int fi = 0; fi < 4; fi++) {
-                            char subname[280];
-                            snprintf(subname, sizeof(subname), "%s.%s",
-                                     name, rgba[fi]);
-                            if (!already_have_constant(ctx, subname)) {
-                                FFIConstant sc = {0};
-                                sc.name  = my_strdup(subname);
-                                sc.value = fields[fi];
-                                ffi_add_constant(ctx, sc);
-                            }
+                    /* Store each sub-field as NAME.0, NAME.1, ... etc.
+                     * Then add a sentinel (value=-1) so PASS 5 in
+                     * ffi_inject_into_env can pack them into an integer. */
+                    for (int fi = 0; fi < nf; fi++) {
+                        char subname[280];
+                        snprintf(subname, sizeof(subname), "%s.%d", name, fi);
+                        if (!already_have_constant(ctx, subname)) {
+                            FFIConstant sc = {0};
+                            sc.name  = my_strdup(subname);
+                            sc.value = fields[fi];
+                            ffi_add_constant(ctx, sc);
                         }
-                        /* Add a sentinel constant with the name so
-                         * already_have_constant returns true for it,
-                         * but mark it specially so inject skips the
-                         * numeric global and creates a layout global.
-                         * We use is_float=false, value=-1 as sentinel. */
-                        FFIConstant sentinel = {0};
-                        sentinel.name     = my_strdup(name);
-                        sentinel.value    = -1;
-                        sentinel.is_float = false;
-                        ffi_add_constant(ctx, sentinel);
-                    } else {
-                        /* Generic struct fields — store first field as the constant */
-                        FFIConstant c = {0};
-                        c.name     = my_strdup(name);
-                        c.value    = fields[0];
-                        c.is_float = false;
-                        ffi_add_constant(ctx, c);
                     }
+                    FFIConstant sentinel = {0};
+                    sentinel.name     = my_strdup(name);
+                    sentinel.value    = -1;
+                    sentinel.is_float = false;
+                    ffi_add_constant(ctx, sentinel);
                     continue;
                 }
             }
@@ -1032,6 +1021,9 @@ static void ffi_parse_struct_macros(FFIContext *ctx, const char *header_path) {
 /// Inject into codegen env
 
 void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
+    fprintf(stderr, "ffi_inject_into_env: cg=%p cg->env=%p\n",
+            (void*)cg, (void*)cg->env);
+    fflush(stderr);
     LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(cg->context), 0);
 
     static const char *protected[] = {
@@ -1089,8 +1081,21 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
     }
 
     /* ── PASS 3: Functions ───────────────────────────────────────────────── */
+    fprintf(stderr, "ffi PASS3: %d functions, env=%p\n",
+            ffi->function_count, (void*)cg->env);
+    fflush(stderr);
     for (int i = 0; i < ffi->function_count; i++) {
         FFIFunction *f = &ffi->functions[i];
+        fprintf(stderr, "ffi PASS3 fn[%d]: name=%p '%s'\n",
+                i, (void*)f->name, f->name ? f->name : "NULL");
+        for (int j = 0; j < f->param_count; j++) {
+            Type *pt2 = f->params[j].type;
+            fprintf(stderr, "  param[%d]: type=%p kind=%d layout_name=%p\n",
+                    j, (void*)pt2,
+                    pt2 ? pt2->kind : -1,
+                    pt2 ? (void*)pt2->layout_name : NULL);
+        }
+        fflush(stderr);
         if (env_lookup(cg->env, f->name)) continue;
 
         bool skip = false;
@@ -1113,6 +1118,14 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
             } else if (ptype->kind == TYPE_I32 || ptype->kind == TYPE_U32) {
                 pt[j] = LLVMInt32TypeInContext(cg->context);
             } else if (ptype->kind == TYPE_LAYOUT) {
+                if (!ptype->layout_name ||
+                    (uintptr_t)ptype->layout_name < 0x1000) {
+                    fprintf(stderr, "ffi: corrupt layout_name ptr %p for param %d of %s\n",
+                            (void*)ptype->layout_name, j, f->name);
+                    pt[j] = ptr_t;
+                    ep[j].type = type_clone(ptype);
+                    continue;
+                }
                 Type *full = env_lookup_layout(cg->env, ptype->layout_name);
                 int sz = full ? full->layout_total_size : 0;
                 if      (sz > 0 && sz <= 4)  pt[j] = LLVMInt32TypeInContext(cg->context);
@@ -1204,69 +1217,57 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
         }
     }
 
-    /* ── PASS 5: Color struct constants ─────────────────────────────────── */
-    Type *color_lay = env_lookup_layout(cg->env, "Color");
-    if (color_lay) {
-        char sname[256];
-        snprintf(sname, sizeof(sname), "layout.%s", color_lay->layout_name);
-        LLVMTypeRef struct_t = LLVMGetTypeByName2(cg->context, sname);
-        if (!struct_t) { type_to_llvm(cg, color_lay); struct_t = LLVMGetTypeByName2(cg->context, sname); }
+    /* ── PASS 5: Struct literal constants (any layout, any size) ────────── */
+    for (int i = 0; i < ffi->constant_count; i++) {
+        FFIConstant *c = &ffi->constants[i];
+        if (strchr(c->name, '.'))  continue;
+        if (c->is_float || c->is_string) continue;
+        if (env_lookup(cg->env, c->name)) continue;
+        /* A sentinel value of -1 signals a struct literal constant.
+         * Collect all sub-field constants named "<NAME>.<field_index>" */
+        if (c->value != -1) continue;
 
-        static const char *ch[] = {".r",".g",".b",".a"};
-        for (int i = 0; i < ffi->constant_count; i++) {
-            FFIConstant *c = &ffi->constants[i];
-            if (strchr(c->name, '.'))  continue;
-            if (c->is_float || c->is_string) continue;
-            if (env_lookup(cg->env, c->name)) continue;
-
-            /* Check for .r .g .b .a sub-constants */
-            char sub[4][280];
-            for (int fi = 0; fi < 4; fi++)
-                snprintf(sub[fi], sizeof(sub[fi]), "%s%s", c->name, ch[fi]);
-            if (!already_have_constant(ffi, sub[0]) ||
-                !already_have_constant(ffi, sub[1]) ||
-                !already_have_constant(ffi, sub[2]) ||
-                !already_have_constant(ffi, sub[3])) continue;
-
-            unsigned char rgba[4] = {0};
-            for (int fi = 0; fi < 4; fi++)
-                for (int j = 0; j < ffi->constant_count; j++)
-                    if (strcmp(ffi->constants[j].name, sub[fi]) == 0) {
-                        rgba[fi] = (unsigned char)ffi->constants[j].value; break;
-                    }
-
-            /* Heap buffer for __layout_ptr_get */
-            unsigned char *buf = malloc(4);
-            buf[0]=rgba[0]; buf[1]=rgba[1]; buf[2]=rgba[2]; buf[3]=rgba[3];
-            __layout_ptr_set(c->name, buf);
-
-            /* Private struct global */
-            LLVMTypeRef  i8t = LLVMInt8TypeInContext(cg->context);
-            LLVMValueRef fv[] = {
-                LLVMConstInt(i8t, rgba[0], 0), LLVMConstInt(i8t, rgba[1], 0),
-                LLVMConstInt(i8t, rgba[2], 0), LLVMConstInt(i8t, rgba[3], 0)
-            };
-            char dname[280]; snprintf(dname, sizeof(dname), ".color.%s", c->name);
-            LLVMValueRef data_gv = LLVMGetNamedGlobal(cg->module, dname);
-            if (!data_gv) {
-                LLVMValueRef sv = struct_t
-                    ? LLVMConstNamedStruct(struct_t, fv, 4)
-                    : LLVMConstStruct(fv, 4, 0);
-                data_gv = LLVMAddGlobal(cg->module,
-                    struct_t ? struct_t : LLVMTypeOf(sv), dname);
-                LLVMSetInitializer(data_gv, sv);
-                LLVMSetLinkage(data_gv, LLVMPrivateLinkage);
-                LLVMSetGlobalConstant(data_gv, 1);
-            }
-
-            /* Pointer global */
-            LLVMValueRef gv = LLVMAddGlobal(cg->module, ptr_t, c->name);
-            LLVMSetInitializer(gv, LLVMConstBitCast(data_gv, ptr_t));
-            LLVMSetLinkage(gv, LLVMInternalLinkage);
-            env_insert(cg->env, c->name, type_clone(color_lay), gv);
-            printf("FFI: color %s = {%d,%d,%d,%d}\n",
-                   c->name, rgba[0], rgba[1], rgba[2], rgba[3]);
+        /* Find how many sub-fields exist by scanning for <NAME>.0, <NAME>.1...
+         * Sub-fields are stored as "<NAME>.<fieldname>" — collect them in order */
+        long long fields[64];
+        int nf = 0;
+        /* Walk all constants looking for ones starting with "<NAME>." */
+        /* We need them in insertion order — they were inserted r,g,b,a order */
+        for (int j = 0; j < ffi->constant_count && nf < 64; j++) {
+            const char *dot = strchr(ffi->constants[j].name, '.');
+            if (!dot) continue;
+            size_t prefix_len = dot - ffi->constants[j].name;
+            if (strlen(c->name) != prefix_len) continue;
+            if (strncmp(ffi->constants[j].name, c->name, prefix_len) != 0) continue;
+            fields[nf++] = ffi->constants[j].value;
         }
+        if (nf == 0) continue;
+
+        /* Determine the integer type wide enough to hold the packed struct.
+         * Each sub-field is 1 byte (u8) for the common case; derive from count. */
+        int total_bytes = nf; /* assume 1 byte per field — holds for Color etc. */
+        LLVMTypeRef int_t;
+        if      (total_bytes <= 1) int_t = LLVMInt8TypeInContext(cg->context);
+        else if (total_bytes <= 2) int_t = LLVMInt16TypeInContext(cg->context);
+        else if (total_bytes <= 4) int_t = LLVMInt32TypeInContext(cg->context);
+        else                       int_t = LLVMInt64TypeInContext(cg->context);
+
+        /* Pack fields little-endian */
+        uint64_t packed = 0;
+        for (int fi = 0; fi < nf; fi++)
+            packed |= ((uint64_t)(unsigned char)fields[fi]) << (fi * 8);
+
+        LLVMValueRef gv = LLVMAddGlobal(cg->module, int_t, c->name);
+        LLVMSetInitializer(gv, LLVMConstInt(int_t, packed, 0));
+        LLVMSetLinkage(gv, LLVMInternalLinkage);
+        LLVMSetGlobalConstant(gv, 1);
+        /* Use the matching integer type so loads work correctly */
+        Type *int_type = (total_bytes <= 1) ? type_u8()  :
+                         (total_bytes <= 2) ? type_u16() :
+                         (total_bytes <= 4) ? type_i32() : type_int();
+        env_insert(cg->env, c->name, int_type, gv);
+        printf("FFI: struct const %s = 0x%llx (%d bytes)\n",
+               c->name, (unsigned long long)packed, total_bytes);
     }
 
     printf("FFI: injected %d functions, %d constants, %d structs\n",

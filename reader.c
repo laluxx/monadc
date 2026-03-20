@@ -404,11 +404,6 @@ AST *ast_clone(AST *ast) {
         break;
     }
 
-    if (ast->type == AST_NUMBER && ast->has_raw_int) {
-        fprintf(stderr, "DEBUG CLONE NUMBER: raw_int=%llu has_raw_int=%d -> clone raw_int=%llu has_raw_int=%d\n",
-                (unsigned long long)ast->raw_int, ast->has_raw_int,
-                (unsigned long long)c->raw_int, c->has_raw_int);
-    }
     return c;
 }
 
@@ -1325,7 +1320,6 @@ static DefineMetadata parse_define_metadata(Parser *p) {
         // :naked True / :naked False
         if (p->current.type == TOK_KEYWORD &&
             strcmp(p->current.value, "naked") == 0) {
-            fprintf(stderr, "DEBUG: found :naked keyword\n");
             p->current = lexer_next_token(p->lexer);
             if (p->current.type == TOK_SYMBOL) {
                 if (strcmp(p->current.value, "True") == 0) {
@@ -1867,7 +1861,8 @@ if (p->current.type == TOK_SYMBOL &&
             int   body_count = 0;
 
             // Pattern matching sugar: body does not start with (
-            if (p->current.type != TOK_LPAREN &&
+            if (ret_type != NULL &&
+                p->current.type != TOK_LPAREN &&
                 p->current.type != TOK_RPAREN &&
                 p->current.type != TOK_EOF) {
                 AST *pm = parse_pmatch_clauses(p, count);
@@ -2805,6 +2800,7 @@ static void parse_feature_blocks(Parser *p, AST ***exprs, size_t *count, size_t 
         }
 
         const char *feature_name = p->current.value;
+
         // Feature is only enabled if parent is also enabled (for nesting)
         bool feature_enabled = parent_enabled && is_feature_active(feature_name);
 
@@ -2829,7 +2825,6 @@ static void parse_feature_blocks(Parser *p, AST ***exprs, size_t *count, size_t 
                 }
                 (*exprs)[(*count)++] = expr;
             } else {
-                // Skip the expression
                 skip_expr(p);
             }
         }

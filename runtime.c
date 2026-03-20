@@ -11,6 +11,29 @@ static inline RuntimeValue *heap_value(void)        { return malloc(sizeof(Runti
 
 volatile int rt_interrupted = 0;
 
+// Layout pointer registry — used by FFI color/struct constants at runtime
+static void  *g_layout_ptrs[256];
+static char   g_layout_names[256][256];
+static int    g_layout_count = 0;
+
+void __layout_ptr_set(const char *name, void *ptr) {
+    for (int i = 0; i < g_layout_count; i++) {
+        if (strcmp(g_layout_names[i], name) == 0) {
+            g_layout_ptrs[i] = ptr; return;
+        }
+    }
+    if (g_layout_count < 256) {
+        strncpy(g_layout_names[g_layout_count], name, 255);
+        g_layout_ptrs[g_layout_count++] = ptr;
+    }
+}
+
+void *__layout_ptr_get(const char *name) {
+    for (int i = 0; i < g_layout_count; i++)
+        if (strcmp(g_layout_names[i], name) == 0)
+            return g_layout_ptrs[i];
+    return NULL;
+}
 //  Global evaluation arena
 //
 //  All hot-path allocations (thunks, list cells, env structs, int/float/char
@@ -107,6 +130,11 @@ RuntimeValue *rt_closure_calln(RuntimeValue *closure, int n, RuntimeValue **args
     RuntimeClosure *c = closure->data.closure_val;
     typedef RuntimeValue *(*Fn)(void *, int, RuntimeValue **);
     return ((Fn)c->fn_ptr)(c->env, n, args);
+}
+
+void *rt_closure_get_env(RuntimeValue *closure) {
+    if (!closure || closure->type != RT_CLOSURE) return NULL;
+    return closure->data.closure_val->env;
 }
 
 ///  Thunk forcing
@@ -2243,6 +2271,7 @@ void declare_runtime_functions(CodegenContext *ctx) {
     // --- Closure ---
     DECL("rt_value_closure", ptr, ptr, ptr, i32, i32);  // fn_ptr, env, env_size, arity
     DECL("rt_closure_calln", ptr, ptr, i32, ptr);       // closure, n, args_array
+    DECL("rt_closure_get_env", ptr, ptr);               // closure -> env ptr
 
     // --- Thunks ---
     DECL("rt_thunk_of_value", ptr, ptr);

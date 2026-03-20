@@ -35,6 +35,7 @@
 
 ;;; Hardware RNG
 
+#+X86-64
 (define (supported? -> Bool)
   "Return True if hardware random number generation is supported on this CPU."
   (asm mov    1    %eax
@@ -53,15 +54,16 @@ Returns 0 on failure."
   (asm rdtsc
        shl 32   %rdx
        or  %rdx %rax))
+#---
 
 ;;; Xorshift64 PRNG
 
 (define (xorshift64 [s :: Int] -> Int)
   "Advance xorshift64 state by one step.
 This is a full-period 64-bit PRNG with excellent statistical properties."
-  (let* ([s (s `^` (s `<<` 13))]
-         [s (s `^` (s `>>>` 7))]
-         [s (s `^` (s `<<` 17))])
+  (let* ([s (s `⊕` (s `<<` 13))]
+         [s (s `⊕` (s `>>>` 7))]
+         [s (s `⊕` (s `<<` 17))])
     s))
 
 ;;; Module state
@@ -140,7 +142,7 @@ GEN is a zero-argument function returning a random value, e.g. random-bool."
 
 (tests
   ;; Type checks
-  (assert-eq (Float? (random-bool?))  True  "random-bool? returns Bool")
+  (assert-eq (Int? (random-bool?))  True  "random-bool? returns Bool")
   (assert-eq (Int? (gen32))          True  "gen32 returns Int")
   (assert-eq (Int? (gen64))          True  "gen64 returns Int")
 

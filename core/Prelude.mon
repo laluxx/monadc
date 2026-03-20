@@ -1,0 +1,364 @@
+;;; Prelude.mon --- Standard library inspired by Haskell Prelude
+
+;; Author: Laluxx
+;; Version: 0.0.1
+;; Keywords: prelude standard library
+
+;;; Commentary:
+;; Core functions available in every program.
+
+;;; Code:
+
+(module Prelude
+  [;; Math
+   floor ceiling round truncate
+   log exp
+   sin cos tan asin acos atan atan2
+   ;; List
+   head tail last init
+   length reverse
+   concat concat-map
+   any? all?
+   maximum minimum
+   elem?
+   replicate
+   iterate
+   split-at
+   span break
+   lookup
+   nub
+   sort sort-by
+   group-by partition
+   zip-with unzip
+   ;; String
+   words unwords lines unlines
+   ;; Function
+   id const flip compose])
+
+
+
+
+
+
+;;; Math
+
+;; Math — pure Monad implementations, no C dependencies
+;; cos via Taylor: cos(x) = 1 - x^2/2! + x^4/4! - ...
+
+(define (cos [x :: Float] -> Float)
+  "Cosine of X in radians."
+  (let [x (mod-f x pi2)]
+    (define (iter [sum :: Float] [term :: Float] [n :: Int] -> Float)
+      (if (< (abs term) 1e-15)
+          sum
+          (iter (+ sum term)
+                (* (- 0.0 term)
+                   (/ (* x x)
+                      (Float (* (* 2 n) (- (* 2 n) 1)))))
+                (+ n 1))))
+    (iter 1.0 (* -0.5 (* x x)) 2)))
+
+;; tan = sin/cos
+
+(define (tan [x :: Float] -> Float)
+  "Tangent of X in radians."
+  (/ (sin x) (cos x)))
+
+;; asin via Newton's method: asin(x) using sin
+
+(define (asin [x :: Float] -> Float)
+  "Arc sine of X."
+  (define (iter [guess :: Float] [n :: Int] -> Float)
+    (if (<= n 0)
+        guess
+        (iter (- guess (/ (- (sin guess) x)
+                          (cos guess)))
+              (- n 1))))
+  (iter x 10))
+
+;; acos = pi/2 - asin
+
+(define (acos [x :: Float] -> Float)
+  "Arc cosine of X."
+  (- pi/2 (asin x)))
+
+;; atan via Taylor for |x|<=1, identity for |x|>1
+
+(define (atan [x :: Float] -> Float)
+  "Arc tangent of X."
+  (define (iter [sum :: Float] [term :: Float] [n :: Int] -> Float)
+    (if (< (abs term) 1e-15)
+        sum
+        (iter (+ sum term)
+              (* (- 0.0 term)
+                 (/ (* x x) (Float (+ (* 2 n) 1))))
+              (+ n 1))))
+  (if (> (abs x) 1.0)
+      (- (if (> x 0.0) pi/2 (- 0.0 pi/2))
+         (atan (/ 1.0 x)))
+      (iter x (* x (- 0.0 (* x x))) 2)))
+
+(define (atan2 [y :: Float] [x :: Float] -> Float)
+  "Arc tangent of Y/X in correct quadrant."
+  (if (> x 0.0)
+      (atan (/ y x))
+      (if (< x 0.0)
+          (if (>= y 0.0)
+              (+ (atan (/ y x)) pi)
+              (- (atan (/ y x)) pi))
+          (if (> y 0.0)  pi/2
+              (if (< y 0.0) (- 0.0 pi/2)
+                  0.0)))))
+
+;; log base 2 and base 10
+
+(define (log2 [x :: Float] -> Float)
+  "Base-2 logarithm of X."
+  (/ (ln x) (ln 2.0)))
+
+(define (log10 [x :: Float] -> Float)
+  "Base-10 logarithm of X."
+  (/ (ln x) (ln 10.0)))
+
+;; hyperbolic
+
+(define (sinh [x :: Float] -> Float)
+  "Hyperbolic sine."
+  (/ (- (exp x) (exp (- 0.0 x))) 2.0))
+
+(define (cosh [x :: Float] -> Float)
+  "Hyperbolic cosine."
+  (/ (+ (exp x) (exp (- 0.0 x))) 2.0))
+
+(define (tanh [x :: Float] -> Float)
+  "Hyperbolic tangent."
+  (/ (sinh x) (cosh x)))
+
+
+
+
+;;; List
+
+(define (head [xs :: List] -> a)
+  "Return the first element of XS. Errors on empty list."
+  (car xs))
+
+(define (tail [xs :: List] -> List)
+  "Return all but the first element of XS."
+  (cdr xs))
+
+(define (last [xs :: List] -> a)
+  "Return the last element of XS."
+  (if (list-empty? (cdr xs))
+      (car xs)
+      (last (cdr xs))))
+
+(define (init [xs :: List] -> List)
+  "Return all but the last element of XS."
+  (if (list-empty? (cdr xs))
+      '()
+      (cons (car xs) (init (cdr xs)))))
+
+(define (length [xs :: List] -> Int)
+  "Return the number of elements in XS."
+  (list-length xs))
+
+(define (reverse [xs :: List] -> List)
+  "Return XS in reverse order."
+  (foldl (lambda (acc x) (cons x acc)) '() xs))
+
+(define (concat [xss :: List] -> List)
+  "Concatenate a list of lists."
+  (foldr append '() xss))
+
+(define (concat-map [f] [xs :: List] -> List)
+  "Map F over XS then concatenate the results."
+  (concat (map f xs)))
+
+(define (any? [f] [xs :: List] -> Bool)
+  "Return True if F returns True for any element of XS."
+  (if (list-empty? xs)
+      False
+      (if (f (car xs))
+          True
+          (any? f (cdr xs)))))
+
+(define (all? [f] [xs :: List] -> Bool)
+  "Return True if F returns True for all elements of XS."
+  (if (list-empty? xs)
+      True
+      (if (f (car xs))
+          (all? f (cdr xs))
+          False)))
+
+(define (maximum [xs :: List] -> a)
+  "Return the largest element of XS."
+  (foldl (lambda (acc x) (if (> x acc) x acc))
+         (car xs)
+         (cdr xs)))
+
+(define (minimum [xs :: List] -> a)
+  "Return the smallest element of XS."
+  (foldl (lambda (acc x) (if (< x acc) x acc))
+         (car xs)
+         (cdr xs)))
+
+(define (elem? [x] [xs :: List] -> Bool)
+  "Return True if X is an element of XS."
+  (any? (lambda (y) (equal? x y)) xs))
+
+(define (replicate [n :: Int] [x] -> List)
+  "Return a list of N copies of X."
+  (if (<= n 0)
+      '()
+      (cons x (replicate (- n 1) x))))
+
+(define (iterate [f] [x] -> List)
+  "Return infinite list [x (f x) (f (f x)) ...]."
+  (cons x (iterate f (f x))))
+
+(define (split-at [n :: Int] [xs :: List] -> List)
+  "Return a list of [(take n xs) (drop n xs)]."
+  (list (take n xs) (drop n xs)))
+
+(define (span [f] [xs :: List] -> List)
+  "Split XS into [takewhile drop] at first element where F fails."
+  (if (list-empty? xs)
+      (list '() '())
+      (if (f (car xs))
+          (let [rest (span f (cdr xs))]
+            (list (cons (car xs) (car rest))
+                  (car (cdr rest))))
+          (list '() xs))))
+
+(define (break [f] [xs :: List] -> List)
+  "Split XS at first element where F succeeds."
+  (span (lambda (x) (not (f x))) xs))
+
+(define (lookup [key] [pairs :: List] -> List)
+  "Find first pair in PAIRS whose car equals KEY. Returns nil if not found."
+  (if (list-empty? pairs)
+      '()
+      (if (equal? key (car (car pairs)))
+          (car pairs)
+          (lookup key (cdr pairs)))))
+
+(define (nub [xs :: List] -> List)
+  "Remove duplicate elements from XS, keeping first occurrences."
+  (if (list-empty? xs)
+      '()
+      (cons (car xs)
+            (nub (filter (lambda (y) (not (equal? (car xs) y)))
+                         (cdr xs))))))
+
+(define (insert-sorted [x] [xs :: List] -> List)
+  "Insert X into sorted list XS."
+  (if (list-empty? xs)
+      (list x)
+      (if (<= x (car xs))
+          (cons x xs)
+          (cons (car xs) (insert-sorted x (cdr xs))))))
+
+(define (sort [xs :: List] -> List)
+  "Sort XS in ascending order using insertion sort."
+  (foldr insert-sorted '() xs))
+
+(define (insert-sorted-by [f] [x] [xs :: List] -> List)
+  "Insert X into XS sorted by comparison function F."
+  (if (list-empty? xs)
+      (list x)
+      (if (f x (car xs))
+          (cons x xs)
+          (cons (car xs) (insert-sorted-by f x (cdr xs))))))
+
+(define (sort-by [f] [xs :: List] -> List)
+  "Sort XS using comparison function F."
+  (foldr (lambda (x acc) (insert-sorted-by f x acc)) '() xs))
+
+(define (group-by [f] [xs :: List] -> List)
+  "Group consecutive elements of XS for which F returns True."
+  (if (list-empty? xs)
+      '()
+      (let [rest (span (lambda (y) (f (car xs) y)) (cdr xs))]
+        (cons (cons (car xs) (car rest))
+              (group-by f (car (cdr rest)))))))
+
+(define (partition [f] [xs :: List] -> List)
+  "Split XS into [(filter f xs) (filter (not f) xs)]."
+  (list (filter f xs)
+        (filter (lambda (x) (not (f x))) xs)))
+
+(define (unzip [pairs :: List] -> List)
+  "Convert list of pairs into pair of lists."
+  (list (map car pairs)
+        (map (lambda (p) (car (cdr p))) pairs)))
+
+
+;;; String
+
+(define (words [s :: String] -> List)
+  "Split string S on whitespace into a list of words."
+  (define (skip-spaces [i :: Int] -> Int)
+    (if (>= i (string-length s))
+        i
+        (if (= (string-ref s i) ' ')
+            (skip-spaces (+ i 1))
+            i)))
+  (define (find-space [i :: Int] -> Int)
+    (if (>= i (string-length s))
+        i
+        (if (= (string-ref s i) ' ')
+            i
+            (find-space (+ i 1)))))
+  (define (go [i :: Int] -> List)
+    (let [start (skip-spaces i)]
+      (if (>= start (string-length s))
+          '()
+          (let [end (find-space start)]
+            (cons (take end (drop start s))
+                  (go end))))))
+  (go 0))
+
+(define (unwords [ws :: List] -> String)
+  "Join list of strings WS with spaces."
+  (if (list-empty? ws)
+      ""
+      (if (list-empty? (cdr ws))
+          (car ws)
+          (String (car ws)))))
+
+(define (lines [s :: String] -> List)
+  "Split string S on newlines."
+  (define (find-newline [i :: Int] -> Int)
+    (if (>= i (string-length s))
+        i
+        (if (= (string-ref s i) '\n')
+            i
+            (find-newline (+ i 1)))))
+  (define (go [i :: Int] -> List)
+    (if (>= i (string-length s))
+        '()
+        (let [end (find-newline i)]
+          (cons (take end (drop i s))
+                (go (+ end 1))))))
+  (go 0))
+
+(define (unlines [ls :: List] -> String)
+  "Join list of strings LS with newlines."
+  (if (list-empty? ls)
+      ""
+      (car ls)))
+
+
+;;; Function
+
+(define id λx.x)
+(define const λx.λy.x)
+
+(define (flip [f] [x] [y] -> b)
+  "Apply F with arguments flipped."
+  (f y x))
+
+(define (compose [f] [g] [x] -> b)
+  "Function composition. Return (f (g x))."
+  (f (g x)))

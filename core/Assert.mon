@@ -11,8 +11,8 @@
 ;;; Code:
 
 (module Assert
-  [assert])
+  [assert?])
 
-(define (assert [expr :: Bool] -> [label :: String] -> Bool)
+(define (assert? [expr :: Bool] -> [label :: String] -> Bool)
   (assert-eq expr True label))
 

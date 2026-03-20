@@ -97,6 +97,7 @@ typedef struct RuntimeValue {
 
 RuntimeValue *rt_value_closure(void *fn_ptr, void **env, int env_size, int arity);
 RuntimeValue *rt_closure_calln(RuntimeValue *closure, int n, RuntimeValue **args);
+void         *rt_closure_get_env(RuntimeValue *closure);
 
 /// HOF Callback Types
 
@@ -329,6 +330,10 @@ void rt_value_free(RuntimeValue *val);
 void rt_list_free(RuntimeList *list);
 void rt_thunk_free(RuntimeThunk *thunk);
 void rt_set_free(RuntimeSet *s);
+
+/// Layout pointer registry
+void  __layout_ptr_set(const char *name, void *ptr);
+void *__layout_ptr_get(const char *name);
 
 /// Assert
 

@@ -15,6 +15,8 @@
 #include "codegen.h"
 #include "module.h"
 #include "buildsystem.h"
+#include "ffi.h"
+#include "wisp.h"
 
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
@@ -47,6 +49,43 @@ typedef struct CompiledModule {
 } CompiledModule;
 
 static CompiledModule *g_compiled = NULL;
+
+/* FFI libraries to link, accumulated during compile_one */
+static char  g_ffi_link_libs[2048] = {0};
+static int   g_ffi_link_libs_len   = 0;
+
+static void ffi_libs_add(FFIContext *ffi) {
+    for (int i = 0; i < ffi->included_count; i++) {
+        const char *hdr  = ffi->included[i];
+        const char *base = strrchr(hdr, '/');
+        base = base ? base + 1 : hdr;
+        char stem[256];
+        strncpy(stem, base, sizeof(stem) - 1);
+        stem[sizeof(stem)-1] = '\0';
+        char *dot = strrchr(stem, '.');
+        if (dot) *dot = '\0';
+        /* Check the lib actually exists before adding */
+        const char *sufx[] = {".so",".so.5",".so.4",".so.3",".so.2",".so.1",NULL};
+        bool found = false;
+        for (int s = 0; sufx[s] && !found; s++) {
+            char soname[512];
+            snprintf(soname, sizeof(soname), "/usr/lib/lib%s%s", stem, sufx[s]);
+            if (access(soname, F_OK) == 0) found = true;
+            if (!found) {
+                snprintf(soname, sizeof(soname), "/usr/local/lib/lib%s%s", stem, sufx[s]);
+                if (access(soname, F_OK) == 0) found = true;
+            }
+        }
+        if (!found) continue;
+        /* Avoid duplicates */
+        char flag[280];
+        snprintf(flag, sizeof(flag), " -l%s", stem);
+        if (strstr(g_ffi_link_libs, flag)) continue;
+        g_ffi_link_libs_len += snprintf(g_ffi_link_libs + g_ffi_link_libs_len,
+                                         sizeof(g_ffi_link_libs) - g_ffi_link_libs_len,
+                                         "%s", flag);
+    }
+}
 
 static CompiledModule *registry_find(const char *name) {
     for (CompiledModule *m = g_compiled; m; m = m->next)
@@ -363,8 +402,102 @@ static CompiledModule *compile_one(const char *source_path,
 
     // Read + parse
     char *source = read_file(my_source_path);
+
+    /* Pre-pass: parse FFI includes to populate wisp arity table before
+     * the full wisp expansion runs. We create a temporary FFI context,
+     * scan for (include ...) lines, parse those headers, then register
+     * all function and layout arities with wisp. */
+    {
+        FFIContext *pre_ffi = ffi_context_create();
+        /* Scan source for include directives using a simple line scan */
+        const char *p = source;
+        while (*p) {
+            /* Skip whitespace */
+            while (*p == ' ' || *p == '\t') p++;
+            /* Match: include <header> or (include <header> system) */
+            if (strncmp(p, "include", 7) == 0 && (p[7] == ' ' || p[7] == '\t' || p[7] == '<')) {
+                const char *q = p + 7;
+                while (*q == ' ' || *q == '\t') q++;
+                bool system_inc = false;
+                const char *hstart = NULL;
+                const char *hend   = NULL;
+                if (*q == '<') {
+                    system_inc = true;
+                    hstart = q + 1;
+                    hend   = strchr(hstart, '>');
+                } else if (*q == '"') {
+                    system_inc = false;
+                    hstart = q + 1;
+                    hend   = strchr(hstart, '"');
+                }
+                if (hstart && hend) {
+                    char header[256];
+                    size_t hlen = hend - hstart;
+                    if (hlen < sizeof(header)) {
+                        memcpy(header, hstart, hlen);
+                        header[hlen] = '\0';
+                        ffi_parse_header(pre_ffi, header, system_inc);
+                    }
+                }
+            }
+            /* Also match s-expression form: (include "header" system) */
+            if (*p == '(' && strncmp(p+1, "include", 7) == 0) {
+                const char *q = p + 8;
+                while (*q == ' ' || *q == '\t') q++;
+                bool system_inc = false;
+                const char *hstart = NULL;
+                const char *hend   = NULL;
+                if (*q == '<') {
+                    system_inc = true;
+                    hstart = q + 1;
+                    hend   = strchr(hstart, '>');
+                } else if (*q == '"') {
+                    system_inc = false;
+                    hstart = q + 1;
+                    hend   = strchr(hstart, '"');
+                }
+                if (hstart && hend) {
+                    char header[256];
+                    size_t hlen = hend - hstart;
+                    if (hlen < sizeof(header)) {
+                        memcpy(header, hstart, hlen);
+                        header[hlen] = '\0';
+                        ffi_parse_header(pre_ffi, header, system_inc);
+                    }
+                }
+            }
+            /* Advance to next line */
+            while (*p && *p != '\n') p++;
+            if (*p == '\n') p++;
+        }
+        /* Register all FFI function arities with wisp */
+        for (int fi = 0; fi < pre_ffi->function_count; fi++)
+            wisp_register_arity(pre_ffi->functions[fi].name,
+                                pre_ffi->functions[fi].param_count);
+        /* Register all layout constructors with their field counts */
+        for (int si = 0; si < pre_ffi->struct_count; si++)
+            if (!pre_ffi->structs[si].alias_of)
+                wisp_register_arity(pre_ffi->structs[si].name,
+                                    pre_ffi->structs[si].field_count);
+        ffi_context_free(pre_ffi);
+    }
+
+    /* Register builtin arities before wisp parse so forms like
+     * define/until/if are known to the arity-driven expander. */
+    {
+        Env *tmp_env = env_create();
+        CodegenContext tmp_ctx = {0};
+        tmp_ctx.env = tmp_env;
+        register_builtins(&tmp_ctx);
+        wisp_register_arities_from_env(tmp_env);
+        env_free(tmp_env);
+    }
+
     parser_set_context(my_source_path, source);
-    ASTList exprs = parse_all(source);
+    AST *_feat_early = detect_features();
+    ast_free(_feat_early);
+    ASTList exprs = wisp_parse_all(source, my_source_path);
+
     if (exprs.count == 0) {
         fprintf(stderr, "%s: error: no expressions found\n", my_source_path);
         exit(1);
@@ -448,7 +581,9 @@ static CompiledModule *compile_one(const char *source_path,
     codegen_init(&ctx, mod_name);
     ctx.module_ctx = mod_ctx;
     ctx.test_mode  = flags->test_mode;
+    ctx.ffi        = ffi_context_create();
     register_builtins(&ctx);
+    wisp_register_arities_from_env(ctx.env);
     declare_runtime_functions(&ctx);
 
 /// Phase 4: Declare externals from compiled deps
@@ -522,36 +657,6 @@ static CompiledModule *compile_one(const char *source_path,
     LLVMBuildStore(ctx.builder, feat_list, fgv);
     env_insert(ctx.env, "*features*", ft, fgv);
 
-/* /// Phase 6: *features* global (builder is now positioned — safe to emit IR) */
-
-/*     AST *feat_ast = detect_features(); */
-/*     LLVMValueRef lf = get_rt_list_empty(&ctx); */
-/*     LLVMValueRef feat_list = LLVMBuildCall2(ctx.builder, */
-/*         LLVMGlobalGetValueType(lf), lf, NULL, 0, "feats"); */
-/*     for (size_t i = 0; i < feat_ast->list.count; i++) { */
-/*         AST *fk = feat_ast->list.items[i]; */
-/*         if (fk->type == AST_KEYWORD) { */
-/*             LLVMValueRef kwf = get_rt_value_keyword(&ctx); */
-/*             LLVMValueRef kws = LLVMBuildGlobalStringPtr(ctx.builder, */
-/*                                                         fk->keyword, "fk"); */
-/*             LLVMValueRef ka[] = {kws}; */
-/*             LLVMValueRef kv   = LLVMBuildCall2(ctx.builder, */
-/*                 LLVMGlobalGetValueType(kwf), kwf, ka, 1, "kv"); */
-/*             LLVMValueRef af   = get_rt_list_append(&ctx); */
-/*             LLVMValueRef aa[] = {feat_list, kv}; */
-/*             LLVMBuildCall2(ctx.builder, LLVMGlobalGetValueType(af), */
-/*                            af, aa, 2, ""); */
-/*         } */
-/*     } */
-/*     ast_free(feat_ast); */
-/*     Type *ft = type_list(type_keyword()); */
-/*     LLVMTypeRef flt = type_to_llvm(&ctx, ft); */
-/*     LLVMValueRef fgv = LLVMAddGlobal(ctx.module, flt, "__features__"); */
-/*     LLVMSetInitializer(fgv, LLVMConstNull(flt)); */
-/*     LLVMSetLinkage(fgv, LLVMInternalLinkage); */
-/*     LLVMBuildStore(ctx.builder, feat_list, fgv); */
-/*     env_insert(ctx.env, "*features*", ft, fgv); */
-
 /// Phase 7: Codegen top-level expressions
 
     // For the main module: call each imported library's init function first
@@ -609,19 +714,32 @@ static CompiledModule *compile_one(const char *source_path,
 /// Phase 9: Build registry entry + rename LLVM symbols to mangled names
 
     CompiledModule *cm = registry_new(mod_name, obj_path, false);
-
     for (size_t bi = 0; bi < ctx.env->size; bi++) {
         EnvEntry *ent = ctx.env->buckets[bi];
         while (ent) {
             if (ent->kind == ENV_BUILTIN || ent->module_name != NULL ||
                 ent->name[0] == '*') { ent = ent->next; continue; }
-            if (!module_decl_is_exported(module_decl, ent->name)) {
-                ent = ent->next; continue;
+            /* Force-export closure-ABI functions so inner closures work in .so */
+            bool force_export = (ent->kind == ENV_FUNC && ent->is_closure_abi);
+            if (!force_export && !module_decl_is_exported(module_decl, ent->name)) {
+                /* Also check if this is an alias for an exported symbol */
+                bool alias_exported = false;
+                if (ent->llvm_name) {
+                    const char *base = strstr(ent->llvm_name, "__");
+                    if (base) base += 2;
+                    else base = ent->llvm_name;
+                    if (module_decl_is_exported(module_decl, base))
+                        alias_exported = true;
+                }
+                if (!alias_exported) { ent = ent->next; continue; }
             }
 
             char *ms = mangle(mod_name, ent->name);
 
             if (ent->kind == ENV_FUNC) {
+                /* Never rename FFI functions — they must keep their original
+                 * symbol names so the linker can find them in libraylib etc. */
+                if (ent->is_ffi) { free(ms); ent = ent->next; continue; }
                 registry_push_func(cm, ent->name, ms,
                                    ent->return_type,
                                    ent->params, ent->param_count,
@@ -630,6 +748,21 @@ static CompiledModule *compile_one(const char *source_path,
                     const char *cur = LLVMGetValueName(ent->func_ref);
                     if (!cur || strcmp(cur, ms) != 0)
                         LLVMSetValueName2(ent->func_ref, ms, strlen(ms));
+                }
+                /* Push aliases for functions too */
+                for (size_t bj = 0; bj < ctx.env->size; bj++) {
+                    for (EnvEntry *other = ctx.env->buckets[bj]; other; other = other->next) {
+                        if (other != ent &&
+                            other->kind == ENV_FUNC &&
+                            other->module_name == NULL &&
+                            other->func_ref == ent->func_ref &&
+                            strcmp(other->name, ent->name) != 0) {
+                            registry_push_func(cm, other->name, ms,
+                                               ent->return_type,
+                                               ent->params, ent->param_count,
+                                               ent->func_ref);
+                        }
+                    }
                 }
             } else {
                 if (!ent->type) { free(ms); ent = ent->next; continue; }
@@ -640,6 +773,35 @@ static CompiledModule *compile_one(const char *source_path,
                     if (!cur || strcmp(cur, ms) != 0)
                         LLVMSetValueName2(gv, ms, strlen(ms));
                     LLVMSetLinkage(gv, LLVMExternalLinkage);
+                }
+                /* Push aliases — entries sharing the same llvm_name */
+                for (size_t bj = 0; bj < ctx.env->size; bj++) {
+                    for (EnvEntry *other = ctx.env->buckets[bj]; other; other = other->next) {
+                        if (other == ent) continue;
+                        if (other->kind != ENV_VAR) continue;
+                        if (other->module_name != NULL) continue;
+                        if (strcmp(other->name, ent->name) == 0) continue;
+                        /* Compare by LLVM global name before mangling */
+                        const char *other_llvm = other->llvm_name ? other->llvm_name : other->name;
+                        const char *ent_llvm   = ent->name; /* before Phase 9 rename, ent->name IS the llvm name */
+                        if (strcmp(other_llvm, ent_llvm) == 0) {
+                            registry_push_var(cm, other->name, ms,
+                                              other->type ? other->type : ent->type);
+                        }
+                    }
+                }
+                for (size_t bj = 0; bj < ctx.env->size; bj++) {
+                    EnvEntry *other = ctx.env->buckets[bj];
+                    while (other) {
+                        if (other != ent &&
+                            other->kind == ENV_VAR &&
+                            other->module_name == NULL &&
+                            other->value == ent->value &&
+                            strcmp(other->name, ent->name) != 0) {
+                            registry_push_var(cm, other->name, ms, other->type ? other->type : ent->type);
+                        }
+                        other = other->next;
+                    }
                 }
             }
             free(ms);
@@ -692,6 +854,7 @@ static CompiledModule *compile_one(const char *source_path,
 
 ///// Cleanup
 
+    if (ctx.ffi) ffi_libs_add(ctx.ffi);
     codegen_dispose(&ctx);
     module_context_free(mod_ctx);
     for (size_t i = 0; i < exprs.count; i++) ast_free(exprs.exprs[i]);
@@ -701,10 +864,13 @@ static CompiledModule *compile_one(const char *source_path,
     free(base);
     free(my_source_path);
     type_alias_free_all();  // clear aliases between compilations
+    wisp_clear_arities();   // clear FFI arities between compilations
     return cm;
 }
 
 static void compile(CompilerFlags *flags) {
+    g_ffi_link_libs[0]  = '\0';
+    g_ffi_link_libs_len = 0;
     compile_one(flags->input_file, flags, true);
 
     // Collect .o files: registry is prepend (newest first), reverse to get
@@ -740,7 +906,8 @@ static void compile(CompilerFlags *flags) {
 
     w += snprintf(cmd + w, sizeof(cmd) - w,
                   " -o %s /usr/local/lib/libmonad.a"
-                  " `llvm-config --ldflags --libs core` -lm -lgmp -no-pie", exec_name);
+                  " `llvm-config --ldflags --libs core` -lm -lgmp -no-pie%s",
+                  exec_name, g_ffi_link_libs);
 
 
     printf("\n[link] %s\n", cmd);

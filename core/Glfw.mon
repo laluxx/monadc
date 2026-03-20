@@ -1,0 +1,18 @@
+;;; Glfw.mon --- glfw binding for monad
+
+;; Author: Laluxx
+;; Version: 0.0.1
+;; Keywords: window glfw graphics vulkan opengl
+
+;;; Commentary:
+
+;; List operations following Guile Scheme conventions.
+;; Lists in Monad are heterogeneous singly-linked cons chains
+;; backed by the runtime's RuntimeList/RuntimeValue system.
+
+;;; Code:
+
+(module Glfw
+  [])
+
+(include <GLFW/glfw3.h>)

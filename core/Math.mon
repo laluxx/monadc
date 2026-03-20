@@ -15,17 +15,35 @@
 
 (module Math
   [double  square  cube  abs  sign
-   add     sub     mul   div-safe
    inc     dec
    zero?   positive?  negative?
    even?   odd?       divisible?
    gcd     lcm        factorial  fib
    prime?  prime-check?
    clamp   min2  max2
-   pow     sqrt-int
+   pow     sqrt
    naturals  positives  evens  odds
    sum  product  sum-range  product-range
-   pi  e  tau  phi])
+   pi  e  tau  phi
+   floor ceiling round truncate
+   deg->rad sin mod-f ls exp pow
+])
+
+;;; Constants
+
+(define [pi   :: Float] 3.141592653589793  :alias π)
+(define [tau  :: Float] 6.283185307179586  :alias τ)
+(define [pi/2 :: Float] 1.5707963267948966 :alias π/2)
+(define [e    :: Float] 2.718281828459045  :alias ℯ)
+(define [phi  :: Float] 1.6180339887498949 :alias ϕ)
+
+;;; Infinite sequences
+
+
+(define [naturals  :: List] '(0..))
+(define [positives :: List] '(1..))
+(define [evens     :: List] '(0,2..))
+(define [odds      :: List] '(1,3..))
 
 ;;; Arithmetic helpers
 
@@ -49,9 +67,103 @@
   "Return X * X * X."
   (* x (* x x)))
 
-(define (abs [x :: Int] -> Int)
+(define (abs [x :: Float] -> Float)
   "Return the absolute value of X."
-  (if (< x 0) (- 0 x) x))
+  (if (x `<` 0.0) (0.0 `-` x) x))
+
+(define (floor [x :: Float] -> Int)
+  :doc "Return the largest integer <= X."
+  :alias ⌊
+  (let [i (Int x)]
+    (if (= (Float i) x) i
+        (if (x `<` 0.0) (i `-` 1) i))))
+
+(define (ceiling [x :: Float] -> Int)
+  :doc "Return the smallest integer >= X."
+  :alias ⌈
+  (let [i (Int x)]
+    (if ((Float i) `=` x) i
+        (if (x `>` 0.0) (i `+` 1) i))))
+
+(define (round [x :: Float] -> Int)
+  "Return the nearest integer to X."
+  (if (x `>=` 0.0)
+      (floor (x `+` 0.5))
+      (ceiling (x `-` 0.5))))
+
+(define (truncate [x :: Float] -> Int)
+  "Return the integer part of X, truncating toward zero."
+  (Int x))
+
+
+(define (pow [base :: Float] [exp :: Float] -> Float)
+  :doc "Raise BASE to the power EXP."
+  :alias ^
+  (if (exp `=` 0.0) 1.0
+      (if (exp `>` 0.0)
+          (base `*` (pow base (exp `-` 1.0)))
+          (1.0 `/` (pow base (0.0 `-` exp))))))
+
+;; Exponential via Taylor series: e^x = sum(x^n / n!)
+(define (exp [x :: Float] -> Float)
+  "`e' raised to the power X."
+  (define (iter [sum :: Float] [term :: Float] [n :: Int] -> Float)
+    (if ((abs term) `<` 1e-15)
+        sum
+        (iter (sum `+` term)
+              (term `*` (x `/` (Float n)))
+              (n `+` 1))))
+  (iter 1.0 x 2))
+
+;; Natural log via Newton's method: ln(x) using exp
+
+(define (ln [x :: Float] -> Float)
+  "Natural logarithm of X."
+  (define (iter [guess :: Float] [n :: Int] -> Float)
+    (if (<= n 0)
+        guess
+        (iter (+ guess (- (/ x (exp guess)) 1.0))
+              (- n 1))))
+  (if (<= x 0.0)
+      0.0
+      (iter 1.0 50)))
+
+(define (sqrt [x :: Float] -> Float)
+  :doc "Square root of X via Newton-Raphson."
+  :alias √
+  (define (iter [guess :: Float] -> Float)
+    (let [next ((guess `+` (x `/` guess)) `/` 2.0)]
+      (if ((abs (next `-` guess)) `<` 1e-10)
+          next
+          (iter next))))
+  (if (x `<=` 0.0) 0.0 (iter (x `/` 2.0))))
+
+
+;; TODO Find a way to get rid of this i only want `mod`
+(define (mod-f [x :: Float] [y :: Float] -> Float)
+  "Float modulo."
+  (- x (* y (floor (/ x y)))))
+
+;; sin via Taylor: sin(x) = x - x^3/3! + x^5/5! - ...
+
+(define (deg->rad [d :: Float] -> Float)
+  "Convert degrees to radians."
+  (* d (/ pi 180.0)))
+
+(define (sin [x :: Float] -> Float)
+  "Sine of X in radians."
+  (let [x (mod-f x tau)]
+    (define (iter [sum :: Float] [term :: Float] [n :: Int] -> Float)
+      (if (< (abs term) 1e-15)
+          sum
+          (iter (+ sum term)
+                (* (- 0.0 term)
+                   (/ (* x x)
+                      (Float (* (+ (* 2 n) 1) (* 2 n)))))
+                (+ n 1))))
+    (iter x (/ (* (- 0.0 x) (* x x)) 6.0) 2)))
+
+
 
 (define (sign [x :: Int] -> Int)
   "Return -1, 0, or 1 depending on the sign of X."
@@ -59,25 +171,6 @@
     [(< x 0) -1]
     [(> x 0)  1]
     [else     0]))
-
-;; TODO Those should not be needed because + and - should
-;; be able to be passed as functions to higher order functions.
-
-(define (add [x :: Int] -> [y :: Int] -> Int)
-  "Return X + Y."
-  (+ x y))
-
-(define (sub [x :: Int] -> [y :: Int] -> Int)
-  "Return X - Y."
-  (- x y))
-
-(define (mul [x :: Int] -> [y :: Int] -> Int)
-  "Return X * Y."
-  (* x y))
-
-(define (div-safe [x :: Int] -> [y :: Int] -> Int)
-  "Return X / Y, or 0 if Y is zero."
-  (if (= y 0) 0 (/ x y)))
 
 ;;; Predicates
 
@@ -168,34 +261,6 @@
   "Return the larger of A and B."
   (if (> a b) a b))
 
-;;; Powers and roots
-
-(define (pow [base :: Int] -> [exp :: Int] -> Int)
-  "Return BASE raised to EXP via fast exponentiation. EXP must be >= 0."
-  (cond
-    [(= exp 0)          1]
-    [(= (mod exp 2) 0)  (square (pow base (/ exp 2)))]
-    [else               (* base (pow base (- exp 1)))]))
-
-(define (sqrt-int [n :: Int] -> Int)
-  "Return the integer square root of N (floor of sqrt). O(sqrt N)."
-  (define (sqrt-iter [i :: Int] -> Int)
-    (if (> (* i i) n) (- i 1) (sqrt-iter (+ i 1))))
-  (sqrt-iter 0))
-
-;;; Constants
-
-(define [pi  :: Float] 3.141592653589793)
-(define [e   :: Float] 2.718281828459045)
-(define [tau :: Float] 6.283185307179586)
-(define [phi :: Float] 1.6180339887498949)
-
-;;; Infinite sequences
-
-(define [naturals  :: List] '(0..))
-(define [positives :: List] '(1..))
-(define [evens     :: List] '(0,2..))
-(define [odds      :: List] '(1,3..))
 
 ;;; Summation and product
 
@@ -305,13 +370,13 @@
   (assert-eq (pow 3 3)   27   "pow 3^3")
   (assert-eq (pow 10 3)  1000 "pow 10^3")
 
-  ;; sqrt-int
-  (assert-eq (sqrt-int 0)   0  "sqrt-int 0")
-  (assert-eq (sqrt-int 1)   1  "sqrt-int 1")
-  (assert-eq (sqrt-int 4)   2  "sqrt-int 4")
-  (assert-eq (sqrt-int 9)   3  "sqrt-int 9")
-  (assert-eq (sqrt-int 10)  3  "sqrt-int 10 floor")
-  (assert-eq (sqrt-int 100) 10 "sqrt-int 100")
+  ;; sqrt
+  (assert-eq (sqrt 0)   0  "sqrt 0")
+  (assert-eq (sqrt 1)   1  "sqrt 1")
+  (assert-eq (sqrt 4)   2  "sqrt 4")
+  (assert-eq (sqrt 9)   3  "sqrt 9")
+  (assert-eq (sqrt 10)  3  "sqrt 10 floor")
+  (assert-eq (sqrt 100) 10 "sqrt 100")
 
   ;; sum / product
   (assert-eq (sum     '(1 2 3 4 5)) 15  "sum list")

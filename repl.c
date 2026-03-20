@@ -22,6 +22,7 @@
 #include "module.h"
 #include "infer.h"
 #include "ffi.h"
+#include "features.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -153,13 +154,13 @@ static void *layout_ptr_get(const char *name) {
 }
 
 // Called from JIT-compiled code to register a layout heap pointer
-void __layout_ptr_set(const char *name, void *ptr) {
+__attribute__((weak)) void __layout_ptr_set(const char *name, void *ptr) {
     layout_ptr_set(name, ptr);
 }
 
 
 // Called from JIT-compiled code to retrieve a layout heap pointer
-void *__layout_ptr_get(const char *name) {
+__attribute__((weak)) void *__layout_ptr_get(const char *name) {
     void *result = layout_ptr_get(name);
     return result;
 }
@@ -242,8 +243,7 @@ static void rt_sym_table_init(void) {
     ADD(__print_i128);
     ADD(__print_u128);
     ADD(rt_closure_calln);
-    ADD(rt_closure_call1);
-    ADD(rt_closure_call2);
+    ADD(rt_closure_get_env);
 
 
     /* Unboxing */
@@ -1380,6 +1380,19 @@ static bool close_and_run(REPLContext *ctx) {
     for (size_t bi = 0; bi < env->size; bi++) {
         for (EnvEntry *e = env->buckets[bi]; e; e = e->next) {
             if (e->kind == ENV_FUNC && e->func_ref && !e->module_name) {
+                /* Map mangled alias names to the same address as the original */
+                char *alias_mangled = mangle_unicode_name(e->name);
+                if (alias_mangled) {
+                    LLVMValueRef in_mod_alias = LLVMGetNamedFunction(mod, alias_mangled);
+                    if (in_mod_alias) {
+                        uint64_t orig_addr = LLVMGetFunctionAddress(ctx->engine,
+                                                LLVMGetValueName(e->func_ref));
+                        if (orig_addr)
+                            LLVMAddGlobalMapping(ctx->engine, in_mod_alias,
+                                                 (void*)(uintptr_t)orig_addr);
+                    }
+                    free(alias_mangled);
+                }
                 /* For non-ASCII function names, map the mangled declaration */
                 const char *fname = (e->llvm_name && e->llvm_name[0])
                                     ? e->llvm_name : e->name;
@@ -1689,7 +1702,8 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
         for (int i = 0; all_objs[i]; i++)
             w += snprintf(cmd + w, sizeof(cmd) - w, " %s", all_objs[i]);
         w += snprintf(cmd + w, sizeof(cmd) - w,
-                      " -Wl,--unresolved-symbols=ignore-all -lm 2>&1");
+                      " -Wl,--unresolved-symbols=ignore-all"
+                      " /usr/local/lib/libmonad.a -lm 2>&1");
         free(all_objs);
 
         if (system(cmd) != 0) {
@@ -1714,6 +1728,37 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
     for (char *p = init_name + 8; *p; p++) if (*p == '.') *p = '_';
     void (*init_fn)(void) = (void(*)(void))dlsym(handle, init_name);
     if (init_fn) init_fn();
+
+    /* Register alias symbols from env — these have Unicode names that
+     * nm won't find but their addresses are in the dlopen'd .so       */
+    {
+        Env *env = ctx->cg.env;
+        for (size_t bi = 0; bi < env->size; bi++) {
+            for (EnvEntry *e = env->buckets[bi]; e; e = e->next) {
+                if (!e->module_name ||
+                    strcmp(e->module_name, mod_name) != 0) continue;
+                /* Try to find the symbol by its mangled llvm_name */
+                const char *lname = (e->llvm_name && e->llvm_name[0])
+                                  ? e->llvm_name : e->name;
+                void *addr = dlsym(handle, lname);
+                if (!addr) {
+                    /* Try mangled version of the name */
+                    char *mangled = mangle_unicode_name(lname);
+                    if (mangled) {
+                        addr = dlsym(handle, mangled);
+                        if (addr) register_imported_sym(mangled, addr);
+                        free(mangled);
+                    }
+                }
+                if (addr) {
+                    register_imported_sym(lname, addr);
+                    /* Also register under the original name */
+                    if (strcmp(lname, e->name) != 0)
+                        register_imported_sym(e->name, addr);
+                }
+            }
+        }
+    }
 
     /* ------------------------------------------------------------------ */
     /* Step 4: Register symbol addresses from the .so                      */
@@ -1740,6 +1785,14 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
             void *addr = dlsym(handle, sym);
             if (!addr) continue;
             register_imported_sym(sym, addr);
+            fprintf(stderr, "DEBUG nm: sym='%s' addr=%p\n", sym, addr);
+            /* Also register under any further-mangled name that
+             * mangle_unicode_name would produce for this symbol */
+            char *remangled = mangle_unicode_name(sym);
+            if (remangled) {
+                register_imported_sym(remangled, addr);
+                free(remangled);
+            }
             count++;
         }
         pclose(nm);
@@ -1845,8 +1898,54 @@ void repl_init(REPLContext *ctx) {
     arena_init(&g_eval_arena, 4 * 1024 * 1024);
     ctx->expr_count = 0;
 
+    /* Populate feature detection and build *features* runtime variable */
+    {
+        AST *_feat = detect_features();
+        ast_free(_feat);
+    }
+
     /* First real module */
     fresh_module(ctx, "__repl_0");
+    open_wrapper(ctx);
+
+    {
+        AST *feat_ast = detect_features();
+        LLVMValueRef feat_list;
+        LLVMValueRef empty_fn = get_rt_list_empty(&ctx->cg);
+        feat_list = LLVMBuildCall2(ctx->cg.builder,
+            LLVMGlobalGetValueType(empty_fn), empty_fn, NULL, 0, "feats");
+        for (int i = (int)feat_ast->list.count - 1; i >= 0; i--) {
+            AST *fk = feat_ast->list.items[i];
+            if (fk->type != AST_KEYWORD) continue;
+            LLVMValueRef kwf = get_rt_value_keyword(&ctx->cg);
+            LLVMValueRef kws = LLVMBuildGlobalStringPtr(ctx->cg.builder, fk->keyword, "fk");
+            LLVMValueRef ka[] = {kws};
+            LLVMValueRef kv   = LLVMBuildCall2(ctx->cg.builder,
+                LLVMGlobalGetValueType(kwf), kwf, ka, 1, "kv");
+            LLVMValueRef cons_fn = get_rt_list_cons(&ctx->cg);
+            LLVMTypeRef  ptr     = LLVMPointerType(LLVMInt8TypeInContext(ctx->cg.context), 0);
+            LLVMTypeRef  cons_ft = LLVMFunctionType(ptr, (LLVMTypeRef[]){ptr, ptr}, 2, 0);
+            LLVMValueRef ca[]    = {kv, feat_list};
+            feat_list = LLVMBuildCall2(ctx->cg.builder, cons_ft, cons_fn, ca, 2, "feat_list");
+        }
+        ast_free(feat_ast);
+        Type *ft = type_list(type_keyword());
+        LLVMTypeRef flt = type_to_llvm(&ctx->cg, ft);
+        LLVMValueRef fgv = LLVMAddGlobal(ctx->cg.module, flt, "__features__");
+        LLVMSetInitializer(fgv, LLVMConstNull(flt));
+        LLVMSetLinkage(fgv, LLVMExternalLinkage);
+        LLVMBuildStore(ctx->cg.builder, feat_list, fgv);
+        EnvEntry *feat_entry = NULL;
+        env_insert(ctx->cg.env, "*features*", ft, fgv);
+        feat_entry = env_lookup(ctx->cg.env, "*features*");
+        if (feat_entry) feat_entry->llvm_name = strdup("__features__");
+        close_and_run(ctx);
+    }
+
+    snprintf(g_wrapper_name, sizeof(g_wrapper_name), WRAPPER_FMT, g_wrapper_seq++);
+    fresh_module(ctx, "__repl_1");
+    ctx->expr_count = 1;
+
 
     printf("\n");
 }
