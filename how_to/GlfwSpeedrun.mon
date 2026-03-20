@@ -1,0 +1,13 @@
+include <GLFW/glfw3.h>
+
+glfwInit
+
+define window
+glfwCreateWindow 640 480 "No bindings?!" nil nil
+
+until glfwWindowShouldClose window
+  glfwSwapBuffers window
+  glfwPollEvents
+
+glfwDestroyWindow window
+glfwTerminate

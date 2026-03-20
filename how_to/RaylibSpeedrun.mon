@@ -1,22 +1,21 @@
-;; include <raylib.h>
+(include <raylib.h>)
 
-;; InitWindow 1920 1080 "No Bindings!?"
+InitWindow 1920 1080 "No Bindings!?"
 
-;; define color Color 33 33 33 0
-;;   "Is this Hakell??"
+define color Color 33 33 33 0
+  "docstring"
 
-;; until WindowShouldClose
-;;   BeginDrawing
-;;   ClearBackground color
-;;   DrawFPS 600 600
-;;   EndDrawing
+until WindowShouldClose
+  BeginDrawing
+  ClearBackground color
+  DrawFPS 600 600
+  EndDrawing
 
+;; define id λx.x
 
-define id λx.x
-
-if 3 `<` 10
-  show "yes"
-  show "no"
+;; if 3 `<` 10
+;;   show "yes"
+;;   show "no"
 
 
 

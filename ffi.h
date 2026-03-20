@@ -108,4 +108,8 @@ Type *ffi_map_c_type(const char *c_type_spelling);
 /* Pretty-print the FFI context (for debugging) */
 void ffi_dump(FFIContext *ctx);
 
+
+bool ffi_cache_save(FFIContext *ctx, const char *header_path);
+bool ffi_cache_load(FFIContext *ctx, const char *header_path);
+
 #endif /* FFI_H */

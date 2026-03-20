@@ -64,19 +64,73 @@ static void ffi_libs_add(FFIContext *ffi) {
         stem[sizeof(stem)-1] = '\0';
         char *dot = strrchr(stem, '.');
         if (dot) *dot = '\0';
-        /* Check the lib actually exists before adding */
-        const char *sufx[] = {".so",".so.5",".so.4",".so.3",".so.2",".so.1",NULL};
-        bool found = false;
-        for (int s = 0; sufx[s] && !found; s++) {
-            char soname[512];
-            snprintf(soname, sizeof(soname), "/usr/lib/lib%s%s", stem, sufx[s]);
-            if (access(soname, F_OK) == 0) found = true;
-            if (!found) {
-                snprintf(soname, sizeof(soname), "/usr/local/lib/lib%s%s", stem, sufx[s]);
-                if (access(soname, F_OK) == 0) found = true;
+
+        /* If stem is a generic name like the header filename without version,
+         * also try the parent directory name as stem.
+         * e.g. /usr/include/SDL3/SDL.h -> try "SDL3" before "SDL" */
+        char dir_stem[256] = {0};
+        if (base > hdr + 1) {
+            const char *dir_end = base - 1; /* points at '/' before filename */
+            const char *dir_start = dir_end;
+            while (dir_start > hdr && *(dir_start-1) != '/') dir_start--;
+            size_t dlen = dir_end - dir_start;
+            if (dlen > 0 && dlen < sizeof(dir_stem)) {
+                memcpy(dir_stem, dir_start, dlen);
+                dir_stem[dlen] = '\0';
             }
         }
-        if (!found) continue;
+        /* Try progressively shorter stems by stripping trailing digits
+         * e.g. glfw3 -> glfw, gl2 -> gl, so headers like glfw3.h and
+         * gl2.h find their actual libraries libglfw.so and libGL.so */
+        const char *sufx[] = {".so",".so.5",".so.4",".so.3",".so.2",".so.1",NULL};
+        bool found = false;
+        char try_stem[256];
+        strncpy(try_stem, stem, sizeof(try_stem) - 1);
+        try_stem[sizeof(try_stem)-1] = '\0';
+
+        /* Try parent directory name first (e.g. SDL3 from SDL3/SDL.h),
+         * then original stem, then progressively strip trailing digits. */
+        if (dir_stem[0] && strcmp(dir_stem, stem) != 0) {
+            for (int s = 0; sufx[s] && !found; s++) {
+                char soname[512];
+                snprintf(soname, sizeof(soname), "/usr/lib/lib%s%s", dir_stem, sufx[s]);
+                if (access(soname, F_OK) == 0) { found = true; strncpy(stem, dir_stem, sizeof(stem)-1); break; }
+                snprintf(soname, sizeof(soname), "/usr/local/lib/lib%s%s", dir_stem, sufx[s]);
+                if (access(soname, F_OK) == 0) { found = true; strncpy(stem, dir_stem, sizeof(stem)-1); break; }
+            }
+        }
+
+        /* Try original stem first, then progressively strip trailing digits.
+         * e.g. SDL3 finds libSDL3.so before trying libSDL.so
+         *      glfw3 doesn't find libglfw3.so so strips to libglfw.so      */
+        while (!found && try_stem[0]) {
+            for (int s = 0; sufx[s] && !found; s++) {
+                char soname[512];
+                snprintf(soname, sizeof(soname), "/usr/lib/lib%s%s", try_stem, sufx[s]);
+                if (access(soname, F_OK) == 0) { found = true; break; }
+                snprintf(soname, sizeof(soname), "/usr/local/lib/lib%s%s", try_stem, sufx[s]);
+                if (access(soname, F_OK) == 0) { found = true; break; }
+            }
+            if (found) {
+                strncpy(stem, try_stem, sizeof(stem) - 1);
+                break;
+            }
+            /* Strip one trailing digit and retry */
+            size_t slen = strlen(try_stem);
+            if (slen > 1 && try_stem[slen-1] >= '0' && try_stem[slen-1] <= '9')
+                try_stem[slen-1] = '\0';
+            else
+                break;
+        }
+
+
+        /* Check the lib actually exists before adding */
+        if (!found) {
+            /* fprintf(stderr, "ffi_libs_add: no lib found for stem '%s' (from '%s')\n", stem, hdr); */
+            continue;
+        }
+        /* fprintf(stderr, "ffi_libs_add: adding -l%s (from '%s')\n", stem, hdr); */
+
         /* Avoid duplicates */
         char flag[280];
         snprintf(flag, sizeof(flag), " -l%s", stem);
@@ -369,6 +423,16 @@ static char *get_obj_path(const char *source_path) {
 static CompiledModule *compile_one(const char *source_path,
                                     CompilerFlags *flags,
                                     bool is_main_module) {
+
+    struct timespec _phase_t0, _phase_t1;
+    #define PHASE_START() clock_gettime(CLOCK_MONOTONIC, &_phase_t0)
+    #define PHASE_END(name) do { \
+        clock_gettime(CLOCK_MONOTONIC, &_phase_t1); \
+        double _ms = (_phase_t1.tv_sec - _phase_t0.tv_sec) * 1000.0 + \
+                     (_phase_t1.tv_nsec - _phase_t0.tv_nsec) / 1e6; \
+        if (_ms > 50.0) printf("  [phase] %s: %.1f ms\n", name, _ms);   \
+    } while(0)
+
     // Defensively own the path — callers may free dep_src right after returning
     char *my_source_path = strdup(source_path);
 
@@ -402,6 +466,8 @@ static CompiledModule *compile_one(const char *source_path,
 
     // Read + parse
     char *source = read_file(my_source_path);
+
+    PHASE_START();
 
     /* Pre-pass: parse FFI includes to populate wisp arity table before
      * the full wisp expansion runs. We create a temporary FFI context,
@@ -482,6 +548,8 @@ static CompiledModule *compile_one(const char *source_path,
         ffi_context_free(pre_ffi);
     }
 
+    PHASE_END("ffi pre-pass");
+
     /* Register builtin arities before wisp parse so forms like
      * define/until/if are known to the arity-driven expander. */
     {
@@ -497,6 +565,8 @@ static CompiledModule *compile_one(const char *source_path,
     AST *_feat_early = detect_features();
     ast_free(_feat_early);
     ASTList exprs = wisp_parse_all(source, my_source_path);
+
+    PHASE_END("wisp+parse");
 
     if (exprs.count == 0) {
         fprintf(stderr, "%s: error: no expressions found\n", my_source_path);
@@ -573,6 +643,7 @@ static CompiledModule *compile_one(const char *source_path,
 
 /// Phase 3: LLVM setup
 
+    PHASE_START();
     LLVMInitializeNativeTarget();
     LLVMInitializeNativeAsmPrinter();
     LLVMInitializeNativeAsmParser();
@@ -582,9 +653,12 @@ static CompiledModule *compile_one(const char *source_path,
     ctx.module_ctx = mod_ctx;
     ctx.test_mode  = flags->test_mode;
     ctx.ffi        = ffi_context_create();
+    PHASE_END("llvm init");
+    PHASE_START();
     register_builtins(&ctx);
     wisp_register_arities_from_env(ctx.env);
     declare_runtime_functions(&ctx);
+    PHASE_END("llvm init + builtins");
 
 /// Phase 4: Declare externals from compiled deps
 
@@ -659,6 +733,7 @@ static CompiledModule *compile_one(const char *source_path,
 
 /// Phase 7: Codegen top-level expressions
 
+    PHASE_START();
     // For the main module: call each imported library's init function first
     // so their top-level variable stores (e.g. phi = 3.14) run before we use them.
     if (is_main_module) {
@@ -698,6 +773,8 @@ static CompiledModule *compile_one(const char *source_path,
         }
         last = codegen_expr(&ctx, expr);
     }
+
+    PHASE_END("codegen");
 
 /// Phase 8: Terminate function
 
@@ -844,6 +921,7 @@ static CompiledModule *compile_one(const char *source_path,
 
 /// Phase 11: Emit object file (skipped if .o is already up to date)
 
+    PHASE_START();
     if (!skip_emit) {
         if (!emit_object(ctx.module, obj_path)) {
             fprintf(stderr, "failed to emit object for %s\n", my_source_path);
@@ -851,6 +929,8 @@ static CompiledModule *compile_one(const char *source_path,
         }
         printf("  wrote object: %s\n", obj_path);
     }
+
+    PHASE_END("emit object");
 
 ///// Cleanup
 
@@ -898,9 +978,16 @@ static void compile(CompilerFlags *flags) {
         exec_name = exec_base;
     }
 
+    const char *ld_flag = "";
+    if (access("/usr/bin/mold", X_OK) == 0 ||
+        access("/usr/local/bin/mold", X_OK) == 0)
+        ld_flag = " -fuse-ld=mold";
+    else if (access("/usr/bin/ld.lld", X_OK) == 0 ||
+             access("/usr/local/bin/ld.lld", X_OK) == 0)
+        ld_flag = " -fuse-ld=lld";
 
     char cmd[4096];
-    int w = snprintf(cmd, sizeof(cmd), "gcc");
+    int w = snprintf(cmd, sizeof(cmd), "clang%s", ld_flag);
     for (size_t i = 0; i < n; i++)
         w += snprintf(cmd + w, sizeof(cmd) - w, " %s", objs[i]);
 
@@ -911,7 +998,13 @@ static void compile(CompilerFlags *flags) {
 
 
     printf("\n[link] %s\n", cmd);
+    struct timespec _lt0, _lt1;
+    clock_gettime(CLOCK_MONOTONIC, &_lt0);
     int rc = system(cmd);
+    clock_gettime(CLOCK_MONOTONIC, &_lt1);
+    double _lms = (_lt1.tv_sec - _lt0.tv_sec) * 1000.0 +
+                  (_lt1.tv_nsec - _lt0.tv_nsec) / 1e6;
+    printf("[link] %.0f ms\n", _lms);
     if (rc == 0) {
         /* printf("[done] %s", exec_name); */
         printf("[done] %s\n", exec_name);

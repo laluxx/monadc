@@ -2,7 +2,6 @@
 #include "codegen.h"
 #include "env.h"
 #include "types.h"
-#include "runtime.h"
 #include <clang-c/Index.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -38,7 +37,7 @@ FFIContext *ffi_context_create(void) {
     ctx->function_cap  = 64;
     ctx->constant_cap  = 256;
     ctx->struct_cap    = 64;
-    ctx->included_cap  = 32;
+    ctx->included_cap  = 512;
     ctx->functions  = malloc(sizeof(FFIFunction)  * ctx->function_cap);
     ctx->constants  = malloc(sizeof(FFIConstant)  * ctx->constant_cap);
     ctx->structs    = malloc(sizeof(FFIStruct)     * ctx->struct_cap);
@@ -280,6 +279,21 @@ static enum CXChildVisitResult visitor(CXCursor cursor,
     CXSourceLocation loc = clang_getCursorLocation(cursor);
     if (clang_Location_isInSystemHeader(loc) && !state->in_system_header)
         return CXChildVisit_Continue;
+
+    /* Track all header files we visit so ffi_parse_struct_macros can
+     * scan them all for macros clang's evaluator missed */
+    {
+        CXFile   file;
+        unsigned line, col, offset;
+        clang_getExpansionLocation(loc, &file, &line, &col, &offset);
+        if (file) {
+            CXString fname = clang_getFileName(file);
+            const char *fpath = clang_getCString(fname);
+            if (fpath && fpath[0] && !already_included(state->ffi, fpath))
+                state->ffi->included[state->ffi->included_count++] = my_strdup(fpath);
+            clang_disposeString(fname);
+        }
+    }
 
     enum CXCursorKind kind = clang_getCursorKind(cursor);
 
@@ -588,7 +602,7 @@ static char *extract_doc_for_function(const char *src, const char *fname) {
                 }
                 if (open > src && *(open-1) == '/') {
                     const char *content = open + 1; /* skip the '*' of opening */
-                    /* skip whitespace/newline immediately after opening /* */
+                    // skip whitespace/newline immediately after opening /*
                     while (*content == ' ' || *content == '\t' ||
                            *content == '\n' || *content == '\r') content++;
                     /* skip leading * on first line if present */
@@ -644,14 +658,27 @@ bool ffi_parse_header(FFIContext *ctx, const char *header_path,
     /* Avoid double-parsing */
     if (already_included(ctx, header_path)) return true;
 
-    /* Record as included */
+    /* Record as included — use a larger initial cap since sub-headers
+     * will be added during the visitor pass */
     if (ctx->included_count >= ctx->included_cap) {
         ctx->included_cap *= 2;
         ctx->included = realloc(ctx->included,
                                 sizeof(char *) * ctx->included_cap);
     }
+
     char *resolved_path = ffi_resolve_header(header_path, system_include);
     ctx->included[ctx->included_count++] = resolved_path;
+
+    /* Try cache first */
+    struct timespec t0, t1;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    if (ffi_cache_load(ctx, resolved_path)) {
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        double ms = (t1.tv_sec - t0.tv_sec) * 1000.0 +
+                    (t1.tv_nsec - t0.tv_nsec) / 1e6;
+        printf("FFI: cache loaded in %.1f ms\n", ms);
+        return true;
+    }
 
     /* Build a small translation unit that just #includes the header */
     char tu_src[512];
@@ -710,6 +737,7 @@ bool ffi_parse_header(FFIContext *ctx, const char *header_path,
     if (resource_found && resource_arg[0])
         clang_args[n_args++] = resource_arg;
 
+    clock_gettime(CLOCK_MONOTONIC, &t0);
     CXIndex index = clang_createIndex(0, 0);
 
     /* Parse from an in-memory buffer */
@@ -780,9 +808,18 @@ bool ffi_parse_header(FFIContext *ctx, const char *header_path,
     }
 
     /* extract struct-literal macros and numeric macros
-     * that clang's evaluator couldn't handle */
-    ffi_parse_struct_macros(ctx, ctx->included[ctx->included_count - 1]);
+     * that clang's evaluator couldn't handle.
+     * Scan ALL resolved headers, not just the top-level one — constants
+     * like SDL_INIT_VIDEO are defined in sub-headers (SDL_init.h etc.) */
+    for (int i = 0; i < ctx->included_count; i++)
+        ffi_parse_struct_macros(ctx, ctx->included[i]);
 
+    /* Save to cache for next time */
+    ffi_cache_save(ctx, resolved_path);
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    double ms = (t1.tv_sec - t0.tv_sec) * 1000.0 +
+                (t1.tv_nsec - t0.tv_nsec) / 1e6;
+    printf("FFI: full parse in %.1f ms (cache saved)\n", ms);
     return true;
 }
 
@@ -798,8 +835,15 @@ bool ffi_parse_header(FFIContext *ctx, const char *header_path,
 // missed (struct literals, expressions referencing other macros).
 //
 static void ffi_parse_struct_macros(FFIContext *ctx, const char *header_path) {
+    fprintf(stderr, "ffi_parse_struct_macros: header_path='%s'\n", header_path);
+    fflush(stderr);
     FILE *f = fopen(header_path, "r");
-    if (!f) return;
+    if (!f) {
+        fprintf(stderr, "ffi_parse_struct_macros: failed to open file\n");
+        return;
+    }
+    fprintf(stderr, "ffi_parse_struct_macros: file opened ok\n");
+    fflush(stderr);
 
     fseek(f, 0, SEEK_END);
     long sz = ftell(f);
@@ -845,8 +889,15 @@ static void ffi_parse_struct_macros(FFIContext *ctx, const char *header_path) {
         memcpy(name, name_start, name_len);
         name[name_len] = '\0';
 
+        if (strstr(name, "SDL_INIT"))
+            fprintf(stderr, "ffi_parse_struct_macros: saw '%s' p[0]='%c' already=%d\n",
+                    name, *p, already_have_constant(ctx, name));
+
         /* Skip function-like macros */
-        if (*p == '(') {
+        if (*p == '(') {            /* But only if the '(' immediately follows the name with no space
+             * i.e. #define FOO(x) — function-like macro definition.
+             * We already consumed the name and whitespace so if we're at '('
+             * it must be a parameter list. Skip it. */
             while (*p && *p != '\n') p++;
             continue;
         }
@@ -860,6 +911,7 @@ static void ffi_parse_struct_macros(FFIContext *ctx, const char *header_path) {
         while (*p && *p != '\n' && vi < (int)sizeof(value) - 1) {
             if (*p == '\\' && *(p+1) == '\n') { p += 2; continue; }
             if (*p == '/' && *(p+1) == '/') break;  /* line comment */
+            if (*p == '/' && *(p+1) == '*') break;  /* block comment */
             value[vi++] = *p++;
         }
         value[vi] = '\0';
@@ -870,6 +922,7 @@ static void ffi_parse_struct_macros(FFIContext *ctx, const char *header_path) {
 
         if (!value[0]) continue;
         if (already_have_constant(ctx, name)) continue;
+        fprintf(stderr, "ffi_parse_struct_macros: name='%s' value='%s'\n", name, value);
 
         /* ── Pattern 1: struct literal macro ──────────────────────────────
          * CLITERAL(TypeName){ a, b, c, d }
@@ -941,6 +994,41 @@ static void ffi_parse_struct_macros(FFIContext *ctx, const char *header_path) {
         /* ── Pattern 2: plain numeric literal ─────────────────────────── */
         {
             const char *v = value;
+            while (*v == ' ') v++;
+            /* Strip common integer cast wrappers:
+             * SDL_UINT64_C(x), UINT64_C(x), INT64_C(x), (uint64_t)(x) etc.
+             * These are used to define 64-bit constants portably. */
+            static const char *cast_wrappers[] = {
+                "SDL_UINT64_C", "SDL_INT64_C",
+                "UINT64_C", "INT64_C", "UINT32_C", "INT32_C",
+                "UINT16_C", "INT16_C", "UINT8_C",  "INT8_C",
+                "(uint64_t)", "(int64_t)", "(uint32_t)", "(int32_t)",
+                "(Uint64)", "(Sint64)", "(Uint32)", "(Sint32)",
+                NULL
+            };
+            for (int wi = 0; cast_wrappers[wi]; wi++) {
+                size_t wlen = strlen(cast_wrappers[wi]);
+                if (strncmp(v, cast_wrappers[wi], wlen) == 0) {
+                    v += wlen;
+                    while (*v == ' ') v++;
+                    /* Strip surrounding parens if present */
+                    if (*v == '(') {
+                        v++;
+                        /* find matching ) */
+                        const char *end = v;
+                        while (*end && *end != ')') end++;
+                        /* copy inner value to a temp buffer */
+                        static char inner[64];
+                        size_t ilen = end - v;
+                        if (ilen < sizeof(inner)) {
+                            memcpy(inner, v, ilen);
+                            inner[ilen] = '\0';
+                            v = inner;
+                        }
+                    }
+                    break;
+                }
+            }
             while (*v == '(' || *v == ' ') v++;
             /* Strip trailing f/F/l/L float suffixes into a temp buffer */
             char numval[256];
@@ -948,7 +1036,8 @@ static void ffi_parse_struct_macros(FFIContext *ctx, const char *header_path) {
             numval[sizeof(numval)-1] = '\0';
             int nlen = strlen(numval);
             while (nlen > 0 && (numval[nlen-1] == 'f' || numval[nlen-1] == 'F' ||
-                                 numval[nlen-1] == 'l' || numval[nlen-1] == 'L')) {
+                                 numval[nlen-1] == 'l' || numval[nlen-1] == 'L' ||
+                                 numval[nlen-1] == 'u' || numval[nlen-1] == 'U')) {
                 numval[--nlen] = '\0';
             }
             char *end;
@@ -1021,9 +1110,8 @@ static void ffi_parse_struct_macros(FFIContext *ctx, const char *header_path) {
 /// Inject into codegen env
 
 void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
-    fprintf(stderr, "ffi_inject_into_env: cg=%p cg->env=%p\n",
-            (void*)cg, (void*)cg->env);
-    fflush(stderr);
+    struct timespec _t0, _t1;
+    clock_gettime(CLOCK_MONOTONIC, &_t0);
     LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(cg->context), 0);
 
     static const char *protected[] = {
@@ -1081,21 +1169,21 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
     }
 
     /* ── PASS 3: Functions ───────────────────────────────────────────────── */
-    fprintf(stderr, "ffi PASS3: %d functions, env=%p\n",
-            ffi->function_count, (void*)cg->env);
+    /* fprintf(stderr, "ffi PASS3: %d functions, env=%p\n", */
+    /*         ffi->function_count, (void*)cg->env); */
     fflush(stderr);
     for (int i = 0; i < ffi->function_count; i++) {
         FFIFunction *f = &ffi->functions[i];
-        fprintf(stderr, "ffi PASS3 fn[%d]: name=%p '%s'\n",
-                i, (void*)f->name, f->name ? f->name : "NULL");
-        for (int j = 0; j < f->param_count; j++) {
-            Type *pt2 = f->params[j].type;
-            fprintf(stderr, "  param[%d]: type=%p kind=%d layout_name=%p\n",
-                    j, (void*)pt2,
-                    pt2 ? pt2->kind : -1,
-                    pt2 ? (void*)pt2->layout_name : NULL);
-        }
-        fflush(stderr);
+        /* fprintf(stderr, "ffi PASS3 fn[%d]: name=%p '%s'\n", */
+        /*         i, (void*)f->name, f->name ? f->name : "NULL"); */
+        /* for (int j = 0; j < f->param_count; j++) { */
+        /*     Type *pt2 = f->params[j].type; */
+        /*     fprintf(stderr, "  param[%d]: type=%p kind=%d layout_name=%p\n", */
+        /*             j, (void*)pt2, */
+        /*             pt2 ? pt2->kind : -1, */
+        /*             pt2 ? (void*)pt2->layout_name : NULL); */
+        /* } */
+        /* fflush(stderr); */
         if (env_lookup(cg->env, f->name)) continue;
 
         bool skip = false;
@@ -1270,8 +1358,11 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
                c->name, (unsigned long long)packed, total_bytes);
     }
 
-    printf("FFI: injected %d functions, %d constants, %d structs\n",
-           ffi->function_count, ffi->constant_count, ffi->struct_count);
+    clock_gettime(CLOCK_MONOTONIC, &_t1);
+    double _ms = (_t1.tv_sec - _t0.tv_sec) * 1000.0 +
+                 (_t1.tv_nsec - _t0.tv_nsec) / 1e6;
+    printf("FFI: injected %d functions, %d constants, %d structs in %.1f ms\n",
+           ffi->function_count, ffi->constant_count, ffi->struct_count, _ms);
 
     /* ── dlopen the library for JIT symbol resolution ───────────────────── */
     for (int i = 0; i < ffi->included_count; i++) {
@@ -1315,4 +1406,280 @@ void ffi_dump(FFIContext *ctx) {
         else
             printf("  %s = %lld\n", c->name, c->value);
     }
+}
+
+/// FFI cache
+//
+// Cache is stored in ~/.cache/monad/<escaped_header_path>.ffic
+// Format: magic + mtime + serialized functions/constants/structs.
+// If the header mtime matches, we skip the clang parse entirely.
+//
+#define FFI_CACHE_MAGIC 0x464649C0  /* "FFI\xC0" */
+#define FFI_CACHE_VERSION 1
+
+static char *ffi_cache_path(const char *header_path) {
+    const char *home = getenv("HOME");
+    if (!home) home = "/tmp";
+    /* escape the header path: replace / with _ */
+    char escaped[512] = {0};
+    const char *p = header_path;
+    int ei = 0;
+    while (*p && ei < (int)sizeof(escaped) - 6) {
+        escaped[ei++] = (*p == '/') ? '_' : *p;
+        p++;
+    }
+    escaped[ei] = '\0';
+    char *result = malloc(512);
+    snprintf(result, 512, "%s/.cache/monad/%s.ffic", home, escaped);
+    return result;
+}
+
+static time_t ffi_header_mtime(const char *header_path) {
+    struct stat st;
+    if (stat(header_path, &st) != 0) return 0;
+    return st.st_mtime;
+}
+
+static void ffi_cache_mkdir(void) {
+    const char *home = getenv("HOME");
+    if (!home) return;
+    char dir[256];
+    snprintf(dir, sizeof(dir), "%s/.cache", home);
+    mkdir(dir, 0755);
+    snprintf(dir, sizeof(dir), "%s/.cache/monad", home);
+    mkdir(dir, 0755);
+}
+
+static void write_str(FILE *f, const char *s) {
+    if (!s) { uint32_t z = 0; fwrite(&z, 4, 1, f); return; }
+    uint32_t len = strlen(s);
+    fwrite(&len, 4, 1, f);
+    fwrite(s, 1, len, f);
+}
+
+static char *read_str(FILE *f) {
+    uint32_t len;
+    if (fread(&len, 4, 1, f) != 1) return NULL;
+    if (len == 0) return NULL;
+    if (len > 65536) return NULL; /* sanity */
+    char *s = malloc(len + 1);
+    if (fread(s, 1, len, f) != len) { free(s); return NULL; }
+    s[len] = '\0';
+    return s;
+}
+
+static void write_type(FILE *f, Type *t) {
+    if (!t) { int32_t k = -1; fwrite(&k, 4, 1, f); return; }
+    int32_t kind = t->kind;
+    fwrite(&kind, 4, 1, f);
+    write_str(f, t->layout_name);
+}
+
+static Type *read_type(FILE *f) {
+    int32_t kind;
+    if (fread(&kind, 4, 1, f) != 1) return NULL;
+    if (kind == -1) return NULL;
+    char *lname = read_str(f);
+    /* Reconstruct basic types from kind */
+    Type *t = NULL;
+    switch (kind) {
+    case TYPE_INT:    t = type_int();    break;
+    case TYPE_FLOAT:  t = type_float();  break;
+    case TYPE_BOOL:   t = type_bool();   break;
+    case TYPE_CHAR:   t = type_char();   break;
+    case TYPE_STRING: t = type_string(); break;
+    case TYPE_I8:     t = type_i8();     break;
+    case TYPE_U8:     t = type_u8();     break;
+    case TYPE_I16:    t = type_i16();    break;
+    case TYPE_U16:    t = type_u16();    break;
+    case TYPE_I32:    t = type_i32();    break;
+    case TYPE_U32:    t = type_u32();    break;
+    case TYPE_I64:    t = type_i64();    break;
+    case TYPE_U64:    t = type_u64();    break;
+    case TYPE_F32:    t = type_f32();    break;
+    case TYPE_LAYOUT: t = lname ? type_layout_ref(lname) : type_unknown(); break;
+    case TYPE_PTR:    t = type_ptr(NULL); break;
+    default:          t = type_unknown(); break;
+    }
+    free(lname);
+    return t;
+}
+
+bool ffi_cache_save(FFIContext *ctx, const char *header_path) {
+    ffi_cache_mkdir();
+    char *path = ffi_cache_path(header_path);
+    FILE *f = fopen(path, "wb");
+    free(path);
+    if (!f) return false;
+
+    /* Header */
+    uint32_t magic = FFI_CACHE_MAGIC;
+    uint32_t ver   = FFI_CACHE_VERSION;
+    int64_t  mtime = (int64_t)ffi_header_mtime(header_path);
+    fwrite(&magic, 4, 1, f);
+    fwrite(&ver,   4, 1, f);
+    fwrite(&mtime, 8, 1, f);
+
+    /* Functions */
+    uint32_t nfn = ctx->function_count;
+    fwrite(&nfn, 4, 1, f);
+    for (int i = 0; i < ctx->function_count; i++) {
+        FFIFunction *fn = &ctx->functions[i];
+        write_str(f, fn->name);
+        write_str(f, fn->doc);
+        write_type(f, fn->return_type);
+        uint8_t var = fn->variadic ? 1 : 0;
+        fwrite(&var, 1, 1, f);
+        uint32_t np = fn->param_count;
+        fwrite(&np, 4, 1, f);
+        for (int j = 0; j < fn->param_count; j++) {
+            write_str(f, fn->params[j].name);
+            write_type(f, fn->params[j].type);
+        }
+    }
+
+    /* Constants */
+    uint32_t nc = ctx->constant_count;
+    fwrite(&nc, 4, 1, f);
+    for (int i = 0; i < ctx->constant_count; i++) {
+        FFIConstant *c = &ctx->constants[i];
+        write_str(f, c->name);
+        write_str(f, c->str_value);
+        fwrite(&c->value,       8, 1, f);
+        fwrite(&c->float_value, 8, 1, f);
+        uint8_t flags = (c->is_float ? 1 : 0) | (c->is_string ? 2 : 0);
+        fwrite(&flags, 1, 1, f);
+    }
+
+    /* Structs */
+    uint32_t ns = ctx->struct_count;
+    fwrite(&ns, 4, 1, f);
+    for (int i = 0; i < ctx->struct_count; i++) {
+        FFIStruct *s = &ctx->structs[i];
+        write_str(f, s->name);
+        write_str(f, s->alias_of);
+        uint32_t nf = s->field_count;
+        int32_t  sb = s->size_bytes;
+        uint8_t  pk = s->packed ? 1 : 0;
+        fwrite(&nf, 4, 1, f);
+        fwrite(&sb, 4, 1, f);
+        fwrite(&pk, 1, 1, f);
+        for (int j = 0; j < s->field_count; j++) {
+            write_str(f, s->fields[j].name);
+            write_type(f, s->fields[j].type);
+        }
+    }
+
+    /* Included paths */
+    uint32_t ni = ctx->included_count;
+    fwrite(&ni, 4, 1, f);
+    for (int i = 0; i < ctx->included_count; i++)
+        write_str(f, ctx->included[i]);
+
+    fclose(f);
+    printf("FFI: cache saved (%d fns, %d consts, %d structs)\n",
+           ctx->function_count, ctx->constant_count, ctx->struct_count);
+    return true;
+}
+
+bool ffi_cache_load(FFIContext *ctx, const char *header_path) {
+    char *path = ffi_cache_path(header_path);
+    FILE *f = fopen(path, "rb");
+    free(path);
+    if (!f) return false;
+
+    uint32_t magic, ver;
+    int64_t  cached_mtime;
+    if (fread(&magic, 4, 1, f) != 1 || magic != FFI_CACHE_MAGIC) { fclose(f); return false; }
+    if (fread(&ver,   4, 1, f) != 1 || ver   != FFI_CACHE_VERSION) { fclose(f); return false; }
+    if (fread(&cached_mtime, 8, 1, f) != 1) { fclose(f); return false; }
+
+    /* Check mtime of the top-level header */
+    int64_t current_mtime = (int64_t)ffi_header_mtime(header_path);
+    if (current_mtime != cached_mtime) {
+        fclose(f); return false; /* stale */
+    }
+
+    /* Functions */
+    uint32_t nfn;
+    if (fread(&nfn, 4, 1, f) != 1) { fclose(f); return false; }
+    for (uint32_t i = 0; i < nfn; i++) {
+        FFIFunction fn = {0};
+        fn.name       = read_str(f);
+        fn.doc        = read_str(f);
+        fn.return_type = read_type(f);
+        uint8_t var;
+        fread(&var, 1, 1, f);
+        fn.variadic = var;
+        uint32_t np;
+        fread(&np, 4, 1, f);
+        fn.param_count = np;
+        fn.params = np > 0 ? malloc(sizeof(FFIParam) * np) : NULL;
+        for (uint32_t j = 0; j < np; j++) {
+            fn.params[j].name = read_str(f);
+            fn.params[j].type = read_type(f);
+        }
+        ffi_add_function(ctx, fn);
+    }
+
+    /* Constants */
+    uint32_t nc;
+    if (fread(&nc, 4, 1, f) != 1) { fclose(f); return false; }
+    for (uint32_t i = 0; i < nc; i++) {
+        FFIConstant c = {0};
+        c.name      = read_str(f);
+        c.str_value = read_str(f);
+        fread(&c.value,       8, 1, f);
+        fread(&c.float_value, 8, 1, f);
+        uint8_t flags;
+        fread(&flags, 1, 1, f);
+        c.is_float  = (flags & 1) ? true : false;
+        c.is_string = (flags & 2) ? true : false;
+        ffi_add_constant(ctx, c);
+    }
+
+    /* Structs */
+    uint32_t ns;
+    if (fread(&ns, 4, 1, f) != 1) { fclose(f); return false; }
+    for (uint32_t i = 0; i < ns; i++) {
+        FFIStruct s = {0};
+        s.name     = read_str(f);
+        s.alias_of = read_str(f);
+        uint32_t nf; int32_t sb; uint8_t pk;
+        fread(&nf, 4, 1, f);
+        fread(&sb, 4, 1, f);
+        fread(&pk, 1, 1, f);
+        s.field_count = nf;
+        s.size_bytes  = sb;
+        s.packed      = pk;
+        s.fields = nf > 0 ? calloc(nf, sizeof(FFIStructField)) : NULL;
+        for (uint32_t j = 0; j < nf; j++) {
+            s.fields[j].name = read_str(f);
+            s.fields[j].type = read_type(f);
+        }
+        if (ctx->struct_count >= ctx->struct_cap) {
+            ctx->struct_cap *= 2;
+            ctx->structs = realloc(ctx->structs, sizeof(FFIStruct) * ctx->struct_cap);
+        }
+        ctx->structs[ctx->struct_count++] = s;
+    }
+
+    /* Included paths */
+    uint32_t ni;
+    if (fread(&ni, 4, 1, f) != 1) { fclose(f); return false; }
+    for (uint32_t i = 0; i < ni; i++) {
+        char *inc = read_str(f);
+        if (inc) {
+            if (ctx->included_count >= ctx->included_cap) {
+                ctx->included_cap *= 2;
+                ctx->included = realloc(ctx->included, sizeof(char*) * ctx->included_cap);
+            }
+            ctx->included[ctx->included_count++] = inc;
+        }
+    }
+
+    fclose(f);
+    printf("FFI: cache loaded (%d fns, %d consts, %d structs)\n",
+           ctx->function_count, ctx->constant_count, ctx->struct_count);
+    return true;
 }

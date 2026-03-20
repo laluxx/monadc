@@ -673,11 +673,15 @@ LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *t) {
          * create an empty named struct as it breaks GEP later */
         if (t->layout_field_count == 0)
             return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+        /* Create the named struct BEFORE recursing into fields so any
+         * self-referential or mutually recursive structs (e.g. SDL linked
+         * list nodes) find the existing type and return a pointer to it
+         * instead of recursing infinitely. */
+        LLVMTypeRef struct_type = LLVMStructCreateNamed(ctx->context, struct_name);
         LLVMTypeRef *field_types = malloc(sizeof(LLVMTypeRef) *
                                           t->layout_field_count);
         for (int i = 0; i < t->layout_field_count; i++)
             field_types[i] = type_to_llvm(ctx, t->layout_fields[i].type);
-        LLVMTypeRef struct_type = LLVMStructCreateNamed(ctx->context, struct_name);
         LLVMStructSetBody(struct_type, field_types, t->layout_field_count,
                           t->layout_packed ? 1 : 0);
         free(field_types);
@@ -6140,7 +6144,7 @@ if (ast->list.count >= 5) {
             }
 
             if (strcmp(head->symbol, "for") == 0) {
-                if (ast->list.count != 3) {
+                if (ast->list.count < 3) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'for' requires a binding and a body",
                             parser_get_filename(), ast->line, ast->column);
                 }
@@ -6230,7 +6234,8 @@ if (ast->list.count >= 5) {
                 if (has_var)
                     env_insert(ctx->env, var_name, type_int(), i_ptr);
 
-                codegen_expr(ctx, ast->list.items[2]);
+                for (size_t bi = 2; bi < ast->list.count; bi++)
+                    codegen_expr(ctx, ast->list.items[bi]);
 
                 env_free(ctx->env);
                 ctx->env = saved_env;
@@ -8217,6 +8222,35 @@ if (ast->list.count >= 5) {
                     args[idx] = cap_val;
                 }
 
+                /* Coerce all args to exactly the LLVM types the function declares.
+                 * This handles i64->i32, i64->i1 etc. for C FFI functions.    */
+                {
+                    LLVMTypeRef fn_t = LLVMGlobalGetValueType(entry->func_ref);
+                    unsigned nparams = LLVMCountParamTypes(fn_t);
+                    if (nparams > 0) {
+                        LLVMTypeRef *param_ts = malloc(sizeof(LLVMTypeRef) * nparams);
+                        LLVMGetParamTypes(fn_t, param_ts);
+                        for (int _i = 0; _i < (int)nparams && _i < total_args; _i++) {
+                            LLVMTypeRef have = LLVMTypeOf(args[_i]);
+                            LLVMTypeRef want = param_ts[_i];
+                            if (have == want) continue;
+                            if (LLVMGetTypeKind(have) == LLVMIntegerTypeKind &&
+                                LLVMGetTypeKind(want) == LLVMIntegerTypeKind) {
+                                args[_i] = LLVMBuildIntCast2(ctx->builder, args[_i],
+                                                             want, 0, "ffi_int_cast");
+                            } else if (LLVMGetTypeKind(have) == LLVMIntegerTypeKind &&
+                                       LLVMGetTypeKind(want) == LLVMPointerTypeKind) {
+                                args[_i] = LLVMBuildIntToPtr(ctx->builder, args[_i],
+                                                             want, "ffi_int_to_ptr");
+                            } else if (LLVMGetTypeKind(have) == LLVMPointerTypeKind &&
+                                       LLVMGetTypeKind(want) == LLVMIntegerTypeKind) {
+                                args[_i] = LLVMBuildPtrToInt(ctx->builder, args[_i],
+                                                             want, "ffi_ptr_to_int");
+                            }
+                        }
+                        free(param_ts);
+                    }
+                }
                 LLVMTypeRef call_ft = LLVMGlobalGetValueType(entry->func_ref);
 
                 /* For FFI functions, look up the declaration in the current
@@ -9288,6 +9322,7 @@ void register_builtins(CodegenContext *ctx) {
 
     // Control flow
     env_insert_builtin(ctx->env, "if",     3,  0, "Conditional: (if cond then else)");
+    env_insert_builtin(ctx->env, "for",    2, -1, "Loop with binding: (for [i 0 10] body) or (for [n] body)");
     env_insert_builtin(ctx->env, "while",  2, -1, "Loop while condition is true: (while cond body...)");
     env_insert_builtin(ctx->env, "until",  2, -1, "Loop until condition is true: (until cond body...)");
     env_insert_builtin(ctx->env, "unless", 2,  0, "Execute body if condition is False: (unless cond body)");

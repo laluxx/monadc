@@ -1,7 +1,8 @@
 #+title: TODO.org
 
-* TODO Env [0/15]
+* TODO Env [0/17]
 - [ ] eval
+- [ ] Proper let-polymorphism 
 - [ ] Reader sugar macro turn: ln(3) -> (ln 3)
 - [ ] Reader sugar macro turn: anything! -> (! anything)
 - [ ] A way to dump an enviroment to a loadable file.env 
@@ -16,6 +17,7 @@
 - [ ] Make lists immutable by removing all builtins that can mutate them
 - [ ] in monad-mode add a function to type check the function and
       substitute the type of the function with the inferred one
+- [ ] in monad-mode add a function to turn wisp into lisp in region/buffer
 - [ ] Connect to a running process with the repl
       We should embed the env into the executable i guess
 
