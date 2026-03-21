@@ -94,6 +94,30 @@ typedef struct Type {
 
 #define list_elem element_type
 
+
+/// Type Refinement
+
+typedef struct RefinementEntry {
+    char *name;
+    char *pred_name;
+    char *base_type;
+    struct AST *predicate_ast;  // owned clone for static evaluation
+    char *var;                  // bound variable name e.g. "x"
+    struct RefinementEntry *next;
+} RefinementEntry;
+
+extern RefinementEntry *g_refinements;
+
+
+typedef struct TypeAlias {
+    char *alias_name;
+    char *target_name;
+    struct TypeAlias *next;
+} TypeAlias;
+
+extern TypeAlias *g_aliases;
+
+
 /// Constructors — ground types
 
 Type *type_unknown(void);
@@ -155,6 +179,18 @@ bool        types_equal(Type *a, Type *b);  // structural equality
 
 Type *infer_literal_type(double value, const char *literal_str);
 Type *type_from_name(const char *name);
+
+
+/// Refinement Type
+
+void refinement_register(const char *name, const char *pred_name,
+                          const char *base_type, void *pred_ast,
+                          const char *var);
+
+const char *refinement_pred_name(const char *type_name);
+int  refinement_check_literal(const char *type_name, double val,
+                               const char **out_pred_src);
+void  refinement_free_all(void);
 void  type_alias_register(const char *alias_name, const char *target_name);
 void  type_alias_free_all(void);
 

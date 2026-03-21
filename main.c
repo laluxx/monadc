@@ -566,6 +566,17 @@ static CompiledModule *compile_one(const char *source_path,
     ast_free(_feat_early);
     ASTList exprs = wisp_parse_all(source, my_source_path);
 
+    /* Show fully desugared AST after all reader transforms */
+    fprintf(stderr, "\n=== desugared AST (%s) ===\n", my_source_path);
+    for (size_t i = 0; i < exprs.count; i++) {
+        ast_print(exprs.exprs[i]);
+        printf("\n");
+        fflush(stdout);
+    }
+    fprintf(stderr, "=== end desugared AST ===\n\n");
+    fflush(stderr);
+
+
     PHASE_END("wisp+parse");
 
     if (exprs.count == 0) {

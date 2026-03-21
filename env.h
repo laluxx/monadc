@@ -91,6 +91,7 @@ void env_insert_from_module(Env *table, const char *name, const char *module_nam
                             Type *type, LLVMValueRef value, bool is_exported);
 
 EnvEntry *env_lookup(Env *table, const char *name);
+void env_remove(Env *table, const char *name);
 
 void env_print(Env *table);
 void env_print_entry(EnvEntry *e);

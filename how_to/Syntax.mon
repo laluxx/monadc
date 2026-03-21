@@ -1,0 +1,30 @@
+
+;; TODO Make this work!
+
+define (double x) * x x
+
+(define (double [x :: Num] -> Num)
+  (* x x))
+
+(define [var :: Int] 3)
+
+;; With pmatch
+define double :: Num -> Num
+  x -> x * x
+
+define double :: [x :: Num] -> Num
+   x * x
+
+
+(type [a] List)
+
+define last :: [a] -> a
+  [] -> nil
+  [x] -> x
+  [_|xs] -> last xs
+
+
+define var :: Int 3
+
+define main :: IO ()
+  show ("o" `isSuffixOf` "hello")

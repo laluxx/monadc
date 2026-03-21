@@ -80,9 +80,39 @@ static void arity_prescan(ArityTable *t, const char *source) {
     while (true) {
         Token tok = lexer_next_token(&lex);
         if (tok.type == TOK_EOF) { free(tok.value); break; }
+
+        /* Bare 'type' symbol (wisp style): type Name { ... } */
+        if (tok.type == TOK_SYMBOL && strcmp(tok.value, "type") == 0) {
+            free(tok.value);
+            tok = lexer_next_token(&lex);
+            if (tok.type == TOK_SYMBOL &&
+                tok.value[0] >= 'A' && tok.value[0] <= 'Z') {
+                char pred_name[256];
+                snprintf(pred_name, sizeof(pred_name), "%s?", tok.value);
+                arity_set(t, pred_name,  1);
+            }
+            free(tok.value);
+            continue;
+        }
+
         if (tok.type != TOK_LPAREN) { free(tok.value); continue; }
         free(tok.value);
         tok = lexer_next_token(&lex);
+
+        /* (type Name ...) s-expression form */
+        if (tok.type == TOK_SYMBOL && strcmp(tok.value, "type") == 0) {
+            free(tok.value);
+            tok = lexer_next_token(&lex);
+            if (tok.type == TOK_SYMBOL &&
+                tok.value[0] >= 'A' && tok.value[0] <= 'Z') {
+                char pred_name[256];
+                snprintf(pred_name, sizeof(pred_name), "%s?", tok.value);
+                arity_set(t, pred_name,  1);
+            }
+            free(tok.value);
+            continue;
+        }
+
         if (tok.type != TOK_SYMBOL || strcmp(tok.value, "define") != 0) {
             free(tok.value); continue;
         }

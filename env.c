@@ -271,6 +271,24 @@ EnvEntry *env_lookup(Env *table, const char *name) {
     return NULL;
 }
 
+void env_remove(Env *table, const char *name) {
+    unsigned int idx = hash(name) % table->size;
+    EnvEntry **pp = &table->buckets[idx];
+    while (*pp) {
+        if (strcmp((*pp)->name, name) == 0) {
+            EnvEntry *dead = *pp;
+            *pp = dead->next;
+            free_entry_fields(dead);
+            free(dead);
+            table->count--;
+            return;
+        }
+        pp = &(*pp)->next;
+    }
+    /* Not in this table — check parent */
+    if (table->parent) env_remove(table->parent, name);
+}
+
 static void build_bracket(EnvEntry *e, char *buf, size_t sz) {
     char sig[256] = {0};
 

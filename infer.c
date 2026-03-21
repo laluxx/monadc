@@ -6,7 +6,6 @@
 #include "types.h"
 #include "reader.h"
 
-
 /// InferEnv
 
 #define INFER_ENV_BUCKETS 64
@@ -920,6 +919,41 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
 
         Type *fn_t  = infer_expr(ctx, head);
         Type *ret_t = infer_fresh(ctx);
+
+        /* Compile-time refinement check for literal arguments.
+         * Walk the parameter type annotations of the called function
+         * and check literal args against refinement predicates.       */
+        if (head->type == AST_SYMBOL) {
+            TypeScheme *head_sc = infer_env_lookup(ctx->env, head->symbol);
+            if (head_sc) {
+                Type *ft = subst_apply(ctx->subst, head_sc->type);
+                if (head_sc->quantified_count > 0)
+                    ft = infer_instantiate(ctx, head_sc);
+                /* Walk arrow chain and check each arg */
+                for (int i = 1; i < (int)ast->list.count && ft && ft->kind == TYPE_ARROW; i++) {
+                    AST *arg = ast->list.items[i];
+                    /* Get the parameter type name from the arrow */
+                    Type *param_t = subst_apply(ctx->subst, ft->arrow_param);
+                    if (param_t) {
+                        const char *tname = type_to_string(param_t);
+                        const char *pred  = refinement_pred_name(tname);
+                        if (pred && arg->type == AST_NUMBER) {
+                            /* Look up the predicate function's lambda in env
+                             * and evaluate it on the literal at compile time.
+                             * We do this by checking the predicate name and
+                             * emitting a compile-time error.               */
+                            /* For now: emit a warning — full static eval
+                             * requires interpreter. Mark as needing check. */
+                            fprintf(stderr, "%s:%d:%d: note: argument %d to '%s' "
+                                    "must satisfy %s (checked at runtime)\n",
+                                    ctx->filename, arg->line, arg->column, i,
+                                    head->symbol, tname);
+                        }
+                    }
+                    ft = ft->arrow_ret;
+                }
+            }
+        }
 
         Type *expected = ret_t;
         for (int i = (int)ast->list.count - 1; i >= 1; i--) {

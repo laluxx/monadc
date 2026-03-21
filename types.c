@@ -4,15 +4,9 @@
 #include <string.h>
 #include <stdio.h>
 
-/// Type alias registry
+/// Type alias
 
-typedef struct TypeAlias {
-    char *alias_name;
-    char *target_name;
-    struct TypeAlias *next;
-} TypeAlias;
-
-static TypeAlias *g_aliases = NULL;
+TypeAlias *g_aliases = NULL;
 
 void type_alias_register(const char *alias_name, const char *target_name) {
     // Replace if already exists
@@ -41,6 +35,192 @@ void type_alias_free_all(void) {
     }
     g_aliases = NULL;
 }
+
+/// Refinement type
+
+RefinementEntry *g_refinements = NULL;
+
+void refinement_register(const char *name, const char *pred_name,
+                          const char *base_type, void *pred_ast,
+                          const char *var) {
+    RefinementEntry *e = malloc(sizeof(RefinementEntry));
+    e->name          = strdup(name);
+    e->pred_name     = strdup(pred_name);
+    e->base_type     = strdup(base_type);
+    e->predicate_ast = pred_ast ? ast_clone((AST*)pred_ast) : NULL;
+    e->var           = var ? strdup(var) : NULL;
+    e->next          = g_refinements;
+    g_refinements    = e;
+}
+
+const char *refinement_pred_name(const char *type_name) {
+    for (RefinementEntry *e = g_refinements; e; e = e->next)
+        if (strcmp(e->name, type_name) == 0) return e->pred_name;
+    return NULL;
+}
+
+void refinement_free_all(void) {
+    RefinementEntry *e = g_refinements;
+    while (e) {
+        RefinementEntry *n = e->next;
+        free(e->name); free(e->pred_name); free(e->base_type);
+        free(e->var);
+        ast_free(e->predicate_ast);
+        free(e);
+        e = n;
+    }
+    g_refinements = NULL;
+}
+
+/* Statically evaluate a simple predicate AST against a numeric constant.
+ * Returns 1 (true), 0 (false), or -1 (cannot evaluate statically).     */
+static int static_eval_pred(AST *pred, const char *var, double val) {
+    if (!pred) return -1;
+
+    /* (op lhs rhs) */
+    if (pred->type == AST_LIST && pred->list.count == 3 &&
+        pred->list.items[0]->type == AST_SYMBOL) {
+        const char *op  = pred->list.items[0]->symbol;
+        AST        *lhs = pred->list.items[1];
+        AST        *rhs = pred->list.items[2];
+
+        double lv, rv;
+
+        /* Evaluate lhs */
+        if (lhs->type == AST_NUMBER) {
+            lv = lhs->number;
+        } else if (lhs->type == AST_SYMBOL && strcmp(lhs->symbol, var) == 0) {
+            lv = val;
+        } else if (lhs->type == AST_LIST) {
+            /* nested expression like (% x 2) */
+            int r = static_eval_pred(lhs, var, val);
+            if (r == -1) return -1;
+            lv = (double)r;
+        } else return -1;
+
+        /* Evaluate rhs */
+        if (rhs->type == AST_NUMBER) {
+            rv = rhs->number;
+        } else if (rhs->type == AST_SYMBOL && strcmp(rhs->symbol, var) == 0) {
+            rv = val;
+        } else if (rhs->type == AST_LIST) {
+            int r = static_eval_pred(rhs, var, val);
+            if (r == -1) return -1;
+            rv = (double)r;
+        } else return -1;
+
+        /* For arithmetic ops, return the value not bool */
+        if (strcmp(op, "%") == 0 || strcmp(op, "mod") == 0)
+            return (int)((long long)lv % (long long)rv);
+        if (strcmp(op, "+") == 0) return (int)(lv + rv);
+        if (strcmp(op, "-") == 0) return (int)(lv - rv);
+        if (strcmp(op, "*") == 0) return (int)(lv * rv);
+
+        /* Comparison ops return 0 or 1 */
+        if (strcmp(op, "=")  == 0) return lv == rv ? 1 : 0;
+        if (strcmp(op, "!=") == 0) return lv != rv ? 1 : 0;
+        if (strcmp(op, ">")  == 0) return lv >  rv ? 1 : 0;
+        if (strcmp(op, ">=") == 0) return lv >= rv ? 1 : 0;
+        if (strcmp(op, "<")  == 0) return lv <  rv ? 1 : 0;
+        if (strcmp(op, "<=") == 0) return lv <= rv ? 1 : 0;
+
+        /* Logical ops */
+        if (strcmp(op, "and") == 0) {
+            int lr = static_eval_pred(lhs, var, val);
+            int rr = static_eval_pred(rhs, var, val);
+            if (lr == -1 || rr == -1) return -1;
+            return (lr && rr) ? 1 : 0;
+        }
+        if (strcmp(op, "or") == 0) {
+            int lr = static_eval_pred(lhs, var, val);
+            int rr = static_eval_pred(rhs, var, val);
+            if (lr == -1 || rr == -1) return -1;
+            return (lr || rr) ? 1 : 0;
+        }
+        return -1;
+    }
+
+    /* (not expr) */
+    if (pred->type == AST_LIST && pred->list.count == 2 &&
+        pred->list.items[0]->type == AST_SYMBOL &&
+        strcmp(pred->list.items[0]->symbol, "not") == 0) {
+        int r = static_eval_pred(pred->list.items[1], var, val);
+        if (r == -1) return -1;
+        return r ? 0 : 1;
+    }
+
+    /* bare variable */
+    if (pred->type == AST_SYMBOL && strcmp(pred->symbol, var) == 0)
+        return val != 0 ? 1 : 0;
+
+    /* bare number */
+    if (pred->type == AST_NUMBER)
+        return pred->number != 0 ? 1 : 0;
+
+    /* function call: (Name? arg) — look up refinement predicate recursively */
+    if (pred->type == AST_LIST && pred->list.count == 2 &&
+        pred->list.items[0]->type == AST_SYMBOL) {
+        const char *fname = pred->list.items[0]->symbol;
+        AST        *arg   = pred->list.items[1];
+
+        /* Evaluate the argument */
+        double arg_val;
+        if (arg->type == AST_NUMBER) {
+            arg_val = arg->number;
+        } else if (arg->type == AST_SYMBOL && strcmp(arg->symbol, var) == 0) {
+            arg_val = val;
+        } else {
+            int r = static_eval_pred(arg, var, val);
+            if (r == -1) return -1;
+            arg_val = (double)r;
+        }
+
+        /* Strip trailing '?' to get refinement name: "Even?" -> "Even" */
+        size_t flen = strlen(fname);
+        if (flen > 1 && fname[flen - 1] == '?') {
+            char rname[256];
+            strncpy(rname, fname, flen - 1);
+            rname[flen - 1] = '\0';
+            /* Look up in refinement registry */
+            int r = refinement_check_literal(rname, arg_val, NULL);
+            if (r != -1) return r;
+        }
+        return -1;
+    }
+
+    return -1; /* cannot evaluate statically */
+}
+
+int refinement_check_literal(const char *type_name, double val,
+                               const char **out_pred_src) {
+    /* Walk alias chain, stopping as soon as we hit a refinement entry */
+    const char *name = type_name;
+    char buf[256];
+    for (int depth = 0; depth < 32; depth++) {
+        /* Direct refinement lookup */
+        for (RefinementEntry *e = g_refinements; e; e = e->next) {
+            if (strcmp(e->name, name) == 0) {
+                if (out_pred_src) *out_pred_src = e->pred_name;
+                if (!e->predicate_ast) return -1;
+                return static_eval_pred(e->predicate_ast, e->var, val);
+            }
+        }
+        /* Not a refinement — try one alias step */
+        bool stepped = false;
+        for (TypeAlias *a = g_aliases; a; a = a->next) {
+            if (strcmp(a->alias_name, name) == 0) {
+                strncpy(buf, a->target_name, sizeof(buf) - 1);
+                buf[sizeof(buf) - 1] = '\0';
+                name = buf;
+                stepped = true;
+                break;
+            }
+        }
+        if (!stepped) break;
+    }
+    return -1;
+}
+
 
 // Resolve a name to a Type*, checking aliases after builtins.
 // Always returns a fresh allocation (or NULL if unknown).

@@ -2,6 +2,7 @@
 #define CODEGEN_H
 
 #include <llvm-c/Core.h>
+#include <llvm-c/ExecutionEngine.h>
 #include <setjmp.h>
 #include "reader.h"
 #include "types.h"

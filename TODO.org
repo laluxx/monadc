@@ -1,11 +1,15 @@
 #+title: TODO.org
 
-* TODO Env [0/17]
+* TODO Stuff [0/21]
 - [ ] eval
+- [ ] When we write wisp error column and numbers are wrong!
+- [ ] allow lazy lists to go both ways so we can have =define ℤ (..0..)=
 - [ ] Proper let-polymorphism 
+- [ ] type predicates with the =type= keyword
 - [ ] Reader sugar macro turn: ln(3) -> (ln 3)
 - [ ] Reader sugar macro turn: anything! -> (! anything)
 - [ ] A way to dump an enviroment to a loadable file.env 
+- [ ] A module that implements a DSL to write SPIRV
 - [ ] => Optional arguments that default to *unspecified*
 - [ ] Default values on layouts so when they are 0 initialized they have those
 - [ ] Auto curry only if -> is used in the function definition, not otherwise
@@ -21,25 +25,26 @@
 - [ ] Connect to a running process with the repl
       We should embed the env into the executable i guess
 
-* TODO ΒUG
+* TODO Dependent Refinement Types with existential quantifiers
 
-The .o has no <sqrt> symbol at all — meaning sqrt itself isn't in the .o either.
-That's because sqrt is a closure-ABI function and its LLVM name gets renamed during Phase 9 to Math__sqrt, so it appears as <Math__sqrt> not <sqrt>.
-
-#+begin_src sh
-bashobjdump -d Math.o | grep -A 40 "Math__sqrt"
+#+begin_src monad
+type Even { x ∈ ℤ | ∃k ∈ ℤ, x = 2k }
+  "The Even type."
 #+end_src
 
-__Math_closure_iter.10 IS in the .o with external linkage. The issue is at Math__sqrt+0x33:
-#+begin_src sh
-8a3:  mov 0x0(%rip),%rdi   # loads iter's function pointer
-#+end_src
+To support the existential form:
+  - Dependent types — need to track existential witnesses (k) in the type system
+  - Refinement types with quantifiers — extend predicate language beyond simple arithmetic to first-order logic
+  - Curry-Howard correspondence — existential types as Σ-types (dependent pairs)
+  - Bidirectional type checking (inference vs checking)
+  - Full normalization — to compare types that involve computation
+  - Explicit universes — to avoid Girard's paradox
+  - Proof terms — witnesses for existential refinements become first-class values
+  - Decision procedures — for solving existential constraints
 
-This is a RIP-relative load from a global variable that holds iter's address. That global needs to contain __Math_closure_iter.10's address. Let's check if that relocation is correct:
-#+begin_src sh
-bashobjdump -r Math.o | grep -A 5 "sqrt"
-#+end_src
-
+The existential ={ x ∈ ℤ | ∃k ∈ ℤ, x = 2k }= then becomes
+a Σ-type: Σ (k : ℤ) (x : ℤ) (x = 2k)
+and the type checker must construct the pair (k, x, refl).
 
 
 * TODO Thread operator |>
@@ -67,8 +72,7 @@ This is a full-period 64-bit PRNG with excellent statistical properties."
 #+end_src
 
 
-
-# TODO Align layouts properly
+# TODO Align layouts properly when showing them
 #+begin_src monad
 Mesh
 (layout Mesh
@@ -91,9 +95,6 @@ Mesh
   [vboId         :: Pointer :: U32])
 #+end_src
 
-
-A module that implements a DSL to write SPIRV
-
 Point.x should return the Float type itself, once we can return types.
 
 #+begin_src monad
@@ -105,6 +106,26 @@ Point
 Point.x
 <input>:1:1: error: qualified symbol 'Point.x' used but no module context
 #+end_src
+
+* TODO ΒUGS
+
+The .o has no <sqrt> symbol at all — meaning sqrt itself isn't in the .o either.
+That's because sqrt is a closure-ABI function and its LLVM name gets renamed during Phase 9 to Math__sqrt, so it appears as <Math__sqrt> not <sqrt>.
+
+#+begin_src sh
+bashobjdump -d Math.o | grep -A 40 "Math__sqrt"
+#+end_src
+
+__Math_closure_iter.10 IS in the .o with external linkage. The issue is at Math__sqrt+0x33:
+#+begin_src sh
+8a3:  mov 0x0(%rip),%rdi   # loads iter's function pointer
+#+end_src
+
+This is a RIP-relative load from a global variable that holds iter's address. That global needs to contain __Math_closure_iter.10's address. Let's check if that relocation is correct:
+#+begin_src sh
+bashobjdump -r Math.o | grep -A 5 "sqrt"
+#+end_src
+
 
 #+begin_src monad
 (cons 120 10)
@@ -127,7 +148,6 @@ Error: IR verification failed
 >>> INFERRED TYPE: Int
 (1 20)
 #+end_src
-
 
 * On Pragmatic Purity
 

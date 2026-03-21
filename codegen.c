@@ -18,6 +18,7 @@
 #include <llvm-c/Analysis.h>
 #include <llvm-c/BitWriter.h>
 #include <llvm-c/TargetMachine.h>
+#include <dlfcn.h>
 
 /* Replace all exit(1) calls in codegen.
  * If a recovery point is set (we're inside repl_eval_line), longjmp back.
@@ -2062,6 +2063,409 @@ static void print_defined(const char *var_name, Type *fallback_type,
         fprintf(stdout, "\x1b[1mDEFINED\x1b[0m [%s :: %s]%s\n",
                 var_name, type_to_string(fallback_type), suffix);
     }
+}
+
+static unsigned int g_jit_pred_seq = 0;
+static LLVMExecutionEngineRef g_refinement_engine = NULL;
+static LLVMContextRef         g_refinement_ctx    = NULL;
+
+static void ensure_refinement_ctx(void) {
+    LLVMInitializeNativeTarget();
+    LLVMInitializeNativeAsmPrinter();
+    LLVMLinkInMCJIT();
+}
+
+/* Cache: type_name -> result for already-checked literals */
+typedef struct RefinementCache {
+    char *type_name;
+    long long arg;
+    int result;
+    struct RefinementCache *next;
+} RefinementCache;
+
+static RefinementCache *g_ref_cache = NULL;
+
+static int cache_lookup(const char *type_name, long long arg) {
+    for (RefinementCache *c = g_ref_cache; c; c = c->next)
+        if (strcmp(c->type_name, type_name) == 0 && c->arg == arg)
+            return c->result;
+    return -2; /* not found */
+}
+
+static void cache_insert(const char *type_name, long long arg, int result) {
+    RefinementCache *c = malloc(sizeof(RefinementCache));
+    c->type_name = strdup(type_name);
+    c->arg       = arg;
+    c->result    = result;
+    c->next      = g_ref_cache;
+    g_ref_cache  = c;
+}
+
+static int jit_eval_refinement(CodegenContext *ctx,
+                                const char *type_name,
+                                AST *arg_ast) {
+    if (arg_ast->type != AST_NUMBER && arg_ast->type != AST_STRING) return -1;
+
+    /* Resolve alias chain to find the RefinementEntry */
+    const char *name = type_name;
+    char buf[256];
+    RefinementEntry *found = NULL;
+    for (int depth = 0; depth < 32 && !found; depth++) {
+        for (RefinementEntry *e = g_refinements; e; e = e->next) {
+            if (strcmp(e->name, name) == 0) { found = e; break; }
+        }
+
+        if (found) break;
+        bool stepped = false;
+        for (TypeAlias *a = g_aliases; a; a = a->next) {
+            if (strcmp(a->alias_name, name) == 0) {
+                strncpy(buf, a->target_name, sizeof(buf)-1);
+                buf[sizeof(buf)-1] = '\0';
+                name = buf; stepped = true; break;
+            }
+        }
+        if (!stepped) break;
+    }
+    if (!found || !found->predicate_ast || !found->var) return -1;
+
+    Type *base_t = type_from_name(found->base_type);
+    bool  is_str = base_t && base_t->kind == TYPE_STRING;
+
+    /* Each check gets a completely fresh context+engine+module.
+     * This avoids all cross-module symbol resolution issues.    */
+    ensure_refinement_ctx();
+
+    LLVMContextRef eval_ctx = LLVMContextCreate();
+    char wrap_mod_name[64];
+    snprintf(wrap_mod_name, sizeof(wrap_mod_name), "__ref_eval_%u", g_jit_pred_seq);
+    LLVMModuleRef  tmp_mod  = LLVMModuleCreateWithNameInContext(
+                                  wrap_mod_name, eval_ctx);
+    LLVMSetTarget(tmp_mod, LLVMGetDefaultTargetTriple());
+
+    char wrap_name[64];
+    snprintf(wrap_name, sizeof(wrap_name), "__ref_wrap_%u", g_jit_pred_seq++);
+
+    LLVMBuilderRef tmp_bld = LLVMCreateBuilderInContext(eval_ctx);
+
+    CodegenContext jit_ctx;
+    memset(&jit_ctx, 0, sizeof(jit_ctx));
+    jit_ctx.module  = tmp_mod;
+    jit_ctx.builder = tmp_bld;
+    jit_ctx.context = eval_ctx;
+    jit_ctx.env     = env_create_child(ctx->env);
+    jit_ctx.init_fn = NULL;
+
+    /* Declare runtime functions */
+    declare_runtime_functions(&jit_ctx);
+
+    /* Pre-declare user-defined predicate functions (Bool-returning) as externs.
+     * Only Bool/integer returning functions are needed in the JIT predicate module. */
+    for (size_t bi = 0; bi < ctx->env->size; bi++) {
+        for (EnvEntry *e = ctx->env->buckets[bi]; e; e = e->next) {
+            if (e->kind != ENV_FUNC || !e->func_ref) continue;
+            if (!e->return_type) continue;
+            /* Only include Bool-returning functions (predicates).
+             * Exclude Int/Float returning functions like constructors
+             * which generate complex IR incompatible with the JIT module. */
+            if (e->return_type->kind != TYPE_BOOL) continue;
+            const char *fname = e->name;
+            if (LLVMGetNamedFunction(tmp_mod, fname)) continue;
+            int np = e->param_count;
+            LLVMTypeRef *pt = malloc(sizeof(LLVMTypeRef) * (np ? np : 1));
+            for (int pi = 0; pi < np; pi++)
+                pt[pi] = type_to_llvm(&jit_ctx, e->params[pi].type);
+            LLVMTypeRef ft = LLVMFunctionType(
+                type_to_llvm(&jit_ctx, e->return_type), pt, np, 0);
+            free(pt);
+            LLVMValueRef decl = LLVMAddFunction(tmp_mod, fname, ft);
+            LLVMSetLinkage(decl, LLVMExternalLinkage);
+            /* Register in jit_ctx.env so codegen_expr finds it */
+            env_insert_func(jit_ctx.env, fname,
+                            clone_params(e->params, np), np,
+                            type_clone(e->return_type), decl, NULL);
+            EnvEntry *je = env_lookup(jit_ctx.env, fname);
+            if (je) {
+                je->is_closure_abi = e->is_closure_abi;
+                je->lifted_count   = e->lifted_count;
+                je->source_ast     = e->source_ast;
+            }
+        }
+    }
+
+    /* Compile all refinement predicates directly into this module,
+     * but only if they haven't already been compiled into a previous
+     * JIT module — duplicate definitions cause MCJIT to fail.       */
+    for (RefinementEntry *re = g_refinements; re; re = re->next) {
+        if (!re->predicate_ast || !re->var) continue;
+        char sub_name[256];
+        snprintf(sub_name, sizeof(sub_name), "%s?", re->name);
+        if (LLVMGetNamedFunction(tmp_mod, sub_name)) continue;
+
+
+        /* Always recompile into this module — cross-module symbol resolution
+         * is unreliable with MCJIT's LLVMAddModule. Each module must be
+         * self-contained with all predicates it depends on defined inline.
+         *
+         * Also recompile any user-defined functions referenced by this predicate. */
+        {
+            /* Walk the predicate AST and recompile any user ENV_FUNC entries
+             * that are not refinement predicates and not yet in tmp_mod.     */
+            char **refs = NULL; int ref_count = 0;
+            collect_free_vars(re->predicate_ast, NULL, 0, NULL, 0,
+                              &refs, &ref_count, ctx->env);
+            for (int ri = 0; ri < ref_count; ri++) {
+                EnvEntry *ue = env_lookup(ctx->env, refs[ri]);
+                free(refs[ri]);
+                if (!ue || ue->kind != ENV_FUNC || !ue->source_ast) continue;
+                if (LLVMGetNamedFunction(tmp_mod, refs[ri])) continue;
+                /* Recompile this function into the JIT module */
+                AST *src = ue->source_ast;
+                AST *lam = NULL;
+                if (src->type == AST_LAMBDA) lam = src;
+                else if (src->type == AST_LIST && src->list.count >= 3 &&
+                         src->list.items[2]->type == AST_LAMBDA)
+                    lam = src->list.items[2];
+                if (!lam) continue;
+                int np = ue->param_count;
+                LLVMTypeRef *pt = malloc(sizeof(LLVMTypeRef) * (np ? np : 1));
+                for (int pi = 0; pi < np; pi++)
+                    pt[pi] = type_to_llvm(&jit_ctx, ue->params[pi].type);
+                LLVMTypeRef rft = LLVMFunctionType(
+                    type_to_llvm(&jit_ctx, ue->return_type), pt, np, 0);
+                free(pt);
+                LLVMValueRef ufn = LLVMAddFunction(tmp_mod, refs[ri], rft);
+                LLVMBasicBlockRef ubb = LLVMAppendBasicBlockInContext(
+                    eval_ctx, ufn, "entry");
+                LLVMBasicBlockRef usaved = LLVMGetInsertBlock(tmp_bld);
+                LLVMPositionBuilderAtEnd(tmp_bld, ubb);
+                Env *uenv = env_create_child(jit_ctx.env);
+                for (int pi = 0; pi < np; pi++) {
+                    LLVMValueRef up = LLVMGetParam(ufn, pi);
+                    LLVMTypeRef  ut = type_to_llvm(&jit_ctx, ue->params[pi].type);
+                    LLVMValueRef ua = LLVMBuildAlloca(tmp_bld, ut, ue->params[pi].name);
+                    LLVMBuildStore(tmp_bld, up, ua);
+                    env_insert(uenv, ue->params[pi].name,
+                               type_clone(ue->params[pi].type), ua);
+                }
+                Env *prev_env = jit_ctx.env;
+                jit_ctx.env = uenv;
+                CodegenResult ur = {NULL, NULL};
+                for (int bi2 = 0; bi2 < lam->lambda.body_count; bi2++)
+                    ur = codegen_expr(&jit_ctx, lam->lambda.body_exprs[bi2]);
+                jit_ctx.env = prev_env;
+                env_free(uenv);
+                if (ur.value) {
+                    LLVMTypeRef ret_llvm = type_to_llvm(&jit_ctx, ue->return_type);
+                    LLVMValueRef rv = ur.value;
+                    if (LLVMTypeOf(rv) != ret_llvm) {
+                        if (LLVMGetTypeKind(ret_llvm) == LLVMIntegerTypeKind)
+                            rv = LLVMBuildIntCast2(tmp_bld, rv, ret_llvm, 1, "rc");
+                    }
+                    LLVMBuildRet(tmp_bld, rv);
+                } else {
+                    LLVMBuildRet(tmp_bld,
+                        LLVMConstNull(type_to_llvm(&jit_ctx, ue->return_type)));
+                }
+                if (usaved) LLVMPositionBuilderAtEnd(tmp_bld, usaved);
+            }
+            free(refs);
+        }
+
+
+        Type *sub_base = type_from_name(re->base_type);
+        bool  sub_str  = sub_base && sub_base->kind == TYPE_STRING;
+        LLVMTypeRef sub_arg_t = sub_str
+            ? LLVMPointerType(LLVMInt8TypeInContext(eval_ctx), 0)
+            : LLVMInt64TypeInContext(eval_ctx);
+        LLVMTypeRef sub_i1 = LLVMInt1TypeInContext(eval_ctx);
+        LLVMTypeRef sub_ft = LLVMFunctionType(sub_i1, &sub_arg_t, 1, 0);
+        LLVMValueRef sub_fn = LLVMAddFunction(tmp_mod, sub_name, sub_ft);
+        LLVMBasicBlockRef sub_bb = LLVMAppendBasicBlockInContext(
+            eval_ctx, sub_fn, "entry");
+
+        LLVMBasicBlockRef saved_insert = LLVMGetInsertBlock(tmp_bld);
+        LLVMPositionBuilderAtEnd(tmp_bld, sub_bb);
+        jit_ctx.init_fn = sub_fn;
+
+        LLVMValueRef sub_param  = LLVMGetParam(sub_fn, 0);
+        LLVMValueRef sub_alloca = LLVMBuildAlloca(tmp_bld, sub_arg_t, re->var);
+        LLVMBuildStore(tmp_bld, sub_param, sub_alloca);
+        Type *sub_pt = sub_str ? type_string() : type_int();
+        env_insert(jit_ctx.env, re->var, sub_pt, sub_alloca);
+
+        CodegenResult sub_r = codegen_expr(&jit_ctx, re->predicate_ast);
+        env_remove(jit_ctx.env, re->var);
+
+        if (sub_r.value) {
+            LLVMValueRef sub_ret = sub_r.value;
+            if (LLVMTypeOf(sub_ret) != sub_i1 &&
+                LLVMGetTypeKind(LLVMTypeOf(sub_ret)) == LLVMIntegerTypeKind)
+                sub_ret = LLVMBuildTrunc(tmp_bld, sub_ret, sub_i1, "to_i1");
+            LLVMBuildRet(tmp_bld, sub_ret);
+        } else {
+            LLVMBuildRet(tmp_bld, LLVMConstInt(sub_i1, 1, 0));
+        }
+
+        if (saved_insert)
+            LLVMPositionBuilderAtEnd(tmp_bld, saved_insert);
+    }
+
+    /* Build the predicate wrapper function */
+    LLVMTypeRef arg_llvm = is_str
+        ? LLVMPointerType(LLVMInt8TypeInContext(eval_ctx), 0)
+        : LLVMInt64TypeInContext(eval_ctx);
+    LLVMTypeRef i1      = LLVMInt1TypeInContext(eval_ctx);
+    LLVMTypeRef fn_type = LLVMFunctionType(i1, &arg_llvm, 1, 0);
+    LLVMValueRef fn     = LLVMAddFunction(tmp_mod, wrap_name, fn_type);
+    LLVMBasicBlockRef bb = LLVMAppendBasicBlockInContext(
+                               eval_ctx, fn, "entry");
+    LLVMPositionBuilderAtEnd(tmp_bld, bb);
+
+    LLVMPositionBuilderAtEnd(tmp_bld, bb);
+    jit_ctx.init_fn = fn;
+
+    /* Bind parameter */
+    LLVMValueRef param  = LLVMGetParam(fn, 0);
+    LLVMValueRef alloca = LLVMBuildAlloca(tmp_bld, arg_llvm, found->var);
+    LLVMBuildStore(tmp_bld, param, alloca);
+    Type *param_type = is_str ? type_string() : type_int();
+    env_insert(jit_ctx.env, found->var, param_type, alloca);
+
+    /* Codegen the predicate body */
+    CodegenResult pred_r = codegen_expr(&jit_ctx, found->predicate_ast);
+
+    env_remove(jit_ctx.env, found->var);
+
+    int result = -1;
+
+    if (pred_r.value) {
+        LLVMValueRef ret = pred_r.value;
+        if (LLVMTypeOf(ret) != i1) {
+            if (LLVMGetTypeKind(LLVMTypeOf(ret)) == LLVMIntegerTypeKind)
+                ret = LLVMBuildTrunc(tmp_bld, ret, i1, "to_i1");
+            else goto cleanup;
+        }
+        LLVMBuildRet(tmp_bld, ret);
+
+        /* Now resolve any unresolved user-defined functions that were
+         * added as extern declarations during predicate/wrapper codegen */
+        {
+            bool changed = true;
+            while (changed) {
+                changed = false;
+                LLVMValueRef f = LLVMGetFirstFunction(tmp_mod);
+                while (f) {
+                    LLVMValueRef next = LLVMGetNextFunction(f);
+                    if (LLVMCountBasicBlocks(f) == 0) {
+                        const char *fname = LLVMGetValueName(f);
+                        if (strncmp(fname, "rt_", 3) != 0 &&
+                            strncmp(fname, "__monad_", 8) != 0) {
+                            char fname_clean[256];
+                            if (fname[0] == '"') {
+                                size_t len = strlen(fname);
+                                size_t copy = (len - 2) < 255 ? (len - 2) : 255;
+                                memcpy(fname_clean, fname + 1, copy);
+                                fname_clean[copy] = '\0';
+                                fname = fname_clean;
+                            }
+                            EnvEntry *ue = env_lookup(ctx->env, fname);
+                            if (ue && ue->kind == ENV_FUNC && ue->source_ast &&
+                                ue->return_type &&
+                                ue->return_type->kind == TYPE_BOOL) {
+                                AST *src = ue->source_ast;
+                                AST *lam = NULL;
+                                if (src->type == AST_LAMBDA) lam = src;
+                                else if (src->type == AST_LIST &&
+                                         src->list.count >= 3 &&
+                                         src->list.items[2]->type == AST_LAMBDA)
+                                    lam = src->list.items[2];
+                                if (lam) {
+                                    int np = ue->param_count;
+                                    LLVMBasicBlockRef ubb = LLVMAppendBasicBlockInContext(
+                                        eval_ctx, f, "entry");
+                                    LLVMBasicBlockRef usaved = LLVMGetInsertBlock(tmp_bld);
+                                    LLVMPositionBuilderAtEnd(tmp_bld, ubb);
+                                    Env *uenv = env_create_child(jit_ctx.env);
+                                    for (int pi = 0; pi < np; pi++) {
+                                        LLVMValueRef up = LLVMGetParam(f, pi);
+                                        LLVMTypeRef  ut = type_to_llvm(&jit_ctx, ue->params[pi].type);
+                                        LLVMValueRef ua = LLVMBuildAlloca(tmp_bld, ut,
+                                                              ue->params[pi].name);
+                                        LLVMBuildStore(tmp_bld, up, ua);
+                                        env_insert(uenv, ue->params[pi].name,
+                                                   type_clone(ue->params[pi].type), ua);
+                                    }
+                                    Env *prev_env = jit_ctx.env;
+                                    jit_ctx.env = uenv;
+                                    CodegenResult ur = {NULL, NULL};
+                                    for (int bi2 = 0; bi2 < lam->lambda.body_count; bi2++)
+                                        ur = codegen_expr(&jit_ctx, lam->lambda.body_exprs[bi2]);
+                                    jit_ctx.env = prev_env;
+                                    env_free(uenv);
+                                    LLVMTypeRef ret_llvm = type_to_llvm(&jit_ctx, ue->return_type);
+                                    LLVMValueRef rv = ur.value
+                                        ? ur.value : LLVMConstNull(ret_llvm);
+                                    if (LLVMTypeOf(rv) != ret_llvm &&
+                                        LLVMGetTypeKind(ret_llvm) == LLVMIntegerTypeKind)
+                                        rv = LLVMBuildIntCast2(tmp_bld, rv, ret_llvm, 1, "rc");
+                                    LLVMBuildRet(tmp_bld, rv);
+                                    if (usaved) LLVMPositionBuilderAtEnd(tmp_bld, usaved);
+                                    changed = true;
+                                }
+                            }
+                        }
+                    }
+                    f = next;
+                }
+            }
+        }
+
+        /* Dump IR for debugging */
+        char *ir = LLVMPrintModuleToString(tmp_mod);
+        LLVMDisposeMessage(ir);
+
+        /* Verify */
+        char *err = NULL;
+        if (LLVMVerifyModule(tmp_mod, LLVMReturnStatusAction, &err) != 0) {
+            if (err) LLVMDisposeMessage(err);
+            goto cleanup;
+        }
+        if (err) LLVMDisposeMessage(err);
+
+        LLVMExecutionEngineRef eval_ee = NULL;
+        char *ee_err = NULL;
+        if (LLVMCreateExecutionEngineForModule(&eval_ee, tmp_mod, &ee_err) != 0) {
+            if (ee_err) LLVMDisposeMessage(ee_err);
+            goto cleanup;
+        }
+        tmp_mod = NULL; /* engine owns it */
+
+        uint64_t fn_addr = LLVMGetFunctionAddress(eval_ee, wrap_name);
+        if (fn_addr) {
+            if (is_str) {
+                typedef long long (*pred_str_t)(const char *);
+                long long r = ((pred_str_t)(uintptr_t)fn_addr)(arg_ast->string);
+                result = (r & 0xFF) ? 1 : 0;
+            } else {
+                typedef long long (*pred_int_t)(long long);
+                long long r = ((pred_int_t)(uintptr_t)fn_addr)((long long)arg_ast->number);
+                result = (r & 0xFF) ? 1 : 0;
+            }
+        }
+        LLVMDisposeExecutionEngine(eval_ee);
+
+    } else {
+        LLVMBuildRet(tmp_bld, LLVMConstInt(i1, 1, 0));
+    }
+
+cleanup:
+    LLVMDisposeBuilder(tmp_bld);
+    if (tmp_mod) LLVMDisposeModule(tmp_mod);
+    LLVMContextDispose(eval_ctx);
+
+    env_free(jit_ctx.env);
+
+    return result;
 }
 
 CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
@@ -6535,7 +6939,6 @@ if (ast->list.count >= 5) {
                 return result;
             }
 
-
             if (strcmp(head->symbol, "contains?") == 0) {
                 if (ast->list.count != 3) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'contains?' requires 2 arguments",
@@ -6546,9 +6949,36 @@ if (ast->list.count >= 5) {
                 LLVMTypeRef  i1     = LLVMInt1TypeInContext(ctx->context);
                 CodegenResult col_r = codegen_expr(ctx, ast->list.items[1]);
                 CodegenResult key_r = codegen_expr(ctx, ast->list.items[2]);
-                LLVMValueRef  boxed = codegen_box(ctx, key_r.value, key_r.type);
                 LLVMValueRef  raw   = col_r.value;
 
+                /* String contains?: use strstr */
+                if (col_r.type && col_r.type->kind == TYPE_STRING) {
+                    LLVMValueRef strstr_fn = LLVMGetNamedFunction(ctx->module, "strstr");
+                    if (!strstr_fn) {
+                        LLVMTypeRef params[] = {ptr, ptr};
+                        LLVMTypeRef ft = LLVMFunctionType(ptr, params, 2, 0);
+                        strstr_fn = LLVMAddFunction(ctx->module, "strstr", ft);
+                        LLVMSetLinkage(strstr_fn, LLVMExternalLinkage);
+                    }
+                    LLVMValueRef needle = key_r.value;
+                    /* If needle is boxed, unbox to string ptr */
+                    if (key_r.type && key_r.type->kind != TYPE_STRING) {
+                        LLVMTypeRef uft = LLVMFunctionType(ptr, &ptr, 1, 0);
+                        needle = LLVMBuildCall2(ctx->builder, uft,
+                                     get_rt_unbox_string(ctx), &needle, 1, "needle");
+                    }
+                    LLVMValueRef args[] = {raw, needle};
+                    LLVMValueRef found  = LLVMBuildCall2(ctx->builder,
+                                             LLVMGlobalGetValueType(strstr_fn),
+                                             strstr_fn, args, 2, "strstr");
+                    /* strstr returns NULL if not found */
+                    result.value = LLVMBuildICmp(ctx->builder, LLVMIntNE, found,
+                                                 LLVMConstPointerNull(ptr), "contains_bool");
+                    result.type  = type_bool();
+                    return result;
+                }
+
+                LLVMValueRef  boxed = codegen_box(ctx, key_r.value, key_r.type);
                 LLVMValueRef fn;
                 if (col_r.type && col_r.type->kind == TYPE_MAP) {
                     LLVMValueRef ub_fn = get_rt_unbox_map(ctx);
@@ -6565,7 +6995,6 @@ if (ast->list.count >= 5) {
                     }
                     fn = get_rt_set_contains(ctx);
                 }
-
                 LLVMTypeRef  cp[]   = {ptr, ptr};
                 LLVMTypeRef  cft    = LLVMFunctionType(i32, cp, 2, 0);
                 LLVMValueRef ca[]   = {raw, boxed};
@@ -6573,6 +7002,244 @@ if (ast->list.count >= 5) {
                 result.value = LLVMBuildTrunc(ctx->builder, i32val, i1, "contains_bool");
                 result.type  = type_bool();
                 return result;
+            }
+
+            if (strcmp(head->symbol, "starts-with?") == 0 ||
+                strcmp(head->symbol, "ends-with?") == 0) {
+                bool is_ends = (strcmp(head->symbol, "ends-with?") == 0);
+                if (ast->list.count != 3) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' requires 2 arguments",
+                                  parser_get_filename(), ast->line, ast->column, head->symbol);
+                }
+                LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+                LLVMTypeRef i32 = LLVMInt32TypeInContext(ctx->context);
+                LLVMTypeRef i1  = LLVMInt1TypeInContext(ctx->context);
+                LLVMTypeRef i8  = LLVMInt8TypeInContext(ctx->context);
+                CodegenResult col_r = codegen_expr(ctx, ast->list.items[1]);
+                CodegenResult suf_r = codegen_expr(ctx, ast->list.items[2]);
+
+                /* ── String ── */
+                if (col_r.type && col_r.type->kind == TYPE_STRING) {
+                    LLVMValueRef strlen_fn = LLVMGetNamedFunction(ctx->module, "strlen");
+                    if (!strlen_fn) {
+                        LLVMTypeRef ft = LLVMFunctionType(i64, &ptr, 1, 0);
+                        strlen_fn = LLVMAddFunction(ctx->module, "strlen", ft);
+                        LLVMSetLinkage(strlen_fn, LLVMExternalLinkage);
+                    }
+                    LLVMValueRef strncmp_fn = LLVMGetNamedFunction(ctx->module, "strncmp");
+                    if (!strncmp_fn) {
+                        LLVMTypeRef p3[] = {ptr, ptr, i64};
+                        LLVMTypeRef ft   = LLVMFunctionType(i32, p3, 3, 0);
+                        strncmp_fn = LLVMAddFunction(ctx->module, "strncmp", ft);
+                        LLVMSetLinkage(strncmp_fn, LLVMExternalLinkage);
+                    }
+                    /* Coerce suffix to string ptr */
+                    LLVMValueRef suffix = suf_r.value;
+                    if (suf_r.type && suf_r.type->kind == TYPE_CHAR) {
+                        LLVMValueRef buf = LLVMBuildAlloca(ctx->builder, LLVMArrayType(i8, 2), "chbuf");
+                        LLVMValueRef z = LLVMConstInt(i64, 0, 0);
+                        LLVMValueRef o = LLVMConstInt(i64, 1, 0);
+                        LLVMBuildStore(ctx->builder, suf_r.value,
+                            LLVMBuildGEP2(ctx->builder, i8, buf, &z, 1, "p0"));
+                        LLVMBuildStore(ctx->builder, LLVMConstInt(i8, 0, 0),
+                            LLVMBuildGEP2(ctx->builder, i8, buf, &o, 1, "p1"));
+                        suffix = LLVMBuildBitCast(ctx->builder, buf, ptr, "chstr");
+                    } else if (suf_r.type && suf_r.type->kind != TYPE_STRING) {
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' on String requires String or Char suffix, got %s",
+                                      parser_get_filename(), ast->line, ast->column,
+                                      head->symbol, type_to_string(suf_r.type));
+                    }
+                    LLVMValueRef sla[] = {col_r.value};
+                    LLVMValueRef fla[] = {suffix};
+                    LLVMValueRef slen   = LLVMBuildCall2(ctx->builder,
+                        LLVMFunctionType(i64, &ptr, 1, 0), strlen_fn, sla, 1, "slen");
+                    LLVMValueRef suflen = LLVMBuildCall2(ctx->builder,
+                        LLVMFunctionType(i64, &ptr, 1, 0), strlen_fn, fla, 1, "suflen");
+                    LLVMValueRef enough = LLVMBuildICmp(ctx->builder, LLVMIntSGE, slen, suflen, "enough");
+                    LLVMValueRef cmp_ptr = is_ends
+                        ? LLVMBuildGEP2(ctx->builder, i8, col_r.value,
+                              &(LLVMValueRef){LLVMBuildSub(ctx->builder, slen, suflen, "diff")}, 1, "tail")
+                        : col_r.value;
+                    LLVMValueRef nc_args[] = {cmp_ptr, suffix, suflen};
+                    LLVMValueRef cmp = LLVMBuildCall2(ctx->builder,
+                        LLVMFunctionType(i32, (LLVMTypeRef[]){ptr, ptr, i64}, 3, 0),
+                        strncmp_fn, nc_args, 3, "cmp");
+                    result.value = LLVMBuildAnd(ctx->builder, enough,
+                        LLVMBuildICmp(ctx->builder, LLVMIntEQ, cmp, LLVMConstInt(i32, 0, 0), "eq"),
+                        "sw_result");
+                    result.type = type_bool();
+                    return result;
+                }
+
+                /* ── Array (fat pointer) ── */
+                if (col_r.type && col_r.type->kind == TYPE_ARR) {
+                    Type *et = col_r.type->arr_element_type ? col_r.type->arr_element_type : type_int();
+                    LLVMTypeRef elem_t = type_to_llvm(ctx, et);
+
+                    /* Extract col data+size */
+                    LLVMValueRef col_data = arr_fat_data(ctx, col_r.value, et);
+                    LLVMValueRef col_size = arr_fat_size(ctx, col_r.value);
+
+                    /* Extract suffix data+size */
+                    LLVMValueRef suf_data, suf_size;
+                    if (suf_r.type && suf_r.type->kind == TYPE_ARR) {
+                        suf_data = arr_fat_data(ctx, suf_r.value, et);
+                        suf_size = arr_fat_size(ctx, suf_r.value);
+                    } else {
+                        /* Single scalar element */
+                        LLVMValueRef buf = LLVMBuildAlloca(ctx->builder, elem_t, "scal");
+                        LLVMValueRef sv  = suf_r.value;
+                        if (LLVMTypeOf(sv) != elem_t)
+                            sv = LLVMBuildBitCast(ctx->builder, sv, elem_t, "sc");
+                        LLVMBuildStore(ctx->builder, sv, buf);
+                        suf_data = buf;
+                        suf_size = LLVMConstInt(i64, 1, 0);
+                    }
+
+                    LLVMValueRef enough = LLVMBuildICmp(ctx->builder, LLVMIntSGE,
+                                             col_size, suf_size, "enough");
+                    LLVMValueRef offset = is_ends
+                        ? LLVMBuildSub(ctx->builder, col_size, suf_size, "off")
+                        : LLVMConstInt(i64, 0, 0);
+
+                    /* Loop: for i in [0, suf_size): col_data[offset+i] == suf_data[i] */
+                    LLVMValueRef func2   = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder));
+                    LLVMValueRef res_ptr = LLVMBuildAlloca(ctx->builder, i1, "res");
+                    LLVMBuildStore(ctx->builder, enough, res_ptr);
+                    LLVMValueRef iptr = LLVMBuildAlloca(ctx->builder, i64, "i");
+                    LLVMBuildStore(ctx->builder, LLVMConstInt(i64, 0, 0), iptr);
+
+                    LLVMBasicBlockRef chk  = LLVMAppendBasicBlockInContext(ctx->context, func2, "aw_chk");
+                    LLVMBasicBlockRef body = LLVMAppendBasicBlockInContext(ctx->context, func2, "aw_body");
+                    LLVMBasicBlockRef inc  = LLVMAppendBasicBlockInContext(ctx->context, func2, "aw_inc");
+                    LLVMBasicBlockRef fail = LLVMAppendBasicBlockInContext(ctx->context, func2, "aw_fail");
+                    LLVMBasicBlockRef done = LLVMAppendBasicBlockInContext(ctx->context, func2, "aw_done");
+
+                    LLVMBuildCondBr(ctx->builder, enough, chk, done);
+
+                    LLVMPositionBuilderAtEnd(ctx->builder, chk);
+                    LLVMValueRef iv = LLVMBuildLoad2(ctx->builder, i64, iptr, "iv");
+                    LLVMBuildCondBr(ctx->builder,
+                        LLVMBuildICmp(ctx->builder, LLVMIntSLT, iv, suf_size, "c"),
+                        body, done);
+
+                    LLVMPositionBuilderAtEnd(ctx->builder, body);
+                    LLVMValueRef iv2  = LLVMBuildLoad2(ctx->builder, i64, iptr, "iv2");
+                    LLVMValueRef ci   = LLVMBuildAdd(ctx->builder, offset, iv2, "ci");
+                    LLVMValueRef lv   = LLVMBuildLoad2(ctx->builder, elem_t,
+                                           LLVMBuildGEP2(ctx->builder, elem_t, col_data, &ci,  1, "lp"), "lv");
+                    LLVMValueRef sv2  = LLVMBuildLoad2(ctx->builder, elem_t,
+                                           LLVMBuildGEP2(ctx->builder, elem_t, suf_data, &iv2, 1, "sp"), "sv");
+                    /* Compare elements — use icmp for integers, fcmp for floats */
+                    LLVMValueRef eq;
+                    if (type_is_float(et))
+                        eq = LLVMBuildFCmp(ctx->builder, LLVMRealOEQ, lv, sv2, "eq");
+                    else
+                        eq = LLVMBuildICmp(ctx->builder, LLVMIntEQ, lv, sv2, "eq");
+                    LLVMBuildCondBr(ctx->builder,
+                        LLVMBuildNot(ctx->builder, eq, "neq"), fail, inc);
+
+                    LLVMPositionBuilderAtEnd(ctx->builder, inc);
+                    LLVMBuildStore(ctx->builder,
+                        LLVMBuildAdd(ctx->builder, iv2, LLVMConstInt(i64, 1, 0), "n"), iptr);
+                    LLVMBuildBr(ctx->builder, chk);
+
+                    LLVMPositionBuilderAtEnd(ctx->builder, fail);
+                    LLVMBuildStore(ctx->builder, LLVMConstInt(i1, 0, 0), res_ptr);
+                    LLVMBuildBr(ctx->builder, done);
+
+                    LLVMPositionBuilderAtEnd(ctx->builder, done);
+                    result.value = LLVMBuildLoad2(ctx->builder, i1, res_ptr, "aw_result");
+                    result.type  = type_bool();
+                    return result;
+                }
+
+                /* ── List ── */
+                {
+                    LLVMValueRef func2  = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder));
+                    LLVMTypeRef  lft    = LLVMFunctionType(i64, &ptr, 1, 0);
+                    LLVMValueRef len_fn = get_rt_list_length(ctx);
+                    LLVMValueRef nth_fn = get_rt_list_nth(ctx);
+                    LLVMValueRef eq_fn  = get_rt_equal_p(ctx);
+
+                    LLVMValueRef col_val = col_r.value;
+                    LLVMValueRef suf_val;
+
+                    /* Wrap scalar suffix in single-element list */
+                    if (suf_r.type && suf_r.type->kind != TYPE_LIST) {
+                        LLVMValueRef sl = LLVMBuildCall2(ctx->builder,
+                            LLVMFunctionType(ptr, NULL, 0, 0), get_rt_list_new(ctx), NULL, 0, "sl");
+                        LLVMValueRef bv = codegen_box(ctx, suf_r.value, suf_r.type);
+                        LLVMValueRef aa[] = {sl, bv};
+                        LLVMBuildCall2(ctx->builder,
+                            LLVMFunctionType(LLVMVoidTypeInContext(ctx->context),
+                                             (LLVMTypeRef[]){ptr, ptr}, 2, 0),
+                            get_rt_list_append(ctx), aa, 2, "");
+                        suf_val = sl;
+                    } else {
+                        suf_val = suf_r.value;
+                    }
+
+                    LLVMValueRef lla[]  = {col_val};
+                    LLVMValueRef sla[]  = {suf_val};
+                    LLVMValueRef llen   = LLVMBuildCall2(ctx->builder, lft, len_fn, lla, 1, "llen");
+                    LLVMValueRef slen   = LLVMBuildCall2(ctx->builder, lft, len_fn, sla, 1, "slen");
+                    LLVMValueRef enough = LLVMBuildICmp(ctx->builder, LLVMIntSGE, llen, slen, "enough");
+                    LLVMValueRef offset = is_ends
+                        ? LLVMBuildSub(ctx->builder, llen, slen, "off")
+                        : LLVMConstInt(i64, 0, 0);
+
+                    LLVMValueRef res_ptr = LLVMBuildAlloca(ctx->builder, i1, "res");
+                    LLVMBuildStore(ctx->builder, enough, res_ptr);
+                    LLVMValueRef iptr = LLVMBuildAlloca(ctx->builder, i64, "i");
+                    LLVMBuildStore(ctx->builder, LLVMConstInt(i64, 0, 0), iptr);
+
+                    LLVMBasicBlockRef chk  = LLVMAppendBasicBlockInContext(ctx->context, func2, "lw_chk");
+                    LLVMBasicBlockRef body = LLVMAppendBasicBlockInContext(ctx->context, func2, "lw_body");
+                    LLVMBasicBlockRef inc  = LLVMAppendBasicBlockInContext(ctx->context, func2, "lw_inc");
+                    LLVMBasicBlockRef fail = LLVMAppendBasicBlockInContext(ctx->context, func2, "lw_fail");
+                    LLVMBasicBlockRef done = LLVMAppendBasicBlockInContext(ctx->context, func2, "lw_done");
+
+                    LLVMBuildCondBr(ctx->builder, enough, chk, done);
+
+                    LLVMPositionBuilderAtEnd(ctx->builder, chk);
+                    LLVMValueRef iv = LLVMBuildLoad2(ctx->builder, i64, iptr, "iv");
+                    LLVMBuildCondBr(ctx->builder,
+                        LLVMBuildICmp(ctx->builder, LLVMIntSLT, iv, slen, "c"),
+                        body, done);
+
+                    LLVMPositionBuilderAtEnd(ctx->builder, body);
+                    LLVMValueRef iv2 = LLVMBuildLoad2(ctx->builder, i64, iptr, "iv2");
+                    LLVMValueRef li  = LLVMBuildAdd(ctx->builder, offset, iv2, "li");
+                    LLVMTypeRef  nft_p[] = {ptr, i64};
+                    LLVMTypeRef  nft = LLVMFunctionType(ptr, nft_p, 2, 0);
+                    LLVMValueRef lna[] = {col_val, li};
+                    LLVMValueRef sna[] = {suf_val, iv2};
+                    LLVMValueRef lv  = LLVMBuildCall2(ctx->builder, nft, nth_fn, lna, 2, "lv");
+                    LLVMValueRef sv  = LLVMBuildCall2(ctx->builder, nft, nth_fn, sna, 2, "sv");
+                    LLVMTypeRef  eft_p[] = {ptr, ptr};
+                    LLVMValueRef ea[] = {lv, sv};
+                    LLVMValueRef eqv = LLVMBuildCall2(ctx->builder,
+                        LLVMFunctionType(i32, eft_p, 2, 0), eq_fn, ea, 2, "eqv");
+                    LLVMBuildCondBr(ctx->builder,
+                        LLVMBuildICmp(ctx->builder, LLVMIntEQ, eqv, LLVMConstInt(i32, 0, 0), "neq"),
+                        fail, inc);
+
+                    LLVMPositionBuilderAtEnd(ctx->builder, inc);
+                    LLVMBuildStore(ctx->builder,
+                        LLVMBuildAdd(ctx->builder, iv2, LLVMConstInt(i64, 1, 0), "n"), iptr);
+                    LLVMBuildBr(ctx->builder, chk);
+
+                    LLVMPositionBuilderAtEnd(ctx->builder, fail);
+                    LLVMBuildStore(ctx->builder, LLVMConstInt(i1, 0, 0), res_ptr);
+                    LLVMBuildBr(ctx->builder, done);
+
+                    LLVMPositionBuilderAtEnd(ctx->builder, done);
+                    result.value = LLVMBuildLoad2(ctx->builder, i1, res_ptr, "lw_result");
+                    result.type  = type_bool();
+                    return result;
+                }
             }
 
             if (strcmp(head->symbol, "count") == 0) {
@@ -8014,6 +8681,54 @@ if (ast->list.count >= 5) {
                     CodegenResult arg_result = codegen_expr(ctx, ast->list.items[i + 1]);
 
                     Type *expected_type = entry->params[i].type;
+
+                    // Compile-time refinement check via JIT — fully general,
+                    // works for any predicate the user writes.
+                    {
+                        AST *arg_ast = ast->list.items[i + 1];
+                        /* Unwrap unary minus: (- 1) -> treat as negative number */
+                        if (arg_ast->type == AST_LIST &&
+                            arg_ast->list.count == 2 &&
+                            arg_ast->list.items[0]->type == AST_SYMBOL &&
+                            strcmp(arg_ast->list.items[0]->symbol, "-") == 0 &&
+                            arg_ast->list.items[1]->type == AST_NUMBER) {
+                            /* synthesize a negative AST_NUMBER for the check */
+                            AST *neg = ast_clone(arg_ast->list.items[1]);
+                            neg->number     = -neg->number;
+                            neg->raw_int    = -neg->raw_int;
+                            neg->has_raw_int = arg_ast->list.items[1]->has_raw_int;
+                            arg_ast = neg;
+                        }
+                        if ((arg_ast->type == AST_NUMBER || arg_ast->type == AST_STRING) &&
+                            entry->source_ast &&
+                            entry->source_ast->type == AST_LAMBDA &&
+                            i < entry->source_ast->lambda.param_count) {
+                            const char *ann = entry->source_ast->lambda.params[i].type_name;
+                            if (ann) {
+                                int ok = jit_eval_refinement(ctx, ann, arg_ast);
+                                fprintf(stderr, "DEBUG refinement check: type='%s' ok=%d\n", ann, ok);
+                                if (ok == 0) {
+                                    if (arg_ast->type == AST_STRING) {
+                                        CODEGEN_ERROR(ctx,
+                                            "%s:%d:%d: error: \"%s\" does not satisfy "
+                                            "refinement type %s",
+                                            parser_get_filename(),
+                                            arg_ast->line, arg_ast->column,
+                                            arg_ast->string, ann);
+                                    } else {
+                                        CODEGEN_ERROR(ctx,
+                                            "%s:%d:%d: error: %g does not satisfy "
+                                            "refinement type %s",
+                                            parser_get_filename(),
+                                            arg_ast->line, arg_ast->column,
+                                            arg_ast->number, ann);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+
                     Type *actual_type   = arg_result.type;
                     LLVMValueRef converted_arg = arg_result.value;
 
@@ -9134,15 +9849,151 @@ if (ast->list.count >= 5) {
                 parser_get_filename(), ast->line, ast->column);
     }
 
-    case AST_TYPE_ALIAS: {
-        const char *alias_name = ast->type_alias.alias_name;
-        if (!alias_name || !isupper((unsigned char)alias_name[0])) {
-            CODEGEN_ERROR(ctx, "%s:%d:%d: error: type alias '%s' must start with an uppercase letter",
-                          parser_get_filename(), ast->line, ast->column,
-                          alias_name ? alias_name : "");
+    case AST_REFINEMENT: {
+        const char *rname     = ast->refinement.name;
+        const char *var       = ast->refinement.var;
+        const char *base      = ast->refinement.base_type;
+        AST        *pred      = ast->refinement.predicate;
+        const char *doc       = ast->refinement.docstring;
+        const char *alias_sym = ast->refinement.alias_name;
+
+        /* Anonymous refinement { x ∈ T | pred } used as a value —
+         * emit as a lambda: (lambda ([x :: T]) pred)              */
+        if (!rname) {
+            ASTParam *params = malloc(sizeof(ASTParam));
+            params[0].name      = strdup(var ? var : "x");
+            params[0].type_name = base ? strdup(base) : NULL;
+            params[0].is_rest   = false;
+            params[0].is_anon   = false;
+
+            AST **body_exprs = malloc(sizeof(AST*));
+            body_exprs[0] = ast_clone(pred);
+
+            AST *lam = ast_new_lambda(params, 1, "Bool", NULL, NULL, false,
+                                      body_exprs[0], body_exprs, 1);
+            lam->line   = ast->line;
+            lam->column = ast->column;
+            CodegenResult r = codegen_expr(ctx, lam);
+            ast_free(lam);
+            return r;
         }
-        type_alias_register(alias_name, ast->type_alias.target_name);
-        printf("Type alias: %s = %s\n", alias_name, ast->type_alias.target_name);
+
+        if (!isupper((unsigned char)rname[0])) {
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: refinement type name '%s' must start uppercase",
+                          parser_get_filename(), ast->line, ast->column, rname);
+        }
+
+        /* 1. Register as a type alias and refinement */
+        type_alias_register(rname, base);
+        /* Also register the alias name if present so it works in type annotations */
+        if (alias_sym) {
+            type_alias_register(alias_sym, rname);
+            fprintf(stderr, "DEBUG alias registered: '%s' -> '%s'\n", alias_sym, rname);
+        }
+        if (pred) {
+            char pred_name_buf[256];
+            snprintf(pred_name_buf, sizeof(pred_name_buf), "%s?", rname);
+            refinement_register(rname, pred_name_buf, base, pred, var);
+        }
+
+        /* Pure alias — no predicate to generate */
+        if (!pred) {
+            if (alias_sym) {
+                /* register the alias name too */
+                type_alias_register(alias_sym, base);
+            }
+            printf("Type alias: %s -> %s\n", rname, base);
+            result.type  = NULL;
+            result.value = NULL;
+            return result;
+        }
+
+        /* 2. Generate predicate function: Name? :: Base -> Bool
+         *    (define (Name? var) pred)                          */
+        char pred_name[256];
+        snprintf(pred_name, sizeof(pred_name), "%s?", rname);
+
+        /* Build: (define (Name? [var :: Base]) pred) */
+        ASTParam *params = malloc(sizeof(ASTParam));
+        params[0].name      = strdup(var);
+        params[0].type_name = strdup(base);
+        params[0].is_rest   = false;
+        params[0].is_anon   = false;
+
+        AST **body_exprs = malloc(sizeof(AST*));
+        body_exprs[0] = ast_clone(pred);
+
+        char pred_doc[512] = {0};
+        if (doc)
+            snprintf(pred_doc, sizeof(pred_doc), "Returns True if %s satisfies: %s", var, doc);
+        else
+            snprintf(pred_doc, sizeof(pred_doc), "Returns True if value satisfies %s refinement", rname);
+
+        AST *pred_lambda = ast_new_lambda(params, 1, "Bool",
+                                          pred_doc, NULL, false,
+                                          body_exprs[0], body_exprs, 1);
+        AST *pred_fname  = ast_new_symbol(pred_name);
+        AST *pred_define = ast_new_list();
+        ast_list_append(pred_define, ast_new_symbol("define"));
+        ast_list_append(pred_define, pred_fname);
+        ast_list_append(pred_define, pred_lambda);
+
+        codegen_expr(ctx, pred_define);
+        ast_free(pred_define);
+
+        /* 3. Generate constructor: Name :: Base -> Base
+         *    Checks predicate, errors if false, returns value  */
+        char cons_doc[512] = {0};
+        if (doc)
+            snprintf(cons_doc, sizeof(cons_doc), "%s", doc);
+        else
+            snprintf(cons_doc, sizeof(cons_doc), "Construct a %s value (checks refinement predicate)", rname);
+
+        /* Build the constructor body:
+         * (if (Name? var) var (error "type error: value does not satisfy Name")) */
+        AST *check_call = ast_new_list();
+        ast_list_append(check_call, ast_new_symbol(pred_name));
+        ast_list_append(check_call, ast_new_symbol(var));
+
+        char errmsg[512];
+        snprintf(errmsg, sizeof(errmsg),
+                 "type error: value does not satisfy %s", rname);
+
+        /* Use show + abort for the error branch */
+        AST *err_show = ast_new_list();
+        ast_list_append(err_show, ast_new_symbol("show"));
+        ast_list_append(err_show, ast_new_string(errmsg));
+
+        AST *cons_if = ast_new_list();
+        ast_list_append(cons_if, ast_new_symbol("if"));
+        ast_list_append(cons_if, check_call);
+        ast_list_append(cons_if, ast_new_symbol(var));
+        ast_list_append(cons_if, err_show);
+
+        ASTParam *cparams = malloc(sizeof(ASTParam));
+        cparams[0].name      = strdup(var);
+        cparams[0].type_name = strdup(base);
+        cparams[0].is_rest   = false;
+        cparams[0].is_anon   = false;
+
+        AST **cbody = malloc(sizeof(AST*));
+        cbody[0] = cons_if;
+
+        AST *cons_lambda = ast_new_lambda(cparams, 1, base,
+                                          cons_doc, alias_sym, false,
+                                          cons_if, cbody, 1);
+        AST *cons_fname  = ast_new_symbol(rname);
+        AST *cons_define = ast_new_list();
+        ast_list_append(cons_define, ast_new_symbol("define"));
+        ast_list_append(cons_define, cons_fname);
+        ast_list_append(cons_define, cons_lambda);
+
+        codegen_expr(ctx, cons_define);
+        ast_free(cons_define);
+
+        printf("Refinement type: %s (%s) where %s satisfies predicate\n",
+               rname, base, var);
+
         result.type  = NULL;
         result.value = NULL;
         return result;
@@ -9221,6 +10072,7 @@ if (ast->list.count >= 5) {
     }
 }
 
+
 /// Module
 
 
@@ -9289,15 +10141,17 @@ void register_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "merge",    2, 0, "Merge two maps, rightmost wins on conflict");
 
     // Set
-    env_insert_builtin(ctx->env, "set",         0, -1, "Create a set from arguments or convert a collection");
-    env_insert_builtin(ctx->env, "Set?",        1,  0, "Test if value is a set");
-    env_insert_builtin(ctx->env, "collection?", 1,  0, "Test if value is a List, Set, or Arr");
-    env_insert_builtin(ctx->env, "conj",        2,  0, "Add an element to a set");
-    env_insert_builtin(ctx->env, "disj",        2,  0, "Remove an element from a set");
-    env_insert_builtin(ctx->env, "conj!",       2,  0, "Mutate a set by adding an element in place");
-    env_insert_builtin(ctx->env, "disj!",       2,  0, "Mutate a set by removing an element in place");
-    env_insert_builtin(ctx->env, "contains?",   2,  0, "Test if a set contains an element");
-    env_insert_builtin(ctx->env, "count",       1,  0, "Get number of elements in a set");
+    env_insert_builtin(ctx->env, "set",          0, -1, "Create a set from arguments or convert a collection");
+    env_insert_builtin(ctx->env, "Set?",         1,  0, "Test if value is a set");
+    env_insert_builtin(ctx->env, "collection?",  1,  0, "Test if value is a List, Set, or Arr");
+    env_insert_builtin(ctx->env, "conj",         2,  0, "Add an element to a set");
+    env_insert_builtin(ctx->env, "disj",         2,  0, "Remove an element from a set");
+    env_insert_builtin(ctx->env, "conj!",        2,  0, "Mutate a set by adding an element in place");
+    env_insert_builtin(ctx->env, "disj!",        2,  0, "Mutate a set by removing an element in place");
+    env_insert_builtin(ctx->env, "contains?",    2,  0, "Test if a set contains an element");
+    env_insert_builtin(ctx->env, "ends-with?",   2,  0, "Test if a string, list or array ends with a suffix");
+    env_insert_builtin(ctx->env, "starts-with?", 2,  0, "Test if a string, list or array starts with a prefix");
+    env_insert_builtin(ctx->env, "count",        1,  0, "Get number of elements in a set");
 
     // List operations
     env_insert_builtin(ctx->env, "list",    0, -1, "Create a list from arguments");
@@ -9335,6 +10189,7 @@ void register_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "include",    1,  0, "Include a C header via FFI");
     env_insert_builtin(ctx->env, "import",     1,  0, "Import a module");
     env_insert_builtin(ctx->env, "module",     1, -1, "Declare a module");
+    env_insert_builtin(ctx->env, "type",       1, -1, "Define a refinement type");
     env_insert_builtin(ctx->env, "lambda",     2, -1, "Create anonymous function");
     env_insert_builtin(ctx->env, "quote",      1,  0, "Quote expression without evaluation");
     env_insert_builtin(ctx->env, "show",       1,  0, "Print a value to stdout");

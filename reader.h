@@ -22,7 +22,7 @@ typedef enum {
     AST_ARRAY,      // array literal [1 2 3]
     AST_LAMBDA,     // (lambda ([x :: T] -> ... -> Ret<T>) "doc" body)
     AST_ASM,        // (asm instruction operand1 operand2 ...)
-    AST_TYPE_ALIAS, // (type Code List)
+    AST_REFINEMENT, // (type Positive { x ∈ Int | (> x 0) })
     AST_TESTS,      // (tests ...)
     AST_ADDRESS_OF, // &expr
     AST_RANGE,      // (0..10) [0..10] [1,3..40] (0..)
@@ -132,6 +132,16 @@ typedef struct AST {
             char *target_name;  // "List"
         } type_alias;
 
+        // AST_REFINEMENT
+        struct {
+            char       *name;        // "Positive"
+            char       *var;         // "x"
+            char       *base_type;   // "Int"
+            struct AST *predicate;   // the expression after |
+            char       *docstring;   // NULL if absent
+            char       *alias_name;  // NULL if absent
+        } refinement;
+
         struct {
             struct AST **assertions;
             int count;
@@ -210,6 +220,9 @@ AST *ast_new_lambda(ASTParam *params, int param_count,
                     int body_count);
 AST *ast_new_asm(AST **instructions, size_t instruction_count);
 AST *ast_new_type_alias(const char *alias_name, const char *target_name);
+AST *ast_new_refinement(const char *name, const char *var,
+                        const char *base_type, AST *predicate,
+                        const char *docstring, const char *alias_name);
 AST *ast_new_address_of(AST *operand);
 AST *ast_new_range(AST *start, AST *step, AST *end, bool is_array);
 AST *ast_new_layout(const char *name,

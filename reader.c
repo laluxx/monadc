@@ -226,11 +226,17 @@ AST *ast_new_array(void) {
     return a;
 }
 
-AST *ast_new_type_alias(const char *alias_name, const char *target_name) {
+AST *ast_new_refinement(const char *name, const char *var,
+                        const char *base_type, AST *predicate,
+                        const char *docstring, const char *alias_name) {
     AST *a = calloc(1, sizeof(AST));
-    a->type = AST_TYPE_ALIAS;
-    a->type_alias.alias_name  = my_strdup(alias_name);
-    a->type_alias.target_name = my_strdup(target_name);
+    a->type                    = AST_REFINEMENT;
+    a->refinement.name         = name      ? my_strdup(name)      : NULL;
+    a->refinement.var          = var       ? my_strdup(var)        : NULL;
+    a->refinement.base_type    = base_type ? my_strdup(base_type)  : NULL;
+    a->refinement.predicate    = predicate;
+    a->refinement.docstring    = docstring   ? my_strdup(docstring)   : NULL;
+    a->refinement.alias_name   = alias_name  ? my_strdup(alias_name)  : NULL;
     return a;
 }
 
@@ -400,6 +406,16 @@ AST *ast_clone(AST *ast) {
         c->range.step  = ast_clone(ast->range.step);
         c->range.end   = ast_clone(ast->range.end);
         break;
+
+    case AST_REFINEMENT:
+        c->refinement.name       = ast->refinement.name       ? strdup(ast->refinement.name)       : NULL;
+        c->refinement.var        = ast->refinement.var        ? strdup(ast->refinement.var)        : NULL;
+        c->refinement.base_type  = ast->refinement.base_type  ? strdup(ast->refinement.base_type)  : NULL;
+        c->refinement.predicate  = ast_clone(ast->refinement.predicate);
+        c->refinement.docstring  = ast->refinement.docstring  ? strdup(ast->refinement.docstring)  : NULL;
+        c->refinement.alias_name = ast->refinement.alias_name ? strdup(ast->refinement.alias_name) : NULL;
+        break;
+
     default:
         break;
     }
@@ -467,9 +483,13 @@ void ast_free(AST *ast) {
         free(ast->keyword);
         break;
 
-    case AST_TYPE_ALIAS:
-        free(ast->type_alias.alias_name);
-        free(ast->type_alias.target_name);
+    case AST_REFINEMENT:
+        free(ast->refinement.name);
+        free(ast->refinement.var);
+        free(ast->refinement.base_type);
+        ast_free(ast->refinement.predicate);
+        free(ast->refinement.docstring);
+        free(ast->refinement.alias_name);
         break;
 
     case AST_TESTS:
@@ -595,9 +615,6 @@ void ast_print(AST *ast) {
     case AST_KEYWORD:
         printf(":%s", ast->keyword);
         break;
-    case AST_TYPE_ALIAS:
-        printf("(type %s %s)", ast->type_alias.alias_name, ast->type_alias.target_name);
-        break;
     case AST_ADDRESS_OF:
         printf("&");
         ast_print(ast->list.items[0]);
@@ -665,6 +682,49 @@ void ast_print(AST *ast) {
         if (ast->layout.packed) printf(" :packed True");
         if (ast->layout.align)  printf(" :align %d", ast->layout.align);
         printf(")");
+        break;
+
+    case AST_SET:
+        printf("{");
+        for (size_t i = 0; i < ast->set.element_count; i++) {
+            if (i > 0) printf(" ");
+            ast_print(ast->set.elements[i]);
+        }
+        printf("}");
+        break;
+
+    case AST_MAP:
+        printf("#{");
+        for (size_t i = 0; i < ast->map.count; i++) {
+            if (i > 0) printf(" ");
+            ast_print(ast->map.keys[i]);
+            printf(" ");
+            ast_print(ast->map.vals[i]);
+        }
+        printf("}");
+        break;
+
+    case AST_REFINEMENT:
+        if (ast->refinement.name)
+            printf("(type %s { %s ∈ %s | ",
+                   ast->refinement.name,
+                   ast->refinement.var  ? ast->refinement.var  : "?",
+                   ast->refinement.base_type ? ast->refinement.base_type : "?");
+        else
+            printf("{ %s ∈ %s | ",
+                   ast->refinement.var  ? ast->refinement.var  : "?",
+                   ast->refinement.base_type ? ast->refinement.base_type : "?");
+        ast_print(ast->refinement.predicate);
+        if (ast->refinement.name) {
+            printf(" }");
+            if (ast->refinement.docstring)
+                printf(" \"%s\"", ast->refinement.docstring);
+            if (ast->refinement.alias_name)
+                printf(" :alias %s", ast->refinement.alias_name);
+            printf(")");
+        } else {
+            printf(" }");
+        }
         break;
     }
 }
@@ -2047,7 +2107,9 @@ if (p->current.type == TOK_SYMBOL &&
         return asm_node;
     }
 
-    // Type alias
+    // Type alias or refinement type
+    // (type Code List)                        — simple alias
+    // (type Positive { x ∈ Int | (> x 0) })  — refinement type
     if (p->current.type == TOK_SYMBOL &&
         strcmp(p->current.value, "type") == 0) {
 
@@ -2056,17 +2118,97 @@ if (p->current.type == TOK_SYMBOL &&
 
         if (p->current.type != TOK_SYMBOL) {
             compiler_error(p->current.line, p->current.column,
-                           "Expected alias name after 'type'");
+                           "Expected type name after 'type'");
         }
-        char *alias_name = my_strdup(p->current.value);
+        char *type_name = my_strdup(p->current.value);
         p->current = lexer_next_token(p->lexer);
 
+        /* Refinement type: { x ∈ Base | predicate }
+         * parse_expr → parse_set → parse_refinement_expr handles the {}
+         * we just need to extract var/base/pred from the result          */
+        if (p->current.type == TOK_LBRACE) {
+            AST *ref = parse_expr(p); /* parse_set detects ∈ and returns AST_REFINEMENT */
+            if (!ref || ref->type != AST_REFINEMENT) {
+                compiler_error(p->current.line, p->current.column,
+                               "Expected refinement type { x ∈ T | pred }");
+            }
+            /* set the name on the anonymous refinement */
+            free(ref->refinement.name);
+            ref->refinement.name = my_strdup(type_name);
+            free(type_name);
+
+            /* Optional metadata after {}: docstring and/or keywords */
+            char *docstring  = NULL;
+            char *alias_name = NULL;
+            if (p->current.type == TOK_STRING) {
+                docstring  = my_strdup(p->current.value);
+                p->current = lexer_next_token(p->lexer);
+            }
+
+            while (p->current.type == TOK_KEYWORD) {
+                if (strcmp(p->current.value, "doc") == 0) {
+                    p->current = lexer_next_token(p->lexer);
+                    if (p->current.type == TOK_STRING) {
+                        free(docstring);
+                        docstring  = my_strdup(p->current.value);
+                        p->current = lexer_next_token(p->lexer);
+                    }
+                } else if (strcmp(p->current.value, "alias") == 0) {
+                    p->current = lexer_next_token(p->lexer);
+                    if (p->current.type == TOK_SYMBOL) {
+                        free(alias_name);
+                        alias_name = my_strdup(p->current.value);
+                        p->current = lexer_next_token(p->lexer);
+                    }
+                } else break;
+            }
+            ref->refinement.docstring  = docstring;
+            ref->refinement.alias_name = alias_name;
+
+            if (p->current.type != TOK_RPAREN)
+                compiler_error(p->current.line, p->current.column,
+                               "Expected ')' to close type definition");
+            int end_col = p->current.column + 1;
+            p->current = lexer_next_token(p->lexer);
+
+            ast_free(list);
+            ref->line = tline; ref->column = tcol;
+            ref->end_column = end_col;
+            return ref;
+        }
+
+        /* Simple alias: (type Code List) — sugar for a refinement with no predicate */
         if (p->current.type != TOK_SYMBOL) {
             compiler_error(p->current.line, p->current.column,
-                           "Expected target type name after alias name");
+                           "Expected target type name or '{' after type name");
         }
         char *target_name = my_strdup(p->current.value);
         p->current = lexer_next_token(p->lexer);
+
+        /* Consume optional metadata: docstring and/or :doc/:alias */
+        char *alias_doc  = NULL;
+        char *alias_name = NULL;
+        if (p->current.type == TOK_STRING) {
+            alias_doc  = my_strdup(p->current.value);
+            p->current = lexer_next_token(p->lexer);
+        }
+        while (p->current.type == TOK_KEYWORD) {
+            if (strcmp(p->current.value, "doc") == 0) {
+                p->current = lexer_next_token(p->lexer);
+                if (p->current.type == TOK_STRING) {
+                    free(alias_doc);
+                    alias_doc  = my_strdup(p->current.value);
+                    p->current = lexer_next_token(p->lexer);
+                }
+            } else if (strcmp(p->current.value, "alias") == 0) {
+                p->current = lexer_next_token(p->lexer);
+                if (p->current.type == TOK_SYMBOL) {
+                    free(alias_name);
+                    alias_name = my_strdup(p->current.value);
+                    p->current = lexer_next_token(p->lexer);
+                }
+            } else break;
+        }
 
         if (p->current.type != TOK_RPAREN) {
             compiler_error(p->current.line, p->current.column,
@@ -2076,11 +2218,12 @@ if (p->current.type == TOK_SYMBOL &&
         p->current = lexer_next_token(p->lexer);
 
         ast_free(list);
-        AST *node = ast_new_type_alias(alias_name, target_name);
-        free(alias_name);
-        free(target_name);
-        node->line = tline;
-        node->column = tcol;
+        /* Represent as AST_REFINEMENT with NULL predicate = pure alias */
+        AST *node = ast_new_refinement(type_name, NULL, target_name,
+                                       NULL, alias_doc, alias_name);
+        free(type_name); free(target_name);
+        free(alias_doc); free(alias_name);
+        node->line = tline; node->column = tcol;
         node->end_column = end_col;
         return node;
     }
@@ -2521,10 +2664,187 @@ static void set_raw_int(AST *ast, const char *s) {
     }
 }
 
+static bool is_elem_of(const char *s) {
+    if (!s) return false;
+    unsigned char u0 = (unsigned char)s[0];
+    unsigned char u1 = (unsigned char)s[1];
+    unsigned char u2 = (unsigned char)s[2];
+    return (u0 == 0xE2 && u1 == 0x88 && u2 == 0x88) || strcmp(s, "in") == 0;
+}
+
+/* Parse { x ∈ T | pred } as a refinement expression (anonymous).
+ * Called from parse_set when we detect the set-builder pattern.
+ * Returns an AST_REFINEMENT with name=NULL (anonymous). */
+static AST *parse_refinement_expr(Parser *p, int start_line, int start_col) {
+    /* var already confirmed to be current token */
+    if (!p->current.value)
+        compiler_error(p->current.line, p->current.column,
+                       "Expected variable name in refinement { x ∈ T | pred }");
+    char *var = my_strdup(p->current.value);
+    p->current = lexer_next_token(p->lexer); // consume var
+
+    /* consume ∈ or 'in' */
+    if (!p->current.value)
+        compiler_error(p->current.line, p->current.column,
+                       "Expected '∈' after variable name");
+    p->current = lexer_next_token(p->lexer); // consume ∈
+
+    if (!p->current.value || p->current.type != TOK_SYMBOL)
+        compiler_error(p->current.line, p->current.column,
+                       "Expected base type after '∈'");
+
+    if (p->current.type != TOK_SYMBOL)
+        compiler_error(p->current.line, p->current.column,
+                       "Expected base type after '∈'");
+    char *base = my_strdup(p->current.value);
+    p->current = lexer_next_token(p->lexer); // consume base type
+
+    if (p->current.type != TOK_PIPE)
+        compiler_error(p->current.line, p->current.column,
+                       "Expected '|' after base type");
+    p->current = lexer_next_token(p->lexer); // consume '|'
+
+    /* Predicate: everything until '}' parsed as one expression.
+     * Support both s-expr (>= x 0) and infix x >= 0 by checking:
+     * if next token is '(' parse normally, otherwise wrap tokens
+     * until '}' into an infix expression using existing backtick logic */
+    AST *pred = NULL;
+    if (p->current.type == TOK_LPAREN ||
+        p->current.type == TOK_LBRACE) {
+        pred = parse_expr(p);
+    } else {
+        /* Collect tokens until '}' and build (op lhs rhs) */
+        /* lhs */
+        AST *lhs = parse_expr(p);
+        if (p->current.type != TOK_RBRACE) {
+            /* op */
+            if (p->current.type != TOK_SYMBOL)
+                compiler_error(p->current.line, p->current.column,
+                               "Expected operator in refinement predicate");
+            char *op = my_strdup(p->current.value);
+            p->current = lexer_next_token(p->lexer);
+            /* rhs — collect remaining until '}' into a begin if multiple */
+            AST *rhs = parse_expr(p);
+            /* handle chained: x >= 0 and x < 100 etc. */
+            pred = ast_new_list();
+            ast_list_append(pred, ast_new_symbol(op));
+            ast_list_append(pred, lhs);
+            ast_list_append(pred, rhs);
+            free(op);
+            /* chain: either arithmetic continuation (x % 2 = 0 → (= (% x 2) 0))
+             * or logical connector (x > 0 and x < 10 → (and (> x 0) (< x 10))) */
+            while (p->current.type != TOK_RBRACE &&
+                   p->current.type != TOK_EOF &&
+                   p->current.type == TOK_SYMBOL) {
+                const char *sv = p->current.value;
+                unsigned char c0 = (unsigned char)sv[0];
+                unsigned char c1 = (unsigned char)sv[1];
+                unsigned char c2 = (unsigned char)sv[2];
+
+                /* logical connector: and ∧ or ∨ */
+                const char *conn = NULL;
+                if (strcmp(sv, "and") == 0 || (c0==0xE2 && c1==0x88 && c2==0xA7))
+                    conn = "and";
+                else if (strcmp(sv, "or") == 0 || (c0==0xE2 && c1==0x88 && c2==0xA8))
+                    conn = "or";
+
+                if (conn) {
+                    p->current = lexer_next_token(p->lexer); // consume connector
+                    /* parse next comparison: lhs op rhs */
+                    AST *lhs2 = parse_expr(p);
+                    if (p->current.type == TOK_RBRACE ||
+                        p->current.type == TOK_EOF) {
+                        /* bare predicate call like (prime? x) */
+                        AST *node = ast_new_list();
+                        ast_list_append(node, ast_new_symbol(conn));
+                        ast_list_append(node, pred);
+                        ast_list_append(node, lhs2);
+                        pred = node;
+                        break;
+                    }
+                    /* op rhs */
+                    char *op2 = my_strdup(p->current.value);
+                    p->current = lexer_next_token(p->lexer);
+                    AST *rhs2 = parse_expr(p);
+                    AST *cmp2 = ast_new_list();
+                    ast_list_append(cmp2, ast_new_symbol(op2));
+                    ast_list_append(cmp2, lhs2);
+                    ast_list_append(cmp2, rhs2);
+                    free(op2);
+                    /* handle further chaining on rhs2: x % 2 = 0 */
+                    while (p->current.type == TOK_SYMBOL &&
+                           p->current.type != TOK_RBRACE) {
+                        const char *sv2 = p->current.value;
+                        unsigned char d0 = (unsigned char)sv2[0];
+                        unsigned char d1 = (unsigned char)sv2[1];
+                        unsigned char d2 = (unsigned char)sv2[2];
+                        if (strcmp(sv2,"and")==0 || strcmp(sv2,"or")==0 ||
+                            (d0==0xE2 && d1==0x88 && (d2==0xA7||d2==0xA8)))
+                            break; /* logical connector — outer loop handles it */
+                        char *op3 = my_strdup(sv2);
+                        p->current = lexer_next_token(p->lexer);
+                        AST *rhs3 = parse_expr(p);
+                        AST *cmp3 = ast_new_list();
+                        ast_list_append(cmp3, ast_new_symbol(op3));
+                        ast_list_append(cmp3, cmp2);
+                        ast_list_append(cmp3, rhs3);
+                        free(op3);
+                        cmp2 = cmp3;
+                    }
+                    AST *node = ast_new_list();
+                    ast_list_append(node, ast_new_symbol(conn));
+                    ast_list_append(node, pred);
+                    ast_list_append(node, cmp2);
+                    pred = node;
+                } else {
+                    /* arithmetic continuation: (pred) op rhs
+                     * e.g. after (% x 2) we see = 0 → (= (% x 2) 0) */
+                    char *op2 = my_strdup(sv);
+                    p->current = lexer_next_token(p->lexer);
+                    AST *rhs2 = parse_expr(p);
+                    AST *node = ast_new_list();
+                    ast_list_append(node, ast_new_symbol(op2));
+                    ast_list_append(node, pred);
+                    ast_list_append(node, rhs2);
+                    free(op2);
+                    pred = node;
+                }
+            }
+        } else {
+            pred = lhs; /* single predicate call like (prime? x) */
+        }
+    }
+
+    if (p->current.type != TOK_RBRACE)
+        compiler_error(p->current.line, p->current.column,
+                       "Expected '}' to close refinement, got '%s'",
+                       p->current.value ? p->current.value : "?");
+    p->current = lexer_next_token(p->lexer); // consume '}'
+
+    AST *node = ast_new_refinement(NULL, var, base, pred, NULL, NULL);
+    free(var); free(base);
+    node->line   = start_line;
+    node->column = start_col;
+    return node;
+}
+
 static AST *parse_set(Parser *p) {
     int start_line = p->current.line;
     int start_col  = p->current.column;
     p->current = lexer_next_token(p->lexer); /* consume '{' */
+
+    /* Detect set-builder / refinement: { x ∈ T | pred } */
+    if (p->current.type == TOK_SYMBOL && p->current.value) {
+        /* peek ahead — if next token is ∈ or 'in', it's a refinement */
+        Lexer saved_lex = *p->lexer;
+        Token peek2 = lexer_next_token(p->lexer);
+        bool is_ref = peek2.value && is_elem_of(peek2.value);
+        free(peek2.value);
+        *p->lexer = saved_lex; /* restore lexer position */
+        /* p->current is unchanged — still the var token */
+        if (is_ref)
+            return parse_refinement_expr(p, start_line, start_col);
+    }
 
     AST *node = ast_new_set();
     while (p->current.type != TOK_RBRACE &&
