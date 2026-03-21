@@ -70,17 +70,23 @@ type Positive { x ∈ Int | x > 0 }
 (define (passedCompanyEmail? [x :: CompanyEmail] -> Bool)
   (CompanyEmail? x))
 
-(show (passedCompanyEmail? "porcodio@company.com"))
-(show "TESTING")
-(show ('(1 2 3) `ends-with?` 3))
-(show ("ciao" `ends-with?` "ao"))
-(show ([1 2 3] `ends-with?` 3))
 
-(show ('(1 2 3) `ends-with?` '(2 3)))
-(show ('[1 2 3] `ends-with?` [2 3]))
-(show ("ciao" `ends-with?` 'o'))
-;; (show ("ciao" `ends-with?` 3))
+(define (return-string -> String)
+  "String returned from a function")
+
+;; (show (passedCompanyEmail? the-email))
+(show (passedCompanyEmail? (return-string)))
 
 
-;; { x ∈ Int | x >= 0 }
-;; (define positives { x ∈ Int | x >= 0 }); This is an infinite lazy set
+
+(define positives { x ∈ Int | x >= 0 }); This is an infinite lazy set
+
+
+(tests
+  (assert-eq ('(1 2 3) `ends-with?` 3     ) True  "List   ends-with? Scalar")
+  (assert-eq ("ciao"   `ends-with?` "ao"  ) True  "List   ends-with? List")
+  (assert-eq ([1 2 3]  `ends-with?` 3     ) True  "Arr    ends-with? Scalar")
+  (assert-eq ('(1 2 3) `ends-with?` '(2 3)) True  "List   ends-with? List")
+  (assert-eq ('[1 2 3] `ends-with?` [2 3] ) True  "Arr    ends-with? Arr")
+  (assert-eq ("ciao"   `ends-with?` 'o'   ) True  "String ends-with? Char"))
+ ;; (show ("ciao" `ends-with?` 3)) TODO assert-compile-error

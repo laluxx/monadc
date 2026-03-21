@@ -1340,13 +1340,22 @@ static DefineMetadata parse_define_metadata(Parser *p) {
     // Anything else = stop, that's the body.
 
     while (true) {
-        // Plain string docstring
+        // Plain string docstring — only if something follows before ')'
+        // If the string is the only thing left, it's the function body.
         if (p->current.type == TOK_STRING && !m.docstring) {
-            // But only if the token AFTER it is not TOK_RPAREN alone
-            // (i.e. there's still a body coming) — we peek by trying:
-            // Actually we just consume it; the body must follow.
-            m.docstring = my_strdup(p->current.value);
-            p->current  = lexer_next_token(p->lexer);
+            Lexer saved_lex = *p->lexer;
+            Token saved_cur = p->current;
+            char *s = my_strdup(p->current.value);
+            p->current = lexer_next_token(p->lexer);
+            if (p->current.type == TOK_RPAREN ||
+                p->current.type == TOK_EOF) {
+                /* Nothing after — restore and let body parsing take it */
+                *p->lexer  = saved_lex;
+                p->current = saved_cur;
+                free(s);
+                break;
+            }
+            m.docstring = s;
             m.consumed++;
             continue;
         }

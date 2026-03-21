@@ -2104,7 +2104,20 @@ static void cache_insert(const char *type_name, long long arg, int result) {
 static int jit_eval_refinement(CodegenContext *ctx,
                                 const char *type_name,
                                 AST *arg_ast) {
-    if (arg_ast->type != AST_NUMBER && arg_ast->type != AST_STRING) return -1;
+
+    /* For symbol arguments, try to resolve to a compile-time constant */
+    AST *resolved_ast = arg_ast;
+    if (arg_ast->type == AST_SYMBOL) {
+        EnvEntry *e = env_lookup(ctx->env, arg_ast->symbol);
+        if (e && e->kind == ENV_VAR && e->source_ast &&
+            (e->source_ast->type == AST_STRING ||
+             e->source_ast->type == AST_NUMBER)) {
+            resolved_ast = e->source_ast;
+        }
+    }
+    if (resolved_ast->type != AST_NUMBER && resolved_ast->type != AST_STRING) return -1;
+    arg_ast = resolved_ast;
+
 
     /* Resolve alias chain to find the RefinementEntry */
     const char *name = type_name;
@@ -2785,15 +2798,19 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
         {
             char *mangled = mangle_unicode_name(ast->symbol);
             if (mangled) {
+                /* Only use mangled name if the variable was actually stored
+                 * under that mangled name (i.e. it IS a unicode/special-char
+                 * variable). For normal variables with hyphens like the-email,
+                 * mangle_unicode_name fires but the variable is stored under
+                 * its original name — use entry->value directly.            */
                 LLVMValueRef mgv = LLVMGetNamedGlobal(ctx->module, mangled);
-                if (!mgv) {
-                    mgv = LLVMAddGlobal(ctx->module, type_to_llvm(ctx, entry->type), mangled);
-                    LLVMSetLinkage(mgv, LLVMExternalLinkage);
+                if (mgv) {
+                    load_target = mgv;
                 }
-                load_target = mgv;
                 free(mangled);
             }
         }
+
         result.value = LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, entry->type),
                                       load_target, ast->symbol);
         return result;
@@ -4165,7 +4182,13 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
                 env_insert(ctx->env, var_name, final_type, var);
                 EnvEntry *evar = env_lookup(ctx->env, var_name);
-                if (evar) evar->llvm_name = strdup(LLVMGetValueName(var));
+                if (evar) {
+                    evar->llvm_name = strdup(LLVMGetValueName(var));
+                    /* Store the literal AST for compile-time refinement checks */
+                    if (value_expr->type == AST_STRING ||
+                        value_expr->type == AST_NUMBER)
+                        evar->source_ast = ast_clone(value_expr);
+                }
 
                 // Optional alias at items[4]
 if (ast->list.count >= 5) {
@@ -8692,12 +8715,20 @@ if (ast->list.count >= 5) {
                             arg_ast->list.items[0]->type == AST_SYMBOL &&
                             strcmp(arg_ast->list.items[0]->symbol, "-") == 0 &&
                             arg_ast->list.items[1]->type == AST_NUMBER) {
-                            /* synthesize a negative AST_NUMBER for the check */
                             AST *neg = ast_clone(arg_ast->list.items[1]);
-                            neg->number     = -neg->number;
-                            neg->raw_int    = -neg->raw_int;
+                            neg->number      = -neg->number;
+                            neg->raw_int     = -neg->raw_int;
                             neg->has_raw_int = arg_ast->list.items[1]->has_raw_int;
                             arg_ast = neg;
+                        }
+                        /* Resolve symbol to its compile-time literal if available */
+                        if (arg_ast->type == AST_SYMBOL) {
+                            EnvEntry *ve = env_lookup(ctx->env, arg_ast->symbol);
+                            if (ve && ve->kind == ENV_VAR && ve->source_ast &&
+                                (ve->source_ast->type == AST_STRING ||
+                                 ve->source_ast->type == AST_NUMBER)) {
+                                arg_ast = ve->source_ast;
+                            }
                         }
                         if ((arg_ast->type == AST_NUMBER || arg_ast->type == AST_STRING) &&
                             entry->source_ast &&
