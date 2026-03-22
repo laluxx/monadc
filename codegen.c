@@ -6431,40 +6431,6 @@ if (ast->list.count >= 5) {
                 return result;
             }
 
-            // (__adt_field ptr fi) -> raw i64 field — legacy, prefer __field_CtorName_fi
-            if (strcmp(head->symbol, "__adt_field") == 0) {
-                if (ast->list.count != 3) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: '__adt_field' requires 2 arguments",
-                                  parser_get_filename(), ast->line, ast->column);
-                }
-                LLVMTypeRef i64  = LLVMInt64TypeInContext(ctx->context);
-                LLVMTypeRef i8ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-                LLVMTypeRef dbl  = LLVMDoubleTypeInContext(ctx->context);
-                CodegenResult ptr_r = codegen_expr(ctx, ast->list.items[1]);
-                CodegenResult idx_r = codegen_expr(ctx, ast->list.items[2]);
-                long long fi = (long long)LLVMConstIntGetZExtValue(idx_r.value);
-                long long byte_offset = 8 + fi * 8;
-                LLVMValueRef base = ptr_r.value;
-                LLVMTypeRef base_t = LLVMTypeOf(base);
-                if (LLVMGetTypeKind(base_t) == LLVMDoubleTypeKind) {
-                    LLVMValueRef as_i64 = LLVMBuildBitCast(ctx->builder, base, i64, "dbl_to_i64");
-                    base = LLVMBuildIntToPtr(ctx->builder, as_i64, i8ptr, "adt_base_ptr");
-                } else if (LLVMGetTypeKind(base_t) == LLVMIntegerTypeKind) {
-                    base = LLVMBuildIntToPtr(ctx->builder, base, i8ptr, "adt_base_ptr");
-                }
-                LLVMValueRef offset  = LLVMConstInt(i64, (uint64_t)byte_offset, 0);
-                LLVMValueRef i8base  = LLVMBuildBitCast(ctx->builder, base, i8ptr, "adt_base");
-                LLVMValueRef fptr    = LLVMBuildGEP2(ctx->builder,
-                                           LLVMInt8TypeInContext(ctx->context),
-                                           i8base, &offset, 1, "fptr");
-                LLVMTypeRef  i64ptr  = LLVMPointerType(i64, 0);
-                LLVMValueRef fptr64  = LLVMBuildBitCast(ctx->builder, fptr, i64ptr, "fptr64");
-                LLVMValueRef fval    = LLVMBuildLoad2(ctx->builder, i64, fptr64, "fval");
-                result.value = LLVMBuildBitCast(ctx->builder, fval, dbl, "field_dbl");
-                result.type  = type_float();
-                return result;
-            }
-
             if (strcmp(head->symbol, "__adt_tag") == 0) {
                 if (ast->list.count != 2) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: '__adt_tag' requires 1 argument",

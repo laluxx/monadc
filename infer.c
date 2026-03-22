@@ -844,6 +844,21 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             break;
         }
 
+        /* ---- n-ary logic — (and a b c ...) / (or a b c ...) --------- */
+        if (head->type == AST_SYMBOL &&
+            (strcmp(head->symbol, "and") == 0 ||
+             strcmp(head->symbol, "or")  == 0) &&
+            ast->list.count >= 2) {
+            for (size_t i = 1; i < ast->list.count; i++) {
+                Type *at = infer_expr(ctx, ast->list.items[i]);
+                infer_constrain(ctx, at, type_bool(),
+                                ast->list.items[i]->line,
+                                ast->list.items[i]->column);
+            }
+            result = type_bool();
+            break;
+        }
+
         /* ---- variadic call: look up if head is a variadic function --- */
         if (head->type == AST_SYMBOL) {
             TypeScheme *sc = infer_env_lookup(ctx->env, head->symbol);
