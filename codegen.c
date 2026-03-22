@@ -3376,6 +3376,200 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     bool has_type_vars = hm_scheme && hm_scheme->quantified_count > 0;
                     bool is_poly_stub  = !use_closure_abi && all_params_unknown && has_type_vars;
 
+                    /* ── Compile-time refinement check for 0-arg functions ──
+                     * If the declared return type is a refinement and the
+                     * function takes no arguments, JIT-compile and run it now,
+                     * then verify the result satisfies the predicate.         */
+
+                    /* Check that the declared return type actually exists */
+                    if (lambda->lambda.return_type) {
+                        const char *rtn = lambda->lambda.return_type;
+                        Type *rtn_type = type_from_name(rtn);
+                        bool rtn_known = (rtn_type && rtn_type->kind != TYPE_UNKNOWN &&
+                                          rtn_type->kind != TYPE_VAR);
+                        if (!rtn_known) {
+                            /* Check aliases */
+                            for (TypeAlias *a = g_aliases; a && !rtn_known; a = a->next)
+                                if (strcmp(a->alias_name, rtn) == 0) rtn_known = true;
+                            /* Check refinements */
+                            for (RefinementEntry *e = g_refinements; e && !rtn_known; e = e->next)
+                                if (strcmp(e->name, rtn) == 0) rtn_known = true;
+                            /* Check layouts */
+                            if (!rtn_known && env_lookup_layout(ctx->env, rtn))
+                                rtn_known = true;
+                        }
+                        if (!rtn_known) {
+                            CODEGEN_ERROR(ctx,
+                                "%s:%d:%d: error: function '%s' declares unknown return type '%s'",
+                                parser_get_filename(), ast->line, ast->column,
+                                var_name, rtn);
+                        }
+                    }
+
+                    if (lambda->lambda.return_type && lambda->lambda.param_count == 0 &&
+                        lambda->lambda.body_count > 0) {
+                        const char *rtype_name = lambda->lambda.return_type;
+                        fprintf(stderr, "DEBUG retcheck: fn='%s' rtype='%s'\n", var_name, rtype_name);
+                        RefinementEntry *rentry = NULL;
+                        {
+                            const char *name = rtype_name;
+                            char rbuf[256];
+                            for (int depth = 0; depth < 32 && !rentry; depth++) {
+                                for (RefinementEntry *e = g_refinements; e; e = e->next)
+                                    if (strcmp(e->name, name) == 0) { rentry = e; break; }
+                                if (rentry) break;
+                                bool stepped = false;
+                                for (TypeAlias *a = g_aliases; a; a = a->next) {
+                                    if (strcmp(a->alias_name, name) == 0) {
+                                        strncpy(rbuf, a->target_name, sizeof(rbuf)-1);
+                                        rbuf[sizeof(rbuf)-1] = '\0';
+                                        name = rbuf; stepped = true; break;
+                                    }
+                                }
+                                if (!stepped) break;
+                            }
+                        }
+                        if (rentry) {
+                            ensure_refinement_ctx();
+
+                            LLVMContextRef jit_ctx2 = LLVMContextCreate();
+                            char jmod_name[64];
+                            snprintf(jmod_name, sizeof(jmod_name), "__retcheck_%u", g_jit_pred_seq);
+                            LLVMModuleRef  jit_mod  = LLVMModuleCreateWithNameInContext(jmod_name, jit_ctx2);
+                            LLVMSetTarget(jit_mod, LLVMGetDefaultTargetTriple());
+                            LLVMBuilderRef jit_bld  = LLVMCreateBuilderInContext(jit_ctx2);
+
+                            CodegenContext jc;
+                            memset(&jc, 0, sizeof(jc));
+                            jc.module  = jit_mod;
+                            jc.builder = jit_bld;
+                            jc.context = jit_ctx2;
+                            jc.env     = env_create_child(ctx->env);
+                            jc.init_fn = NULL;
+                            declare_runtime_functions(&jc);
+
+                            /* Walk base type chain to find primitive type */
+                            const char *base_walk = rentry->base_type;
+                            char base_buf[256];
+                            for (int depth = 0; depth < 32; depth++) {
+                                RefinementEntry *be = NULL;
+                                for (RefinementEntry *e = g_refinements; e; e = e->next)
+                                    if (strcmp(e->name, base_walk) == 0) { be = e; break; }
+                                if (!be) break;
+                                strncpy(base_buf, be->base_type, sizeof(base_buf)-1);
+                                base_buf[sizeof(base_buf)-1] = '\0';
+                                base_walk = base_buf;
+                            }
+                            Type *fn_ret_base = type_from_name(base_walk);
+                            bool fn_ret_str   = fn_ret_base && fn_ret_base->kind == TYPE_STRING;
+                            LLVMTypeRef fn_ret_llvm = fn_ret_str
+                                ? LLVMPointerType(LLVMInt8TypeInContext(jit_ctx2), 0)
+                                : LLVMInt64TypeInContext(jit_ctx2);
+
+                            /* Build 0-arg function that runs the body */
+                            char jfn_name[256];
+                            snprintf(jfn_name, sizeof(jfn_name), "__jret_%u", g_jit_pred_seq++);
+                            LLVMTypeRef  jfn_ft = LLVMFunctionType(fn_ret_llvm, NULL, 0, 0);
+                            LLVMValueRef jfn    = LLVMAddFunction(jit_mod, jfn_name, jfn_ft);
+                            LLVMBasicBlockRef jfn_bb = LLVMAppendBasicBlockInContext(
+                                                           jit_ctx2, jfn, "entry");
+                            LLVMPositionBuilderAtEnd(jit_bld, jfn_bb);
+                            jc.init_fn = jfn;
+
+                            /* Swap ctx to JIT for body codegen */
+                            LLVMModuleRef  swap_mod  = ctx->module;
+                            LLVMBuilderRef swap_bld  = ctx->builder;
+                            LLVMContextRef swap_cctx = ctx->context;
+                            Env           *swap_env  = ctx->env;
+                            ctx->module  = jit_mod;
+                            ctx->builder = jit_bld;
+                            ctx->context = jit_ctx2;
+                            ctx->env     = env_create_child(jc.env);
+
+                            CodegenResult jbody = {NULL, NULL};
+                            const char *saved_fname = ctx->current_function_name;
+                            ctx->current_function_name = var_name;
+                            for (int bi = 0; bi < lambda->lambda.body_count; bi++)
+                                jbody = codegen_expr(ctx, lambda->lambda.body_exprs[bi]);
+                            ctx->current_function_name = saved_fname;
+
+                            Env *body_env = ctx->env;
+                            ctx->module  = swap_mod;
+                            ctx->builder = swap_bld;
+                            ctx->context = swap_cctx;
+                            ctx->env     = swap_env;
+                            env_free(body_env);
+
+                            if (jbody.value) {
+                                LLVMValueRef jret = jbody.value;
+                                LLVMTypeRef  jact = LLVMTypeOf(jret);
+                                if (jact != fn_ret_llvm) {
+                                    if (fn_ret_str && LLVMGetTypeKind(jact) == LLVMPointerTypeKind)
+                                        ; /* ok */
+                                    else if (!fn_ret_str && LLVMGetTypeKind(jact) == LLVMIntegerTypeKind)
+                                        jret = LLVMBuildIntCast2(jit_bld, jret, fn_ret_llvm, 1, "rc");
+                                    else if (!fn_ret_str && type_is_float(jbody.type))
+                                        jret = LLVMBuildFPToSI(jit_bld, jret, fn_ret_llvm, "rc");
+                                }
+                                LLVMBuildRet(jit_bld, jret);
+                            } else {
+                                LLVMBuildRet(jit_bld, fn_ret_str
+                                    ? (LLVMValueRef)LLVMBuildGlobalStringPtr(jit_bld, "", "empty")
+                                    : LLVMConstInt(fn_ret_llvm, 0, 0));
+                            }
+
+                            /* Verify and run to extract the return value */
+                            char *verr = NULL;
+                            if (LLVMVerifyModule(jit_mod, LLVMReturnStatusAction, &verr) == 0) {
+                                LLVMExecutionEngineRef ee = NULL;
+                                char *ee_err = NULL;
+                                if (LLVMCreateExecutionEngineForModule(&ee, jit_mod, &ee_err) == 0) {
+                                    jit_mod = NULL;
+                                    uint64_t addr = LLVMGetFunctionAddress(ee, jfn_name);
+                                    if (addr) {
+                                        AST *ret_ast = NULL;
+                                        if (fn_ret_str) {
+                                            typedef const char *(*str_fn_t)(void);
+                                            const char *ret_str = ((str_fn_t)(uintptr_t)addr)();
+                                            if (ret_str) ret_ast = ast_new_string((char*)ret_str);
+                                        } else {
+                                            typedef long long (*int_fn_t)(void);
+                                            long long ret_int = ((int_fn_t)(uintptr_t)addr)();
+                                            ret_ast = ast_new_number((double)ret_int, NULL);
+                                            ret_ast->has_raw_int = true;
+                                            ret_ast->raw_int     = ret_int;
+                                        }
+                                        if (ret_ast) {
+                                            int ok = jit_eval_refinement(ctx, rtype_name, ret_ast);
+                                            ast_free(ret_ast);
+                                            if (ok == 0) {
+                                                LLVMDisposeExecutionEngine(ee);
+                                                LLVMDisposeBuilder(jit_bld);
+                                                LLVMContextDispose(jit_ctx2);
+                                                env_free(jc.env);
+                                                CODEGEN_ERROR(ctx,
+                                                    "%s:%d:%d: error: function '%s' declares return type "
+                                                    "'%s' but its return value does not satisfy the refinement",
+                                                    parser_get_filename(), ast->line, ast->column,
+                                                    var_name, rtype_name);
+                                            }
+                                        }
+                                    }
+                                    LLVMDisposeExecutionEngine(ee);
+                                } else {
+                                    if (ee_err) LLVMDisposeMessage(ee_err);
+                                }
+                            } else {
+                                if (verr) LLVMDisposeMessage(verr);
+                            }
+
+                            LLVMDisposeBuilder(jit_bld);
+                            if (jit_mod) LLVMDisposeModule(jit_mod);
+                            LLVMContextDispose(jit_ctx2);
+                            env_free(jc.env);
+                        }
+                    }
+
                     LLVMTypeRef ret_llvm_type = (use_closure_abi || is_poly_stub ||
                                                  ret_type->kind == TYPE_VAR     ||
                                                  ret_type->kind == TYPE_UNKNOWN)
@@ -3793,9 +3987,178 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
                     }
 
+           ///// Refinement return type check
+
+                    /* If the declared return type is a refinement, verify the
+                     * body satisfies the predicate at compile time.
+                     * Only works when the body is a compile-time constant
+                     * (literal number or string).                            */
+                    if (lambda->lambda.return_type && ret_value && !use_closure_abi) {
+                        const char *rtype_name = lambda->lambda.return_type;
+                        /* Walk alias chain to find a RefinementEntry */
+                        RefinementEntry *rentry = NULL;
+                        {
+                            const char *name = rtype_name;
+                            char buf[256];
+                            for (int depth = 0; depth < 32 && !rentry; depth++) {
+                                for (RefinementEntry *e = g_refinements; e; e = e->next) {
+                                    if (strcmp(e->name, name) == 0) { rentry = e; break; }
+                                }
+                                if (rentry) break;
+                                bool stepped = false;
+                                for (TypeAlias *a = g_aliases; a; a = a->next) {
+                                    if (strcmp(a->alias_name, name) == 0) {
+                                        strncpy(buf, a->target_name, sizeof(buf)-1);
+                                        buf[sizeof(buf)-1] = '\0';
+                                        name = buf; stepped = true; break;
+                                    }
+                                }
+                                if (!stepped) break;
+                            }
+                        }
+                        if (rentry) {
+                            /* Try to extract a compile-time constant from ret_value */
+                            AST *ret_ast = NULL;
+                            /* Case 1: last body expression is a literal */
+                            if (lambda->lambda.body_count > 0) {
+                                AST *last = lambda->lambda.body_exprs[lambda->lambda.body_count - 1];
+                                if (last->type == AST_NUMBER || last->type == AST_STRING) {
+                                    ret_ast = last;
+                                } else if (last->type == AST_SYMBOL) {
+                                    /* Resolve symbol to its source literal */
+                                    EnvEntry *ve = env_lookup(ctx->env, last->symbol);
+                                    if (ve && ve->kind == ENV_VAR && ve->source_ast &&
+                                        (ve->source_ast->type == AST_NUMBER ||
+                                         ve->source_ast->type == AST_STRING))
+                                        ret_ast = ve->source_ast;
+                                }
+                            }
+                            if (ret_ast) {
+                                int ok = jit_eval_refinement(ctx, rtype_name, ret_ast);
+                                if (ok == 0) {
+                                    if (ret_ast->type == AST_STRING) {
+                                        CODEGEN_ERROR(ctx,
+                                            "%s:%d:%d: error: function '%s' declares return type '%s' "
+                                            "but its return value \"%s\" does not satisfy the refinement",
+                                            parser_get_filename(), ast->line, ast->column,
+                                            var_name, rtype_name, ret_ast->string);
+                                    } else {
+                                        CODEGEN_ERROR(ctx,
+                                            "%s:%d:%d: error: function '%s' declares return type '%s' "
+                                            "but its return value %g does not satisfy the refinement",
+                                            parser_get_filename(), ast->line, ast->column,
+                                            var_name, rtype_name, ret_ast->number);
+                                    }
+                                }
+                            } else {
+                                /* No compile-time constant available — emit a runtime check.
+                                 * Call the predicate function (Name?) on the return value
+                                 * and call __monad_runtime_error if it fails.             */
+                                char pred_name[256];
+                                snprintf(pred_name, sizeof(pred_name), "%s?", rtype_name);
+                                /* Walk alias chain for pred_name too */
+                                {
+                                    const char *pname = rtype_name;
+                                    char pbuf[256];
+                                    for (int depth = 0; depth < 32; depth++) {
+                                        snprintf(pred_name, sizeof(pred_name), "%s?", pname);
+                                        if (LLVMGetNamedFunction(ctx->module, pred_name)) break;
+                                        bool stepped = false;
+                                        for (TypeAlias *a = g_aliases; a; a = a->next) {
+                                            if (strcmp(a->alias_name, pname) == 0) {
+                                                strncpy(pbuf, a->target_name, sizeof(pbuf)-1);
+                                                pbuf[sizeof(pbuf)-1] = '\0';
+                                                pname = pbuf; stepped = true; break;
+                                            }
+                                        }
+                                        if (!stepped) break;
+                                    }
+                                }
+                                EnvEntry *pred_e = env_lookup(ctx->env, pred_name);
+                                LLVMValueRef pred_fn = pred_e ? pred_e->func_ref
+                                    : LLVMGetNamedFunction(ctx->module, pred_name);
+                                if (pred_fn && ret_value) {
+                                    LLVMTypeRef ptr_t = LLVMPointerType(
+                                        LLVMInt8TypeInContext(ctx->context), 0);
+                                    LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
+                                    LLVMTypeRef i1_t  = LLVMInt1TypeInContext(ctx->context);
+
+                                    /* Box the return value to pass to the predicate */
+                                    Type *body_t = (lambda->lambda.body_count > 0)
+                                        ? ret_type : type_unknown();
+                                    LLVMValueRef check_arg = ret_value;
+
+                                    /* Predicate expects the base type (Int/String) */
+                                    Type *base_t = type_from_name(rentry->base_type);
+                                    LLVMTypeRef pred_arg_llvm = base_t
+                                        ? type_to_llvm(ctx, base_t)
+                                        : LLVMInt64TypeInContext(ctx->context);
+
+                                    /* Coerce ret_value to pred arg type */
+                                    LLVMTypeRef cur_llvm = LLVMTypeOf(ret_value);
+                                    if (cur_llvm == ptr_t && pred_arg_llvm == i64_t) {
+                                        LLVMTypeRef uft = LLVMFunctionType(i64_t, &ptr_t, 1, 0);
+                                        check_arg = LLVMBuildCall2(ctx->builder, uft,
+                                                        get_rt_unbox_int(ctx), &ret_value, 1, "chk_ub");
+                                    } else if (cur_llvm != pred_arg_llvm) {
+                                        if (LLVMGetTypeKind(cur_llvm) == LLVMIntegerTypeKind &&
+                                            LLVMGetTypeKind(pred_arg_llvm) == LLVMIntegerTypeKind)
+                                            check_arg = LLVMBuildIntCast2(ctx->builder, ret_value,
+                                                            pred_arg_llvm, 1, "chk_cast");
+                                        else if (LLVMGetTypeKind(pred_arg_llvm) == LLVMFloatTypeKind ||
+                                                 LLVMGetTypeKind(pred_arg_llvm) == LLVMDoubleTypeKind)
+                                            check_arg = LLVMBuildSIToFP(ctx->builder, ret_value,
+                                                            pred_arg_llvm, "chk_fp");
+                                    }
+
+                                    /* Call predicate */
+                                    LLVMTypeRef pred_ft = LLVMFunctionType(i1_t, &pred_arg_llvm, 1, 0);
+                                    LLVMValueRef pred_ok = LLVMBuildCall2(ctx->builder, pred_ft,
+                                                               pred_fn, &check_arg, 1, "pred_ok");
+
+                                    /* Branch: if !pred_ok -> runtime error */
+                                    LLVMValueRef cur_fn_rt = LLVMGetBasicBlockParent(
+                                                                 LLVMGetInsertBlock(ctx->builder));
+                                    LLVMBasicBlockRef ok_bb  = LLVMAppendBasicBlockInContext(
+                                                                    ctx->context, cur_fn_rt, "ret_ok");
+                                    LLVMBasicBlockRef err_bb = LLVMAppendBasicBlockInContext(
+                                                                    ctx->context, cur_fn_rt, "ret_err");
+                                    LLVMBuildCondBr(ctx->builder, pred_ok, ok_bb, err_bb);
+
+                                    /* Error block */
+                                    LLVMPositionBuilderAtEnd(ctx->builder, err_bb);
+                                    LLVMValueRef rterr_fn = get___monad_runtime_error(ctx);
+                                    LLVMTypeRef  rte_p[]  = {ptr_t, i64_t, i64_t, ptr_t};
+                                    LLVMTypeRef  rte_ft   = LLVMFunctionType(
+                                        LLVMVoidTypeInContext(ctx->context), rte_p, 4, 0);
+                                    char errmsg_rt[512];
+                                    snprintf(errmsg_rt, sizeof(errmsg_rt),
+                                        "function '%s' return value does not satisfy refinement type '%s'",
+                                        var_name, rtype_name);
+                                    LLVMValueRef file_str = LLVMBuildGlobalStringPtr(ctx->builder,
+                                        parser_get_filename(), "ret_chk_file");
+                                    LLVMValueRef msg_str  = LLVMBuildGlobalStringPtr(ctx->builder,
+                                        errmsg_rt, "ret_chk_msg");
+                                    LLVMValueRef rte_args[] = {
+                                        file_str,
+                                        LLVMConstInt(i64_t, ast->line, 0),
+                                        LLVMConstInt(i64_t, ast->column, 0),
+                                        msg_str
+                                    };
+                                    LLVMBuildCall2(ctx->builder, rte_ft, rterr_fn, rte_args, 4, "");
+                                    LLVMBuildUnreachable(ctx->builder);
+
+                                    /* Continue in ok block */
+                                    LLVMPositionBuilderAtEnd(ctx->builder, ok_bb);
+                                }
+                            }
+                        }
+                    }
+
            ///// Emit return
 
                     if (lambda->lambda.naked) {
+
                         LLVMBuildUnreachable(ctx->builder);
                     } else {
                         // If declared return type is ptr but actual value is
@@ -9887,6 +10250,28 @@ if (ast->list.count >= 5) {
         AST        *pred      = ast->refinement.predicate;
         const char *doc       = ast->refinement.docstring;
         const char *alias_sym = ast->refinement.alias_name;
+
+        /* Validate that the base type exists before doing anything */
+        if (base && rname) {
+            Type *base_type = type_from_name(base);
+            bool base_known = (base_type && base_type->kind != TYPE_UNKNOWN &&
+                               base_type->kind != TYPE_VAR);
+            if (!base_known) {
+                for (TypeAlias *a = g_aliases; a && !base_known; a = a->next)
+                    if (strcmp(a->alias_name, base) == 0) base_known = true;
+                for (RefinementEntry *e = g_refinements; e && !base_known; e = e->next)
+                    if (strcmp(e->name, base) == 0) base_known = true;
+                if (!base_known && env_lookup_layout(ctx->env, base))
+                    base_known = true;
+            }
+            if (!base_known) {
+                CODEGEN_ERROR(ctx,
+                    "%s:%d:%d: error: refinement type '%s' has unknown base type '%s' — "
+                    "did you forget to define it first?",
+                    parser_get_filename(), ast->line, ast->column,
+                    rname, base);
+            }
+        }
 
         /* Anonymous refinement { x ∈ T | pred } used as a value —
          * emit as a lambda: (lambda ([x :: T]) pred)              */

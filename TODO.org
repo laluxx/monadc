@@ -25,6 +25,21 @@
 - [ ] Connect to a running process with the repl
       We should embed the env into the executable i guess
 
+Parser BUG
+#+begin_src monad
+(define (return-string [x :: CompanyEmail?] -> CompanyEmail)
+  "String returned from a function")
+#+end_src
+           |
+           v
+#+begin_src txt
+RefinementType.mon:74:36: error: unexpected token type: 2
+   74 |   "String returned from a function")
+      |                                    ^
+#+end_src
+
+
+
 * TODO Dependent Refinement Types with existential quantifiers
 
 #+begin_src monad
@@ -60,11 +75,6 @@ Compile-time evaluation (what I'm doing now)
     ⊂ Liquid types (adds SMT for symbolic reasoning)
         ⊂ Dependent types (adds proof terms, full expressiveness)
 #+end_src
-
-
-
-
-
 
 
 * TODO Thread operator |>
