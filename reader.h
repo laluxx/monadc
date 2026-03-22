@@ -30,6 +30,7 @@ typedef enum {
     AST_SET,        // {val val val}
     AST_MAP,        // #{"key" val "key" val}
     AST_PMATCH,     // pattern matching clauses
+    AST_DATA,       // (data Color Red | Green | Blue)
     TOK_LAMBDA_LIT, // λx. — pure lambda calculus literal
 } ASTType;
 
@@ -50,6 +51,7 @@ typedef enum {
     PAT_LITERAL_FLOAT,  // 3.14
     PAT_LIST_EMPTY,     // []
     PAT_LIST,           // [p1 p2 ... | tail?]
+    PAT_CONSTRUCTOR,    // Red, Green, Circle, Rectangle ...
 } PatternKind;
 
 typedef struct ASTPattern {
@@ -60,6 +62,9 @@ typedef struct ASTPattern {
     struct ASTPattern *elements;    // per-element sub-patterns
     int                element_count;
     struct ASTPattern *tail;        // NULL or PAT_VAR/PAT_WILDCARD after |
+    /* For PAT_CONSTRUCTOR: field sub-patterns */
+    struct ASTPattern *ctor_fields;
+    int         ctor_field_count;
 } ASTPattern;
 
 // One clause: patterns (one per param) + body
@@ -68,6 +73,14 @@ typedef struct ASTPMatchClause {
     int          pattern_count;
     struct AST  *body;
 } ASTPMatchClause;
+
+// A single constructor in a data definition
+// e.g. Circle Float  or  Rectangle Float Float
+typedef struct ASTDataConstructor {
+    char  *name;         // "Circle"
+    char **field_types;  // ["Float"] or ["Float", "Float"]
+    int    field_count;
+} ASTDataConstructor;
 
 // A single field in a layout definition
 typedef struct ASTLayoutField {
@@ -184,6 +197,15 @@ typedef struct AST {
             ASTPMatchClause *clauses;
             int              clause_count;
         } pmatch;
+
+        // AST_DATA
+        struct {
+            char                *name;         // "Color", "Shape"
+            ASTDataConstructor  *constructors;
+            int                  constructor_count;
+            char               **deriving;     // ["show", "eq", ...]
+            int                  deriving_count;
+        } data;
     };
 
     char *literal_str; // original literal string for numbers (e.g. "0xFF")
@@ -231,6 +253,9 @@ AST *ast_new_layout(const char *name,
 AST *ast_new_set(void);
 AST *ast_new_map(void);
 AST *ast_new_pmatch(ASTPMatchClause *clauses, int clause_count);
+AST *ast_new_data(const char *name,
+                  ASTDataConstructor *constructors, int constructor_count,
+                  char **deriving, int deriving_count);
 void ast_pattern_free(ASTPattern *p);
 
 

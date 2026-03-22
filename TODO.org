@@ -1,7 +1,9 @@
 #+title: TODO.org
 
-* TODO Stuff [0/21]
+* TODO Stuff [0/23]
 - [ ] eval
+- [ ] AST->JSON
+- [ ] Regex literal #""
 - [ ] When we write wisp error column and numbers are wrong!
 - [ ] allow lazy lists to go both ways so we can have =define ℤ (..0..)=
 - [ ] Proper let-polymorphism 
@@ -53,18 +55,18 @@ and the type checker must construct the pair (k, x, refl).
 
 ** Roadmap
 
-compile-time evaluation approach:
- - Works on pure functions with known arguments =✓=
+=✓= compile-time evaluation approach: 
+ - Works on pure functions with known arguments
  - Fails on impure functions (! suffix) — We shouldn't evaluate side effects at compile time
  - Fails on functions with unknown arguments — defers to runtime, which is correct
  - Fails on recursive functions that don't terminate — needs a fuel/depth limit
 
-Liquid types can handle:
+~⨯~ Liquid types can handle:
  - Functions with unknown arguments — reasons symbolically: =∀x. P(x) → Q(f(x))=
  - Impure functions — through effect typing (monadic refinements in F*)
  - Recursive functions — through measure/termination proofs
 
-Dependent types can handle everything liquid types can, plus:
+~⨯~ Dependent types can handle everything liquid types can, plus:
  - Types that depend on values: Vec n a (list of exactly n elements)
  - Existential witnesses: ={ x ∈ ℤ | ∃k ∈ ℤ, x = 2k}=
  - Full theorem proving

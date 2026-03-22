@@ -36,7 +36,7 @@
 
 (define (singleton? [x :: Set] -> Bool)
   "Return True if x is a set containing exactly one element."
-  (and (set? x) (= 1 (count x))))
+  (and (Set? x) (= 1 (count x))))
 
 ;;; Set algebra
 

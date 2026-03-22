@@ -1,30 +1,42 @@
+;; DONE
+(define [var :: Int] 3)
+define var :: Int 3
 
-;; TODO Make this work!
+;; DONE
+(define [arr :: Arr :: 3 :: Int] [1 2 3])
+define arr :: Arr :: 3 :: Int [1 2 3]
+
+
+;; DONE
+(define (my-count String -> Int)
+  x -> (count x))
+
+define (my-count String -> Int)
+  x -> count x
+
+define my-count :: String -> Int
+  x -> count x
+
+;; DONE
+(define (last List -> a)
+  [] -> nil
+  [x] -> x
+  [_|xs] -> (last xs))
+
+define last :: List -> a
+ [] -> nil
+ [x] -> x
+ [_|xs] -> last xs
 
 define (double x) * x x
 
-(define (double [x :: Num] -> Num)
-  (* x x))
-
-(define [var :: Int] 3)
-
-;; With pmatch
-define double :: Num -> Num
-  x -> x * x
-
-define double :: [x :: Num] -> Num
-   x * x
+define id λx.x
 
 
-(type [a] List)
+(show (last '(1 2 3)))
 
-define last :: [a] -> a
-  [] -> nil
-  [x] -> x
-  [_|xs] -> last xs
+(show (my-count "ciao"))
 
 
-define var :: Int 3
-
-define main :: IO ()
-  show ("o" `isSuffixOf` "hello")
+;; define main :: IO ()
+;;   show ("o" `isSuffixOf` "hello")

@@ -7,8 +7,6 @@
 #include <stdarg.h>
 #include <stdint.h>
 
-// TODO AST->JSON
-
 /* Replace all exit(1) calls in the reader/parser.
  * If a recovery point is set (we're inside repl_eval_line), longjmp back.
  * Otherwise fall back to real exit so the standalone compiler still works. */
@@ -306,6 +304,19 @@ void ast_pattern_free(ASTPattern *p) {
     }
 }
 
+AST *ast_new_data(const char *name,
+                  ASTDataConstructor *constructors, int constructor_count,
+                  char **deriving, int deriving_count) {
+    AST *a = calloc(1, sizeof(AST));
+    a->type                     = AST_DATA;
+    a->data.name                = my_strdup(name);
+    a->data.constructors        = constructors;
+    a->data.constructor_count   = constructor_count;
+    a->data.deriving            = deriving;
+    a->data.deriving_count      = deriving_count;
+    return a;
+}
+
 AST *ast_new_pmatch(ASTPMatchClause *clauses, int clause_count) {
     AST *a = calloc(1, sizeof(AST));
     a->type                = AST_PMATCH;
@@ -534,6 +545,20 @@ void ast_free(AST *ast) {
         free(ast->map.vals);
         break;
 
+    case AST_DATA:
+        free(ast->data.name);
+        for (int i = 0; i < ast->data.constructor_count; i++) {
+            free(ast->data.constructors[i].name);
+            for (int j = 0; j < ast->data.constructors[i].field_count; j++)
+                free(ast->data.constructors[i].field_types[j]);
+            free(ast->data.constructors[i].field_types);
+        }
+        free(ast->data.constructors);
+        for (int i = 0; i < ast->data.deriving_count; i++)
+            free(ast->data.deriving[i]);
+        free(ast->data.deriving);
+        break;
+
     case AST_PMATCH:
         for (int i = 0; i < ast->pmatch.clause_count; i++) {
             ASTPMatchClause *cl = &ast->pmatch.clauses[i];
@@ -703,6 +728,26 @@ void ast_print(AST *ast) {
         }
         printf("}");
         break;
+
+    case AST_DATA:
+        printf("(data %s", ast->data.name);
+        for (int i = 0; i < ast->data.constructor_count; i++) {
+            if (i > 0) printf(" |");
+            printf(" %s", ast->data.constructors[i].name);
+            for (int j = 0; j < ast->data.constructors[i].field_count; j++)
+                printf(" %s", ast->data.constructors[i].field_types[j]);
+        }
+        if (ast->data.deriving_count > 0) {
+            printf(" deriving [");
+            for (int i = 0; i < ast->data.deriving_count; i++) {
+                if (i > 0) printf(" ");
+                printf("%s", ast->data.deriving[i]);
+            }
+            printf("]");
+        }
+        printf(")");
+        break;
+
 
     case AST_REFINEMENT:
         if (ast->refinement.name)
@@ -2043,6 +2088,13 @@ if (p->current.type == TOK_SYMBOL &&
             // THEN parse metadata after the value
             DefineMetadata meta = parse_define_metadata(p);
 
+            // Also accept a bare string as docstring (wisp style)
+            if (!meta.docstring &&
+                p->current.type == TOK_STRING) {
+                meta.docstring = strdup(p->current.value);
+                p->current = lexer_next_token(p->lexer);
+            }
+
             if (p->current.type != TOK_RPAREN) {
                 compiler_error(p->current.line, p->current.column,
                                "Expected ')' to close define");
@@ -2233,6 +2285,157 @@ if (p->current.type == TOK_SYMBOL &&
         free(type_name); free(target_name);
         free(alias_doc); free(alias_name);
         node->line = tline; node->column = tcol;
+        node->end_column = end_col;
+        return node;
+    }
+
+    // (data Name Ctor1 Type... | Ctor2 Type... deriving [show eq])
+    if (p->current.type == TOK_SYMBOL &&
+        strcmp(p->current.value, "data") == 0) {
+
+        int dat_line = p->current.line, dat_col = p->current.column;
+        p->current = lexer_next_token(p->lexer); // consume 'data'
+
+        if (p->current.type != TOK_SYMBOL)
+            compiler_error(p->current.line, p->current.column,
+                           "Expected type name after 'data'");
+        char *dat_name = my_strdup(p->current.value);
+        p->current = lexer_next_token(p->lexer);
+
+        ASTDataConstructor *ctors   = NULL;
+        int                 nctors  = 0;
+        char              **deriving = NULL;
+        int                 nderiving = 0;
+
+        /* Shorthand: data Point Float Float
+         * If the first token after the type name is an uppercase known type
+         * (Float, Int, Bool, etc.) with no constructor name, treat as single
+         * constructor sharing the type name.                                */
+        {
+            bool is_shorthand = false;
+            if (p->current.type == TOK_SYMBOL && p->current.value &&
+                p->current.value[0] >= 'A' && p->current.value[0] <= 'Z') {
+                /* Peek: if this looks like a type name (known primitive) rather
+                 * than a constructor name, use shorthand.
+                 * Heuristic: if it's a known primitive type OR if there's no |
+                 * separator and all remaining tokens until ) are uppercase,
+                 * treat as shorthand single-constructor.                      */
+                const char *known_types[] = {
+                    "Float", "Int", "Bool", "Char", "String",
+                    "F32", "I8", "U8", "I16", "U16", "I32", "U32",
+                    "I64", "U64", "I128", "U128", NULL
+                };
+                for (int _ki = 0; known_types[_ki]; _ki++) {
+                    if (strcmp(p->current.value, known_types[_ki]) == 0) {
+                        is_shorthand = true;
+                        break;
+                    }
+                }
+                /* Also shorthand if the first token matches a previously
+                 * defined data type name (e.g. data Triangle Point Point Point) */
+                /* We can't check env here, so use a simpler rule:
+                 * if no | appears before ) then it's shorthand             */
+                if (!is_shorthand) {
+                    /* Scan ahead for | — if none found, it's shorthand */
+                    /* We can't easily scan ahead with this lexer, so use
+                     * the known_types check only for now. User-defined types
+                     * as fields still need explicit constructor name.
+                     * TODO: improve with lookahead                          */
+                }
+            }
+
+            if (is_shorthand) {
+                /* Single constructor, same name as type, fields are all remaining tokens */
+                ASTDataConstructor ctor = {0};
+                ctor.name = my_strdup(dat_name); /* constructor = type name */
+                while (p->current.type != TOK_RPAREN &&
+                       p->current.type != TOK_EOF    &&
+                       p->current.type != TOK_PIPE) {
+                    if (p->current.type == TOK_SYMBOL && p->current.value) {
+                        ctor.field_types = realloc(ctor.field_types,
+                            sizeof(char*) * (ctor.field_count + 1));
+                        ctor.field_types[ctor.field_count++] =
+                            my_strdup(p->current.value);
+                    }
+                    p->current = lexer_next_token(p->lexer);
+                }
+                ctors = realloc(ctors, sizeof(ASTDataConstructor) * (nctors + 1));
+                ctors[nctors++] = ctor;
+            }
+        }
+
+        /* Parse constructors separated by | */
+        while (p->current.type != TOK_RPAREN &&
+               p->current.type != TOK_EOF) {
+
+            /* skip leading | */
+            if (p->current.type == TOK_PIPE) {
+                p->current = lexer_next_token(p->lexer);
+                continue;
+            }
+
+            /* deriving [show eq ...] */
+            if (p->current.type == TOK_SYMBOL &&
+                strcmp(p->current.value, "deriving") == 0) {
+                p->current = lexer_next_token(p->lexer);
+                if (p->current.type != TOK_LBRACKET)
+                    compiler_error(p->current.line, p->current.column,
+                                   "Expected '[' after 'deriving'");
+                p->current = lexer_next_token(p->lexer); // consume '['
+                while (p->current.type != TOK_RBRACKET &&
+                       p->current.type != TOK_EOF) {
+                    if (p->current.type == TOK_SYMBOL && p->current.value) {
+                        deriving = realloc(deriving, sizeof(char*) * (nderiving + 1));
+                        deriving[nderiving++] = my_strdup(p->current.value);
+                    }
+                    p->current = lexer_next_token(p->lexer);
+                }
+                if (p->current.type == TOK_RBRACKET)
+                    p->current = lexer_next_token(p->lexer); // consume ']'
+                continue;
+            }
+
+            /* Constructor name — must start with uppercase */
+            if (p->current.type != TOK_SYMBOL || !p->current.value ||
+                p->current.value[0] < 'A' || p->current.value[0] > 'Z')
+                compiler_error(p->current.line, p->current.column,
+                               "Expected constructor name (uppercase) in 'data'");
+
+            ASTDataConstructor ctor = {0};
+            ctor.name = my_strdup(p->current.value);
+            p->current = lexer_next_token(p->lexer);
+
+            /* Collect field types until | or ) or 'deriving' */
+            while (p->current.type != TOK_PIPE     &&
+                   p->current.type != TOK_RPAREN   &&
+                   p->current.type != TOK_EOF      &&
+                   !(p->current.type == TOK_SYMBOL &&
+                     p->current.value &&
+                     strcmp(p->current.value, "deriving") == 0)) {
+                if (p->current.type == TOK_SYMBOL && p->current.value) {
+                    ctor.field_types = realloc(ctor.field_types,
+                        sizeof(char*) * (ctor.field_count + 1));
+                    ctor.field_types[ctor.field_count++] =
+                        my_strdup(p->current.value);
+                }
+                p->current = lexer_next_token(p->lexer);
+            }
+
+            ctors = realloc(ctors, sizeof(ASTDataConstructor) * (nctors + 1));
+            ctors[nctors++] = ctor;
+        }
+
+        if (p->current.type != TOK_RPAREN)
+            compiler_error(p->current.line, p->current.column,
+                           "Expected ')' to close 'data' definition");
+        int end_col = p->current.column + 1;
+        p->current = lexer_next_token(p->lexer);
+
+        ast_free(list);
+        AST *node = ast_new_data(dat_name, ctors, nctors, deriving, nderiving);
+        free(dat_name);
+        node->line       = dat_line;
+        node->column     = dat_col;
         node->end_column = end_col;
         return node;
     }

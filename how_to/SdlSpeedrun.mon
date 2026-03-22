@@ -1,5 +1,3 @@
-
-
 include <SDL3/SDL.h>
 
 SDL_Init SDL_INIT_VIDEO
@@ -15,28 +13,6 @@ while True
 SDL_DestroyRenderer renderer
 SDL_DestroyWindow window
 SDL_Quit
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 ;; TODO We don't have [[https://en.wikipedia.org/wiki/Algebraic_data_type][ADT's]] that we can map to C enums,

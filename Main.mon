@@ -1280,25 +1280,27 @@
 ;;; Algebraic Data Types
 
 ;; A type with three constructors
-;; (data Color Red | Green | Blue
-;;   deriving [show])
+(data Color Red | Green | Blue
+  deriving [show])
 
 ;; Implicitly:
 ;; [Red :: Color] [Green :: Color] [Blue :: Color]
 
 ;; Usage
-;; (define [my-color :: Color] Red); Manually Annotated
-;; (define my-color Red); Inferred as [my-color :: Color]
+(define [my-color :: Color] Red); Manually Annotated
+(define my-color Red); Inferred as [my-color :: Color]
 
 ;; NOTE The compile enforces exhaustive pattern matching.
-;; (match my-color
-;;   Red   -> "stop"
-;;   Green -> "go"
-;;   Blue  -> "ocean")
-                                             ; A Shape is a
-;; (data Shape Circle Double                    ; Circle with radius (AND)
-;;           | Rectangle Double Double          ; OR Rectangle with width AND height
-;;           | Triangle Double Double Double)   ; OR Triangle with side1 AND side2 AND side3
+(match my-color
+  Red   -> "stop"
+  Green -> "go"
+  Blue  -> "ocean")
+
+; A Shape is a
+(data Shape Circle    Float               ; Circle with radius (AND)
+          | Rectangle Float Float         ; OR Rectangle with width AND height
+          | Triangle  Float Float Float)  ; OR Triangle with side1 AND side2 AND side3
+
 
 ;;; Layouts
 

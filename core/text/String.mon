@@ -25,35 +25,35 @@
 
 (define (string-empty? [s :: String] -> Bool)
   "Return True if S is the empty string."
-  (= (string-length s) 0))
+  (= (count s) 0))
 
 (define (string-prefix? [prefix :: String] -> [s :: String] -> Bool)
   "Return True if S starts with PREFIX."
-  (define [plen   :: Int]  (string-length prefix))
-  (define [slen   :: Int]  (string-length s))
+  (define [plen   :: Int]  (count prefix))
+  (define [slen   :: Int]  (count s))
   (define [result :: Bool] (and (<= plen slen) True))
   (if (<= plen slen)
     (for [i 0 plen]
-      (if (!= (string-ref prefix i) (string-ref s i))
+      (if (!= (prefix i) (s i))
         (set! result False))))
   result)
 
 (define (string-suffix? [suffix :: String] -> [s :: String] -> Bool)
   "Return True if S ends with SUFFIX."
-  (define [suflen :: Int]  (string-length suffix))
-  (define [slen   :: Int]  (string-length s))
+  (define [suflen :: Int]  (count suffix))
+  (define [slen   :: Int]  (count s))
   (define [offset :: Int]  (- slen suflen))
   (define [result :: Bool] (and (<= suflen slen) True))
   (if (<= suflen slen)
     (for [i 0 suflen]
-      (if (!= (string-ref suffix i) (string-ref s (+ offset i)))
+      (if (!= (suffix i) (s (+ offset i)))
         (set! result False))))
   result)
 
 (define (string-contains? [s :: String] -> [sub :: String] -> Bool)
   "Return True if S contains SUB."
-  (define [slen   :: Int]  (string-length s))
-  (define [sublen :: Int]  (string-length sub))
+  (define [slen   :: Int]  (count s))
+  (define [sublen :: Int]  (count sub))
   (define [result :: Bool] False)
   (define [limit  :: Int]  (- slen sublen))
   (define [match  :: Bool] True)
@@ -62,7 +62,7 @@
       (begin
         (set! match True)
         (for [j 0 sublen]
-          (if (!= (string-ref s (+ i j)) (string-ref sub j))
+          (if (!= (s (+ i j)) (sub j))
             (set! match False)))
         (if match
           (set! result True)))))
@@ -72,21 +72,21 @@
 
 (define (string-copy [s :: String] -> String)
   "Return a fresh mutable copy of S."
-  (define [len    :: Int]    (string-length s))
+  (define [len    :: Int]    (count s))
   (define [result :: String] (make-string len 'a'))
   (for [i 0 len]
-    (string-set! result i (string-ref s i)))
+    (set! (result i) (s i)))
   result)
 
 (define (string-append [a :: String] -> [b :: String] -> String)
   "Return a new string that is A followed by B."
-  (define [alen   :: Int]    (string-length a))
-  (define [blen   :: Int]    (string-length b))
+  (define [alen   :: Int]    (count a))
+  (define [blen   :: Int]    (count b))
   (define [result :: String] (make-string (+ alen blen) 'a'))
   (for [i 0 alen]
-    (string-set! result i (string-ref a i)))
+    (set! (result i) (a i)))
   (for [i 0 blen]
-    (string-set! result (+ alen i) (string-ref b i)))
+    (set! (result (+ alen i)) (b i)))
   result)
 
 (define (substring [s :: String] -> [start :: Int] -> [end :: Int] -> String)
@@ -94,26 +94,26 @@
   (define [len    :: Int]    (- end start))
   (define [result :: String] (make-string len 'a'))
   (for [i 0 len]
-    (string-set! result i (string-ref s (+ start i))))
+    (set! (result i) (s (+ start i))))
   result)
 
 ;;;; Trimming
 
 (define (string-trim [s :: String] -> String)
   "Return S with leading whitespace removed."
-  (define [len   :: Int] (string-length s))
+  (define [len   :: Int] (count s))
   (define [start :: Int] 0)
   (for [i 0 len]
-    (if (and (= start i) (char-whitespace? (string-ref s i)))
+    (if (and (= start i) (char-whitespace? (s i)))
       (set! start (+ start 1))))
   (substring s start len))
 
 (define (string-trim-right [s :: String] -> String)
   "Return S with trailing whitespace removed."
-  (define [len :: Int] (string-length s))
+  (define [len :: Int] (count s))
   (define [end :: Int] len)
   (for [i 0 len]
-    (if (char-whitespace? (string-ref s (- len (+ i 1))))
+    (if (char-whitespace? (s (- len (+ i 1))))
       (if (= end (- len i))
         (set! end (- end 1)))))
   (substring s 0 end))
@@ -126,51 +126,51 @@
 
 (define (string-pad-left [s :: String] -> [n :: Int] -> [c :: Char] -> String)
   "Pad S on the left with C to length N."
-  (define [len    :: Int]    (string-length s))
+  (define [len    :: Int]    (count s))
   (if (<= n len)
     s
     (begin
       (define [pad    :: Int]    (- n len))
       (define [result :: String] (make-string n c))
       (for [i 0 len]
-        (string-set! result (+ pad i) (string-ref s i)))
+        (set! (result (+ pad i)) (s i)))
       result)))
 
 (define (string-pad-right [s :: String] -> [n :: Int] -> [c :: Char] -> String)
   "Pad S on the right with C to length N."
-  (define [len    :: Int]    (string-length s))
+  (define [len    :: Int]    (count s))
   (if (<= n len)
     s
     (begin
       (define [result :: String] (make-string n c))
       (for [i 0 len]
-        (string-set! result i (string-ref s i)))
+        (set! (result i) (s i)))
       result)))
 
 ;;;; Case conversion
 
 (define (upcase [input :: String] -> String)
   "Convert INPUT to upper case."
-  (define [result :: String] (make-string (string-length input) 'a'))
-  (for [i 0 (string-length input)]
-    (string-set! result i (char-upcase (string-ref input i))))
+  (define [result :: String] (make-string (count input) 'a'))
+  (for [i 0 (count input)]
+    (set! (result i) (char-upcase (input i))))
   result)
 
 (define (downcase [input :: String] -> String)
   "Convert INPUT to lower case."
-  (define [result :: String] (make-string (string-length input) 'a'))
-  (for [i 0 (string-length input)]
-    (string-set! result i (char-downcase (string-ref input i))))
+  (define [result :: String] (make-string (count input) 'a'))
+  (for [i 0 (count input)]
+    (set! (result i) (char-downcase (input i))))
   result)
 
 (define (capitalize [input :: String] -> String)
   "Capitalize INPUT."
-  (define [result :: String] (make-string (string-length input) 'a'))
-  (for [i 0 (string-length input)]
-    (string-set! result i
+  (define [result :: String] (make-string (count input) 'a'))
+  (for [i 0 (count input)]
+    (set! (result i)
       (if (= i 0)
-        (char-upcase   (string-ref input i))
-        (char-downcase (string-ref input i)))))
+        (char-upcase   (input i))
+        (char-downcase (input i)))))
   result)
 
 (tests

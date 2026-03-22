@@ -11,6 +11,10 @@
 // Forward declaration
 typedef struct ModuleContext ModuleContext;
 
+/// Algebraic Data Types
+
+int  adt_constructor_tag(const char *name);
+
 /// Monomorphization cache
 //
 // Maps (function_name, concrete_arg_types) -> specialized LLVMValueRef.

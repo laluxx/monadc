@@ -13,6 +13,7 @@ typedef enum {
     ENV_BUILTIN,  // a built-in
     ENV_FUNC,     // a user-defined function
     ENV_LAYOUT,   // a layout type definition
+    ENV_ADT_CTOR, // an ADT constructor (tag index stored in adt_tag)
 } EnvEntryKind;
 
 typedef struct EnvParam {
@@ -56,6 +57,7 @@ typedef struct EnvEntry {
 
     char *source_text; // original define Source code, NULL if not available
     char *header_path; // path to C header for FFI symbols, NULL if not FFI
+    int   adt_tag;     // tag index for ADT constructors (-1 if not an ADT ctor)
 
     struct EnvEntry *next;
 } EnvEntry;
@@ -99,6 +101,9 @@ void env_print_entry(EnvEntry *e);
 void env_insert_layout(Env *table, const char *name, Type *layout_type,
                        const char *source_text);
 Type *env_lookup_layout(Env *table, const char *name);
+void env_insert_adt_ctor(Env *table, const char *name, int tag,
+                         Type *data_type, LLVMValueRef func_ref);
+EnvEntry *env_lookup_adt_ctor(Env *table, const char *name);
 
 bool env_is_local(Env *table, const char *name);
 

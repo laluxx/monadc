@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monad - Documentation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-toplevel: #050606;
+            --bg-primary: #0E0F0F;
+            --bg-secondary: #0a0b0b;
+            --bg-hover: #111212;
+
+            --fg-primary: #CCCAC8;
+            --fg-dimmed: #91908E;
+
+            --button-bg: #151718;
+            --button-border: #1D2021;
+            --border: #181A1A;
+            --accent: #9B7BFF;
+            --accent-glow: rgba(155, 123, 255, 0.15);
+            --accent-dim: rgba(155, 123, 255, 0.08);
+            --success: #00D9A3;
+
+            --font-sans: 'Inter', system-ui, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+
+            --sidebar-width: 280px;
+            --content-max-width: 850px;
+            --transition-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            scroll-padding-top: 2rem;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background-color: var(--bg-toplevel);
+            color: var(--fg-primary);
+            line-height: 1.6;
+            font-size: 15px;
+            overflow-x: hidden;
+        }
+
+        /* Deep Black Background with Morphing Light */
+        .bg-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            background: var(--bg-toplevel);
+        }
+
+        .morphing-light {
+            position: fixed;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(ellipse at center, rgba(155, 123, 255, 0.12) 0%, transparent 65%);
+            pointer-events: none;
+            z-index: 0;
+            transform: translate(-50%, -50%);
+            filter: blur(60px);
+            border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+            animation: morph 8s ease-in-out infinite;
+            transition: left 0.4s ease-out, top 0.4s ease-out;
+        }
+
+        @keyframes morph {
+            0% {
+                border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+                transform: translate(-50%, -50%) rotate(0deg) scale(1);
+            }
+            25% {
+                border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
+                transform: translate(-50%, -50%) rotate(90deg) scale(1.1);
+            }
+            50% {
+                border-radius: 50% 60% 30% 60% / 30% 40% 70% 60%;
+                transform: translate(-50%, -50%) rotate(180deg) scale(0.95);
+            }
+            75% {
+                border-radius: 40% 30% 60% 50% / 60% 50% 40% 30%;
+                transform: translate(-50%, -50%) rotate(270deg) scale(1.05);
+            }
+            100% {
+                border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+                transform: translate(-50%, -50%) rotate(360deg) scale(1);
+            }
+        }
+
+        /* Secondary morphing shape */
+        .morphing-light-2 {
+            position: fixed;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(ellipse at center, rgba(155, 123, 255, 0.06) 0%, transparent 60%);
+            pointer-events: none;
+            z-index: 0;
+            transform: translate(-50%, -50%);
+            filter: blur(40px);
+            border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+            animation: morph2 12s ease-in-out infinite reverse;
+            transition: left 0.6s ease-out, top 0.6s ease-out;
+        }
+
+        @keyframes morph2 {
+            0% {
+                border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+                transform: translate(-50%, -50%) rotate(0deg);
+            }
+            33% {
+                border-radius: 70% 30% 50% 50% / 30% 30% 70% 70%;
+                transform: translate(-50%, -50%) rotate(120deg) scale(1.2);
+            }
+            66% {
+                border-radius: 50% 50% 30% 70% / 60% 40% 60% 40%;
+                transform: translate(-50%, -50%) rotate(240deg) scale(0.8);
+            }
+            100% {
+                border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+                transform: translate(-50%, -50%) rotate(360deg);
+            }
+        }
+
+        /* Layout */
+        .container {
+            display: flex;
+            min-height: 100vh;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Sidebar - Sharp, No Rounds, No Logo */
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: var(--sidebar-width);
+            height: 100vh;
+            background: rgba(14, 15, 15, 0.95);
+            backdrop-filter: blur(10px);
+            border-right: 1px solid var(--border);
+            padding: 0;
+            overflow-y: auto;
+            z-index: 100;
+            transition: transform 0.4s var(--transition-smooth);
+        }
+
+        .sidebar::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb {
+            background: var(--border);
+        }
+
+        /* Cool Search Bar - Full Width Transparent */
+        .search-container {
+            position: relative;
+            margin: 0;
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border);
+            background: linear-gradient(180deg, rgba(155, 123, 255, 0.03) 0%, transparent 100%);
+        }
+
+        .search-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 0.875rem 1rem 0.875rem 2.5rem;
+            background: rgba(21, 23, 24, 0.4);
+            border: 1px solid var(--button-border);
+            color: var(--fg-primary);
+            font-family: var(--font-sans);
+            font-size: 0.85rem;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .search-input:focus {
+            background: rgba(21, 23, 24, 0.8);
+            border-color: var(--accent);
+            box-shadow: 0 0 20px rgba(155, 123, 255, 0.1), inset 0 0 20px rgba(155, 123, 255, 0.05);
+        }
+
+        .search-input::placeholder {
+            color: var(--fg-dimmed);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 0.875rem;
+            color: var(--accent);
+            font-size: 0.9rem;
+            pointer-events: none;
+            transition: all 0.3s ease;
+        }
+
+        .search-input:focus + .search-icon {
+            color: var(--accent);
+            text-shadow: 0 0 10px var(--accent-glow);
+        }
+
+        .search-glow {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            border-radius: 0;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+            box-shadow: 0 0 30px rgba(155, 123, 255, 0.15);
+        }
+
+        .search-input:focus ~ .search-glow {
+            opacity: 1;
+        }
+
+        /* Navigation - Sharp, No Background Rounds */
+        .nav-section {
+            margin-bottom: 2rem;
+            padding: 0 1.5rem;
+        }
+
+        .nav-section:first-of-type {
+            margin-top: 1.5rem;
+        }
+
+        .nav-title {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            color: var(--fg-dimmed);
+            margin-bottom: 0.75rem;
+            font-weight: 600;
+        }
+
+        .nav-list {
+            list-style: none;
+        }
+
+        .nav-item {
+            margin-bottom: 0.125rem;
+            position: relative;
+        }
+
+        /* Only the circle indicator on left */
+        .nav-item::before {
+            content: '';
+            position: absolute;
+            left: -1.5rem;
+            top: 50%;
+            transform: translateY(-50%) scale(0);
+            width: 6px;
+            height: 6px;
+            background: var(--accent);
+            transition: transform 0.2s;
+            z-index: 10;
+        }
+
+        .nav-item.active::before {
+            transform: translateY(-50%) scale(1);
+        }
+
+        .nav-link {
+            display: block;
+            padding: 0.5rem 0;
+            color: var(--fg-dimmed);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            border: none;
+            background: transparent;
+        }
+
+        .nav-link:hover {
+            color: var(--fg-primary);
+        }
+
+        .nav-link.active {
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        /* Main Content */
+        .main {
+            margin-left: var(--sidebar-width);
+            flex: 1;
+            padding: 4rem 4rem 6rem 4rem;
+            max-width: calc(var(--sidebar-width) + var(--content-max-width) + 8rem);
+            position: relative;
+        }
+
+        .content {
+            max-width: var(--content-max-width);
+        }
+
+        /* Typography - Sharp Contrast */
+        h1 {
+            font-size: 2.75rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            margin-top: 0;
+            margin-bottom: 1.5rem;
+            line-height: 1.1;
+            color: var(--fg-primary);
+        }
+
+        h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-top: 3rem;
+            margin-bottom: 1.25rem;
+            color: var(--fg-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        h2::before {
+            content: '';
+            width: 3px;
+            height: 20px;
+            background: var(--accent);
+        }
+
+        h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--fg-primary);
+            margin-top: 2rem;
+            margin-bottom: 0.75rem;
+            letter-spacing: -0.01em;
+        }
+
+        p {
+            margin-bottom: 1.25rem;
+            color: var(--fg-dimmed);
+            line-height: 1.7;
+            font-size: 0.95rem;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        a:hover {
+            color: var(--fg-primary);
+        }
+
+        /* Redesigned Quick Links - Minimal Grid */
+        .quick-links {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1px;
+            margin: 2.5rem 0;
+            background: var(--border);
+            border: 1px solid var(--border);
+        }
+
+        .quick-link {
+            display: block;
+            padding: 1.5rem;
+            background: var(--bg-primary);
+            text-decoration: none;
+            transition: all 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .quick-link:hover {
+            background: var(--bg-hover);
+        }
+
+        .quick-link:hover .quick-link-title {
+            color: var(--accent);
+        }
+
+        .quick-link-title {
+            color: var(--fg-primary);
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-bottom: 0.5rem;
+            transition: color 0.2s;
+        }
+
+        .quick-link-desc {
+            color: var(--fg-dimmed);
+            font-size: 0.8rem;
+            margin: 0;
+            line-height: 1.5;
+        }
+
+        /* Code Blocks - Sharp */
+        .code-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1rem;
+            background: var(--button-bg);
+            border: 1px solid var(--button-border);
+            border-bottom: none;
+            font-size: 0.75rem;
+            color: var(--fg-dimmed);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        pre {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            padding: 1.25rem;
+            overflow-x: auto;
+            margin: 0 0 1.5rem 0;
+            position: relative;
+        }
+
+        pre code {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            line-height: 1.6;
+            color: var(--fg-primary);
+            display: block;
+        }
+
+        /* Syntax Highlighting - Sharp Contrast */
+        .keyword { color: var(--accent); font-weight: 600; }
+        .string { color: #7CB9FF; }
+        .comment { color: var(--fg-dimmed); font-style: italic; }
+        .function { color: #A5F3C4; }
+        .number { color: #FFB86C; }
+        .operator { color: var(--fg-primary); }
+        .type { color: #FF8C69; }
+
+        /* Copy Button - Green Success */
+        .copy-btn {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            color: var(--fg-dimmed);
+            padding: 0.4rem 0.75rem;
+            font-size: 0.75rem;
+            cursor: pointer;
+            opacity: 0;
+            transition: all 0.2s;
+            font-family: var(--font-sans);
+            font-weight: 500;
+        }
+
+        pre:hover .copy-btn {
+            opacity: 1;
+        }
+
+        .copy-btn:hover {
+            color: var(--fg-primary);
+            border-color: var(--accent);
+        }
+
+        .copy-btn.copied {
+            color: var(--success);
+            border-color: var(--success);
+            background: rgba(0, 217, 163, 0.1);
+        }
+
+        /* Callouts - Sharp */
+        .callout {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-left: 3px solid var(--accent);
+            padding: 1.25rem;
+            margin: 1.5rem 0;
+        }
+
+        .callout-title {
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .callout p {
+            margin: 0;
+            font-size: 0.9rem;
+        }
+
+        /* Lists */
+        ul, ol {
+            margin: 1.25rem 0;
+            padding-left: 1.5rem;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+            color: var(--fg-dimmed);
+            font-size: 0.9rem;
+        }
+
+        li::marker {
+            color: var(--accent);
+        }
+
+        li strong {
+            color: var(--fg-primary);
+            font-weight: 600;
+        }
+
+        /* Tables - Sharp */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            font-size: 0.85rem;
+            border: 1px solid var(--border);
+        }
+
+        th {
+            text-align: left;
+            padding: 0.875rem 1rem;
+            background: var(--button-bg);
+            color: var(--fg-primary);
+            font-weight: 600;
+            border-bottom: 1px solid var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            font-size: 0.75rem;
+        }
+
+        td {
+            padding: 0.875rem 1rem;
+            border-bottom: 1px solid var(--border);
+            color: var(--fg-dimmed);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background: var(--bg-hover);
+            color: var(--fg-primary);
+        }
+
+        /* Inline Code */
+        code {
+            font-family: var(--font-mono);
+            font-size: 0.85em;
+            background: var(--button-bg);
+            padding: 0.2em 0.4em;
+            color: var(--accent);
+            border: 1px solid var(--button-border);
+            font-weight: 500;
+        }
+
+        /* Badge */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.5rem;
+            background: var(--accent-dim);
+            border: 1px solid var(--accent);
+            font-size: 0.65rem;
+            color: var(--accent);
+            font-family: var(--font-mono);
+            margin-left: 0.5rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* Section Divider */
+        .section-divider {
+            height: 1px;
+            background: var(--border);
+            margin: 3rem 0;
+            border: none;
+        }
+
+        /* Bottom Progress Bar */
+        .progress-container {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--bg-primary);
+            z-index: 1000;
+        }
+
+        .scroll-progress {
+            height: 100%;
+            background: var(--accent);
+            width: 0%;
+            transition: width 0.1s;
+        }
+
+        /* Mobile Toggle */
+        .mobile-toggle {
+            display: none;
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 200;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            color: var(--fg-primary);
+            padding: 0.75rem;
+            cursor: pointer;
+            font-size: 1.1rem;
+        }
+
+        .mobile-toggle:hover {
+            border-color: var(--accent);
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+
+            .sidebar.open {
+                transform: translateX(0);
+            }
+
+            .main {
+                margin-left: 0;
+                padding: 2rem;
+                padding-top: 5rem;
+            }
+
+            .mobile-toggle {
+                display: block;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            h2 {
+                font-size: 1.25rem;
+            }
+
+            .quick-links {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Anchor Links */
+        .anchor {
+            margin-left: 0.5rem;
+            opacity: 0;
+            transition: opacity 0.2s;
+            color: var(--fg-dimmed);
+            text-decoration: none;
+            font-weight: 400;
+            font-size: 0.8em;
+        }
+
+        h2:hover .anchor,
+        h3:hover .anchor {
+            opacity: 1;
+        }
+
+        .anchor:hover {
+            color: var(--accent);
+        }
+
+        /* Selection */
+        ::selection {
+            background: var(--accent);
+            color: var(--bg-toplevel);
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-toplevel);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--accent);
+        }
+
+        /* Section reveal animation */
+        section {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+        }
+
+        section.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+<base target="_blank">
+</head>
+<body>
+    <!-- Morphing Background Lights -->
+    <div class="bg-canvas">
+        <div class="morphing-light" id="morphingLight"></div>
+        <div class="morphing-light-2" id="morphingLight2"></div>
+    </div>
+
+    <button class="mobile-toggle" onclick="toggleSidebar()">☰</button>
+
+    <div class="container">
+        <aside class="sidebar" id="sidebar">
+            <!-- Cool Search Bar - No Logo -->
+            <div class="search-container">
+                <div class="search-wrapper">
+                    <input type="text" class="search-input" placeholder="Search documentation..." id="search">
+                    <span class="search-icon">⌕</span>
+                    <div class="search-glow"></div>
+                </div>
+            </div>
+
+            <nav>
+                <div class="nav-section">
+                    <div class="nav-title">Getting Started</div>
+                    <ul class="nav-list">
+                        <li class="nav-item active"><a href="#introduction" class="nav-link active">Introduction</a></li>
+                        <li class="nav-item"><a href="#installation" class="nav-link">Installation</a></li>
+                        <li class="nav-item"><a href="#quickstart" class="nav-link">Quick Start</a></li>
+                    </ul>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-title">Core Concepts</div>
+                    <ul class="nav-list">
+                        <li class="nav-item"><a href="#syntax" class="nav-link">Syntax Overview</a></li>
+                        <li class="nav-item"><a href="#types" class="nav-link">Type System</a></li>
+                        <li class="nav-item"><a href="#functions" class="nav-link">Functions</a></li>
+                        <li class="nav-item"><a href="#monads" class="nav-link">Monads</a></li>
+                    </ul>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-title">Reference</div>
+                    <ul class="nav-list">
+                        <li class="nav-item"><a href="#stdlib" class="nav-link">Standard Library</a></li>
+                        <li class="nav-item"><a href="#operators" class="nav-link">Operators</a></li>
+                        <li class="nav-item"><a href="#errors" class="nav-link">Error Handling</a></li>
+                    </ul>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-title">Advanced</div>
+                    <ul class="nav-list">
+                        <li class="nav-item"><a href="#ffi" class="nav-link">FFI</a></li>
+                        <li class="nav-item"><a href="#optimization" class="nav-link">Optimization</a></li>
+                        <li class="nav-item"><a href="#deployment" class="nav-link">Deployment</a></li>
+                    </ul>
+                </div>
+            </nav>
+        </aside>
+
+        <main class="main">
+            <div class="content">
+                <h1>Monad Documentation</h1>
+
+                <div class="quick-links">
+                    <a href="#quickstart" class="quick-link">
+                        <div class="quick-link-title">Quick Start</div>
+                        <p class="quick-link-desc">Get up and running in 5 minutes with your first Monad program</p>
+                    </a>
+                    <a href="#syntax" class="quick-link">
+                        <div class="quick-link-title">Language Guide</div>
+                        <p class="quick-link-desc">Learn the core concepts and functional programming paradigms</p>
+                    </a>
+                    <a href="#stdlib" class="quick-link">
+                        <div class="quick-link-title">API Reference</div>
+                        <p class="quick-link-desc">Browse the standard library and module documentation</p>
+                    </a>
+                </div>
+
+                <section id="introduction">
+                    <h2>Introduction <a href="#introduction" class="anchor">#</a></h2>
+                    <p>
+                        Monad is a functional programming language designed for clarity, composition, and type safety. 
+                        Built around the concept of monads as first-class citizens, it enables developers to write 
+                        expressive, maintainable code with powerful abstractions.
+                    </p>
+
+                    <div class="callout">
+                        <div class="callout-title">Philosophy</div>
+                        <p>Monad prioritizes composition over inheritance, immutability over mutation, and explicit effects over hidden side effects.</p>
+                    </div>
+
+                    <h3>Key Features</h3>
+                    <ul>
+                        <li><strong>Pure Functions</strong> - All functions are pure by default, effects are explicit</li>
+                        <li><strong>Type Inference</strong> - Powerful Hindley-Milner type inference with minimal annotations</li>
+                        <li><strong>Pattern Matching</strong> - Exhaustive pattern matching with compiler warnings</li>
+                        <li><strong>Effect System</strong> - Track side effects at the type level</li>
+                        <li><strong>Zero-cost Abstractions</strong> - High-level concepts compile to efficient machine code</li>
+                    </ul>
+                </section>
+
+                <section id="installation">
+                    <h2>Installation <a href="#installation" class="anchor">#</a></h2>
+                    <p>Install Monad using the official installer. Supports macOS, Linux, and Windows (WSL).</p>
+
+                    <div class="code-header">Terminal</div>
+                    <pre><code><span class="comment"># macOS / Linux</span>
+curl -fsSL https://monad.dev/install.sh | sh
+
+<span class="comment"># Or using Homebrew</span>
+brew install monad-lang
+
+<span class="comment"># Verify installation</span>
+monad --version</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+
+                    <h3>System Requirements</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Platform</th>
+                                <th>Minimum Version</th>
+                                <th>Architecture</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>macOS</td>
+                                <td>11.0 (Big Sur)</td>
+                                <td>x86_64, ARM64</td>
+                            </tr>
+                            <tr>
+                                <td>Linux</td>
+                                <td>Kernel 5.4+</td>
+                                <td>x86_64, ARM64</td>
+                            </tr>
+                            <tr>
+                                <td>Windows</td>
+                                <td>WSL2</td>
+                                <td>x86_64</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </section>
+
+                <section id="quickstart">
+                    <h2>Quick Start <a href="#quickstart" class="anchor">#</a></h2>
+                    <p>Create your first Monad program. The classic "Hello, World" with a functional twist:</p>
+
+                    <div class="code-header">hello.mon</div>
+                    <pre><code><span class="comment">-- Main entry point</span>
+<span class="keyword">module</span> <span class="type">Main</span> <span class="keyword">where</span>
+
+<span class="keyword">import</span> <span class="type">IO</span>
+<span class="keyword">import</span> <span class="type">String</span>
+
+<span class="comment">-- Pure function greeting</span>
+<span class="function">greet</span> : <span class="type">String</span> -> <span class="type">String</span>
+<span class="function">greet</span> name = <span class="string">"Hello, "</span> ++ name ++ <span class="string">"!"</span>
+
+<span class="comment">-- Main IO action</span>
+<span class="function">main</span> : <span class="type">IO</span> ()
+<span class="function">main</span> = <span class="keyword">do</span>
+    name <- <span class="function">getLine</span>
+    <span class="function">putStrLn</span> (<span class="function">greet</span> name)</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+
+                    <p>Run the program:</p>
+                    <div class="code-header">Terminal</div>
+                    <pre><code>$ monad run hello.mon
+> Monad
+Hello, Monad!</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+                </section>
+
+                <section id="syntax">
+                    <h2>Syntax Overview <a href="#syntax" class="anchor">#</a></h2>
+                    <p>Monad uses clean, indentation-sensitive syntax inspired by Haskell and Python, optimized for readability.</p>
+
+                    <h3>Variables and Immutability</h3>
+                    <div class="code-header">variables.mon</div>
+                    <pre><code><span class="comment">-- Immutable bindings (default)</span>
+<span class="function">x</span> = <span class="number">42</span>
+<span class="function">name</span> = <span class="string">"Monad"</span>
+
+<span class="comment">-- Type annotations (optional)</span>
+<span class="function">count</span> : <span class="type">Int</span>
+<span class="function">count</span> = <span class="number">100</span>
+
+<span class="comment">-- Mutable references (explicit)</span>
+<span class="function">counter</span> : <span class="type">Ref</span> <span class="type">Int</span>
+<span class="function">counter</span> = <span class="function">ref</span> <span class="number">0</span></code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+
+                    <h3>Functions</h3>
+                    <div class="code-header">functions.mon</div>
+                    <pre><code><span class="comment">-- Function definition</span>
+<span class="function">add</span> : <span class="type">Int</span> -> <span class="type">Int</span> -> <span class="type">Int</span>
+<span class="function">add</span> x y = x + y
+
+<span class="comment">-- Lambda expressions</span>
+<span class="function">square</span> = \x -> x * x
+
+<span class="comment">-- Function composition</span>
+<span class="function">process</span> = <span class="function">format</span> . <span class="function">validate</span> . <span class="function">parse</span>
+
+<span class="comment">-- Higher-order functions</span>
+<span class="function">apply</span> : (<span class="type">a</span> -> <span class="type">b</span>) -> <span class="type">a</span> -> <span class="type">b</span>
+<span class="function">apply</span> f x = f x</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+                </section>
+
+                <section id="types">
+                    <h2>Type System <a href="#types" class="anchor">#</a></h2>
+                    <p>Monad features a powerful static type system with full inference. Write code without types, get safety with them.</p>
+
+                    <h3>Basic Types</h3>
+                    <div class="code-header">types.mon</div>
+                    <pre><code><span class="comment">-- Primitive types</span>
+<span class="function">intVal</span> : <span class="type">Int</span>        <span class="comment">-- 64-bit integer</span>
+<span class="function">floatVal</span> : <span class="type">Float</span>      <span class="comment">-- 64-bit float</span>
+<span class="function">boolVal</span> : <span class="type">Bool</span>       <span class="comment">-- true | false</span>
+<span class="function">charVal</span> : <span class="type">Char</span>       <span class="comment">-- Unicode character</span>
+<span class="function">strVal</span> : <span class="type">String</span>     <span class="comment">-- UTF-8 text</span>
+
+<span class="comment">-- Composite types</span>
+<span class="function">list</span> : <span class="type">List</span> <span class="type">Int</span>       <span class="comment">-- [1, 2, 3]</span>
+<span class="function">pair</span> : (<span class="type">Int</span>, <span class="type">String</span>) <span class="comment">-- (42, "answer")</span>
+<span class="function">record</span> : { <span class="function">x</span>: <span class="type">Int</span>, <span class="function">y</span>: <span class="type">Int</span> }  <span class="comment">-- { x: 1, y: 2 }</span></code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+
+                    <h3>Algebraic Data Types</h3>
+                    <div class="code-header">adt.mon</div>
+                    <pre><code><span class="comment">-- Sum types (enums)</span>
+<span class="keyword">data</span> <span class="type">Option</span> <span class="function">a</span> = <span class="type">None</span> | <span class="type">Some</span> <span class="function">a</span>
+
+<span class="comment">-- Product types (records)</span>
+<span class="keyword">data</span> <span class="type">Person</span> = <span class="type">Person</span> {
+    <span class="function">name</span> : <span class="type">String</span>,
+    <span class="function">age</span> : <span class="type">Int</span>
+}
+
+<span class="comment">-- Recursive types</span>
+<span class="keyword">data</span> <span class="type">Tree</span> <span class="function">a</span> = <span class="type">Leaf</span> | <span class="type">Node</span> <span class="function">a</span> (<span class="type">Tree</span> <span class="function">a</span>) (<span class="type">Tree</span> <span class="function">a</span>)</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+                </section>
+
+                <section id="monads">
+                    <h2>Monads <a href="#monads" class="anchor">#</a></h2>
+                    <p>The heart of the language. Monads provide a unified interface for sequencing computations with context.</p>
+
+                    <div class="callout">
+                        <div class="callout-title">Core Concept</div>
+                        <p>A monad is a design pattern that allows chaining operations while managing effects, state, or context automatically.</p>
+                    </div>
+
+                    <h3>Common Monads</h3>
+                    <div class="code-header">monads.mon</div>
+                    <pre><code><span class="comment">-- Maybe monad for null safety</span>
+<span class="function">safeDivide</span> : <span class="type">Float</span> -> <span class="type">Float</span> -> <span class="type">Maybe</span> <span class="type">Float</span>
+<span class="function">safeDivide</span> x <span class="number">0</span> = <span class="type">Nothing</span>
+<span class="function">safeDivide</span> x y = <span class="type">Just</span> (x / y)
+
+<span class="comment">-- Result monad for error handling</span>
+<span class="function">parseInt</span> : <span class="type">String</span> -> <span class="type">Result</span> <span class="type">ParseError</span> <span class="type">Int</span>
+
+<span class="comment">-- IO monad for effects</span>
+<span class="function">readFile</span> : <span class="type">Path</span> -> <span class="type">IO</span> (<span class="type">Result</span> <span class="type">IOError</span> <span class="type">String</span>)
+
+<span class="comment">-- Do notation for sequencing</span>
+<span class="function">program</span> : <span class="type">IO</span> ()
+<span class="function">program</span> = <span class="keyword">do</span>
+    <span class="function">putStr</span> <span class="string">"Enter number: "</span>
+    input <- <span class="function">getLine</span>
+    <span class="keyword">case</span> <span class="function">parseInt</span> input <span class="keyword">of</span>
+        <span class="type">Ok</span> n -> <span class="function">print</span> (n * <span class="number">2</span>)
+        <span class="type">Err</span> e -> <span class="function">putStrLn</span> <span class="string">"Invalid input"</span></code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+                </section>
+
+                <section id="stdlib">
+                    <h2>Standard Library <a href="#stdlib" class="anchor">#</a></h2>
+                    <p>The standard library provides essential modules for common programming tasks.</p>
+
+                    <h3>Core Modules</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Module</th>
+                                <th>Description</th>
+                                <th>Key Functions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>Prelude</code></td>
+                                <td>Automatically imported basics</td>
+                                <td>map, filter, fold, id, const</td>
+                            </tr>
+                            <tr>
+                                <td><code>IO</code></td>
+                                <td>Input/Output operations</td>
+                                <td>putStrLn, getLine, readFile, writeFile</td>
+                            </tr>
+                            <tr>
+                                <td><code>List</code></td>
+                                <td>List operations</td>
+                                <td>head, tail, take, drop, zip, unzip</td>
+                            </tr>
+                            <tr>
+                                <td><code>String</code></td>
+                                <td>Text manipulation</td>
+                                <td>split, join, trim, replace</td>
+                            </tr>
+                            <tr>
+                                <td><code>Maybe</code></td>
+                                <td>Optional values</td>
+                                <td>isJust, isNothing, fromMaybe, mapMaybe</td>
+                            </tr>
+                            <tr>
+                                <td><code>Result</code></td>
+                                <td>Error handling</td>
+                                <td>map, mapErr, andThen, withDefault</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </section>
+
+                <section id="operators">
+                    <h2>Operators <a href="#operators" class="anchor">#</a></h2>
+                    <p>Monad provides a rich set of operators with customizable precedence.</p>
+
+                    <div class="code-header">operators.mon</div>
+                    <pre><code><span class="comment">-- Arithmetic</span>
++  -  *  /  %           <span class="comment">-- Basic math</span>
+**                      <span class="comment">-- Exponentiation</span>
+
+<span class="comment">-- Comparison</span>
+==  /=  <  >  <=  >=    <span class="comment">-- Equality and ordering</span>
+
+<span class="comment">-- Logical</span>
+&&  ||  !               <span class="comment">-- And, Or, Not</span>
+
+<span class="comment">-- Functional</span>
+|>                      <span class="comment">-- Forward pipe: x |> f = f x</span>
+<|                      <span class="comment">-- Backward pipe</span>
+>>                      <span class="comment">-- Monad bind: flatMap</span>
+=<<                     <span class="comment">-- Reverse bind</span>
+.                       <span class="comment">-- Composition: (f . g) x = f (g x)</span>
+$                       <span class="comment">-- Application: f $ x = f x</span>
+
+<span class="comment">-- List</span>
+++                      <span class="comment">-- Concatenation</span>
+::                      <span class="comment">-- Cons: x :: xs = [x] ++ xs</span></code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+                </section>
+
+                <section id="errors">
+                    <h2>Error Handling <a href="#errors" class="anchor">#</a></h2>
+                    <p>Monad eliminates exceptions. All errors are explicit and type-safe using the <code>Result</code> type.</p>
+
+                    <div class="code-header">error.mon</div>
+                    <pre><code><span class="keyword">data</span> <span class="type">FileError</span> = <span class="type">NotFound</span> <span class="type">Path</span> 
+               | <span class="type">PermissionDenied</span> <span class="type">Path</span>
+               | <span class="type">IOError</span> <span class="type">String</span>
+
+<span class="function">readConfig</span> : <span class="type">Path</span> -> <span class="type">Result</span> <span class="type">FileError</span> <span class="type">Config</span>
+<span class="function">readConfig</span> path = 
+    <span class="function">readFile</span> path
+        |> <span class="function">map</span> <span class="function">parseConfig</span>
+        |> <span class="function">andThen</span> <span class="function">validateConfig</span>
+
+<span class="comment">-- Error propagation with context</span>
+<span class="function">loadApp</span> : <span class="type">Result</span> <span class="type">AppError</span> <span class="type">App</span>
+<span class="function">loadApp</span> = <span class="keyword">do</span>
+    config <- <span class="function">mapErr</span> <span class="type">ConfigError</span> (<span class="function">readConfig</span> <span class="string">"app.conf"</span>)
+    db <- <span class="function">mapErr</span> <span class="type">DBError</span> (<span class="function">connectDB</span> config.database)
+    <span class="type">Ok</span> (<span class="type">App</span> config db)</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+                </section>
+
+                <section id="ffi">
+                    <h2>FFI <span class="badge">Advanced</span> <a href="#ffi" class="anchor">#</a></h2>
+                    <p>Foreign Function Interface allows calling C libraries directly with zero overhead.</p>
+
+                    <div class="code-header">ffi.mon</div>
+                    <pre><code><span class="comment">-- Import C functions</span>
+<span class="keyword">foreign</span> <span class="keyword">import</span> <span class="string">"math.h"</span>
+    <span class="function">sin</span> : <span class="type">Float</span> -> <span class="type">Float</span>
+    <span class="function">cos</span> : <span class="type">Float</span> -> <span class="type">Float</span>
+    <span class="function">sqrt</span> : <span class="type">Float</span> -> <span class="type">Float</span>
+
+<span class="comment">-- Safe wrappers</span>
+<span class="function">safeSqrt</span> : <span class="type">Float</span> -> <span class="type">Maybe</span> <span class="type">Float</span>
+<span class="function">safeSqrt</span> x = 
+    <span class="keyword">if</span> x < <span class="number">0</span> 
+    <span class="keyword">then</span> <span class="type">Nothing</span> 
+    <span class="keyword">else</span> <span class="type">Just</span> (<span class="function">sqrt</span> x)</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+                </section>
+
+                <section id="optimization">
+                    <h2>Optimization <span class="badge">Advanced</span> <a href="#optimization" class="anchor">#</a></h2>
+                    <p>Monad compiles through LLVM with aggressive optimizations enabled by default.</p>
+
+                    <h3>Compiler Flags</h3>
+                    <div class="code-header">terminal</div>
+                    <pre><code>monad build --release          <span class="comment"># Optimized build</span>
+monad build --target=wasm32    <span class="comment"># WebAssembly output</span>
+monad build --emit-llvm        <span class="comment"># Output LLVM IR</span></code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+
+                    <div class="callout">
+                        <div class="callout-title">Performance Tips</div>
+                        <p>Use strictness annotations (!) for hot loops. Enable tail-call optimization with -O3. Profile with <code>monad prof</code>.</p>
+                    </div>
+                </section>
+
+                <section id="deployment">
+                    <h2>Deployment <a href="#deployment" class="anchor">#</a></h2>
+                    <p>Compile to native binaries, WebAssembly, or run in the cloud.</p>
+
+                    <div class="code-header">deployment.mon</div>
+                    <pre><code><span class="comment">-- Cloud function deployment</span>
+<span class="keyword">module</span> <span class="type">API</span> <span class="keyword">where</span>
+
+<span class="keyword">import</span> <span class="type">HTTP</span>
+<span class="keyword">import</span> <span class="type">JSON</span>
+
+<span class="comment">-- Auto-generates OpenAPI spec</span>
+<span class="function">handler</span> : <span class="type">Request</span> -> <span class="type">IO</span> <span class="type">Response</span>
+<span class="function">handler</span> req = <span class="keyword">do</span>
+    body <- <span class="function">jsonBody</span> req
+    <span class="keyword">case</span> <span class="function">validate</span> body <span class="keyword">of</span>
+        <span class="type">Ok</span> user -> <span class="function">jsonResponse</span> <span class="number">200</span> (<span class="function">createUser</span> user)
+        <span class="type">Err</span> e -> <span class="function">jsonResponse</span> <span class="number">400</span> (<span class="function">errorObj</span> e)</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+                </section>
+
+                <hr class="section-divider">
+
+                <p style="text-align: center; color: var(--fg-dimmed); font-size: 0.8rem; margin-top: 3rem;">
+                    Monad Language  2026 Documentation licensed under MIT
+                </p>
+            </div>
+        </main>
+    </div>
+
+    <!-- Bottom Progress Bar -->
+    <div class="progress-container">
+        <div class="scroll-progress" id="scrollProgress"></div>
+    </div>
+
+    <script>
+        // Morphing lights following cursor
+        const morphingLight = document.getElementById('morphingLight');
+        const morphingLight2 = document.getElementById('morphingLight2');
+        let mouseX = window.innerWidth / 2, mouseY = window.innerHeight / 2;
+        let light1X = mouseX, light1Y = mouseY;
+        let light2X = mouseX, light2Y = mouseY;
+        let time = 0;
+
+        document.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        });
+
+        function animateLights() {
+            time += 0.01;
+
+            // Primary light - follows with delay and organic movement
+            light1X += (mouseX - light1X) * 0.03;
+            light1Y += (mouseY - light1Y) * 0.03;
+
+            // Add organic noise movement
+            const noise1X = Math.sin(time * 0.7) * 30 + Math.cos(time * 1.3) * 20;
+            const noise1Y = Math.cos(time * 0.5) * 30 + Math.sin(time * 0.9) * 20;
+
+            morphingLight.style.left = (light1X + noise1X) + 'px';
+            morphingLight.style.top = (light1Y + noise1Y) + 'px';
+
+            // Secondary light - follows with more delay and different pattern
+            light2X += (mouseX - light2X) * 0.015;
+            light2Y += (mouseY - light2Y) * 0.015;
+
+            const noise2X = Math.sin(time * 0.4 + 2) * 50 + Math.cos(time * 0.8) * 30;
+            const noise2Y = Math.cos(time * 0.6 + 1) * 50 + Math.sin(time * 1.1) * 30;
+
+            morphingLight2.style.left = (light2X + noise2X) + 'px';
+            morphingLight2.style.top = (light2Y + noise2Y) + 'px';
+
+            requestAnimationFrame(animateLights);
+        }
+        animateLights();
+
+        // Mobile sidebar toggle
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+        }
+
+        // Copy code functionality - Green accent
+        function copyCode(btn) {
+            const pre = btn.parentElement;
+            const code = pre.querySelector('code');
+            const text = code.innerText;
+
+            navigator.clipboard.writeText(text).then(() => {
+                btn.textContent = 'Copied!';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.textContent = 'Copy';
+                    btn.classList.remove('copied');
+                }, 2000);
+            });
+        }
+
+        // Active navigation highlighting
+        const sections = document.querySelectorAll('section[id]');
+        const navLinks = document.querySelectorAll('.nav-link');
+        const navItems = document.querySelectorAll('.nav-item');
+
+        function updateActiveNav() {
+            let current = '';
+            const scrollPos = window.scrollY + 200;
+
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                const sectionHeight = section.clientHeight;
+                if (scrollPos >= sectionTop && scrollPos < sectionTop + sectionHeight) {
+                    current = section.getAttribute('id');
+                }
+            });
+
+            navLinks.forEach((link, index) => {
+                link.classList.remove('active');
+                navItems[index].classList.remove('active');
+                if (link.getAttribute('href') === '#' + current) {
+                    link.classList.add('active');
+                    navItems[index].classList.add('active');
+                }
+            });
+        }
+
+        // Scroll progress bar
+        function updateScrollProgress() {
+            const winScroll = document.body.scrollTop || document.documentElement.scrollTop;
+            const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+            const scrolled = (winScroll / height) * 100;
+            document.getElementById('scrollProgress').style.width = scrolled + '%';
+        }
+
+        // Section reveal on scroll
+        function revealSections() {
+            sections.forEach(section => {
+                const sectionTop = section.getBoundingClientRect().top;
+                const windowHeight = window.innerHeight;
+                if (sectionTop < windowHeight * 0.85) {
+                    section.classList.add('visible');
+                }
+            });
+        }
+
+        window.addEventListener('scroll', () => {
+            updateActiveNav();
+            updateScrollProgress();
+            revealSections();
+        });
+
+        window.addEventListener('load', () => {
+            updateActiveNav();
+            updateScrollProgress();
+            revealSections();
+        });
+
+        // Search functionality
+        const searchInput = document.getElementById('search');
+        searchInput.addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            navLinks.forEach((link, index) => {
+                const text = link.textContent.toLowerCase();
+                if (text.includes(term)) {
+                    navItems[index].style.display = 'block';
+                    link.style.display = 'block';
+                } else {
+                    navItems[index].style.display = 'none';
+                }
+            });
+        });
+
+        // Close mobile sidebar when clicking a link
+        navLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const targetId = link.getAttribute('href');
+                const targetSection = document.querySelector(targetId);
+
+                if (targetSection) {
+                    targetSection.scrollIntoView({ behavior: 'smooth' });
+                }
+
+                if (window.innerWidth <= 1024) {
+                    document.getElementById('sidebar').classList.remove('open');
+                }
+            });
+        });
+
+        // Smooth scroll for quick links
+        document.querySelectorAll('.quick-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const targetId = link.getAttribute('href');
+                const targetSection = document.querySelector(targetId);
+                if (targetSection) {
+                    targetSection.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

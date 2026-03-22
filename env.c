@@ -103,6 +103,7 @@ static EnvEntry *new_entry(const char *name) {
     e->name      = strdup(name);
     e->arity_min = -1;
     e->arity_max = -1;
+    e->adt_tag   = -1;
     return e;
 }
 
@@ -149,6 +150,33 @@ void env_insert_layout(Env *table, const char *name, Type *layout_type,
 Type *env_lookup_layout(Env *table, const char *name) {
     EnvEntry *e = env_lookup(table, name);
     if (e && e->kind == ENV_LAYOUT) return e->type;
+    return NULL;
+}
+
+void env_insert_adt_ctor(Env *table, const char *name, int tag,
+                         Type *data_type, LLVMValueRef func_ref) {
+    EnvEntry *e = find(table, name);
+    if (e) {
+        type_free(e->type);
+        e->kind     = ENV_ADT_CTOR;
+        e->adt_tag  = tag;
+        e->type     = data_type;
+        e->func_ref = func_ref;
+        e->is_exported = true;
+        return;
+    }
+    e = new_entry(name);
+    e->kind     = ENV_ADT_CTOR;
+    e->adt_tag  = tag;
+    e->type     = data_type;
+    e->func_ref = func_ref;
+    e->is_exported = true;
+    chain(table, e);
+}
+
+EnvEntry *env_lookup_adt_ctor(Env *table, const char *name) {
+    EnvEntry *e = env_lookup(table, name);
+    if (e && e->kind == ENV_ADT_CTOR) return e;
     return NULL;
 }
 

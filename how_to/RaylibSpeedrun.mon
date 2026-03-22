@@ -1,3 +1,5 @@
+;;; Raylib Speedrun
+
 include <raylib.h>
 
 InitWindow 1920 1080 "No Bindings!?"
@@ -10,12 +12,6 @@ until WindowShouldClose
   ClearBackground color
   DrawFPS 600 600
   EndDrawing
-
-;; define id λx.x
-
-;; if 3 `<` 10
-;;   show "yes"
-;;   show "no"
 
 
 

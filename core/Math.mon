@@ -213,7 +213,7 @@
 
 (define (lcm [a :: Int] -> [b :: Int] -> Int)
   "Return the least common multiple of A and B."
-  (/ (* a b) (gcd a b)))
+  ((* a b) `/` (gcd a b)))
 
 (define (factorial [n :: Int] -> Int)
   "Return N! iteratively. Returns 1 for N <= 0."

@@ -6,4 +6,3 @@ Button         #151718
 Button-border  #1D2021
 Border         #181A1A
 Accent         #9B7BFF
-Accent contrast ratio (~7:1)

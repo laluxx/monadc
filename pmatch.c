@@ -65,8 +65,8 @@ static ASTPattern parse_single_pattern(Parser *p) {
         return pat;
     }
 
-    // List pattern [...]
-    if (parser_at(p, TOK_LBRACKET)) {
+    // List pattern [...] — handled above in the combined bracket block
+    if (false && parser_at(p, TOK_LBRACKET)) {
         parser_advance(p); // consume '['
 
         // Empty list []
@@ -119,6 +119,90 @@ static ASTPattern parse_single_pattern(Parser *p) {
         return pat;
     }
 
+    // ADT constructor pattern (uppercase symbol = constructor name)
+    // Handles both bare `Red` and destructuring `(Circle r)` / `(Rectangle w h)`
+    if (parser_at(p, TOK_SYMBOL) &&
+        p->current.value[0] >= 'A' && p->current.value[0] <= 'Z') {
+        pat.kind     = PAT_CONSTRUCTOR;
+        pat.var_name = my_strdup(p->current.value);
+        parser_advance(p);
+        return pat;
+    }
+
+    // [Constructor field1 field2 ...] — destructuring constructor pattern
+    if (parser_at(p, TOK_LBRACKET)) {
+        // Peek: only treat as constructor pattern if first token inside is uppercase
+        parser_advance(p); // consume '['
+        if (parser_at(p, TOK_SYMBOL) &&
+            p->current.value[0] >= 'A' && p->current.value[0] <= 'Z') {
+            pat.kind     = PAT_CONSTRUCTOR;
+            pat.var_name = my_strdup(p->current.value);
+            parser_advance(p);
+
+            // Parse field patterns until ']'
+            ASTPattern *fields = NULL;
+            int         fcount = 0;
+            int         fcap   = 0;
+            while (!parser_at(p, TOK_RBRACKET) && !parser_at(p, TOK_EOF)) {
+                ASTPattern fp = parse_single_pattern(p);
+                if (fcount >= fcap) {
+                    fcap = fcap == 0 ? 4 : fcap * 2;
+                    fields = realloc(fields, sizeof(ASTPattern) * fcap);
+                }
+                fields[fcount++] = fp;
+            }
+            if (!parser_at(p, TOK_RBRACKET)) {
+                fprintf(stderr, "pmatch: expected ']' to close constructor pattern\n");
+            } else {
+                parser_advance(p); // consume ']'
+            }
+            pat.ctor_fields      = fields;
+            pat.ctor_field_count = fcount;
+            return pat;
+        }
+        /* Not a constructor pattern — fall through to existing list pattern
+         * handling by re-entering the list pattern code. But we already
+         * consumed '[', so handle as empty or non-constructor list pattern. */
+        if (parser_at(p, TOK_RBRACKET)) {
+            parser_advance(p);
+            pat.kind = PAT_LIST_EMPTY;
+            return pat;
+        }
+        /* Non-uppercase after '[' — treat as regular list pattern */
+        ASTPattern *elems = NULL;
+        int count = 0, cap = 0;
+        while (!parser_at(p, TOK_RBRACKET) &&
+               !parser_at(p, TOK_PIPE)     &&
+               !parser_at(p, TOK_EOF)) {
+            ASTPattern elem = parse_single_pattern(p);
+            if (count >= cap) {
+                cap = cap == 0 ? 4 : cap * 2;
+                elems = realloc(elems, sizeof(ASTPattern) * cap);
+            }
+            elems[count++] = elem;
+        }
+        ASTPattern *tail = NULL;
+        if (parser_at(p, TOK_PIPE)) {
+            parser_advance(p);
+            tail = malloc(sizeof(ASTPattern));
+            *tail = parse_single_pattern(p);
+            if (tail->kind != PAT_VAR && tail->kind != PAT_WILDCARD) {
+                fprintf(stderr, "pmatch: tail after | must be a variable or _\n");
+                tail->kind = PAT_WILDCARD;
+            }
+        }
+        if (!parser_at(p, TOK_RBRACKET)) {
+            fprintf(stderr, "pmatch: expected ']' to close list pattern\n");
+        } else {
+            parser_advance(p);
+        }
+        pat.kind          = PAT_LIST;
+        pat.elements      = elems;
+        pat.element_count = count;
+        pat.tail          = tail;
+        return pat;
+    }
+
     // Variable binding (lowercase symbol)
     if (parser_at(p, TOK_SYMBOL)) {
         pat.kind     = PAT_VAR;
@@ -145,12 +229,19 @@ static ASTPMatchClause parse_one_clause(Parser *p, int param_count) {
     ASTPMatchClause clause = {0};
 
     ASTPattern *patterns = malloc(sizeof(ASTPattern) * (param_count ? param_count : 1));
-    for (int i = 0; i < param_count; i++)
+    for (int i = 0; i < param_count; i++) {
         patterns[i] = parse_single_pattern(p);
+        fprintf(stderr, "DEBUG parse_one_clause: pattern[%d] kind=%d var_name='%s' ctor_field_count=%d\n",
+                i, patterns[i].kind,
+                patterns[i].var_name ? patterns[i].var_name : "NULL",
+                patterns[i].ctor_field_count);
+    }
 
     // Consume ->
     if (!parser_at(p, TOK_ARROW)) {
-        fprintf(stderr, "pmatch: expected '->' after pattern\n");
+        fprintf(stderr, "pmatch: expected '->' after pattern, got token type=%d value='%s'\n",
+                p->current.type,
+                p->current.value ? p->current.value : "NULL");
     } else {
         parser_advance(p);
     }
@@ -346,9 +437,26 @@ static AST *ast_substitute(AST *node,
 }
 
 static AST *make_let(const char **names, AST **exprs, int count, AST *body) {
-    // Use direct substitution instead of let-binding via immediately-invoked
-    // lambda. This avoids boxing/unboxing issues with the closure ABI.
-    return ast_substitute(body, names, exprs, count);
+    /* First, substitute earlier bindings into later binding expressions
+     * so that chained bindings like:
+     *   __nested_Point_0 = (__adt_field __p_0 0)
+     *   x1               = (__adt_field __nested_Point_0 0)
+     * correctly resolve to:
+     *   x1               = (__adt_field (__adt_field __p_0 0) 0)
+     * before substituting into the body.                              */
+    AST **resolved = malloc(sizeof(AST*) * count);
+    for (int i = 0; i < count; i++) {
+        /* Substitute all previous bindings into this expression */
+        resolved[i] = ast_substitute(exprs[i],
+                                     (const char **)names, resolved,
+                                     i /* only previous bindings */);
+    }
+    /* Now substitute all resolved bindings into the body */
+    AST *result = ast_substitute(body, names, resolved, count);
+    for (int i = 0; i < count; i++)
+        ast_free(resolved[i]);
+    free(resolved);
+    return result;
 }
 
 // Build guard + bindings for one pattern applied to one parameter.
@@ -389,16 +497,12 @@ static void build_pattern_conditions(
         break;
 
     case PAT_VAR:
-        // No guard, bind name = param
-        // For scalar params, wrap in type cast if type is known
-        if (elem_type_name) {
-            AST *cast = ast_new_list();
-            ast_list_append(cast, sym(elem_type_name));
-            ast_list_append(cast, sym(param_name));
-            PUSH_BIND(pat->var_name, cast);
-        } else {
-            PUSH_BIND(pat->var_name, sym(param_name));
-        }
+        // No guard, just bind name = param directly.
+        // Never wrap in a type cast — the param already has the correct
+        // type from the function signature. Casting causes bugs e.g.
+        // (String x) on a String param goes through sprintf instead of
+        // returning the string itself.
+        PUSH_BIND(pat->var_name, sym(param_name));
         break;
 
     case PAT_LITERAL_INT:
@@ -412,6 +516,115 @@ static void build_pattern_conditions(
     case PAT_LIST_EMPTY:
         PUSH_GUARD(make_list_empty(param_name));
         break;
+
+    case PAT_CONSTRUCTOR: {
+        /* Guard: (= (__adt_tag param) __adt_tag_CtorName) */
+        char tag_sym[256];
+        snprintf(tag_sym, sizeof(tag_sym), "__adt_tag_%s", pat->var_name);
+        AST *tag_call = ast_new_list();
+        ast_list_append(tag_call, sym("__adt_tag"));
+        ast_list_append(tag_call, sym(param_name));
+        AST *tag_items[] = {sym("="), tag_call, sym(tag_sym)};
+        PUSH_GUARD(make_list(tag_items, 3));
+
+        /* For each field sub-pattern, extract via __adt_field and bind/guard */
+        for (int fi = 0; fi < pat->ctor_field_count; fi++) {
+            ASTPattern *fp = &pat->ctor_fields[fi];
+
+            char fi_buf[16];
+            snprintf(fi_buf, sizeof(fi_buf), "%d", fi);
+            AST *field_call = ast_new_list();
+            ast_list_append(field_call, sym("__adt_field"));
+            ast_list_append(field_call, sym(param_name));
+            ast_list_append(field_call, ast_new_number((double)fi, fi_buf));
+
+            switch (fp->kind) {
+            case PAT_WILDCARD:
+                break;
+
+            case PAT_VAR:
+                PUSH_BIND(fp->var_name, field_call);
+                break;
+
+            case PAT_LITERAL_INT:
+                PUSH_GUARD(make_eq_int(field_call, (long long)fp->lit_value));
+                break;
+
+            case PAT_LITERAL_FLOAT:
+                PUSH_GUARD(make_eq_float(field_call, fp->lit_value));
+                break;
+
+            case PAT_CONSTRUCTOR: {
+                /* Nested: [Triangle [Point x1 y1] [Point x2 y2] ...]
+                 *
+                 * Step 1 — Guard: check the nested field's tag directly
+                 *   (= (__adt_tag (__adt_field param fi)) __adt_tag_NestedCtor)
+                 * We use field_call directly here — no synthetic name in guard.
+                 *
+                 * Step 2 — Bind: __nested_CtorName_fi = (__adt_field param fi)
+                 * This lets ast_substitute replace __nested_CtorName_fi with
+                 * the field expression everywhere in the body.
+                 *
+                 * Step 3 — Bind nested fields: x1 = (__adt_field __nested_... 0)
+                 * We emit these as VAR bindings referencing the synthetic name.
+                 * ast_substitute will chain-substitute them correctly.           */
+
+                /* Step 1: tag guard using field_call directly */
+                char nested_tag_sym[256];
+                snprintf(nested_tag_sym, sizeof(nested_tag_sym),
+                         "__adt_tag_%s", fp->var_name);
+                AST *ntag_call = ast_new_list();
+                ast_list_append(ntag_call, sym("__adt_tag"));
+                ast_list_append(ntag_call, ast_clone(field_call));
+                AST *ntag_items[] = {sym("="), ntag_call, sym(nested_tag_sym)};
+                PUSH_GUARD(make_list(ntag_items, 3));
+
+                /* Step 2: bind synthetic name = field_call */
+                char *nested_param = malloc(256);
+                snprintf(nested_param, 256, "__nested_%s_%d", fp->var_name, fi);
+                PUSH_BIND(nested_param, ast_clone(field_call));
+
+                /* Step 3: bind each nested field var to (__adt_field nested_param nfi)
+                 * Do NOT recurse into build_pattern_conditions — that would emit
+                 * a redundant tag guard using nested_param as a symbol, which is
+                 * not yet a real variable at guard evaluation time.              */
+                for (int nfi = 0; nfi < fp->ctor_field_count; nfi++) {
+                    ASTPattern *nfp = &fp->ctor_fields[nfi];
+                    char nfi_buf[16];
+                    snprintf(nfi_buf, sizeof(nfi_buf), "%d", nfi);
+                    AST *nfield_call = ast_new_list();
+                    ast_list_append(nfield_call, sym("__adt_field"));
+                    ast_list_append(nfield_call, sym(nested_param));
+                    ast_list_append(nfield_call,
+                                    ast_new_number((double)nfi, nfi_buf));
+                    switch (nfp->kind) {
+                    case PAT_WILDCARD:
+                        break;
+                    case PAT_VAR:
+                        PUSH_BIND(nfp->var_name, nfield_call);
+                        break;
+                    case PAT_LITERAL_INT:
+                        PUSH_GUARD(make_eq_int(ast_clone(nfield_call),
+                                               (long long)nfp->lit_value));
+                        break;
+                    case PAT_LITERAL_FLOAT:
+                        PUSH_GUARD(make_eq_float(ast_clone(nfield_call),
+                                                 nfp->lit_value));
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                break;
+            }
+
+            default:
+                break;
+            }
+        }
+        break;
+    }
+
 
     case PAT_LIST: {
         int n = pat->element_count;
@@ -443,16 +656,9 @@ static void build_pattern_conditions(
             case PAT_WILDCARD:
                 break;
             case PAT_VAR:
-                // Wrap list-ref result in a type cast so codegen gets
-                // a concrete typed value rather than a RuntimeValue*.
-                if (elem_type_name) {
-                    AST *cast = ast_new_list();
-                    ast_list_append(cast, sym(elem_type_name));
-                    ast_list_append(cast, elem_expr);
-                    PUSH_BIND(ep->var_name, cast);
-                } else {
-                    PUSH_BIND(ep->var_name, elem_expr);
-                }
+                /* Never cast — list-ref returns RuntimeValue* and
+                 * the type system handles it from there.           */
+                PUSH_BIND(ep->var_name, elem_expr);
                 break;
             case PAT_LITERAL_INT:
                 PUSH_GUARD(make_eq_int(elem_expr, (long long)ep->lit_value));
@@ -520,6 +726,10 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
                 &bind_count,  &bind_cap);
         }
 
+        fprintf(stderr, "DEBUG pmatch_desugar: clause %d guard_count=%d bind_count=%d\n",
+                i, guard_count, bind_count);
+        for (int _bi = 0; _bi < bind_count; _bi++)
+            fprintf(stderr, "  bind[%d] name='%s'\n", _bi, bind_names[_bi] ? bind_names[_bi] : "NULL");
         AST *guard = (guard_count == 0)
             ? sym("else")
             : make_and(guard_parts, guard_count);
