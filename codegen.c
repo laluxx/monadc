@@ -1940,6 +1940,77 @@ void codegen_data(CodegenContext *ctx, AST *ast) {
             }
         }
 
+        /* Emit typed field accessor functions:
+         * __field_CtorName_fi :: ptr -> FieldType
+         * These replace the generic __adt_field hack.              */
+        for (int fi = 0; fi < nfields; fi++) {
+            char acc_name[256];
+            snprintf(acc_name, sizeof(acc_name), "__field_%s_%d", ctor->name, fi);
+
+            Type       *ft       = field_type_objs[fi];
+            /* For layout/ADT fields, always return i8* ptr — avoids struct
+             * type mismatches between modules. Callers cast as needed.    */
+            LLVMTypeRef  ret_llvm = (ft->kind == TYPE_LAYOUT)
+                                  ? ptr_t
+                                  : type_to_llvm(ctx, ft);
+
+            /* Accessor takes the raw ADT ptr and returns the field value */
+            LLVMTypeRef  acc_params[] = {ptr_t};
+            LLVMTypeRef  acc_ft       = LLVMFunctionType(ret_llvm, acc_params, 1, 0);
+            LLVMValueRef acc_fn       = LLVMAddFunction(ctx->module, acc_name, acc_ft);
+            LLVMSetLinkage(acc_fn, LLVMExternalLinkage);
+
+            LLVMBasicBlockRef acc_saved = LLVMGetInsertBlock(ctx->builder);
+            LLVMBasicBlockRef acc_entry = LLVMAppendBasicBlockInContext(
+                                              ctx->context, acc_fn, "entry");
+            LLVMPositionBuilderAtEnd(ctx->builder, acc_entry);
+
+            LLVMValueRef acc_ptr = LLVMGetParam(acc_fn, 0);
+
+            /* GEP: byte offset 8 + fi*8 (tag=i32 at 0, padding 4 bytes, fields at 8+) */
+            long long byte_off = 8 + fi * 8;
+            LLVMValueRef offset   = LLVMConstInt(i64, (uint64_t)byte_off, 0);
+            LLVMValueRef i8base   = LLVMBuildBitCast(ctx->builder, acc_ptr,
+                                        LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0),
+                                        "base");
+            LLVMValueRef fptr_i8  = LLVMBuildGEP2(ctx->builder,
+                                        LLVMInt8TypeInContext(ctx->context),
+                                        i8base, &offset, 1, "fptr");
+            LLVMTypeRef  i64ptr   = LLVMPointerType(i64, 0);
+            LLVMValueRef fptr64   = LLVMBuildBitCast(ctx->builder, fptr_i8, i64ptr, "fptr64");
+            LLVMValueRef fval_i64 = LLVMBuildLoad2(ctx->builder, i64, fptr64, "fval");
+
+            /* Reinterpret to correct type */
+            LLVMValueRef fval;
+            if (type_is_float(ft)) {
+                fval = LLVMBuildBitCast(ctx->builder, fval_i64,
+                                        LLVMDoubleTypeInContext(ctx->context), "fval_dbl");
+            } else if (ft->kind == TYPE_LAYOUT) {
+                fval = LLVMBuildIntToPtr(ctx->builder, fval_i64, ptr_t, "fval_ptr");
+            } else if (ft->kind == TYPE_CHAR) {
+                fval = LLVMBuildTrunc(ctx->builder, fval_i64,
+                                      LLVMInt8TypeInContext(ctx->context), "fval_char");
+            } else {
+                fval = fval_i64;
+            }
+
+            LLVMBuildRet(ctx->builder, fval);
+
+            if (acc_saved) LLVMPositionBuilderAtEnd(ctx->builder, acc_saved);
+
+            /* Register accessor in env with correct type */
+            EnvParam acc_eparam = {strdup("__self"), type_clone(data_layout_type)};
+            env_insert_func(ctx->env, acc_name,
+                            clone_params(&acc_eparam, 1), 1,
+                            type_clone(ft), acc_fn, NULL);
+            EnvEntry *acc_e = env_lookup(ctx->env, acc_name);
+            if (acc_e) {
+                acc_e->is_closure_abi = false;
+                acc_e->lifted_count   = 0;
+            }
+            free(acc_eparam.name);
+        }
+
         free(param_types);
         for (int fi = 0; fi < nfields; fi++) free(env_params[fi].name);
         free(env_params);
@@ -6360,39 +6431,25 @@ if (ast->list.count >= 5) {
                 return result;
             }
 
-
-            // (__adt_field ptr fi) -> value of field fi (1-indexed in struct, 0-indexed here)
+            // (__adt_field ptr fi) -> raw i64 field — legacy, prefer __field_CtorName_fi
             if (strcmp(head->symbol, "__adt_field") == 0) {
                 if (ast->list.count != 3) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: '__adt_field' requires 2 arguments",
                                   parser_get_filename(), ast->line, ast->column);
                 }
-                LLVMTypeRef i32  = LLVMInt32TypeInContext(ctx->context);
                 LLVMTypeRef i64  = LLVMInt64TypeInContext(ctx->context);
+                LLVMTypeRef i8ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
                 LLVMTypeRef dbl  = LLVMDoubleTypeInContext(ctx->context);
                 CodegenResult ptr_r = codegen_expr(ctx, ast->list.items[1]);
                 CodegenResult idx_r = codegen_expr(ctx, ast->list.items[2]);
                 long long fi = (long long)LLVMConstIntGetZExtValue(idx_r.value);
-
-                /* The struct is { i32 tag, i64 field0, i64 field1, ... }
-                 * Field fi is at struct index fi+1                        */
-                /* We don't know the exact struct type here so use a generic
-                 * approach: the struct name is data.TypeName.
-                 * Since we don't know TypeName, use GEP with byte offset.
-                 * tag=i32(4 bytes), then i64 fields at 8-byte offsets
-                 * (with padding: offset of field fi = 8 + fi*8)          */
-                LLVMTypeRef  i8ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-                /* Byte offset: 8 (after i32 tag + 4 bytes padding) + fi*8 */
                 long long byte_offset = 8 + fi * 8;
-                LLVMValueRef base    = ptr_r.value;
-                /* Normalize base to ptr — may be double (float field reinterpreted
-                 * as ptr for nested ADT access), i64, or already ptr            */
-                LLVMTypeRef base_kind_t = LLVMTypeOf(base);
-                if (LLVMGetTypeKind(base_kind_t) == LLVMDoubleTypeKind) {
-                    /* Float bits stored as double but actually a pointer — recover */
+                LLVMValueRef base = ptr_r.value;
+                LLVMTypeRef base_t = LLVMTypeOf(base);
+                if (LLVMGetTypeKind(base_t) == LLVMDoubleTypeKind) {
                     LLVMValueRef as_i64 = LLVMBuildBitCast(ctx->builder, base, i64, "dbl_to_i64");
                     base = LLVMBuildIntToPtr(ctx->builder, as_i64, i8ptr, "adt_base_ptr");
-                } else if (LLVMGetTypeKind(base_kind_t) == LLVMIntegerTypeKind) {
+                } else if (LLVMGetTypeKind(base_t) == LLVMIntegerTypeKind) {
                     base = LLVMBuildIntToPtr(ctx->builder, base, i8ptr, "adt_base_ptr");
                 }
                 LLVMValueRef offset  = LLVMConstInt(i64, (uint64_t)byte_offset, 0);
@@ -6402,15 +6459,10 @@ if (ast->list.count >= 5) {
                                            i8base, &offset, 1, "fptr");
                 LLVMTypeRef  i64ptr  = LLVMPointerType(i64, 0);
                 LLVMValueRef fptr64  = LLVMBuildBitCast(ctx->builder, fptr, i64ptr, "fptr64");
-                LLVMValueRef fval = LLVMBuildLoad2(ctx->builder, i64, fptr64, "fval");
-                /* Reinterpret i64 bits as double — correct for Float fields
-                 * (stored via bitcast double->i64) and used by __adt_tag
-                 * which accepts both double and ptr input.
-                 * Arithmetic ops see TYPE_FLOAT and use FAdd/FMul directly. */
+                LLVMValueRef fval    = LLVMBuildLoad2(ctx->builder, i64, fptr64, "fval");
                 result.value = LLVMBuildBitCast(ctx->builder, fval, dbl, "field_dbl");
                 result.type  = type_float();
                 return result;
-
             }
 
             if (strcmp(head->symbol, "__adt_tag") == 0) {
@@ -6418,35 +6470,27 @@ if (ast->list.count >= 5) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: '__adt_tag' requires 1 argument",
                                   parser_get_filename(), ast->line, ast->column);
                 }
-                LLVMTypeRef  i32     = LLVMInt32TypeInContext(ctx->context);
-                LLVMTypeRef  i64     = LLVMInt64TypeInContext(ctx->context);
-                LLVMTypeRef  ptr_t   = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-                CodegenResult arg    = codegen_expr(ctx, ast->list.items[1]);
+                LLVMTypeRef  i32   = LLVMInt32TypeInContext(ctx->context);
+                LLVMTypeRef  i64   = LLVMInt64TypeInContext(ctx->context);
+                LLVMTypeRef  ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                CodegenResult arg  = codegen_expr(ctx, ast->list.items[1]);
                 if (!arg.value) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: __adt_tag got null value",
                                   parser_get_filename(), ast->line, ast->column);
                 }
-                /* Normalize to ptr — arg may be double (field reinterpreted),
-                 * i64, or already ptr                                        */
-                LLVMValueRef adt_ptr  = arg.value;
-                LLVMTypeRef  arg_llvm = LLVMTypeOf(adt_ptr);
-                if (LLVMGetTypeKind(arg_llvm) == LLVMIntegerTypeKind) {
+                /* arg is always a ptr — typed accessors guarantee this.
+                 * If we get i64, use inttoptr (not bitcast which is invalid). */
+                LLVMValueRef adt_ptr = arg.value;
+                LLVMTypeRef  arg_t   = LLVMTypeOf(adt_ptr);
+                if (LLVMGetTypeKind(arg_t) == LLVMIntegerTypeKind)
                     adt_ptr = LLVMBuildIntToPtr(ctx->builder, adt_ptr, ptr_t, "adt_ptr");
-                } else if (LLVMGetTypeKind(arg_llvm) == LLVMDoubleTypeKind) {
-                    /* double bits are actually a stored pointer — bitcast to i64 then inttoptr */
-                    adt_ptr = LLVMBuildBitCast(ctx->builder, adt_ptr, i64, "dbl_to_i64");
-                    adt_ptr = LLVMBuildIntToPtr(ctx->builder, adt_ptr, ptr_t, "adt_ptr");
-                } else if (LLVMGetTypeKind(arg_llvm) != LLVMPointerTypeKind) {
+                else if (LLVMGetTypeKind(arg_t) != LLVMPointerTypeKind)
                     adt_ptr = LLVMBuildBitCast(ctx->builder, adt_ptr, ptr_t, "adt_ptr");
-                }
                 LLVMTypeRef  i32ptr  = LLVMPointerType(i32, 0);
                 LLVMValueRef tag_ptr = LLVMBuildBitCast(ctx->builder, adt_ptr, i32ptr, "tag_ptr");
                 LLVMValueRef tag     = LLVMBuildLoad2(ctx->builder, i32, tag_ptr, "adt_tag");
                 result.value = LLVMBuildSExt(ctx->builder, tag, i64, "adt_tag_i64");
                 result.type  = type_int();
-                /* Dump the containing function IR so we can see what's generated */
-                LLVMValueRef cur_fn = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder));
-                /* if (cur_fn) LLVMDumpValue(cur_fn); */ // DEBUG
                 return result;
             }
 

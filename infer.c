@@ -1097,6 +1097,13 @@ void infer_register_builtins(InferCtx *ctx) {
         scheme_mono(type_arrow(type_map(), type_list(infer_fresh(ctx)))));
     infer_env_insert(ctx->env, "vals",
         scheme_mono(type_arrow(type_map(), type_list(infer_fresh(ctx)))));
+
+    /* ADT internal primitives — typed by codegen_data at runtime,
+     * registered here as opaque so HM doesn't reject them          */
+    Type *adt_a = infer_fresh(ctx);
+    TypeScheme *adt_tag_sc = infer_generalise(ctx,
+        type_arrow(adt_a, type_int()), ctx->env);
+    infer_env_insert(ctx->env, "__adt_tag", adt_tag_sc);
 }
 
 

@@ -531,12 +531,12 @@ static void build_pattern_conditions(
         for (int fi = 0; fi < pat->ctor_field_count; fi++) {
             ASTPattern *fp = &pat->ctor_fields[fi];
 
-            char fi_buf[16];
-            snprintf(fi_buf, sizeof(fi_buf), "%d", fi);
+            /* Use typed accessor __field_CtorName_fi instead of generic __adt_field */
+            char acc_sym[256];
+            snprintf(acc_sym, sizeof(acc_sym), "__field_%s_%d", pat->var_name, fi);
             AST *field_call = ast_new_list();
-            ast_list_append(field_call, sym("__adt_field"));
+            ast_list_append(field_call, sym(acc_sym));
             ast_list_append(field_call, sym(param_name));
-            ast_list_append(field_call, ast_new_number((double)fi, fi_buf));
 
             switch (fp->kind) {
             case PAT_WILDCARD:
@@ -592,11 +592,12 @@ static void build_pattern_conditions(
                     ASTPattern *nfp = &fp->ctor_fields[nfi];
                     char nfi_buf[16];
                     snprintf(nfi_buf, sizeof(nfi_buf), "%d", nfi);
+                    char nacc_sym[256];
+                    snprintf(nacc_sym, sizeof(nacc_sym), "__field_%s_%d",
+                             fp->var_name, nfi);
                     AST *nfield_call = ast_new_list();
-                    ast_list_append(nfield_call, sym("__adt_field"));
+                    ast_list_append(nfield_call, sym(nacc_sym));
                     ast_list_append(nfield_call, sym(nested_param));
-                    ast_list_append(nfield_call,
-                                    ast_new_number((double)nfi, nfi_buf));
                     switch (nfp->kind) {
                     case PAT_WILDCARD:
                         break;
