@@ -633,284 +633,234 @@ void ast_free(AST *ast) {
     free(ast);
 }
 
-/// ast_to_string
-//
-// Renders an AST node to a heap-allocated string.
-// Caller is responsible for free()ing the result.
-//
-char *ast_to_string(AST *ast) {
-    if (!ast) return strdup("nil");
 
-    size_t  cap = 256;
-    size_t  len = 0;
-    char   *buf = malloc(cap);
-    buf[0] = '\0';
-
-#define APPEND(s) do { \
-        const char *_s = (s); if (!_s) break; \
-        size_t _n = strlen(_s); \
-        while (len + _n + 1 > cap) { cap *= 2; buf = realloc(buf, cap); } \
-        memcpy(buf + len, _s, _n + 1); len += _n; \
-    } while(0)
-
-#define APPENDF(...) do { \
-        char _tmp[512]; \
-        snprintf(_tmp, sizeof(_tmp), __VA_ARGS__); \
-        APPEND(_tmp); \
-    } while(0)
-
-#define APPENDS(node) do { \
-        char *_s = ast_to_string(node); APPEND(_s); free(_s); \
-    } while(0)
-
+void ast_print(AST *ast) {
+    if (!ast) { printf("nil"); return; }
     switch (ast->type) {
     case AST_NUMBER:
-        if (ast->has_raw_int && ast->literal_str) APPEND(ast->literal_str);
-        else APPENDF("%g", ast->number);
-        break;
-
-    case AST_SYMBOL:
-        APPEND(ast->symbol);
-        break;
-
-    case AST_STRING:
-        APPEND("\""); APPEND(ast->string); APPEND("\"");
-        break;
-
-    case AST_CHAR:
-        APPENDF("'%c'", ast->character);
-        break;
-
-    case AST_KEYWORD:
-        APPEND(":"); APPEND(ast->keyword);
+        if (ast->has_raw_int && ast->literal_str)
+            printf("%s", ast->literal_str);
+        else
+            printf("%g", ast->number);
+    break;
+    case AST_SYMBOL:  printf("%s", ast->symbol); break;
+    case AST_STRING:  printf("\"%s\"", ast->string); break;
+    case AST_CHAR:    printf("'%c'", ast->character); break;
+    case AST_LIST:
+        printf("(");
+        for (size_t i = 0; i < ast->list.count; i++) {
+            if (i > 0) printf(" ");
+            ast_print(ast->list.items[i]);
+        }
+        printf(")");
         break;
 
     case AST_RATIO:
-        APPENDF("%lld/%lld", ast->ratio.numerator, ast->ratio.denominator);
-        break;
-
-    case AST_LIST:
-        APPEND("(");
-        for (size_t i = 0; i < ast->list.count; i++) {
-            if (i > 0) APPEND(" ");
-            APPENDS(ast->list.items[i]);
-        }
-        APPEND(")");
+        printf("%lld/%lld", ast->ratio.numerator, ast->ratio.denominator);
         break;
 
     case AST_ARRAY:
-        APPEND("[");
+        printf("[");
         for (size_t i = 0; i < ast->array.element_count; i++) {
-            if (i > 0) APPEND(" ");
-            APPENDS(ast->array.elements[i]);
+            if (i > 0) printf(" ");
+            ast_print(ast->array.elements[i]);
         }
-        APPEND("]");
-        break;
-
-    case AST_SET:
-        APPEND("{");
-        for (size_t i = 0; i < ast->set.element_count; i++) {
-            if (i > 0) APPEND(" ");
-            APPENDS(ast->set.elements[i]);
-        }
-        APPEND("}");
-        break;
-
-    case AST_MAP:
-        APPEND("#{");
-        for (size_t i = 0; i < ast->map.count; i++) {
-            if (i > 0) APPEND(" ");
-            APPENDS(ast->map.keys[i]);
-            APPEND(" ");
-            APPENDS(ast->map.vals[i]);
-        }
-        APPEND("}");
+        printf("]");
         break;
 
     case AST_LAMBDA:
-        APPEND("(lambda (");
+        printf("(lambda (");
         for (int i = 0; i < ast->lambda.param_count; i++) {
-            if (i > 0) APPEND(" ");
-            APPEND("[");
-            APPEND(ast->lambda.params[i].name);
-            if (ast->lambda.params[i].type_name) {
-                APPEND(" :: ");
-                APPEND(ast->lambda.params[i].type_name);
-            }
-            APPEND("]");
+            if (i > 0) printf(" ");
+            printf("[%s", ast->lambda.params[i].name);
+            if (ast->lambda.params[i].type_name)
+                printf(" :: %s", ast->lambda.params[i].type_name);
+            printf("]");
         }
-        if (ast->lambda.return_type) {
-            APPEND(" -> "); APPEND(ast->lambda.return_type);
-        }
-        APPEND(")");
-        if (ast->lambda.docstring) {
-            APPEND(" \""); APPEND(ast->lambda.docstring); APPEND("\"");
-        }
-        APPEND(" ");
-        if (ast->lambda.body) APPENDS(ast->lambda.body);
-        APPEND(")");
+        if (ast->lambda.return_type)
+            printf(" -> %s", ast->lambda.return_type);
+        printf(")");
+        if (ast->lambda.docstring)
+            printf(" \"%s\"", ast->lambda.docstring);
+        printf(" ");
+        ast_print(ast->lambda.body);
+        printf(")");
         break;
-
     case AST_ASM:
-        APPEND("(asm");
+        printf("(asm");
         for (size_t i = 0; i < ast->asm_block.instruction_count; i++) {
-            APPEND(" ");
-            APPENDS(ast->asm_block.instructions[i]);
+            printf(" ");
+            ast_print(ast->asm_block.instructions[i]);
         }
-        APPEND(")");
+        printf(")");
         break;
-
+    case AST_KEYWORD:
+        printf(":%s", ast->keyword);
+        break;
     case AST_ADDRESS_OF:
-        APPEND("&");
-        APPENDS(ast->list.items[0]);
+        printf("&");
+        ast_print(ast->list.items[0]);
         break;
-
     case AST_RANGE:
-        APPEND(ast->range.is_array ? "[" : "(");
-        APPENDS(ast->range.start);
-        if (ast->range.step) { APPEND(","); APPENDS(ast->range.step); }
-        APPEND("..");
-        if (ast->range.end) APPENDS(ast->range.end);
-        APPEND(ast->range.is_array ? "]" : ")");
+        printf(ast->range.is_array ? "[" : "(");
+        ast_print(ast->range.start);
+        if (ast->range.step) { printf(","); ast_print(ast->range.step); }
+        printf("..");
+        if (ast->range.end) ast_print(ast->range.end);
+        printf(ast->range.is_array ? "]" : ")");
         break;
-
-    case AST_LAYOUT:
-        APPEND("(layout "); APPEND(ast->layout.name);
-        for (int i = 0; i < ast->layout.field_count; i++) {
-            ASTLayoutField *f = &ast->layout.fields[i];
-            if (f->is_array)
-                APPENDF(" [%s :: [%s %d]]", f->name,
-                        f->array_elem ? f->array_elem : "?", f->array_size);
-            else
-                APPENDF(" [%s :: %s]", f->name,
-                        f->type_name ? f->type_name : "?");
-        }
-        if (ast->layout.packed) APPEND(" :packed True");
-        if (ast->layout.align)  APPENDF(" :align %d", ast->layout.align);
-        APPEND(")");
-        break;
-
-    case AST_DATA:
-        APPEND("(data "); APPEND(ast->data.name);
-        for (int i = 0; i < ast->data.constructor_count; i++) {
-            if (i > 0) APPEND(" |");
-            APPEND(" "); APPEND(ast->data.constructors[i].name);
-            for (int j = 0; j < ast->data.constructors[i].field_count; j++) {
-                APPEND(" "); APPEND(ast->data.constructors[i].field_types[j]);
-            }
-        }
-        if (ast->data.deriving_count > 0) {
-            APPEND(" deriving [");
-            for (int i = 0; i < ast->data.deriving_count; i++) {
-                if (i > 0) APPEND(" ");
-                APPEND(ast->data.deriving[i]);
-            }
-            APPEND("]");
-        }
-        APPEND(")");
-        break;
-
     case AST_PMATCH:
         for (int i = 0; i < ast->pmatch.clause_count; i++) {
             ASTPMatchClause *cl = &ast->pmatch.clauses[i];
-            if (i > 0) APPEND("\n  ");
+            if (i > 0) printf("\n  ");
             for (int j = 0; j < cl->pattern_count; j++) {
-                if (j > 0) APPEND(" ");
+                if (j > 0) printf(" ");
                 ASTPattern *pat = &cl->patterns[j];
                 switch (pat->kind) {
-                case PAT_WILDCARD:      APPEND("_"); break;
-                case PAT_VAR:           APPEND(pat->var_name); break;
-                case PAT_LITERAL_INT:   APPENDF("%lld", (long long)pat->lit_value); break;
-                case PAT_LITERAL_FLOAT: APPENDF("%g", pat->lit_value); break;
-                case PAT_LIST_EMPTY:    APPEND("[]"); break;
+                case PAT_WILDCARD: printf("_"); break;
+                case PAT_VAR:      printf("%s", pat->var_name); break;
+                case PAT_LITERAL_INT:   printf("%lld", (long long)pat->lit_value); break;
+                case PAT_LITERAL_FLOAT: printf("%g",   pat->lit_value); break;
+                case PAT_LIST_EMPTY: printf("[]"); break;
                 case PAT_LIST:
-                    APPEND("[");
+                    printf("[");
                     for (int k = 0; k < pat->element_count; k++) {
-                        if (k > 0) APPEND(" ");
+                        if (k > 0) printf(" ");
                         ASTPattern *ep = &pat->elements[k];
                         switch (ep->kind) {
-                        case PAT_WILDCARD:      APPEND("_"); break;
-                        case PAT_VAR:           APPEND(ep->var_name); break;
-                        case PAT_LITERAL_INT:   APPENDF("%lld", (long long)ep->lit_value); break;
-                        case PAT_LITERAL_FLOAT: APPENDF("%g", ep->lit_value); break;
-                        default:                APPEND("_"); break;
+                        case PAT_WILDCARD: printf("_"); break;
+                        case PAT_VAR:      printf("%s", ep->var_name); break;
+                        case PAT_LITERAL_INT:   printf("%lld", (long long)ep->lit_value); break;
+                        case PAT_LITERAL_FLOAT: printf("%g", ep->lit_value); break;
+                        default: printf("_"); break;
                         }
                     }
                     if (pat->tail) {
-                        APPEND("|");
-                        APPEND(pat->tail->kind == PAT_VAR ? pat->tail->var_name : "_");
+                        printf("|");
+                        if (pat->tail->kind == PAT_VAR)
+                            printf("%s", pat->tail->var_name);
+                        else
+                            printf("_");
                     }
-                    APPEND("]");
+                    printf("]");
                     break;
-                default: APPEND("_"); break;
                 }
             }
-            APPEND(" -> ");
-            APPENDS(cl->body);
+            printf(" -> ");
+            ast_print(cl->body);
         }
+        break;
+    case AST_LAYOUT:
+        printf("(layout %s", ast->layout.name);
+        for (int i = 0; i < ast->layout.field_count; i++) {
+            ASTLayoutField *f = &ast->layout.fields[i];
+            if (f->is_array)
+                printf(" [%s :: [%s %d]]", f->name,
+                       f->array_elem ? f->array_elem : "?", f->array_size);
+            else
+                printf(" [%s :: %s]", f->name,
+                       f->type_name ? f->type_name : "?");
+        }
+        if (ast->layout.packed) printf(" :packed True");
+        if (ast->layout.align)  printf(" :align %d", ast->layout.align);
+        printf(")");
+        break;
+
+    case AST_SET:
+        printf("{");
+        for (size_t i = 0; i < ast->set.element_count; i++) {
+            if (i > 0) printf(" ");
+            ast_print(ast->set.elements[i]);
+        }
+        printf("}");
+        break;
+
+    case AST_MAP:
+        printf("#{");
+        for (size_t i = 0; i < ast->map.count; i++) {
+            if (i > 0) printf(" ");
+            ast_print(ast->map.keys[i]);
+            printf(" ");
+            ast_print(ast->map.vals[i]);
+        }
+        printf("}");
+        break;
+
+    case AST_DATA:
+        printf("(data %s", ast->data.name);
+        for (int i = 0; i < ast->data.constructor_count; i++) {
+            if (i > 0) printf(" |");
+            printf(" %s", ast->data.constructors[i].name);
+            for (int j = 0; j < ast->data.constructors[i].field_count; j++)
+                printf(" %s", ast->data.constructors[i].field_types[j]);
+        }
+        if (ast->data.deriving_count > 0) {
+            printf(" deriving [");
+            for (int i = 0; i < ast->data.deriving_count; i++) {
+                if (i > 0) printf(" ");
+                printf("%s", ast->data.deriving[i]);
+            }
+            printf("]");
+        }
+        printf(")");
         break;
 
     case AST_REFINEMENT:
+        if (ast->refinement.name)
+            printf("(type %s { %s ∈ %s | ",
+                   ast->refinement.name,
+                   ast->refinement.var  ? ast->refinement.var  : "?",
+                   ast->refinement.base_type ? ast->refinement.base_type : "?");
+        else
+            printf("{ %s ∈ %s | ",
+                   ast->refinement.var  ? ast->refinement.var  : "?",
+                   ast->refinement.base_type ? ast->refinement.base_type : "?");
+        ast_print(ast->refinement.predicate);
         if (ast->refinement.name) {
-            APPENDF("(type %s { %s ∈ %s | ",
-                    ast->refinement.name,
-                    ast->refinement.var       ? ast->refinement.var       : "?",
-                    ast->refinement.base_type ? ast->refinement.base_type : "?");
+            printf(" }");
+            if (ast->refinement.docstring)
+                printf(" \"%s\"", ast->refinement.docstring);
+            if (ast->refinement.alias_name)
+                printf(" :alias %s", ast->refinement.alias_name);
+            printf(")");
         } else {
-            APPENDF("{ %s ∈ %s | ",
-                    ast->refinement.var       ? ast->refinement.var       : "?",
-                    ast->refinement.base_type ? ast->refinement.base_type : "?");
-        }
-        if (ast->refinement.predicate) APPENDS(ast->refinement.predicate);
-        if (ast->refinement.name) {
-            APPEND(" }");
-            if (ast->refinement.docstring) {
-                APPEND(" \""); APPEND(ast->refinement.docstring); APPEND("\"");
-            }
-            if (ast->refinement.alias_name) {
-                APPEND(" :alias "); APPEND(ast->refinement.alias_name);
-            }
-            APPEND(")");
-        } else {
-            APPEND(" }");
+            printf(" }");
         }
         break;
 
     case AST_CLASS:
-        APPENDF("(class %s %s where",
-                ast->class_decl.name    ? ast->class_decl.name    : "?",
-                ast->class_decl.type_var ? ast->class_decl.type_var : "?");
+        printf("(class %s %s where",
+               ast->class_decl.name     ? ast->class_decl.name     : "?",
+               ast->class_decl.type_var ? ast->class_decl.type_var : "?");
         for (int i = 0; i < ast->class_decl.method_count; i++)
-            APPENDF(" (%s) :: %s",
-                    ast->class_decl.method_names[i],
-                    ast->class_decl.method_types[i]);
-        APPEND(")");
+            printf(" (%s) :: %s",
+                   ast->class_decl.method_names[i]
+                       ? ast->class_decl.method_names[i] : "?",
+                   ast->class_decl.method_types[i]
+                       ? ast->class_decl.method_types[i] : "?");
+        printf(")");
         break;
 
     case AST_INSTANCE:
-        APPENDF("(instance %s %s where ...)",
-                ast->instance_decl.class_name ? ast->instance_decl.class_name : "?",
-                ast->instance_decl.type_name  ? ast->instance_decl.type_name  : "?");
-        break;
-
-    default:
-        APPENDF("<ast:%d>", ast->type);
+        printf("(instance %s %s where",
+               ast->instance_decl.class_name
+                   ? ast->instance_decl.class_name : "?",
+               ast->instance_decl.type_name
+                   ? ast->instance_decl.type_name  : "?");
+        for (int i = 0; i < ast->instance_decl.method_count; i++) {
+            printf("\n  (%s", ast->instance_decl.method_names[i]
+                           ? ast->instance_decl.method_names[i] : "?");
+            if (ast->instance_decl.method_bodies[i]) {
+                printf(" = ");
+                ast_print(ast->instance_decl.method_bodies[i]);
+            }
+            printf(")");
+        }
+        printf(")");
         break;
     }
-
-#undef APPEND
-#undef APPENDF
-#undef APPENDS
-
-    return buf;
 }
 
-// Prints an AST node to stdout. Implemented via ast_to_string.
-void ast_print(AST *ast) {
-    char *s = ast_to_string(ast);
-    printf("%s", s);
-    free(s);
-}
 
 /// Lexer
 

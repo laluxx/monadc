@@ -8210,84 +8210,65 @@ if (ast->list.count >= 5) {
 
                 const char *op = head->symbol;
 
-                /* Type class dispatch: if this operator belongs to a class,
-                 * resolve the instance from the argument type and call the
-                 * instance method directly. Error if no instance found.    */
+                /* ── Typeclass dispatch ─────────────────────────────────── */
                 if (tc_is_method(ctx->tc_registry, op)) {
                     const char *cls = tc_method_class(ctx->tc_registry, op);
 
-                    /* Codegen both args to determine their types */
                     CodegenResult lhs = codegen_expr(ctx, ast->list.items[1]);
                     CodegenResult rhs = codegen_expr(ctx, ast->list.items[2]);
 
-                    /* Determine the concrete type name from lhs */
+                    /* Skip typeclass dispatch for internal pmatch-generated
+                     * __adt_tag comparisons — these are integer comparisons
+                     * emitted by pmatch_desugar inside instance method bodies,
+                     * not user-level typeclass calls.                         */
+                    {
+                        bool is_adt_tag_call = false;
+                        AST *arg1 = ast->list.items[1];
+                        AST *arg2 = ast->list.items[2];
+                        /* (= (__adt_tag x) __adt_tag_Ctor) pattern */
+                        if (arg1->type == AST_LIST && arg1->list.count > 0 &&
+                            arg1->list.items[0]->type == AST_SYMBOL &&
+                            strcmp(arg1->list.items[0]->symbol, "__adt_tag") == 0)
+                            is_adt_tag_call = true;
+                        if (arg2->type == AST_SYMBOL &&
+                            strncmp(arg2->symbol, "__adt_tag_", 10) == 0)
+                            is_adt_tag_call = true;
+                        if (is_adt_tag_call) goto normal_comparison;
+                    }
+
+                    /* Determine concrete type name from lhs */
                     const char *type_name = NULL;
                     if (lhs.type && lhs.type->kind == TYPE_LAYOUT)
                         type_name = lhs.type->layout_name;
 
-                    if (!type_name) {
-                        /* Try to infer from the ADT env — look up lhs symbol
-                         * to find its layout type                           */
-                        if (ast->list.items[1]->type == AST_SYMBOL) {
-                            EnvEntry *e = env_lookup(ctx->env,
-                                              ast->list.items[1]->symbol);
-                            if (e && e->type && e->type->kind == TYPE_LAYOUT)
-                                type_name = e->type->layout_name;
-                        }
+                    if (!type_name && ast->list.items[1]->type == AST_SYMBOL) {
+                        EnvEntry *e = env_lookup(ctx->env, ast->list.items[1]->symbol);
+                        if (e && e->type && e->type->kind == TYPE_LAYOUT)
+                            type_name = e->type->layout_name;
                     }
 
-                    if (!type_name) {
+                    /* If we can't determine a concrete layout type, the call is
+                     * either inside a polymorphic default implementation or an
+                     * internal helper — fall through to normal comparison.     */
+                    if (!type_name) goto normal_comparison;
+
+                    /* We have a concrete type — check an instance exists */
+                    TCInstance *inst = tc_find_instance(ctx->tc_registry, cls, type_name);
+                    if (!inst) {
                         CODEGEN_ERROR(ctx,
                             "%s:%d:%d: error:\n"
-                            "    • No instance for '%s' arising from a use of '%s'\n"
-                            "    • Cannot determine concrete type of left-hand argument\n"
-                            "    • In the expression: %s",
+                            "    • No instance for '%s %s' arising from a use of '%s'\n"
+                            "    • In the expression: (%s %s %s)\n"
+                            "  - Hint: add (instance %s %s where ...)",
                             parser_get_filename(), ast->line, ast->column,
-                            cls, op,
-                            ast_to_string(ast));
+                            cls, type_name, op,
+                            op,
+                            ast->list.items[1]->type == AST_SYMBOL ? ast->list.items[1]->symbol : "?",
+                            ast->list.items[2]->type == AST_SYMBOL ? ast->list.items[2]->symbol : "?",
+                            cls, type_name);
                     }
 
-                    /* Look up the instance */
-                    TCInstance *inst = tc_find_instance(ctx->tc_registry,
-                                                        cls, type_name);
-                    if (!inst) {
-                        /* Reconstruct the expression string for the error */
-                        /* Build expression string from the original AST items
-                         * before they were codegenned                       */
-                        char *lhs_str = ast_to_string(ast->list.items[1]);
-                        char *rhs_str = ast_to_string(ast->list.items[2]);
-                        char  expr_buf[512];
-                        snprintf(expr_buf, sizeof(expr_buf),
-                                 "(%s %s %s)", op, lhs_str, rhs_str);
-                        free(lhs_str); free(rhs_str);
-
-                        const char *fn_name_ctx = ctx->current_function_name;
-                        if (fn_name_ctx) {
-                            CODEGEN_ERROR(ctx,
-                                "%s:%d:%d: error:\n"
-                                "    • No instance for '%s %s' arising from a use of ‘%s’\n"
-                                "    • In the expression: %s\n"
-                                "    • In an equation for '%s': %s = %s\n"
-                                "  - Hint: add (instance %s %s where ...)",
-                                parser_get_filename(), ast->line, ast->column,
-                                cls, type_name, op,
-                                expr_buf,
-                                fn_name_ctx, fn_name_ctx, expr_buf,
-                                cls, type_name);
-                        } else {
-                            CODEGEN_ERROR(ctx,
-                                "%s:%d:%d: error:\n"
-                                "    • No instance for '%s %s' arising from a use of ‘%s’\n"
-                                "    • In the expression: %s\n"
-                                "  - Hint: add (instance %s %s where ...)",
-                                parser_get_filename(), ast->line, ast->column,
-                                cls, type_name, op,
-                                expr_buf,
-                                cls, type_name);
-                        }
-                    }
-
-                    /* Find the method function in the instance */
+                    /* Find method in instance */
                     LLVMValueRef method_fn = NULL;
                     for (int _mi = 0; _mi < inst->method_count; _mi++) {
                         if (strcmp(inst->method_names[_mi], op) == 0) {
@@ -8298,60 +8279,119 @@ if (ast->list.count >= 5) {
 
                     if (!method_fn) {
                         CODEGEN_ERROR(ctx,
-                            "%s:%d:%d: error: instance '%s %s' has no "
-                            "implementation for method '%s'",
+                            "%s:%d:%d: error: instance '%s %s' has no implementation for '%s'",
                             parser_get_filename(), ast->line, ast->column,
                             cls, type_name, op);
                     }
 
                     /* Re-declare in current module if needed */
-                    const char *fn_name = LLVMGetValueName(method_fn);
-                    LLVMTypeRef fn_t    = LLVMGlobalGetValueType(method_fn);
-                    LLVMValueRef fn     = LLVMGetNamedFunction(ctx->module, fn_name);
+                    const char  *fn_name = LLVMGetValueName(method_fn);
+                    LLVMTypeRef  fn_t    = LLVMGlobalGetValueType(method_fn);
+                    LLVMValueRef fn      = LLVMGetNamedFunction(ctx->module, fn_name);
                     if (!fn) {
                         fn = LLVMAddFunction(ctx->module, fn_name, fn_t);
                         LLVMSetLinkage(fn, LLVMExternalLinkage);
                     }
 
-                    /* Call the instance method directly.
-                     * Instance methods are compiled as regular 2-param functions
-                     * taking ptr args and returning ptr (boxed Bool).      */
-                    LLVMTypeRef ptr_t = LLVMPointerType(
-                                            LLVMInt8TypeInContext(ctx->context), 0);
+                    LLVMTypeRef  ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                    LLVMTypeRef  i32_t = LLVMInt32TypeInContext(ctx->context);
+                    LLVMTypeRef  i64_t = LLVMInt64TypeInContext(ctx->context);
 
-                    /* Box args to ptr if needed */
+                    /* The method is a poly stub compiled with closure-style
+                     * arg unboxing: it calls rt_unbox_int on each arg.
+                     * So we must pass boxed RuntimeValue* — use rt_value_int
+                     * for scalars, pass layout ptrs through rt_value_int via
+                     * ptrtoint first.                                         */
                     LLVMValueRef lv = lhs.value;
                     LLVMValueRef rv = rhs.value;
-                    if (LLVMGetTypeKind(LLVMTypeOf(lv)) != LLVMPointerTypeKind)
+                    /* For layout (ADT) types: ptrtoint → box as int */
+                    if (lhs.type && lhs.type->kind == TYPE_LAYOUT) {
+                        LLVMTypeRef i64_box = LLVMInt64TypeInContext(ctx->context);
+                        LLVMValueRef as_int = LLVMBuildPtrToInt(ctx->builder, lv, i64_box, "lv_int");
+                        LLVMTypeRef bft = LLVMFunctionType(ptr_t, &i64_box, 1, 0);
+                        lv = LLVMBuildCall2(ctx->builder, bft,
+                                 get_rt_value_int(ctx), &as_int, 1, "lv_boxed");
+                    } else if (LLVMGetTypeKind(LLVMTypeOf(lv)) != LLVMPointerTypeKind) {
                         lv = codegen_box(ctx, lv, lhs.type);
-                    if (LLVMGetTypeKind(LLVMTypeOf(rv)) != LLVMPointerTypeKind)
+                    }
+                    if (rhs.type && rhs.type->kind == TYPE_LAYOUT) {
+                        LLVMTypeRef i64_box = LLVMInt64TypeInContext(ctx->context);
+                        LLVMValueRef as_int = LLVMBuildPtrToInt(ctx->builder, rv, i64_box, "rv_int");
+                        LLVMTypeRef bft = LLVMFunctionType(ptr_t, &i64_box, 1, 0);
+                        rv = LLVMBuildCall2(ctx->builder, bft,
+                                 get_rt_value_int(ctx), &as_int, 1, "rv_boxed");
+                    } else if (LLVMGetTypeKind(LLVMTypeOf(rv)) != LLVMPointerTypeKind) {
                         rv = codegen_box(ctx, rv, rhs.type);
+                    }
 
-                    /* Build call using the actual function type */
-                    LLVMTypeRef  actual_ft = LLVMGlobalGetValueType(fn);
-                    LLVMValueRef tc_args[] = {lv, rv};
-                    LLVMValueRef call_r    = LLVMBuildCall2(ctx->builder,
-                                                actual_ft, fn, tc_args, 2,
-                                                "tc_call");
+                    /* Method uses closure ABI: (ptr env, i32 n, ptr args[]) -> ptr
+                     * Build a 2-element args array on the stack and call directly */
+                    LLVMTypeRef  arr_t   = LLVMArrayType(ptr_t, 2);
+                    LLVMValueRef arr_ptr = LLVMBuildAlloca(ctx->builder, arr_t, "tc_args");
+                    LLVMValueRef zero    = LLVMConstInt(i32_t, 0, 0);
+                    LLVMValueRef one     = LLVMConstInt(i32_t, 1, 0);
+                    LLVMValueRef slot0   = LLVMBuildGEP2(ctx->builder, arr_t, arr_ptr,
+                                              (LLVMValueRef[]){zero, zero}, 2, "slot0");
+                    LLVMValueRef slot1   = LLVMBuildGEP2(ctx->builder, arr_t, arr_ptr,
+                                              (LLVMValueRef[]){zero, one},  2, "slot1");
+                    LLVMBuildStore(ctx->builder, lv, slot0);
+                    LLVMBuildStore(ctx->builder, rv, slot1);
+                    LLVMValueRef args_ptr = LLVMBuildBitCast(ctx->builder,
+                                               arr_ptr, ptr_t, "tc_args_ptr");
 
-                    /* Unbox result — instance method returns ptr (boxed Bool)
-                     * Extract the i1 bool from the runtime value            */
-                    LLVMTypeRef  i64_t  = LLVMInt64TypeInContext(ctx->context);
-                    LLVMTypeRef  unbox_args_t[] = {ptr_t};
-                    LLVMTypeRef  unbox_ft = LLVMFunctionType(i64_t,
-                                                unbox_args_t, 1, 0);
-                    LLVMValueRef unbox_fn = get_rt_unbox_int(ctx);
-                    LLVMValueRef unboxed  = LLVMBuildCall2(ctx->builder,
-                                                unbox_ft, unbox_fn,
-                                                &call_r, 1, "tc_unbox");
-                    result.value = LLVMBuildICmp(ctx->builder, LLVMIntNE,
-                                       unboxed,
-                                       LLVMConstInt(i64_t, 0, 0), "tc_bool");
+                    /* Look up the env entry to determine ABI */
+                    const char *impl_fn_name = LLVMGetValueName(fn);
+                    EnvEntry   *impl_entry   = env_lookup(ctx->env, impl_fn_name);
+                    bool        impl_is_clo  = impl_entry && impl_entry->is_closure_abi;
+
+                    LLVMValueRef call_r;
+                    if (impl_is_clo) {
+                        /* Closure ABI: fn(null_env, 2, args[]) -> ptr */
+                        LLVMTypeRef  clo_params[] = {ptr_t, i32_t, ptr_t};
+                        LLVMTypeRef  clo_ft       = LLVMFunctionType(ptr_t, clo_params, 3, 0);
+                        LLVMValueRef clo_args[]   = {
+                            LLVMConstPointerNull(ptr_t),
+                            LLVMConstInt(i32_t, 2, 0),
+                            args_ptr
+                        };
+                        call_r = LLVMBuildCall2(ctx->builder, clo_ft,
+                                                fn, clo_args, 3, "tc_call");
+                        /* Unbox ptr result to i1 */
+                        LLVMTypeRef  uft     = LLVMFunctionType(i64_t, &ptr_t, 1, 0);
+                        LLVMValueRef unboxed = LLVMBuildCall2(ctx->builder, uft,
+                                                  get_rt_unbox_int(ctx), &call_r, 1, "tc_unbox");
+                        result.value = LLVMBuildICmp(ctx->builder, LLVMIntNE,
+                                           unboxed, LLVMConstInt(i64_t, 0, 0), "tc_bool");
+                    } else {
+                        /* Typed ABI: fn(ptr arg0, ptr arg1) -> ptr (boxed result) */
+                        LLVMTypeRef  typed_params[] = {ptr_t, ptr_t};
+                        LLVMTypeRef  actual_ret     = LLVMGetReturnType(
+                                                          LLVMGlobalGetValueType(fn));
+                        LLVMTypeRef  typed_ft       = LLVMFunctionType(
+                                                          actual_ret, typed_params, 2, 0);
+                        LLVMValueRef typed_args[]   = {lv, rv};
+                        call_r = LLVMBuildCall2(ctx->builder, typed_ft,
+                                                fn, typed_args, 2, "tc_call");
+                        /* Unbox ptr result → i64 → i1 */
+                        if (LLVMGetTypeKind(actual_ret) == LLVMPointerTypeKind) {
+                            LLVMTypeRef  uft     = LLVMFunctionType(i64_t, &ptr_t, 1, 0);
+                            LLVMValueRef unboxed = LLVMBuildCall2(ctx->builder, uft,
+                                                      get_rt_unbox_int(ctx), &call_r, 1, "tc_unbox");
+                            result.value = LLVMBuildICmp(ctx->builder, LLVMIntNE,
+                                               unboxed, LLVMConstInt(i64_t, 0, 0), "tc_bool");
+                        } else {
+                            /* Already i1 */
+                            result.value = LLVMBuildTrunc(ctx->builder, call_r,
+                                               LLVMInt1TypeInContext(ctx->context), "tc_bool");
+                        }
+                    }
                     result.type  = type_bool();
                     return result;
-
                 }
 
+                /* ── end typeclass dispatch ─────────────────────────────── */
+
+                normal_comparison:;
                 CodegenResult lhs = codegen_expr(ctx, ast->list.items[1]);
                 CodegenResult rhs = codegen_expr(ctx, ast->list.items[2]);
 
