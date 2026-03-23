@@ -29,6 +29,123 @@ char     g_reader_error_msg[512];
         exit(1); \
     } while(0)
 
+
+/// Multiline -| comments |-
+
+CommentSpan *g_comment_spans = NULL;
+int          g_comment_count = 0;
+int          g_comment_cap   = 0;
+
+static void comment_map_free(void) {
+    free(g_comment_spans);
+    g_comment_spans = NULL;
+    g_comment_count = 0;
+    g_comment_cap   = 0;
+}
+
+static void comment_map_add(int open_pos, int close_pos, int para_end) {
+    if (g_comment_count >= g_comment_cap) {
+        g_comment_cap = g_comment_cap == 0 ? 8 : g_comment_cap * 2;
+        g_comment_spans = realloc(g_comment_spans,
+                                  sizeof(CommentSpan) * g_comment_cap);
+    }
+    g_comment_spans[g_comment_count].open_pos  = open_pos;
+    g_comment_spans[g_comment_count].close_pos = close_pos;
+    g_comment_spans[g_comment_count].para_end  = para_end;
+    g_comment_count++;
+}
+
+/* Pre-scan the entire source once, building the comment map.
+ * For each -| found:
+ *   - scan forward for |-
+ *   - if found: block comment, record open/close positions
+ *   - if EOF first: paragraph comment, end = first blank line after open
+ */
+void comment_map_build(const char *source) {
+    comment_map_free();
+    int len = (int)strlen(source);
+    int i   = 0;
+    while (i < len - 1) {
+        /* Skip ; line comments so we don't find -| inside them */
+        if (source[i] == ';') {
+            while (i < len && source[i] != '\n') i++;
+            continue;
+        }
+        /* Skip string literals */
+        if (source[i] == '"') {
+            i++;
+            while (i < len && source[i] != '"') {
+                if (source[i] == '\\') i++;
+                i++;
+            }
+            if (i < len) i++; /* skip closing " */
+            continue;
+        }
+        /* Detect -| */
+        if (source[i] == '-' && source[i+1] == '|') {
+            int open_pos = i;
+            i += 2; /* skip past -| */
+
+            /* Scan forward for |-
+             * If we hit another -| before finding |-, the original -| is a
+             * paragraph comment. Reset i to the new -| so the outer loop
+             * processes it next.                                             */
+            int close_pos = -1;
+            int saved_i = i;
+            while (i < len - 1) {
+                if (source[i] == '|' && source[i+1] == '-') {
+                    close_pos = i;
+                    i += 2;
+                    break;
+                }
+                if (source[i] == '-' && source[i+1] == '|') {
+                    /* found another -| before |- : original is paragraph comment */
+                    /* leave i here so outer loop picks up this new -| next */
+                    break;
+                }
+                i++;
+            }
+
+            if (close_pos >= 0) {
+                /* Block comment — open_pos to close_pos+2 */
+                comment_map_add(open_pos, close_pos, -1);
+            } else {
+                /* No |- found — paragraph comment.
+                 * End = position after first blank line following open_pos.
+                 * A blank line = \n\n or \n followed by whitespace-only line. */
+                int para_end = len; /* default: to EOF */
+                int j = open_pos + 2;
+                while (j < len) {
+                    if (source[j] == '\n') {
+                        /* Check if next line is blank (empty or whitespace only) */
+                        int k = j + 1;
+                        while (k < len && source[k] == ' ' ||
+                               k < len && source[k] == '\t') k++;
+                        if (k >= len || source[k] == '\n') {
+                            /* blank line found — paragraph ends here */
+                            para_end = j;
+                            break;
+                        }
+                    }
+                    j++;
+                }
+                comment_map_add(open_pos, -1, para_end);
+            }
+            continue;
+        }
+        i++;
+    }
+}
+
+/* Look up position in comment map — returns the CommentSpan if pos
+ * is at an open_pos, NULL otherwise. */
+static CommentSpan *comment_map_lookup(int pos) {
+    for (int i = 0; i < g_comment_count; i++)
+        if (g_comment_spans[i].open_pos == pos)
+            return &g_comment_spans[i];
+    return NULL;
+}
+
 /// Error reporting context
 
 static const char *current_filename = NULL;
@@ -37,6 +154,7 @@ static const char *current_source = NULL;
 void parser_set_context(const char *filename, const char *source) {
     current_filename = filename;
     current_source = source;
+    if (source) comment_map_build(source);
 }
 
 const char *parser_get_filename(void) {
@@ -963,6 +1081,25 @@ Token lexer_next_token(Lexer *lex) {
         }
     }
 
+    // -| comment
+    if (c == '-' && peek_ahead(lex, 1) == '|') {
+        int cur_pos = (int)lex->pos;
+        CommentSpan *span = comment_map_lookup(cur_pos);
+        if (span) {
+            if (span->close_pos >= 0) {
+                /* Block comment — skip to after |- */
+                while ((int)lex->pos < span->close_pos + 2)
+                    advance(lex);
+            } else {
+                /* Paragraph comment — skip to para_end */
+                while ((int)lex->pos < span->para_end)
+                    advance(lex);
+            }
+            /* Tail-recurse: get next real token */
+            return lexer_next_token(lex);
+        }
+    }
+
     // Arrow  ->
     if (c == '-' && peek_ahead(lex, 1) == '>') {
         advance(lex); advance(lex);
@@ -995,6 +1132,12 @@ Token lexer_next_token(Lexer *lex) {
     if (c == '{') { advance(lex); tok.type = TOK_LBRACE;   return tok; }
     if (c == '}') { advance(lex); tok.type = TOK_RBRACE;   return tok; }
     if (c == ',') { advance(lex); tok.type = TOK_SYMBOL; tok.value = my_strdup(","); return tok; }
+    if (c == '|' && peek_ahead(lex, 1) == '-') {
+        /* Stray |- closer — already consumed as part of a comment span,
+         * but if we somehow reach it, skip it silently */
+        advance(lex); advance(lex);
+        return lexer_next_token(lex);
+    }
     if (c == '|') { advance(lex); tok.type = TOK_PIPE;     return tok; }
     if (c == '`') { advance(lex); tok.type = TOK_BACKTICK; return tok; }
 
@@ -2903,26 +3046,36 @@ if (p->current.type == TOK_SYMBOL &&
                 continue;
             }
 
-            /* deriving [show eq ...] */
+            /* deriving Eq  or  deriving [Eq Show ...] */
             if (p->current.type == TOK_SYMBOL &&
                 strcmp(p->current.value, "deriving") == 0) {
                 p->current = lexer_next_token(p->lexer);
-                if (p->current.type != TOK_LBRACKET)
-                    compiler_error(p->current.line, p->current.column,
-                                   "Expected '[' after 'deriving'");
-                p->current = lexer_next_token(p->lexer); // consume '['
-                while (p->current.type != TOK_RBRACKET &&
-                       p->current.type != TOK_EOF) {
-                    if (p->current.type == TOK_SYMBOL && p->current.value) {
-                        deriving = realloc(deriving, sizeof(char*) * (nderiving + 1));
-                        deriving[nderiving++] = my_strdup(p->current.value);
+                if (p->current.type == TOK_LBRACKET) {
+                    /* deriving [Eq Show ...] */
+                    p->current = lexer_next_token(p->lexer); // consume '['
+                    while (p->current.type != TOK_RBRACKET &&
+                           p->current.type != TOK_EOF) {
+                        if (p->current.type == TOK_SYMBOL && p->current.value) {
+                            deriving = realloc(deriving, sizeof(char*) * (nderiving + 1));
+                            deriving[nderiving++] = my_strdup(p->current.value);
+                        }
+                        p->current = lexer_next_token(p->lexer);
                     }
+                    if (p->current.type == TOK_RBRACKET)
+                        p->current = lexer_next_token(p->lexer); // consume ']'
+                } else if (p->current.type == TOK_SYMBOL && p->current.value) {
+                    /* deriving Eq — single, no brackets */
+                    deriving = realloc(deriving, sizeof(char*) * (nderiving + 1));
+                    deriving[nderiving++] = my_strdup(p->current.value);
                     p->current = lexer_next_token(p->lexer);
+                } else {
+                    compiler_error(p->current.line, p->current.column,
+                                   "'deriving' requires at least one typeclass — "
+                                   "use 'deriving Eq' or 'deriving [Eq Show ...]'");
                 }
-                if (p->current.type == TOK_RBRACKET)
-                    p->current = lexer_next_token(p->lexer); // consume ']'
                 continue;
             }
+
 
             /* Constructor name — must start with uppercase */
             if (p->current.type != TOK_SYMBOL || !p->current.value ||

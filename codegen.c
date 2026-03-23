@@ -12,6 +12,7 @@
 #include "module.h"
 #include "infer.h"
 #include "typeclass.h"
+#include "pmatch.h"
 #include <ctype.h>
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
@@ -1118,7 +1119,7 @@ static EnvEntry *resolve_symbol_with_modules(CodegenContext *ctx, const char *sy
 
         if (!ctx->module_ctx) {
             free(module_prefix);
-            CODEGEN_ERROR(ctx, "%s:%d:%d: error: qualified symbol '%s' used but no module context",
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: qualified symbol ‘%s’ used but no module context",
                     parser_get_filename(), ast->line, ast->column, symbol_name);
         }
 
@@ -1129,14 +1130,14 @@ static EnvEntry *resolve_symbol_with_modules(CodegenContext *ctx, const char *sy
             strncpy(_mp_copy, module_prefix, sizeof(_mp_copy) - 1);
             _mp_copy[sizeof(_mp_copy)-1] = '\0';
             free(module_prefix);
-            CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown module prefix '%s'",
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown module prefix ‘%s’",
                     parser_get_filename(), ast->line, ast->column, _mp_copy);
         }
 
         // Check if this symbol is included in the import
         if (!import_decl_includes_symbol(import, local_symbol)) {
             free(module_prefix);
-            CODEGEN_ERROR(ctx, "%s:%d:%d: error: symbol '%s' not imported from module '%s'",
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: symbol ‘%s’ not imported from module ‘%s’",
                     parser_get_filename(), ast->line, ast->column,
                     local_symbol, import->module_name);
         }
@@ -2025,13 +2026,99 @@ void codegen_data(CodegenContext *ctx, AST *ast) {
         printf(" -> %s\n", type_name);
     }
 
-    printf("Data type: %s (%d constructors)\n", type_name, nctors);
+printf("Data type: %s (%d constructors)\n", type_name, nctors);
+
+    /* Auto-derive requested typeclasses */
+    for (int di = 0; di < ast->data.deriving_count; di++) {
+        const char *derive_name = ast->data.deriving[di];
+
+        if (strcmp(derive_name, "Eq") == 0) {
+            /* Check class is registered */
+            TCClass *cls = tc_find_class(ctx->tc_registry, "Eq");
+            if (!cls) {
+                fprintf(stderr, "warning: deriving Eq for ‘%s’ but Eq class not defined\n",
+                        type_name);
+                continue;
+            }
+            /* Check instance not already defined */
+            if (tc_find_instance(ctx->tc_registry, "Eq", type_name)) continue;
+
+            /* Build instance AST synthetically:
+             * For each constructor pair (A, A) => True, plus (_ = _) => False */
+            int total_clauses = nctors + 1;
+            char    **method_names  = malloc(sizeof(char*));
+            AST     **method_bodies = malloc(sizeof(AST*));
+            method_names[0] = strdup("=");
+
+            ASTPMatchClause *clauses = malloc(sizeof(ASTPMatchClause) * total_clauses);
+
+            for (int ci = 0; ci < nctors; ci++) {
+                const char *cname = ast->data.constructors[ci].name;
+                ASTPattern *pats  = malloc(sizeof(ASTPattern) * 2);
+                pats[0].kind            = PAT_CONSTRUCTOR;
+                pats[0].var_name        = strdup(cname);
+                pats[0].ctor_fields     = NULL;
+                pats[0].ctor_field_count = 0;
+                pats[0].elements        = NULL;
+                pats[0].element_count   = 0;
+                pats[0].tail            = NULL;
+                pats[1] = pats[0];
+                pats[1].var_name = strdup(cname);
+
+                clauses[ci].patterns      = pats;
+                clauses[ci].pattern_count = 2;
+                clauses[ci].body          = ast_new_symbol("True");
+            }
+
+            /* Wildcard clause: (_ = _) => False */
+            ASTPattern *wild_pats = malloc(sizeof(ASTPattern) * 2);
+            wild_pats[0].kind            = PAT_WILDCARD;
+            wild_pats[0].var_name        = NULL;
+            wild_pats[0].elements        = NULL;
+            wild_pats[0].element_count   = 0;
+            wild_pats[0].tail            = NULL;
+            wild_pats[0].ctor_fields     = NULL;
+            wild_pats[0].ctor_field_count = 0;
+            wild_pats[1] = wild_pats[0];
+            clauses[nctors].patterns      = wild_pats;
+            clauses[nctors].pattern_count = 2;
+            clauses[nctors].body          = ast_new_symbol("False");
+
+            /* Desugar pmatch into a lambda */
+            ASTParam *params = malloc(sizeof(ASTParam) * 2);
+            params[0].name      = strdup("__p0");
+            params[0].type_name = strdup(type_name);
+            params[0].is_rest   = false;
+            params[0].is_anon   = false;
+            params[1].name      = strdup("__p1");
+            params[1].type_name = strdup(type_name);
+            params[1].is_rest   = false;
+            params[1].is_anon   = false;
+
+            AST *pm       = ast_new_pmatch(clauses, total_clauses);
+            AST *desugared = pmatch_desugar(pm, params, 2);
+            free(pm);
+
+            AST **body_exprs = malloc(sizeof(AST*));
+            body_exprs[0]    = desugared;
+            method_bodies[0] = ast_new_lambda(params, 2, "Bool", NULL, NULL,
+                                              false, desugared, body_exprs, 1);
+
+            AST *inst_ast = ast_new_instance("Eq", type_name,
+                                             method_names, method_bodies, 1);
+            tc_register_instance(ctx->tc_registry, inst_ast, ctx);
+            ast_free(inst_ast);
+
+            printf("Derived: instance Eq %s\n", type_name);
+        }
+    }
 }
+
 
 void codegen_layout(CodegenContext *ctx, AST *ast) {
     const char *name = ast->layout.name;
     if (!name || !isupper((unsigned char)name[0])) {
-        CODEGEN_ERROR(ctx, "%s:%d:%d: error: layout name '%s' must start with an uppercase letter",
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: layout name ‘%s’ must start with an uppercase letter",
                       parser_get_filename(), ast->line, ast->column,
                       name ? name : "");
     }
@@ -2048,7 +2135,7 @@ void codegen_layout(CodegenContext *ctx, AST *ast) {
             // [ElemType Size] sugar
             Type *elem = type_from_name(af->array_elem);
             if (!elem) {
-                CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown array element type '%s' in layout '%s'",
+                CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown array element type ‘%s’ in layout ‘%s’",
                               parser_get_filename(), ast->line, ast->column,
                               af->array_elem, ast->layout.name);
             }
@@ -2061,7 +2148,7 @@ void codegen_layout(CodegenContext *ctx, AST *ast) {
                 if (ft) ft = type_clone(ft);  // clone so ownership is clear
             }
             if (!ft) {
-                CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown type '%s' for field '%s' in layout '%s'",
+                CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown type ‘%s’ for field ‘%s’ in layout ‘%s’",
                               parser_get_filename(), ast->line, ast->column,
                               af->type_name, af->name, ast->layout.name);
             }
@@ -2118,14 +2205,14 @@ static void check_predicate_name(CodegenContext *ctx, const char *name,
     bool returns_bool = (return_type->kind == TYPE_BOOL);
 
     if (returns_bool && !ends_with_q && !ends_with_qi) {
-        CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' returns Bool, making it a "
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: ‘%s’ returns Bool, making it a "
                       "predicate — predicate functions must end with '?', "
-                      "rename to '%s?'",
+                      "rename to ‘%s?’",
                       parser_get_filename(), ast->line, ast->column,
                       name, name);
     }
     if (!returns_bool && ends_with_q && !ends_with_qi) {
-        CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' ends with '?' making it "
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: ‘%s’ ends with '?' making it "
                       "is a predicate, but it returns %s — predicates must "
                       "return Bool, either fix the return type or rename to "
                       "remove the '?'",
@@ -2175,9 +2262,9 @@ static void check_purity(CodegenContext *ctx, const char *caller,
         }
 
         if (!name_is_impure(caller) && target_name) {
-            CODEGEN_ERROR(ctx, "%s:%d:%d: error: pure function '%s' mutates "
-                          "global variable '%s' via '%s' — global mutation is "
-                          "a side effect, rename to '%s' to declare it impure",
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: pure function ‘%s’ mutates "
+                          "global variable ‘%s’ via ‘%s’ — global mutation is "
+                          "a side effect, rename to ‘%s’ to declare it impure",
                           parser_get_filename(), ast->line, ast->column,
                           caller, target_name, callee, impure_name);
         }
@@ -2185,8 +2272,8 @@ static void check_purity(CodegenContext *ctx, const char *caller,
     }
 
     if (!name_is_impure(caller)) {
-        CODEGEN_ERROR(ctx, "%s:%d:%d: error: pure function '%s' calls impure "
-                      "function '%s' — rename to '%s' to declare it impure",
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: pure function ‘%s’ calls impure "
+                      "function ‘%s’ — rename to ‘%s’ to declare it impure",
                       parser_get_filename(), ast->line, ast->column,
                       caller, callee, impure_name);
     }
@@ -2200,7 +2287,7 @@ static CodegenResult codegen_set_op(CodegenContext *ctx, AST *ast,
                                     const char *op_name) {
     CodegenResult result = {NULL, NULL};
     if (ast->list.count != 3) {
-        CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' requires 2 arguments (set val)",
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: ‘%s’ requires 2 arguments (set val)",
                       parser_get_filename(), ast->line, ast->column, op_name);
     }
 
@@ -2237,7 +2324,7 @@ static CodegenResult codegen_map_op(CodegenContext *ctx, AST *ast,
                                     const char *op_name, int expect_args) {
     CodegenResult result = {NULL, NULL};
     if ((int)ast->list.count != expect_args + 1) {
-        CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' requires %d argument%s",
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: ‘%s’ requires %d argument%s",
                       parser_get_filename(), ast->line, ast->column,
                       op_name, expect_args, expect_args == 1 ? "" : "s");
     }
@@ -2905,7 +2992,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
     switch (ast->type) {
     case AST_NUMBER: {
-        /* fprintf(stderr, ">>> CODEGEN NUMBER: literal_str='%s', number=%g\n", */
+        /* fprintf(stderr, ">>> CODEGEN NUMBER: literal_str=‘%s’, number=%g\n", */
         /*         ast->literal_str ? ast->literal_str : "NULL", ast->number); */
 
         Type *num_type = infer_literal_type(ast->number, ast->literal_str);
@@ -2958,7 +3045,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             const char *ctor_name = ast->symbol + 10;
             EnvEntry *ce = env_lookup_adt_ctor(ctx->env, ctor_name);
             if (!ce) {
-                CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown ADT constructor '%s'",
+                CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown ADT constructor ‘%s’",
                               parser_get_filename(), ast->line, ast->column, ctor_name);
             }
             result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context),
@@ -2988,7 +3075,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     }
                 }
                 if (field_idx < 0) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: layout '%s' has no field '%s'",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: layout ‘%s’ has no field ‘%s’",
                                   parser_get_filename(), ast->line, ast->column,
                                   lay->layout_name, field_name);
                 }
@@ -2997,7 +3084,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 snprintf(struct_name, sizeof(struct_name), "layout.%s", lay->layout_name);
                 LLVMTypeRef struct_llvm = LLVMGetTypeByName2(ctx->context, struct_name);
                 if (!struct_llvm) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: LLVM struct type for '%s' not found",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: LLVM struct type for ‘%s’ not found",
                                   parser_get_filename(), ast->line, ast->column, lay->layout_name);
                 }
                 LLVMTypeRef  ptr_t2   = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
@@ -3054,7 +3141,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 }
                 result.type = type_clone(entry->type);
             } else {
-                CODEGEN_ERROR(ctx, "%s:%d:%d: error: ADT constructor '%s' has no function ref",
+                CODEGEN_ERROR(ctx, "%s:%d:%d: error: ADT constructor ‘%s’ has no function ref",
                               parser_get_filename(), ast->line, ast->column, ast->symbol);
             }
             return result;
@@ -3241,11 +3328,11 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
         }
 
         if (!entry->type) {
-            CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' has no type information",
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: ‘%s’ has no type information",
                           parser_get_filename(), ast->line, ast->column, ast->symbol);
         }
 
-        /* fprintf(stderr, "[symbol load] name='%s' entry=%p entry->value=%p is_global=%d\n", */
+        /* fprintf(stderr, "[symbol load] name=‘%s’ entry=%p entry->value=%p is_global=%d\n", */
         /*         ast->symbol, (void*)entry, (void*)entry->value, */
         /*         entry->value ? (LLVMIsAGlobalVariable(entry->value) != NULL) : -1); */
 
@@ -3331,11 +3418,11 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             } else if (entry->kind == ENV_VAR) {
                 addr = LLVMBuildPtrToInt(ctx->builder, entry->value, i64, "var_addr");
             } else if (entry->kind == ENV_BUILTIN) {
-                CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot take address of builtin '%s'",
+                CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot take address of builtin ‘%s’",
                               parser_get_filename(), ast->line, ast->column, operand->symbol);
                 return result;
             } else {
-                CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot take address of '%s'",
+                CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot take address of ‘%s’",
                               parser_get_filename(), ast->line, ast->column, operand->symbol);
                 return result;
             }
@@ -3692,7 +3779,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
                     bool all_params_unknown = (total_params > 0);
                     for (int i = 0; i < total_params; i++) {
-                        /* fprintf(stderr, "DEBUG param[%d] name='%s' type_name='%s' type_kind=%d\n", */
+                        /* fprintf(stderr, "DEBUG param[%d] name=‘%s’ type_name=‘%s’ type_kind=%d\n", */
                         /*         i, */
                         /*         lambda->lambda.params[i].name ? lambda->lambda.params[i].name : "?", */
                         /*         lambda->lambda.params[i].type_name ? lambda->lambda.params[i].type_name : "NULL", */
@@ -3707,7 +3794,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                                 Type *elem = type_from_name(param->type_name);
                                 if (!elem)
                                     CODEGEN_ERROR(ctx,
-                                        "%s:%d:%d: error: unknown type '%s' for rest parameter '%s'",
+                                        "%s:%d:%d: error: unknown type ‘%s’ for rest parameter ‘%s’",
                                         parser_get_filename(), lambda->line, lambda->column,
                                         param->type_name, param->name);
                                 env_params[i].type = type_list(elem);
@@ -3741,8 +3828,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                                 }
                                 if (!found_alias && (!param_type || param_type->kind == TYPE_UNKNOWN)) {
                                     CODEGEN_ERROR(ctx,
-                                        "%s:%d:%d: error: unknown input parameter type '%s' "
-                                        "for parameter '%s' — is '%s' defined as a data type, "
+                                        "%s:%d:%d: error: unknown input parameter type ‘%s’ "
+                                        "for parameter ‘%s’ — is ‘%s’ defined as a data type, "
                                         "layout, or type alias before this function?",
                                         parser_get_filename(), lambda->line, lambda->column,
                                         param->type_name,
@@ -3888,7 +3975,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         }
                         if (!rtn_known) {
                             CODEGEN_ERROR(ctx,
-                                "%s:%d:%d: error: function '%s' declares unknown return type '%s'",
+                                "%s:%d:%d: error: function ‘%s’ declares unknown return type ‘%s’",
                                 parser_get_filename(), ast->line, ast->column,
                                 var_name, rtn);
                         }
@@ -3897,7 +3984,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     if (lambda->lambda.return_type && lambda->lambda.param_count == 0 &&
                         lambda->lambda.body_count > 0) {
                         const char *rtype_name = lambda->lambda.return_type;
-                        /* fprintf(stderr, "DEBUG retcheck: fn='%s' rtype='%s'\n", var_name, rtype_name); */
+                        /* fprintf(stderr, "DEBUG retcheck: fn=‘%s’ rtype=‘%s’\n", var_name, rtype_name); */
                         RefinementEntry *rentry = NULL;
                         {
                             const char *name = rtype_name;
@@ -4036,8 +4123,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                                                 LLVMContextDispose(jit_ctx2);
                                                 env_free(jc.env);
                                                 CODEGEN_ERROR(ctx,
-                                                    "%s:%d:%d: error: function '%s' declares return type "
-                                                    "'%s' but its return value does not satisfy the refinement",
+                                                    "%s:%d:%d: error: function ‘%s’ declares return type "
+                                                    "‘%s’ but its return value does not satisfy the refinement",
                                                     parser_get_filename(), ast->line, ast->column,
                                                     var_name, rtype_name);
                                             }
@@ -4531,13 +4618,13 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                                 if (ok == 0) {
                                     if (ret_ast->type == AST_STRING) {
                                         CODEGEN_ERROR(ctx,
-                                            "%s:%d:%d: error: function '%s' declares return type '%s' "
+                                            "%s:%d:%d: error: function ‘%s’ declares return type ‘%s’ "
                                             "but its return value \"%s\" does not satisfy the refinement",
                                             parser_get_filename(), ast->line, ast->column,
                                             var_name, rtype_name, ret_ast->string);
                                     } else {
                                         CODEGEN_ERROR(ctx,
-                                            "%s:%d:%d: error: function '%s' declares return type '%s' "
+                                            "%s:%d:%d: error: function ‘%s’ declares return type ‘%s’ "
                                             "but its return value %g does not satisfy the refinement",
                                             parser_get_filename(), ast->line, ast->column,
                                             var_name, rtype_name, ret_ast->number);
@@ -4626,7 +4713,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                                         LLVMVoidTypeInContext(ctx->context), rte_p, 4, 0);
                                     char errmsg_rt[512];
                                     snprintf(errmsg_rt, sizeof(errmsg_rt),
-                                        "function '%s' return value does not satisfy refinement type '%s'",
+                                        "function ‘%s’ return value does not satisfy refinement type ‘%s’",
                                         var_name, rtype_name);
                                     LLVMValueRef file_str = LLVMBuildGlobalStringPtr(ctx->builder,
                                         parser_get_filename(), "ret_chk_file");
@@ -4690,7 +4777,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     ctx->env = saved_env;
                     if (saved_block)
                         LLVMPositionBuilderAtEnd(ctx->builder, saved_block);
-                    /* fprintf(stderr, "DEBUG FINAL IR for '%s':\n", var_name); */
+                    /* fprintf(stderr, "DEBUG FINAL IR for ‘%s’:\n", var_name); */
                     // LLVMDumpValue(func); // DEBUG
 
            ///// Emit closure value in outer block (closure ABI only)
@@ -5116,7 +5203,7 @@ if (ast->list.count >= 5) {
                 bool ok = ffi_parse_header(ctx->ffi, header, system_inc);
                 if (!ok) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: failed to parse "
-                                  "header '%s'",
+                                  "header ‘%s’",
                                   parser_get_filename(), ast->line, ast->column,
                                   header);
                 }
@@ -5154,7 +5241,7 @@ if (ast->list.count >= 5) {
                 for (int _pi = 0; type_preds[_pi].pred; _pi++) {
                     if (strcmp(head->symbol, type_preds[_pi].pred) != 0) continue;
                     if (ast->list.count != 2) {
-                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' requires 1 argument",
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: ‘%s’ requires 1 argument",
                                       parser_get_filename(), ast->line, ast->column,
                                       head->symbol);
                     }
@@ -5688,12 +5775,12 @@ if (ast->list.count >= 5) {
                                   parser_get_filename(), ast->line, ast->column, fn_name);
                 }
                 if (!e->source_text || !e->source_text[0]) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: no source available for '%s'",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: no source available for ‘%s’",
                                   parser_get_filename(), ast->line, ast->column, fn_name);
                 }
                 AST *src_ast = parse(e->source_text);
                 if (!src_ast) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: failed to parse source for '%s'",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: failed to parse source for ‘%s’",
                                   parser_get_filename(), ast->line, ast->column, fn_name);
                 }
                 RuntimeValue *rv = rt_ast_to_runtime_value(src_ast);
@@ -5928,7 +6015,7 @@ if (ast->list.count >= 5) {
                 const char *fn_name = LLVMGetValueName(cur_fn);
                 char msg[512];
                 snprintf(msg, sizeof(msg),
-                         "%s:%d:%d: error: called undefined function '%s'\n",
+                         "%s:%d:%d: error: called undefined function ‘%s’\n",
                          parser_get_filename(), ast->line, ast->column, fn_name);
                 LLVMValueRef msg_str = LLVMBuildGlobalStringPtr(ctx->builder, msg, "undef_msg");
                 LLVMValueRef msg_args[] = {msg_str};
@@ -6732,7 +6819,7 @@ if (ast->list.count >= 5) {
                         return result;
                     }
 
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'set!' index target '%s' is not an array",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'set!' index target ‘%s’ is not an array",
                                   parser_get_filename(), ast->line, ast->column, arr_sym);
                 }
 
@@ -6756,7 +6843,7 @@ if (ast->list.count >= 5) {
                                       parser_get_filename(), ast->line, ast->column, var_name);
                     }
                     if (base_entry->type && base_entry->type->kind != TYPE_LAYOUT) {
-                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' is not a layout type",
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: ‘%s’ is not a layout type",
                                       parser_get_filename(), ast->line, ast->column, var_name);
                     }
 
@@ -6769,7 +6856,7 @@ if (ast->list.count >= 5) {
                         }
                     }
                     if (field_idx < 0) {
-                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: layout '%s' has no field '%s'",
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: layout ‘%s’ has no field ‘%s’",
                                       parser_get_filename(), ast->line, ast->column,
                                       lay->layout_name, field_name);
                     }
@@ -6781,7 +6868,7 @@ if (ast->list.count >= 5) {
                     snprintf(sname_set, sizeof(sname_set), "layout.%s", lay->layout_name);
                     LLVMTypeRef struct_llvm = LLVMGetTypeByName2(ctx->context, sname_set);
                     if (!struct_llvm) {
-                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: LLVM struct type for '%s' not found",
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: LLVM struct type for ‘%s’ not found",
                                       parser_get_filename(), ast->line, ast->column, lay->layout_name);
                     }
 
@@ -6838,7 +6925,7 @@ if (ast->list.count >= 5) {
                 } else {
                     target = entry->value;
                     if (!target) {
-                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'set!' target '%s' has no value",
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'set!' target ‘%s’ has no value",
                                       parser_get_filename(), ast->line, ast->column, name_ast->symbol);
                     }
                 }
@@ -7893,7 +7980,7 @@ if (ast->list.count >= 5) {
                 strcmp(head->symbol, "ends-with?") == 0) {
                 bool is_ends = (strcmp(head->symbol, "ends-with?") == 0);
                 if (ast->list.count != 3) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' requires 2 arguments",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: ‘%s’ requires 2 arguments",
                                   parser_get_filename(), ast->line, ast->column, head->symbol);
                 }
                 LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
@@ -7931,7 +8018,7 @@ if (ast->list.count >= 5) {
                             LLVMBuildGEP2(ctx->builder, i8, buf, &o, 1, "p1"));
                         suffix = LLVMBuildBitCast(ctx->builder, buf, ptr, "chstr");
                     } else if (suf_r.type && suf_r.type->kind != TYPE_STRING) {
-                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' on String requires String or Char suffix, got %s",
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: ‘%s’ on String requires String or Char suffix, got %s",
                                       parser_get_filename(), ast->line, ast->column,
                                       head->symbol, type_to_string(suf_r.type));
                     }
@@ -8204,7 +8291,7 @@ if (ast->list.count >= 5) {
                 strcmp(head->symbol, "=")  == 0 || strcmp(head->symbol, "!=") == 0) {
 
                 if (ast->list.count != 3) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' requires 2 arguments",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: ‘%s’ requires 2 arguments",
                                   parser_get_filename(), ast->line, ast->column, head->symbol);
                 }
 
@@ -8257,14 +8344,16 @@ if (ast->list.count >= 5) {
                     if (!inst) {
                         CODEGEN_ERROR(ctx,
                             "%s:%d:%d: error:\n"
-                            "    • No instance for '%s %s' arising from a use of '%s'\n"
+                            "    • No instance for ‘%s %s’ arising from a use of ‘%s’\n"
                             "    • In the expression: (%s %s %s)\n"
-                            "  - Hint: add (instance %s %s where ...)",
+                            "  - Hint: add ‘deriving %s’ to the ‘%s’ data declaration,\n"
+                            "  - or define it manually: (instance %s %s where ...)",
                             parser_get_filename(), ast->line, ast->column,
                             cls, type_name, op,
                             op,
                             ast->list.items[1]->type == AST_SYMBOL ? ast->list.items[1]->symbol : "?",
                             ast->list.items[2]->type == AST_SYMBOL ? ast->list.items[2]->symbol : "?",
+                            cls, type_name,
                             cls, type_name);
                     }
 
@@ -8279,7 +8368,7 @@ if (ast->list.count >= 5) {
 
                     if (!method_fn) {
                         CODEGEN_ERROR(ctx,
-                            "%s:%d:%d: error: instance '%s %s' has no implementation for '%s'",
+                            "%s:%d:%d: error: instance ‘%s %s’ has no implementation for ‘%s’",
                             parser_get_filename(), ast->line, ast->column,
                             cls, type_name, op);
                     }
@@ -8330,7 +8419,7 @@ if (ast->list.count >= 5) {
                     bool        impl_is_clo  = impl_entry && impl_entry->is_closure_abi;
                     /* { */
                     /*     char *ir = LLVMPrintValueToString(fn); */
-                    /*     fprintf(stderr, "DEBUG tc dispatch: fn='%s' is_clo=%d\n  IR: %s\n", */
+                    /*     fprintf(stderr, "DEBUG tc dispatch: fn=‘%s’ is_clo=%d\n  IR: %s\n", */
                     /*             impl_fn_name, (int)impl_is_clo, ir); */
                     /*     LLVMDisposeMessage(ir); */
                     /* } */
@@ -8561,7 +8650,7 @@ if (ast->list.count >= 5) {
                 const char *op = head->symbol;
 
                 if (ast->list.count < 2) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' requires at least 1 argument",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: ‘%s’ requires at least 1 argument",
                             parser_get_filename(), ast->line, ast->column, op);
                 }
 
@@ -9097,7 +9186,7 @@ if (ast->list.count >= 5) {
 
             // If it's a variable being used in function position, that's an error
             if (entry && entry->kind == ENV_VAR) {
-                CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' is a variable, not a function",
+                CODEGEN_ERROR(ctx, "%s:%d:%d: error: ‘%s’ is a variable, not a function",
                         parser_get_filename(), ast->line, ast->column, head->symbol);
             }
 
@@ -9791,8 +9880,8 @@ if (ast->list.count >= 5) {
 
                                 if (!type_ok) {
                                     CODEGEN_ERROR(ctx,
-                                                  "%s:%d:%d: error: variadic argument %zu to '%s' "
-                                                  "has type %s but rest parameter '[%s :: %s]' requires %s",
+                                                  "%s:%d:%d: error: variadic argument %zu to ‘%s’ "
+                                                  "has type %s but rest parameter ‘[%s :: %s]’ requires %s",
                                                   parser_get_filename(),
                                                   ast->list.items[j]->line,
                                                   ast->list.items[j]->column,
@@ -9858,7 +9947,7 @@ if (ast->list.count >= 5) {
                             const char *ann = entry->source_ast->lambda.params[i].type_name;
                             if (ann) {
                                 int ok = jit_eval_refinement(ctx, ann, arg_ast);
-                                /* fprintf(stderr, "DEBUG refinement check: type='%s' ok=%d\n", ann, ok); */
+                                /* fprintf(stderr, "DEBUG refinement check: type=‘%s’ ok=%d\n", ann, ok); */
                                 if (ok == 0) {
                                     if (arg_ast->type == AST_STRING) {
                                         CODEGEN_ERROR(ctx,
@@ -10169,7 +10258,7 @@ if (ast->list.count >= 5) {
                     result.value = LLVMConstPointerNull(ptr_t);
                     result.type  = NULL; /* NULL signals void */
                 } else {
-                    /* fprintf(stderr, "DEBUG call '%s' total_args=%d\n", head->symbol, total_args); */
+                    /* fprintf(stderr, "DEBUG call ‘%s’ total_args=%d\n", head->symbol, total_args); */
                     for (int _di = 0; _di < total_args; _di++)
                         fprintf(stderr, "  arg[%d] llvm_type_kind=%d\n", _di,
                                 (int)LLVMGetTypeKind(LLVMTypeOf(args[_di])));
@@ -10251,7 +10340,7 @@ if (ast->list.count >= 5) {
 
             if (cast_target) {
                 if (ast->list.count != 2) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: type cast '%s' requires exactly 1 argument",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: type cast ‘%s’ requires exactly 1 argument",
                             parser_get_filename(), ast->line, ast->column, cast_target);
                 }
 
@@ -10761,7 +10850,7 @@ if (ast->list.count >= 5) {
                         while (i < (int)ast->list.count) {
                             AST *kw = ast->list.items[i];
                             if (kw->type != AST_KEYWORD) {
-                                CODEGEN_ERROR(ctx, "%s:%d:%d: error: expected keyword argument in '%s' constructor",
+                                CODEGEN_ERROR(ctx, "%s:%d:%d: error: expected keyword argument in ‘%s’ constructor",
                                               parser_get_filename(), kw->line, kw->column, head->symbol);
                             }
                             if (i + 1 >= (int)ast->list.count) {
@@ -10776,7 +10865,7 @@ if (ast->list.count >= 5) {
                                 }
                             }
                             if (field_idx < 0) {
-                                CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown field ':%s' in layout '%s'",
+                                CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown field ‘:%s’ in layout ‘%s’",
                                               parser_get_filename(), kw->line, kw->column,
                                               kw->keyword, head->symbol);
                             }
@@ -10828,7 +10917,7 @@ if (ast->list.count >= 5) {
                             }
                         }
                         if (field_idx < 0) {
-                            CODEGEN_ERROR(ctx, "%s:%d:%d: error: layout '%s' has no field '%s'",
+                            CODEGEN_ERROR(ctx, "%s:%d:%d: error: layout ‘%s’ has no field ‘%s’",
                                           parser_get_filename(), ast->line, ast->column,
                                           lay->layout_name, field_name);
                         }
@@ -10838,7 +10927,7 @@ if (ast->list.count >= 5) {
                         snprintf(sname, sizeof(sname), "layout.%s", lay->layout_name);
                         LLVMTypeRef struct_llvm = LLVMGetTypeByName2(ctx->context, sname);
                         if (!struct_llvm) {
-                            CODEGEN_ERROR(ctx, "%s:%d:%d: error: LLVM struct type for '%s' not found",
+                            CODEGEN_ERROR(ctx, "%s:%d:%d: error: LLVM struct type for ‘%s’ not found",
                                           parser_get_filename(), ast->line, ast->column, lay->layout_name);
                         }
 
@@ -10868,7 +10957,7 @@ if (ast->list.count >= 5) {
                     }
 
                     if (base_entry) {
-                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' is not a layout type",
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: ‘%s’ is not a layout type",
                                       parser_get_filename(), ast->line, ast->column, var_name);
                     }
                     if (!ctx->module_ctx) {
@@ -11129,7 +11218,7 @@ if (ast->list.count >= 5) {
             }
             if (!base_known) {
                 CODEGEN_ERROR(ctx,
-                    "%s:%d:%d: error: refinement type '%s' has unknown base type '%s' — "
+                    "%s:%d:%d: error: refinement type ‘%s’ has unknown base type ‘%s’ — "
                     "did you forget to define it first?",
                     parser_get_filename(), ast->line, ast->column,
                     rname, base);
@@ -11158,7 +11247,7 @@ if (ast->list.count >= 5) {
         }
 
         if (!isupper((unsigned char)rname[0])) {
-            CODEGEN_ERROR(ctx, "%s:%d:%d: error: refinement type name '%s' must start uppercase",
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: refinement type name ‘%s’ must start uppercase",
                           parser_get_filename(), ast->line, ast->column, rname);
         }
 
@@ -11167,7 +11256,7 @@ if (ast->list.count >= 5) {
         /* Also register the alias name if present so it works in type annotations */
         if (alias_sym) {
             type_alias_register(alias_sym, rname);
-            /* fprintf(stderr, "DEBUG alias registered: '%s' -> '%s'\n", alias_sym, rname); */
+            /* fprintf(stderr, "DEBUG alias registered: ‘%s’ -> ‘%s’\n", alias_sym, rname); */
         }
         if (pred) {
             char pred_name_buf[256];

@@ -1,8 +1,9 @@
 #+title: TODO.org
 
-* TODO Stuff [0/23]
+* TODO Stuff [0/24]
 - [ ] eval
 - [ ] AST->JSON
+- [ ] Syntax for compiler directives: -|[ INLINE (/=) ]|-
 - [ ] Regex literal #""
 - [ ] When we write wisp error column and numbers are wrong!
 - [ ] allow lazy lists to go both ways so we can have =define ℤ (..0..)=

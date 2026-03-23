@@ -1036,10 +1036,58 @@ void wisp_register_arities_from_env(Env *env) {
     }
 }
 
+/* Strip -| ... |- and paragraph comments from source, replacing
+ * comment content with spaces/newlines to preserve line numbers. */
+static char *strip_comments(const char *source) {
+    comment_map_build(source);
+    int len = (int)strlen(source);
+    char *out = malloc(len + 1);
+    memcpy(out, source, len + 1);
+
+    for (int i = 0; i < g_comment_count; i++) {
+        CommentSpan *span = &g_comment_spans[i];
+        int start = span->open_pos;
+        int end   = span->close_pos >= 0
+                  ? span->close_pos + 2
+                  : span->para_end;
+
+        /* Check if this is a single-line inline comment */
+        bool is_single_line = true;
+        for (int j = start; j < end && j < len; j++) {
+            if (source[j] == '\n') { is_single_line = false; break; }
+        }
+
+        if (is_single_line) {
+            /* Inline comment — remove entirely by shifting remaining content left */
+            int span_len = end - start;
+            memmove(out + start, out + end, len - end + 1);
+            len -= span_len;
+            /* Adjust all subsequent span positions */
+            for (int k = i + 1; k < g_comment_count; k++) {
+                if (g_comment_spans[k].open_pos > start)
+                    g_comment_spans[k].open_pos -= span_len;
+                if (g_comment_spans[k].close_pos > start)
+                    g_comment_spans[k].close_pos -= span_len;
+                if (g_comment_spans[k].para_end > start)
+                    g_comment_spans[k].para_end -= span_len;
+            }
+        } else {
+            /* Multiline comment — replace with spaces/newlines to preserve line numbers */
+            for (int j = start; j < end && j < len; j++)
+                out[j] = (source[j] == '\n') ? '\n' : ' ';
+        }
+    }
+
+    return out;
+}
+
 ASTList wisp_parse_all(const char *source, const char *filename) {
+    /* Strip comments first, preserving line structure */
+    char *stripped = strip_comments(source);
+
     /* Check if file has any wisp-style lines at all */
     bool has_wisp = false;
-    const char *p = source;
+    const char *p = stripped;
     while (*p) {
         while (*p == ' ' || *p == '\t') p++;
         char c = *p;
@@ -1048,20 +1096,24 @@ ASTList wisp_parse_all(const char *source, const char *filename) {
         while (*p && *p != '\n') p++;
         if (*p) p++;
     }
-    if (!has_wisp)
-        return parse_all(source);
+    if (!has_wisp) {
+        parser_set_context(filename, stripped);
+        ASTList result = parse_all(stripped);
+        free(stripped);
+        return result;
+    }
 
     /* Build arity table */
     ArityTable t;
     memset(&t, 0, sizeof(t));
-    arity_prescan(&t, source);
+    arity_prescan(&t, stripped);
     if (g_ffi_arities_init)
         for (int i = 0; i < ARITY_BUCKETS; i++)
             for (ArityEntry *e = g_ffi_arities.buckets[i]; e; e = e->next)
                 arity_set(&t, e->name, e->arity);
 
     /* Build flat token stream */
-    WTokenStream s = build_token_stream(source, &t);
+    WTokenStream s = build_token_stream(stripped, &t);
 
     /* Parse all top-level expressions */
     SB out; sb_init(&out);
@@ -1081,6 +1133,7 @@ ASTList wisp_parse_all(const char *source, const char *filename) {
     ASTList result = parse_all(transformed);
 
     free(transformed);
+    free(stripped);
     wts_free(&s);
     arity_free(&t);
 

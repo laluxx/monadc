@@ -45,6 +45,21 @@ typedef struct ASTParam {
     bool is_anon;     // Name was generated, user wrote type only e.g. Int
 } ASTParam;
 
+
+/// Comment map — pre-scanned -| ... |- pairs
+
+typedef struct CommentSpan {
+    int open_pos;   /* position of '-' in '-|' */
+    int close_pos;  /* position of '-' in '|-', or -1 if paragraph */
+    int para_end;   /* if paragraph: position after last comment char */
+} CommentSpan;
+
+extern CommentSpan *g_comment_spans;
+extern int          g_comment_count;
+extern int          g_comment_cap;
+
+void comment_map_build(const char *source);
+
 /// Pattern matching
 
 typedef enum {

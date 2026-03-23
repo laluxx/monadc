@@ -1,0 +1,20 @@
+;;; IO.mon --- Input Output
+
+;; Author: Laluxx
+;; Version: 0.0.1
+;; Keywords: IO input output
+
+;;; Commentary:
+
+;; TODO Write one..
+
+;;; Code:
+
+(module IO
+  [])
+
+
+r"C:\program files\nim"
+
+define readLine :: IO ()
+  undefined
