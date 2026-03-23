@@ -8297,32 +8297,17 @@ if (ast->list.count >= 5) {
                     LLVMTypeRef  i32_t = LLVMInt32TypeInContext(ctx->context);
                     LLVMTypeRef  i64_t = LLVMInt64TypeInContext(ctx->context);
 
-                    /* The method is a poly stub compiled with closure-style
-                     * arg unboxing: it calls rt_unbox_int on each arg.
-                     * So we must pass boxed RuntimeValue* — use rt_value_int
-                     * for scalars, pass layout ptrs through rt_value_int via
-                     * ptrtoint first.                                         */
+                    /* Pass raw values — typed ABI methods take the concrete
+                     * type directly (ADT heap ptr, int, etc.)               */
                     LLVMValueRef lv = lhs.value;
                     LLVMValueRef rv = rhs.value;
-                    /* For layout (ADT) types: ptrtoint → box as int */
-                    if (lhs.type && lhs.type->kind == TYPE_LAYOUT) {
-                        LLVMTypeRef i64_box = LLVMInt64TypeInContext(ctx->context);
-                        LLVMValueRef as_int = LLVMBuildPtrToInt(ctx->builder, lv, i64_box, "lv_int");
-                        LLVMTypeRef bft = LLVMFunctionType(ptr_t, &i64_box, 1, 0);
-                        lv = LLVMBuildCall2(ctx->builder, bft,
-                                 get_rt_value_int(ctx), &as_int, 1, "lv_boxed");
-                    } else if (LLVMGetTypeKind(LLVMTypeOf(lv)) != LLVMPointerTypeKind) {
+                    /* Ensure ptr type for layout args */
+                    if (LLVMGetTypeKind(LLVMTypeOf(lv)) != LLVMPointerTypeKind &&
+                        lhs.type && lhs.type->kind != TYPE_LAYOUT)
                         lv = codegen_box(ctx, lv, lhs.type);
-                    }
-                    if (rhs.type && rhs.type->kind == TYPE_LAYOUT) {
-                        LLVMTypeRef i64_box = LLVMInt64TypeInContext(ctx->context);
-                        LLVMValueRef as_int = LLVMBuildPtrToInt(ctx->builder, rv, i64_box, "rv_int");
-                        LLVMTypeRef bft = LLVMFunctionType(ptr_t, &i64_box, 1, 0);
-                        rv = LLVMBuildCall2(ctx->builder, bft,
-                                 get_rt_value_int(ctx), &as_int, 1, "rv_boxed");
-                    } else if (LLVMGetTypeKind(LLVMTypeOf(rv)) != LLVMPointerTypeKind) {
+                    if (LLVMGetTypeKind(LLVMTypeOf(rv)) != LLVMPointerTypeKind &&
+                        rhs.type && rhs.type->kind != TYPE_LAYOUT)
                         rv = codegen_box(ctx, rv, rhs.type);
-                    }
 
                     /* Method uses closure ABI: (ptr env, i32 n, ptr args[]) -> ptr
                      * Build a 2-element args array on the stack and call directly */
@@ -8343,6 +8328,12 @@ if (ast->list.count >= 5) {
                     const char *impl_fn_name = LLVMGetValueName(fn);
                     EnvEntry   *impl_entry   = env_lookup(ctx->env, impl_fn_name);
                     bool        impl_is_clo  = impl_entry && impl_entry->is_closure_abi;
+                    /* { */
+                    /*     char *ir = LLVMPrintValueToString(fn); */
+                    /*     fprintf(stderr, "DEBUG tc dispatch: fn='%s' is_clo=%d\n  IR: %s\n", */
+                    /*             impl_fn_name, (int)impl_is_clo, ir); */
+                    /*     LLVMDisposeMessage(ir); */
+                    /* } */
 
                     LLVMValueRef call_r;
                     if (impl_is_clo) {

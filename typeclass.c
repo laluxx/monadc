@@ -249,10 +249,20 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
         /* The method uses closure ABI: (ptr env, i32 n, ptr args) -> ptr
          * We compile the lambda body as a closure-ABI function.
          * This reuses the existing define path by synthesizing a define node. */
+
+        /* Clone the lambda and annotate each param with the concrete
+         * instance type so codegen uses typed ABI instead of poly stub */
+        AST *typed_lam = ast_clone(body_lam);
+        for (int pi = 0; pi < typed_lam->lambda.param_count; pi++) {
+            if (!typed_lam->lambda.params[pi].type_name) {
+                typed_lam->lambda.params[pi].type_name = strdup(type_name);
+            }
+        }
+
         AST *define_node = ast_new_list();
         ast_list_append(define_node, ast_new_symbol("define"));
         ast_list_append(define_node, ast_new_symbol(fn_name));
-        ast_list_append(define_node, ast_clone(body_lam));
+        ast_list_append(define_node, typed_lam);
 
         codegen_expr(ctx, define_node);
         ast_free(define_node);
