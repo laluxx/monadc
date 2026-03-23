@@ -23,6 +23,9 @@ ASTPattern parse_pattern(Parser *p);
 // Returns an AST_PMATCH node owning all parsed clauses.
 AST *parse_pmatch_clauses(Parser *p, int param_count);
 
+
+ASTPattern parse_single_pattern(Parser *p);
+
 /// Desugarer
 
 // Transform an AST_PMATCH node into an equivalent (cond ...) AST

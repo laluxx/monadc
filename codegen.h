@@ -40,7 +40,7 @@ typedef struct MonoCache {
 } MonoCache;
 
 
-typedef struct {
+typedef struct CodegenContext {
     LLVMModuleRef module;
     LLVMBuilderRef builder;
     LLVMContextRef context;
@@ -61,6 +61,7 @@ typedef struct {
 
     // Monomorphization cache
     MonoCache mono_cache;
+    struct TypeClassRegistry *tc_registry;
 
     /* Error recovery — set by CODEGEN_ERROR, caught by codegen_expr callers */
     jmp_buf  error_jmp;

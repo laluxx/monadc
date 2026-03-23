@@ -28,7 +28,7 @@ static bool parser_at(Parser *p, TokenType t) {
 }
 
 // Parse a single pattern element — used both at top level and inside [...]
-static ASTPattern parse_single_pattern(Parser *p) {
+ASTPattern parse_single_pattern(Parser *p) {
     ASTPattern pat = {0};
 
     // Wildcard

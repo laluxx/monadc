@@ -8,6 +8,7 @@
 /* Forward declarations */
 struct Type;
 struct AST;
+typedef struct AST AST;
 
 /// AST
 
@@ -30,8 +31,10 @@ typedef enum {
     AST_SET,        // {val val val}
     AST_MAP,        // #{"key" val "key" val}
     AST_PMATCH,     // pattern matching clauses
-    AST_DATA,       // (data Color Red | Green | Blue)
-    TOK_LAMBDA_LIT, // λx. — pure lambda calculus literal
+    AST_DATA,        // (data Color Red | Green | Blue)
+    AST_CLASS,       // (class Eq a where ...)
+    AST_INSTANCE,    // (instance Eq TrafficLight where ...)
+    TOK_LAMBDA_LIT,  // λx. — pure lambda calculus literal
 } ASTType;
 
 // A single parsed function parameter: name + optional type annotation
@@ -198,7 +201,7 @@ typedef struct AST {
             int              clause_count;
         } pmatch;
 
-        // AST_DATA
+// AST_DATA
         struct {
             char                *name;         // "Color", "Shape"
             ASTDataConstructor  *constructors;
@@ -206,6 +209,30 @@ typedef struct AST {
             char               **deriving;     // ["show", "eq", ...]
             int                  deriving_count;
         } data;
+
+        // AST_CLASS
+        struct {
+            char  *name;           // "Eq"
+            char  *type_var;       // "a"
+            // Method signatures: name + type string
+            char **method_names;   // ["=", "!="]
+            char **method_types;   // ["a -> a -> Bool", "a -> a -> Bool"]
+            int    method_count;
+            // Default implementations: method name + pmatch body AST
+            char **default_names;  // ["!="]
+            AST  **default_bodies; // [lambda AST for default impl]
+            int    default_count;
+        } class_decl;
+
+        // AST_INSTANCE
+        struct {
+            char  *class_name;     // "Eq"
+            char  *type_name;      // "TrafficLight"
+            // Method implementations: name + pmatch clauses as lambda
+            char **method_names;
+            AST  **method_bodies;  // lambda ASTs
+            int    method_count;
+        } instance_decl;
     };
 
     char *literal_str; // original literal string for numbers (e.g. "0xFF")
@@ -256,6 +283,11 @@ AST *ast_new_pmatch(ASTPMatchClause *clauses, int clause_count);
 AST *ast_new_data(const char *name,
                   ASTDataConstructor *constructors, int constructor_count,
                   char **deriving, int deriving_count);
+AST *ast_new_class(const char *name, const char *type_var,
+                   char **method_names, char **method_types, int method_count,
+                   char **default_names, AST **default_bodies, int default_count);
+AST *ast_new_instance(const char *class_name, const char *type_name,
+                      char **method_names, AST **method_bodies, int method_count);
 void ast_pattern_free(ASTPattern *p);
 
 

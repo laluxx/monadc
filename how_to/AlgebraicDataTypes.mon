@@ -1,6 +1,7 @@
-;;; Algebraic Data Types
+;; ;;; Algebraic Data Types
 
-;; A type with three constructors
+;; ;; A data type with three constructors
+
 ;; data Color Red
 ;;          | Green
 ;;          | Blue
@@ -12,41 +13,62 @@
 
 ;; (show (color-to-string Blue))
 
-data Point Float Float
+;; data Point Float Float
 
-data Shape Circle    Float
-         | Rectangle Float Float
-         | Triangle  Point Point Point
+;; data Shape Circle    Float
+;;          | Rectangle Float Float
+;;          | Triangle  Point Point Point
 
-(define [pi :: Float] 3.141592653589793 :alias π)
+;; (define [pi :: Float] 3.141592653589793 :alias π)
 
-(define (abs [x :: Float] -> Float)
-  "Return the absolute value of X."
-  (if (x `<` 0.0) (0.0 `-` x) x))
+;; (define (abs [x :: Float] -> Float)
+;;   "Return the absolute value of X."
+;;   (if (x `<` 0.0) (0.0 `-` x) x))
 
-(define (area Shape -> Float)
-  [Circle r]      -> (pi `*` r `*` r)
-  [Rectangle w h] -> (w `*` h)
-  [Triangle
-   [Point x1 y1]
-   [Point x2 y2]
-   [Point x3 y3]] -> (* 0.5 (abs (+ (* x1 (y2 `-` y3))
-                                    (* x2 (y3 `-` y1))
-                                    (* x3 (y1 `-` y2))))))
-
-
-(define circle (Circle 3.0))
-(define rectangle (Rectangle 3.0 2.0))
-
-(define triangle
-  (Triangle (Point 0.0 0.0)
-            (Point 4.0 0.0)
-            (Point 0.0 3.0)))
+;; (define (area Shape -> Float)
+;;   [Circle r]      -> (pi `*` r `*` r)
+;;   [Rectangle w h] -> (w `*` h)
+;;   [Triangle
+;;    [Point x1 y1]
+;;    [Point x2 y2]
+;;    [Point x3 y3]] -> (* 0.5 (abs (+ (x1 `*` (y2 `-` y3))
+;;                                     (x2 `*` (y3 `-` y1))
+;;                                     (x3 `*` (y1 `-` y2))))))
 
 
-(show (area circle))
-(show (area rectangle))
-(show (area triangle))
+;; (define circle (Circle 3.0))
+;; (define rectangle (Rectangle 3.0 2.0))
+
+;; (define triangle
+;;   (Triangle (Point 0.0 0.0)
+;;             (Point 4.0 0.0)
+;;             (Point 0.0 3.0)))
+
+
+;; (show (area circle))
+;; (show (area rectangle))
+;; (show (area triangle))
+
+
+;;; Type Classes
+
+
+(class Eq a where
+    (=)  :: a -> a -> Bool
+    (!=) :: a -> a -> Bool
+    (x `!=` y) => (not (x `=` y))); Default implementation(s)
+
+data TrafficLight Red | Yellow | Green
+
+;; (instance Eq TrafficLight where
+;;     (Red    `=` Red)    => True
+;;     (Yellow `=` Yellow) => True
+;;     (Green  `=` Green)  => True
+;;     (_      `=` _ )     => False)
+
+(show (= Red Red))
+(show (= Red Green))
+(show (!= Red Green))
 
 
 ;; TODO
@@ -55,28 +77,6 @@ data Shape Circle    Float
 ;; (show "circle is a _"    circle)
 ;; (show "rectangle is a _" rectangle)
 ;; (show "triangle is a _"  triangle)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

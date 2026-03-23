@@ -317,6 +317,34 @@ AST *ast_new_data(const char *name,
     return a;
 }
 
+AST *ast_new_class(const char *name, const char *type_var,
+                   char **method_names, char **method_types, int method_count,
+                   char **default_names, AST **default_bodies, int default_count) {
+    AST *a = calloc(1, sizeof(AST));
+    a->type                          = AST_CLASS;
+    a->class_decl.name               = my_strdup(name);
+    a->class_decl.type_var           = my_strdup(type_var);
+    a->class_decl.method_names       = method_names;
+    a->class_decl.method_types       = method_types;
+    a->class_decl.method_count       = method_count;
+    a->class_decl.default_names      = default_names;
+    a->class_decl.default_bodies     = default_bodies;
+    a->class_decl.default_count      = default_count;
+    return a;
+}
+
+AST *ast_new_instance(const char *class_name, const char *type_name,
+                      char **method_names, AST **method_bodies, int method_count) {
+    AST *a = calloc(1, sizeof(AST));
+    a->type                            = AST_INSTANCE;
+    a->instance_decl.class_name        = my_strdup(class_name);
+    a->instance_decl.type_name         = my_strdup(type_name);
+    a->instance_decl.method_names      = method_names;
+    a->instance_decl.method_bodies     = method_bodies;
+    a->instance_decl.method_count      = method_count;
+    return a;
+}
+
 AST *ast_new_pmatch(ASTPMatchClause *clauses, int clause_count) {
     AST *a = calloc(1, sizeof(AST));
     a->type                = AST_PMATCH;
@@ -545,6 +573,34 @@ void ast_free(AST *ast) {
         free(ast->map.vals);
         break;
 
+    case AST_CLASS:
+        free(ast->class_decl.name);
+        free(ast->class_decl.type_var);
+        for (int i = 0; i < ast->class_decl.method_count; i++) {
+            free(ast->class_decl.method_names[i]);
+            free(ast->class_decl.method_types[i]);
+        }
+        free(ast->class_decl.method_names);
+        free(ast->class_decl.method_types);
+        for (int i = 0; i < ast->class_decl.default_count; i++) {
+            free(ast->class_decl.default_names[i]);
+            ast_free(ast->class_decl.default_bodies[i]);
+        }
+        free(ast->class_decl.default_names);
+        free(ast->class_decl.default_bodies);
+        break;
+
+    case AST_INSTANCE:
+        free(ast->instance_decl.class_name);
+        free(ast->instance_decl.type_name);
+        for (int i = 0; i < ast->instance_decl.method_count; i++) {
+            free(ast->instance_decl.method_names[i]);
+            ast_free(ast->instance_decl.method_bodies[i]);
+        }
+        free(ast->instance_decl.method_names);
+        free(ast->instance_decl.method_bodies);
+        break;
+
     case AST_DATA:
         free(ast->data.name);
         for (int i = 0; i < ast->data.constructor_count; i++) {
@@ -577,201 +633,283 @@ void ast_free(AST *ast) {
     free(ast);
 }
 
-void ast_print(AST *ast) {
-    if (!ast) { printf("nil"); return; }
+/// ast_to_string
+//
+// Renders an AST node to a heap-allocated string.
+// Caller is responsible for free()ing the result.
+//
+char *ast_to_string(AST *ast) {
+    if (!ast) return strdup("nil");
+
+    size_t  cap = 256;
+    size_t  len = 0;
+    char   *buf = malloc(cap);
+    buf[0] = '\0';
+
+#define APPEND(s) do { \
+        const char *_s = (s); if (!_s) break; \
+        size_t _n = strlen(_s); \
+        while (len + _n + 1 > cap) { cap *= 2; buf = realloc(buf, cap); } \
+        memcpy(buf + len, _s, _n + 1); len += _n; \
+    } while(0)
+
+#define APPENDF(...) do { \
+        char _tmp[512]; \
+        snprintf(_tmp, sizeof(_tmp), __VA_ARGS__); \
+        APPEND(_tmp); \
+    } while(0)
+
+#define APPENDS(node) do { \
+        char *_s = ast_to_string(node); APPEND(_s); free(_s); \
+    } while(0)
+
     switch (ast->type) {
     case AST_NUMBER:
-        if (ast->has_raw_int && ast->literal_str)
-            printf("%s", ast->literal_str);
-        else
-            printf("%g", ast->number);
-    break;
-    case AST_SYMBOL:  printf("%s", ast->symbol); break;
-    case AST_STRING:  printf("\"%s\"", ast->string); break;
-    case AST_CHAR:    printf("'%c'", ast->character); break;
-    case AST_LIST:
-        printf("(");
-        for (size_t i = 0; i < ast->list.count; i++) {
-            if (i > 0) printf(" ");
-            ast_print(ast->list.items[i]);
-        }
-        printf(")");
+        if (ast->has_raw_int && ast->literal_str) APPEND(ast->literal_str);
+        else APPENDF("%g", ast->number);
+        break;
+
+    case AST_SYMBOL:
+        APPEND(ast->symbol);
+        break;
+
+    case AST_STRING:
+        APPEND("\""); APPEND(ast->string); APPEND("\"");
+        break;
+
+    case AST_CHAR:
+        APPENDF("'%c'", ast->character);
+        break;
+
+    case AST_KEYWORD:
+        APPEND(":"); APPEND(ast->keyword);
         break;
 
     case AST_RATIO:
-        printf("%lld/%lld", ast->ratio.numerator, ast->ratio.denominator);
+        APPENDF("%lld/%lld", ast->ratio.numerator, ast->ratio.denominator);
+        break;
+
+    case AST_LIST:
+        APPEND("(");
+        for (size_t i = 0; i < ast->list.count; i++) {
+            if (i > 0) APPEND(" ");
+            APPENDS(ast->list.items[i]);
+        }
+        APPEND(")");
         break;
 
     case AST_ARRAY:
-        printf("[");
+        APPEND("[");
         for (size_t i = 0; i < ast->array.element_count; i++) {
-            if (i > 0) printf(" ");
-            ast_print(ast->array.elements[i]);
+            if (i > 0) APPEND(" ");
+            APPENDS(ast->array.elements[i]);
         }
-        printf("]");
-        break;
-
-    case AST_LAMBDA:
-        printf("(lambda (");
-        for (int i = 0; i < ast->lambda.param_count; i++) {
-            if (i > 0) printf(" ");
-            printf("[%s", ast->lambda.params[i].name);
-            if (ast->lambda.params[i].type_name)
-                printf(" :: %s", ast->lambda.params[i].type_name);
-            printf("]");
-        }
-        if (ast->lambda.return_type)
-            printf(" -> %s", ast->lambda.return_type);
-        printf(")");
-        if (ast->lambda.docstring)
-            printf(" \"%s\"", ast->lambda.docstring);
-        printf(" ");
-        ast_print(ast->lambda.body);
-        printf(")");
-        break;
-    case AST_ASM:
-        printf("(asm");
-        for (size_t i = 0; i < ast->asm_block.instruction_count; i++) {
-            printf(" ");
-            ast_print(ast->asm_block.instructions[i]);
-        }
-        printf(")");
-        break;
-    case AST_KEYWORD:
-        printf(":%s", ast->keyword);
-        break;
-    case AST_ADDRESS_OF:
-        printf("&");
-        ast_print(ast->list.items[0]);
-        break;
-    case AST_RANGE:
-        printf(ast->range.is_array ? "[" : "(");
-        ast_print(ast->range.start);
-        if (ast->range.step) { printf(","); ast_print(ast->range.step); }
-        printf("..");
-        if (ast->range.end) ast_print(ast->range.end);
-        printf(ast->range.is_array ? "]" : ")");
-        break;
-    case AST_PMATCH:
-        for (int i = 0; i < ast->pmatch.clause_count; i++) {
-            ASTPMatchClause *cl = &ast->pmatch.clauses[i];
-            if (i > 0) printf("\n  ");
-            for (int j = 0; j < cl->pattern_count; j++) {
-                if (j > 0) printf(" ");
-                ASTPattern *pat = &cl->patterns[j];
-                switch (pat->kind) {
-                case PAT_WILDCARD: printf("_"); break;
-                case PAT_VAR:      printf("%s", pat->var_name); break;
-                case PAT_LITERAL_INT:   printf("%lld", (long long)pat->lit_value); break;
-                case PAT_LITERAL_FLOAT: printf("%g",   pat->lit_value); break;
-                case PAT_LIST_EMPTY: printf("[]"); break;
-                case PAT_LIST:
-                    printf("[");
-                    for (int k = 0; k < pat->element_count; k++) {
-                        if (k > 0) printf(" ");
-                        ASTPattern *ep = &pat->elements[k];
-                        switch (ep->kind) {
-                        case PAT_WILDCARD: printf("_"); break;
-                        case PAT_VAR:      printf("%s", ep->var_name); break;
-                        case PAT_LITERAL_INT:   printf("%lld", (long long)ep->lit_value); break;
-                        case PAT_LITERAL_FLOAT: printf("%g", ep->lit_value); break;
-                        default: printf("_"); break;
-                        }
-                    }
-                    if (pat->tail) {
-                        printf("|");
-                        if (pat->tail->kind == PAT_VAR)
-                            printf("%s", pat->tail->var_name);
-                        else
-                            printf("_");
-                    }
-                    printf("]");
-                    break;
-                }
-            }
-            printf(" -> ");
-            ast_print(cl->body);
-        }
-        break;
-    case AST_LAYOUT:
-        printf("(layout %s", ast->layout.name);
-        for (int i = 0; i < ast->layout.field_count; i++) {
-            ASTLayoutField *f = &ast->layout.fields[i];
-            if (f->is_array)
-                printf(" [%s :: [%s %d]]", f->name,
-                       f->array_elem ? f->array_elem : "?", f->array_size);
-            else
-                printf(" [%s :: %s]", f->name,
-                       f->type_name ? f->type_name : "?");
-        }
-        if (ast->layout.packed) printf(" :packed True");
-        if (ast->layout.align)  printf(" :align %d", ast->layout.align);
-        printf(")");
+        APPEND("]");
         break;
 
     case AST_SET:
-        printf("{");
+        APPEND("{");
         for (size_t i = 0; i < ast->set.element_count; i++) {
-            if (i > 0) printf(" ");
-            ast_print(ast->set.elements[i]);
+            if (i > 0) APPEND(" ");
+            APPENDS(ast->set.elements[i]);
         }
-        printf("}");
+        APPEND("}");
         break;
 
     case AST_MAP:
-        printf("#{");
+        APPEND("#{");
         for (size_t i = 0; i < ast->map.count; i++) {
-            if (i > 0) printf(" ");
-            ast_print(ast->map.keys[i]);
-            printf(" ");
-            ast_print(ast->map.vals[i]);
+            if (i > 0) APPEND(" ");
+            APPENDS(ast->map.keys[i]);
+            APPEND(" ");
+            APPENDS(ast->map.vals[i]);
         }
-        printf("}");
+        APPEND("}");
+        break;
+
+    case AST_LAMBDA:
+        APPEND("(lambda (");
+        for (int i = 0; i < ast->lambda.param_count; i++) {
+            if (i > 0) APPEND(" ");
+            APPEND("[");
+            APPEND(ast->lambda.params[i].name);
+            if (ast->lambda.params[i].type_name) {
+                APPEND(" :: ");
+                APPEND(ast->lambda.params[i].type_name);
+            }
+            APPEND("]");
+        }
+        if (ast->lambda.return_type) {
+            APPEND(" -> "); APPEND(ast->lambda.return_type);
+        }
+        APPEND(")");
+        if (ast->lambda.docstring) {
+            APPEND(" \""); APPEND(ast->lambda.docstring); APPEND("\"");
+        }
+        APPEND(" ");
+        if (ast->lambda.body) APPENDS(ast->lambda.body);
+        APPEND(")");
+        break;
+
+    case AST_ASM:
+        APPEND("(asm");
+        for (size_t i = 0; i < ast->asm_block.instruction_count; i++) {
+            APPEND(" ");
+            APPENDS(ast->asm_block.instructions[i]);
+        }
+        APPEND(")");
+        break;
+
+    case AST_ADDRESS_OF:
+        APPEND("&");
+        APPENDS(ast->list.items[0]);
+        break;
+
+    case AST_RANGE:
+        APPEND(ast->range.is_array ? "[" : "(");
+        APPENDS(ast->range.start);
+        if (ast->range.step) { APPEND(","); APPENDS(ast->range.step); }
+        APPEND("..");
+        if (ast->range.end) APPENDS(ast->range.end);
+        APPEND(ast->range.is_array ? "]" : ")");
+        break;
+
+    case AST_LAYOUT:
+        APPEND("(layout "); APPEND(ast->layout.name);
+        for (int i = 0; i < ast->layout.field_count; i++) {
+            ASTLayoutField *f = &ast->layout.fields[i];
+            if (f->is_array)
+                APPENDF(" [%s :: [%s %d]]", f->name,
+                        f->array_elem ? f->array_elem : "?", f->array_size);
+            else
+                APPENDF(" [%s :: %s]", f->name,
+                        f->type_name ? f->type_name : "?");
+        }
+        if (ast->layout.packed) APPEND(" :packed True");
+        if (ast->layout.align)  APPENDF(" :align %d", ast->layout.align);
+        APPEND(")");
         break;
 
     case AST_DATA:
-        printf("(data %s", ast->data.name);
+        APPEND("(data "); APPEND(ast->data.name);
         for (int i = 0; i < ast->data.constructor_count; i++) {
-            if (i > 0) printf(" |");
-            printf(" %s", ast->data.constructors[i].name);
-            for (int j = 0; j < ast->data.constructors[i].field_count; j++)
-                printf(" %s", ast->data.constructors[i].field_types[j]);
+            if (i > 0) APPEND(" |");
+            APPEND(" "); APPEND(ast->data.constructors[i].name);
+            for (int j = 0; j < ast->data.constructors[i].field_count; j++) {
+                APPEND(" "); APPEND(ast->data.constructors[i].field_types[j]);
+            }
         }
         if (ast->data.deriving_count > 0) {
-            printf(" deriving [");
+            APPEND(" deriving [");
             for (int i = 0; i < ast->data.deriving_count; i++) {
-                if (i > 0) printf(" ");
-                printf("%s", ast->data.deriving[i]);
+                if (i > 0) APPEND(" ");
+                APPEND(ast->data.deriving[i]);
             }
-            printf("]");
+            APPEND("]");
         }
-        printf(")");
+        APPEND(")");
         break;
 
+    case AST_PMATCH:
+        for (int i = 0; i < ast->pmatch.clause_count; i++) {
+            ASTPMatchClause *cl = &ast->pmatch.clauses[i];
+            if (i > 0) APPEND("\n  ");
+            for (int j = 0; j < cl->pattern_count; j++) {
+                if (j > 0) APPEND(" ");
+                ASTPattern *pat = &cl->patterns[j];
+                switch (pat->kind) {
+                case PAT_WILDCARD:      APPEND("_"); break;
+                case PAT_VAR:           APPEND(pat->var_name); break;
+                case PAT_LITERAL_INT:   APPENDF("%lld", (long long)pat->lit_value); break;
+                case PAT_LITERAL_FLOAT: APPENDF("%g", pat->lit_value); break;
+                case PAT_LIST_EMPTY:    APPEND("[]"); break;
+                case PAT_LIST:
+                    APPEND("[");
+                    for (int k = 0; k < pat->element_count; k++) {
+                        if (k > 0) APPEND(" ");
+                        ASTPattern *ep = &pat->elements[k];
+                        switch (ep->kind) {
+                        case PAT_WILDCARD:      APPEND("_"); break;
+                        case PAT_VAR:           APPEND(ep->var_name); break;
+                        case PAT_LITERAL_INT:   APPENDF("%lld", (long long)ep->lit_value); break;
+                        case PAT_LITERAL_FLOAT: APPENDF("%g", ep->lit_value); break;
+                        default:                APPEND("_"); break;
+                        }
+                    }
+                    if (pat->tail) {
+                        APPEND("|");
+                        APPEND(pat->tail->kind == PAT_VAR ? pat->tail->var_name : "_");
+                    }
+                    APPEND("]");
+                    break;
+                default: APPEND("_"); break;
+                }
+            }
+            APPEND(" -> ");
+            APPENDS(cl->body);
+        }
+        break;
 
     case AST_REFINEMENT:
-        if (ast->refinement.name)
-            printf("(type %s { %s ∈ %s | ",
-                   ast->refinement.name,
-                   ast->refinement.var  ? ast->refinement.var  : "?",
-                   ast->refinement.base_type ? ast->refinement.base_type : "?");
-        else
-            printf("{ %s ∈ %s | ",
-                   ast->refinement.var  ? ast->refinement.var  : "?",
-                   ast->refinement.base_type ? ast->refinement.base_type : "?");
-        ast_print(ast->refinement.predicate);
         if (ast->refinement.name) {
-            printf(" }");
-            if (ast->refinement.docstring)
-                printf(" \"%s\"", ast->refinement.docstring);
-            if (ast->refinement.alias_name)
-                printf(" :alias %s", ast->refinement.alias_name);
-            printf(")");
+            APPENDF("(type %s { %s ∈ %s | ",
+                    ast->refinement.name,
+                    ast->refinement.var       ? ast->refinement.var       : "?",
+                    ast->refinement.base_type ? ast->refinement.base_type : "?");
         } else {
-            printf(" }");
+            APPENDF("{ %s ∈ %s | ",
+                    ast->refinement.var       ? ast->refinement.var       : "?",
+                    ast->refinement.base_type ? ast->refinement.base_type : "?");
+        }
+        if (ast->refinement.predicate) APPENDS(ast->refinement.predicate);
+        if (ast->refinement.name) {
+            APPEND(" }");
+            if (ast->refinement.docstring) {
+                APPEND(" \""); APPEND(ast->refinement.docstring); APPEND("\"");
+            }
+            if (ast->refinement.alias_name) {
+                APPEND(" :alias "); APPEND(ast->refinement.alias_name);
+            }
+            APPEND(")");
+        } else {
+            APPEND(" }");
         }
         break;
+
+    case AST_CLASS:
+        APPENDF("(class %s %s where",
+                ast->class_decl.name    ? ast->class_decl.name    : "?",
+                ast->class_decl.type_var ? ast->class_decl.type_var : "?");
+        for (int i = 0; i < ast->class_decl.method_count; i++)
+            APPENDF(" (%s) :: %s",
+                    ast->class_decl.method_names[i],
+                    ast->class_decl.method_types[i]);
+        APPEND(")");
+        break;
+
+    case AST_INSTANCE:
+        APPENDF("(instance %s %s where ...)",
+                ast->instance_decl.class_name ? ast->instance_decl.class_name : "?",
+                ast->instance_decl.type_name  ? ast->instance_decl.type_name  : "?");
+        break;
+
+    default:
+        APPENDF("<ast:%d>", ast->type);
+        break;
     }
+
+#undef APPEND
+#undef APPENDF
+#undef APPENDS
+
+    return buf;
+}
+
+// Prints an AST node to stdout. Implemented via ast_to_string.
+void ast_print(AST *ast) {
+    char *s = ast_to_string(ast);
+    printf("%s", s);
+    free(s);
 }
 
 /// Lexer
@@ -2286,6 +2424,447 @@ if (p->current.type == TOK_SYMBOL &&
         free(alias_doc); free(alias_name);
         node->line = tline; node->column = tcol;
         node->end_column = end_col;
+        return node;
+    }
+
+    // (class ClassName typevar where
+    //     method :: type
+    //     (default x y) => body)
+    if (p->current.type == TOK_SYMBOL &&
+        strcmp(p->current.value, "class") == 0) {
+
+        int cls_line = p->current.line, cls_col = p->current.column;
+        p->current = lexer_next_token(p->lexer); // consume 'class'
+
+        if (p->current.type != TOK_SYMBOL)
+            compiler_error(p->current.line, p->current.column,
+                           "Expected class name after 'class'");
+        char *cls_name = my_strdup(p->current.value);
+        p->current = lexer_next_token(p->lexer);
+
+        if (p->current.type != TOK_SYMBOL)
+            compiler_error(p->current.line, p->current.column,
+                           "Expected type variable after class name");
+        char *type_var = my_strdup(p->current.value);
+        p->current = lexer_next_token(p->lexer);
+
+        /* consume 'where' */
+        if (p->current.type == TOK_SYMBOL &&
+            strcmp(p->current.value, "where") == 0)
+            p->current = lexer_next_token(p->lexer);
+
+        char **method_names   = NULL;
+        char **method_types   = NULL;
+        int    method_count   = 0;
+        char **default_names  = NULL;
+        AST  **default_bodies = NULL;
+        int    default_count  = 0;
+
+        while (p->current.type != TOK_RPAREN &&
+               p->current.type != TOK_EOF) {
+
+            /* Method signature: (=) :: a -> a -> Bool
+             * Must check for (method) :: pattern BEFORE checking
+             * for default impls — peek ahead for '::' after the paren group */
+            if (p->current.type == TOK_LPAREN) {
+                /* Save position to distinguish (method) :: sig from (pat) => body */
+                Lexer saved_lex = *p->lexer;
+                Token saved_cur = p->current;
+
+                p->current = lexer_next_token(p->lexer); // consume '('
+                char *peek_name = NULL;
+                if (p->current.type == TOK_SYMBOL) {
+                    peek_name = my_strdup(p->current.value);
+                    p->current = lexer_next_token(p->lexer); // consume name
+                }
+                bool is_sig = (p->current.type == TOK_RPAREN);
+                if (is_sig) {
+                    p->current = lexer_next_token(p->lexer); // consume ')'
+                    /* Now check for '::' */
+                    is_sig = (p->current.type == TOK_SYMBOL &&
+                              strcmp(p->current.value, "::") == 0);
+                }
+
+                if (is_sig && peek_name) {
+                    /* It's a method signature: (=) :: type */
+                    p->current = lexer_next_token(p->lexer); // consume '::'
+
+                    char type_buf[512] = {0};
+                    while (p->current.type != TOK_RPAREN &&
+                           p->current.type != TOK_EOF    &&
+                           p->current.type != TOK_LPAREN) {
+                        /* Stop if we see symbol followed by '::' — next method */
+                        Token cur = p->current;
+                        p->current = lexer_next_token(p->lexer);
+                        if (p->current.type == TOK_SYMBOL &&
+                            strcmp(p->current.value, "::") == 0) {
+                            /* cur was a method name — don't include it */
+                            /* restore: put cur back as current */
+                            /* We can't push back, so just stop here */
+                            /* The outer loop will pick up cur next iteration */
+                            /* Trick: manually set current to cur and break */
+                            p->current = cur;
+                            break;
+                        }
+                        const char *tok_str = cur.value ? cur.value
+                                            : (cur.type == TOK_ARROW ? "->" : NULL);
+                        if (tok_str) {
+                            if (type_buf[0]) strncat(type_buf, " ",
+                                sizeof(type_buf) - strlen(type_buf) - 1);
+                            strncat(type_buf, tok_str,
+                                sizeof(type_buf) - strlen(type_buf) - 1);
+                        }
+                        /* Also add '->' tokens */
+                        if (cur.type == TOK_ARROW) {
+                            /* already added "->", continue */
+                        }
+                    }
+
+                    method_names = realloc(method_names,
+                                           sizeof(char*) * (method_count + 1));
+                    method_types = realloc(method_types,
+                                           sizeof(char*) * (method_count + 1));
+                    method_names[method_count] = peek_name;
+                    method_types[method_count] = my_strdup(type_buf);
+                    method_count++;
+                    continue;
+                }
+
+                /* Not a signature — restore and parse as default impl */
+                free(peek_name);
+                *p->lexer  = saved_lex;
+                p->current = saved_cur;
+            }
+
+            /* Default implementation: (x `!=` y) => body */
+            if (p->current.type == TOK_LPAREN) {
+                p->current = lexer_next_token(p->lexer); // consume '('
+
+                char *def_method = NULL;
+                AST *pattern_arg1 = NULL;
+                AST *pattern_arg2 = NULL;
+
+                if (p->current.type == TOK_SYMBOL) {
+                    pattern_arg1 = parse_expr(p);
+                    if (p->current.type == TOK_BACKTICK) {
+                        p->current = lexer_next_token(p->lexer);
+                        if (p->current.type == TOK_SYMBOL)
+                            def_method = my_strdup(p->current.value);
+                        p->current = lexer_next_token(p->lexer);
+                        if (p->current.type == TOK_BACKTICK)
+                            p->current = lexer_next_token(p->lexer);
+                        pattern_arg2 = parse_expr(p);
+                    } else {
+                        if (pattern_arg1->type == AST_SYMBOL)
+                            def_method = my_strdup(pattern_arg1->symbol);
+                        while (p->current.type != TOK_RPAREN &&
+                               p->current.type != TOK_EOF) {
+                            ast_free(pattern_arg2);
+                            pattern_arg2 = parse_expr(p);
+                        }
+                    }
+                }
+
+                if (p->current.type == TOK_RPAREN)
+                    p->current = lexer_next_token(p->lexer);
+
+                if (p->current.type == TOK_SYMBOL &&
+                    strcmp(p->current.value, "=>") == 0)
+                    p->current = lexer_next_token(p->lexer);
+
+                AST *def_body = parse_expr(p);
+
+                if (def_method) {
+                    ASTParam *dparams = malloc(sizeof(ASTParam) * 2);
+                    dparams[0].name = (pattern_arg1 &&
+                                       pattern_arg1->type == AST_SYMBOL)
+                                    ? my_strdup(pattern_arg1->symbol)
+                                    : my_strdup("__x");
+                    dparams[0].type_name = NULL;
+                    dparams[0].is_rest   = false;
+                    dparams[0].is_anon   = false;
+                    dparams[1].name = (pattern_arg2 &&
+                                       pattern_arg2->type == AST_SYMBOL)
+                                    ? my_strdup(pattern_arg2->symbol)
+                                    : my_strdup("__y");
+                    dparams[1].type_name = NULL;
+                    dparams[1].is_rest   = false;
+                    dparams[1].is_anon   = false;
+
+                    AST **dbody_exprs = malloc(sizeof(AST*));
+                    dbody_exprs[0]    = def_body;
+                    AST *def_lam = ast_new_lambda(dparams, 2, NULL, NULL, NULL,
+                                                  false, def_body,
+                                                  dbody_exprs, 1);
+                    default_names  = realloc(default_names,
+                                     sizeof(char*) * (default_count + 1));
+                    default_bodies = realloc(default_bodies,
+                                     sizeof(AST*)  * (default_count + 1));
+                    default_names[default_count]  = def_method;
+                    default_bodies[default_count] = def_lam;
+                    default_count++;
+                } else {
+                    ast_free(def_body);
+                }
+                ast_free(pattern_arg1);
+                ast_free(pattern_arg2);
+                continue;
+            }
+
+            /* Bare symbol method: = :: a -> a -> Bool (without parens) */
+            if (p->current.type == TOK_SYMBOL) {
+                char *mname = my_strdup(p->current.value);
+                p->current = lexer_next_token(p->lexer);
+
+                if (p->current.type == TOK_SYMBOL &&
+                    strcmp(p->current.value, "::") == 0) {
+                    p->current = lexer_next_token(p->lexer);
+
+                    char type_buf[512] = {0};
+                    while (p->current.type != TOK_RPAREN &&
+                           p->current.type != TOK_EOF    &&
+                           p->current.type != TOK_LPAREN) {
+                        Token cur = p->current;
+                        p->current = lexer_next_token(p->lexer);
+                        /* Stop before next method name */
+                        if (p->current.type == TOK_SYMBOL &&
+                            strcmp(p->current.value, "::") == 0) {
+                            p->current = cur;
+                            break;
+                        }
+                        if (cur.value) {
+                            if (type_buf[0]) strncat(type_buf, " ",
+                                sizeof(type_buf) - strlen(type_buf) - 1);
+                            strncat(type_buf, cur.value,
+                                sizeof(type_buf) - strlen(type_buf) - 1);
+                        }
+                    }
+                    method_names = realloc(method_names,
+                                           sizeof(char*) * (method_count + 1));
+                    method_types = realloc(method_types,
+                                           sizeof(char*) * (method_count + 1));
+                    method_names[method_count] = mname;
+                    method_types[method_count] = my_strdup(type_buf);
+                    method_count++;
+                } else {
+                    free(mname);
+                }
+                continue;
+            }
+
+            /* Skip anything unexpected */
+            p->current = lexer_next_token(p->lexer);
+        }
+
+        if (p->current.type == TOK_RPAREN)
+            p->current = lexer_next_token(p->lexer);
+
+        ast_free(list);
+        AST *node = ast_new_class(cls_name, type_var,
+                                   method_names, method_types, method_count,
+                                   default_names, default_bodies, default_count);
+        free(cls_name); free(type_var);
+        node->line = cls_line; node->column = cls_col;
+        return node;
+    }
+
+    // (instance ClassName TypeName where
+    //     (pattern) => body ...)
+    if (p->current.type == TOK_SYMBOL &&
+        strcmp(p->current.value, "instance") == 0) {
+
+        int ins_line = p->current.line, ins_col = p->current.column;
+        p->current = lexer_next_token(p->lexer); // consume 'instance'
+
+        if (p->current.type != TOK_SYMBOL)
+            compiler_error(p->current.line, p->current.column,
+                           "Expected class name after 'instance'");
+        char *cls_name = my_strdup(p->current.value);
+        p->current = lexer_next_token(p->lexer);
+
+        if (p->current.type != TOK_SYMBOL)
+            compiler_error(p->current.line, p->current.column,
+                           "Expected type name after class name");
+        char *type_name = my_strdup(p->current.value);
+        p->current = lexer_next_token(p->lexer);
+
+        /* consume 'where' */
+        if (p->current.type == TOK_SYMBOL &&
+            strcmp(p->current.value, "where") == 0)
+            p->current = lexer_next_token(p->lexer);
+
+        /* Collect all clauses grouped by method name.
+         * Each clause: (pat1 `op` pat2) => body
+         * or           (ctor `op` ctor2) => body               */
+
+        /* We accumulate clauses per method, then build lambdas  */
+        typedef struct {
+            char *method;
+            ASTPMatchClause *clauses;
+            int clause_count;
+            int clause_cap;
+        } MethodClauses;
+
+        MethodClauses *methods = NULL;
+        int nethods = 0;
+
+        while (p->current.type != TOK_RPAREN &&
+               p->current.type != TOK_EOF) {
+
+            if (p->current.type != TOK_LPAREN)
+                compiler_error(p->current.line, p->current.column,
+                               "Expected '(' to start instance method clause");
+
+            p->current = lexer_next_token(p->lexer); // consume '('
+
+            /* Parse pattern: could be (Pat1 `op` Pat2) or (Pat1 Pat2) */
+            /* We need to identify the method name and the patterns      */
+
+            /* Use a mini-parser: collect tokens, find method name       */
+            /* Strategy: parse as pmatch pattern using existing machinery */
+
+            /* First: detect method name */
+            char *method_name = NULL;
+            ASTPattern pat1 = {0}, pat2 = {0};
+            bool has_pat2 = false;
+
+            /* Pattern token 1 */
+            /* Re-use parse_single_pattern from pmatch via the Parser    */
+            /* We'll build a temporary Parser around the current lexer   */
+            Parser pm_parser;
+            pm_parser.lexer   = p->lexer;
+            pm_parser.current = p->current;
+
+            /* Parse first pattern */
+            pat1 = parse_single_pattern(&pm_parser);
+            p->current = pm_parser.current;
+
+            if (p->current.type == TOK_BACKTICK) {
+                /* infix: pat1 `method` pat2 */
+                p->current = lexer_next_token(p->lexer); // consume '`'
+                if (p->current.type == TOK_SYMBOL)
+                    method_name = my_strdup(p->current.value);
+                p->current = lexer_next_token(p->lexer); // consume method
+                if (p->current.type == TOK_BACKTICK)
+                    p->current = lexer_next_token(p->lexer); // consume '`'
+
+                pm_parser.current = p->current;
+                pat2 = parse_single_pattern(&pm_parser);
+                p->current = pm_parser.current;
+                has_pat2 = true;
+            } else if (p->current.type == TOK_SYMBOL &&
+                       pat1.kind == PAT_CONSTRUCTOR) {
+                /* prefix: (method pat1 pat2) — first token was method */
+                method_name = my_strdup(pat1.var_name);
+                /* pat1 was actually the method name, pat2 is first real pat */
+                pat1 = (ASTPattern){0};
+                pm_parser.current = p->current;
+                pat1 = parse_single_pattern(&pm_parser);
+                p->current = pm_parser.current;
+                if (p->current.type != TOK_RPAREN) {
+                    pm_parser.current = p->current;
+                    pat2 = parse_single_pattern(&pm_parser);
+                    p->current = pm_parser.current;
+                    has_pat2 = true;
+                }
+            }
+
+            if (p->current.type == TOK_RPAREN)
+                p->current = lexer_next_token(p->lexer); // consume ')'
+
+            /* consume '=>' */
+            if (p->current.type == TOK_SYMBOL &&
+                strcmp(p->current.value, "=>") == 0)
+                p->current = lexer_next_token(p->lexer);
+
+            AST *body = parse_expr(p);
+
+            if (!method_name) {
+                ast_free(body);
+                continue;
+            }
+
+            /* Find or create method entry */
+            int mi = -1;
+            for (int i = 0; i < nethods; i++) {
+                if (strcmp(methods[i].method, method_name) == 0) {
+                    mi = i; break;
+                }
+            }
+            if (mi < 0) {
+                methods = realloc(methods, sizeof(MethodClauses) * (nethods + 1));
+                methods[nethods].method      = my_strdup(method_name);
+                methods[nethods].clauses     = NULL;
+                methods[nethods].clause_count = 0;
+                methods[nethods].clause_cap   = 0;
+                mi = nethods++;
+            }
+            free(method_name);
+
+            /* Add clause */
+            MethodClauses *mc = &methods[mi];
+            if (mc->clause_count >= mc->clause_cap) {
+                mc->clause_cap = mc->clause_cap == 0 ? 4 : mc->clause_cap * 2;
+                mc->clauses = realloc(mc->clauses,
+                                      sizeof(ASTPMatchClause) * mc->clause_cap);
+            }
+            ASTPMatchClause *cl = &mc->clauses[mc->clause_count++];
+            int npats = has_pat2 ? 2 : 1;
+            cl->patterns      = malloc(sizeof(ASTPattern) * npats);
+            cl->patterns[0]   = pat1;
+            if (has_pat2) cl->patterns[1] = pat2;
+            cl->pattern_count = npats;
+            cl->body          = body;
+        }
+
+        if (p->current.type == TOK_RPAREN)
+            p->current = lexer_next_token(p->lexer);
+
+        /* Build method lambdas from collected clauses */
+        char **inst_method_names  = malloc(sizeof(char*) * (nethods ? nethods : 1));
+        AST  **inst_method_bodies = malloc(sizeof(AST*)  * (nethods ? nethods : 1));
+
+        for (int mi = 0; mi < nethods; mi++) {
+            MethodClauses *mc = &methods[mi];
+            inst_method_names[mi] = my_strdup(mc->method);
+
+            /* Create params for the lambda — use generic names */
+            int npats = mc->clauses[0].pattern_count;
+            ASTParam *params = malloc(sizeof(ASTParam) * npats);
+            for (int pi = 0; pi < npats; pi++) {
+                char pname[32];
+                snprintf(pname, sizeof(pname), "__inst_p%d", pi);
+                params[pi].name      = my_strdup(pname);
+                params[pi].type_name = NULL;
+                params[pi].is_rest   = false;
+                params[pi].is_anon   = false;
+            }
+
+            /* Desugar pmatch clauses */
+            AST *pm = ast_new_pmatch(mc->clauses, mc->clause_count);
+            AST *desugared = pmatch_desugar(pm, params, npats);
+            /* Do NOT ast_free(pm) — pmatch_desugar takes ownership of
+             * clause bodies. Just free the container without freeing
+             * the clauses themselves.                                  */
+            free(pm); /* free only the AST node, not via ast_free */
+
+            AST **body_exprs = malloc(sizeof(AST*));
+            body_exprs[0] = desugared;
+            inst_method_bodies[mi] = ast_new_lambda(params, npats, NULL, NULL,
+                                                     NULL, false, desugared,
+                                                     body_exprs, 1);
+            free(mc->method);
+            /* clauses array freed but not the contents — owned by desugared */
+            free(mc->clauses);
+        }
+        free(methods);
+
+        ast_free(list);
+        AST *node = ast_new_instance(cls_name, type_name,
+                                     inst_method_names, inst_method_bodies,
+                                     nethods);
+        free(cls_name); free(type_name);
+        node->line = ins_line; node->column = ins_col;
         return node;
     }
 
