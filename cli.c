@@ -170,6 +170,35 @@ static char *yaml_first_exe(const char *content) {
 // print_usage / parse_flags / get_base_executable_name
 // ─────────────────────────────────────────────────────────────────────────────
 
+#define CLR_RESET  "\x1b[0m"
+#define CLR_BOLD   "\x1b[1m"
+#define CLR_CYAN   "\x1b[36m"
+#define CLR_GRAY   "\x1b[90m"
+
+
+/* void print_usage(const char *prog) { */
+/*     fprintf(stderr, "Usage: %s [options] [<file.mon>]\n\n", prog); */
+
+/*     fprintf(stderr, "Commands:\n"); */
+/*     fprintf(stderr, "  %-10s %s\n", "new",          "<package-name>"); */
+/*     fprintf(stderr, "  %-10s %s\n", "build",        "Compile current project"); */
+/*     fprintf(stderr, "  %-10s %s\n", "run",          "Build and execute project"); */
+/*     fprintf(stderr, "  %-10s %s\n", "clean",        "Remove build artifacts"); */
+/*     fprintf(stderr, "  %-10s %s\n", "install",      "Install package to system"); */
+/*     fprintf(stderr, "  %-10s %s\n", "test",         "<file.mon>"); */
+/*     fprintf(stderr, "\n"); */
+
+/*     fprintf(stderr, "Options:\n"); */
+/*     fprintf(stderr, "  -i                 Start interactive REPL\n"); */
+/*     fprintf(stderr, "  -o <file>          Output file name\n"); */
+/*     fprintf(stderr, "  --test             Compile and embed tests (keep binary)\n"); */
+/*     fprintf(stderr, "  --emit-ir          Emit LLVM IR (.ll)\n"); */
+/*     fprintf(stderr, "  --emit-asm         Emit assembly (.s)\n"); */
+/*     fprintf(stderr, "  --emit-obj         Emit object file (.o)\n"); */
+/*     fprintf(stderr, "  -Wall, -Wextra     Enable warnings (no-op)\n"); */
+/* } */
+
+
 void print_usage(const char *prog) {
     fprintf(stderr, "Usage: %s [options] [<file.mon>]\n", prog);
     fprintf(stderr, "       %s new <package-name>\n", prog);

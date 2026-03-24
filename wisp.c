@@ -375,7 +375,7 @@ static void sb_puts(SB *b, const char *s) {
 
 
 /* Forward declaration — tokenise_into calls wisp_parse_expr for body expansion */
-static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_indent);
+static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_indent, int parent_remaining);
 
 /* Tokenise one line into the stream */
 static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
@@ -407,6 +407,30 @@ static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
             char tok[5]; memcpy(tok, p, 4); tok[4] = 0;
             wts_push(s, tok, indent, lineno);
             p += 4; continue;
+        }
+
+        /* quote prefix: '(...) — treat as single token */
+        if (*p == '\'' && (*(p+1) == '(' || *(p+1) == '[' || *(p+1) == '{')) {
+            const char *start = p++;
+            char open  = *p;
+            char close = open == '(' ? ')' : open == '[' ? ']' : '}';
+            int depth = 0; bool in_str = false;
+            while (*p) {
+                if (in_str) {
+                    if (*p == '\\') p++;
+                    else if (*p == '"') in_str = false;
+                    p++; continue;
+                }
+                if (*p == '"') { in_str = true; p++; continue; }
+                if (*p == ';') break;
+                if (*p == open)  depth++;
+                if (*p == close) { depth--; p++; if (!depth) break; continue; }
+                p++;
+            }
+            char *tok = strndup(start, p - start);
+            wts_push(s, tok, indent, lineno);
+            free(tok);
+            continue;
         }
 
         /* grouped expression — keep as single token */
@@ -512,7 +536,7 @@ static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
                     tokenise_into(t, &body_ts, body_raw, indent, lineno);
                     SB body_sb; sb_init(&body_sb);
                     while (body_ts.pos < body_ts.count)
-                        wisp_parse_expr(t, &body_ts, &body_sb, -1);
+                        wisp_parse_expr(t, &body_ts, &body_sb, -1, 0);
                     char *body_expanded = sb_take(&body_sb);
                     wts_free(&body_ts);
                     free(body_raw);
@@ -671,7 +695,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                             tokenise_into(at, &body_ts, body_raw, indent, lineno);
                             SB body_sb; sb_init(&body_sb);
                             while (body_ts.pos < body_ts.count)
-                                wisp_parse_expr(at, &body_ts, &body_sb, -1);
+                                wisp_parse_expr(at, &body_ts, &body_sb, -1, 0);
                             char *body_expanded = sb_take(&body_sb);
                             wts_free(&body_ts);
                             free(body_raw);
@@ -872,7 +896,9 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
             continue;
         }
 
-        /* Detect: "define name :: T -> ... -> Ret" type-signature style. */
+        /* Detect: "define name :: T -> ... -> Ret" type-signature style.
+         * Also handles: "define name -> Ret" (zero-param function).
+         * Also handles: "define name [p :: T] [p :: T] -> Ret" bracketed params. */
         {
             const char *sig = t;
             if (strncmp(sig, "define", 6) == 0 &&
@@ -883,6 +909,8 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                 while (*name_end && *name_end != ' ' && *name_end != '\t') name_end++;
                 const char *after_name = name_end;
                 while (*after_name == ' ' || *after_name == '\t') after_name++;
+
+                /* Case 1: define name :: T -> ... -> Ret */
                 if (after_name[0] == ':' && after_name[1] == ':' &&
                     strstr(after_name + 2, "->")) {
                     size_t name_len = name_end - after_define;
@@ -893,6 +921,71 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     size_t hlen = 1 + name_len + 1 + siglen + 1 + 1;
                     char *header = malloc(hlen);
                     snprintf(header, hlen, "(%s %s)", fname, sig_rest);
+                    free(fname);
+                    wts_push(&s, "define", indent, lineno);
+                    wts_push(&s, header, indent, lineno);
+                    free(header);
+                    free(raw);
+                    lineno++;
+                    continue;
+                }
+
+                /* Case 2: define name -> Ret  (zero-param, return type only) */
+                if (after_name[0] == '-' && after_name[1] == '>') {
+                    size_t name_len = name_end - after_define;
+                    char *fname = strndup(after_define, name_len);
+                    const char *ret_start = after_name + 2;
+                    while (*ret_start == ' ' || *ret_start == '\t') ret_start++;
+                    const char *ret_end = ret_start;
+                    while (*ret_end && *ret_end != ' ' && *ret_end != '\t' &&
+                           *ret_end != ';') ret_end++;
+                    size_t ret_len = ret_end - ret_start;
+                    /* Build "(fname -> RetType)" */
+                    size_t hlen = 1 + name_len + 4 + ret_len + 1 + 1;
+                    char *header = malloc(hlen);
+                    snprintf(header, hlen, "(%s -> %.*s)", fname,
+                             (int)ret_len, ret_start);
+                    free(fname);
+                    wts_push(&s, "define", indent, lineno);
+                    wts_push(&s, header, indent, lineno);
+                    free(header);
+                    free(raw);
+                    lineno++;
+                    continue;
+                }
+
+                /* Case 3: define name [p :: T] ... [p :: T] -> Ret
+                 * The first non-space token after the name starts with '['.
+                 * Collect everything up to and including the final '-> Ret'
+                 * and wrap as a single header token (fname [..] [..] -> Ret). */
+                if (after_name[0] == '[') {
+                    size_t name_len = name_end - after_define;
+                    char *fname = strndup(after_define, name_len);
+
+                    /* Scan to end of line (strip inline comment) */
+                    const char *line_end = after_name;
+                    bool in_str = false;
+                    while (*line_end) {
+                        if (in_str) {
+                            if (*line_end == '\\') line_end++;
+                            else if (*line_end == '"') in_str = false;
+                            line_end++; continue;
+                        }
+                        if (*line_end == '"') { in_str = true; line_end++; continue; }
+                        if (*line_end == ';') break;
+                        line_end++;
+                    }
+                    /* trim trailing whitespace */
+                    while (line_end > after_name &&
+                           (*(line_end-1) == ' ' || *(line_end-1) == '\t'))
+                        line_end--;
+
+                    size_t rest_len = line_end - after_name;
+                    /* Build "(fname [p :: T] ... -> Ret)" */
+                    size_t hlen = 1 + name_len + 1 + rest_len + 1 + 1;
+                    char *header = malloc(hlen);
+                    snprintf(header, hlen, "(%s %.*s)", fname,
+                             (int)rest_len, after_name);
                     free(fname);
                     wts_push(&s, "define", indent, lineno);
                     wts_push(&s, header, indent, lineno);
@@ -913,15 +1006,12 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
 
 /// Recursive arity-driven parser
 
-// Forward declaration
-static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_indent);
-
 /*
  * Parse one complete expression from the token stream.
  * parent_indent: the indent level of the enclosing variadic form,
  *   used to stop variadic consumption. -1 means top level.
  */
-static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_indent) {
+static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_indent, int parent_remaining) {
     if (s->pos >= s->count) return;
 
     WToken *tok = &s->tokens[s->pos];
@@ -953,6 +1043,28 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
         return;
     }
 
+    /* Function in argument position with no same-line arguments following:
+     * treat as a bare function reference, not a call.
+     * e.g. in "map square '(1 2 3)", square has nothing after it on the
+     * same line that belongs to it — it's being passed, not called.    */
+    if (arity > 0 && parent_indent >= 0) {
+        /* Count same-line tokens remaining after this one */
+        int same_line_remaining = 0;
+        for (int _i = s->pos; _i < s->count; _i++) {
+            if (s->tokens[_i].lineno != tok->lineno) break;
+            same_line_remaining++;
+        }
+        /* Only expand as a call if there are enough tokens for both
+         * this function's args AND the parent's remaining args.
+         * parent_remaining is passed in via a new parameter — for now
+         * we approximate: if same_line_remaining < arity, emit bare.  */
+        int needed = arity + (parent_remaining > 0 ? parent_remaining : 0);
+        if (same_line_remaining < needed) {
+            sb_puts(out, text);
+            return;
+        }
+    }
+
     /* Fixed or variadic — open a form */
     sb_putc(out, '(');
     sb_puts(out, text);
@@ -961,16 +1073,40 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
         /* Fixed arity: consume exactly N args regardless of indentation */
         for (int i = 0; i < arity && s->pos < s->count; i++) {
             sb_putc(out, ' ');
-            wisp_parse_expr(t, s, out, my_indent);
+            wisp_parse_expr(t, s, out, my_indent, arity - i - 1);
         }
-        /* Special case: define may have an optional docstring as the
-         * next token — consume it unconditionally if it's a string,
-         * regardless of indentation or line position. */
-        if (strcmp(text, "define") == 0 &&
-            s->pos < s->count &&
-            s->tokens[s->pos].text[0] == '"') {
-            sb_putc(out, '\n');
-            wisp_parse_expr(t, s, out, my_indent);
+        /* Special case: define may have optional metadata (docstring,
+         * :keyword value pairs) before the body — consume them all. */
+        if (strcmp(text, "define") == 0) {
+            /* bare string docstring */
+            if (s->pos < s->count &&
+                s->tokens[s->pos].text[0] == '"' &&
+                s->tokens[s->pos].indent > my_indent) {
+                sb_putc(out, '\n');
+                wisp_parse_expr(t, s, out, my_indent, 0);
+            }
+            /* :keyword value pairs */
+            while (s->pos + 1 < s->count &&
+                   s->tokens[s->pos].indent > my_indent &&
+                   s->tokens[s->pos].text[0] == ':') {
+                /* emit the :keyword */
+                sb_putc(out, '\n');
+                wisp_parse_expr(t, s, out, my_indent, 0);
+                /* emit the value (must exist and be on same or deeper line) */
+                if (s->pos < s->count &&
+                    s->tokens[s->pos].indent > my_indent) {
+                    sb_putc(out, ' ');
+                    wisp_parse_expr(t, s, out, my_indent, 0);
+                }
+            }
+            /* body expressions — consume all deeper-indented lines,
+             * including pmatch clauses (tokens containing "->") and
+             * plain expressions */
+            while (s->pos < s->count &&
+                   s->tokens[s->pos].indent > my_indent) {
+                sb_putc(out, '\n');
+                wisp_parse_expr(t, s, out, my_indent, 0);
+            }
         }
         /* Special case: define with pmatch clauses.
          * After consuming the fixed arity args, if the next token on a
@@ -986,7 +1122,8 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
                 bool is_pmatch_clause = (strstr(next->text, "->") != NULL);
                 if (!is_pmatch_clause) break;
                 sb_putc(out, '\n');
-                wisp_parse_expr(t, s, out, my_indent);
+                sb_putc(out, '\n');
+                wisp_parse_expr(t, s, out, my_indent, 0);
             }
         }
     } else {
@@ -1007,7 +1144,7 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
                 /* same or shallower indent on a different line — stop */
                 break;
             }
-            wisp_parse_expr(t, s, out, my_indent);
+            wisp_parse_expr(t, s, out, my_indent, 0);
         }
     }
 
@@ -1121,7 +1258,7 @@ ASTList wisp_parse_all(const char *source, const char *filename) {
     while (s.pos < s.count) {
         if (!first) sb_putc(&out, '\n');
         first = false;
-        wisp_parse_expr(&t, &s, &out, -1);
+        wisp_parse_expr(&t, &s, &out, -1, 0);
     }
 
     char *transformed = sb_take(&out);

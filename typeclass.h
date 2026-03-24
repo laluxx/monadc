@@ -108,6 +108,7 @@ LLVMValueRef tc_get_method(TypeClassRegistry *reg, const char *class_name,
 LLVMValueRef tc_get_dict(TypeClassRegistry *reg, const char *class_name,
                          const char *type_name, CodegenContext *ctx);
 
+
 /// Method introspection
 //
 // These let codegen.c check whether a symbol being called is actually

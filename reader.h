@@ -335,6 +335,7 @@ typedef enum {
     TOK_HASH_LBRACE,    // #{
     TOK_PIPE,           // |
     TOK_BACKTICK,       // `
+    TOK_LINE_DIRECTIVE, // #line N COL (internal, emitted by wisp, never reaches parser)
 } TokenType;
 
 typedef struct {
@@ -391,5 +392,12 @@ AST  *desugar_let_ast(AST *let_list);
 extern jmp_buf  g_reader_escape;
 extern bool     g_reader_escape_set;
 extern char     g_reader_error_msg[512];
+
+// Source map: set by the lexer when it sees a #line N COL directive
+// emitted by the wisp transformer. Shifts all subsequent line/column
+// reporting back to original source coordinates.
+extern int g_srcmap_line_bias;   // add to lex->line to get original line
+extern int g_srcmap_col_bias;    // add to lex->column to get original col
+extern int g_quote_depth;        // >0 means we are inside a quoted form
 
 #endif

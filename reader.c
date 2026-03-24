@@ -14,6 +14,7 @@
 jmp_buf  g_reader_escape;
 bool     g_reader_escape_set = false;
 char     g_reader_error_msg[512];
+int      g_quote_depth = 0;
 
 #define READER_ERROR(line, col, fmt, ...) \
     do { \
@@ -2970,8 +2971,15 @@ if (p->current.type == TOK_SYMBOL &&
 
         if (p->current.type != TOK_SYMBOL)
             compiler_error(p->current.line, p->current.column,
-                           "Expected type name after 'data'");
+                           "Expected type name after ‘data’");
         char *dat_name = my_strdup(p->current.value);
+        if (dat_name[0] < 'A' || dat_name[0] > 'Z')
+            compiler_error(p->current.line, p->current.column,
+                           "data type name ‘%s’ must start with an uppercase letter "
+                           "(e.g. ‘data %c%s’ instead of ‘data %s’)",
+                           dat_name,
+                           (char)(dat_name[0] - 32), dat_name + 1,
+                           dat_name);
         p->current = lexer_next_token(p->lexer);
 
         ASTDataConstructor *ctors   = NULL;
@@ -3078,10 +3086,18 @@ if (p->current.type == TOK_SYMBOL &&
 
 
             /* Constructor name — must start with uppercase */
-            if (p->current.type != TOK_SYMBOL || !p->current.value ||
-                p->current.value[0] < 'A' || p->current.value[0] > 'Z')
+            if (p->current.type != TOK_SYMBOL || !p->current.value)
                 compiler_error(p->current.line, p->current.column,
-                               "Expected constructor name (uppercase) in 'data'");
+                               "Expected constructor name in ‘data %s’", dat_name);
+            if (p->current.value[0] < 'A' || p->current.value[0] > 'Z')
+                compiler_error(p->current.line, p->current.column,
+                               "constructor name ‘%s’ in ‘data %s’ must start with "
+                               "an uppercase letter — did you mean ‘%c%s’?",
+                               p->current.value, dat_name,
+                               (char)(p->current.value[0] >= 'a' && p->current.value[0] <= 'z'
+                                      ? p->current.value[0] - 32
+                                      : p->current.value[0]),
+                               p->current.value + 1);
 
             ASTDataConstructor ctor = {0};
             ctor.name = my_strdup(p->current.value);
@@ -3245,9 +3261,7 @@ if (p->current.type == TOK_SYMBOL &&
         return node;
     }
 
-
-
-/* (include <stdio.h>) or (include "myheader.h") */
+    /* (include <stdio.h>) or (include "myheader.h") */
     if (p->current.type == TOK_SYMBOL &&
         strcmp(p->current.value, "include") == 0) {
         int inc_line = p->current.line;
@@ -3302,14 +3316,31 @@ if (p->current.type == TOK_SYMBOL &&
             }
         }
 
+        /* Parse optional :unprefix PREFIX1 PREFIX2 ... */
+        char *unprefix_strs[16] = {0};
+        int   unprefix_count    = 0;
+        if (p->current.type == TOK_KEYWORD &&
+            strcmp(p->current.value, "unprefix") == 0) {
+            p->current = lexer_next_token(p->lexer); /* consume :unprefix */
+            while (p->current.type == TOK_SYMBOL &&
+                   p->current.type != TOK_RPAREN &&
+                   p->current.type != TOK_EOF &&
+                   unprefix_count < 16) {
+                unprefix_strs[unprefix_count++] = strdup(p->current.value);
+                p->current = lexer_next_token(p->lexer);
+            }
+        }
         if (p->current.type == TOK_RPAREN)
             p->current = lexer_next_token(p->lexer);
-
-        /* Build (include "header_name" system_flag) as a list */
+        /* Build (include "header_name" system_flag "pfx1" "pfx2" ...) */
         AST *result = ast_new_list();
         ast_list_append(result, ast_new_symbol("include"));
         ast_list_append(result, ast_new_string(header_name));
         ast_list_append(result, ast_new_symbol(system_include ? "system" : "local"));
+        for (int i = 0; i < unprefix_count; i++) {
+            ast_list_append(result, ast_new_string(unprefix_strs[i]));
+            free(unprefix_strs[i]);
+        }
         ast_free(list);
         result->line   = inc_line;
         result->column = inc_col;
@@ -3355,6 +3386,31 @@ if (p->current.type == TOK_SYMBOL &&
             /* empty list () */
         } else {
             AST *first = parse_expr(p);
+
+            /* Guard: literals cannot appear in function position
+             * unless we are inside a quoted form.
+             * Exception: backtick infix — (0.0 `op` x) is valid and
+             * will be desugared below, so skip the check in that case. */
+            if (g_quote_depth == 0 &&
+                p->current.type != TOK_BACKTICK &&
+                (first->type == AST_NUMBER  ||
+                 first->type == AST_STRING  ||
+                 first->type == AST_CHAR    ||
+                 first->type == AST_RATIO   ||
+                 first->type == AST_KEYWORD)) {
+                const char *kind =
+                    first->type == AST_NUMBER  ? "number"    :
+                    first->type == AST_STRING  ? "string"    :
+                    first->type == AST_CHAR    ? "character" :
+                    first->type == AST_RATIO   ? "ratio"     : "keyword";
+                const char *lit =
+                    first->literal_str         ? first->literal_str :
+                    first->type == AST_STRING  ? first->string      :
+                    first->type == AST_KEYWORD ? first->keyword     : "?";
+                compiler_error(first->line, first->column,
+                               "‘%s’ is a %s literal and cannot be called as a function",
+                               lit, kind);
+            }
 
             /* step syntax: (1,3..10) — comma between start and step */
             AST *step = NULL;
@@ -3903,7 +3959,9 @@ AST *parse_expr(Parser *p) {
         int quote_line = tok.line;
         int quote_column = tok.column;
         p->current = lexer_next_token(p->lexer);
+        g_quote_depth++;
         AST *quoted = parse_expr(p);
+        g_quote_depth--;
         AST *list   = ast_new_list();
         ast_list_append(list, ast_new_symbol("quote"));
         ast_list_append(list, quoted);

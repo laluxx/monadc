@@ -5188,7 +5188,7 @@ if (ast->list.count >= 5) {
             }
 
             if (strcmp(head->symbol, "include") == 0) {
-                if (ast->list.count != 3) {
+                if (ast->list.count < 3) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: malformed include",
                                   parser_get_filename(), ast->line, ast->column);
                 }
@@ -5200,10 +5200,23 @@ if (ast->list.count >= 5) {
                                   "(no ffi context on codegen ctx)",
                                   parser_get_filename(), ast->line, ast->column);
                 }
+                /* Load :unprefix prefixes (items 3+) onto the FFI context */
+                for (int i = 0; i < ctx->ffi->strip_prefix_count; i++)
+                    free(ctx->ffi->strip_prefixes[i]);
+                ctx->ffi->strip_prefix_count = 0;
+                int extra = (int)ast->list.count - 3;
+                if (extra > 0) {
+                    ctx->ffi->strip_prefixes = realloc(ctx->ffi->strip_prefixes,
+                                                       sizeof(char *) * extra);
+                    for (int i = 0; i < extra; i++) {
+                        ctx->ffi->strip_prefixes[ctx->ffi->strip_prefix_count++] =
+                            strdup(ast->list.items[3 + i]->string);
+                    }
+                }
                 bool ok = ffi_parse_header(ctx->ffi, header, system_inc);
                 if (!ok) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: failed to parse "
-                                  "header ‘%s’",
+                                  "header '%s'",
                                   parser_get_filename(), ast->line, ast->column,
                                   header);
                 }

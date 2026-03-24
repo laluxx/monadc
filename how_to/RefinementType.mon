@@ -16,6 +16,7 @@ type Natural { x ∈ Int | x >= 0 }
   (Natural? x))
 
 
+
 show (passedNatural? 1); passing -1 is a compile time ERROR
 
 ;; TODO

@@ -34,6 +34,7 @@ typedef struct FFIConstant {
     double float_value;
     bool   is_string;
     char  *str_value;
+    bool   is_struct_literal;
 } FFIConstant;
 
 /// FFI Struct Field
@@ -75,6 +76,9 @@ typedef struct FFIContext {
     char        **included;
     int           included_count;
     int           included_cap;
+    /* Prefixes to strip when injecting symbols (from :unprefix) */
+    char        **strip_prefixes;
+    int           strip_prefix_count;
 } FFIContext;
 
 /// API

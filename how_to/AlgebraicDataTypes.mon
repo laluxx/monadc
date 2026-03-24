@@ -1,3 +1,32 @@
+;;; Type Classes
+
+;; TODO constraint propagation
+;; TODO deriving Eq should work on _non nullary_ data types too
+
+(class Eq a where
+  (=)  :: a -> a -> Bool
+  (!=) :: a -> a -> Bool
+  (x `!=` y) => (not (x `=` y))) ; Default implementation(s)
+
+data TrafficLight Red | Yellow | Green
+
+
+;; (instance Eq TrafficLight where
+;;     (Red    `=` Red)    => True
+;;     (Yellow `=` Yellow) => True
+;;     (Green  `=` Green)  => True
+;;     (_      `=` _ )     => False)
+
+show Red `=` Red
+show Red `=` Green
+show Red `!=` Green
+show Red `!=` Red
+
+
+define color Red
+
+
+
 ;;; Algebraic Data Types
 
 ;; A simple data type with three `nullary` constructors
@@ -15,6 +44,14 @@
 
 data Point Float Float
 
+
+define p1 (Point 1.0 1.0)
+define p2 (Point 1.0 1.0)
+
+show p1
+show p2
+
+
 data Shape Circle    Float
          | Rectangle Float Float
          | Triangle  Point Point Point
@@ -25,60 +62,57 @@ data Shape Circle    Float
   "Return the absolute value of X."
   (if (x `<` 0.0) (0.0 `-` x) x))
 
-(define (area Shape -> Float)
-  [Circle r]      -> (pi `*` r `*` r)
-  [Rectangle w h] -> (w `*` h)
-  [Triangle
-   [Point x1 y1]
-   [Point x2 y2]
-   [Point x3 y3]] -> (* 0.5 (abs (+ (x1 `*` (y2 `-` y3))
-                                    (x2 `*` (y3 `-` y1))
-                                    (x3 `*` (y1 `-` y2))))))
+
+;; (define (area Shape -> Float)
+;;   [Circle r]      -> (pi `*` r `*` r)
+;;   [Rectangle w h] -> (w `*` h)
+;;   [Triangle
+;;    [Point x1 y1]
+;;    [Point x2 y2]
+;;    [Point x3 y3]] -> (* 0.5 (abs (+ (x1 `*` (y2 `-` y3))
+;;                                     (x2 `*` (y3 `-` y1))
+;;                                     (x3 `*` (y1 `-` y2))))))
+
+{x ∈ Int | lsakdj }
+
+-| salkdjas |-
 
 
-(define circle (Circle 3.0))
-(define rectangle (Rectangle 3.0 2.0))
-
-(define triangle
-  (Triangle (Point 0.0 0.0)
-            (Point 4.0 0.0)
-            (Point 0.0 3.0)))
+(define [pi :: Float] 3.141592653589793 :alias π)
 
 
-(show (area circle))
-(show (area rectangle))
-(show (area triangle))
 
 
-;;; Type Classes
+;; TODO Helpful message if :: is missing (because this is a function known by ->)
+;;          v
+;; define area :: Shape -> Float
+;;   [Circle r]      -> pi `*` r `*` r
+;;   [Rectangle w h] -> w `*` h
+;;   [Triangle
+;;    [Point x1 y1]
+;;    [Point x2 y2]
+;;    [Point x3 y3]] -> * 0.5 abs + x1 `*` y2 `-` y3
+;;                                  x2 `*` y3 `-` y1
+;;                                  x3 `*` y1 `-` y2
 
-;; TODO constraint propagation
 
--| dlkasjdlkasjdkljdlskjaskajld
-   dlsajkdslkajdlaskjdlkasjdlkj
-   dlsajkdslkajdlaskjdlkasjdlkj
-   dlsajkdslkajdlaskjdlkasjdlkj
 
-(class Eq a where
-    (=)  :: a -> a -> Bool
-    (!=) :: a -> a -> Bool
-    (x `!=` y) => (not (x `=` y))) ; Default implementation(s)
+;; (define circle (Circle 3.0))
+;; (define rectangle (Rectangle 3.0 2.0))
 
-data TrafficLight Red | Yellow | Green
+;; (define triangle
+;;   (Triangle (Point 0.0 0.0)
+;;             (Point 4.0 0.0)
+;;             (Point 0.0 3.0)))
 
-;; (instance Eq TrafficLight where
-;;     (Red    `=` Red)    => True
-;;     (Yellow `=` Yellow) => True
-;;     (Green  `=` Green)  => True
-;;     (_      `=` _ )     => False)
 
-show Red `=` Red
-show Red `=` Green
-show Red `!=` Green
-show Red `!=` Red
+;; (show (area circle))
+;; (show (area rectangle))
+;; (show (area triangle))
 
-;; TODO
-;; deriving [show]
+
+
+
 
 ;; (show "circle is a _"    circle)
 ;; (show "rectangle is a _" rectangle)
@@ -86,12 +120,18 @@ show Red `!=` Red
 
 
 
+;;; TODO
+
+
 
 ;; TODO Wisp
-;; define area :: Shape -> Float
-;;   Circle r      -> pi `*` r `*` r
-;;   Rectangle w h -> w `*` h
-;;   Rectangle w h -> w `*` h
+define area :: Shape -> Float
+  Circle r      -> pi `*` r `*` r
+  Rectangle w h -> w `*` h
+
+
+(define (area Shape -> Float) Circle
+  r -> ((pi `*` r) `*` r))
 
 
 ;; Shape :: [Rectangle (3 2)]

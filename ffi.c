@@ -982,9 +982,10 @@ static void ffi_parse_struct_macros(FFIContext *ctx, const char *header_path) {
                         }
                     }
                     FFIConstant sentinel = {0};
-                    sentinel.name     = my_strdup(name);
-                    sentinel.value    = -1;
-                    sentinel.is_float = false;
+                    sentinel.name              = my_strdup(name);
+                    sentinel.value             = -1;
+                    sentinel.is_float          = false;
+                    sentinel.is_struct_literal = true;
                     ffi_add_constant(ctx, sentinel);
                     continue;
                 }
@@ -1065,6 +1066,57 @@ static void ffi_parse_struct_macros(FFIContext *ctx, const char *header_path) {
             }
         }
 
+        /* ── Pattern 4: bitwise OR of already-known constants ─────────── */
+        {
+            const char *v = value;
+            while (*v == '(') v++;
+
+            long long result = 0;
+            bool ok = false;
+            bool any = false;
+            const char *cur = v;
+
+            while (*cur) {
+                while (*cur == ' ' || *cur == '\t') cur++;
+                if (!*cur || *cur == ')') break;
+
+                const char *tok_start = cur;
+                while (*cur && *cur != ' ' && *cur != '\t' &&
+                       *cur != '|' && *cur != ')') cur++;
+                size_t tok_len = cur - tok_start;
+                if (tok_len == 0) { any = false; break; }
+
+                char tok[256] = {0};
+                if (tok_len >= sizeof(tok)) { any = false; break; }
+                memcpy(tok, tok_start, tok_len);
+
+                bool found = false;
+                for (int j = 0; j < ctx->constant_count; j++) {
+                    if (strcmp(ctx->constants[j].name, tok) == 0 &&
+                        !ctx->constants[j].is_float &&
+                        !ctx->constants[j].is_string) {
+                        result |= ctx->constants[j].value;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) { any = false; break; }
+                any = true;
+
+                while (*cur == ' ' || *cur == '\t') cur++;
+                if (*cur == '|') cur++;
+            }
+            ok = any;
+
+            if (ok) {
+                FFIConstant c = {0};
+                c.name  = my_strdup(name);
+                c.value = result;
+                ffi_add_constant(ctx, c);
+                continue;
+            }
+        }
+
         /* ── Pattern 3: string literal ───────────────────────────────── */
         {
             const char *v = value;
@@ -1108,6 +1160,17 @@ static void ffi_parse_struct_macros(FFIContext *ctx, const char *header_path) {
 }
 
 /// Inject into codegen env
+
+/* Strip any matching prefix from name, return pointer into name or name itself */
+static const char *strip_prefix(FFIContext *ffi, const char *name) {
+    for (int i = 0; i < ffi->strip_prefix_count; i++) {
+        const char *pfx = ffi->strip_prefixes[i];
+        size_t plen = strlen(pfx);
+        if (strncmp(name, pfx, plen) == 0 && name[plen] != '\0')
+            return name + plen;
+    }
+    return NULL; /* no match */
+}
 
 void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
     struct timespec _t0, _t1;
@@ -1248,6 +1311,11 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
         env_insert_func(cg->env, f->name, ep, f->param_count,
                         f->return_type ? type_clone(f->return_type) : NULL,
                         fn_ref, f->doc ? f->doc : NULL);
+        const char *f_short = strip_prefix(ffi, f->name);
+        if (f_short && !env_lookup(cg->env, f_short))
+            env_insert_func(cg->env, f_short, ep, f->param_count,
+                            f->return_type ? type_clone(f->return_type) : NULL,
+                            fn_ref, f->doc ? f->doc : NULL);
 
         EnvEntry *e = env_lookup(cg->env, f->name);
         if (e) {
@@ -1266,7 +1334,7 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
         if (env_lookup(cg->env, c->name)) continue;
         /* Skip sub-field constants (RED.r etc.) and sentinels */
         if (strchr(c->name, '.')) continue;
-        if (!c->is_float && !c->is_string && c->value == -1) continue;
+        if (!c->is_float && !c->is_string && c->is_struct_literal) continue;
 
         if (c->is_string) {
             LLVMTypeRef  i8    = LLVMInt8TypeInContext(cg->context);
@@ -1286,6 +1354,8 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
             LLVMSetLinkage(gv, LLVMInternalLinkage);
             LLVMSetGlobalConstant(gv, 1);
             env_insert(cg->env, c->name, type_string(), gv);
+            { const char *s = strip_prefix(ffi, c->name);
+              if (s && !env_lookup(cg->env, s)) env_insert(cg->env, s, type_string(), gv); }
         } else if (c->is_float) {
             LLVMTypeRef  lt = LLVMDoubleTypeInContext(cg->context);
             LLVMValueRef lv = LLVMConstReal(lt, c->float_value);
@@ -1294,6 +1364,8 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
             LLVMSetGlobalConstant(gv, 1);
             LLVMSetLinkage(gv, LLVMInternalLinkage);
             env_insert(cg->env, c->name, type_float(), gv);
+            { const char *s = strip_prefix(ffi, c->name);
+              if (s && !env_lookup(cg->env, s)) env_insert(cg->env, s, type_float(), gv); }
         } else {
             LLVMTypeRef  lt = LLVMInt64TypeInContext(cg->context);
             LLVMValueRef lv = LLVMConstInt(lt, (unsigned long long)c->value, 0);
@@ -1302,6 +1374,8 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
             LLVMSetGlobalConstant(gv, 1);
             LLVMSetLinkage(gv, LLVMInternalLinkage);
             env_insert(cg->env, c->name, type_int(), gv);
+            { const char *s = strip_prefix(ffi, c->name);
+              if (s && !env_lookup(cg->env, s)) env_insert(cg->env, s, type_int(), gv); }
         }
     }
 
@@ -1313,7 +1387,7 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
         if (env_lookup(cg->env, c->name)) continue;
         /* A sentinel value of -1 signals a struct literal constant.
          * Collect all sub-field constants named "<NAME>.<field_index>" */
-        if (c->value != -1) continue;
+        if (!c->is_struct_literal) continue;
 
         /* Find how many sub-fields exist by scanning for <NAME>.0, <NAME>.1...
          * Sub-fields are stored as "<NAME>.<fieldname>" — collect them in order */
@@ -1354,6 +1428,8 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
                          (total_bytes <= 2) ? type_u16() :
                          (total_bytes <= 4) ? type_i32() : type_int();
         env_insert(cg->env, c->name, int_type, gv);
+        { const char *s = strip_prefix(ffi, c->name);
+          if (s && !env_lookup(cg->env, s)) env_insert(cg->env, s, int_type, gv); }
         printf("FFI: struct const %s = 0x%llx (%d bytes)\n",
                c->name, (unsigned long long)packed, total_bytes);
     }
@@ -1547,7 +1623,9 @@ bool ffi_cache_save(FFIContext *ctx, const char *header_path) {
         write_str(f, c->str_value);
         fwrite(&c->value,       8, 1, f);
         fwrite(&c->float_value, 8, 1, f);
-        uint8_t flags = (c->is_float ? 1 : 0) | (c->is_string ? 2 : 0);
+        uint8_t flags = (c->is_float ? 1 : 0)
+                      | (c->is_string ? 2 : 0)
+                      | (c->is_struct_literal ? 4 : 0);
         fwrite(&flags, 1, 1, f);
     }
 
@@ -1633,8 +1711,9 @@ bool ffi_cache_load(FFIContext *ctx, const char *header_path) {
         fread(&c.float_value, 8, 1, f);
         uint8_t flags;
         fread(&flags, 1, 1, f);
-        c.is_float  = (flags & 1) ? true : false;
-        c.is_string = (flags & 2) ? true : false;
+        c.is_float          = (flags & 1) ? true : false;
+        c.is_string         = (flags & 2) ? true : false;
+        c.is_struct_literal = (flags & 4) ? true : false;
         ffi_add_constant(ctx, c);
     }
 

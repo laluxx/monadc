@@ -12,7 +12,6 @@
 
 ;;; Code:
 
-
 (module Math
   [double  square  cube  abs  sign
    inc     dec
@@ -162,6 +161,8 @@
                       (Float (* (+ (* 2 n) 1) (* 2 n)))))
                 (+ n 1))))
     (iter x (/ (* (- 0.0 x) (* x x)) 6.0) 2)))
+
+
 
 
 
