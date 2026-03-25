@@ -10,7 +10,3 @@ until WindowShouldClose
   ClearBackground color
   DrawFPS 600 600
   EndDrawing
-
-
-
-

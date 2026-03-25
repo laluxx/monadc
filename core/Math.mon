@@ -94,7 +94,6 @@
   "Return the integer part of X, truncating toward zero."
   (Int x))
 
-
 (define (pow [base :: Float] [exp :: Float] -> Float)
   :doc "Raise BASE to the power EXP."
   :alias ^
@@ -161,10 +160,6 @@
                       (Float (* (+ (* 2 n) 1) (* 2 n)))))
                 (+ n 1))))
     (iter x (/ (* (- 0.0 x) (* x x)) 6.0) 2)))
-
-
-
-
 
 (define (sign [x :: Int] -> Int)
   "Return -1, 0, or 1 depending on the sign of X."

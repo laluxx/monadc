@@ -3,18 +3,7 @@
 ;; Math — pure Monad implementations, no C dependencies
 ;; cos via Taylor: cos(x) = 1 - x^2/2! + x^4/4! - ...
 
-(define (cos [x :: Float] -> Float)
-  "Cosine of X in radians."
-  (let [x (mod-f x pi2)]
-    (define (iter [sum :: Float] [term :: Float] [n :: Int] -> Float)
-      (if (< (abs term) 1e-15)
-          sum
-          (iter (+ sum term)
-                (* (- 0.0 term)
-                   (/ (* x x)
-                      (Float (* (* 2 n) (- (* 2 n) 1)))))
-                (+ n 1))))
-    (iter 1.0 (* -0.5 (* x x)) 2)))
+
 
 ;; tan = sin/cos
 

@@ -1018,6 +1018,12 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
     const char *text = tok->text;
     int my_indent = tok->indent;
 
+    /* Emit a #line directive so the reader maps errors back to original source */
+    char linedir[64];
+    snprintf(linedir, sizeof(linedir), "(#line %d %d)", tok->lineno, 1);
+    sb_puts(out, linedir);
+    sb_putc(out, ' ');
+
     /* Already a grouped s-expression — emit verbatim */
     if (text[0] == '(' || text[0] == '[' || text[0] == '{' ||
         (text[0] == '#' && text[1] == '{')) {

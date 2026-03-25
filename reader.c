@@ -14,7 +14,10 @@
 jmp_buf  g_reader_escape;
 bool     g_reader_escape_set = false;
 char     g_reader_error_msg[512];
-int      g_quote_depth = 0;
+
+int g_quote_depth       = 0;
+int g_srcmap_line_bias  = 0;
+int g_srcmap_col_bias   = 0;
 
 #define READER_ERROR(line, col, fmt, ...) \
     do { \
@@ -153,8 +156,10 @@ static const char *current_filename = NULL;
 static const char *current_source = NULL;
 
 void parser_set_context(const char *filename, const char *source) {
-    current_filename = filename;
-    current_source = source;
+    current_filename  = filename;
+    current_source    = source;
+    g_srcmap_line_bias = 0;
+    g_srcmap_col_bias  = 0;
     if (source) comment_map_build(source);
 }
 
@@ -1056,12 +1061,38 @@ Token lexer_next_token(Lexer *lex) {
         skip_whitespace(lex);
     }
 
-    tok.line   = lex->line;
-    tok.column = lex->column;
+    tok.line   = lex->line   + g_srcmap_line_bias;
+    tok.column = lex->column + g_srcmap_col_bias;
 
     char c = peek(lex);
 
     if (c == '\0') { tok.type = TOK_EOF; return tok; }
+
+    // #line N COL directive (emitted by wisp, maps transformed pos back to original)
+    if (c == '(' && peek_ahead(lex, 1) == '#' &&
+        peek_ahead(lex, 2) == 'l' && peek_ahead(lex, 3) == 'i' &&
+        peek_ahead(lex, 4) == 'n' && peek_ahead(lex, 5) == 'e' &&
+        peek_ahead(lex, 6) == ' ') {
+        advance(lex); advance(lex); // skip '(' '#'
+        /* skip "line " */
+        while (peek(lex) != ' ' && peek(lex) != '\0') advance(lex);
+        advance(lex); // skip space
+        /* read line number */
+        size_t nstart = lex->pos;
+        while (is_digit(peek(lex))) advance(lex);
+        char *linestr = my_strndup(lex->source + nstart, lex->pos - nstart);
+        int orig_line = atoi(linestr);
+        free(linestr);
+        /* read col (currently unused but consumed) */
+        advance(lex); // skip space
+        while (is_digit(peek(lex))) advance(lex);
+        /* consume closing ')' */
+        while (peek(lex) != ')' && peek(lex) != '\0') advance(lex);
+        if (peek(lex) == ')') advance(lex);
+        /* set bias so subsequent tokens report original line numbers */
+        g_srcmap_line_bias = orig_line - lex->line;
+        return lexer_next_token(lex);
+    }
 
     // Feature directives: #+ and #---
     if (c == '#') {

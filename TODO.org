@@ -167,7 +167,7 @@ bashobjdump -r Math.o | grep -A 5 "sqrt"
 #+begin_src monad
 (cons 120 10)
 >>> CODEGEN NUMBER: literal_str='120', number=120
->>> INFERRED TYPE: Int
+iii>>> INFERRED TYPE: Int
 >>> CODEGEN NUMBER: literal_str='10', number=10
 >>> INFERRED TYPE: Int
 Call parameter type does not match function signature!

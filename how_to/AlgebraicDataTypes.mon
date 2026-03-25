@@ -73,10 +73,6 @@ data Shape Circle    Float
 ;;                                     (x2 `*` (y3 `-` y1))
 ;;                                     (x3 `*` (y1 `-` y2))))))
 
-{x ∈ Int | lsakdj }
-
--| salkdjas |-
-
 
 (define [pi :: Float] 3.141592653589793 :alias π)
 
@@ -125,13 +121,13 @@ data Shape Circle    Float
 
 
 ;; TODO Wisp
-define area :: Shape -> Float
-  Circle r      -> pi `*` r `*` r
-  Rectangle w h -> w `*` h
+;; define area :: Shape -> Float
+;;   Circle r      -> pi `*` r `*` r
+;;   Rectangle w h -> w `*` h
 
 
-(define (area Shape -> Float) Circle
-  r -> ((pi `*` r) `*` r))
+;; (define (area Shape -> Float) Circle
+;;   r -> ((pi `*` r) `*` r))
 
 
 ;; Shape :: [Rectangle (3 2)]
