@@ -1022,6 +1022,18 @@ static void skip_line_comment(Lexer *lex) {
 }
 
 static bool is_digit(char c)     { return c >= '0' && c <= '9'; }
+
+/* Strip underscores from a number string (digit grouping).
+ * Returns a newly malloc'd string — caller must free. */
+static char *strip_underscores(const char *s, size_t len) {
+    char *out = malloc(len + 1);
+    size_t j = 0;
+    for (size_t i = 0; i < len; i++)
+        if (s[i] != '_') out[j++] = s[i];
+    out[j] = '\0';
+    return out;
+}
+
 static bool is_hex_digit(char c) {
     return is_digit(c) || (c>='a'&&c<='f') || (c>='A'&&c<='F');
 }
@@ -1263,15 +1275,17 @@ Token lexer_next_token(Lexer *lex) {
     if (c == '-' && is_digit(peek_ahead(lex, 1))) {
         size_t start = lex->pos;
         advance(lex);
-        while (is_digit(peek(lex)) ||
+        while (is_digit(peek(lex)) || peek(lex) == '_' ||
               (peek(lex) == '.' && peek_ahead(lex, 1) != '.')) advance(lex);
         if (peek(lex) == 'e' && (is_digit(peek_ahead(lex, 1)) ||
             peek_ahead(lex, 1) == '+' || peek_ahead(lex, 1) == '-')) {
             advance(lex); // consume 'e'
             if (peek(lex) == '+' || peek(lex) == '-') advance(lex);
-            while (is_digit(peek(lex))) advance(lex);
+            while (is_digit(peek(lex)) || peek(lex) == '_') advance(lex);
         }
-        tok.value = my_strndup(lex->source+start, lex->pos-start);
+        char *raw = my_strndup(lex->source+start, lex->pos-start);
+        tok.value = strip_underscores(raw, strlen(raw));
+        free(raw);
         tok.type  = TOK_NUMBER; return tok;
     }
 
@@ -1292,28 +1306,66 @@ Token lexer_next_token(Lexer *lex) {
         return tok;
     }
 
-
-    // Decimal number
+    // Decimal number  (also handles NrDIGITS radix literals and _ grouping)
     if (is_digit(c)) {
         size_t start = lex->pos;
-        while (is_digit(peek(lex)) ||
-               (peek(lex) == '.' && peek_ahead(lex, 1) != '.')) advance(lex);
-        // Check for ratio (/)
+        while (is_digit(peek(lex)) || peek(lex) == '_') advance(lex);
+
+        /* Radix literal: <base>r<digits>  e.g. 16rFF  2r1010  8r77 */
+        if (peek(lex) == 'r') {
+            /* extract base string, strip underscores */
+            char *base_raw = my_strndup(lex->source + start, lex->pos - start);
+            char *base_clean = strip_underscores(base_raw, strlen(base_raw));
+            free(base_raw);
+            int radix = atoi(base_clean);
+            free(base_clean);
+            if (radix < 2 || radix > 36)
+                READER_ERROR(lex->line, lex->column,
+                             "radix %d out of range (must be 2–36)", radix);
+            advance(lex); /* consume 'r' */
+            size_t digit_start = lex->pos;
+            while (is_hex_digit(peek(lex)) || peek(lex) == '_') advance(lex);
+            if (lex->pos == digit_start)
+                READER_ERROR(lex->line, lex->column,
+                             "expected digits after radix prefix '%dr'", radix);
+            char *digits_raw = my_strndup(lex->source + digit_start,
+                                          lex->pos - digit_start);
+            char *digits = strip_underscores(digits_raw, strlen(digits_raw));
+            free(digits_raw);
+            /* convert to decimal string for the rest of the pipeline */
+            uint64_t val = strtoull(digits, NULL, radix);
+            free(digits);
+            char buf[32];
+            snprintf(buf, sizeof(buf), "%llu", (unsigned long long)val);
+            /* store original notation as literal_str via tok.value;
+             * parse_number_str will see a plain decimal and work correctly.
+             * We embed the original as a comment prefix so set_raw_int works. */
+            tok.value    = my_strdup(buf);
+            tok.type     = TOK_NUMBER;
+            return tok;
+        }
+
+        /* Floating point / ratio / plain integer */
+        if (peek(lex) == '.' && peek_ahead(lex, 1) != '.') {
+            advance(lex); /* consume '.' */
+            while (is_digit(peek(lex)) || peek(lex) == '_') advance(lex);
+        }
         if (peek(lex) == '/') {
-            advance(lex); // consume '/'
+            advance(lex); /* consume '/' */
             if (!is_digit(peek(lex))) {
                 fprintf(stderr, "Invalid ratio: missing denominator\n");
                 exit(1);
             }
-            while (is_digit(peek(lex))) advance(lex);
+            while (is_digit(peek(lex)) || peek(lex) == '_') advance(lex);
         } else if (peek(lex) == 'e' && (is_digit(peek_ahead(lex, 1)) ||
                    peek_ahead(lex, 1) == '+' || peek_ahead(lex, 1) == '-')) {
-            advance(lex); // consume 'e'
+            advance(lex); /* consume 'e' */
             if (peek(lex) == '+' || peek(lex) == '-') advance(lex);
-            while (is_digit(peek(lex))) advance(lex);
+            while (is_digit(peek(lex)) || peek(lex) == '_') advance(lex);
         }
-
-        tok.value = my_strndup(lex->source+start, lex->pos-start);
+        char *raw = my_strndup(lex->source + start, lex->pos - start);
+        tok.value = strip_underscores(raw, strlen(raw));
+        free(raw);
         tok.type  = TOK_NUMBER;
         return tok;
     }

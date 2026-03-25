@@ -3,8 +3,6 @@
 * TODO Stuff [0/24]
 - [ ] eval
 - [ ] AST->JSON
-- [ ] Base literal: 16rFF (FF in base 16) =r= stands for =radix=
-- [ ] Digit grouping: 1_000_000  (Same as 1000000)
 - [ ] Syntax for compiler directives: -|[ INLINE (/=) ]|-
 - [ ] Regex literal #""
 - [ ] When we write wisp error column and numbers are wrong!
