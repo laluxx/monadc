@@ -4224,6 +4224,419 @@ ASTList parse_all(const char *source) {
     return list;
 }
 
+/// String builder
+
+void sb_init(SB *b)  { b->data = malloc(256); b->data[0]='\0'; b->len=0; b->cap=256; }
+void sb_free(SB *b)  { free(b->data); }
+char *sb_take(SB *b) { char *r = b->data; b->data = NULL; return r; }
+
+void sb_putc(SB *b, char c) {
+    if (b->len + 1 >= b->cap) { b->cap *= 2; b->data = realloc(b->data, b->cap); }
+    b->data[b->len++] = c;
+    b->data[b->len]   = '\0';
+}
+
+void sb_puts(SB *b, const char *s) {
+    size_t l = strlen(s);
+    while (b->len + l + 1 >= b->cap) { b->cap *= 2; b->data = realloc(b->data, b->cap); }
+    memcpy(b->data + b->len, s, l + 1);
+    b->len += l;
+}
+
+
+
+/// AST -> JSON
+
+static void json_escape(SB *b, const char *s) {
+    sb_putc(b, '"');
+    for (; *s; s++) {
+        switch (*s) {
+        case '"':  sb_puts(b, "\\\""); break;
+        case '\\': sb_puts(b, "\\\\"); break;
+        case '\n': sb_puts(b, "\\n");  break;
+        case '\r': sb_puts(b, "\\r");  break;
+        case '\t': sb_puts(b, "\\t");  break;
+        default:   sb_putc(b, *s);     break;
+        }
+    }
+    sb_putc(b, '"');
+}
+
+static void json_loc(SB *b, AST *a) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "\"line\":%d,\"col\":%d", a->line, a->column);
+    sb_puts(b, buf);
+}
+
+static void ast_to_json_sb(SB *b, AST *ast);
+
+static void json_pattern(SB *b, ASTPattern *p) {
+    sb_puts(b, "{\"kind\":");
+    switch (p->kind) {
+    case PAT_WILDCARD:     sb_puts(b, "\"wildcard\""); break;
+    case PAT_VAR:
+        sb_puts(b, "\"var\",\"name\":");
+        json_escape(b, p->var_name ? p->var_name : "");
+        break;
+    case PAT_LITERAL_INT:
+        sb_puts(b, "\"literal_int\",\"value\":");
+        { char buf[32]; snprintf(buf, sizeof(buf), "%lld", (long long)p->lit_value);
+          sb_puts(b, buf); }
+        break;
+    case PAT_LITERAL_FLOAT:
+        sb_puts(b, "\"literal_float\",\"value\":");
+        { char buf[32]; snprintf(buf, sizeof(buf), "%g", p->lit_value);
+          sb_puts(b, buf); }
+        break;
+    case PAT_LIST_EMPTY:
+        sb_puts(b, "\"list_empty\"");
+        break;
+    case PAT_LIST:
+        sb_puts(b, "\"list\",\"elements\":[");
+        for (int i = 0; i < p->element_count; i++) {
+            if (i) sb_putc(b, ',');
+            json_pattern(b, &p->elements[i]);
+        }
+        sb_puts(b, "]");
+        if (p->tail) {
+            sb_puts(b, ",\"tail\":");
+            json_pattern(b, p->tail);
+        }
+        break;
+    case PAT_CONSTRUCTOR:
+        sb_puts(b, "\"constructor\",\"name\":");
+        json_escape(b, p->var_name ? p->var_name : "");
+        if (p->ctor_field_count > 0) {
+            sb_puts(b, ",\"fields\":[");
+            for (int i = 0; i < p->ctor_field_count; i++) {
+                if (i) sb_putc(b, ',');
+                json_pattern(b, &p->ctor_fields[i]);
+            }
+            sb_puts(b, "]");
+        }
+        break;
+    }
+    sb_putc(b, '}');
+}
+
+static void ast_to_json_sb(SB *b, AST *ast) {
+    if (!ast) { sb_puts(b, "null"); return; }
+
+    sb_puts(b, "{");
+    json_loc(b, ast);
+    sb_puts(b, ",\"type\":");
+
+    switch (ast->type) {
+
+    case AST_NUMBER:
+        sb_puts(b, "\"number\",\"value\":");
+        if (ast->literal_str) json_escape(b, ast->literal_str);
+        else {
+            char buf[64]; snprintf(buf, sizeof(buf), "%g", ast->number);
+            sb_puts(b, buf);
+        }
+        break;
+
+    case AST_SYMBOL:
+        sb_puts(b, "\"symbol\",\"name\":");
+        json_escape(b, ast->symbol ? ast->symbol : "");
+        break;
+
+    case AST_STRING:
+        sb_puts(b, "\"string\",\"value\":");
+        json_escape(b, ast->string ? ast->string : "");
+        break;
+
+    case AST_CHAR: {
+        char buf[3] = {ast->character, 0};
+        sb_puts(b, "\"char\",\"value\":");
+        json_escape(b, buf);
+        break;
+    }
+
+    case AST_KEYWORD:
+        sb_puts(b, "\"keyword\",\"name\":");
+        json_escape(b, ast->keyword ? ast->keyword : "");
+        break;
+
+    case AST_RATIO: {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "\"ratio\",\"numerator\":%lld,\"denominator\":%lld",
+                 ast->ratio.numerator, ast->ratio.denominator);
+        sb_puts(b, buf);
+        break;
+    }
+
+    case AST_LIST:
+        sb_puts(b, "\"list\",\"items\":[");
+        for (size_t i = 0; i < ast->list.count; i++) {
+            if (i) sb_putc(b, ',');
+            ast_to_json_sb(b, ast->list.items[i]);
+        }
+        sb_puts(b, "]");
+        break;
+
+    case AST_ARRAY:
+        sb_puts(b, "\"array\",\"elements\":[");
+        for (size_t i = 0; i < ast->array.element_count; i++) {
+            if (i) sb_putc(b, ',');
+            ast_to_json_sb(b, ast->array.elements[i]);
+        }
+        sb_puts(b, "]");
+        break;
+
+    case AST_SET:
+        sb_puts(b, "\"set\",\"elements\":[");
+        for (size_t i = 0; i < ast->set.element_count; i++) {
+            if (i) sb_putc(b, ',');
+            ast_to_json_sb(b, ast->set.elements[i]);
+        }
+        sb_puts(b, "]");
+        break;
+
+    case AST_MAP:
+        sb_puts(b, "\"map\",\"entries\":[");
+        for (size_t i = 0; i < ast->map.count; i++) {
+            if (i) sb_putc(b, ',');
+            sb_puts(b, "{\"key\":");
+            ast_to_json_sb(b, ast->map.keys[i]);
+            sb_puts(b, ",\"val\":");
+            ast_to_json_sb(b, ast->map.vals[i]);
+            sb_putc(b, '}');
+        }
+        sb_puts(b, "]");
+        break;
+
+    case AST_LAMBDA:
+        sb_puts(b, "\"lambda\",\"params\":[");
+        for (int i = 0; i < ast->lambda.param_count; i++) {
+            if (i) sb_putc(b, ',');
+            sb_puts(b, "{\"name\":");
+            json_escape(b, ast->lambda.params[i].name ? ast->lambda.params[i].name : "");
+            if (ast->lambda.params[i].type_name) {
+                sb_puts(b, ",\"type\":");
+                json_escape(b, ast->lambda.params[i].type_name);
+            }
+            if (ast->lambda.params[i].is_rest) sb_puts(b, ",\"rest\":true");
+            if (ast->lambda.params[i].is_anon) sb_puts(b, ",\"anon\":true");
+            sb_putc(b, '}');
+        }
+        sb_puts(b, "]");
+        if (ast->lambda.return_type) {
+            sb_puts(b, ",\"return_type\":");
+            json_escape(b, ast->lambda.return_type);
+        }
+        if (ast->lambda.docstring) {
+            sb_puts(b, ",\"docstring\":");
+            json_escape(b, ast->lambda.docstring);
+        }
+        if (ast->lambda.naked) sb_puts(b, ",\"naked\":true");
+        sb_puts(b, ",\"body\":[");
+        for (int i = 0; i < ast->lambda.body_count; i++) {
+            if (i) sb_putc(b, ',');
+            ast_to_json_sb(b, ast->lambda.body_exprs[i]);
+        }
+        sb_puts(b, "]");
+        break;
+
+    case AST_RANGE:
+        sb_puts(b, "\"range\"");
+        sb_puts(b, ",\"is_array\":");
+        sb_puts(b, ast->range.is_array ? "true" : "false");
+        sb_puts(b, ",\"start\":");
+        ast_to_json_sb(b, ast->range.start);
+        if (ast->range.step) {
+            sb_puts(b, ",\"step\":");
+            ast_to_json_sb(b, ast->range.step);
+        }
+        if (ast->range.end) {
+            sb_puts(b, ",\"end\":");
+            ast_to_json_sb(b, ast->range.end);
+        }
+        break;
+
+    case AST_ADDRESS_OF:
+        sb_puts(b, "\"address_of\",\"operand\":");
+        ast_to_json_sb(b, ast->list.items[0]);
+        break;
+
+    case AST_REFINEMENT:
+        sb_puts(b, "\"refinement\"");
+        if (ast->refinement.name) {
+            sb_puts(b, ",\"name\":");
+            json_escape(b, ast->refinement.name);
+        }
+        if (ast->refinement.var) {
+            sb_puts(b, ",\"var\":");
+            json_escape(b, ast->refinement.var);
+        }
+        if (ast->refinement.base_type) {
+            sb_puts(b, ",\"base_type\":");
+            json_escape(b, ast->refinement.base_type);
+        }
+        if (ast->refinement.predicate) {
+            sb_puts(b, ",\"predicate\":");
+            ast_to_json_sb(b, ast->refinement.predicate);
+        }
+        if (ast->refinement.docstring) {
+            sb_puts(b, ",\"docstring\":");
+            json_escape(b, ast->refinement.docstring);
+        }
+        break;
+
+    case AST_LAYOUT:
+        sb_puts(b, "\"layout\",\"name\":");
+        json_escape(b, ast->layout.name ? ast->layout.name : "");
+        sb_puts(b, ",\"fields\":[");
+        for (int i = 0; i < ast->layout.field_count; i++) {
+            if (i) sb_putc(b, ',');
+            ASTLayoutField *f = &ast->layout.fields[i];
+            sb_puts(b, "{\"name\":");
+            json_escape(b, f->name ? f->name : "");
+            if (f->is_array) {
+                sb_puts(b, ",\"is_array\":true,\"array_elem\":");
+                json_escape(b, f->array_elem ? f->array_elem : "");
+                char buf[32];
+                snprintf(buf, sizeof(buf), ",\"array_size\":%d", f->array_size);
+                sb_puts(b, buf);
+            } else {
+                sb_puts(b, ",\"type\":");
+                json_escape(b, f->type_name ? f->type_name : "");
+            }
+            sb_putc(b, '}');
+        }
+        sb_puts(b, "]");
+        if (ast->layout.packed) sb_puts(b, ",\"packed\":true");
+        if (ast->layout.align) {
+            char buf[32];
+            snprintf(buf, sizeof(buf), ",\"align\":%d", ast->layout.align);
+            sb_puts(b, buf);
+        }
+        break;
+
+    case AST_DATA:
+        sb_puts(b, "\"data\",\"name\":");
+        json_escape(b, ast->data.name ? ast->data.name : "");
+        sb_puts(b, ",\"constructors\":[");
+        for (int i = 0; i < ast->data.constructor_count; i++) {
+            if (i) sb_putc(b, ',');
+            ASTDataConstructor *ct = &ast->data.constructors[i];
+            sb_puts(b, "{\"name\":");
+            json_escape(b, ct->name ? ct->name : "");
+            sb_puts(b, ",\"fields\":[");
+            for (int j = 0; j < ct->field_count; j++) {
+                if (j) sb_putc(b, ',');
+                json_escape(b, ct->field_types[j] ? ct->field_types[j] : "");
+            }
+            sb_puts(b, "]}");
+        }
+        sb_puts(b, "]");
+        if (ast->data.deriving_count > 0) {
+            sb_puts(b, ",\"deriving\":[");
+            for (int i = 0; i < ast->data.deriving_count; i++) {
+                if (i) sb_putc(b, ',');
+                json_escape(b, ast->data.deriving[i] ? ast->data.deriving[i] : "");
+            }
+            sb_puts(b, "]");
+        }
+        break;
+
+    case AST_PMATCH:
+        sb_puts(b, "\"pmatch\",\"clauses\":[");
+        for (int i = 0; i < ast->pmatch.clause_count; i++) {
+            if (i) sb_putc(b, ',');
+            ASTPMatchClause *cl = &ast->pmatch.clauses[i];
+            sb_puts(b, "{\"patterns\":[");
+            for (int j = 0; j < cl->pattern_count; j++) {
+                if (j) sb_putc(b, ',');
+                json_pattern(b, &cl->patterns[j]);
+            }
+            sb_puts(b, "],\"body\":");
+            ast_to_json_sb(b, cl->body);
+            sb_putc(b, '}');
+        }
+        sb_puts(b, "]");
+        break;
+
+    case AST_CLASS:
+        sb_puts(b, "\"class\",\"name\":");
+        json_escape(b, ast->class_decl.name ? ast->class_decl.name : "");
+        sb_puts(b, ",\"type_var\":");
+        json_escape(b, ast->class_decl.type_var ? ast->class_decl.type_var : "");
+        sb_puts(b, ",\"methods\":[");
+        for (int i = 0; i < ast->class_decl.method_count; i++) {
+            if (i) sb_putc(b, ',');
+            sb_puts(b, "{\"name\":");
+            json_escape(b, ast->class_decl.method_names[i] ? ast->class_decl.method_names[i] : "");
+            sb_puts(b, ",\"type\":");
+            json_escape(b, ast->class_decl.method_types[i] ? ast->class_decl.method_types[i] : "");
+            sb_putc(b, '}');
+        }
+        sb_puts(b, "]");
+        if (ast->class_decl.default_count > 0) {
+            sb_puts(b, ",\"defaults\":[");
+            for (int i = 0; i < ast->class_decl.default_count; i++) {
+                if (i) sb_putc(b, ',');
+                sb_puts(b, "{\"name\":");
+                json_escape(b, ast->class_decl.default_names[i] ? ast->class_decl.default_names[i] : "");
+                sb_puts(b, ",\"body\":");
+                ast_to_json_sb(b, ast->class_decl.default_bodies[i]);
+                sb_putc(b, '}');
+            }
+            sb_puts(b, "]");
+        }
+        break;
+
+    case AST_INSTANCE:
+        sb_puts(b, "\"instance\",\"class\":");
+        json_escape(b, ast->instance_decl.class_name ? ast->instance_decl.class_name : "");
+        sb_puts(b, ",\"type\":");
+        json_escape(b, ast->instance_decl.type_name ? ast->instance_decl.type_name : "");
+        sb_puts(b, ",\"methods\":[");
+        for (int i = 0; i < ast->instance_decl.method_count; i++) {
+            if (i) sb_putc(b, ',');
+            sb_puts(b, "{\"name\":");
+            json_escape(b, ast->instance_decl.method_names[i] ? ast->instance_decl.method_names[i] : "");
+            sb_puts(b, ",\"body\":");
+            ast_to_json_sb(b, ast->instance_decl.method_bodies[i]);
+            sb_putc(b, '}');
+        }
+        sb_puts(b, "]");
+        break;
+
+    case AST_ASM:
+        sb_puts(b, "\"asm\",\"instructions\":[");
+        for (size_t i = 0; i < ast->asm_block.instruction_count; i++) {
+            if (i) sb_putc(b, ',');
+            ast_to_json_sb(b, ast->asm_block.instructions[i]);
+        }
+        sb_puts(b, "]");
+        break;
+
+    case AST_TESTS:
+        sb_puts(b, "\"tests\",\"assertions\":[");
+        for (int i = 0; i < ast->tests.count; i++) {
+            if (i) sb_putc(b, ',');
+            ast_to_json_sb(b, ast->tests.assertions[i]);
+        }
+        sb_puts(b, "]");
+        break;
+
+    default:
+        sb_puts(b, "\"unknown\"");
+        break;
+    }
+
+    sb_putc(b, '}');
+}
+
+char *ast_to_json(AST *ast) {
+    SB b;
+    sb_init(&b);
+    ast_to_json_sb(&b, ast);
+    return sb_take(&b);
+}
+
 AST *parse(const char *source) {
     Lexer lex;
     lexer_init(&lex, source);

@@ -378,31 +378,6 @@ static int measure_indent(const char *s) {
     return col;
 }
 
-
-typedef struct {
-    char  *data;
-    size_t len;
-    size_t cap;
-} SB;
-
-static void sb_init(SB *b) { b->data = malloc(256); b->data[0]='\0'; b->len=0; b->cap=256; }
-static void sb_free(SB *b) { free(b->data); }
-static char *sb_take(SB *b) { char *r = b->data; b->data = NULL; return r; }
-
-static void sb_putc(SB *b, char c) {
-    if (b->len + 1 >= b->cap) { b->cap *= 2; b->data = realloc(b->data, b->cap); }
-    b->data[b->len++] = c;
-    b->data[b->len]   = '\0';
-}
-
-static void sb_puts(SB *b, const char *s) {
-    size_t l = strlen(s);
-    while (b->len + l + 1 >= b->cap) { b->cap *= 2; b->data = realloc(b->data, b->cap); }
-    memcpy(b->data + b->len, s, l + 1);
-    b->len += l;
-}
-
-
 /* Forward declaration — tokenise_into calls wisp_parse_expr for body expansion */
 static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_indent, int parent_remaining);
 

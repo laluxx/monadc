@@ -576,6 +576,42 @@ static CompiledModule *compile_one(const char *source_path,
     fprintf(stderr, "=== end desugared AST ===\n\n");
     fflush(stderr);
 
+    if (flags->emit_json) {
+        char json_path[512];
+        if (flags->output_name)
+            snprintf(json_path, sizeof(json_path), "%s.json", flags->output_name);
+        else {
+            strncpy(json_path, my_source_path, sizeof(json_path) - 6);
+            char *dot = strrchr(json_path, '.');
+            if (dot) strcpy(dot, ".json");
+            else strncat(json_path, ".json", sizeof(json_path) - strlen(json_path) - 1);
+        }
+
+        FILE *jf = fopen(json_path, "w");
+        if (!jf) { perror(json_path); }
+        else {
+            fprintf(jf, "[\n");
+            for (size_t i = 0; i < exprs.count; i++) {
+                char *j = ast_to_json(exprs.exprs[i]);
+                fprintf(jf, "  %s%s\n", j, i + 1 < exprs.count ? "," : "");
+                free(j);
+            }
+            fprintf(jf, "]\n");
+            fclose(jf);
+            printf("  wrote json: %s\n", json_path);
+        }
+
+        /* JSON-only mode: clean up and stop — no codegen, no binary */
+        for (size_t i = 0; i < exprs.count; i++) ast_free(exprs.exprs[i]);
+        free(exprs.exprs);
+        free(source);
+        free(obj_path);
+        free(base);
+        free(my_source_path);
+        wisp_clear_arities();
+        type_alias_free_all();
+        return NULL;
+    }
 
     PHASE_END("wisp+parse");
 
@@ -962,7 +998,9 @@ static CompiledModule *compile_one(const char *source_path,
 static void compile(CompilerFlags *flags) {
     g_ffi_link_libs[0]  = '\0';
     g_ffi_link_libs_len = 0;
-    compile_one(flags->input_file, flags, true);
+
+    CompiledModule *main_mod = compile_one(flags->input_file, flags, true);
+    if (!main_mod) return;  /* emit-json mode, no linking needed */
 
     // Collect .o files: registry is prepend (newest first), reverse to get
     // deps first so linker resolves symbols correctly

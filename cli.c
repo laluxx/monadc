@@ -170,35 +170,6 @@ static char *yaml_first_exe(const char *content) {
 // print_usage / parse_flags / get_base_executable_name
 // ─────────────────────────────────────────────────────────────────────────────
 
-#define CLR_RESET  "\x1b[0m"
-#define CLR_BOLD   "\x1b[1m"
-#define CLR_CYAN   "\x1b[36m"
-#define CLR_GRAY   "\x1b[90m"
-
-
-/* void print_usage(const char *prog) { */
-/*     fprintf(stderr, "Usage: %s [options] [<file.mon>]\n\n", prog); */
-
-/*     fprintf(stderr, "Commands:\n"); */
-/*     fprintf(stderr, "  %-10s %s\n", "new",          "<package-name>"); */
-/*     fprintf(stderr, "  %-10s %s\n", "build",        "Compile current project"); */
-/*     fprintf(stderr, "  %-10s %s\n", "run",          "Build and execute project"); */
-/*     fprintf(stderr, "  %-10s %s\n", "clean",        "Remove build artifacts"); */
-/*     fprintf(stderr, "  %-10s %s\n", "install",      "Install package to system"); */
-/*     fprintf(stderr, "  %-10s %s\n", "test",         "<file.mon>"); */
-/*     fprintf(stderr, "\n"); */
-
-/*     fprintf(stderr, "Options:\n"); */
-/*     fprintf(stderr, "  -i                 Start interactive REPL\n"); */
-/*     fprintf(stderr, "  -o <file>          Output file name\n"); */
-/*     fprintf(stderr, "  --test             Compile and embed tests (keep binary)\n"); */
-/*     fprintf(stderr, "  --emit-ir          Emit LLVM IR (.ll)\n"); */
-/*     fprintf(stderr, "  --emit-asm         Emit assembly (.s)\n"); */
-/*     fprintf(stderr, "  --emit-obj         Emit object file (.o)\n"); */
-/*     fprintf(stderr, "  -Wall, -Wextra     Enable warnings (no-op)\n"); */
-/* } */
-
-
 void print_usage(const char *prog) {
     fprintf(stderr, "Usage: %s [options] [<file.mon>]\n", prog);
     fprintf(stderr, "       %s new <package-name>\n", prog);
@@ -216,15 +187,22 @@ void print_usage(const char *prog) {
     fprintf(stderr, "  --emit-bc      Emit LLVM bitcode (.bc)\n");
     fprintf(stderr, "  --emit-asm     Emit assembly (.s)\n");
     fprintf(stderr, "  --emit-obj     Emit object file (.o)\n");
+    fprintf(stderr, "  --emit-json    Emit AST as JSON (.json)\n");
     fprintf(stderr, "  -Wall          Enable all warnings (accepted, no-op)\n");
     fprintf(stderr, "  -Wextra        Enable extra warnings (accepted, no-op)\n");
+    fprintf(stderr, "  -h, --help     Show this help message\n");
 }
 
 CompilerFlags parse_flags(int argc, char **argv) {
     CompilerFlags flags = {0};
     flags.mode = CMD_COMPILE;
 
-    if (argc < 2) { print_usage(argv[0]); exit(1); }
+    if (argc < 2) { flags.mode = CMD_REPL; flags.start_repl = true; return flags; }
+
+    // Help
+    if (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
+        print_usage(argv[0]); exit(0);
+    }
 
     // Subcommands
     if (strcmp(argv[1], "new") == 0) {
@@ -256,10 +234,11 @@ CompilerFlags parse_flags(int argc, char **argv) {
         flags.input_file = argv[2];
         int start = 3;
         for (int i = start; i < argc; i++) {
-            if      (!strcmp(argv[i], "--emit-ir"))  flags.emit_ir  = true;
-            else if (!strcmp(argv[i], "--emit-bc"))  flags.emit_bc  = true;
-            else if (!strcmp(argv[i], "--emit-asm")) flags.emit_asm = true;
-            else if (!strcmp(argv[i], "--emit-obj")) flags.emit_obj = true;
+            if      (!strcmp(argv[i], "--emit-ir"))   flags.emit_ir   = true;
+            else if (!strcmp(argv[i], "--emit-bc"))   flags.emit_bc   = true;
+            else if (!strcmp(argv[i], "--emit-asm"))  flags.emit_asm  = true;
+            else if (!strcmp(argv[i], "--emit-obj"))  flags.emit_obj  = true;
+            else if (!strcmp(argv[i], "--emit-json")) flags.emit_json = true;
             else if (!strcmp(argv[i], "-Wall"))   {}
             else if (!strcmp(argv[i], "-Wextra")) {}
             else if (!strcmp(argv[i], "-o")) {
@@ -285,10 +264,11 @@ CompilerFlags parse_flags(int argc, char **argv) {
     // monad <file.mon> [flags...]  →  normal compile
     flags.input_file = argv[1];
     for (int i = 2; i < argc; i++) {
-        if      (!strcmp(argv[i], "--emit-ir"))  flags.emit_ir  = true;
-        else if (!strcmp(argv[i], "--emit-bc"))  flags.emit_bc  = true;
-        else if (!strcmp(argv[i], "--emit-asm")) flags.emit_asm = true;
-        else if (!strcmp(argv[i], "--emit-obj")) flags.emit_obj = true;
+        if      (!strcmp(argv[i], "--emit-ir"))   flags.emit_ir   = true;
+        else if (!strcmp(argv[i], "--emit-bc"))   flags.emit_bc   = true;
+        else if (!strcmp(argv[i], "--emit-asm"))  flags.emit_asm  = true;
+        else if (!strcmp(argv[i], "--emit-obj"))  flags.emit_obj  = true;
+        else if (!strcmp(argv[i], "--emit-json")) flags.emit_json = true;
         else if (!strcmp(argv[i], "-Wall"))   {}
         else if (!strcmp(argv[i], "-Wextra")) {}
         else if (!strcmp(argv[i], "-o")) {

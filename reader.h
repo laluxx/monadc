@@ -380,9 +380,27 @@ AST *parse(const char *source);
 
 const char *parser_get_filename(void);
 
-char *ast_to_string(AST *ast);
 AST  *desugar_cond_ast(AST *cond_list);
 AST  *desugar_let_ast(AST *let_list);
+
+/// String builder
+
+typedef struct {
+    char  *data;
+    size_t len;
+    size_t cap;
+} SB;
+
+void sb_init(SB *b);
+void sb_free(SB *b);
+char *sb_take(SB *b);
+void sb_putc(SB *b, char c);
+void sb_puts(SB *b, const char *s);
+
+/// Ast -> Json
+
+char *ast_to_json(AST *ast);
+
 
 
 /// ERROR Handling
