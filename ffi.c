@@ -1310,12 +1310,12 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
         /*         f->doc ? f->doc : "(null)"); */
         env_insert_func(cg->env, f->name, ep, f->param_count,
                         f->return_type ? type_clone(f->return_type) : NULL,
-                        fn_ref, f->doc ? f->doc : NULL);
+                        fn_ref, f->doc ? f->doc : NULL, NULL);
         const char *f_short = strip_prefix(ffi, f->name);
         if (f_short && !env_lookup(cg->env, f_short))
             env_insert_func(cg->env, f_short, ep, f->param_count,
                             f->return_type ? type_clone(f->return_type) : NULL,
-                            fn_ref, f->doc ? f->doc : NULL);
+                            fn_ref, f->doc ? f->doc : NULL, NULL);
 
         EnvEntry *e = env_lookup(cg->env, f->name);
         if (e) {

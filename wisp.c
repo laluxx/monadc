@@ -8,8 +8,9 @@
 /// Arity table
 
 typedef struct ArityEntry {
-    char *name;
-    int   arity;
+    char      *name;
+    int        arity;
+    ParamKind  param_kinds[WISP_MAX_PARAMS];
     struct ArityEntry *next;
 } ArityEntry;
 
@@ -32,8 +33,22 @@ static void arity_set(ArityTable *t, const char *name, int arity) {
     ArityEntry *e = malloc(sizeof(ArityEntry));
     e->name  = strdup(name);
     e->arity = arity;
+    memset(e->param_kinds, PARAM_VALUE, sizeof(e->param_kinds));
     e->next  = t->buckets[h];
     t->buckets[h] = e;
+}
+
+static void arity_set_with_kinds(ArityTable *t, const char *name, int arity,
+                                  const ParamKind *kinds) {
+    arity_set(t, name, arity);
+    if (!kinds) return;
+    unsigned int h = arity_hash(name);
+    for (ArityEntry *e = t->buckets[h]; e; e = e->next)
+        if (strcmp(e->name, name) == 0) {
+            for (int i = 0; i < arity && i < WISP_MAX_PARAMS; i++)
+                e->param_kinds[i] = kinds[i];
+            return;
+        }
 }
 
 static int arity_get(ArityTable *t, const char *name) {
@@ -41,6 +56,13 @@ static int arity_get(ArityTable *t, const char *name) {
     for (ArityEntry *e = t->buckets[h]; e; e = e->next)
         if (strcmp(e->name, name) == 0) return e->arity;
     return -2; /* unknown */
+}
+
+static ArityEntry *arity_get_entry(ArityTable *t, const char *name) {
+    unsigned int h = arity_hash(name);
+    for (ArityEntry *e = t->buckets[h]; e; e = e->next)
+        if (strcmp(e->name, name) == 0) return e;
+    return NULL;
 }
 
 static void arity_free(ArityTable *t) {
@@ -128,6 +150,13 @@ static void arity_prescan(ArityTable *t, const char *source) {
                         arity_set(t, fname, arity);
                     }
                     /* no arrow = variable definition, not a function, skip */
+                } else if (tok.type == TOK_ARROW ||
+                           (tok.type == TOK_SYMBOL && strcmp(tok.value, "->") == 0)) {
+                    /* define name -> RetType — nullary function, arity 0 */
+                    free(tok.value);
+                    tok = lexer_next_token(&lex); /* consume return type */
+                    free(tok.value);
+                    arity_set(t, fname, 0);
                 } else {
                     free(tok.value);
                 }
@@ -1049,37 +1078,25 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
         return;
     }
 
-    /* Function in argument position with no same-line arguments following:
-     * treat as a bare function reference, not a call.
-     * e.g. in "map square '(1 2 3)", square has nothing after it on the
-     * same line that belongs to it — it's being passed, not called.    */
-    if (arity > 0 && parent_indent >= 0) {
-        /* Count same-line tokens remaining after this one */
-        int same_line_remaining = 0;
-        for (int _i = s->pos; _i < s->count; _i++) {
-            if (s->tokens[_i].lineno != tok->lineno) break;
-            same_line_remaining++;
-        }
-        /* Only expand as a call if there are enough tokens for both
-         * this function's args AND the parent's remaining args.
-         * parent_remaining is passed in via a new parameter — for now
-         * we approximate: if same_line_remaining < arity, emit bare.  */
-        int needed = arity + (parent_remaining > 0 ? parent_remaining : 0);
-        if (same_line_remaining < needed) {
-            sb_puts(out, text);
-            return;
-        }
-    }
-
     /* Fixed or variadic — open a form */
     sb_putc(out, '(');
     sb_puts(out, text);
 
     if (arity > 0) {
         /* Fixed arity: consume exactly N args regardless of indentation */
+        ArityEntry *entry = arity_get_entry(t, text);
         for (int i = 0; i < arity && s->pos < s->count; i++) {
             sb_putc(out, ' ');
-            wisp_parse_expr(t, s, out, my_indent, arity - i - 1);
+            ParamKind kind = (entry && i < WISP_MAX_PARAMS)
+                           ? entry->param_kinds[i] : PARAM_VALUE;
+            if (kind == PARAM_FUNC) {
+                /* Emit bare — this slot expects a function value, not a call result */
+                WToken *arg = &s->tokens[s->pos];
+                sb_puts(out, arg->text);
+                s->pos++;
+            } else {
+                wisp_parse_expr(t, s, out, my_indent, arity - i - 1);
+            }
         }
         /* Special case: define may have optional metadata (docstring,
          * :keyword value pairs) before the body — consume them all. */
@@ -1165,16 +1182,17 @@ void wisp_register_arities_from_env(Env *env) {
             if (e->kind != ENV_BUILTIN && e->kind != ENV_FUNC) continue;
             int arity;
             if (e->arity_max == -1) {
-                /* variadic */
                 arity = -1;
             } else if (e->arity_max == 0) {
-                /* sentinel: fixed arity = arity_min */
                 arity = e->arity_min;
             } else {
-                /* fixed arity = arity_max */
                 arity = e->arity_max;
             }
-            wisp_register_arity(e->name, arity);
+            if (!g_ffi_arities_init) {
+                memset(&g_ffi_arities, 0, sizeof(g_ffi_arities));
+                g_ffi_arities_init = true;
+            }
+            arity_set_with_kinds(&g_ffi_arities, e->name, arity, e->param_kinds);
         }
     }
 }
@@ -1253,7 +1271,7 @@ ASTList wisp_parse_all(const char *source, const char *filename) {
     if (g_ffi_arities_init)
         for (int i = 0; i < ARITY_BUCKETS; i++)
             for (ArityEntry *e = g_ffi_arities.buckets[i]; e; e = e->next)
-                arity_set(&t, e->name, e->arity);
+                arity_set_with_kinds(&t, e->name, e->arity, e->param_kinds);
 
     /* Build flat token stream */
     WTokenStream s = build_token_stream(stripped, &t);

@@ -1,9 +1,0 @@
-* Monadc
-
-The only compiler for the Monad programming language
-
-** Debug
-   To debug the repl run:
-   #+begin_src sh
-   REPL_DUMP_IR=1 ./monad -i
-   #+end_src

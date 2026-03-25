@@ -1,12 +1,14 @@
 #ifndef ENV_H
 #define ENV_H
-
 #include <llvm-c/Core.h>
 #include "types.h"
 #include "reader.h"
 
 /* Forward declaration — full definition in infer.h */
 struct TypeScheme;
+
+#define WISP_MAX_PARAMS 16
+typedef enum { PARAM_VALUE, PARAM_FUNC } ParamKind;
 
 typedef enum {
     ENV_VAR,      // a variable
@@ -39,6 +41,7 @@ typedef struct EnvEntry {
     // Arity  (-1 = variadic)
     int arity_min;
     int arity_max;
+    ParamKind param_kinds[WISP_MAX_PARAMS]; // per-param: PARAM_FUNC if slot expects a function
 
     // Functions (ENV_FUNC)
     LLVMValueRef func_ref;
@@ -82,12 +85,17 @@ void env_insert_with_doc(Env *table, const char *name, Type *type,
 
 void env_insert_builtin(Env *table, const char *name,
                               int arity_min, int arity_max,
-                              const char *docstring);
-
+                              const char *docstring,
+                              const ParamKind *param_kinds);
 void env_insert_func(Env *table, const char *name,
                           EnvParam *params, int param_count,
                           Type *return_type, LLVMValueRef func_ref,
-                          const char *docstring);
+                          const char *docstring,
+                          const ParamKind *param_kinds);
+/* Convenience macro — for functions with no higher-order params */
+#define env_insert_builtin_simple(t,n,mn,mx,doc) \
+    env_insert_builtin((t),(n),(mn),(mx),(doc),NULL)
+
 
 void env_insert_from_module(Env *table, const char *name, const char *module_name,
                             Type *type, LLVMValueRef value, bool is_exported);

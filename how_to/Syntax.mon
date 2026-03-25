@@ -15,70 +15,72 @@ define arr :: Arr :: 3 :: Int [1 2 3]
 define (my-count String -> Int)
   x -> count x
 
-
 ;; DONE
 define return-string -> String
   "ciao"
-
-;; TODO WISP
-show return-string
-;; (show return-string) WRONG
 
 
 define square :: Int -> Int
   x -> x `*` x
 
-show square 3
+map square '(1 2 3 4)
+show return-string
 
 
-show map square '(1 2 3)
+;; define square :: Int -> Int
+;;   x -> x `*` x
+
+;; show square 3
 
 
-
-;; TODO Wisp
-;; define pow [base :: Float] [exp :: Float] -> Float
-;;   :doc "Raise BASE to the power EXP."
-;;   :alias ^
-;;   if exp `=` 0.0 1.0
-;;       if exp `>` 0.0
-;;           base `*` base `^` (exp `-` 1.0)
-;;           1.0  `/` base `^` (0.0 `-` exp)
+;; show map square '(1 2 3)
 
 
 
-
-
-;; TODO
-;; (define (main)
-;;   (map square '(1 2 3)))
-
-
-define my-count :: String -> Int
-  x -> count x
-
-
-;; ;; DONE
-(define (last [a] -> a)
-  [] -> nil
-  [x] -> x
-  [_|xs] -> (last xs))
-
-
-define last :: [a] -> a
- [] -> nil
- [x] -> x
- [_|xs] -> last xs
-
-;; define (double x) * x x
-
-;; define id λx.x
+;; ;; TODO Wisp
+;; ;; define pow [base :: Float] [exp :: Float] -> Float
+;; ;;   :doc "Raise BASE to the power EXP."
+;; ;;   :alias ^
+;; ;;   if exp `=` 0.0 1.0
+;; ;;       if exp `>` 0.0
+;; ;;           base `*` base `^` (exp `-` 1.0)
+;; ;;           1.0  `/` base `^` (0.0 `-` exp)
 
 
 
-;; (show (last '(1 2 3)))
-
-;; (show (my-count "ciao"))
 
 
-;; define main :: IO ()
-;;   show ("o" `isSuffixOf` "hello")
+;; ;; TODO
+;; ;; (define (main)
+;; ;;   (map square '(1 2 3)))
+
+
+;; define my-count :: String -> Int
+;;   x -> count x
+
+
+;; ;; ;; DONE
+;; (define (last [a] -> a)
+;;   [] -> nil
+;;   [x] -> x
+;;   [_|xs] -> (last xs))
+
+
+;; define last :: [a] -> a
+;;  [] -> nil
+;;  [x] -> x
+;;  [_|xs] -> last xs
+
+;; ;; define (double x) * x x
+
+;; ;; define id λx.x
+
+
+
+;; ;; (show (last '(1 2 3)))
+
+;; ;; (show (my-count "ciao"))
+
+
+;; ;; define main :: IO ()
+;; ;;   show ("o" `isSuffixOf` "hello")

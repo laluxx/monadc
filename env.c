@@ -233,7 +233,8 @@ void env_insert_from_module(Env *table, const char *name, const char *module_nam
 
 void env_insert_builtin(Env *table, const char *name,
                          int arity_min, int arity_max,
-                         const char *docstring) {
+                         const char *docstring,
+                         const ParamKind *param_kinds) {
     EnvEntry *e = find(table, name);
     if (e) {
         e->kind      = ENV_BUILTIN;
@@ -241,20 +242,27 @@ void env_insert_builtin(Env *table, const char *name,
         e->arity_max = arity_max;
         free(e->docstring);
         e->docstring = docstring ? strdup(docstring) : NULL;
-        return;
+    } else {
+        e = new_entry(name);
+        e->kind      = ENV_BUILTIN;
+        e->arity_min = arity_min;
+        e->arity_max = arity_max;
+        e->docstring = docstring ? strdup(docstring) : NULL;
+        chain(table, e);
     }
-    e = new_entry(name);
-    e->kind      = ENV_BUILTIN;
-    e->arity_min = arity_min;
-    e->arity_max = arity_max;
-    e->docstring = docstring ? strdup(docstring) : NULL;
-    chain(table, e);
+    memset(e->param_kinds, PARAM_VALUE, sizeof(e->param_kinds));
+    if (param_kinds) {
+        int n = arity_max > 0 ? arity_max : arity_min;
+        for (int i = 0; i < n && i < WISP_MAX_PARAMS; i++)
+            e->param_kinds[i] = param_kinds[i];
+    }
 }
 
 void env_insert_func(Env *table, const char *name,
                      EnvParam *params, int param_count,
                      Type *return_type, LLVMValueRef func_ref,
-                     const char *docstring) {
+                     const char *docstring,
+                     const ParamKind *param_kinds) {
     EnvEntry *e = find(table, name);
     if (e) {
         char *saved_source  = e->source_text;
@@ -288,6 +296,11 @@ void env_insert_func(Env *table, const char *name,
     e->type        = type_fn(NULL, 0, NULL);
     e->module_name = NULL;
     e->is_exported = true;
+    memset(e->param_kinds, PARAM_VALUE, sizeof(e->param_kinds));
+    if (param_kinds) {
+        for (int i = 0; i < param_count && i < WISP_MAX_PARAMS; i++)
+            e->param_kinds[i] = param_kinds[i];
+    }
 }
 
 EnvEntry *env_lookup(Env *table, const char *name) {

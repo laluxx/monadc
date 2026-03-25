@@ -8,7 +8,7 @@
   (!=) :: a -> a -> Bool
   (x `!=` y) => (not (x `=` y))) ; Default implementation(s)
 
-data TrafficLight Red | Yellow | Green
+data TrafficLight Red | Yellow | Green deriving Eq
 
 
 ;; (instance Eq TrafficLight where

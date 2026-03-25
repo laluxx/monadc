@@ -362,7 +362,7 @@ static void declare_externals(CodegenContext *ctx,
             }
             env_insert_func(ctx->env, qn,
                             clone_params(e->params, e->param_count),
-                            e->param_count, type_clone(e->return_type), fn, NULL);
+                            e->param_count, type_clone(e->return_type), fn, NULL, NULL);
             EnvEntry *ent = env_lookup(ctx->env, qn);
             if (ent) { ent->module_name = strdup(dep->module_name);
                        ent->llvm_name   = strdup(e->mangled_name); }
@@ -370,7 +370,7 @@ static void declare_externals(CodegenContext *ctx,
             if (import->mode != IMPORT_QUALIFIED) {
                 env_insert_func(ctx->env, e->local_name,
                                 clone_params(e->params, e->param_count),
-                                e->param_count, type_clone(e->return_type), fn, NULL);
+                                e->param_count, type_clone(e->return_type), fn, NULL, NULL);
                 EnvEntry *ent2 = env_lookup(ctx->env, e->local_name);
                 if (ent2) { ent2->module_name = strdup(dep->module_name);
                             ent2->llvm_name   = strdup(e->mangled_name); }

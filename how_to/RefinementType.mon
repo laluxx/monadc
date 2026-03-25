@@ -67,8 +67,9 @@ type Positive { x ∈ Int | x > 0 }
   (CompanyEmail? x))
 
 (define (return-string -> CompanyEmail)
-  "String returned from a function")
+  "ciao@company.com")
 
+define the-email "email@company.com"
 
 (show (return-string))
 (show (passedCompanyEmail? the-email))

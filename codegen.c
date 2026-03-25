@@ -308,7 +308,7 @@ static LLVMValueRef codegen_specialize(CodegenContext *ctx,
     env_insert_func(ctx->env, spec_name,
                     clone_params(env_params, total_params),
                     total_params, type_clone(ret_type),
-                    func, NULL);
+                    func, NULL, NULL);
     EnvEntry *spec_entry = env_lookup(ctx->env, spec_name);
     if (spec_entry) {
         spec_entry->lifted_count   = 0;
@@ -1897,7 +1897,7 @@ void codegen_data(CodegenContext *ctx, AST *ast) {
         Type *ret_type = type_clone(data_layout_type);
         env_insert_func(ctx->env, ctor->name,
                         clone_params(env_params, nfields),
-                        nfields, ret_type, func, NULL);
+                        nfields, ret_type, func, NULL, NULL);
         env_insert_adt_ctor(ctx->env, ctor->name, ci,
                             type_clone(data_layout_type), func);
         EnvEntry *ctor_e = env_lookup(ctx->env, ctor->name);
@@ -2006,7 +2006,7 @@ void codegen_data(CodegenContext *ctx, AST *ast) {
             EnvParam acc_eparam = {strdup("__self"), type_clone(data_layout_type)};
             env_insert_func(ctx->env, acc_name,
                             clone_params(&acc_eparam, 1), 1,
-                            type_clone(ft), acc_fn, NULL);
+                            type_clone(ft), acc_fn, NULL, NULL);
             EnvEntry *acc_e = env_lookup(ctx->env, acc_name);
             if (acc_e) {
                 acc_e->is_closure_abi = false;
@@ -2671,6 +2671,7 @@ static int jit_eval_refinement(CodegenContext *ctx,
     jit_ctx.context = eval_ctx;
     jit_ctx.env     = env_create_child(ctx->env);
     jit_ctx.init_fn = NULL;
+    jit_ctx.tc_registry = ctx->tc_registry;
 
     /* Declare runtime functions */
     declare_runtime_functions(&jit_ctx);
@@ -2699,7 +2700,7 @@ static int jit_eval_refinement(CodegenContext *ctx,
             /* Register in jit_ctx.env so codegen_expr finds it */
             env_insert_func(jit_ctx.env, fname,
                             clone_params(e->params, np), np,
-                            type_clone(e->return_type), decl, NULL);
+                            type_clone(e->return_type), decl, NULL, NULL);
             EnvEntry *je = env_lookup(jit_ctx.env, fname);
             if (je) {
                 je->is_closure_abi = e->is_closure_abi;
@@ -4188,7 +4189,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     env_insert_func(ctx->env, var_name,
                                     clone_params(env_params, total_params),
                                     total_params, type_clone(ret_type),
-                                    func, lambda->lambda.docstring);
+                                    func, lambda->lambda.docstring, NULL);
                     if (hm_scheme) env_set_scheme(ctx->env, var_name, hm_scheme);
                     EnvEntry *e_fwd = env_lookup(ctx->env, var_name);
                     if (e_fwd) {
@@ -4844,7 +4845,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
            ///// Register in symbol table
 
                     env_insert_func(ctx->env, var_name, env_params, total_params,
-                                    ret_type, func, lambda->lambda.docstring);
+                                    ret_type, func, lambda->lambda.docstring, NULL);
                     if (hm_scheme) env_set_scheme(ctx->env, var_name, hm_scheme);
                     EnvEntry *efinal = env_lookup(ctx->env, var_name);
                     if (efinal) {
@@ -4860,7 +4861,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         env_insert_func(ctx->env, alias_sym,
                                         clone_params(env_params, total_params),
                                         total_params, type_clone(ret_type),
-                                        func, lambda->lambda.docstring);
+                                        func, lambda->lambda.docstring, NULL);
                         if (hm_scheme)
                             env_set_scheme(ctx->env, alias_sym, hm_scheme);
                         EnvEntry *alias_e = env_lookup(ctx->env, alias_sym);
@@ -4891,7 +4892,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                             env_insert_func(ctx->env, mangled,
                                             clone_params(env_params, total_params),
                                             total_params, type_clone(ret_type),
-                                            func, lambda->lambda.docstring);
+                                            func, lambda->lambda.docstring, NULL);
                             if (hm_scheme)
                                 env_set_scheme(ctx->env, mangled, hm_scheme);
                             EnvEntry *mangled_e = env_lookup(ctx->env, mangled);
@@ -11502,150 +11503,151 @@ void codegen_declare_external_func(CodegenContext *ctx,
     LLVMSetLinkage(fn, LLVMExternalLinkage);
     free(ptypes);
 }
-
 void register_builtins(CodegenContext *ctx) {
     // Arithmetic operators
-    env_insert_builtin(ctx->env, "+",  1, -1, "Add numbers");
-    env_insert_builtin(ctx->env, "-",  1, -1, "Subtract or negate numbers");
-    env_insert_builtin(ctx->env, "*",  1, -1, "Multiply numbers");
-    env_insert_builtin(ctx->env, "/",  1, -1, "Divide numbers");
-    env_insert_builtin(ctx->env, "%",  2,  0, "Modulo operation");
+    env_insert_builtin(ctx->env, "+",  1, -1, "Add numbers", NULL);
+    env_insert_builtin(ctx->env, "-",  1, -1, "Subtract or negate numbers", NULL);
+    env_insert_builtin(ctx->env, "*",  1, -1, "Multiply numbers", NULL);
+    env_insert_builtin(ctx->env, "/",  1, -1, "Divide numbers", NULL);
+    env_insert_builtin(ctx->env, "%",  2,  0, "Modulo operation", NULL);
 
     // Bitwise operators
-    env_insert_builtin(ctx->env, "&",         2, -1, "Bitwise AND of integers: (& a b c ...).\n As a prefix &x returns the memory address of x");
-    env_insert_builtin(ctx->env, "|",         2, -1, "Bitwise OR of integers: (| a b c ...)");
-    env_insert_builtin(ctx->env, "bit-xor",   2, -1, "Bitwise XOR of integers: (bit-xor a b c ...)");
-    env_insert_builtin(ctx->env, "⊕",         2, -1, "Bitwise XOR of integers: (⊕ a b c ...)");
-    env_insert_builtin(ctx->env, "~",         1,  0, "Bitwise NOT of an integer: (~ x)");
-    env_insert_builtin(ctx->env, "<<",        2,  0, "Left shift: (<< x n)");
-    env_insert_builtin(ctx->env, ">>",        2,  0, "Arithmetic right shift, sign-preserving: (>> x n)");
-    env_insert_builtin(ctx->env, ">>>",       2,  0, "Logical right shift, zero-fill: (>>> x n)");
+    env_insert_builtin(ctx->env, "&",         2, -1, "Bitwise AND of integers: (& a b c ...).\n As a prefix &x returns the memory address of x", NULL);
+    env_insert_builtin(ctx->env, "|",         2, -1, "Bitwise OR of integers: (| a b c ...)", NULL);
+    env_insert_builtin(ctx->env, "bit-xor",   2, -1, "Bitwise XOR of integers: (bit-xor a b c ...)", NULL);
+    env_insert_builtin(ctx->env, "⊕",         2, -1, "Bitwise XOR of integers: (⊕ a b c ...)", NULL);
+    env_insert_builtin(ctx->env, "~",         1,  0, "Bitwise NOT of an integer: (~ x)", NULL);
+    env_insert_builtin(ctx->env, "<<",        2,  0, "Left shift: (<< x n)", NULL);
+    env_insert_builtin(ctx->env, ">>",        2,  0, "Arithmetic right shift, sign-preserving: (>> x n)", NULL);
+    env_insert_builtin(ctx->env, ">>>",       2,  0, "Logical right shift, zero-fill: (>>> x n)", NULL);
 
     // Comparison operators
-    env_insert_builtin(ctx->env, "=",  2, -1, "Test equality");
-    env_insert_builtin(ctx->env, "!=", 2, -1, "Test inequality");
-    env_insert_builtin(ctx->env, "<",  2, -1, "Less than");
-    env_insert_builtin(ctx->env, "<=", 2, -1, "Less than or equal");
-    env_insert_builtin(ctx->env, ">",  2, -1, "Greater than");
-    env_insert_builtin(ctx->env, ">=", 2, -1, "Greater than or equal");
+    env_insert_builtin(ctx->env, "=",  2, -1, "Test equality", NULL);
+    env_insert_builtin(ctx->env, "!=", 2, -1, "Test inequality", NULL);
+    env_insert_builtin(ctx->env, "<",  2, -1, "Less than", NULL);
+    env_insert_builtin(ctx->env, "<=", 2, -1, "Less than or equal", NULL);
+    env_insert_builtin(ctx->env, ">",  2, -1, "Greater than", NULL);
+    env_insert_builtin(ctx->env, ">=", 2, -1, "Greater than or equal", NULL);
 
-    env_insert_builtin(ctx->env, "code", 1, 0, "Return the source AST of a defined function");
+    env_insert_builtin(ctx->env, "code", 1, 0, "Return the source AST of a defined function", NULL);
 
     // Map
-    env_insert_builtin(ctx->env, "Map?",     1, 0, "Test if value is a map");
-    env_insert_builtin(ctx->env, "assoc",    3, 0, "Add or update a key-value pair in a map (immutable)");
-    env_insert_builtin(ctx->env, "assoc!",   3, 0, "Add or update a key-value pair in a map in place");
-    env_insert_builtin(ctx->env, "dissoc",   2, 0, "Remove a key from a map (immutable)");
-    env_insert_builtin(ctx->env, "dissoc!",  2, 0, "Remove a key from a map in place");
-    env_insert_builtin(ctx->env, "find",     2, 0, "Return (key val) pair for key in map, or nil");
-    env_insert_builtin(ctx->env, "keys",     1, 0, "Return a list of all keys in a map");
-    env_insert_builtin(ctx->env, "vals",     1, 0, "Return a list of all values in a map");
-    env_insert_builtin(ctx->env, "merge",    2, 0, "Merge two maps, rightmost wins on conflict");
+    env_insert_builtin(ctx->env, "Map?",     1, 0, "Test if value is a map", NULL);
+    env_insert_builtin(ctx->env, "assoc",    3, 0, "Add or update a key-value pair in a map (immutable)", NULL);
+    env_insert_builtin(ctx->env, "assoc!",   3, 0, "Add or update a key-value pair in a map in place", NULL);
+    env_insert_builtin(ctx->env, "dissoc",   2, 0, "Remove a key from a map (immutable)", NULL);
+    env_insert_builtin(ctx->env, "dissoc!",  2, 0, "Remove a key from a map in place", NULL);
+    env_insert_builtin(ctx->env, "find",     2, 0, "Return (key val) pair for key in map, or nil", NULL);
+    env_insert_builtin(ctx->env, "keys",     1, 0, "Return a list of all keys in a map", NULL);
+    env_insert_builtin(ctx->env, "vals",     1, 0, "Return a list of all values in a map", NULL);
+    env_insert_builtin(ctx->env, "merge",    2, 0, "Merge two maps, rightmost wins on conflict", NULL);
 
     // Set
-    env_insert_builtin(ctx->env, "set",          0, -1, "Create a set from arguments or convert a collection");
-    env_insert_builtin(ctx->env, "Set?",         1,  0, "Test if value is a set");
-    env_insert_builtin(ctx->env, "collection?",  1,  0, "Test if value is a List, Set, or Arr");
-    env_insert_builtin(ctx->env, "conj",         2,  0, "Add an element to a set");
-    env_insert_builtin(ctx->env, "disj",         2,  0, "Remove an element from a set");
-    env_insert_builtin(ctx->env, "conj!",        2,  0, "Mutate a set by adding an element in place");
-    env_insert_builtin(ctx->env, "disj!",        2,  0, "Mutate a set by removing an element in place");
-    env_insert_builtin(ctx->env, "contains?",    2,  0, "Test if a set contains an element");
-    env_insert_builtin(ctx->env, "ends-with?",   2,  0, "Test if a string, list or array ends with a suffix");
-    env_insert_builtin(ctx->env, "starts-with?", 2,  0, "Test if a string, list or array starts with a prefix");
-    env_insert_builtin(ctx->env, "count",        1,  0, "Get number of elements in a set");
+    env_insert_builtin(ctx->env, "set",          0, -1, "Create a set from arguments or convert a collection", NULL);
+    env_insert_builtin(ctx->env, "Set?",         1,  0, "Test if value is a set", NULL);
+    env_insert_builtin(ctx->env, "collection?",  1,  0, "Test if value is a List, Set, or Arr", NULL);
+    env_insert_builtin(ctx->env, "conj",         2,  0, "Add an element to a set", NULL);
+    env_insert_builtin(ctx->env, "disj",         2,  0, "Remove an element from a set", NULL);
+    env_insert_builtin(ctx->env, "conj!",        2,  0, "Mutate a set by adding an element in place", NULL);
+    env_insert_builtin(ctx->env, "disj!",        2,  0, "Mutate a set by removing an element in place", NULL);
+    env_insert_builtin(ctx->env, "contains?",    2,  0, "Test if a set contains an element", NULL);
+    env_insert_builtin(ctx->env, "ends-with?",   2,  0, "Test if a string, list or array ends with a suffix", NULL);
+    env_insert_builtin(ctx->env, "starts-with?", 2,  0, "Test if a string, list or array starts with a prefix", NULL);
+    env_insert_builtin(ctx->env, "count",        1,  0, "Get number of elements in a set", NULL);
 
     // List operations
-    env_insert_builtin(ctx->env, "list",    0, -1, "Create a list from arguments");
-    env_insert_builtin(ctx->env, "cons",    2,  0, "Cons an element onto a list");
-    env_insert_builtin(ctx->env, "car",     1,  0, "Get first element of list");
-    env_insert_builtin(ctx->env, "cdr",     1,  0, "Get rest of list");
-    env_insert_builtin(ctx->env, "first",   1,  0, "Get first element (alias for car)");
-    env_insert_builtin(ctx->env, "rest",    1,  0, "Get rest of list (alias for cdr)");
-    env_insert_builtin(ctx->env, "length",  1,  0, "Get length of list or string");
-    env_insert_builtin(ctx->env, "append",  2, -1, "Concatenate lists");
-    env_insert_builtin(ctx->env, "reverse", 1,  0, "Reverse a list");
-    env_insert_builtin(ctx->env, "nth",     2,  0, "Get nth element of list (0-indexed)");
-    env_insert_builtin(ctx->env, "map",     2,  0, "Map function over list");
-    env_insert_builtin(ctx->env, "filter",  2,  0, "Filter list by predicate");
-    env_insert_builtin(ctx->env, "reduce",  3,  0, "Reduce list with function and initial value");
-    env_insert_builtin(ctx->env, "empty?",  1,  0, "Test if list is empty");
+    env_insert_builtin(ctx->env, "list",    0, -1, "Create a list from arguments", NULL);
+    env_insert_builtin(ctx->env, "cons",    2,  0, "Cons an element onto a list", NULL);
+    env_insert_builtin(ctx->env, "car",     1,  0, "Get first element of list", NULL);
+    env_insert_builtin(ctx->env, "cdr",     1,  0, "Get rest of list", NULL);
+    env_insert_builtin(ctx->env, "first",   1,  0, "Get first element (alias for car)", NULL);
+    env_insert_builtin(ctx->env, "rest",    1,  0, "Get rest of list (alias for cdr)", NULL);
+    env_insert_builtin(ctx->env, "length",  1,  0, "Get length of list or string", NULL);
+    env_insert_builtin(ctx->env, "append",  2, -1, "Concatenate lists", NULL);
+    env_insert_builtin(ctx->env, "reverse", 1,  0, "Reverse a list", NULL);
+    env_insert_builtin(ctx->env, "nth",     2,  0, "Get nth element of list (0-indexed)", NULL);
+    { static const ParamKind pk[] = {PARAM_FUNC, PARAM_VALUE};
+      env_insert_builtin(ctx->env, "map",    2, 0, "Map function over list", pk); }
+    { static const ParamKind pk[] = {PARAM_FUNC, PARAM_VALUE};
+      env_insert_builtin(ctx->env, "filter", 2, 0, "Filter list by predicate", pk); }
+    { static const ParamKind pk[] = {PARAM_FUNC, PARAM_VALUE, PARAM_VALUE};
+      env_insert_builtin(ctx->env, "reduce", 3, 0, "Reduce list with function and initial value", pk); }
+    env_insert_builtin(ctx->env, "empty?",  1,  0, "Test if list is empty", NULL);
 
     // Logic operators
-    env_insert_builtin(ctx->env, "and", 2, -1, "Logical AND (short-circuit)");
-    env_insert_builtin(ctx->env, "or",  2, -1, "Logical OR (short-circuit)");
-    env_insert_builtin(ctx->env, "not", 1,  0, "Logical NOT");
+    env_insert_builtin(ctx->env, "and", 2, -1, "Logical AND (short-circuit)", NULL);
+    env_insert_builtin(ctx->env, "or",  2, -1, "Logical OR (short-circuit)", NULL);
+    env_insert_builtin(ctx->env, "not", 1,  0, "Logical NOT", NULL);
 
     // Control flow
-    env_insert_builtin(ctx->env, "if",     3,  0, "Conditional: (if cond then else)");
-    env_insert_builtin(ctx->env, "for",    2, -1, "Loop with binding: (for [i 0 10] body) or (for [n] body)");
-    env_insert_builtin(ctx->env, "while",  2, -1, "Loop while condition is true: (while cond body...)");
-    env_insert_builtin(ctx->env, "until",  2, -1, "Loop until condition is true: (until cond body...)");
-    env_insert_builtin(ctx->env, "unless", 2,  0, "Execute body if condition is False: (unless cond body)");
-    env_insert_builtin(ctx->env, "when",   2, -1, "Execute when condition is true");
-    env_insert_builtin(ctx->env, "unless", 2, -1, "Execute unless condition is true");
-    env_insert_builtin(ctx->env, "cond",   1, -1, "Multi-branch conditional");
+    env_insert_builtin(ctx->env, "if",     3,  0, "Conditional: (if cond then else)", NULL);
+    env_insert_builtin(ctx->env, "for",    2, -1, "Loop with binding: (for [i 0 10] body) or (for [n] body)", NULL);
+    env_insert_builtin(ctx->env, "while",  2, -1, "Loop while condition is true: (while cond body...)", NULL);
+    env_insert_builtin(ctx->env, "until",  2, -1, "Loop until condition is true: (until cond body...)", NULL);
+    env_insert_builtin(ctx->env, "unless", 2,  0, "Execute body if condition is False: (unless cond body)", NULL);
+    env_insert_builtin(ctx->env, "when",   2, -1, "Execute when condition is true", NULL);
+    env_insert_builtin(ctx->env, "unless", 2, -1, "Execute unless condition is true", NULL);
+    env_insert_builtin(ctx->env, "cond",   1, -1, "Multi-branch conditional", NULL);
 
     // Special forms (even though handled specially, should be in environment)
-    env_insert_builtin(ctx->env, "define",     2,  0, "Define a variable or function");
-    env_insert_builtin(ctx->env, "include",    1,  0, "Include a C header via FFI");
-    env_insert_builtin(ctx->env, "import",     1,  0, "Import a module");
-    env_insert_builtin(ctx->env, "module",     1, -1, "Declare a module");
-    env_insert_builtin(ctx->env, "type",       1, -1, "Define a refinement type");
-    env_insert_builtin(ctx->env, "lambda",     2, -1, "Create anonymous function");
-    env_insert_builtin(ctx->env, "quote",      1,  0, "Quote expression without evaluation");
-    env_insert_builtin(ctx->env, "show",       1,  0, "Print a value to stdout");
-    env_insert_builtin(ctx->env, "let",        2, -1, "Bind variables in scope: (let ([x e] ...) body)");
-    env_insert_builtin(ctx->env, "let*",       2, -1, "Bind variables sequentially, each visible to the next:\n (let* ([x e] [y (f x)] ...) body)");
-    env_insert_builtin(ctx->env, "letrec",     2, -1, "Bind mutually recursive variables:\n (letrec ([f (lambda ...)]) body)");
-    env_insert_builtin(ctx->env, "set!",       2,  0, "Mutate an existing variable: (set! x value)");
+    env_insert_builtin(ctx->env, "define",     2,  0, "Define a variable or function", NULL);
+    env_insert_builtin(ctx->env, "include",    1,  0, "Include a C header via FFI", NULL);
+    env_insert_builtin(ctx->env, "import",     1,  0, "Import a module", NULL);
+    env_insert_builtin(ctx->env, "module",     1, -1, "Declare a module", NULL);
+    env_insert_builtin(ctx->env, "type",       1, -1, "Define a refinement type", NULL);
+    env_insert_builtin(ctx->env, "lambda",     2, -1, "Create anonymous function", NULL);
+    env_insert_builtin(ctx->env, "quote",      1,  0, "Quote expression without evaluation", NULL);
+    env_insert_builtin(ctx->env, "show",       1,  0, "Print a value to stdout", NULL);
+    env_insert_builtin(ctx->env, "let",        2, -1, "Bind variables in scope: (let ([x e] ...) body)", NULL);
+    env_insert_builtin(ctx->env, "let*",       2, -1, "Bind variables sequentially, each visible to the next:\n (let* ([x e] [y (f x)] ...) body)", NULL);
+    env_insert_builtin(ctx->env, "letrec",     2, -1, "Bind mutually recursive variables:\n (letrec ([f (lambda ...)]) body)", NULL);
+    env_insert_builtin(ctx->env, "set!",       2,  0, "Mutate an existing variable: (set! x value)", NULL);
 
-    // Type conversions (already implemented but add to env)
-    env_insert_builtin(ctx->env, "Int",    1, 0, "Convert value to integer");
-    env_insert_builtin(ctx->env, "Float",  1, 0, "Convert value to float");
-    env_insert_builtin(ctx->env, "Char",   1, 0, "Convert value to character");
-    env_insert_builtin(ctx->env, "String", 1, 0, "Convert value to string");
-    env_insert_builtin(ctx->env, "Hex",    1, 0, "Convert to hexadecimal integer");
-    env_insert_builtin(ctx->env, "Bin",    1, 0, "Convert to binary integer");
-    env_insert_builtin(ctx->env, "Oct",    1, 0, "Convert to octal integer");
-    env_insert_builtin(ctx->env, "F32",    1, 0, "Convert to 32-bit float");
-    env_insert_builtin(ctx->env, "I8",     1, 0, "Convert to signed 8-bit integer");
-    env_insert_builtin(ctx->env, "U8",     1, 0, "Convert to unsigned 8-bit integer");
-    env_insert_builtin(ctx->env, "I16",    1, 0, "Convert to signed 16-bit integer");
-    env_insert_builtin(ctx->env, "U16",    1, 0, "Convert to unsigned 16-bit integer");
-    env_insert_builtin(ctx->env, "I32",    1, 0, "Convert to signed 32-bit integer");
-    env_insert_builtin(ctx->env, "U32",    1, 0, "Convert to unsigned 32-bit integer");
-    env_insert_builtin(ctx->env, "I64",    1, 0, "Convert to signed 64-bit integer");
-    env_insert_builtin(ctx->env, "U64",    1, 0, "Convert to unsigned 64-bit integer");
-    env_insert_builtin(ctx->env, "I128",   1, 0, "Convert to signed 128-bit integer");
-    env_insert_builtin(ctx->env, "U128",   1, 0, "Convert to unsigned 128-bit integer");
+    // Type conversions
+    env_insert_builtin(ctx->env, "Int",    1, 0, "Convert value to integer", NULL);
+    env_insert_builtin(ctx->env, "Float",  1, 0, "Convert value to float", NULL);
+    env_insert_builtin(ctx->env, "Char",   1, 0, "Convert value to character", NULL);
+    env_insert_builtin(ctx->env, "String", 1, 0, "Convert value to string", NULL);
+    env_insert_builtin(ctx->env, "Hex",    1, 0, "Convert to hexadecimal integer", NULL);
+    env_insert_builtin(ctx->env, "Bin",    1, 0, "Convert to binary integer", NULL);
+    env_insert_builtin(ctx->env, "Oct",    1, 0, "Convert to octal integer", NULL);
+    env_insert_builtin(ctx->env, "F32",    1, 0, "Convert to 32-bit float", NULL);
+    env_insert_builtin(ctx->env, "I8",     1, 0, "Convert to signed 8-bit integer", NULL);
+    env_insert_builtin(ctx->env, "U8",     1, 0, "Convert to unsigned 8-bit integer", NULL);
+    env_insert_builtin(ctx->env, "I16",    1, 0, "Convert to signed 16-bit integer", NULL);
+    env_insert_builtin(ctx->env, "U16",    1, 0, "Convert to unsigned 16-bit integer", NULL);
+    env_insert_builtin(ctx->env, "I32",    1, 0, "Convert to signed 32-bit integer", NULL);
+    env_insert_builtin(ctx->env, "U32",    1, 0, "Convert to unsigned 32-bit integer", NULL);
+    env_insert_builtin(ctx->env, "I64",    1, 0, "Convert to signed 64-bit integer", NULL);
+    env_insert_builtin(ctx->env, "U64",    1, 0, "Convert to unsigned 64-bit integer", NULL);
+    env_insert_builtin(ctx->env, "I128",   1, 0, "Convert to signed 128-bit integer", NULL);
+    env_insert_builtin(ctx->env, "U128",   1, 0, "Convert to unsigned 128-bit integer", NULL);
 
     /* Type predicates — auto-generated for every known type */
-    env_insert_builtin(ctx->env, "nil?", 1, 1, "Return True if value is nil (null pointer)");
-    env_insert_builtin(ctx->env, "Int?",     1, 0, "Return True if value is an Int");
-    env_insert_builtin(ctx->env, "Float?",   1, 0, "Return True if value is a Float");
-    env_insert_builtin(ctx->env, "Char?",    1, 0, "Return True if value is a Char");
-    env_insert_builtin(ctx->env, "String?",  1, 0, "Return True if value is a String");
-    env_insert_builtin(ctx->env, "Bool?",    1, 0, "Return True if value is a Bool");
-    env_insert_builtin(ctx->env, "Symbol?",  1, 0, "Return True if value is a Symbol");
-    env_insert_builtin(ctx->env, "Keyword?", 1, 0, "Return True if value is a Keyword");
-    env_insert_builtin(ctx->env, "List?",    1, 0, "Return True if value is a List");
-    env_insert_builtin(ctx->env, "Ratio?",   1, 0, "Return True if value is a Ratio");
-    env_insert_builtin(ctx->env, "Set?",     1, 0, "Return True if value is a Set");
-    env_insert_builtin(ctx->env, "Map?",     1, 0, "Return True if value is a Map");
-    env_insert_builtin(ctx->env, "Arr?",     1, 0, "Return True if value is an Arr");
-    env_insert_builtin(ctx->env, "Fn?",      1, 0, "Return True if value is a Fn/closure");
-    env_insert_builtin(ctx->env, "Number?",  1, 0, "Return True if value is Int or Float");
-    env_insert_builtin(ctx->env, "Boolean?", 1, 0, "Return True if value is a Bool");
-    env_insert_builtin(ctx->env, "Hex?",     1, 0, "Return True if value is a Hex");
-    env_insert_builtin(ctx->env, "Bin?",     1, 0, "Return True if value is a Bin");
-    env_insert_builtin(ctx->env, "Oct?",     1, 0, "Return True if value is an Oct");
-
+    env_insert_builtin(ctx->env, "nil?",     1, 1, "Return True if value is nil (null pointer)", NULL);
+    env_insert_builtin(ctx->env, "Int?",     1, 0, "Return True if value is an Int", NULL);
+    env_insert_builtin(ctx->env, "Float?",   1, 0, "Return True if value is a Float", NULL);
+    env_insert_builtin(ctx->env, "Char?",    1, 0, "Return True if value is a Char", NULL);
+    env_insert_builtin(ctx->env, "String?",  1, 0, "Return True if value is a String", NULL);
+    env_insert_builtin(ctx->env, "Bool?",    1, 0, "Return True if value is a Bool", NULL);
+    env_insert_builtin(ctx->env, "Symbol?",  1, 0, "Return True if value is a Symbol", NULL);
+    env_insert_builtin(ctx->env, "Keyword?", 1, 0, "Return True if value is a Keyword", NULL);
+    env_insert_builtin(ctx->env, "List?",    1, 0, "Return True if value is a List", NULL);
+    env_insert_builtin(ctx->env, "Ratio?",   1, 0, "Return True if value is a Ratio", NULL);
+    env_insert_builtin(ctx->env, "Set?",     1, 0, "Return True if value is a Set", NULL);
+    env_insert_builtin(ctx->env, "Map?",     1, 0, "Return True if value is a Map", NULL);
+    env_insert_builtin(ctx->env, "Arr?",     1, 0, "Return True if value is an Arr", NULL);
+    env_insert_builtin(ctx->env, "Fn?",      1, 0, "Return True if value is a Fn/closure", NULL);
+    env_insert_builtin(ctx->env, "Number?",  1, 0, "Return True if value is Int or Float", NULL);
+    env_insert_builtin(ctx->env, "Boolean?", 1, 0, "Return True if value is a Bool", NULL);
+    env_insert_builtin(ctx->env, "Hex?",     1, 0, "Return True if value is a Hex", NULL);
+    env_insert_builtin(ctx->env, "Bin?",     1, 0, "Return True if value is a Bin", NULL);
+    env_insert_builtin(ctx->env, "Oct?",     1, 0, "Return True if value is an Oct", NULL);
 
     // String operations
-    env_insert_builtin(ctx->env, "concat",        2, -1, "Concatenate strings");
-    env_insert_builtin(ctx->env, "substring",     3,  0, "Get substring (str start end)");
+    env_insert_builtin(ctx->env, "concat",    2, -1, "Concatenate strings", NULL);
+    env_insert_builtin(ctx->env, "substring", 3,  0, "Get substring (str start end)", NULL);
 
-    env_insert_builtin(ctx->env, "take", 2, 0, "Take n elements from a (possibly infinite) list");
-    env_insert_builtin(ctx->env, "drop", 2, 0, "Drop n elements from a list");
+    env_insert_builtin(ctx->env, "take", 2, 0, "Take n elements from a (possibly infinite) list", NULL);
+    env_insert_builtin(ctx->env, "drop", 2, 0, "Drop n elements from a list", NULL);
 }

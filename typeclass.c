@@ -340,7 +340,7 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
             params[1].name = strdup("__y");
             params[1].type = type_unknown();
             env_insert_func(ctx->env, mname, params, 2,
-                            type_unknown(), inst->method_funcs[mi], NULL);
+                            type_unknown(), inst->method_funcs[mi], NULL, NULL);
             EnvEntry *e = env_lookup(ctx->env, mname);
             if (e) {
                 e->is_closure_abi = true;
