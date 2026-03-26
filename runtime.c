@@ -1450,113 +1450,140 @@ static bool rt_value_is_short(RuntimeValue *val, int budget) {
 static void rt_print_list_indent(RuntimeList *list, int indent) {
     if (rt_list_is_empty_list(list)) { printf("()"); return; }
 
-    // Collect elements
-    RuntimeValue *elems[4096];
-    int count = 0;
-    RuntimeList *cur = list;
-    while (!rt_list_is_empty_list(cur) && count < 4095) {
-        if (rt_interrupted) { printf(" ..."); return; }
-        elems[count++] = rt_list_car(cur);
-        cur = rt_list_cdr(cur);
-    }
-    bool truncated = !rt_list_is_empty_list(cur);
-
-    int inner = indent + 2;
-
-    // Check if head is a special form symbol
-    bool is_lambda = (count >= 1 && elems[0] &&
-                      elems[0]->type == RT_SYMBOL &&
-                      strcmp(elems[0]->data.symbol_val, "lambda") == 0);
-    bool is_if     = (count >= 1 && elems[0] &&
-                      elems[0]->type == RT_SYMBOL &&
-                      strcmp(elems[0]->data.symbol_val, "if") == 0);
-    bool is_define = (count >= 1 && elems[0] &&
-                      elems[0]->type == RT_SYMBOL &&
-                      strcmp(elems[0]->data.symbol_val, "define") == 0);
-
-    // Check if any element is a list
-    bool has_list = false;
-    for (int i = 0; i < count; i++)
-        if (elems[i] && elems[i]->type == RT_LIST)
-            has_list = true;
-
-    if (!has_list) {
-        // All atoms — single line
-        printf("(");
-        for (int i = 0; i < count; i++) {
-            if (i > 0) printf(" ");
-            rt_print_value_indent(elems[i], inner);
-        }
-        if (truncated) printf(" ...");
-        printf(")");
-        return;
-    }
-
-    if (is_lambda && count >= 3) {
-        // (lambda (params) body...)
-        // Print as: (lambda (params)
-        //             body...)
-        printf("(lambda ");
-        rt_print_value_indent(elems[1], inner);  // params list on same line
-        for (int i = 2; i < count; i++) {
-            printf("\n");
-            for (int s = 0; s < inner; s++) printf(" ");
-            rt_print_value_indent(elems[i], inner);
-        }
-        if (truncated) printf(" ...");
-        printf(")");
-        return;
-    }
-
-    if (is_if && count >= 3) {
-        // (if test then else?)
-        // Print as: (if test
-        //              then
-        //              else)
-        printf("(if ");
-        rt_print_value_indent(elems[1], inner);  // test on same line
-        for (int i = 2; i < count; i++) {
-            printf("\n");
-            for (int s = 0; s < inner; s++) printf(" ");
-            rt_print_value_indent(elems[i], inner);
-        }
-        if (truncated) printf(" ...");
-        printf(")");
-        return;
-    }
-
-    if (is_define && count >= 3) {
-        // (define name value)
-        printf("(define ");
-        rt_print_value_indent(elems[1], inner);
-        for (int i = 2; i < count; i++) {
-            printf("\n");
-            for (int s = 0; s < inner; s++) printf(" ");
-            rt_print_value_indent(elems[i], inner);
-        }
-        if (truncated) printf(" ...");
-        printf(")");
-        return;
-    }
-
-    // General case: first element on same line, nested lists indented only if long
     printf("(");
-    rt_print_value_indent(elems[0], inner);
-    for (int i = 1; i < count; i++) {
-        if (elems[i] && elems[i]->type == RT_LIST &&
-            !rt_value_is_short(elems[i], 40)) {
-            printf("\n");
-            for (int s = 0; s < inner; s++) printf(" ");
-            rt_print_value_indent(elems[i], inner);
-        } else {
-            printf(" ");
-            rt_print_value_indent(elems[i], inner);
-        }
+    RuntimeList *cur = list;
+    int first = 1;
+    int count = 0;
+
+    while (!rt_list_is_empty_list(cur)) {
+        if (rt_interrupted) { printf(" ..."); break; }
+
+        if (!first) printf(" ");
+        first = 0;
+
+        RuntimeValue *h = rt_list_car(cur);
+        rt_print_value_indent(h, indent + 2);
+
+        cur = rt_list_cdr(cur);
+        count++;
+
+        // Flush periodically so output appears while printing
+        if (count % 64 == 0) fflush(stdout);
     }
 
-    if (truncated) printf(" ...");
     printf(")");
 }
+
+/* static void rt_print_list_indent(RuntimeList *list, int indent) { */
+/*     if (rt_list_is_empty_list(list)) { printf("()"); return; } */
+
+/*     // Collect elements */
+/*     RuntimeValue *elems[4096]; */
+/*     int count = 0; */
+/*     RuntimeList *cur = list; */
+/*     while (!rt_list_is_empty_list(cur) && count < 4095) { */
+/*         if (rt_interrupted) { printf(" ..."); return; } */
+/*         elems[count++] = rt_list_car(cur); */
+/*         cur = rt_list_cdr(cur); */
+/*     } */
+/*     bool truncated = !rt_list_is_empty_list(cur); */
+
+/*     int inner = indent + 2; */
+
+/*     // Check if head is a special form symbol */
+/*     bool is_lambda = (count >= 1 && elems[0] && */
+/*                       elems[0]->type == RT_SYMBOL && */
+/*                       strcmp(elems[0]->data.symbol_val, "lambda") == 0); */
+/*     bool is_if     = (count >= 1 && elems[0] && */
+/*                       elems[0]->type == RT_SYMBOL && */
+/*                       strcmp(elems[0]->data.symbol_val, "if") == 0); */
+/*     bool is_define = (count >= 1 && elems[0] && */
+/*                       elems[0]->type == RT_SYMBOL && */
+/*                       strcmp(elems[0]->data.symbol_val, "define") == 0); */
+
+/*     // Check if any element is a list */
+/*     bool has_list = false; */
+/*     for (int i = 0; i < count; i++) */
+/*         if (elems[i] && elems[i]->type == RT_LIST) */
+/*             has_list = true; */
+
+/*     if (!has_list) { */
+/*         // All atoms — single line */
+/*         printf("("); */
+/*         for (int i = 0; i < count; i++) { */
+/*             if (i > 0) printf(" "); */
+/*             rt_print_value_indent(elems[i], inner); */
+/*         } */
+/*         if (truncated) printf(" ..."); */
+/*         printf(")"); */
+/*         return; */
+/*     } */
+
+/*     if (is_lambda && count >= 3) { */
+/*         // (lambda (params) body...) */
+/*         // Print as: (lambda (params) */
+/*         //             body...) */
+/*         printf("(lambda "); */
+/*         rt_print_value_indent(elems[1], inner);  // params list on same line */
+/*         for (int i = 2; i < count; i++) { */
+/*             printf("\n"); */
+/*             for (int s = 0; s < inner; s++) printf(" "); */
+/*             rt_print_value_indent(elems[i], inner); */
+/*         } */
+/*         if (truncated) printf(" ..."); */
+/*         printf(")"); */
+/*         return; */
+/*     } */
+
+/*     if (is_if && count >= 3) { */
+/*         // (if test then else?) */
+/*         // Print as: (if test */
+/*         //              then */
+/*         //              else) */
+/*         printf("(if "); */
+/*         rt_print_value_indent(elems[1], inner);  // test on same line */
+/*         for (int i = 2; i < count; i++) { */
+/*             printf("\n"); */
+/*             for (int s = 0; s < inner; s++) printf(" "); */
+/*             rt_print_value_indent(elems[i], inner); */
+/*         } */
+/*         if (truncated) printf(" ..."); */
+/*         printf(")"); */
+/*         return; */
+/*     } */
+
+/*     if (is_define && count >= 3) { */
+/*         // (define name value) */
+/*         printf("(define "); */
+/*         rt_print_value_indent(elems[1], inner); */
+/*         for (int i = 2; i < count; i++) { */
+/*             printf("\n"); */
+/*             for (int s = 0; s < inner; s++) printf(" "); */
+/*             rt_print_value_indent(elems[i], inner); */
+/*         } */
+/*         if (truncated) printf(" ..."); */
+/*         printf(")"); */
+/*         return; */
+/*     } */
+
+/*     // General case: first element on same line, nested lists indented only if long */
+/*     printf("("); */
+/*     rt_print_value_indent(elems[0], inner); */
+/*     for (int i = 1; i < count; i++) { */
+/*         if (elems[i] && elems[i]->type == RT_LIST && */
+/*             !rt_value_is_short(elems[i], 40)) { */
+/*             printf("\n"); */
+/*             for (int s = 0; s < inner; s++) printf(" "); */
+/*             rt_print_value_indent(elems[i], inner); */
+/*         } else { */
+/*             printf(" "); */
+/*             rt_print_value_indent(elems[i], inner); */
+/*         } */
+/*     } */
+
+/*     if (truncated) printf(" ..."); */
+/*     printf(")"); */
+/* } */
 
 static void rt_print_value_indent(RuntimeValue *val, int indent) {
     if (!val) { printf("nil"); return; }

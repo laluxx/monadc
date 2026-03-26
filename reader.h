@@ -216,13 +216,13 @@ typedef struct AST {
             int              clause_count;
         } pmatch;
 
-// AST_DATA
+        // AST_DATA
         struct {
-            char                *name;         // "Color", "Shape"
-            ASTDataConstructor  *constructors;
-            int                  constructor_count;
-            char               **deriving;     // ["show", "eq", ...]
-            int                  deriving_count;
+            char *name;           // "Color", "Shape"
+            ASTDataConstructor *constructors;
+            int constructor_count;
+            char **deriving;      // ["show", "eq", ...]
+            int deriving_count;
         } data;
 
         // AST_CLASS
@@ -334,8 +334,8 @@ typedef enum {
     TOK_RBRACE,         // }
     TOK_HASH_LBRACE,    // #{
     TOK_PIPE,           // |
-    TOK_BACKTICK,       // `
     TOK_LINE_DIRECTIVE, // #line N COL (internal, emitted by wisp, never reaches parser)
+
 } TokenType;
 
 typedef struct {
@@ -401,8 +401,6 @@ void sb_puts(SB *b, const char *s);
 
 char *ast_to_json(AST *ast);
 
-
-
 /// ERROR Handling
 
 #include <setjmp.h>
@@ -417,5 +415,12 @@ extern char     g_reader_error_msg[512];
 extern int g_srcmap_line_bias;   // add to lex->line to get original line
 extern int g_srcmap_col_bias;    // add to lex->column to get original col
 extern int g_quote_depth;        // >0 means we are inside a quoted form
+
+// Param-kind lookup hook — set by wisp before parsing so the reader
+// can decide whether a symbol in non-head position is infix or an argument.
+// Returns 1 if the given argument slot of `func_name` expects a function
+// (i.e. PARAM_FUNC), 0 otherwise. NULL = always return 0.
+extern int (*g_param_kind_is_func)(const char *func_name, int arg_index);
+extern int (*g_is_known_function)(const char *name);
 
 #endif

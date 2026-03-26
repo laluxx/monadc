@@ -35,6 +35,19 @@
 (define (cddar [xs :: List] -> List) (cdr (cdr (car xs))))
 (define (cdddr [xs :: List] -> List) (cdr (cdr (cdr xs))))
 
+-|[ Imperative ]|-
+
+
+;; define repeat :: a -> List
+;;   "Return an infinite list of Xs."
+;;   x -> x | repeat x
+
+;; TODO Make sure it can repeat anything!
+;; (define (repeat [x :: a] -> List)
+;;   "Return an infinite list of Xs."
+;;   (x cons (repeat x)))
+
+
 
 (define (apply [f :: Fn] [xs :: List] -> a)
   "Call f with elements of xs as arguments."

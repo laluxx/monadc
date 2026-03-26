@@ -19,6 +19,9 @@ int g_quote_depth       = 0;
 int g_srcmap_line_bias  = 0;
 int g_srcmap_col_bias   = 0;
 
+int (*g_param_kind_is_func)(const char *func_name, int arg_index) = NULL;
+int (*g_is_known_function)(const char *name) = NULL;
+
 #define READER_ERROR(line, col, fmt, ...) \
     do { \
         snprintf(g_reader_error_msg, sizeof(g_reader_error_msg), \
@@ -1047,7 +1050,7 @@ static bool is_symbol_start(unsigned char c) {
            c=='-' || c=='+' || c=='*' || c=='/' ||
            c=='<' || c=='>' || c=='=' || c=='!' ||
            c=='?' || c=='_' || c==':' || c=='%' ||
-           c=='^' || c=='~' ||
+           c=='^' || c=='~' || c=='|' ||
            c > 127;  // UTF-8 multi-byte sequences
 }
 
@@ -1182,8 +1185,6 @@ Token lexer_next_token(Lexer *lex) {
         advance(lex); advance(lex);
         return lexer_next_token(lex);
     }
-    if (c == '|') { advance(lex); tok.type = TOK_PIPE;     return tok; }
-    if (c == '`') { advance(lex); tok.type = TOK_BACKTICK; return tok; }
 
     // Character literal or quote
     if (c == '\'') {
@@ -2723,13 +2724,10 @@ if (p->current.type == TOK_SYMBOL &&
 
                 if (p->current.type == TOK_SYMBOL) {
                     pattern_arg1 = parse_expr(p);
-                    if (p->current.type == TOK_BACKTICK) {
+                    if (p->current.type == TOK_SYMBOL) {
+                        /* infix: (pat1 method pat2) */
+                        def_method = my_strdup(p->current.value);
                         p->current = lexer_next_token(p->lexer);
-                        if (p->current.type == TOK_SYMBOL)
-                            def_method = my_strdup(p->current.value);
-                        p->current = lexer_next_token(p->lexer);
-                        if (p->current.type == TOK_BACKTICK)
-                            p->current = lexer_next_token(p->lexer);
                         pattern_arg2 = parse_expr(p);
                     } else {
                         if (pattern_arg1->type == AST_SYMBOL)
@@ -2916,15 +2914,11 @@ if (p->current.type == TOK_SYMBOL &&
             pat1 = parse_single_pattern(&pm_parser);
             p->current = pm_parser.current;
 
-            if (p->current.type == TOK_BACKTICK) {
-                /* infix: pat1 `method` pat2 */
-                p->current = lexer_next_token(p->lexer); // consume '`'
-                if (p->current.type == TOK_SYMBOL)
-                    method_name = my_strdup(p->current.value);
+            if (p->current.type == TOK_SYMBOL &&
+                p->current.value && pat1.kind != PAT_CONSTRUCTOR) {
+                /* infix: pat1 method pat2 */
+                method_name = my_strdup(p->current.value);
                 p->current = lexer_next_token(p->lexer); // consume method
-                if (p->current.type == TOK_BACKTICK)
-                    p->current = lexer_next_token(p->lexer); // consume '`'
-
                 pm_parser.current = p->current;
                 pat2 = parse_single_pattern(&pm_parser);
                 p->current = pm_parser.current;
@@ -3470,31 +3464,6 @@ if (p->current.type == TOK_SYMBOL &&
         } else {
             AST *first = parse_expr(p);
 
-            /* Guard: literals cannot appear in function position
-             * unless we are inside a quoted form.
-             * Exception: backtick infix — (0.0 `op` x) is valid and
-             * will be desugared below, so skip the check in that case. */
-            if (g_quote_depth == 0 &&
-                p->current.type != TOK_BACKTICK &&
-                (first->type == AST_NUMBER  ||
-                 first->type == AST_STRING  ||
-                 first->type == AST_CHAR    ||
-                 first->type == AST_RATIO   ||
-                 first->type == AST_KEYWORD)) {
-                const char *kind =
-                    first->type == AST_NUMBER  ? "number"    :
-                    first->type == AST_STRING  ? "string"    :
-                    first->type == AST_CHAR    ? "character" :
-                    first->type == AST_RATIO   ? "ratio"     : "keyword";
-                const char *lit =
-                    first->literal_str         ? first->literal_str :
-                    first->type == AST_STRING  ? first->string      :
-                    first->type == AST_KEYWORD ? first->keyword     : "?";
-                compiler_error(first->line, first->column,
-                               "‘%s’ is a %s literal and cannot be called as a function",
-                               lit, kind);
-            }
-
             /* step syntax: (1,3..10) — comma between start and step */
             AST *step = NULL;
             /* comma is lexed as a symbol in your lexer */
@@ -3523,52 +3492,136 @@ if (p->current.type == TOK_SYMBOL &&
 
             /* Not a range — proceed as normal list with first already parsed */
 
-            /* ── Infix sugar: (a `f` b `g` c) ─────────────────────────────
-             * Expands left-to-right:
-             *   (a `f` b)        => (f b a)
-             *   (a `f` b `g` c)  => (g c (f b a))            */
-            if (p->current.type == TOK_BACKTICK) {
-                AST *acc = first;
+            /* ── Automatic infix detection ─────────────────────────────────
+             * (a f b) => (f a b)  when:
+             *   - next token is a symbol (candidate infix op)
+             *   - the token after that is NOT ')' or EOF (so f has a rhs)
+             *   - first is NOT a known callable (already a prefix call head)
+             *   - the head `first` does NOT expect a function at the next slot
+             * Chains left-to-right: (a f b g c) => (g (f a b) c)          */
+            bool first_is_known_fn = false;
+            if (first->type == AST_SYMBOL && g_is_known_function)
+                first_is_known_fn = g_is_known_function(first->symbol);
 
-                while (p->current.type == TOK_BACKTICK) {
-                    p->current = lexer_next_token(p->lexer); /* consume '`' */
+            if (!first_is_known_fn && p->current.type == TOK_SYMBOL && p->current.value) {
+                /* peek: is there a rhs after the candidate? */
+                /* We need at least one more token that isn't ')' */
+                /* Strategy: tentatively check using saved lexer state */
+                Lexer saved_lex = *p->lexer;
+                Token candidate  = p->current;
+                Token after      = lexer_next_token(p->lexer);
+                *p->lexer        = saved_lex; /* restore — we only peeked */
 
-                    if (p->current.type != TOK_SYMBOL)
-                        compiler_error(p->current.line, p->current.column,
-                                       "Expected function name between backticks");
-                    AST *fn_sym = ast_new_symbol(p->current.value);
-                    fn_sym->line   = p->current.line;
-                    fn_sym->column = p->current.column;
-                    p->current = lexer_next_token(p->lexer); /* consume fn name */
+                bool has_rhs = (after.type != TOK_RPAREN &&
+                                after.type != TOK_EOF);
+                free(after.value);
 
-                    if (p->current.type != TOK_BACKTICK)
-                        compiler_error(p->current.line, p->current.column,
-                                       "Expected closing '`' after infix function name");
-                    p->current = lexer_next_token(p->lexer); /* consume '`' */
-
-                    AST *rhs = parse_expr(p);
-
-                    /* build (fn acc rhs) */
-                    AST *call = ast_new_list();
-                    call->line   = fn_sym->line;
-                    call->column = fn_sym->column;
-                    ast_list_append(call, fn_sym);
-                    ast_list_append(call, acc);
-                    ast_list_append(call, rhs);
-                    acc = call;
+                /* Check whether `first`'s head wants a func at slot 0 */
+                bool head_wants_func = false;
+                if (g_param_kind_is_func) {
+                    const char *head_name = NULL;
+                    int slot = 0;
+                    if (first->type == AST_SYMBOL) {
+                        head_name = first->symbol;
+                        slot = 0;
+                    } else if (first->type == AST_LIST &&
+                               first->list.count >= 1 &&
+                               first->list.items[0]->type == AST_SYMBOL) {
+                        head_name = first->list.items[0]->symbol;
+                        slot = (int)first->list.count - 1;
+                    }
+                    if (head_name)
+                        head_wants_func = g_param_kind_is_func(head_name, slot);
                 }
 
-                /* expect closing ')' — no more elements allowed after infix chain */
-                if (p->current.type != TOK_RPAREN)
-                    compiler_error(p->current.line, p->current.column,
-                                   "Expected ')' after infix expression");
-                int end_col = p->current.column + 1;
-                p->current = lexer_next_token(p->lexer);
-                ast_free(list);
-                acc->line       = start_line;
-                acc->column     = start_column;
-                acc->end_column = end_col;
-                return acc;
+                if (has_rhs && !head_wants_func) {
+                    /* Infix rewrite — consume chain */
+                    AST *acc = first;
+                    while (p->current.type == TOK_SYMBOL && p->current.value) {
+                        /* peek again to confirm rhs exists */
+                        Lexer sl2   = *p->lexer;
+                        Token after2 = lexer_next_token(p->lexer);
+                        *p->lexer   = sl2;
+                        bool has_rhs2 = (after2.type != TOK_RPAREN &&
+                                         after2.type != TOK_EOF);
+                        free(after2.value);
+                        if (!has_rhs2) break;
+
+                        /* check the current acc head's next slot */
+                        bool wants_func = false;
+                        if (g_param_kind_is_func) {
+                            const char *hname = NULL;
+                            int sl = 0;
+                            if (acc->type == AST_LIST &&
+                                acc->list.count >= 1 &&
+                                acc->list.items[0]->type == AST_SYMBOL) {
+                                hname = acc->list.items[0]->symbol;
+                                sl    = (int)acc->list.count - 1;
+                            } else if (acc->type == AST_SYMBOL) {
+                                hname = acc->symbol;
+                                sl    = 0;
+                            }
+                            if (hname)
+                                wants_func = g_param_kind_is_func(hname, sl);
+                        }
+                        if (wants_func) break;
+
+                        int fn_line   = p->current.line;
+                        int fn_col    = p->current.column;
+                        char *fn_name = my_strdup(p->current.value);
+                        p->current    = lexer_next_token(p->lexer);
+
+                        AST *rhs  = parse_expr(p);
+                        AST *fn_sym = ast_new_symbol(fn_name);
+                        free(fn_name);
+                        fn_sym->line   = fn_line;
+                        fn_sym->column = fn_col;
+                        AST *call = ast_new_list();
+                        call->line   = fn_line;
+                        call->column = fn_col;
+                        ast_list_append(call, fn_sym);
+                        ast_list_append(call, acc);
+                        ast_list_append(call, rhs);
+                        acc = call;
+
+                        if (p->current.type == TOK_RPAREN) break;
+                    }
+
+                    if (p->current.type != TOK_RPAREN)
+                        compiler_error(p->current.line, p->current.column,
+                                       "Expected ')' after infix expression");
+                    int end_col = p->current.column + 1;
+                    p->current  = lexer_next_token(p->lexer);
+                    /* list was never appended to — safe to free the empty shell */
+                    free(list->list.items);
+                    free(list);
+                    acc->line       = start_line;
+                    acc->column     = start_column;
+                    acc->end_column = end_col;
+                    return acc;
+                }
+            }
+
+            /* Guard: literals cannot appear in function position
+             * unless we are inside a quoted form or were rewritten as infix. */
+            if (g_quote_depth == 0 &&
+                (first->type == AST_NUMBER  ||
+                 first->type == AST_STRING  ||
+                 first->type == AST_CHAR    ||
+                 first->type == AST_RATIO   ||
+                 first->type == AST_KEYWORD)) {
+                const char *kind =
+                    first->type == AST_NUMBER  ? "number"    :
+                    first->type == AST_STRING  ? "string"    :
+                    first->type == AST_CHAR    ? "character" :
+                    first->type == AST_RATIO   ? "ratio"     : "keyword";
+                const char *lit =
+                    first->literal_str         ? first->literal_str :
+                    first->type == AST_STRING  ? first->string      :
+                    first->type == AST_KEYWORD ? first->keyword     : "?";
+                compiler_error(first->line, first->column,
+                               "'%s' is a %s literal and cannot be called as a function",
+                               lit, kind);
             }
 
             ast_list_append(list, first);
@@ -4053,6 +4106,7 @@ AST *parse_expr(Parser *p) {
         list->end_column = quoted->end_column;
         return list;
     }
+
     case TOK_ARROW: {
         int end_col = tok.column + 2;
         p->current = lexer_next_token(p->lexer);
@@ -4062,6 +4116,7 @@ AST *parse_expr(Parser *p) {
         ast->end_column = end_col;
         return ast;
     }
+
     case TOK_LAMBDA_LIT: {
         // tok.value is the single param name (e.g. "x" from λx.body)
         int lam_line = tok.line;

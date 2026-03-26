@@ -60,10 +60,10 @@ show return-string
 
 
 ;; ;; ;; DONE
-;; (define (last [a] -> a)
-;;   [] -> nil
-;;   [x] -> x
-;;   [_|xs] -> (last xs))
+(define (last [a] -> a)
+  [] -> nil
+  [x] -> x
+  [_|xs] -> (last xs))
 
 
 ;; define last :: [a] -> a

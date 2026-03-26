@@ -469,45 +469,7 @@ static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
             continue;
         }
 
-        /* backtick infix: atom `op` atom → keep backticks, group as
-         * (lhs `op` rhs) so reader.c's infix logic handles it */
-        if (*p == '`') {
-            const char *bt_start = p++;
-            while (*p && *p != '`') p++;
-            if (*p == '`') p++;
-            while (*p == ' ' || *p == '\t') p++;
-            const char *rhs_start = p;
-            if (*p == '"') {
-                p++;
-                while (*p && !(*p == '"' && *(p-1) != '\\')) p++;
-                if (*p == '"') p++;
-            } else {
-                while (*p && *p != ' ' && *p != '\t' && *p != ';') p++;
-            }
-            if (s->count > 0 && s->tokens[s->count-1].lineno == lineno) {
-                char *lhs = s->tokens[s->count-1].text;
-                /* extract op name between backticks */
-                const char *op_s = bt_start + 1;
-                const char *op_e = memchr(op_s, '`', p - op_s);
-                if (!op_e) op_e = p;
-                /* trim trailing spaces */
-                while (op_e > op_s && *(op_e-1) == ' ') op_e--;
-                char op[64]; size_t op_len = op_e - op_s;
-                if (op_len >= sizeof(op)) op_len = sizeof(op)-1;
-                memcpy(op, op_s, op_len); op[op_len] = '\0';
-                char *rhs = strndup(rhs_start, p - rhs_start);
-                /* preserve backticks so reader.c infix logic fires */
-                size_t tlen = 1 + strlen(lhs) + 3 + op_len + 3 + strlen(rhs) + 1 + 1;
-                char *grouped = malloc(tlen);
-                snprintf(grouped, tlen, "(%s `%s` %s)", lhs, op, rhs);
-                free(s->tokens[s->count-1].text);
-                s->tokens[s->count-1].text = grouped;
-                free(rhs);
-            }
-            continue;
-        }
-
-/* regular token */
+        /* regular token */
         const char *start = p;
         while (*p && *p != ' ' && *p != '\t' && *p != ';') p++;
         char *tok = strndup(start, p - start);
@@ -1217,6 +1179,19 @@ static char *strip_comments(const char *source) {
     return out;
 }
 
+static int wisp_param_kind_is_func(const char *func_name, int arg_index) {
+    if (!g_ffi_arities_init) return 0;
+    ArityEntry *e = arity_get_entry(&g_ffi_arities, func_name);
+    if (!e) return 0;
+    if (arg_index < 0 || arg_index >= WISP_MAX_PARAMS) return 0;
+    return e->param_kinds[arg_index] == PARAM_FUNC ? 1 : 0;
+}
+
+static int wisp_is_known_function(const char *name) {
+    if (!g_ffi_arities_init) return 0;
+    return arity_get_entry(&g_ffi_arities, name) != NULL ? 1 : 0;
+}
+
 ASTList wisp_parse_all(const char *source, const char *filename) {
     /* Strip comments first, preserving line structure */
     char *stripped = strip_comments(source);
@@ -1265,8 +1240,15 @@ ASTList wisp_parse_all(const char *source, const char *filename) {
     fprintf(stderr, "\n=== wisp expanded (%s) ===\n%s\n=== end ===\n\n",
             filename ? filename : "<input>", transformed);
 
+    /* Install param-kind hook so reader.c can do automatic infix detection */
+    g_param_kind_is_func = wisp_param_kind_is_func;
+    g_is_known_function  = wisp_is_known_function;
+
     parser_set_context(filename, transformed);
     ASTList result = parse_all(transformed);
+
+    g_param_kind_is_func = NULL;
+    g_is_known_function  = NULL;
 
     free(transformed);
     free(stripped);

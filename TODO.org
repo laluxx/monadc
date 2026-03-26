@@ -2,7 +2,7 @@
 
 * TODO Stuff [0/24]
 - [ ] eval
-- [ ] AST->JSON
+- [ ] Aceept .org files as input
 - [ ] Syntax for compiler directives: -|[ INLINE (/=) ]|-
 - [ ] Regex literal #""
 - [ ] When we write wisp error column and numbers are wrong!
@@ -28,7 +28,14 @@
 - [ ] Connect to a running process with the repl
       We should embed the env into the executable i guess
 
-1_000_000
+BUG
+#+begin_src monad
+(0..)
+<input>:1:2: error: ‘0’ is a number literal and cannot be called as a function
+    1 | (0..)
+      |  ^
+#+end_src
+
 
 Parser BUG
 #+begin_src monad
