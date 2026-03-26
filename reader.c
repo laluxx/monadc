@@ -3107,7 +3107,9 @@ if (p->current.type == TOK_SYMBOL &&
                 ctor.name = my_strdup(dat_name); /* constructor = type name */
                 while (p->current.type != TOK_RPAREN &&
                        p->current.type != TOK_EOF    &&
-                       p->current.type != TOK_PIPE) {
+                       !(p->current.type == TOK_SYMBOL &&
+                         p->current.value &&
+                         strcmp(p->current.value, "|") == 0)) {
                     if (p->current.type == TOK_SYMBOL && p->current.value) {
                         ctor.field_types = realloc(ctor.field_types,
                             sizeof(char*) * (ctor.field_count + 1));
@@ -3126,7 +3128,9 @@ if (p->current.type == TOK_SYMBOL &&
                p->current.type != TOK_EOF) {
 
             /* skip leading | */
-            if (p->current.type == TOK_PIPE) {
+            if (p->current.type == TOK_SYMBOL &&
+                p->current.value &&
+                strcmp(p->current.value, "|") == 0) {
                 p->current = lexer_next_token(p->lexer);
                 continue;
             }
@@ -3181,7 +3185,9 @@ if (p->current.type == TOK_SYMBOL &&
             p->current = lexer_next_token(p->lexer);
 
             /* Collect field types until | or ) or 'deriving' */
-            while (p->current.type != TOK_PIPE     &&
+            while (!(p->current.type == TOK_SYMBOL &&
+                     p->current.value &&
+                     strcmp(p->current.value, "|") == 0) &&
                    p->current.type != TOK_RPAREN   &&
                    p->current.type != TOK_EOF      &&
                    !(p->current.type == TOK_SYMBOL &&
@@ -3785,7 +3791,9 @@ static AST *parse_refinement_expr(Parser *p, int start_line, int start_col) {
     char *base = my_strdup(p->current.value);
     p->current = lexer_next_token(p->lexer); // consume base type
 
-    if (p->current.type != TOK_PIPE)
+    if (!(p->current.type == TOK_SYMBOL &&
+          p->current.value &&
+          strcmp(p->current.value, "|") == 0))
         compiler_error(p->current.line, p->current.column,
                        "Expected '|' after base type");
     p->current = lexer_next_token(p->lexer); // consume '|'

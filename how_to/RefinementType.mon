@@ -1,57 +1,61 @@
-;; The symplest Refinement Type
-type Code List
-  :doc "doc"
-  :alias C
-;     ^
-; Types MUST start with a capital letter
-; `Code` will inherit everything from list
-; including the docstring if not specified.
+;; ;; The symplest Refinement Type
+;; type Code List
+;;   :doc "doc"
+;;   :alias C
+;; ;     ^
+;; ; Types MUST start with a capital letter
+;; ; `Code` will inherit everything from list
+;; ; including the docstring if not specified.
 
 
 type Natural { x ∈ Int | x >= 0 }
   :doc "Natural number type"
   :alias ℕ
 
+
 (define (passedNatural? [x :: ℕ] -> Bool)
   (Natural? x))
 
-
+;; define passedNatural? :: ℕ -> Bool
+;;   x -> Natural? x
 
 show (passedNatural? 1); passing -1 is a compile time ERROR
 
-;; TODO
-;; type Even { x ∈ ℤ | ∃k ∈ ℤ, x = 2k }
-;;   "Existential form."
-
-type Even { x ∈ Int | x % 2 = 0 }
-  "Even integers"
-
-(define (passedEven? [x :: Even] -> Bool)
-  (Even? x))
-
-(show (passedEven? 2))
 
 
-type Positive { x ∈ Int | x > 0 }
-  "Integers greater than zero"
+;; ;; TODO
+;; ;; type Even { x ∈ ℤ | ∃k ∈ ℤ, x = 2k }
+;; ;;   "Existential form."
+
+;; type Even { x ∈ Int | x % 2 = 0 }
+;;   "Even integers"
+
+;; (define (passedEven? [x :: Even] -> Bool)
+;;   (Even? x))
+
+;; (show (passedEven? 2))
 
 
-(type PositiveEven
-  { n ∈ Int
-  | ((Positive? n) `and` (Even? n)) }
-  "Positive even integers")
+;; type Positive { x ∈ Int | x > 0 }
+;;   "Integers greater than zero"
 
-(define (passedPositiveEven? [x :: PositiveEven] -> Bool)
-  (PositiveEven? x))
 
-(show (passedPositiveEven? 2))
+;; (type PositiveEven
+;;   { n ∈ Int
+;;   | ((Positive? n) and (Even? n)) }
+;;   "Positive even integers")
+
+;; (define (passedPositiveEven? [x :: PositiveEven] -> Bool)
+;;   (PositiveEven? x))
+
+;; (show (passedPositiveEven? 2))
 
 (type Email
   { s ∈ String
-  | (and (s `contains?` "@")
-         (s `contains?` ".")
-         ((count s) `>` 5)
-         (not (s `contains?` " "))) })
+  | (and (s contains? "@")
+         (s contains? ".")
+         ((count s) > 5)
+         (not (s contains? " "))) })
 
 
 (define (passedEmail? [x :: Email] -> Bool)
@@ -61,30 +65,30 @@ type Positive { x ∈ Int | x > 0 }
 
 (type CompanyEmail
   { s ∈ Email
-  | (s `ends-with?` "@company.com") })
+  | (s ends-with? "@company.com") })
 
 (define (passedCompanyEmail? [x :: CompanyEmail] -> Bool)
   (CompanyEmail? x))
 
 (define (return-string -> CompanyEmail)
-  "ciao@company.com")
+  "ciao@wrong.com")
 
-define the-email "email@company.com"
+;; define the-email "email@company.com"
 
-(show (return-string))
-(show (passedCompanyEmail? the-email))
-(show (passedCompanyEmail? (return-string)))
-
-
-
-;; (define positives { x ∈ Int | x >= 0 }); This is an infinite lazy set
+;; (show (return-string))
+;; (show (passedCompanyEmail? the-email))
+;; (show (passedCompanyEmail? (return-string)))
 
 
-;; (tests
-;;   (assert-eq ('(1 2 3) `ends-with?` 3     ) True  "List   ends-with? Scalar")
-;;   (assert-eq ("ciao"   `ends-with?` "ao"  ) True  "List   ends-with? List")
-;;   (assert-eq ([1 2 3]  `ends-with?` 3     ) True  "Arr    ends-with? Scalar")
-;;   (assert-eq ('(1 2 3) `ends-with?` '(2 3)) True  "List   ends-with? List")
-;;   (assert-eq ('[1 2 3] `ends-with?` [2 3] ) True  "Arr    ends-with? Arr")
-;;   (assert-eq ("ciao"   `ends-with?` 'o'   ) True  "String ends-with? Char"))
-;;  ;; (show ("ciao" `ends-with?` 3)) TODO assert-compile-error
+
+;; ;; (define positives { x ∈ Int | x >= 0 }); This is an infinite lazy set
+
+
+;; ;; (tests
+;; ;;   (assert-eq ('(1 2 3) `ends-with?` 3     ) True  "List   ends-with? Scalar")
+;; ;;   (assert-eq ("ciao"   `ends-with?` "ao"  ) True  "List   ends-with? List")
+;; ;;   (assert-eq ([1 2 3]  `ends-with?` 3     ) True  "Arr    ends-with? Scalar")
+;; ;;   (assert-eq ('(1 2 3) `ends-with?` '(2 3)) True  "List   ends-with? List")
+;; ;;   (assert-eq ('[1 2 3] `ends-with?` [2 3] ) True  "Arr    ends-with? Arr")
+;; ;;   (assert-eq ("ciao"   `ends-with?` 'o'   ) True  "String ends-with? Char"))
+;; ;;  ;; (show ("ciao" `ends-with?` 3)) TODO assert-compile-error
