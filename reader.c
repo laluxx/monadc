@@ -18,6 +18,7 @@ char     g_reader_error_msg[512];
 int g_quote_depth       = 0;
 int g_srcmap_line_bias  = 0;
 int g_srcmap_col_bias   = 0;
+int g_srcmap_abs_line   = 0;
 
 int (*g_param_kind_is_func)(const char *func_name, int arg_index) = NULL;
 int (*g_is_known_function)(const char *name) = NULL;
@@ -159,10 +160,11 @@ static const char *current_filename = NULL;
 static const char *current_source = NULL;
 
 void parser_set_context(const char *filename, const char *source) {
-    current_filename  = filename;
-    current_source    = source;
+    current_filename   = filename;
+    current_source     = source;
     g_srcmap_line_bias = 0;
     g_srcmap_col_bias  = 0;
+    g_srcmap_abs_line  = 0;
     if (source) comment_map_build(source);
 }
 
@@ -1079,7 +1081,8 @@ Token lexer_next_token(Lexer *lex) {
         skip_whitespace(lex);
     }
 
-    tok.line   = lex->line   + g_srcmap_line_bias;
+    tok.line   = g_srcmap_abs_line > 0 ? g_srcmap_abs_line
+                                       : lex->line + g_srcmap_line_bias;
     tok.column = lex->column + g_srcmap_col_bias;
 
     char c = peek(lex);
@@ -1107,8 +1110,9 @@ Token lexer_next_token(Lexer *lex) {
         /* consume closing ')' */
         while (peek(lex) != ')' && peek(lex) != '\0') advance(lex);
         if (peek(lex) == ')') advance(lex);
-        /* set bias so subsequent tokens report original line numbers */
-        g_srcmap_line_bias = orig_line - lex->line;
+        /* store absolute original line; tok.line will use it directly */
+        g_srcmap_abs_line  = orig_line;
+        g_srcmap_line_bias = 0;
         return lexer_next_token(lex);
     }
 
@@ -2273,9 +2277,6 @@ if (p->current.type == TOK_SYMBOL &&
         // Peek ahead to see if it's (define (fname ...) or (define name ...)
         Token define_token = p->current;
         p->current = lexer_next_token(p->lexer);
-
-        fprintf(stderr, "DEBUG define: next token type=%d value='%s'\n",
-                p->current.type, p->current.value ? p->current.value : "NULL");
 
         // Check if next token is '(' (function definition)
         if (p->current.type == TOK_LPAREN) {

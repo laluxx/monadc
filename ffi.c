@@ -173,6 +173,20 @@ Type *ffi_map_c_type(const char *s) {
         return type_unknown();
     }
 
+    /* Array types: BaseType [Size] */
+    const char *bracket = strchr(s, '[');
+    if (bracket) {
+        char base[256];
+        size_t blen = bracket - s;
+        if (blen >= sizeof(base)) blen = sizeof(base) - 1;
+        strncpy(base, s, blen);
+        base[blen] = '\0';
+        /* Strip trailing spaces from base name */
+        while (blen > 0 && (base[blen-1] == ' ' || base[blen-1] == '\t')) base[--blen] = '\0';
+        int arr_size = atoi(bracket + 1);
+        return type_arr(ffi_map_c_type(base), arr_size);
+    }
+
     /* Named struct/typedef — return a layout reference by name */
     const char *clean_name = s;
     if (strncmp(clean_name, "const ",  6) == 0) clean_name += 6;  // six
@@ -301,8 +315,9 @@ static enum CXChildVisitResult visitor(CXCursor cursor,
 
     enum CXCursorKind kind = clang_getCursorKind(cursor);
 
-    /* Recurse into extern "C" blocks (often found in C headers for C++ compatibility) */
-    if (kind == CXCursor_LinkageSpec) {
+    /* Recurse into extern "C" blocks and enum declarations */
+    if (kind == CXCursor_LinkageSpec ||
+        kind == CXCursor_EnumDecl) {
         return CXChildVisit_Recurse;
     }
 
@@ -422,15 +437,11 @@ static enum CXChildVisitResult visitor(CXCursor cursor,
                     }
                     int scalar_idx = ffi->struct_count++;
                     memset(&ffi->structs[scalar_idx], 0, sizeof(FFIStruct));
-                    ffi->structs[scalar_idx].name             = my_strdup(name);
-                    ffi->structs[scalar_idx].alias_of         = my_strdup(clang_getCString(canon_s));
-                    ffi->structs[scalar_idx].field_count      = 0;
-                    ffi->structs[scalar_idx].fields           = NULL;
+                    ffi->structs[scalar_idx].name              = my_strdup(name);
+                    ffi->structs[scalar_idx].alias_of          = my_strdup(clang_getCString(canon_s));
+                    ffi->structs[scalar_idx].field_count       = 0;
+                    ffi->structs[scalar_idx].fields            = NULL;
                     ffi->structs[scalar_idx].is_scalar_typedef = true;
-                    fprintf(stderr, "FFI: scalar typedef registered: %s -> %s is_scalar=%d\n",
-                            ffi->structs[scalar_idx].name,
-                            ffi->structs[scalar_idx].alias_of,
-                            ffi->structs[scalar_idx].is_scalar_typedef);
                     clang_disposeString(canon_s);
                 }
                 clang_disposeString(cx_name);
@@ -889,15 +900,10 @@ bool ffi_parse_header(FFIContext *ctx, const char *header_path,
 // missed (struct literals, expressions referencing other macros).
 //
 static void ffi_parse_struct_macros(FFIContext *ctx, const char *header_path) {
-    fprintf(stderr, "ffi_parse_struct_macros: header_path='%s'\n", header_path);
-    fflush(stderr);
     FILE *f = fopen(header_path, "r");
     if (!f) {
-        fprintf(stderr, "ffi_parse_struct_macros: failed to open file\n");
         return;
     }
-    fprintf(stderr, "ffi_parse_struct_macros: file opened ok\n");
-    fflush(stderr);
 
     fseek(f, 0, SEEK_END);
     long sz = ftell(f);
@@ -943,10 +949,6 @@ static void ffi_parse_struct_macros(FFIContext *ctx, const char *header_path) {
         memcpy(name, name_start, name_len);
         name[name_len] = '\0';
 
-        if (strstr(name, "SDL_INIT"))
-            fprintf(stderr, "ffi_parse_struct_macros: saw '%s' p[0]='%c' already=%d\n",
-                    name, *p, already_have_constant(ctx, name));
-
         /* Skip function-like macros */
         if (*p == '(') {            /* But only if the '(' immediately follows the name with no space
              * i.e. #define FOO(x) — function-like macro definition.
@@ -976,7 +978,6 @@ static void ffi_parse_struct_macros(FFIContext *ctx, const char *header_path) {
 
         if (!value[0]) continue;
         if (already_have_constant(ctx, name)) continue;
-        fprintf(stderr, "ffi_parse_struct_macros: name='%s' value='%s'\n", name, value);
 
         /* ── Pattern 1: struct literal macro ──────────────────────────────
          * CLITERAL(TypeName){ a, b, c, d }
@@ -1085,11 +1086,25 @@ static void ffi_parse_struct_macros(FFIContext *ctx, const char *header_path) {
                 }
             }
             while (*v == '(' || *v == ' ') v++;
+
+            bool is_not = false;
+            if (*v == '~') {
+                is_not = true;
+                v++;
+                while (*v == ' ' || *v == '(') v++;
+            }
+
             /* Strip trailing f/F/l/L float suffixes into a temp buffer */
             char numval[256];
             strncpy(numval, v, sizeof(numval) - 1);
             numval[sizeof(numval)-1] = '\0';
             int nlen = strlen(numval);
+
+            /* Strip trailing closing parens and whitespace */
+            while (nlen > 0 && (numval[nlen-1] == ')' || numval[nlen-1] == ' ' || numval[nlen-1] == '\t')) {
+                numval[--nlen] = '\0';
+            }
+
             while (nlen > 0 && (numval[nlen-1] == 'f' || numval[nlen-1] == 'F' ||
                                  numval[nlen-1] == 'l' || numval[nlen-1] == 'L' ||
                                  numval[nlen-1] == 'u' || numval[nlen-1] == 'U')) {
@@ -1115,7 +1130,8 @@ static void ffi_parse_struct_macros(FFIContext *ctx, const char *header_path) {
                     c.float_value = fval;
                 } else {
                     c.is_float = false;
-                    c.value    = (long long)strtoll(numval, NULL, 0);
+                    long long parsed_val = (long long)strtoll(numval, NULL, 0);
+                    c.value = is_not ? ~parsed_val : parsed_val;
                 }
                 ffi_add_constant(ctx, c);
                 continue;
@@ -1274,11 +1290,6 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
             for (int i = 0; i < ffi->struct_count; i++) {
                 FFIStruct *s = &ffi->structs[i];
                 if (!s->name) continue;
-                fprintf(stderr, "FFI PASS2 checking: %s alias_of=%s scalar=%d already=%p ptr=%p\n",
-                        s->name, s->alias_of ? s->alias_of : "NULL",
-                        s->is_scalar_typedef,
-                        (void*)env_lookup_layout(cg->env, s->name),
-                        (void*)s);
                 if (env_lookup_layout(cg->env, s->name)) continue;
 
                 /* Scalar typedef (VkImage = uint64_t etc.)
@@ -1288,9 +1299,6 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
                                   env_lookup_layout(cg->env, s->alias_of) == NULL);
                 if (is_scalar) {
                     Type *scalar = ffi_map_c_type(s->alias_of);
-                    fprintf(stderr, "FFI: scalar typedef PASS2: %s -> %s, scalar=%p kind=%d\n",
-                            s->name, s->alias_of,
-                            (void*)scalar, scalar ? scalar->kind : -1);
                     if (scalar && scalar->kind != TYPE_UNKNOWN) {
                         LayoutField *f = malloc(sizeof(LayoutField));
                         f->name   = strdup("handle");
@@ -1320,8 +1328,6 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
                 changed = true;
             }
         }
-        printf("DEBUG: FT_Bitmap in env: %p\n", (void*)env_lookup_layout(cg->env, "FT_Bitmap"));
-        printf("DEBUG: FT_Bitmap_ in env: %p\n", (void*)env_lookup_layout(cg->env, "FT_Bitmap_"));
     }
 
     /* ── PASS 3: Functions ───────────────────────────────────────────────── */
@@ -1423,6 +1429,8 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
     /* ── PASS 4: Numeric/float/string constants ──────────────────────────── */
     for (int i = 0; i < ffi->constant_count; i++) {
         FFIConstant *c = &ffi->constants[i];
+        if (c->name && strstr(c->name, "VK_STRUCTURE_TYPE_COMMAND_POOL"))
+            fprintf(stderr, "DEBUG PASS4: found '%s' = %lld\n", c->name, c->value);
 
         /* SAFETY: Skip compiler built-ins or macros with invalid names/values */
         if (!c || !c->name || c->name[0] == '\0') continue;
@@ -1662,6 +1670,11 @@ static void write_type(FILE *f, Type *t) {
     int32_t kind = t->kind;
     fwrite(&kind, 4, 1, f);
     write_str(f, t->layout_name);
+    if (kind == TYPE_ARR) {
+        int32_t sz = t->arr_size;
+        fwrite(&sz, 4, 1, f);
+        write_type(f, t->arr_element_type);
+    }
 }
 
 static Type *read_type(FILE *f) {
@@ -1669,6 +1682,14 @@ static Type *read_type(FILE *f) {
     if (fread(&kind, 4, 1, f) != 1) return NULL;
     if (kind == -1) return NULL;
     char *lname = read_str(f);
+    if (kind == TYPE_ARR) {
+        int32_t sz;
+        if (fread(&sz, 4, 1, f) != 1) sz = 0;
+        Type *elem = read_type(f);
+        Type *t = type_arr(elem, sz);
+        free(lname);
+        return t;
+    }
     /* Reconstruct basic types from kind */
     Type *t = NULL;
     switch (kind) {

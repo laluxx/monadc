@@ -1,4 +1,5 @@
 include <stdlib.h>
+include <string.h>
 include <ft2build.h>
 include <freetype/freetype.h>
 include <vulkan/vulkan.h>
@@ -34,51 +35,65 @@ include <vulkan/vulkan.h>
 
 ;; Global FreeType library handle
 define ft-lib 0
+define vk-instance    0
+define vk-device      0
+define vk-phys-device 0
+define vk-queue       0
+define vk-queue-family-index 0
+define vk-cmd-pool    0
 
-(define (init-font-system)
+(define (init-font-system [instance :: VkInstance] [phys-device :: VkPhysicalDevice]
+                          [device :: VkDevice] [queue :: VkQueue] [queue-family :: U32])
+  (set! vk-instance    instance)
+  (set! vk-phys-device phys-device)
+  (set! vk-device      device)
+  (set! vk-queue       queue)
+  (set! vk-queue-family-index queue-family)
+  (define pool-info (VkCommandPoolCreateInfo))
+  (set! pool-info.sType VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO)
+  (set! pool-info.queueFamilyIndex queue-family)
+  (set! pool-info.flags VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
+  (vkCreateCommandPool device &pool-info 0 &vk-cmd-pool)
   (FT_Init_FreeType &ft-lib))
 
 
-(define (load-font [path :: String] [size :: I32] -> Pointer :: Font)
+
+(define (load-font [path :: String] [size :: I32] [vk-render-pass :: VkRenderPass] -> Pointer :: Font)
   (define font (Font))
   (define face (FT_FaceRec))
 
   (FT_New_Face ft-lib path 0 &face)
   (FT_Set_Pixel_Sizes face 0 size)
 
-  (set! font.width  512)
-  (set! font.height 512)
+  (define [atlas-w :: I32] 512)
+  (define [atlas-h :: I32] 512)
+  (set! font.width  atlas-w)
+  (set! font.height atlas-h)
 
-  ;; Allocate RGBA buffer for the 512x512 atlas
-  (define atlas-size ((512 * 512) * 4))
+  ;; --- Fill FreeType metrics and build RGBA atlas buffer ---
+  (define atlas-size ((atlas-w * atlas-h) * 4))
   (define atlas-buffer (calloc 1 atlas-size))
-
   (define [atlas-x    :: I32] 0)
   (define [atlas-y    :: I32] 0)
   (define [row-height :: I32] 0)
 
-  ;; Pre-load standard ASCII characters (space to tilde)
-  (define i 32)
-  (until (i > 126)
-    (FT_Load_Char face i 4) ; FT_LOAD_RENDER = 4
-
-    ;; MUST be defined first, and MUST read from face.glyph
+  (for [i 32 127]
+    (FT_Load_Char face i 4)
     (define glyph face.glyph)
     (define bmp   glyph.bitmap)
     (define adv   glyph.advance)
-    (define bw    bmp.width)
-    (define bh    bmp.rows)
+    (define [bw :: I32] bmp.width)
+    (define [bh :: I32] bmp.rows)
 
-    ;; Wrap to next row if character doesn't fit on current line
-    (if ((atlas-x + bw) >= 512)
+    ;; Wrap to next row if needed
+    (if ((atlas-x + bw) >= atlas-w)
       (begin
         (set! atlas-y (atlas-y + row-height))
         (set! atlas-x 0)
         (set! row-height 0)))
 
-    ;; Load struct BY VALUE to preserve the layout type
+    ;; Store character metrics
     (define char-info (font.chars i))
-
     (set! char-info.ax (adv.x / 64.0))
     (set! char-info.ay (adv.y / 64.0))
     (set! char-info.bw bw)
@@ -87,28 +102,209 @@ define ft-lib 0
     (set! char-info.bt glyph.bitmap_top)
     (set! char-info.tx (atlas-x / 512.0))
     (set! char-info.ty (atlas-y / 512.0))
-
-    ;; Write the modified struct back into the array
     (set! (font.chars i) char-info)
 
-    ;; TODO: Insert a memory-copy loop here to copy bmp.buffer
-    ;; into atlas-buffer at (atlas-x, atlas-y) mapping 1-byte grayscale to RGBA.
+    ;; Copy grayscale bitmap into RGBA atlas buffer
+    (for [row 0 bh]
+      (for [col 0 bw]
+        (define src-idx ((row * bw) + col))
+        (define dst-idx ((((atlas-y + row) * atlas-w) + (+ atlas-x col)) * 4))
+        (define pixel (bmp.buffer src-idx))
+        (set! (atlas-buffer (dst-idx + 0)) 255)
+        (set! (atlas-buffer (dst-idx + 1)) 255)
+        (set! (atlas-buffer (dst-idx + 2)) 255)
+        (set! (atlas-buffer (dst-idx + 3)) pixel)))
 
-    (if (bh > row-height)
-      (set! row-height bh))
+    (if (bh > row-height) (set! row-height bh))
+    (set! atlas-x (+ atlas-x bw 1)))
 
-    (set! atlas-x (+ atlas-x bw 1))
-    (set! i (+ i 1)))
+;;;;; Create VkImage
 
-  ;; Upload the atlas to OpenGL (outside the loop)
-  (define tex-id 0)
-  (glGenTextures 1 &tex-id)
-  (glBindTexture GL_TEXTURE_2D tex-id)
-  (glTexImage2D GL_TEXTURE_2D 0 GL_RGBA 512 512 0 GL_RGBA GL_UNSIGNED_BYTE atlas-buffer)
-  (glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER GL_LINEAR)
-  (glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER GL_LINEAR)
+  (define img-info (VkImageCreateInfo))
+  (set! img-info.sType         VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO)
+  (set! img-info.imageType     VK_IMAGE_TYPE_2D)
+  (set! img-info.format        VK_FORMAT_R8G8B8A8_UNORM)
+  (set! img-info.extent.width  512)
+  (set! img-info.extent.height 512)
+  (set! img-info.extent.depth  1)
+  (set! img-info.mipLevels     1)
+  (set! img-info.arrayLayers   1)
+  (set! img-info.samples       VK_SAMPLE_COUNT_1_BIT)
+  (set! img-info.tiling        VK_IMAGE_TILING_OPTIMAL)
+  (set! img-info.usage         (VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                                  VK_IMAGE_USAGE_SAMPLED_BIT))
+  (set! img-info.sharingMode   VK_SHARING_MODE_EXCLUSIVE)
+  (set! img-info.initialLayout VK_IMAGE_LAYOUT_UNDEFINED)
+  (define atlas-image (VkImage))
+  (vkCreateImage vk-device &img-info 0 &atlas-image)
 
-  (set! font.texture tex-id)
+  ;; --- Allocate device-local memory for image ---
+  (define mem-reqs (VkMemoryRequirements))
+  (vkGetImageMemoryRequirements vk-device atlas-image &mem-reqs)
+  (define phys-props (VkPhysicalDeviceMemoryProperties))
+  (vkGetPhysicalDeviceMemoryProperties vk-phys-device &phys-props)
+  (define [mem-type-index :: U32] 0)
+  (for [mi 0 phys-props.memoryTypeCount]
+    (define mem-type (phys-props.memoryTypes mi))
+    (if ((mem-reqs.memoryTypeBits >> mi) &
+           (mem-type.propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+      (begin
+        (set! mem-type-index mi)
+        (set! mi phys-props.memoryTypeCount)))) ; break
+
+  (define img-alloc (VkMemoryAllocateInfo))
+  (set! img-alloc.sType           VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO)
+  (set! img-alloc.allocationSize  mem-reqs.size)
+  (set! img-alloc.memoryTypeIndex mem-type-index)
+  (define atlas-memory (VkDeviceMemory))
+  (vkAllocateMemory vk-device &img-alloc 0 &atlas-memory)
+  (vkBindImageMemory vk-device atlas-image atlas-memory 0)
+
+  ;; --- Create staging buffer ---
+  (define buf-info (VkBufferCreateInfo))
+  (set! buf-info.sType       VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO)
+  (set! buf-info.size        atlas-size)
+  (set! buf-info.usage       VK_BUFFER_USAGE_TRANSFER_SRC_BIT)
+  (set! buf-info.sharingMode VK_SHARING_MODE_EXCLUSIVE)
+  (define staging-buf (VkBuffer))
+  (vkCreateBuffer vk-device &buf-info 0 &staging-buf)
+
+  (define sbuf-reqs (VkMemoryRequirements))
+  (vkGetBufferMemoryRequirements vk-device staging-buf &sbuf-reqs)
+  (define [staging-mem-type :: U32] 0)
+  (define host-flags (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
+  (for [smi 0 phys-props.memoryTypeCount]
+    (define stype (phys-props.memoryTypes smi))
+    (if ((sbuf-reqs.memoryTypeBits >> smi) &
+           (stype.propertyFlags & host-flags))
+      (begin
+        (set! staging-mem-type smi)
+        (set! smi phys-props.memoryTypeCount)))) ; break
+
+  (define staging-alloc (VkMemoryAllocateInfo))
+  (set! staging-alloc.sType           VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO)
+  (set! staging-alloc.allocationSize  sbuf-reqs.size)
+  (set! staging-alloc.memoryTypeIndex staging-mem-type)
+  (define staging-memory (VkDeviceMemory))
+  (vkAllocateMemory vk-device &staging-alloc 0 &staging-memory)
+  (vkBindBufferMemory vk-device staging-buf staging-memory 0)
+
+  ;; --- Upload atlas into staging buffer ---
+  (define mapped 0)
+  (vkMapMemory vk-device staging-memory 0 atlas-size 0 &mapped)
+  (memcpy mapped atlas-buffer atlas-size)
+  (vkUnmapMemory vk-device staging-memory)
   (free atlas-buffer)
-  font)
 
+  ;; --- Record one-time command buffer ---
+  (define cmd-alloc (VkCommandBufferAllocateInfo))
+  (set! cmd-alloc.sType              VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO)
+  (set! cmd-alloc.commandPool        vk-cmd-pool)
+  (set! cmd-alloc.level              VK_COMMAND_BUFFER_LEVEL_PRIMARY)
+  (set! cmd-alloc.commandBufferCount 1)
+  (define cmd-buf (VkCommandBuffer))
+  (vkAllocateCommandBuffers vk-device &cmd-alloc &cmd-buf)
+
+  (define begin-info (VkCommandBufferBeginInfo))
+  (set! begin-info.sType VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO)
+  (set! begin-info.flags VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)
+  (vkBeginCommandBuffer cmd-buf &begin-info)
+
+  ;; Transition: UNDEFINED -> TRANSFER_DST
+  (define barrier (VkImageMemoryBarrier))
+  (set! barrier.sType                           VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER)
+  (set! barrier.oldLayout                       VK_IMAGE_LAYOUT_UNDEFINED)
+  (set! barrier.newLayout                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+  (set! barrier.srcQueueFamilyIndex             VK_QUEUE_FAMILY_IGNORED)
+  (set! barrier.dstQueueFamilyIndex             VK_QUEUE_FAMILY_IGNORED)
+  (set! barrier.image                           atlas-image)
+  (set! barrier.subresourceRange.aspectMask     VK_IMAGE_ASPECT_COLOR_BIT)
+  (set! barrier.subresourceRange.baseMipLevel   0)
+  (set! barrier.subresourceRange.levelCount     1)
+  (set! barrier.subresourceRange.baseArrayLayer 0)
+  (set! barrier.subresourceRange.layerCount     1)
+  (set! barrier.srcAccessMask                   0)
+  (set! barrier.dstAccessMask                   VK_ACCESS_TRANSFER_WRITE_BIT)
+  (vkCmdPipelineBarrier cmd-buf
+    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+    VK_PIPELINE_STAGE_TRANSFER_BIT
+    0 0 0 0 0 1 &barrier)
+
+  ;; Copy staging buffer -> image
+  (define region (VkBufferImageCopy))
+  (set! region.bufferOffset                    0)
+  (set! region.bufferRowLength                 0)
+  (set! region.bufferImageHeight               0)
+  (set! region.imageSubresource.aspectMask     VK_IMAGE_ASPECT_COLOR_BIT)
+  (set! region.imageSubresource.mipLevel       0)
+  (set! region.imageSubresource.baseArrayLayer 0)
+  (set! region.imageSubresource.layerCount     1)
+  (set! region.imageOffset.x                   0)
+  (set! region.imageOffset.y                   0)
+  (set! region.imageOffset.z                   0)
+  (set! region.imageExtent.width               512)
+  (set! region.imageExtent.height              512)
+  (set! region.imageExtent.depth               1)
+  (vkCmdCopyBufferToImage cmd-buf staging-buf atlas-image
+    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL 1 &region)
+
+  ;; Transition: TRANSFER_DST -> SHADER_READ_ONLY
+  (set! barrier.oldLayout     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+  (set! barrier.newLayout     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+  (set! barrier.srcAccessMask VK_ACCESS_TRANSFER_WRITE_BIT)
+  (set! barrier.dstAccessMask VK_ACCESS_SHADER_READ_BIT)
+  (vkCmdPipelineBarrier cmd-buf
+    VK_PIPELINE_STAGE_TRANSFER_BIT
+    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+    0 0 0 0 0 1 &barrier)
+  (vkEndCommandBuffer cmd-buf)
+
+  ;; Submit and wait
+  (define submit-info (VkSubmitInfo))
+  (set! submit-info.sType              VK_STRUCTURE_TYPE_SUBMIT_INFO)
+  (set! submit-info.commandBufferCount 1)
+  (set! submit-info.pCommandBuffers    &cmd-buf)
+  (vkQueueSubmit vk-queue 1 &submit-info 0)
+  (vkQueueWaitIdle vk-queue)
+  (vkFreeCommandBuffers vk-device vk-cmd-pool 1 &cmd-buf)
+
+  ;; Cleanup staging
+  (vkDestroyBuffer vk-device staging-buf 0)
+  (vkFreeMemory    vk-device staging-memory 0)
+
+  ;; --- Create ImageView ---
+  (define view-info (VkImageViewCreateInfo))
+  (set! view-info.sType                           VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO)
+  (set! view-info.image                           atlas-image)
+  (set! view-info.viewType                        VK_IMAGE_VIEW_TYPE_2D)
+  (set! view-info.format                          VK_FORMAT_R8G8B8A8_UNORM)
+  (set! view-info.subresourceRange.aspectMask     VK_IMAGE_ASPECT_COLOR_BIT)
+  (set! view-info.subresourceRange.baseMipLevel   0)
+  (set! view-info.subresourceRange.levelCount     1)
+  (set! view-info.subresourceRange.baseArrayLayer 0)
+  (set! view-info.subresourceRange.layerCount     1)
+  (define atlas-view (VkImageView))
+  (vkCreateImageView vk-device &view-info 0 &atlas-view)
+
+  ;; --- Create Sampler ---
+  (define sampler-info (VkSamplerCreateInfo))
+  (set! sampler-info.sType        VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO)
+  (set! sampler-info.magFilter    VK_FILTER_LINEAR)
+  (set! sampler-info.minFilter    VK_FILTER_LINEAR)
+  (set! sampler-info.addressModeU VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
+  (set! sampler-info.addressModeV VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
+  (set! sampler-info.addressModeW VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
+  (set! sampler-info.borderColor  VK_BORDER_COLOR_INT_OPAQUE_BLACK)
+  (define atlas-sampler (VkSampler))
+  (vkCreateSampler vk-device &sampler-info 0 &atlas-sampler)
+
+  ;; --- Store into Font ---
+  (set! font.texture.image   atlas-image)
+  (set! font.texture.memory  atlas-memory)
+  (set! font.texture.view    atlas-view)
+  (set! font.texture.sampler atlas-sampler)
+  (set! font.texture.width   512)
+  (set! font.texture.height  512)
+  (set! font.texture.loaded  1)
+  font)

@@ -3111,7 +3111,7 @@ static LLVMValueRef codegen_lvalue(CodegenContext *ctx, AST *ast, Type **out_typ
         LLVMValueRef arr_ptr = codegen_lvalue(ctx, ast->list.items[0], &arr_type);
         if (!arr_ptr) return NULL;
 
-        if (arr_type && arr_type->kind == TYPE_STRING) {
+        if (arr_type && (arr_type->kind == TYPE_STRING || arr_type->kind == TYPE_PTR)) {
             if (out_type) *out_type = type_char();
             LLVMTypeRef  i8  = LLVMInt8TypeInContext(ctx->context);
             LLVMTypeRef  i64 = LLVMInt64TypeInContext(ctx->context);

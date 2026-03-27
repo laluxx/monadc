@@ -751,8 +751,11 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                 char *line_expanded = strndup(lt, lt_end - lt);
                 size_t ltlen = strlen(line_expanded);
 
-                while (acc_len + ltlen + 3 >= acc_cap) { acc_cap *= 2; acc = realloc(acc, acc_cap); }
-                acc[acc_len++] = ' ';
+                char _ld[48];
+                int _ldlen = snprintf(_ld, sizeof(_ld), " (#line %d 1) ", lineno);
+                while (acc_len + (size_t)_ldlen + ltlen + 3 >= acc_cap) { acc_cap *= 2; acc = realloc(acc, acc_cap); }
+                memcpy(acc + acc_len, _ld, _ldlen);
+                acc_len += _ldlen;
                 memcpy(acc + acc_len, line_expanded, ltlen);
                 acc_len += ltlen;
                 acc[acc_len] = '\0';
@@ -844,8 +847,11 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                 while (lt_end > lt && (*(lt_end-1)==' '||*(lt_end-1)=='\t')) lt_end--;
                 size_t ltlen = lt_end - lt;
 
-                while (acc_len + ltlen + 4 >= acc_cap) { acc_cap *= 2; acc = realloc(acc, acc_cap); }
-                acc[acc_len++] = ' ';
+                char _ld2[48];
+                int _ld2len = snprintf(_ld2, sizeof(_ld2), " (#line %d 1) ", lineno);
+                while (acc_len + (size_t)_ld2len + ltlen + 4 >= acc_cap) { acc_cap *= 2; acc = realloc(acc, acc_cap); }
+                memcpy(acc + acc_len, _ld2, _ld2len);
+                acc_len += _ld2len;
                 memcpy(acc + acc_len, lt, ltlen);
                 acc_len += ltlen;
                 acc[acc_len] = '\0';

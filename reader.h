@@ -31,10 +31,10 @@ typedef enum {
     AST_SET,        // {val val val}
     AST_MAP,        // #{"key" val "key" val}
     AST_PMATCH,     // pattern matching clauses
-    AST_DATA,        // (data Color Red | Green | Blue)
-    AST_CLASS,       // (class Eq a where ...)
-    AST_INSTANCE,    // (instance Eq TrafficLight where ...)
-    TOK_LAMBDA_LIT,  // λx. — pure lambda calculus literal
+    AST_DATA,       // (data Color Red | Green | Blue)
+    AST_CLASS,      // (class Eq a where ...)
+    AST_INSTANCE,   // (instance Eq TrafficLight where ...)
+    TOK_LAMBDA_LIT, // λx. — pure lambda calculus literal
 } ASTType;
 
 // A single parsed function parameter: name + optional type annotation
@@ -411,8 +411,9 @@ extern char     g_reader_error_msg[512];
 // Source map: set by the lexer when it sees a #line N COL directive
 // emitted by the wisp transformer. Shifts all subsequent line/column
 // reporting back to original source coordinates.
-extern int g_srcmap_line_bias;   // add to lex->line to get original line
-extern int g_srcmap_col_bias;    // add to lex->column to get original col
+extern int g_srcmap_line_bias;
+extern int g_srcmap_col_bias;
+extern int g_srcmap_abs_line;    // when >0, overrides lex->line directly
 extern int g_quote_depth;        // >0 means we are inside a quoted form
 
 // Param-kind lookup hook — set by wisp before parsing so the reader
