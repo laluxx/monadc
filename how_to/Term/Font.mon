@@ -1,0 +1,114 @@
+include <stdlib.h>
+include <ft2build.h>
+include <freetype/freetype.h>
+include <vulkan/vulkan.h>
+
+(layout Character
+  [ax :: F32]  ; advance.x
+  [ay :: F32]  ; advance.y
+  [bw :: F32]  ; bitmap.width
+  [bh :: F32]  ; bitmap.rows
+  [bl :: F32]  ; bitmap_left
+  [bt :: F32]  ; bitmap_top
+  [tx :: F32]  ; x offset in texture atlas (0.0 to 1.0)
+  [ty :: F32]) ; y offset in texture atlas (0.0 to 1.0)
+
+(layout Texture2D
+  [image   :: VkImage]
+  [memory  :: VkDeviceMemory]
+  [view    :: VkImageView]
+  [sampler :: VkSampler]
+  [descSet :: VkDescriptorSet]
+  [width   :: U32]
+  [height  :: U32]
+  [loaded  :: Bool])
+
+(layout Font
+  [texture :: Texture2D]
+  [width   :: I32]
+  [height  :: I32]
+  [ascent  :: I32]
+  [descent :: I32]
+  [chars   :: [Character 128]])
+
+
+;; Global FreeType library handle
+define ft-lib 0
+
+(define (init-font-system)
+  (FT_Init_FreeType &ft-lib))
+
+
+(define (load-font [path :: String] [size :: I32] -> Pointer :: Font)
+  (define font (Font))
+  (define face (FT_FaceRec))
+
+  (FT_New_Face ft-lib path 0 &face)
+  (FT_Set_Pixel_Sizes face 0 size)
+
+  (set! font.width  512)
+  (set! font.height 512)
+
+  ;; Allocate RGBA buffer for the 512x512 atlas
+  (define atlas-size ((512 * 512) * 4))
+  (define atlas-buffer (calloc 1 atlas-size))
+
+  (define [atlas-x    :: I32] 0)
+  (define [atlas-y    :: I32] 0)
+  (define [row-height :: I32] 0)
+
+  ;; Pre-load standard ASCII characters (space to tilde)
+  (define i 32)
+  (until (i > 126)
+    (FT_Load_Char face i 4) ; FT_LOAD_RENDER = 4
+
+    ;; MUST be defined first, and MUST read from face.glyph
+    (define glyph face.glyph)
+    (define bmp   glyph.bitmap)
+    (define adv   glyph.advance)
+    (define bw    bmp.width)
+    (define bh    bmp.rows)
+
+    ;; Wrap to next row if character doesn't fit on current line
+    (if ((atlas-x + bw) >= 512)
+      (begin
+        (set! atlas-y (atlas-y + row-height))
+        (set! atlas-x 0)
+        (set! row-height 0)))
+
+    ;; Load struct BY VALUE to preserve the layout type
+    (define char-info (font.chars i))
+
+    (set! char-info.ax (adv.x / 64.0))
+    (set! char-info.ay (adv.y / 64.0))
+    (set! char-info.bw bw)
+    (set! char-info.bh bh)
+    (set! char-info.bl glyph.bitmap_left)
+    (set! char-info.bt glyph.bitmap_top)
+    (set! char-info.tx (atlas-x / 512.0))
+    (set! char-info.ty (atlas-y / 512.0))
+
+    ;; Write the modified struct back into the array
+    (set! (font.chars i) char-info)
+
+    ;; TODO: Insert a memory-copy loop here to copy bmp.buffer
+    ;; into atlas-buffer at (atlas-x, atlas-y) mapping 1-byte grayscale to RGBA.
+
+    (if (bh > row-height)
+      (set! row-height bh))
+
+    (set! atlas-x (+ atlas-x bw 1))
+    (set! i (+ i 1)))
+
+  ;; Upload the atlas to OpenGL (outside the loop)
+  (define tex-id 0)
+  (glGenTextures 1 &tex-id)
+  (glBindTexture GL_TEXTURE_2D tex-id)
+  (glTexImage2D GL_TEXTURE_2D 0 GL_RGBA 512 512 0 GL_RGBA GL_UNSIGNED_BYTE atlas-buffer)
+  (glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER GL_LINEAR)
+  (glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER GL_LINEAR)
+
+  (set! font.texture tex-id)
+  (free atlas-buffer)
+  font)
+

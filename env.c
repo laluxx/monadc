@@ -109,15 +109,6 @@ static EnvEntry *new_entry(const char *name) {
 
 static void chain(Env *table, EnvEntry *e) {
     unsigned int idx = hash(e->name) % table->size;
-    /* Check for duplicate name in this bucket before inserting */
-    for (EnvEntry *existing = table->buckets[idx]; existing; existing = existing->next) {
-        if (strcmp(existing->name, e->name) == 0) {
-            /* Name already exists — free the new entry and return */
-            free_entry_fields(e);
-            free(e);
-            return;
-        }
-    }
     e->next = table->buckets[idx];
     table->buckets[idx] = e;
     table->count++;

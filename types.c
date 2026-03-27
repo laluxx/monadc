@@ -227,6 +227,34 @@ int refinement_check_literal(const char *type_name, double val,
 Type *type_from_name(const char *name) {
     if (!name) return NULL;
 
+    // Compound types (parsed dynamically from string annotations)
+    if (strncmp(name, "Pointer :: ", 11) == 0) {
+        const char *inner_name = name + 11;
+        Type *inner_type = type_from_name(inner_name);
+        if (!inner_type) {
+            /* Treat undefined inner types as opaque C structs for FFI */
+            inner_type = type_layout_ref(inner_name);
+        }
+        return type_ptr(inner_type);
+    }
+
+    if (strncmp(name, "Arr :: ", 7) == 0) {
+        char buf[256];
+        strncpy(buf, name + 7, sizeof(buf) - 1);
+        buf[sizeof(buf) - 1] = '\0';
+
+        char *delim = strstr(buf, " :: ");
+        if (delim) {
+            *delim = '\0';
+            Type *elem_type = type_from_name(buf);
+            int size = atoi(delim + 4);
+            return type_arr(elem_type, size);
+        } else {
+            Type *elem_type = type_from_name(buf);
+            return type_arr_fat(elem_type);
+        }
+    }
+
     // Built-in types first
     if (strcmp(name, "Int")     == 0) return type_int();
     if (strcmp(name, "Float")   == 0) return type_float();

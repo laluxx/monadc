@@ -335,7 +335,6 @@ typedef enum {
     TOK_HASH_LBRACE,    // #{
     TOK_PIPE,           // |
     TOK_LINE_DIRECTIVE, // #line N COL (internal, emitted by wisp, never reaches parser)
-
 } TokenType;
 
 typedef struct {

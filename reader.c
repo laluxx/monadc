@@ -809,10 +809,13 @@ void ast_print(AST *ast) {
         printf(")");
         if (ast->lambda.docstring)
             printf(" \"%s\"", ast->lambda.docstring);
-        printf(" ");
-        ast_print(ast->lambda.body);
+        for (int i = 0; i < ast->lambda.body_count; i++) {
+            printf(" ");
+            ast_print(ast->lambda.body_exprs[i]);
+        }
         printf(")");
         break;
+
     case AST_ASM:
         printf("(asm");
         for (size_t i = 0; i < ast->asm_block.instruction_count; i++) {
@@ -1468,9 +1471,19 @@ static ASTParam parse_one_param(Parser *p) {
         if (p->current.type == TOK_SYMBOL &&
             strcmp(p->current.value, "::") == 0) {
             p->current = lexer_next_token(p->lexer);
-            if (p->current.type == TOK_SYMBOL) {
-                param.type_name = my_strdup(p->current.value);
+
+            char type_buf[512] = {0};
+            while (p->current.type != TOK_RBRACKET && p->current.type != TOK_EOF) {
+                const char *tok_str = p->current.value ? p->current.value
+                                    : (p->current.type == TOK_ARROW ? "->" : NULL);
+                if (tok_str) {
+                    if (type_buf[0]) strncat(type_buf, " ", sizeof(type_buf) - strlen(type_buf) - 1);
+                    strncat(type_buf, tok_str, sizeof(type_buf) - strlen(type_buf) - 1);
+                }
                 p->current = lexer_next_token(p->lexer);
+            }
+            if (type_buf[0]) {
+                param.type_name = my_strdup(type_buf);
             }
         }
     }
@@ -1559,33 +1572,25 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
             params[count++] = param;
 
         } else if (p->current.type == TOK_ARROW) {
-            /* Consume -> and continue — bare symbol after -> may be
-             * return type only if it's the very last token before )  */
             p->current = lexer_next_token(p->lexer);
 
-            /* If next token is a symbol, peek one more ahead */
             if (p->current.type == TOK_SYMBOL) {
-                char *sym  = my_strdup(p->current.value);
-                p->current = lexer_next_token(p->lexer);
+                char type_buf[512] = {0};
 
-                if (p->current.type == TOK_RPAREN ||
-                    p->current.type == TOK_EOF) {
-                    /* Last token before ) — it's the return type */
-                    free(ret_type);
-                    ret_type = sym;
-                } else {
-                    /* More tokens follow — it's another parameter */
-                    if (count >= capacity) {
-                        capacity = capacity == 0 ? 4 : capacity * 2;
-                        params   = realloc(params, sizeof(ASTParam) * capacity);
+                /* Keep consuming until we hit ')' */
+                while (p->current.type != TOK_RPAREN && p->current.type != TOK_EOF) {
+                    const char *tok_str = p->current.value ? p->current.value
+                                        : (p->current.type == TOK_ARROW ? "->" : NULL);
+                    if (tok_str) {
+                        if (type_buf[0]) strncat(type_buf, " ", sizeof(type_buf) - strlen(type_buf) - 1);
+                        strncat(type_buf, tok_str, sizeof(type_buf) - strlen(type_buf) - 1);
                     }
-                    params[count].name      = sym;
-                    params[count].type_name = NULL;
-                    params[count].is_rest   = false;
-                    count++;
+                    p->current = lexer_next_token(p->lexer);
                 }
+
+                free(ret_type);
+                ret_type = my_strdup(type_buf);
             }
-            /* If next token is [ or another ->, just continue the loop */
         } else if (p->current.type == TOK_SYMBOL) {
             /* Bare symbol NOT after -> — could be a named param or an
              * anonymous typed param (uppercase = type only, e.g. Int).  */
@@ -1624,9 +1629,18 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
     if (p->current.type == TOK_ARROW) {
         p->current = lexer_next_token(p->lexer);
         if (p->current.type == TOK_SYMBOL) {
+            char type_buf[512] = {0};
+            while (p->current.type != TOK_RPAREN && p->current.type != TOK_EOF) {
+                const char *tok_str = p->current.value ? p->current.value
+                                    : (p->current.type == TOK_ARROW ? "->" : NULL);
+                if (tok_str) {
+                    if (type_buf[0]) strncat(type_buf, " ", sizeof(type_buf) - strlen(type_buf) - 1);
+                    strncat(type_buf, tok_str, sizeof(type_buf) - strlen(type_buf) - 1);
+                }
+                p->current = lexer_next_token(p->lexer);
+            }
             free(ret_type);
-            ret_type   = my_strdup(p->current.value);
-            p->current = lexer_next_token(p->lexer);
+            ret_type = my_strdup(type_buf);
         }
     }
 
@@ -2260,6 +2274,9 @@ if (p->current.type == TOK_SYMBOL &&
         Token define_token = p->current;
         p->current = lexer_next_token(p->lexer);
 
+        fprintf(stderr, "DEBUG define: next token type=%d value='%s'\n",
+                p->current.type, p->current.value ? p->current.value : "NULL");
+
         // Check if next token is '(' (function definition)
         if (p->current.type == TOK_LPAREN) {
             // Parse as (define (fname signature...) metadata? body)
@@ -2387,7 +2404,24 @@ if (p->current.type == TOK_SYMBOL &&
             AST *name_ast;
 
             if (p->current.type == TOK_LBRACKET) {
-                name_ast = parse_expr(p);
+                p->current = lexer_next_token(p->lexer); // consume '['
+                if (p->current.type != TOK_SYMBOL)
+                    compiler_error(p->current.line, p->current.column,
+                                   "Expected variable name in typed define");
+                name_ast = ast_new_symbol(p->current.value);
+                name_ast->line   = p->current.line;
+                name_ast->column = p->current.column;
+                p->current = lexer_next_token(p->lexer); // consume name
+                if (p->current.type == TOK_SYMBOL &&
+                    strcmp(p->current.value, "::") == 0) {
+                    p->current = lexer_next_token(p->lexer); // consume '::'
+                    if (p->current.type == TOK_SYMBOL)
+                        p->current = lexer_next_token(p->lexer); // consume type
+                }
+                if (p->current.type != TOK_RBRACKET)
+                    compiler_error(p->current.line, p->current.column,
+                                   "Expected ']' to close typed variable binding");
+                p->current = lexer_next_token(p->lexer); // consume ']'
             } else if (p->current.type == TOK_SYMBOL) {
                 name_ast = ast_new_symbol(p->current.value);
                 name_ast->line   = p->current.line;
@@ -3509,7 +3543,11 @@ if (p->current.type == TOK_SYMBOL &&
             if (first->type == AST_SYMBOL && g_is_known_function)
                 first_is_known_fn = g_is_known_function(first->symbol);
 
-            if (!first_is_known_fn && p->current.type == TOK_SYMBOL && p->current.value) {
+            bool candidate_is_known_fn = true;
+            if (p->current.type == TOK_SYMBOL && p->current.value && g_is_known_function)
+                candidate_is_known_fn = g_is_known_function(p->current.value);
+
+            if (!first_is_known_fn && p->current.type == TOK_SYMBOL && p->current.value && candidate_is_known_fn) {
                 /* peek: is there a rhs after the candidate? */
                 /* We need at least one more token that isn't ')' */
                 /* Strategy: tentatively check using saved lexer state */
@@ -3544,6 +3582,11 @@ if (p->current.type == TOK_SYMBOL &&
                     /* Infix rewrite — consume chain */
                     AST *acc = first;
                     while (p->current.type == TOK_SYMBOL && p->current.value) {
+                        bool chain_is_known_fn = true;
+                        if (g_is_known_function)
+                            chain_is_known_fn = g_is_known_function(p->current.value);
+                        if (!chain_is_known_fn) break;
+
                         /* peek again to confirm rhs exists */
                         Lexer sl2   = *p->lexer;
                         Token after2 = lexer_next_token(p->lexer);

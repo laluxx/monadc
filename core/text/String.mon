@@ -21,7 +21,7 @@
 
 (import Ascii)
 
-;;;; Queries
+;;; Queries
 
 (define (string-empty? [s :: String] -> Bool)
   "Return True if S is the empty string."
@@ -68,7 +68,7 @@
           (set! result True)))))
   result)
 
-;;;; Copying and construction
+;;; Copying and construction
 
 (define (string-copy [s :: String] -> String)
   "Return a fresh mutable copy of S."
@@ -78,6 +78,7 @@
     (set! (result i) (s i)))
   result)
 
+;; TODO It should be able to take String or Character as `b'
 (define (string-append [a :: String] -> [b :: String] -> String)
   "Return a new string that is A followed by B."
   (define [alen   :: Int]    (count a))
@@ -97,7 +98,7 @@
     (set! (result i) (s (+ start i))))
   result)
 
-;;;; Trimming
+;;; Trimming
 
 (define (string-trim [s :: String] -> String)
   "Return S with leading whitespace removed."
@@ -122,7 +123,7 @@
   "Return S with leading and trailing whitespace removed."
   (string-trim (string-trim-right s)))
 
-;;;; Padding
+;;; Padding
 
 (define (string-pad-left [s :: String] -> [n :: Int] -> [c :: Char] -> String)
   "Pad S on the left with C to length N."

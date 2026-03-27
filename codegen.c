@@ -2135,6 +2135,11 @@ void codegen_layout(CodegenContext *ctx, AST *ast) {
             // [ElemType Size] sugar
             Type *elem = type_from_name(af->array_elem);
             if (!elem) {
+                // Try layout registry for array elements (arrays of structs)
+                elem = env_lookup_layout(ctx->env, af->array_elem);
+                if (elem) elem = type_clone(elem);
+            }
+            if (!elem) {
                 CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown array element type ‘%s’ in layout ‘%s’",
                               parser_get_filename(), ast->line, ast->column,
                               af->array_elem, ast->layout.name);
@@ -2452,6 +2457,11 @@ static LLVMValueRef wrap_func_as_closure(CodegenContext *ctx, EnvEntry *e) {
                 LLVMTypeRef uft = LLVMFunctionType(dbl, &ptr_t, 1, 0);
                 real_args[i] = LLVMBuildCall2(ctx->builder, uft,
                                    get_rt_unbox_float(ctx), &boxed, 1, "ua");
+            } else if (LLVMGetTypeKind(native) == LLVMIntegerTypeKind && native != LLVMInt1TypeInContext(ctx->context)) {
+                LLVMTypeRef uft = LLVMFunctionType(i64, &ptr_t, 1, 0);
+                LLVMValueRef unboxed64 = LLVMBuildCall2(ctx->builder, uft,
+                                   get_rt_unbox_int(ctx), &boxed, 1, "ua");
+                real_args[i] = LLVMBuildTrunc(ctx->builder, unboxed64, native, "ua_trunc");
             } else {
                 real_args[i] = boxed;
             }
@@ -2476,8 +2486,13 @@ static LLVMValueRef wrap_func_as_closure(CodegenContext *ctx, EnvEntry *e) {
             LLVMTypeRef bft = LLVMFunctionType(ptr_t, &dbl, 1, 0);
             boxed_ret = LLVMBuildCall2(ctx->builder, bft,
                                        get_rt_value_float(ctx), &raw, 1, "br");
-        } else if (native_ret == i1) {
+            } else if (native_ret == i1) {
             LLVMValueRef ext = LLVMBuildZExt(ctx->builder, raw, i64, "ext");
+            LLVMTypeRef  bft = LLVMFunctionType(ptr_t, &i64, 1, 0);
+            boxed_ret = LLVMBuildCall2(ctx->builder, bft,
+                                       get_rt_value_int(ctx), &ext, 1, "br");
+        } else if (LLVMGetTypeKind(native_ret) == LLVMIntegerTypeKind) {
+            LLVMValueRef ext = LLVMBuildSExt(ctx->builder, raw, i64, "ext");
             LLVMTypeRef  bft = LLVMFunctionType(ptr_t, &i64, 1, 0);
             boxed_ret = LLVMBuildCall2(ctx->builder, bft,
                                        get_rt_value_int(ctx), &ext, 1, "br");
@@ -2986,6 +3001,212 @@ cleanup:
     return result;
 }
 
+static LLVMValueRef codegen_dot_chain(CodegenContext *ctx, const char *symbol, Type **out_type, AST *ast) {
+    const char *first_dot = strchr(symbol, '.');
+    if (!first_dot || first_dot == symbol) return NULL; // Not a dot-chain
+
+    char var_name[256];
+    size_t vlen = first_dot - symbol;
+    if (vlen >= sizeof(var_name)) vlen = sizeof(var_name) - 1;
+    memcpy(var_name, symbol, vlen);
+    var_name[vlen] = '\0';
+
+    EnvEntry *base_entry = resolve_symbol_with_modules(ctx, var_name, ast);
+    if (!base_entry || !base_entry->type) {
+        return NULL; // Might be a module prefix
+    }
+
+    Type *current_lay = base_entry->type;
+
+    /* Auto-dereference if it's a Pointer :: Layout (like face.glyph) */
+    if (current_lay->kind == TYPE_PTR && current_lay->element_type && current_lay->element_type->kind == TYPE_LAYOUT) {
+        current_lay = current_lay->element_type;
+    } else if (current_lay->kind != TYPE_LAYOUT) {
+        return NULL; // Not a layout or pointer to layout
+    }
+
+    LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+
+    if (!base_entry->value) {
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: unbound variable or null value: %s",
+                      parser_get_filename(), ast->line, ast->column, var_name);
+        return NULL;
+    }
+
+    LLVMValueRef current_ptr = LLVMBuildLoad2(ctx->builder, ptr_t, base_entry->value, var_name);
+
+    const char *p = first_dot + 1;
+    while (*p) {
+        if (current_lay->layout_field_count == 0 && current_lay->layout_name) {
+            Type *resolved = env_lookup_layout(ctx->env, current_lay->layout_name);
+            if (resolved) current_lay = resolved;
+        }
+
+        const char *next_dot = strchr(p, '.');
+        char field_name[256];
+        if (next_dot) {
+            size_t flen = next_dot - p;
+            if (flen >= sizeof(field_name)) flen = sizeof(field_name) - 1;
+            memcpy(field_name, p, flen);
+            field_name[flen] = '\0';
+        } else {
+            strncpy(field_name, p, sizeof(field_name) - 1);
+            field_name[sizeof(field_name) - 1] = '\0';
+        }
+
+        int field_idx = -1;
+        for (int i = 0; i < current_lay->layout_field_count; i++) {
+            if (strcmp(current_lay->layout_fields[i].name, field_name) == 0) {
+                field_idx = i;
+                break;
+            }
+        }
+
+        if (field_idx < 0) {
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: layout '%s' has no field '%s'",
+                          parser_get_filename(), ast->line, ast->column,
+                          current_lay->layout_name, field_name);
+            return NULL;
+        }
+
+        char sname[256];
+        snprintf(sname, sizeof(sname), "layout.%s", current_lay->layout_name);
+        LLVMTypeRef struct_llvm = LLVMGetTypeByName2(ctx->context, sname);
+        if (!struct_llvm) {
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: LLVM struct type for '%s' not found",
+                          parser_get_filename(), ast->line, ast->column, current_lay->layout_name);
+            return NULL;
+        }
+
+        LLVMValueRef zero = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0);
+        LLVMValueRef fidx = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), field_idx, 0);
+        LLVMValueRef indices[] = {zero, fidx};
+
+        current_ptr = LLVMBuildGEP2(ctx->builder, struct_llvm, current_ptr, indices, 2, "fld_ptr");
+        current_lay = current_lay->layout_fields[field_idx].type;
+
+        // If this isn't the last field, continue chaining the GEP
+        if (next_dot) {
+            if (current_lay->kind != TYPE_LAYOUT) {
+                CODEGEN_ERROR(ctx, "%s:%d:%d: error: field '%s' is not a layout type, cannot access nested fields",
+                              parser_get_filename(), ast->line, ast->column, field_name);
+                return NULL;
+            }
+            // DO NOT LOAD! current_ptr is already the pointer to the nested struct.
+            p = next_dot + 1;
+        } else {
+            break;
+        }
+
+    }
+
+    if (out_type) *out_type = current_lay;
+    return current_ptr;
+}
+
+static LLVMValueRef codegen_lvalue(CodegenContext *ctx, AST *ast, Type **out_type) {
+     if (ast->type == AST_LIST && ast->list.count == 2) {
+        Type *arr_type = NULL;
+        /* Recursively resolve the base (e.g. font.chars) to get its memory pointer */
+        LLVMValueRef arr_ptr = codegen_lvalue(ctx, ast->list.items[0], &arr_type);
+        if (!arr_ptr) return NULL;
+
+        if (arr_type && arr_type->kind == TYPE_STRING) {
+            if (out_type) *out_type = type_char();
+            LLVMTypeRef  i8  = LLVMInt8TypeInContext(ctx->context);
+            LLVMTypeRef  i64 = LLVMInt64TypeInContext(ctx->context);
+            LLVMValueRef str_val = LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, arr_type), arr_ptr, "str_val");
+            CodegenResult idx_r = codegen_expr(ctx, ast->list.items[1]);
+            LLVMValueRef idx = type_is_float(idx_r.type) ? LLVMBuildFPToSI(ctx->builder, idx_r.value, i64, "idx") : idx_r.value;
+            if (LLVMTypeOf(idx) != i64) idx = LLVMBuildZExt(ctx->builder, idx, i64, "idx64");
+            return LLVMBuildGEP2(ctx->builder, i8, str_val, &idx, 1, "char_ptr");
+        }
+
+        if (arr_type && arr_type->kind == TYPE_ARR) {
+            LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+            LLVMTypeRef i32 = LLVMInt32TypeInContext(ctx->context);
+            LLVMTypeRef arr_llvm = type_to_llvm(ctx, arr_type);
+
+            if (arr_type->arr_is_fat) {
+                LLVMTypeRef fat_ptr_t = arr_llvm;
+                LLVMValueRef fat = LLVMBuildLoad2(ctx->builder, fat_ptr_t, arr_ptr, "fat_ptr");
+                Type *et = arr_type->arr_element_type;
+                if (out_type) *out_type = et;
+                LLVMValueRef data_ptr = arr_fat_data(ctx, fat, et);
+
+                CodegenResult idx_r2 = codegen_expr(ctx, ast->list.items[1]);
+                LLVMValueRef idx2 = type_is_float(idx_r2.type) ? LLVMBuildFPToSI(ctx->builder, idx_r2.value, i64, "idx") : idx_r2.value;
+                if (LLVMTypeOf(idx2) != i64) idx2 = LLVMBuildZExt(ctx->builder, idx2, i64, "idx64");
+
+                LLVMTypeRef elem_llvm2 = type_to_llvm(ctx, et);
+                return LLVMBuildGEP2(ctx->builder, elem_llvm2, data_ptr, &idx2, 1, "ep");
+            }
+
+            Type *elem_type = (arr_type->arr_element_type && arr_type->arr_element_type->kind != TYPE_UNKNOWN)
+                            ? arr_type->arr_element_type : type_int();
+            if (out_type) *out_type = elem_type;
+            LLVMTypeRef elem_llvm = type_to_llvm(ctx, elem_type);
+
+            CodegenResult idx_r = codegen_expr(ctx, ast->list.items[1]);
+            LLVMValueRef idx = type_is_float(idx_r.type) ? LLVMBuildFPToSI(ctx->builder, idx_r.value, i64, "idx") : idx_r.value;
+            if (LLVMTypeOf(idx) != i64) idx = LLVMBuildZExt(ctx->builder, idx, i64, "idx64");
+
+            bool arr_is_sized = (LLVMGetTypeKind(arr_llvm) == LLVMArrayTypeKind);
+            if (arr_is_sized) {
+                LLVMValueRef zero = LLVMConstInt(i32, 0, 0);
+                LLVMValueRef idx32 = LLVMBuildTrunc(ctx->builder, idx, i32, "idx32");
+                LLVMValueRef idxs[] = {zero, idx32};
+                return LLVMBuildGEP2(ctx->builder, arr_llvm, arr_ptr, idxs, 2, "elem_ptr");
+            } else {
+                LLVMValueRef data_ptr = LLVMBuildLoad2(ctx->builder, LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0), arr_ptr, "arr_data_ptr");
+                return LLVMBuildGEP2(ctx->builder, elem_llvm, data_ptr, &idx, 1, "elem_ptr");
+            }
+        }
+     }
+
+     if (ast->type == AST_SYMBOL) {
+        Type *dot_type = NULL;
+        LLVMValueRef dot_ptr = codegen_dot_chain(ctx, ast->symbol, &dot_type, ast);
+        if (dot_ptr) {
+            if (out_type) *out_type = dot_type;
+            return dot_ptr;
+        }
+
+        EnvEntry *entry = env_lookup(ctx->env, ast->symbol);
+        if (!entry) {
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: unbound variable: %s", parser_get_filename(), ast->line, ast->column, ast->symbol);
+            return NULL;
+        }
+        if (out_type) *out_type = entry->type;
+
+        if (entry->kind == ENV_FUNC) return entry->func_ref;
+        if (entry->kind == ENV_BUILTIN) {
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot take address of builtin '%s'", parser_get_filename(), ast->line, ast->column, ast->symbol);
+            return NULL;
+        }
+
+        LLVMValueRef target;
+        bool is_global = (entry->value && LLVMGetValueKind(entry->value) == LLVMGlobalVariableValueKind);
+        if (is_global) {
+            const char *gname = (entry->llvm_name && entry->llvm_name[0]) ? entry->llvm_name : entry->name;
+            target = LLVMGetNamedGlobal(ctx->module, gname);
+            if (!target) {
+                LLVMTypeRef lt = type_to_llvm(ctx, entry->type);
+                target = LLVMAddGlobal(ctx->module, lt, gname);
+                LLVMSetLinkage(target, LLVMExternalLinkage);
+            }
+            entry->value = target;
+        } else {
+            target = entry->value;
+        }
+        return target;
+    }
+
+    CODEGEN_ERROR(ctx, "%s:%d:%d: error: expression is not an lvalue", parser_get_filename(), ast->line, ast->column);
+    return NULL;
+}
+
+
 CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     CodegenResult result = {NULL, NULL};
 
@@ -3055,63 +3276,17 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             return result;
         }
 
-        // ── Dot-access: p.x ─────────────────────────────────────────────────
-        const char *dot = strchr(ast->symbol, '.');
-        if (dot && dot != ast->symbol) {
-            char var_name[256];
-            size_t vlen = dot - ast->symbol;
-            if (vlen >= sizeof(var_name)) vlen = sizeof(var_name) - 1;
-            memcpy(var_name, ast->symbol, vlen);
-            var_name[vlen] = '\0';
-            const char *field_name = dot + 1;
-
-            EnvEntry *base_entry = env_lookup(ctx->env, var_name);
-            if (base_entry && base_entry->type && base_entry->type->kind == TYPE_LAYOUT) {
-                Type *lay = base_entry->type;
-                int field_idx = -1;
-                for (int i = 0; i < lay->layout_field_count; i++) {
-                    if (strcmp(lay->layout_fields[i].name, field_name) == 0) {
-                        field_idx = i;
-                        break;
-                    }
-                }
-                if (field_idx < 0) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: layout ‘%s’ has no field ‘%s’",
-                                  parser_get_filename(), ast->line, ast->column,
-                                  lay->layout_name, field_name);
-                }
-                // Get the underlying struct type (strip pointer wrapping from type_to_llvm)
-                char struct_name[256];
-                snprintf(struct_name, sizeof(struct_name), "layout.%s", lay->layout_name);
-                LLVMTypeRef struct_llvm = LLVMGetTypeByName2(ctx->context, struct_name);
-                if (!struct_llvm) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: LLVM struct type for ‘%s’ not found",
-                                  parser_get_filename(), ast->line, ast->column, lay->layout_name);
-                }
-                LLVMTypeRef  ptr_t2   = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-                LLVMValueRef get_fn2  = LLVMGetNamedFunction(ctx->module, "__layout_ptr_get");
-                if (!get_fn2) {
-                    LLVMTypeRef ft2 = LLVMFunctionType(ptr_t2, &ptr_t2, 1, 0);
-                    get_fn2 = LLVMAddFunction(ctx->module, "__layout_ptr_get", ft2);
-                    LLVMSetLinkage(get_fn2, LLVMExternalLinkage);
-                }
-                LLVMValueRef vname_str = LLVMBuildGlobalStringPtr(ctx->builder, var_name, "lay_name");
-                LLVMValueRef heap_ptr2 = LLVMBuildCall2(ctx->builder,
-                                             LLVMFunctionType(ptr_t2, &ptr_t2, 1, 0),
-                                             get_fn2, &vname_str, 1, "lay_ptr");
-                LLVMValueRef zero      = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0);
-                LLVMValueRef fidx      = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), field_idx, 0);
-                LLVMValueRef indices[] = {zero, fidx};
-                LLVMValueRef gep       = LLVMBuildGEP2(ctx->builder, struct_llvm,
-                                                       heap_ptr2, indices, 2, "fld_ptr");
-                Type *ft = lay->layout_fields[field_idx].type;
-                result.value = LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, ft), gep, field_name);
-                result.type  = type_clone(ft);
-                return result;
-
+        // ── Dot-access: p.x.y.z ─────────────────────────────────────────────
+        Type *dot_type = NULL;
+        LLVMValueRef dot_ptr = codegen_dot_chain(ctx, ast->symbol, &dot_type, ast);
+        if (dot_ptr) {
+            if (dot_type && dot_type->kind == TYPE_LAYOUT && dot_type->layout_field_count == 0 && dot_type->layout_name) {
+                Type *full = env_lookup_layout(ctx->env, dot_type->layout_name);
+                if (full) dot_type = full;
             }
-            // base exists but is not a layout — fall through to normal resolution
-            // (handles module-qualified symbols like M.phi)
+            result.value = LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, dot_type), dot_ptr, "dot_val");
+            result.type  = type_clone(dot_type);
+            return result;
         }
 
         // ── Normal variable / module-qualified symbol ────────────────────────
@@ -3405,34 +3580,13 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
     case AST_ADDRESS_OF: {
         AST *operand = ast->list.items[0];
-        if (operand->type == AST_SYMBOL) {
-            EnvEntry *entry = env_lookup(ctx->env, operand->symbol);
-            if (!entry) {
-                CODEGEN_ERROR(ctx, "%s:%d:%d: error: unbound variable: %s",
-                              parser_get_filename(), ast->line, ast->column, operand->symbol);
-                return result;
-            }
-            LLVMValueRef addr;
-            LLVMTypeRef  i64 = LLVMInt64TypeInContext(ctx->context);
-            if (entry->kind == ENV_FUNC) {
-                addr = LLVMBuildPtrToInt(ctx->builder, entry->func_ref, i64, "fn_addr");
-            } else if (entry->kind == ENV_VAR) {
-                addr = LLVMBuildPtrToInt(ctx->builder, entry->value, i64, "var_addr");
-            } else if (entry->kind == ENV_BUILTIN) {
-                CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot take address of builtin ‘%s’",
-                              parser_get_filename(), ast->line, ast->column, operand->symbol);
-                return result;
-            } else {
-                CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot take address of ‘%s’",
-                              parser_get_filename(), ast->line, ast->column, operand->symbol);
-                return result;
-            }
-            result.value = addr;
-            result.type  = type_hex();
-            return result;
-        }
-        CODEGEN_ERROR(ctx, "%s:%d:%d: error: '&' operand must be a symbol",
-                      parser_get_filename(), ast->line, ast->column);
+        Type *target_type = NULL;
+        LLVMValueRef target_ptr = codegen_lvalue(ctx, operand, &target_type);
+        if (!target_ptr) return result;
+
+        LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+        result.value = LLVMBuildPtrToInt(ctx->builder, target_ptr, i64, "addr_to_int");
+        result.type  = type_hex();
         return result;
     }
 
@@ -4253,6 +4407,9 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                                     LLVMInt64TypeInContext(ctx->context), &ptr_t, 1, 0);
                                 unboxed = LLVMBuildCall2(ctx->builder, uft,
                                               get_rt_unbox_int(ctx), &boxed, 1, "unboxed");
+                                if (typed_llvm != LLVMInt64TypeInContext(ctx->context)) {
+                                    unboxed = LLVMBuildTrunc(ctx->builder, unboxed, typed_llvm, "unboxed_trunc");
+                                }
                             } else if (type_is_float(param_type)) {
                                 LLVMTypeRef uft = LLVMFunctionType(
                                     LLVMDoubleTypeInContext(ctx->context), &ptr_t, 1, 0);
@@ -6827,279 +6984,41 @@ if (ast->list.count >= 5) {
                                   parser_get_filename(), ast->line, ast->column);
                 }
 
-                AST *name_ast = ast->list.items[1];
+                Type *target_type = NULL;
+                LLVMValueRef target_ptr = codegen_lvalue(ctx, ast->list.items[1], &target_type);
+                if (!target_ptr) return result;
 
-                // ── Array index: (set! (arr i) val) ─────────────────────────────────
-                if (name_ast->type == AST_LIST && name_ast->list.count == 2 &&
-                    name_ast->list.items[0]->type == AST_SYMBOL) {
+                CodegenResult val_r = codegen_expr(ctx, ast->list.items[2]);
+                LLVMValueRef stored = val_r.value;
 
-                    const char *arr_sym = name_ast->list.items[0]->symbol;
-                    EnvEntry *arr_entry = env_lookup(ctx->env, arr_sym);
-
-                    if (arr_entry && arr_entry->type &&
-                        arr_entry->type->kind == TYPE_STRING) {
-                        /* (set! (str i) char) — mutate string in place */
-                        LLVMTypeRef  i8  = LLVMInt8TypeInContext(ctx->context);
-                        LLVMTypeRef  i64 = LLVMInt64TypeInContext(ctx->context);
-                        LLVMValueRef str_val = LLVMBuildLoad2(ctx->builder,
-                                                   type_to_llvm(ctx, arr_entry->type),
-                                                   arr_entry->value, arr_sym);
-                        CodegenResult idx_r = codegen_expr(ctx, name_ast->list.items[1]);
-                        LLVMValueRef idx = type_is_float(idx_r.type)
-                            ? LLVMBuildFPToSI(ctx->builder, idx_r.value, i64, "idx")
-                            : idx_r.value;
-                        if (LLVMTypeOf(idx) != i64)
-                            idx = LLVMBuildZExt(ctx->builder, idx, i64, "idx64");
-                        CodegenResult val_r = codegen_expr(ctx, ast->list.items[2]);
-                        LLVMValueRef ch = val_r.value;
-                        if (LLVMTypeOf(ch) != i8)
-                            ch = LLVMBuildTrunc(ctx->builder, ch, i8, "to_char");
-                        LLVMValueRef char_ptr = LLVMBuildGEP2(ctx->builder, i8,
-                                                    str_val, &idx, 1, "char_ptr");
-                        LLVMBuildStore(ctx->builder, ch, char_ptr);
-                        result.value = str_val;
-                        result.type  = type_string();
-                        return result;
-                    }
-
-                    if (arr_entry && arr_entry->type &&
-                        arr_entry->type->kind == TYPE_ARR) {
-
-                        LLVMTypeRef i64      = LLVMInt64TypeInContext(ctx->context);
-                        LLVMTypeRef i32      = LLVMInt32TypeInContext(ctx->context);
-                        LLVMTypeRef arr_llvm = type_to_llvm(ctx, arr_entry->type);
-
-                        /* Re-resolve globals by name so cross-module stores work */
-                        LLVMValueRef arr_ptr = arr_entry->value;
-
-                        /* Fat pointer — extract data pointer first */
-                        if (arr_entry->type->arr_is_fat) {
-                            LLVMTypeRef fat_ptr_t = arr_llvm;
-                            LLVMValueRef fat = LLVMBuildLoad2(ctx->builder,
-                                                fat_ptr_t, arr_ptr, "fat_ptr");
-                            Type *et = arr_entry->type->arr_element_type;
-                            arr_ptr  = arr_fat_data(ctx, fat, et);
-                            arr_llvm = LLVMPointerType(
-                                type_to_llvm(ctx, et), 0);
-                            /* Now do direct GEP — skip the sized-array path */
-                            CodegenResult idx_r2 = codegen_expr(ctx, name_ast->list.items[1]);
-                            LLVMValueRef idx2 = type_is_float(idx_r2.type)
-                                ? LLVMBuildFPToSI(ctx->builder, idx_r2.value, i64, "idx")
-                                : idx_r2.value;
-                            if (LLVMTypeOf(idx2) != i64)
-                                idx2 = LLVMBuildZExt(ctx->builder, idx2, i64, "idx64");
-                            Type *et2 = arr_entry->type->arr_element_type;
-                            LLVMTypeRef elem_llvm2 = type_to_llvm(ctx, et2);
-                            LLVMValueRef ep2 = LLVMBuildGEP2(ctx->builder,
-                                elem_llvm2, arr_ptr, &idx2, 1, "ep");
-                            CodegenResult val_r2 = codegen_expr(ctx, ast->list.items[2]);
-                            LLVMValueRef stored2 = val_r2.value;
-                            LLVMBuildStore(ctx->builder, stored2, ep2);
-                            result.value = LLVMConstPointerNull(
-                                LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0));
-                            result.type = NULL;
-                            return result;
-                        }
-
-                        bool arr_is_global = arr_ptr &&
-                            LLVMGetValueKind(arr_ptr) == LLVMGlobalVariableValueKind;
-                        if (arr_is_global) {
-                            const char *gname = (arr_entry->llvm_name && arr_entry->llvm_name[0])
-                                ? arr_entry->llvm_name : arr_entry->name;
-                            LLVMValueRef gv = LLVMGetNamedGlobal(ctx->module, gname);
-                            if (!gv) {
-                                gv = LLVMAddGlobal(ctx->module, arr_llvm, gname);
-                                LLVMSetLinkage(gv, LLVMExternalLinkage);
-                            }
-                            arr_ptr = gv;
-                        } else if (arr_ptr &&
-                                   LLVMGetTypeKind(arr_llvm) != LLVMArrayTypeKind) {
-                            /* Unsized Arr parameter — arr_ptr is an alloca holding
-                             * a raw pointer to the data; load it to get the data ptr */
-                            arr_ptr = LLVMBuildLoad2(ctx->builder,
-                                LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0),
-                                arr_ptr, "arr_data_ptr");
-                        } else if (arr_ptr &&
-                                   LLVMGetTypeKind(arr_llvm) == LLVMArrayTypeKind) {
-                            /* Sized local array alloca — arr_ptr is already the
-                             * base pointer to [N x T], use directly */
-                        }
-
-                        /* Element type */
-                        Type *elem_type = (arr_entry->type->arr_element_type &&
-                                           arr_entry->type->arr_element_type->kind != TYPE_UNKNOWN)
-                                        ? arr_entry->type->arr_element_type
-                                        : type_int();
-                        LLVMTypeRef elem_llvm = type_to_llvm(ctx, elem_type);
-
-                        /* Index */
-                        CodegenResult idx_r = codegen_expr(ctx, name_ast->list.items[1]);
-                        LLVMValueRef idx = type_is_float(idx_r.type)
-                            ? LLVMBuildFPToSI(ctx->builder, idx_r.value, i64, "idx")
-                            : idx_r.value;
-                        if (LLVMTypeOf(idx) != i64)
-                            idx = LLVMBuildZExt(ctx->builder, idx, i64, "idx64");
-
-                        /* GEP */
-                        LLVMValueRef elem_ptr;
-                        bool arr_is_sized = (LLVMGetTypeKind(arr_llvm) == LLVMArrayTypeKind);
-                        if (arr_is_sized) {
-                            LLVMValueRef zero     = LLVMConstInt(i32, 0, 0);
-                            LLVMValueRef idx32    = LLVMBuildTrunc(ctx->builder, idx, i32, "idx32");
-                            LLVMValueRef idxs[]   = {zero, idx32};
-                            elem_ptr = LLVMBuildGEP2(ctx->builder, arr_llvm,
-                                                     arr_ptr, idxs, 2, "elem_ptr");
+                if (target_type && val_r.type && val_r.type->kind != TYPE_UNKNOWN) {
+                    LLVMTypeRef elem_llvm = type_to_llvm(ctx, target_type);
+                    if (type_is_integer(target_type) && type_is_float(val_r.type)) {
+                        stored = LLVMBuildFPToSI(ctx->builder, stored, elem_llvm, "set_conv");
+                    } else if (type_is_float(target_type) && type_is_integer(val_r.type)) {
+                        stored = LLVMBuildSIToFP(ctx->builder, stored, elem_llvm, "set_conv");
+                    } else if (LLVMTypeOf(stored) != elem_llvm) {
+                        LLVMTypeKind src_k = LLVMGetTypeKind(LLVMTypeOf(stored));
+                        LLVMTypeKind dst_k = LLVMGetTypeKind(elem_llvm);
+                        if (src_k == LLVMDoubleTypeKind && dst_k == LLVMFloatTypeKind) {
+                            stored = LLVMBuildFPTrunc(ctx->builder, stored, elem_llvm, "fptrunc");
+                        } else if (src_k == LLVMFloatTypeKind && dst_k == LLVMDoubleTypeKind) {
+                            stored = LLVMBuildFPExt(ctx->builder, stored, elem_llvm, "fpext");
+                        } else if (src_k == LLVMIntegerTypeKind && dst_k == LLVMIntegerTypeKind) {
+                            unsigned src_w = LLVMGetIntTypeWidth(LLVMTypeOf(stored));
+                            unsigned dst_w = LLVMGetIntTypeWidth(elem_llvm);
+                            if (src_w > dst_w) stored = LLVMBuildTrunc(ctx->builder, stored, elem_llvm, "trunc");
+                            else stored = LLVMBuildSExt(ctx->builder, stored, elem_llvm, "sext");
                         } else {
-                            elem_ptr = LLVMBuildGEP2(ctx->builder, elem_llvm,
-                                                     arr_ptr, &idx, 1, "elem_ptr");
-                        }
-
-                        /* Value — coerce to element type if needed */
-                        CodegenResult val_r = codegen_expr(ctx, ast->list.items[2]);
-                        LLVMValueRef stored = val_r.value;
-                        if (val_r.type && val_r.type->kind != TYPE_UNKNOWN) {
-                            if (type_is_integer(elem_type) && type_is_float(val_r.type))
-                                stored = LLVMBuildFPToSI(ctx->builder, stored, elem_llvm, "conv");
-                            else if (type_is_float(elem_type) && type_is_integer(val_r.type))
-                                stored = LLVMBuildSIToFP(ctx->builder, stored, elem_llvm, "conv");
-                            else if (elem_type->kind == TYPE_CHAR && type_is_integer(val_r.type))
-                                stored = LLVMBuildTrunc(ctx->builder, stored, elem_llvm, "conv");
-                        }
-                        if (LLVMTypeOf(stored) != elem_llvm)
                             stored = LLVMBuildBitCast(ctx->builder, stored, elem_llvm, "cast_elem");
-
-                        LLVMBuildStore(ctx->builder, stored, elem_ptr);
-                        result.value = LLVMConstPointerNull(
-                            LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0));
-                        result.type  = NULL; /* void/unspecified — suppress auto-print */
-                        return result;
-                    }
-
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'set!' index target ‘%s’ is not an array",
-                                  parser_get_filename(), ast->line, ast->column, arr_sym);
-                }
-
-                if (name_ast->type != AST_SYMBOL) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'set!' target must be a symbol or (arr i) index expression",
-                                  parser_get_filename(), ast->line, ast->column);
-                }
-
-                // ── Dot-access: (set! p.x 5.0) ──────────────────────────────────────
-                const char *dot = strchr(name_ast->symbol, '.');
-                if (dot && dot != name_ast->symbol) {
-                    char var_name[256];
-                    size_t vlen = dot - name_ast->symbol;
-                    memcpy(var_name, name_ast->symbol, vlen);
-                    var_name[vlen] = '\0';
-                    const char *field_name = dot + 1;
-
-                    EnvEntry *base_entry = env_lookup(ctx->env, var_name);
-                    if (!base_entry) {
-                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: unbound variable: %s",
-                                      parser_get_filename(), ast->line, ast->column, var_name);
-                    }
-                    if (base_entry->type && base_entry->type->kind != TYPE_LAYOUT) {
-                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: ‘%s’ is not a layout type",
-                                      parser_get_filename(), ast->line, ast->column, var_name);
-                    }
-
-                    Type *lay = base_entry->type;
-                    int field_idx = -1;
-                    for (int i = 0; i < lay->layout_field_count; i++) {
-                        if (strcmp(lay->layout_fields[i].name, field_name) == 0) {
-                            field_idx = i;
-                            break;
                         }
                     }
-                    if (field_idx < 0) {
-                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: layout ‘%s’ has no field ‘%s’",
-                                      parser_get_filename(), ast->line, ast->column,
-                                      lay->layout_name, field_name);
-                    }
-
-                    CodegenResult val = codegen_expr(ctx, ast->list.items[2]);
-                    Type *ft = lay->layout_fields[field_idx].type;
-
-                    char sname_set[256];
-                    snprintf(sname_set, sizeof(sname_set), "layout.%s", lay->layout_name);
-                    LLVMTypeRef struct_llvm = LLVMGetTypeByName2(ctx->context, sname_set);
-                    if (!struct_llvm) {
-                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: LLVM struct type for ‘%s’ not found",
-                                      parser_get_filename(), ast->line, ast->column, lay->layout_name);
-                    }
-
-                    LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-                    LLVMValueRef get_fn = LLVMGetNamedFunction(ctx->module, "__layout_ptr_get");
-                    if (!get_fn) {
-                        LLVMTypeRef gft = LLVMFunctionType(ptr_t, &ptr_t, 1, 0);
-                        get_fn = LLVMAddFunction(ctx->module, "__layout_ptr_get", gft);
-                        LLVMSetLinkage(get_fn, LLVMExternalLinkage);
-                    }
-                    LLVMValueRef name_str2 = LLVMBuildGlobalStringPtr(ctx->builder, var_name, "lay_name");
-                    LLVMValueRef heap_ptr  = LLVMBuildCall2(ctx->builder,
-                                                            LLVMFunctionType(ptr_t, &ptr_t, 1, 0),
-                                                            get_fn, &name_str2, 1, "lay_ptr");
-                    LLVMValueRef gep_zero  = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0);
-                    LLVMValueRef gep_fidx  = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), field_idx, 0);
-                    LLVMValueRef gep_idx[] = {gep_zero, gep_fidx};
-                    LLVMValueRef gep       = LLVMBuildGEP2(ctx->builder, struct_llvm,
-                                                           heap_ptr, gep_idx, 2, "fld_ptr");
-
-                    LLVMValueRef stored = val.value;
-                    if (type_is_integer(ft) && type_is_float(val.type))
-                        stored = LLVMBuildFPToSI(ctx->builder, val.value, type_to_llvm(ctx, ft), "set_conv");
-                    else if (type_is_float(ft) && type_is_integer(val.type))
-                        stored = LLVMBuildSIToFP(ctx->builder, val.value, type_to_llvm(ctx, ft), "set_conv");
-
-                    LLVMBuildStore(ctx->builder, stored, gep);
-                    result.value = stored;
-                    result.type  = type_clone(ft);
-                    return result;
                 }
 
-                // ── Plain variable: (set! x 5.0) ────────────────────────────────────
-                EnvEntry *entry = env_lookup(ctx->env, name_ast->symbol);
-                if (!entry) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: unbound variable: %s",
-                                  parser_get_filename(), ast->line, ast->column, name_ast->symbol);
-                }
+                LLVMBuildStore(ctx->builder, stored, target_ptr);
 
-                LLVMValueRef target;
-                bool is_global = (entry->value &&
-                                  LLVMGetValueKind(entry->value) == LLVMGlobalVariableValueKind);
-
-                if (is_global) {
-                    const char *gname = (entry->llvm_name && entry->llvm_name[0])
-                        ? entry->llvm_name : entry->name;
-                    target = LLVMGetNamedGlobal(ctx->module, gname);
-                    if (!target) {
-                        LLVMTypeRef lt = type_to_llvm(ctx, entry->type);
-                        target = LLVMAddGlobal(ctx->module, lt, gname);
-                        LLVMSetLinkage(target, LLVMExternalLinkage);
-                    }
-                    entry->value = target;
-                } else {
-                    target = entry->value;
-                    if (!target) {
-                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'set!' target ‘%s’ has no value",
-                                      parser_get_filename(), ast->line, ast->column, name_ast->symbol);
-                    }
-                }
-
-                CodegenResult val = codegen_expr(ctx, ast->list.items[2]);
-
-                LLVMValueRef stored = val.value;
-                if (type_is_integer(entry->type) && type_is_float(val.type)) {
-                    stored = LLVMBuildFPToSI(ctx->builder, val.value,
-                                             type_to_llvm(ctx, entry->type), "set_conv");
-                } else if (type_is_float(entry->type) && type_is_integer(val.type)) {
-                    stored = LLVMBuildSIToFP(ctx->builder, val.value,
-                                             type_to_llvm(ctx, entry->type), "set_conv");
-                }
-
-                LLVMBuildStore(ctx->builder, stored, target);
                 result.value = stored;
-                result.type  = type_clone(entry->type);
+                result.type  = target_type ? type_clone(target_type) : type_unknown();
                 return result;
             }
 
@@ -8753,6 +8672,15 @@ if (ast->list.count >= 5) {
                         strcmp(op, "=")  == 0 ? LLVMRealOEQ : LLVMRealONE;
                     cmp = LLVMBuildFCmp(ctx->builder, pred, lv, rv, "cmptmp");
                 } else {
+                    /* Promote integers to the same bit-width before comparing */
+                    unsigned lw = LLVMGetIntTypeWidth(LLVMTypeOf(lv));
+                    unsigned rw = LLVMGetIntTypeWidth(LLVMTypeOf(rv));
+                    if (lw > rw) {
+                        rv = LLVMBuildSExt(ctx->builder, rv, LLVMTypeOf(lv), "sext");
+                    } else if (rw > lw) {
+                        lv = LLVMBuildSExt(ctx->builder, lv, LLVMTypeOf(rv), "sext");
+                    }
+
                     LLVMIntPredicate pred =
                         strcmp(op, "<")  == 0 ? LLVMIntSLT :
                         strcmp(op, ">")  == 0 ? LLVMIntSGT :
@@ -8815,8 +8743,8 @@ if (ast->list.count >= 5) {
                 Type         *result_type  = first.type;
                 LLVMValueRef  result_value = first.value;
 
-                if (!type_is_numeric(result_type) &&
-                    result_type->kind != TYPE_UNKNOWN) {
+                /* Bypass broken type_is_numeric by using a blacklist */
+                if (result_type->kind == TYPE_LAYOUT || result_type->kind == TYPE_STRING || result_type->kind == TYPE_PTR) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot perform arithmetic on type %s",
                             parser_get_filename(), ast->line, ast->column, type_to_string(result_type));
                 }
@@ -8845,8 +8773,9 @@ if (ast->list.count >= 5) {
                         result.value = LLVMBuildFNeg(ctx->builder, result_value, "negtmp");
                     } else {
                         result.type  = result_type;
+                        // Use exact type of result_value instead of hardcoding I64 to prevent LLVM crashes
                         result.value = LLVMBuildSub(ctx->builder,
-                                                    LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0),
+                                                    LLVMConstInt(LLVMTypeOf(result_value), 0, 0),
                                                     result_value, "negtmp");
                     }
                     return result;
@@ -8890,8 +8819,7 @@ if (ast->list.count >= 5) {
                 for (size_t i = 2; i < ast->list.count; i++) {
                     CodegenResult rhs = codegen_expr(ctx, ast->list.items[i]);
 
-                    if (!type_is_numeric(rhs.type) &&
-                        rhs.type->kind != TYPE_UNKNOWN) {
+                    if (rhs.type->kind == TYPE_LAYOUT || rhs.type->kind == TYPE_STRING || rhs.type->kind == TYPE_PTR) {
                         CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot perform arithmetic on type %s",
                                 parser_get_filename(), ast->line, ast->column, type_to_string(rhs.type));
                     }
@@ -8922,26 +8850,38 @@ if (ast->list.count >= 5) {
                                 type_to_string(result_type), type_to_string(rhs.type));
                     }
 
-                    // Determine result type
-                    Type *new_result_type;
-                    if (type_is_float(result_type) || type_is_float(rhs.type))
-                        new_result_type = type_float();
-                    else if (result_type->kind == rhs.type->kind)
-                        new_result_type = result_type;
-                    else
-                        new_result_type = type_int();
-
                     // Convert operands to common type
+                    Type *new_result_type;
                     LLVMValueRef lhs_val = result_value;
                     LLVMValueRef rhs_val = rhs.value;
 
-                    if (type_is_float(new_result_type)) {
-                        if (type_is_integer(result_type))
-                            lhs_val = LLVMBuildSIToFP(ctx->builder, lhs_val,
-                                                      LLVMDoubleTypeInContext(ctx->context), "tofloat");
-                        if (type_is_integer(rhs.type))
-                            rhs_val = LLVMBuildSIToFP(ctx->builder, rhs_val,
-                                                      LLVMDoubleTypeInContext(ctx->context), "tofloat");
+                    bool lhs_is_float = type_is_float(result_type);
+                    bool rhs_is_float = type_is_float(rhs.type);
+
+                    if (lhs_is_float || rhs_is_float) {
+                        // Float promotion (default to the largest float type)
+                        new_result_type = type_float();
+                        LLVMTypeRef target_llvm = LLVMDoubleTypeInContext(ctx->context);
+
+                        if (!lhs_is_float) lhs_val = LLVMBuildSIToFP(ctx->builder, lhs_val, target_llvm, "tofloat");
+                        else if (LLVMTypeOf(lhs_val) != target_llvm) lhs_val = LLVMBuildFPExt(ctx->builder, lhs_val, target_llvm, "fpext");
+
+                        if (!rhs_is_float) rhs_val = LLVMBuildSIToFP(ctx->builder, rhs_val, target_llvm, "tofloat");
+                        else if (LLVMTypeOf(rhs_val) != target_llvm) rhs_val = LLVMBuildFPExt(ctx->builder, rhs_val, target_llvm, "fpext");
+                    } else {
+                        // Integer promotion: promote the smaller bit-width to the larger bit-width
+                        unsigned lhs_bits = LLVMGetIntTypeWidth(LLVMTypeOf(lhs_val));
+                        unsigned rhs_bits = LLVMGetIntTypeWidth(LLVMTypeOf(rhs_val));
+
+                        if (lhs_bits > rhs_bits) {
+                            new_result_type = result_type;
+                            rhs_val = LLVMBuildSExt(ctx->builder, rhs_val, LLVMTypeOf(lhs_val), "sext");
+                        } else if (rhs_bits > lhs_bits) {
+                            new_result_type = rhs.type;
+                            lhs_val = LLVMBuildSExt(ctx->builder, lhs_val, LLVMTypeOf(rhs_val), "sext");
+                        } else {
+                            new_result_type = result_type; // Same size
+                        }
                     }
 
                     // Perform operation
@@ -10169,24 +10109,163 @@ if (ast->list.count >= 5) {
                         }
                     }
 
-                    /* If expected type is Fn, wrap argument as a closure */
-                    if (expected_type && expected_type->kind == TYPE_FN) {
-                        if (ast->list.items[i + 1]->type == AST_SYMBOL) {
-                            EnvEntry *ae = env_lookup(ctx->env,
-                                           ast->list.items[i + 1]->symbol);
-                            if (ae && ae->kind == ENV_FUNC && ae->func_ref) {
-                                converted_arg = wrap_func_as_closure(ctx, ae);
-                            } else if (ae && ae->kind == ENV_VAR &&
-                                       ae->type && ae->type->kind == TYPE_FN) {
-                                LLVMTypeRef ptr_t = LLVMPointerType(
-                                    LLVMInt8TypeInContext(ctx->context), 0);
-                                converted_arg = LLVMBuildLoad2(ctx->builder,
-                                    ptr_t, ae->value, ae->name);
+                    Type *cb_type = expected_type;
+                    if (cb_type && cb_type->kind == TYPE_PTR && cb_type->element_type && cb_type->element_type->kind == TYPE_FN) {
+                        cb_type = cb_type->element_type;
+                    }
+
+                    AST *arg_ast = ast->list.items[i + 1];
+                    bool is_ffi_lambda = (entry && entry->is_ffi && arg_ast->type == AST_LAMBDA);
+
+                    if (is_ffi_lambda || (cb_type && cb_type->kind == TYPE_FN)) {
+                        if (entry && entry->is_ffi) {
+                            /* Generate a static C-ABI trampoline backed by a global closure slot. */
+                            LLVMTypeRef  ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                            LLVMTypeRef  i32   = LLVMInt32TypeInContext(ctx->context);
+                            LLVMTypeRef  i64   = LLVMInt64TypeInContext(ctx->context);
+
+                            int cb_arity = 0;
+                            LLVMTypeRef *cb_params = NULL;
+                            LLVMTypeRef cb_ret = LLVMVoidTypeInContext(ctx->context);
+
+                            /* Prefer the AST lambda signature if available to ensure perfect sync with the inner wrapper */
+                            if (is_ffi_lambda) {
+                                cb_arity = arg_ast->lambda.param_count;
+                                cb_params = malloc(sizeof(LLVMTypeRef) * (cb_arity ? cb_arity : 1));
+                                for (int _ci = 0; _ci < cb_arity; _ci++) {
+                                    const char *tname = arg_ast->lambda.params[_ci].type_name;
+                                    Type *pt = tname ? type_from_name(tname) : NULL;
+                                    cb_params[_ci] = pt ? type_to_llvm(ctx, pt) : ptr_t;
+                                }
+                                const char *rtname = arg_ast->lambda.return_type;
+                                Type *rt = rtname ? type_from_name(rtname) : NULL;
+                                cb_ret = rt ? type_to_llvm(ctx, rt) : LLVMVoidTypeInContext(ctx->context);
+                            } else {
+                                Type *resolve_type = cb_type;
+                                if ((!resolve_type || resolve_type->param_count == 0) && actual_type && actual_type->kind == TYPE_FN) {
+                                    resolve_type = actual_type;
+                                }
+                                cb_arity = resolve_type->param_count;
+                                cb_params = malloc(sizeof(LLVMTypeRef) * (cb_arity ? cb_arity : 1));
+                                for (int _ci = 0; _ci < cb_arity; _ci++) {
+                                    cb_params[_ci] = resolve_type->params[_ci].type ? type_to_llvm(ctx, resolve_type->params[_ci].type) : ptr_t;
+                                }
+                                cb_ret = resolve_type->return_type ? type_to_llvm(ctx, resolve_type->return_type) : LLVMVoidTypeInContext(ctx->context);
                             }
+
+                            LLVMTypeRef cb_ft = LLVMFunctionType(cb_ret, cb_params, cb_arity, 0);
+                            free(cb_params);
+
+                            static int cb_slot_count = 0;
+                            char slot_name[64];
+                            snprintf(slot_name, sizeof(slot_name), "__cb_closure_slot_%d", cb_slot_count);
+
+                            LLVMValueRef slot_gv = LLVMGetNamedGlobal(ctx->module, slot_name);
+                            if (!slot_gv) {
+                                slot_gv = LLVMAddGlobal(ctx->module, ptr_t, slot_name);
+                                LLVMSetInitializer(slot_gv, LLVMConstPointerNull(ptr_t));
+                                LLVMSetLinkage(slot_gv, LLVMExternalLinkage);
+                            }
+
+                            LLVMBuildStore(ctx->builder, converted_arg, slot_gv);
+
+                            char tramp_name[64];
+                            snprintf(tramp_name, sizeof(tramp_name), "__cb_tramp_%d", cb_slot_count++);
+
+                            LLVMValueRef tramp_fn = LLVMGetNamedFunction(ctx->module, tramp_name);
+                            if (!tramp_fn) {
+                                tramp_fn = LLVMAddFunction(ctx->module, tramp_name, cb_ft);
+                                LLVMSetLinkage(tramp_fn, LLVMExternalLinkage);
+
+                                LLVMBasicBlockRef saved_bb    = LLVMGetInsertBlock(ctx->builder);
+                                LLVMBasicBlockRef tramp_entry = LLVMAppendBasicBlockInContext(
+                                                                   ctx->context, tramp_fn, "entry");
+                                LLVMPositionBuilderAtEnd(ctx->builder, tramp_entry);
+
+                                LLVMValueRef clo = LLVMBuildLoad2(ctx->builder, ptr_t, slot_gv, "clo");
+
+                                LLVMTypeRef arr_t   = LLVMArrayType(ptr_t, cb_arity ? cb_arity : 1);
+                                LLVMValueRef arr_ptr = LLVMBuildAlloca(ctx->builder, arr_t, "cb_args");
+                                for (int _ci = 0; _ci < cb_arity; _ci++) {
+                                    LLVMValueRef raw = LLVMGetParam(tramp_fn, _ci);
+                                    LLVMValueRef boxed;
+                                    LLVMTypeRef  raw_t = LLVMTypeOf(raw);
+                                    if (LLVMGetTypeKind(raw_t) == LLVMIntegerTypeKind) {
+                                        LLVMValueRef ext = LLVMBuildZExt(ctx->builder, raw, i64, "ext");
+                                        LLVMTypeRef  bft = LLVMFunctionType(ptr_t, &i64, 1, 0);
+                                        LLVMValueRef vi  = LLVMGetNamedFunction(ctx->module, "rt_value_int");
+                                        if (!vi) {
+                                            vi = LLVMAddFunction(ctx->module, "rt_value_int", bft);
+                                            LLVMSetLinkage(vi, LLVMExternalLinkage);
+                                        }
+                                        boxed = LLVMBuildCall2(ctx->builder, bft, vi, &ext, 1, "boxed");
+                                    } else {
+                                        boxed = LLVMBuildBitCast(ctx->builder, raw, ptr_t, "boxed");
+                                    }
+                                    LLVMValueRef zero   = LLVMConstInt(i32, 0, 0);
+                                    LLVMValueRef idx    = LLVMConstInt(i32, _ci, 0);
+                                    LLVMValueRef idxs[] = {zero, idx};
+                                    LLVMValueRef slot2  = LLVMBuildGEP2(ctx->builder, arr_t,
+                                                                         arr_ptr, idxs, 2, "slot");
+                                    LLVMBuildStore(ctx->builder, boxed, slot2);
+                                }
+
+                                LLVMValueRef args_ptr = cb_arity > 0
+                                    ? LLVMBuildBitCast(ctx->builder, arr_ptr, ptr_t, "args_ptr")
+                                    : LLVMConstPointerNull(ptr_t);
+
+                                LLVMValueRef calln_fn = get_rt_closure_calln(ctx);
+                                LLVMTypeRef  calln_p[] = {ptr_t, i32, ptr_t};
+                                LLVMTypeRef  calln_ft  = LLVMFunctionType(ptr_t, calln_p, 3, 0);
+                                LLVMValueRef calln_a[] = {
+                                    clo,
+                                    LLVMConstInt(i32, cb_arity, 0),
+                                    args_ptr
+                                };
+                                LLVMValueRef ret = LLVMBuildCall2(ctx->builder, calln_ft,
+                                                                   calln_fn, calln_a, 3, "cb_ret");
+
+                                if (LLVMGetTypeKind(cb_ret) == LLVMVoidTypeKind) {
+                                    LLVMBuildRetVoid(ctx->builder);
+                                } else if (LLVMGetTypeKind(cb_ret) == LLVMIntegerTypeKind) {
+                                    LLVMTypeRef  uft     = LLVMFunctionType(i64, &ptr_t, 1, 0);
+                                    LLVMValueRef vi_fn   = LLVMGetNamedFunction(ctx->module, "rt_unbox_int");
+                                    if (!vi_fn) {
+                                        vi_fn = LLVMAddFunction(ctx->module, "rt_unbox_int", uft);
+                                        LLVMSetLinkage(vi_fn, LLVMExternalLinkage);
+                                    }
+                                    LLVMValueRef unboxed = LLVMBuildCall2(ctx->builder, uft, vi_fn, &ret, 1, "r");
+                                    LLVMValueRef cast    = LLVMBuildIntCast2(ctx->builder, unboxed, cb_ret, 0, "r");
+                                    LLVMBuildRet(ctx->builder, cast);
+                                } else {
+                                    LLVMBuildRet(ctx->builder, LLVMBuildBitCast(ctx->builder, ret, cb_ret, "r"));
+                                }
+
+                                if (saved_bb) LLVMPositionBuilderAtEnd(ctx->builder, saved_bb);
+                            }
+
+                            converted_arg = LLVMBuildBitCast(ctx->builder, tramp_fn, ptr_t, "tramp_ptr");
+                            args[i] = converted_arg;
+                            continue;
+                        } else {
+                            /* NOT FFI: Normal internal closure handling */
+                            if (ast->list.items[i + 1]->type == AST_SYMBOL) {
+                                EnvEntry *ae = env_lookup(ctx->env,
+                                               ast->list.items[i + 1]->symbol);
+                                if (ae && ae->kind == ENV_FUNC && ae->func_ref) {
+                                    converted_arg = wrap_func_as_closure(ctx, ae);
+                                } else if (ae && ae->kind == ENV_VAR &&
+                                           ae->type && ae->type->kind == TYPE_FN) {
+                                    LLVMTypeRef ptr_t = LLVMPointerType(
+                                        LLVMInt8TypeInContext(ctx->context), 0);
+                                    converted_arg = LLVMBuildLoad2(ctx->builder,
+                                        ptr_t, ae->value, ae->name);
+                                }
+                            }
+                            /* Lambda or expression — codegen_expr already returned closure */
+                            args[i] = converted_arg;
+                            continue;
                         }
-                        /* Lambda or expression — codegen_expr already returned closure */
-                        args[i] = converted_arg;
-                        continue;
                     }
 
                     if (expected_type && expected_type->kind == TYPE_COLL) {
@@ -10767,26 +10846,36 @@ if (ast->list.count >= 5) {
                 LLVMValueRef av = arg_result.value;
 
                 // Helper: get i64 value regardless of integer subtype
-                // (all integer subtypes are already i64 in LLVM)
                 LLVMValueRef as_i64 = NULL;
                 LLVMValueRef as_double = NULL;
 
-                if (at->kind == TYPE_FLOAT) {
-                    as_double = av;
-                    as_i64 = LLVMBuildFPToSI(ctx->builder, av,
-                        LLVMInt64TypeInContext(ctx->context), "to_i64");
-                } else if (at->kind == TYPE_CHAR) {
-                    as_i64 = LLVMBuildSExt(ctx->builder, av,
-                        LLVMInt64TypeInContext(ctx->context), "to_i64");
-                    as_double = LLVMBuildSIToFP(ctx->builder, as_i64,
-                        LLVMDoubleTypeInContext(ctx->context), "to_double");
-                } else if (at->kind == TYPE_INT || at->kind == TYPE_HEX ||
-                           at->kind == TYPE_BIN || at->kind == TYPE_OCT) {
-                    as_i64 = av; // already i64
-                    as_double = LLVMBuildSIToFP(ctx->builder, av,
-                        LLVMDoubleTypeInContext(ctx->context), "to_double");
-                } else if (at->kind == TYPE_STRING) {
-                    // hash the string pointer value (just use pointer as integer)
+                if (type_is_float(at)) {
+                    if (at->kind == TYPE_F32) {
+                        as_double = LLVMBuildFPExt(ctx->builder, av, LLVMDoubleTypeInContext(ctx->context), "to_double");
+                    } else {
+                        as_double = av;
+                    }
+                    as_i64 = LLVMBuildFPToSI(ctx->builder, as_double, LLVMInt64TypeInContext(ctx->context), "to_i64");
+                } else if (type_is_integer(at) || at->kind == TYPE_BOOL) {
+                    LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
+                    LLVMTypeRef actual_t = LLVMTypeOf(av);
+                    if (actual_t == i64_t) {
+                        as_i64 = av;
+                    } else if (LLVMGetTypeKind(actual_t) == LLVMIntegerTypeKind) {
+                        if (type_is_unsigned(at) || at->kind == TYPE_BOOL) {
+                            as_i64 = LLVMBuildZExt(ctx->builder, av, i64_t, "to_i64");
+                        } else {
+                            as_i64 = LLVMBuildSExt(ctx->builder, av, i64_t, "to_i64");
+                        }
+                    } else {
+                        as_i64 = LLVMBuildPtrToInt(ctx->builder, av, i64_t, "to_i64");
+                    }
+                    if (type_is_unsigned(at) || at->kind == TYPE_BOOL) {
+                        as_double = LLVMBuildUIToFP(ctx->builder, as_i64, LLVMDoubleTypeInContext(ctx->context), "to_double");
+                    } else {
+                        as_double = LLVMBuildSIToFP(ctx->builder, as_i64, LLVMDoubleTypeInContext(ctx->context), "to_double");
+                    }
+                } else if (at->kind == TYPE_STRING) {                    // hash the string pointer value (just use pointer as integer)
                     as_i64 = LLVMBuildPtrToInt(ctx->builder, av,
                         LLVMInt64TypeInContext(ctx->context), "str_hash");
                     as_double = LLVMBuildSIToFP(ctx->builder, as_i64,
@@ -11051,76 +11140,92 @@ if (ast->list.count >= 5) {
                 }
             }
 
-            // Dot access: p.x
+            // Dot-access function call or array indexing: (p.x.y.func arg) or (font.chars i)
             {
-                const char *dot = strchr(ast->symbol, '.');
-                if (dot && dot != ast->symbol) {
-                    char var_name[256];
-                    size_t vlen = dot - ast->symbol;
-                    if (vlen >= sizeof(var_name)) vlen = sizeof(var_name) - 1;
-                    memcpy(var_name, ast->symbol, vlen);
-                    var_name[vlen] = '\0';
-                    const char *field_name = dot + 1;
+                Type *dot_type = NULL;
+                LLVMValueRef dot_ptr = codegen_dot_chain(ctx, head->symbol, &dot_type, head);
+                if (dot_ptr) {
+                    if (dot_type && dot_type->kind == TYPE_LAYOUT && dot_type->layout_field_count == 0 && dot_type->layout_name) {
+                        Type *full = env_lookup_layout(ctx->env, dot_type->layout_name);
+                        if (full) dot_type = full;
+                    }
+                    LLVMValueRef dot_val = LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, dot_type), dot_ptr, "dot_val");
 
-                    EnvEntry *base_entry = env_lookup(ctx->env, var_name);
-                    if (base_entry && base_entry->type && base_entry->type->kind == TYPE_LAYOUT) {
-                        Type *lay = base_entry->type;
+                    // 1. Array Indexing: (font.chars i)
+                    if (dot_type && dot_type->kind == TYPE_ARR && ast->list.count == 2) {
+                        CodegenResult idx_r = codegen_expr(ctx, ast->list.items[1]);
+                        LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+                        LLVMValueRef idx = type_is_float(idx_r.type) ? LLVMBuildFPToSI(ctx->builder, idx_r.value, i64, "idx") : idx_r.value;
+                        if (LLVMTypeOf(idx) != i64) idx = LLVMBuildZExt(ctx->builder, idx, i64, "idx64");
 
-                        int field_idx = -1;
-                        for (int i = 0; i < lay->layout_field_count; i++) {
-                            if (strcmp(lay->layout_fields[i].name, field_name) == 0) {
-                                field_idx = i;
-                                break;
-                            }
+                        Type *elem_type = dot_type->arr_element_type ? dot_type->arr_element_type : type_int();
+                        LLVMTypeRef elem_llvm = type_to_llvm(ctx, elem_type);
+
+                        LLVMValueRef data_ptr;
+                        if (dot_type->arr_is_fat) {
+                            data_ptr = arr_fat_data(ctx, dot_val, elem_type);
+                        } else if (LLVMGetTypeKind(type_to_llvm(ctx, dot_type)) == LLVMArrayTypeKind) {
+                            LLVMValueRef zero = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0);
+                            LLVMValueRef idx32 = LLVMBuildTrunc(ctx->builder, idx, LLVMInt32TypeInContext(ctx->context), "idx32");
+                            LLVMValueRef indices[] = {zero, idx32};
+                            LLVMValueRef elem_ptr = LLVMBuildGEP2(ctx->builder, type_to_llvm(ctx, dot_type), dot_ptr, indices, 2, "elem_ptr");
+                            result.value = LLVMBuildLoad2(ctx->builder, elem_llvm, elem_ptr, "elem");
+                            result.type = type_clone(elem_type);
+                            return result;
+                        } else {
+                            data_ptr = dot_val;
                         }
-                        if (field_idx < 0) {
-                            CODEGEN_ERROR(ctx, "%s:%d:%d: error: layout ‘%s’ has no field ‘%s’",
-                                          parser_get_filename(), ast->line, ast->column,
-                                          lay->layout_name, field_name);
-                        }
-
-                        // Get bare struct type
-                        char sname[256];
-                        snprintf(sname, sizeof(sname), "layout.%s", lay->layout_name);
-                        LLVMTypeRef struct_llvm = LLVMGetTypeByName2(ctx->context, sname);
-                        if (!struct_llvm) {
-                            CODEGEN_ERROR(ctx, "%s:%d:%d: error: LLVM struct type for ‘%s’ not found",
-                                          parser_get_filename(), ast->line, ast->column, lay->layout_name);
-                        }
-
-
-                        LLVMTypeRef  ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-                        LLVMValueRef get_fn = LLVMGetNamedFunction(ctx->module, "__layout_ptr_get");
-                        if (!get_fn) {
-                            LLVMTypeRef ft = LLVMFunctionType(ptr_t, &ptr_t, 1, 0);
-                            get_fn = LLVMAddFunction(ctx->module, "__layout_ptr_get", ft);
-                            LLVMSetLinkage(get_fn, LLVMExternalLinkage);
-                        }
-                        LLVMValueRef name_str = LLVMBuildGlobalStringPtr(ctx->builder, var_name, "lay_name");
-                        LLVMValueRef heap_ptr = LLVMBuildCall2(ctx->builder,
-                                                               LLVMFunctionType(ptr_t, &ptr_t, 1, 0),
-                                                               get_fn, &name_str, 1, "lay_ptr");
-
-
-                        LLVMValueRef zero      = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0);
-                        LLVMValueRef fidx      = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), field_idx, 0);
-                        LLVMValueRef indices[] = {zero, fidx};
-                        LLVMValueRef gep       = LLVMBuildGEP2(ctx->builder, struct_llvm,
-                                                               heap_ptr, indices, 2, "fld_ptr");
-                        Type        *ft        = lay->layout_fields[field_idx].type;
-                        result.value = LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, ft), gep, field_name);
-                        result.type  = type_clone(ft);
+                        LLVMValueRef elem_ptr = LLVMBuildGEP2(ctx->builder, elem_llvm, data_ptr, &idx, 1, "elem_ptr");
+                        result.value = LLVMBuildLoad2(ctx->builder, elem_llvm, elem_ptr, "elem");
+                        result.type  = type_clone(elem_type);
                         return result;
                     }
 
-                    if (base_entry) {
-                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: ‘%s’ is not a layout type",
-                                      parser_get_filename(), ast->line, ast->column, var_name);
+                    // 2. String Indexing: (layout.str i)
+                    if (dot_type && dot_type->kind == TYPE_STRING && ast->list.count == 2) {
+                        CodegenResult idx_r = codegen_expr(ctx, ast->list.items[1]);
+                        LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+                        LLVMTypeRef i8  = LLVMInt8TypeInContext(ctx->context);
+                        LLVMValueRef idx = type_is_float(idx_r.type) ? LLVMBuildFPToSI(ctx->builder, idx_r.value, i64, "idx") : idx_r.value;
+                        if (LLVMTypeOf(idx) != i64) idx = LLVMBuildZExt(ctx->builder, idx, i64, "idx64");
+
+                        LLVMValueRef char_ptr = LLVMBuildGEP2(ctx->builder, i8, dot_val, &idx, 1, "char_ptr");
+                        result.value = LLVMBuildLoad2(ctx->builder, i8, char_ptr, "char");
+                        result.type = type_char();
+                        return result;
                     }
-                    if (!ctx->module_ctx) {
-                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: unbound variable: %s",
-                                      parser_get_filename(), ast->line, ast->column, var_name);
+
+                    // 3. Function Call: (obj.func arg)
+                    if (dot_type && (dot_type->kind == TYPE_FN || dot_type->kind == TYPE_ARROW || dot_type->kind == TYPE_UNKNOWN)) {
+                        LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                        LLVMTypeRef i32 = LLVMInt32TypeInContext(ctx->context);
+                        int n_args = (int)ast->list.count - 1;
+                        LLVMTypeRef arr_t = LLVMArrayType(ptr, n_args ? n_args : 1);
+                        LLVMValueRef arr_ptr = LLVMBuildAlloca(ctx->builder, arr_t, "call_args");
+                        for (int i = 0; i < n_args; i++) {
+                            CodegenResult ar = codegen_expr(ctx, ast->list.items[i + 1]);
+                            LLVMValueRef bv = codegen_box(ctx, ar.value, ar.type);
+                            LLVMValueRef zero = LLVMConstInt(i32, 0, 0);
+                            LLVMValueRef a_idx = LLVMConstInt(i32, i, 0);
+                            LLVMValueRef idxs[] = {zero, a_idx};
+                            LLVMValueRef slot = LLVMBuildGEP2(ctx->builder, arr_t, arr_ptr, idxs, 2, "slot");
+                            LLVMBuildStore(ctx->builder, bv, slot);
+                        }
+                        LLVMValueRef args_ptr = n_args > 0 ? LLVMBuildBitCast(ctx->builder, arr_ptr, ptr, "args_ptr") : LLVMConstPointerNull(ptr);
+                        LLVMValueRef calln_fn = get_rt_closure_calln(ctx);
+                        LLVMTypeRef calln_p[] = {ptr, i32, ptr};
+                        LLVMTypeRef calln_ft = LLVMFunctionType(ptr, calln_p, 3, 0);
+
+                        LLVMValueRef clo_val = dot_val;
+                        if (LLVMTypeOf(clo_val) != ptr) clo_val = LLVMBuildBitCast(ctx->builder, clo_val, ptr, "clo_cast");
+
+                        LLVMValueRef calln_a[] = { clo_val, LLVMConstInt(i32, n_args, 0), args_ptr };
+                        result.value = LLVMBuildCall2(ctx->builder, calln_ft, calln_fn, calln_a, 3, "dot_call");
+                        result.type = type_unknown();
+                        return result;
                     }
+
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot call or index type %s via dot access", parser_get_filename(), ast->line, ast->column, type_to_string(dot_type));
                 }
             }
 
@@ -11789,8 +11894,9 @@ void register_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "Oct?",     1, 0, "Return True if value is an Oct", NULL);
 
     // String operations
-    env_insert_builtin(ctx->env, "concat",    2, -1, "Concatenate strings", NULL);
-    env_insert_builtin(ctx->env, "substring", 3,  0, "Get substring (str start end)", NULL);
+    env_insert_builtin(ctx->env, "concat",      2, -1, "Concatenate strings", NULL);
+    env_insert_builtin(ctx->env, "substring",   3,  0, "Get substring (str start end)", NULL);
+    env_insert_builtin(ctx->env, "make-string", 2,  0, "Create a string of length n filled with char c", NULL);
 
     env_insert_builtin(ctx->env, "take", 2, 0, "Take n elements from a (possibly infinite) list", NULL);
     env_insert_builtin(ctx->env, "drop", 2, 0, "Drop n elements from a list", NULL);

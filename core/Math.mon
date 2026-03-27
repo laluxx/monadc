@@ -68,27 +68,27 @@
 
 (define (abs [x :: Float] -> Float)
   "Return the absolute value of X."
-  (if (x `<` 0.0) (0.0 `-` x) x))
+  (if (x < 0.0) (0.0 - x) x))
 
 (define (floor [x :: Float] -> Int)
   :doc "Return the largest integer <= X."
   :alias ⌊
   (let [i (Int x)]
     (if (= (Float i) x) i
-        (if (x `<` 0.0) (i `-` 1) i))))
+        (if (x < 0.0) (i - 1) i))))
 
 (define (ceiling [x :: Float] -> Int)
   :doc "Return the smallest integer >= X."
   :alias ⌈
   (let [i (Int x)]
-    (if ((Float i) `=` x) i
-        (if (x `>` 0.0) (i `+` 1) i))))
+    (if ((Float i) = x) i
+        (if (x > 0.0) (i + 1) i))))
 
 (define (round [x :: Float] -> Int)
   "Return the nearest integer to X."
-  (if (x `>=` 0.0)
-      (floor (x `+` 0.5))
-      (ceiling (x `-` 0.5))))
+  (if (x >= 0.0)
+      (floor (x + 0.5))
+      (ceiling (x - 0.5))))
 
 (define (truncate [x :: Float] -> Int)
   "Return the integer part of X, truncating toward zero."
@@ -97,20 +97,20 @@
 (define (pow [base :: Float] [exp :: Float] -> Float)
   :doc "Raise BASE to the power EXP."
   :alias ^
-  (if (exp `=` 0.0) 1.0
-      (if (exp `>` 0.0)
-          (base `*` (pow base (exp `-` 1.0)))
-          (1.0 `/` (pow base (0.0 `-` exp))))))
+  (if (exp = 0.0) 1.0
+      (if (exp > 0.0)
+          (base * (pow base (exp - 1.0)))
+          (1.0 / (pow base (0.0 - exp))))))
 
 ;; Exponential via Taylor series: e^x = sum(x^n / n!)
 (define (exp [x :: Float] -> Float)
-  "`e' raised to the power X."
+  "e' raised to the power X."
   (define (iter [sum :: Float] [term :: Float] [n :: Int] -> Float)
-    (if ((abs term) `<` 1e-15)
+    (if ((abs term) < 1e-15)
         sum
-        (iter (sum `+` term)
-              (term `*` (x `/` (Float n)))
-              (n `+` 1))))
+        (iter (sum + term)
+              (term * (x / (Float n)))
+              (n + 1))))
   (iter 1.0 x 2))
 
 ;; Natural log via Newton's method: ln(x) using exp
@@ -130,14 +130,14 @@
   :doc "Square root of X via Newton-Raphson."
   :alias √
   (define (iter [guess :: Float] -> Float)
-    (let [next ((guess `+` (x `/` guess)) `/` 2.0)]
-      (if ((abs (next `-` guess)) `<` 1e-10)
+    (let [next ((guess + (x / guess)) / 2.0)]
+      (if ((abs (next - guess)) < 1e-10)
           next
           (iter next))))
-  (if (x `<=` 0.0) 0.0 (iter (x `/` 2.0))))
+  (if (x <= 0.0) 0.0 (iter (x / 2.0))))
 
 
-;; TODO Find a way to get rid of this i only want `mod`
+;; TODO Find a way to get rid of this i only want mod
 (define (mod-f [x :: Float] [y :: Float] -> Float)
   "Float modulo."
   (- x (* y (floor (/ x y)))))
@@ -209,7 +209,7 @@
 
 (define (lcm [a :: Int] -> [b :: Int] -> Int)
   "Return the least common multiple of A and B."
-  ((* a b) `/` (gcd a b)))
+  ((* a b) / (gcd a b)))
 
 (define (factorial [n :: Int] -> Int)
   "Return N! iteratively. Returns 1 for N <= 0."

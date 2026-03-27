@@ -44,7 +44,6 @@ struct RuntimeMap;
 
 typedef struct RuntimeValue *(*ThunkFn)(void *env);
 
-
 /// RuntimeThunk
 
 typedef struct RuntimeThunk {
@@ -53,7 +52,6 @@ typedef struct RuntimeThunk {
     struct RuntimeValue *value;
     int                  forced;
 } RuntimeThunk;
-
 
 /// RuntimeValue
 

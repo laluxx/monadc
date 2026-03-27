@@ -45,6 +45,7 @@ typedef struct FFIStructField {
 } FFIStructField;
 
 /// FFI Struct
+
 typedef struct FFIStruct {
     char           *name;
     char           *alias_of;   /* non-NULL if this is a typedef alias */
@@ -52,6 +53,7 @@ typedef struct FFIStruct {
     int             field_count;
     int             size_bytes;
     bool            packed;
+    bool            is_scalar_typedef; /* true for uint64_t/pointer typedefs */
 } FFIStruct;
 
 /// FFI Context

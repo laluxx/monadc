@@ -174,7 +174,10 @@ Type *ffi_map_c_type(const char *s) {
     }
 
     /* Named struct/typedef — return a layout reference by name */
-    return type_layout_ref(s);
+    const char *clean_name = s;
+    if (strncmp(clean_name, "const ",  6) == 0) clean_name += 6;  // six
+    if (strncmp(clean_name, "struct ", 7) == 0) clean_name += 7;  // seven
+    return type_layout_ref(clean_name);
 }
 
 /// Clang visitor state
@@ -253,7 +256,8 @@ static enum CXChildVisitResult field_visitor(CXCursor cursor,
 
     CXString fname   = clang_getCursorSpelling(cursor);
     CXType   ftype   = clang_getCursorType(cursor);
-    CXString ftype_s = clang_getTypeSpelling(ftype);
+    CXType   canon   = clang_getCanonicalType(ftype); /* FIX: resolve pointer typedefs */
+    CXString ftype_s = clang_getTypeSpelling(canon);
 
     fs->s->fields[fs->idx].name = my_strdup(clang_getCString(fname));
     fs->s->fields[fs->idx].type = ffi_map_c_type(clang_getCString(ftype_s));
@@ -273,12 +277,12 @@ static enum CXChildVisitResult visitor(CXCursor cursor,
     VisitorState *state = (VisitorState *)client_data;
     FFIContext   *ffi   = state->ffi;
 
-    /* Skip cursors not from the directly included header.
-     * We allow everything when system_include=true since the user
-     * explicitly asked for that header. */
+    /* If the user explicitly included a system header (like stdlib.h),
+     * we MUST process its contents even if they are marked as system headers. */
     CXSourceLocation loc = clang_getCursorLocation(cursor);
-    if (clang_Location_isInSystemHeader(loc) && !state->in_system_header)
-        return CXChildVisit_Continue;
+    if (clang_Location_isInSystemHeader(loc)) {
+        if (!state->in_system_header) return CXChildVisit_Continue;
+    }
 
     /* Track all header files we visit so ffi_parse_struct_macros can
      * scan them all for macros clang's evaluator missed */
@@ -297,7 +301,13 @@ static enum CXChildVisitResult visitor(CXCursor cursor,
 
     enum CXCursorKind kind = clang_getCursorKind(cursor);
 
+    /* Recurse into extern "C" blocks (often found in C headers for C++ compatibility) */
+    if (kind == CXCursor_LinkageSpec) {
+        return CXChildVisit_Recurse;
+    }
+
     /* ── Function declarations ─────────────────────────────────────────── */
+
     if (kind == CXCursor_FunctionDecl) {
         CXString cx_name = clang_getCursorSpelling(cursor);
         const char *name = clang_getCString(cx_name);
@@ -395,6 +405,37 @@ static enum CXChildVisitResult visitor(CXCursor cursor,
         if (kind == CXCursor_TypedefDecl && name && name[0]) {
             CXType cx_type = clang_getCursorType(cursor);
             CXType canon   = clang_getCanonicalType(cx_type);
+            if (canon.kind != CXType_Record) {
+                /* Scalar typedef: uint64_t alias, opaque pointer, etc.
+                 * e.g. VK_DEFINE_NON_DISPATCHABLE_HANDLE(VkImage) */
+                if (!already_have_struct(ffi, name)) {
+                    CXString canon_s = clang_getTypeSpelling(canon);
+                    if (ffi->struct_count >= ffi->struct_cap) {
+                        ffi->struct_cap *= 2;
+                        ffi->structs = realloc(ffi->structs,
+                                               sizeof(FFIStruct) * ffi->struct_cap);
+                    }
+                    if (ffi->struct_count >= ffi->struct_cap) {
+                        ffi->struct_cap *= 2;
+                        ffi->structs = realloc(ffi->structs,
+                                               sizeof(FFIStruct) * ffi->struct_cap);
+                    }
+                    int scalar_idx = ffi->struct_count++;
+                    memset(&ffi->structs[scalar_idx], 0, sizeof(FFIStruct));
+                    ffi->structs[scalar_idx].name             = my_strdup(name);
+                    ffi->structs[scalar_idx].alias_of         = my_strdup(clang_getCString(canon_s));
+                    ffi->structs[scalar_idx].field_count      = 0;
+                    ffi->structs[scalar_idx].fields           = NULL;
+                    ffi->structs[scalar_idx].is_scalar_typedef = true;
+                    fprintf(stderr, "FFI: scalar typedef registered: %s -> %s is_scalar=%d\n",
+                            ffi->structs[scalar_idx].name,
+                            ffi->structs[scalar_idx].alias_of,
+                            ffi->structs[scalar_idx].is_scalar_typedef);
+                    clang_disposeString(canon_s);
+                }
+                clang_disposeString(cx_name);
+                return CXChildVisit_Continue;
+            }
             if (canon.kind == CXType_Record) {
                 CXString     canon_s    = clang_getTypeSpelling(canon);
                 const char  *canon_raw  = clang_getCString(canon_s);
@@ -728,12 +769,25 @@ bool ffi_parse_header(FFIContext *ctx, const char *header_path,
         }
     }
 
-    const char *clang_args[8];
+    const char *clang_args[16];
     int n_args = 0;
     clang_args[n_args++] = "-x";
     clang_args[n_args++] = "c";
-    clang_args[n_args++] = "-std=c11";
+    clang_args[n_args++] = "-std=gnu11";    /* Use GNU C11 for better header compatibility */
     clang_args[n_args++] = "-D_GNU_SOURCE";
+    clang_args[n_args++] = "-D__STDC_CONSTANT_MACROS";
+    clang_args[n_args++] = "-D__STDC_LIMIT_MACROS";
+
+    /* Add FreeType include directory directly */
+    clang_args[n_args++] = "-I/usr/include/freetype2";
+
+    /* FreeType fix: ft2build.h MUST be present for freetype.h to parse in C */
+    if (strstr(header_path, "freetype/")) {
+        clang_args[n_args++] = "-include";
+        clang_args[n_args++] = "ft2build.h";
+        clang_args[n_args++] = "-Dconst="; // Optional: prevents some Clang parser skips
+    }
+
     if (resource_found && resource_arg[0])
         clang_args[n_args++] = resource_arg;
 
@@ -1047,9 +1101,11 @@ static void ffi_parse_struct_macros(FFIContext *ctx, const char *header_path) {
             if (end != numval) {
                 /* Check if it's actually a float (has . or e or f suffix) */
                 bool is_float = false;
-                for (const char *cp = v; *cp && cp < v + strlen(v); cp++) {
-                    if (*cp == '.' || *cp == 'e' || *cp == 'E' || *cp == 'f' || *cp == 'F') {
-                        is_float = true; break;
+                if (strncmp(numval, "0x", 2) != 0 && strncmp(numval, "0X", 2) != 0) {
+                    for (const char *cp = v; *cp && cp < v + strlen(v); cp++) {
+                        if (*cp == '.' || *cp == 'e' || *cp == 'E' || *cp == 'f' || *cp == 'F') {
+                            is_float = true; break;
+                        }
                     }
                 }
                 FFIConstant c = {0};
@@ -1178,11 +1234,9 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
     LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(cg->context), 0);
 
     static const char *protected[] = {
-        "printf", "fprintf", "sprintf", "snprintf",
-        "malloc", "calloc", "realloc", "free",
-        "memset", "memcpy", "memmove", "strlen",
-        "strcmp", "strncmp", "strcpy", "strdup",
-        "abort", "exit", NULL
+        /* Only protect functions you define natively in the compiler itself
+         * and register manually — NOT standard libc functions */
+        NULL
     };
 
     /* ── PASS 1: Structs → layouts ──────────────────────────────────────── */
@@ -1213,22 +1267,61 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
                s->name, s->field_count, s->size_bytes);
     }
 
-    /* ── PASS 2: Typedef aliases ─────────────────────────────────────────── */
-    for (int i = 0; i < ffi->struct_count; i++) {
-        FFIStruct *s = &ffi->structs[i];
-        if (!s->name || !s->alias_of) continue;
-        if (env_lookup_layout(cg->env, s->name)) continue;
-        Type *target = env_lookup_layout(cg->env, s->alias_of);
-        if (!target) continue;
-        Type *alias_t = type_layout(s->name,
-                                    target->layout_fields,
-                                    target->layout_field_count,
-                                    target->layout_total_size,
-                                    target->layout_packed,
-                                    target->layout_align);
-        env_insert_layout(cg->env, s->name, alias_t, NULL);
-        type_to_llvm(cg, alias_t);
-        printf("FFI: layout alias %s -> %s\n", s->name, s->alias_of);
+    /* ── PASS 2: Typedef aliases (loop until stable) ─────────────────────── */
+    {
+        bool changed = true;
+        while (changed) { changed = false;
+            for (int i = 0; i < ffi->struct_count; i++) {
+                FFIStruct *s = &ffi->structs[i];
+                if (!s->name) continue;
+                fprintf(stderr, "FFI PASS2 checking: %s alias_of=%s scalar=%d already=%p ptr=%p\n",
+                        s->name, s->alias_of ? s->alias_of : "NULL",
+                        s->is_scalar_typedef,
+                        (void*)env_lookup_layout(cg->env, s->name),
+                        (void*)s);
+                if (env_lookup_layout(cg->env, s->name)) continue;
+
+                /* Scalar typedef (VkImage = uint64_t etc.)
+                 * Detected by: has alias_of but zero fields and no struct target */
+                bool is_scalar = (s->field_count == 0 &&
+                                  s->alias_of != NULL &&
+                                  env_lookup_layout(cg->env, s->alias_of) == NULL);
+                if (is_scalar) {
+                    Type *scalar = ffi_map_c_type(s->alias_of);
+                    fprintf(stderr, "FFI: scalar typedef PASS2: %s -> %s, scalar=%p kind=%d\n",
+                            s->name, s->alias_of,
+                            (void*)scalar, scalar ? scalar->kind : -1);
+                    if (scalar && scalar->kind != TYPE_UNKNOWN) {
+                        LayoutField *f = malloc(sizeof(LayoutField));
+                        f->name   = strdup("handle");
+                        f->type   = scalar;
+                        f->size   = 8; /* handles are always pointer-sized */
+                        f->offset = 0;
+                        Type *lt  = type_layout(s->name, f, 1, 8, false, 0);
+                        env_insert_layout(cg->env, s->name, lt, NULL);
+                        type_to_llvm(cg, lt);
+                        printf("FFI: scalar typedef %s -> %s\n", s->name, s->alias_of);
+                        changed = true;
+                    }
+                    continue;
+                }
+
+                Type *target = env_lookup_layout(cg->env, s->alias_of);
+                if (!target) continue;
+                Type *alias_t = type_layout(s->name,
+                                            target->layout_fields,
+                                            target->layout_field_count,
+                                            target->layout_total_size,
+                                            target->layout_packed,
+                                            target->layout_align);
+                env_insert_layout(cg->env, s->name, alias_t, NULL);
+                type_to_llvm(cg, alias_t);
+                printf("FFI: layout alias %s -> %s\n", s->name, s->alias_of);
+                changed = true;
+            }
+        }
+        printf("DEBUG: FT_Bitmap in env: %p\n", (void*)env_lookup_layout(cg->env, "FT_Bitmap"));
+        printf("DEBUG: FT_Bitmap_ in env: %p\n", (void*)env_lookup_layout(cg->env, "FT_Bitmap_"));
     }
 
     /* ── PASS 3: Functions ───────────────────────────────────────────────── */
@@ -1268,9 +1361,8 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
                 pt[j] = ptr_t;
             } else if (ptype->kind == TYPE_I32 || ptype->kind == TYPE_U32) {
                 pt[j] = LLVMInt32TypeInContext(cg->context);
-            } else if (ptype->kind == TYPE_LAYOUT) {
-                if (!ptype->layout_name ||
-                    (uintptr_t)ptype->layout_name < 0x1000) {
+            } else if (ptype->kind == TYPE_LAYOUT && ptype->layout_name) {
+                if ((uintptr_t)ptype->layout_name < 0x1000) {
                     fprintf(stderr, "ffi: corrupt layout_name ptr %p for param %d of %s\n",
                             (void*)ptype->layout_name, j, f->name);
                     pt[j] = ptr_t;
@@ -1331,6 +1423,11 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
     /* ── PASS 4: Numeric/float/string constants ──────────────────────────── */
     for (int i = 0; i < ffi->constant_count; i++) {
         FFIConstant *c = &ffi->constants[i];
+
+        /* SAFETY: Skip compiler built-ins or macros with invalid names/values */
+        if (!c || !c->name || c->name[0] == '\0') continue;
+        if (c->is_string && !c->str_value) continue;
+
         if (env_lookup(cg->env, c->name)) continue;
         /* Skip sub-field constants (RED.r etc.) and sentinels */
         if (strchr(c->name, '.')) continue;
@@ -1367,15 +1464,31 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
             { const char *s = strip_prefix(ffi, c->name);
               if (s && !env_lookup(cg->env, s)) env_insert(cg->env, s, type_float(), gv); }
         } else {
-            LLVMTypeRef  lt = LLVMInt64TypeInContext(cg->context);
+            /* C macros and enums typically default to 32-bit integers ('int').
+             * Map values that fit in 32 bits to I32 so they natively match
+             * FFI function parameters (which are also usually I32).
+             * If they exceed 32-bit bounds, fall back to Int. */
+            LLVMTypeRef lt;
+            bool is_32bit = (c->value >= -2147483648LL && c->value <= 4294967295LL);
+
+            if (is_32bit) {
+                lt = LLVMInt32TypeInContext(cg->context);
+            } else {
+                lt = LLVMInt64TypeInContext(cg->context);
+            }
+
             LLVMValueRef lv = LLVMConstInt(lt, (unsigned long long)c->value, 0);
             LLVMValueRef gv = LLVMAddGlobal(cg->module, lt, c->name);
             LLVMSetInitializer(gv, lv);
             LLVMSetGlobalConstant(gv, 1);
             LLVMSetLinkage(gv, LLVMInternalLinkage);
-            env_insert(cg->env, c->name, type_int(), gv);
+
+            env_insert(cg->env, c->name, is_32bit ? type_i32() : type_int(), gv);
             { const char *s = strip_prefix(ffi, c->name);
-              if (s && !env_lookup(cg->env, s)) env_insert(cg->env, s, type_int(), gv); }
+              if (s && !env_lookup(cg->env, s)) {
+                  env_insert(cg->env, s, is_32bit ? type_i32() : type_int(), gv);
+              }
+            }
         }
     }
 
@@ -1639,9 +1752,11 @@ bool ffi_cache_save(FFIContext *ctx, const char *header_path) {
         uint32_t nf = s->field_count;
         int32_t  sb = s->size_bytes;
         uint8_t  pk = s->packed ? 1 : 0;
+        uint8_t  sc = s->is_scalar_typedef ? 1 : 0;
         fwrite(&nf, 4, 1, f);
         fwrite(&sb, 4, 1, f);
         fwrite(&pk, 1, 1, f);
+        fwrite(&sc, 1, 1, f);
         for (int j = 0; j < s->field_count; j++) {
             write_str(f, s->fields[j].name);
             write_type(f, s->fields[j].type);
@@ -1728,9 +1843,11 @@ bool ffi_cache_load(FFIContext *ctx, const char *header_path) {
         fread(&nf, 4, 1, f);
         fread(&sb, 4, 1, f);
         fread(&pk, 1, 1, f);
-        s.field_count = nf;
-        s.size_bytes  = sb;
-        s.packed      = pk;
+        uint8_t sc; fread(&sc, 1, 1, f);
+        s.field_count      = nf;
+        s.size_bytes       = sb;
+        s.packed           = pk;
+        s.is_scalar_typedef = sc;
         s.fields = nf > 0 ? calloc(nf, sizeof(FFIStructField)) : NULL;
         for (uint32_t j = 0; j < nf; j++) {
             s.fields[j].name = read_str(f);

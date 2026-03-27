@@ -1,0 +1,48 @@
+(import String)
+
+(include <GLFW/glfw3.h> :unprefix GLFW_)
+
+define input ""
+define cursor 0
+define lines '()
+
+
+glfwInit
+define window glfwCreateWindow 640 480 "terminal" nil nil
+
+(glfwSetCharCallback window
+  (lambda ([w :: Pointer :: GLFWwindow] [codepoint :: I32])
+    (set! input (string-append input (String (Char codepoint))))
+    (set! cursor (cursor + 1))
+    (show "cursor is at _" cursor)
+    (show input)))
+
+define drop-last :: String -> String
+  s -> take ((count s) - 1) s
+
+define drop-last! :: String -> String
+  s -> set! input (take ((count s) - 1) s)
+
+(glfwSetKeyCallback window
+  (lambda ([w :: Pointer :: GLFWwindow]
+      [key :: I32] [scancode :: I32]
+      [action :: I32] [mods :: I32])
+    (cond
+      [((key = KEY_BACKSPACE) and (action != RELEASE) and (cursor > 0))
+        (drop-last! input)
+        (set! cursor (cursor - 1))
+        (show "cursor is at _" cursor)
+        (show input)]
+      [((key = KEY_ENTER) and (action = PRESS))
+        (set! lines  (string-append lines input))
+        (set! input  "")
+        (set! cursor 0)
+        (show input)])))
+
+until (glfwWindowShouldClose window)
+  glClear GL_COLOR_BUFFER_BIT
+  glfwSwapBuffers window
+  glfwPollEvents
+
+glfwDestroyWindow window
+glfwTerminate

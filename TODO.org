@@ -2,6 +2,7 @@
 
 * TODO Stuff [0/24]
 - [ ] eval
+- [ ] cmove instruction instead of branching
 - [ ] Aceept .org files as input
 - [ ] Syntax for compiler directives: -|[ INLINE (/=) ]|-
 - [ ] Regex literal #""
