@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <ctype.h>
 
 #include "reader.h"
 #include "cli.h"
@@ -144,6 +145,12 @@ static void ffi_libs_add(FFIContext *ffi) {
 static CompiledModule *registry_find(const char *name) {
     for (CompiledModule *m = g_compiled; m; m = m->next)
         if (strcmp(m->module_name, name) == 0) return m;
+    return NULL;
+}
+
+static CompiledModule *registry_find_by_obj(const char *obj_path) {
+    for (CompiledModule *m = g_compiled; m; m = m->next)
+        if (strcmp(m->obj_path, obj_path) == 0) return m;
     return NULL;
 }
 
@@ -436,6 +443,15 @@ static CompiledModule *compile_one(const char *source_path,
     // Defensively own the path — callers may free dep_src right after returning
     char *my_source_path = strdup(source_path);
 
+    // Early-exit if this module is already compiled and registered.
+    // This prevents duplicate .o entries from recursive pre-scan calls.
+    if (!is_main_module) {
+        char *guessed = path_to_module_name(my_source_path);
+        CompiledModule *cached = registry_find(guessed);
+        free(guessed);
+        if (cached) return cached;
+    }
+
     char *base     = base_no_ext(my_source_path);
     /* char *obj_path = malloc(strlen(base) + 3); */
     /* sprintf(obj_path, "%s.o", base); */
@@ -448,14 +464,32 @@ static CompiledModule *compile_one(const char *source_path,
         CompiledModule *cached = registry_find(guessed);
         free(guessed);
         if (cached) {
+            for (size_t fi = 0; fi < cached->export_count; fi++)
+                if (cached->exports[fi].kind == ENV_FUNC)
+                    wisp_register_arity(cached->exports[fi].local_name,
+                                        cached->exports[fi].param_count);
             free(base); free(obj_path); free(my_source_path);
             return cached;
         }
     }
 
+    // Reserve this module in the registry immediately by obj_path so any
+    // recursive pre-scan calls for the same file bail out before doing any work.
+    if (!is_main_module) {
+        if (registry_find_by_obj(obj_path)) {
+            free(base); free(obj_path); free(my_source_path);
+            return registry_find_by_obj(obj_path);
+        }
+        // placeholder so recursive calls see it immediately
+        char *guessed = path_to_module_name(my_source_path);
+        registry_new(guessed, obj_path, true);
+        free(guessed);
+    }
+
     // Check if we can skip emitting a new .o (but we still run full codegen
     // to populate the registry with correct types — it's cheap without emit)
     time_t src_t = file_mtime(my_source_path);
+
     time_t obj_t = file_mtime(obj_path);
     bool skip_emit = !is_main_module && (obj_t > 0 && obj_t > src_t);
 
@@ -463,6 +497,11 @@ static CompiledModule *compile_one(const char *source_path,
         printf("[skip]    %s (.o is up to date)\n", my_source_path);
     else
         printf("[compile] %s\n", my_source_path);
+
+    {
+        char *_dbg_name = path_to_module_name(my_source_path);
+        free(_dbg_name);
+    }
 
     // Read + parse
     char *source = read_file(my_source_path);
@@ -559,6 +598,168 @@ static CompiledModule *compile_one(const char *source_path,
         register_builtins(&tmp_ctx);
         wisp_register_arities_from_env(tmp_env);
         env_free(tmp_env);
+    }
+
+    /* Pre-scan imports and compile dependencies BEFORE wisp expansion
+     * so their FFI arities are available when we expand this module. */
+    {
+        const char *p = source;
+        while (*p) {
+            while (*p == ' ' || *p == '\t') p++;
+            /* Match: (import ModuleName) or (import qualified ModuleName) */
+            if (*p == '(' &&
+                strncmp(p + 1, "import", 6) == 0 &&
+                (p[7] == ' ' || p[7] == '\t')) {
+                const char *q = p + 7;
+                while (*q == ' ' || *q == '\t') q++;
+                /* skip optional 'qualified' */
+                if (strncmp(q, "qualified", 9) == 0 &&
+                    (q[9] == ' ' || q[9] == '\t'))
+                    q += 9;
+                while (*q == ' ' || *q == '\t') q++;
+                /* read module name: letters, digits, dots */
+                const char *mstart = q;
+                while (*q && (isalnum((unsigned char)*q) || *q == '.')) q++;
+                if (q > mstart) {
+                    char mod_name[256];
+                    size_t mlen = q - mstart;
+                    if (mlen < sizeof(mod_name)) {
+                        memcpy(mod_name, mstart, mlen);
+                        mod_name[mlen] = '\0';
+                        char *dep_src = module_name_to_path(mod_name);
+                        if (dep_src && file_exists(dep_src)) {
+                            compile_one(dep_src, flags, false);
+                            parser_set_context(my_source_path, source);
+                            /* Re-parse dep's headers into our FFI context
+                             * so types like VkApplicationInfo are visible */
+                            char *dep_source = read_file(dep_src);
+                            FFIContext *dep_ffi = ffi_context_create();
+                            const char *dp = dep_source;
+                            while (*dp) {
+                                while (*dp == ' ' || *dp == '\t') dp++;
+                                const char *line = dp;
+                                bool is_include = false;
+                                if (strncmp(dp, "include", 7) == 0 &&
+                                    (dp[7] == ' ' || dp[7] == '\t' || dp[7] == '<'))
+                                    is_include = true;
+                                if (*dp == '(' && strncmp(dp+1, "include", 7) == 0)
+                                    is_include = true;
+                                if (is_include) {
+                                    const char *q = strchr(dp, '<');
+                                    const char *qq = strchr(dp, '"');
+                                    bool sys = false;
+                                    const char *hstart = NULL, *hend = NULL;
+                                    if (q && (!qq || q < qq)) {
+                                        sys = true; hstart = q+1;
+                                        hend = strchr(hstart, '>');
+                                    } else if (qq) {
+                                        sys = false; hstart = qq+1;
+                                        hend = strchr(hstart, '"');
+                                    }
+                                    if (hstart && hend) {
+                                        char hdr[256];
+                                        size_t hl = hend - hstart;
+                                        if (hl < sizeof(hdr)) {
+                                            memcpy(hdr, hstart, hl);
+                                            hdr[hl] = '\0';
+                                            ffi_parse_header(dep_ffi, hdr, sys);
+                                        }
+                                    }
+                                }
+                                while (*dp && *dp != '\n') dp++;
+                                if (*dp == '\n') dp++;
+                            }
+                            for (int fi = 0; fi < dep_ffi->function_count; fi++)
+                                wisp_register_arity(dep_ffi->functions[fi].name,
+                                                    dep_ffi->functions[fi].param_count);
+                            for (int si = 0; si < dep_ffi->struct_count; si++)
+                                if (!dep_ffi->structs[si].alias_of)
+                                    wisp_register_arity(dep_ffi->structs[si].name,
+                                                        dep_ffi->structs[si].field_count);
+                            ffi_context_free(dep_ffi);
+                            free(dep_source);
+                        }
+                        free(dep_src);
+                    }
+                }
+            }
+            /* also match bare wisp-style: import ModuleName */
+            else if (strncmp(p, "import", 6) == 0 &&
+                     (p[6] == ' ' || p[6] == '\t')) {
+                const char *q = p + 6;
+                while (*q == ' ' || *q == '\t') q++;
+                if (strncmp(q, "qualified", 9) == 0 &&
+                    (q[9] == ' ' || q[9] == '\t'))
+                    q += 9;
+                while (*q == ' ' || *q == '\t') q++;
+                const char *mstart = q;
+                while (*q && (isalnum((unsigned char)*q) || *q == '.')) q++;
+                if (q > mstart) {
+                    char mod_name[256];
+                    size_t mlen = q - mstart;
+                    if (mlen < sizeof(mod_name)) {
+                        memcpy(mod_name, mstart, mlen);
+                        mod_name[mlen] = '\0';
+                        char *dep_src = module_name_to_path(mod_name);
+                        if (dep_src && file_exists(dep_src)) {
+                            compile_one(dep_src, flags, false);
+                            parser_set_context(my_source_path, source);
+                            /* Re-parse dep's headers into our FFI context
+                             * so types like VkApplicationInfo are visible */
+                            char *dep_source = read_file(dep_src);
+                            FFIContext *dep_ffi = ffi_context_create();
+                            const char *dp = dep_source;
+                            while (*dp) {
+                                while (*dp == ' ' || *dp == '\t') dp++;
+                                const char *line = dp;
+                                bool is_include = false;
+                                if (strncmp(dp, "include", 7) == 0 &&
+                                    (dp[7] == ' ' || dp[7] == '\t' || dp[7] == '<'))
+                                    is_include = true;
+                                if (*dp == '(' && strncmp(dp+1, "include", 7) == 0)
+                                    is_include = true;
+                                if (is_include) {
+                                    const char *q = strchr(dp, '<');
+                                    const char *qq = strchr(dp, '"');
+                                    bool sys = false;
+                                    const char *hstart = NULL, *hend = NULL;
+                                    if (q && (!qq || q < qq)) {
+                                        sys = true; hstart = q+1;
+                                        hend = strchr(hstart, '>');
+                                    } else if (qq) {
+                                        sys = false; hstart = qq+1;
+                                        hend = strchr(hstart, '"');
+                                    }
+                                    if (hstart && hend) {
+                                        char hdr[256];
+                                        size_t hl = hend - hstart;
+                                        if (hl < sizeof(hdr)) {
+                                            memcpy(hdr, hstart, hl);
+                                            hdr[hl] = '\0';
+                                            ffi_parse_header(dep_ffi, hdr, sys);
+                                        }
+                                    }
+                                }
+                                while (*dp && *dp != '\n') dp++;
+                                if (*dp == '\n') dp++;
+                            }
+                            for (int fi = 0; fi < dep_ffi->function_count; fi++)
+                                wisp_register_arity(dep_ffi->functions[fi].name,
+                                                    dep_ffi->functions[fi].param_count);
+                            for (int si = 0; si < dep_ffi->struct_count; si++)
+                                if (!dep_ffi->structs[si].alias_of)
+                                    wisp_register_arity(dep_ffi->structs[si].name,
+                                                        dep_ffi->structs[si].field_count);
+                            ffi_context_free(dep_ffi);
+                            free(dep_source);
+                        }
+                        free(dep_src);
+                    }
+                }
+            }
+            while (*p && *p != '\n') p++;
+            if (*p == '\n') p++;
+        }
     }
 
     parser_set_context(my_source_path, source);
@@ -671,21 +872,23 @@ static CompiledModule *compile_one(const char *source_path,
     const char *mod_name = module_decl->name;
     printf("  module: %s\n", mod_name);
 
-/// Phase 2: Recursively compile dependencies
+/// Phase 2: Verify dependencies are compiled
 
+    // (pre-scan already did the work)
     for (size_t i = 0; i < mod_ctx->import_count; i++) {
         ImportDecl *imp = mod_ctx->imports[i];
-        char *dep_src = module_name_to_path(imp->module_name);
-        if (!file_exists(dep_src)) {
-            fprintf(stderr, "error: cannot find module '%s' (tried: %s)",
-                    imp->module_name, dep_src);
-            free(dep_src); exit(1);
+        if (!registry_find(imp->module_name)) {
+            // Fallback: pre-scan missed it (e.g. non-standard path)
+            char *dep_src = module_name_to_path(imp->module_name);
+            if (!file_exists(dep_src)) {
+                fprintf(stderr, "error: cannot find module '%s' (tried: %s)",
+                        imp->module_name, dep_src);
+                free(dep_src); exit(1);
+            }
+            compile_one(dep_src, flags, false);
+            parser_set_context(my_source_path, source);
+            free(dep_src);
         }
-        // dep_src is freed here after compile_one returns; compile_one
-        // strdups it internally so this is safe
-        compile_one(dep_src, flags, false);
-        free(dep_src);
-        parser_set_context(my_source_path, source);
     }
 
 /// Phase 3: LLVM setup
@@ -717,6 +920,45 @@ static CompiledModule *compile_one(const char *source_path,
                     imp->module_name); exit(1);
         }
         declare_externals(&ctx, dep, imp);
+
+        /* Inject dep's headers into our FFI context so struct types
+         * defined in imported modules (e.g. VkApplicationInfo from
+         * Font's vulkan include) are visible during codegen */
+        char *dep_src = module_name_to_path(imp->module_name);
+        if (dep_src && file_exists(dep_src)) {
+            char *dep_source = read_file(dep_src);
+            const char *dp = dep_source;
+            while (*dp) {
+                while (*dp == ' ' || *dp == '\t') dp++;
+                bool is_include = (strncmp(dp,"include",7)==0 &&
+                                   (dp[7]==' '||dp[7]=='\t'||dp[7]=='<')) ||
+                                  (*dp=='('&&strncmp(dp+1,"include",7)==0);
+                if (is_include) {
+                    const char *q  = strchr(dp, '<');
+                    const char *qq = strchr(dp, '"');
+                    bool sys = false;
+                    const char *hstart = NULL, *hend = NULL;
+                    if (q && (!qq || q < qq)) {
+                        sys=true; hstart=q+1; hend=strchr(hstart,'>');
+                    } else if (qq) {
+                        sys=false; hstart=qq+1; hend=strchr(hstart+1,'"');
+                    }
+                    if (hstart && hend) {
+                        char hdr[256];
+                        size_t hl = hend-hstart;
+                        if (hl < sizeof(hdr)) {
+                            memcpy(hdr, hstart, hl);
+                            hdr[hl] = '\0';
+                            ffi_parse_header(ctx.ffi, hdr, sys);
+                        }
+                    }
+                }
+                while (*dp && *dp != '\n') dp++;
+                if (*dp == '\n') dp++;
+            }
+            free(dep_source);
+        }
+        free(dep_src);
     }
 
 /// Phase 5: Create init/main function and position builder
@@ -837,7 +1079,15 @@ static CompiledModule *compile_one(const char *source_path,
 
 /// Phase 9: Build registry entry + rename LLVM symbols to mangled names
 
-    CompiledModule *cm = registry_new(mod_name, obj_path, false);
+    // Find the placeholder we reserved at the top (by obj_path), update it.
+    CompiledModule *cm = registry_find_by_obj(obj_path);
+    if (cm) {
+        free(cm->module_name);
+        cm->module_name = strdup(mod_name);
+        cm->was_skipped = false;
+    } else {
+        cm = registry_new(mod_name, obj_path, false);
+    }
     for (size_t bi = 0; bi < ctx.env->size; bi++) {
         EnvEntry *ent = ctx.env->buckets[bi];
         while (ent) {
@@ -991,7 +1241,6 @@ static CompiledModule *compile_one(const char *source_path,
     free(base);
     free(my_source_path);
     type_alias_free_all();  // clear aliases between compilations
-    wisp_clear_arities();   // clear FFI arities between compilations
     return cm;
 }
 
@@ -1066,6 +1315,7 @@ static void compile(CompilerFlags *flags) {
     free(objs);
     free(exec_name);
     registry_free_all();
+    wisp_clear_arities();
 }
 
 bool repl_compile_module(CodegenContext *ctx, ImportDecl *imp) {

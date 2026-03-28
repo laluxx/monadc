@@ -35,5 +35,6 @@ ASTList wisp_parse_all(const char *source, const char *filename);
 void    wisp_register_arity(const char *name, int arity);
 void    wisp_register_arities_from_env(Env *env);
 void    wisp_clear_arities(void);
+int     wisp_get_arity(const char *name);
 
 #endif

@@ -90,6 +90,7 @@ typedef struct Type {
     int          layout_total_size;
     bool         layout_packed;
     int          layout_align;
+    bool         layout_is_scalar; /* true for opaque handle typedefs like VkInstance */
 } Type;
 
 #define list_elem element_type

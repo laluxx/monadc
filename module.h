@@ -4,11 +4,11 @@
 #include <stdbool.h>
 #include "reader.h"
 
-// Module System
+/// Module System
 //
 // Rules:
 // 1. Module names MUST be capitalized
-// 2. File names must match their module name (e.g., Math.monad for module Math)
+// 2. File names must match their module name (E.g. Math.monad for module Math)
 // 3. The file exporting Main can be named anything
 //
 // Syntax:
@@ -16,10 +16,11 @@
 //   (module Main [])        ; Export nothing
 //   (module Main [f1 f2])   ; Export only f1 and f2
 //
-//   (import qualified Std.Math :as Math)  ; Qualified - must use Math:sqrt
+//   (import qualified Std.Math :as Math)  ; Qualified - must use Math.sqrt
 //   (import Std.Math :as Math)            ; Can use sqrt or Math:sqrt
 //   (import Std.Math [sqrt log])          ; Import only sqrt and log
 //   (import Std.Math hiding [sqrt log])   ; Import everything except sqrt and log
+//
 
 typedef enum {
     EXPORT_ALL,       // Export everything

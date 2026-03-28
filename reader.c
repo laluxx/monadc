@@ -2405,24 +2405,41 @@ if (p->current.type == TOK_SYMBOL &&
             AST *name_ast;
 
             if (p->current.type == TOK_LBRACKET) {
+                int bracket_line = p->current.line;
+                int bracket_col  = p->current.column;
                 p->current = lexer_next_token(p->lexer); // consume '['
                 if (p->current.type != TOK_SYMBOL)
                     compiler_error(p->current.line, p->current.column,
                                    "Expected variable name in typed define");
+                /* Build a list AST [name :: Type] so parse_type_annotation works */
+                AST *bracket_list = ast_new_list();
+                bracket_list->line   = bracket_line;
+                bracket_list->column = bracket_col;
                 name_ast = ast_new_symbol(p->current.value);
                 name_ast->line   = p->current.line;
                 name_ast->column = p->current.column;
+                ast_list_append(bracket_list, name_ast);
                 p->current = lexer_next_token(p->lexer); // consume name
                 if (p->current.type == TOK_SYMBOL &&
                     strcmp(p->current.value, "::") == 0) {
+                    ast_list_append(bracket_list, ast_new_symbol("::"));
                     p->current = lexer_next_token(p->lexer); // consume '::'
-                    if (p->current.type == TOK_SYMBOL)
-                        p->current = lexer_next_token(p->lexer); // consume type
+                    /* Collect full type annotation (may be multi-token: Pointer :: T) */
+                    while (p->current.type == TOK_SYMBOL &&
+                           p->current.type != TOK_RBRACKET) {
+                        ast_list_append(bracket_list, ast_new_symbol(p->current.value));
+                        p->current = lexer_next_token(p->lexer);
+                        if (p->current.type != TOK_SYMBOL ||
+                            strcmp(p->current.value, "::") != 0) break;
+                        ast_list_append(bracket_list, ast_new_symbol("::"));
+                        p->current = lexer_next_token(p->lexer); // consume '::'
+                    }
                 }
                 if (p->current.type != TOK_RBRACKET)
                     compiler_error(p->current.line, p->current.column,
                                    "Expected ']' to close typed variable binding");
                 p->current = lexer_next_token(p->lexer); // consume ']'
+                name_ast = bracket_list;
             } else if (p->current.type == TOK_SYMBOL) {
                 name_ast = ast_new_symbol(p->current.value);
                 name_ast->line   = p->current.line;

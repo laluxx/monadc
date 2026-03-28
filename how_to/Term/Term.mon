@@ -1,14 +1,110 @@
 (import String)
+(import Font)
 
+(include <vulkan/vulkan.h>)
 (include <GLFW/glfw3.h> :unprefix GLFW_)
 
 define input ""
 define cursor 0
 define lines '()
 
-
 glfwInit
+glfwWindowHint GLFW_CLIENT_API GLFW_NO_API; Tell GLFW to not use OpenGL
 define window glfwCreateWindow 640 480 "terminal" nil nil
+
+;;; 1 VULKAN INSTANCE & SURFACE
+
+(define app-info (VkApplicationInfo))
+(set! app-info.sType VK_STRUCTURE_TYPE_APPLICATION_INFO)
+(set! app-info.pApplicationName "Monad Editor")
+(set! app-info.applicationVersion 1)
+(set! app-info.pEngineName "Monad Engine")
+(set! app-info.engineVersion 1)
+(set! app-info.apiVersion 4194304) ; VK_API_VERSION_1_0
+
+(define inst-info (VkInstanceCreateInfo))
+(set! inst-info.sType VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO)
+(set! inst-info.pApplicationInfo app-info)
+
+;; Get extensions from GLFW
+(define [glfw-ext-count :: U32] 0)
+(define glfw-exts (glfwGetRequiredInstanceExtensions &glfw-ext-count))
+(set! inst-info.enabledExtensionCount glfw-ext-count)
+(set! inst-info.ppEnabledExtensionNames glfw-exts)
+(set! inst-info.enabledLayerCount 0)
+
+(define my-instance (VkInstance))
+
+
+(show "sType: _" inst-info.sType)
+(show "pNext: _" inst-info.pNext)
+(show "flags: _" inst-info.flags)
+(show "ext count: _" inst-info.enabledExtensionCount)
+(show "layer count: _" inst-info.enabledLayerCount)
+(show "pAppInfo: _" inst-info.pApplicationInfo)
+(show "ppExtNames: _" inst-info.ppEnabledExtensionNames)
+(show "glfw-exts: _" glfw-exts)
+
+(define [vk-result :: I32] (vkCreateInstance &inst-info 0 &my-instance))
+(show "vkCreateInstance result: _" vk-result)
+
+(define my-surface (VkSurfaceKHR))
+(glfwCreateWindowSurface my-instance window 0 &my-surface)
+
+;;; 2 PHYSICAL DEVICE & QUEUE FAMILY
+
+(define [device-count :: U32] 0)
+(vkEnumeratePhysicalDevices my-instance &device-count 0)
+(define phys-devices (calloc device-count 8)) ; 8 bytes per pointer/handle
+(vkEnumeratePhysicalDevices my-instance &device-count phys-devices)
+(define my-phys-device (phys-devices 0)) ; Just grab the first GPU
+(free phys-devices)
+
+(define [queue-count :: U32] 0)
+(vkGetPhysicalDeviceQueueFamilyProperties my-phys-device &queue-count 0)
+(show "queue-count: _" queue-count)
+(define [queue-props :: Pointer :: VkQueueFamilyProperties] (calloc queue-count 24))
+(vkGetPhysicalDeviceQueueFamilyProperties my-phys-device &queue-count queue-props)
+
+(define [graphics-queue-index :: U32] 0)
+(if ((queue-props.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0)
+  (set! graphics-queue-index 0))
+
+;;; 3 LOGICAL DEVICE & QUEUE
+
+(define [queue-prio :: F32] 1.0)
+(define queue-info (VkDeviceQueueCreateInfo))
+(set! queue-info.sType VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO)
+(set! queue-info.queueFamilyIndex graphics-queue-index)
+(set! queue-info.queueCount 1)
+(set! queue-info.pQueuePriorities &queue-prio)
+
+;; We need the swapchain extension
+(define ext-name "VK_KHR_swapchain")
+(define device-exts (calloc 1 8))
+(set! (device-exts 0) ext-name)
+
+(define device-info (VkDeviceCreateInfo))
+(set! device-info.sType VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO)
+(set! device-info.pQueueCreateInfos &queue-info)
+(set! device-info.queueCreateInfoCount 1)
+(set! device-info.enabledExtensionCount 1)
+(set! device-info.ppEnabledExtensionNames device-exts)
+
+(define my-device (VkDevice))
+(define [vk-device-result :: I32] (vkCreateDevice my-phys-device &device-info 0 &my-device))
+(show "vkCreateDevice result: _" vk-device-result)
+
+(define my-queue (VkQueue))
+(vkGetDeviceQueue my-device graphics-queue-index 0 &my-queue)
+
+;; Wire it into your Font system!
+(init-font-system my-instance my-phys-device my-device my-queue graphics-queue-index)
+
+(show "Vulkan initialized successfully in Monad!")
+
+
+
 
 (glfwSetCharCallback window
   (lambda ([w :: Pointer :: GLFWwindow] [codepoint :: I32])
@@ -17,11 +113,11 @@ define window glfwCreateWindow 640 480 "terminal" nil nil
     (show "cursor is at _" cursor)
     (show input)))
 
-define drop-last :: String -> String
-  s -> take ((count s) - 1) s
+;; define drop-last :: String -> String
+;;   s -> take ((count s) - 1) s
 
-define drop-last! :: String -> String
-  s -> set! input (take ((count s) - 1) s)
+;; define drop-last! :: String -> String
+;;   s -> set! input (take ((count s) - 1) s)
 
 (glfwSetKeyCallback window
   (lambda ([w :: Pointer :: GLFWwindow]
@@ -29,7 +125,7 @@ define drop-last! :: String -> String
       [action :: I32] [mods :: I32])
     (cond
       [((key = KEY_BACKSPACE) and (action != RELEASE) and (cursor > 0))
-        (drop-last! input)
+        ;; (drop-last! input)
         (set! cursor (cursor - 1))
         (show "cursor is at _" cursor)
         (show input)]
@@ -40,9 +136,11 @@ define drop-last! :: String -> String
         (show input)])))
 
 until (glfwWindowShouldClose window)
-  glClear GL_COLOR_BUFFER_BIT
-  glfwSwapBuffers window
+  ;; GL_COLOR_BUFFER_BIT is gone.
+  ;; The Vulkan render pass and text vertex generation will go here.
+
   glfwPollEvents
 
 glfwDestroyWindow window
 glfwTerminate
+

@@ -719,43 +719,50 @@ Type *infer_literal_type(double value, const char *literal_str) {
 
 // Parse type annotation [name :: TypeName] or [name :: Arr :: Int :: 3]
 Type *parse_type_annotation(AST *ast) {
-    if (!ast || ast->type != AST_LIST) return NULL;
-
-    for (size_t i = 0; i < ast->list.count; i++) {
-        AST *item = ast->list.items[i];
-        if (item->type == AST_SYMBOL && strcmp(item->symbol, "::") == 0) {
-            if (i + 1 >= ast->list.count) return NULL;
-            AST *type_node = ast->list.items[i + 1];
-            if (type_node->type != AST_SYMBOL) return NULL;
-            const char *tn = type_node->symbol;
-
-            // Array: [x :: Arr :: ElemType :: Size]
-            if (strcmp(tn, "Arr") == 0) {
-                Type *elem_type = NULL;
-                int   size      = -1;
-
-                if (i + 2 < ast->list.count &&
-                    ast->list.items[i+2]->type == AST_SYMBOL &&
-                    strcmp(ast->list.items[i+2]->symbol, "::") == 0 &&
-                    i + 3 < ast->list.count &&
-                    ast->list.items[i+3]->type == AST_SYMBOL) {
-
-                    elem_type = type_from_name(ast->list.items[i+3]->symbol);
-
-                    if (i + 4 < ast->list.count &&
-                        ast->list.items[i+4]->type == AST_SYMBOL &&
-                        strcmp(ast->list.items[i+4]->symbol, "::") == 0 &&
-                        i + 5 < ast->list.count &&
-                        ast->list.items[i+5]->type == AST_NUMBER) {
-                        size = (int)ast->list.items[i+5]->number;
-                    }
+    if (!ast) return NULL;
+    size_t count;
+    AST **items;
+    if (ast->type == AST_LIST) {
+        count = ast->list.count;
+        items = ast->list.items;
+    } else if (ast->type == AST_ARRAY) {
+        count = ast->array.element_count;
+        items = ast->array.elements;
+    } else {
+        return NULL;
+    }
+    for (size_t i = 0; i < count; i++) {
+        if (items[i]->type != AST_SYMBOL || strcmp(items[i]->symbol, "::") != 0) continue;
+        if (i + 1 >= count) return NULL;
+        AST *type_node = items[i + 1];
+        if (type_node->type != AST_SYMBOL) return NULL;
+        const char *tn = type_node->symbol;
+        if (strcmp(tn, "Arr") == 0) {
+            Type *elem_type = NULL;
+            int   size      = -1;
+            if (i + 2 < count && items[i+2]->type == AST_SYMBOL &&
+                strcmp(items[i+2]->symbol, "::") == 0 &&
+                i + 3 < count && items[i+3]->type == AST_SYMBOL) {
+                elem_type = type_from_name(items[i+3]->symbol);
+                if (i + 4 < count && items[i+4]->type == AST_SYMBOL &&
+                    strcmp(items[i+4]->symbol, "::") == 0 &&
+                    i + 5 < count && items[i+5]->type == AST_NUMBER) {
+                    size = (int)items[i+5]->number;
                 }
-                return type_arr(elem_type, size);
             }
-
-            // Everything else — including aliases
-            return type_from_name(tn);
+            return type_arr(elem_type, size);
         }
+        if (strcmp(tn, "Pointer") == 0) {
+            if (i + 2 < count && items[i+2]->type == AST_SYMBOL &&
+                strcmp(items[i+2]->symbol, "::") == 0 &&
+                i + 3 < count && items[i+3]->type == AST_SYMBOL) {
+                Type *inner = type_from_name(items[i+3]->symbol);
+                if (!inner) inner = type_layout_ref(items[i+3]->symbol);
+                return type_ptr(inner);
+            }
+            return type_ptr(NULL);
+        }
+        return type_from_name(tn);
     }
     return NULL;
 }

@@ -43,7 +43,7 @@ define vk-queue-family-index 0
 define vk-cmd-pool    0
 
 (define (init-font-system [instance :: VkInstance] [phys-device :: VkPhysicalDevice]
-                          [device :: VkDevice] [queue :: VkQueue] [queue-family :: U32])
+                          [device :: VkDevice] [queue :: VkQueue] [queue-family :: U32] -> I32)
   (set! vk-instance    instance)
   (set! vk-phys-device phys-device)
   (set! vk-device      device)
@@ -57,8 +57,9 @@ define vk-cmd-pool    0
   (FT_Init_FreeType &ft-lib))
 
 
-
-(define (load-font [path :: String] [size :: I32] [vk-render-pass :: VkRenderPass] -> Pointer :: Font)
+(define (load-font [path :: String]
+                   [size :: I32]
+                   [vk-render-pass :: VkRenderPass] -> Pointer :: Font)
   (define font (Font))
   (define face (FT_FaceRec))
 
@@ -131,7 +132,7 @@ define vk-cmd-pool    0
   (set! img-info.arrayLayers   1)
   (set! img-info.samples       VK_SAMPLE_COUNT_1_BIT)
   (set! img-info.tiling        VK_IMAGE_TILING_OPTIMAL)
-  (set! img-info.usage         (VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+  (set! img-info.usage         (VK_IMAGE_USAGE_TRANSFER_DST_BIT ∨
                                   VK_IMAGE_USAGE_SAMPLED_BIT))
   (set! img-info.sharingMode   VK_SHARING_MODE_EXCLUSIVE)
   (set! img-info.initialLayout VK_IMAGE_LAYOUT_UNDEFINED)
@@ -172,7 +173,7 @@ define vk-cmd-pool    0
   (define sbuf-reqs (VkMemoryRequirements))
   (vkGetBufferMemoryRequirements vk-device staging-buf &sbuf-reqs)
   (define [staging-mem-type :: U32] 0)
-  (define host-flags (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+  (define host-flags (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT ∨
                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
   (for [smi 0 phys-props.memoryTypeCount]
     (define stype (phys-props.memoryTypes smi))

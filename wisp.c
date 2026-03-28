@@ -86,6 +86,11 @@ void wisp_register_arity(const char *name, int arity) {
     arity_set(&g_ffi_arities, name, arity);
 }
 
+int wisp_get_arity(const char *name) {
+    if (!g_ffi_arities_init) return -99;
+    return arity_get(&g_ffi_arities, name);
+}
+
 void wisp_clear_arities(void) {
     if (g_ffi_arities_init) {
         arity_free(&g_ffi_arities);
@@ -1259,7 +1264,20 @@ ASTList wisp_parse_all(const char *source, const char *filename) {
     free(transformed);
     free(stripped);
     wts_free(&s);
+
+    // Persist all discovered arities back into g_ffi_arities so that
+    // modules imported later inherit everything this module knew about,
+    // including C functions from its includes.
+    if (!g_ffi_arities_init) {
+        memset(&g_ffi_arities, 0, sizeof(g_ffi_arities));
+        g_ffi_arities_init = true;
+    }
+    for (int i = 0; i < ARITY_BUCKETS; i++)
+        for (ArityEntry *e = t.buckets[i]; e; e = e->next)
+            arity_set_with_kinds(&g_ffi_arities, e->name, e->arity, e->param_kinds);
+
     arity_free(&t);
+
 
     return result;
 }

@@ -270,15 +270,51 @@ static enum CXChildVisitResult field_visitor(CXCursor cursor,
 
     CXString fname   = clang_getCursorSpelling(cursor);
     CXType   ftype   = clang_getCursorType(cursor);
-    CXType   canon   = clang_getCanonicalType(ftype); /* FIX: resolve pointer typedefs */
-    CXString ftype_s = clang_getTypeSpelling(canon);
+    CXType   canon   = clang_getCanonicalType(ftype);
 
     fs->s->fields[fs->idx].name = my_strdup(clang_getCString(fname));
-    fs->s->fields[fs->idx].type = ffi_map_c_type(clang_getCString(ftype_s));
+
+    /* Use the canonical type kind directly for accurate size mapping.
+     * Spelling-based mapping fails for enums ("enum VkStructureType" → unknown)
+     * and for typedefs that resolve to primitive sizes. */
+    Type *field_type;
+    enum CXTypeKind ck = canon.kind;
+    if (ck == CXType_Enum) {
+        /* Enums are always i32 in C */
+        field_type = type_i32();
+    } else if (ck == CXType_Bool) {
+        field_type = type_bool();
+    } else if (ck == CXType_UChar || ck == CXType_Char_U) {
+        field_type = type_u8();
+    } else if (ck == CXType_SChar || ck == CXType_Char_S) {
+        field_type = type_char();
+    } else if (ck == CXType_UShort) {
+        field_type = type_u16();
+    } else if (ck == CXType_Short) {
+        field_type = type_i16();
+    } else if (ck == CXType_UInt) {
+        field_type = type_u32();
+    } else if (ck == CXType_Int) {
+        field_type = type_i32();
+    } else if (ck == CXType_ULong || ck == CXType_ULongLong) {
+        field_type = type_u64();
+    } else if (ck == CXType_Long || ck == CXType_LongLong) {
+        field_type = type_i64();
+    } else if (ck == CXType_Float) {
+        field_type = type_f32();
+    } else if (ck == CXType_Double || ck == CXType_LongDouble) {
+        field_type = type_float();
+    } else {
+        /* Fall back to spelling-based mapping for pointers, structs, arrays */
+        CXString ftype_s = clang_getTypeSpelling(canon);
+        field_type = ffi_map_c_type(clang_getCString(ftype_s));
+        clang_disposeString(ftype_s);
+    }
+
+    fs->s->fields[fs->idx].type = field_type;
     fs->idx++;
 
     clang_disposeString(fname);
-    clang_disposeString(ftype_s);
     return CXChildVisit_Continue;
 }
 
@@ -329,12 +365,36 @@ static enum CXChildVisitResult visitor(CXCursor cursor,
 
         if (name && name[0] && !already_have_function(ffi, name)) {
             CXType fn_type = clang_getCursorType(cursor);
-            CXType ret_cx  = clang_getResultType(fn_type);
-            CXString ret_s = clang_getTypeSpelling(ret_cx);
+            CXType ret_cx   = clang_getResultType(fn_type);
+            CXType ret_canon = clang_getCanonicalType(ret_cx);
+            CXString ret_s  = clang_getTypeSpelling(ret_cx);
 
             FFIFunction fn = {0};
             fn.name        = my_strdup(name);
-            fn.return_type = ffi_map_c_type(clang_getCString(ret_s));
+            /* Use canonical kind for return type, same as field_visitor */
+            switch (ret_canon.kind) {
+                case CXType_Void:                          fn.return_type = NULL; break;
+                case CXType_Enum:                          fn.return_type = type_i32(); break;
+                case CXType_Bool:                          fn.return_type = type_bool(); break;
+                case CXType_UChar: case CXType_Char_U:    fn.return_type = type_u8(); break;
+                case CXType_SChar: case CXType_Char_S:    fn.return_type = type_char(); break;
+                case CXType_UShort:                        fn.return_type = type_u16(); break;
+                case CXType_Short:                         fn.return_type = type_i16(); break;
+                case CXType_UInt:                          fn.return_type = type_u32(); break;
+                case CXType_Int:                           fn.return_type = type_i32(); break;
+                case CXType_ULong: case CXType_ULongLong: fn.return_type = type_u64(); break;
+                case CXType_Long:  case CXType_LongLong:  fn.return_type = type_i64(); break;
+                case CXType_Float:                         fn.return_type = type_f32(); break;
+                case CXType_Double: case CXType_LongDouble: fn.return_type = type_float(); break;
+                case CXType_Pointer: case CXType_BlockPointer: {
+                    CXType pointee = clang_getPointeeType(ret_canon);
+                    CXString pointee_s = clang_getTypeSpelling(pointee);
+                    fn.return_type = type_ptr(ffi_map_c_type(clang_getCString(pointee_s)));
+                    clang_disposeString(pointee_s);
+                    break;
+                }
+                default: fn.return_type = ffi_map_c_type(clang_getCString(ret_s)); break;
+            }
             fn.variadic    = clang_isFunctionTypeVariadic(fn_type);
 
             int nparams = clang_Cursor_getNumArguments(cursor);
@@ -343,15 +403,37 @@ static enum CXChildVisitResult visitor(CXCursor cursor,
                 ? malloc(sizeof(FFIParam) * nparams) : NULL;
 
             for (int i = 0; i < nparams; i++) {
-                CXCursor    arg      = clang_Cursor_getArgument(cursor, i);
-                CXString    aname_s  = clang_getCursorSpelling(arg);
-                CXType      atype_cx = clang_getCursorType(arg);
-                CXString    atype_s  = clang_getTypeSpelling(atype_cx);
+                CXCursor    arg       = clang_Cursor_getArgument(cursor, i);
+                CXString    aname_s   = clang_getCursorSpelling(arg);
+                CXType      atype_cx  = clang_getCursorType(arg);
+                CXType      atype_can = clang_getCanonicalType(atype_cx);
+                CXString    atype_s   = clang_getTypeSpelling(atype_cx);
 
                 const char *aname = clang_getCString(aname_s);
                 fn.params[i].name = (aname && aname[0])
                     ? my_strdup(aname) : NULL;
-                fn.params[i].type = ffi_map_c_type(clang_getCString(atype_s));
+                switch (atype_can.kind) {
+                    case CXType_Enum:                          fn.params[i].type = type_i32(); break;
+                    case CXType_Bool:                          fn.params[i].type = type_bool(); break;
+                    case CXType_UChar: case CXType_Char_U:    fn.params[i].type = type_u8(); break;
+                    case CXType_SChar: case CXType_Char_S:    fn.params[i].type = type_char(); break;
+                    case CXType_UShort:                        fn.params[i].type = type_u16(); break;
+                    case CXType_Short:                         fn.params[i].type = type_i16(); break;
+                    case CXType_UInt:                          fn.params[i].type = type_u32(); break;
+                    case CXType_Int:                           fn.params[i].type = type_i32(); break;
+                    case CXType_ULong: case CXType_ULongLong: fn.params[i].type = type_u64(); break;
+                    case CXType_Long:  case CXType_LongLong:  fn.params[i].type = type_i64(); break;
+                    case CXType_Float:                         fn.params[i].type = type_f32(); break;
+                    case CXType_Double: case CXType_LongDouble: fn.params[i].type = type_float(); break;
+                    case CXType_Pointer: case CXType_BlockPointer: {
+                        CXType pointee = clang_getPointeeType(atype_can);
+                        CXString pointee_s = clang_getTypeSpelling(pointee);
+                        fn.params[i].type = type_ptr(ffi_map_c_type(clang_getCString(pointee_s)));
+                        clang_disposeString(pointee_s);
+                        break;
+                    }
+                    default: fn.params[i].type = ffi_map_c_type(clang_getCString(atype_s)); break;
+                }
 
                 clang_disposeString(aname_s);
                 clang_disposeString(atype_s);
@@ -780,14 +862,24 @@ bool ffi_parse_header(FFIContext *ctx, const char *header_path,
         }
     }
 
-    const char *clang_args[16];
+    /* Build -include args for all previously parsed headers so that
+     * guards like #ifdef VK_VERSION_1_0 evaluate correctly when
+     * a later header (glfw3.h) depends on a prior one (vulkan.h). */
+    int n_prior = ctx->included_count;
+    /* Each prior header needs 2 slots: "-include" + path.
+     * Plus 16 for fixed args. */
+    const char **clang_args = malloc(sizeof(char*) * (16 + n_prior * 2));
     int n_args = 0;
     clang_args[n_args++] = "-x";
     clang_args[n_args++] = "c";
-    clang_args[n_args++] = "-std=gnu11";    /* Use GNU C11 for better header compatibility */
+    clang_args[n_args++] = "-std=gnu11";
     clang_args[n_args++] = "-D_GNU_SOURCE";
     clang_args[n_args++] = "-D__STDC_CONSTANT_MACROS";
     clang_args[n_args++] = "-D__STDC_LIMIT_MACROS";
+    for (int pi = 0; pi < n_prior; pi++) {
+        clang_args[n_args++] = "-include";
+        clang_args[n_args++] = ctx->included[pi];
+    }
 
     /* Add FreeType include directory directly */
     clang_args[n_args++] = "-I/usr/include/freetype2";
@@ -801,6 +893,7 @@ bool ffi_parse_header(FFIContext *ctx, const char *header_path,
 
     if (resource_found && resource_arg[0])
         clang_args[n_args++] = resource_arg;
+    /* n_args is now final — clang_args was heap-allocated above */
 
     clock_gettime(CLOCK_MONOTONIC, &t0);
     CXIndex index = clang_createIndex(0, 0);
@@ -847,6 +940,7 @@ bool ffi_parse_header(FFIContext *ctx, const char *header_path,
 
     clang_disposeTranslationUnit(tu);
     clang_disposeIndex(index);
+    free(clang_args);
 
     /* Post-parse: read source text once and extract docstrings for all
      * functions that were added during this parse. */
@@ -1271,8 +1365,20 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
         for (int j = 0; j < s->field_count; j++) {
             fields[j].name   = strdup(s->fields[j].name ? s->fields[j].name : "_");
             fields[j].type   = s->fields[j].type ? type_clone(s->fields[j].type) : type_int();
-            fields[j].size   = s->size_bytes > 0 ? s->size_bytes / s->field_count : 8;
             fields[j].offset = 0;
+            Type *ft = s->fields[j].type;
+            int sz = 8;
+            if (ft) switch (ft->kind) {
+                case TYPE_BOOL:
+                case TYPE_I8:  case TYPE_U8:                          sz = 1; break;
+                case TYPE_I16: case TYPE_U16:                         sz = 2; break;
+                case TYPE_I32: case TYPE_U32: case TYPE_F32:          sz = 4; break;
+                case TYPE_I64: case TYPE_U64: case TYPE_FLOAT:
+                case TYPE_INT: case TYPE_STRING: case TYPE_PTR:
+                case TYPE_LAYOUT: case TYPE_UNKNOWN:                  sz = 8; break;
+                default:                                              sz = 8; break;
+            }
+            fields[j].size = sz;
         }
         layout_compute_offsets(fields, s->field_count, false, NULL);
         Type *layout_type = type_layout(s->name, fields, s->field_count,
@@ -1306,6 +1412,7 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
                         f->size   = 8; /* handles are always pointer-sized */
                         f->offset = 0;
                         Type *lt  = type_layout(s->name, f, 1, 8, false, 0);
+                        lt->layout_is_scalar = true;
                         env_insert_layout(cg->env, s->name, lt, NULL);
                         type_to_llvm(cg, lt);
                         printf("FFI: scalar typedef %s -> %s\n", s->name, s->alias_of);
@@ -1375,17 +1482,7 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
                     ep[j].type = type_clone(ptype);
                     continue;
                 }
-                Type *full = env_lookup_layout(cg->env, ptype->layout_name);
-                int sz = full ? full->layout_total_size : 0;
-                if      (sz > 0 && sz <= 4)  pt[j] = LLVMInt32TypeInContext(cg->context);
-                else if (sz > 4 && sz <= 8)  pt[j] = LLVMInt64TypeInContext(cg->context);
-                else if (sz > 8 && sz <= 16) {
-                    LLVMTypeRef i64 = LLVMInt64TypeInContext(cg->context);
-                    LLVMTypeRef f2[] = {i64, i64};
-                    pt[j] = LLVMStructTypeInContext(cg->context, f2, 2, 0);
-                } else {
-                    pt[j] = ptr_t;
-                }
+                pt[j] = ptr_t;
             } else {
                 pt[j] = type_to_llvm(cg, ptype);
             }
@@ -1429,8 +1526,6 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
     /* ── PASS 4: Numeric/float/string constants ──────────────────────────── */
     for (int i = 0; i < ffi->constant_count; i++) {
         FFIConstant *c = &ffi->constants[i];
-        if (c->name && strstr(c->name, "VK_STRUCTURE_TYPE_COMMAND_POOL"))
-            fprintf(stderr, "DEBUG PASS4: found '%s' = %lld\n", c->name, c->value);
 
         /* SAFETY: Skip compiler built-ins or macros with invalid names/values */
         if (!c || !c->name || c->name[0] == '\0') continue;
