@@ -59,7 +59,8 @@ define vk-cmd-pool    0
 
 (define (load-font [path :: String]
                    [size :: I32]
-                   [vk-render-pass :: VkRenderPass] -> Pointer :: Font)
+                   [vk-render-pass :: VkRenderPass]
+                   [desc-set-layout :: VkDescriptorSetLayout] -> Pointer :: Font)
   (define font (Font))
   (define face (FT_FaceRec))
 
@@ -300,7 +301,43 @@ define vk-cmd-pool    0
   (define atlas-sampler (VkSampler))
   (vkCreateSampler vk-device &sampler-info 0 &atlas-sampler)
 
+  ;; --- Allocate descriptor pool ---
+  (define pool-size (VkDescriptorPoolSize))
+  (set! pool-size.type            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+  (set! pool-size.descriptorCount 1)
+  (define dp-info (VkDescriptorPoolCreateInfo))
+  (set! dp-info.sType         VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO)
+  (set! dp-info.maxSets       1)
+  (set! dp-info.poolSizeCount 1)
+  (set! dp-info.pPoolSizes    &pool-size)
+  (define desc-pool (VkDescriptorPool))
+  (vkCreateDescriptorPool vk-device &dp-info 0 &desc-pool)
+
+  ;; --- Allocate descriptor set ---
+  (define ds-alloc (VkDescriptorSetAllocateInfo))
+  (set! ds-alloc.sType              VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO)
+  (set! ds-alloc.descriptorPool     desc-pool)
+  (set! ds-alloc.descriptorSetCount 1)
+  (set! ds-alloc.pSetLayouts        &desc-set-layout)
+  (define atlas-desc-set (VkDescriptorSet))
+  (vkAllocateDescriptorSets vk-device &ds-alloc &atlas-desc-set)
+
+  ;; --- Write sampler+view into descriptor set ---
+  (define ds-img-info (VkDescriptorImageInfo))
+  (set! ds-img-info.sampler     atlas-sampler)
+  (set! ds-img-info.imageView   atlas-view)
+  (set! ds-img-info.imageLayout VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+  (define ds-write (VkWriteDescriptorSet))
+  (set! ds-write.sType           VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET)
+  (set! ds-write.dstSet          atlas-desc-set)
+  (set! ds-write.dstBinding      0)
+  (set! ds-write.descriptorCount 1)
+  (set! ds-write.descriptorType  VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+  (set! ds-write.pImageInfo      &ds-img-info)
+  (vkUpdateDescriptorSets vk-device 1 &ds-write 0 0)
+
   ;; --- Store into Font ---
+  (set! font.texture.descSet atlas-desc-set)
   (set! font.texture.image   atlas-image)
   (set! font.texture.memory  atlas-memory)
   (set! font.texture.view    atlas-view)
@@ -308,4 +345,6 @@ define vk-cmd-pool    0
   (set! font.texture.width   512)
   (set! font.texture.height  512)
   (set! font.texture.loaded  1)
+  (show "font descSet: _" font.texture.descSet)
+  (show "font loaded: _" font.texture.loaded)
   font)

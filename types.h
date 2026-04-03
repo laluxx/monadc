@@ -33,11 +33,13 @@ typedef enum {
     TYPE_I128,
     TYPE_U128,
     TYPE_UNKNOWN,
-    TYPE_VAR,      // HM type variable — 'a, 'b, etc.
-    TYPE_ARROW,    // function type — param -> return
-    TYPE_VARIADIC, // List 'a rest params.
-    TYPE_COLL,     // Abstract collection — List | Set | Arr
-    TYPE_PTR,      // Pointer :: T        — typed pointer to T
+    TYPE_VAR,           // HM type variable    — 'a, 'b, etc.
+    TYPE_ARROW,         // function type       — param -> return
+    TYPE_VARIADIC,      // List 'a rest params — (. args)
+    TYPE_COLL,          // Abstract collection — List | Set | Arr
+    TYPE_PTR,           // Pointer :: T        — typed pointer to T
+    TYPE_INT_ARBITRARY, // I<n> / U<n>         — arbitrary-width integer, 1–64 or 128
+    TYPE_F80,           // F80                 — x87 extended precision
 } TypeKind;
 
 
@@ -91,6 +93,11 @@ typedef struct Type {
     bool         layout_packed;
     int          layout_align;
     bool         layout_is_scalar; /* true for opaque handle typedefs like VkInstance */
+    bool         layout_is_inline; /* true when used as a nested field (not a pointer) */
+
+    // TYPE_INT_ARBITRARY
+    int  numeric_width;   // bit-width: 1–64 or 128
+    bool numeric_signed;  // true = I (signed), false = U (unsigned)
 } Type;
 
 #define list_elem element_type
@@ -147,6 +154,8 @@ Type *type_i64(void);
 Type *type_u64(void);
 Type *type_i128(void);
 Type *type_u128(void);
+Type *type_f80(void);
+Type *type_int_arbitrary(int width, bool is_signed); // I<n> or U<n>
 
 
 /// Constructors — compound types

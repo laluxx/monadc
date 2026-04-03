@@ -293,9 +293,31 @@ bool infer_unify_one(InferCtx *ctx, Type *a, Type *b, int line, int col) {
     if (a->kind != b->kind) {
         /* TYPE_FN (unannotated Fn) is compatible with any arrow type */
         if (a->kind == TYPE_FN && b->kind == TYPE_ARROW) return true;
+
+        /* Collection acting as a function: (Coll -> 'a) ~ (Int -> 'a) */
+        if ((a->kind == TYPE_COLL || a->kind == TYPE_LIST || a->kind == TYPE_ARR || a->kind == TYPE_STRING) &&
+            b->kind == TYPE_ARROW) {
+            // Unify the arrow parameter with Int
+            return infer_unify_one(ctx, type_int(), b->arrow_param, line, col);
+        }
+        if ((b->kind == TYPE_COLL || b->kind == TYPE_LIST || b->kind == TYPE_ARR || b->kind == TYPE_STRING) &&
+            a->kind == TYPE_ARROW) {
+            return infer_unify_one(ctx, a->arrow_param, type_int(), line, col);
+        }
+
         if (a->kind == TYPE_ARROW && b->kind == TYPE_FN) return true;
         /* TYPE_FN ~ TYPE_FN always ok */
         if (a->kind == TYPE_FN && b->kind == TYPE_FN) return true;
+        /* TYPE_INT_ARBITRARY ~ TYPE_INT (and vice versa) — widen to i64 */
+        if (a->kind == TYPE_INT_ARBITRARY && b->kind == TYPE_INT) return true;
+        if (a->kind == TYPE_INT && b->kind == TYPE_INT_ARBITRARY) return true;
+        /* TYPE_INT_ARBITRARY ~ TYPE_INT_ARBITRARY — must match width+sign */
+        if (a->kind == TYPE_INT_ARBITRARY && b->kind == TYPE_INT_ARBITRARY)
+            return (a->numeric_width == b->numeric_width &&
+                    a->numeric_signed == b->numeric_signed);
+        /* TYPE_F80 ~ TYPE_FLOAT */
+        if (a->kind == TYPE_F80 && b->kind == TYPE_FLOAT) return true;
+        if (a->kind == TYPE_FLOAT && b->kind == TYPE_F80) return true;
         /* TYPE_COLL is compatible with any collection type */
         if (a->kind == TYPE_COLL && (b->kind == TYPE_LIST ||
                                      b->kind == TYPE_SET  ||
@@ -303,6 +325,22 @@ bool infer_unify_one(InferCtx *ctx, Type *a, Type *b, int line, int col) {
         if (b->kind == TYPE_COLL && (a->kind == TYPE_LIST ||
                                      a->kind == TYPE_SET  ||
                                      a->kind == TYPE_ARR)) return true;
+
+        /* Hard error: Coll cannot be a scalar primitive */
+        if ((a->kind == TYPE_COLL && (b->kind == TYPE_INT || b->kind == TYPE_FLOAT || b->kind == TYPE_BOOL)) ||
+            (b->kind == TYPE_COLL && (a->kind == TYPE_INT || a->kind == TYPE_FLOAT || a->kind == TYPE_BOOL))) {
+            char a_str[64], b_str[64];
+            snprintf(a_str, sizeof(a_str), "%s", type_to_string(a));
+            snprintf(b_str, sizeof(b_str), "%s", type_to_string(b));
+            snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                     "%s:%d:%d: type error: cannot use %s as a Collection (%s)",
+                     ctx->filename, line, col,
+                     (a->kind == TYPE_COLL ? b_str : a_str),
+                     (a->kind == TYPE_COLL ? a_str : b_str));
+            ctx->had_error = true;
+            return false;
+        }
+
         char a_str[64], b_str[64];
         snprintf(a_str, sizeof(a_str), "%s", type_to_string(a));
         snprintf(b_str, sizeof(b_str), "%s", type_to_string(b));

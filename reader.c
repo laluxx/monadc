@@ -994,6 +994,38 @@ void ast_print(AST *ast) {
 }
 
 
+/// Arbitrary-width integer type parsing
+
+bool parse_int_type(const char *name, int line, int col,
+                    int *out_width, bool *out_signed) {
+    if (!name) return false;
+    char prefix = name[0];
+    if (prefix != 'I' && prefix != 'U') return false;
+
+    const char *digits = name + 1;
+    if (!digits[0]) return false;
+    for (const char *p = digits; *p; p++)
+        if (*p < '0' || *p > '9') return false;
+    if (digits[0] == '0' && digits[1] != '\0') return false;
+
+    int width = atoi(digits);
+    if (width < 1) {
+        compiler_error(line, col,
+            "invalid integer type '%s': bit-width must be at least 1", name);
+    } else if (width >= 65 && width <= 127) {
+        compiler_error(line, col,
+            "invalid integer type '%s': bit-widths 65–127 are not supported; "
+            "valid widths are 1–64 and 128", name);
+    } else if (width > 128) {
+        compiler_error(line, col,
+            "invalid integer type '%s': bit-width %d exceeds the maximum of 128",
+            name, width);
+    }
+    *out_width  = width;
+    *out_signed = (prefix == 'I');
+    return true;
+}
+
 /// Lexer
 
 void lexer_init(Lexer *lex, const char *source) {
@@ -1314,6 +1346,33 @@ Token lexer_next_token(Lexer *lex) {
         return tok;
     }
 
+    // Postfix dot access: .fieldname (after a closing paren or bracket)
+    if (c == '.') {
+        char after = peek_ahead(lex, 1);
+        if ((after>='a'&&after<='z') || (after>='A'&&after<='Z') || after=='_') {
+            advance(lex); // consume '.'
+            size_t start = lex->pos;
+            while (true) {
+                char nc = peek(lex);
+                if (nc == '\0') break;
+                if (nc == '.') {
+                    char after2 = lex->source[lex->pos + 1];
+                    if ((after2>='a'&&after2<='z') || (after2>='A'&&after2<='Z') ||
+                        (after2>='0'&&after2<='9') || after2=='_') {
+                        advance(lex);
+                        continue;
+                    } else break;
+                }
+                if (is_symbol_char(nc) && nc != '.') {
+                    advance(lex);
+                } else break;
+            }
+            tok.type  = TOK_DOT;
+            tok.value = my_strndup(lex->source + start, lex->pos - start);
+            return tok;
+        }
+    }
+
     // Decimal number  (also handles NrDIGITS radix literals and _ grouping)
     if (is_digit(c)) {
         size_t start = lex->pos;
@@ -1472,17 +1531,29 @@ static ASTParam parse_one_param(Parser *p) {
         param.name = my_strdup(p->current.value);
         p->current = lexer_next_token(p->lexer);
 
-        if (p->current.type == TOK_SYMBOL &&
-            strcmp(p->current.value, "::") == 0) {
+        bool is_colon = (p->current.type == TOK_SYMBOL &&
+                         strcmp(p->current.value, "::") == 0);
+        bool is_arrow = (p->current.type == TOK_ARROW);
+
+        if (is_colon || is_arrow) {
             p->current = lexer_next_token(p->lexer);
 
             char type_buf[512] = {0};
+
+            /* [name -> T]  is sugar for  [name :: Pointer :: T] */
+            if (is_arrow) {
+                strncat(type_buf, "Pointer ::",
+                        sizeof(type_buf) - strlen(type_buf) - 1);
+            }
+
             while (p->current.type != TOK_RBRACKET && p->current.type != TOK_EOF) {
                 const char *tok_str = p->current.value ? p->current.value
                                     : (p->current.type == TOK_ARROW ? "->" : NULL);
                 if (tok_str) {
-                    if (type_buf[0]) strncat(type_buf, " ", sizeof(type_buf) - strlen(type_buf) - 1);
-                    strncat(type_buf, tok_str, sizeof(type_buf) - strlen(type_buf) - 1);
+                    if (type_buf[0]) strncat(type_buf, " ",
+                                             sizeof(type_buf) - strlen(type_buf) - 1);
+                    strncat(type_buf, tok_str,
+                            sizeof(type_buf) - strlen(type_buf) - 1);
                 }
                 p->current = lexer_next_token(p->lexer);
             }
@@ -1572,30 +1643,70 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                 capacity = capacity == 0 ? 4 : capacity * 2;
                 params   = realloc(params, sizeof(ASTParam) * capacity);
             }
-            param.is_anon = false;
+
+            if (param.type_name == NULL) {
+                char gen_name[32];
+                snprintf(gen_name, sizeof(gen_name), "__p_%d", count);
+                free(param.name);
+                param.name = my_strdup(gen_name);
+                param.type_name = my_strdup("Coll");
+                param.is_anon = true;
+            } else {
+                param.is_anon = false;
+            }
+
             params[count++] = param;
 
         } else if (p->current.type == TOK_ARROW) {
             p->current = lexer_next_token(p->lexer);
 
             if (p->current.type == TOK_SYMBOL) {
-                char type_buf[512] = {0};
+                /* Consume exactly ONE type token as the next parameter type,
+                 * then loop back — the next '->' will be the return type arrow,
+                 * or another parameter arrow. Only treat as return type when
+                 * there is no further '->' before ')'. */
 
-                /* Keep consuming until we hit ')' */
-                while (p->current.type != TOK_RPAREN && p->current.type != TOK_EOF) {
-                    const char *tok_str = p->current.value ? p->current.value
-                                        : (p->current.type == TOK_ARROW ? "->" : NULL);
-                    if (tok_str) {
-                        if (type_buf[0]) strncat(type_buf, " ", sizeof(type_buf) - strlen(type_buf) - 1);
-                        strncat(type_buf, tok_str, sizeof(type_buf) - strlen(type_buf) - 1);
+                /* Peek ahead to see if another '->' follows before ')' */
+                Lexer peek_lex = *p->lexer;
+                Token peek_tok = lexer_next_token(&peek_lex);
+                bool has_more_arrow = (peek_tok.type == TOK_ARROW);
+                free(peek_tok.value);
+
+                if (has_more_arrow) {
+                    /* Not the final return type — treat as anonymous typed param */
+                    if (count >= capacity) {
+                        capacity = capacity == 0 ? 4 : capacity * 2;
+                        params   = realloc(params, sizeof(ASTParam) * capacity);
                     }
+                    char gen_name[32];
+                    snprintf(gen_name, sizeof(gen_name), "__p_%d", count);
+                    params[count].name      = my_strdup(gen_name);
+                    params[count].type_name = my_strdup(p->current.value);
+                    params[count].is_rest   = false;
+                    params[count].is_anon   = true;
+                    count++;
                     p->current = lexer_next_token(p->lexer);
+                } else {
+                    /* Final return type — consume it */
+                    char type_buf[512] = {0};
+                    while (p->current.type != TOK_RPAREN &&
+                           p->current.type != TOK_ARROW  &&
+                           p->current.type != TOK_EOF) {
+                        const char *tok_str = p->current.value;
+                        if (tok_str) {
+                            if (type_buf[0]) strncat(type_buf, " ",
+                                sizeof(type_buf) - strlen(type_buf) - 1);
+                            strncat(type_buf, tok_str,
+                                sizeof(type_buf) - strlen(type_buf) - 1);
+                        }
+                        p->current = lexer_next_token(p->lexer);
+                    }
+                    free(ret_type);
+                    ret_type = my_strdup(type_buf);
                 }
-
-                free(ret_type);
-                ret_type = my_strdup(type_buf);
             }
         } else if (p->current.type == TOK_SYMBOL) {
+
             /* Bare symbol NOT after -> — could be a named param or an
              * anonymous typed param (uppercase = type only, e.g. Int).  */
             char *sym  = my_strdup(p->current.value);
@@ -2112,8 +2223,6 @@ AST *desugar_let_ast(AST *let_list) {
     }
 
     int line = let_list->line, col = let_list->column;
-    fprintf(stderr, "DEBUG desugar_let_ast: param_count=%d body_count=%d\n",
-            param_count, body_count);
     for (int i = 0; i < param_count; i++)
         fprintf(stderr, "  param[%d] name='%s' type_name='%s'\n",
                 i,
@@ -2307,29 +2416,74 @@ if (p->current.type == TOK_SYMBOL &&
             /* AST *body = parse_expr(p); */
             AST **body_exprs = NULL;
             int   body_count = 0;
+            const char *_debug_body_sym = (p->current.type == TOK_SYMBOL) ? p->current.value : NULL;
+            AST *_debug_body_node = NULL;
+            (void)_debug_body_sym; (void)_debug_body_node;
 
             // Pattern matching sugar: body does not start with (
             if (ret_type != NULL &&
-                p->current.type != TOK_LPAREN &&
                 p->current.type != TOK_RPAREN &&
                 p->current.type != TOK_EOF) {
-                AST *pm = parse_pmatch_clauses(p, count);
-                // Desugar immediately at parse time — consistent with how
-                // cond is desugared at parse time, so ast_clone and (code f)
-                // always see the expanded if-chain, never raw AST_PMATCH.
-                ASTParam *pm_params = params;
-                AST *desugared = pmatch_desugar(pm, pm_params, count);
-                ast_free(pm);
-                body_exprs = malloc(sizeof(AST*));
-                body_exprs[0] = desugared;
-                body_count = 1;
-            } else {
-                while (p->current.type != TOK_RPAREN &&
-                       p->current.type != TOK_EOF    &&
-                       p->current.type != TOK_KEYWORD) {
-                    body_exprs = realloc(body_exprs, sizeof(AST*) * (body_count + 1));
-                    body_exprs[body_count++] = parse_expr(p);
+                /* Peek ahead to confirm '->' exists at depth 0 before
+                 * entering pmatch mode. A plain expression body (e.g.
+                 * just `x`) has no '->' and must be parsed normally. */
+                bool body_has_arrow = (p->current.type == TOK_ARROW);
+                {
+                    Lexer peek_lex = *p->lexer;
+                    /* Start peeking from NEXT token — do NOT free p->current.value
+                     * since p->current is still live and will be parsed below. */
+                    Token peek_cur = lexer_next_token(&peek_lex);
+                    int depth = 0;
+                    while (peek_cur.type != TOK_RPAREN &&
+                           peek_cur.type != TOK_EOF     &&
+                           peek_cur.type != TOK_KEYWORD) {
+                        if (peek_cur.type == TOK_LPAREN ||
+                            peek_cur.type == TOK_LBRACKET) depth++;
+                        if ((peek_cur.type == TOK_RPAREN ||
+                             peek_cur.type == TOK_RBRACKET) && depth > 0) depth--;
+                        if (peek_cur.type == TOK_ARROW && depth == 0) {
+                            body_has_arrow = true;
+                            free(peek_cur.value);
+                            break;
+                        }
+                        free(peek_cur.value);
+                        peek_cur = lexer_next_token(&peek_lex);
+                    }
+                    if (!body_has_arrow) free(peek_cur.value);
                 }
+                if (body_has_arrow) {
+                    AST *pm = parse_pmatch_clauses(p, count);
+                    ASTParam *pm_params = params;
+                    AST *desugared = pmatch_desugar(pm, pm_params, count);
+                    ast_free(pm);
+                    body_exprs = malloc(sizeof(AST*));
+                    body_exprs[0] = desugared;
+                    body_count = 1;
+                } else {
+                    while (p->current.type != TOK_RPAREN &&
+                           p->current.type != TOK_EOF    &&
+                           p->current.type != TOK_KEYWORD) {
+                        body_exprs = realloc(body_exprs, sizeof(AST*) * (body_count + 1));
+                        body_exprs[body_count++] = parse_expr(p);
+                    }
+                }
+            }
+            /* Fall-through: parse remaining body expressions if not already
+             * handled by pmatch (body_count == 0 means nothing parsed yet). */
+            while (p->current.type != TOK_RPAREN &&
+                   p->current.type != TOK_EOF    &&
+                   p->current.type != TOK_KEYWORD) {
+                AST *e = parse_expr(p);
+                /* Skip #line directive nodes that leaked through as AST_LIST
+                 * with head symbol "#line" — they are location markers only. */
+                if (e->type == AST_LIST && e->list.count >= 1 &&
+                    e->list.items[0]->type == AST_SYMBOL &&
+                    strcmp(e->list.items[0]->symbol, "#line") == 0) {
+                    ast_free(e);
+                    continue;
+                }
+                body_exprs = realloc(body_exprs, sizeof(AST*) * (body_count + 1));
+                body_exprs[body_count++] = e;
             }
             if (body_count == 0) {
                 compiler_error(p->current.line, p->current.column,
@@ -2420,19 +2574,34 @@ if (p->current.type == TOK_SYMBOL &&
                 name_ast->column = p->current.column;
                 ast_list_append(bracket_list, name_ast);
                 p->current = lexer_next_token(p->lexer); // consume name
-                if (p->current.type == TOK_SYMBOL &&
-                    strcmp(p->current.value, "::") == 0) {
-                    ast_list_append(bracket_list, ast_new_symbol("::"));
-                    p->current = lexer_next_token(p->lexer); // consume '::'
-                    /* Collect full type annotation (may be multi-token: Pointer :: T) */
-                    while (p->current.type == TOK_SYMBOL &&
-                           p->current.type != TOK_RBRACKET) {
-                        ast_list_append(bracket_list, ast_new_symbol(p->current.value));
-                        p->current = lexer_next_token(p->lexer);
-                        if (p->current.type != TOK_SYMBOL ||
-                            strcmp(p->current.value, "::") != 0) break;
-                        ast_list_append(bracket_list, ast_new_symbol("::"));
-                        p->current = lexer_next_token(p->lexer); // consume '::'
+                if ((p->current.type == TOK_SYMBOL &&
+                     strcmp(p->current.value, "::") == 0) ||
+                    p->current.type == TOK_ARROW) {
+                    bool is_arrow = (p->current.type == TOK_ARROW);
+                    ast_list_append(bracket_list, ast_new_symbol(is_arrow ? "->" : "::"));
+                    p->current = lexer_next_token(p->lexer); // consume '::' or '->'
+                    /* [name -> T] is sugar for [name :: Pointer :: T] */
+                    if (is_arrow) {
+                        /* collect all tokens until ']' */
+                        while (p->current.type != TOK_RBRACKET &&
+                               p->current.type != TOK_EOF) {
+                            const char *tv = p->current.value
+                                ? p->current.value
+                                : (p->current.type == TOK_ARROW ? "->" : NULL);
+                            if (tv) ast_list_append(bracket_list, ast_new_symbol(tv));
+                            p->current = lexer_next_token(p->lexer);
+                        }
+                    } else {
+                        /* Collect full type annotation (may be multi-token: Pointer :: T) */
+                        while (p->current.type == TOK_SYMBOL &&
+                               p->current.type != TOK_RBRACKET) {
+                            ast_list_append(bracket_list, ast_new_symbol(p->current.value));
+                            p->current = lexer_next_token(p->lexer);
+                            if (p->current.type != TOK_SYMBOL ||
+                                strcmp(p->current.value, "::") != 0) break;
+                            ast_list_append(bracket_list, ast_new_symbol("::"));
+                            p->current = lexer_next_token(p->lexer); // consume '::'
+                        }
                     }
                 }
                 if (p->current.type != TOK_RBRACKET)
@@ -2453,6 +2622,29 @@ if (p->current.type == TOK_SYMBOL &&
             // Parse the value FIRST — no pre-value metadata scan
             AST *value_ast = parse_expr(p);
 
+            /* Skip any #line directive nodes that leaked through */
+            while (p->current.type == TOK_LPAREN) {
+                /* peek: is it a #line node? */
+                Lexer saved_lex = *p->lexer;
+                Token saved_cur = p->current;
+                Token peek = lexer_next_token(p->lexer);
+                if (peek.type == TOK_SYMBOL && peek.value &&
+                    strcmp(peek.value, "#line") == 0) {
+                    /* consume the whole (#line N COL) */
+                    free(peek.value);
+                    while (p->current.type != TOK_RPAREN &&
+                           p->current.type != TOK_EOF)
+                        p->current = lexer_next_token(p->lexer);
+                    if (p->current.type == TOK_RPAREN)
+                        p->current = lexer_next_token(p->lexer);
+                } else {
+                    free(peek.value);
+                    *p->lexer  = saved_lex;
+                    p->current = saved_cur;
+                    break;
+                }
+            }
+
             // THEN parse metadata after the value
             DefineMetadata meta = parse_define_metadata(p);
 
@@ -2467,6 +2659,7 @@ if (p->current.type == TOK_SYMBOL &&
                 compiler_error(p->current.line, p->current.column,
                                "Expected ')' to close define");
             }
+
             int end_col = p->current.column + 1;
             p->current = lexer_next_token(p->lexer);
 
@@ -3333,16 +3526,21 @@ if (p->current.type == TOK_SYMBOL &&
             char *fname = my_strdup(p->current.value);
             p->current = lexer_next_token(p->lexer);
 
-            // expect ::
-            if (p->current.type != TOK_SYMBOL ||
-                strcmp(p->current.value, "::") != 0)
+            // expect :: or ->  (-> is sugar for Pointer ::)
+            bool field_is_ptr = false;
+            if (p->current.type == TOK_ARROW) {
+                field_is_ptr = true;
+            } else if (p->current.type != TOK_SYMBOL ||
+                       strcmp(p->current.value, "::") != 0) {
                 compiler_error(p->current.line, p->current.column,
                                "Expected '::' after field name '%s'", fname);
+            }
             p->current = lexer_next_token(p->lexer);
 
             ASTLayoutField field = {0};
             field.name       = fname;
             field.array_size = -1;
+            field.is_ptr     = field_is_ptr;
 
             // Array sugar: [ElemType Size]
             if (p->current.type == TOK_LBRACKET) {
@@ -3367,7 +3565,13 @@ if (p->current.type == TOK_SYMBOL &&
                 if (p->current.type != TOK_SYMBOL)
                     compiler_error(p->current.line, p->current.column,
                                    "Expected type name for field '%s'", fname);
-                field.type_name = my_strdup(p->current.value);
+                if (field_is_ptr) {
+                    char buf[512];
+                    snprintf(buf, sizeof(buf), "Pointer :: %s", p->current.value);
+                    field.type_name = my_strdup(buf);
+                } else {
+                    field.type_name = my_strdup(p->current.value);
+                }
                 p->current = lexer_next_token(p->lexer);
             }
 
@@ -3673,18 +3877,15 @@ if (p->current.type == TOK_SYMBOL &&
              * unless we are inside a quoted form or were rewritten as infix. */
             if (g_quote_depth == 0 &&
                 (first->type == AST_NUMBER  ||
-                 first->type == AST_STRING  ||
                  first->type == AST_CHAR    ||
                  first->type == AST_RATIO   ||
                  first->type == AST_KEYWORD)) {
                 const char *kind =
                     first->type == AST_NUMBER  ? "number"    :
-                    first->type == AST_STRING  ? "string"    :
                     first->type == AST_CHAR    ? "character" :
                     first->type == AST_RATIO   ? "ratio"     : "keyword";
                 const char *lit =
                     first->literal_str         ? first->literal_str :
-                    first->type == AST_STRING  ? first->string      :
                     first->type == AST_KEYWORD ? first->keyword     : "?";
                 compiler_error(first->line, first->column,
                                "'%s' is a %s literal and cannot be called as a function",
@@ -3773,7 +3974,8 @@ static AST *parse_bracket_list(Parser *p) {
     bool has_double_colon = false;
     for (size_t i = 0; i < list->list.count; i++) {
         if (list->list.items[i]->type == AST_SYMBOL &&
-            strcmp(list->list.items[i]->symbol, "::") == 0) {
+            (strcmp(list->list.items[i]->symbol, "::") == 0 ||
+             strcmp(list->list.items[i]->symbol, "->") == 0)) {
             has_double_colon = true;
             break;
         }
@@ -4063,7 +4265,7 @@ static AST *parse_map(Parser *p) {
     return node;
 }
 
-AST *parse_expr(Parser *p) {
+static AST *parse_expr_base(Parser *p) {
     Token tok = p->current;
 
     switch (tok.type) {
@@ -4225,6 +4427,48 @@ AST *parse_expr(Parser *p) {
     default:
         compiler_error(tok.line, tok.column, "unexpected token type: %d", tok.type);
     }
+}
+
+AST *parse_expr(Parser *p) {
+    Token tok = p->current;
+
+    AST *expr_result = parse_expr_base(p);
+
+    /* Postfix dot: (expr).field.field2 */
+    while (p->current.type == TOK_DOT && p->current.value) {
+        const char *field = p->current.value;
+        if (!field[0]) break;
+        int dot_line = p->current.line;
+        int dot_col  = p->current.column;
+        p->current = lexer_next_token(p->lexer);
+        /* Build a synthetic symbol "____postfix_dot" list:
+         * represent as (dot-access expr "field") so codegen can handle it,
+         * OR synthesize a combined symbol if expr is already a symbol.     */
+        if (expr_result->type == AST_SYMBOL) {
+            /* Merge into a.b style symbol that codegen_dot_chain handles */
+            char combined[512];
+            snprintf(combined, sizeof(combined), "%s.%s",
+                     expr_result->symbol, field);
+            AST *merged = ast_new_symbol(combined);
+            merged->line       = expr_result->line;
+            merged->column     = expr_result->column;
+            merged->end_column = dot_col + (int)strlen(field) + 1;
+            ast_free(expr_result);
+            expr_result = merged;
+        } else {
+            /* Non-symbol base (call result, etc.) — wrap as AST_LIST
+             * (dot expr field) for codegen to pattern-match on */
+            AST *dot_node = ast_new_list();
+            ast_list_append(dot_node, ast_new_symbol("dot"));
+            ast_list_append(dot_node, expr_result);
+            ast_list_append(dot_node, ast_new_symbol(field));
+            dot_node->line       = dot_line;
+            dot_node->column     = dot_col;
+            dot_node->end_column = dot_col + (int)strlen(field) + 1;
+            expr_result = dot_node;
+        }
+    }
+    return expr_result;
 }
 
 // Helper to skip an expression without parsing it

@@ -81,6 +81,13 @@ typedef struct FFIContext {
     /* Prefixes to strip when injecting symbols (from :unprefix) */
     char        **strip_prefixes;
     int           strip_prefix_count;
+    /* Per-module injection watermarks */
+    char        **injected_into;
+    int          *wm_functions;
+    int          *wm_structs;
+    int          *wm_constants;
+    int           injected_into_count;
+    int           injected_into_cap;
 } FFIContext;
 
 /// API

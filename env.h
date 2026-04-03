@@ -109,6 +109,7 @@ void env_print_entry(EnvEntry *e);
 void env_insert_layout(Env *table, const char *name, Type *layout_type,
                        const char *source_text);
 Type *env_lookup_layout(Env *table, const char *name);
+Type *env_find_layout_with_field(Env *table, const char *field_name);
 void env_insert_adt_ctor(Env *table, const char *name, int tag,
                          Type *data_type, LLVMValueRef func_ref);
 EnvEntry *env_lookup_adt_ctor(Env *table, const char *name);

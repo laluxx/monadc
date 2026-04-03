@@ -1297,6 +1297,9 @@ int rt_equal_p(RuntimeValue *a, RuntimeValue *b) {
 
 // TODO UNBOX BIGNUM
 int64_t rt_unbox_int(RuntimeValue *v) {
+    /* Raw integer values (e.g. I4, U15) are passed directly as iN —
+     * any pointer below the minimum heap address is the value itself. */
+    if ((uintptr_t)v < 0x10000) return (int64_t)(uintptr_t)v;
     if (!v || v->type == RT_NIL) return 0;
     if (v->type == RT_THUNK) v = rt_force(v->data.thunk_val);
     if (v->type == RT_INT)   return v->data.int_val;

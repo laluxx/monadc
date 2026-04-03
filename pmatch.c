@@ -83,6 +83,7 @@ ASTPattern parse_single_pattern(Parser *p) {
 
         while (!parser_at(p, TOK_RBRACKET) &&
                !parser_at(p, TOK_PIPE)     &&
+               !(p->current.type == TOK_SYMBOL && p->current.value && p->current.value[0] == '|') &&
                !parser_at(p, TOK_EOF)) {
             ASTPattern elem = parse_single_pattern(p);
             if (count >= cap) {
@@ -94,16 +95,36 @@ ASTPattern parse_single_pattern(Parser *p) {
 
         ASTPattern *tail = NULL;
 
-        // Optional | tail
+        // Optional | tail — handle both TOK_PIPE and |xs symbol
         if (parser_at(p, TOK_PIPE)) {
             parser_advance(p); // consume '|'
             tail = malloc(sizeof(ASTPattern));
             *tail = parse_single_pattern(p);
-            // tail must be a var or wildcard
             if (tail->kind != PAT_VAR && tail->kind != PAT_WILDCARD) {
                 fprintf(stderr, "pmatch: tail after | must be a variable or _\n");
                 tail->kind = PAT_WILDCARD;
             }
+        } else if (p->current.type == TOK_SYMBOL && p->current.value && p->current.value[0] == '|') {
+            // |xs was lexed as a single symbol — strip the leading '|'
+            tail = malloc(sizeof(ASTPattern));
+            const char *tail_name = p->current.value + 1; // skip '|'
+            if (strcmp(tail_name, "_") == 0) {
+                tail->kind = PAT_WILDCARD;
+                tail->var_name = NULL;
+            } else if (tail_name[0] != '\0') {
+                tail->kind = PAT_VAR;
+                tail->var_name = my_strdup(tail_name);
+            } else {
+                tail->kind = PAT_WILDCARD;
+                tail->var_name = NULL;
+            }
+            tail->elements = NULL;
+            tail->element_count = 0;
+            tail->tail = NULL;
+            tail->ctor_fields = NULL;
+            tail->ctor_field_count = 0;
+            tail->lit_value = 0;
+            parser_advance(p); // consume the |xs token
         }
 
         if (!parser_at(p, TOK_RBRACKET)) {
@@ -168,12 +189,51 @@ ASTPattern parse_single_pattern(Parser *p) {
             pat.kind = PAT_LIST_EMPTY;
             return pat;
         }
+
         /* Non-uppercase after '[' — treat as regular list pattern */
         ASTPattern *elems = NULL;
         int count = 0, cap = 0;
+        ASTPattern *tail = NULL;
+
         while (!parser_at(p, TOK_RBRACKET) &&
                !parser_at(p, TOK_PIPE)     &&
                !parser_at(p, TOK_EOF)) {
+            /* Detect fused token like "_|xs" or "x|xs" — symbol containing '|' */
+            if (p->current.type == TOK_SYMBOL && p->current.value) {
+                const char *pipe = strchr(p->current.value, '|');
+                if (pipe) {
+                    /* Split: part before '|' is an element pattern */
+                    size_t before_len = (size_t)(pipe - p->current.value);
+                    if (before_len > 0) {
+                        char *before = my_strdup(p->current.value);
+                        before[before_len] = '\0';
+                        ASTPattern elem = {0};
+                        if (strcmp(before, "_") == 0) {
+                            elem.kind = PAT_WILDCARD;
+                        } else {
+                            elem.kind     = PAT_VAR;
+                            elem.var_name = my_strdup(before);
+                        }
+                        free(before);
+                        if (count >= cap) {
+                            cap = cap == 0 ? 4 : cap * 2;
+                            elems = realloc(elems, sizeof(ASTPattern) * cap);
+                        }
+                        elems[count++] = elem;
+                    }
+                    /* Part after '|' is the tail */
+                    const char *tail_name = pipe + 1;
+                    tail = calloc(1, sizeof(ASTPattern));
+                    if (strcmp(tail_name, "_") == 0 || tail_name[0] == '\0') {
+                        tail->kind = PAT_WILDCARD;
+                    } else {
+                        tail->kind     = PAT_VAR;
+                        tail->var_name = my_strdup(tail_name);
+                    }
+                    parser_advance(p);
+                    break; /* tail ends the element list */
+                }
+            }
             ASTPattern elem = parse_single_pattern(p);
             if (count >= cap) {
                 cap = cap == 0 ? 4 : cap * 2;
@@ -181,16 +241,17 @@ ASTPattern parse_single_pattern(Parser *p) {
             }
             elems[count++] = elem;
         }
-        ASTPattern *tail = NULL;
+
         if (parser_at(p, TOK_PIPE)) {
             parser_advance(p);
-            tail = malloc(sizeof(ASTPattern));
+            tail = calloc(1, sizeof(ASTPattern));
             *tail = parse_single_pattern(p);
             if (tail->kind != PAT_VAR && tail->kind != PAT_WILDCARD) {
                 fprintf(stderr, "pmatch: tail after | must be a variable or _\n");
                 tail->kind = PAT_WILDCARD;
             }
         }
+
         if (!parser_at(p, TOK_RBRACKET)) {
             fprintf(stderr, "pmatch: expected ']' to close list pattern\n");
         } else {
@@ -266,6 +327,27 @@ AST *parse_pmatch_clauses(Parser *p, int param_count) {
     while (!parser_at(p, TOK_RPAREN) &&
            !parser_at(p, TOK_EOF)    &&
            !parser_at(p, TOK_KEYWORD)) {
+        /* Peek ahead to confirm there is a '->' at depth 0 before
+         * committing to parsing this as a pmatch clause. If no '->'
+         * exists, the remaining tokens are plain body expressions,
+         * not pattern clauses. */
+        {
+            Lexer peek_lex = *p->lexer;
+            Token peek_cur = lexer_next_token(&peek_lex); /* start AFTER p->current */
+            bool has_arrow = (p->current.type == TOK_ARROW);
+            int depth = 0;
+            while (!has_arrow &&
+                   peek_cur.type != TOK_RPAREN &&
+                   peek_cur.type != TOK_EOF     &&
+                   peek_cur.type != TOK_KEYWORD) {
+                if (peek_cur.type == TOK_LPAREN || peek_cur.type == TOK_LBRACKET) depth++;
+                if ((peek_cur.type == TOK_RPAREN || peek_cur.type == TOK_RBRACKET) && depth > 0) depth--;
+                if (peek_cur.type == TOK_ARROW && depth == 0) { has_arrow = true; free(peek_cur.value); break; }
+                free(peek_cur.value);
+                peek_cur = lexer_next_token(&peek_lex);
+            }
+            if (!has_arrow) { free(peek_cur.value); break; }
+        }
         ASTPMatchClause clause = parse_one_clause(p, param_count);
         if (count >= cap) {
             cap = cap == 0 ? 4 : cap * 2;
@@ -317,46 +399,41 @@ static AST *make_true(void) {
     return sym("True");
 }
 
-// Helper: (list-empty? param)
-static AST *make_list_empty(const char *param_name) {
-    AST *items[] = {sym("list-empty?"), sym(param_name)};
-    return make_list(items, 2);
-}
-
 // Helper: (list-length param)
 static AST *make_list_length(const char *param_name) {
     AST *items[] = {sym("list-length"), sym(param_name)};
     return make_list(items, 2);
 }
 
-// Helper: (= (list-length param) n)
-static AST *make_length_eq(const char *param_name, int n) {
+// Helper: (count param)
+static AST *make_count(const char *param_name) {
+    AST *items[] = {sym("count"), sym(param_name)};
+    return make_list(items, 2);
+}
+
+// Helper: (list-empty? param) -> (= (count param) 0)
+static AST *make_list_empty(const char *param_name) {
+    AST *cnt = make_count(param_name);
+    AST *zero = ast_new_number(0.0, "0");
+    AST *items[] = {sym("="), cnt, zero};
+    return make_list(items, 3);
+}
+
+// Helper: (= (count param) n)
+static AST *make_count_eq(const char *param_name, int n) {
     char buf[32];
     snprintf(buf, sizeof(buf), "%d", n);
-    AST *len   = make_list_length(param_name);
-    AST *items[] = {sym("="), len, ast_new_number((double)n, buf)};
+    AST *cnt = make_count(param_name);
+    AST *items[] = {sym("="), cnt, ast_new_number((double)n, buf)};
     return make_list(items, 3);
 }
 
-// Helper: (car param)
-static AST *make_car(const char *param_name) {
-    AST *items[] = {sym("car"), sym(param_name)};
-    return make_list(items, 2);
-}
-
-// Helper: (cdr param)
-static AST *make_cdr(const char *param_name) {
-    AST *items[] = {sym("cdr"), sym(param_name)};
-    return make_list(items, 2);
-}
-
-// Helper: (list-ref param i)
-static AST *make_list_ref(const char *param_name, int idx) {
+// Helper: (param i) - Unified Indexing
+static AST *make_index_access(const char *param_name, int idx) {
     char buf[32];
     snprintf(buf, sizeof(buf), "%d", idx);
-    AST *items[] = {sym("list-ref"), sym(param_name),
-                    ast_new_number((double)idx, buf)};
-    return make_list(items, 3);
+    AST *items[] = {sym(param_name), ast_new_number((double)idx, buf)};
+    return make_list(items, 2);
 }
 
 // Helper: (and expr expr ...)
@@ -632,26 +709,31 @@ static void build_pattern_conditions(
         bool has_tail = (pat->tail != NULL);
 
         if (has_tail) {
-            // [e0 e1 ... | xs] — list must have at least n elements
-            // Guard: (>= (list-length param) n)
             if (n > 0) {
-                char buf[32];
-                snprintf(buf, sizeof(buf), "%d", n);
-                AST *len     = make_list_length(param_name);
-                AST *items[] = {sym(">="), len, ast_new_number((double)n, buf)};
-                PUSH_GUARD(make_list(items, 3));
-            } else {
-                // [|xs] means any list — no length guard, just bind xs = param
+                bool all_irrefutable = true;
+                for (int i = 0; i < n; i++) {
+                    PatternKind k = pat->elements[i].kind;
+                    if (k != PAT_WILDCARD && k != PAT_VAR) {
+                        all_irrefutable = false;
+                        break;
+                    }
+                }
+                if (!all_irrefutable) {
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "%d", n);
+                    AST *cnt     = make_count(param_name); // Unified
+                    AST *items[] = {sym(">="), cnt, ast_new_number((double)n, buf)};
+                    PUSH_GUARD(make_list(items, 3));
+                }
             }
         } else {
-            // [e0 e1 ...] — exact length
-            PUSH_GUARD(make_length_eq(param_name, n));
+            PUSH_GUARD(make_count_eq(param_name, n)); // Unified
         }
 
         // Per-element conditions and bindings
         for (int i = 0; i < n; i++) {
             ASTPattern *ep = &pat->elements[i];
-            AST *elem_expr = make_list_ref(param_name, i);
+            AST *elem_expr = make_index_access(param_name, i); // Unified
 
             switch (ep->kind) {
             case PAT_WILDCARD:
@@ -709,15 +791,14 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
         int          bind_cap   = 0;
 
         for (int j = 0; j < cl->pattern_count && j < param_count; j++) {
-            // For rest params, elem_type is the element type of the list.
-            // For scalar params, elem_type is the param's own type.
-            const char *elem_type = NULL;
-            if (params[j].is_rest) {
-                // type_name on a rest param is the element type (e.g. "Int")
-                elem_type = params[j].type_name;
-            } else {
-                elem_type = params[j].type_name;
+            const char *elem_type = params[j].type_name;
+
+            // Force type to Coll if no specific type is known
+            // This triggers unified collection codegen (count/indexing)
+            if (!elem_type) {
+                params[j].type_name = "Coll";
             }
+
             build_pattern_conditions(
                 &cl->patterns[j],
                 params[j].name,

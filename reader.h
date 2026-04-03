@@ -105,6 +105,7 @@ typedef struct ASTLayoutField {
     char *name;        // field name
     char *type_name;   // base type (e.g. "Float", "Point") — NULL if array
     bool  is_array;    // true if [ElemType Size] sugar was used
+    bool  is_ptr;      // true if field used -> (pointer), false if :: (inline)
     char *array_elem;  // element type name, NULL if not array
     int   array_size;  // array size, -1 if not specified
 } ASTLayoutField;
@@ -330,6 +331,7 @@ typedef enum {
     TOK_FEATURE_BEGIN,  // #+
     TOK_FEATURE_END,    // #---
     TOK_DOTDOT,         // ..
+    TOK_DOT,            // .field  (postfix field access)
     TOK_LBRACE,         // {
     TOK_RBRACE,         // }
     TOK_HASH_LBRACE,    // #{
@@ -381,6 +383,13 @@ const char *parser_get_filename(void);
 
 AST  *desugar_cond_ast(AST *cond_list);
 AST  *desugar_let_ast(AST *let_list);
+
+// Parse an I<n>/U<n> type name. Returns true and fills *out_width and
+// *out_signed when the name matches the pattern and the width is valid.
+// Calls compiler_error (fatal) when the pattern matches but width is bad.
+// Returns false when the name does not match I/U at all.
+bool parse_int_type(const char *name, int line, int col,
+                    int *out_width, bool *out_signed);
 
 /// String builder
 

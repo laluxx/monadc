@@ -39,6 +39,11 @@ typedef struct CompiledExport {
     LLVMValueRef  func_ref;     // FUNC only — valid only when not skipped
 } CompiledExport;
 
+typedef struct CompiledLayout {
+    char *name;
+    Type *type;
+} CompiledLayout;
+
 typedef struct CompiledModule {
     char           *module_name;
     char           *obj_path;
@@ -46,6 +51,9 @@ typedef struct CompiledModule {
     CompiledExport *exports;
     size_t          export_count;
     size_t          export_cap;
+    CompiledLayout *layouts;
+    size_t          layout_count;
+    size_t          layout_cap;
     struct CompiledModule *next;
 } CompiledModule;
 
@@ -162,6 +170,8 @@ static CompiledModule *registry_new(const char *name, const char *obj,
     m->was_skipped  = skipped;
     m->export_cap   = 8;
     m->exports      = malloc(sizeof(CompiledExport) * 8);
+    m->layout_cap   = 8;
+    m->layouts      = malloc(sizeof(CompiledLayout) * 8);
     m->next         = g_compiled;
     g_compiled      = m;
     return m;
@@ -226,6 +236,11 @@ static void registry_free_all(void) {
             }
         }
         free(m->exports);
+        for (size_t i = 0; i < m->layout_count; i++) {
+            free(m->layouts[i].name);
+            type_free(m->layouts[i].type);
+        }
+        free(m->layouts);
         free(m);
         m = next;
     }
@@ -316,6 +331,14 @@ static bool emit_object(LLVMModuleRef mod, const char *obj_path) {
 static void declare_externals(CodegenContext *ctx,
                                CompiledModule *dep,
                                ImportDecl *import) {
+    /* Re-register all layouts from the imported module first so that
+     * field access on imported types works in the importing module. */
+    for (size_t i = 0; i < dep->layout_count; i++) {
+        if (!env_lookup_layout(ctx->env, dep->layouts[i].name))
+            env_insert_layout(ctx->env, dep->layouts[i].name,
+                              type_clone(dep->layouts[i].type), NULL);
+    }
+
     for (size_t i = 0; i < dep->export_count; i++) {
         CompiledExport *e = &dep->exports[i];
 
@@ -425,6 +448,13 @@ static char *get_obj_path(const char *source_path) {
     sprintf(obj, "%s.o", base);
     free(base);
     return obj;
+}
+
+static FFIContext *g_ffi = NULL;
+
+static FFIContext *get_global_ffi(void) {
+    if (!g_ffi) g_ffi = ffi_context_create();
+    return g_ffi;
 }
 
 static CompiledModule *compile_one(const char *source_path,
@@ -586,7 +616,6 @@ static CompiledModule *compile_one(const char *source_path,
                                     pre_ffi->structs[si].field_count);
         ffi_context_free(pre_ffi);
     }
-
     PHASE_END("ffi pre-pass");
 
     /* Register builtin arities before wisp parse so forms like
@@ -630,54 +659,7 @@ static CompiledModule *compile_one(const char *source_path,
                         if (dep_src && file_exists(dep_src)) {
                             compile_one(dep_src, flags, false);
                             parser_set_context(my_source_path, source);
-                            /* Re-parse dep's headers into our FFI context
-                             * so types like VkApplicationInfo are visible */
-                            char *dep_source = read_file(dep_src);
-                            FFIContext *dep_ffi = ffi_context_create();
-                            const char *dp = dep_source;
-                            while (*dp) {
-                                while (*dp == ' ' || *dp == '\t') dp++;
-                                const char *line = dp;
-                                bool is_include = false;
-                                if (strncmp(dp, "include", 7) == 0 &&
-                                    (dp[7] == ' ' || dp[7] == '\t' || dp[7] == '<'))
-                                    is_include = true;
-                                if (*dp == '(' && strncmp(dp+1, "include", 7) == 0)
-                                    is_include = true;
-                                if (is_include) {
-                                    const char *q = strchr(dp, '<');
-                                    const char *qq = strchr(dp, '"');
-                                    bool sys = false;
-                                    const char *hstart = NULL, *hend = NULL;
-                                    if (q && (!qq || q < qq)) {
-                                        sys = true; hstart = q+1;
-                                        hend = strchr(hstart, '>');
-                                    } else if (qq) {
-                                        sys = false; hstart = qq+1;
-                                        hend = strchr(hstart, '"');
-                                    }
-                                    if (hstart && hend) {
-                                        char hdr[256];
-                                        size_t hl = hend - hstart;
-                                        if (hl < sizeof(hdr)) {
-                                            memcpy(hdr, hstart, hl);
-                                            hdr[hl] = '\0';
-                                            ffi_parse_header(dep_ffi, hdr, sys);
-                                        }
-                                    }
-                                }
-                                while (*dp && *dp != '\n') dp++;
-                                if (*dp == '\n') dp++;
-                            }
-                            for (int fi = 0; fi < dep_ffi->function_count; fi++)
-                                wisp_register_arity(dep_ffi->functions[fi].name,
-                                                    dep_ffi->functions[fi].param_count);
-                            for (int si = 0; si < dep_ffi->struct_count; si++)
-                                if (!dep_ffi->structs[si].alias_of)
-                                    wisp_register_arity(dep_ffi->structs[si].name,
-                                                        dep_ffi->structs[si].field_count);
-                            ffi_context_free(dep_ffi);
-                            free(dep_source);
+                            /* dep headers already in global FFI context */
                         }
                         free(dep_src);
                     }
@@ -902,7 +884,7 @@ static CompiledModule *compile_one(const char *source_path,
     codegen_init(&ctx, mod_name);
     ctx.module_ctx = mod_ctx;
     ctx.test_mode  = flags->test_mode;
-    ctx.ffi        = ffi_context_create();
+    ctx.ffi        = get_global_ffi();
     PHASE_END("llvm init");
     PHASE_START();
     register_builtins(&ctx);
@@ -921,44 +903,8 @@ static CompiledModule *compile_one(const char *source_path,
         }
         declare_externals(&ctx, dep, imp);
 
-        /* Inject dep's headers into our FFI context so struct types
-         * defined in imported modules (e.g. VkApplicationInfo from
-         * Font's vulkan include) are visible during codegen */
-        char *dep_src = module_name_to_path(imp->module_name);
-        if (dep_src && file_exists(dep_src)) {
-            char *dep_source = read_file(dep_src);
-            const char *dp = dep_source;
-            while (*dp) {
-                while (*dp == ' ' || *dp == '\t') dp++;
-                bool is_include = (strncmp(dp,"include",7)==0 &&
-                                   (dp[7]==' '||dp[7]=='\t'||dp[7]=='<')) ||
-                                  (*dp=='('&&strncmp(dp+1,"include",7)==0);
-                if (is_include) {
-                    const char *q  = strchr(dp, '<');
-                    const char *qq = strchr(dp, '"');
-                    bool sys = false;
-                    const char *hstart = NULL, *hend = NULL;
-                    if (q && (!qq || q < qq)) {
-                        sys=true; hstart=q+1; hend=strchr(hstart,'>');
-                    } else if (qq) {
-                        sys=false; hstart=qq+1; hend=strchr(hstart+1,'"');
-                    }
-                    if (hstart && hend) {
-                        char hdr[256];
-                        size_t hl = hend-hstart;
-                        if (hl < sizeof(hdr)) {
-                            memcpy(hdr, hstart, hl);
-                            hdr[hl] = '\0';
-                            ffi_parse_header(ctx.ffi, hdr, sys);
-                        }
-                    }
-                }
-                while (*dp && *dp != '\n') dp++;
-                if (*dp == '\n') dp++;
-            }
-            free(dep_source);
-        }
-        free(dep_src);
+        /* Headers from imported modules are already in the global FFI context
+         * (parsed when that module was compiled) — nothing to do here. */
     }
 
 /// Phase 5: Create init/main function and position builder
@@ -982,6 +928,7 @@ static CompiledModule *compile_one(const char *source_path,
         ctx.context, init_fn, "entry");
     LLVMPositionBuilderAtEnd(ctx.builder, entry_blk);
     ctx.init_fn = init_fn;
+    ctx.top_level_fn = init_fn;
 
 /// Phase 6: *features* global
 
@@ -1183,6 +1130,21 @@ static CompiledModule *compile_one(const char *source_path,
         }
     }
 
+    /* Save all ENV_LAYOUT entries into the compiled module registry */
+    for (size_t bi = 0; bi < ctx.env->size; bi++) {
+        for (EnvEntry *ent = ctx.env->buckets[bi]; ent; ent = ent->next) {
+            if (ent->kind != ENV_LAYOUT || !ent->name || !ent->type) continue;
+            if (cm->layout_count >= cm->layout_cap) {
+                cm->layout_cap *= 2;
+                cm->layouts = realloc(cm->layouts,
+                                      sizeof(CompiledLayout) * cm->layout_cap);
+            }
+            cm->layouts[cm->layout_count].name = strdup(ent->name);
+            cm->layouts[cm->layout_count].type = type_clone(ent->type);
+            cm->layout_count++;
+        }
+    }
+
 /// Phase 10: Verify + optional IR/asm output
 
     char *error = NULL;
@@ -1231,7 +1193,8 @@ static CompiledModule *compile_one(const char *source_path,
 
 ///// Cleanup
 
-    if (ctx.ffi) ffi_libs_add(ctx.ffi);
+    ffi_libs_add(g_ffi);
+    ctx.ffi = NULL;  /* don't free the global */
     codegen_dispose(&ctx);
     module_context_free(mod_ctx);
     for (size_t i = 0; i < exprs.count; i++) ast_free(exprs.exprs[i]);
@@ -1316,6 +1279,7 @@ static void compile(CompilerFlags *flags) {
     free(exec_name);
     registry_free_all();
     wisp_clear_arities();
+    if (g_ffi) { ffi_context_free(g_ffi); g_ffi = NULL; }
 }
 
 bool repl_compile_module(CodegenContext *ctx, ImportDecl *imp) {

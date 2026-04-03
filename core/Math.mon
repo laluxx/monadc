@@ -198,7 +198,7 @@
 
 (define (gcd2 [a :: Int] -> [b :: Int] -> Int)
   "Return the greatest common divisor of A and B (Euclidean algorithm)."
-  (if (= b 0) a (gcd2 b (mod a b))))
+  (if (b = 0) a (gcd2 b (a mod b))))
 
 (define (gcd . Int -> Int)
  "Return the GCD of all provided integers."
@@ -209,12 +209,12 @@
 
 (define (lcm [a :: Int] -> [b :: Int] -> Int)
   "Return the least common multiple of A and B."
-  ((* a b) / (gcd a b)))
+  ((a * b) / (gcd a b)))
 
 (define (factorial [n :: Int] -> Int)
   "Return N! iteratively. Returns 1 for N <= 0."
   (define (fact-iter [acc :: Int] [k :: Int] -> Int)
-    (if (<= k 0) acc (fact-iter (* acc k) (- k 1))))
+    (if (k <= 0) acc (fact-iter (acc * k) (k - 1))))
   (fact-iter 1 n))
 
 (define (fib [n :: Int] -> Int)

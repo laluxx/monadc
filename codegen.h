@@ -48,6 +48,7 @@ typedef struct CodegenContext {
     ModuleContext *module_ctx;  // Module system context
     bool is_top_level;          // Are we generating top-level (global init) code?
     LLVMValueRef init_fn;       // The __module_init_<name> function for side-effects
+    LLVMValueRef top_level_fn;  // The original top-level init, never overwritten
     // Cached format strings
     LLVMValueRef fmt_str;
     LLVMValueRef fmt_char;

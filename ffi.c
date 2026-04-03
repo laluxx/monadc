@@ -2,6 +2,7 @@
 #include "codegen.h"
 #include "env.h"
 #include "types.h"
+#include "module.h"
 #include <clang-c/Index.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -11,7 +12,6 @@
 #include <ctype.h>
 #include <sys/stat.h>
 #include <dlfcn.h>
-
 #include <llvm-c/Core.h>
 
 /// Helpers
@@ -41,7 +41,13 @@ FFIContext *ffi_context_create(void) {
     ctx->functions  = malloc(sizeof(FFIFunction)  * ctx->function_cap);
     ctx->constants  = malloc(sizeof(FFIConstant)  * ctx->constant_cap);
     ctx->structs    = malloc(sizeof(FFIStruct)     * ctx->struct_cap);
-    ctx->included   = malloc(sizeof(char *)        * ctx->included_cap);
+    ctx->included        = malloc(sizeof(char *)   * ctx->included_cap);
+    ctx->injected_into_cap   = 64;
+    ctx->injected_into_count = 0;
+    ctx->injected_into  = malloc(sizeof(char *) * ctx->injected_into_cap);
+    ctx->wm_functions   = calloc(ctx->injected_into_cap, sizeof(int));
+    ctx->wm_structs     = calloc(ctx->injected_into_cap, sizeof(int));
+    ctx->wm_constants   = calloc(ctx->injected_into_cap, sizeof(int));
     return ctx;
 }
 
@@ -75,6 +81,12 @@ void ffi_context_free(FFIContext *ctx) {
     for (int i = 0; i < ctx->included_count; i++)
         free(ctx->included[i]);
     free(ctx->included);
+    for (int i = 0; i < ctx->injected_into_count; i++)
+        free(ctx->injected_into[i]);
+    free(ctx->injected_into);
+    free(ctx->wm_functions);
+    free(ctx->wm_structs);
+    free(ctx->wm_constants);
     free(ctx);
 }
 
@@ -304,6 +316,18 @@ static enum CXChildVisitResult field_visitor(CXCursor cursor,
         field_type = type_f32();
     } else if (ck == CXType_Double || ck == CXType_LongDouble) {
         field_type = type_float();
+    } else if (ck == CXType_Record) {
+        /* Embedded struct by value — mark as inline */
+        CXString ftype_s = clang_getTypeSpelling(canon);
+        field_type = ffi_map_c_type(clang_getCString(ftype_s));
+        if (field_type && field_type->kind == TYPE_LAYOUT) {
+            field_type->layout_is_inline = true;
+            fprintf(stderr, "FFI inline field: %s.%s = %s\n",
+                    fs->s->name ? fs->s->name : "?",
+                    fs->s->fields[fs->idx].name ? fs->s->fields[fs->idx].name : "?",
+                    clang_getCString(ftype_s));
+        }
+        clang_disposeString(ftype_s);
     } else {
         /* Fall back to spelling-based mapping for pointers, structs, arrays */
         CXString ftype_s = clang_getTypeSpelling(canon);
@@ -789,8 +813,12 @@ static char *extract_doc_for_function(const char *src, const char *fname) {
 
 bool ffi_parse_header(FFIContext *ctx, const char *header_path,
                       bool system_include) {
-    /* Avoid double-parsing */
+    /* Avoid double-parsing — check both the raw name and resolved path */
     if (already_included(ctx, header_path)) return true;
+    char *resolved_early = ffi_resolve_header(header_path, system_include);
+    bool already = already_included(ctx, resolved_early);
+    free(resolved_early);
+    if (already) return true;
 
     /* Record as included — use a larger initial cap since sub-headers
      * will be added during the visitor pass */
@@ -1339,6 +1367,54 @@ static const char *strip_prefix(FFIContext *ffi, const char *name) {
 }
 
 void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
+    /* Guard: skip entirely if nothing new to inject into this module */
+    const char *mod_name = (cg->module_ctx && cg->module_ctx->decl)
+        ? cg->module_ctx->decl->name : "__unknown__";
+
+    /* Find or create per-module watermarks */
+    int inject_fn_start = 0;
+    int inject_st_start = 0;
+    int inject_co_start = 0;
+    int wm_idx = -1;
+    for (int _i = 0; _i < ffi->injected_into_count; _i++) {
+        if (strcmp(ffi->injected_into[_i], mod_name) == 0) {
+            wm_idx = _i; break;
+        }
+    }
+    if (wm_idx >= 0) {
+        inject_fn_start = ffi->wm_functions[wm_idx];
+        inject_st_start = ffi->wm_structs[wm_idx];
+        inject_co_start = ffi->wm_constants[wm_idx];
+        if (inject_fn_start == ffi->function_count &&
+            inject_st_start == ffi->struct_count &&
+            inject_co_start == ffi->constant_count &&
+            ffi->strip_prefix_count == 0) {
+            return; /* nothing new */
+        }
+        ffi->wm_functions[wm_idx] = ffi->function_count;
+        ffi->wm_structs[wm_idx]   = ffi->struct_count;
+        ffi->wm_constants[wm_idx] = ffi->constant_count;
+    } else {
+        if (ffi->injected_into_count >= ffi->injected_into_cap) {
+            ffi->injected_into_cap *= 2;
+            ffi->injected_into = realloc(ffi->injected_into,
+                                         sizeof(char*) * ffi->injected_into_cap);
+            ffi->wm_functions  = realloc(ffi->wm_functions,
+                                         sizeof(int) * ffi->injected_into_cap);
+            ffi->wm_structs    = realloc(ffi->wm_structs,
+                                         sizeof(int) * ffi->injected_into_cap);
+            ffi->wm_constants  = realloc(ffi->wm_constants,
+                                         sizeof(int) * ffi->injected_into_cap);
+        }
+        wm_idx = ffi->injected_into_count;
+        ffi->injected_into[wm_idx] = strdup(mod_name);
+        ffi->wm_functions[wm_idx]  = ffi->function_count;
+        ffi->wm_structs[wm_idx]    = ffi->struct_count;
+        ffi->wm_constants[wm_idx]  = ffi->constant_count;
+        ffi->injected_into_count++;
+        /* inject_fn/st/co_start stay 0 — inject everything for new module */
+    }
+
     struct timespec _t0, _t1;
     clock_gettime(CLOCK_MONOTONIC, &_t0);
     LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(cg->context), 0);
@@ -1350,7 +1426,7 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
     };
 
     /* ── PASS 1: Structs → layouts ──────────────────────────────────────── */
-    for (int i = 0; i < ffi->struct_count; i++) {
+    for (int i = inject_st_start; i < ffi->struct_count; i++) {
         FFIStruct *s = &ffi->structs[i];
         if (!s->name) continue;
         if (env_lookup_layout(cg->env, s->name)) continue;
@@ -1384,9 +1460,15 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
         Type *layout_type = type_layout(s->name, fields, s->field_count,
                                         s->size_bytes, false, 0);
         env_insert_layout(cg->env, s->name, layout_type, NULL);
-        type_to_llvm(cg, layout_type);
         printf("FFI: layout %s (%d fields, %d bytes)\n",
                s->name, s->field_count, s->size_bytes);
+    }
+    /* Second sub-pass: now all layouts are registered, build LLVM types */
+    for (int i = inject_st_start; i < ffi->struct_count; i++) {
+        FFIStruct *s = &ffi->structs[i];
+        if (!s->name || s->alias_of || s->field_count == 0) continue;
+        Type *lt = env_lookup_layout(cg->env, s->name);
+        if (lt) type_to_llvm(cg, lt);
     }
 
     /* ── PASS 2: Typedef aliases (loop until stable) ─────────────────────── */
@@ -1438,10 +1520,8 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
     }
 
     /* ── PASS 3: Functions ───────────────────────────────────────────────── */
-    /* fprintf(stderr, "ffi PASS3: %d functions, env=%p\n", */
-    /*         ffi->function_count, (void*)cg->env); */
     fflush(stderr);
-    for (int i = 0; i < ffi->function_count; i++) {
+    for (int i = inject_fn_start; i < ffi->function_count; i++) {
         FFIFunction *f = &ffi->functions[i];
         /* fprintf(stderr, "ffi PASS3 fn[%d]: name=%p '%s'\n", */
         /*         i, (void*)f->name, f->name ? f->name : "NULL"); */
@@ -1524,7 +1604,7 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
     }
 
     /* ── PASS 4: Numeric/float/string constants ──────────────────────────── */
-    for (int i = 0; i < ffi->constant_count; i++) {
+    for (int i = inject_co_start; i < ffi->constant_count; i++) {
         FFIConstant *c = &ffi->constants[i];
 
         /* SAFETY: Skip compiler built-ins or macros with invalid names/values */
@@ -1596,7 +1676,7 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
     }
 
     /* ── PASS 5: Struct literal constants (any layout, any size) ────────── */
-    for (int i = 0; i < ffi->constant_count; i++) {
+    for (int i = inject_co_start; i < ffi->constant_count; i++) {
         FFIConstant *c = &ffi->constants[i];
         if (strchr(c->name, '.'))  continue;
         if (c->is_float || c->is_string) continue;
@@ -1656,7 +1736,9 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
     printf("FFI: injected %d functions, %d constants, %d structs in %.1f ms\n",
            ffi->function_count, ffi->constant_count, ffi->struct_count, _ms);
 
-    /* ── dlopen the library for JIT symbol resolution ───────────────────── */
+    /* ── dlopen the library for JIT symbol resolution (once only) ───────── */
+    static char *g_dlopened[256] = {0};
+    static int   g_dlopened_count = 0;
     for (int i = 0; i < ffi->included_count; i++) {
         const char *hdr  = ffi->included[i];
         const char *base = strrchr(hdr, '/');
@@ -1666,12 +1748,22 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
         stem[sizeof(stem)-1] = '\0';
         char *dot = strrchr(stem, '.');
         if (dot) *dot = '\0';
+        /* Skip if already dlopened */
+        bool already_open = false;
+        for (int d = 0; d < g_dlopened_count; d++)
+            if (strcmp(g_dlopened[d], stem) == 0) { already_open = true; break; }
+        if (already_open) continue;
         const char *sufx[] = {".so",".so.5",".so.4",".so.3",".so.2",".so.1",NULL};
         for (int s = 0; sufx[s]; s++) {
             char soname[512];
             snprintf(soname, sizeof(soname), "lib%s%s", stem, sufx[s]);
             void *h = dlopen(soname, RTLD_NOW | RTLD_GLOBAL);
-            if (h) { printf("FFI: loaded %s for JIT symbol resolution\n", soname); break; }
+            if (h) {
+                printf("FFI: loaded %s for JIT symbol resolution\n", soname);
+                if (g_dlopened_count < 256)
+                    g_dlopened[g_dlopened_count++] = strdup(stem);
+                break;
+            }
         }
     }
 }
@@ -1765,6 +1857,8 @@ static void write_type(FILE *f, Type *t) {
     int32_t kind = t->kind;
     fwrite(&kind, 4, 1, f);
     write_str(f, t->layout_name);
+    uint8_t is_inline = (t->kind == TYPE_LAYOUT && t->layout_is_inline) ? 1 : 0;
+    fwrite(&is_inline, 1, 1, f);
     if (kind == TYPE_ARR) {
         int32_t sz = t->arr_size;
         fwrite(&sz, 4, 1, f);
@@ -1777,6 +1871,8 @@ static Type *read_type(FILE *f) {
     if (fread(&kind, 4, 1, f) != 1) return NULL;
     if (kind == -1) return NULL;
     char *lname = read_str(f);
+    uint8_t is_inline = 0;
+    fread(&is_inline, 1, 1, f);
     if (kind == TYPE_ARR) {
         int32_t sz;
         if (fread(&sz, 4, 1, f) != 1) sz = 0;
@@ -1802,7 +1898,11 @@ static Type *read_type(FILE *f) {
     case TYPE_I64:    t = type_i64();    break;
     case TYPE_U64:    t = type_u64();    break;
     case TYPE_F32:    t = type_f32();    break;
-    case TYPE_LAYOUT: t = lname ? type_layout_ref(lname) : type_unknown(); break;
+    case TYPE_LAYOUT: {
+        t = lname ? type_layout_ref(lname) : type_unknown();
+        if (t && is_inline) t->layout_is_inline = true;
+        break;
+    }
     case TYPE_PTR:    t = type_ptr(NULL); break;
     default:          t = type_unknown(); break;
     }

@@ -144,6 +144,22 @@ Type *env_lookup_layout(Env *table, const char *name) {
     return NULL;
 }
 
+Type *env_find_layout_with_field(Env *table, const char *field_name) {
+    for (Env *e = table; e; e = e->parent) {
+        for (size_t i = 0; i < e->size; i++) {
+            for (EnvEntry *entry = e->buckets[i]; entry; entry = entry->next) {
+                if (entry->kind != ENV_LAYOUT || !entry->type) continue;
+                Type *t = entry->type;
+                for (int f = 0; f < t->layout_field_count; f++) {
+                    if (strcmp(t->layout_fields[f].name, field_name) == 0)
+                        return t;
+                }
+            }
+        }
+    }
+    return NULL;
+}
+
 void env_insert_adt_ctor(Env *table, const char *name, int tag,
                          Type *data_type, LLVMValueRef func_ref) {
     EnvEntry *e = find(table, name);

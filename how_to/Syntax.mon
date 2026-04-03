@@ -21,10 +21,18 @@ define return-string -> String
 
 
 define square :: Int -> Int
-  x -> x `*` x
+  x -> x * x
 
 map square '(1 2 3 4)
 show return-string
+
+
+
+
+
+
+
+
 
 
 ;; define square :: Int -> Int
@@ -60,7 +68,7 @@ show return-string
 
 
 ;; ;; ;; DONE
-(define (last [a] -> a)
+(define (last List -> a)
   [] -> nil
   [x] -> x
   [_|xs] -> (last xs))

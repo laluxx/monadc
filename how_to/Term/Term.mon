@@ -1,52 +1,46 @@
-(import String)
-(import Font)
+import String
+import Font
+import Renderer
 
-(include <vulkan/vulkan.h>)
-(include <GLFW/glfw3.h> :unprefix GLFW_)
+include <vulkan/vulkan.h>
+include <GLFW/glfw3.h> :unprefix GLFW_
+include <stdio.h>
 
 define input ""
 define cursor 0
-define lines '()
+
+;;; Vulkan core handles
 
 glfwInit
-glfwWindowHint GLFW_CLIENT_API GLFW_NO_API; Tell GLFW to not use OpenGL
-define window glfwCreateWindow 640 480 "terminal" nil nil
+glfwWindowHint CLIENT_API NO_API
+define window glfwCreateWindow 640 480 "editor" nil nil
 
 ;;; 1 VULKAN INSTANCE & SURFACE
 
 (define app-info (VkApplicationInfo))
 (set! app-info.sType VK_STRUCTURE_TYPE_APPLICATION_INFO)
-(set! app-info.pApplicationName "Monad Editor")
+(set! app-info.pApplicationName "Editor")
 (set! app-info.applicationVersion 1)
-(set! app-info.pEngineName "Monad Engine")
+(set! app-info.pEngineName "Monad")
 (set! app-info.engineVersion 1)
-(set! app-info.apiVersion 4194304) ; VK_API_VERSION_1_0
+(set! app-info.apiVersion 4194304)
 
 (define inst-info (VkInstanceCreateInfo))
 (set! inst-info.sType VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO)
 (set! inst-info.pApplicationInfo app-info)
 
-;; Get extensions from GLFW
 (define [glfw-ext-count :: U32] 0)
 (define glfw-exts (glfwGetRequiredInstanceExtensions &glfw-ext-count))
 (set! inst-info.enabledExtensionCount glfw-ext-count)
 (set! inst-info.ppEnabledExtensionNames glfw-exts)
-(set! inst-info.enabledLayerCount 0)
+(set! inst-info.enabledLayerCount 1)
+(define validation-layer "VK_LAYER_KHRONOS_validation")
+(define layers (calloc 1 8))
+(set! (layers 0) validation-layer)
+(set! inst-info.ppEnabledLayerNames layers)
 
 (define my-instance (VkInstance))
-
-
-(show "sType: _" inst-info.sType)
-(show "pNext: _" inst-info.pNext)
-(show "flags: _" inst-info.flags)
-(show "ext count: _" inst-info.enabledExtensionCount)
-(show "layer count: _" inst-info.enabledLayerCount)
-(show "pAppInfo: _" inst-info.pApplicationInfo)
-(show "ppExtNames: _" inst-info.ppEnabledExtensionNames)
-(show "glfw-exts: _" glfw-exts)
-
-(define [vk-result :: I32] (vkCreateInstance &inst-info 0 &my-instance))
-(show "vkCreateInstance result: _" vk-result)
+(vkCreateInstance &inst-info 0 &my-instance)
 
 (define my-surface (VkSurfaceKHR))
 (glfwCreateWindowSurface my-instance window 0 &my-surface)
@@ -55,20 +49,16 @@ define window glfwCreateWindow 640 480 "terminal" nil nil
 
 (define [device-count :: U32] 0)
 (vkEnumeratePhysicalDevices my-instance &device-count 0)
-(define phys-devices (calloc device-count 8)) ; 8 bytes per pointer/handle
+(define phys-devices (calloc device-count 8))
 (vkEnumeratePhysicalDevices my-instance &device-count phys-devices)
-(define my-phys-device (phys-devices 0)) ; Just grab the first GPU
+(define my-phys-device (phys-devices 0))
 (free phys-devices)
 
 (define [queue-count :: U32] 0)
 (vkGetPhysicalDeviceQueueFamilyProperties my-phys-device &queue-count 0)
-(show "queue-count: _" queue-count)
-(define [queue-props :: Pointer :: VkQueueFamilyProperties] (calloc queue-count 24))
+(define [queue-props -> VkQueueFamilyProperties] (calloc queue-count 24))
 (vkGetPhysicalDeviceQueueFamilyProperties my-phys-device &queue-count queue-props)
-
 (define [graphics-queue-index :: U32] 0)
-(if ((queue-props.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0)
-  (set! graphics-queue-index 0))
 
 ;;; 3 LOGICAL DEVICE & QUEUE
 
@@ -79,7 +69,6 @@ define window glfwCreateWindow 640 480 "terminal" nil nil
 (set! queue-info.queueCount 1)
 (set! queue-info.pQueuePriorities &queue-prio)
 
-;; We need the swapchain extension
 (define ext-name "VK_KHR_swapchain")
 (define device-exts (calloc 1 8))
 (set! (device-exts 0) ext-name)
@@ -92,55 +81,291 @@ define window glfwCreateWindow 640 480 "terminal" nil nil
 (set! device-info.ppEnabledExtensionNames device-exts)
 
 (define my-device (VkDevice))
-(define [vk-device-result :: I32] (vkCreateDevice my-phys-device &device-info 0 &my-device))
-(show "vkCreateDevice result: _" vk-device-result)
+(vkCreateDevice my-phys-device &device-info 0 &my-device)
 
 (define my-queue (VkQueue))
 (vkGetDeviceQueue my-device graphics-queue-index 0 &my-queue)
 
-;; Wire it into your Font system!
 (init-font-system my-instance my-phys-device my-device my-queue graphics-queue-index)
 
-(show "Vulkan initialized successfully in Monad!")
+;;; 4 SWAPCHAIN
 
+(define [swap-w :: U32] 640)
+(define [swap-h :: U32] 480)
 
+(define swap-info (VkSwapchainCreateInfoKHR))
+(set! swap-info.sType            VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR)
+(set! swap-info.surface          my-surface)
+(define surf-caps (VkSurfaceCapabilitiesKHR))
+(vkGetPhysicalDeviceSurfaceCapabilitiesKHR my-phys-device my-surface &surf-caps)
+(set! swap-info.minImageCount    surf-caps.minImageCount)
+(set! swap-w surf-caps.currentExtent.width)
+(set! swap-h surf-caps.currentExtent.height)
+(set! swap-info.imageFormat      VK_FORMAT_B8G8R8A8_UNORM)
+(set! swap-info.imageColorSpace  VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+(set! swap-info.imageExtent.width  swap-w)
+(set! swap-info.imageExtent.height swap-h)
+(set! swap-info.imageArrayLayers 1)
+(set! swap-info.imageUsage       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+(set! swap-info.imageSharingMode VK_SHARING_MODE_EXCLUSIVE)
+(set! swap-info.preTransform     VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+(set! swap-info.compositeAlpha   VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
+(set! swap-info.presentMode      VK_PRESENT_MODE_FIFO_KHR)
+(set! swap-info.clipped          1)
 
+(define my-swapchain (VkSwapchainKHR))
+(vkCreateSwapchainKHR my-device &swap-info 0 &my-swapchain)
+
+;;; 5 SWAPCHAIN IMAGES & VIEWS
+
+(define [image-count :: U32] 0)
+(vkGetSwapchainImagesKHR my-device my-swapchain &image-count 0)
+(define swap-images (calloc image-count 8))
+(vkGetSwapchainImagesKHR my-device my-swapchain &image-count swap-images)
+
+(define swap-views (calloc image-count 8))
+(for [i 0 image-count]
+  (define view-info (VkImageViewCreateInfo))
+  (set! view-info.sType            VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO)
+  (set! view-info.image            (swap-images i))
+  (set! view-info.viewType         VK_IMAGE_VIEW_TYPE_2D)
+  (set! view-info.format           VK_FORMAT_B8G8R8A8_UNORM)
+  (set! view-info.subresourceRange.aspectMask     VK_IMAGE_ASPECT_COLOR_BIT)
+  (set! view-info.subresourceRange.baseMipLevel   0)
+  (set! view-info.subresourceRange.levelCount     1)
+  (set! view-info.subresourceRange.baseArrayLayer 0)
+  (set! view-info.subresourceRange.layerCount     1)
+  (define [v -> VkImageView] 0)
+  (vkCreateImageView my-device &view-info 0 &v)
+  (set! (swap-views i) v))
+
+;;; 6 RENDER PASS
+
+(define color-att (VkAttachmentDescription))
+(set! color-att.format         VK_FORMAT_B8G8R8A8_UNORM)
+(set! color-att.samples        VK_SAMPLE_COUNT_1_BIT)
+(set! color-att.loadOp         VK_ATTACHMENT_LOAD_OP_CLEAR)
+(set! color-att.storeOp        VK_ATTACHMENT_STORE_OP_STORE)
+(set! color-att.stencilLoadOp  VK_ATTACHMENT_LOAD_OP_DONT_CARE)
+(set! color-att.stencilStoreOp VK_ATTACHMENT_STORE_OP_DONT_CARE)
+(set! color-att.initialLayout  VK_IMAGE_LAYOUT_UNDEFINED)
+(set! color-att.finalLayout    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+
+(define color-ref (VkAttachmentReference))
+(set! color-ref.attachment 0)
+(set! color-ref.layout     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+
+(define subpass (VkSubpassDescription))
+(set! subpass.pipelineBindPoint    VK_PIPELINE_BIND_POINT_GRAPHICS)
+(set! subpass.colorAttachmentCount 1)
+(set! subpass.pColorAttachments    &color-ref)
+
+(define rp-info (VkRenderPassCreateInfo))
+(set! rp-info.sType           VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO)
+(set! rp-info.attachmentCount 1)
+(set! rp-info.pAttachments    &color-att)
+(set! rp-info.subpassCount    1)
+(set! rp-info.pSubpasses      &subpass)
+
+(define my-render-pass (VkRenderPass))
+(vkCreateRenderPass my-device &rp-info 0 &my-render-pass)
+
+;;; 7 FRAMEBUFFERS
+
+(define framebuffers (calloc image-count 8))
+(for [i 0 image-count]
+  (define [iv -> VkImageView] (swap-views i))
+  (define fb-info (VkFramebufferCreateInfo))
+  (set! fb-info.sType           VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO)
+  (set! fb-info.renderPass      my-render-pass)
+  (set! fb-info.attachmentCount 1)
+  (set! fb-info.pAttachments    &iv)
+  (set! fb-info.width           swap-w)
+  (set! fb-info.height          swap-h)
+  (set! fb-info.layers          1)
+  (define [fb -> VkFramebuffer] 0)
+  (vkCreateFramebuffer my-device &fb-info 0 &fb)
+  (set! (framebuffers i) fb))
+
+;;; 8 COMMAND POOL & BUFFERS
+
+(define pool-info (VkCommandPoolCreateInfo))
+(set! pool-info.sType            VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO)
+(set! pool-info.queueFamilyIndex graphics-queue-index)
+(set! pool-info.flags            VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
+(define my-cmd-pool (VkCommandPool))
+(vkCreateCommandPool my-device &pool-info 0 &my-cmd-pool)
+
+(define cmd-alloc (VkCommandBufferAllocateInfo))
+(set! cmd-alloc.sType              VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO)
+(set! cmd-alloc.commandPool        my-cmd-pool)
+(set! cmd-alloc.level              VK_COMMAND_BUFFER_LEVEL_PRIMARY)
+(set! cmd-alloc.commandBufferCount image-count)
+(define cmd-bufs (calloc image-count 8))
+(vkAllocateCommandBuffers my-device &cmd-alloc cmd-bufs)
+
+;;; 9 SYNC OBJECTS
+
+(define img-available (VkSemaphore))
+(define render-done   (VkSemaphore))
+(define in-flight     (VkFence))
+
+(define sem-info (VkSemaphoreCreateInfo))
+(set! sem-info.sType VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO)
+(vkCreateSemaphore my-device &sem-info 0 &img-available)
+(vkCreateSemaphore my-device &sem-info 0 &render-done)
+
+(define fence-info (VkFenceCreateInfo))
+(set! fence-info.sType VK_STRUCTURE_TYPE_FENCE_CREATE_INFO)
+(set! fence-info.flags VK_FENCE_CREATE_SIGNALED_BIT)
+(vkCreateFence my-device &fence-info 0 &in-flight)
+
+;;; 10 RENDERER + FONT
+
+(set! g-device      my-device)
+(set! g-phys-device my-phys-device)
+(set! g-queue       my-queue)
+(set! g-screen-w    640.0)
+(set! g-screen-h    480.0)
+(renderer-create-pipeline my-render-pass)
+
+(define my-font (load-font "./Uiua386.ttf" 18 my-render-pass g-desc-set-layout))
+
+;;; 11 INPUT
+
+(define [cursor-blink-time :: F32] 0.0)
+(define [cursor-visible    :: I32] 1)
+(define [last-time         :: Float] 0.0)
 
 (glfwSetCharCallback window
-  (lambda ([w :: Pointer :: GLFWwindow] [codepoint :: I32])
+  (lambda ([w -> GLFWwindow] [codepoint :: I32])
     (set! input (string-append input (String (Char codepoint))))
     (set! cursor (cursor + 1))
-    (show "cursor is at _" cursor)
-    (show input)))
-
-;; define drop-last :: String -> String
-;;   s -> take ((count s) - 1) s
-
-;; define drop-last! :: String -> String
-;;   s -> set! input (take ((count s) - 1) s)
+    (set! cursor-visible 1)
+    (set! cursor-blink-time 0.0)))
 
 (glfwSetKeyCallback window
-  (lambda ([w :: Pointer :: GLFWwindow]
-      [key :: I32] [scancode :: I32]
-      [action :: I32] [mods :: I32])
+  (lambda ([w -> GLFWwindow]
+           [key :: I32] [scancode :: I32]
+           [action :: I32] [mods :: I32])
     (cond
       [((key = KEY_BACKSPACE) and (action != RELEASE) and (cursor > 0))
-        ;; (drop-last! input)
+        (set! input (take ((count input) - 1) input))
         (set! cursor (cursor - 1))
-        (show "cursor is at _" cursor)
-        (show input)]
-      [((key = KEY_ENTER) and (action = PRESS))
-        (set! lines  (string-append lines input))
-        (set! input  "")
-        (set! cursor 0)
-        (show input)])))
+        (set! cursor-visible 1)
+        (set! cursor-blink-time 0.0)]
+      [((key = KEY_ESCAPE) and (action = PRESS))
+        (glfwSetWindowShouldClose window 1)])))
 
-until (glfwWindowShouldClose window)
-  ;; GL_COLOR_BUFFER_BIT is gone.
-  ;; The Vulkan render pass and text vertex generation will go here.
+;;; 12 MAIN LOOP
 
+(set! last-time (glfwGetTime))
+
+(until (glfwWindowShouldClose window)
   glfwPollEvents
 
-glfwDestroyWindow window
-glfwTerminate
+  ;; Delta time + cursor blink
+  (define [now    :: Float] (glfwGetTime))
+  (define [dt     :: F32] (now - last-time))
+  (set! last-time now)
+  (set! cursor-blink-time (cursor-blink-time + dt))
+  (if (cursor-blink-time >= 0.5)
+    (begin
+      (set! cursor-visible (if (cursor-visible = 0) 1 0))
+      (set! cursor-blink-time 0.0)))
 
+  ;; Acquire image
+  (vkWaitForFences my-device 1 &in-flight 1 18446744073709551615)
+  (vkResetFences   my-device 1 &in-flight)
+  (define [img-idx :: U32] 0)
+  (vkAcquireNextImageKHR my-device my-swapchain
+    18446744073709551615 img-available 0 &img-idx)
+
+  ;; Record command buffer
+  (define [cmd -> VkCommandBuffer] (cmd-bufs img-idx))
+  (vkResetCommandBuffer cmd 0)
+
+  (define begin-info (VkCommandBufferBeginInfo))
+  (set! begin-info.sType VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO)
+  (vkBeginCommandBuffer cmd &begin-info)
+
+  (define [clear-r :: F32] 0.1)
+  (define [clear-g :: F32] 0.1)
+  (define [clear-b :: F32] 0.1)
+  (define [clear-a :: F32] 1.0)
+  (define clear-color (calloc 1 16))
+  (memcpy clear-color &clear-r 4)
+  (memcpy (clear-color + 4) &clear-g 4)
+  (memcpy (clear-color + 8) &clear-b 4)
+  (memcpy (clear-color + 12) &clear-a 4)
+
+  (define rp-begin (VkRenderPassBeginInfo))
+  (set! rp-begin.sType             VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO)
+  (set! rp-begin.renderPass        my-render-pass)
+  (set! rp-begin.framebuffer       (framebuffers img-idx))
+  (set! rp-begin.renderArea.offset.x 0)
+  (set! rp-begin.renderArea.offset.y 0)
+  (set! rp-begin.renderArea.extent.width  swap-w)
+  (set! rp-begin.renderArea.extent.height swap-h)
+  (set! rp-begin.clearValueCount   1)
+  (set! rp-begin.pClearValues      clear-color)
+  (vkCmdBeginRenderPass cmd &rp-begin VK_SUBPASS_CONTENTS_INLINE)
+
+  ;; Draw
+  (renderer-begin-frame)
+  (draw-text   my-font input  8.0 (8.0 + my-font.ascent) WHITE)
+  (if (cursor-visible = 1)
+    (begin
+      ;; Measure text width up to cursor to position it
+      (define [cx :: F32] 8.0)
+      (define [ci :: I32] 0)
+      (until (ci = cursor)
+        (define ch-info (my-font.chars (input ci)))
+        (set! cx (cx + ch-info.ax))
+        (set! ci (ci + 1)))
+      (draw-cursor my-font cx (8.0 + my-font.ascent) WHITE)))
+  (renderer-end-frame cmd)
+
+  (vkCmdEndRenderPass cmd)
+  (vkEndCommandBuffer cmd)
+
+  ;; Submit
+  (define [wait-stage :: U32] VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
+  (define submit-info (VkSubmitInfo))
+  (set! submit-info.sType                VK_STRUCTURE_TYPE_SUBMIT_INFO)
+  (set! submit-info.waitSemaphoreCount   1)
+  (set! submit-info.pWaitSemaphores      &img-available)
+  (set! submit-info.pWaitDstStageMask    &wait-stage)
+  (set! submit-info.commandBufferCount   1)
+  (set! submit-info.pCommandBuffers      &cmd)
+  (set! submit-info.signalSemaphoreCount 1)
+  (set! submit-info.pSignalSemaphores    &render-done)
+  (vkQueueSubmit my-queue 1 &submit-info in-flight)
+
+  ;; Present
+  (define present-info (VkPresentInfoKHR))
+  (set! present-info.sType              VK_STRUCTURE_TYPE_PRESENT_INFO_KHR)
+  (set! present-info.waitSemaphoreCount 1)
+  (set! present-info.pWaitSemaphores    &render-done)
+  (set! present-info.swapchainCount     1)
+  (set! present-info.pSwapchains        &my-swapchain)
+  (set! present-info.pImageIndices      &img-idx)
+  (vkQueuePresentKHR my-queue &present-info))
+
+;;; CLEANUP
+
+(vkDeviceWaitIdle my-device)
+(renderer-shutdown)
+(vkDestroyFence       my-device in-flight     0)
+(vkDestroySemaphore   my-device render-done   0)
+(vkDestroySemaphore   my-device img-available 0)
+(vkDestroyCommandPool my-device my-cmd-pool   0)
+(for [i 0 image-count]
+  (vkDestroyFramebuffer my-device (framebuffers i) 0)
+  (vkDestroyImageView   my-device (swap-views   i) 0))
+(vkDestroyRenderPass    my-device my-render-pass   0)
+(vkDestroySwapchainKHR  my-device my-swapchain     0)
+(vkDestroyDevice        my-device                  0)
+(vkDestroyInstance      my-instance                0)
+(glfwDestroyWindow window)
+(glfwTerminate)

@@ -28,7 +28,6 @@
   (= (count s) 0))
 
 (define (string-prefix? [prefix :: String] -> [s :: String] -> Bool)
-  "Return True if S starts with PREFIX."
   (define [plen   :: Int]  (count prefix))
   (define [slen   :: Int]  (count s))
   (define [result :: Bool] (and (<= plen slen) True))

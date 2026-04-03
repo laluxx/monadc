@@ -1,0 +1,124 @@
+;; ;; DONE
+;; Simplest possible macro
+;; (define (unitmacro -> Syntax)
+;;   42)
+;; (define (main -> Int)
+;;   (unitmacro))
+;; show main
+
+;; ;; DONE
+;; (define (identity-macro x -> Syntax)
+;;   x)
+;; (define (main -> Int)
+;;   (identity-macro 99))
+;; show main
+
+;; ;; DONE
+;; (define (when condition . body -> Syntax)
+;;   (if condition (begin . body)))
+;; (define (main -> Int)
+;;   (let [x 0]
+;;     (when False
+;;       (set! x 1)
+;;       (set! x (x + 1)))
+;;       (show x)
+;;     x))
+;; main
+
+
+;; ;; DONE Test 1 — unless (negated when)
+;; (define (macro-unless condition . body -> Syntax)
+;;   (if condition (begin) (begin . body)))
+;; (define (main -> Int)
+;;   (let [x 0]
+;;     (macro-unless False
+;;       (set! x 42))
+;;     x))
+;; show main
+
+
+;; ;; TODO Result looks wrong
+;; DONE Test 2 — swap! (multiple statements, two args)
+;; (define (swap! a b -> Syntax)
+;;   (let [tmp a]
+;;     (set! a b)
+;;     (set! b tmp)))
+
+;; (define (main -> Int)
+;;   (let [x 1]
+;;     (let [y 99]
+;;       (swap! x y)
+;;       x)))
+;; show main
+
+
+;; ;; TODO Test 3 — and (variadic, recursive)
+;; (define (my-and . args -> Syntax)
+;;   []       -> True
+;;   [x]      -> x
+;;   [x|rest] -> (if x (my-and . rest) False))
+
+;; (define (main -> Int)
+;;   (if (my-and True True True)
+;;     1
+;;     0))
+;; show main
+
+
+;; ;; DONE Test 4 — assert (conditional expansion)
+(define (assert condition . body -> Syntax)
+  (when condition
+    (begin . body)))
+
+;; (define (main -> Int)
+;;   (let [x 0]
+;;     (assert True
+;;       (set! x 1))
+;;     x))
+;; show main
+
+layout Vec2 [x :: Int] [y :: Int]
+
+define swap-components [v -> Vec2]
+  let [tmp v.x]
+    set! v.x v.y
+    set! v.y tmp
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+define v (Vec2 10 20)
+show v.x
+show v.y
+swap-components v
+show v.x
+show v.y
+
+
+
+
+
+;; ;; DONE Test 5 — hygiene test
+;; (define (swap x y -> Syntax)
+;;   (let [tmp x]
+;;     (set! x y)
+;;     (set! y tmp)))
+
+;; (define (main -> Int)
+;;   (let ([tmp 999]
+;;         [x 1]
+;;         [y 42])
+;;     (swap! x y)
+;;     (+ x tmp)))
+;; show main

@@ -6,7 +6,7 @@
 (class Eq a where
   (=)  :: a -> a -> Bool
   (!=) :: a -> a -> Bool
-  (x `!=` y) => (not (x `=` y))) ; Default implementation(s)
+  (x != y) => (not (x = y))) ; Default implementation(s)
 
 data TrafficLight Red | Yellow | Green deriving Eq
 
@@ -17,10 +17,10 @@ data TrafficLight Red | Yellow | Green deriving Eq
 ;;     (Green  `=` Green)  => True
 ;;     (_      `=` _ )     => False)
 
-show Red `=` Red
-show Red `=` Green
-show Red `!=` Green
-show Red `!=` Red
+show Red = Red
+show Red = Green
+show Red != Green
+show Red != Red
 
 
 define color Red
@@ -31,14 +31,14 @@ define color Red
 
 ;; A simple data type with three `nullary` constructors
 
-;; data Color Red
-;;          | Green
-;;          | Blue
+data Color Red
+         | Green
+         | Blue
 
-;; define color-to-string :: Color -> String
-;;   Red   -> "red"
-;;   Green -> "green"
-;;   Blue  -> "blue"
+define color-to-string :: Color -> String
+  Red   -> "red"
+  Green -> "green"
+  Blue  -> "blue"
 
 ;; (show (color-to-string Blue))
 
@@ -60,7 +60,7 @@ data Shape Circle    Float
 
 (define (abs [x :: Float] -> Float)
   "Return the absolute value of X."
-  (if (x `<` 0.0) (0.0 `-` x) x))
+  (if (x < 0.0) (0.0 - x) x))
 
 
 ;; (define (area Shape -> Float)

@@ -23,9 +23,9 @@ show (passedNatural? 1); passing -1 is a compile time ERROR
 
 
 
-;; ;; TODO
-;; ;; type Even { x ∈ ℤ | ∃k ∈ ℤ, x = 2k }
-;; ;;   "Existential form."
+;; TODO
+;; type Even { x ∈ ℤ | ∃k ∈ ℤ, x = 2k }
+;;   "Existential form."
 
 ;; type Even { x ∈ Int | x % 2 = 0 }
 ;;   "Even integers"

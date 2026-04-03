@@ -1,7 +1,11 @@
 #+title: TODO.org
 
-* TODO Stuff [0/24]
+* TODO Stuff [0/26]
 - [ ] eval
+- [ ] [a] is an alias for the Coll type, [Int] is an array of ints, (a) is an alias for the List type, (Int) is a list of ints
+- [ ] Fat strings... fuck my life
+- [ ] pmatch backtracking on failure with =<-=
+- [ ] anonymous Algebraic Data Types (tagged unions)
 - [ ] cmove instruction instead of branching
 - [ ] Aceept .org files as input
 - [ ] Syntax for compiler directives: -|[ INLINE (/=) ]|-
@@ -17,7 +21,7 @@
 - [ ] => Optional arguments that default to *unspecified*
 - [ ] Default values on layouts so when they are 0 initialized they have those
 - [ ] Auto curry only if -> is used in the function definition, not otherwise
-- [ ] Optimize infix function call, if the function is variadic turn =(3 `+` 4 `+` 5)= int a single call =(+ 3 4 5)= and not =(+ 5 (+ 3 4))=
+- [ ] Optimize infix function call, if the function is variadic turn =(3 + 4 + 5)= int a single call =(+ 3 4 5)= and not =(+ 5 (+ 3 4))=
 - [ ] Allow _ as name of parameters (defun monad-repl--eldoc-function (callback &rest _)
 - [ ] Look into dependent types and make it a general concept that you can do in the language
 - [ ] IMPORTANT C FFI Enums should probably become ADTs
@@ -29,27 +33,45 @@
 - [ ] Connect to a running process with the repl
       We should embed the env into the executable i guess
 
-BUG
-#+begin_src monad
-(0..)
-<input>:1:2: error: ‘0’ is a number literal and cannot be called as a function
-    1 | (0..)
-      |  ^
+
+* DONE Macro System
+  CLOSED: [2026-04-02 Thu 20:56]
+
+  Macros are functions with return type ~-> Syntax~. No special form needed.
+  The compiler recognizes ~-> Syntax~ and expands call sites before codegen.
+
+  If no ~#(~ appears in the body, the entire body is the template and pattern
+  variables are substituted literally. If ~#(~ appears, only ~#(...)~ is the
+  output and the rest runs at expand time.
+
+  Variadic macros use ~.~ on both sides, capture in the pattern, splice in
+  the template. Macros are hygienic: names introduced inside a macro body
+  get fresh unique names at each expansion site so they never clash with
+  the module variables.
+
+#+begin_src scheme
+(define (when condition . body -> Syntax)
+  (if condition (begin . body) (begin)))
+
+(define (my-and . args -> Syntax)
+  []         -> True
+  [x]        -> x
+  [x . rest] -> (if x (my-and . rest) False))
+
+(define (swap! a b -> Syntax)
+  (let [tmp a]
+    (set! a b)
+    (set! b tmp)))
+
+(define (assert condition message -> Syntax)
+  (if debug-mode
+    #(when (not condition) (error message))
+    #(begin)))
 #+end_src
 
+  Expansion runs after ~parse_all~ and before type checking and LLVM codegen,
+  repeated to a fixpoint. Macros are first class values like any function.
 
-Parser BUG
-#+begin_src monad
-(define (return-string [x :: CompanyEmail?] -> CompanyEmail)
-  "String returned from a function")
-#+end_src
-           |
-           v
-#+begin_src txt
-RefinementType.mon:74:36: error: unexpected token type: 2
-   74 |   "String returned from a function")
-      |                                    ^
-#+end_src
 
 
 
@@ -60,27 +82,27 @@ type Even { x ∈ ℤ | ∃k ∈ ℤ, x = 2k }
   "The Even type."
 #+end_src
 
-The existential ={ x ∈ ℤ | ∃k ∈ ℤ, x = 2k }= becomes
-a Σ-type: Σ (k : ℤ) (x : ℤ) (x = 2k)
-and the type checker must construct the pair (k, x, refl).
+  The existential ={ x ∈ ℤ | ∃k ∈ ℤ, x = 2k }= becomes
+  a Σ-type: Σ (k : ℤ) (x : ℤ) (x = 2k)
+  and the type checker must construct the pair (k, x, refl).
 
 ** Roadmap
 
-=✓= compile-time evaluation approach: 
- - Works on pure functions with known arguments
- - Fails on impure functions (! suffix) — We shouldn't evaluate side effects at compile time
- - Fails on functions with unknown arguments — defers to runtime, which is correct
- - Fails on recursive functions that don't terminate — needs a fuel/depth limit
+  =✓= compile-time evaluation approach: 
+   - Works on pure functions with known arguments
+   - Fails on impure functions (! suffix) — We shouldn't evaluate side effects at compile time
+   - Fails on functions with unknown arguments — defers to runtime, which is correct
+   - Fails on recursive functions that don't terminate — needs a fuel/depth limit
 
-~⨯~ Liquid types can handle:
- - Functions with unknown arguments — reasons symbolically: =∀x. P(x) → Q(f(x))=
- - Impure functions — through effect typing (monadic refinements in F*)
- - Recursive functions — through measure/termination proofs
+  ~⨯~ Liquid types can handle:
+   - Functions with unknown arguments — reasons symbolically: =∀x. P(x) → Q(f(x))=
+   - Impure functions — through effect typing (monadic refinements in F*)
+   - Recursive functions — through measure/termination proofs
 
-~⨯~ Dependent types can handle everything liquid types can, plus:
- - Types that depend on values: Vec n a (list of exactly n elements)
- - Existential witnesses: ={ x ∈ ℤ | ∃k ∈ ℤ, x = 2k}=
- - Full theorem proving
+  ~⨯~ Dependent types can handle everything liquid types can, plus:
+   - Types that depend on values: Vec n a (list of exactly n elements)
+   - Existential witnesses: ={ x ∈ ℤ | ∃k ∈ ℤ, x = 2k}=
+   - Full theorem proving
 
 They are ~NOT~ mutually exclusive. The hierarchy is:
 #+begin_src txt
@@ -150,25 +172,8 @@ Point.x
 <input>:1:1: error: qualified symbol 'Point.x' used but no module context
 #+end_src
 
-* TODO ΒUGS
 
-The .o has no <sqrt> symbol at all — meaning sqrt itself isn't in the .o either.
-That's because sqrt is a closure-ABI function and its LLVM name gets renamed during Phase 9 to Math__sqrt, so it appears as <Math__sqrt> not <sqrt>.
-
-#+begin_src sh
-bashobjdump -d Math.o | grep -A 40 "Math__sqrt"
-#+end_src
-
-__Math_closure_iter.10 IS in the .o with external linkage. The issue is at Math__sqrt+0x33:
-#+begin_src sh
-8a3:  mov 0x0(%rip),%rdi   # loads iter's function pointer
-#+end_src
-
-This is a RIP-relative load from a global variable that holds iter's address. That global needs to contain __Math_closure_iter.10's address. Let's check if that relocation is correct:
-#+begin_src sh
-bashobjdump -r Math.o | grep -A 5 "sqrt"
-#+end_src
-
+* ΒUGS
 
 #+begin_src monad
 (cons 120 10)
@@ -192,6 +197,21 @@ Error: IR verification failed
 (1 20)
 #+end_src
 
+
+Parser BUG
+#+begin_src monad
+(define (return-string [x :: CompanyEmail?] -> CompanyEmail)
+  "String returned from a function")
+#+end_src
+           |
+           v
+#+begin_src txt
+RefinementType.mon:74:36: error: unexpected token type: 2
+   74 |   "String returned from a function")
+      |                                    ^
+#+end_src
+
+
 * On Pragmatic Purity
 
 why is mutation forbidden even locally? If a function always returns the same output
@@ -200,11 +220,11 @@ for the same input, and nothing escapes, why does internal mutation matter?
 The key insight: unobservable implementation details don't affect purity.
    - Local variables (even mutable) are born and die within the function
    - Memory allocation addresses can't be observed if pointers don't escape
-   - Same input → same output is all that matters
+   - Same input -> same output is all that matters
 
 This leads to a simple rule:
-    - Local mutation/allocation → pure (implementation detail)
-    - Global mutation/allocation → impure (observable side effect)
+    - Local mutation/allocation  -> pure (implementation detail)
+    - Global mutation/allocation -> impure (observable side effect)
 
 The language remains deterministic and optimizable (CSE works!)
 while giving programmers imperative flexibility when they need it.

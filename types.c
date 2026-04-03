@@ -284,6 +284,14 @@ Type *type_from_name(const char *name) {
     if (strcmp(name, "U128")    == 0) return type_u128();
     if (strcmp(name, "Fn")      == 0) return type_fn(NULL, 0, NULL);
     if (strcmp(name, "Pointer") == 0) return type_ptr(NULL);
+    if (strcmp(name, "F80")     == 0) return type_f80();
+
+    /* Arbitrary-width integers: I<n> and U<n> */
+    {
+        int width = 0; bool is_signed = false;
+        if (parse_int_type(name, 0, 0, &width, &is_signed))
+            return type_int_arbitrary(width, is_signed);
+    }
 
     // Check alias registry (supports chained aliases: Code -> List -> ...)
     int depth = 0;
@@ -340,6 +348,14 @@ Type *type_i64    (void) { return make_type(TYPE_I64);     }
 Type *type_u64    (void) { return make_type(TYPE_U64);     }
 Type *type_i128   (void) { return make_type(TYPE_I128);    }
 Type *type_u128   (void) { return make_type(TYPE_U128);    }
+Type *type_f80    (void) { return make_type(TYPE_F80);     }
+
+Type *type_int_arbitrary(int width, bool is_signed) {
+    Type *t = make_type(TYPE_INT_ARBITRARY);
+    t->numeric_width  = width;
+    t->numeric_signed = is_signed;
+    return t;
+}
 
 Type *type_list(Type *element_type) {
     Type *t = make_type(TYPE_LIST);
@@ -497,7 +513,9 @@ Type *type_clone(Type *t) {
             c->arr_is_fat = t->arr_is_fat;
             return c;
         }
-        case TYPE_PTR:     return type_ptr(type_clone(t->element_type));
+        case TYPE_PTR:          return type_ptr(type_clone(t->element_type));
+        case TYPE_F80:          return type_f80();
+        case TYPE_INT_ARBITRARY: return type_int_arbitrary(t->numeric_width, t->numeric_signed);
         case TYPE_VAR:     return type_var(t->var_id);
         case TYPE_ARROW:   return type_arrow(type_clone(t->arrow_param), type_clone(t->arrow_ret));
         case TYPE_LAYOUT: {
@@ -509,6 +527,7 @@ Type *type_clone(Type *t) {
             c->layout_total_size   = t->layout_total_size;
             c->layout_packed       = t->layout_packed;
             c->layout_align        = t->layout_align;
+            c->layout_is_inline    = t->layout_is_inline;
             return c;
         }
 
@@ -579,6 +598,13 @@ const char *type_to_string(Type *t) {
     case TYPE_I128:    return "I128";
     case TYPE_U128:    return "U128";
     case TYPE_UNKNOWN: return "?";
+    case TYPE_F80:     return "F80";
+    case TYPE_INT_ARBITRARY: {
+        static char ibuf[16];
+        snprintf(ibuf, sizeof(ibuf), "%c%d",
+                 t->numeric_signed ? 'I' : 'U', t->numeric_width);
+        return ibuf;
+    }
     case TYPE_PTR: {
         static char pbuf[256];
         snprintf(pbuf, sizeof(pbuf), "Pointer :: %s",
@@ -718,10 +744,11 @@ Type *infer_literal_type(double value, const char *literal_str) {
 }
 
 // Parse type annotation [name :: TypeName] or [name :: Arr :: Int :: 3]
-Type *parse_type_annotation(AST *ast) {
+Type *parse_type_annotation(struct AST *ast) {
     if (!ast) return NULL;
     size_t count;
-    AST **items;
+    struct AST **items;
+
     if (ast->type == AST_LIST) {
         count = ast->list.count;
         items = ast->list.items;
@@ -731,12 +758,41 @@ Type *parse_type_annotation(AST *ast) {
     } else {
         return NULL;
     }
+
     for (size_t i = 0; i < count; i++) {
-        if (items[i]->type != AST_SYMBOL || strcmp(items[i]->symbol, "::") != 0) continue;
+        bool is_colon = items[i]->type == AST_SYMBOL && strcmp(items[i]->symbol, "::") == 0;
+        bool is_arrow = items[i]->type == AST_SYMBOL && strcmp(items[i]->symbol, "->") == 0;
+
+        if (!is_colon && !is_arrow) continue;
         if (i + 1 >= count) return NULL;
-        AST *type_node = items[i + 1];
+
+        /* [name -> T] is sugar for [name :: Pointer :: T] */
+        if (is_arrow) {
+            struct AST *inner_node = items[i + 1];
+            Type *inner = NULL;
+
+            // Support array syntax in arrow shorthand
+            if (inner_node->type == AST_ARRAY) {
+                inner = type_coll();
+            } else if (inner_node->type == AST_SYMBOL) {
+                inner = type_from_name(inner_node->symbol);
+                if (!inner) inner = type_layout_ref(inner_node->symbol);
+            }
+
+            if (!inner) return NULL;
+            return type_ptr(inner);
+        }
+
+        struct AST *type_node = items[i + 1];
+
+        // ALIAS: Treat any array literal in a type signature as Coll
+        if (type_node->type == AST_ARRAY) {
+            return type_coll();
+        }
+
         if (type_node->type != AST_SYMBOL) return NULL;
         const char *tn = type_node->symbol;
+
         if (strcmp(tn, "Arr") == 0) {
             Type *elem_type = NULL;
             int   size      = -1;
@@ -766,6 +822,65 @@ Type *parse_type_annotation(AST *ast) {
     }
     return NULL;
 }
+
+/* Type *parse_type_annotation(AST *ast) { */
+/*     if (!ast) return NULL; */
+/*     size_t count; */
+/*     AST **items; */
+/*     if (ast->type == AST_LIST) { */
+/*         count = ast->list.count; */
+/*         items = ast->list.items; */
+/*     } else if (ast->type == AST_ARRAY) { */
+/*         count = ast->array.element_count; */
+/*         items = ast->array.elements; */
+/*     } else { */
+/*         return NULL; */
+/*     } */
+/*     for (size_t i = 0; i < count; i++) { */
+/*         bool is_colon = items[i]->type == AST_SYMBOL && strcmp(items[i]->symbol, "::") == 0; */
+/*         bool is_arrow = items[i]->type == AST_SYMBOL && strcmp(items[i]->symbol, "->") == 0; */
+/*         if (!is_colon && !is_arrow) continue; */
+/*         if (i + 1 >= count) return NULL; */
+/*         /\* [name -> T] is sugar for [name :: Pointer :: T] *\/ */
+/*         if (is_arrow) { */
+/*             AST *inner_node = items[i + 1]; */
+/*             if (inner_node->type != AST_SYMBOL) return NULL; */
+/*             Type *inner = type_from_name(inner_node->symbol); */
+/*             if (!inner) inner = type_layout_ref(inner_node->symbol); */
+/*             return type_ptr(inner); */
+/*         } */
+/*         AST *type_node = items[i + 1]; */
+/*         if (type_node->type != AST_SYMBOL) return NULL; */
+/*         const char *tn = type_node->symbol; */
+/*         if (strcmp(tn, "Arr") == 0) { */
+/*             Type *elem_type = NULL; */
+/*             int   size      = -1; */
+/*             if (i + 2 < count && items[i+2]->type == AST_SYMBOL && */
+/*                 strcmp(items[i+2]->symbol, "::") == 0 && */
+/*                 i + 3 < count && items[i+3]->type == AST_SYMBOL) { */
+/*                 elem_type = type_from_name(items[i+3]->symbol); */
+/*                 if (i + 4 < count && items[i+4]->type == AST_SYMBOL && */
+/*                     strcmp(items[i+4]->symbol, "::") == 0 && */
+/*                     i + 5 < count && items[i+5]->type == AST_NUMBER) { */
+/*                     size = (int)items[i+5]->number; */
+/*                 } */
+/*             } */
+/*             return type_arr(elem_type, size); */
+/*         } */
+/*         if (strcmp(tn, "Pointer") == 0) { */
+/*             if (i + 2 < count && items[i+2]->type == AST_SYMBOL && */
+/*                 strcmp(items[i+2]->symbol, "::") == 0 && */
+/*                 i + 3 < count && items[i+3]->type == AST_SYMBOL) { */
+/*                 Type *inner = type_from_name(items[i+3]->symbol); */
+/*                 if (!inner) inner = type_layout_ref(items[i+3]->symbol); */
+/*                 return type_ptr(inner); */
+/*             } */
+/*             return type_ptr(NULL); */
+/*         } */
+/*         return type_from_name(tn); */
+/*     } */
+/*     return NULL; */
+/* } */
 
 // Compute field sizes and offsets, respecting packed/align.
 // Returns the total struct size.

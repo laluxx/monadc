@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./etc/logo-no-bg.png" alt="Monad Logo" width="200"/>
+<img src="./etc/logo.png" alt="Monad Logo" width="200"/>
 
 ### A Pure Functional Language from High-Level Abstraction to Bare Metal
 
