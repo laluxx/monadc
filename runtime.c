@@ -226,6 +226,15 @@ int rt_list_is_empty_list(RuntimeList *list) {
     return (!list || list->cell == NULL) ? 1 : 0;
 }
 
+int rt_is_pair(RuntimeValue *v) {
+    if ((uintptr_t)v < 0x10000) return 0;
+    if (!v) return 0;
+    if (v->type == RT_THUNK) v = rt_force(v->data.thunk_val);
+    if (!v || v->type != RT_LIST) return 0;
+    RuntimeList *l = v->data.list_val;
+    return !rt_list_is_empty_list(l);
+}
+
 // Low-level lazy cons: caller supplies already-constructed thunk function +
 // env for both head and tail.  Used by the range generators below.
 // Returns a RuntimeList* pointing at a freshly arena-allocated ConsCell.
@@ -325,7 +334,7 @@ RuntimeList *rt_list_cdr(RuntimeList *list) {
 
 RuntimeValue *rt_list_nth(RuntimeList *list, int64_t index) {
     if (index < 0) return rt_value_nil();
-    RuntimeList *cur = list;
+    RuntimeList *cur = rt_unbox_list((RuntimeValue *)list);
     for (int64_t i = 0; i < index; i++) {
         if (rt_list_is_empty_list(cur)) return rt_value_nil();
         cur = rt_list_cdr(cur);
@@ -333,9 +342,10 @@ RuntimeValue *rt_list_nth(RuntimeList *list, int64_t index) {
     return rt_list_car(cur);
 }
 
+
 int64_t rt_list_length(RuntimeList *list) {
     int64_t len = 0;
-    RuntimeList *cur = list;
+    RuntimeList *cur = rt_unbox_list((RuntimeValue *)list);
     while (!rt_list_is_empty_list(cur)) {
         len++;
         cur = rt_list_cdr(cur);
@@ -422,20 +432,16 @@ void rt_list_append(RuntimeList *list, RuntimeValue *value) {
 typedef struct { RuntimeList *rest; RuntimeList *b; } AppendEnv;
 static RuntimeValue *_rt_append_tail_fn(void *e);
 
-RuntimeList *rt_list_append_lists(RuntimeList *a, RuntimeList *b) {
+// Internal: both a and b are guaranteed raw RuntimeList* — no unboxing needed.
+static RuntimeList *_rt_list_append_lists_raw(RuntimeList *a, RuntimeList *b) {
     if (rt_list_is_empty_list(a)) return b;
 
-    // Head: share directly — it's immutable after creation
-    // We need to wrap the head as a thunk fn for lazy_cons_fns.
-    // Simplest: build a fused cell where head is already forced.
-    ConsCell *c   = alloc_cons_cell();
-    // Copy head from a
+    ConsCell *c    = alloc_cons_cell();
     c->head_fn     = NULL;
     c->head_env    = NULL;
     c->head_val    = _force_head(a->cell);
     c->head_forced = 1;
 
-    // Lazy tail
     AppendEnv *env = arena_alloc(&g_eval_arena, sizeof(AppendEnv));
     env->rest = rt_list_cdr(a);
     env->b    = b;
@@ -449,10 +455,17 @@ RuntimeList *rt_list_append_lists(RuntimeList *a, RuntimeList *b) {
     return lst;
 }
 
+// Public: accepts either RuntimeValue*(RT_LIST) or raw RuntimeList*.
+RuntimeList *rt_list_append_lists(RuntimeList *a, RuntimeList *b) {
+    a = rt_unbox_list((RuntimeValue *)a);
+    b = rt_unbox_list((RuntimeValue *)b);
+    return _rt_list_append_lists_raw(a, b);
+}
+
 static RuntimeValue *_rt_append_tail_fn(void *e) {
     AppendEnv   *env    = (AppendEnv *)e;
-    // no free — arena owns env
-    RuntimeList *result = rt_list_append_lists(env->rest, env->b);
+    // env->rest and env->b are raw RuntimeList* from rt_list_cdr — use raw version.
+    RuntimeList *result = _rt_list_append_lists_raw(env->rest, env->b);
     RuntimeValue *rv = alloc_value();
     rv->type           = RT_LIST;
     rv->data.list_val  = result;
@@ -611,6 +624,97 @@ char *rt_string_take(const char *s, int64_t n) {
     memcpy(result, s, n);
     result[n] = '\0';
     return result;
+}
+
+char *rt_string_concat(const char *a, const char *b) {
+    if (!a) a = "";
+    if (!b) b = "";
+    size_t la = strlen(a);
+    size_t lb = strlen(b);
+    char *result = malloc(la + lb + 1);
+    memcpy(result, a, la);
+    memcpy(result + la, b, lb + 1);
+    return result;
+}
+
+void *rt_arr_concat(void *d1, int64_t l1, void *d2, int64_t l2, int64_t elem_size) {
+    if (l1 <= 0 && l2 <= 0) return NULL;
+    void *result = calloc(l1 + l2, elem_size);
+    if (l1 > 0 && d1) memcpy(result, d1, l1 * elem_size);
+    if (l2 > 0 && d2) memcpy((char*)result + (l1 * elem_size), d2, l2 * elem_size);
+    return result;
+}
+
+RuntimeValue *rt_coll_wrap(RuntimeValue *coll, RuntimeValue *item) {
+    if (!coll) return rt_value_list(rt_list_cons(item, rt_list_empty()));
+    if (coll->type == RT_STRING) {
+        char buf[2] = { (char)rt_unbox_char(item), '\0' };
+        return rt_value_string(buf);
+    }
+    if (coll->type == RT_ARRAY) {
+        RuntimeValue *arr = rt_value_array(1);
+        rt_array_set(arr, 0, item);
+        return arr;
+    }
+    return rt_value_list(rt_list_cons(item, rt_list_empty()));
+}
+
+RuntimeValue *rt_coll_empty(RuntimeValue *coll) {
+    if (!coll) return rt_value_list(rt_list_empty());
+    if (coll->type == RT_STRING) return rt_value_string("");
+    if (coll->type == RT_ARRAY) return rt_value_array(0);
+    return rt_value_list(rt_list_empty());
+}
+
+RuntimeValue *rt_coll_concat(RuntimeValue *a, RuntimeValue *b) {
+    if (!a) return b;
+    if (!b) return a;
+    if (a->type == RT_STRING && b->type == RT_STRING) {
+        char *s = rt_string_concat(a->data.string_val, b->data.string_val);
+        RuntimeValue *v = rt_value_string(s);
+        free(s);
+        return v;
+    }
+    if (a->type == RT_ARRAY && b->type == RT_ARRAY) {
+        size_t la = a->data.array_val.length;
+        size_t lb = b->data.array_val.length;
+        RuntimeValue *v = rt_value_array(la + lb);
+        for (size_t i = 0; i < la; i++)
+            v->data.array_val.elements[i] = a->data.array_val.elements[i];
+        for (size_t i = 0; i < lb; i++)
+            v->data.array_val.elements[la + i] = b->data.array_val.elements[i];
+        return v;
+    }
+    return rt_value_list(rt_list_append_lists(rt_unbox_list(a), rt_unbox_list(b)));
+}
+
+RuntimeValue *rt_coll_drop(RuntimeValue *coll, int64_t n) {
+    if (!coll) return rt_value_list(rt_list_empty());
+    if (n < 0) n = 0;
+    if (coll->type == RT_STRING) {
+        int64_t len = strlen(coll->data.string_val);
+        if (n >= len) return rt_value_string("");
+        return rt_value_string(coll->data.string_val + n);
+    }
+    if (coll->type == RT_ARRAY) {
+        int64_t len = coll->data.array_val.length;
+        if (n >= len) return rt_value_array(0);
+        size_t new_len = len - n;
+        RuntimeValue *v = rt_value_array(new_len);
+        for (size_t i = 0; i < new_len; i++)
+            v->data.array_val.elements[i] = coll->data.array_val.elements[n + i];
+        return v;
+    }
+    return rt_value_list(rt_list_drop(rt_unbox_list(coll), n));
+}
+
+int64_t rt_coll_count(RuntimeValue *coll) {
+    if (!coll) return 0;
+    if (coll->type == RT_STRING) return strlen(coll->data.string_val);
+    if (coll->type == RT_ARRAY)  return coll->data.array_val.length;
+    if (coll->type == RT_MAP)    return rt_map_count(coll->data.map_val);
+    if (coll->type == RT_SET)    return rt_set_count(coll->data.set_val);
+    return rt_list_length(rt_unbox_list(coll));
 }
 
 RuntimeList *rt_list_drop(RuntimeList *list, int64_t n) {
@@ -1263,6 +1367,19 @@ RuntimeSet *rt_unbox_set(RuntimeValue *v) {
 int rt_equal_p(RuntimeValue *a, RuntimeValue *b) {
     if (!a && !b) return 1;
     if (!a || !b) return 0;
+    // Normalize: if a pointer has an out-of-range type tag, treat as raw RuntimeList*
+    {
+        int ta = (int)a->type;
+        if (ta < 0 || ta > RT_CLOSURE) {
+            RuntimeValue tmp_a = {.type = RT_LIST, .data = {.list_val = (RuntimeList*)a}};
+            return rt_equal_p(&tmp_a, b);
+        }
+        int tb = (int)b->type;
+        if (tb < 0 || tb > RT_CLOSURE) {
+            RuntimeValue tmp_b = {.type = RT_LIST, .data = {.list_val = (RuntimeList*)b}};
+            return rt_equal_p(a, &tmp_b);
+        }
+    }
     if (a->type == RT_THUNK) a = rt_force(a->data.thunk_val);
     if (b->type == RT_THUNK) b = rt_force(b->data.thunk_val);
     if (a->type == RT_NIL && b->type == RT_NIL) return 1;
@@ -1279,6 +1396,14 @@ int rt_equal_p(RuntimeValue *a, RuntimeValue *b) {
         case RT_MAP:
             if (b->type != RT_MAP) return 0;
             return rt_map_equal(a->data.map_val, b->data.map_val);
+        case RT_ARRAY: {
+            if (b->type != RT_ARRAY) return 0;
+            if (a->data.array_val.length != b->data.array_val.length) return 0;
+            for (size_t i = 0; i < a->data.array_val.length; i++) {
+                if (!rt_equal_p(a->data.array_val.elements[i], b->data.array_val.elements[i])) return 0;
+            }
+            return 1;
+        }
         case RT_LIST: {
             RuntimeList *la = a->data.list_val;
             RuntimeList *lb = b->data.list_val;
@@ -1334,6 +1459,7 @@ char *rt_unbox_string(RuntimeValue *v) {
 
 RuntimeList *rt_unbox_list(RuntimeValue *v) {
     if (!v) return rt_list_empty();
+    if ((uintptr_t)v < 0x10000) return rt_list_empty(); /* Protect against unboxed integers */
     int tag = (int)v->type;
     if (tag < 0 || tag > RT_CLOSURE) {
         /* Treat as raw RuntimeList* */
@@ -1343,6 +1469,13 @@ RuntimeList *rt_unbox_list(RuntimeValue *v) {
     if (v->type == RT_THUNK) v = rt_force(v->data.thunk_val);
     if (v->type == RT_LIST) return v->data.list_val;
     if (v->type == RT_SET)  return rt_set_seq(v->data.set_val);
+    if (v->type == RT_ARRAY) {
+        RuntimeList *lst = rt_list_new();
+        for (size_t i = 0; i < v->data.array_val.length; i++) {
+            rt_list_append(lst, v->data.array_val.elements[i]);
+        }
+        return lst;
+    }
     return rt_list_empty();
 }
 
@@ -1451,142 +1584,53 @@ static bool rt_value_is_short(RuntimeValue *val, int budget) {
 }
 
 static void rt_print_list_indent(RuntimeList *list, int indent) {
-    if (rt_list_is_empty_list(list)) { printf("()"); return; }
+    if (rt_list_is_empty_list(list)) {
+        printf("()");
+        return;
+    }
 
     printf("(");
     RuntimeList *cur = list;
     int first = 1;
     int count = 0;
 
-    while (!rt_list_is_empty_list(cur)) {
-        if (rt_interrupted) { printf(" ..."); break; }
+    while (cur && cur->cell) {
+        if (rt_interrupted) {
+            printf(" ...");
+            break;
+        }
 
         if (!first) printf(" ");
         first = 0;
 
-        RuntimeValue *h = rt_list_car(cur);
+        // Force and print the head
+        RuntimeValue *h = _force_head(cur->cell);
         rt_print_value_indent(h, indent + 2);
 
-        cur = rt_list_cdr(cur);
-        count++;
+        // Force and inspect the tail
+        RuntimeValue *tail_v = _force_tail(cur->cell);
 
-        // Flush periodically so output appears while printing
+        if (!tail_v || tail_v->type == RT_NIL) {
+            // Proper list end
+            break;
+        } else if (tail_v->type == RT_LIST) {
+            // Continue traversal for proper lists
+            cur = tail_v->data.list_val;
+        } else {
+            // Improper list (dotted pair) reached
+            printf(" . ");
+            rt_print_value_indent(tail_v, indent + 2);
+            break;
+        }
+
+        count++;
+        // Flush periodically so output appears while printing long lists
         if (count % 64 == 0) fflush(stdout);
     }
 
     printf(")");
 }
 
-/* static void rt_print_list_indent(RuntimeList *list, int indent) { */
-/*     if (rt_list_is_empty_list(list)) { printf("()"); return; } */
-
-/*     // Collect elements */
-/*     RuntimeValue *elems[4096]; */
-/*     int count = 0; */
-/*     RuntimeList *cur = list; */
-/*     while (!rt_list_is_empty_list(cur) && count < 4095) { */
-/*         if (rt_interrupted) { printf(" ..."); return; } */
-/*         elems[count++] = rt_list_car(cur); */
-/*         cur = rt_list_cdr(cur); */
-/*     } */
-/*     bool truncated = !rt_list_is_empty_list(cur); */
-
-/*     int inner = indent + 2; */
-
-/*     // Check if head is a special form symbol */
-/*     bool is_lambda = (count >= 1 && elems[0] && */
-/*                       elems[0]->type == RT_SYMBOL && */
-/*                       strcmp(elems[0]->data.symbol_val, "lambda") == 0); */
-/*     bool is_if     = (count >= 1 && elems[0] && */
-/*                       elems[0]->type == RT_SYMBOL && */
-/*                       strcmp(elems[0]->data.symbol_val, "if") == 0); */
-/*     bool is_define = (count >= 1 && elems[0] && */
-/*                       elems[0]->type == RT_SYMBOL && */
-/*                       strcmp(elems[0]->data.symbol_val, "define") == 0); */
-
-/*     // Check if any element is a list */
-/*     bool has_list = false; */
-/*     for (int i = 0; i < count; i++) */
-/*         if (elems[i] && elems[i]->type == RT_LIST) */
-/*             has_list = true; */
-
-/*     if (!has_list) { */
-/*         // All atoms — single line */
-/*         printf("("); */
-/*         for (int i = 0; i < count; i++) { */
-/*             if (i > 0) printf(" "); */
-/*             rt_print_value_indent(elems[i], inner); */
-/*         } */
-/*         if (truncated) printf(" ..."); */
-/*         printf(")"); */
-/*         return; */
-/*     } */
-
-/*     if (is_lambda && count >= 3) { */
-/*         // (lambda (params) body...) */
-/*         // Print as: (lambda (params) */
-/*         //             body...) */
-/*         printf("(lambda "); */
-/*         rt_print_value_indent(elems[1], inner);  // params list on same line */
-/*         for (int i = 2; i < count; i++) { */
-/*             printf("\n"); */
-/*             for (int s = 0; s < inner; s++) printf(" "); */
-/*             rt_print_value_indent(elems[i], inner); */
-/*         } */
-/*         if (truncated) printf(" ..."); */
-/*         printf(")"); */
-/*         return; */
-/*     } */
-
-/*     if (is_if && count >= 3) { */
-/*         // (if test then else?) */
-/*         // Print as: (if test */
-/*         //              then */
-/*         //              else) */
-/*         printf("(if "); */
-/*         rt_print_value_indent(elems[1], inner);  // test on same line */
-/*         for (int i = 2; i < count; i++) { */
-/*             printf("\n"); */
-/*             for (int s = 0; s < inner; s++) printf(" "); */
-/*             rt_print_value_indent(elems[i], inner); */
-/*         } */
-/*         if (truncated) printf(" ..."); */
-/*         printf(")"); */
-/*         return; */
-/*     } */
-
-/*     if (is_define && count >= 3) { */
-/*         // (define name value) */
-/*         printf("(define "); */
-/*         rt_print_value_indent(elems[1], inner); */
-/*         for (int i = 2; i < count; i++) { */
-/*             printf("\n"); */
-/*             for (int s = 0; s < inner; s++) printf(" "); */
-/*             rt_print_value_indent(elems[i], inner); */
-/*         } */
-/*         if (truncated) printf(" ..."); */
-/*         printf(")"); */
-/*         return; */
-/*     } */
-
-/*     // General case: first element on same line, nested lists indented only if long */
-/*     printf("("); */
-/*     rt_print_value_indent(elems[0], inner); */
-/*     for (int i = 1; i < count; i++) { */
-/*         if (elems[i] && elems[i]->type == RT_LIST && */
-/*             !rt_value_is_short(elems[i], 40)) { */
-/*             printf("\n"); */
-/*             for (int s = 0; s < inner; s++) printf(" "); */
-/*             rt_print_value_indent(elems[i], inner); */
-/*         } else { */
-/*             printf(" "); */
-/*             rt_print_value_indent(elems[i], inner); */
-/*         } */
-/*     } */
-
-/*     if (truncated) printf(" ..."); */
-/*     printf(")"); */
-/* } */
 
 static void rt_print_value_indent(RuntimeValue *val, int indent) {
     if (!val) { printf("nil"); return; }
@@ -1710,12 +1754,12 @@ void rt_print_value(RuntimeValue *val) {
 
 void rt_print_list_unbounded(RuntimeList *list) {
     rt_interrupted = 0;
-    rt_print_list_indent(list, 0);
+    rt_print_list_indent(rt_unbox_list((RuntimeValue *)list), 0);
     printf("\n");
 }
 
 void rt_print_list(RuntimeList *list) {
-    rt_print_list_unbounded(list);
+    rt_print_list_unbounded(rt_unbox_list((RuntimeValue *)list));
 }
 
 void rt_print_expanded(RuntimeValue *val) {
@@ -2175,10 +2219,10 @@ RuntimeValue *rt_ast_to_runtime_value(AST *ast) {
             return WRAP_LIST(lst);
         }
         case AST_ARRAY: {
-            RuntimeList *lst = HEAP_LIST();
+            RuntimeValue *v = rt_value_array(ast->array.element_count);
             for (size_t i = 0; i < ast->array.element_count; i++)
-                heap_list_append(lst, rt_ast_to_runtime_value(ast->array.elements[i]));
-            return WRAP_LIST(lst);
+                rt_array_set(v, i, rt_ast_to_runtime_value(ast->array.elements[i]));
+            return v;
         }
         case AST_LAMBDA: {
             RuntimeList *lst = HEAP_LIST();
@@ -2314,6 +2358,7 @@ void declare_runtime_functions(CodegenContext *ctx) {
     DECL("rt_list_lazy_cons", ptr, ptr, ptr);
     DECL("rt_list_cons", ptr, ptr, ptr);
     DECL("rt_list_is_empty_list", i32, ptr);
+    DECL("rt_is_pair", i32, ptr);
 
     // --- List accessors ---
     DECL("rt_list_car",    ptr, ptr);
@@ -2422,6 +2467,15 @@ void declare_runtime_functions(CodegenContext *ctx) {
     DECL("rt_print_list",          void_t, ptr);
     DECL("rt_print_list_limited",  void_t, ptr, i64);
 
+    // --- String & Array Helpers ---
+    DECL("rt_string_concat", ptr, ptr, ptr);
+    DECL("rt_arr_concat", ptr, ptr, i64, ptr, i64, i64);
+    DECL("rt_coll_wrap", ptr, ptr, ptr);
+    DECL("rt_coll_empty", ptr, ptr);
+    DECL("rt_coll_concat", ptr, ptr, ptr);
+    DECL("rt_coll_drop", ptr, ptr, i64);
+    DECL("rt_coll_count", i64, ptr);
+
     // --- Assert ---
     {
         LLVMTypeRef ft = LLVMFunctionType(void_t, &ptr, 1, 0);
@@ -2462,6 +2516,7 @@ GET_RUNTIME_FUNCTION(rt_list_empty)
 GET_RUNTIME_FUNCTION(rt_list_lazy_cons)
 GET_RUNTIME_FUNCTION(rt_list_cons)
 GET_RUNTIME_FUNCTION(rt_list_is_empty_list)
+GET_RUNTIME_FUNCTION(rt_is_pair)
 
 LLVMValueRef get_rt_list_is_empty(CodegenContext *ctx) {
     LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, "rt_list_is_empty_list");
@@ -2564,6 +2619,14 @@ GET_RUNTIME_FUNCTION(rt_map_vals)
 GET_RUNTIME_FUNCTION(rt_map_merge)
 GET_RUNTIME_FUNCTION(rt_value_map)
 GET_RUNTIME_FUNCTION(rt_unbox_map)
+
+GET_RUNTIME_FUNCTION(rt_string_concat)
+GET_RUNTIME_FUNCTION(rt_arr_concat)
+GET_RUNTIME_FUNCTION(rt_coll_wrap)
+GET_RUNTIME_FUNCTION(rt_coll_empty)
+GET_RUNTIME_FUNCTION(rt_coll_concat)
+GET_RUNTIME_FUNCTION(rt_coll_drop)
+GET_RUNTIME_FUNCTION(rt_coll_count)
 
 LLVMValueRef get___monad_runtime_error(CodegenContext *ctx) {
     LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, "__monad_runtime_error");

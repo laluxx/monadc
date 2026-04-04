@@ -176,6 +176,7 @@ RuntimeValue *rt_force(RuntimeThunk *thunk);
 RuntimeList *rt_list_new(void);
 RuntimeList *rt_list_empty(void);
 int          rt_list_is_empty_list(RuntimeList *list);
+int          rt_is_pair(RuntimeValue *v);
 
 RuntimeList  *rt_list_lazy_cons(RuntimeThunk *head_thunk, RuntimeThunk *tail_thunk);
 RuntimeList  *rt_list_cons(RuntimeValue *head_val, RuntimeList *tail_list);
@@ -344,9 +345,15 @@ void __monad_runtime_error(const char *file, long line, long col, const char *ms
 
 RuntimeValue *rt_ast_to_runtime_value(AST *ast);
 char         *rt_string_take(const char *s, int64_t n);
+char         *rt_string_concat(const char *a, const char *b);
+void         *rt_arr_concat(void *d1, int64_t l1, void *d2, int64_t l2, int64_t elem_size);
+RuntimeValue *rt_coll_wrap(RuntimeValue *coll, RuntimeValue *item);
+RuntimeValue *rt_coll_empty(RuntimeValue *coll);
+RuntimeValue *rt_coll_concat(RuntimeValue *a, RuntimeValue *b);
+RuntimeValue *rt_coll_drop(RuntimeValue *coll, int64_t n);
+int64_t rt_coll_count(RuntimeValue *coll);
 
 /// LLVM
-
 //// Runtime Declaration
 
 void declare_runtime_functions(CodegenContext *ctx);
@@ -377,6 +384,7 @@ LLVMValueRef get_rt_list_lazy_cons(CodegenContext *ctx);
 LLVMValueRef get_rt_list_cons(CodegenContext *ctx);
 LLVMValueRef get_rt_list_is_empty_list(CodegenContext *ctx);
 LLVMValueRef get_rt_list_is_empty(CodegenContext *ctx);
+LLVMValueRef get_rt_is_pair(CodegenContext *ctx);
 LLVMValueRef get_rt_list_car(CodegenContext *ctx);
 LLVMValueRef get_rt_list_cdr(CodegenContext *ctx);
 LLVMValueRef get_rt_list_nth(CodegenContext *ctx);
@@ -486,6 +494,13 @@ LLVMValueRef get_rt_print_list(CodegenContext *ctx);
 //// String
 
 LLVMValueRef get_rt_string_take(CodegenContext *ctx);
+LLVMValueRef get_rt_string_concat(CodegenContext *ctx);
+LLVMValueRef get_rt_arr_concat(CodegenContext *ctx);
+LLVMValueRef get_rt_coll_wrap(CodegenContext *ctx);
+LLVMValueRef get_rt_coll_empty(CodegenContext *ctx);
+LLVMValueRef get_rt_coll_concat(CodegenContext *ctx);
+LLVMValueRef get_rt_coll_drop(CodegenContext *ctx);
+LLVMValueRef get_rt_coll_count(CodegenContext *ctx);
 LLVMValueRef get_rt_ast_to_runtime_value(CodegenContext *ctx);
 
 #endif // RUNTIME_H

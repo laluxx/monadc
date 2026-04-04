@@ -2,6 +2,7 @@
 
 * TODO Stuff [0/26]
 - [ ] eval
+- [ ] Haskell like hole driven development
 - [ ] [a] is an alias for the Coll type, [Int] is an array of ints, (a) is an alias for the List type, (Int) is a list of ints
 - [ ] Fat strings... fuck my life
 - [ ] pmatch backtracking on failure with =<-=

@@ -90,6 +90,10 @@ typedef struct ASTPMatchClause {
     ASTPattern  *patterns;    // one pattern per matched param
     int          pattern_count;
     struct AST  *body;
+    // guarded clause: | cond -> body | cond -> body ...
+    struct AST **guard_conds;
+    struct AST **guard_bodies;
+    int          guard_count;
 } ASTPMatchClause;
 
 // A single constructor in a data definition

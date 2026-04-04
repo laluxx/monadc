@@ -197,6 +197,8 @@ ASTPattern parse_single_pattern(Parser *p) {
 
         while (!parser_at(p, TOK_RBRACKET) &&
                !parser_at(p, TOK_PIPE)     &&
+               !(parser_at(p, TOK_SYMBOL) && p->current.value &&
+                 strcmp(p->current.value, "|") == 0) &&
                !parser_at(p, TOK_EOF)) {
             /* Detect fused token like "_|xs" or "x|xs" — symbol containing '|' */
             if (p->current.type == TOK_SYMBOL && p->current.value) {
@@ -242,7 +244,8 @@ ASTPattern parse_single_pattern(Parser *p) {
             elems[count++] = elem;
         }
 
-        if (parser_at(p, TOK_PIPE)) {
+        if (parser_at(p, TOK_PIPE) ||
+            (parser_at(p, TOK_SYMBOL) && p->current.value && strcmp(p->current.value, "|") == 0)) {
             parser_advance(p);
             tail = calloc(1, sizeof(ASTPattern));
             *tail = parse_single_pattern(p);
@@ -251,7 +254,6 @@ ASTPattern parse_single_pattern(Parser *p) {
                 tail->kind = PAT_WILDCARD;
             }
         }
-
         if (!parser_at(p, TOK_RBRACKET)) {
             fprintf(stderr, "pmatch: expected ']' to close list pattern\n");
         } else {
@@ -298,7 +300,53 @@ static ASTPMatchClause parse_one_clause(Parser *p, int param_count) {
                 patterns[i].ctor_field_count);
     }
 
-    // Consume ->
+    // Check for guards: '|' means guarded clause, no '->' expected at top level
+    if (parser_at(p, TOK_PIPE) ||
+        (parser_at(p, TOK_SYMBOL) && p->current.value &&
+         strcmp(p->current.value, "|") == 0)) {
+
+        AST **guard_conds  = NULL;
+        AST **guard_bodies = NULL;
+        int   guard_count  = 0;
+        int   guard_cap    = 0;
+
+        while (parser_at(p, TOK_PIPE) ||
+               (parser_at(p, TOK_SYMBOL) && p->current.value &&
+                strcmp(p->current.value, "|") == 0)) {
+            parser_advance(p); // consume '|'
+
+            AST *cond = parse_expr(p);
+
+            if (!parser_at(p, TOK_ARROW)) {
+                fprintf(stderr, "pmatch: expected '->' after guard condition, got type=%d value='%s'\n",
+                        p->current.type,
+                        p->current.value ? p->current.value : "NULL");
+            } else {
+                parser_advance(p);
+            }
+
+            AST *body = parse_expr(p);
+
+            if (guard_count >= guard_cap) {
+                guard_cap = guard_cap == 0 ? 4 : guard_cap * 2;
+                guard_conds  = realloc(guard_conds,  sizeof(AST*) * guard_cap);
+                guard_bodies = realloc(guard_bodies, sizeof(AST*) * guard_cap);
+            }
+            guard_conds[guard_count]  = cond;
+            guard_bodies[guard_count] = body;
+            guard_count++;
+        }
+
+        clause.patterns      = patterns;
+        clause.pattern_count = param_count;
+        clause.body          = NULL;
+        clause.guard_conds   = guard_conds;
+        clause.guard_bodies  = guard_bodies;
+        clause.guard_count   = guard_count;
+        return clause;
+    }
+
+    // No guards — consume -> and parse single body
     if (!parser_at(p, TOK_ARROW)) {
         fprintf(stderr, "pmatch: expected '->' after pattern, got token type=%d value='%s'\n",
                 p->current.type,
@@ -307,16 +355,17 @@ static ASTPMatchClause parse_one_clause(Parser *p, int param_count) {
         parser_advance(p);
     }
 
-    // Parse body expression using the existing reader's parse_expr
-    // We expose this via parse() on a sub-expression — but since we
-    // share the same Parser/Lexer we just call parse_expr directly.
     AST *body = parse_expr(p);
 
     clause.patterns      = patterns;
     clause.pattern_count = param_count;
     clause.body          = body;
+    clause.guard_conds   = NULL;
+    clause.guard_bodies  = NULL;
+    clause.guard_count   = 0;
     return clause;
 }
+
 
 AST *parse_pmatch_clauses(Parser *p, int param_count) {
     ASTPMatchClause *clauses = NULL;
@@ -335,18 +384,28 @@ AST *parse_pmatch_clauses(Parser *p, int param_count) {
             Lexer peek_lex = *p->lexer;
             Token peek_cur = lexer_next_token(&peek_lex); /* start AFTER p->current */
             bool has_arrow = (p->current.type == TOK_ARROW);
+            /* Also treat a top-level '|' as a clause signal (guarded clause) */
+            bool has_pipe  = (p->current.type == TOK_PIPE ||
+                              (p->current.type == TOK_SYMBOL &&
+                               p->current.value &&
+                               strcmp(p->current.value, "|") == 0));
             int depth = 0;
-            while (!has_arrow &&
+            while (!has_arrow && !has_pipe &&
                    peek_cur.type != TOK_RPAREN &&
                    peek_cur.type != TOK_EOF     &&
                    peek_cur.type != TOK_KEYWORD) {
                 if (peek_cur.type == TOK_LPAREN || peek_cur.type == TOK_LBRACKET) depth++;
                 if ((peek_cur.type == TOK_RPAREN || peek_cur.type == TOK_RBRACKET) && depth > 0) depth--;
                 if (peek_cur.type == TOK_ARROW && depth == 0) { has_arrow = true; free(peek_cur.value); break; }
+                if (peek_cur.type == TOK_PIPE  && depth == 0) { has_pipe  = true; free(peek_cur.value); break; }
+                if (peek_cur.type == TOK_SYMBOL && peek_cur.value &&
+                    strcmp(peek_cur.value, "|") == 0 && depth == 0) {
+                    has_pipe = true; free(peek_cur.value); break;
+                }
                 free(peek_cur.value);
                 peek_cur = lexer_next_token(&peek_lex);
             }
-            if (!has_arrow) { free(peek_cur.value); break; }
+            if (!has_arrow && !has_pipe) { free(peek_cur.value); break; }
         }
         ASTPMatchClause clause = parse_one_clause(p, param_count);
         if (count >= cap) {
@@ -470,6 +529,25 @@ static AST *ast_substitute(AST *node,
             ast_list_append(result,
                 ast_substitute(node->list.items[i], names, exprs, count));
         return result;
+    }
+
+    // For arrays, recurse into each element
+    if (node->type == AST_ARRAY) {
+        if (node->array.element_count == 1) {
+            AST *item = ast_substitute(node->array.elements[0], names, exprs, count);
+            AST *call = ast_new_list();
+            ast_list_append(call, ast_new_symbol("rt_coll_wrap"));
+            ast_list_append(call, ast_new_symbol("__p_0"));
+            ast_list_append(call, item);
+            return call;
+        }
+        AST *cloned = ast_clone(node);
+        for (size_t i = 0; i < cloned->array.element_count; i++) {
+            AST *new_elem = ast_substitute(cloned->array.elements[i], names, exprs, count);
+            ast_free(cloned->array.elements[i]);
+            cloned->array.elements[i] = new_elem;
+        }
+        return cloned;
     }
 
     // For lambdas, substitute in body but not in params (they shadow)
@@ -812,22 +890,74 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
                 i, guard_count, bind_count);
         for (int _bi = 0; _bi < bind_count; _bi++)
             fprintf(stderr, "  bind[%d] name='%s'\n", _bi, bind_names[_bi] ? bind_names[_bi] : "NULL");
-        AST *guard = (guard_count == 0)
-            ? sym("else")
-            : make_and(guard_parts, guard_count);
 
-        AST *body = ast_clone(cl->body);
-        if (bind_count > 0)
-            body = make_let(bind_names, bind_exprs, bind_count, body);
+        if (cl->guard_count > 0) {
+            // Guarded clause: pattern conditions are shared across all guards.
+            // Build the pattern guard once, then AND it with each guard cond.
+            AST *pattern_guard = (guard_count == 0)
+                ? NULL
+                : make_and(guard_parts, guard_count);
+
+            for (int gi = 0; gi < cl->guard_count; gi++) {
+                AST *gcond = ast_clone(cl->guard_conds[gi]);
+                AST *gbody = ast_clone(cl->guard_bodies[gi]);
+
+                if (bind_count > 0) {
+                    gcond = make_let(bind_names, bind_exprs, bind_count, gcond);
+                    gbody = make_let(bind_names, bind_exprs, bind_count, gbody);
+                }
+
+                bool is_otherwise = (gcond->type == AST_SYMBOL &&
+                                     strcmp(gcond->symbol, "otherwise") == 0);
+                AST *combined;
+                if (is_otherwise) {
+                    ast_free(gcond);
+                    combined = pattern_guard ? ast_clone(pattern_guard) : sym("else");
+                } else if (pattern_guard) {
+                    AST *parts[2] = { ast_clone(pattern_guard), gcond };
+                    combined = make_and(parts, 2);
+                } else {
+                    combined = gcond;
+                }
+
+                AST *branch = ast_new_list();
+                ast_list_append(branch, combined);
+                ast_list_append(branch, gbody);
+                ast_list_append(cond_list, branch);
+            }
+            if (pattern_guard) ast_free(pattern_guard);
+        } else {
+            AST *guard = (guard_count == 0)
+                ? sym("else")
+                : make_and(guard_parts, guard_count);
+
+            AST *body = ast_clone(cl->body);
+
+            /* Polymorphic empty collection: if body is exactly [], desugar to (rt_coll_empty __p_0) */
+            if (body->type == AST_LIST && body->list.count == 0) {
+                ast_free(body);
+                body = ast_new_list();
+                ast_list_append(body, sym("rt_coll_empty"));
+                ast_list_append(body, sym("__p_0"));
+            } else if (body->type == AST_ARRAY && body->array.element_count == 0) {
+                ast_free(body);
+                body = ast_new_list();
+                ast_list_append(body, sym("rt_coll_empty"));
+                ast_list_append(body, sym("__p_0"));
+            }
+
+            if (bind_count > 0)
+                body = make_let(bind_names, bind_exprs, bind_count, body);
+
+            AST *clause = ast_new_list();
+            ast_list_append(clause, guard);
+            ast_list_append(clause, body);
+            ast_list_append(cond_list, clause);
+        }
 
         free(guard_parts);
         free(bind_names);
         free(bind_exprs);
-
-        AST *clause = ast_new_list();
-        ast_list_append(clause, guard);
-        ast_list_append(clause, body);
-        ast_list_append(cond_list, clause);
     }
 
     // Fallthrough: non-exhaustive pattern match
