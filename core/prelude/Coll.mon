@@ -1,0 +1,66 @@
+;;; Coll.mon --- Core Collection Utilities
+
+;; Author: Laluxx
+;; Version: 0.1.0
+;; Keywords: Coll collections sequence prelude
+
+;;; Commentary:
+
+;; The polymorphic sequence module for Monad.
+;; Provides a unified interface for Lists, Arrays, and Strings.
+;; Includes structural manipulation (take, drop), concatenation,
+;; and higher-order sequence utilities that work across all Coll types.
+
+;;; Code:
+
+;; (module Coll
+;;   [take drop])
+
+
+define take :: Int -> [a] -> [a]
+  _ []            -> []
+  n [x|xs]
+      | n > 0     -> (x ++ (take (n - 1) xs))
+      | otherwise -> []
+
+
+define drop :: Int -> [a] -> [a]
+  _ []            -> []
+  n [x|xs]
+      | n > 0     -> (drop (n - 1) xs)
+      | otherwise -> (x ++ xs)
+
+
+;; TODO
+;; define takeWhile :: (a -> Bool) -> [a] -> Coll
+;;   _ []            -> []
+;;   p [x|xs]
+;;       | p x       -> (x . (takeWhile p xs))
+;;       | otherwise -> []
+
+;; define dropWhile :: (a -> Bool) -> [a] -> Coll
+;;   _ []            -> []
+;;   p [x|xs]
+;;       | p x       -> dropWhile p xs
+;;       | otherwise -> (x . xs)
+
+
+(tests
+  ;; [take]
+  (assert-eq (take 2 [1 2 3 4])   [1 2]      "take 2 Array")
+  (assert-eq (take 2 '(1 2 3 4)) '(1 2)      "take 2 List")
+  (assert-eq (take 2 "monad")     "mo"       "take 2 String")
+  (assert-eq (take 0 [1 2 3])     []         "take 0 Array")
+  (assert-eq (take 5 [1 2])       [1 2]      "take over-length")
+
+  ;; [drop]
+  (assert-eq (drop 2 [1 2 3 4])   [3 4]      "drop 2 Array")
+  (assert-eq (drop 2 '(1 2 3 4)) '(3 4)      "drop 2 List")
+  (assert-eq (drop 2 "monad")     "nad"      "drop 2 String")
+  (assert-eq (drop 0 [1 2 3])     [1 2 3]    "drop 0 Array")
+  (assert-eq (drop 5 [1 2])       []         "drop over-length")
+
+  ;; [edge cases]
+  (assert-eq (take 1 [42])        [42]       "take singleton array")
+  (assert-eq (drop 1 [42])        []         "drop singleton array")
+  (assert-eq (take 10 "")         ""         "take empty string"))

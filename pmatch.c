@@ -470,6 +470,12 @@ static AST *make_count(const char *param_name) {
     return make_list(items, 2);
 }
 
+// Helper: (rt_coll_wrap coll_param elem)
+static AST *make_coll_wrap(const char *coll_param, AST *elem) {
+    AST *items[] = {sym("rt_coll_wrap"), sym(coll_param), elem};
+    return make_list(items, 3);
+}
+
 // Helper: (list-empty? param) -> (= (count param) 0)
 static AST *make_list_empty(const char *param_name) {
     AST *cnt = make_count(param_name);
@@ -817,8 +823,8 @@ static void build_pattern_conditions(
             case PAT_WILDCARD:
                 break;
             case PAT_VAR:
-                /* Never cast — list-ref returns RuntimeValue* and
-                 * the type system handles it from there.           */
+                /* x is always a raw element — never pre-wrap.
+                 * The ++ operator handles wrapping at the call site. */
                 PUSH_BIND(ep->var_name, elem_expr);
                 break;
             case PAT_LITERAL_INT:
@@ -833,12 +839,17 @@ static void build_pattern_conditions(
         }
 
         // Tail binding: xs = (drop n param)
+        // Always use the C runtime directly — never the user-defined drop —
+        // to avoid infinite recursion when drop itself uses [x|xs] patterns.
+        // rt_coll_drop signature: (RuntimeValue* coll, int64_t n)
+        // n is the number of elements before the tail — drop exactly n.
         if (has_tail && pat->tail->kind == PAT_VAR) {
+            int drop_n = n > 0 ? n : 1;
             char buf[32];
-            snprintf(buf, sizeof(buf), "%d", n);
-            AST *drop_args[] = {sym("drop"),
-                                ast_new_number((double)n, buf),
-                                sym(param_name)};
+            snprintf(buf, sizeof(buf), "%d", drop_n);
+            AST *drop_args[] = {sym("rt_coll_drop"),
+                                sym(param_name),
+                                ast_new_number((double)drop_n, buf)};
             PUSH_BIND(pat->tail->var_name, make_list(drop_args, 3));
         }
         break;
@@ -920,6 +931,26 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
                     combined = gcond;
                 }
 
+                /* Polymorphic empty collection in guard body: [] -> (rt_coll_empty __p_N) */
+                if ((gbody->type == AST_LIST  && gbody->list.count == 0) ||
+                    (gbody->type == AST_ARRAY && gbody->array.element_count == 0)) {
+                    ast_free(gbody);
+                    const char *coll_param = "__p_0";
+                    for (int _pi = 0; _pi < param_count; _pi++) {
+                        const char *tn = params[_pi].type_name;
+                        if (tn && (strcmp(tn, "Coll") == 0 ||
+                                   strcmp(tn, "List") == 0 ||
+                                   strcmp(tn, "[a]") == 0  ||
+                                   tn[0] == '[')) {
+                            coll_param = params[_pi].name;
+                            break;
+                        }
+                    }
+                    gbody = ast_new_list();
+                    ast_list_append(gbody, sym("rt_coll_empty"));
+                    ast_list_append(gbody, sym(coll_param));
+                }
+
                 AST *branch = ast_new_list();
                 ast_list_append(branch, combined);
                 ast_list_append(branch, gbody);
@@ -933,17 +964,26 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
 
             AST *body = ast_clone(cl->body);
 
-            /* Polymorphic empty collection: if body is exactly [], desugar to (rt_coll_empty __p_0) */
-            if (body->type == AST_LIST && body->list.count == 0) {
+            /* Polymorphic empty collection: if body is exactly [], desugar to
+             * (rt_coll_empty __p_N) where __p_N is the first collection param. */
+            if ((body->type == AST_LIST  && body->list.count == 0) ||
+                (body->type == AST_ARRAY && body->array.element_count == 0)) {
                 ast_free(body);
+                /* Find the first parameter that is a collection type */
+                const char *coll_param = "__p_0";
+                for (int _pi = 0; _pi < param_count; _pi++) {
+                    const char *tn = params[_pi].type_name;
+                    if (tn && (strcmp(tn, "Coll") == 0 ||
+                               strcmp(tn, "List") == 0 ||
+                               strcmp(tn, "[a]") == 0  ||
+                               tn[0] == '[')) {
+                        coll_param = params[_pi].name;
+                        break;
+                    }
+                }
                 body = ast_new_list();
                 ast_list_append(body, sym("rt_coll_empty"));
-                ast_list_append(body, sym("__p_0"));
-            } else if (body->type == AST_ARRAY && body->array.element_count == 0) {
-                ast_free(body);
-                body = ast_new_list();
-                ast_list_append(body, sym("rt_coll_empty"));
-                ast_list_append(body, sym("__p_0"));
+                ast_list_append(body, sym(coll_param));
             }
 
             if (bind_count > 0)

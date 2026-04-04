@@ -1305,14 +1305,11 @@ static void codegen_show_value(CodegenContext *ctx, LLVMValueRef val, Type *type
         LLVMValueRef args[] = {newline ? get_fmt_float(ctx) : get_fmt_float_no_newline(ctx), ext};
         LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, "");
     } else if (type->kind == TYPE_LIST) {
+        /* rt_print_list calls rt_print_list_unbounded which already appends \n —
+         * do NOT add another newline here regardless of the newline flag. */
         LLVMValueRef print_fn = get_rt_print_list(ctx);
         LLVMValueRef args[] = {val};
         LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(print_fn), print_fn, args, 1, "");
-        if (newline) {
-            LLVMValueRef nl = LLVMBuildGlobalStringPtr(ctx->builder, "\n", "nl");
-            LLVMValueRef nl_args[] = {nl};
-            LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, nl_args, 1, "");
-        }
     } else if (type->kind == TYPE_RATIO || type->kind == TYPE_SYMBOL) {
         LLVMValueRef print_fn = get_rt_print_value(ctx);
         LLVMValueRef args[] = {val};
@@ -1323,6 +1320,9 @@ static void codegen_show_value(CodegenContext *ctx, LLVMValueRef val, Type *type
             LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, nl_args, 1, "");
         }
     } else if (type->kind == TYPE_KEYWORD) {
+        LLVMValueRef colon = LLVMBuildGlobalStringPtr(ctx->builder, ":", "kw_colon");
+        LLVMValueRef colon_args[] = {colon};
+        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, colon_args, 1, "");
         LLVMValueRef args[] = {newline ? get_fmt_str(ctx) : get_fmt_str_no_newline(ctx), val};
         LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, "");
     } else if (type->kind == TYPE_BOOL) {
@@ -1617,7 +1617,7 @@ static LLVMValueRef codegen_box(CodegenContext *ctx, LLVMValueRef val, Type *typ
             LLVMPositionBuilderAtEnd(ctx->builder, exit_bb);
             return boxed_arr;
         }
-    case TYPE_LIST: {
+        case TYPE_LIST: {
             // If this is already a RuntimeValue* (e.g. function parameter or
             // call result), pass it through — do NOT wrap again with rt_value_list.
             // Only raw RuntimeList* values (from rt_list_new etc.) need wrapping.
@@ -5793,7 +5793,6 @@ if (ast->list.count >= 5) {
                 return result;
             }
 
-            // Handle 'show' function
             if (strcmp(head->symbol, "show") == 0) {
                 if (ast->list.count < 2) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'show' requires at least 1 argument",
@@ -5803,9 +5802,7 @@ if (ast->list.count >= 5) {
                 LLVMValueRef printf_fn = get_or_declare_printf(ctx);
                 AST *arg = ast->list.items[1];
 
-                // ----------------------------------------------------------------
                 // Variadic: (show "format _ string" val1 val2 ...)
-                // ----------------------------------------------------------------
                 if (ast->list.count > 2 && arg->type == AST_STRING) {
                     const char *fmt     = arg->string;
                     size_t      arg_idx = 2;
@@ -6730,6 +6727,23 @@ if (ast->list.count >= 5) {
                 return result;
             }
 
+            if (strcmp(head->symbol, "rt_coll_drop") == 0) {
+                LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
+                CodegenResult coll_r = codegen_expr(ctx, ast->list.items[1]);
+                CodegenResult n_r    = codegen_expr(ctx, ast->list.items[2]);
+                LLVMValueRef n_val   = n_r.value;
+                if (LLVMTypeOf(n_val) != i64_t)
+                    n_val = LLVMBuildIntCast2(ctx->builder, n_val, i64_t, 1, "drop_n");
+                LLVMValueRef fn = get_rt_coll_drop(ctx);
+                LLVMTypeRef args[] = {ptr_t, i64_t};
+                LLVMValueRef call_args[] = {coll_r.value, n_val};
+                result.value = LLVMBuildCall2(ctx->builder, LLVMFunctionType(ptr_t, args, 2, 0),
+                                              fn, call_args, 2, "drop_coll");
+                result.type = type_coll();
+                return result;
+            }
+
             if (strcmp(head->symbol, "++") == 0) {
                 if (ast->list.count != 3) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: '++' requires 2 arguments",
@@ -6791,111 +6805,6 @@ if (ast->list.count >= 5) {
                     LLVMValueRef fn = get_rt_coll_concat(ctx);
                     result.value = LLVMBuildCall2(ctx->builder, LLVMFunctionType(ptr, (LLVMTypeRef[]){ptr, ptr}, 2, 0),
                                                   fn, (LLVMValueRef[]){left_r.value, right_r.value}, 2, "concat_coll");
-                    result.type  = type_coll();
-                    return result;
-                }
-            }
-
-            if (strcmp(head->symbol, "take") == 0) {
-                LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-                LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
-                CodegenResult n_r    = codegen_expr(ctx, ast->list.items[1]);
-                CodegenResult col_r  = codegen_expr(ctx, ast->list.items[2]);
-                LLVMValueRef n_val = type_is_float(n_r.type)
-                    ? LLVMBuildFPToSI(ctx->builder, n_r.value, i64, "n") : n_r.value;
-
-                // 1. String: returns a new substring via runtime helper
-                if (col_r.type && col_r.type->kind == TYPE_STRING) {
-                    LLVMValueRef fn = get_rt_string_take(ctx);
-                    result.value = LLVMBuildCall2(ctx->builder, LLVMFunctionType(ptr, (LLVMTypeRef[]){ptr, i64}, 2, 0),
-                                                  fn, (LLVMValueRef[]){col_r.value, n_val}, 2, "take_str");
-                    result.type  = type_string();
-                    return result;
-                }
-
-                // 2. Array: Inline Slice (Update Length)
-                if (col_r.type && col_r.type->kind == TYPE_ARR) {
-                    LLVMTypeRef fat_t = get_arr_fat_type(ctx);
-                    LLVMValueRef old_fat = col_r.value;
-
-                    // Allocate a new fat pointer on the stack for the slice
-                    LLVMValueRef new_fat = LLVMBuildAlloca(ctx->builder, fat_t, "take_slice");
-
-                    // Extract data pointer from original fat pointer
-                    LLVMValueRef data_ptr = arr_fat_data(ctx, old_fat, col_r.type->arr_element_type);
-
-                    // Store the original data pointer and the NEW length (n_val)
-                    LLVMBuildStore(ctx->builder, data_ptr, LLVMBuildStructGEP2(ctx->builder, fat_t, new_fat, 0, "d"));
-                    LLVMBuildStore(ctx->builder, n_val, LLVMBuildStructGEP2(ctx->builder, fat_t, new_fat, 1, "l"));
-
-                    result.value = new_fat;
-                    result.type  = type_clone(col_r.type);
-                    result.type->arr_size = -1; // Sliced arrays have dynamic size
-                    return result;
-                }
-
-                // 3. List / Coll:
-                LLVMValueRef ub_list_fn = get_rt_unbox_list(ctx);
-                LLVMTypeRef  ub_list_ft = LLVMFunctionType(ptr, &ptr, 1, 0);
-                LLVMValueRef raw_list = LLVMBuildCall2(ctx->builder, ub_list_ft, ub_list_fn, &col_r.value, 1, "raw_list");
-
-                LLVMValueRef fn = get_rt_list_take(ctx);
-                LLVMValueRef take_val = LLVMBuildCall2(ctx->builder, LLVMFunctionType(ptr, (LLVMTypeRef[]){ptr, i64}, 2, 0),
-                                              fn, (LLVMValueRef[]){raw_list, n_val}, 2, "take_list");
-
-                result.value = LLVMBuildCall2(ctx->builder, LLVMFunctionType(ptr, &ptr, 1, 0),
-                                              get_rt_value_list(ctx), &take_val, 1, "rebox_take");
-                result.type  = type_coll();
-                return result;
-            }
-
-            if (strcmp(head->symbol, "drop") == 0) {
-                LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-                LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
-                CodegenResult n_r    = codegen_expr(ctx, ast->list.items[1]);
-                CodegenResult col_r  = codegen_expr(ctx, ast->list.items[2]);
-                LLVMValueRef n_val = type_is_float(n_r.type)
-                    ? LLVMBuildFPToSI(ctx->builder, n_r.value, i64, "n") : n_r.value;
-
-                // 1. String: returns the pointer suffix (pointer arithmetic)
-                if (col_r.type && col_r.type->kind == TYPE_STRING) {
-                    result.value = LLVMBuildGEP2(ctx->builder, LLVMInt8TypeInContext(ctx->context),
-                                                  col_r.value, &n_val, 1, "drop_str");
-                    result.type  = type_string();
-                    return result;
-                }
-
-                // 2. Array: Inline Slice (Update Pointer and Length)
-                if (col_r.type && col_r.type->kind == TYPE_ARR) {
-                    LLVMTypeRef fat_t = get_arr_fat_type(ctx);
-                    LLVMTypeRef elem_t = type_to_llvm(ctx, col_r.type->arr_element_type);
-                    LLVMValueRef old_fat = col_r.value;
-
-                    // Extract current data pointer and current length
-                    LLVMValueRef old_data = arr_fat_data(ctx, old_fat, col_r.type->arr_element_type);
-                    LLVMValueRef old_len  = arr_fat_size(ctx, old_fat);
-
-                    // New data pointer = old_data + n
-                    LLVMValueRef new_data = LLVMBuildGEP2(ctx->builder, elem_t, old_data, &n_val, 1, "new_ptr");
-                    // New length = old_len - n
-                    LLVMValueRef new_len = LLVMBuildSub(ctx->builder, old_len, n_val, "new_len");
-
-                    // Allocate and populate the new fat pointer slice
-                    LLVMValueRef new_fat = LLVMBuildAlloca(ctx->builder, fat_t, "drop_slice");
-                    LLVMBuildStore(ctx->builder, new_data, LLVMBuildStructGEP2(ctx->builder, fat_t, new_fat, 0, "d"));
-                    LLVMBuildStore(ctx->builder, new_len, LLVMBuildStructGEP2(ctx->builder, fat_t, new_fat, 1, "l"));
-
-                    result.value = new_fat;
-                    result.type  = type_clone(col_r.type);
-                    result.type->arr_size = -1;
-                    return result;
-                }
-
-                // 3. List / Coll / Array: runtime dispatch via helper
-                {
-                    LLVMValueRef fn = get_rt_coll_drop(ctx);
-                    result.value = LLVMBuildCall2(ctx->builder, LLVMFunctionType(ptr, (LLVMTypeRef[]){ptr, i64}, 2, 0),
-                                                  fn, (LLVMValueRef[]){col_r.value, n_val}, 2, "drop_coll");
                     result.type  = type_coll();
                     return result;
                 }
@@ -10527,18 +10436,30 @@ if (ast->list.count >= 5) {
                     CodegenResult arg_result = codegen_expr(ctx, ast->list.items[i + 1]);
 
                     Type *expected_type = entry->params[i].type;
-                    if (expected_type && expected_type->kind == TYPE_COLL) {
+                    if (expected_type && (expected_type->kind == TYPE_COLL ||
+                                         expected_type->kind == TYPE_LIST  ||
+                                         expected_type->kind == TYPE_ARR   ||
+                                         expected_type->kind == TYPE_SET   ||
+                                         expected_type->kind == TYPE_MAP   ||
+                                         expected_type->kind == TYPE_STRING)) {
                         if (arg_result.type && (arg_result.type->kind == TYPE_INT   ||
                                                 arg_result.type->kind == TYPE_FLOAT ||
                                                 arg_result.type->kind == TYPE_BOOL  ||
                                                 arg_result.type->kind == TYPE_CHAR)) {
-                            CODEGEN_ERROR(ctx, "%s:%d:%d: error: function '%s' expects an ordered Collection for argument %d, but got %s",
+                            CODEGEN_ERROR(ctx, "%s:%d:%d: error: function '%s' expects a %s for argument %d, but got %s",
                                           parser_get_filename(), ast->list.items[i+1]->line,
-                                          ast->list.items[i+1]->column, head->symbol, i + 1,
+                                          ast->list.items[i+1]->column, head->symbol,
+                                          type_to_string(expected_type), i + 1,
                                           type_to_string(arg_result.type));
                         }
+                        if (arg_result.type && (arg_result.type->kind == TYPE_ARROW ||
+                                                arg_result.type->kind == TYPE_FN)) {
+                            CODEGEN_ERROR(ctx, "%s:%d:%d: error: argument %d to '%s' must be a %s, but got a function",
+                                          parser_get_filename(), ast->list.items[i+1]->line,
+                                          ast->list.items[i+1]->column, i + 1, head->symbol,
+                                          type_to_string(expected_type));
+                        }
                     }
-
 
                     /* FFI call with array arg — always unwrap fat ptr to raw data pointer */
                     if (entry->is_ffi && arg_result.type &&
@@ -12491,9 +12412,6 @@ void register_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "concat",      2, -1, "Concatenate strings", NULL);
     env_insert_builtin(ctx->env, "substring",   3,  0, "Get substring (str start end)", NULL);
     env_insert_builtin(ctx->env, "make-string", 2,  0, "Create a string of length n filled with char c", NULL);
-
-    env_insert_builtin(ctx->env, "take", 2, 0, "Take n elements from a (possibly infinite) list", NULL);
-    env_insert_builtin(ctx->env, "drop", 2, 0, "Drop n elements from a list", NULL);
 
     env_insert_builtin(ctx->env, "layout",   1, -1, "Define a struct layout", NULL);
     env_insert_builtin(ctx->env, "data",     1, -1, "Define an algebraic data type", NULL);

@@ -1644,7 +1644,7 @@ static void rt_print_value_indent(RuntimeValue *val, int indent) {
         case RT_CHAR:    printf("'%c'", val->data.char_val);  break;
         case RT_STRING:  printf("\"%s\"", val->data.string_val); break;
         case RT_SYMBOL:  printf("%s",   val->data.symbol_val);   break;
-        case RT_KEYWORD: printf("%s",  val->data.keyword_val);  break;
+        case RT_KEYWORD: printf(":%s", val->data.keyword_val);  break;
         case RT_NIL:     printf("nil"); break;
         case RT_LIST:    rt_print_list_indent(val->data.list_val, indent); break;
         case RT_CLOSURE: printf("<closure/%d>", val->data.closure_val->arity); break;

@@ -1657,15 +1657,36 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
 
             params[count++] = param;
 
+        } else if (p->current.type == TOK_LPAREN) {
+            /* Typed or annotated parameter: (name) or (name :: Type) */
+            p->current = lexer_next_token(p->lexer);
+            ASTParam param = parse_one_param(p);
+            if (p->current.type != TOK_RPAREN)
+                compiler_error(p->current.line, p->current.column,
+                               "Expected ')' after parameter");
+            p->current = lexer_next_token(p->lexer);
+            if (count >= capacity) {
+                capacity = capacity == 0 ? 4 : capacity * 2;
+                params   = realloc(params, sizeof(ASTParam) * capacity);
+            }
+
+            if (param.type_name == NULL) {
+                char gen_name[32];
+                snprintf(gen_name, sizeof(gen_name), "__p_%d", count);
+                free(param.name);
+                param.name = my_strdup(gen_name);
+                param.type_name = my_strdup("List");
+                param.is_anon = true;
+            } else {
+                param.is_anon = false;
+            }
+
+            params[count++] = param;
+
         } else if (p->current.type == TOK_ARROW) {
             p->current = lexer_next_token(p->lexer);
 
             if (p->current.type == TOK_SYMBOL) {
-                /* Consume exactly ONE type token as the next parameter type,
-                 * then loop back — the next '->' will be the return type arrow,
-                 * or another parameter arrow. Only treat as return type when
-                 * there is no further '->' before ')'. */
-
                 /* Peek ahead to see if another '->' follows before ')' */
                 Lexer peek_lex = *p->lexer;
                 Token peek_tok = lexer_next_token(&peek_lex);
@@ -1703,6 +1724,100 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                     }
                     free(ret_type);
                     ret_type = my_strdup(type_buf);
+                }
+            } else if (p->current.type == TOK_LBRACKET) {
+                /* Type is [a] or [Int] etc. — peek past the [...] to check
+                 * if another '->' follows, determining param vs return type. */
+                Lexer peek_lex = *p->lexer;
+                Token peek_tok = p->current; /* current is '[' */
+                /* Skip past the bracketed type to find the next '->' */
+                peek_tok = lexer_next_token(&peek_lex); /* 'a' or type inside */
+                while (peek_tok.type != TOK_RBRACKET &&
+                       peek_tok.type != TOK_EOF) {
+                    free(peek_tok.value);
+                    peek_tok = lexer_next_token(&peek_lex);
+                }
+                free(peek_tok.value); /* consume ']' */
+                peek_tok = lexer_next_token(&peek_lex); /* token after ']' */
+                bool has_more_arrow = (peek_tok.type == TOK_ARROW);
+                free(peek_tok.value);
+
+                if (has_more_arrow) {
+                    /* [a] is a parameter type — treat as Coll */
+                    if (count >= capacity) {
+                        capacity = capacity == 0 ? 4 : capacity * 2;
+                        params   = realloc(params, sizeof(ASTParam) * capacity);
+                    }
+                    char gen_name[32];
+                    snprintf(gen_name, sizeof(gen_name), "__p_%d", count);
+                    params[count].name      = my_strdup(gen_name);
+                    params[count].type_name = my_strdup("Coll");
+                    params[count].is_rest   = false;
+                    params[count].is_anon   = true;
+                    count++;
+                    /* Consume the bracketed type: [ a ] */
+                    p->current = lexer_next_token(p->lexer); /* skip '[' */
+                    while (p->current.type != TOK_RBRACKET &&
+                           p->current.type != TOK_EOF)
+                        p->current = lexer_next_token(p->lexer);
+                    p->current = lexer_next_token(p->lexer); /* skip ']' */
+                } else {
+                    /* [a] is the return type — consume and store as "Coll" */
+                    /* Consume the bracketed type: [ a ] */
+                    p->current = lexer_next_token(p->lexer); /* skip '[' */
+                    while (p->current.type != TOK_RBRACKET &&
+                           p->current.type != TOK_EOF)
+                        p->current = lexer_next_token(p->lexer);
+                    p->current = lexer_next_token(p->lexer); /* skip ']' */
+                    free(ret_type);
+                    ret_type = my_strdup("Coll");
+                }
+            } else if (p->current.type == TOK_LPAREN) {
+                /* Type is (a) or (Int) etc. — peek past the (...) to check
+                 * if another '->' follows, determining param vs return type. */
+                Lexer peek_lex = *p->lexer;
+                Token peek_tok = p->current; /* current is '(' */
+                /* Skip past the parenthesized type to find the next '->' */
+                peek_tok = lexer_next_token(&peek_lex); /* 'a' or type inside */
+                while (peek_tok.type != TOK_RPAREN &&
+                       peek_tok.type != TOK_EOF) {
+                    free(peek_tok.value);
+                    peek_tok = lexer_next_token(&peek_lex);
+                }
+                free(peek_tok.value); /* consume ')' */
+                peek_tok = lexer_next_token(&peek_lex); /* token after ')' */
+                bool has_more_arrow = (peek_tok.type == TOK_ARROW);
+                free(peek_tok.value);
+
+                if (has_more_arrow) {
+                    /* (a) is a parameter type — treat as List */
+                    if (count >= capacity) {
+                        capacity = capacity == 0 ? 4 : capacity * 2;
+                        params   = realloc(params, sizeof(ASTParam) * capacity);
+                    }
+                    char gen_name[32];
+                    snprintf(gen_name, sizeof(gen_name), "__p_%d", count);
+                    params[count].name      = my_strdup(gen_name);
+                    params[count].type_name = my_strdup("List");
+                    params[count].is_rest   = false;
+                    params[count].is_anon   = true;
+                    count++;
+                    /* Consume the parenthesized type: ( a ) */
+                    p->current = lexer_next_token(p->lexer); /* skip '(' */
+                    while (p->current.type != TOK_RPAREN &&
+                           p->current.type != TOK_EOF)
+                        p->current = lexer_next_token(p->lexer);
+                    p->current = lexer_next_token(p->lexer); /* skip ')' */
+                } else {
+                    /* (a) is the return type — consume and store as "List" */
+                    /* Consume the parenthesized type: ( a ) */
+                    p->current = lexer_next_token(p->lexer); /* skip '(' */
+                    while (p->current.type != TOK_RPAREN &&
+                           p->current.type != TOK_EOF)
+                        p->current = lexer_next_token(p->lexer);
+                    p->current = lexer_next_token(p->lexer); /* skip ')' */
+                    free(ret_type);
+                    ret_type = my_strdup("List");
                 }
             }
         } else if (p->current.type == TOK_SYMBOL) {

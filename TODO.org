@@ -2,6 +2,7 @@
 
 * TODO Stuff [0/26]
 - [ ] eval
+- [ ] The right place to trow type checking errors is a post-zonk validation pass in infer_toplevel after infer_zonk_ast. NOT in codegen.c
 - [ ] Haskell like hole driven development
 - [ ] [a] is an alias for the Coll type, [Int] is an array of ints, (a) is an alias for the List type, (Int) is a list of ints
 - [ ] Fat strings... fuck my life
@@ -19,7 +20,7 @@
 - [ ] Reader sugar macro turn: anything! -> (! anything)
 - [ ] A way to dump an enviroment to a loadable file.env 
 - [ ] A module that implements a DSL to write SPIRV
-- [ ] => Optional arguments that default to *unspecified*
+- [ ] ==> Optional arguments that default to *unspecified*
 - [ ] Default values on layouts so when they are 0 initialized they have those
 - [ ] Auto curry only if -> is used in the function definition, not otherwise
 - [ ] Optimize infix function call, if the function is variadic turn =(3 + 4 + 5)= int a single call =(+ 3 4 5)= and not =(+ 5 (+ 3 4))=
@@ -27,9 +28,9 @@
 - [ ] Look into dependent types and make it a general concept that you can do in the language
 - [ ] IMPORTANT C FFI Enums should probably become ADTs
 - [ ] :inline True or :inline False (The default) inside functions
-- [ ] Make lists immutable by removing all builtins that can mutate them
 - [ ] in monad-mode add a function to type check the function and
       substitute the type of the function with the inferred one
+- [ ] Make lists immutable by removing all builtins that can mutate them
 - [ ] in monad-mode add a function to turn wisp into lisp in region/buffer
 - [ ] Connect to a running process with the repl
       We should embed the env into the executable i guess
