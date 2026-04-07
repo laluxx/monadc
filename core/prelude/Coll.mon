@@ -13,9 +13,9 @@
 
 ;;; Code:
 
-;; (module Coll
-;;   [take drop])
-
+(module Coll
+  [take      drop
+   takeWhile dropWhile])
 
 define take :: Int -> [a] -> [a]
   _ []            -> []
@@ -31,18 +31,73 @@ define drop :: Int -> [a] -> [a]
       | otherwise -> (x ++ xs)
 
 
-;; TODO
-;; define takeWhile :: (a -> Bool) -> [a] -> Coll
-;;   _ []            -> []
-;;   p [x|xs]
-;;       | p x       -> (x . (takeWhile p xs))
-;;       | otherwise -> []
+define takeWhile :: (a -> Bool) -> [a] -> [a]
+  _ []            -> []
+  p [x|xs]
+      | p x       -> (x ++ (takeWhile p xs))
+      | otherwise -> []
 
-;; define dropWhile :: (a -> Bool) -> [a] -> Coll
-;;   _ []            -> []
-;;   p [x|xs]
-;;       | p x       -> dropWhile p xs
-;;       | otherwise -> (x . xs)
+
+define dropWhile :: (a -> Bool) -> [a] -> [a]
+  _ []            -> []
+  p [x|xs]
+      | p x       -> dropWhile p xs
+      | otherwise -> (x ++ xs)
+
+
+
+;; define my-map :: (a -> b) -> [a] -> [b]
+;;   _ []     -> []
+;;   f [x|xs] -> ((f x) ++ (my-map f xs))
+
+;; (define case-delta ('a' - 'A'))
+
+;; (define (char-upcase [c :: Char] -> Char)
+;;   "Convert C to upper case."
+;;   (if ((c >= 'a') and (c <= 'z'))
+;;     (c - case-delta)
+;;     c))
+
+;; define double :: Int -> Int
+;;   x -> * x x
+
+;; show (my-map char-upcase "ciao")
+;; ;; show (my-map double "ciao")
+;; show (my-map double '(1 2 3))
+;; show (my-map double [1 2 3])
+
+
+
+;; TODO
+;; define char-upcase :: Char -> Char
+;;   c | c >= 'a' and c <= 'z' -> c - case-delta
+;;     | otherwise             -> c
+
+
+;; show (my-map double "ciao")
+
+
+;; define square :: Int -> Int
+;;   x -> * x x
+
+;; show (my-map square [1 2 3 4])
+
+;; TODO
+;; define ∘ :: (b -> c) -> (a -> b) -> a -> c
+;;   f g x -> f (g x)
+
+;; define square :: Int -> Int
+;;   x -> x * x
+
+;; define add1 :: Int -> Int
+;;   x -> x + 1
+
+;; define square-then-add1 :: Int -> Int
+;;   (add1 . square)
+
+;; show (square-then-add1 5)  ;; 26 (square 5 = 25, +1 = 26)
+
+
 
 
 (tests

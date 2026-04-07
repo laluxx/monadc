@@ -1,10 +1,12 @@
 #+title: TODO.org
 
-* TODO Stuff [0/26]
+* TODO Stuff [0/32]
 - [ ] eval
-- [ ] The right place to trow type checking errors is a post-zonk validation pass in infer_toplevel after infer_zonk_ast. NOT in codegen.c
+- [ ] arbitrary return at any point of execution using =->=
+- [ ] Builtin Path type and Path literals e.g ~/path/to/file.c (also support windows)
+- [ ] The coll type: [a] should NOT be a runtime thing, it should just do monomorphization
 - [ ] Haskell like hole driven development
-- [ ] [a] is an alias for the Coll type, [Int] is an array of ints, (a) is an alias for the List type, (Int) is a list of ints
+- [ ] (Type) or [Type] for lists of type and arrays of type
 - [ ] Fat strings... fuck my life
 - [ ] pmatch backtracking on failure with =<-=
 - [ ] anonymous Algebraic Data Types (tagged unions)
@@ -34,6 +36,10 @@
 - [ ] in monad-mode add a function to turn wisp into lisp in region/buffer
 - [ ] Connect to a running process with the repl
       We should embed the env into the executable i guess
+
+* Stuff to look into
+- Higher order functors
+- first class modules
 
 
 * DONE Macro System

@@ -570,7 +570,21 @@ struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
                 name, ctx->error_msg);
     } else {
         infer_unify_one(ctx, self_t, inferred, lambda_ast->line, lambda_ast->column);
+        /* Fully apply substitution so the scheme's type nodes are concrete
+         * ground types — no TYPE_VAR nodes that reference the now-dead ctx */
         scheme = infer_generalise(ctx, inferred, ienv);
+        /* Walk the full type tree applying the substitution deeply so no
+         * TYPE_VAR nodes remain that reference the now-dead substitution */
+        scheme->type = subst_apply(ctx->subst, scheme->type);
+        /* Also walk arrow chain and concretize each node */
+        {
+            Type *t = scheme->type;
+            while (t && t->kind == TYPE_ARROW) {
+                t->arrow_param = subst_apply(ctx->subst, t->arrow_param);
+                t->arrow_ret   = subst_apply(ctx->subst, t->arrow_ret);
+                t = t->arrow_ret;
+            }
+        }
         /* ienv owns the original scheme for future instantiation.
          * EnvEntry gets its own clone so free_entry_fields() can
          * safely call scheme_free() without double-freeing.        */
@@ -581,6 +595,16 @@ struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
     infer_ctx_free(ctx);
     infer_env_free(child);
     return scheme;
+}
+
+/* Return the element type of a collection type, or NULL if not a collection. */
+static Type *collection_element_type(Type *t) {
+    if (!t) return NULL;
+    if (t->kind == TYPE_STRING)  return type_char();
+    if (t->kind == TYPE_LIST  && t->list_elem)          return t->list_elem;
+    if (t->kind == TYPE_ARR   && t->arr_element_type)   return t->arr_element_type;
+    /* untyped Coll — element type unknown */
+    return NULL;
 }
 
 bool env_hm_check_call(Env *env, const char *name, Type **arg_types, int n,
@@ -594,21 +618,184 @@ bool env_hm_check_call(Env *env, const char *name, Type **arg_types, int n,
     InferCtx *ctx = infer_ctx_create(ienv, filename ? filename : "<check>");
     Type *inst = infer_instantiate(ctx, sc);
     Type *cursor = inst;
+    fprintf(stderr, "DEBUG hm_check_call entry: name=%s sc->quantified_count=%d sc->type_kind=%d inst_kind=%d\n",
+            name,
+            sc->quantified_count,
+            sc->type ? sc->type->kind : -1,
+            inst ? inst->kind : -1);
     bool ok = true;
 
     for (int i = 0; i < n && cursor && cursor->kind == TYPE_ARROW; i++) {
-        Type *param = subst_apply(ctx->subst, cursor->arrow_param);
-        Type *arg   = arg_types[i];
-        if (param && param->kind != TYPE_UNKNOWN &&
-            arg   && arg->kind   != TYPE_UNKNOWN) {
-            if (!infer_unify_one(ctx, param, arg, line, col)) {
-                fprintf(stderr, "[hm] type error in call to '%s' arg %d: %s\n",
-                        name, i, ctx->error_msg);
-                ok = false;
-                break;
+        Type *param     = cursor->arrow_param;
+        Type *arg       = arg_types[i];
+        Type *orig_param = param;
+        Type *orig_arg   = arg;
+        fprintf(stderr, "DEBUG hm_check_call: name=%s i=%d param_kind=%d arg_kind=%d\n",
+                name, i,
+                param ? (int)param->kind : -1,
+                arg   ? (int)arg->kind   : -1);
+        if (param && param->kind != TYPE_VAR && param->kind != TYPE_UNKNOWN &&
+            arg   && arg->kind   != TYPE_VAR && arg->kind   != TYPE_UNKNOWN) {
+            /* If param is TYPE_FN, check if it carries an arrow annotation
+             * via the source lambda param's type_name (e.g. "Fn :: (Int -> Int)").
+             * We recover it from the InferEnv scheme's arrow chain if available. */
+            bool arg_is_fn   = (arg->kind   == TYPE_ARROW || arg->kind   == TYPE_FN);
+            bool param_is_fn = (param->kind == TYPE_ARROW || param->kind == TYPE_FN);
+            bool mismatch = false;
+            if (arg_is_fn && !param_is_fn) {
+                mismatch = true;
+            } else if (!arg_is_fn && param_is_fn) {
+                mismatch = true;
+            } else if (arg_is_fn && param_is_fn &&
+                       param->kind == TYPE_ARROW && arg->kind == TYPE_ARROW) {
+                /* Both have full arrow types — compare slot by slot */
+                Type *ap = arg->arrow_param;
+                Type *pp = param->arrow_param;
+                Type *aa = arg;
+                Type *pa = param;
+                while (ap && pp) {
+                    bool ap_c = (ap->kind != TYPE_VAR && ap->kind != TYPE_UNKNOWN);
+                    bool pp_c = (pp->kind != TYPE_VAR && pp->kind != TYPE_UNKNOWN);
+                    if (ap_c && pp_c && ap->kind != pp->kind) {
+                        bool a_int = (ap->kind == TYPE_INT || ap->kind == TYPE_HEX ||
+                                      ap->kind == TYPE_BIN || ap->kind == TYPE_OCT ||
+                                      ap->kind == TYPE_INT_ARBITRARY);
+                        bool p_int = (pp->kind == TYPE_INT ||
+                                      pp->kind == TYPE_INT_ARBITRARY);
+                        if (!(a_int && p_int)) { mismatch = true; break; }
+                    }
+                    Type *an = (aa->kind == TYPE_ARROW) ? aa->arrow_ret : NULL;
+                    Type *pn = (pa->kind == TYPE_ARROW) ? pa->arrow_ret : NULL;
+                    if (!an || !pn) break;
+                    aa = an; ap = aa->kind == TYPE_ARROW ? aa->arrow_param : aa;
+                    pa = pn; pp = pa->kind == TYPE_ARROW ? pa->arrow_param : pa;
+                }
+            } else if (!arg_is_fn && !param_is_fn && arg->kind != param->kind) {
+                /* Allow numeric widening: any int kind satisfies Int param */
+                bool arg_is_int   = (arg->kind   == TYPE_INT || arg->kind == TYPE_HEX ||
+                                     arg->kind   == TYPE_BIN || arg->kind == TYPE_OCT ||
+                                     arg->kind   == TYPE_INT_ARBITRARY);
+                bool param_is_int = (param->kind == TYPE_INT ||
+                                     param->kind == TYPE_INT_ARBITRARY);
+                bool arg_is_coll  = (arg->kind == TYPE_LIST || arg->kind == TYPE_ARR ||
+                                     arg->kind == TYPE_SET  || arg->kind == TYPE_MAP  ||
+                                     arg->kind == TYPE_COLL || arg->kind == TYPE_STRING);
+                bool param_is_coll = (param->kind == TYPE_LIST || param->kind == TYPE_ARR ||
+                                      param->kind == TYPE_SET  || param->kind == TYPE_MAP  ||
+                                      param->kind == TYPE_COLL || param->kind == TYPE_STRING);
+                if (!(arg_is_int && param_is_int) &&
+                    !(arg_is_coll && param_is_coll))
+                    mismatch = true;
+            }
+            if (mismatch) {
+                /* Use orig_arg/orig_param — arg/param may have been advanced
+                 * by the arrow-walking loop and type_to_string uses static
+                 * buffers so we copy the param string before calling again. */
+                char param_str[256];
+                char arg_str[256];
+                strncpy(param_str, type_to_string(orig_param), sizeof(param_str) - 1);
+                param_str[sizeof(param_str) - 1] = '\0';
+                strncpy(arg_str, type_to_string(orig_arg), sizeof(arg_str) - 1);
+                arg_str[sizeof(arg_str) - 1] = '\0';
+                const char *arg_desc = arg_str;
+                /* Build a full signature string from the scheme type */
+                char sig[256] = {0};
+                Type *_walk = sc->type;
+                bool _first = true;
+                while (_walk && _walk->kind == TYPE_ARROW) {
+                    if (!_first) strncat(sig, " -> ", sizeof(sig) - strlen(sig) - 1);
+                    strncat(sig, type_to_string(_walk->arrow_param),
+                            sizeof(sig) - strlen(sig) - 1);
+                    _first = false;
+                    _walk = _walk->arrow_ret;
+                }
+                if (_walk) {
+                    strncat(sig, " -> ", sizeof(sig) - strlen(sig) - 1);
+                    strncat(sig, type_to_string(_walk), sizeof(sig) - strlen(sig) - 1);
+                }
+                READER_ERROR(line, col,
+                    "\n"
+                    "    • Couldn't match expected type '%s' with actual type '%s'\n"
+                    "    • In argument %d of a call to ‘%s’\n"
+                    "    • Of type: %s :: %s\n"
+                    "  - Hint: argument %d must be %s, but you passed %s",
+                    param_str, arg_desc,
+                    i + 1, name,
+                    name, sig,
+                    i + 1, param_str, arg_desc);
             }
         }
         cursor = cursor->arrow_ret;
+    }
+
+/* Cross-argument check: if argument i is a function (arrow) and argument j
+     * is a collection, verify that the function's domain matches the
+     * collection's element type.  This catches (my-map double "ciao") where
+     * double :: Int->Int but String elements are Char.                        */
+    {
+        /* Find the first function arg and the first collection arg */
+        int fn_idx   = -1;
+        int coll_idx = -1;
+        for (int i = 0; i < n; i++) {
+            if (!arg_types[i]) continue;
+            bool is_fn   = (arg_types[i]->kind == TYPE_ARROW ||
+                            arg_types[i]->kind == TYPE_FN);
+            bool is_coll = (arg_types[i]->kind == TYPE_STRING ||
+                            arg_types[i]->kind == TYPE_LIST   ||
+                            arg_types[i]->kind == TYPE_ARR    ||
+                            arg_types[i]->kind == TYPE_COLL);
+            if (is_fn   && fn_idx   < 0) fn_idx   = i;
+            if (is_coll && coll_idx < 0) coll_idx = i;
+        }
+
+        if (fn_idx >= 0 && coll_idx >= 0) {
+            Type *fn_t   = arg_types[fn_idx];
+            Type *coll_t = arg_types[coll_idx];
+
+            /* Extract the function's input (domain) type */
+            Type *fn_domain = (fn_t->kind == TYPE_ARROW) ? fn_t->arrow_param : NULL;
+
+            /* Extract the collection's element type */
+            Type *elem_t = collection_element_type(coll_t);
+
+            if (fn_domain && elem_t &&
+                fn_domain->kind != TYPE_VAR && fn_domain->kind != TYPE_UNKNOWN &&
+                elem_t->kind    != TYPE_VAR && elem_t->kind    != TYPE_UNKNOWN &&
+                fn_domain->kind != elem_t->kind) {
+
+                /* Allow numeric widening (HEX/BIN/OCT/arbitrary all satisfy Int) */
+                bool dom_is_int  = (fn_domain->kind == TYPE_INT ||
+                                    fn_domain->kind == TYPE_HEX ||
+                                    fn_domain->kind == TYPE_BIN ||
+                                    fn_domain->kind == TYPE_OCT ||
+                                    fn_domain->kind == TYPE_INT_ARBITRARY);
+                bool elem_is_int = (elem_t->kind == TYPE_INT ||
+                                    elem_t->kind == TYPE_HEX ||
+                                    elem_t->kind == TYPE_BIN ||
+                                    elem_t->kind == TYPE_OCT ||
+                                    elem_t->kind == TYPE_INT_ARBITRARY);
+
+                if (!(dom_is_int && elem_is_int)) {
+                    char dom_str[128], elem_str[128], coll_str[128];
+                    strncpy(dom_str,  type_to_string(fn_domain), sizeof(dom_str)  - 1);
+                    strncpy(elem_str, type_to_string(elem_t),    sizeof(elem_str) - 1);
+                    strncpy(coll_str, type_to_string(coll_t),    sizeof(coll_str) - 1);
+                    dom_str[sizeof(dom_str)-1]   = '\0';
+                    elem_str[sizeof(elem_str)-1] = '\0';
+                    coll_str[sizeof(coll_str)-1] = '\0';
+                    READER_ERROR(line, col,
+                        "\n"
+                        "    • Couldn't match collection element type '%s' with function domain '%s'\n"
+                        "    • In call to '%s': the function (argument %d) expects '%s'\n"
+                        "    • but the collection (argument %d) has element type '%s' (%s)\n"
+                        "  - Hint: you cannot map a '%s -> ...' function over a %s",
+                        elem_str, dom_str,
+                        name, fn_idx + 1, dom_str,
+                        coll_idx + 1, elem_str, coll_str,
+                        dom_str, coll_str);
+                }
+            }
+        }
     }
 
     infer_ctx_free(ctx);

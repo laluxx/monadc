@@ -333,8 +333,17 @@ RuntimeList *rt_list_cdr(RuntimeList *list) {
 }
 
 RuntimeValue *rt_list_nth(RuntimeList *list, int64_t index) {
+    if (!list) return rt_value_nil();
     if (index < 0) return rt_value_nil();
-    RuntimeList *cur = rt_unbox_list((RuntimeValue *)list);
+    /* Auto-unbox RuntimeValue* → RuntimeList* */
+    {
+        int tag = (int)((RuntimeValue *)list)->type;
+        if (tag == RT_LIST)
+            list = ((RuntimeValue *)list)->data.list_val;
+        else if (tag == RT_NIL || (tag >= 0 && tag <= RT_CLOSURE && tag != RT_LIST))
+            return rt_value_nil();
+    }
+    RuntimeList *cur = list;
     for (int64_t i = 0; i < index; i++) {
         if (rt_list_is_empty_list(cur)) return rt_value_nil();
         cur = rt_list_cdr(cur);
@@ -342,10 +351,19 @@ RuntimeValue *rt_list_nth(RuntimeList *list, int64_t index) {
     return rt_list_car(cur);
 }
 
-
 int64_t rt_list_length(RuntimeList *list) {
+    /* Guard: if the pointer looks like a RuntimeValue* (has a valid RT_LIST
+     * tag at offset 0), unbox it first so callers that pass a RuntimeValue*
+     * directly don't crash.                                                 */
+    if (list) {
+        int tag = (int)((RuntimeValue *)list)->type;
+        if (tag == RT_LIST)
+            list = ((RuntimeValue *)list)->data.list_val;
+        else if (tag == RT_NIL || (tag >= 0 && tag <= RT_CLOSURE && tag != RT_LIST))
+            return 0;
+    }
     int64_t len = 0;
-    RuntimeList *cur = rt_unbox_list((RuntimeValue *)list);
+    RuntimeList *cur = list;
     while (!rt_list_is_empty_list(cur)) {
         len++;
         cur = rt_list_cdr(cur);
@@ -356,8 +374,6 @@ int64_t rt_list_length(RuntimeList *list) {
 // Destructive append of an already-evaluated value.
 // Walks the spine and attaches a new strict cons cell at the end.
 // Used by printing helpers and rt_list_take.
-
-
 void rt_list_append(RuntimeList *list, RuntimeValue *value) {
     if (!list) return;
 
@@ -661,36 +677,154 @@ RuntimeValue *rt_coll_wrap(RuntimeValue *coll, RuntimeValue *item) {
 
 RuntimeValue *rt_coll_empty(RuntimeValue *coll) {
     if (!coll) return rt_value_list(rt_list_empty());
+    if ((uintptr_t)coll >= 0x10000) {
+        int _tag = (int)coll->type;
+        if (_tag < 0 || _tag > RT_CLOSURE)
+            return rt_value_list(rt_list_empty());
+    }
     if (coll->type == RT_STRING) return rt_value_string("");
     if (coll->type == RT_ARRAY) return rt_value_array(0);
     return rt_value_list(rt_list_empty());
 }
 
+int rt_coll_is_empty(RuntimeValue *coll) {
+    if (!coll) return 1;
+    if (coll->type == RT_STRING) return coll->data.string_val[0] == '\0';
+    if (coll->type == RT_ARRAY)  return coll->data.array_val.length == 0;
+    if (coll->type == RT_LIST)   return rt_list_is_empty_list(coll->data.list_val);
+    return 1;
+}
+
+typedef struct { RuntimeThunk *t; } LazyConcatEnv;
+
+static RuntimeValue *_lazy_concat_tail_fn(void *e) {
+    LazyConcatEnv *env = (LazyConcatEnv *)e;
+    return rt_force(env->t);
+}
+
+RuntimeValue *rt_coll_lazy_cons(RuntimeValue *head, RuntimeThunk *tail_thunk) {
+    ConsCell *c    = malloc(sizeof(ConsCell));
+    c->head_fn     = NULL;
+    c->head_env    = NULL;
+    c->head_val    = head;
+    c->head_forced = 1;
+    LazyConcatEnv *env = malloc(sizeof(LazyConcatEnv));
+    env->t             = tail_thunk;
+    c->tail_fn     = _lazy_concat_tail_fn;
+    c->tail_env    = env;
+    c->tail_val    = NULL;
+    c->tail_forced = 0;
+    RuntimeList *lst = malloc(sizeof(RuntimeList));
+    lst->cell = c;
+    return rt_value_list(lst);
+}
+
 RuntimeValue *rt_coll_concat(RuntimeValue *a, RuntimeValue *b) {
     if (!a) return b;
     if (!b) return a;
+
+    /* Coerce RT_CHAR to single-char RT_STRING */
+    if (a->type == RT_CHAR) {
+        char buf[2] = { a->data.char_val, '\0' };
+        a = rt_value_string(buf);
+    }
+    if (b->type == RT_CHAR) {
+        char buf[2] = { b->data.char_val, '\0' };
+        b = rt_value_string(buf);
+    }
+
+    /* String + String */
     if (a->type == RT_STRING && b->type == RT_STRING) {
         char *s = rt_string_concat(a->data.string_val, b->data.string_val);
         RuntimeValue *v = rt_value_string(s);
         free(s);
         return v;
     }
-    if (a->type == RT_ARRAY && b->type == RT_ARRAY) {
-        size_t la = a->data.array_val.length;
-        size_t lb = b->data.array_val.length;
+
+    /* Array context: if either side is an array, produce an array */
+    if (a->type == RT_ARRAY || b->type == RT_ARRAY) {
+        /* Coerce non-array side to single-element array */
+        RuntimeValue *av = a, *bv = b;
+        if (a->type != RT_ARRAY) {
+            av = rt_value_array(1);
+            av->data.array_val.elements[0] = a;
+        }
+        if (b->type != RT_ARRAY) {
+            bv = rt_value_array(1);
+            bv->data.array_val.elements[0] = b;
+        }
+        size_t la = av->data.array_val.length;
+        size_t lb = bv->data.array_val.length;
         RuntimeValue *v = rt_value_array(la + lb);
         for (size_t i = 0; i < la; i++)
-            v->data.array_val.elements[i] = a->data.array_val.elements[i];
+            v->data.array_val.elements[i] = av->data.array_val.elements[i];
         for (size_t i = 0; i < lb; i++)
-            v->data.array_val.elements[la + i] = b->data.array_val.elements[i];
+            v->data.array_val.elements[la + i] = bv->data.array_val.elements[i];
         return v;
     }
-    return rt_value_list(rt_list_append_lists(rt_unbox_list(a), rt_unbox_list(b)));
+
+    /* List fallback: coerce scalars to single-element lists.
+     * BUT: if the right side is an Array or String, preserve that type
+     * so prepending a single element doesn't silently downcast to List. */
+
+    /* Scalar ++ Array → Array */
+    if (b->type == RT_ARRAY) {
+        size_t lb = b->data.array_val.length;
+        RuntimeValue *v = rt_value_array(1 + lb);
+        v->data.array_val.elements[0] = a;
+        for (size_t i = 0; i < lb; i++)
+            v->data.array_val.elements[1 + i] = b->data.array_val.elements[i];
+        return v;
+    }
+
+    /* Scalar ++ String → String: a must be RT_CHAR */
+    if (b->type == RT_STRING) {
+        char prefix[2] = { (a->type == RT_CHAR) ? a->data.char_val : (char)rt_unbox_int(a), '\0' };
+        char *s = rt_string_concat(prefix, b->data.string_val);
+        RuntimeValue *v = rt_value_string(s);
+        free(s);
+        return v;
+    }
+
+    /* Scalar ++ List → lazy cons */
+    if (a->type != RT_LIST && b->type == RT_LIST)
+        return rt_value_list(rt_list_cons(a, b->data.list_val));
+
+    /* List ++ List → lazy append */
+    if (a->type == RT_LIST && b->type == RT_LIST)
+        return rt_value_list(_rt_list_append_lists_raw(
+            a->data.list_val, b->data.list_val));
+
+    /* List fallback: coerce scalars to single-element lists */
+    RuntimeList *la_list, *lb_list;
+
+    if (a->type == RT_LIST) {
+        la_list = a->data.list_val;
+    } else {
+        la_list = heap_list_wrapper();
+        la_list->cell = NULL;
+        rt_list_append(la_list, a);
+    }
+
+    if (b->type == RT_LIST) {
+        lb_list = b->data.list_val;
+    } else {
+        lb_list = heap_list_wrapper();
+        lb_list->cell = NULL;
+        rt_list_append(lb_list, b);
+    }
+
+    return rt_value_list(_rt_list_append_lists_raw(la_list, lb_list));
 }
 
 RuntimeValue *rt_coll_drop(RuntimeValue *coll, int64_t n) {
     if (!coll) return rt_value_list(rt_list_empty());
     if (n < 0) n = 0;
+    if ((uintptr_t)coll >= 0x10000) {
+        int _tag = (int)coll->type;
+        if (_tag < 0 || _tag > RT_CLOSURE)
+            return rt_value_list(rt_list_drop((RuntimeList *)coll, n));
+    }
     if (coll->type == RT_STRING) {
         int64_t len = strlen(coll->data.string_val);
         if (n >= len) return rt_value_string("");
@@ -714,7 +848,8 @@ int64_t rt_coll_count(RuntimeValue *coll) {
     if (coll->type == RT_ARRAY)  return coll->data.array_val.length;
     if (coll->type == RT_MAP)    return rt_map_count(coll->data.map_val);
     if (coll->type == RT_SET)    return rt_set_count(coll->data.set_val);
-    return rt_list_length(rt_unbox_list(coll));
+    if (coll->type == RT_LIST)   return rt_list_length(coll->data.list_val);
+    return 0;
 }
 
 RuntimeList *rt_list_drop(RuntimeList *list, int64_t n) {
@@ -1852,6 +1987,12 @@ typedef struct { RuntimeList *rest; RT_UnaryFn fn; void *env; } LazyMapEnv;
 static RuntimeValue *_rt_lazy_map_tail_fn(void *e);
 
 RuntimeList *rt_list_map(RuntimeList *list, void *env, RT_UnaryFn fn) {
+    /* Accept RuntimeValue*(RT_LIST) or raw RuntimeList* */
+    {
+        int _tag = (int)((RuntimeValue *)list)->type;
+        if (_tag >= 0 && _tag <= RT_CLOSURE && _tag == RT_LIST)
+            list = ((RuntimeValue *)list)->data.list_val;
+    }
     if (rt_list_is_empty_list(list)) return rt_list_empty();
 
     ConsCell *c    = heap_cons_cell();
@@ -1884,6 +2025,9 @@ static RuntimeValue *_rt_lazy_map_tail_fn(void *e) {
 
 RuntimeValue *rt_list_foldl(RuntimeList *list, RuntimeValue *init,
                              void *env, RT_BinaryFn fn) {
+    { int _tag = (int)((RuntimeValue *)list)->type;
+      if (_tag >= 0 && _tag <= RT_CLOSURE && _tag == RT_LIST)
+          list = ((RuntimeValue *)list)->data.list_val; }
     RuntimeValue *acc = init;
     RuntimeList  *cur = list;
     while (!rt_list_is_empty_list(cur)) {
@@ -1917,6 +2061,9 @@ typedef struct { RuntimeList *rest; RT_UnaryFn fn; void *env; } LazyFilterEnv;
 static RuntimeValue *_rt_lazy_filter_tail_fn(void *e);
 
 RuntimeList *rt_list_filter(RuntimeList *list, void *env, RT_UnaryFn pred) {
+    { int _tag = (int)((RuntimeValue *)list)->type;
+      if (_tag >= 0 && _tag <= RT_CLOSURE && _tag == RT_LIST)
+          list = ((RuntimeValue *)list)->data.list_val; }
     RuntimeList *cur = list;
     while (!rt_list_is_empty_list(cur)) {
         RuntimeValue *val    = rt_list_car(cur);
@@ -1955,6 +2102,12 @@ static RuntimeValue *_rt_lazy_filter_tail_fn(void *e) {
 }
 
 RuntimeList *rt_list_zip(RuntimeList *a, RuntimeList *b) {
+    { int _tag = (int)((RuntimeValue *)a)->type;
+      if (_tag >= 0 && _tag <= RT_CLOSURE && _tag == RT_LIST)
+          a = ((RuntimeValue *)a)->data.list_val; }
+    { int _tag = (int)((RuntimeValue *)b)->type;
+      if (_tag >= 0 && _tag <= RT_CLOSURE && _tag == RT_LIST)
+          b = ((RuntimeValue *)b)->data.list_val; }
     RuntimeList *out = heap_list_wrapper();
     out->cell = NULL;
     RuntimeList *ca = a, *cb = b;
@@ -1973,6 +2126,12 @@ RuntimeList *rt_list_zip(RuntimeList *a, RuntimeList *b) {
 
 RuntimeList *rt_list_zipwith(RuntimeList *a, RuntimeList *b,
                               void *env, RT_BinaryFn fn) {
+    { int _tag = (int)((RuntimeValue *)a)->type;
+      if (_tag >= 0 && _tag <= RT_CLOSURE && _tag == RT_LIST)
+          a = ((RuntimeValue *)a)->data.list_val; }
+    { int _tag = (int)((RuntimeValue *)b)->type;
+      if (_tag >= 0 && _tag <= RT_CLOSURE && _tag == RT_LIST)
+          b = ((RuntimeValue *)b)->data.list_val; }
     RuntimeList *out = heap_list_wrapper();
     out->cell = NULL;
     RuntimeList *ca = a, *cb = b;
@@ -2468,13 +2627,15 @@ void declare_runtime_functions(CodegenContext *ctx) {
     DECL("rt_print_list_limited",  void_t, ptr, i64);
 
     // --- String & Array Helpers ---
-    DECL("rt_string_concat", ptr, ptr, ptr);
-    DECL("rt_arr_concat", ptr, ptr, i64, ptr, i64, i64);
-    DECL("rt_coll_wrap", ptr, ptr, ptr);
-    DECL("rt_coll_empty", ptr, ptr);
-    DECL("rt_coll_concat", ptr, ptr, ptr);
-    DECL("rt_coll_drop", ptr, ptr, i64);
-    DECL("rt_coll_count", i64, ptr);
+    DECL("rt_string_concat",  ptr, ptr, ptr);
+    DECL("rt_arr_concat",     ptr, ptr, i64, ptr, i64, i64);
+    DECL("rt_coll_wrap",      ptr, ptr, ptr);
+    DECL("rt_coll_empty",     ptr, ptr);
+    DECL("rt_coll_concat",    ptr, ptr, ptr);
+    DECL("rt_coll_lazy_cons", ptr, ptr, ptr);
+    DECL("rt_coll_drop",      ptr, ptr, i64);
+    DECL("rt_coll_count",     i64, ptr);
+    DECL("rt_coll_is_empty",  i32, ptr);
 
     // --- Assert ---
     {
@@ -2625,8 +2786,10 @@ GET_RUNTIME_FUNCTION(rt_arr_concat)
 GET_RUNTIME_FUNCTION(rt_coll_wrap)
 GET_RUNTIME_FUNCTION(rt_coll_empty)
 GET_RUNTIME_FUNCTION(rt_coll_concat)
+GET_RUNTIME_FUNCTION(rt_coll_lazy_cons)
 GET_RUNTIME_FUNCTION(rt_coll_drop)
 GET_RUNTIME_FUNCTION(rt_coll_count)
+GET_RUNTIME_FUNCTION(rt_coll_is_empty)
 
 LLVMValueRef get___monad_runtime_error(CodegenContext *ctx) {
     LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, "__monad_runtime_error");

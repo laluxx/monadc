@@ -177,6 +177,8 @@ Type *type_var(int id);                   // fresh type variable
 Type *type_arrow(Type *param, Type *ret); // function/arrow type
 
 
+Type *type_parse_fn_arrow(const char *fn_type_name);
+
 /// Operations
 
 Type       *type_clone(Type *t);

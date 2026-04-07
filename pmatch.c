@@ -476,13 +476,16 @@ static AST *make_coll_wrap(const char *coll_param, AST *elem) {
     return make_list(items, 3);
 }
 
-// Helper: (list-empty? param) -> (= (count param) 0)
-static AST *make_list_empty(const char *param_name) {
-    AST *cnt = make_count(param_name);
-    AST *zero = ast_new_number(0.0, "0");
-    AST *items[] = {sym("="), cnt, zero};
-    return make_list(items, 3);
+// Helper: (rt_coll_is_empty param) — O(1), safe for lazy/infinite lists
+static AST *make_coll_is_empty(const char *param_name) {
+    AST *items[] = {sym("rt_coll_is_empty"), sym(param_name)};
+    AST *call = make_list(items, 2);
+    /* wrap in (not ...) — rt_coll_is_empty returns 1 when empty,
+     * but PAT_LIST_EMPTY guard needs truthy-when-empty */
+    /* Actually return directly — caller uses it as a truthy guard */
+    return call;
 }
+
 
 // Helper: (= (count param) n)
 static AST *make_count_eq(const char *param_name, int n) {
@@ -675,7 +678,7 @@ static void build_pattern_conditions(
         break;
 
     case PAT_LIST_EMPTY:
-        PUSH_GUARD(make_list_empty(param_name));
+        PUSH_GUARD(make_coll_is_empty(param_name));
         break;
 
     case PAT_CONSTRUCTOR: {
@@ -885,7 +888,7 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
             // Force type to Coll if no specific type is known
             // This triggers unified collection codegen (count/indexing)
             if (!elem_type) {
-                params[j].type_name = "Coll";
+                params[j].type_name = strdup("Coll");
             }
 
             build_pattern_conditions(

@@ -10,6 +10,25 @@ struct Type;
 struct AST;
 typedef struct AST AST;
 
+extern const char *current_filename;
+extern const char *current_source;
+
+#define READER_ERROR(line, col, fmt, ...) \
+    do { \
+        snprintf(g_reader_error_msg, sizeof(g_reader_error_msg), \
+                 "%s:%d:%d: error: " fmt, \
+                 current_filename ? current_filename : "<input>", \
+                 (line), (col), ##__VA_ARGS__); \
+        fprintf(stderr, "%s\n", g_reader_error_msg); \
+        if (g_reader_escape_set) { \
+            g_reader_escape_set = false; \
+            longjmp(g_reader_escape, 1); \
+        } \
+        exit(1); \
+    } while(0)
+
+
+
 /// AST
 
 typedef enum {

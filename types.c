@@ -228,6 +228,12 @@ Type *type_from_name(const char *name) {
     if (!name) return NULL;
 
     // Compound types (parsed dynamically from string annotations)
+    if (strncmp(name, "Fn :: ", 6) == 0) {
+        /* Fn :: (Int -> Int) — parse and return the full arrow type chain.
+         * Codegen treats TYPE_ARROW params the same as TYPE_FN for closures. */
+        Type *arrow = type_parse_fn_arrow(name);
+        return arrow ? arrow : type_fn(NULL, 0, NULL);
+    }
     if (strncmp(name, "Pointer :: ", 11) == 0) {
         const char *inner_name = name + 11;
         Type *inner_type = type_from_name(inner_name);
@@ -481,6 +487,39 @@ Type *type_fn_builtin(int min_args, int opt_args, bool variadic) {
     return type_fn(params, total, NULL);
 }
 
+/* Parse "Fn :: (Int -> Int)" into a TYPE_ARROW chain for HM checking.
+ * Returns NULL if the name is not a Fn :: (...) annotation.
+ * Caller owns the returned type.                                        */
+Type *type_parse_fn_arrow(const char *name) {
+    if (!name || strncmp(name, "Fn :: ", 6) != 0) return NULL;
+    const char *inner = name + 6;
+    if (inner[0] == '(') inner++;
+    char buf[512];
+    strncpy(buf, inner, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    size_t blen = strlen(buf);
+    if (blen > 0 && buf[blen - 1] == ')') buf[--blen] = '\0';
+    const char *parts[16];
+    int nparts = 0;
+    char *p2 = buf;
+    while (p2 && nparts < 16) {
+        parts[nparts++] = p2;
+        char *arrow_pos = strstr(p2, " -> ");
+        if (!arrow_pos) break;
+        *arrow_pos = '\0';
+        p2 = arrow_pos + 4;
+    }
+    if (nparts < 2) return NULL;
+    Type *result = type_from_name(parts[nparts - 1]);
+    if (!result) result = type_unknown();
+    for (int _i = nparts - 2; _i >= 0; _i--) {
+        Type *param_t = type_from_name(parts[_i]);
+        if (!param_t) param_t = type_unknown();
+        result = type_arrow(param_t, result);
+    }
+    return result;
+}
+
 Type *type_clone(Type *t) {
     if (!t) return NULL;
     switch (t->kind) {
@@ -585,7 +624,6 @@ const char *type_to_string(Type *t) {
     case TYPE_RATIO:   return "Ratio";
     case TYPE_SET:     return "Set";
     case TYPE_MAP:     return "Map";
-    case TYPE_COLL:    return "Coll";
     case TYPE_F32:     return "F32";
     case TYPE_I8:      return "I8";
     case TYPE_U8:      return "U8";
@@ -630,12 +668,13 @@ const char *type_to_string(Type *t) {
 
     case TYPE_LIST: {
         if (t->element_type) {
-            snprintf(buf, sizeof(buf), "List<%s>", type_to_string(t->element_type));
+            snprintf(buf, sizeof(buf), "(%s)", type_to_string(t->element_type));
         } else {
-            snprintf(buf, sizeof(buf), "List");
+            snprintf(buf, sizeof(buf), "(a)");
         }
         return buf;
     }
+    case TYPE_COLL:    return "[a]";
 
     case TYPE_ARR: {
         if (t->arr_element_type && t->arr_size >= 0) {

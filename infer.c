@@ -600,6 +600,12 @@ void infer_zonk_ast(InferCtx *ctx, AST *ast) {
     if (ast->inferred_type)
         ast->inferred_type = subst_apply(ctx->subst, ast->inferred_type);
 
+    /* Resolve symbol types from env so validate_calls can see them */
+    if (ast->type == AST_SYMBOL && !ast->inferred_type) {
+        TypeScheme *sc = infer_env_lookup(ctx->env, ast->symbol);
+        if (sc) ast->inferred_type = infer_instantiate(ctx, sc);
+    }
+
     switch (ast->type) {
     case AST_LIST:
         for (size_t i = 0; i < ast->list.count; i++)
@@ -1162,6 +1168,74 @@ void infer_register_builtins(InferCtx *ctx) {
 
 /// Top-level Entry Point
 
+static void infer_validate_calls(InferCtx *ctx, AST *ast) {
+    if (!ast) return;
+
+    if (ast->type == AST_LIST && ast->list.count >= 2) {
+        AST *head = ast->list.items[0];
+        fprintf(stderr, "DEBUG validate_calls: head=%s count=%zu\n",
+            head->type == AST_SYMBOL ? head->symbol : "<non-sym>",
+            ast->list.count);
+        if (head->type == AST_SYMBOL) {
+            TypeScheme *sc = infer_env_lookup(ctx->env, head->symbol);
+            if (sc) {
+                Type *ft = subst_apply(ctx->subst, sc->type);
+                for (int i = 1; i < (int)ast->list.count && ft && ft->kind == TYPE_ARROW; i++) {
+                    Type *param_t = subst_apply(ctx->subst, ft->arrow_param);
+                    AST  *arg     = ast->list.items[i];
+                    Type *arg_t = arg->inferred_type
+                                ? subst_apply(ctx->subst, arg->inferred_type)
+                                : NULL;
+                    /* If still unresolved, try env lookup for symbols */
+                    if ((!arg_t || arg_t->kind == TYPE_UNKNOWN) &&
+                        arg->type == AST_SYMBOL) {
+                        TypeScheme *asc = infer_env_lookup(ctx->env, arg->symbol);
+                        if (asc) arg_t = subst_apply(ctx->subst, asc->type);
+                    }
+
+                    fprintf(stderr, "DEBUG validate: head=%s i=%d param_kind=%d arg_kind=%d arg_inferred=%p\n",
+                        head->symbol, i,
+                        param_t ? param_t->kind : -1,
+                        arg_t   ? arg_t->kind   : -1,
+                        (void*)(arg ? arg->inferred_type : NULL));
+                    if (param_t && arg_t &&
+                        param_t->kind != TYPE_VAR &&
+                        param_t->kind != TYPE_UNKNOWN &&
+                        arg_t->kind   != TYPE_VAR &&
+                        arg_t->kind   != TYPE_UNKNOWN) {
+                        bool arg_is_fn   = (arg_t->kind   == TYPE_ARROW || arg_t->kind   == TYPE_FN);
+                        bool param_is_fn = (param_t->kind == TYPE_ARROW || param_t->kind == TYPE_FN);
+                        if (arg_is_fn && !param_is_fn) {
+                            READER_ERROR(arg->line, arg->column,
+                                "argument %d to '%s' must be %s, but got a function",
+                                i, head->symbol, type_to_string(param_t));
+                        }
+                    }
+                    ft = ft->arrow_ret;
+                }
+            }
+        }
+    }
+
+    /* Recurse into all children */
+    switch (ast->type) {
+    case AST_LIST:
+        for (size_t i = 0; i < ast->list.count; i++)
+            infer_validate_calls(ctx, ast->list.items[i]);
+        break;
+    case AST_LAMBDA:
+        for (int i = 0; i < ast->lambda.body_count; i++)
+            infer_validate_calls(ctx, ast->lambda.body_exprs[i]);
+        break;
+    case AST_ARRAY:
+        for (size_t i = 0; i < ast->array.element_count; i++)
+            infer_validate_calls(ctx, ast->array.elements[i]);
+        break;
+    default:
+        break;
+    }
+}
+
 Type *infer_toplevel(InferCtx *ctx, AST *ast) {
     /* 1. Constraint generation */
     Type *t = infer_expr(ctx, ast);
@@ -1172,6 +1246,9 @@ Type *infer_toplevel(InferCtx *ctx, AST *ast) {
 
     /* 3. Zonking — apply substitution to all AST nodes */
     infer_zonk_ast(ctx, ast);
+
+    /* 4. Post-zonk validation — check call sites with concrete types */
+    infer_validate_calls(ctx, ast);
 
     return subst_apply(ctx->subst, t);
 }

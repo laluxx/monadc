@@ -9,6 +9,7 @@ INCDIR  = $(PREFIX)/include/monad
 COREDIR = $(PREFIX)/lib/monad/core
 
 DEBUG_CFLAGS   = -g -DDEBUG
+ASAN_CFLAGS    = -g -fsanitize=address -fno-omit-frame-pointer -DDEBUG
 RELEASE_CFLAGS = -DNDEBUG -O2
 
 # All .c files EXCEPT runtime.c (built separately as a static archive)
@@ -23,6 +24,10 @@ RUNTIME_OBJ = runtime.o arena.o
 
 all: CFLAGS += $(DEBUG_CFLAGS)
 all: $(RUNTIME_LIB) $(TARGET)
+
+asan: CFLAGS += $(ASAN_CFLAGS)
+asan: LDFLAGS += -fsanitize=address
+asan: $(RUNTIME_LIB) $(TARGET)
 
 release: CFLAGS += $(RELEASE_CFLAGS)
 release: $(RUNTIME_LIB) $(TARGET)

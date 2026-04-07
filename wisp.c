@@ -312,41 +312,55 @@ static void arity_prescan(ArityTable *t, const char *source) {
         free(tok.value);
         tok = lexer_next_token(&lex);
         if (tok.type == TOK_LPAREN) {
-            free(tok.value);
-            tok = lexer_next_token(&lex);
-            if (tok.type != TOK_SYMBOL) { free(tok.value); continue; }
-            char *fname = strdup(tok.value);
-            free(tok.value);
-            int arity = 0;
-            while (true) {
-                tok = lexer_next_token(&lex);
-                if (tok.type == TOK_EOF || tok.type == TOK_RPAREN) { free(tok.value); break; }
-                if (tok.type == TOK_LBRACKET) {
                     free(tok.value);
-                    int depth = 1;
-                    while (depth > 0) {
+                    tok = lexer_next_token(&lex);
+                    if (tok.type != TOK_SYMBOL) { free(tok.value); continue; }
+                    char *fname = strdup(tok.value);
+                    free(tok.value);
+                    int arity = 0;
+                    ParamKind kinds[WISP_MAX_PARAMS];
+                    memset(kinds, PARAM_VALUE, sizeof(kinds));
+                    while (true) {
                         tok = lexer_next_token(&lex);
-                        if (tok.type == TOK_EOF) depth = 0;
-                        if (tok.type == TOK_LBRACKET) depth++;
-                        if (tok.type == TOK_RBRACKET) depth--;
+                        if (tok.type == TOK_EOF || tok.type == TOK_RPAREN) { free(tok.value); break; }
+                        if (tok.type == TOK_LBRACKET) {
+                            /* Peek inside bracket to detect Fn param:
+                             * [name :: Fn :: ...] or [name :: (a -> b)] */
+                            free(tok.value);
+                            bool is_fn = false;
+                            int depth = 1;
+                            while (depth > 0) {
+                                tok = lexer_next_token(&lex);
+                                if (tok.type == TOK_EOF) { depth = 0; free(tok.value); break; }
+                                if (tok.type == TOK_LBRACKET) depth++;
+                                if (tok.type == TOK_RBRACKET) depth--;
+                                /* Fn keyword or arrow type inside bracket = function param */
+                                if (depth > 0 && tok.type == TOK_SYMBOL && tok.value &&
+                                    (strcmp(tok.value, "Fn") == 0 ||
+                                     strcmp(tok.value, "->") == 0))
+                                    is_fn = true;
+                                if (depth > 0 && tok.type == TOK_ARROW)
+                                    is_fn = true;
+                                free(tok.value);
+                            }
+                            if (arity < WISP_MAX_PARAMS)
+                                kinds[arity] = is_fn ? PARAM_FUNC : PARAM_VALUE;
+                            arity++; continue;
+                        }
+                        if (tok.type == TOK_ARROW) { free(tok.value); continue; }
+                        if (tok.type == TOK_SYMBOL) {
+                            if (strcmp(tok.value, "::") == 0) {
+                                free(tok.value);
+                                tok = lexer_next_token(&lex);
+                                free(tok.value);
+                                continue;
+                            }
+                            arity++;
+                        }
                         free(tok.value);
                     }
-                    arity++; continue;
-                }
-                if (tok.type == TOK_ARROW) { free(tok.value); continue; }
-                if (tok.type == TOK_SYMBOL) {
-                    if (strcmp(tok.value, "::") == 0) {
-                        free(tok.value);
-                        tok = lexer_next_token(&lex);
-                        free(tok.value);
-                        continue;
-                    }
-                    arity++;
-                }
-                free(tok.value);
-            }
-            arity_set(t, fname, arity);
-            free(fname);
+                    arity_set_with_kinds(t, fname, arity, kinds);
+                    free(fname);
         } else if (tok.type == TOK_SYMBOL) {
             char *vname = strdup(tok.value);
             free(tok.value);
@@ -597,7 +611,8 @@ static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
         /* removed -> single-token grouping hack */
 
         /* Peek ahead: if next non-space token is '::',
-         * group entire chain as [tok :: T1 :: T2 :: ...] */
+         * group entire chain as [tok :: T1 :: T2 :: ...].
+         * Types may themselves be parenthesized arrow types: (Int -> Int). */
         const char *peek = p;
         while (*peek == ' ' || *peek == '\t') peek++;
         if (strncmp(peek, "::", 2) == 0 &&
@@ -615,7 +630,8 @@ static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
                 q += 2;
                 while (*q == ' ' || *q == '\t') q++;
 
-                /* consume one token (type name, number, or bracketed group) */
+                /* consume one type token (may be bracketed, or plain word,
+                 * followed optionally by -> chains for arrow types)         */
                 const char *seg_start = q;
                 const char *seg_end;
                 if (*q == '[' || *q == '(') {
@@ -645,6 +661,45 @@ static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
 
                 /* skip spaces and peek at next token */
                 while (*q == ' ' || *q == '\t') q++;
+
+                /* Also consume any trailing -> Type pairs so that
+                 * (Int -> Int) -> (a) -> (a) becomes one annotation:
+                 * [name :: (Int -> Int) :: -> :: (a) :: -> :: (a)]
+                 * which parse_fn_signature already knows how to read.      */
+                while (*q == '-' && *(q+1) == '>' &&
+                       (q[2] == ' ' || q[2] == '\t' || q[2] == '\0')) {
+                    sb_puts(&ann, " :: ->");
+                    q += 2;
+                    while (*q == ' ' || *q == '\t') q++;
+
+                    /* consume next type segment */
+                    if (*q == '[' || *q == '(') {
+                        char open2  = *q;
+                        char close2 = open2 == '[' ? ']' : ')';
+                        int depth2  = 0;
+                        seg_start = q;
+                        seg_end   = q;
+                        while (*seg_end) {
+                            if (*seg_end == open2)  depth2++;
+                            if (*seg_end == close2) { depth2--; seg_end++; if (!depth2) break; continue; }
+                            seg_end++;
+                        }
+                    } else {
+                        seg_start = q;
+                        seg_end   = q;
+                        while (*seg_end && *seg_end != ' ' && *seg_end != '\t' &&
+                               *seg_end != ';' && *seg_end != '\n') seg_end++;
+                    }
+
+                    if (seg_end == seg_start) break;
+
+                    char *seg2 = strndup(seg_start, seg_end - seg_start);
+                    sb_puts(&ann, " :: ");
+                    sb_puts(&ann, seg2);
+                    free(seg2);
+                    q = seg_end;
+                    while (*q == ' ' || *q == '\t') q++;
+                }
             }
 
             sb_putc(&ann, ']');
@@ -718,7 +773,66 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                 while (*right_end && *right_end != ';') right_end++;
                 while (right_end > right_start && (*(right_end-1) == ' ' || *(right_end-1) == '\t')) right_end--;
 
-                char *body_raw = strndup(right_start, right_end - right_start);
+                /* Check if the body has unbalanced brackets — if so,
+                         * accumulate continuation lines until balanced.       */
+                        int body_depth = 0;
+                        bool body_in_str = false;
+                        for (const char *bq = right_start; bq < right_end; bq++) {
+                            if (body_in_str) {
+                                if (*bq == '\\') bq++;
+                                else if (*bq == '"') body_in_str = false;
+                                continue;
+                            }
+                            if (*bq == '"') { body_in_str = true; continue; }
+                            if (*bq == '(' || *bq == '[' || *bq == '{') body_depth++;
+                            if (*bq == ')' || *bq == ']' || *bq == '}') body_depth--;
+                        }
+
+                        size_t body_acc_cap = 256;
+                        char *body_acc = malloc(body_acc_cap);
+                        size_t body_acc_len = right_end - right_start;
+                        memcpy(body_acc, right_start, body_acc_len);
+                        body_acc[body_acc_len] = '\0';
+
+                        while (body_depth != 0 && *p) {
+                            const char *cls = p;
+                            while (*p && *p != '\n') p++;
+                            if (*p == '\n') p++;
+                            int cll = (int)(p - cls);
+                            char *clraw = strndup(cls, cll);
+                            const char *clt = clraw;
+                            while (*clt == ' ' || *clt == '\t') clt++;
+                            if (!*clt || *clt == ';') { free(clraw); lineno++; continue; }
+                            const char *clt_end = clt;
+                            bool clt_ins = false;
+                            while (*clt_end) {
+                                if (clt_ins) {
+                                    if (*clt_end == '\\') clt_end++;
+                                    else if (*clt_end == '"') clt_ins = false;
+                                    clt_end++; continue;
+                                }
+                                if (*clt_end == '"') { clt_ins = true; clt_end++; continue; }
+                                if (*clt_end == ';') break;
+                                clt_end++;
+                            }
+                            while (clt_end > clt && (*(clt_end-1)==' '||*(clt_end-1)=='\t')) clt_end--;
+                            size_t cltlen = clt_end - clt;
+                            while (body_acc_len + cltlen + 3 >= body_acc_cap) {
+                                body_acc_cap *= 2; body_acc = realloc(body_acc, body_acc_cap);
+                            }
+                            body_acc[body_acc_len++] = ' ';
+                            memcpy(body_acc + body_acc_len, clt, cltlen);
+                            body_acc_len += cltlen;
+                            body_acc[body_acc_len] = '\0';
+                            for (const char *bq = clt; *bq && *bq != ';'; bq++) {
+                                if (*bq == '(' || *bq == '[' || *bq == '{') body_depth++;
+                                if (*bq == ')' || *bq == ']' || *bq == '}') body_depth--;
+                            }
+                            free(clraw);
+                            lineno++;
+                        }
+
+                        char *body_raw = body_acc;
                         WTokenStream body_ts = {0};
                         tokenise_into(at, &body_ts, body_raw, indent, lineno);
                         SB body_sb; sb_init(&body_sb);
@@ -1085,14 +1199,49 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     int arr_count = 0;
                     int bdepth = 0;
                     bool in_str = false;
-                    for (const char *p = sig_rest; *p && *p != ';'; p++) {
-                        if (in_str) { if (*p == '\\' && *(p+1)) p++; else if (*p == '"') in_str = false; continue; }
-                        if (*p == '"') { in_str = true; continue; }
-                        if (*p == '[' || *p == '(' || *p == '{') bdepth++;
-                        else if (*p == ']' || *p == ')' || *p == '}') bdepth--;
-                        else if (bdepth == 0 && *p == '-' && *(p+1) == '>') arr_count++;
+                    ParamKind sig_kinds[WISP_MAX_PARAMS];
+                    memset(sig_kinds, PARAM_VALUE, sizeof(sig_kinds));
+                    int sig_param = 0;
+                    /* Walk the type signature tracking each param type.
+                     * A param whose type contains '->' (inside parens/brackets)
+                     * or is literally (a -> b) is a function param. */
+                    const char *sp = sig_rest;
+                    while (*sp && *sp != ';') {
+                        /* skip spaces */
+                        while (*sp == ' ' || *sp == '\t') sp++;
+                        if (!*sp || *sp == ';') break;
+                        /* detect top-level '->' separator */
+                        if (*sp == '-' && *(sp+1) == '>') {
+                            arr_count++;
+                            sp += 2;
+                            sig_param++;
+                            continue;
+                        }
+                        /* consume one type token (may be bracketed) */
+                        if (*sp == '(' || *sp == '[') {
+                            char open = *sp, close = open == '(' ? ')' : ']';
+                            int d = 0;
+                            const char *tstart = sp;
+                            bool has_arrow_inside = false;
+                            while (*sp) {
+                                if (*sp == open)  d++;
+                                if (*sp == close) { d--; sp++; if (!d) break; continue; }
+                                if (d == 1 && *sp == '-' && *(sp+1) == '>') has_arrow_inside = true;
+                                sp++;
+                            }
+                            /* This bracketed type is a param if a top-level ->
+                             * follows it — we'll mark it after seeing the arrow.
+                             * Store tentatively: mark previous slot if arrow seen. */
+                            (void)tstart;
+                            if (has_arrow_inside && sig_param < WISP_MAX_PARAMS)
+                                sig_kinds[sig_param] = PARAM_FUNC;
+                        } else {
+                            /* plain word type */
+                            while (*sp && *sp != ' ' && *sp != '\t' && *sp != ';' &&
+                                   !(*sp == '-' && *(sp+1) == '>')) sp++;
+                        }
                     }
-                    arity_set(at, fname, arr_count);
+                    arity_set_with_kinds(at, fname, arr_count, sig_kinds);
 
                     size_t siglen = strlen(sig_rest);
                     size_t hlen = 1 + name_len + 1 + siglen + 1 + 1;
