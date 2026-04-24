@@ -1,7 +1,8 @@
 #+title: TODO.org
 
-* TODO Stuff [0/32]
+* TODO Stuff [0/34]
 - [ ] eval
+- [ ] labels like :label that create continuations that you can goto
 - [ ] arbitrary return at any point of execution using =->=
 - [ ] Builtin Path type and Path literals e.g ~/path/to/file.c (also support windows)
 - [ ] The coll type: [a] should NOT be a runtime thing, it should just do monomorphization
@@ -118,6 +119,61 @@ Compile-time evaluation (what I'm doing now)
     ⊂ Liquid types (adds SMT for symbolic reasoning)
         ⊂ Dependent types (adds proof terms, full expressiveness)
 #+end_src
+
+
+* TODO Complex Numbers Design
+** Literals
+
+#+BEGIN_SRC monad
+3i          ; pure imaginary
+3+4i        ; complex
+∞           ; infinity (or "inf")
+#+END_SRC
+
+** Predicates
+
+#+BEGIN_SRC scheme
+(Complex? x)      ; all numbers are complex
+(Real? x)         ; imaginary part zero
+(imaginary? x)    ; real part zero
+(Int? x)          ; real and imaginary zero? no - real only
+(Inf? x)          ; ∞
+#+END_SRC
+
+** Arithmetic
+
+#+BEGIN_SRC scheme
+(+ 3i 2i)     ; 5i
+(* 2i 3i)     ; -6
+(/ 1 0)       ; ∞
+(/ 0 0)       ; ERROR
+(+ 5 ∞)       ; ∞
+(* 0 ∞)       ; ERROR
+#+END_SRC
+
+** Accessors
+
+#+BEGIN_SRC scheme
+(real 3+4i)       ; 3
+(imag 3+4i)       ; 4
+(mag 3+4i)        ; 5
+(arg 3+4i)        ; 0.927...
+(conj 3+4i)       ; 3-4i
+#+END_SRC
+
+** Constructors
+
+#+BEGIN_SRC scheme
+(rect 3 4)        ; 3+4i
+(polar 5 0.927)   ; 3+4i
+#+END_SRC
+
+** Gaussian Integers
+
+#+BEGIN_SRC scheme
+(gaussian-gcd 3+4i 1+2i)
+(gaussian-prime? 1+i)   ; #t
+#+END_SRC
 
 
 * TODO Thread operator |>

@@ -666,9 +666,20 @@ bool env_hm_check_call(Env *env, const char *name, Type **arg_types, int n,
                     }
                     Type *an = (aa->kind == TYPE_ARROW) ? aa->arrow_ret : NULL;
                     Type *pn = (pa->kind == TYPE_ARROW) ? pa->arrow_ret : NULL;
-                    if (!an || !pn) break;
+                    if (!an || !pn) {
+                        /* One chain ended before the other — arity mismatch */
+                        if (an != pn) mismatch = true;
+                        break;
+                    }
                     aa = an; ap = aa->kind == TYPE_ARROW ? aa->arrow_param : aa;
                     pa = pn; pp = pa->kind == TYPE_ARROW ? pa->arrow_param : pa;
+                }
+                /* After the loop, if param chain is exhausted but arg chain
+                 * still has arrows (or vice versa), arities differ */
+                if (!mismatch) {
+                    bool aa_done = (aa->kind != TYPE_ARROW);
+                    bool pa_done = (pa->kind != TYPE_ARROW);
+                    if (aa_done != pa_done) mismatch = true;
                 }
             } else if (!arg_is_fn && !param_is_fn && arg->kind != param->kind) {
                 /* Allow numeric widening: any int kind satisfies Int param */

@@ -22,30 +22,18 @@
    apply])
 
 
-(define (caar  [xs :: List] -> List) (car (car xs)))
-(define (cadr  [xs :: List] -> List) (car (cdr xs)))
-(define (cdar  [xs :: List] -> List) (cdr (car xs)))
-(define (cddr  [xs :: List] -> List) (cdr (cdr xs)))
-(define (caaar [xs :: List] -> List) (car (car (car xs))))
-(define (caadr [xs :: List] -> List) (car (car (cdr xs))))
-(define (cadar [xs :: List] -> List) (car (cdr (car xs))))
-(define (caddr [xs :: List] -> List) (car (cdr (cdr xs))))
-(define (cdaar [xs :: List] -> List) (cdr (car (car xs))))
-(define (cdadr [xs :: List] -> List) (cdr (car (cdr xs))))
-(define (cddar [xs :: List] -> List) (cdr (cdr (car xs))))
-(define (cdddr [xs :: List] -> List) (cdr (cdr (cdr xs))))
-
--|[ Imperative ]|-
-
-
-;; define repeat :: a -> List
-;;   "Return an infinite list of Xs."
-;;   x -> x | repeat x
-
-;; TODO Make sure it can repeat anything!
-;; (define (repeat [x :: a] -> List)
-;;   "Return an infinite list of Xs."
-;;   (x cons (repeat x)))
+(define (caar  [xs :: List] -> a) (car (car xs)))
+(define (cadr  [xs :: List] -> a) (car (cdr xs)))
+(define (cdar  [xs :: List] -> a) (cdr (car xs)))
+(define (cddr  [xs :: List] -> a) (cdr (cdr xs)))
+(define (caaar [xs :: List] -> a) (car (car (car xs))))
+(define (caadr [xs :: List] -> a) (car (car (cdr xs))))
+(define (cadar [xs :: List] -> a) (car (cdr (car xs))))
+(define (caddr [xs :: List] -> a) (car (cdr (cdr xs))))
+(define (cdaar [xs :: List] -> a) (cdr (car (car xs))))
+(define (cdadr [xs :: List] -> a) (cdr (car (cdr xs))))
+(define (cddar [xs :: List] -> a) (cdr (cdr (car xs))))
+(define (cdddr [xs :: List] -> a) (cdr (cdr (cdr xs))))
 
 
 
@@ -73,19 +61,17 @@
       (set! cur (cdr cur))))
   result)
 
-
 (define (list-index [xs :: List] -> val -> Int)
   "Return index of first element equal to VAL, or -1."
   (define [result :: Int] -1)
   (define [cur :: List] xs)
-  (define [len :: Int] (list-length xs))
+  (define [len :: Int] (count xs))
   (for [i 0 len]
     (begin
       (if (and (equal? (car cur) val) (= result -1))
         (set! result i))
       (set! cur (cdr cur))))
   result)
-
 
 (define (iota [count :: Int] -> List)
   :doc "Return a list of COUNT integers starting from 0."
@@ -97,28 +83,28 @@
 
 
 (tests
-  ;; list-length
-  (assert-eq (list-length (list))          0   "length empty")
-  (assert-eq (list-length (cons 1 (list))) 1   "length cons 1")
-  (assert-eq (list-length (iota 5))        5   "length iota 5")
-  (assert-eq (list-length (iota 10))       10  "length iota 10")
+  ;; count
+  (assert-eq (count (list))          0   "length empty")
+  (assert-eq (count (cons 1 (list))) 1   "length cons 1")
+  (assert-eq (count (iota 5))        5   "length iota 5")
+  (assert-eq (count (iota 10))       10  "length iota 10")
 
   ;; list-empty?
   (assert-eq (list-empty? (list))     True  "empty? empty")
   (assert-eq (list-empty? (iota 3))   False "empty? nonempty")
 
   ;; iota
-  (assert-eq (list-length (iota 0))   0   "iota 0")
-  (assert-eq (list-length (iota 1))   1   "iota 1")
-  (assert-eq (list-length (iota 100)) 100 "iota 100")
+  (assert-eq (count (iota 0))   0   "iota 0")
+  (assert-eq (count (iota 1))   1   "iota 1")
+  (assert-eq (count (iota 100)) 100 "iota 100")
 
   ;; list-tail
-  (assert-eq (list-length (list-tail (iota 5) 2)) 3 "list-tail length")
-  (assert-eq (list-length (list-tail (iota 5) 0)) 5 "list-tail 0")
-  (assert-eq (list-length (list-tail (iota 5) 5)) 0 "list-tail full")
+  (assert-eq (count (list-tail (iota 5) 2)) 3 "list-tail length")
+  (assert-eq (count (list-tail (iota 5) 0)) 5 "list-tail 0")
+  (assert-eq (count (list-tail (iota 5) 5)) 0 "list-tail full")
 
   ;; list-reverse
-  (assert-eq (list-length (list-reverse (iota 5))) 5    "reverse length")
+  (assert-eq (count (list-reverse (iota 5))) 5    "reverse length")
   (assert-eq (list-empty? (list-reverse (list)))   True "reverse empty")
 
   ;; list-index
@@ -155,9 +141,9 @@
   ;; ── lazy ranges ──────────────────────────────────────────────────────
 
   ;; finite range length
-  (assert-eq (list-length (take 10 '(0..9)))   10 "range 0..9 length")
-  (assert-eq (list-length (take 1  '(0..0)))   1  "range singleton")
-  (assert-eq (list-length (take 5  '(1..5)))   5  "range 1..5 length")
+  (assert-eq (count (take 10 '(0..9)))   10 "range 0..9 length")
+  (assert-eq (count (take 1  '(0..0)))   1  "range singleton")
+  (assert-eq (count (take 5  '(1..5)))   5  "range 1..5 length")
 
   ;; finite range values
   (assert-eq (list-ref '(1..5) 0) 1 "range first element")
@@ -170,26 +156,26 @@
   (assert-eq (list-ref '(0,2..8) 4) 8 "stepped range end")
 
   ;; infinite list with take
-  (assert-eq (list-length (take 0   '(1..))) 0   "take 0 infinite")
-  (assert-eq (list-length (take 1   '(1..))) 1   "take 1 infinite")
-  (assert-eq (list-length (take 100 '(1..))) 100 "take 100 infinite")
+  (assert-eq (count (take 0   '(1..))) 0   "take 0 infinite")
+  (assert-eq (count (take 1   '(1..))) 1   "take 1 infinite")
+  (assert-eq (count (take 100 '(1..))) 100 "take 100 infinite")
   (assert-eq (list-ref (take 10 '(1..)) 0)  1    "infinite first")
   (assert-eq (list-ref (take 10 '(1..)) 9)  10   "infinite tenth")
 
   ;; drop
-  (assert-eq (list-length (drop 3 '(1..5)))    2 "drop length")
+  (assert-eq (count (drop 3 '(1..5)))    2 "drop length")
   (assert-eq (list-ref    (drop 3 '(1..5)) 0)  4 "drop first element")
-  (assert-eq (list-length (drop 0 '(1..5)))    5 "drop 0")
+  (assert-eq (count (drop 0 '(1..5)))    5 "drop 0")
 
   ;; ── map ──────────────────────────────────────────────────────────────
 
   ;; basic map
-  (assert-eq (list-length (map double '(1 2 3 4 5))) 5  "map length")
+  (assert-eq (count (map double '(1 2 3 4 5))) 5  "map length")
   (assert-eq (list-ref    (map double '(1 2 3 4 5)) 0)  2  "map first")
   (assert-eq (list-ref    (map double '(1 2 3 4 5)) 4)  10 "map last")
 
   ;; map empty
-  (assert-eq (list-length (map double (list))) 0 "map empty list")
+  (assert-eq (count (map double (list))) 0 "map empty list")
 
   ;; map identity (square of iota)
   (assert-eq (list-ref (map square (iota 5)) 0) 0 "map square 0")
@@ -201,38 +187,38 @@
   (assert-eq (list-ref (map double (map double '(1 2 3))) 2) 12 "chained map last")
 
   ;; map over finite range
-  (assert-eq (list-length (map double '(1..10))) 10 "map range length")
+  (assert-eq (count (map double '(1..10))) 10 "map range length")
   (assert-eq (list-ref    (map double '(1..10)) 0)   2  "map range first")
   (assert-eq (list-ref    (map double '(1..10)) 9)   20 "map range last")
 
   ;; map over infinite list (lazy)
-  (assert-eq (list-length (take 5 (map double '(1..)))) 5  "map infinite length")
+  (assert-eq (count (take 5 (map double '(1..)))) 5  "map infinite length")
   (assert-eq (list-ref    (take 5 (map square '(1..))) 0)  1  "map square inf first")
   (assert-eq (list-ref    (take 5 (map square '(1..))) 4)  25 "map square inf fifth")
 
   ;; ── filter ───────────────────────────────────────────────────────────
 
   ;; basic filter
-  (assert-eq (list-length (filter positive? '(-2 -1 0 1 2 3))) 3 "filter positive length")
+  (assert-eq (count (filter positive? '(-2 -1 0 1 2 3))) 3 "filter positive length")
   (assert-eq (list-ref    (filter positive? '(-2 -1 0 1 2 3)) 0) 1 "filter positive first")
 
   ;; filter even
-  (assert-eq (list-length (filter even? '(1 2 3 4 5 6 7 8 9 10))) 5 "filter even length")
+  (assert-eq (count (filter even? '(1 2 3 4 5 6 7 8 9 10))) 5 "filter even length")
   (assert-eq (list-ref    (filter even? '(1 2 3 4 5 6 7 8 9 10)) 0) 2 "filter even first")
   (assert-eq (list-ref    (filter even? '(1 2 3 4 5 6 7 8 9 10)) 4) 10 "filter even last")
 
   ;; filter odd
-  (assert-eq (list-length (filter odd? '(1 2 3 4 5 6 7 8 9 10))) 5 "filter odd length")
+  (assert-eq (count (filter odd? '(1 2 3 4 5 6 7 8 9 10))) 5 "filter odd length")
   (assert-eq (list-ref    (filter odd? '(1 2 3 4 5 6 7 8 9 10)) 0) 1 "filter odd first")
 
   ;; filter empty result
-  (assert-eq (list-length (filter positive? '(-3 -2 -1))) 0 "filter all negative")
+  (assert-eq (count (filter positive? '(-3 -2 -1))) 0 "filter all negative")
 
   ;; filter all pass
-  (assert-eq (list-length (filter positive? '(1 2 3 4 5))) 5 "filter all pass")
+  (assert-eq (count (filter positive? '(1 2 3 4 5))) 5 "filter all pass")
 
   ;; filter on range (lazy)
-  (assert-eq (list-length (take 5 (filter even? '(0..)))) 5 "filter even infinite length")
+  (assert-eq (count (take 5 (filter even? '(0..)))) 5 "filter even infinite length")
   (assert-eq (list-ref    (take 5 (filter even? '(0..))) 0) 0 "filter even inf first")
   (assert-eq (list-ref    (take 5 (filter even? '(0..))) 1) 2 "filter even inf second")
   (assert-eq (list-ref    (take 5 (filter even? '(0..))) 4) 8 "filter even inf fifth")
@@ -270,10 +256,10 @@
   ;; ── zip ──────────────────────────────────────────────────────────────
 
   ;; basic zip length
-  (assert-eq (list-length (zip '(1 2 3) '(4 5 6)))     3 "zip length equal")
-  (assert-eq (list-length (zip '(1 2 3 4 5) '(10 20))) 2 "zip truncates to shorter")
-  (assert-eq (list-length (zip (list) '(1 2 3)))        0 "zip empty left")
-  (assert-eq (list-length (zip '(1 2 3) (list)))        0 "zip empty right")
+  (assert-eq (count (zip '(1 2 3) '(4 5 6)))     3 "zip length equal")
+  (assert-eq (count (zip '(1 2 3 4 5) '(10 20))) 2 "zip truncates to shorter")
+  (assert-eq (count (zip (list) '(1 2 3)))        0 "zip empty left")
+  (assert-eq (count (zip '(1 2 3) (list)))        0 "zip empty right")
 
   ;; zip pair contents — each element is a 2-list (a b)
   (assert-eq (car  (list-ref (zip '(1 2 3) '(4 5 6)) 0)) 1 "zip pair first-left")
@@ -282,14 +268,14 @@
   (assert-eq (cadr (list-ref (zip '(1 2 3) '(4 5 6)) 2)) 6 "zip pair last-right")
 
   ;; zip with infinite list (lazy)
-  (assert-eq (list-length (take 5 (zip '(1..) '(1..))))  5 "zip two infinite length")
+  (assert-eq (count (take 5 (zip '(1..) '(1..))))  5 "zip two infinite length")
   (assert-eq (car (list-ref (take 3 (zip '(1..) '(10..))) 0)) 1  "zip inf left first")
   (assert-eq (cadr (list-ref (take 3 (zip '(1..) '(10..))) 0)) 10 "zip inf right first")
 
   ;; ── zipwith ──────────────────────────────────────────────────────────
 
   ;; pairwise add
-  (assert-eq (list-length (zipwith add '(1 2 3) '(4 5 6))) 3  "zipwith length")
+  (assert-eq (count       (zipwith add '(1 2 3) '(4 5 6)))    3  "zipwith length")
   (assert-eq (list-ref    (zipwith add '(1 2 3) '(4 5 6)) 0)  5  "zipwith first")
   (assert-eq (list-ref    (zipwith add '(1 2 3) '(4 5 6)) 2)  9  "zipwith last")
 
@@ -299,10 +285,10 @@
   (assert-eq (list-ref (zipwith mul '(1 2 3) '(4 5 6)) 2)  18 "zipwith mul third")
 
   ;; truncates to shorter
-  (assert-eq (list-length (zipwith add '(1 2 3 4 5) '(10 20))) 2 "zipwith truncates")
+  (assert-eq (count (zipwith add '(1 2 3 4 5) '(10 20))) 2 "zipwith truncates")
 
   ;; empty
-  (assert-eq (list-length (zipwith add (list) '(1 2 3))) 0 "zipwith empty left")
+  (assert-eq (count (zipwith add (list) '(1 2 3))) 0 "zipwith empty left")
 
   ;; dot product: foldl + zipwith
   (assert-eq (foldl add 0 (zipwith mul '(1 2 3) '(4 5 6))) 32 "dot product")
@@ -320,12 +306,12 @@
   ;; sum of even numbers 1..20
   (assert-eq (foldl add 0 (filter even? '(1..20))) 110 "sum of evens 1..20")
 
-  ;; count of positives via filter + list-length
-  (assert-eq (list-length (filter positive? '(-5 -4 -3 -2 -1 0 1 2 3 4 5))) 5
+  ;; count of positives via filter + count
+  (assert-eq (count (filter positive? '(-5 -4 -3 -2 -1 0 1 2 3 4 5))) 5
              "count positives")
 
   ;; map then filter
-  (assert-eq (list-length (filter positive? (map sub '(1 2 3 4 5)))) 0
+  (assert-eq (count (filter positive? (map sub '(1 2 3 4 5)))) 0
              "map sub then filter positive (all zero or negative)")
 
   ;; double then sum

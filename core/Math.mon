@@ -28,6 +28,8 @@
    deg->rad sin mod-f ls exp pow
 ])
 
+import Coll
+
 ;;; Constants
 
 (define [pi   :: Float] 3.141592653589793  :alias π)

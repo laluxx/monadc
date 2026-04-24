@@ -12,6 +12,7 @@ typedef struct ArityEntry {
     char      *name;
     int        arity;
     ParamKind  param_kinds[WISP_MAX_PARAMS];
+    int        param_fn_arities[WISP_MAX_PARAMS]; // arity of fn params, -1 if unknown
     struct ArityEntry *next;
 } ArityEntry;
 
@@ -35,6 +36,7 @@ static void arity_set(ArityTable *t, const char *name, int arity) {
     e->name  = strdup(name);
     e->arity = arity;
     memset(e->param_kinds, PARAM_VALUE, sizeof(e->param_kinds));
+    memset(e->param_fn_arities, -1, sizeof(e->param_fn_arities));
     e->next  = t->buckets[h];
     t->buckets[h] = e;
 }
@@ -215,6 +217,10 @@ static void arity_prescan(ArityTable *t, const char *source) {
                 if (tok.type == TOK_SYMBOL && strcmp(tok.value, "::") == 0) {
                     free(tok.value);
                     int arity = 0;
+                    int fn_arities[WISP_MAX_PARAMS];
+                    memset(fn_arities, -1, sizeof(fn_arities));
+                    ParamKind kinds[WISP_MAX_PARAMS];
+                    memset(kinds, PARAM_VALUE, sizeof(kinds));
                     bool found_arrow = false;
                     while (true) {
                         tok = lexer_next_token(&lex);
@@ -225,6 +231,31 @@ static void arity_prescan(ArityTable *t, const char *source) {
                         if (tok.type == TOK_SYMBOL && strcmp(tok.value, "->") == 0) {
                             free(tok.value); found_arrow = true; break;
                         }
+                        /* bracketed type like (a -> b -> b) — count inner arrows */
+                        if (tok.type == TOK_LPAREN) {
+                            free(tok.value);
+                            int inner_arrows = 0;
+                            bool is_fn = false;
+                            int depth = 1;
+                            while (depth > 0) {
+                                tok = lexer_next_token(&lex);
+                                if (tok.type == TOK_EOF) { depth = 0; free(tok.value); break; }
+                                if (tok.type == TOK_LPAREN) depth++;
+                                if (tok.type == TOK_RPAREN) { depth--; if (!depth) { free(tok.value); break; } }
+                                if (depth > 0 && (tok.type == TOK_ARROW ||
+                                    (tok.type == TOK_SYMBOL && strcmp(tok.value, "->") == 0))) {
+                                    inner_arrows++;
+                                    is_fn = true;
+                                }
+                                free(tok.value);
+                            }
+                            if (arity < WISP_MAX_PARAMS) {
+                                kinds[arity] = is_fn ? PARAM_FUNC : PARAM_VALUE;
+                                fn_arities[arity] = is_fn ? inner_arrows : -1;
+                            }
+                            arity++;
+                            continue;
+                        }
                         if (tok.type == TOK_SYMBOL && strcmp(tok.value, "::") != 0)
                             arity++;
                         free(tok.value);
@@ -233,7 +264,14 @@ static void arity_prescan(ArityTable *t, const char *source) {
                         /* skip just the return type token */
                         tok = lexer_next_token(&lex);
                         free(tok.value);
-                        arity_set(t, fname, arity);
+                        arity_set_with_kinds(t, fname, arity, kinds);
+                        /* store per-param fn arities */
+                        unsigned int h = arity_hash(fname);
+                        for (ArityEntry *e = t->buckets[h]; e; e = e->next)
+                            if (strcmp(e->name, fname) == 0) {
+                                memcpy(e->param_fn_arities, fn_arities, sizeof(fn_arities));
+                                break;
+                            }
                     }
                     /* no arrow = variable definition, not a function, skip */
                 } else if (tok.type == TOK_ARROW ||
@@ -850,6 +888,77 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                         const char *lscan = left_str;
                         while (*lscan == ' ' || *lscan == '\t') lscan++;
 
+                        /* Register pattern variable arities from the enclosing
+                         * define's param_fn_arities so body calls like
+                         * "f x xs" expand correctly when f :: (a->b->b).
+                         * We look backwards in the token stream for the most
+                         * recent "define" token and use its fn_arities.      */
+                        {
+                            /* Find the define name from recent tokens */
+                            const char *def_name = NULL;
+                            for (int _ti = s.count - 1; _ti >= 0; _ti--) {
+                                if (strcmp(s.tokens[_ti].text, "define") == 0 &&
+                                    _ti + 1 < s.count) {
+                                    const char *dn = s.tokens[_ti + 1].text;
+                                    /* strip leading '(' if present */
+                                    if (dn[0] == '(') dn++;
+                                    def_name = dn;
+                                    break;
+                                }
+                            }
+                            if (def_name) {
+                                unsigned int _h = arity_hash(def_name);
+                                ArityEntry *_de = NULL;
+                                for (ArityEntry *_e = at->buckets[_h]; _e; _e = _e->next)
+                                    if (strcmp(_e->name, def_name) == 0) { _de = _e; break; }
+                                if (_de) {
+                                    /* Walk pattern tokens and assign arities */
+                                    const char *_ps = lscan;
+                                    if (*_ps == '|') { /* skip guard marker */
+                                        while (*_ps && *_ps != ' ' && *_ps != '\t') _ps++;
+                                        while (*_ps == ' ' || *_ps == '\t') _ps++;
+                                    }
+                                    int _pi = 0;
+                                    while (*_ps && _pi < _de->arity) {
+                                        while (*_ps == ' ' || *_ps == '\t') _ps++;
+                                        if (!*_ps) break;
+                                        /* skip wildcard '_' */
+                                        if (*_ps == '_') {
+                                            _pi++;
+                                            while (*_ps && *_ps != ' ' && *_ps != '\t') _ps++;
+                                            continue;
+                                        }
+                                        /* skip grouped pattern like [] or [x|xs] */
+                                        if (*_ps == '[' || *_ps == '(') {
+                                            char _oc = *_ps;
+                                            char _cc = _oc == '[' ? ']' : ')';
+                                            int _d = 0;
+                                            while (*_ps) {
+                                                if (*_ps == _oc) _d++;
+                                                else if (*_ps == _cc) { _d--; _ps++; if (!_d) break; continue; }
+                                                _ps++;
+                                            }
+                                            _pi++;
+                                            continue;
+                                        }
+                                        /* plain variable name */
+                                        const char *_ve = _ps;
+                                        while (*_ve && *_ve != ' ' && *_ve != '\t') _ve++;
+                                        size_t _vl = _ve - _ps;
+                                        if (_vl > 0 && _de->param_fn_arities[_pi] > 0) {
+                                            char _vname[128];
+                                            size_t _vn = _vl < 127 ? _vl : 127;
+                                            memcpy(_vname, _ps, _vn);
+                                            _vname[_vn] = '\0';
+                                            arity_set(at, _vname, _de->param_fn_arities[_pi]);
+                                        }
+                                        _ps = _ve;
+                                        _pi++;
+                                    }
+                                }
+                            }
+                        }
+
                         if (*lscan == '|') {
                             wts_push(&s, "|", indent, lineno);
                             lscan++;
@@ -871,11 +980,19 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                         }
                         free(left_str);
 
-                        size_t clen = 4 + strlen(body_expanded) + 1;
-                        char *clause = malloc(clen);
-                        snprintf(clause, clen, "-> %s", body_expanded);
-                        wts_push(&s, clause, indent, lineno);
-                        free(clause);
+                        wts_push(&s, "->", indent, lineno);
+                        /* If body is a bare multi-token call (not already grouped),
+                         * wrap it so wisp_parse_expr emits it as a single s-expr. */
+                        if (body_expanded[0] != '(' && body_expanded[0] != '[' &&
+                            body_expanded[0] != '{' && strchr(body_expanded, ' ')) {
+                            size_t wlen = strlen(body_expanded) + 3;
+                            char *wrapped = malloc(wlen);
+                            snprintf(wrapped, wlen, "(%s)", body_expanded);
+                            wts_push(&s, wrapped, indent, lineno);
+                            free(wrapped);
+                        } else {
+                            wts_push(&s, body_expanded, indent, lineno);
+                        }
                         free(body_expanded);
 
                         free(raw);

@@ -703,20 +703,10 @@ static RuntimeValue *_lazy_concat_tail_fn(void *e) {
 }
 
 RuntimeValue *rt_coll_lazy_cons(RuntimeValue *head, RuntimeThunk *tail_thunk) {
-    ConsCell *c    = malloc(sizeof(ConsCell));
-    c->head_fn     = NULL;
-    c->head_env    = NULL;
-    c->head_val    = head;
-    c->head_forced = 1;
-    LazyConcatEnv *env = malloc(sizeof(LazyConcatEnv));
-    env->t             = tail_thunk;
-    c->tail_fn     = _lazy_concat_tail_fn;
-    c->tail_env    = env;
-    c->tail_val    = NULL;
-    c->tail_forced = 0;
-    RuntimeList *lst = malloc(sizeof(RuntimeList));
-    lst->cell = c;
-    return rt_value_list(lst);
+    /* Force the tail immediately so we can inspect its type and dispatch
+     * to the correct collection concat, preserving String and Array types. */
+    RuntimeValue *tail = rt_force(tail_thunk);
+    return rt_coll_concat(head, tail);
 }
 
 RuntimeValue *rt_coll_concat(RuntimeValue *a, RuntimeValue *b) {
