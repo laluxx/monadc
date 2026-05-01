@@ -65,82 +65,8 @@ ASTPattern parse_single_pattern(Parser *p) {
         return pat;
     }
 
-    // List pattern [...] — handled above in the combined bracket block
-    if (false && parser_at(p, TOK_LBRACKET)) {
-        parser_advance(p); // consume '['
-
-        // Empty list []
-        if (parser_at(p, TOK_RBRACKET)) {
-            parser_advance(p);
-            pat.kind = PAT_LIST_EMPTY;
-            return pat;
-        }
-
-        // Parse element patterns until ] or |
-        ASTPattern *elems = NULL;
-        int         count = 0;
-        int         cap   = 0;
-
-        while (!parser_at(p, TOK_RBRACKET) &&
-               !parser_at(p, TOK_PIPE)     &&
-               !(p->current.type == TOK_SYMBOL && p->current.value && p->current.value[0] == '|') &&
-               !parser_at(p, TOK_EOF)) {
-            ASTPattern elem = parse_single_pattern(p);
-            if (count >= cap) {
-                cap = cap == 0 ? 4 : cap * 2;
-                elems = realloc(elems, sizeof(ASTPattern) * cap);
-            }
-            elems[count++] = elem;
-        }
-
-        ASTPattern *tail = NULL;
-
-        // Optional | tail — handle both TOK_PIPE and |xs symbol
-        if (parser_at(p, TOK_PIPE)) {
-            parser_advance(p); // consume '|'
-            tail = malloc(sizeof(ASTPattern));
-            *tail = parse_single_pattern(p);
-            if (tail->kind != PAT_VAR && tail->kind != PAT_WILDCARD) {
-                fprintf(stderr, "pmatch: tail after | must be a variable or _\n");
-                tail->kind = PAT_WILDCARD;
-            }
-        } else if (p->current.type == TOK_SYMBOL && p->current.value && p->current.value[0] == '|') {
-            // |xs was lexed as a single symbol — strip the leading '|'
-            tail = malloc(sizeof(ASTPattern));
-            const char *tail_name = p->current.value + 1; // skip '|'
-            if (strcmp(tail_name, "_") == 0) {
-                tail->kind = PAT_WILDCARD;
-                tail->var_name = NULL;
-            } else if (tail_name[0] != '\0') {
-                tail->kind = PAT_VAR;
-                tail->var_name = my_strdup(tail_name);
-            } else {
-                tail->kind = PAT_WILDCARD;
-                tail->var_name = NULL;
-            }
-            tail->elements = NULL;
-            tail->element_count = 0;
-            tail->tail = NULL;
-            tail->ctor_fields = NULL;
-            tail->ctor_field_count = 0;
-            tail->lit_value = 0;
-            parser_advance(p); // consume the |xs token
-        }
-
-        if (!parser_at(p, TOK_RBRACKET)) {
-            fprintf(stderr, "pmatch: expected ']' to close list pattern\n");
-        } else {
-            parser_advance(p); // consume ']'
-        }
-
-        pat.kind          = PAT_LIST;
-        pat.elements      = elems;
-        pat.element_count = count;
-        pat.tail          = tail;
-        return pat;
-    }
-
     // ADT constructor pattern (uppercase symbol = constructor name)
+
     // Handles both bare `Red` and destructuring `(Circle r)` / `(Rectangle w h)`
     if (parser_at(p, TOK_SYMBOL) &&
         p->current.value[0] >= 'A' && p->current.value[0] <= 'Z') {
@@ -682,13 +608,12 @@ static void build_pattern_conditions(
         break;
 
     case PAT_CONSTRUCTOR: {
-        /* Guard: (= (__adt_tag param) __adt_tag_CtorName) */
+        /* Guard: (= param.__tag __adt_tag_CtorName) */
         char tag_sym[256];
         snprintf(tag_sym, sizeof(tag_sym), "__adt_tag_%s", pat->var_name);
-        AST *tag_call = ast_new_list();
-        ast_list_append(tag_call, sym("__adt_tag"));
-        ast_list_append(tag_call, sym(param_name));
-        AST *tag_items[] = {sym("="), tag_call, sym(tag_sym)};
+        char dot_sym[256];
+        snprintf(dot_sym, sizeof(dot_sym), "%s.__tag", param_name);
+        AST *tag_items[] = {sym("="), sym(dot_sym), sym(tag_sym)};
         PUSH_GUARD(make_list(tag_items, 3));
 
         /* For each field sub-pattern, extract via __adt_field and bind/guard */
@@ -721,32 +646,29 @@ static void build_pattern_conditions(
             case PAT_CONSTRUCTOR: {
                 /* Nested: [Triangle [Point x1 y1] [Point x2 y2] ...]
                  *
-                 * Step 1 — Guard: check the nested field's tag directly
-                 *   (= (__adt_tag (__adt_field param fi)) __adt_tag_NestedCtor)
-                 * We use field_call directly here — no synthetic name in guard.
-                 *
-                 * Step 2 — Bind: __nested_CtorName_fi = (__adt_field param fi)
+                 * Step 1 — Bind: __nested_CtorName_fi = (__adt_field param fi)
                  * This lets ast_substitute replace __nested_CtorName_fi with
                  * the field expression everywhere in the body.
                  *
+                 * Step 2 — Guard: check the nested field's tag via dot access
+                 *   (= __nested_CtorName_fi.__tag __adt_tag_NestedCtor)
+                 *
                  * Step 3 — Bind nested fields: x1 = (__adt_field __nested_... 0)
                  * We emit these as VAR bindings referencing the synthetic name.
-                 * ast_substitute will chain-substitute them correctly.           */
+                 * ast_substitute will chain-substitute them correctly.            */
 
-                /* Step 1: tag guard using field_call directly */
-                char nested_tag_sym[256];
-                snprintf(nested_tag_sym, sizeof(nested_tag_sym),
-                         "__adt_tag_%s", fp->var_name);
-                AST *ntag_call = ast_new_list();
-                ast_list_append(ntag_call, sym("__adt_tag"));
-                ast_list_append(ntag_call, ast_clone(field_call));
-                AST *ntag_items[] = {sym("="), ntag_call, sym(nested_tag_sym)};
-                PUSH_GUARD(make_list(ntag_items, 3));
-
-                /* Step 2: bind synthetic name = field_call */
+                /* Step 1: bind synthetic name = field_call */
                 char *nested_param = malloc(256);
                 snprintf(nested_param, 256, "__nested_%s_%d", fp->var_name, fi);
                 PUSH_BIND(nested_param, ast_clone(field_call));
+
+                /* Step 2: tag guard using nested_param.__tag */
+                char nested_tag_sym[256];
+                snprintf(nested_tag_sym, sizeof(nested_tag_sym), "__adt_tag_%s", fp->var_name);
+                char ndot_sym[256];
+                snprintf(ndot_sym, sizeof(ndot_sym), "%s.__tag", nested_param);
+                AST *ntag_items[] = {sym("="), sym(ndot_sym), sym(nested_tag_sym)};
+                PUSH_GUARD(make_list(ntag_items, 3));
 
                 /* Step 3: bind each nested field var to (__adt_field nested_param nfi)
                  * Do NOT recurse into build_pattern_conditions — that would emit

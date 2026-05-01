@@ -11618,7 +11618,7 @@ void register_builtins(CodegenContext *ctx) {
     // Logic operators
     env_insert_builtin(ctx->env, "and", 2, -1, "Logical AND (short-circuit)", NULL);
     env_insert_builtin(ctx->env, "or",  2, -1, "Logical OR (short-circuit)", NULL);
-    env_insert_builtin(ctx->env, "not", 1,  0, "Logical NOT", NULL);
+    env_insert_builtin(ctx->env, "not", 1, -1, "Logical NOT", NULL);
 
     // Control flow
     env_insert_builtin(ctx->env, "if",     3,  0, "Conditional: (if cond then else)", NULL);

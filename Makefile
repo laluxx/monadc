@@ -12,15 +12,15 @@ DEBUG_CFLAGS   = -g -DDEBUG
 ASAN_CFLAGS    = -g -fsanitize=address -fno-omit-frame-pointer -DDEBUG
 RELEASE_CFLAGS = -DNDEBUG -O2
 
-# All .c files EXCEPT runtime.c (built separately as a static archive)
-SRCS = $(filter-out runtime.c, $(wildcard *.c))
-FFI_CFLAGS = $(shell pkg-config --cflags libclang 2>/dev/null || echo "-I/usr/lib/llvm/include")
-OBJS = $(SRCS:.c=.o)
-
 # Static archive — no rpath/ldconfig needed, works from any directory
 RUNTIME_LIB = libmonad.a
 RUNTIME_SRC = runtime.c arena.c
-RUNTIME_OBJ = runtime.o arena.o
+RUNTIME_OBJ = $(RUNTIME_SRC:.c=.o)
+
+# All .c files EXCEPT runtime sources to prevent concurrent write race conditions in make -j
+SRCS = $(filter-out $(RUNTIME_SRC), $(wildcard *.c))
+FFI_CFLAGS = $(shell pkg-config --cflags libclang 2>/dev/null || echo "-I/usr/lib/llvm/include")
+OBJS = $(SRCS:.c=.o)
 
 all: CFLAGS += $(DEBUG_CFLAGS)
 all: $(RUNTIME_LIB) $(TARGET)
@@ -33,10 +33,10 @@ release: CFLAGS += $(RELEASE_CFLAGS)
 release: $(RUNTIME_LIB) $(TARGET)
 
 
+DEPFLAGS = -MMD -MP
+
 $(RUNTIME_OBJ): %.o: %.c
-	$(CC) $(CFLAGS) -fPIC -c $< -o $@
-# $(RUNTIME_OBJ): $(RUNTIME_SRC)
-# 	$(CC) $(CFLAGS) -fPIC -c $< -o $@
+	$(CC) $(CFLAGS) $(DEPFLAGS) -fPIC -c $< -o $@
 
 $(RUNTIME_LIB): $(RUNTIME_OBJ)
 	ar rcs $@ $^
@@ -45,15 +45,16 @@ $(RUNTIME_LIB): $(RUNTIME_OBJ)
 $(TARGET): $(OBJS) $(RUNTIME_LIB)
 	$(CC) $(CFLAGS) -rdynamic -o $@ $(OBJS) $(RUNTIME_LIB) $(LDFLAGS)
 
-
 ffi.o: ffi.c
-	$(CC) $(CFLAGS) $(FFI_CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(FFI_CFLAGS) $(DEPFLAGS) -c $< -o $@
 
 %.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(DEPFLAGS) -c $< -o $@
+
+-include $(OBJS:.o=.d) $(RUNTIME_OBJ:.o=.d)
 
 clean:
-	rm -f $(OBJS) $(RUNTIME_OBJ) $(RUNTIME_LIB) $(TARGET)
+	rm -f $(OBJS) $(RUNTIME_OBJ) $(RUNTIME_LIB) $(TARGET) $(OBJS:.o=.d) $(RUNTIME_OBJ:.o=.d)
 
 # Install: monad binary + static archive + core (for linking compiled .mon programs)
 install: $(RUNTIME_LIB) $(TARGET)
