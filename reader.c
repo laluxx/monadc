@@ -2128,8 +2128,28 @@ static AST *parse_lambda(Parser *p) {
 
     char *docstring = NULL;
     if (p->current.type == TOK_STRING) {
-        docstring  = my_strdup(p->current.value);
-        p->current = lexer_next_token(p->lexer);
+        bool has_pmatch = false;
+        Lexer peek_lex = *p->lexer;
+        Token peek_tok = lexer_next_token(&peek_lex);
+        int depth = 0;
+        while (peek_tok.type != TOK_RPAREN && peek_tok.type != TOK_EOF && peek_tok.type != TOK_KEYWORD) {
+            if (peek_tok.type == TOK_LPAREN || peek_tok.type == TOK_LBRACKET) depth++;
+            if ((peek_tok.type == TOK_RPAREN || peek_tok.type == TOK_RBRACKET) && depth > 0) depth--;
+            if (depth == 0 && (peek_tok.type == TOK_ARROW || peek_tok.type == TOK_PIPE ||
+                               (peek_tok.type == TOK_SYMBOL && peek_tok.value && strcmp(peek_tok.value, "|") == 0))) {
+                has_pmatch = true;
+                free(peek_tok.value);
+                break;
+            }
+            free(peek_tok.value);
+            peek_tok = lexer_next_token(&peek_lex);
+        }
+        if (!has_pmatch) free(peek_tok.value);
+
+        if (!has_pmatch) {
+            docstring  = my_strdup(p->current.value);
+            p->current = lexer_next_token(p->lexer);
+        }
     }
 
     // Collect multiple body expressions — last one is the return value.
@@ -2242,9 +2262,29 @@ static DefineMetadata parse_define_metadata(Parser *p) {
             Token saved_cur = p->current;
             char *s = my_strdup(p->current.value);
             p->current = lexer_next_token(p->lexer);
+
+            bool has_pmatch = false;
+            Lexer peek_lex = *p->lexer;
+            Token peek_tok = p->current;
+            int depth = 0;
+            while (peek_tok.type != TOK_RPAREN && peek_tok.type != TOK_EOF && peek_tok.type != TOK_KEYWORD) {
+                if (peek_tok.type == TOK_LPAREN || peek_tok.type == TOK_LBRACKET) depth++;
+                if ((peek_tok.type == TOK_RPAREN || peek_tok.type == TOK_RBRACKET) && depth > 0) depth--;
+                if (depth == 0 && (peek_tok.type == TOK_ARROW || peek_tok.type == TOK_PIPE ||
+                                   (peek_tok.type == TOK_SYMBOL && peek_tok.value && strcmp(peek_tok.value, "|") == 0))) {
+                    has_pmatch = true;
+                    free(peek_tok.value);
+                    break;
+                }
+                free(peek_tok.value);
+                peek_tok = lexer_next_token(&peek_lex);
+            }
+            if (!has_pmatch) free(peek_tok.value);
+
             if (p->current.type == TOK_RPAREN ||
-                p->current.type == TOK_EOF) {
-                /* Nothing after — restore and let body parsing take it */
+                p->current.type == TOK_EOF ||
+                has_pmatch) {
+                /* Nothing after, or it's a pattern clause — restore and let body parsing take it */
                 *p->lexer  = saved_lex;
                 p->current = saved_cur;
                 free(s);

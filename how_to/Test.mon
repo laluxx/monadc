@@ -1,27 +1,20 @@
 
 
-;; TODO Make sure it can repeat anything!
+define string->int :: String -> Int?
+  "1" -> 1
+  "2" -> 2
+  "3" -> 3
+  "4" -> 4
+  _   -> nil
 
-(define (mul [x :: Int] -> [y :: Int] -> Int) (* x x))
+(show (?? (string->int "2") (error "This should never be nil")))
 
-show (3 mul 3)
-
-
-;; (define (repeat [x :: a] -> List)
-;;   "Return an infinite list of Xs."
-;;   (3 | (repeat x)))
-
-;; (show (repeat 3))
+;; error "There was an error"
 
 
 
+;; (define (mul [x :: Int] -> [y :: Int] -> Int) (* x x))
+
+;; show (3 mul 3)
 
 
-
-;; (define (repeat a -> List)
-;;  "Return an infine list of Xs."
-;;   x -> x (| (repeat x)))
-
-;; define repeat :: a -> List
-;;   "Return an infine list of Xs."
-;;   x -> x | repeat x

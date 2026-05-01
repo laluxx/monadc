@@ -720,7 +720,9 @@ LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *t) {
     case TYPE_BOOL:
         return LLVMInt1TypeInContext(ctx->context);
     case TYPE_PTR:
-        /* Typed pointer — represented as i8* in LLVM, pointee type is
+    case TYPE_OPTIONAL:
+    case TYPE_NIL:
+        /* Typed pointer / Optionals — represented as i8* in LLVM, inner type is
          * tracked in the type system only for user-facing display/safety */
         return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
     case TYPE_UNKNOWN:
@@ -5342,6 +5344,63 @@ if (ast->list.count >= 5) {
                 }
             }
 
+            /* ---- null-coalescing (?? a b) -------------------------------- */
+            if (strcmp(head->symbol, "??") == 0) {
+                if (ast->list.count != 3) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: '??' requires exactly 2 arguments",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+
+                CodegenResult lhs = codegen_expr(ctx, ast->list.items[1]);
+
+                // For now, emit a naive runtime check: if lhs != nil, return lhs, else evaluate rhs.
+                // We assume optionals are runtime boxed values where 'nil' is represented as a NULL pointer or a nil tag.
+                LLVMValueRef is_nil_fn = get_rt_value_is_nil(ctx);
+                LLVMValueRef args[] = { lhs.value };
+                LLVMValueRef is_nil = LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(is_nil_fn), is_nil_fn, args, 1, "is_nil");
+
+                LLVMValueRef is_nil_bool = LLVMBuildICmp(ctx->builder, LLVMIntNE, is_nil, LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, false), "is_nil_bool");
+
+                LLVMBasicBlockRef then_bb = LLVMAppendBasicBlockInContext(ctx->context, LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder)), "coalesce_then");
+                LLVMBasicBlockRef else_bb = LLVMAppendBasicBlockInContext(ctx->context, LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder)), "coalesce_else");
+                LLVMBasicBlockRef merge_bb = LLVMAppendBasicBlockInContext(ctx->context, LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder)), "coalesce_merge");
+
+                LLVMBuildCondBr(ctx->builder, is_nil_bool, then_bb, else_bb);
+
+                // Then block (lhs is nil, evaluate rhs)
+                LLVMPositionBuilderAtEnd(ctx->builder, then_bb);
+                CodegenResult rhs = codegen_expr(ctx, ast->list.items[2]);
+                LLVMBasicBlockRef then_end_bb = LLVMGetInsertBlock(ctx->builder); // rhs evaluation might have created blocks
+                LLVMBuildBr(ctx->builder, merge_bb);
+
+                // Else block (lhs is not nil, return lhs unwrapped)
+                LLVMPositionBuilderAtEnd(ctx->builder, else_bb);
+
+                /* Unbox the LHS if the RHS is a primitive scalar type so they unify in the PHI node */
+                LLVMValueRef unwrapped_lhs = lhs.value;
+                if (rhs.type && type_is_integer(rhs.type)) {
+                    LLVMValueRef unbox_fn = get_rt_unbox_int(ctx);
+                    unwrapped_lhs = LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(unbox_fn), unbox_fn, &lhs.value, 1, "unbox_lhs_int");
+                } else if (rhs.type && type_is_float(rhs.type)) {
+                    LLVMValueRef unbox_fn = get_rt_unbox_float(ctx);
+                    unwrapped_lhs = LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(unbox_fn), unbox_fn, &lhs.value, 1, "unbox_lhs_float");
+                }
+
+                LLVMBuildBr(ctx->builder, merge_bb);
+
+                // Merge block
+                LLVMPositionBuilderAtEnd(ctx->builder, merge_bb);
+                LLVMValueRef phi = LLVMBuildPhi(ctx->builder, LLVMTypeOf(rhs.value), "coalesce_tmp");
+                LLVMValueRef incoming_values[] = { rhs.value, unwrapped_lhs };
+                LLVMBasicBlockRef incoming_blocks[] = { then_end_bb, else_bb };
+                LLVMAddIncoming(phi, incoming_values, incoming_blocks, 2);
+
+                result.value = phi;
+                result.type = rhs.type; // Unwrapped type
+                return result;
+            }
+
+
             if (strcmp(head->symbol, "expand") == 0) {
                 REQUIRE_MIN_ARGS(1);
                 AST *arg = ast->list.items[1];
@@ -5872,6 +5931,87 @@ if (ast->list.count >= 5) {
                 LLVMPositionBuilderAtEnd(ctx->builder, cont_bb);
                 result.type  = type_bool();
                 result.value = cond;
+                return result;
+            }
+
+            if (strcmp(head->symbol, "error") == 0) {
+                REQUIRE_MIN_ARGS(1);
+                LLVMValueRef printf_fn = get_or_declare_printf(ctx);
+                LLVMTypeRef  ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMTypeRef  i64_t = LLVMInt64TypeInContext(ctx->context);
+
+                /* Evaluate the message argument */
+                CodegenResult msg_r = codegen_expr(ctx, ast->list.items[1]);
+                LLVMValueRef  msg_val;
+
+                if (msg_r.type && msg_r.type->kind == TYPE_STRING) {
+                    msg_val = msg_r.value;
+                } else {
+                    /* Non-string: coerce to something printable */
+                    msg_val = LLVMBuildGlobalStringPtr(ctx->builder,
+                                                       "(error called)", "err_fallback");
+                }
+
+                /* Print: "<file>:<line>:<col>: error: <msg>\n" */
+                char location[256];
+                snprintf(location, sizeof(location), "%s:%d:%d: error: ",
+                         parser_get_filename(), ast->line, ast->column);
+                LLVMValueRef loc_str = LLVMBuildGlobalStringPtr(ctx->builder,
+                                                                location, "err_loc");
+                LLVMValueRef newline = LLVMBuildGlobalStringPtr(ctx->builder,
+                                                                "\n", "err_nl");
+
+                /* Print location prefix */
+                LLVMValueRef loc_args[] = {loc_str};
+                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                               printf_fn, loc_args, 1, "");
+
+                /* Print user message */
+                LLVMValueRef fmt_s = LLVMBuildGlobalStringPtr(ctx->builder,
+                                                              "%s", "err_fmt");
+                LLVMValueRef msg_args[] = {fmt_s, msg_val};
+                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                               printf_fn, msg_args, 2, "");
+
+                /* Print newline */
+                LLVMValueRef nl_args[] = {newline};
+                LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                               printf_fn, nl_args, 1, "");
+
+                /* Call abort() */
+                LLVMValueRef abort_fn = LLVMGetNamedFunction(ctx->module, "abort");
+                if (!abort_fn) {
+                    LLVMTypeRef abort_ft = LLVMFunctionType(
+                        LLVMVoidTypeInContext(ctx->context), NULL, 0, 0);
+                    abort_fn = LLVMAddFunction(ctx->module, "abort", abort_ft);
+                    LLVMSetLinkage(abort_fn, LLVMExternalLinkage);
+                }
+                LLVMValueRef exit_fn = LLVMGetNamedFunction(ctx->module, "exit");
+                if (!exit_fn) {
+                    LLVMTypeRef exit_param = LLVMInt32TypeInContext(ctx->context);
+                    LLVMTypeRef exit_ft = LLVMFunctionType(
+                        LLVMVoidTypeInContext(ctx->context), &exit_param, 1, 0);
+                    exit_fn = LLVMAddFunction(ctx->module, "exit", exit_ft);
+                    LLVMSetLinkage(exit_fn, LLVMExternalLinkage);
+                }
+                LLVMTypeRef exit_param = LLVMInt32TypeInContext(ctx->context);
+                LLVMTypeRef exit_ft = LLVMFunctionType(
+                    LLVMVoidTypeInContext(ctx->context), &exit_param, 1, 0);
+                LLVMValueRef exit_code = LLVMConstInt(
+                    LLVMInt32TypeInContext(ctx->context), 1, 0);
+                LLVMBuildCall2(ctx->builder, exit_ft, exit_fn, &exit_code, 1, "");
+                LLVMBuildUnreachable(ctx->builder);
+
+                /* Dead block so the builder stays valid after this point */
+                LLVMValueRef cur_fn = LLVMGetBasicBlockParent(
+                                          LLVMGetInsertBlock(ctx->builder));
+                LLVMBasicBlockRef dead_bb = LLVMAppendBasicBlockInContext(
+                    ctx->context, cur_fn, "error_dead");
+                LLVMPositionBuilderAtEnd(ctx->builder, dead_bb);
+
+                /* Return type is unknown so it unifies with any branch */
+                result.value = LLVMConstPointerNull(ptr_t);
+                result.type  = type_unknown();
                 return result;
             }
 
@@ -11545,6 +11685,7 @@ void codegen_declare_external_func(CodegenContext *ctx,
 }
 
 void register_builtins(CodegenContext *ctx) {
+    env_insert_builtin(ctx->env, "??",        2,  0, "Null coalescing operator: (?? expr default)", NULL);
     // Arithmetic operators
     env_insert_builtin(ctx->env, "+",  1, -1, "Add numbers", NULL);
     env_insert_builtin(ctx->env, "-",  1, -1, "Subtract or negate numbers", NULL);
@@ -11696,6 +11837,7 @@ void register_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "class",    1, -1, "Define a typeclass", NULL);
     env_insert_builtin(ctx->env, "instance", 1, -1, "Define a typeclass instance", NULL);
     env_insert_builtin(ctx->env, "tests",    1, -1, "Define a test block", NULL);
+    env_insert_builtin(ctx->env, "error",    1,  0, "Abort with a runtime error message: (error \"msg\")", NULL);
     env_insert_builtin(ctx->env, "asm",      1, -1, "Inline assembly block", NULL);
 
     env_insert_builtin(ctx->env, "rt_coll_empty", 1, 0, "Internal polymorphic empty collection", NULL);

@@ -1,0 +1,720 @@
+;;; Json.mon --- JSON Parser
+
+;; Author: Laluxx
+;; Version: 0.1.0
+;; Keywords: Json parser serialization deserialization
+
+;;; Commentary:
+
+;; A high-quality, modular JSON parser for Monad.
+;; Follows RFC 8259. Parses a String into a JsonValue ADT and
+;; provides serialization back to String. Fully structural —
+;; every concern (lexing, number parsing, string unescaping,
+;; value dispatch, pretty-printing) lives in its own definition.
+
+;;; Code:
+
+(module Json
+  [parse      unparse
+   parseFile  stringify
+   get        getAt
+   keys       values
+   member?    size])
+
+import Coll
+import Ascii
+
+
+;; ── Data ─────────────────────────────────────────────────────────────────────
+
+data JsonValue
+    = JsonNull
+    | JsonBool   Bool
+    | JsonInt    Int
+    | JsonFloat  Float
+    | JsonStr    String
+    | JsonArray  (JsonValue)
+    | JsonObject ((String, JsonValue))
+    deriving Eq
+
+
+;; ── Result type ──────────────────────────────────────────────────────────────
+
+data ParseResult a
+    = Ok  a String    ;; remaining input
+    | Err String      ;; error message
+    deriving Eq
+
+
+;; ── Character predicates ─────────────────────────────────────────────────────
+
+define isWhitespace :: Char -> Bool
+  c -> (c = ' ') or (c = '\n') or (c = '\r') or (c = '\t')
+
+define isDigit :: Char -> Bool
+  c -> (c >= '0') and (c <= '9')
+
+define isHexDigit :: Char -> Bool
+  c -> (isDigit c)
+    or ((c >= 'a') and (c <= 'f'))
+    or ((c >= 'A') and (c <= 'F'))
+
+define isSign :: Char -> Bool
+  c -> (c = '+') or (c = '-')
+
+define isExponent :: Char -> Bool
+  c -> (c = 'e') or (c = 'E')
+
+define isStructural :: Char -> Bool
+  c -> (c = '{') or (c = '}')
+    or (c = '[') or (c = ']')
+    or (c = ':') or (c = ',')
+    or (c = '\"')
+
+
+;; ── Whitespace ───────────────────────────────────────────────────────────────
+
+define skipWS :: String -> String
+  ""                 -> ""
+  [c|cs]
+    | isWhitespace c -> skipWS cs
+    | otherwise      -> [c|cs]
+
+
+;; ── Number helpers ───────────────────────────────────────────────────────────
+
+define digitVal :: Char -> Int
+  c -> (Ascii.ord c) - (Ascii.ord '0')
+
+define hexVal :: Char -> Int
+  c | (c >= '0') and (c <= '9') -> (Ascii.ord c) - (Ascii.ord '0')
+    | (c >= 'a') and (c <= 'f') -> (Ascii.ord c) - (Ascii.ord 'a') + 10
+    | (c >= 'A') and (c <= 'F') -> (Ascii.ord c) - (Ascii.ord 'A') + 10
+    | otherwise                 -> 0
+
+;; Collect leading digits, return (digits-string, rest)
+define spanDigits :: String -> (String, String)
+  ""      -> ("", "")
+  [c|cs]
+      | isDigit c ->
+          let (ds, rest) = spanDigits cs
+          in  ([c|ds], rest)
+      | otherwise -> ("", [c|cs])
+
+define digitsToInt :: String -> Int
+  s -> foldl (\acc c -> (acc * 10) + (digitVal c)) 0 s
+
+define digitsToFloat :: String -> Float
+  s -> foldl (\acc c -> (acc * 10.0) + (toFloat (digitVal c))) 0.0 s
+
+define buildFloat :: Int -> String -> String -> Int -> Float
+  sign intPart fracPart exp ->
+    let iVal  = toFloat (sign * (digitsToInt intPart))
+        fVal  = (digitsToFloat fracPart) / (pow 10.0 (toFloat (length fracPart)))
+        base  = iVal + (copySign fVal iVal)
+    in  base * (pow 10.0 (toFloat exp))
+
+
+;; ── Number parser ────────────────────────────────────────────────────────────
+
+define parseSign :: String -> (Int, String)
+  ['-'|rest] -> (-1, rest)
+  ['+'|rest] -> ( 1, rest)
+  s          -> ( 1, s   )
+
+define parseExponent :: String -> (Int, String)
+  [e|rest]
+      | isExponent e ->
+          let (sign, r1) = parseSign rest
+              (ds,   r2) = spanDigits r1
+          in  (sign * (digitsToInt ds), r2)
+  s -> (0, s)
+
+define parseFraction :: String -> (String, String)
+  ['.'|rest] -> spanDigits rest
+  s          -> ("", s)
+
+define parseNumber :: String -> ParseResult JsonValue
+  s ->
+    let (sign,  s1) = parseSign s
+        (iDigs, s2) = spanDigits s1
+    in  if (length iDigs) = 0
+        then Err "Expected digit in number"
+        else
+          let (fDigs, s3) = parseFraction s2
+              (exp,   s4) = parseExponent s3
+          in  if ((length fDigs) = 0) and (exp = 0)
+              then Ok (JsonInt (sign * (digitsToInt iDigs))) s4
+              else Ok (JsonFloat (buildFloat sign iDigs fDigs exp)) s4
+
+
+;; ── String / escape parser ───────────────────────────────────────────────────
+
+;; Decode a single \uXXXX escape; consumes exactly 4 hex chars
+define parseUnicode :: String -> ParseResult Char
+  [a, b, c, d | rest]
+              | (isHexDigit a) and (isHexDigit b)
+     and (isHexDigit c) and (isHexDigit d) ->
+          let cp = ((hexVal a) * 4096)
+                 + ((hexVal b) * 256)
+                 + ((hexVal c) * 16)
+                 +  (hexVal d)
+          in Ok (Ascii.chr cp) rest
+  _ -> Err "Invalid \\uXXXX escape"
+
+define parseEscape :: String -> ParseResult Char
+  ['"'  | rest] -> Ok '"'  rest
+  ['\\' | rest] -> Ok '\\' rest
+  ['/'  | rest] -> Ok '/'  rest
+  ['b'  | rest] -> Ok '\b' rest
+  ['f'  | rest] -> Ok '\f' rest
+  ['n'  | rest] -> Ok '\n' rest
+  ['r'  | rest] -> Ok '\r' rest
+  ['t'  | rest] -> Ok '\t' rest
+  ['u'  | rest] -> parseUnicode rest
+  [c    | _   ] -> Err (("Unknown escape character: \\") ++ (Ascii.charToStr c))
+  ""            -> Err "Unexpected end of input in escape"
+
+;; Inner loop — accumulates chars until closing quote
+define parseStringChars :: String -> ParseResult String
+  ""             -> Err "Unterminated string literal"
+  ['"'  | rest]  -> Ok "" rest
+  ['\\'  | rest] ->
+      (case parseEscape rest of
+        Err msg      -> Err msg
+        Ok ch tail   ->
+          (case parseStringChars tail of
+            Err msg      -> Err msg
+            Ok cs rest2  -> Ok ([ch|cs]) rest2))
+  [c | rest] ->
+      (case parseStringChars rest of
+        Err msg     -> Err msg
+        Ok cs rest2 -> Ok ([c|cs]) rest2)
+
+;; Expects leading '"' already consumed
+define parseStringBody :: String -> ParseResult String
+  s -> parseStringChars s
+
+;; Full string parse including opening quote
+define parseString :: String -> ParseResult JsonValue
+  ['"' | rest] ->
+      (case parseStringBody rest of
+        Err msg     -> Err msg
+        Ok s  rest2 -> Ok (JsonStr s) rest2)
+  _ -> Err "Expected '\"'"
+
+
+;; ── Literal parsers ──────────────────────────────────────────────────────────
+
+define parseNull :: String -> ParseResult JsonValue
+  ['n','u','l','l' | rest] -> Ok JsonNull rest
+  _                        -> Err "Expected 'null'"
+
+define parseTrue :: String -> ParseResult JsonValue
+  ['t','r','u','e' | rest] -> Ok (JsonBool True) rest
+  _                        -> Err "Expected 'true'"
+
+define parseFalse :: String -> ParseResult JsonValue
+  ['f','a','l','s','e' | rest] -> Ok (JsonBool False) rest
+  _                            -> Err "Expected 'false'"
+
+
+;; ── Array parser ─────────────────────────────────────────────────────────────
+
+define parseArrayTail :: String -> ParseResult [JsonValue]
+  s ->
+    let s1 = skipWS s
+    in  (case s1 of
+          [']' | rest] -> Ok [] rest
+          [','  | rest] ->
+              let s2 = skipWS rest
+              in  (case parseValue s2 of
+                    Err msg    -> Err msg
+                    Ok v rest2 ->
+                      (case parseArrayTail rest2 of
+                        Err msg      -> Err msg
+                        Ok vs rest3  -> Ok ([v|vs]) rest3))
+          _ -> Err "Expected ',' or ']' in array")
+
+define parseArray :: String -> ParseResult JsonValue
+  ['[' | rest] ->
+      let s1 = skipWS rest
+      in  (case s1 of
+            [']' | rest2] -> Ok (JsonArray []) rest2
+            _             ->
+              (case parseValue s1 of
+                Err msg    -> Err msg
+                Ok v rest2 ->
+                  (case parseArrayTail rest2 of
+                    Err msg     -> Err msg
+                    Ok vs rest3 -> Ok (JsonArray ([v|vs])) rest3)))
+  _ -> Err "Expected '['"
+
+
+;; ── Object parser ────────────────────────────────────────────────────────────
+
+define parseKeyValue :: String -> ParseResult (String, JsonValue)
+  s ->
+    let s1 = skipWS s
+    in  (case parseString s1 of
+          Err msg          -> Err msg
+          Ok (JsonStr k) s2 ->
+              let s3 = skipWS s2
+              in  (case s3 of
+                    [':'|s4] ->
+                        let s5 = skipWS s4
+                        in  (case parseValue s5 of
+                              Err msg    -> Err msg
+                              Ok v rest  -> Ok (k, v) rest)
+                    _ -> Err "Expected ':' after object key")
+          Ok _ _ -> Err "Internal: key parse returned non-string")
+
+define parseObjectTail :: String -> ParseResult [(String, JsonValue)]
+  s ->
+    let s1 = skipWS s
+    in  (case s1 of
+          ['}'|rest] -> Ok [] rest
+          [','|rest] ->
+              let s2 = skipWS rest
+              in  (case parseKeyValue s2 of
+                    Err msg        -> Err msg
+                    Ok pair rest2  ->
+                      (case parseObjectTail rest2 of
+                        Err msg        -> Err msg
+                        Ok pairs rest3 -> Ok ([pair|pairs]) rest3))
+          _ -> Err "Expected ',' or '}' in object")
+
+define parseObject :: String -> ParseResult JsonValue
+  ['{'|rest] ->
+      let s1 = skipWS rest
+      in  (case s1 of
+            ['}'|rest2] -> Ok (JsonObject []) rest2
+            _           ->
+              (case parseKeyValue s1 of
+                Err msg        -> Err msg
+                Ok pair rest2  ->
+                  (case parseObjectTail rest2 of
+                    Err msg        -> Err msg
+                    Ok pairs rest3 -> Ok (JsonObject ([pair|pairs])) rest3)))
+  _ -> Err "Expected '{'"
+
+
+;; ── Value dispatcher ─────────────────────────────────────────────────────────
+
+define parseValue :: String -> ParseResult JsonValue
+  ""      -> Err "Unexpected end of input"
+  [c|cs]
+      | c = '"'            -> parseString [c|cs]
+      | c = '{'            -> parseObject [c|cs]
+      | c = '['            -> parseArray  [c|cs]
+      | c = 'n'            -> parseNull   [c|cs]
+      | c = 't'            -> parseTrue   [c|cs]
+      | c = 'f'            -> parseFalse  [c|cs]
+      | (isDigit c)
+     or (c = '-')          -> parseNumber [c|cs]
+      | otherwise          ->
+          Err (("Unexpected character: ") ++ (Ascii.charToStr c))
+
+
+;; ── Top-level entry points ───────────────────────────────────────────────────
+
+;; Parse a JSON string, returning Ok/Err
+define parse :: String -> ParseResult JsonValue
+  s ->
+    let s1 = skipWS s
+    in  (case parseValue s1 of
+          Err msg    -> Err msg
+          Ok v rest  ->
+            let trailing = skipWS rest
+            in  if (length trailing) = 0
+                then Ok v ""
+                else Err (("Trailing garbage after JSON value: ") ++ trailing))
+
+;; Convenience — returns JsonNull on failure (use parse for error handling)
+define parseOrNull :: String -> JsonValue
+  s -> (case parse s of
+         Ok v _  -> v
+         Err _   -> JsonNull)
+
+
+;; ── Serializer ───────────────────────────────────────────────────────────────
+
+define escapeChar :: Char -> String
+  '"'  -> "\\\""
+  '\\' -> "\\\\"
+  '\b' -> "\\b"
+  '\f' -> "\\f"
+  '\n' -> "\\n"
+  '\r' -> "\\r"
+  '\t' -> "\\t"
+  c    -> Ascii.charToStr c
+
+define escapeString :: String -> String
+  s -> foldl (\acc c -> acc ++ (escapeChar c)) "" s
+
+define serializePair :: (String, JsonValue) -> String
+  (k, v) -> ("\"") ++ (escapeString k) ++ ("\":") ++ (unparse v)
+
+define joinWith :: String -> [String] -> String
+  _   []     -> ""
+  _   [x]    -> x
+  sep [x|xs] -> x ++ sep ++ (joinWith sep xs)
+
+define unparse :: JsonValue -> String
+  JsonNull       -> "null"
+  JsonBool True  -> "true"
+  JsonBool False -> "false"
+  JsonInt  n     -> showInt n
+  JsonFloat f    -> showFloat f
+  JsonStr  s     -> ("\"") ++ (escapeString s) ++ ("\"")
+  JsonArray  vs  -> ("[") ++ (joinWith "," (map unparse vs))  ++ ("]")
+  JsonObject ps  -> ("{") ++ (joinWith "," (map serializePair ps)) ++ ("}")
+
+;; Alias matching common naming convention
+define stringify :: JsonValue -> String
+  v -> unparse v
+
+
+;; ── Pretty-printer ───────────────────────────────────────────────────────────
+
+define indent :: Int -> String
+  n -> foldl (\acc _ -> acc ++ "  ") "" (take n (repeat ()))
+
+define prettyPair :: Int -> (String, JsonValue) -> String
+  depth (k, v) ->
+    (indent depth) ++ ("\"") ++ (escapeString k) ++ ("\": ")
+                   ++ (prettyAt depth v)
+
+define prettyAt :: Int -> JsonValue -> String
+  _ JsonNull       -> "null"
+  _ (JsonBool True)  -> "true"
+  _ (JsonBool False) -> "false"
+  _ (JsonInt  n)   -> showInt n
+  _ (JsonFloat f)  -> showFloat f
+  _ (JsonStr  s)   -> ("\"") ++ (escapeString s) ++ ("\"")
+  depth (JsonArray [])  -> "[]"
+  depth (JsonArray vs)  ->
+      let inner = joinWith (",\n") (map (\v -> (indent (depth + 1)) ++ (prettyAt (depth + 1) v)) vs)
+      in  "[\n" ++ inner ++ "\n" ++ (indent depth) ++ "]"
+  depth (JsonObject []) -> "{}"
+  depth (JsonObject ps) ->
+      let inner = joinWith (",\n") (map (prettyPair (depth + 1)) ps)
+      in  "{\n" ++ inner ++ "\n" ++ (indent depth) ++ "}"
+
+define pretty :: JsonValue -> String
+  v -> prettyAt 0 v
+
+
+;; ── Query utilities ──────────────────────────────────────────────────────────
+
+;; Look up a key in a JsonObject
+define get :: String -> JsonValue -> JsonValue
+  _ JsonNull        -> JsonNull
+  k (JsonObject ps) ->
+      (case filter (\(key, _) -> key = k) ps of
+        [(_, v) | _] -> v
+        []           -> JsonNull)
+  _ _ -> JsonNull
+
+;; Index into a JsonArray
+define getAt :: Int -> JsonValue -> JsonValue
+  _ JsonNull       -> JsonNull
+  n (JsonArray vs) ->
+      (case drop n vs of
+        [v|_] -> v
+        []    -> JsonNull)
+  _ _ -> JsonNull
+
+;; Safe nested path: (getPath ["user", "name"] obj)
+define getPath :: [String] -> JsonValue -> JsonValue
+  []     v -> v
+  [k|ks] v -> getPath ks (get k v)
+
+;; Keys of a JsonObject
+define keys :: JsonValue -> [String]
+  (JsonObject ps) -> map (\(k, _) -> k) ps
+  _               -> []
+
+;; Values of a JsonObject
+define values :: JsonValue -> [JsonValue]
+  (JsonObject ps) -> map (\(_, v) -> v) ps
+  _               -> []
+
+;; Entries as (key, value) pairs
+define entries :: JsonValue -> [(String, JsonValue)]
+  (JsonObject ps) -> ps
+  _               -> []
+
+;; Number of elements (array) or pairs (object)
+define size :: JsonValue -> Int
+  (JsonArray  vs) -> length vs
+  (JsonObject ps) -> length ps
+  _               -> 0
+
+;; Membership test for object keys
+define member? :: String -> JsonValue -> Bool
+  k obj -> (length (filter (\key -> key = k) (keys obj))) > 0
+
+
+;; ── Transformation utilities ─────────────────────────────────────────────────
+
+;; Map over array elements
+define mapArray :: (JsonValue -> JsonValue) -> JsonValue -> JsonValue
+  f (JsonArray vs) -> JsonArray (map f vs)
+  _ v              -> v
+
+;; Map over object values, preserving keys
+define mapObject :: (JsonValue -> JsonValue) -> JsonValue -> JsonValue
+  f (JsonObject ps) -> JsonObject (map (\(k, v) -> (k, f v)) ps)
+  _ v               -> v
+
+;; Filter array elements
+define filterArray :: (JsonValue -> Bool) -> JsonValue -> JsonValue
+  p (JsonArray vs) -> JsonArray (filter p vs)
+  _ v              -> v
+
+;; Insert or overwrite a key in a JsonObject
+define insert :: String -> JsonValue -> JsonValue -> JsonValue
+  k val (JsonObject ps) ->
+      let cleaned = filter (\(key, _) -> key != k) ps
+      in  JsonObject (append cleaned (k, val))
+  k val _ -> JsonObject [(k, val)]
+
+;; Remove a key from a JsonObject
+define remove :: String -> JsonValue -> JsonValue
+  k (JsonObject ps) -> JsonObject (filter (\(key, _) -> key != k) ps)
+  _ v               -> v
+
+;; Merge two JsonObjects; right-biased on key conflicts
+define merge :: JsonValue -> JsonValue -> JsonValue
+  (JsonObject ps1) (JsonObject ps2) ->
+      foldl (\obj (k, v) -> insert k v obj) (JsonObject ps1) ps2
+  _ b -> b
+
+
+;; ── Type guards ──────────────────────────────────────────────────────────────
+
+define isNull?   :: JsonValue -> Bool
+  JsonNull -> True
+  _        -> False
+
+define isBool?   :: JsonValue -> Bool
+  (JsonBool _) -> True
+  _            -> False
+
+define isInt?    :: JsonValue -> Bool
+  (JsonInt _) -> True
+  _           -> False
+
+define isFloat?  :: JsonValue -> Bool
+  (JsonFloat _) -> True
+  _             -> False
+
+define isNumber? :: JsonValue -> Bool
+  v -> (isInt? v) or (isFloat? v)
+
+define isString? :: JsonValue -> Bool
+  (JsonStr _) -> True
+  _           -> False
+
+define isArray?  :: JsonValue -> Bool
+  (JsonArray _) -> True
+  _             -> False
+
+define isObject? :: JsonValue -> Bool
+  (JsonObject _) -> True
+  _              -> False
+
+
+;; ── Coercions ────────────────────────────────────────────────────────────────
+
+define toBool :: JsonValue -> Bool
+  (JsonBool b) -> b
+  JsonNull     -> False
+  _            -> True      ;; truthy by default
+
+define toInt :: JsonValue -> Int
+  (JsonInt   n) -> n
+  (JsonFloat f) -> toInt f
+  _             -> 0
+
+define toFloat :: JsonValue -> Float
+  (JsonFloat f) -> f
+  (JsonInt   n) -> toFloat n
+  _             -> 0.0
+
+define toStr :: JsonValue -> String
+  (JsonStr s) -> s
+  v           -> unparse v   ;; fallback: serialize
+
+
+;; ── Tests ────────────────────────────────────────────────────────────────────
+
+(tests
+  ;; ── Literals ──────────────────────────────────────────────────────────────
+
+  (assert-eq (parse "null")  (Ok JsonNull "")         "parse null")
+  (assert-eq (parse "true")  (Ok (JsonBool True)  "") "parse true")
+  (assert-eq (parse "false") (Ok (JsonBool False) "") "parse false")
+
+  ;; ── Numbers ───────────────────────────────────────────────────────────────
+
+  (assert-eq (parse "0")     (Ok (JsonInt 0)    "") "parse zero")
+  (assert-eq (parse "42")    (Ok (JsonInt 42)   "") "parse positive int")
+  (assert-eq (parse "-7")    (Ok (JsonInt -7)   "") "parse negative int")
+  (assert-eq (parse "3.14")  (Ok (JsonFloat 3.14)  "") "parse float")
+  (assert-eq (parse "-0.5")  (Ok (JsonFloat -0.5)  "") "parse negative float")
+  (assert-eq (parse "1e2")   (Ok (JsonFloat 100.0) "") "parse exponent")
+  (assert-eq (parse "1.5e3") (Ok (JsonFloat 1500.0) "") "parse float exponent")
+  (assert-eq (parse "2E-2")  (Ok (JsonFloat 0.02)  "") "parse negative exponent")
+
+  ;; ── Strings ───────────────────────────────────────────────────────────────
+
+  (assert-eq (parse "\"\"")        (Ok (JsonStr "")      "") "parse empty string")
+  (assert-eq (parse "\"hello\"")   (Ok (JsonStr "hello") "") "parse simple string")
+  (assert-eq (parse "\"a\\nb\"")   (Ok (JsonStr "a\nb")  "") "parse newline escape")
+  (assert-eq (parse "\"a\\tb\"")   (Ok (JsonStr "a\tb")  "") "parse tab escape")
+  (assert-eq (parse "\"\\\"\"")    (Ok (JsonStr "\"")    "") "parse escaped quote")
+  (assert-eq (parse "\"\\\\\"")    (Ok (JsonStr "\\")    "") "parse escaped backslash")
+
+  ;; ── Arrays ────────────────────────────────────────────────────────────────
+
+  (assert-eq (parse "[]")          (Ok (JsonArray []) "")                  "parse empty array")
+  (assert-eq (parse "[1,2,3]")     (Ok (JsonArray [(JsonInt 1) (JsonInt 2) (JsonInt 3)]) "") "parse int array")
+  (assert-eq (parse "[ 1 , 2 ]")   (Ok (JsonArray [(JsonInt 1) (JsonInt 2)]) "") "parse array with spaces")
+  (assert-eq (parse "[true,null]")  (Ok (JsonArray [(JsonBool True) JsonNull]) "") "parse mixed array")
+  (assert-eq (parse "[[1],[2]]")
+    (Ok (JsonArray [(JsonArray [(JsonInt 1)]) (JsonArray [(JsonInt 2)])]) "")
+    "parse nested arrays")
+
+  ;; ── Objects ───────────────────────────────────────────────────────────────
+
+  (assert-eq (parse "{}")
+    (Ok (JsonObject []) "")
+    "parse empty object")
+
+  (assert-eq (parse "{\"x\":1}")
+    (Ok (JsonObject [("x", (JsonInt 1))]) "")
+    "parse single-key object")
+
+  (assert-eq (parse "{\"a\":true,\"b\":null}")
+    (Ok (JsonObject [("a", (JsonBool True)) ("b", JsonNull)]) "")
+    "parse two-key object")
+
+  (assert-eq (parse "{\"n\":{\"m\":2}}")
+    (Ok (JsonObject [("n", (JsonObject [("m", (JsonInt 2))]))]) "")
+    "parse nested object")
+
+  ;; ── Whitespace tolerance ──────────────────────────────────────────────────
+
+  (assert-eq (parse "  null  ")   (Ok JsonNull "")     "parse null with whitespace")
+  (assert-eq (parse "\n42\n")     (Ok (JsonInt 42) "") "parse int with newlines")
+
+  ;; ── Error cases ───────────────────────────────────────────────────────────
+
+  (assert-eq (isErr (parse ""))          True "empty string is error")
+  (assert-eq (isErr (parse "nul"))       True "truncated null is error")
+  (assert-eq (isErr (parse "{\"a\":}"))  True "missing value is error")
+  (assert-eq (isErr (parse "[1,]"))      True "trailing comma is error")
+  (assert-eq (isErr (parse "\"abc"))     True "unterminated string is error")
+  (assert-eq (isErr (parse "42 garbage")) True "trailing garbage is error")
+
+  ;; ── Round-trip ────────────────────────────────────────────────────────────
+
+  (assert-eq (parse (unparse JsonNull))             (Ok JsonNull "")             "round-trip null")
+  (assert-eq (parse (unparse (JsonBool False)))     (Ok (JsonBool False) "")     "round-trip false")
+  (assert-eq (parse (unparse (JsonInt 99)))         (Ok (JsonInt 99) "")         "round-trip int")
+  (assert-eq (parse (unparse (JsonStr "hi\nthere"))) (Ok (JsonStr "hi\nthere") "") "round-trip escaped string")
+  (assert-eq (parse (unparse (JsonArray [(JsonInt 1) (JsonInt 2)])))
+    (Ok (JsonArray [(JsonInt 1) (JsonInt 2)]) "")
+    "round-trip array")
+  (assert-eq (parse (unparse (JsonObject [("k", (JsonStr "v"))])))
+    (Ok (JsonObject [("k", (JsonStr "v"))]) "")
+    "round-trip object")
+
+  ;; ── Query ─────────────────────────────────────────────────────────────────
+
+  (let obj = (JsonObject [("name", (JsonStr "Alice")) ("age", (JsonInt 30))]))
+  (assert-eq (get "name" obj)   (JsonStr "Alice") "get existing key")
+  (assert-eq (get "age"  obj)   (JsonInt 30)      "get int key")
+  (assert-eq (get "x"    obj)   JsonNull          "get missing key returns null")
+  (assert-eq (keys   obj)       ["name", "age"]   "keys of object")
+  (assert-eq (size   obj)       2                 "size of object")
+  (assert-eq (member? "name" obj) True            "member? present key")
+  (assert-eq (member? "nope" obj) False           "member? absent key")
+
+  (let arr = (JsonArray [(JsonInt 10) (JsonInt 20) (JsonInt 30)]))
+  (assert-eq (getAt 0 arr)  (JsonInt 10) "getAt index 0")
+  (assert-eq (getAt 2 arr)  (JsonInt 30) "getAt index 2")
+  (assert-eq (getAt 9 arr)  JsonNull     "getAt out-of-bounds")
+  (assert-eq (size arr)     3            "size of array")
+
+  ;; ── Nested path ───────────────────────────────────────────────────────────
+
+  (let nested = (JsonObject [("user", (JsonObject [("name", (JsonStr "Bob"))]))]))
+  (assert-eq (getPath ["user" "name"] nested) (JsonStr "Bob") "getPath 2 levels")
+  (assert-eq (getPath ["user" "missing"] nested) JsonNull     "getPath missing leaf")
+  (assert-eq (getPath ["gone"] nested)           JsonNull     "getPath missing root")
+
+  ;; ── Transformation ────────────────────────────────────────────────────────
+
+  (assert-eq (mapArray  (JsonInt 0) (JsonArray [(JsonInt 1) (JsonInt 2)]))
+    (JsonArray [(JsonInt 0) (JsonInt 0)])
+    "mapArray constant")
+
+  (assert-eq (filterArray isInt? (JsonArray [(JsonInt 1) (JsonBool True) (JsonInt 3)]))
+    (JsonArray [(JsonInt 1) (JsonInt 3)])
+    "filterArray keep ints")
+
+  (assert-eq (insert "x" (JsonInt 9) (JsonObject [("a", (JsonInt 1))]))
+    (JsonObject [("a", (JsonInt 1)) ("x", (JsonInt 9))])
+    "insert new key")
+
+  (assert-eq (insert "a" (JsonInt 99) (JsonObject [("a", (JsonInt 1))]))
+    (JsonObject [("a", (JsonInt 99))])
+    "insert overwrites existing key")
+
+  (assert-eq (remove "a" (JsonObject [("a", (JsonInt 1)) ("b", (JsonInt 2))]))
+    (JsonObject [("b", (JsonInt 2))])
+    "remove existing key")
+
+  (assert-eq (merge (JsonObject [("a", (JsonInt 1))]) (JsonObject [("b", (JsonInt 2))]))
+    (JsonObject [("a", (JsonInt 1)) ("b", (JsonInt 2))])
+    "merge disjoint objects")
+
+  (assert-eq (merge (JsonObject [("a", (JsonInt 1))]) (JsonObject [("a", (JsonInt 99))]))
+    (JsonObject [("a", (JsonInt 99))])
+    "merge right-bias on conflict")
+
+  ;; ── Type guards ───────────────────────────────────────────────────────────
+
+  (assert-eq (isNull?   JsonNull)           True  "isNull? null")
+  (assert-eq (isNull?   (JsonInt 0))        False "isNull? non-null")
+  (assert-eq (isBool?   (JsonBool True))    True  "isBool? bool")
+  (assert-eq (isNumber? (JsonInt 1))        True  "isNumber? int")
+  (assert-eq (isNumber? (JsonFloat 1.0))    True  "isNumber? float")
+  (assert-eq (isString? (JsonStr ""))       True  "isString? string")
+  (assert-eq (isArray?  (JsonArray []))     True  "isArray? array")
+  (assert-eq (isObject? (JsonObject []))    True  "isObject? object")
+
+  ;; ── Coercions ─────────────────────────────────────────────────────────────
+
+  (assert-eq (toBool (JsonBool False))  False "toBool false")
+  (assert-eq (toBool JsonNull)          False "toBool null is falsy")
+  (assert-eq (toBool (JsonInt 1))       True  "toBool non-null truthy")
+  (assert-eq (toInt  (JsonInt 42))      42    "toInt int")
+  (assert-eq (toStr  (JsonStr "hi"))    "hi"  "toStr string")
+  (assert-eq (toStr  (JsonInt 7))       "7"   "toStr coerces via unparse")
+
+  ;; ── Integration ───────────────────────────────────────────────────────────
+
+  (let jsonSrc = "{\"scores\":[10,20,30],\"name\":\"Test\"}")
+  (let parsed  = parseOrNull jsonSrc)
+  (assert-eq (get "name" parsed)           (JsonStr "Test")      "integration: get name")
+  (assert-eq (getAt 1 (get "scores" parsed)) (JsonInt 20)        "integration: nested getAt")
+  (assert-eq (size (get "scores" parsed))  3                     "integration: size of nested array")
+  (assert-eq (foldl (\a v -> a + (toInt v)) 0
+              (values (JsonObject [("a", (JsonInt 1)) ("b", (JsonInt 2)) ("c", (JsonInt 3))])))
+    6
+    "integration: sum object values")
+)

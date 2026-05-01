@@ -227,6 +227,14 @@ int refinement_check_literal(const char *type_name, double val,
 Type *type_from_name(const char *name) {
     if (!name) return NULL;
 
+    size_t len = strlen(name);
+    if (len > 1 && name[len - 1] == '?') {
+        char *inner_name = strndup(name, len - 1);
+        Type *inner = type_from_name(inner_name);
+        free(inner_name);
+        if (inner) return type_optional(inner);
+    }
+
     // Compound types (parsed dynamically from string annotations)
     if (strncmp(name, "Fn :: ", 6) == 0) {
         /* Fn :: (Int -> Int) — parse and return the full arrow type chain.
@@ -363,6 +371,14 @@ Type *type_int_arbitrary(int width, bool is_signed) {
     return t;
 }
 
+Type *type_nil(void) { return make_type(TYPE_NIL); }
+
+Type *type_optional(Type *inner) {
+    Type *t = make_type(TYPE_OPTIONAL);
+    t->element_type = inner;
+    return t;
+}
+
 Type *type_list(Type *element_type) {
     Type *t = make_type(TYPE_LIST);
     t->element_type = element_type;
@@ -449,6 +465,7 @@ bool types_equal(Type *a, Type *b) {
         return types_equal(a->arrow_param, b->arrow_param)
             && types_equal(a->arrow_ret,   b->arrow_ret);
     case TYPE_LIST:
+    case TYPE_OPTIONAL:
         return types_equal(a->element_type, b->element_type);
     case TYPE_ARR:
         return a->arr_size == b->arr_size
@@ -553,6 +570,8 @@ Type *type_clone(Type *t) {
             return c;
         }
         case TYPE_PTR:          return type_ptr(type_clone(t->element_type));
+        case TYPE_OPTIONAL:     return type_optional(type_clone(t->element_type));
+        case TYPE_NIL:          return type_nil();
         case TYPE_F80:          return type_f80();
         case TYPE_INT_ARBITRARY: return type_int_arbitrary(t->numeric_width, t->numeric_signed);
         case TYPE_VAR:     return type_var(t->var_id);
@@ -586,7 +605,7 @@ void type_free(Type *t) {
         }
         type_free(t->return_type);
     }
-    if (t->kind == TYPE_LIST || t->kind == TYPE_PTR) {
+    if (t->kind == TYPE_LIST || t->kind == TYPE_PTR || t->kind == TYPE_OPTIONAL) {
         type_free(t->element_type);
     }
     if (t->kind == TYPE_ARR) {
@@ -636,6 +655,7 @@ const char *type_to_string(Type *t) {
     case TYPE_I128:    return "I128";
     case TYPE_U128:    return "U128";
     case TYPE_UNKNOWN: return "?";
+    case TYPE_NIL:     return "Nil";
     case TYPE_F80:     return "F80";
     case TYPE_INT_ARBITRARY: {
         static char ibuf[16];
@@ -648,6 +668,11 @@ const char *type_to_string(Type *t) {
         snprintf(pbuf, sizeof(pbuf), "Pointer :: %s",
                  type_to_string(t->element_type));
         return pbuf;
+    }
+    case TYPE_OPTIONAL: {
+        static char obuf[256];
+        snprintf(obuf, sizeof(obuf), "%s?", type_to_string(t->element_type));
+        return obuf;
     }
     case TYPE_VAR: {
         static char vbuf[32];

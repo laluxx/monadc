@@ -158,6 +158,11 @@ Type *subst_apply(Substitution *s, Type *t) {
             return type_list(subst_apply(s, t->list_elem));
         return t;
 
+    case TYPE_OPTIONAL:
+        if (t->element_type)
+            return type_optional(subst_apply(s, t->element_type));
+        return t;
+
     case TYPE_ARR:
         if (t->arr_element_type)
             return type_arr(subst_apply(s, t->arr_element_type), t->arr_size);
@@ -222,7 +227,8 @@ bool infer_occurs(Substitution *s, int var_id, Type *t) {
     case TYPE_VAR:
         return subst_find(s, t->var_id) == subst_find(s, var_id);
     case TYPE_LIST:
-        return infer_occurs(s, var_id, t->list_elem);
+    case TYPE_OPTIONAL:
+        return infer_occurs(s, var_id, t->element_type);
     case TYPE_ARR:
         return infer_occurs(s, var_id, t->arr_element_type);
     case TYPE_ARROW:
@@ -327,6 +333,15 @@ bool infer_unify_one(InferCtx *ctx, Type *a, Type *b, int line, int col) {
                                      a->kind == TYPE_ARR)) return true;
 
         /* Hard error: Coll cannot be a scalar primitive */
+        /* TYPE_OPTIONAL ~ TYPE_OPTIONAL */
+        if (a->kind == TYPE_OPTIONAL && b->kind == TYPE_OPTIONAL)
+            return infer_unify_one(ctx, a->element_type, b->element_type, line, col);
+
+        /* nil strictly unifies ONLY with TYPE_OPTIONAL or itself */
+        if (a->kind == TYPE_NIL && b->kind == TYPE_OPTIONAL) return true;
+        if (a->kind == TYPE_OPTIONAL && b->kind == TYPE_NIL) return true;
+        if (a->kind == TYPE_NIL && b->kind == TYPE_NIL) return true;
+
         if ((a->kind == TYPE_COLL && (b->kind == TYPE_INT || b->kind == TYPE_FLOAT || b->kind == TYPE_BOOL)) ||
             (b->kind == TYPE_COLL && (a->kind == TYPE_INT || a->kind == TYPE_FLOAT || a->kind == TYPE_BOOL))) {
             char a_str[64], b_str[64];
@@ -344,9 +359,20 @@ bool infer_unify_one(InferCtx *ctx, Type *a, Type *b, int line, int col) {
         char a_str[64], b_str[64];
         snprintf(a_str, sizeof(a_str), "%s", type_to_string(a));
         snprintf(b_str, sizeof(b_str), "%s", type_to_string(b));
-        snprintf(ctx->error_msg, sizeof(ctx->error_msg),
-                 "%s:%d:%d: type warning: cannot unify %s with %s",
-                 ctx->filename, line, col, a_str, b_str);
+
+        if (a->kind == TYPE_NIL || b->kind == TYPE_NIL || a->kind == TYPE_OPTIONAL || b->kind == TYPE_OPTIONAL) {
+            Type *non_opt = (a->kind != TYPE_OPTIONAL && a->kind != TYPE_NIL) ? a : b;
+            char req_str[64];
+            snprintf(req_str, sizeof(req_str), "%s", type_to_string(non_opt));
+            snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                     "%s:%d:%d: type error: cannot unify %s with %s.\n"
+                     "  - Hint: If a function can return nil, its return type should end with '?' (e.g. %s?)",
+                     ctx->filename, line, col, a_str, b_str, req_str);
+        } else {
+            snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                     "%s:%d:%d: type error: cannot unify %s with %s",
+                     ctx->filename, line, col, a_str, b_str);
+        }
         ctx->had_error = true;
         return false;
     }
@@ -354,8 +380,11 @@ bool infer_unify_one(InferCtx *ctx, Type *a, Type *b, int line, int col) {
 
     /* Recurse for compound types */
     switch (a->kind) {
-    case TYPE_LIST:
+    case AST_LIST:
         return infer_unify_one(ctx, a->list_elem, b->list_elem, line, col);
+
+    case TYPE_OPTIONAL:
+        return infer_unify_one(ctx, a->element_type, b->element_type, line, col);
 
     case TYPE_ARR:
         return infer_unify_one(ctx, a->arr_element_type,
@@ -402,7 +431,8 @@ void infer_free_vars_type(Substitution *s, Type *t, int *out, int *count, int ca
         break;
     }
     case TYPE_LIST:
-        infer_free_vars_type(s, t->list_elem, out, count, cap);
+    case TYPE_OPTIONAL:
+        infer_free_vars_type(s, t->element_type, out, count, cap);
         break;
     case TYPE_ARR:
         infer_free_vars_type(s, t->arr_element_type, out, count, cap);
@@ -693,7 +723,7 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
     case AST_SYMBOL: {
         if (strcmp(ast->symbol, "True")  == 0) { result = type_bool(); break; }
         if (strcmp(ast->symbol, "False") == 0) { result = type_bool(); break; }
-        if (strcmp(ast->symbol, "nil")   == 0) { result = infer_fresh(ctx); break; }
+        if (strcmp(ast->symbol, "nil")   == 0) { result = type_nil();  break; }
 
         TypeScheme *sc = infer_env_lookup(ctx->env, ast->symbol);
         if (!sc) {
@@ -847,6 +877,17 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                 Type *then_t = infer_expr(ctx, ast->list.items[2]);
                 if (ast->list.count == 4) {
                     Type *else_t = infer_expr(ctx, ast->list.items[3]);
+
+                    /* Smart Optional Promotion for Branches */
+                    bool then_opt = (then_t->kind == TYPE_OPTIONAL || then_t->kind == TYPE_NIL);
+                    bool else_opt = (else_t->kind == TYPE_OPTIONAL || else_t->kind == TYPE_NIL);
+
+                    if (then_opt && !else_opt) {
+                        else_t = type_optional(else_t);
+                    } else if (else_opt && !then_opt) {
+                        then_t = type_optional(then_t);
+                    }
+
                     infer_constrain(ctx, then_t, else_t,
                                     ast->list.items[3]->line,
                                     ast->list.items[3]->column);
@@ -1277,6 +1318,10 @@ void infer_print_type(Type *t, Substitution *s) {
         printf("List<");
         infer_print_type(t->list_elem, s);
         printf(">");
+        break;
+    case TYPE_OPTIONAL:
+        infer_print_type(t->element_type, s);
+        printf("?");
         break;
     default:
         printf("%s", type_to_string(t));

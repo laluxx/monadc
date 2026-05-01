@@ -86,6 +86,7 @@ typedef enum {
     PAT_VAR,            // x  (binds name)
     PAT_LITERAL_INT,    // 0, 42, -1
     PAT_LITERAL_FLOAT,  // 3.14
+    PAT_LITERAL_STRING, // "abc"
     PAT_LIST_EMPTY,     // []
     PAT_LIST,           // [p1 p2 ... | tail?]
     PAT_CONSTRUCTOR,    // Red, Green, Circle, Rectangle ...

@@ -566,8 +566,12 @@ struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
     TypeScheme *scheme = NULL;
 
     if (!inferred || ctx->had_error) {
-        fprintf(stderr, "[hm] inference failed for '%s': %s\n",
-                name, ctx->error_msg);
+        /* Halt compilation violently with a high-quality visual error */
+        READER_ERROR(lambda_ast->line, lambda_ast->column,
+            "\n"
+            "    • Type inference failed for definition '%s'\n"
+            "    • %s",
+            name, ctx->error_msg);
     } else {
         infer_unify_one(ctx, self_t, inferred, lambda_ast->line, lambda_ast->column);
         /* Fully apply substitution so the scheme's type nodes are concrete
@@ -682,21 +686,27 @@ bool env_hm_check_call(Env *env, const char *name, Type **arg_types, int n,
                     if (aa_done != pa_done) mismatch = true;
                 }
             } else if (!arg_is_fn && !param_is_fn && arg->kind != param->kind) {
-                /* Allow numeric widening: any int kind satisfies Int param */
-                bool arg_is_int   = (arg->kind   == TYPE_INT || arg->kind == TYPE_HEX ||
-                                     arg->kind   == TYPE_BIN || arg->kind == TYPE_OCT ||
-                                     arg->kind   == TYPE_INT_ARBITRARY);
-                bool param_is_int = (param->kind == TYPE_INT ||
-                                     param->kind == TYPE_INT_ARBITRARY);
-                bool arg_is_coll  = (arg->kind == TYPE_LIST || arg->kind == TYPE_ARR ||
-                                     arg->kind == TYPE_SET  || arg->kind == TYPE_MAP  ||
-                                     arg->kind == TYPE_COLL || arg->kind == TYPE_STRING);
-                bool param_is_coll = (param->kind == TYPE_LIST || param->kind == TYPE_ARR ||
-                                      param->kind == TYPE_SET  || param->kind == TYPE_MAP  ||
-                                      param->kind == TYPE_COLL || param->kind == TYPE_STRING);
-                if (!(arg_is_int && param_is_int) &&
-                    !(arg_is_coll && param_is_coll))
-                    mismatch = true;
+                /* Allow nil -> Optional */
+                if ((arg->kind == TYPE_NIL && param->kind == TYPE_OPTIONAL) ||
+                    (arg->kind == TYPE_OPTIONAL && param->kind == TYPE_NIL)) {
+                    /* nil is perfectly compatible with any Optional argument */
+                } else {
+                    /* Allow numeric widening: any int kind satisfies Int param */
+                    bool arg_is_int   = (arg->kind   == TYPE_INT || arg->kind == TYPE_HEX ||
+                                         arg->kind   == TYPE_BIN || arg->kind == TYPE_OCT ||
+                                         arg->kind   == TYPE_INT_ARBITRARY);
+                    bool param_is_int = (param->kind == TYPE_INT ||
+                                         param->kind == TYPE_INT_ARBITRARY);
+                    bool arg_is_coll  = (arg->kind == TYPE_LIST || arg->kind == TYPE_ARR ||
+                                         arg->kind == TYPE_SET  || arg->kind == TYPE_MAP  ||
+                                         arg->kind == TYPE_COLL || arg->kind == TYPE_STRING);
+                    bool param_is_coll = (param->kind == TYPE_LIST || param->kind == TYPE_ARR ||
+                                          param->kind == TYPE_SET  || param->kind == TYPE_MAP  ||
+                                          param->kind == TYPE_COLL || param->kind == TYPE_STRING);
+                    if (!(arg_is_int && param_is_int) &&
+                        !(arg_is_coll && param_is_coll))
+                        mismatch = true;
+                }
             }
             if (mismatch) {
                 /* Use orig_arg/orig_param — arg/param may have been advanced
@@ -774,6 +784,10 @@ bool env_hm_check_call(Env *env, const char *name, Type **arg_types, int n,
                 elem_t->kind    != TYPE_VAR && elem_t->kind    != TYPE_UNKNOWN &&
                 fn_domain->kind != elem_t->kind) {
 
+                /* Allow nil -> Optional */
+                bool is_opt_nil = ((fn_domain->kind == TYPE_NIL && elem_t->kind == TYPE_OPTIONAL) ||
+                                   (fn_domain->kind == TYPE_OPTIONAL && elem_t->kind == TYPE_NIL));
+
                 /* Allow numeric widening (HEX/BIN/OCT/arbitrary all satisfy Int) */
                 bool dom_is_int  = (fn_domain->kind == TYPE_INT ||
                                     fn_domain->kind == TYPE_HEX ||
@@ -786,7 +800,7 @@ bool env_hm_check_call(Env *env, const char *name, Type **arg_types, int n,
                                     elem_t->kind == TYPE_OCT ||
                                     elem_t->kind == TYPE_INT_ARBITRARY);
 
-                if (!(dom_is_int && elem_is_int)) {
+                if (!is_opt_nil && !(dom_is_int && elem_is_int)) {
                     char dom_str[128], elem_str[128], coll_str[128];
                     strncpy(dom_str,  type_to_string(fn_domain), sizeof(dom_str)  - 1);
                     strncpy(elem_str, type_to_string(elem_t),    sizeof(elem_str) - 1);

@@ -48,6 +48,14 @@ ASTPattern parse_single_pattern(Parser *p) {
         return pat;
     }
 
+    // String literal
+    if (parser_at(p, TOK_STRING)) {
+        pat.kind = PAT_LITERAL_STRING;
+        pat.var_name = my_strdup(p->current.value);
+        parser_advance(p);
+        return pat;
+    }
+
     // Negative number literal: symbol "-" followed by number
     if (parser_at(p, TOK_SYMBOL) && strcmp(p->current.value, "-") == 0) {
         parser_advance(p);
@@ -603,6 +611,12 @@ static void build_pattern_conditions(
         PUSH_GUARD(make_eq_float(sym(param_name), pat->lit_value));
         break;
 
+    case PAT_LITERAL_STRING: {
+        AST *items[] = {sym("="), sym(param_name), ast_new_string(pat->var_name)};
+        PUSH_GUARD(make_list(items, 3));
+        break;
+    }
+
     case PAT_LIST_EMPTY:
         PUSH_GUARD(make_coll_is_empty(param_name));
         break;
@@ -642,6 +656,12 @@ static void build_pattern_conditions(
             case PAT_LITERAL_FLOAT:
                 PUSH_GUARD(make_eq_float(field_call, fp->lit_value));
                 break;
+
+            case PAT_LITERAL_STRING: {
+                AST *items[] = {sym("="), field_call, ast_new_string(fp->var_name)};
+                PUSH_GUARD(make_list(items, 3));
+                break;
+            }
 
             case PAT_CONSTRUCTOR: {
                 /* Nested: [Triangle [Point x1 y1] [Point x2 y2] ...]
@@ -698,6 +718,11 @@ static void build_pattern_conditions(
                         PUSH_GUARD(make_eq_float(ast_clone(nfield_call),
                                                  nfp->lit_value));
                         break;
+                    case PAT_LITERAL_STRING: {
+                        AST *items[] = {sym("="), ast_clone(nfield_call), ast_new_string(nfp->var_name)};
+                        PUSH_GUARD(make_list(items, 3));
+                        break;
+                    }
                     default:
                         break;
                     }
@@ -758,6 +783,11 @@ static void build_pattern_conditions(
             case PAT_LITERAL_FLOAT:
                 PUSH_GUARD(make_eq_float(elem_expr, ep->lit_value));
                 break;
+            case PAT_LITERAL_STRING: {
+                AST *items[] = {sym("="), elem_expr, ast_new_string(ep->var_name)};
+                PUSH_GUARD(make_list(items, 3));
+                break;
+            }
             default:
                 break;
             }

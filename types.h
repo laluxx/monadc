@@ -41,6 +41,8 @@ typedef enum {
     TYPE_PTR,           // Pointer :: T        — typed pointer to T
     TYPE_INT_ARBITRARY, // I<n> / U<n>         — arbitrary-width integer, 1–64 or 128
     TYPE_F80,           // F80                 — x87 extended precision
+    TYPE_OPTIONAL,      // T?                  — optional type
+    TYPE_NIL,           // nil
 } TypeKind;
 
 
@@ -170,6 +172,8 @@ Type *type_layout(const char *name, LayoutField *fields, int field_count,
                   int total_size, bool packed, int align);
 Type *type_layout_ref(const char *name);
 Type *type_ptr(Type *pointee);
+Type *type_optional(Type *inner);
+Type *type_nil(void);
 
 
 /// Constructors — HM types

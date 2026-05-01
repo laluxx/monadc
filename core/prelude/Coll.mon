@@ -76,7 +76,6 @@ define zip :: [a] -> [b] -> [c]
   _ []          -> []
   [x|xs] [y|ys] -> ((list x y) ++ (zip xs ys))
 
-
 define zipwith :: (a -> b -> c) -> [a] -> [b] -> [c]
   _ [] _          -> []
   _ _ []          -> []
