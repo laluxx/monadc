@@ -550,6 +550,107 @@ static int measure_indent(const char *s) {
     return col;
 }
 
+static const char *get_logical_line_end(const char *start) {
+    const char *p = start;
+    bool in_str = false;
+    while (*p) {
+        if (in_str) {
+            if (*p == '\\' && *(p+1)) p++;
+            else if (*p == '"') in_str = false;
+        } else {
+            if (*p == '"') in_str = true;
+            else if (*p == ';') break;
+        }
+        p++;
+    }
+    while (p > start && (*(p-1) == ' ' || *(p-1) == '\t')) p--;
+    return p;
+}
+
+static const char *skip_balanced_chars(const char *q) {
+    char open_char = *q;
+    char close_char = open_char == '[' ? ']' : (open_char == '(' ? ')' : '}');
+    int depth = 0;
+    const char *p = q;
+    while (*p) {
+        if (*p == open_char) depth++;
+        else if (*p == close_char) {
+            depth--;
+            p++;
+            if (depth == 0) return p;
+            continue;
+        }
+        p++;
+    }
+    return p;
+}
+
+static bool try_consume_type_annotation(WTokenStream *s, const char **p_ptr, const char *tok, int indent, int lineno) {
+    const char *peek = *p_ptr;
+    while (*peek == ' ' || *peek == '\t') peek++;
+
+    if (strncmp(peek, "::", 2) != 0 || (peek[2] != ' ' && peek[2] != '\t' && peek[2] != '\0')) {
+        return false;
+    }
+
+    SB ann; sb_init(&ann);
+    sb_putc(&ann, '[');
+    sb_puts(&ann, tok);
+
+    const char *q = peek;
+    while (strncmp(q, "::", 2) == 0 && (q[2] == ' ' || q[2] == '\t' || q[2] == '\0')) {
+        q += 2;
+        while (*q == ' ' || *q == '\t') q++;
+
+        const char *seg_start = q;
+        const char *seg_end;
+        if (*q == '[' || *q == '(' || *q == '{') {
+            seg_end = skip_balanced_chars(q);
+        } else {
+            seg_end = q;
+            while (*seg_end && *seg_end != ' ' && *seg_end != '\t' && *seg_end != ';' && *seg_end != '\n') seg_end++;
+        }
+        if (seg_end == seg_start) break;
+
+        char *seg = strndup(seg_start, seg_end - seg_start);
+        sb_puts(&ann, " :: ");
+        sb_puts(&ann, seg);
+        free(seg);
+        q = seg_end;
+
+        while (*q == ' ' || *q == '\t') q++;
+
+        /* consume -> chains */
+        while (*q == '-' && *(q+1) == '>' && (q[2] == ' ' || q[2] == '\t' || q[2] == '\0')) {
+            sb_puts(&ann, " :: ->");
+            q += 2;
+            while (*q == ' ' || *q == '\t') q++;
+
+            seg_start = q;
+            if (*q == '[' || *q == '(' || *q == '{') {
+                seg_end = skip_balanced_chars(q);
+            } else {
+                seg_end = q;
+                while (*seg_end && *seg_end != ' ' && *seg_end != '\t' && *seg_end != ';' && *seg_end != '\n') seg_end++;
+            }
+            if (seg_end == seg_start) break;
+
+            char *seg2 = strndup(seg_start, seg_end - seg_start);
+            sb_puts(&ann, " :: ");
+            sb_puts(&ann, seg2);
+            free(seg2);
+            q = seg_end;
+            while (*q == ' ' || *q == '\t') q++;
+        }
+    }
+    sb_putc(&ann, ']');
+    char *bracketed = sb_take(&ann);
+    wts_push(s, bracketed, indent, lineno);
+    free(bracketed);
+    *p_ptr = q;
+    return true;
+}
+
 /* Forward declaration — tokenise_into calls wisp_parse_expr for body expansion */
 static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_indent, int parent_remaining);
 
@@ -637,90 +738,12 @@ static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
             }
             char *tok = strndup(start, end - start);
 
-            /* After a grouped token, apply the same :: annotation grouping
-             * that plain symbols get. If next non-space token is '::',
-             * consume the whole 'grouped :: type -> type -> ...' as one
-             * token so variadic form bodies stay as single logical units.
-             * Example: (=) :: a -> a -> Bool  =>  [(=) :: a -> a -> Bool]
-             * Example: (x != y) => body       =>  kept as arrow clause   */
+            /* After a grouped token, apply the same :: annotation grouping */
             const char *peek = p;
             while (*peek == ' ' || *peek == '\t') peek++;
 
-            if (strncmp(peek, "::", 2) == 0 &&
-                (peek[2] == ' ' || peek[2] == '\t' || peek[2] == '\0')) {
-                /* Reuse the same :: grouping logic as for plain symbols:
-                 * build [tok :: T1 -> T2 -> ...] */
-                SB ann; sb_init(&ann);
-                sb_putc(&ann, '[');
-                sb_puts(&ann, tok);
+            if (try_consume_type_annotation(s, &p, tok, indent, lineno)) {
                 free(tok);
-
-                const char *q = peek;
-                while (strncmp(q, "::", 2) == 0 &&
-                       (q[2] == ' ' || q[2] == '\t' || q[2] == '\0')) {
-                    q += 2;
-                    while (*q == ' ' || *q == '\t') q++;
-                    const char *seg_start = q;
-                    const char *seg_end;
-                    if (*q == '[' || *q == '(') {
-                        char sopen  = *q;
-                        char sclose = sopen == '[' ? ']' : ')';
-                        int d = 0;
-                        seg_end = q;
-                        while (*seg_end) {
-                            if (*seg_end == sopen)  d++;
-                            if (*seg_end == sclose) { d--; seg_end++; if (!d) break; continue; }
-                            seg_end++;
-                        }
-                    } else {
-                        seg_end = q;
-                        while (*seg_end && *seg_end != ' ' && *seg_end != '\t' &&
-                               *seg_end != ';' && *seg_end != '\n') seg_end++;
-                    }
-                    if (seg_end == seg_start) break;
-                    char *seg = strndup(seg_start, seg_end - seg_start);
-                    sb_puts(&ann, " :: ");
-                    sb_puts(&ann, seg);
-                    free(seg);
-                    q = seg_end;
-                    while (*q == ' ' || *q == '\t') q++;
-                    /* consume -> chains */
-                    while (*q == '-' && *(q+1) == '>' &&
-                           (q[2] == ' ' || q[2] == '\t' || q[2] == '\0')) {
-                        sb_puts(&ann, " :: ->");
-                        q += 2;
-                        while (*q == ' ' || *q == '\t') q++;
-                        if (*q == '[' || *q == '(') {
-                            char sopen2  = *q;
-                            char sclose2 = sopen2 == '[' ? ']' : ')';
-                            int d2 = 0;
-                            seg_start = q;
-                            seg_end   = q;
-                            while (*seg_end) {
-                                if (*seg_end == sopen2)  d2++;
-                                if (*seg_end == sclose2) { d2--; seg_end++; if (!d2) break; continue; }
-                                seg_end++;
-                            }
-                        } else {
-                            seg_start = q;
-                            seg_end   = q;
-                            while (*seg_end && *seg_end != ' ' && *seg_end != '\t' &&
-                                   *seg_end != ';' && *seg_end != '\n') seg_end++;
-                        }
-                        if (seg_end == seg_start) break;
-                        char *seg2 = strndup(seg_start, seg_end - seg_start);
-                        sb_puts(&ann, " :: ");
-                        sb_puts(&ann, seg2);
-                        free(seg2);
-                        q = seg_end;
-                        while (*q == ' ' || *q == '\t') q++;
-                    }
-                }
-                sb_putc(&ann, ']');
-                char *bracketed = sb_take(&ann);
-                wts_push(s, bracketed, indent, lineno);
-                free(bracketed);
-                p = q;
             } else if (strncmp(peek, "=>", 2) == 0 &&
                        (peek[2] == ' ' || peek[2] == '\t' || peek[2] == '\0')) {
                 /* (pattern) => body -- keep as arrow clause token so the
@@ -729,8 +752,6 @@ static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
                  * so the existing -> clause machinery picks them up.        */
                 wts_push(s, tok, indent, lineno);
                 free(tok);
-                /* p is already past the grouped token; peek points at =>
-                 * let the main loop continue and tokenize => and body */
                 p = peek;
             } else {
                 wts_push(s, tok, indent, lineno);
@@ -744,106 +765,9 @@ static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
         while (*p && *p != ' ' && *p != '\t' && *p != ';') p++;
         char *tok = strndup(start, p - start);
 
-        /* removed -> single-token grouping hack */
-
-        /* Peek ahead: if next non-space token is '::',
-         * group entire chain as [tok :: T1 :: T2 :: ...].
-         * Types may themselves be parenthesized arrow types: (Int -> Int). */
-        const char *peek = p;
-        while (*peek == ' ' || *peek == '\t') peek++;
-        if (strncmp(peek, "::", 2) == 0 &&
-            (peek[2] == ' ' || peek[2] == '\t' || peek[2] == '\0')) {
-
-            /* Build the bracket content: start with the name */
-            SB ann; sb_init(&ann);
-            sb_putc(&ann, '[');
-            sb_puts(&ann, tok);
-
-            const char *q = peek;
-            while (strncmp(q, "::", 2) == 0 &&
-                   (q[2] == ' ' || q[2] == '\t' || q[2] == '\0')) {
-                /* consume '::' */
-                q += 2;
-                while (*q == ' ' || *q == '\t') q++;
-
-                /* consume one type token (may be bracketed, or plain word,
-                 * followed optionally by -> chains for arrow types)         */
-                const char *seg_start = q;
-                const char *seg_end;
-                if (*q == '[' || *q == '(') {
-                    /* bracketed segment — find matching close */
-                    char open  = *q;
-                    char close = open == '[' ? ']' : ')';
-                    int depth  = 0;
-                    seg_end = q;
-                    while (*seg_end) {
-                        if (*seg_end == open)  depth++;
-                        if (*seg_end == close) { depth--; seg_end++; if (!depth) break; continue; }
-                        seg_end++;
-                    }
-                } else {
-                    seg_end = q;
-                    while (*seg_end && *seg_end != ' ' && *seg_end != '\t' &&
-                           *seg_end != ';' && *seg_end != '\n') seg_end++;
-                }
-
-                if (seg_end == seg_start) break; /* nothing to consume */
-
-                char *seg = strndup(seg_start, seg_end - seg_start);
-                sb_puts(&ann, " :: ");
-                sb_puts(&ann, seg);
-                free(seg);
-                q = seg_end;
-
-                /* skip spaces and peek at next token */
-                while (*q == ' ' || *q == '\t') q++;
-
-                /* Also consume any trailing -> Type pairs so that
-                 * (Int -> Int) -> (a) -> (a) becomes one annotation:
-                 * [name :: (Int -> Int) :: -> :: (a) :: -> :: (a)]
-                 * which parse_fn_signature already knows how to read.      */
-                while (*q == '-' && *(q+1) == '>' &&
-                       (q[2] == ' ' || q[2] == '\t' || q[2] == '\0')) {
-                    sb_puts(&ann, " :: ->");
-                    q += 2;
-                    while (*q == ' ' || *q == '\t') q++;
-
-                    /* consume next type segment */
-                    if (*q == '[' || *q == '(') {
-                        char open2  = *q;
-                        char close2 = open2 == '[' ? ']' : ')';
-                        int depth2  = 0;
-                        seg_start = q;
-                        seg_end   = q;
-                        while (*seg_end) {
-                            if (*seg_end == open2)  depth2++;
-                            if (*seg_end == close2) { depth2--; seg_end++; if (!depth2) break; continue; }
-                            seg_end++;
-                        }
-                    } else {
-                        seg_start = q;
-                        seg_end   = q;
-                        while (*seg_end && *seg_end != ' ' && *seg_end != '\t' &&
-                               *seg_end != ';' && *seg_end != '\n') seg_end++;
-                    }
-
-                    if (seg_end == seg_start) break;
-
-                    char *seg2 = strndup(seg_start, seg_end - seg_start);
-                    sb_puts(&ann, " :: ");
-                    sb_puts(&ann, seg2);
-                    free(seg2);
-                    q = seg_end;
-                    while (*q == ' ' || *q == '\t') q++;
-                }
-            }
-
-            sb_putc(&ann, ']');
-            char *bracketed = sb_take(&ann);
-            wts_push(s, bracketed, indent, lineno);
-            free(bracketed);
+        /* Peek ahead: if next non-space token is '::', group entire chain */
+        if (try_consume_type_annotation(s, &p, tok, indent, lineno)) {
             free(tok);
-            p = q;
             continue;
         }
 
@@ -941,19 +865,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                             const char *clt = clraw;
                             while (*clt == ' ' || *clt == '\t') clt++;
                             if (!*clt || *clt == ';') { free(clraw); lineno++; continue; }
-                            const char *clt_end = clt;
-                            bool clt_ins = false;
-                            while (*clt_end) {
-                                if (clt_ins) {
-                                    if (*clt_end == '\\') clt_end++;
-                                    else if (*clt_end == '"') clt_ins = false;
-                                    clt_end++; continue;
-                                }
-                                if (*clt_end == '"') { clt_ins = true; clt_end++; continue; }
-                                if (*clt_end == ';') break;
-                                clt_end++;
-                            }
-                            while (clt_end > clt && (*(clt_end-1)==' '||*(clt_end-1)=='\t')) clt_end--;
+                            const char *clt_end = get_logical_line_end(clt);
                             size_t cltlen = clt_end - clt;
                             while (body_acc_len + cltlen + 3 >= body_acc_cap) {
                                 body_acc_cap *= 2; body_acc = realloc(body_acc, body_acc_cap);
@@ -1124,15 +1036,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                 size_t acc_cap = 256;
                 char *acc = malloc(acc_cap);
                 size_t acc_len = 0;
-                const char *t_end = t;
-                bool t_ins = false;
-                while (*t_end) {
-                    if (t_ins) { if (*t_end=='\\') t_end++; else if (*t_end=='"') t_ins=false; t_end++; continue; }
-                    if (*t_end=='"') { t_ins=true; t_end++; continue; }
-                    if (*t_end==';') break;
-                    t_end++;
-                }
-                while (t_end > t && (*(t_end-1)==' '||*(t_end-1)=='\t')) t_end--;
+                const char *t_end = get_logical_line_end(t);
                 size_t tlen = t_end - t;
                 while (acc_len + tlen + 2 >= acc_cap) { acc_cap *= 2; acc = realloc(acc, acc_cap); }
                 memcpy(acc + acc_len, t, tlen);
@@ -1150,15 +1054,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     const char *lt = lraw;
                     while (*lt == ' ' || *lt == '\t') lt++;
                     if (!*lt || *lt == ';') { free(lraw); lineno++; continue; }
-                    const char *lt_end = lt;
-                    bool lt_ins = false;
-                    while (*lt_end) {
-                        if (lt_ins) { if (*lt_end=='\\') lt_end++; else if (*lt_end=='"') lt_ins=false; lt_end++; continue; }
-                        if (*lt_end=='"') { lt_ins=true; lt_end++; continue; }
-                        if (*lt_end==';') break;
-                        lt_end++;
-                    }
-                    while (lt_end > lt && (*(lt_end-1)==' '||*(lt_end-1)=='\t')) lt_end--;
+                    const char *lt_end = get_logical_line_end(lt);
                     size_t ltlen = lt_end - lt;
                     while (acc_len + ltlen + 3 >= acc_cap) { acc_cap *= 2; acc = realloc(acc, acc_cap); }
                     acc[acc_len++] = ' ';
@@ -1201,31 +1097,14 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                 continue;
             }
 
-            /* Unbalanced — accumulate lines until balanced */
-            size_t acc_cap = 256;
-            char *acc = malloc(acc_cap);
-            size_t acc_len = 0;
+            /* Unbalanced - accumulate lines until balanced */
+            SB acc; sb_init(&acc);
 
             /* copy first line, stripping inline comment */
-            const char *t_end = t;
-            bool t_in_str = false;
-            while (*t_end) {
-                if (t_in_str) {
-                    if (*t_end == '\\') t_end++;
-                    else if (*t_end == '"') t_in_str = false;
-                    t_end++; continue;
-                }
-                if (*t_end == '"') { t_in_str = true; t_end++; continue; }
-                if (*t_end == ';') break;
-                t_end++;
-            }
-            /* trim trailing whitespace */
-            while (t_end > t && (*(t_end-1) == ' ' || *(t_end-1) == '\t')) t_end--;
-            size_t tlen = t_end - t;
-            while (acc_len + tlen + 2 >= acc_cap) { acc_cap *= 2; acc = realloc(acc, acc_cap); }
-            memcpy(acc + acc_len, t, tlen);
-            acc_len += tlen;
-            acc[acc_len] = '\0';
+            const char *t_end = get_logical_line_end(t);
+            char *t_str = strndup(t, t_end - t);
+            sb_puts(&acc, t_str);
+            free(t_str);
             free(raw);
             lineno++;
 
@@ -1242,34 +1121,13 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                 /* skip blank/comment lines inside grouped expr */
                 if (!*lt || *lt == ';') { free(lraw); lineno++; continue; }
 
-                /* Strip inline comments from continuation lines */
-                const char *lt_end = lt;
-                bool in_str2 = false;
-                while (*lt_end) {
-                    if (in_str2) {
-                        if (*lt_end == '\\') lt_end++;
-                        else if (*lt_end == '"') in_str2 = false;
-                        lt_end++;
-                        continue;
-                    }
-                    if (*lt_end == '"') { in_str2 = true; lt_end++; continue; }
-                    if (*lt_end == ';') break;
-                    lt_end++;
-                }
-                /* trim trailing whitespace before comment */
-                while (lt_end > lt && (*(lt_end-1) == ' ' || *(lt_end-1) == '\t'))
-                    lt_end--;
+                const char *lt_end = get_logical_line_end(lt);
                 char *line_expanded = strndup(lt, lt_end - lt);
-                size_t ltlen = strlen(line_expanded);
 
                 char _ld[48];
-                int _ldlen = snprintf(_ld, sizeof(_ld), " (#line %d 1) ", lineno);
-                while (acc_len + (size_t)_ldlen + ltlen + 3 >= acc_cap) { acc_cap *= 2; acc = realloc(acc, acc_cap); }
-                memcpy(acc + acc_len, _ld, _ldlen);
-                acc_len += _ldlen;
-                memcpy(acc + acc_len, line_expanded, ltlen);
-                acc_len += ltlen;
-                acc[acc_len] = '\0';
+                snprintf(_ld, sizeof(_ld), " (#line %d 1) ", lineno);
+                sb_puts(&acc, _ld);
+                sb_puts(&acc, line_expanded);
                 free(line_expanded);
 
                 /* update depth */
@@ -1288,10 +1146,10 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                 lineno++;
             }
 
-            wts_push(&s, acc, indent, lineno - 1);
-            free(acc);
+            char *final_acc = sb_take(&acc);
+            wts_push(&s, final_acc, indent, lineno - 1);
+            free(final_acc);
             continue;
-
         }
 
         /* Normal non-grouped line */
@@ -1312,19 +1170,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
             acc[0] = '\0';
 
             acc[acc_len++] = '(';
-            const char *t_end = t;
-            bool t_ins = false;
-            while (*t_end) {
-                if (t_ins) {
-                    if (*t_end == '\\') t_end++;
-                    else if (*t_end == '"') t_ins = false;
-                    t_end++; continue;
-                }
-                if (*t_end == '"') { t_ins = true; t_end++; continue; }
-                if (*t_end == ';') break;
-                t_end++;
-            }
-            while (t_end > t && (*(t_end-1)==' '||*(t_end-1)=='\t')) t_end--;
+            const char *t_end = get_logical_line_end(t);
             size_t tlen = t_end - t;
             while (acc_len + tlen + 4 >= acc_cap) { acc_cap *= 2; acc = realloc(acc, acc_cap); }
             memcpy(acc + acc_len, t, tlen);
@@ -1736,22 +1582,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     char *fname = strndup(after_define, name_len);
 
                     /* Scan to end of line (strip inline comment) */
-                    const char *line_end = after_name;
-                    bool in_str = false;
-                    while (*line_end) {
-                        if (in_str) {
-                            if (*line_end == '\\') line_end++;
-                            else if (*line_end == '"') in_str = false;
-                            line_end++; continue;
-                        }
-                        if (*line_end == '"') { in_str = true; line_end++; continue; }
-                        if (*line_end == ';') break;
-                        line_end++;
-                    }
-                    /* trim trailing whitespace */
-                    while (line_end > after_name &&
-                           (*(line_end-1) == ' ' || *(line_end-1) == '\t'))
-                        line_end--;
+                    const char *line_end = get_logical_line_end(after_name);
 
                     int arr_count = 0;
                     int bdepth = 0;
