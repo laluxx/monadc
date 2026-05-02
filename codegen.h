@@ -59,6 +59,7 @@ typedef struct CodegenContext {
     LLVMValueRef fmt_oct;
     bool test_mode;
     const char *current_function_name;  // NULL at top level, set when inside a define
+    int in_coalesce_depth;
 
     // Monomorphization cache
     MonoCache mono_cache;

@@ -1,5 +1,7 @@
 
 
+
+
 define string->int :: String -> Int?
   "1" -> 1
   "2" -> 2
@@ -7,14 +9,47 @@ define string->int :: String -> Int?
   "4" -> 4
   _   -> nil
 
-(show (?? (string->int "2") (error "This should never be nil")))
 
-;; error "There was an error"
+define double :: Int -> Int
+  n -> n * 2
+
+
+show double string->int "1" ?? error "ciao"
 
 
 
-;; (define (mul [x :: Int] -> [y :: Int] -> Int) (* x x))
 
-;; show (3 mul 3)
+;; define foldl :: (b -> a -> b) -> b -> [a] -> b
+;;   _ acc []     -> acc
+;;   f acc [x|xs] -> foldl f (f acc x) xs
+
+
+;; define atoi :: String -> Int?
+;;   ""                -> nil
+;;   s | all? digit? s -> foldl (lambda (n c) n * 10 + (Int c - 48)) 0 s
+;;     | otherwise     -> nil
+
+
+;; fn atoi(s){
+;;    "Parses a decimal integer from string `s`."
+;;    if(!is_str(s)){ return 0 }
+;;    mut n = str_len(s)
+;;    if(n == 0){ return 0 }
+;;    mut i = 0
+;;    mut sign = 1
+;;    if(load8(s, 0) == 45){
+;;       sign = -1
+;;       i = 1
+;;    }
+;;    mut val = 0
+;;    while(i < n){
+;;       mut c = load8(s, i)
+;;       if(c < 48 || c > 57){ break }
+;;       val = val * 10 + (c - 48)
+;;       i += 1
+;;    }
+;;    if(sign < 0){ val = 0 - val }
+;;    val
+;; }
 
 

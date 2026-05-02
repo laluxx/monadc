@@ -12,6 +12,9 @@ DEBUG_CFLAGS   = -g -DDEBUG
 ASAN_CFLAGS    = -g -fsanitize=address -fno-omit-frame-pointer -DDEBUG
 RELEASE_CFLAGS = -DNDEBUG -O2
 
+NPROCS = $(shell nproc)
+MAKEFLAGS += -j$(NPROCS)
+
 # Static archive — no rpath/ldconfig needed, works from any directory
 RUNTIME_LIB = libmonad.a
 RUNTIME_SRC = runtime.c arena.c
@@ -32,11 +35,8 @@ asan: $(RUNTIME_LIB) $(TARGET)
 release: CFLAGS += $(RELEASE_CFLAGS)
 release: $(RUNTIME_LIB) $(TARGET)
 
-
-DEPFLAGS = -MMD -MP
-
 $(RUNTIME_OBJ): %.o: %.c
-	$(CC) $(CFLAGS) $(DEPFLAGS) -fPIC -c $< -o $@
+	$(CC) $(CFLAGS) -fPIC -c $< -o $@
 
 $(RUNTIME_LIB): $(RUNTIME_OBJ)
 	ar rcs $@ $^
@@ -46,15 +46,13 @@ $(TARGET): $(OBJS) $(RUNTIME_LIB)
 	$(CC) $(CFLAGS) -rdynamic -o $@ $(OBJS) $(RUNTIME_LIB) $(LDFLAGS)
 
 ffi.o: ffi.c
-	$(CC) $(CFLAGS) $(FFI_CFLAGS) $(DEPFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(FFI_CFLAGS) -c $< -o $@
 
 %.o: %.c
-	$(CC) $(CFLAGS) $(DEPFLAGS) -c $< -o $@
-
--include $(OBJS:.o=.d) $(RUNTIME_OBJ:.o=.d)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(OBJS) $(RUNTIME_OBJ) $(RUNTIME_LIB) $(TARGET) $(OBJS:.o=.d) $(RUNTIME_OBJ:.o=.d)
+	rm -f $(OBJS) $(RUNTIME_OBJ) $(RUNTIME_LIB) $(TARGET)
 
 # Install: monad binary + static archive + core (for linking compiled .mon programs)
 install: $(RUNTIME_LIB) $(TARGET)
@@ -77,4 +75,4 @@ uninstall:
 	rm -rf $(INCDIR)
 	rm -rf $(PREFIX)/lib/monad/core
 
-.PHONY: all clean release install uninstall
+.PHONY: all clean release install uninstall asan

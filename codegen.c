@@ -5347,19 +5347,39 @@ if (ast->list.count >= 5) {
             /* ---- null-coalescing (?? a b) -------------------------------- */
             if (strcmp(head->symbol, "??") == 0) {
                 if (ast->list.count != 3) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: '??' requires exactly 2 arguments",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: '?\?' requires exactly 2 arguments",
                                   parser_get_filename(), ast->line, ast->column);
                 }
 
+                ctx->in_coalesce_depth++;
                 CodegenResult lhs = codegen_expr(ctx, ast->list.items[1]);
+                ctx->in_coalesce_depth--;
 
-                // For now, emit a naive runtime check: if lhs != nil, return lhs, else evaluate rhs.
-                // We assume optionals are runtime boxed values where 'nil' is represented as a NULL pointer or a nil tag.
+                /* If lhs is a scalar, it can never be nil. Just return lhs directly. */
+                if (lhs.type && (lhs.type->kind == TYPE_INT ||
+                                 lhs.type->kind == TYPE_FLOAT ||
+                                 lhs.type->kind == TYPE_BOOL ||
+                                 lhs.type->kind == TYPE_CHAR)) {
+                    return lhs;
+                }
+
+                LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMValueRef val_to_check = lhs.value;
+
+                /* Ensure we are passing a pointer to rt_value_is_nil */
+                if (LLVMTypeOf(val_to_check) != ptr_t) {
+                    if (LLVMGetTypeKind(LLVMTypeOf(val_to_check)) == LLVMIntegerTypeKind) {
+                        val_to_check = LLVMBuildIntToPtr(ctx->builder, val_to_check, ptr_t, "nil_cast");
+                    } else {
+                        val_to_check = LLVMBuildBitCast(ctx->builder, val_to_check, ptr_t, "nil_cast");
+                    }
+                }
+
                 LLVMValueRef is_nil_fn = get_rt_value_is_nil(ctx);
-                LLVMValueRef args[] = { lhs.value };
+                LLVMValueRef args[] = { val_to_check };
                 LLVMValueRef is_nil = LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(is_nil_fn), is_nil_fn, args, 1, "is_nil");
 
-                LLVMValueRef is_nil_bool = LLVMBuildICmp(ctx->builder, LLVMIntNE, is_nil, LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, false), "is_nil_bool");
+                LLVMValueRef is_nil_bool = LLVMBuildICmp(ctx->builder, LLVMIntNE, is_nil, LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0), "is_nil_bool");
 
                 LLVMBasicBlockRef then_bb = LLVMAppendBasicBlockInContext(ctx->context, LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder)), "coalesce_then");
                 LLVMBasicBlockRef else_bb = LLVMAppendBasicBlockInContext(ctx->context, LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder)), "coalesce_else");
@@ -5371,7 +5391,6 @@ if (ast->list.count >= 5) {
                 LLVMPositionBuilderAtEnd(ctx->builder, then_bb);
                 CodegenResult rhs = codegen_expr(ctx, ast->list.items[2]);
                 LLVMBasicBlockRef then_end_bb = LLVMGetInsertBlock(ctx->builder); // rhs evaluation might have created blocks
-                LLVMBuildBr(ctx->builder, merge_bb);
 
                 // Else block (lhs is not nil, return lhs unwrapped)
                 LLVMPositionBuilderAtEnd(ctx->builder, else_bb);
@@ -5380,18 +5399,33 @@ if (ast->list.count >= 5) {
                 LLVMValueRef unwrapped_lhs = lhs.value;
                 if (rhs.type && type_is_integer(rhs.type)) {
                     LLVMValueRef unbox_fn = get_rt_unbox_int(ctx);
-                    unwrapped_lhs = LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(unbox_fn), unbox_fn, &lhs.value, 1, "unbox_lhs_int");
+                    unwrapped_lhs = LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(unbox_fn), unbox_fn, &val_to_check, 1, "unbox_lhs_int");
                 } else if (rhs.type && type_is_float(rhs.type)) {
                     LLVMValueRef unbox_fn = get_rt_unbox_float(ctx);
-                    unwrapped_lhs = LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(unbox_fn), unbox_fn, &lhs.value, 1, "unbox_lhs_float");
+                    unwrapped_lhs = LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(unbox_fn), unbox_fn, &val_to_check, 1, "unbox_lhs_float");
                 }
 
                 LLVMBuildBr(ctx->builder, merge_bb);
 
                 // Merge block
                 LLVMPositionBuilderAtEnd(ctx->builder, merge_bb);
-                LLVMValueRef phi = LLVMBuildPhi(ctx->builder, LLVMTypeOf(rhs.value), "coalesce_tmp");
-                LLVMValueRef incoming_values[] = { rhs.value, unwrapped_lhs };
+
+                // Ensure rhs value matches the phi target type
+                LLVMValueRef rhs_val = rhs.value;
+                LLVMTypeRef target_llvm_type = LLVMTypeOf(unwrapped_lhs);
+                if (LLVMTypeOf(rhs_val) != target_llvm_type) {
+                    LLVMPositionBuilderAtEnd(ctx->builder, then_end_bb);
+                    rhs_val = emit_type_cast(ctx, rhs_val, target_llvm_type);
+                    LLVMBuildBr(ctx->builder, merge_bb);
+                    LLVMPositionBuilderAtEnd(ctx->builder, merge_bb);
+                } else {
+                    LLVMPositionBuilderAtEnd(ctx->builder, then_end_bb);
+                    LLVMBuildBr(ctx->builder, merge_bb);
+                    LLVMPositionBuilderAtEnd(ctx->builder, merge_bb);
+                }
+
+                LLVMValueRef phi = LLVMBuildPhi(ctx->builder, target_llvm_type, "coalesce_tmp");
+                LLVMValueRef incoming_values[] = { rhs_val, unwrapped_lhs };
                 LLVMBasicBlockRef incoming_blocks[] = { then_end_bb, else_bb };
                 LLVMAddIncoming(phi, incoming_values, incoming_blocks, 2);
 
@@ -5539,6 +5573,15 @@ if (ast->list.count >= 5) {
 
                 // Symbol (variable)
                 if (arg->type == AST_SYMBOL) {
+                    if (strcmp(arg->symbol, "nil") == 0) {
+                        LLVMValueRef nil_fn = get_rt_value_nil(ctx);
+                        LLVMValueRef nil_val = LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(nil_fn), nil_fn, NULL, 0, "nil");
+                        LLVMValueRef print_fn = get_rt_print_value_newline(ctx);
+                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(print_fn), print_fn, &nil_val, 1, "");
+                        result.type  = type_float();
+                        result.value = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0);
+                        return result;
+                    }
                     // Handle dot-access: (show p.x)
                     if (strchr(arg->symbol, '.')) {
                         CodegenResult field_r = codegen_expr(ctx, arg);
@@ -5646,7 +5689,12 @@ if (ast->list.count >= 5) {
                     LLVMValueRef loaded = LLVMBuildLoad2(ctx->builder,
                                                          type_to_llvm(ctx, entry->type),
                                                          entry->value, arg->symbol);
-                    codegen_show_value(ctx, loaded, entry->type, true);
+                    if (entry->type->kind == TYPE_OPTIONAL || entry->type->kind == TYPE_NIL) {
+                        LLVMValueRef print_fn = get_rt_print_value_newline(ctx);
+                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(print_fn), print_fn, &loaded, 1, "");
+                    } else {
+                        codegen_show_value(ctx, loaded, entry->type, true);
+                    }
 
                     result.type  = type_float();
                     result.value = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0);
@@ -5692,8 +5740,14 @@ if (ast->list.count >= 5) {
                 }
 
                 // Everything else
-                if (arg_result.type)
-                    codegen_show_value(ctx, arg_result.value, arg_result.type, true);
+                if (arg_result.type) {
+                    if (arg_result.type->kind == TYPE_OPTIONAL || arg_result.type->kind == TYPE_NIL) {
+                        LLVMValueRef print_fn = get_rt_print_value_newline(ctx);
+                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(print_fn), print_fn, &arg_result.value, 1, "");
+                    } else {
+                        codegen_show_value(ctx, arg_result.value, arg_result.type, true);
+                    }
+                }
 
                 result.type  = type_float();
                 result.value = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0);
@@ -6941,7 +6995,9 @@ if (ast->list.count >= 5) {
                     then_result.type->kind == TYPE_SYMBOL  ||
                     then_result.type->kind == TYPE_KEYWORD ||
                     then_result.type->kind == TYPE_RATIO   ||
-                    then_result.type->kind == TYPE_UNKNOWN;
+                    then_result.type->kind == TYPE_UNKNOWN ||
+                    then_result.type->kind == TYPE_OPTIONAL||
+                    then_result.type->kind == TYPE_NIL;
                 bool else_is_ptr = else_result.type->kind == TYPE_SET     ||
                     else_result.type->kind == TYPE_MAP     ||
                     else_result.type->kind == TYPE_LIST    ||
@@ -6949,7 +7005,9 @@ if (ast->list.count >= 5) {
                     else_result.type->kind == TYPE_SYMBOL  ||
                     else_result.type->kind == TYPE_KEYWORD ||
                     else_result.type->kind == TYPE_RATIO   ||
-                    else_result.type->kind == TYPE_UNKNOWN;
+                    else_result.type->kind == TYPE_UNKNOWN ||
+                    else_result.type->kind == TYPE_OPTIONAL||
+                    else_result.type->kind == TYPE_NIL;
 
                 bool then_is_arr = then_result.type->kind == TYPE_ARR;
                 bool else_is_arr = else_result.type->kind == TYPE_ARR;
@@ -6999,8 +7057,14 @@ if (ast->list.count >= 5) {
                 if (then_is_ptr || else_is_ptr ||
                     then_result.type->kind == TYPE_COLL || else_result.type->kind == TYPE_COLL) {
                     phi_llvm_type = ptr;
-                    /* If we are unifying collections, use TYPE_UNKNOWN as the common denominator */
-                    phi_type      = type_unknown();
+                    if (then_result.type->kind == TYPE_OPTIONAL) {
+                        phi_type = then_result.type;
+                    } else if (else_result.type->kind == TYPE_OPTIONAL) {
+                        phi_type = else_result.type;
+                    } else {
+                        /* If we are unifying collections, use TYPE_UNKNOWN as the common denominator */
+                        phi_type = type_unknown();
+                    }
                 } else if (then_is_arr || else_is_arr) {
                     phi_llvm_type = then_is_arr ? LLVMTypeOf(then_result.value) : LLVMTypeOf(else_result.value);
                     phi_type      = then_is_arr ? then_result.type : else_result.type;
@@ -7033,7 +7097,11 @@ if (ast->list.count >= 5) {
                 LLVMPositionBuilderAtEnd(ctx->builder, then_end_bb);
                 LLVMValueRef then_val = then_result.value;
                 if (!LLVMGetBasicBlockTerminator(then_end_bb)) {
-                    then_val = emit_type_cast(ctx, then_val, phi_llvm_type);
+                    if (phi_llvm_type == ptr && !then_is_ptr) {
+                        then_val = codegen_box(ctx, then_val, then_result.type);
+                    } else {
+                        then_val = emit_type_cast(ctx, then_val, phi_llvm_type);
+                    }
                     LLVMBuildBr(ctx->builder, merge_bb);
                 }
                 LLVMBasicBlockRef then_phi_bb = LLVMGetInsertBlock(ctx->builder);
@@ -7042,7 +7110,11 @@ if (ast->list.count >= 5) {
                 LLVMPositionBuilderAtEnd(ctx->builder, else_end_bb);
                 LLVMValueRef else_val = else_result.value;
                 if (!LLVMGetBasicBlockTerminator(else_end_bb)) {
-                    else_val = emit_type_cast(ctx, else_val, phi_llvm_type);
+                    if (phi_llvm_type == ptr && !else_is_ptr) {
+                        else_val = codegen_box(ctx, else_val, else_result.type);
+                    } else {
+                        else_val = emit_type_cast(ctx, else_val, phi_llvm_type);
+                    }
                     LLVMBuildBr(ctx->builder, merge_bb);
                 }
                 LLVMBasicBlockRef else_phi_bb = LLVMGetInsertBlock(ctx->builder);
@@ -9849,6 +9921,8 @@ if (ast->list.count >= 5) {
                 /* ── Typed ABI direct call ──────────────────────────────── */
                 int total_args = declared_params + entry->lifted_count;
                 LLVMValueRef *args = malloc(sizeof(LLVMValueRef) * (total_args ? total_args : 1));
+                bool auto_lift = false;
+                LLVMValueRef auto_lift_nil_check = NULL;
                 for (int i = 0; i < declared_params; i++) {
                     if (has_rest && i == declared_params - 1) {
                         // Collect remaining args into a runtime list
@@ -10046,6 +10120,59 @@ if (ast->list.count >= 5) {
 
                     Type *actual_type   = arg_result.type;
                     LLVMValueRef converted_arg = arg_result.value;
+
+                    /* ── Optional Safety Trap & Auto-Lift ────────────────────── */
+                    if (expected_type && actual_type && expected_type->kind != TYPE_UNKNOWN && actual_type->kind != expected_type->kind) {
+                        if ((actual_type->kind == TYPE_OPTIONAL || actual_type->kind == TYPE_NIL) &&
+                            expected_type->kind != TYPE_OPTIONAL && expected_type->kind != TYPE_NIL && expected_type->kind != TYPE_PTR) {
+
+                            if (ctx->in_coalesce_depth > 0) {
+                                auto_lift = true;
+                                LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                                LLVMTypeRef i32_t = LLVMInt32TypeInContext(ctx->context);
+                                LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
+
+                                LLVMValueRef val_to_check = converted_arg;
+                                if (LLVMTypeOf(val_to_check) != ptr_t) {
+                                    if (LLVMGetTypeKind(LLVMTypeOf(val_to_check)) == LLVMIntegerTypeKind) {
+                                        val_to_check = LLVMBuildIntToPtr(ctx->builder, val_to_check, ptr_t, "nil_cast");
+                                    } else {
+                                        val_to_check = LLVMBuildBitCast(ctx->builder, val_to_check, ptr_t, "nil_cast");
+                                    }
+                                }
+
+                                LLVMValueRef is_nil_fn = get_rt_value_is_nil(ctx);
+                                LLVMValueRef check = LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(is_nil_fn), is_nil_fn, &val_to_check, 1, "al_check");
+                                LLVMValueRef check_bool = LLVMBuildICmp(ctx->builder, LLVMIntNE, check, LLVMConstInt(i32_t, 0, 0), "al_bool");
+
+                                if (auto_lift_nil_check) {
+                                    auto_lift_nil_check = LLVMBuildOr(ctx->builder, auto_lift_nil_check, check_bool, "al_or");
+                                } else {
+                                    auto_lift_nil_check = check_bool;
+                                }
+
+                                /* Prevent crash in unbox: if nil, substitute a dummy valid boxed zero */
+                                LLVMValueRef vi_fn = get_rt_value_int(ctx);
+                                LLVMTypeRef vi_ft = LLVMFunctionType(ptr_t, &i64_t, 1, 0);
+                                LLVMValueRef zero_val = LLVMConstInt(i64_t, 0, 0);
+                                LLVMValueRef dummy_zero = LLVMBuildCall2(ctx->builder, vi_ft, vi_fn, &zero_val, 1, "dummy_zero");
+                                converted_arg = LLVMBuildSelect(ctx->builder, check_bool, dummy_zero, converted_arg, "safe_arg");
+                            } else {
+                                char exp_str[64];
+                                char act_str[64];
+                                snprintf(exp_str, sizeof(exp_str), "%s", type_to_string(expected_type));
+                                snprintf(act_str, sizeof(act_str), "%s", type_to_string(actual_type));
+
+                                CODEGEN_ERROR(ctx,
+                                              "%s:%d:%d: error: Type mismatch in function call to '%s'\n"
+                                              "    • Argument %d evaluates to an optional '%s' but the function expects strict '%s'.\n"
+                                              "  - Hint: You cannot directly pass an Optional type to a function expecting a raw value.\n"
+                                              "  - Fix: Explicitly handle the possible 'nil' using the '?\?' operator (e.g. call ?? default).",
+                                              parser_get_filename(), ast->list.items[i+1]->line, ast->list.items[i+1]->column,
+                                              head->symbol, i + 1, act_str, exp_str);
+                            }
+                        }
+                    }
 
                     fprintf(stderr, "LAST DEBUG arg[%d] to '%s': actual_type_kind=%d arr_is_fat=%d expected_type_kind=%d llvm_type_kind=%d\n",
                             i, head->symbol,
@@ -10542,6 +10669,20 @@ if (ast->list.count >= 5) {
                 LLVMTypeRef ret_llvm = LLVMGetReturnType(call_ft);
                 bool is_void_ret = (LLVMGetTypeKind(ret_llvm) == LLVMVoidTypeKind);
 
+                LLVMBasicBlockRef al_nil_bb = NULL;
+                LLVMBasicBlockRef al_call_bb = NULL;
+                LLVMBasicBlockRef al_merge_bb = NULL;
+
+                if (auto_lift && auto_lift_nil_check) {
+                    LLVMValueRef cur_fn = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder));
+                    al_nil_bb = LLVMAppendBasicBlockInContext(ctx->context, cur_fn, "al_nil");
+                    al_call_bb = LLVMAppendBasicBlockInContext(ctx->context, cur_fn, "al_call");
+                    al_merge_bb = LLVMAppendBasicBlockInContext(ctx->context, cur_fn, "al_merge");
+                    LLVMBuildCondBr(ctx->builder, auto_lift_nil_check, al_nil_bb, al_call_bb);
+
+                    LLVMPositionBuilderAtEnd(ctx->builder, al_call_bb);
+                }
+
                 if (is_void_ret) {
                     LLVMBuildCall2(ctx->builder, call_ft, call_target,
                                    args, total_args, "");
@@ -10607,6 +10748,32 @@ if (ast->list.count >= 5) {
                     }
 
                 }
+
+                if (auto_lift && auto_lift_nil_check) {
+                    LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                    LLVMValueRef boxed_res = result.value;
+                    if (!is_void_ret && LLVMGetTypeKind(ret_llvm) != LLVMPointerTypeKind) {
+                        boxed_res = codegen_box(ctx, result.value, result.type);
+                    }
+                    LLVMBasicBlockRef call_end_bb = LLVMGetInsertBlock(ctx->builder);
+                    LLVMBuildBr(ctx->builder, al_merge_bb);
+
+                    LLVMPositionBuilderAtEnd(ctx->builder, al_nil_bb);
+                    LLVMValueRef nil_fn = get_rt_value_nil(ctx);
+                    LLVMValueRef nil_res = LLVMBuildCall2(ctx->builder, LLVMFunctionType(ptr_t, NULL, 0, 0), nil_fn, NULL, 0, "nil_res");
+                    LLVMBuildBr(ctx->builder, al_merge_bb);
+
+                    LLVMPositionBuilderAtEnd(ctx->builder, al_merge_bb);
+                    if (!is_void_ret) {
+                        LLVMValueRef phi = LLVMBuildPhi(ctx->builder, ptr_t, "al_phi");
+                        LLVMValueRef inc_vals[] = { nil_res, boxed_res };
+                        LLVMBasicBlockRef inc_bbs[] = { al_nil_bb, call_end_bb };
+                        LLVMAddIncoming(phi, inc_vals, inc_bbs, 2);
+                        result.value = phi;
+                    }
+                    if (result.type) result.type->kind = TYPE_OPTIONAL;
+                }
+
                 free(args);
                 return result;
             }
