@@ -211,11 +211,76 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
     LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
     LLVMTypeRef i64   = LLVMInt64TypeInContext(ctx->context);
 
-    /* ── Step 1: compile each explicitly provided method ───────────────── */
+    /* ── Step 0: pre-declare LLVM functions for mutual recursion ────────── */
     for (int mi = 0; mi < c->method_count; mi++) {
         const char *mname = c->methods[mi].name;
         inst->method_names[mi] = strdup(mname);
-        inst->method_funcs[mi] = NULL; /* filled below */
+
+        char fn_name[256];
+        tc_method_name(class_name, type_name, mname, fn_name, sizeof(fn_name));
+
+        LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, fn_name);
+        if (!fn) {
+            char sig_buf[512];
+            snprintf(sig_buf, sizeof(sig_buf), "Fn :: %s", c->methods[mi].type_str);
+            Type *method_sig = type_parse_fn_arrow(sig_buf);
+
+            int param_count = 0;
+            Type *t_iter = method_sig;
+            while (t_iter && t_iter->kind == TYPE_ARROW) {
+                param_count++;
+                t_iter = t_iter->arrow_ret;
+            }
+
+            LLVMTypeRef *param_types = malloc(sizeof(LLVMTypeRef) * (param_count ? param_count : 1));
+            EnvParam *env_params = malloc(sizeof(EnvParam) * (param_count ? param_count : 1));
+
+            t_iter = method_sig;
+            for (int i = 0; i < param_count; i++) {
+                Type *pt = t_iter->arrow_param;
+                bool is_var = !pt || (pt->kind == TYPE_VAR) || (pt->kind == TYPE_UNKNOWN);
+                Type *concrete_pt = is_var ? type_from_name(type_name) : type_clone(pt);
+                if (!concrete_pt && is_var) {
+                    Type *lay = env_lookup_layout(ctx->env, type_name);
+                    if (lay) concrete_pt = type_clone(lay);
+                }
+
+                param_types[i] = type_to_llvm(ctx, concrete_pt);
+
+                char buf[32];
+                snprintf(buf, sizeof(buf), "__p%d", i);
+                env_params[i].name = strdup(buf);
+                env_params[i].type = concrete_pt;
+
+                t_iter = t_iter->arrow_ret;
+            }
+            Type *ret = t_iter;
+            bool ret_is_var = !ret || (ret->kind == TYPE_VAR) || (ret->kind == TYPE_UNKNOWN);
+            Type *concrete_ret = ret_is_var ? type_from_name(type_name) : type_clone(ret);
+            if (!concrete_ret && ret_is_var) {
+                Type *lay = env_lookup_layout(ctx->env, type_name);
+                if (lay) concrete_ret = type_clone(lay);
+            }
+
+            LLVMTypeRef ret_llvm = type_to_llvm(ctx, concrete_ret);
+
+            LLVMTypeRef ft = LLVMFunctionType(ret_llvm, param_types, param_count, 0);
+
+            fn = LLVMAddFunction(ctx->module, fn_name, ft);
+            LLVMSetLinkage(fn, LLVMExternalLinkage);
+
+            env_insert_func(ctx->env, fn_name, env_params, param_count, type_clone(concrete_ret), fn, NULL, NULL);
+
+            if (concrete_ret) type_free(concrete_ret);
+            free(param_types);
+            if (method_sig) type_free(method_sig);
+        }
+        inst->method_funcs[mi] = fn;
+    }
+
+    /* ── Step 1: compile each explicitly provided method ───────────────── */
+    for (int mi = 0; mi < c->method_count; mi++) {
+        const char *mname = c->methods[mi].name;
 
         /* Find this method in the instance declaration */
         AST *body_lam = NULL;
@@ -246,20 +311,44 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
         char fn_name[256];
         tc_method_name(class_name, type_name, mname, fn_name, sizeof(fn_name));
 
-        /* The method uses closure ABI: (ptr env, i32 n, ptr args) -> ptr
-         * We compile the lambda body as a closure-ABI function.
-         * This reuses the existing define path by synthesizing a define node. */
-
         /* Clone the lambda and annotate each param with the concrete
          * instance type so codegen uses typed ABI instead of poly stub */
         AST *typed_lam = ast_clone(body_lam);
+        char sig_buf[512];
+        snprintf(sig_buf, sizeof(sig_buf), "Fn :: %s", c->methods[mi].type_str);
+        Type *method_sig = type_parse_fn_arrow(sig_buf);
+        Type *t_iter = method_sig;
+
         for (int pi = 0; pi < typed_lam->lambda.param_count; pi++) {
             if (!typed_lam->lambda.params[pi].type_name) {
-                typed_lam->lambda.params[pi].type_name = strdup(type_name);
+                Type *pt = NULL;
+                if (t_iter && t_iter->kind == TYPE_ARROW) {
+                    pt = t_iter->arrow_param;
+                }
+                bool is_var = !pt || (pt->kind == TYPE_VAR) || (pt->kind == TYPE_UNKNOWN);
+                if (is_var) {
+                    typed_lam->lambda.params[pi].type_name = strdup(type_name);
+                } else {
+                    typed_lam->lambda.params[pi].type_name = strdup(type_to_string(pt));
+                }
+            }
+            if (t_iter && t_iter->kind == TYPE_ARROW) {
+                t_iter = t_iter->arrow_ret;
             }
         }
+        if (!typed_lam->lambda.return_type) {
+            Type *rt = t_iter;
+            bool ret_is_var = !rt || (rt->kind == TYPE_VAR) || (rt->kind == TYPE_UNKNOWN);
+            if (ret_is_var) {
+                typed_lam->lambda.return_type = strdup(type_name);
+            } else {
+                typed_lam->lambda.return_type = strdup(type_to_string(rt));
+            }
+        }
+        if (method_sig) type_free(method_sig);
 
         AST *define_node = ast_new_list();
+
         ast_list_append(define_node, ast_new_symbol("define"));
         ast_list_append(define_node, ast_new_symbol(fn_name));
         ast_list_append(define_node, typed_lam);

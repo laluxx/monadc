@@ -15,10 +15,6 @@
     (array)[(count)++] = (item);                                   \
 } while(0)
 
-/* Replace all exit(1) calls in the reader/parser.
- * If a recovery point is set (we're inside repl_eval_line), longjmp back.
- * Otherwise fall back to real exit so the standalone compiler still works. */
-
 jmp_buf  g_reader_escape;
 bool     g_reader_escape_set = false;
 char     g_reader_error_msg[512];
@@ -3351,19 +3347,19 @@ if (p->current.type == TOK_SYMBOL &&
                     while (p->current.type != TOK_RPAREN &&
                            p->current.type != TOK_EOF    &&
                            p->current.type != TOK_LPAREN) {
-                        /* Stop if we see symbol followed by '::' — next method */
+                        /* Safely peek ahead to see if the NEXT token is '::' */
+                        if (p->current.type == TOK_SYMBOL) {
+                            Lexer peek_lex = *p->lexer;
+                            Token peek_tok = lexer_next_token(&peek_lex);
+                            if (peek_tok.type == TOK_SYMBOL && strcmp(peek_tok.value, "::") == 0) {
+                                free(peek_tok.value);
+                                break;
+                            }
+                            free(peek_tok.value);
+                        }
+
                         Token cur = p->current;
                         p->current = lexer_next_token(p->lexer);
-                        if (p->current.type == TOK_SYMBOL &&
-                            strcmp(p->current.value, "::") == 0) {
-                            /* cur was a method name — don't include it */
-                            /* restore: put cur back as current */
-                            /* We can't push back, so just stop here */
-                            /* The outer loop will pick up cur next iteration */
-                            /* Trick: manually set current to cur and break */
-                            p->current = cur;
-                            break;
-                        }
                         const char *tok_str = cur.value ? cur.value
                                             : (cur.type == TOK_ARROW ? "->" : NULL);
                         if (tok_str) {
@@ -3372,10 +3368,7 @@ if (p->current.type == TOK_SYMBOL &&
                             strncat(type_buf, tok_str,
                                 sizeof(type_buf) - strlen(type_buf) - 1);
                         }
-                        /* Also add '->' tokens */
-                        if (cur.type == TOK_ARROW) {
-                            /* already added "->", continue */
-                        }
+                        if (cur.value) free(cur.value);
                     }
 
                     method_names = realloc(method_names,
@@ -3398,26 +3391,11 @@ if (p->current.type == TOK_SYMBOL &&
             if (p->current.type == TOK_LPAREN) {
                 p->current = lexer_next_token(p->lexer); // consume '('
 
-                char *def_method = NULL;
-                AST *pattern_arg1 = NULL;
-                AST *pattern_arg2 = NULL;
-
-                if (p->current.type == TOK_SYMBOL) {
-                    pattern_arg1 = parse_expr(p);
-                    if (p->current.type == TOK_SYMBOL) {
-                        /* infix: (pat1 method pat2) */
-                        def_method = my_strdup(p->current.value);
-                        p->current = lexer_next_token(p->lexer);
-                        pattern_arg2 = parse_expr(p);
-                    } else {
-                        if (pattern_arg1->type == AST_SYMBOL)
-                            def_method = my_strdup(pattern_arg1->symbol);
-                        while (p->current.type != TOK_RPAREN &&
-                               p->current.type != TOK_EOF) {
-                            ast_free(pattern_arg2);
-                            pattern_arg2 = parse_expr(p);
-                        }
-                    }
+                AST **items = NULL;
+                int num_items = 0;
+                while (p->current.type != TOK_RPAREN && p->current.type != TOK_EOF) {
+                    items = realloc(items, sizeof(AST*) * (num_items + 1));
+                    items[num_items++] = parse_expr(p);
                 }
 
                 if (p->current.type == TOK_RPAREN)
@@ -3429,26 +3407,60 @@ if (p->current.type == TOK_SYMBOL &&
 
                 AST *def_body = parse_expr(p);
 
+                char *def_method = NULL;
+                AST **pat_args = NULL;
+                int pat_count = 0;
+
+                if (num_items > 0) {
+                    bool is_infix = false;
+                    if (num_items == 3 && items[1]->type == AST_SYMBOL) {
+                        for (int mi = 0; mi < method_count; mi++) {
+                            if (strcmp(method_names[mi], items[1]->symbol) == 0) {
+                                is_infix = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (is_infix) {
+                        def_method = my_strdup(items[1]->symbol);
+                        pat_count = 2;
+                        pat_args = malloc(sizeof(AST*) * 2);
+                        pat_args[0] = items[0];
+                        pat_args[1] = items[2];
+                    } else if (items[0]->type == AST_SYMBOL) {
+                        def_method = my_strdup(items[0]->symbol);
+                        pat_count = num_items - 1;
+                        if (pat_count > 0) {
+                            pat_args = malloc(sizeof(AST*) * pat_count);
+                            for (int i = 0; i < pat_count; i++) {
+                                pat_args[i] = items[i + 1];
+                            }
+                        }
+                    }
+                }
+
                 if (def_method) {
-                    ASTParam *dparams = malloc(sizeof(ASTParam) * 2);
-                    dparams[0].name = (pattern_arg1 &&
-                                       pattern_arg1->type == AST_SYMBOL)
-                                    ? my_strdup(pattern_arg1->symbol)
-                                    : my_strdup("__x");
-                    dparams[0].type_name = NULL;
-                    dparams[0].is_rest   = false;
-                    dparams[0].is_anon   = false;
-                    dparams[1].name = (pattern_arg2 &&
-                                       pattern_arg2->type == AST_SYMBOL)
-                                    ? my_strdup(pattern_arg2->symbol)
-                                    : my_strdup("__y");
-                    dparams[1].type_name = NULL;
-                    dparams[1].is_rest   = false;
-                    dparams[1].is_anon   = false;
+                    ASTParam *dparams = NULL;
+                    if (pat_count > 0) {
+                        dparams = malloc(sizeof(ASTParam) * pat_count);
+                        for (int i = 0; i < pat_count; i++) {
+                            if (pat_args[i] && pat_args[i]->type == AST_SYMBOL) {
+                                dparams[i].name = my_strdup(pat_args[i]->symbol);
+                            } else {
+                                char buf[32];
+                                snprintf(buf, sizeof(buf), "__p%d", i);
+                                dparams[i].name = my_strdup(buf);
+                            }
+                            dparams[i].type_name = NULL;
+                            dparams[i].is_rest   = false;
+                            dparams[i].is_anon   = false;
+                        }
+                    }
 
                     AST **dbody_exprs = malloc(sizeof(AST*));
                     dbody_exprs[0]    = def_body;
-                    AST *def_lam = ast_new_lambda(dparams, 2, NULL, NULL, NULL,
+                    AST *def_lam = ast_new_lambda(dparams, pat_count, NULL, NULL, NULL,
                                                   false, def_body,
                                                   dbody_exprs, 1);
                     default_names  = realloc(default_names,
@@ -3461,13 +3473,20 @@ if (p->current.type == TOK_SYMBOL &&
                 } else {
                     ast_free(def_body);
                 }
-                ast_free(pattern_arg1);
-                ast_free(pattern_arg2);
+
+                for (int i = 0; i < num_items; i++) {
+                    ast_free(items[i]);
+                }
+                free(items);
+                free(pat_args);
                 continue;
             }
 
             /* Bare symbol method: = :: a -> a -> Bool (without parens) */
             if (p->current.type == TOK_SYMBOL) {
+                Lexer saved_lex = *p->lexer;
+                Token saved_cur = p->current;
+
                 char *mname = my_strdup(p->current.value);
                 p->current = lexer_next_token(p->lexer);
 
@@ -3479,20 +3498,28 @@ if (p->current.type == TOK_SYMBOL &&
                     while (p->current.type != TOK_RPAREN &&
                            p->current.type != TOK_EOF    &&
                            p->current.type != TOK_LPAREN) {
+                        /* Safely peek ahead to see if the NEXT token is '::' */
+                        if (p->current.type == TOK_SYMBOL) {
+                            Lexer peek_lex = *p->lexer;
+                            Token peek_tok = lexer_next_token(&peek_lex);
+                            if (peek_tok.type == TOK_SYMBOL && strcmp(peek_tok.value, "::") == 0) {
+                                free(peek_tok.value);
+                                break;
+                            }
+                            free(peek_tok.value);
+                        }
+
                         Token cur = p->current;
                         p->current = lexer_next_token(p->lexer);
-                        /* Stop before next method name */
-                        if (p->current.type == TOK_SYMBOL &&
-                            strcmp(p->current.value, "::") == 0) {
-                            p->current = cur;
-                            break;
-                        }
-                        if (cur.value) {
+                        const char *tok_str = cur.value ? cur.value
+                                            : (cur.type == TOK_ARROW ? "->" : NULL);
+                        if (tok_str) {
                             if (type_buf[0]) strncat(type_buf, " ",
                                 sizeof(type_buf) - strlen(type_buf) - 1);
-                            strncat(type_buf, cur.value,
+                            strncat(type_buf, tok_str,
                                 sizeof(type_buf) - strlen(type_buf) - 1);
                         }
+                        if (cur.value) free(cur.value);
                     }
                     method_names = realloc(method_names,
                                            sizeof(char*) * (method_count + 1));
@@ -3501,10 +3528,12 @@ if (p->current.type == TOK_SYMBOL &&
                     method_names[method_count] = mname;
                     method_types[method_count] = my_strdup(type_buf);
                     method_count++;
+                    continue;
                 } else {
                     free(mname);
+                    *p->lexer = saved_lex;
+                    p->current = saved_cur;
                 }
-                continue;
             }
 
             /* Skip anything unexpected */

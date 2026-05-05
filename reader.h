@@ -13,6 +13,9 @@ typedef struct AST AST;
 extern const char *current_filename;
 extern const char *current_source;
 
+/* Replace all exit(1) calls in the reader/parser.
+ * If a recovery point is set (we're inside repl_eval_line), longjmp back.
+ * Otherwise fall back to real exit so the standalone compiler still works. */
 #define READER_ERROR(line, col, fmt, ...) \
     do { \
         snprintf(g_reader_error_msg, sizeof(g_reader_error_msg), \
@@ -26,7 +29,6 @@ extern const char *current_source;
         } \
         exit(1); \
     } while(0)
-
 
 
 /// AST

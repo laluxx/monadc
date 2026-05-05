@@ -43,48 +43,134 @@
 - first class modules
 
 
-* DONE Macro System
-  CLOSED: [2026-04-02 Thu 20:56]
+* TODO Destructuring in def and define
 
-  Macros are functions with return type ~-> Syntax~. No special form needed.
-  The compiler recognizes ~-> Syntax~ and expands call sites before codegen.
+Pattern matching works in pmatch and macro arguments. Bring it to regular bindings.
 
-  If no ~#(~ appears in the body, the entire body is the template and pattern
-  variables are substituted literally. If ~#(~ appears, only ~#(...)~ is the
-  output and the rest runs at expand time.
-
-  Variadic macros use ~.~ on both sides, capture in the pattern, splice in
-  the template. Macros are hygienic: names introduced inside a macro body
-  get fresh unique names at each expansion site so they never clash with
-  the module variables.
-
-#+begin_src scheme
-(define (when condition . body -> Syntax)
-  (if condition (begin . body) (begin)))
-
-(define (my-and . args -> Syntax)
-  []         -> True
-  [x]        -> x
-  [x . rest] -> (if x (my-and . rest) False))
-
-(define (swap! a b -> Syntax)
-  (let [tmp a]
-    (set! a b)
-    (set! b tmp)))
-
-(define (assert condition message -> Syntax)
-  (if debug-mode
-    #(when (not condition) (error message))
-    #(begin)))
+#+begin_src monad
+def [x|xs] (list 1 2 3)    ; x=1, xs=[2 3]
+def {name age} (get-user)  ; assumes map with keys :name and :age
 #+end_src
 
-  Expansion runs after ~parse_all~ and before type checking and LLVM codegen,
-  repeated to a fixpoint. Macros are first class values like any function.
+
+* TODO Dependent types
+
+From: ∀a. a -> a
+To:   Π [A : Type] -> [x : A] -> A
+
+Full dependent types means the type checker becomes a partial evaluator.
+The infer_unify_one function — that simple structural comparison — dies today.
+It is not being extended. The entire paradigm is being replaced.
+
+** What full dependent types actually mean for the code
+
+The current system:
+  - Types are trees. Unification compares trees.
+  - Type equality is decidable and fast.
+  - Type checking is separate from evaluation.
+
+Dependent types:
+  - Types are terms. The same AST nodes used for programs are used for types.
+  - Type equality requires evaluating both sides to normal form and comparing.
+  - Type checking is evaluation. The boundary disappears.
+
+A proof assistant disguised as a programming language is being built.
+
+** What needs to be rewritten or replaced
+
+*** 1. The unification algorithm (delete it)
+
+The subst_find and subst_union mechanisms can be kept for term variables.
+But type equality is no longer syntactic — it becomes definitional equality
+based on reduction.
+
+A definitional equality function is needed that:
+  - β-reduces both terms
+  - Compares normal forms modulo α-equivalence
+  - Handles Π-types (dependent functions)
+  - Handles Σ-types (dependent pairs)
+
+This is algorithmic and decidable for total languages, but significantly
+slower than the original unification.
+
+Related concepts: weak head normal form (WHNF), conversion checking,
+intensional type theory, η-expansion.
+
+*** 2. The representation of type variables
+
+Currently TYPE_VAR with an integer ID.
+
+For dependent types, three distinct concepts are needed:
+
+Bound variables — variables introduced by Π or λ. De Bruijn indices make
+α-equivalence trivial and are recommended.
+
+Free variables — global names that refer to definitions in the environment.
+
+Unification variables — holes that are filled during inference. The existing
+union-find structure can be kept for these.
+
+A second binding mechanism for Π-bound variables must be built alongside
+the union-find.
+
+Related concepts: locally nameless representation, De Bruijn levels,
+parametric higher-order abstract syntax (PHOAS).
+
+*** 3. The generalisation function
+
+ML-style let-polymorphism (∀a. a -> a) quantifies only over types.
+Dependent types quantify over terms.
+
+Instead of a type variable, a Π-binding can bind a term variable of any type,
+including Type itself. The TypeScheme structure must store term variables
+with their kinds, not just type variable IDs.
+
+Related concepts: dependent function type, Π-type (pi type), function
+extensionality, implicit arguments, bidirectional typing.
+
+*** 4. The environment
+
+InferEnv currently maps names to TypeScheme. For dependent types, the
+environment becomes a context that tracks:
+
+  - Term variables with their types (x : T)
+  - Type variables with their kinds (X : Type)
+  - Quantities (for QTT) describing usage
+
+The hash table approach works for global definitions. For local binders
+(Π, λ, let) a linked list of binders with De Bruijn indices is required.
+
+Related concepts: typing context, telescope (a sequence of Π-bindings),
+kind hierarchy (Type₀ : Type₁ : Type₂), universe polymorphism.
+
+* TODO QTT (Quantitative Type Theory)
+
+QTT adds usage quantities to each binder. Quantities are typically 0, 1, and ω.
+
+0 means the variable is never used. The bound term can be erased completely
+before code generation. This provides guaranteed dead code elimination.
+
+1 means the variable is used exactly once. No memoization is beneficial
+because the result is consumed immediately. No reference counting is needed
+because there is only one reference. Values bound with quantity 1 can be
+moved rather than copied.
+
+ω means the variable is used many times (zero or more). Memoization may be
+beneficial depending on the cost of recomputation versus cache access.
+Reference counting is required for heap-allocated mutable data with ω usage.
+
+The quantity is attached to the binder, not the type. A function parameter
+can be annotated with a quantity, and the language guarantees that the
+function obeys that usage.
+
+Related concepts: linear types (exactly once), affine types (at most once),
+relevant types (at least once), unrestricted types (any number), resource
+semantics, erasure analysis, uniqueness typing.
 
 
 
 
-* TODO Dependent Refinement Types with existential quantifiers
+* TODO LATER Dependent Refinement Types with existential quantifiers
 
 #+begin_src monad
 type Even { x ∈ ℤ | ∃k ∈ ℤ, x = 2k }

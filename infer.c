@@ -261,6 +261,8 @@ bool infer_unify_one(InferCtx *ctx, Type *a, Type *b, int line, int col) {
 
     if (!a || !b) return true;  /* NULL ~ anything: allow for now */
 
+    if (a->kind == TYPE_UNKNOWN || b->kind == TYPE_UNKNOWN) return true;
+
     /* Both free variables — merge their roots */
     if (a->kind == TYPE_VAR && b->kind == TYPE_VAR) {
         subst_union(s, a->var_id, b->var_id);

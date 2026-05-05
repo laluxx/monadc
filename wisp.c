@@ -205,6 +205,104 @@ static void arity_prescan(ArityTable *t, const char *source) {
             continue;
         }
 
+        /* Bare 'class' symbol: class Name a where ... */
+        if (tok.type == TOK_SYMBOL && strcmp(tok.value, "class") == 0) {
+            free(tok.value);
+            tok = lexer_next_token(&lex); // ClassName
+            free(tok.value);
+            tok = lexer_next_token(&lex); // type_var
+            free(tok.value);
+            Lexer saved = lex;
+            tok = lexer_next_token(&lex); // where
+            if (tok.type == TOK_SYMBOL && strcmp(tok.value, "where") == 0) {
+                free(tok.value);
+            } else {
+                lex = saved;
+                free(tok.value);
+            }
+
+            while (true) {
+                saved = lex;
+                tok = lexer_next_token(&lex);
+                if (tok.type == TOK_EOF) {
+                    lex = saved; free(tok.value); break;
+                }
+                if (tok.type == TOK_SYMBOL &&
+                    (strcmp(tok.value, "define") == 0 || strcmp(tok.value, "class") == 0 ||
+                     strcmp(tok.value, "instance") == 0 || strcmp(tok.value, "data") == 0 ||
+                     strcmp(tok.value, "layout") == 0 || strcmp(tok.value, "type") == 0)) {
+                    lex = saved; free(tok.value); break;
+                }
+
+                char *mname = NULL;
+                if (tok.type == TOK_LPAREN) {
+                    Lexer peek = lex;
+                    Token t1 = lexer_next_token(&peek); // =
+                    Token t2 = lexer_next_token(&peek); // )
+                    Token t3 = lexer_next_token(&peek); // ::
+                    if (t1.type == TOK_SYMBOL && t2.type == TOK_RPAREN &&
+                        t3.type == TOK_SYMBOL && strcmp(t3.value, "::") == 0) {
+                        mname = strdup(t1.value);
+                        lex = peek; // fast forward lexer
+                    }
+                    free(t1.value); free(t2.value); free(t3.value);
+                    if (!mname) {
+                        lex = saved; free(tok.value); break; // Default impl, break out
+                    }
+                } else if (tok.type == TOK_SYMBOL) {
+                    mname = strdup(tok.value);
+                    Lexer peek = lex;
+                    Token t1 = lexer_next_token(&peek); // ::
+                    if (t1.type == TOK_SYMBOL && strcmp(t1.value, "::") == 0) {
+                        lex = peek;
+                    } else {
+                        free(mname);
+                        mname = NULL;
+                    }
+                    free(t1.value);
+                }
+
+                free(tok.value);
+
+                if (mname) {
+                    int arity = 0;
+                    while (true) {
+                        Lexer next_saved = lex;
+                        tok = lexer_next_token(&lex);
+                        if (tok.type == TOK_EOF || tok.type == TOK_LPAREN) {
+                            lex = next_saved; free(tok.value); break;
+                        }
+                        if (tok.type == TOK_SYMBOL &&
+                            (strcmp(tok.value, "define") == 0 || strcmp(tok.value, "class") == 0 ||
+                             strcmp(tok.value, "instance") == 0 || strcmp(tok.value, "data") == 0 ||
+                             strcmp(tok.value, "layout") == 0 || strcmp(tok.value, "type") == 0)) {
+                            lex = next_saved; free(tok.value); break;
+                        }
+                        if (tok.type == TOK_ARROW ||
+                            (tok.type == TOK_SYMBOL && strcmp(tok.value, "->") == 0)) {
+                            arity++;
+                            free(tok.value);
+                            continue;
+                        }
+                        if (tok.type == TOK_SYMBOL) {
+                            Lexer peek = lex;
+                            Token ptok = lexer_next_token(&peek);
+                            if (ptok.type == TOK_SYMBOL && strcmp(ptok.value, "::") == 0) {
+                                free(ptok.value); free(tok.value);
+                                lex = next_saved;
+                                break;
+                            }
+                            free(ptok.value);
+                        }
+                        free(tok.value);
+                    }
+                    arity_set(t, mname, arity);
+                    free(mname);
+                }
+            }
+            continue;
+        }
+
         /* Bare wisp-style: define name :: T -> ... -> Ret */
         /* fprintf(stderr, "DEBUG prescan tok: type=%d val='%s'\n", tok.type, tok.value ? tok.value : "NULL"); */
         if (tok.type == TOK_SYMBOL && strcmp(tok.value, "define") == 0) {
