@@ -1,43 +1,59 @@
-;;; Type Classes
+;; ;;; Type Classes
 
-;; TODO constraint propagation
-;; TODO deriving Eq should work on _non nullary_ data types too
+;; ;; TODO constraint propagation
+;; ;; TODO deriving Eq should work on _non nullary_ data types too
 
-class Eq a where
-  (=)  :: a -> a -> Bool
-  (!=) :: a -> a -> Bool
-  (x != y) => not x = y   ; Default implementation(s)
-
-
-class Enum a where
-  succ     :: a -> a
-  pred     :: a -> a
-  toEnum   :: Int -> a
-  fromEnum :: a -> Int
-  (succ x) => toEnum ((fromEnum x) + 1)
-  (pred x) => toEnum ((fromEnum x) - 1)
+;; class Eq a where
+;;   (=)  :: a -> a -> Bool
+;;   (!=) :: a -> a -> Bool
+;;   (x != y) => not x = y   ; Default implementation(s)
 
 
-data TrafficLight Red | Yellow | Green
-  deriving [Eq Enum]
+;; class Enum a where
+;;   succ     :: a -> a
+;;   pred     :: a -> a
+;;   toEnum   :: Int -> a
+;;   fromEnum :: a -> Int
+;;   (succ x) => toEnum ((fromEnum x) + 1)
+;;   (pred x) => toEnum ((fromEnum x) - 1)
 
-show Red = Red
-show Red = Green
-show Red != Green
-show Red != Red
 
-show fromEnum Red
-show fromEnum Yellow
-show fromEnum Green
-show succ Red
-show succ Yellow
-show pred Green
-show pred Yellow
+;; data TrafficLight Red | Yellow | Green
+;;   deriving [Eq Enum]
 
-show "testing show"
-show Red
-show Yellow
-show Green
+;; show Red = Red
+;; show Red = Green
+;; show Red != Green
+;; show Red != Red
+
+;; show fromEnum Red
+;; show fromEnum Yellow
+;; show fromEnum Green
+;; show succ Red
+;; show succ Yellow
+;; show pred Green
+;; show pred Yellow
+
+;; show "testing show"
+;; show Red
+;; show Yellow
+;; show Green
+
+
+;; define main -> Int
+;;   def x 30
+;;   show x ; Doesn't work?
+
+;; define x 30
+;; show x
+
+
+;; TODO
+define char-upcase ∈ Char -> Char
+  c | c >= 'a' and c <= 'z' -> c - case-delta
+    | otherwise             -> c
+
+
 
 ;; (instance Eq TrafficLight where
 ;;     (Red    `=` Red)    => True

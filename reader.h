@@ -450,6 +450,7 @@ extern int g_srcmap_line_bias;
 extern int g_srcmap_col_bias;
 extern int g_srcmap_abs_line;    // when >0, overrides lex->line directly
 extern int g_quote_depth;        // >0 means we are inside a quoted form
+extern int g_scope_depth;        // >0 means we are inside a function body
 
 // Param-kind lookup hook — set by wisp before parsing so the reader
 // can decide whether a symbol in non-head position is infix or an argument.

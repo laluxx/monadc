@@ -43,6 +43,12 @@
 - first class modules
 
 
+* TODO Implement distinct semantics for :: vs ∈
+  - [ ] Add parsing and compiler support for `val :: Type` syntax (e.g., `3 :: Int`).
+  - [ ] Define `::` as a static, compile-time type judgment (structural contract). Must be used for functions.
+  - [ ] Define `∈` as a dynamic, runtime value predicate (set membership). Under the hood, `x ∈ Type` evaluates `Type?(x)`.
+
+
 * TODO Destructuring in def and define
 
 Pattern matching works in pmatch and macro arguments. Bring it to regular bindings.

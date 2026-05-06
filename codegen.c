@@ -3858,7 +3858,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
       //// define
 
-            if (strcmp(head->symbol, "define") == 0) {
+            if (strcmp(head->symbol, "define") == 0 ||
+                strcmp(head->symbol, "def") == 0) {
                 if (ast->list.count < 3) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'define' requires at least 2 arguments",
                             parser_get_filename(), ast->line, ast->column);
@@ -12261,6 +12262,7 @@ void register_builtins(CodegenContext *ctx) {
 
     // Special forms (even though handled specially, should be in environment)
     env_insert_builtin(ctx->env, "define",     2,  0, "Define a variable or function", NULL);
+    env_insert_builtin(ctx->env, "def",        2,  0, "Define a local variable or function (inside functions only)", NULL);
     env_insert_builtin(ctx->env, "include",   -1, -1, "Include a C header via FFI", NULL);
     env_insert_builtin(ctx->env, "import",     1,  0, "Import a module", NULL);
     env_insert_builtin(ctx->env, "module",     1, -1, "Declare a module", NULL);

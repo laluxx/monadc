@@ -305,7 +305,8 @@ static void arity_prescan(ArityTable *t, const char *source) {
 
         /* Bare wisp-style: define name :: T -> ... -> Ret */
         /* fprintf(stderr, "DEBUG prescan tok: type=%d val='%s'\n", tok.type, tok.value ? tok.value : "NULL"); */
-        if (tok.type == TOK_SYMBOL && strcmp(tok.value, "define") == 0) {
+        if (tok.type == TOK_SYMBOL &&
+            (strcmp(tok.value, "define") == 0 || strcmp(tok.value, "def") == 0)) {
             free(tok.value);
             tok = lexer_next_token(&lex);
             if (tok.type == TOK_SYMBOL) {
@@ -442,9 +443,11 @@ static void arity_prescan(ArityTable *t, const char *source) {
             continue;
         }
 
-        if (tok.type != TOK_SYMBOL || strcmp(tok.value, "define") != 0) {
+        if (tok.type != TOK_SYMBOL ||
+            (strcmp(tok.value, "define") != 0 && strcmp(tok.value, "def") != 0)) {
             free(tok.value); continue;
         }
+        /* keep def as def — reader.c handles the scope enforcement */
         free(tok.value);
         tok = lexer_next_token(&lex);
         if (tok.type == TOK_LPAREN) {
@@ -1657,9 +1660,11 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
          * Also handles: "define name [p :: T] [p :: T] -> Ret" bracketed params. */
         {
             const char *sig = t;
-            if (strncmp(sig, "define", 6) == 0 &&
-                (sig[6] == ' ' || sig[6] == '\t')) {
-                const char *after_define = sig + 6;
+            int _def_len = (strncmp(sig, "define", 6) == 0 && (sig[6] == ' ' || sig[6] == '\t')) ? 6 :
+                           (strncmp(sig, "def", 3) == 0 && (sig[3] == ' ' || sig[3] == '\t')) ? 3 : 0;
+            if (_def_len > 0) {
+                const char *after_define = sig + _def_len;
+
                 while (*after_define == ' ' || *after_define == '\t') after_define++;
                 const char *name_end = after_define;
                 if (*name_end == '[') {

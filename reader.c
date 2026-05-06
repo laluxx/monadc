@@ -23,6 +23,7 @@ int g_quote_depth       = 0;
 int g_srcmap_line_bias  = 0;
 int g_srcmap_col_bias   = 0;
 int g_srcmap_abs_line   = 0;
+int g_scope_depth       = 0;
 
 int (*g_param_kind_is_func)(const char *func_name, int arg_index) = NULL;
 int (*g_is_known_function)(const char *name) = NULL;
@@ -2193,6 +2194,7 @@ static AST *parse_lambda(Parser *p) {
         }
     }
 
+    g_scope_depth++;
     if (lambda_has_pmatch && count > 0) {
         /* Parse clauses using the same param count as the lambda */
         AST *pm = parse_pmatch_clauses(p, count);
@@ -2216,6 +2218,7 @@ static AST *parse_lambda(Parser *p) {
         if (p->current.type == TOK_RPAREN)
             p->current = lexer_next_token(p->lexer);
     }
+    g_scope_depth--;
 
     if (body_count == 0) {
         compiler_error(p->current.line, p->current.column,
@@ -2708,7 +2711,7 @@ static AST *parse_list(Parser *p) {
         return result;
     }
 
-if (p->current.type == TOK_SYMBOL &&
+    if (p->current.type == TOK_SYMBOL &&
         (strcmp(p->current.value, "let") == 0 ||
          strcmp(p->current.value, "let*") == 0)) {
         bool is_sequential = (strcmp(p->current.value, "let*") == 0);
@@ -2811,9 +2814,26 @@ if (p->current.type == TOK_SYMBOL &&
         return inner_body[0];
     }
 
+    // Detect (def ...) inside functions — local binding
+    bool _came_from_def = false;
+    if (p->current.type == TOK_SYMBOL &&
+        strcmp(p->current.value, "def") == 0) {
+        if (g_scope_depth == 0) {
+            compiler_error(p->current.line, p->current.column,
+                "can't use 'def' for top-level definitions, use 'define' instead");
+        }
+        _came_from_def = true;
+        p->current.value = realloc(p->current.value, 8);
+        strcpy(p->current.value, "define");
+    }
+
     // Detect (define (fname params...) body) - short-form function definition
     if (p->current.type == TOK_SYMBOL &&
         strcmp(p->current.value, "define") == 0) {
+        if (g_scope_depth > 0 && !_came_from_def) {
+            compiler_error(p->current.line, p->current.column,
+                "can't use 'define' inside a function body, use 'def' instead");
+        }
 
         // Peek ahead to see if it's (define (fname ...) or (define name ...)
         Token define_token = p->current;
@@ -2849,6 +2869,7 @@ if (p->current.type == TOK_SYMBOL &&
             AST **body_exprs = NULL;
             int   body_count = 0;
             int   body_cap   = 0;
+            g_scope_depth++;
 
             // Pattern matching sugar: body does not start with (
             if (ret_type != NULL &&
@@ -2914,6 +2935,7 @@ if (p->current.type == TOK_SYMBOL &&
                 }
                 DA_PUSH(body_exprs, body_count, body_cap, e);
             }
+            g_scope_depth--;
             if (body_count == 0) {
                 compiler_error(p->current.line, p->current.column,
                                "function body cannot be empty");
