@@ -1227,6 +1227,15 @@ Token lexer_next_token(Lexer *lex) {
         return tok;
     }
 
+    // Bare single colon — used as type separator in parameter brackets [x : Int]
+    if (c == ':' && peek_ahead(lex, 1) != ':' &&
+        (peek_ahead(lex, 1) == ' ' || peek_ahead(lex, 1) == '\t')) {
+        advance(lex);
+        tok.type  = TOK_COLON;
+        tok.value = my_strdup(":");
+        return tok;
+    }
+
     if (c == '(') { advance(lex); tok.type = TOK_LPAREN;   return tok; }
     if (c == ')') { advance(lex); tok.type = TOK_RPAREN;   return tok; }
     if (c == '[') { advance(lex); tok.type = TOK_LBRACKET; return tok; }
@@ -1550,8 +1559,15 @@ static ASTParam parse_one_param(Parser *p) {
         param.name = my_strdup(p->current.value);
         p->current = lexer_next_token(p->lexer);
 
-        bool is_colon = (p->current.type == TOK_SYMBOL &&
-                         strcmp(p->current.value, "::") == 0);
+        if (p->current.type == TOK_SYMBOL &&
+            strcmp(p->current.value, "::") == 0) {
+            compiler_error(p->current.line, p->current.column,
+                "use ‘:’ instead of ‘::’ to annotate parameter types, "
+                "write [%s : Type] not [%s :: Type]",
+                param.name, param.name);
+        }
+
+        bool is_colon = (p->current.type == TOK_COLON);
         bool is_arrow = (p->current.type == TOK_ARROW);
 
         if (is_colon || is_arrow) {

@@ -362,6 +362,7 @@ typedef enum {
     TOK_RBRACE,         // }
     TOK_HASH_LBRACE,    // #{
     TOK_PIPE,           // |
+    TOK_COLON,          // :  (bare single colon, parameter type separator)
     TOK_LINE_DIRECTIVE, // #line N COL (internal, emitted by wisp, never reaches parser)
 } TokenType;
 

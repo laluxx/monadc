@@ -43,10 +43,21 @@
 - first class modules
 
 
+
 * TODO Implement distinct semantics for :: vs ∈
   - [ ] Add parsing and compiler support for `val :: Type` syntax (e.g., `3 :: Int`).
   - [ ] Define `::` as a static, compile-time type judgment (structural contract). Must be used for functions.
   - [ ] Define `∈` as a dynamic, runtime value predicate (set membership). Under the hood, `x ∈ Type` evaluates `Type?(x)`.
+
+
+* TODO [RESEARCH] Explore Probabilistic / Fuzzy Refinement Types
+  - [ ] Investigate creating a `Confidence` or `FuzzyBool` type (wrapping a float 0.0 - 1.0) for probabilistic states.
+  - [ ] Design a `Predicate` type class to generalize `∈`. 
+    - Standard types (e.g., `Int`) implement it by returning a strict `Bool`.
+    - Fuzzy types (e.g., `Hot`) implement it by returning a `Confidence` gradient.
+  - [ ] Define control-flow syntax for collapsing probabilities into booleans (e.g., forcing users to write `if ((temp ∈ Hot) > 0.8)`).
+  - [ ] CRITICAL: Ensure the static type checker (`::`) remains 100% deterministic. Confine all Bayesian math and sigmoid evaluations strictly to the runtime evaluator (`∈`).
+
 
 
 * TODO Destructuring in def and define

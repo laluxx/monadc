@@ -47,11 +47,15 @@
 ;; define x 30
 ;; show x
 
+define double :: [x :: Int] -> Int
+  x * 2
+
+show double 3
 
 ;; TODO
-define char-upcase ∈ Char -> Char
-  c | c >= 'a' and c <= 'z' -> c - case-delta
-    | otherwise             -> c
+;; define char-upcase ∈ Char -> Char
+;;   c | c >= 'a' and c <= 'z' -> c - case-delta
+;;     | otherwise             -> c
 
 
 

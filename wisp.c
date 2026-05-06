@@ -355,6 +355,27 @@ static void arity_prescan(ArityTable *t, const char *source) {
                             arity++;
                             continue;
                         }
+                        /* bracketed param [x : T] or [x :: T] — extract param name */
+                        if (tok.type == TOK_LBRACKET) {
+                            free(tok.value);
+                            tok = lexer_next_token(&lex);
+                            if (tok.type == TOK_SYMBOL && tok.value &&
+                                tok.value[0] >= 'a' && tok.value[0] <= 'z') {
+                                fprintf(stderr, "DEBUG prescan: registered param '%s' arity=0\n", tok.value);
+                                arity_set(t, tok.value, 0);
+                            }
+                            free(tok.value);
+                            int _bd = 1;
+                            while (_bd > 0) {
+                                tok = lexer_next_token(&lex);
+                                if (tok.type == TOK_EOF) { _bd = 0; free(tok.value); break; }
+                                if (tok.type == TOK_LBRACKET) _bd++;
+                                if (tok.type == TOK_RBRACKET) _bd--;
+                                free(tok.value);
+                            }
+                            arity++;
+                            continue;
+                        }
                         if (tok.type == TOK_SYMBOL && strcmp(tok.value, "::") != 0)
                             arity++;
                         free(tok.value);
@@ -467,12 +488,21 @@ static void arity_prescan(ArityTable *t, const char *source) {
                              * [name :: Fn :: ...] or [name :: (a -> b)] */
                             free(tok.value);
                             bool is_fn = false;
+                            char param_var_name[128] = {0};
                             int depth = 1;
+                            bool first_tok_in_bracket = true;
                             while (depth > 0) {
                                 tok = lexer_next_token(&lex);
                                 if (tok.type == TOK_EOF) { depth = 0; free(tok.value); break; }
                                 if (tok.type == TOK_LBRACKET) depth++;
                                 if (tok.type == TOK_RBRACKET) depth--;
+                                /* First symbol in bracket is the param name — register it */
+                                if (depth > 0 && first_tok_in_bracket &&
+                                    tok.type == TOK_SYMBOL && tok.value &&
+                                    tok.value[0] >= 'a' && tok.value[0] <= 'z') {
+                                    strncpy(param_var_name, tok.value, sizeof(param_var_name) - 1);
+                                }
+                                first_tok_in_bracket = false;
                                 /* Fn keyword or arrow type inside bracket = function param */
                                 if (depth > 0 && tok.type == TOK_SYMBOL && tok.value &&
                                     (strcmp(tok.value, "Fn") == 0 ||
@@ -482,9 +512,16 @@ static void arity_prescan(ArityTable *t, const char *source) {
                                     is_fn = true;
                                 free(tok.value);
                             }
+                            /* Register the param variable name as arity 0 (a value atom)
+                             * so wisp's infix promotion treats it as lhs, not a callable */
+                            if (param_var_name[0]) {
+                                arity_set(t, param_var_name, 0);
+                                fprintf(stderr, "DEBUG prescan: registered param '%s' arity=0\n", param_var_name);
+                            }
                             if (arity < WISP_MAX_PARAMS)
                                 kinds[arity] = is_fn ? PARAM_FUNC : PARAM_VALUE;
                             arity++; continue;
+
                         }
                         if (tok.type == TOK_ARROW) { free(tok.value); continue; }
                         if (tok.type == TOK_SYMBOL) {
@@ -690,7 +727,9 @@ static bool try_consume_type_annotation(WTokenStream *s, const char **p_ptr, con
     const char *peek = *p_ptr;
     while (*peek == ' ' || *peek == '\t') peek++;
 
-    if (strncmp(peek, "::", 2) != 0 || (peek[2] != ' ' && peek[2] != '\t' && peek[2] != '\0')) {
+    bool _double_colon = (strncmp(peek, "::", 2) == 0 && (peek[2] == ' ' || peek[2] == '\t' || peek[2] == '\0'));
+    bool _single_colon = (!_double_colon && peek[0] == ':' && (peek[1] == ' ' || peek[1] == '\t' || peek[1] == '\0'));
+    if (!_double_colon && !_single_colon) {
         return false;
     }
 
@@ -699,8 +738,10 @@ static bool try_consume_type_annotation(WTokenStream *s, const char **p_ptr, con
     sb_puts(&ann, tok);
 
     const char *q = peek;
-    while (strncmp(q, "::", 2) == 0 && (q[2] == ' ' || q[2] == '\t' || q[2] == '\0')) {
-        q += 2;
+    while ((strncmp(q, "::", 2) == 0 && (q[2] == ' ' || q[2] == '\t' || q[2] == '\0')) ||
+           (q[0] == ':' && q[1] != ':' && (q[1] == ' ' || q[1] == '\t' || q[1] == '\0'))) {
+        int _skip = (q[0] == ':' && q[1] != ':') ? 1 : 2;
+        q += _skip;
         while (*q == ' ' || *q == '\t') q++;
 
         const char *seg_start = q;
@@ -714,7 +755,7 @@ static bool try_consume_type_annotation(WTokenStream *s, const char **p_ptr, con
         if (seg_end == seg_start) break;
 
         char *seg = strndup(seg_start, seg_end - seg_start);
-        sb_puts(&ann, " :: ");
+        sb_puts(&ann, " : ");
         sb_puts(&ann, seg);
         free(seg);
         q = seg_end;
@@ -723,7 +764,7 @@ static bool try_consume_type_annotation(WTokenStream *s, const char **p_ptr, con
 
         /* consume -> chains */
         while (*q == '-' && *(q+1) == '>' && (q[2] == ' ' || q[2] == '\t' || q[2] == '\0')) {
-            sb_puts(&ann, " :: ->");
+            sb_puts(&ann, " : ->");
             q += 2;
             while (*q == ' ' || *q == '\t') q++;
 
@@ -999,11 +1040,13 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                                 WToken *cand_lhs = &body_ts.tokens[body_ts.pos];
                                 WToken *cand_op  = &body_ts.tokens[body_ts.pos + 1];
                                 bool lhs_is_atom = (cand_lhs->text[0] != '(' && cand_lhs->text[0] != '[' && cand_lhs->text[0] != '{');
+                                int  lhs_arity   = arity_get(at, cand_lhs->text);
+                                bool lhs_is_callable = (lhs_arity != -2 && lhs_arity != 0);
                                 int  op_arity    = arity_get(at, cand_op->text);
                                 bool op_known    = (op_arity != -2);
                                 bool op_is_atom  = (cand_op->text[0] != '(' && cand_op->text[0] != '[' && cand_op->text[0] != '{');
 
-                                if (lhs_is_atom && op_is_atom && op_known && (op_arity >= 2 || op_arity == -1)) {
+                                if (lhs_is_atom && !lhs_is_callable && op_is_atom && op_known && (op_arity >= 2 || op_arity == -1)) {
                                     char *accum = strdup(cand_lhs->text);
                                     body_ts.pos++; /* consume lhs */
                                     while (body_ts.pos < body_ts.count) {
@@ -1851,18 +1894,66 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
     }
 
     int arity = arity_get(t, text);
+    fprintf(stderr, "DEBUG wisp_parse_expr: text='%s' arity=%d pos=%d\n", text, arity, s->pos);
     s->pos++;
-
-    /* Atom with no args */
-    if (arity == 0) {
-        sb_putc(out, '(');
-        sb_puts(out, text);
-        sb_putc(out, ')');
-        return;
-    }
 
     if (arity == -2) {
         /* Unknown arity — emit as bare atom */
+        sb_puts(out, text);
+        return;
+    }
+
+    /* Arity 0 — known value atom (named param or zero-arg binding).
+     * Check if next token is an infix operator and promote if so. */
+    if (arity == 0) {
+        if (s->pos < s->count) {
+            WToken *next_tok = &s->tokens[s->pos];
+            bool next_is_atom = (next_tok->text[0] != '(' &&
+                                 next_tok->text[0] != '[' &&
+                                 next_tok->text[0] != '{');
+            int next_arity = arity_get(t, next_tok->text);
+            if (next_is_atom && (next_arity >= 2 || next_arity == -1)) {
+                char *accum = strdup(text);
+                int lhs_lineno = s->tokens[s->pos > 0 ? s->pos - 1 : 0].lineno;
+                    while (s->pos < s->count) {
+                        WToken *op_tok = &s->tokens[s->pos];
+                        if (op_tok->lineno != lhs_lineno) break;
+                        bool op_is_atom = (op_tok->text[0] != '(' &&
+                                           op_tok->text[0] != '[' &&
+                                           op_tok->text[0] != '{');
+                        int op_ar = arity_get(t, op_tok->text);
+                        if (!op_is_atom || (op_ar < 2 && op_ar != -1)) break;
+                        char *op_name = strdup(op_tok->text);
+                        s->pos++;
+                        SB next_acc; sb_init(&next_acc);
+                        sb_putc(&next_acc, '(');
+                        sb_puts(&next_acc, op_name);
+                        sb_putc(&next_acc, ' ');
+                        sb_puts(&next_acc, accum);
+                        free(op_name); free(accum);
+                        int rhs_slots = (op_ar > 0) ? (op_ar - 1) : -1;
+                        if (rhs_slots == -1) {
+                            while (s->pos < s->count &&
+                                   s->tokens[s->pos].lineno == lhs_lineno) {
+                                sb_putc(&next_acc, ' ');
+                                wisp_parse_expr(t, s, &next_acc, parent_indent, 1);
+                            }
+                        } else {
+                            for (int r = 0; r < rhs_slots && s->pos < s->count; r++) {
+                                if (s->tokens[s->pos].lineno != lhs_lineno) break;
+                                sb_putc(&next_acc, ' ');
+                                wisp_parse_expr(t, s, &next_acc, parent_indent, 1);
+                            }
+                        }
+                        sb_putc(&next_acc, ')');
+                        accum = sb_take(&next_acc);
+                    }
+                    sb_puts(out, accum);
+                    free(accum);
+                    return;
+                }
+            }
+        /* No infix — emit as bare atom (it's a value, not a zero-arg call) */
         sb_puts(out, text);
         return;
     }
