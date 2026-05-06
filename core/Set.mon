@@ -28,6 +28,10 @@
    disjoint?])
 
 
+
+define empty-set {}
+  :alias ∅
+
 ;;; Construction
 
 (define (singleton [x] -> Set)

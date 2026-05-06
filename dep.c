@@ -1,0 +1,2807 @@
+#include "dep.h"
+#include "reader.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdarg.h>
+#include <assert.h>
+
+/// Trace Utilities
+
+static int g_dep_trace_depth = 0;
+static bool g_dep_trace_enabled = true; // Set to false to disable tracing
+
+static void dep_trace_indent(void) {
+    if (!g_dep_trace_enabled) return;
+    for (int i = 0; i < g_dep_trace_depth; i++) fprintf(stderr, "│   ");
+}
+
+/// Universe levels
+
+static Level *level_alloc(LevelKind kind) {
+    Level *l = calloc(1, sizeof(Level));
+    l->kind  = kind;
+    return l;
+}
+
+Level *level_const(int n) {
+    Level *l = level_alloc(LEVEL_CONST);
+    l->value = n;
+    return l;
+}
+
+Level *level_var(int id) {
+    Level *l  = level_alloc(LEVEL_VAR);
+    l->var_id = id;
+    return l;
+}
+
+Level *level_max(Level *u, Level *v) {
+    // Eagerly reduce: max(const a, const b) = const(max a b)
+    if (u->kind == LEVEL_CONST && v->kind == LEVEL_CONST) {
+        int m = u->value > v->value ? u->value : v->value;
+        level_free(u); level_free(v);
+        return level_const(m);
+    }
+    Level *l  = level_alloc(LEVEL_MAX);
+    l->left   = u;
+    l->right  = v;
+    return l;
+}
+
+Level *level_succ(Level *u) {
+    // Eagerly reduce: succ(const n) = const(n+1)
+    if (u->kind == LEVEL_CONST) {
+        int n = u->value + 1;
+        if (n > DEP_LEVEL_MAX) {
+            fprintf(stderr, "dep: universe level overflow (max %d)\n", DEP_LEVEL_MAX);
+            n = DEP_LEVEL_MAX;
+        }
+        level_free(u);
+        return level_const(n);
+    }
+    Level *l = level_alloc(LEVEL_SUCC);
+    l->left  = u;
+    l->value = 1;
+    return l;
+}
+
+Level *level_clone(Level *u) {
+    if (!u) return NULL;
+    switch (u->kind) {
+        case LEVEL_CONST: return level_const(u->value);
+        case LEVEL_VAR:   return level_var(u->var_id);
+        case LEVEL_MAX:   return level_max(level_clone(u->left), level_clone(u->right));
+        case LEVEL_SUCC:  { Level *l = level_alloc(LEVEL_SUCC); l->left = level_clone(u->left); l->value = u->value; return l; }
+    }
+    return NULL;
+}
+
+void level_free(Level *u) {
+    if (!u) return;
+    level_free(u->left);
+    level_free(u->right);
+    free(u);
+}
+
+int level_eval(Level *u) {
+    if (!u) return 0;
+    switch (u->kind) {
+        case LEVEL_CONST: return u->value;
+        case LEVEL_VAR:   return -1; // cannot evaluate variable
+        case LEVEL_MAX: {
+            int a = level_eval(u->left), b = level_eval(u->right);
+            if (a < 0 || b < 0) return -1;
+            return a > b ? a : b;
+        }
+        case LEVEL_SUCC: {
+            int a = level_eval(u->left);
+            if (a < 0) return -1;
+            return a + u->value;
+        }
+    }
+    return -1;
+}
+
+bool levels_equal(Level *u, Level *v) {
+    if (!u && !v) return true;
+    if (!u || !v) return false;
+    if (u->kind != v->kind) {
+        // Try evaluating both to concrete ints
+        int a = level_eval(u), b = level_eval(v);
+        if (a >= 0 && b >= 0) return a == b;
+        return false;
+    }
+    switch (u->kind) {
+        case LEVEL_CONST: return u->value  == v->value;
+        case LEVEL_VAR:   return u->var_id == v->var_id;
+        case LEVEL_MAX:   return levels_equal(u->left, v->left)
+                              && levels_equal(u->right, v->right);
+        case LEVEL_SUCC:  return u->value == v->value
+                              && levels_equal(u->left, v->left);
+    }
+    return false;
+}
+
+bool level_leq(Level *u, Level *v) {
+    int a = level_eval(u), b = level_eval(v);
+    if (a >= 0 && b >= 0) return a <= b;
+    return false; // conservative: unknown ≤ unknown = false
+}
+
+const char *level_to_string(Level *u) {
+    static char buf[64];
+    if (!u) { snprintf(buf, sizeof(buf), "?"); return buf; }
+    int n = level_eval(u);
+    if (n >= 0) snprintf(buf, sizeof(buf), "%d", n);
+    else        snprintf(buf, sizeof(buf), "?lvl");
+    return buf;
+}
+
+
+/// Term constructors
+
+static Term *term_alloc(TermKind kind) {
+    Term *t = calloc(1, sizeof(Term));
+    t->kind = kind;
+    return t;
+}
+
+Term *term_bvar(int index) {
+    Term *t = term_alloc(TERM_BVAR);
+    t->bvar_index = index;
+    return t;
+}
+
+Term *term_fvar(const char *name) {
+    Term *t = term_alloc(TERM_FVAR);
+    t->fvar_name = strdup(name);
+    return t;
+}
+
+Term *term_type(Level *level) {
+    Term *t = term_alloc(TERM_TYPE);
+    t->type_level = level;
+    return t;
+}
+
+Term *term_type_n(int n) {
+    return term_type(level_const(n));
+}
+
+Term *term_kind(void) {
+    return term_alloc(TERM_KIND);
+}
+
+Term *term_pi(const char *name, Term *dom, Term *body, Implicitness impl) {
+    Term *t = term_alloc(TERM_PI);
+    t->binder_name = name ? strdup(name) : strdup("_");
+    t->binder_dom  = dom;
+    t->binder_body = body;
+    t->implicit    = impl;
+    return t;
+}
+
+Term *term_lam(const char *name, Term *dom, Term *body) {
+    Term *t = term_alloc(TERM_LAM);
+    t->binder_name = name ? strdup(name) : strdup("_");
+    t->binder_dom  = dom;
+    t->binder_body = body;
+    return t;
+}
+
+Term *term_app(Term *fn, Term **args, int argc) {
+    Term *t    = term_alloc(TERM_APP);
+    t->app_fn  = fn;
+    t->app_args = args;   // takes ownership
+    t->app_argc = argc;
+    return t;
+}
+
+Term *term_app1(Term *fn, Term *arg) {
+    Term **args = malloc(sizeof(Term *));
+    args[0]     = arg;
+    return term_app(fn, args, 1);
+}
+
+Term *term_sigma(const char *name, Term *dom, Term *body) {
+    Term *t = term_alloc(TERM_SIGMA);
+    t->binder_name = name ? strdup(name) : strdup("_");
+    t->binder_dom  = dom;
+    t->binder_body = body;
+    return t;
+}
+
+Term *term_pair(Term *fst, Term *snd, Term *type) {
+    Term *t    = term_alloc(TERM_PAIR);
+    t->pair_fst  = fst;
+    t->pair_snd  = snd;
+    t->pair_type = type;
+    return t;
+}
+
+Term *term_fst(Term *pair) {
+    Term *t    = term_alloc(TERM_FST);
+    t->pair_fst = pair;
+    return t;
+}
+
+Term *term_snd(Term *pair) {
+    Term *t    = term_alloc(TERM_SND);
+    t->pair_fst = pair;   // reuse pair_fst as the source
+    return t;
+}
+
+Term *term_eq(Term *lhs, Term *rhs, Term *type) {
+    Term *t   = term_alloc(TERM_EQ);
+    t->eq_lhs  = lhs;
+    t->eq_rhs  = rhs;
+    t->eq_type = type;
+    return t;
+}
+
+Term *term_refl(Term *val) {
+    Term *t    = term_alloc(TERM_REFL);
+    t->refl_val = val;
+    return t;
+}
+
+Term *term_subst(Term *proof, Term *motive, Term *base) {
+    Term *t       = term_alloc(TERM_SUBST);
+    t->subst_proof  = proof;
+    t->subst_motive = motive;
+    t->subst_base   = base;
+    return t;
+}
+
+Term *term_nat (void) { return term_alloc(TERM_NAT);  }
+Term *term_zero(void) { return term_alloc(TERM_ZERO); }
+
+Term *term_succ(Term *pred) {
+    Term *t     = term_alloc(TERM_SUCC_T);
+    t->succ_pred = pred;
+    return t;
+}
+
+Term *term_num_lit(unsigned long long n) {
+    Term *t = term_alloc(TERM_NUM_LIT);
+    t->num_lit = n;
+    return t;
+}
+
+Term *term_nat_elim(Term *motive, Term *pz, Term *ps, Term *n) {
+    Term *t       = term_alloc(TERM_NAT_ELIM);
+    t->nelim_motive = motive;
+    t->nelim_zero   = pz;
+    t->nelim_succ   = ps;
+    t->nelim_arg    = n;
+    return t;
+}
+
+Term *term_let(const char *name, Term *type, Term *val, Term *body) {
+    Term *t = term_alloc(TERM_LET);
+    t->binder_name = name ? strdup(name) : strdup("_");
+    t->let_type    = type;
+    t->let_val     = val;
+    t->binder_body = body;
+    return t;
+}
+
+Term *term_meta(int id) {
+    Term *t   = term_alloc(TERM_META);
+    t->meta_id = id;
+    return t;
+}
+
+Term *term_hole(void) { return term_alloc(TERM_HOLE); }
+
+Term *term_embed(Type *ground_type) {
+    Term *t      = term_alloc(TERM_EMBED);
+    t->embed_type = ground_type;
+    return t;
+}
+
+Term *term_ann(Term *t_, Term *ty) {
+    Term *t   = term_alloc(TERM_ANN);
+    t->ann_term = t_;
+    t->ann_type = ty;
+    return t;
+}
+
+
+/// Structural operations on terms
+//
+//  dep_shift — raise all free De Bruijn indices ≥ cutoff by delta.
+//  This is required whenever a term is placed under a new binder:
+//    · When building  Π(x:A).B  the body B may contain references to
+//      outer binders at indices 0, 1, 2 … Those indices must be raised
+//      by 1 to account for the new x binder.
+//    · Similarly for λ, Σ, let.
+//  cutoff tracks how many binders we have descended into within the
+//  shift operation itself, so that locally-bound variables are not moved.
+//
+Term *dep_shift(Term *t, int delta, int cutoff) {
+    if (!t) return NULL;
+    switch (t->kind) {
+    case TERM_BVAR:
+        if (t->bvar_index >= cutoff)
+            return term_bvar(t->bvar_index + delta);
+        return term_clone(t);
+
+    case TERM_FVAR:    return term_clone(t);
+    case TERM_TYPE:    return term_type(level_clone(t->type_level));
+    case TERM_KIND:    return term_kind();
+    case TERM_NAT:     return term_nat();
+    case TERM_ZERO:    return term_zero();
+    case TERM_META:    return term_meta(t->meta_id);
+    case TERM_HOLE:    return term_hole();
+    case TERM_EMBED:   return term_embed(t->embed_type);
+
+    case TERM_PI:
+    case TERM_LAM:
+    case TERM_SIGMA: {
+        Term *dom  = dep_shift(t->binder_dom,  delta, cutoff);
+        Term *body = dep_shift(t->binder_body, delta, cutoff + 1); /* under binder */
+        if (t->kind == TERM_PI)    return term_pi(t->binder_name, dom, body, t->implicit);
+        if (t->kind == TERM_LAM)   return term_lam(t->binder_name, dom, body);
+        return term_sigma(t->binder_name, dom, body);
+    }
+
+    case TERM_LET: {
+        Term *ty   = dep_shift(t->let_type,    delta, cutoff);
+        Term *val  = dep_shift(t->let_val,     delta, cutoff);
+        Term *body = dep_shift(t->binder_body, delta, cutoff + 1);
+        return term_let(t->binder_name, ty, val, body);
+    }
+
+    case TERM_APP: {
+        Term  *fn    = dep_shift(t->app_fn, delta, cutoff);
+        Term **args  = malloc(sizeof(Term *) * t->app_argc);
+        for (int i = 0; i < t->app_argc; i++)
+            args[i] = dep_shift(t->app_args[i], delta, cutoff);
+        return term_app(fn, args, t->app_argc);
+    }
+
+    case TERM_PAIR:
+        return term_pair(dep_shift(t->pair_fst,  delta, cutoff),
+                         dep_shift(t->pair_snd,  delta, cutoff),
+                         dep_shift(t->pair_type, delta, cutoff));
+
+    case TERM_FST: { Term *r = term_alloc(TERM_FST); r->pair_fst = dep_shift(t->pair_fst, delta, cutoff); return r; }
+    case TERM_SND: { Term *r = term_alloc(TERM_SND); r->pair_fst = dep_shift(t->pair_fst, delta, cutoff); return r; }
+
+    case TERM_EQ:
+        return term_eq(dep_shift(t->eq_lhs,  delta, cutoff),
+                       dep_shift(t->eq_rhs,  delta, cutoff),
+                       dep_shift(t->eq_type, delta, cutoff));
+
+    case TERM_REFL: { Term *r = term_alloc(TERM_REFL); r->refl_val = dep_shift(t->refl_val, delta, cutoff); return r; }
+
+    case TERM_SUBST:
+        return term_subst(dep_shift(t->subst_proof,  delta, cutoff),
+                          dep_shift(t->subst_motive, delta, cutoff),
+                          dep_shift(t->subst_base,   delta, cutoff));
+
+    case TERM_SUCC_T: { Term *r = term_alloc(TERM_SUCC_T); r->succ_pred = dep_shift(t->succ_pred, delta, cutoff); return r; }
+    case TERM_NUM_LIT: return term_num_lit(t->num_lit);
+
+    case TERM_NAT_ELIM:
+        return term_nat_elim(dep_shift(t->nelim_motive, delta, cutoff),
+                             dep_shift(t->nelim_zero,   delta, cutoff),
+                             dep_shift(t->nelim_succ,   delta, cutoff),
+                             dep_shift(t->nelim_arg,    delta, cutoff));
+
+    case TERM_ANN:
+        return term_ann(dep_shift(t->ann_term, delta, cutoff),
+                        dep_shift(t->ann_type, delta, cutoff));
+    }
+    return term_clone(t);
+}
+
+//  dep_subst_bvar — perform one β-reduction step:
+//    body[BVar(0) |-> s]
+//  All De Bruijn indices ≥ 1 in body are decremented by 1 (since the
+//  binder they referred to has been consumed).  s must be shifted up by
+//  depth each time it is substituted under depth additional binders —
+//  here depth starts at 0 and grows as we descend.
+//
+static Term *subst_at(Term *body, Term *s, int depth) {
+    if (!body) return NULL;
+    switch (body->kind) {
+    case TERM_BVAR:
+        if (body->bvar_index == depth) {
+            // Hit — replace with s shifted to the current depth
+            return dep_shift(s, depth, 0);
+        }
+        if (body->bvar_index > depth)
+            return term_bvar(body->bvar_index - 1);  // close the gap
+        return term_clone(body);                     // index < depth: refers to inner binder
+
+    case TERM_FVAR:    return term_clone(body);
+    case TERM_TYPE:    return term_type(level_clone(body->type_level));
+    case TERM_KIND:    return term_kind();
+    case TERM_NAT:     return term_nat();
+    case TERM_ZERO:    return term_zero();
+    case TERM_META:    return term_meta(body->meta_id);
+    case TERM_HOLE:    return term_hole();
+    case TERM_EMBED:   return term_embed(body->embed_type);
+
+    case TERM_PI:
+    case TERM_LAM:
+    case TERM_SIGMA: {
+        Term *dom  = subst_at(body->binder_dom,  s, depth);
+        Term *bd   = subst_at(body->binder_body, s, depth + 1);
+        if (body->kind == TERM_PI)    return term_pi(body->binder_name, dom, bd, body->implicit);
+        if (body->kind == TERM_LAM)   return term_lam(body->binder_name, dom, bd);
+        return term_sigma(body->binder_name, dom, bd);
+    }
+
+    case TERM_LET: {
+        Term *ty  = subst_at(body->let_type,    s, depth);
+        Term *val = subst_at(body->let_val,     s, depth);
+        Term *bd  = subst_at(body->binder_body, s, depth + 1);
+        return term_let(body->binder_name, ty, val, bd);
+    }
+
+    case TERM_APP: {
+        Term  *fn   = subst_at(body->app_fn, s, depth);
+        Term **args = malloc(sizeof(Term *) * body->app_argc);
+        for (int i = 0; i < body->app_argc; i++)
+            args[i] = subst_at(body->app_args[i], s, depth);
+        return term_app(fn, args, body->app_argc);
+    }
+
+    case TERM_PAIR:
+        return term_pair(subst_at(body->pair_fst,  s, depth),
+                         subst_at(body->pair_snd,  s, depth),
+                         subst_at(body->pair_type, s, depth));
+
+    case TERM_FST: { Term *r = term_alloc(TERM_FST); r->pair_fst = subst_at(body->pair_fst, s, depth); return r; }
+    case TERM_SND: { Term *r = term_alloc(TERM_SND); r->pair_fst = subst_at(body->pair_fst, s, depth); return r; }
+
+    case TERM_EQ:
+        return term_eq(subst_at(body->eq_lhs, s, depth),
+                       subst_at(body->eq_rhs, s, depth),
+                       subst_at(body->eq_type, s, depth));
+
+    case TERM_REFL: { Term *r = term_alloc(TERM_REFL); r->refl_val = subst_at(body->refl_val, s, depth); return r; }
+
+    case TERM_SUBST:
+        return term_subst(subst_at(body->subst_proof,  s, depth),
+                          subst_at(body->subst_motive, s, depth),
+                          subst_at(body->subst_base,   s, depth));
+
+    case TERM_SUCC_T: { Term *r = term_alloc(TERM_SUCC_T); r->succ_pred = subst_at(body->succ_pred, s, depth); return r; }
+    case TERM_NUM_LIT: return term_num_lit(body->num_lit);
+
+    case TERM_NAT_ELIM:
+        return term_nat_elim(subst_at(body->nelim_motive, s, depth),
+                             subst_at(body->nelim_zero,   s, depth),
+                             subst_at(body->nelim_succ,   s, depth),
+                             subst_at(body->nelim_arg,    s, depth));
+
+    case TERM_ANN:
+        return term_ann(subst_at(body->ann_term, s, depth),
+                        subst_at(body->ann_type, s, depth));
+    }
+    return term_clone(body);
+}
+
+Term *dep_subst_bvar(Term *body, Term *s) {
+    return subst_at(body, s, 0);
+}
+
+Term *dep_subst_fvar(Term *t, const char *name, Term *replacement) {
+    if (!t) return NULL;
+    switch (t->kind) {
+    case TERM_FVAR:
+        if (strcmp(t->fvar_name, name) == 0) return term_clone(replacement);
+        return term_clone(t);
+
+    case TERM_BVAR:
+    case TERM_TYPE:
+    case TERM_KIND:
+    case TERM_NAT:
+    case TERM_ZERO:
+    case TERM_META:
+    case TERM_HOLE:
+    case TERM_EMBED:
+        return term_clone(t);
+
+    case TERM_PI:
+    case TERM_LAM:
+    case TERM_SIGMA: {
+        Term *dom  = dep_subst_fvar(t->binder_dom,  name, replacement);
+        Term *body = dep_subst_fvar(t->binder_body, name, replacement);
+        if (t->kind == TERM_PI)    return term_pi(t->binder_name, dom, body, t->implicit);
+        if (t->kind == TERM_LAM)   return term_lam(t->binder_name, dom, body);
+        return term_sigma(t->binder_name, dom, body);
+    }
+
+    case TERM_LET: {
+        Term *ty   = dep_subst_fvar(t->let_type,    name, replacement);
+        Term *val  = dep_subst_fvar(t->let_val,     name, replacement);
+        Term *body = dep_subst_fvar(t->binder_body, name, replacement);
+        return term_let(t->binder_name, ty, val, body);
+    }
+
+    case TERM_APP: {
+        Term  *fn   = dep_subst_fvar(t->app_fn, name, replacement);
+        Term **args = malloc(sizeof(Term *) * t->app_argc);
+        for (int i = 0; i < t->app_argc; i++)
+            args[i] = dep_subst_fvar(t->app_args[i], name, replacement);
+        return term_app(fn, args, t->app_argc);
+    }
+
+    case TERM_PAIR:
+        return term_pair(dep_subst_fvar(t->pair_fst,  name, replacement),
+                         dep_subst_fvar(t->pair_snd,  name, replacement),
+                         dep_subst_fvar(t->pair_type, name, replacement));
+
+    case TERM_FST: { Term *r = term_alloc(TERM_FST); r->pair_fst = dep_subst_fvar(t->pair_fst, name, replacement); return r; }
+    case TERM_SND: { Term *r = term_alloc(TERM_SND); r->pair_fst = dep_subst_fvar(t->pair_fst, name, replacement); return r; }
+
+    case TERM_EQ:
+        return term_eq(dep_subst_fvar(t->eq_lhs,  name, replacement),
+                       dep_subst_fvar(t->eq_rhs,  name, replacement),
+                       dep_subst_fvar(t->eq_type, name, replacement));
+
+    case TERM_REFL: { Term *r = term_alloc(TERM_REFL); r->refl_val = dep_subst_fvar(t->refl_val, name, replacement); return r; }
+
+    case TERM_SUBST:
+        return term_subst(dep_subst_fvar(t->subst_proof,  name, replacement),
+                          dep_subst_fvar(t->subst_motive, name, replacement),
+                          dep_subst_fvar(t->subst_base,   name, replacement));
+
+    case TERM_SUCC_T: { Term *r = term_alloc(TERM_SUCC_T); r->succ_pred = dep_subst_fvar(t->succ_pred, name, replacement); return r; }
+    case TERM_NUM_LIT: return term_num_lit(t->num_lit);
+
+    case TERM_NAT_ELIM:
+        return term_nat_elim(dep_subst_fvar(t->nelim_motive, name, replacement),
+                             dep_subst_fvar(t->nelim_zero,   name, replacement),
+                             dep_subst_fvar(t->nelim_succ,   name, replacement),
+                             dep_subst_fvar(t->nelim_arg,    name, replacement));
+
+    case TERM_ANN:
+        return term_ann(dep_subst_fvar(t->ann_term, name, replacement),
+                        dep_subst_fvar(t->ann_type, name, replacement));
+    }
+    return term_clone(t);
+}
+
+Term *term_clone(Term *t) {
+    if (!t) return NULL;
+    switch (t->kind) {
+    case TERM_BVAR:    return term_bvar(t->bvar_index);
+    case TERM_FVAR:    return term_fvar(t->fvar_name);
+    case TERM_TYPE:    return term_type(level_clone(t->type_level));
+    case TERM_KIND:    return term_kind();
+    case TERM_NAT:     return term_nat();
+    case TERM_ZERO:    return term_zero();
+    case TERM_META:    return term_meta(t->meta_id);
+    case TERM_HOLE:    return term_hole();
+    case TERM_EMBED:   return term_embed(t->embed_type);
+    case TERM_PI:      return term_pi(t->binder_name, term_clone(t->binder_dom), term_clone(t->binder_body), t->implicit);
+    case TERM_LAM:     return term_lam(t->binder_name, term_clone(t->binder_dom), term_clone(t->binder_body));
+    case TERM_SIGMA:   return term_sigma(t->binder_name, term_clone(t->binder_dom), term_clone(t->binder_body));
+    case TERM_LET:     return term_let(t->binder_name, term_clone(t->let_type), term_clone(t->let_val), term_clone(t->binder_body));
+    case TERM_APP: {
+        Term **args = malloc(sizeof(Term *) * t->app_argc);
+        for (int i = 0; i < t->app_argc; i++) args[i] = term_clone(t->app_args[i]);
+        return term_app(term_clone(t->app_fn), args, t->app_argc);
+    }
+    case TERM_PAIR:    return term_pair(term_clone(t->pair_fst), term_clone(t->pair_snd), term_clone(t->pair_type));
+    case TERM_FST:     return term_fst(term_clone(t->pair_fst));
+    case TERM_SND:     return term_snd(term_clone(t->pair_fst));
+    case TERM_EQ:      return term_eq(term_clone(t->eq_lhs), term_clone(t->eq_rhs), term_clone(t->eq_type));
+    case TERM_REFL:    { Term *r = term_alloc(TERM_REFL); r->refl_val = term_clone(t->refl_val); return r; }
+    case TERM_SUBST:   return term_subst(term_clone(t->subst_proof), term_clone(t->subst_motive), term_clone(t->subst_base));
+    case TERM_SUCC_T:  { Term *r = term_alloc(TERM_SUCC_T); r->succ_pred = term_clone(t->succ_pred); return r; }
+    case TERM_NUM_LIT: return term_num_lit(t->num_lit);
+    case TERM_NAT_ELIM: return term_nat_elim(term_clone(t->nelim_motive), term_clone(t->nelim_zero), term_clone(t->nelim_succ), term_clone(t->nelim_arg));
+    case TERM_ANN:     return term_ann(term_clone(t->ann_term), term_clone(t->ann_type));
+    }
+    return term_alloc(t->kind);
+}
+
+void term_free(Term *t) {
+    if (!t) return;
+    free(t->fvar_name);
+    free(t->binder_name);
+    level_free(t->type_level);
+    term_free(t->binder_dom);
+    term_free(t->binder_body);
+    term_free(t->let_type);
+    term_free(t->let_val);
+    term_free(t->app_fn);
+    if (t->app_args) {
+        for (int i = 0; i < t->app_argc; i++) term_free(t->app_args[i]);
+        free(t->app_args);
+    }
+    term_free(t->pair_fst);
+    term_free(t->pair_snd);
+    term_free(t->pair_type);
+    term_free(t->eq_lhs);
+    term_free(t->eq_rhs);
+    term_free(t->eq_type);
+    term_free(t->refl_val);
+    term_free(t->subst_proof);
+    term_free(t->subst_motive);
+    term_free(t->subst_base);
+    term_free(t->succ_pred);
+    term_free(t->nelim_motive);
+    term_free(t->nelim_zero);
+    term_free(t->nelim_succ);
+    term_free(t->nelim_arg);
+    term_free(t->ann_term);
+    term_free(t->ann_type);
+    // embed_type is not owned — it belongs to the type registry
+    free(t);
+}
+
+const char *term_to_string(Term *t) {
+    static char buf[2048];
+    if (!t) { return "?"; }
+    switch (t->kind) {
+    case TERM_BVAR: snprintf(buf, sizeof(buf), "#%d",    t->bvar_index); return buf;
+    case TERM_FVAR: return t->fvar_name ? t->fvar_name : "?";
+    case TERM_TYPE: snprintf(buf, sizeof(buf), "Type %s", level_to_string(t->type_level)); return buf;
+    case TERM_KIND: return "Kind";
+    case TERM_NAT:  return "Nat";
+    case TERM_ZERO: return "zero";
+    case TERM_META: snprintf(buf, sizeof(buf), "?%d", t->meta_id); return buf;
+    case TERM_HOLE: return "_";
+    case TERM_EMBED: return type_to_string(t->embed_type);
+    case TERM_PI:
+        snprintf(buf, sizeof(buf), "Π(%s : %s). ...",
+                 t->binder_name ? t->binder_name : "_",
+                 term_to_string(t->binder_dom));
+        return buf;
+    case TERM_LAM:
+        snprintf(buf, sizeof(buf), "λ(%s : %s). ...",
+                 t->binder_name ? t->binder_name : "_",
+                 term_to_string(t->binder_dom));
+        return buf;
+    case TERM_SIGMA:
+        snprintf(buf, sizeof(buf), "Σ(%s : %s). ...",
+                 t->binder_name ? t->binder_name : "_",
+                 term_to_string(t->binder_dom));
+        return buf;
+    case TERM_APP:
+        snprintf(buf, sizeof(buf), "(%s ...)", term_to_string(t->app_fn));
+        return buf;
+    case TERM_PAIR:
+        snprintf(buf, sizeof(buf), "⟨%s, %s⟩",
+                 term_to_string(t->pair_fst),
+                 term_to_string(t->pair_snd));
+        return buf;
+    case TERM_FST: snprintf(buf, sizeof(buf), "fst(%s)", term_to_string(t->pair_fst)); return buf;
+    case TERM_SND: snprintf(buf, sizeof(buf), "snd(%s)", term_to_string(t->pair_fst)); return buf;
+    case TERM_EQ:
+        snprintf(buf, sizeof(buf), "%s ≡ %s",
+                 term_to_string(t->eq_lhs), term_to_string(t->eq_rhs));
+        return buf;
+    case TERM_REFL: snprintf(buf, sizeof(buf), "refl %s", term_to_string(t->refl_val)); return buf;
+    case TERM_SUCC_T: {
+        /* Collapse Peano numbers into decimals for readable error messages
+         * and eliminate static buffer overlapping UB */
+        int n = 0;
+        Term *curr = t;
+        while (curr->kind == TERM_SUCC_T) { n++; curr = curr->succ_pred; }
+        if (curr->kind == TERM_ZERO) {
+            snprintf(buf, sizeof(buf), "%d", n);
+        } else {
+            snprintf(buf, sizeof(buf), "%d + %s", n, term_to_string(curr));
+        }
+        return buf;
+    }
+    case TERM_NUM_LIT:
+        snprintf(buf, sizeof(buf), "%llu", t->num_lit);
+        return buf;
+    case TERM_NAT_ELIM: return "Nat-elim(...)";
+    case TERM_LET:
+        snprintf(buf, sizeof(buf), "let %s := ... in ...",
+                 t->binder_name ? t->binder_name : "_");
+        return buf;
+    case TERM_SUBST:  return "subst(...)";
+    case TERM_ANN:
+        snprintf(buf, sizeof(buf), "(%s : %s)",
+                 term_to_string(t->ann_term), term_to_string(t->ann_type));
+        return buf;
+    }
+    return "?";
+}
+
+bool terms_syntactically_equal(Term *a, Term *b) {
+    if (!a && !b) return true;
+    if (!a || !b) return false;
+    if (a->kind != b->kind) return false;
+    switch (a->kind) {
+    case TERM_BVAR:  return a->bvar_index == b->bvar_index;
+    case TERM_FVAR:  return strcmp(a->fvar_name, b->fvar_name) == 0;
+    case TERM_TYPE:  return levels_equal(a->type_level, b->type_level);
+    case TERM_KIND:  return true;
+    case TERM_NAT:   return true;
+    case TERM_ZERO:  return true;
+    case TERM_META:  return a->meta_id == b->meta_id;
+    case TERM_HOLE:  return false;   // two holes are never the same
+    case TERM_EMBED: return types_equal(a->embed_type, b->embed_type);
+    case TERM_PI:
+    case TERM_LAM:
+    case TERM_SIGMA:
+        return terms_syntactically_equal(a->binder_dom,  b->binder_dom)
+            && terms_syntactically_equal(a->binder_body, b->binder_body);
+    case TERM_LET:
+        return terms_syntactically_equal(a->let_type,    b->let_type)
+            && terms_syntactically_equal(a->let_val,     b->let_val)
+            && terms_syntactically_equal(a->binder_body, b->binder_body);
+    case TERM_APP:
+        if (a->app_argc != b->app_argc) return false;
+        if (!terms_syntactically_equal(a->app_fn, b->app_fn)) return false;
+        for (int i = 0; i < a->app_argc; i++)
+            if (!terms_syntactically_equal(a->app_args[i], b->app_args[i])) return false;
+        return true;
+    case TERM_PAIR:
+        return terms_syntactically_equal(a->pair_fst, b->pair_fst)
+            && terms_syntactically_equal(a->pair_snd, b->pair_snd);
+    case TERM_EQ:
+        return terms_syntactically_equal(a->eq_lhs, b->eq_lhs)
+            && terms_syntactically_equal(a->eq_rhs, b->eq_rhs);
+    case TERM_REFL:   return terms_syntactically_equal(a->refl_val, b->refl_val);
+    case TERM_SUCC_T: return terms_syntactically_equal(a->succ_pred, b->succ_pred);
+    case TERM_NUM_LIT: return a->num_lit == b->num_lit;
+    default: return true;
+    }
+}
+
+
+/// Semantic environment
+
+EvalEnv *eval_env_empty(void) {
+    EvalEnv *e = calloc(1, sizeof(EvalEnv));
+    e->head  = NULL;
+    e->level = 0;
+    return e;
+}
+
+EvalEnv *eval_env_extend(EvalEnv *e, Value *v) {
+    EvalEnv      *ne    = malloc(sizeof(EvalEnv));
+    EvalEnvEntry *entry = malloc(sizeof(EvalEnvEntry));
+    entry->val  = v;
+    entry->next = e ? e->head : NULL;
+    ne->head    = entry;
+    ne->level   = e ? e->level + 1 : 1;
+    return ne;
+}
+
+Value *eval_env_lookup(EvalEnv *e, int index) {
+    if (!e) return NULL;
+    EvalEnvEntry *cur = e->head;
+    for (int i = 0; i < index && cur; i++) cur = cur->next;
+    return cur ? cur->val : NULL;
+}
+
+void eval_env_free(EvalEnv *e) {
+    if (!e) return;
+    EvalEnvEntry *cur = e->head;
+    while (cur) {
+        EvalEnvEntry *next = cur->next;
+        free(cur);
+        cur = next;
+    }
+    free(e);
+}
+
+EvalEnv *eval_env_clone(EvalEnv *e) {
+    if (!e) return eval_env_empty();
+    EvalEnv *ne      = malloc(sizeof(EvalEnv));
+    ne->level        = e->level;
+    ne->head         = NULL;
+    EvalEnvEntry **tail = &ne->head;
+    for (EvalEnvEntry *cur = e->head; cur; cur = cur->next) {
+        EvalEnvEntry *entry = malloc(sizeof(EvalEnvEntry));
+        entry->val  = cur->val;
+        entry->next = NULL;
+        *tail = entry;
+        tail  = &entry->next;
+    }
+    return ne;
+}
+
+
+/// Values and closures
+
+static Value *val_alloc(ValKind kind) {
+    Value *v = calloc(1, sizeof(Value));
+    v->kind  = kind;
+    return v;
+}
+
+Value *val_universe(Level *level) {
+    Value *v  = val_alloc(VAL_UNIVERSE);
+    v->level  = level;
+    return v;
+}
+
+Value *val_universe_n(int n) {
+    return val_universe(level_const(n));
+}
+
+Value *val_pi(const char *name, Value *dom, Closure body, Implicitness impl) {
+    Value *v       = val_alloc(VAL_PI);
+    v->binder_name = name ? strdup(name) : strdup("_");
+    v->domain      = dom;
+    v->closure     = body;
+    v->implicit    = impl;
+    return v;
+}
+
+Value *val_sigma(const char *name, Value *dom, Closure body) {
+    Value *v       = val_alloc(VAL_SIGMA);
+    v->binder_name = name ? strdup(name) : strdup("_");
+    v->domain      = dom;
+    v->closure     = body;
+    return v;
+}
+
+Value *val_lam(const char *name, Value *dom, Closure body) {
+    Value *v       = val_alloc(VAL_LAM);
+    v->binder_name = name ? strdup(name) : strdup("_");
+    v->domain      = dom;
+    v->closure     = body;
+    return v;
+}
+
+Value *val_pair(Value *fst, Value *snd) {
+    Value *v = val_alloc(VAL_PAIR);
+    v->fst   = fst;
+    v->snd   = snd;
+    return v;
+}
+
+Value *val_nat(void)  { return val_alloc(VAL_NAT);  }
+Value *val_zero(void) { return val_alloc(VAL_ZERO); }
+
+Value *val_succ(Value *pred) {
+    Value *v = val_alloc(VAL_SUCC);
+    v->pred  = pred;
+    return v;
+}
+
+Value *val_num_lit(unsigned long long n) {
+    Value *v = val_alloc(VAL_NUM_LIT);
+    v->num_lit = n;
+    return v;
+}
+
+Value *val_eq(Value *lhs, Value *rhs, Value *type) {
+    Value *v      = val_alloc(VAL_EQ);
+    v->eq_lhs     = lhs;
+    v->eq_rhs     = rhs;
+    v->eq_type_val = type;
+    return v;
+}
+
+Value *val_refl(Value *v_) {
+    Value *v   = val_alloc(VAL_REFL);
+    v->refl_val = v_;
+    return v;
+}
+
+Spine val_spine_empty(void) {
+    Spine sp = { .args = NULL, .count = 0, .cap = 0 };
+    return sp;
+}
+
+void val_spine_push(Spine *sp, Value *arg) {
+    if (sp->count >= sp->cap) {
+        sp->cap  = sp->cap ? sp->cap * 2 : 4;
+        sp->args = realloc(sp->args, sizeof(Value *) * sp->cap);
+    }
+    sp->args[sp->count++] = arg;
+}
+
+Spine val_spine_clone(Spine sp) {
+    Spine ns = val_spine_empty();
+    for (int i = 0; i < sp.count; i++) val_spine_push(&ns, sp.args[i]);
+    return ns;
+}
+
+void val_spine_free(Spine sp) {
+    free(sp.args);
+}
+
+Value *val_neutral(const char *name, Spine spine) {
+    Value *v         = val_alloc(VAL_NEUTRAL);
+    v->neutral_name  = strdup(name);
+    v->spine         = spine;
+    return v;
+}
+
+Value *val_meta(int id, Spine spine) {
+    Value *v   = val_alloc(VAL_META);
+    v->meta_id = id;
+    v->spine   = spine;
+    return v;
+}
+
+Value *val_embed(Type *t) {
+    Value *v      = val_alloc(VAL_EMBED);
+    v->embed_type = t;
+    return v;
+}
+
+void val_free(Value *v) {
+    if (!v) return;
+    free(v->binder_name);
+    free(v->neutral_name);
+    level_free(v->level);
+    /* NOTE: We do NOT recursively free Values because they are shared
+     * across the semantic environment.  The allocator/GC is responsible.
+     * For now (single-pass compilation) we accept the leak; a precise
+     * ref-counted or arena allocator is the correct production solution. */
+    free(v);
+}
+
+Value *dep_closure_apply(Closure c, Value *arg) {
+    EvalEnv *new_env = eval_env_extend(c.env, arg);
+    Value *result = dep_eval(c.body, new_env, NULL);
+    eval_env_free(new_env);
+    return result;
+}
+
+
+/// Metavariable context
+
+MetaCtx *meta_ctx_create(void) {
+    MetaCtx *m = calloc(1, sizeof(MetaCtx));
+    m->cap     = 64;
+    m->entries = calloc(m->cap, sizeof(MetaEntry));
+    m->count   = 0;
+    return m;
+}
+
+void meta_ctx_free(MetaCtx *mctx) {
+    if (!mctx) return;
+    for (int i = 0; i < mctx->count; i++) {
+        free(mctx->entries[i].hint);
+        term_free(mctx->entries[i].solution);
+    }
+    free(mctx->entries);
+    free(mctx);
+}
+
+int meta_fresh(MetaCtx *mctx, Value *type, int depth, const char *hint) {
+    if (mctx->count >= mctx->cap) {
+        mctx->cap     *= 2;
+        mctx->entries  = realloc(mctx->entries, sizeof(MetaEntry) * mctx->cap);
+    }
+    int id = mctx->count++;
+    MetaEntry *e = &mctx->entries[id];
+    e->id       = id;
+    e->state    = META_UNSOLVED;
+    e->type     = type;
+    e->solution = NULL;
+    e->depth    = depth;
+    e->hint     = hint ? strdup(hint) : NULL;
+    return id;
+}
+
+MetaEntry *meta_lookup(MetaCtx *mctx, int id) {
+    if (!mctx || id < 0 || id >= mctx->count) return NULL;
+    return &mctx->entries[id];
+}
+
+bool meta_solve(MetaCtx *mctx, int id, Term *solution) {
+    MetaEntry *e = meta_lookup(mctx, id);
+    if (!e || e->state == META_SOLVED) return false;
+    // Occurs check: the solution must not mention meta id itself
+    if (meta_occurs(mctx, id, dep_eval(solution, eval_env_empty(), mctx))) return false;
+    e->state    = META_SOLVED;
+    e->solution = term_clone(solution);
+    return true;
+}
+
+//  meta_occurs: check whether meta `id` appears in value `v`.
+//  We work on values rather than terms to avoid re-evaluating.
+//  Neutral metas in the spine and unsolved metas in closures are checked. */
+//
+bool meta_occurs(MetaCtx *mctx, int id, Value *v) {
+    if (!v) return false;
+    switch (v->kind) {
+    case VAL_META:
+        if (v->meta_id == id) return true;
+        /* Check the spine */
+        for (int i = 0; i < v->spine.count; i++)
+            if (meta_occurs(mctx, id, v->spine.args[i])) return true;
+        return false;
+    case VAL_NEUTRAL:
+        for (int i = 0; i < v->spine.count; i++)
+            if (meta_occurs(mctx, id, v->spine.args[i])) return true;
+        return false;
+    case VAL_UNIVERSE: return false;
+    case VAL_NAT:      return false;
+    case VAL_ZERO:     return false;
+    case VAL_EMBED:    return false;
+    case VAL_SUCC:     return meta_occurs(mctx, id, v->pred);
+    case VAL_NUM_LIT:  return false;
+    case VAL_PAIR:     return meta_occurs(mctx, id, v->fst)
+                           || meta_occurs(mctx, id, v->snd);
+    case VAL_EQ:       return meta_occurs(mctx, id, v->eq_lhs)
+                           || meta_occurs(mctx, id, v->eq_rhs)
+                           || meta_occurs(mctx, id, v->eq_type_val);
+    case VAL_REFL:     return meta_occurs(mctx, id, v->refl_val);
+    // Closures: we cannot easily traverse them without evaluating.
+    // Conservative approximation: assume no occurrence.
+    case VAL_PI:
+    case VAL_SIGMA:
+    case VAL_LAM:
+        return meta_occurs(mctx, id, v->domain);
+    }
+    return false;
+}
+
+bool meta_all_solved(MetaCtx *mctx) {
+    for (int i = 0; i < mctx->count; i++)
+        if (mctx->entries[i].state == META_UNSOLVED) return false;
+    return true;
+}
+
+
+/// Evaluation — NbE  (Normalisation by Evaluation)
+
+//  dep_force: if v is a solved meta applied to a spine, substitute and
+//  reduce.  Otherwise return v unchanged.  This is the "forcing" step
+//  that drives the conversion check forward when metas are solved.
+//
+Value *dep_force(Value *v, MetaCtx *mctx) {
+    if (!v || !mctx) return v;
+    if (v->kind != VAL_META) return v;
+    MetaEntry *e = meta_lookup(mctx, v->meta_id);
+    if (!e || e->state != META_SOLVED) return v;
+    // Re-evaluate the solution in the empty environment, then apply spine
+    Value *result = dep_eval(e->solution, eval_env_empty(), mctx);
+    for (int i = 0; i < v->spine.count; i++) {
+        if (result->kind == VAL_LAM) {
+            result = dep_closure_apply(result->closure, v->spine.args[i]);
+        } else {
+            // Neutral application: rebuild a neutral spine
+            Spine sp = val_spine_empty();
+            val_spine_push(&sp, v->spine.args[i]);
+            /* This path means the meta solved to a non-function — the
+             * type checker should catch this as a type error separately  */
+            return result;
+        }
+    }
+    return result;
+}
+
+//  dep_eval: evaluate term t in environment env to a Value.
+//  env maps De Bruijn indices to Values via eval_env_lookup.
+//  mctx may be NULL (no metavariable resolution during pure evaluation).
+//
+Value *dep_eval(Term *t, EvalEnv *env, MetaCtx *mctx) {
+    if (!t) return val_universe_n(0);
+
+    switch (t->kind) {
+
+    // ── Atoms ────────────────────────────────────────────────────
+    case TERM_BVAR: {
+        Value *v = eval_env_lookup(env, t->bvar_index);
+        return v ? v : val_neutral("?bvar", val_spine_empty());
+    }
+
+    case TERM_FVAR: {
+        /* Free variables evaluate to themselves as neutrals.
+         * δ-unfolding (definitions) happens in dep_conv when both sides
+         * are neutrals with the same head — we look up the definition
+         * and reduce if available.                                       */
+        return val_neutral(t->fvar_name, val_spine_empty());
+    }
+
+    case TERM_TYPE:
+        return val_universe(level_clone(t->type_level));
+
+    case TERM_KIND:
+        return val_universe(level_const(DEP_LEVEL_MAX));
+
+    case TERM_NAT:   return val_nat();
+    case TERM_ZERO:  return val_zero();
+    case TERM_EMBED: return val_embed(t->embed_type);
+
+    case TERM_META: {
+        if (mctx) {
+            MetaEntry *e = meta_lookup(mctx, t->meta_id);
+            if (e && e->state == META_SOLVED)
+                return dep_eval(e->solution, eval_env_empty(), mctx);
+        }
+        return val_meta(t->meta_id, val_spine_empty());
+    }
+
+    case TERM_HOLE:
+        return val_meta(-1, val_spine_empty());
+
+    // ── Binders — create closures ─────────────────────────────────
+    case TERM_PI: {
+        Value   *dom  = dep_eval(t->binder_dom, env, mctx);
+        Closure  body = { .env = eval_env_clone(env), .body = t->binder_body };
+        return val_pi(t->binder_name, dom, body, t->implicit);
+    }
+
+    case TERM_LAM: {
+        Value   *dom  = dep_eval(t->binder_dom, env, mctx);
+        Closure  body = { .env = eval_env_clone(env), .body = t->binder_body };
+        return val_lam(t->binder_name, dom, body);
+    }
+
+    case TERM_SIGMA: {
+        Value   *dom  = dep_eval(t->binder_dom, env, mctx);
+        Closure  body = { .env = eval_env_clone(env), .body = t->binder_body };
+        return val_sigma(t->binder_name, dom, body);
+    }
+
+    // ── Application — β-reduction ─────────────────────────────────
+    case TERM_APP: {
+        Value *fn = dep_eval(t->app_fn, env, mctx);
+        for (int i = 0; i < t->app_argc; i++) {
+            Value *arg = dep_eval(t->app_args[i], env, mctx);
+            fn = dep_force(fn, mctx);
+            if (fn->kind == VAL_LAM) {
+                // β-reduction: substitute arg into the closure body
+                fn = dep_closure_apply(fn->closure, arg);
+            } else if (fn->kind == VAL_NEUTRAL) {
+                // Accumulate onto the neutral spine
+                val_spine_push(&fn->spine, arg);
+            } else if (fn->kind == VAL_META) {
+                val_spine_push(&fn->spine, arg);
+            } else {
+                /* Type ERROR: applying a non-function.  The type checker
+                 * should have caught this; produce a neutral to continue. */
+                Spine sp = val_spine_empty();
+                val_spine_push(&sp, arg);
+                fn = val_neutral("!not-a-function", sp);
+            }
+        }
+        return fn;
+    }
+
+    // ── Pairs ─────────────────────────────────────────────────────
+    case TERM_PAIR:
+        return val_pair(dep_eval(t->pair_fst,  env, mctx),
+                        dep_eval(t->pair_snd,  env, mctx));
+
+    case TERM_FST: {
+        Value *p = dep_eval(t->pair_fst, env, mctx);
+        p = dep_force(p, mctx);
+        if (p->kind == VAL_PAIR) return p->fst;
+        // Neutral fst
+        Spine sp = val_spine_empty();
+        char name[64]; snprintf(name, sizeof(name), "fst!");
+        return val_neutral(name, sp);
+    }
+
+    case TERM_SND: {
+        Value *p = dep_eval(t->pair_fst, env, mctx);
+        p = dep_force(p, mctx);
+        if (p->kind == VAL_PAIR) return p->snd;
+        Spine sp = val_spine_empty();
+        return val_neutral("snd!", sp);
+    }
+
+    // ── Equality ──────────────────────────────────────────────────
+    case TERM_EQ:
+        return val_eq(dep_eval(t->eq_lhs,  env, mctx),
+                      dep_eval(t->eq_rhs,  env, mctx),
+                      dep_eval(t->eq_type, env, mctx));
+
+    case TERM_REFL:
+        return val_refl(dep_eval(t->refl_val, env, mctx));
+
+    case TERM_SUBST: {
+        // subst h P pa :  if h reduces to refl then result is pa
+        Value *h = dep_eval(t->subst_proof, env, mctx);
+        h = dep_force(h, mctx);
+        if (h->kind == VAL_REFL) {
+            return dep_eval(t->subst_base, env, mctx);
+        }
+        return val_neutral("subst!", val_spine_empty());
+    }
+
+    // ── Nat ───────────────────────────────────────────────────────
+    case TERM_SUCC_T:
+        return val_succ(dep_eval(t->succ_pred, env, mctx));
+
+    case TERM_NUM_LIT:
+        return val_num_lit(t->num_lit);
+
+    case TERM_NAT_ELIM: {
+        //  Nat-elim P pz ps n  reduces when n is a concrete numeral.
+        Value *n  = dep_eval(t->nelim_arg, env, mctx);
+        n = dep_force(n, mctx);
+        if (n->kind == VAL_ZERO || (n->kind == VAL_NUM_LIT && n->num_lit == 0)) {
+            return dep_eval(t->nelim_zero, env, mctx);
+        }
+        if (n->kind == VAL_SUCC || (n->kind == VAL_NUM_LIT && n->num_lit > 0)) {
+            //  ps  :  Π(n:Nat). P n → P (succ n)
+            //  Result = ((ps pred) (Nat-elim P pz ps pred))
+            Value *ps   = dep_eval(t->nelim_succ,  env, mctx);
+            Value *pz   = dep_eval(t->nelim_zero,  env, mctx);
+            Value *moti = dep_eval(t->nelim_motive, env, mctx);
+
+            Value *pred_val;
+            Term  *pred_term;
+            if (n->kind == VAL_SUCC) {
+                pred_val = n->pred;
+                pred_term = dep_quote(n->pred, env ? env->level : 0, mctx);
+            } else {
+                pred_val = val_num_lit(n->num_lit - 1);
+                pred_term = term_num_lit(n->num_lit - 1);
+            }
+
+            // Build the recursive call on the predecessor
+            Term *rec_call = term_nat_elim(term_clone(t->nelim_motive),
+                                           term_clone(t->nelim_zero),
+                                           term_clone(t->nelim_succ),
+                                           pred_term);
+            Value *rec_val = dep_eval(rec_call, env, mctx);
+            term_free(rec_call);
+            // Apply ps to predecessor, then to recursive result
+            Value *step1 = dep_closure_apply(ps->closure, pred_val);
+            Value *step2 = dep_closure_apply(step1->closure, rec_val);
+
+            if (n->kind == VAL_NUM_LIT) {
+                val_free(pred_val);
+            }
+
+            (void)moti; (void)pz;
+            return step2;
+        }
+        // Stuck: n is neutral
+        return val_neutral("Nat-elim!", val_spine_empty());
+    }
+
+    // ── Let ───────────────────────────────────────────────────────
+    case TERM_LET: {
+        Value   *v   = dep_eval(t->let_val, env, mctx);
+        EvalEnv *ne  = eval_env_extend(env, v);
+        Value   *res = dep_eval(t->binder_body, ne, mctx);
+        eval_env_free(ne);
+        return res;
+    }
+
+    // ── Annotation — transparent ──────────────────────────────────
+    case TERM_ANN:
+        return dep_eval(t->ann_term, env, mctx);
+    }
+
+    return val_universe_n(0);
+}
+
+//  dep_quote: reify a value back into a term at binding depth `depth`.
+//  Fresh variables are introduced for binders to ensure the result is
+//  in β-normal η-long form.
+//
+//  The η-expansion rules are:
+//    · Functions:  quote(v) = λ(x:A). quote(v (neutral x))
+//    · Pairs:      quote(v) = ⟨quote(fst v), quote(snd v)⟩
+//  These ensure that all values are quoting-consistent.
+//
+Term *dep_quote(Value *v, int depth, MetaCtx *mctx) {
+    if (!v) return term_type_n(0);
+    v = dep_force(v, mctx);
+
+    switch (v->kind) {
+
+    case VAL_UNIVERSE:
+        return term_type(level_clone(v->level));
+
+    case VAL_NAT:   return term_nat();
+    case VAL_ZERO:  return term_zero();
+    case VAL_EMBED: return term_embed(v->embed_type);
+
+    case VAL_SUCC:
+        return term_succ(dep_quote(v->pred, depth, mctx));
+
+    case VAL_NUM_LIT:
+        return term_num_lit(v->num_lit);
+
+    // η-expand lambda values into explicit lambdas
+    case VAL_LAM: {
+        Term  *dom  = dep_quote(v->domain, depth, mctx);
+        // Fresh neutral variable at this depth
+        char   fresh_name[32];
+        snprintf(fresh_name, sizeof(fresh_name), "x%d", depth);
+        Value *fresh_var  = val_neutral(fresh_name, val_spine_empty());
+        Value *body_val   = dep_closure_apply(v->closure, fresh_var);
+        Term  *body_term  = dep_quote(body_val, depth + 1, mctx);
+        return term_lam(v->binder_name, dom, body_term);
+    }
+
+    // η-expand Π-types
+    case VAL_PI: {
+        Term  *dom  = dep_quote(v->domain, depth, mctx);
+        char   fresh_name[32];
+        snprintf(fresh_name, sizeof(fresh_name), "x%d", depth);
+        Value *fresh_var  = val_neutral(fresh_name, val_spine_empty());
+        Value *codom_val  = dep_closure_apply(v->closure, fresh_var);
+        Term  *codom_term = dep_quote(codom_val, depth + 1, mctx);
+        return term_pi(v->binder_name, dom, codom_term, v->implicit);
+    }
+
+    case VAL_SIGMA: {
+        Term  *dom  = dep_quote(v->domain, depth, mctx);
+        char   fresh_name[32];
+        snprintf(fresh_name, sizeof(fresh_name), "x%d", depth);
+        Value *fresh_var  = val_neutral(fresh_name, val_spine_empty());
+        Value *codom_val  = dep_closure_apply(v->closure, fresh_var);
+        Term  *codom_term = dep_quote(codom_val, depth + 1, mctx);
+        return term_sigma(v->binder_name, dom, codom_term);
+    }
+
+    // η-expand pairs: always expand to ⟨fst v, snd v⟩
+    case VAL_PAIR:
+        return term_pair(dep_quote(v->fst, depth, mctx),
+                         dep_quote(v->snd, depth, mctx),
+                         NULL);  // type will be re-inferred
+
+    case VAL_EQ:
+        return term_eq(dep_quote(v->eq_lhs,      depth, mctx),
+                       dep_quote(v->eq_rhs,      depth, mctx),
+                       dep_quote(v->eq_type_val, depth, mctx));
+
+    case VAL_REFL: {
+        Term *r = term_alloc(TERM_REFL);
+        r->refl_val = dep_quote(v->refl_val, depth, mctx);
+        return r;
+    }
+
+    /* Neutral: a free variable applied to a spine of arguments.
+     * The variable's De Bruijn index is (depth - level - 1), where
+     * level is the depth at which the variable was introduced.
+     * Since we store the *name* (not the level), we emit TERM_FVAR.    */
+    case VAL_NEUTRAL: {
+        Term *head;
+        head = term_fvar(v->neutral_name);
+        if (v->spine.count == 0) return head;
+        Term **args = malloc(sizeof(Term *) * v->spine.count);
+        for (int i = 0; i < v->spine.count; i++)
+            args[i] = dep_quote(v->spine.args[i], depth, mctx);
+        return term_app(head, args, v->spine.count);
+    }
+
+    case VAL_META: {
+        MetaEntry *e = mctx ? meta_lookup(mctx, v->meta_id) : NULL;
+        if (e && e->state == META_SOLVED) {
+            Value *sol = dep_eval(e->solution, eval_env_empty(), mctx);
+            for (int i = 0; i < v->spine.count; i++)
+                sol = dep_closure_apply(sol->closure, v->spine.args[i]);
+            return dep_quote(sol, depth, mctx);
+        }
+        return term_meta(v->meta_id);
+    }
+    }
+
+    return term_type_n(0);
+}
+
+Term *dep_normalise(Term *t, EvalEnv *env, MetaCtx *mctx) {
+    Value *v = dep_eval(t, env, mctx);
+    return dep_quote(v, env ? env->level : 0, mctx);
+}
+
+
+/// Definitional equality  — conversion checking
+
+ConvCtx conv_ctx_make(DepCtx *dctx, int depth) {
+    ConvCtx c;
+    c.dctx      = dctx;
+    c.depth     = depth;
+    c.fuel      = DEP_CONV_FUEL;
+    c.had_error = false;
+    c.error_msg[0] = '\0';
+    return c;
+}
+
+//  dep_conv_vals: the core conversion algorithm.
+//
+//  Algorithm (following Coquand's algorithm for intensional type theory):
+//    1. Force both values (resolve solved metas).
+//    2. If either is a λ, η-expand both and recurse under a fresh variable.
+//    3. If both are Π or Σ, check domains then codomain under a fresh var.
+//    4. If both are neutrals with the same head, zip their spines.
+//    5. If one is an unsolved meta, attempt to unify.
+//    6. Otherwise, fail.
+//
+static bool dep_conv_vals(ConvCtx *cctx, Value *v1, Value *v2, Value *ty);
+
+//  Apply a fresh neutral at depth `cctx->depth` to extend the context
+static Value *fresh_neutral(ConvCtx *cctx, const char *hint) {
+    char name[64];
+    snprintf(name, sizeof(name), "%s!%d", hint ? hint : "x", cctx->depth);
+    return val_neutral(name, val_spine_empty());
+}
+
+static bool dep_conv_vals_internal(ConvCtx *cctx, Value *v1, Value *v2, Value *ty);
+
+static bool dep_conv_vals(ConvCtx *cctx, Value *v1, Value *v2, Value *ty) {
+    if (cctx->had_error) return false;
+
+    MetaCtx *mctx = cctx->dctx ? cctx->dctx->mctx : NULL;
+    if (g_dep_trace_enabled) {
+        Term *q1 = dep_quote(v1, cctx->depth, mctx);
+        Term *q2 = dep_quote(v2, cctx->depth, mctx);
+        dep_trace_indent();
+        fprintf(stderr, "├─ \033[35mConv \033[0m %s ≡ %s\n", term_to_string(q1), term_to_string(q2));
+        term_free(q1);
+        term_free(q2);
+        g_dep_trace_depth++;
+    }
+
+    bool res = dep_conv_vals_internal(cctx, v1, v2, ty);
+
+    if (g_dep_trace_enabled) {
+        g_dep_trace_depth--;
+        dep_trace_indent();
+        if (res) {
+            fprintf(stderr, "└─ \033[32mOK\033[0m\n");
+        } else {
+            fprintf(stderr, "└─ \033[31mFAIL\033[0m\n");
+        }
+    }
+    return res;
+}
+
+static bool dep_conv_vals_internal(ConvCtx *cctx, Value *v1, Value *v2, Value *ty) {
+    if (--cctx->fuel <= 0) {
+        snprintf(cctx->error_msg, sizeof(cctx->error_msg),
+                 "dep: conversion check ran out of fuel (possible non-termination)");
+        cctx->had_error = true;
+        return false;
+    }
+
+    MetaCtx *mctx = cctx->dctx ? cctx->dctx->mctx : NULL;
+
+    v1 = dep_force(v1, mctx);
+    v2 = dep_force(v2, mctx);
+
+    /* Solve metavariables when one side is an unsolved meta.
+     * Simple pattern: meta ?n applied to distinct neutral variables.
+     * This is "pattern unification" — the most tractable fragment.     */
+    if (v1 && v1->kind == VAL_META) {
+        MetaEntry *e = mctx ? meta_lookup(mctx, v1->meta_id) : NULL;
+        if (e && e->state == META_UNSOLVED) {
+            Term *sol = dep_quote(v2, cctx->depth, mctx);
+            return meta_solve(mctx, v1->meta_id, sol);
+        }
+    }
+    if (v2 && v2->kind == VAL_META) {
+        MetaEntry *e = mctx ? meta_lookup(mctx, v2->meta_id) : NULL;
+        if (e && e->state == META_UNSOLVED) {
+            Term *sol = dep_quote(v1, cctx->depth, mctx);
+            return meta_solve(mctx, v2->meta_id, sol);
+        }
+    }
+
+    if (!v1 || !v2) return v1 == v2;
+
+    // η-expand functions: compare (λx.v1 x) and (λx.v2 x)
+    if (v1->kind == VAL_LAM || v2->kind == VAL_LAM) {
+        Value *var = fresh_neutral(cctx, "η");
+        // η-expand whichever side is not already a lambda
+        Value *body1 = (v1->kind == VAL_LAM)
+            ? dep_closure_apply(v1->closure, var)
+            : (Value*)({ Spine sp = val_spine_clone(v1->spine); val_spine_push(&sp, var); val_neutral(v1->neutral_name, sp); });
+        Value *body2 = (v2->kind == VAL_LAM)
+            ? dep_closure_apply(v2->closure, var)
+            : (Value*)({ Spine sp = val_spine_clone(v2->spine); val_spine_push(&sp, var); val_neutral(v2->neutral_name, sp); });
+        // The return type is the codomain applied to `var
+        Value *codom = NULL;
+        if (ty && ty->kind == VAL_PI)
+            codom = dep_closure_apply(ty->closure, var);
+        cctx->depth++;
+        bool ok = dep_conv_vals(cctx, body1, body2, codom);
+        cctx->depth--;
+        return ok;
+    }
+
+    // η-expand pairs
+    if (v1->kind == VAL_PAIR || v2->kind == VAL_PAIR) {
+        Value *fst1 = (v1->kind == VAL_PAIR) ? v1->fst : val_neutral("fst!", val_spine_empty());
+        Value *snd1 = (v1->kind == VAL_PAIR) ? v1->snd : val_neutral("snd!", val_spine_empty());
+        Value *fst2 = (v2->kind == VAL_PAIR) ? v2->fst : val_neutral("fst!", val_spine_empty());
+        Value *snd2 = (v2->kind == VAL_PAIR) ? v2->snd : val_neutral("snd!", val_spine_empty());
+        Value *fst_ty = NULL, *snd_ty = NULL;
+        if (ty && ty->kind == VAL_SIGMA) {
+            fst_ty = ty->domain;
+            snd_ty = dep_closure_apply(ty->closure, fst1);
+        }
+        return dep_conv_vals(cctx, fst1, fst2, fst_ty)
+            && dep_conv_vals(cctx, snd1, snd2, snd_ty);
+    }
+
+    if (v1->kind != v2->kind) {
+        // Unify numbers across representations
+        if (v1->kind == VAL_NUM_LIT && v1->num_lit == 0 && v2->kind == VAL_ZERO) return true;
+        if (v2->kind == VAL_NUM_LIT && v2->num_lit == 0 && v1->kind == VAL_ZERO) return true;
+        if (v1->kind == VAL_NUM_LIT && v1->num_lit > 0 && v2->kind == VAL_SUCC) {
+            Value *pred1 = val_num_lit(v1->num_lit - 1);
+            bool ok = dep_conv_vals(cctx, pred1, v2->pred, val_nat());
+            val_free(pred1);
+            return ok;
+        }
+        if (v2->kind == VAL_NUM_LIT && v2->num_lit > 0 && v1->kind == VAL_SUCC) {
+            Value *pred2 = val_num_lit(v2->num_lit - 1);
+            bool ok = dep_conv_vals(cctx, v1->pred, pred2, val_nat());
+            val_free(pred2);
+            return ok;
+        }
+
+        // Embed vs ground — compare underlying types
+        if (v1->kind == VAL_EMBED && v2->kind == VAL_EMBED) {
+            if (types_equal(v1->embed_type, v2->embed_type)) return true;
+            int k1 = v1->embed_type ? v1->embed_type->kind : -1;
+            int k2 = v2->embed_type ? v2->embed_type->kind : -1;
+            if ((k1 == TYPE_INT && k2 == TYPE_CHAR) || (k1 == TYPE_CHAR && k2 == TYPE_INT)) return true;
+            if ((k1 == TYPE_INT_ARBITRARY && k2 == TYPE_CHAR) || (k1 == TYPE_CHAR && k2 == TYPE_INT_ARBITRARY)) return true;
+            return false;
+        }
+
+        // Allow Nat (literals < 64) to implicitly coerce to Int and Char signatures smoothly
+        bool v1_nat = (v1->kind == VAL_NAT || v1->kind == VAL_SUCC || v1->kind == VAL_ZERO || v1->kind == VAL_NUM_LIT);
+        bool v2_nat = (v2->kind == VAL_NAT || v2->kind == VAL_SUCC || v2->kind == VAL_ZERO || v2->kind == VAL_NUM_LIT);
+        bool v1_target = (v1->kind == VAL_EMBED && v1->embed_type && (v1->embed_type->kind == TYPE_INT || v1->embed_type->kind == TYPE_CHAR));
+        bool v2_target = (v2->kind == VAL_EMBED && v2->embed_type && (v2->embed_type->kind == TYPE_INT || v2->embed_type->kind == TYPE_CHAR));
+
+        if ((v1_nat && v2_target) || (v1_target && v2_nat)) return true;
+
+        snprintf(cctx->error_msg, sizeof(cctx->error_msg),
+                 "Structural mismatch between '%s' and '%s'",
+                 term_to_string(dep_quote(v1, cctx->depth, mctx)),
+                 term_to_string(dep_quote(v2, cctx->depth, mctx)));
+        cctx->had_error = true;
+        return false;
+    }
+
+    switch (v1->kind) {
+    case VAL_UNIVERSE:
+        if (!levels_equal(v1->level, v2->level)) {
+            snprintf(cctx->error_msg, sizeof(cctx->error_msg),
+                     "dep: universe level mismatch: Type %s ≠ Type %s",
+                     level_to_string(v1->level), level_to_string(v2->level));
+            cctx->had_error = true;
+            return false;
+        }
+        return true;
+
+    case VAL_NAT:
+    case VAL_ZERO:
+        return true;
+
+    case VAL_SUCC:
+        return dep_conv_vals(cctx, v1->pred, v2->pred, val_nat());
+
+    case VAL_NUM_LIT:
+        return v1->num_lit == v2->num_lit;
+
+    case VAL_PI:
+    case VAL_SIGMA: {
+        // Check domains, then codomains under a fresh variable
+        bool dom_ok = dep_conv_vals(cctx, v1->domain, v2->domain, NULL);
+        if (!dom_ok) return false;
+        Value *var    = fresh_neutral(cctx, v1->binder_name);
+        Value *cod1   = dep_closure_apply(v1->closure, var);
+        Value *cod2   = dep_closure_apply(v2->closure, var);
+        cctx->depth++;
+        bool cod_ok   = dep_conv_vals(cctx, cod1, cod2, NULL);
+        cctx->depth--;
+        return cod_ok;
+    }
+
+    case VAL_EQ:
+        return dep_conv_vals(cctx, v1->eq_lhs,      v2->eq_lhs,      v1->eq_type_val)
+            && dep_conv_vals(cctx, v1->eq_rhs,      v2->eq_rhs,      v1->eq_type_val)
+            && dep_conv_vals(cctx, v1->eq_type_val, v2->eq_type_val, NULL);
+
+    case VAL_REFL:
+        return dep_conv_vals(cctx, v1->refl_val, v2->refl_val, NULL);
+
+    case VAL_EMBED: {
+        if (types_equal(v1->embed_type, v2->embed_type)) return true;
+
+        /* Implicit coercions for characters acting as small integers */
+        int k1 = v1->embed_type->kind;
+        int k2 = v2->embed_type->kind;
+        if ((k1 == TYPE_INT && k2 == TYPE_CHAR) || (k1 == TYPE_CHAR && k2 == TYPE_INT)) return true;
+        if ((k1 == TYPE_INT_ARBITRARY && k2 == TYPE_CHAR) || (k1 == TYPE_CHAR && k2 == TYPE_INT_ARBITRARY)) return true;
+
+        return false;
+    }
+
+    case VAL_NEUTRAL: {
+        // Both neutral: heads must match, spines must match element-wise
+        if (strcmp(v1->neutral_name, v2->neutral_name) != 0) {
+            // Try δ-unfolding both heads in the global env
+            DepEnvEntry *e1 = cctx->dctx
+                ? dep_env_lookup(cctx->dctx->globals, v1->neutral_name) : NULL;
+            DepEnvEntry *e2 = cctx->dctx
+                ? dep_env_lookup(cctx->dctx->globals, v2->neutral_name) : NULL;
+            bool unfolded = false;
+            if (e1 && e1->def_val && !e1->opaque) {
+                Value *unf1 = e1->def_val;
+                for (int i = 0; i < v1->spine.count; i++)
+                    unf1 = dep_closure_apply(unf1->closure, v1->spine.args[i]);
+                return dep_conv_vals(cctx, unf1, v2, ty);
+            }
+            if (e2 && e2->def_val && !e2->opaque) {
+                Value *unf2 = e2->def_val;
+                for (int i = 0; i < v2->spine.count; i++)
+                    unf2 = dep_closure_apply(unf2->closure, v2->spine.args[i]);
+                return dep_conv_vals(cctx, v1, unf2, ty);
+            }
+            (void)unfolded;
+            snprintf(cctx->error_msg, sizeof(cctx->error_msg),
+                     "dep: cannot unify %s with %s",
+                     v1->neutral_name, v2->neutral_name);
+            cctx->had_error = true;
+            return false;
+        }
+        if (v1->spine.count != v2->spine.count) {
+            snprintf(cctx->error_msg, sizeof(cctx->error_msg),
+                     "dep: spine length mismatch for %s: %d vs %d",
+                     v1->neutral_name, v1->spine.count, v2->spine.count);
+            cctx->had_error = true;
+            return false;
+        }
+        for (int i = 0; i < v1->spine.count; i++) {
+            if (!dep_conv_vals(cctx, v1->spine.args[i], v2->spine.args[i], NULL))
+                return false;
+        }
+        return true;
+    }
+
+    default:
+        return true;
+    }
+}
+
+bool dep_conv(ConvCtx *cctx, Value *v1, Value *v2, Value *ty) {
+    return dep_conv_vals(cctx, v1, v2, ty);
+}
+
+bool dep_conv_terms(DepCtx *dctx, Term *t1, Term *t2, int depth) {
+    Value *v1  = dep_eval(t1, dctx->env, dctx->mctx);
+    Value *v2  = dep_eval(t2, dctx->env, dctx->mctx);
+    ConvCtx cc = conv_ctx_make(dctx, depth);
+    bool ok = dep_conv(&cc, v1, v2, NULL);
+    if (!ok && !dctx->had_error) {
+        strncpy(dctx->error_msg, cc.error_msg, sizeof(dctx->error_msg) - 1);
+        dctx->had_error = true;
+    }
+    return ok;
+}
+
+
+/// Global environment
+
+static size_t dep_env_hash(const char *name) {
+    size_t h = 5381;
+    for (; *name; name++) h = h * 33 ^ (unsigned char)*name;
+    return h % DEP_ENV_BUCKETS;
+}
+
+DepEnv *dep_env_create(void) {
+    DepEnv *e = calloc(1, sizeof(DepEnv));
+    e->buckets = calloc(DEP_ENV_BUCKETS, sizeof(DepEnvEntry *));
+    e->size    = DEP_ENV_BUCKETS;
+    e->parent  = NULL;
+    return e;
+}
+
+DepEnv *dep_env_create_child(DepEnv *parent) {
+    DepEnv *e = dep_env_create();
+    e->parent = parent;
+    return e;
+}
+
+void dep_env_free(DepEnv *env) {
+    if (!env) return;
+    for (size_t i = 0; i < env->size; i++) {
+        DepEnvEntry *e = env->buckets[i];
+        while (e) {
+            DepEnvEntry *next = e->next;
+            free(e->name);
+            term_free(e->def_term);
+            free(e);
+            e = next;
+        }
+    }
+    free(env->buckets);
+    free(env);
+}
+
+void dep_env_declare(DepEnv *env, const char *name, Value *type) {
+    dep_env_define(env, name, type, NULL, NULL, false);
+}
+
+void dep_env_define(DepEnv *env, const char *name, Value *type,
+                    Term *def_term, Value *def_val, bool opaque) {
+    size_t idx = dep_env_hash(name);
+    /* Overwrite if present */
+    for (DepEnvEntry *e = env->buckets[idx]; e; e = e->next) {
+        if (strcmp(e->name, name) == 0) {
+            e->type     = type;
+            e->def_term = def_term;
+            e->def_val  = def_val;
+            e->opaque   = opaque;
+            return;
+        }
+    }
+    DepEnvEntry *e = calloc(1, sizeof(DepEnvEntry));
+    e->name     = strdup(name);
+    e->type     = type;
+    e->def_term = def_term;
+    e->def_val  = def_val;
+    e->opaque   = opaque;
+    e->next     = env->buckets[idx];
+    env->buckets[idx] = e;
+}
+
+DepEnvEntry *dep_env_lookup(DepEnv *env, const char *name) {
+    for (DepEnv *cur = env; cur; cur = cur->parent) {
+        size_t idx = dep_env_hash(name);
+        for (DepEnvEntry *e = cur->buckets[idx]; e; e = e->next)
+            if (strcmp(e->name, name) == 0) return e;
+    }
+    return NULL;
+}
+
+
+/// Typing context
+
+DepCtx *dep_ctx_create(const char *filename) {
+    DepCtx *ctx    = calloc(1, sizeof(DepCtx));
+    ctx->locals    = NULL;
+    ctx->depth     = 0;
+    ctx->globals   = dep_env_create();
+    ctx->mctx      = meta_ctx_create();
+    ctx->env       = eval_env_empty();
+    ctx->filename  = filename ? filename : "<unknown>";
+    ctx->had_error = false;
+    return ctx;
+}
+
+DepCtx *dep_ctx_child(DepCtx *parent) {
+    // Shallow child: shares globals, mctx, and env; gets fresh locals
+    DepCtx *ctx    = calloc(1, sizeof(DepCtx));
+    ctx->locals    = NULL;
+    ctx->depth     = parent->depth;
+    ctx->globals   = parent->globals;  // shared
+    ctx->mctx      = parent->mctx;     // shared
+    ctx->env       = eval_env_clone(parent->env);
+    ctx->filename  = parent->filename;
+    ctx->had_error = false;
+    return ctx;
+}
+
+void dep_ctx_free(DepCtx *ctx) {
+    if (!ctx) return;
+    DepCtxEntry *e = ctx->locals;
+    while (e) {
+        DepCtxEntry *next = e->next;
+        free(e->name);
+        free(e);
+        e = next;
+    }
+    eval_env_free(ctx->env);
+    // globals and mctx are either shared or freed by the caller
+    free(ctx);
+}
+
+void dep_ctx_push(DepCtx *ctx, const char *name, Value *type) {
+    DepCtxEntry *e = calloc(1, sizeof(DepCtxEntry));
+    e->name  = strdup(name);
+    e->type  = type;
+    e->val   = NULL;
+    e->next  = ctx->locals;
+    ctx->locals = e;
+
+    // Extend the semantic environment with a fresh neutral
+    char fresh[64];
+    snprintf(fresh, sizeof(fresh), "%s!%d", name, ctx->depth);
+    ctx->env = eval_env_extend(ctx->env, val_neutral(fresh, val_spine_empty()));
+    ctx->depth++;
+}
+
+void dep_ctx_push_def(DepCtx *ctx, const char *name, Value *type, Value *val) {
+    DepCtxEntry *e = calloc(1, sizeof(DepCtxEntry));
+    e->name  = strdup(name);
+    e->type  = type;
+    e->val   = val;
+    e->next  = ctx->locals;
+    ctx->locals = e;
+    ctx->env = eval_env_extend(ctx->env, val);
+    ctx->depth++;
+}
+
+void dep_ctx_pop(DepCtx *ctx) {
+    if (!ctx->locals) return;
+    DepCtxEntry *e = ctx->locals;
+    ctx->locals = e->next;
+    free(e->name);
+    free(e);
+    // Shrink env: rebuild without the head entry
+    if (ctx->env && ctx->env->head) {
+        EvalEnvEntry *old_head = ctx->env->head;
+        ctx->env->head = old_head->next;
+        ctx->env->level--;
+        free(old_head);
+    }
+    if (ctx->depth > 0) ctx->depth--;
+}
+
+DepCtxEntry *dep_ctx_lookup_local(DepCtx *ctx, const char *name) {
+    for (DepCtxEntry *e = ctx->locals; e; e = e->next)
+        if (strcmp(e->name, name) == 0) return e;
+    return NULL;
+}
+
+Value *dep_ctx_type_at_level(DepCtx *ctx, int level) {
+    int i = 0;
+    for (DepCtxEntry *e = ctx->locals; e; e = e->next, i++)
+        if (i == (ctx->depth - 1 - level)) return e->type;
+    return NULL;
+}
+
+/// Bidirectional type checker
+//
+//  dep_infer — Γ ⊢ t ⇒ A
+//
+//  Returns the synthesised type Value, or NULL on ERROR.
+//  Annotates ctx->had_error on failure.
+//
+static Value *dep_infer_internal(DepCtx *ctx, Term *t);
+
+Value *dep_infer(DepCtx *ctx, Term *t) {
+    if (!t) return val_universe_n(0);
+    if (ctx->had_error) return NULL;
+
+    if (g_dep_trace_enabled) {
+        dep_trace_indent();
+        fprintf(stderr, "├─ \033[36mInfer\033[0m %s\n", term_to_string(t));
+        g_dep_trace_depth++;
+    }
+
+    Value *res = dep_infer_internal(ctx, t);
+
+    if (g_dep_trace_enabled) {
+        g_dep_trace_depth--;
+        dep_trace_indent();
+        if (res) {
+            Term *q = dep_quote(res, ctx->depth, ctx->mctx);
+            fprintf(stderr, "└─ \033[32mOK\033[0m: %s : %s\n", term_to_string(t), term_to_string(q));
+            term_free(q);
+        } else {
+            fprintf(stderr, "└─ \033[31mFAIL\033[0m\n");
+        }
+    }
+    return res;
+}
+
+static Value *dep_infer_internal(DepCtx *ctx, Term *t) {
+    switch (t->kind) {
+
+    // ── Universes ──────────────────────────────────────────────────
+    case TERM_TYPE: {
+        // Type u : Type (u+1)  — the universe formation rule
+        int u = level_eval(t->type_level);
+        if (u < 0) {
+            dep_error_set(ctx, t->line, t->col,
+                          "cannot evaluate universe level to a concrete integer");
+            return NULL;
+        }
+        if (u >= DEP_LEVEL_MAX) {
+            dep_error_set(ctx, t->line, t->col,
+                          "universe level %d exceeds maximum %d", u, DEP_LEVEL_MAX);
+            return NULL;
+        }
+        return val_universe_n(u + 1);
+    }
+
+    case TERM_KIND:
+        return val_universe(level_const(DEP_LEVEL_MAX));
+
+    case TERM_NAT:
+        return val_universe_n(0);
+
+    case TERM_ZERO:
+        return val_nat();
+
+    case TERM_NUM_LIT:
+        return val_nat();
+
+    case TERM_EMBED:
+        // Ground types live at universe 0 by convention
+        return val_universe_n(0);
+
+    // ── Variables ──────────────────────────────────────────────────
+    case TERM_BVAR: {
+        Value *ty = dep_ctx_type_at_level(ctx, t->bvar_index);
+        if (!ty) {
+            dep_error_set(ctx, t->line, t->col,
+                          "De Bruijn index %d out of range (depth %d)",
+                          t->bvar_index, ctx->depth);
+            return NULL;
+        }
+        return ty;
+    }
+
+    case TERM_FVAR: {
+        // Check local context first, then globals
+        DepCtxEntry *local = dep_ctx_lookup_local(ctx, t->fvar_name);
+        if (local) return local->type;
+        DepEnvEntry *global = dep_env_lookup(ctx->globals, t->fvar_name);
+        if (global) return global->type;
+
+        // TEMPORARY SHADOW PASS HACK:
+        // Automatically invent a hole for any unbound global function (like 'show' or 'if')
+        int id = meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, t->fvar_name);
+        return val_meta(id, val_spine_empty());
+    }
+
+        // ── Annotation — explicit type ascription ─────────────────────
+    case TERM_ANN: {
+        Value *ann_ty = dep_eval(t->ann_type, ctx->env, ctx->mctx);
+        // Check the term against the ascribed type
+        if (!dep_check(ctx, t->ann_term, ann_ty)) return NULL;
+        return ann_ty;
+    }
+
+    // ── Lambda (Fallback Inference) ────────────────────────────────
+    case TERM_LAM: {
+        if (!t->binder_dom || t->binder_dom->kind == TERM_HOLE) {
+            dep_error_set(ctx, t->line, t->col,
+                          "cannot infer type of lambda without parameter type annotation");
+            return NULL;
+        }
+        Value *dom_val = dep_eval(t->binder_dom, ctx->env, ctx->mctx);
+        dep_ctx_push(ctx, t->binder_name, dom_val);
+        Value *body_ty = dep_infer(ctx, t->binder_body);
+
+        if (!body_ty) {
+            dep_ctx_pop(ctx);
+            return NULL;
+        }
+        Term *body_ty_term = dep_quote(body_ty, ctx->depth, ctx->mctx);
+        dep_ctx_pop(ctx);
+
+        Term *pi_term = term_pi(t->binder_name, term_clone(t->binder_dom), body_ty_term, IMPLICIT_EXPLICIT);
+        Value *pi_val = dep_eval(pi_term, ctx->env, ctx->mctx);
+        term_free(pi_term);
+        return pi_val;
+    }
+
+    // ── Π-type formation ───────────────────────────────────────────
+    case TERM_PI: {
+        int u = dep_infer_level(ctx, t->binder_dom);
+        if (u < 0) return NULL;
+        // Check body under extended context
+        Value *dom_val = dep_eval(t->binder_dom, ctx->env, ctx->mctx);
+        dep_ctx_push(ctx, t->binder_name, dom_val);
+        int v = dep_infer_level(ctx, t->binder_body);
+        dep_ctx_pop(ctx);
+        if (v < 0) return NULL;
+        int level = u > v ? u : v;   // max(u, v) — predicative Π
+        return val_universe_n(level);
+    }
+
+    // ── Σ-type formation ───────────────────────────────────────────
+    case TERM_SIGMA: {
+        int u = dep_infer_level(ctx, t->binder_dom);
+        if (u < 0) return NULL;
+        Value *dom_val = dep_eval(t->binder_dom, ctx->env, ctx->mctx);
+        dep_ctx_push(ctx, t->binder_name, dom_val);
+        int v = dep_infer_level(ctx, t->binder_body);
+        dep_ctx_pop(ctx);
+        if (v < 0) return NULL;
+        int level = u > v ? u : v;
+        return val_universe_n(level);
+    }
+
+    // ── Application ───────────────────────────────────────────────
+    case TERM_APP: {
+        Value *fn_ty = dep_infer(ctx, t->app_fn);
+        if (!fn_ty) return NULL;
+
+        for (int i = 0; i < t->app_argc; i++) {
+            fn_ty = dep_force(fn_ty, ctx->mctx);
+            // Insert implicit arguments automatically
+            while (fn_ty && fn_ty->kind == VAL_PI &&
+                   fn_ty->implicit == IMPLICIT_IMPLICIT) {
+                int meta_id = meta_fresh(ctx->mctx, fn_ty->domain, ctx->depth, "?impl");
+                Value *meta_val = val_meta(meta_id, val_spine_empty());
+                fn_ty = dep_closure_apply(fn_ty->closure, meta_val);
+                fn_ty = dep_force(fn_ty, ctx->mctx);
+            }
+            if (fn_ty && fn_ty->kind == VAL_META) {
+                // If it's a hole (like our dummy stdlib functions), we cannot check domain types.
+                // We just assume the argument is fine and return another hole as the result type.
+                fn_ty = val_meta(meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, "?ret"), val_spine_empty());
+                continue;
+            }
+            // Protect against eager Peano coercion masquerading as a function type
+            if (fn_ty && (fn_ty->kind == VAL_NAT || fn_ty->kind == VAL_SUCC || fn_ty->kind == VAL_ZERO || fn_ty->kind == VAL_NUM_LIT)) {
+                 fn_ty = val_embed(type_int()); // Safely collapse numeric constants back to structural bounds
+            }
+            if (!fn_ty || fn_ty->kind != VAL_PI) {
+                dep_error_set(ctx, t->line, t->col,
+                              "\n"
+                              "    * Applied too many arguments to function\n"
+                              "    * Expected a function type (Pi), but got: '%s'\n"
+                              "  - Hint: Check the arity of the function you are calling.",
+                              fn_ty ? term_to_string(dep_quote(fn_ty, ctx->depth, ctx->mctx)) : "unknown");
+                return NULL;
+            }
+            if (!dep_check(ctx, t->app_args[i], fn_ty->domain)) return NULL;
+            Value *arg_val = dep_eval(t->app_args[i], ctx->env, ctx->mctx);
+            fn_ty = dep_closure_apply(fn_ty->closure, arg_val);
+        }
+        return fn_ty;
+    }
+
+    // ── Projections ───────────────────────────────────────────────
+    case TERM_FST: {
+        Value *pair_ty = dep_infer(ctx, t->pair_fst);
+        if (!pair_ty) return NULL;
+        pair_ty = dep_force(pair_ty, ctx->mctx);
+        if (pair_ty->kind != VAL_SIGMA) {
+            dep_error_set(ctx, t->line, t->col,
+                          "fst: expected Σ-type, got %s",
+                          term_to_string(dep_quote(pair_ty, ctx->depth, ctx->mctx)));
+            return NULL;
+        }
+        return pair_ty->domain;
+    }
+
+    case TERM_SND: {
+        Value *pair_ty = dep_infer(ctx, t->pair_fst);
+        if (!pair_ty) return NULL;
+        pair_ty = dep_force(pair_ty, ctx->mctx);
+        if (pair_ty->kind != VAL_SIGMA) {
+            dep_error_set(ctx, t->line, t->col,
+                          "snd: expected Σ-type, got %s",
+                          term_to_string(dep_quote(pair_ty, ctx->depth, ctx->mctx)));
+            return NULL;
+        }
+        // snd p : B[fst p / x]
+        Value *fst_val = dep_eval(term_fst(term_clone(t->pair_fst)), ctx->env, ctx->mctx);
+        return dep_closure_apply(pair_ty->closure, fst_val);
+    }
+
+    // ── Nat successor ─────────────────────────────────────────────
+    case TERM_SUCC_T: {
+        if (!dep_check(ctx, t->succ_pred, val_nat())) return NULL;
+        return val_nat();
+    }
+
+    // ── Nat eliminator ────────────────────────────────────────────
+    case TERM_NAT_ELIM: {
+        /*  Nat-elim : Π(P : Nat → Type u). P zero → (Π(n:Nat). P n → P (succ n))
+         *             → Π(n : Nat). P n
+         *
+         *  We synthesise by checking each piece against its expected type.
+         */
+        Value *nat_to_type = val_pi("n", val_nat(),
+            (Closure){ .env = eval_env_empty(), .body = term_type_n(0) },
+            IMPLICIT_EXPLICIT);
+        if (!dep_check(ctx, t->nelim_motive, nat_to_type)) return NULL;
+
+        Value *P  = dep_eval(t->nelim_motive, ctx->env, ctx->mctx);
+        Value *Pz = dep_closure_apply(P->closure, val_zero());
+        if (!dep_check(ctx, t->nelim_zero, Pz)) return NULL;
+
+        // ps : Π(n:Nat). P n → P (succ n)
+        Term *ps_type_term = term_pi("n", term_nat(),
+            term_pi("ih", term_app1(term_clone(t->nelim_motive), term_bvar(0)),
+                term_app1(term_clone(t->nelim_motive), term_succ(term_bvar(1))),
+                IMPLICIT_EXPLICIT),
+            IMPLICIT_EXPLICIT);
+        Value *ps_type = dep_eval(ps_type_term, ctx->env, ctx->mctx);
+        term_free(ps_type_term);
+        if (!dep_check(ctx, t->nelim_succ, ps_type)) return NULL;
+
+        if (!dep_check(ctx, t->nelim_arg, val_nat())) return NULL;
+        Value *n_val = dep_eval(t->nelim_arg, ctx->env, ctx->mctx);
+        return dep_closure_apply(P->closure, n_val);
+    }
+
+    // ── Equality type ─────────────────────────────────────────────
+    case TERM_EQ: {
+        Value *ty = dep_infer(ctx, t->eq_lhs);
+        if (!ty) return NULL;
+        if (!dep_check(ctx, t->eq_rhs, ty)) return NULL;
+        // a ≡ b : A  lives in Type u where A : Type u
+        return dep_infer(ctx, t->eq_type);
+    }
+
+    // ── Meta ──────────────────────────────────────────────────────
+    case TERM_META: {
+        MetaEntry *e = meta_lookup(ctx->mctx, t->meta_id);
+        if (!e) {
+            dep_error_set(ctx, t->line, t->col,
+                          "unknown metavariable ?%d", t->meta_id);
+            return NULL;
+        }
+        return e->type;
+    }
+
+    // ── Let ───────────────────────────────────────────────────────
+    case TERM_LET: {
+        Value *ty_val = dep_eval(t->let_type, ctx->env, ctx->mctx);
+        if (!dep_check(ctx, t->let_val, ty_val)) return NULL;
+        Value *val_val = dep_eval(t->let_val, ctx->env, ctx->mctx);
+        dep_ctx_push_def(ctx, t->binder_name, ty_val, val_val);
+        Value *body_ty = dep_infer(ctx, t->binder_body);
+        dep_ctx_pop(ctx);
+        return body_ty;
+    }
+
+    default:
+        dep_error_set(ctx, t->line, t->col,
+                      "cannot infer type of %s", term_to_string(t));
+        return NULL;
+    }
+}
+
+//  dep_check — Γ ⊢ t ⇐ A
+//
+//  Check term t against known type ty.  Returns true on success.
+//  This is the "push" direction of bidirectional checking: the type
+//  flows *in* from the context.
+//
+static bool dep_check_internal(DepCtx *ctx, Term *t, Value *expected_type);
+
+bool dep_check(DepCtx *ctx, Term *t, Value *expected_type) {
+    if (!t || !expected_type) return false;
+    if (ctx->had_error) return false;
+
+    if (g_dep_trace_enabled) {
+        Term *q_exp = dep_quote(expected_type, ctx->depth, ctx->mctx);
+        dep_trace_indent();
+        fprintf(stderr, "├─ \033[33mCheck\033[0m %s ⇐ %s\n", term_to_string(t), term_to_string(q_exp));
+        term_free(q_exp);
+        g_dep_trace_depth++;
+    }
+
+    bool res = dep_check_internal(ctx, t, expected_type);
+
+    if (g_dep_trace_enabled) {
+        g_dep_trace_depth--;
+        dep_trace_indent();
+        if (res) {
+            fprintf(stderr, "└─ \033[32mOK\033[0m\n");
+        } else {
+            fprintf(stderr, "└─ \033[31mFAIL\033[0m\n");
+        }
+    }
+    return res;
+}
+
+static bool dep_check_internal(DepCtx *ctx, Term *t, Value *expected_type) {
+    expected_type = dep_force(expected_type, ctx->mctx);
+
+    switch (t->kind) {
+
+    // ── Lambda — check against Π ──────────────────────────────────
+    case TERM_LAM: {
+        if (expected_type->kind != VAL_PI) {
+            // Insert implicit argument if the Π is implicit
+            if (expected_type->kind == VAL_PI &&
+                expected_type->implicit == IMPLICIT_IMPLICIT) {
+                // skip — handled below in the default path
+            } else {
+                dep_error_set(ctx, t->line, t->col,
+                              "lambda in non-function position: expected %s",
+                              term_to_string(dep_quote(expected_type, ctx->depth, ctx->mctx)));
+                return false;
+            }
+        }
+        // Check domain annotation (if provided) matches the expected Π
+        if (t->binder_dom) {
+            Value *ann_dom = dep_eval(t->binder_dom, ctx->env, ctx->mctx);
+            ConvCtx cc = conv_ctx_make(ctx, ctx->depth);
+            if (!dep_conv(&cc, ann_dom, expected_type->domain, NULL)) {
+                dep_error_set(ctx, t->line, t->col,
+                              "lambda parameter type mismatch: %s",
+                              cc.error_msg);
+                return false;
+            }
+        }
+        // Extend context with the bound variable
+        char   fresh[64];
+        snprintf(fresh, sizeof(fresh), "%s!%d", t->binder_name, ctx->depth);
+        Value *var = val_neutral(fresh, val_spine_empty());
+        dep_ctx_push(ctx, t->binder_name, expected_type->domain);
+        Value *body_ty = dep_closure_apply(expected_type->closure, var);
+        bool ok = dep_check(ctx, t->binder_body, body_ty);
+        dep_ctx_pop(ctx);
+        return ok;
+    }
+
+    // ── Pair — check against Σ ────────────────────────────────────
+    case TERM_PAIR: {
+        if (expected_type->kind != VAL_SIGMA) {
+            dep_error_set(ctx, t->line, t->col,
+                          "pair in non-Σ position: expected %s",
+                          term_to_string(dep_quote(expected_type, ctx->depth, ctx->mctx)));
+            return false;
+        }
+        if (!dep_check(ctx, t->pair_fst, expected_type->domain)) return false;
+        Value *fst_val = dep_eval(t->pair_fst, ctx->env, ctx->mctx);
+        Value *snd_ty  = dep_closure_apply(expected_type->closure, fst_val);
+        return dep_check(ctx, t->pair_snd, snd_ty);
+    }
+
+    // ── Refl — check against equality type ───────────────────────
+    case TERM_REFL: {
+        if (expected_type->kind != VAL_EQ) {
+            dep_error_set(ctx, t->line, t->col,
+                          "refl: expected equality type, got %s",
+                          term_to_string(dep_quote(expected_type, ctx->depth, ctx->mctx)));
+            return false;
+        }
+        /* Check that the two sides are definitionally equal            */
+        ConvCtx cc = conv_ctx_make(ctx, ctx->depth);
+        if (!dep_conv(&cc, expected_type->eq_lhs,
+                          expected_type->eq_rhs,
+                          expected_type->eq_type_val)) {
+            dep_error_set(ctx, t->line, t->col,
+                          "refl: sides not definitionally equal: %s", cc.error_msg);
+            return false;
+        }
+        return true;
+    }
+
+    // ── Hole / meta — generate a fresh metavariable ───────────────
+    case TERM_HOLE: {
+        int id = meta_fresh(ctx->mctx, expected_type, ctx->depth, "_");
+        (void)id;     // The hole is now represented as ?id in the mctx
+        return true;  // Always succeeds; solver fills it later
+    }
+
+    case TERM_META: {
+        MetaEntry *e = meta_lookup(ctx->mctx, t->meta_id);
+        if (!e) {
+            dep_error_set(ctx, t->line, t->col,
+                          "unknown metavariable ?%d", t->meta_id);
+            return false;
+        }
+        if (e->state == META_SOLVED) {
+            Value *sol_val = dep_eval(e->solution, eval_env_empty(), ctx->mctx);
+            ConvCtx cc = conv_ctx_make(ctx, ctx->depth);
+            return dep_conv(&cc, sol_val, dep_eval(term_meta(t->meta_id), ctx->env, ctx->mctx), expected_type);
+        }
+        // Unsolved meta: set its expected type and succeed
+        if (!e->type) e->type = expected_type;
+        return true;
+    }
+
+    // ── Default: infer and compare ────────────────────────────────
+    default: {
+        Value *inferred = dep_infer(ctx, t);
+        if (!inferred) return false;
+        ConvCtx cc = conv_ctx_make(ctx, ctx->depth);
+        if (!dep_conv(&cc, inferred, expected_type, NULL)) {
+            dep_error_set(ctx, t->line, t->col,
+                          "\n"
+                          "    * Couldn't match expected type '%s' with actual type '%s'\n"
+                          "    * While checking the expression: %s\n"
+                          "  - Hint: %s",
+                          term_to_string(dep_quote(expected_type,  ctx->depth, ctx->mctx)),
+                          term_to_string(dep_quote(inferred,       ctx->depth, ctx->mctx)),
+                          term_to_string(t),
+                          cc.error_msg[0] ? cc.error_msg : "Ensure your type annotations align with the values.");
+            return false;
+        }
+        return true;
+    }
+    }
+}
+
+int dep_infer_level(DepCtx *ctx, Term *ty) {
+    Value *sort = dep_infer(ctx, ty);
+    if (!sort) return -1;
+    sort = dep_force(sort, ctx->mctx);
+    if (sort->kind != VAL_UNIVERSE) {
+        dep_error_set(ctx, ty ? ty->line : 0, ty ? ty->col : 0,
+                      "expected a type (universe), got %s",
+                      term_to_string(dep_quote(sort, ctx->depth, ctx->mctx)));
+        return -1;
+    }
+    int n = level_eval(sort->level);
+    return n >= 0 ? n : 0;
+}
+
+
+/// Interop: ground types <-> core terms
+
+Term *dep_term_of_ground(Type *ground_type) {
+    return term_embed(ground_type);
+}
+
+Type *dep_ground_of_value(Value *v, MetaCtx *mctx) {
+    if (!v) return NULL;
+    v = dep_force(v, mctx);
+
+    if (v->kind == VAL_EMBED) {
+        return type_clone(v->embed_type);
+    }
+    if (v->kind == VAL_PI) {
+        // Idris-style Erasure: Skip implicit compile-time arguments when projecting to runtime HM types
+        if (v->implicit != IMPLICIT_EXPLICIT) {
+            Value *dummy = val_neutral("hm_impl", val_spine_empty());
+            Value *codom = dep_closure_apply(v->closure, dummy);
+            return dep_ground_of_value(codom, mctx);
+        }
+
+        Type *param = dep_ground_of_value(v->domain, mctx);
+        Value *dummy = val_neutral("hm_arg", val_spine_empty());
+        Value *codom = dep_closure_apply(v->closure, dummy);
+        Type *ret = dep_ground_of_value(codom, mctx);
+
+        if (param && ret) return type_arrow(param, ret);
+        if (param) type_free(param);
+        if (ret) type_free(ret);
+        return type_unknown();
+    }
+    if (v->kind == VAL_NAT || v->kind == VAL_SUCC || v->kind == VAL_ZERO || v->kind == VAL_NUM_LIT) {
+        return type_int(); // Peano Nats lower to Ints in the HM/LLVM layer
+    }
+
+    return type_unknown();
+}
+
+Term *dep_term_of_ast(DepCtx *ctx, AST *ast) {
+    if (!ast) return term_hole();
+    switch (ast->type) {
+    case AST_NUMBER:
+        {
+            long long n = (long long)ast->number;
+            if (n >= 0) {
+                return term_num_lit((unsigned long long)n);
+            }
+            return term_embed(type_int());
+        }
+    case AST_STRING:  return term_embed(type_string());
+    case AST_CHAR: {
+        long long n = (long long)ast->character;
+        if (n >= 0) {
+            return term_num_lit((unsigned long long)n);
+        }
+        return term_embed(type_char());
+    }
+    case AST_KEYWORD: return term_embed(type_keyword());
+    case AST_SYMBOL:
+        // Check if it is a universe literal "Type" or "Type N"
+        if (strcmp(ast->symbol, "Type") == 0) return term_type_n(0);
+        if (strcmp(ast->symbol, "Nat")  == 0) return term_nat();
+        if (strcmp(ast->symbol, "zero") == 0) return term_zero();
+        // Check if it is a known ground type name
+        {
+            Type *ground = type_from_name(ast->symbol);
+            if (ground) return term_embed(ground);
+        }
+        return term_fvar(ast->symbol);
+    case AST_LIST:
+        if (ast->list.count == 0) return term_hole();
+        {
+            AST *head = ast->list.items[0];
+            // (Π [x : A] -> B)
+            if (head->type == AST_SYMBOL && strcmp(head->symbol, "Pi") == 0 && ast->list.count == 3) {
+                Term *dom  = dep_term_of_ast(ctx, ast->list.items[1]);
+                Term *body = dep_term_of_ast(ctx, ast->list.items[2]);
+                return term_pi("x", dom, body, IMPLICIT_EXPLICIT);
+            }
+            // (Sigma [x : A] B)
+            if (head->type == AST_SYMBOL && strcmp(head->symbol, "Sigma") == 0 && ast->list.count == 3) {
+                Term *dom  = dep_term_of_ast(ctx, ast->list.items[1]);
+                Term *body = dep_term_of_ast(ctx, ast->list.items[2]);
+                return term_sigma("x", dom, body);
+            }
+            // (= A a b) — equality type
+            if (head->type == AST_SYMBOL && strcmp(head->symbol, "=") == 0 && ast->list.count == 4) {
+                Term *ty  = dep_term_of_ast(ctx, ast->list.items[1]);
+                Term *lhs = dep_term_of_ast(ctx, ast->list.items[2]);
+                Term *rhs = dep_term_of_ast(ctx, ast->list.items[3]);
+                return term_eq(lhs, rhs, ty);
+            }
+            // (refl t)
+            if (head->type == AST_SYMBOL && strcmp(head->symbol, "refl") == 0 && ast->list.count == 2)
+                return term_refl(dep_term_of_ast(ctx, ast->list.items[1]));
+            // (lambda (x : A) body) or (λ x body)
+            if (head->type == AST_SYMBOL &&
+                (strcmp(head->symbol, "lambda") == 0 || strcmp(head->symbol, "λ") == 0) &&
+                ast->list.count >= 3) {
+                const char *param = "_";
+                Term       *dom   = term_hole();
+                AST        *param_ast = ast->list.items[1];
+                if (param_ast->type == AST_SYMBOL) {
+                    param = param_ast->symbol;
+                } else if (param_ast->type == AST_LIST && param_ast->list.count == 3) {
+                    /* (x : T) */
+                    if (param_ast->list.items[0]->type == AST_SYMBOL)
+                        param = param_ast->list.items[0]->symbol;
+                    dom = dep_term_of_ast(ctx, param_ast->list.items[2]);
+                }
+                Term *body = dep_term_of_ast(ctx, ast->list.items[ast->list.count - 1]);
+                return term_lam(param, dom, body);
+            }
+            // (succ n)
+            if (head->type == AST_SYMBOL && strcmp(head->symbol, "succ") == 0 && ast->list.count == 2)
+                return term_succ(dep_term_of_ast(ctx, ast->list.items[1]));
+            // (let [x : T = val] body) — simplified form
+            if (head->type == AST_SYMBOL && strcmp(head->symbol, "let") == 0 && ast->list.count == 4)
+                return term_let(
+                    ast->list.items[1]->type == AST_SYMBOL ? ast->list.items[1]->symbol : "_",
+                    dep_term_of_ast(ctx, ast->list.items[2]),
+                    dep_term_of_ast(ctx, ast->list.items[2]),   // type=val placeholder
+                    dep_term_of_ast(ctx, ast->list.items[3]));
+            // Function application: (f a1 a2 ... an)
+            Term  *fn    = dep_term_of_ast(ctx, head);
+            Term **args  = malloc(sizeof(Term *) * (ast->list.count - 1));
+            for (size_t i = 1; i < ast->list.count; i++)
+                args[i - 1] = dep_term_of_ast(ctx, ast->list.items[i]);
+            return term_app(fn, args, (int)(ast->list.count - 1));
+        }
+    case AST_LAMBDA: {
+        Term *body = dep_term_of_ast(ctx, ast->lambda.body);
+        Term *ty   = NULL;
+
+        if (ast->lambda.return_type) {
+            AST *ret_ast = parse(ast->lambda.return_type);
+            if (ret_ast) {
+                ty = dep_term_of_ast(ctx, ret_ast);
+                ast_free(ret_ast);
+            }
+        }
+
+        for (int i = ast->lambda.param_count - 1; i >= 0; i--) {
+            ASTParam *p = &ast->lambda.params[i];
+            Term *dom = term_hole();
+            if (p->type_name) {
+                AST *ty_ast = parse(p->type_name);
+                if (ty_ast) {
+                    dom = dep_term_of_ast(ctx, ty_ast);
+                    ast_free(ty_ast);
+                }
+            }
+            body = term_lam(p->name, term_clone(dom), body);
+            if (ty) {
+                ty = term_pi(p->name, dom, ty, IMPLICIT_EXPLICIT);
+            } else {
+                term_free(dom);
+            }
+        }
+
+        if (ty) {
+            return term_ann(body, ty);
+        }
+        return body;
+    }
+    default:
+        return term_hole();
+    }
+}
+
+Term *dep_term_of_type_ast(DepCtx *ctx, AST *ast) {
+    return dep_term_of_ast(ctx, ast);
+}
+
+Term *dep_elab_term(DepCtx *ctx, AST *ast, Value *expected_type) {
+    Term *t = dep_term_of_ast(ctx, ast);
+    if (expected_type) {
+        if (!dep_check(ctx, t, expected_type)) return NULL;
+    } else {
+        if (!dep_infer(ctx, t)) return NULL;
+    }
+    return t;
+}
+
+Term *dep_elab_type(DepCtx *ctx, AST *ast) {
+    Term  *t  = dep_term_of_ast(ctx, ast);
+    int    lv = dep_infer_level(ctx, t);
+    if (lv < 0) return NULL;
+    return t;
+}
+
+Value *dep_elab_and_infer(DepCtx *ctx, AST *ast) {
+    Term *t = dep_term_of_ast(ctx, ast);
+    return dep_infer(ctx, t);
+}
+
+
+/// Top-level pipeline
+
+Term *dep_toplevel(DepCtx *ctx, AST *ast, Term **out_type) {
+    if (!ast) return NULL;
+
+    /* Intercept top-level (define name value) */
+    if (ast->type == AST_LIST && ast->list.count >= 3 &&
+        ast->list.items[0]->type == AST_SYMBOL &&
+        strcmp(ast->list.items[0]->symbol, "define") == 0) {
+
+        AST *name_ast = ast->list.items[1];
+        AST *val_ast  = ast->list.items[2];
+
+        if (name_ast->type != AST_SYMBOL) {
+            dep_error_set(ctx, name_ast->line, name_ast->column, "expected symbol for define");
+            return NULL;
+        }
+
+        Term *val_term = dep_term_of_ast(ctx, val_ast);
+        if (!val_term) return NULL;
+
+        Value *ty = dep_infer(ctx, val_term);
+        if (!ty || ctx->had_error) {
+            dep_error_print(ctx);
+            term_free(val_term);
+            return NULL;
+        }
+
+        /* Evaluate a cloned term that the DepEnv officially owns so
+         * Closures point to safe, persistent memory instead of being freed by main.c */
+        Term *def_term_clone = term_clone(val_term);
+        Value *val_val = dep_eval(def_term_clone, ctx->env, ctx->mctx);
+        dep_env_define(ctx->globals, name_ast->symbol, ty, def_term_clone, val_val, false);
+
+        /* UNIFICATION: Project the mathematically proven dependent type down
+         * to a ground HM Type and attach it to the AST. When the HM checker
+         * runs later, it will trust the proof instead of inferring from scratch! */
+        Type *hm_ty = dep_ground_of_value(ty, ctx->mctx);
+        if (hm_ty) {
+            if (val_ast->inferred_type) type_free(val_ast->inferred_type);
+            val_ast->inferred_type = hm_ty;
+        }
+
+        if (out_type) {
+            Term *ty_term = dep_quote(ty, ctx->depth, ctx->mctx);
+            *out_type = dep_normalise(ty_term, ctx->env, ctx->mctx);
+            term_free(ty_term);
+        }
+
+        return val_term;
+    }
+
+    // 1. Surface → pre-term
+    Term *t = dep_term_of_ast(ctx, ast);
+    if (!t) return NULL;
+
+    // 2. Bidirectional inference
+    Value *ty = dep_infer(ctx, t);
+    if (!ty || ctx->had_error) {
+        dep_error_print(ctx);
+        return NULL;
+    }
+
+    // 3. Verify all metavariables were solved
+    if (!meta_all_solved(ctx->mctx)) {
+        int unsolved = 0;
+        for (int i = 0; i < ctx->mctx->count; i++)
+            if (ctx->mctx->entries[i].state == META_UNSOLVED) unsolved++;
+
+        fprintf(stderr, "\n  \033[33m[dep] Warning: %d unsolved metavariable(s) remain\033[0m\n", unsolved);
+        for (int i = 0; i < ctx->mctx->count; i++) {
+            if (ctx->mctx->entries[i].state == META_UNSOLVED) {
+                MetaEntry *e = &ctx->mctx->entries[i];
+                fprintf(stderr, "    * ?%d [%s] at depth %d\n", e->id, e->hint ? e->hint : "unknown", e->depth);
+                if (e->type) {
+                    Term *ty_term = dep_quote(e->type, 0, ctx->mctx);
+                    fprintf(stderr, "      Expected type: %s\n", term_to_string(ty_term));
+                    term_free(ty_term);
+                }
+            }
+        }
+        fprintf(stderr, "  - Hint: This is expected during bootstrap. Untyped library functions (like 'and', '>=') generate holes.\n\n");
+    }
+
+    // 4. Bridge to HM: Project the proven type back into the AST
+    Type *hm_ty = dep_ground_of_value(ty, ctx->mctx);
+    if (hm_ty) {
+        if (ast->inferred_type) type_free(ast->inferred_type);
+        ast->inferred_type = hm_ty;
+    }
+
+    // 5. Normalise the result type for output
+    if (out_type) {
+        Term *ty_term = dep_quote(ty, ctx->depth, ctx->mctx);
+        Term *nf      = dep_normalise(ty_term, ctx->env, ctx->mctx);
+        term_free(ty_term);
+        *out_type = nf;
+    }
+
+    return t;
+}
+
+
+/// Builtins bootstrap
+
+void dep_register_builtins(DepCtx *ctx) {
+    DepEnv *env = ctx->globals;
+
+    // Nat : Type 0
+    dep_env_define(env, "Nat",  val_universe_n(0),
+                   term_nat(), val_nat(), true);
+
+    // zero : Nat
+    dep_env_define(env, "zero", val_nat(),
+                   term_zero(), val_zero(), true);
+
+    // succ : Nat → Nat
+    {
+        Value *succ_ty = val_pi("n", val_nat(),
+            (Closure){ .env = eval_env_empty(), .body = term_nat() },
+            IMPLICIT_EXPLICIT);
+        dep_env_declare(env, "succ", succ_ty);
+    }
+
+    // Bool : Type 0  (encoded as Nat: zero=False, succ zero=True)
+    {
+        Value *bool_ty = val_universe_n(0);
+        dep_env_declare(env, "Bool", bool_ty);
+    }
+    dep_env_define(env, "True",  val_embed(type_bool()),
+                   term_embed(type_bool()), val_embed(type_bool()), true);
+    dep_env_define(env, "False", val_embed(type_bool()),
+                   term_embed(type_bool()), val_embed(type_bool()), true);
+
+    // Embed all ground types from types.h at universe 0
+    const char *ground_names[] = {
+        "Int", "Float", "Char", "String", "Bool",
+        "I8","U8","I16","U16","I32","U32","I64","U64","I128","U128",
+        "F32","F80","Ratio","Symbol","Keyword",
+        NULL
+    };
+    for (int i = 0; ground_names[i]; i++) {
+        Type *g = type_from_name(ground_names[i]);
+        if (g) {
+            dep_env_define(env, ground_names[i],
+                           val_universe_n(0),
+                           term_embed(g), val_embed(g), true);
+        }
+    }
+
+    // fst : Π{A: Type u}. Π{B: A → Type u}. Σ(x:A).B x → A
+    // snd : Π{A: Type u}. Π{B: A → Type u}. Π(p: Σ(x:A).B x). B (fst p)
+    // (These are axiomatic; their type is checked at call sites)
+    dep_env_declare(env, "fst",   val_universe_n(0));  // placeholder
+    dep_env_declare(env, "snd",   val_universe_n(0));  // placeholder
+
+    // refl : Π{A: Type u}. Π{a: A}. a ≡ a
+    dep_env_declare(env, "refl",  val_universe_n(0));  // placeholder
+
+    /* subst : Π{A: Type u}. Π{a b: A}. a ≡ b → Π(P: A→Type u). P a → P b */
+    dep_env_declare(env, "subst", val_universe_n(0));  // placeholder
+
+    // sym : Π{A:Type}. Π{a b:A}. a≡b → b≡a
+    dep_env_declare(env, "sym",   val_universe_n(0));  // placeholder
+
+    // trans : Π{A:Type}. Π{a b c:A}. a≡b → b≡c → a≡c
+    dep_env_declare(env, "trans", val_universe_n(0));  // placeholder
+
+    // cong : Π{A B:Type}. Π(f:A→B). Π{a b:A}. a≡b → f a≡f b
+    dep_env_declare(env, "cong",  val_universe_n(0));  // placeholder
+
+    // ── Standard Library Bootstrapping ─────────────────────────────
+    Term *t_int  = term_embed(type_int());
+    Term *t_bool = term_embed(type_bool());
+    Term *t_str  = term_embed(type_string());
+
+    // Helper to generate A -> B
+    #define ARROW(a, b) term_pi("_", (a), (b), IMPLICIT_EXPLICIT)
+
+    Term *int_int_int  = ARROW(term_clone(t_int), ARROW(term_clone(t_int), term_clone(t_int)));
+    Term *int_int_bool = ARROW(term_clone(t_int), ARROW(term_clone(t_int), term_clone(t_bool)));
+    Term *bool_bool_bool = ARROW(term_clone(t_bool), ARROW(term_clone(t_bool), term_clone(t_bool)));
+
+    EvalEnv *ee = eval_env_empty();
+
+    // Math & Logic
+    dep_env_declare(env, "+",   dep_eval(int_int_int, ee, NULL));
+    dep_env_declare(env, "-",   dep_eval(int_int_int, ee, NULL));
+    dep_env_declare(env, "*",   dep_eval(int_int_int, ee, NULL));
+    dep_env_declare(env, "/",   dep_eval(int_int_int, ee, NULL));
+    dep_env_declare(env, "and", dep_eval(bool_bool_bool, ee, NULL));
+    dep_env_declare(env, "or",  dep_eval(bool_bool_bool, ee, NULL));
+
+    dep_env_declare(env, ">=",  dep_eval(int_int_bool, ee, NULL));
+    dep_env_declare(env, "<=",  dep_eval(int_int_bool, ee, NULL));
+    dep_env_declare(env, ">",   dep_eval(int_int_bool, ee, NULL));
+    dep_env_declare(env, "<",   dep_eval(int_int_bool, ee, NULL));
+    dep_env_declare(env, "=",   dep_eval(int_int_bool, ee, NULL));
+    dep_env_declare(env, "!=",  dep_eval(int_int_bool, ee, NULL));
+
+    // show : Π{A : Type 0}. A -> String
+    Term *show_ty = term_pi("A", term_type_n(0),
+                        ARROW(term_bvar(0), term_clone(t_str)),
+                        IMPLICIT_IMPLICIT);
+    dep_env_declare(env, "show", dep_eval(show_ty, ee, NULL));
+
+    // if : Π{A : Type 0}. Bool -> A -> A -> A
+    // (Notice how De Bruijn indices shift as we nest deeper into binders)
+    Term *if_ty = term_pi("A", term_type_n(0),
+                    ARROW(term_clone(t_bool),
+                        ARROW(term_bvar(1),
+                            ARROW(term_bvar(2), term_bvar(3)))),
+                  IMPLICIT_IMPLICIT);
+    dep_env_declare(env, "if", dep_eval(if_ty, ee, NULL));
+
+    eval_env_free(ee);
+
+    /*
+     * TEMPORARY SHADOW PASS HACK:
+     * We intentionally do NOT free the type terms (int_int_int, if_ty, etc.) here.
+     * The NbE 'Closure' struct holds direct C pointers to these Term ASTs for lazy evaluation.
+     * Freeing them causes a Use-After-Free memory corruption when the type checker
+     * evaluates standard library calls later on!
+     */
+    #undef ARROW
+}
+
+
+/// Error reporting
+
+void dep_error_set(DepCtx *ctx, int line, int col, const char *fmt, ...) {
+    if (ctx->had_error) return;   // keep the first error only
+    ctx->had_error = true;
+    char msg[900];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(msg, sizeof(msg), fmt, ap);
+    va_end(ap);
+    snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+             "%s:%d:%d: Dependent Type Error%s",
+             ctx->filename, line, col, msg);
+}
+
+void dep_error_print(DepCtx *ctx) {
+    if (!ctx->had_error) return;
+    fprintf(stderr, "%s\n", ctx->error_msg);
+}
+
+
+/// Pretty printing
+
+void dep_print_term(Term *t) {
+    printf("%s", term_to_string(t));
+}
+
+void dep_print_value(Value *v, MetaCtx *mctx) {
+    if (!v) { printf("?"); return; }
+    Term *t = dep_quote(v, 0, mctx);
+    printf("%s", term_to_string(t));
+    term_free(t);
+}
+
+void dep_print_ctx(DepCtx *ctx) {
+    printf("[dep context — depth %d]\n", ctx->depth);
+    int i = ctx->depth - 1;
+    for (DepCtxEntry *e = ctx->locals; e; e = e->next, i--) {
+        printf("  %d  %s : ", i, e->name);
+        dep_print_value(e->type, ctx->mctx);
+        printf("\n");
+    }
+}
+
+void dep_print_meta_ctx(MetaCtx *mctx) {
+    if (!mctx) return;
+    printf("[metavariables — %d total]\n", mctx->count);
+    for (int i = 0; i < mctx->count; i++) {
+        MetaEntry *e = &mctx->entries[i];
+        printf("  ?%d [%s]", e->id,
+               e->state == META_SOLVED ? "solved" : "UNSOLVED");
+        if (e->hint) printf(" (%s)", e->hint);
+        if (e->state == META_SOLVED) {
+            printf(" = %s", term_to_string(e->solution));
+        }
+        printf("\n");
+    }
+}

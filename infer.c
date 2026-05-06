@@ -1079,7 +1079,16 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         break;
     }
 
-    ast->inferred_type = result;
+    if (ast->inferred_type && ast->inferred_type->kind != TYPE_UNKNOWN) {
+        /* UNIFICATION: The dependent elaborator pre-seeded a ground type for us!
+         * Constrain our HM-inferred type against the mathematically proven type.
+         * This bridges the two systems: HM gets the superpowers of dependent types. */
+        infer_constrain(ctx, result, ast->inferred_type, ast->line, ast->column);
+        result = ast->inferred_type; // Use the rich type going forward
+    } else {
+        ast->inferred_type = result;
+    }
+
     return result;
 }
 

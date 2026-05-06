@@ -18,6 +18,7 @@
 #include "buildsystem.h"
 #include "ffi.h"
 #include "wisp.h"
+#include "dep.h"
 
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
@@ -966,6 +967,51 @@ static CompiledModule *compile_one(const char *source_path,
     LLVMSetLinkage(fgv, LLVMInternalLinkage);
     LLVMBuildStore(ctx.builder, feat_list, fgv);
     env_insert(ctx.env, "*features*", ft, fgv);
+
+/// Phase 6.5: Dependent Type Checking (Shadow Pass)
+
+    DepCtx *dep_ctx = dep_ctx_create(my_source_path);
+    dep_register_builtins(dep_ctx);
+
+    printf("  [dep] running bidirectional type checker...\n");
+    bool dep_failed = false;
+
+    for (size_t i = first_code; i < exprs.count; i++) {
+        AST *expr = exprs.exprs[i];
+
+        // Skip module/import nodes for the type checker
+        if (expr->type == AST_LIST && expr->list.count > 0 && expr->list.items[0]->type == AST_SYMBOL) {
+            const char *h = expr->list.items[0]->symbol;
+            if (strcmp(h, "module") == 0 || strcmp(h, "import") == 0) continue;
+        }
+
+        Term *out_type = NULL;
+        Term *elaborated = dep_toplevel(dep_ctx, expr, &out_type);
+
+        if (!elaborated || dep_ctx->had_error) {
+            dep_failed = true;
+            break; // Stop checking on first error
+        }
+
+        // Uncomment to see the elaborator's beautiful proofs!
+        // printf("  [dep] ok: ");
+        // dep_print_term(elaborated);
+        // printf(" : ");
+        // dep_print_term(out_type);
+        // printf("\n");
+
+        term_free(elaborated);
+        term_free(out_type);
+    }
+
+    if (dep_failed) {
+        dep_error_print(dep_ctx);
+        fprintf(stderr, "Compilation halted due to dependent type errors.\n");
+        dep_ctx_free(dep_ctx);
+        exit(1);
+    }
+
+    dep_ctx_free(dep_ctx);
 
 /// Phase 7: Codegen top-level expressions
 

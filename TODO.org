@@ -160,6 +160,7 @@ The hash table approach works for global definitions. For local binders
 Related concepts: typing context, telescope (a sequence of Π-bindings),
 kind hierarchy (Type₀ : Type₁ : Type₂), universe polymorphism.
 
+
 * TODO QTT (Quantitative Type Theory)
 
 QTT adds usage quantities to each binder. Quantities are typically 0, 1, and ω.
@@ -183,6 +184,7 @@ function obeys that usage.
 Related concepts: linear types (exactly once), affine types (at most once),
 relevant types (at least once), unrestricted types (any number), resource
 semantics, erasure analysis, uniqueness typing.
+
 
 
 
