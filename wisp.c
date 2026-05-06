@@ -1168,21 +1168,160 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                             }
                         }
 
-                        if (*lscan == '|') {
-                            wts_push(&s, "|", indent, lineno);
-                            lscan++;
-                            while (*lscan == ' ' || *lscan == '\t') lscan++;
-                            if (*lscan && *lscan != '\0') {
-                                bool has_space = false;
-                                for (const char *c = lscan; *c; c++) {
-                                    if (*c == ' ' || *c == '\t') { has_space = true; break; }
+                        /* Check if left_str contains '|' not at start —
+                         * pattern with inline guard: "c | guard -> body"
+                         * Split into pattern tokens + | + guard expansion. */
+                        const char *inline_pipe = NULL;
+                        {
+                            const char *_sp = lscan;
+                            if (*_sp == '|') {
+                                /* guard-only line, handled below */
+                            } else {
+                                /* scan for | at depth 0 */
+                                int _bd = 0; bool _bs = false;
+                                for (; *_sp; _sp++) {
+                                    if (_bs) { if (*_sp=='\\') _sp++; else if (*_sp=='"') _bs=false; continue; }
+                                    if (*_sp=='"') { _bs=true; continue; }
+                                    if (*_sp=='('||*_sp=='['||*_sp=='{') _bd++;
+                                    if (*_sp==')'||*_sp==']'||*_sp=='}') _bd--;
+                                    if (_bd==0 && *_sp=='|' &&
+                                        (_sp==lscan || *(_sp-1)==' '||*(_sp-1)=='\t') &&
+                                        (*(  _sp+1)==' '||*(  _sp+1)=='\t'||*(  _sp+1)=='\0')) {
+                                        inline_pipe = _sp; break;
+                                    }
                                 }
-                                size_t glen = strlen(lscan) + 3;
-                                char *guard = malloc(glen);
-                                if (has_space) snprintf(guard, glen, "(%s)", lscan);
-                                else snprintf(guard, glen, "%s", lscan);
-                                wts_push(&s, guard, indent, lineno);
-                                free(guard);
+                            }
+                        }
+                        if (inline_pipe) {
+                            /* emit pattern tokens before | */
+                            size_t pat_part_len = inline_pipe - lscan;
+                            while (pat_part_len > 0 &&
+                                   (lscan[pat_part_len-1]==' '||lscan[pat_part_len-1]=='\t'))
+                                pat_part_len--;
+                            if (pat_part_len > 0) {
+                                char *pat_part = strndup(lscan, pat_part_len);
+                                tokenise_into(at, &s, pat_part, indent, lineno);
+                                free(pat_part);
+                            }
+                            /* emit | as a TOK_PIPE-equivalent marker */
+                            wts_push(&s, "|", indent, lineno);
+                            /* emit guard as expanded token */
+                            const char *gstart = inline_pipe + 1;
+                            while (*gstart == ' ' || *gstart == '\t') gstart++;
+                            if (*gstart) {
+                                WTokenStream guard_ts = {0};
+                                tokenise_into(at, &guard_ts, gstart, indent, lineno);
+                                fprintf(stderr, "DEBUG guard_ts count=%d tokens: ", guard_ts.count);
+                                for (int _gi = 0; _gi < guard_ts.count; _gi++)
+                                    fprintf(stderr, "[%d:'%s'(ar=%d)] ", _gi, guard_ts.tokens[_gi].text, arity_get(at, guard_ts.tokens[_gi].text));
+                                fprintf(stderr, "\n");
+
+                                /* Two-pass guard expansion with operator precedence:
+                                 * Pass 1: reduce all comparison operators (>=,<=,>,<,=,!=)
+                                 *         into grouped tokens: c >= 'a' -> (>= c 'a')
+                                 * Pass 2: reduce logical operators (and, or) whose operands
+                                 *         are now single grouped tokens from pass 1.
+                                 * This correctly handles: c >= 'a' and c <= 'z'
+                                 *   Pass1: [(>= c 'a')] [and] [(<= c 'z')]
+                                 *   Pass2: [(and (>= c 'a') (<= c 'z'))]
+                                 */
+
+                                /* --- Pass 1: collapse comparisons --- */
+                                /* Build a reduced token list where each
+                                 * "atom cmp atom" triple becomes one string token */
+                                char **p1_toks = malloc(sizeof(char*) * (guard_ts.count + 1));
+                                int p1_count = 0;
+                                int _gp = 0;
+                                while (_gp < guard_ts.count) {
+                                    const char *cur = guard_ts.tokens[_gp].text;
+                                    bool is_cmp = (strcmp(cur,">=") == 0 || strcmp(cur,"<=") == 0 ||
+                                                   strcmp(cur,">")  == 0 || strcmp(cur,"<")  == 0 ||
+                                                   strcmp(cur,"=")  == 0 || strcmp(cur,"!=") == 0);
+                                    bool is_logic = (strcmp(cur,"and") == 0 || strcmp(cur,"or") == 0);
+
+                                    /* atom cmp atom -> "(cmp lhs rhs)" */
+                                    if (!is_cmp && !is_logic &&
+                                        _gp + 2 < guard_ts.count) {
+                                        const char *op  = guard_ts.tokens[_gp + 1].text;
+                                        const char *rhs = guard_ts.tokens[_gp + 2].text;
+                                        bool op_is_cmp = (strcmp(op,">=") == 0 || strcmp(op,"<=") == 0 ||
+                                                          strcmp(op,">")  == 0 || strcmp(op,"<")  == 0 ||
+                                                          strcmp(op,"=")  == 0 || strcmp(op,"!=") == 0);
+                                        if (op_is_cmp) {
+                                            size_t len = strlen(cur) + strlen(op) + strlen(rhs) + 5;
+                                            char *grouped = malloc(len);
+                                            snprintf(grouped, len, "(%s %s %s)", op, cur, rhs);
+                                            p1_toks[p1_count++] = grouped;
+                                            _gp += 3;
+                                            continue;
+                                        }
+                                    }
+                                    p1_toks[p1_count++] = strdup(cur);
+                                    _gp++;
+                                }
+
+                                fprintf(stderr, "DEBUG guard pass1: ");
+                                for (int _gi = 0; _gi < p1_count; _gi++)
+                                    fprintf(stderr, "[%s] ", p1_toks[_gi]);
+                                fprintf(stderr, "\n");
+
+                                /* --- Pass 2: collapse and/or --- */
+                                char **p2_toks = malloc(sizeof(char*) * (p1_count + 1));
+                                int p2_count = 0;
+                                int _gp2 = 0;
+                                while (_gp2 < p1_count) {
+                                    const char *cur = p1_toks[_gp2];
+                                    bool is_logic = (strcmp(cur,"and") == 0 || strcmp(cur,"or") == 0);
+                                    if (!is_logic &&
+                                        _gp2 + 2 < p1_count) {
+                                        const char *op  = p1_toks[_gp2 + 1];
+                                        const char *rhs = p1_toks[_gp2 + 2];
+                                        bool op_is_logic = (strcmp(op,"and") == 0 || strcmp(op,"or") == 0);
+                                        if (op_is_logic) {
+                                            size_t len = strlen(cur) + strlen(op) + strlen(rhs) + 5;
+                                            char *grouped = malloc(len);
+                                            snprintf(grouped, len, "(%s %s %s)", op, cur, rhs);
+                                            p2_toks[p2_count++] = grouped;
+                                            _gp2 += 3;
+                                            continue;
+                                        }
+                                    }
+                                    p2_toks[p2_count++] = strdup(cur);
+                                    _gp2++;
+                                }
+
+                                fprintf(stderr, "DEBUG guard pass2: ");
+                                for (int _gi = 0; _gi < p2_count; _gi++)
+                                    fprintf(stderr, "[%s] ", p2_toks[_gi]);
+                                fprintf(stderr, "\n");
+
+                                /* Join pass2 result */
+                                SB guard_sb; sb_init(&guard_sb);
+                                for (int _gi = 0; _gi < p2_count; _gi++) {
+                                    if (_gi > 0) sb_putc(&guard_sb, ' ');
+                                    sb_puts(&guard_sb, p2_toks[_gi]);
+                                    free(p2_toks[_gi]);
+                                }
+                                for (int _gi = 0; _gi < p1_count; _gi++) free(p1_toks[_gi]);
+                                free(p1_toks); free(p2_toks);
+                                wts_free(&guard_ts);
+                                char *guard_expanded = sb_take(&guard_sb);
+
+                                /* Wrap in parens if multi-token so reader sees one expression */
+                                bool needs_wrap = (guard_expanded[0] != '(' &&
+                                                   guard_expanded[0] != '[' &&
+                                                   guard_expanded[0] != '{' &&
+                                                   strchr(guard_expanded, ' ') != NULL);
+                                if (needs_wrap) {
+                                    size_t glen = strlen(guard_expanded) + 3;
+                                    char *wrapped = malloc(glen);
+                                    snprintf(wrapped, glen, "(%s)", guard_expanded);
+                                    wts_push(&s, wrapped, indent, lineno);
+                                    free(wrapped);
+                                } else {
+                                    wts_push(&s, guard_expanded, indent, lineno);
+                                }
+                                free(guard_expanded);
                             }
                         } else {
                             tokenise_into(at, &s, left_str, indent, lineno);
@@ -1922,6 +2061,10 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
                                            op_tok->text[0] != '[' &&
                                            op_tok->text[0] != '{');
                         int op_ar = arity_get(t, op_tok->text);
+                        bool op_is_cmp = (strcmp(op_tok->text,">=") == 0 || strcmp(op_tok->text,"<=") == 0 ||
+                                          strcmp(op_tok->text,">")  == 0 || strcmp(op_tok->text,"<")  == 0 ||
+                                          strcmp(op_tok->text,"=")  == 0 || strcmp(op_tok->text,"!=") == 0);
+                        if (op_ar == -1 && op_is_cmp) op_ar = 2;
                         if (!op_is_atom || (op_ar < 2 && op_ar != -1)) break;
                         char *op_name = strdup(op_tok->text);
                         s->pos++;
@@ -2161,6 +2304,8 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
             bool deeper     = (next->indent > my_indent &&
                                next->lineno != my_lineno);
             if (!same_line && !deeper) break;
+            if (same_line && (strcmp(next->text, "->") == 0 ||
+                              strcmp(next->text, "=>") == 0)) break;
 
             sb_putc(out, same_line ? ' ' : '\n');
 

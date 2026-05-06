@@ -40,23 +40,14 @@
 ;; show Green
 
 
-;; define main -> Int
-;;   def x 30
-;;   show x ; Doesn't work?
 
-;; define x 30
-;; show x
-
-define double :: [x :: Int] -> Int
-  x * 2
-
-show double 3
 
 ;; TODO
-;; define char-upcase ∈ Char -> Char
-;;   c | c >= 'a' and c <= 'z' -> c - case-delta
-;;     | otherwise             -> c
+define char-upcase :: Char -> Char
+  c | c >= 'a' and c <= 'z' -> c - 32
+    | otherwise             -> c
 
+show char-upcase 'a'
 
 
 ;; (instance Eq TrafficLight where

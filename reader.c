@@ -2894,7 +2894,11 @@ static AST *parse_list(Parser *p) {
                 /* Peek ahead to confirm '->' exists at depth 0 before
                  * entering pmatch mode. A plain expression body (e.g.
                  * just `x`) has no '->' and must be parsed normally. */
-                bool body_has_arrow = (p->current.type == TOK_ARROW);
+                bool body_has_arrow = (p->current.type == TOK_ARROW ||
+                                       p->current.type == TOK_PIPE  ||
+                                       (p->current.type == TOK_SYMBOL &&
+                                        p->current.value &&
+                                        strcmp(p->current.value, "|") == 0));
                 {
                     Lexer peek_lex = *p->lexer;
                     /* Start peeking from NEXT token — do NOT free p->current.value
@@ -2909,6 +2913,19 @@ static AST *parse_list(Parser *p) {
                         if ((peek_cur.type == TOK_RPAREN ||
                              peek_cur.type == TOK_RBRACKET) && depth > 0) depth--;
                         if (peek_cur.type == TOK_ARROW && depth == 0) {
+                            body_has_arrow = true;
+                            free(peek_cur.value);
+                            break;
+                        }
+                        if (peek_cur.type == TOK_PIPE && depth == 0) {
+                            body_has_arrow = true;
+                            free(peek_cur.value);
+                            break;
+                        }
+                        if (peek_cur.type == TOK_SYMBOL &&
+                            peek_cur.value &&
+                            strcmp(peek_cur.value, "|") == 0 &&
+                            depth == 0) {
                             body_has_arrow = true;
                             free(peek_cur.value);
                             break;

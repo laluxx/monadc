@@ -326,6 +326,12 @@ bool infer_unify_one(InferCtx *ctx, Type *a, Type *b, int line, int col) {
         /* TYPE_F80 ~ TYPE_FLOAT */
         if (a->kind == TYPE_F80 && b->kind == TYPE_FLOAT) return true;
         if (a->kind == TYPE_FLOAT && b->kind == TYPE_F80) return true;
+        /* TYPE_INT ~ TYPE_CHAR — chars are small integers, coercion is always valid */
+        if (a->kind == TYPE_INT && b->kind == TYPE_CHAR) return true;
+        if (a->kind == TYPE_CHAR && b->kind == TYPE_INT) return true;
+        /* TYPE_INT_ARBITRARY ~ TYPE_CHAR — same reasoning */
+        if (a->kind == TYPE_INT_ARBITRARY && b->kind == TYPE_CHAR) return true;
+        if (a->kind == TYPE_CHAR && b->kind == TYPE_INT_ARBITRARY) return true;
         /* TYPE_COLL is compatible with any collection type */
         if (a->kind == TYPE_COLL && (b->kind == TYPE_LIST ||
                                      b->kind == TYPE_SET  ||
