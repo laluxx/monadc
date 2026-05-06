@@ -246,9 +246,10 @@ struct Term {
     struct Term  *ann_term;       // annotated term
     struct Term  *ann_type;       // type annotation
 
-    // ── Source location (all nodes) ───────────────────────────────
+    // ── Source location and Interop ───────────────────────────────
     int           line;
     int           col;
+    struct AST   *source_ast;     // For back-propagating types to HM
 };
 
 
@@ -389,6 +390,7 @@ struct Value {
 
     // VAL_NEUTRAL / VAL_META
     char     *neutral_name;   // VAL_NEUTRAL: free variable name
+    int       neutral_level;  // VAL_NEUTRAL: binding level (-1 for globals)
     int       meta_id;        // VAL_META: metavariable ID
     Spine     spine;          // arguments accumulated on the neutral
 
@@ -408,7 +410,7 @@ Value *val_succ(Value *pred);
 Value *val_num_lit(unsigned long long n);
 Value *val_eq(Value *lhs, Value *rhs, Value *type);
 Value *val_refl(Value *v);
-Value *val_neutral(const char *name, Spine spine);
+Value *val_neutral(const char *name, int level, Spine spine);
 Value *val_meta(int id, Spine spine);
 Value *val_embed(Type *t);
 void   val_free(Value *v);
@@ -515,6 +517,7 @@ void      meta_ctx_free(MetaCtx *mctx);
 int       meta_fresh(MetaCtx *mctx, Value *type, int depth, const char *hint);
 bool      meta_solve(MetaCtx *mctx, int id, Term *solution); // false = occurs
 MetaEntry *meta_lookup(MetaCtx *mctx, int id);
+bool      term_occurs_meta(int id, Term *t);
 bool      meta_occurs(MetaCtx *mctx, int id, Value *v);      // occurs check
 bool      meta_all_solved(MetaCtx *mctx);                    // post-elab check
 

@@ -40,6 +40,7 @@
 ;; show Green
 
 
+
 define char-upcase :: Char -> Char
   c | c >= 'a' and c <= 'z' -> c - 32
     | otherwise             -> c

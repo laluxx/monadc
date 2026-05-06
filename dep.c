@@ -8,12 +8,12 @@
 
 /// Trace Utilities
 
-static int g_dep_trace_depth = 0;
-static bool g_dep_trace_enabled = true; // Set to false to disable tracing
+int g_trace_depth = 0;
+bool g_trace_enabled = true; // Set to false to disable tracing
 
-static void dep_trace_indent(void) {
-    if (!g_dep_trace_enabled) return;
-    for (int i = 0; i < g_dep_trace_depth; i++) fprintf(stderr, "│   ");
+void shared_trace_indent(void) {
+    if (!g_trace_enabled) return;
+    for (int i = 0; i < g_trace_depth; i++) fprintf(stderr, "│   ");
 }
 
 /// Universe levels
@@ -130,11 +130,14 @@ bool level_leq(Level *u, Level *v) {
 }
 
 const char *level_to_string(Level *u) {
-    static char buf[64];
-    if (!u) { snprintf(buf, sizeof(buf), "?"); return buf; }
+    static char bufs[8][64];
+    static int buf_idx = 0;
+    char *buf = bufs[buf_idx];
+    buf_idx = (buf_idx + 1) % 8;
+    if (!u) { snprintf(buf, 64, "?"); return buf; }
     int n = level_eval(u);
-    if (n >= 0) snprintf(buf, sizeof(buf), "%d", n);
-    else        snprintf(buf, sizeof(buf), "?lvl");
+    if (n >= 0) snprintf(buf, 64, "%d", n);
+    else        snprintf(buf, 64, "?lvl");
     return buf;
 }
 
@@ -640,72 +643,94 @@ void term_free(Term *t) {
 }
 
 const char *term_to_string(Term *t) {
-    static char buf[2048];
+    static char bufs[16][4096];
+    static int buf_idx = 0;
+    char *buf = bufs[buf_idx];
+    buf_idx = (buf_idx + 1) % 16;
     if (!t) { return "?"; }
     switch (t->kind) {
-    case TERM_BVAR: snprintf(buf, sizeof(buf), "#%d",    t->bvar_index); return buf;
+    case TERM_BVAR: snprintf(buf, 4096, "#%d", t->bvar_index); return buf;
     case TERM_FVAR: return t->fvar_name ? t->fvar_name : "?";
-    case TERM_TYPE: snprintf(buf, sizeof(buf), "Type %s", level_to_string(t->type_level)); return buf;
+    case TERM_TYPE: snprintf(buf, 4096, "Type %s", level_to_string(t->type_level)); return buf;
     case TERM_KIND: return "Kind";
     case TERM_NAT:  return "Nat";
     case TERM_ZERO: return "zero";
-    case TERM_META: snprintf(buf, sizeof(buf), "?%d", t->meta_id); return buf;
+    case TERM_META: snprintf(buf, 4096, "?%d", t->meta_id); return buf;
     case TERM_HOLE: return "_";
     case TERM_EMBED: return type_to_string(t->embed_type);
     case TERM_PI:
-        snprintf(buf, sizeof(buf), "Π(%s : %s). ...",
+        snprintf(buf, 4096, "Π(%s : %s). %s",
                  t->binder_name ? t->binder_name : "_",
-                 term_to_string(t->binder_dom));
+                 term_to_string(t->binder_dom),
+                 term_to_string(t->binder_body));
         return buf;
     case TERM_LAM:
-        snprintf(buf, sizeof(buf), "λ(%s : %s). ...",
+        snprintf(buf, 4096, "λ(%s : %s). %s",
                  t->binder_name ? t->binder_name : "_",
-                 term_to_string(t->binder_dom));
+                 term_to_string(t->binder_dom),
+                 term_to_string(t->binder_body));
         return buf;
     case TERM_SIGMA:
-        snprintf(buf, sizeof(buf), "Σ(%s : %s). ...",
+        snprintf(buf, 4096, "Σ(%s : %s). %s",
                  t->binder_name ? t->binder_name : "_",
-                 term_to_string(t->binder_dom));
+                 term_to_string(t->binder_dom),
+                 term_to_string(t->binder_body));
         return buf;
-    case TERM_APP:
-        snprintf(buf, sizeof(buf), "(%s ...)", term_to_string(t->app_fn));
+    case TERM_APP: {
+        int offset = snprintf(buf, 4096, "(%s", term_to_string(t->app_fn));
+        for (int i = 0; i < t->app_argc && offset < 4095; i++) {
+            offset += snprintf(buf + offset, 4096 - offset, " %s", term_to_string(t->app_args[i]));
+        }
+        if (offset < 4095) snprintf(buf + offset, 4096 - offset, ")");
         return buf;
+    }
     case TERM_PAIR:
-        snprintf(buf, sizeof(buf), "⟨%s, %s⟩",
+        snprintf(buf, 4096, "⟨%s, %s⟩",
                  term_to_string(t->pair_fst),
                  term_to_string(t->pair_snd));
         return buf;
-    case TERM_FST: snprintf(buf, sizeof(buf), "fst(%s)", term_to_string(t->pair_fst)); return buf;
-    case TERM_SND: snprintf(buf, sizeof(buf), "snd(%s)", term_to_string(t->pair_fst)); return buf;
+    case TERM_FST: snprintf(buf, 4096, "fst(%s)", term_to_string(t->pair_fst)); return buf;
+    case TERM_SND: snprintf(buf, 4096, "snd(%s)", term_to_string(t->pair_fst)); return buf;
     case TERM_EQ:
-        snprintf(buf, sizeof(buf), "%s ≡ %s",
+        snprintf(buf, 4096, "%s ≡ %s",
                  term_to_string(t->eq_lhs), term_to_string(t->eq_rhs));
         return buf;
-    case TERM_REFL: snprintf(buf, sizeof(buf), "refl %s", term_to_string(t->refl_val)); return buf;
+    case TERM_REFL: snprintf(buf, 4096, "refl %s", term_to_string(t->refl_val)); return buf;
     case TERM_SUCC_T: {
-        /* Collapse Peano numbers into decimals for readable error messages
-         * and eliminate static buffer overlapping UB */
         int n = 0;
         Term *curr = t;
         while (curr->kind == TERM_SUCC_T) { n++; curr = curr->succ_pred; }
         if (curr->kind == TERM_ZERO) {
-            snprintf(buf, sizeof(buf), "%d", n);
+            snprintf(buf, 4096, "%d", n);
         } else {
-            snprintf(buf, sizeof(buf), "%d + %s", n, term_to_string(curr));
+            snprintf(buf, 4096, "%d + %s", n, term_to_string(curr));
         }
         return buf;
     }
     case TERM_NUM_LIT:
-        snprintf(buf, sizeof(buf), "%llu", t->num_lit);
+        snprintf(buf, 4096, "%llu", t->num_lit);
         return buf;
-    case TERM_NAT_ELIM: return "Nat-elim(...)";
+    case TERM_NAT_ELIM:
+        snprintf(buf, 4096, "Nat-elim(%s, %s, %s, %s)",
+                 term_to_string(t->nelim_motive),
+                 term_to_string(t->nelim_zero),
+                 term_to_string(t->nelim_succ),
+                 term_to_string(t->nelim_arg));
+        return buf;
     case TERM_LET:
-        snprintf(buf, sizeof(buf), "let %s := ... in ...",
-                 t->binder_name ? t->binder_name : "_");
+        snprintf(buf, 4096, "let %s := %s in %s",
+                 t->binder_name ? t->binder_name : "_",
+                 term_to_string(t->let_val),
+                 term_to_string(t->binder_body));
         return buf;
-    case TERM_SUBST:  return "subst(...)";
+    case TERM_SUBST:
+        snprintf(buf, 4096, "subst(%s, %s, %s)",
+                 term_to_string(t->subst_proof),
+                 term_to_string(t->subst_motive),
+                 term_to_string(t->subst_base));
+        return buf;
     case TERM_ANN:
-        snprintf(buf, sizeof(buf), "(%s : %s)",
+        snprintf(buf, 4096, "(%s : %s)",
                  term_to_string(t->ann_term), term_to_string(t->ann_type));
         return buf;
     }
@@ -911,9 +936,10 @@ void val_spine_free(Spine sp) {
     free(sp.args);
 }
 
-Value *val_neutral(const char *name, Spine spine) {
+Value *val_neutral(const char *name, int level, Spine spine) {
     Value *v         = val_alloc(VAL_NEUTRAL);
     v->neutral_name  = strdup(name);
+    v->neutral_level = level;
     v->spine         = spine;
     return v;
 }
@@ -1002,43 +1028,52 @@ bool meta_solve(MetaCtx *mctx, int id, Term *solution) {
     return true;
 }
 
+bool term_occurs_meta(int id, Term *t) {
+    if (!t) return false;
+    switch (t->kind) {
+        case TERM_META: return t->meta_id == id;
+        case TERM_PI:
+        case TERM_LAM:
+        case TERM_SIGMA:
+            return term_occurs_meta(id, t->binder_dom) || term_occurs_meta(id, t->binder_body);
+        case TERM_APP:
+            if (term_occurs_meta(id, t->app_fn)) return true;
+            for (int i = 0; i < t->app_argc; i++) {
+                if (term_occurs_meta(id, t->app_args[i])) return true;
+            }
+            return false;
+        case TERM_LET:
+            return term_occurs_meta(id, t->let_type) || term_occurs_meta(id, t->let_val) || term_occurs_meta(id, t->binder_body);
+        case TERM_PAIR:
+            return term_occurs_meta(id, t->pair_fst) || term_occurs_meta(id, t->pair_snd) || term_occurs_meta(id, t->pair_type);
+        case TERM_FST:
+        case TERM_SND:
+            return term_occurs_meta(id, t->pair_fst);
+        case TERM_EQ:
+            return term_occurs_meta(id, t->eq_lhs) || term_occurs_meta(id, t->eq_rhs) || term_occurs_meta(id, t->eq_type);
+        case TERM_REFL:
+            return term_occurs_meta(id, t->refl_val);
+        case TERM_SUBST:
+            return term_occurs_meta(id, t->subst_proof) || term_occurs_meta(id, t->subst_motive) || term_occurs_meta(id, t->subst_base);
+        case TERM_SUCC_T:
+            return term_occurs_meta(id, t->succ_pred);
+        case TERM_NAT_ELIM:
+            return term_occurs_meta(id, t->nelim_motive) || term_occurs_meta(id, t->nelim_zero) || term_occurs_meta(id, t->nelim_succ) || term_occurs_meta(id, t->nelim_arg);
+        case TERM_ANN:
+            return term_occurs_meta(id, t->ann_term) || term_occurs_meta(id, t->ann_type);
+        default: return false;
+    }
+}
+
 //  meta_occurs: check whether meta `id` appears in value `v`.
-//  We work on values rather than terms to avoid re-evaluating.
-//  Neutral metas in the spine and unsolved metas in closures are checked. */
+//  Uses dep_quote to expand closures and check full spines safely.
 //
 bool meta_occurs(MetaCtx *mctx, int id, Value *v) {
     if (!v) return false;
-    switch (v->kind) {
-    case VAL_META:
-        if (v->meta_id == id) return true;
-        /* Check the spine */
-        for (int i = 0; i < v->spine.count; i++)
-            if (meta_occurs(mctx, id, v->spine.args[i])) return true;
-        return false;
-    case VAL_NEUTRAL:
-        for (int i = 0; i < v->spine.count; i++)
-            if (meta_occurs(mctx, id, v->spine.args[i])) return true;
-        return false;
-    case VAL_UNIVERSE: return false;
-    case VAL_NAT:      return false;
-    case VAL_ZERO:     return false;
-    case VAL_EMBED:    return false;
-    case VAL_SUCC:     return meta_occurs(mctx, id, v->pred);
-    case VAL_NUM_LIT:  return false;
-    case VAL_PAIR:     return meta_occurs(mctx, id, v->fst)
-                           || meta_occurs(mctx, id, v->snd);
-    case VAL_EQ:       return meta_occurs(mctx, id, v->eq_lhs)
-                           || meta_occurs(mctx, id, v->eq_rhs)
-                           || meta_occurs(mctx, id, v->eq_type_val);
-    case VAL_REFL:     return meta_occurs(mctx, id, v->refl_val);
-    // Closures: we cannot easily traverse them without evaluating.
-    // Conservative approximation: assume no occurrence.
-    case VAL_PI:
-    case VAL_SIGMA:
-    case VAL_LAM:
-        return meta_occurs(mctx, id, v->domain);
-    }
-    return false;
+    Term *quoted = dep_quote(v, 0, mctx);
+    bool occurs = term_occurs_meta(id, quoted);
+    term_free(quoted);
+    return occurs;
 }
 
 bool meta_all_solved(MetaCtx *mctx) {
@@ -1088,7 +1123,7 @@ Value *dep_eval(Term *t, EvalEnv *env, MetaCtx *mctx) {
     // ── Atoms ────────────────────────────────────────────────────
     case TERM_BVAR: {
         Value *v = eval_env_lookup(env, t->bvar_index);
-        return v ? v : val_neutral("?bvar", val_spine_empty());
+        return v ? v : val_neutral("?bvar", -1, val_spine_empty());
     }
 
     case TERM_FVAR: {
@@ -1096,7 +1131,7 @@ Value *dep_eval(Term *t, EvalEnv *env, MetaCtx *mctx) {
          * δ-unfolding (definitions) happens in dep_conv when both sides
          * are neutrals with the same head — we look up the definition
          * and reduce if available.                                       */
-        return val_neutral(t->fvar_name, val_spine_empty());
+        return val_neutral(t->fvar_name, -1, val_spine_empty());
     }
 
     case TERM_TYPE:
@@ -1159,7 +1194,7 @@ Value *dep_eval(Term *t, EvalEnv *env, MetaCtx *mctx) {
                  * should have caught this; produce a neutral to continue. */
                 Spine sp = val_spine_empty();
                 val_spine_push(&sp, arg);
-                fn = val_neutral("!not-a-function", sp);
+                fn = val_neutral("!not-a-function", -1, sp);
             }
         }
         return fn;
@@ -1176,8 +1211,8 @@ Value *dep_eval(Term *t, EvalEnv *env, MetaCtx *mctx) {
         if (p->kind == VAL_PAIR) return p->fst;
         // Neutral fst
         Spine sp = val_spine_empty();
-        char name[64]; snprintf(name, sizeof(name), "fst!");
-        return val_neutral(name, sp);
+        char name[64]; snprintf(name, 64, "fst!");
+        return val_neutral(name, -1, sp);
     }
 
     case TERM_SND: {
@@ -1185,7 +1220,7 @@ Value *dep_eval(Term *t, EvalEnv *env, MetaCtx *mctx) {
         p = dep_force(p, mctx);
         if (p->kind == VAL_PAIR) return p->snd;
         Spine sp = val_spine_empty();
-        return val_neutral("snd!", sp);
+        return val_neutral("snd!", -1, sp);
     }
 
     // ── Equality ──────────────────────────────────────────────────
@@ -1204,7 +1239,7 @@ Value *dep_eval(Term *t, EvalEnv *env, MetaCtx *mctx) {
         if (h->kind == VAL_REFL) {
             return dep_eval(t->subst_base, env, mctx);
         }
-        return val_neutral("subst!", val_spine_empty());
+        return val_neutral("subst!", -1, val_spine_empty());
     }
 
     // ── Nat ───────────────────────────────────────────────────────
@@ -1257,7 +1292,7 @@ Value *dep_eval(Term *t, EvalEnv *env, MetaCtx *mctx) {
             return step2;
         }
         // Stuck: n is neutral
-        return val_neutral("Nat-elim!", val_spine_empty());
+        return val_neutral("Nat-elim!", -1, val_spine_empty());
     }
 
     // ── Let ───────────────────────────────────────────────────────
@@ -1311,7 +1346,7 @@ Term *dep_quote(Value *v, int depth, MetaCtx *mctx) {
         // Fresh neutral variable at this depth
         char   fresh_name[32];
         snprintf(fresh_name, sizeof(fresh_name), "x%d", depth);
-        Value *fresh_var  = val_neutral(fresh_name, val_spine_empty());
+        Value *fresh_var  = val_neutral(fresh_name, depth, val_spine_empty());
         Value *body_val   = dep_closure_apply(v->closure, fresh_var);
         Term  *body_term  = dep_quote(body_val, depth + 1, mctx);
         return term_lam(v->binder_name, dom, body_term);
@@ -1322,7 +1357,7 @@ Term *dep_quote(Value *v, int depth, MetaCtx *mctx) {
         Term  *dom  = dep_quote(v->domain, depth, mctx);
         char   fresh_name[32];
         snprintf(fresh_name, sizeof(fresh_name), "x%d", depth);
-        Value *fresh_var  = val_neutral(fresh_name, val_spine_empty());
+        Value *fresh_var  = val_neutral(fresh_name, depth, val_spine_empty());
         Value *codom_val  = dep_closure_apply(v->closure, fresh_var);
         Term  *codom_term = dep_quote(codom_val, depth + 1, mctx);
         return term_pi(v->binder_name, dom, codom_term, v->implicit);
@@ -1332,7 +1367,7 @@ Term *dep_quote(Value *v, int depth, MetaCtx *mctx) {
         Term  *dom  = dep_quote(v->domain, depth, mctx);
         char   fresh_name[32];
         snprintf(fresh_name, sizeof(fresh_name), "x%d", depth);
-        Value *fresh_var  = val_neutral(fresh_name, val_spine_empty());
+        Value *fresh_var  = val_neutral(fresh_name, depth, val_spine_empty());
         Value *codom_val  = dep_closure_apply(v->closure, fresh_var);
         Term  *codom_term = dep_quote(codom_val, depth + 1, mctx);
         return term_sigma(v->binder_name, dom, codom_term);
@@ -1356,12 +1391,15 @@ Term *dep_quote(Value *v, int depth, MetaCtx *mctx) {
     }
 
     /* Neutral: a free variable applied to a spine of arguments.
-     * The variable's De Bruijn index is (depth - level - 1), where
-     * level is the depth at which the variable was introduced.
-     * Since we store the *name* (not the level), we emit TERM_FVAR.    */
+     * With neutral_level, we can now emit perfectly valid De Bruijn
+     * indices (TERM_BVAR) for mathematically sound scope checking! */
     case VAL_NEUTRAL: {
         Term *head;
-        head = term_fvar(v->neutral_name);
+        if (v->neutral_level >= 0) {
+            head = term_bvar(depth - v->neutral_level - 1);
+        } else {
+            head = term_fvar(v->neutral_name);
+        }
         if (v->spine.count == 0) return head;
         Term **args = malloc(sizeof(Term *) * v->spine.count);
         for (int i = 0; i < v->spine.count; i++)
@@ -1418,7 +1456,7 @@ static bool dep_conv_vals(ConvCtx *cctx, Value *v1, Value *v2, Value *ty);
 static Value *fresh_neutral(ConvCtx *cctx, const char *hint) {
     char name[64];
     snprintf(name, sizeof(name), "%s!%d", hint ? hint : "x", cctx->depth);
-    return val_neutral(name, val_spine_empty());
+    return val_neutral(name, cctx->depth, val_spine_empty());
 }
 
 static bool dep_conv_vals_internal(ConvCtx *cctx, Value *v1, Value *v2, Value *ty);
@@ -1427,21 +1465,21 @@ static bool dep_conv_vals(ConvCtx *cctx, Value *v1, Value *v2, Value *ty) {
     if (cctx->had_error) return false;
 
     MetaCtx *mctx = cctx->dctx ? cctx->dctx->mctx : NULL;
-    if (g_dep_trace_enabled) {
+    if (g_trace_enabled) {
         Term *q1 = dep_quote(v1, cctx->depth, mctx);
         Term *q2 = dep_quote(v2, cctx->depth, mctx);
-        dep_trace_indent();
+        shared_trace_indent();
         fprintf(stderr, "├─ \033[35mConv \033[0m %s ≡ %s\n", term_to_string(q1), term_to_string(q2));
         term_free(q1);
         term_free(q2);
-        g_dep_trace_depth++;
+        g_trace_depth++;
     }
 
     bool res = dep_conv_vals_internal(cctx, v1, v2, ty);
 
-    if (g_dep_trace_enabled) {
-        g_dep_trace_depth--;
-        dep_trace_indent();
+    if (g_trace_enabled) {
+        g_trace_depth--;
+        shared_trace_indent();
         if (res) {
             fprintf(stderr, "└─ \033[32mOK\033[0m\n");
         } else {
@@ -1470,15 +1508,21 @@ static bool dep_conv_vals_internal(ConvCtx *cctx, Value *v1, Value *v2, Value *t
     if (v1 && v1->kind == VAL_META) {
         MetaEntry *e = mctx ? meta_lookup(mctx, v1->meta_id) : NULL;
         if (e && e->state == META_UNSOLVED) {
+            /* TODO (Idris 2 Level): Proper pattern unification requires checking that v1->spine
+             * contains only distinct bound variables, and pruning variables not in scope. */
             Term *sol = dep_quote(v2, cctx->depth, mctx);
-            return meta_solve(mctx, v1->meta_id, sol);
+            bool ok = meta_solve(mctx, v1->meta_id, sol);
+            if (!ok) term_free(sol);
+            return ok;
         }
     }
     if (v2 && v2->kind == VAL_META) {
         MetaEntry *e = mctx ? meta_lookup(mctx, v2->meta_id) : NULL;
         if (e && e->state == META_UNSOLVED) {
             Term *sol = dep_quote(v1, cctx->depth, mctx);
-            return meta_solve(mctx, v2->meta_id, sol);
+            bool ok = meta_solve(mctx, v2->meta_id, sol);
+            if (!ok) term_free(sol);
+            return ok;
         }
     }
 
@@ -1488,12 +1532,23 @@ static bool dep_conv_vals_internal(ConvCtx *cctx, Value *v1, Value *v2, Value *t
     if (v1->kind == VAL_LAM || v2->kind == VAL_LAM) {
         Value *var = fresh_neutral(cctx, "η");
         // η-expand whichever side is not already a lambda
-        Value *body1 = (v1->kind == VAL_LAM)
-            ? dep_closure_apply(v1->closure, var)
-            : (Value*)({ Spine sp = val_spine_clone(v1->spine); val_spine_push(&sp, var); val_neutral(v1->neutral_name, sp); });
-        Value *body2 = (v2->kind == VAL_LAM)
-            ? dep_closure_apply(v2->closure, var)
-            : (Value*)({ Spine sp = val_spine_clone(v2->spine); val_spine_push(&sp, var); val_neutral(v2->neutral_name, sp); });
+        Value *body1;
+        if (v1->kind == VAL_LAM) {
+            body1 = dep_closure_apply(v1->closure, var);
+        } else {
+            Spine sp = val_spine_clone(v1->spine);
+            val_spine_push(&sp, var);
+            body1 = val_neutral(v1->neutral_name, v1->neutral_level, sp);
+        }
+
+        Value *body2;
+        if (v2->kind == VAL_LAM) {
+            body2 = dep_closure_apply(v2->closure, var);
+        } else {
+            Spine sp = val_spine_clone(v2->spine);
+            val_spine_push(&sp, var);
+            body2 = val_neutral(v2->neutral_name, v2->neutral_level, sp);
+        }
         // The return type is the codomain applied to `var
         Value *codom = NULL;
         if (ty && ty->kind == VAL_PI)
@@ -1506,10 +1561,10 @@ static bool dep_conv_vals_internal(ConvCtx *cctx, Value *v1, Value *v2, Value *t
 
     // η-expand pairs
     if (v1->kind == VAL_PAIR || v2->kind == VAL_PAIR) {
-        Value *fst1 = (v1->kind == VAL_PAIR) ? v1->fst : val_neutral("fst!", val_spine_empty());
-        Value *snd1 = (v1->kind == VAL_PAIR) ? v1->snd : val_neutral("snd!", val_spine_empty());
-        Value *fst2 = (v2->kind == VAL_PAIR) ? v2->fst : val_neutral("fst!", val_spine_empty());
-        Value *snd2 = (v2->kind == VAL_PAIR) ? v2->snd : val_neutral("snd!", val_spine_empty());
+        Value *fst1 = (v1->kind == VAL_PAIR) ? v1->fst : val_neutral("fst!", -1, val_spine_empty());
+        Value *snd1 = (v1->kind == VAL_PAIR) ? v1->snd : val_neutral("snd!", -1, val_spine_empty());
+        Value *fst2 = (v2->kind == VAL_PAIR) ? v2->fst : val_neutral("fst!", -1, val_spine_empty());
+        Value *snd2 = (v2->kind == VAL_PAIR) ? v2->snd : val_neutral("snd!", -1, val_spine_empty());
         Value *fst_ty = NULL, *snd_ty = NULL;
         if (ty && ty->kind == VAL_SIGMA) {
             fst_ty = ty->domain;
@@ -1808,7 +1863,7 @@ void dep_ctx_push(DepCtx *ctx, const char *name, Value *type) {
     // Extend the semantic environment with a fresh neutral
     char fresh[64];
     snprintf(fresh, sizeof(fresh), "%s!%d", name, ctx->depth);
-    ctx->env = eval_env_extend(ctx->env, val_neutral(fresh, val_spine_empty()));
+    ctx->env = eval_env_extend(ctx->env, val_neutral(fresh, ctx->depth, val_spine_empty()));
     ctx->depth++;
 }
 
@@ -1865,17 +1920,25 @@ Value *dep_infer(DepCtx *ctx, Term *t) {
     if (!t) return val_universe_n(0);
     if (ctx->had_error) return NULL;
 
-    if (g_dep_trace_enabled) {
-        dep_trace_indent();
+    if (g_trace_enabled) {
+        shared_trace_indent();
         fprintf(stderr, "├─ \033[36mInfer\033[0m %s\n", term_to_string(t));
-        g_dep_trace_depth++;
+        g_trace_depth++;
     }
 
     Value *res = dep_infer_internal(ctx, t);
 
-    if (g_dep_trace_enabled) {
-        g_dep_trace_depth--;
-        dep_trace_indent();
+    if (res && t && t->source_ast) {
+        Type *hm_ty = dep_ground_of_value(res, ctx->mctx);
+        if (hm_ty) {
+            if (t->source_ast->inferred_type) type_free(t->source_ast->inferred_type);
+            t->source_ast->inferred_type = hm_ty;
+        }
+    }
+
+    if (g_trace_enabled) {
+        g_trace_depth--;
+        shared_trace_indent();
         if (res) {
             Term *q = dep_quote(res, ctx->depth, ctx->mctx);
             fprintf(stderr, "└─ \033[32mOK\033[0m: %s : %s\n", term_to_string(t), term_to_string(q));
@@ -1976,7 +2039,7 @@ static Value *dep_infer_internal(DepCtx *ctx, Term *t) {
 
         Term *pi_term = term_pi(t->binder_name, term_clone(t->binder_dom), body_ty_term, IMPLICIT_EXPLICIT);
         Value *pi_val = dep_eval(pi_term, ctx->env, ctx->mctx);
-        term_free(pi_term);
+        /* DO NOT FREE pi_term: pi_val captures its body in a closure! */
         return pi_val;
     }
 
@@ -2106,7 +2169,7 @@ static Value *dep_infer_internal(DepCtx *ctx, Term *t) {
                 IMPLICIT_EXPLICIT),
             IMPLICIT_EXPLICIT);
         Value *ps_type = dep_eval(ps_type_term, ctx->env, ctx->mctx);
-        term_free(ps_type_term);
+        /* DO NOT FREE ps_type_term: ps_type captures its body in a closure! */
         if (!dep_check(ctx, t->nelim_succ, ps_type)) return NULL;
 
         if (!dep_check(ctx, t->nelim_arg, val_nat())) return NULL;
@@ -2164,19 +2227,27 @@ bool dep_check(DepCtx *ctx, Term *t, Value *expected_type) {
     if (!t || !expected_type) return false;
     if (ctx->had_error) return false;
 
-    if (g_dep_trace_enabled) {
+    if (g_trace_enabled) {
         Term *q_exp = dep_quote(expected_type, ctx->depth, ctx->mctx);
-        dep_trace_indent();
+        shared_trace_indent();
         fprintf(stderr, "├─ \033[33mCheck\033[0m %s ⇐ %s\n", term_to_string(t), term_to_string(q_exp));
         term_free(q_exp);
-        g_dep_trace_depth++;
+        g_trace_depth++;
     }
 
     bool res = dep_check_internal(ctx, t, expected_type);
 
-    if (g_dep_trace_enabled) {
-        g_dep_trace_depth--;
-        dep_trace_indent();
+    if (res && t && t->source_ast) {
+        Type *hm_ty = dep_ground_of_value(expected_type, ctx->mctx);
+        if (hm_ty) {
+            if (t->source_ast->inferred_type) type_free(t->source_ast->inferred_type);
+            t->source_ast->inferred_type = hm_ty;
+        }
+    }
+
+    if (g_trace_enabled) {
+        g_trace_depth--;
+        shared_trace_indent();
         if (res) {
             fprintf(stderr, "└─ \033[32mOK\033[0m\n");
         } else {
@@ -2219,7 +2290,7 @@ static bool dep_check_internal(DepCtx *ctx, Term *t, Value *expected_type) {
         // Extend context with the bound variable
         char   fresh[64];
         snprintf(fresh, sizeof(fresh), "%s!%d", t->binder_name, ctx->depth);
-        Value *var = val_neutral(fresh, val_spine_empty());
+        Value *var = val_neutral(fresh, ctx->depth, val_spine_empty());
         dep_ctx_push(ctx, t->binder_name, expected_type->domain);
         Value *body_ty = dep_closure_apply(expected_type->closure, var);
         bool ok = dep_check(ctx, t->binder_body, body_ty);
@@ -2338,13 +2409,13 @@ Type *dep_ground_of_value(Value *v, MetaCtx *mctx) {
     if (v->kind == VAL_PI) {
         // Idris-style Erasure: Skip implicit compile-time arguments when projecting to runtime HM types
         if (v->implicit != IMPLICIT_EXPLICIT) {
-            Value *dummy = val_neutral("hm_impl", val_spine_empty());
+            Value *dummy = val_neutral("hm_impl", -1, val_spine_empty());
             Value *codom = dep_closure_apply(v->closure, dummy);
             return dep_ground_of_value(codom, mctx);
         }
 
         Type *param = dep_ground_of_value(v->domain, mctx);
-        Value *dummy = val_neutral("hm_arg", val_spine_empty());
+        Value *dummy = val_neutral("hm_arg", -1, val_spine_empty());
         Value *codom = dep_closure_apply(v->closure, dummy);
         Type *ret = dep_ground_of_value(codom, mctx);
 
@@ -2360,7 +2431,7 @@ Type *dep_ground_of_value(Value *v, MetaCtx *mctx) {
     return type_unknown();
 }
 
-Term *dep_term_of_ast(DepCtx *ctx, AST *ast) {
+static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
     if (!ast) return term_hole();
     switch (ast->type) {
     case AST_NUMBER:
@@ -2492,6 +2563,12 @@ Term *dep_term_of_ast(DepCtx *ctx, AST *ast) {
     }
 }
 
+Term *dep_term_of_ast(DepCtx *ctx, AST *ast) {
+    Term *t = dep_term_of_ast_internal(ctx, ast);
+    if (t) t->source_ast = ast;
+    return t;
+}
+
 Term *dep_term_of_type_ast(DepCtx *ctx, AST *ast) {
     return dep_term_of_ast(ctx, ast);
 }
@@ -2547,20 +2624,20 @@ Term *dep_toplevel(DepCtx *ctx, AST *ast, Term **out_type) {
             return NULL;
         }
 
-        /* Evaluate a cloned term that the DepEnv officially owns so
-         * Closures point to safe, persistent memory instead of being freed by main.c */
-        Term *def_term_clone = term_clone(val_term);
-        Value *val_val = dep_eval(def_term_clone, ctx->env, ctx->mctx);
-        dep_env_define(ctx->globals, name_ast->symbol, ty, def_term_clone, val_val, false);
+        /* Evaluate to resolve metas, then quote to get the fully elaborated core term */
+        Value *raw_val = dep_eval(val_term, ctx->env, ctx->mctx);
+        Term *elaborated_term = dep_quote(raw_val, 0, ctx->mctx);
 
-        /* UNIFICATION: Project the mathematically proven dependent type down
-         * to a ground HM Type and attach it to the AST. When the HM checker
-         * runs later, it will trust the proof instead of inferring from scratch! */
-        Type *hm_ty = dep_ground_of_value(ty, ctx->mctx);
-        if (hm_ty) {
-            if (val_ast->inferred_type) type_free(val_ast->inferred_type);
-            val_ast->inferred_type = hm_ty;
-        }
+        /* Evaluate the elaborated term so closures point to safe, persistent memory
+         * owned by the DepEnv, instead of the transient val_term that main.c will free. */
+        Value *elaborated_val = dep_eval(elaborated_term, ctx->env, ctx->mctx);
+
+        /* Re-base the inferred type onto a persistent term so closures survive val_term being freed */
+        Term *ty_term = dep_quote(ty, 0, ctx->mctx);
+        Value *persistent_ty = dep_eval(ty_term, eval_env_empty(), ctx->mctx);
+
+        /* Define the actual elaborated term in the environment */
+        dep_env_define(ctx->globals, name_ast->symbol, persistent_ty, elaborated_term, elaborated_val, false);
 
         if (out_type) {
             Term *ty_term = dep_quote(ty, ctx->depth, ctx->mctx);
@@ -2603,12 +2680,7 @@ Term *dep_toplevel(DepCtx *ctx, AST *ast, Term **out_type) {
         fprintf(stderr, "  - Hint: This is expected during bootstrap. Untyped library functions (like 'and', '>=') generate holes.\n\n");
     }
 
-    // 4. Bridge to HM: Project the proven type back into the AST
-    Type *hm_ty = dep_ground_of_value(ty, ctx->mctx);
-    if (hm_ty) {
-        if (ast->inferred_type) type_free(ast->inferred_type);
-        ast->inferred_type = hm_ty;
-    }
+    // 4. (HM Bridging is now natively executed during elaboration!)
 
     // 5. Normalise the result type for output
     if (out_type) {

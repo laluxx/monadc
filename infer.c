@@ -6,6 +6,10 @@
 #include "types.h"
 #include "reader.h"
 
+extern int g_trace_depth;
+extern bool g_trace_enabled;
+extern void shared_trace_indent(void);
+
 /// InferEnv
 
 #define INFER_ENV_BUCKETS 64
@@ -254,7 +258,32 @@ void infer_constrain(InferCtx *ctx, Type *a, Type *b, int line, int col) {
 
 /// Unification
 
+static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, int col);
+
 bool infer_unify_one(InferCtx *ctx, Type *a, Type *b, int line, int col) {
+    if (g_trace_enabled) {
+        shared_trace_indent();
+        fprintf(stderr, "├─ \033[36mHM Unify\033[0m ");
+        infer_print_type(a, ctx->subst);
+        fprintf(stderr, " ~ ");
+        infer_print_type(b, ctx->subst);
+        fprintf(stderr, "\n");
+        g_trace_depth++;
+    }
+
+    bool ok = infer_unify_one_internal(ctx, a, b, line, col);
+
+    if (g_trace_enabled) {
+        g_trace_depth--;
+        shared_trace_indent();
+        if (ok) fprintf(stderr, "└─ \033[32mOK\033[0m\n");
+        else fprintf(stderr, "└─ \033[31mFAIL\033[0m\n");
+    }
+    return ok;
+}
+
+// Rename your existing function
+static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, int col) {
     Substitution *s = ctx->subst;
     a = subst_apply_shallow(s, a);
     b = subst_apply_shallow(s, b);
@@ -1083,6 +1112,7 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         /* UNIFICATION: The dependent elaborator pre-seeded a ground type for us!
          * Constrain our HM-inferred type against the mathematically proven type.
          * This bridges the two systems: HM gets the superpowers of dependent types. */
+        fprintf(stderr, "├─ \033[34mInterop\033[0m HM unifies with prior Dependent Type check: %s\n", type_to_string(ast->inferred_type));
         infer_constrain(ctx, result, ast->inferred_type, ast->line, ast->column);
         result = ast->inferred_type; // Use the rich type going forward
     } else {
@@ -1231,9 +1261,6 @@ static void infer_validate_calls(InferCtx *ctx, AST *ast) {
 
     if (ast->type == AST_LIST && ast->list.count >= 2) {
         AST *head = ast->list.items[0];
-        fprintf(stderr, "DEBUG validate_calls: head=%s count=%zu\n",
-            head->type == AST_SYMBOL ? head->symbol : "<non-sym>",
-            ast->list.count);
         if (head->type == AST_SYMBOL) {
             TypeScheme *sc = infer_env_lookup(ctx->env, head->symbol);
             if (sc) {
@@ -1251,11 +1278,6 @@ static void infer_validate_calls(InferCtx *ctx, AST *ast) {
                         if (asc) arg_t = subst_apply(ctx->subst, asc->type);
                     }
 
-                    fprintf(stderr, "DEBUG validate: head=%s i=%d param_kind=%d arg_kind=%d arg_inferred=%p\n",
-                        head->symbol, i,
-                        param_t ? param_t->kind : -1,
-                        arg_t   ? arg_t->kind   : -1,
-                        (void*)(arg ? arg->inferred_type : NULL));
                     if (param_t && arg_t &&
                         param_t->kind != TYPE_VAR &&
                         param_t->kind != TYPE_UNKNOWN &&
@@ -1315,46 +1337,46 @@ Type *infer_toplevel(InferCtx *ctx, AST *ast) {
 /// Pretty Printing
 
 void infer_print_type(Type *t, Substitution *s) {
-    if (!t) { printf("?"); return; }
+    if (!t) { fprintf(stderr, "?"); return; }
     if (s) t = subst_apply(s, t);
-    if (!t) { printf("?"); return; }
+    if (!t) { fprintf(stderr, "?"); return; }
 
     switch (t->kind) {
     case TYPE_VAR:
-        printf("'%c", 'a' + (t->var_id % 26));
-        if (t->var_id >= 26) printf("%d", t->var_id / 26);
+        fprintf(stderr, "'%c", 'a' + (t->var_id % 26));
+        if (t->var_id >= 26) fprintf(stderr, "%d", t->var_id / 26);
         break;
     case TYPE_ARROW:
-        printf("(");
+        fprintf(stderr, "(");
         infer_print_type(t->arrow_param, s);
-        printf(" → ");
+        fprintf(stderr, " → ");
         infer_print_type(t->arrow_ret, s);
-        printf(")");
+        fprintf(stderr, ")");
         break;
     case TYPE_LIST:
-        printf("List<");
+        fprintf(stderr, "List<");
         infer_print_type(t->list_elem, s);
-        printf(">");
+        fprintf(stderr, ">");
         break;
     case TYPE_OPTIONAL:
         infer_print_type(t->element_type, s);
-        printf("?");
+        fprintf(stderr, "?");
         break;
     default:
-        printf("%s", type_to_string(t));
+        fprintf(stderr, "%s", type_to_string(t));
         break;
     }
 }
 
 void infer_print_scheme(TypeScheme *sc) {
-    if (!sc) { printf("?"); return; }
+    if (!sc) { fprintf(stderr, "?"); return; }
     if (sc->quantified_count > 0) {
-        printf("∀");
+        fprintf(stderr, "∀");
         for (int i = 0; i < sc->quantified_count; i++) {
-            if (i > 0) printf(" ");
-            printf("'%c", 'a' + (sc->quantified[i] % 26));
+            if (i > 0) fprintf(stderr, " ");
+            fprintf(stderr, "'%c", 'a' + (sc->quantified[i] % 26));
         }
-        printf(". ");
+        fprintf(stderr, ". ");
     }
     infer_print_type(sc->type, NULL);
 }
