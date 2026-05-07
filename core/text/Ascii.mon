@@ -47,44 +47,44 @@
 (define case-delta (- 'a' 'A'))
 
 
-(define (char-upcase [c :: Char] -> Char)
+(define (char-upcase [c : Char] -> Char)
   "Convert C to upper case."
   (if (and (>= c 'a') (<= c 'z'))
     (- c case-delta)
     c))
 
-(define (char-downcase [c :: Char] -> Char)
+(define (char-downcase [c : Char] -> Char)
   "Convert C to lower case."
   (if (and (>= c 'A') (<= c 'Z'))
     (+ c case-delta)
     c))
 
-(define (char-lower? [c :: Char] -> Bool)
+(define (char-lower? [c : Char] -> Bool)
   "Return True if C is a lowercase letter."
   (and (>= c 'a') (<= c 'z')))
 
 
-(define (char-upper? [c :: Char] -> Bool)
+(define (char-upper? [c : Char] -> Bool)
   "Return True if C is an uppercase letter."
   (and (>= c 'A') (<= c 'Z')))
 
 
-(define (char-alphabetic? [c :: Char] -> Bool)
+(define (char-alphabetic? [c : Char] -> Bool)
   "Return True if C is a letter."
   (or (char-lower? c) (char-upper? c)))
 
 
-(define (char-numeric? [c :: Char] -> Bool)
+(define (char-numeric? [c : Char] -> Bool)
   "Return True if C is a digit."
   (and (>= c '0') (<= c '9')))
 
 
-(define (char-alphanumeric? [c :: Char] -> Bool)
+(define (char-alphanumeric? [c : Char] -> Bool)
   "Return True if C is a letter or digit."
   (or (char-alphabetic? c) (char-numeric? c)))
 
 
-(define (char-whitespace? [c :: Char] -> Bool)
+(define (char-whitespace? [c : Char] -> Bool)
   "Return True if C is a whitespace character."
   (or (= c ' ') (= c  '\t') (= c '\n') (= c '\r')))
 

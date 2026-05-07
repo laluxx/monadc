@@ -3,41 +3,43 @@
 ;; ;; TODO constraint propagation
 ;; ;; TODO deriving Eq should work on _non nullary_ data types too
 
-;; class Eq a where
-;;   (=)  :: a -> a -> Bool
-;;   (!=) :: a -> a -> Bool
-;;   (x != y) => not x = y   ; Default implementation(s)
+class Eq a where
+  (=)  :: a -> a -> Bool
+  (!=) :: a -> a -> Bool
+  (x != y) => not x = y   ; Default implementation(s)
 
 
-;; class Enum a where
-;;   succ     :: a -> a
-;;   pred     :: a -> a
-;;   toEnum   :: Int -> a
-;;   fromEnum :: a -> Int
-;;   (succ x) => toEnum ((fromEnum x) + 1)
-;;   (pred x) => toEnum ((fromEnum x) - 1)
+class Enum a where
+  succ     :: a -> a
+  pred     :: a -> a
+  toEnum   :: Int -> a
+  fromEnum :: a -> Int
+  (succ x) => toEnum ((fromEnum x) + 1)
+  (pred x) => toEnum ((fromEnum x) - 1)
 
 
-;; data TrafficLight Red | Yellow | Green
-;;   deriving [Eq Enum]
+data TrafficLight Red | Yellow | Green
+  deriving [Eq Enum]
 
-;; show Red = Red
-;; show Red = Green
-;; show Red != Green
-;; show Red != Red
+show Red = Red
+show Red = Green
+show Red != Green
+show Red != Red
 
-;; show fromEnum Red
-;; show fromEnum Yellow
-;; show fromEnum Green
-;; show succ Red
-;; show succ Yellow
-;; show pred Green
-;; show pred Yellow
+show fromEnum Red
+show fromEnum Yellow
+show fromEnum Green
+show succ Red
+show succ Yellow
+show pred Green
+show pred Yellow
 
-;; show "testing show"
-;; show Red
-;; show Yellow
-;; show Green
+show "testing show"
+show Red
+show Yellow
+show Green
+
+
 
 
 
@@ -46,6 +48,26 @@ define char-upcase :: Char -> Char
     | otherwise             -> c
 
 show char-upcase 'a'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 ;; (instance Eq TrafficLight where

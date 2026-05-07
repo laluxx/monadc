@@ -12,6 +12,9 @@ typedef struct AST AST;
 
 extern const char *current_filename;
 extern const char *current_source;
+extern const char *original_source;
+
+void parser_set_original_source(const char *orig_source);
 
 /* Replace all exit(1) calls in the reader/parser.
  * If a recovery point is set (we're inside repl_eval_line), longjmp back.

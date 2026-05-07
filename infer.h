@@ -76,7 +76,7 @@ InferEnv *infer_env_create(void);
 InferEnv *infer_env_create_child(InferEnv *parent);
 void      infer_env_free(InferEnv *env);
 void      infer_env_insert(InferEnv *env, const char *name, TypeScheme *scheme);
-TypeScheme *infer_env_lookup(InferEnv *env, const char *name);
+TypeScheme *infer_env_lookup(InferCtx *ctx, const char *name);
 
 
 /// Substitution
@@ -131,13 +131,14 @@ typedef struct InferCtx {
     TypeConstraint  *constraints;
     size_t           constraint_count;
     size_t           constraint_cap;
-    InferEnv        *env;            // current type environment
+    InferEnv        *env;            // local HM environment
+    struct DepCtx   *dctx;           // TT Master Global Scope
     const char      *filename;       // for error messages
     bool             had_error;
     char             error_msg[512];
 } InferCtx;
 
-InferCtx *infer_ctx_create(InferEnv *env, const char *filename);
+InferCtx *infer_ctx_create(InferEnv *env, struct DepCtx *dctx, const char *filename);
 void      infer_ctx_free(InferCtx *ctx);
 
 

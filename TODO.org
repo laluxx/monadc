@@ -1,6 +1,7 @@
 #+title: TODO.org
 
 * TODO Stuff [0/34]
+- [ ] Serialize modules with types
 - [ ] eval
 - [ ] labels like :label that create continuations that you can goto
 - [ ] arbitrary return at any point of execution using =->=
@@ -70,7 +71,8 @@ def {name age} (get-user)  ; assumes map with keys :name and :age
 #+end_src
 
 
-* TODO Dependent types
+* DONE Dependent types
+  CLOSED: [2026-05-07 Thu 09:47]
 
 From: ∀a. a -> a
 To:   Π [A : Type] -> [x : A] -> A

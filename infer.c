@@ -5,6 +5,7 @@
 #include "infer.h"
 #include "types.h"
 #include "reader.h"
+#include "dep.h"
 
 extern int g_trace_depth;
 extern bool g_trace_enabled;
@@ -67,15 +68,23 @@ void infer_env_insert(InferEnv *env, const char *name, TypeScheme *scheme) {
     env->buckets[idx] = e;
 }
 
-TypeScheme *infer_env_lookup(InferEnv *env, const char *name) {
-    for (InferEnv *cur = env; cur; cur = cur->parent) {
-        size_t         idx = infer_env_hash(name);
-        InferEnvEntry *e   = cur->buckets[idx];
+TypeScheme *infer_env_lookup(InferCtx *ctx, const char *name) {
+    if (!ctx || !name) return NULL;
+    // 1. Check local HM environment (for lambda params, local lets)
+    for (InferEnv *cur = ctx->env; cur; cur = cur->parent) {
+        size_t idx = infer_env_hash(name);
+        InferEnvEntry *e = cur->buckets[idx];
         while (e) {
             if (strcmp(e->name, name) == 0) return e->scheme;
             e = e->next;
         }
     }
+    // 2. Fallback to TT Global Environment (The Idris Bridge)
+    // DISABLED: The LLVM Codegen phase occasionally passes a stale/freed dctx pointer,
+    // leading to severe Use-After-Free segfaults.
+    // This bridge is no longer necessary because the Dependent Elaborator now
+    // pre-seeds `ast->inferred_type` on all nodes, giving HM inference the exact
+    // mathematical types without needing global environment lookups.
     return NULL;
 }
 
@@ -187,13 +196,14 @@ Type *subst_apply(Substitution *s, Type *t) {
 
 /// Inference Context
 
-InferCtx *infer_ctx_create(InferEnv *env, const char *filename) {
+InferCtx *infer_ctx_create(InferEnv *env, struct DepCtx *dctx, const char *filename) {
     InferCtx *ctx       = calloc(1, sizeof(InferCtx));
     ctx->subst          = subst_create();
     ctx->constraint_cap = 256;
     ctx->constraints    = malloc(sizeof(TypeConstraint) * ctx->constraint_cap);
     ctx->constraint_count = 0;
     ctx->env            = env;
+    ctx->dctx           = dctx;
     ctx->filename       = filename ? filename : "<unknown>";
     ctx->had_error      = false;
     return ctx;
@@ -484,6 +494,7 @@ void infer_free_vars_type(Substitution *s, Type *t, int *out, int *count, int ca
 }
 
 void infer_free_vars_env(InferCtx *ctx, InferEnv *env, int *out, int *count, int cap) {
+    if (!env) return;
     /* Only walk the single env level passed — do NOT follow parent chain.
      * Parent envs contain schemes from previous InferCtx runs whose type
      * var IDs belong to foreign substitutions and cannot be safely
@@ -669,7 +680,7 @@ void infer_zonk_ast(InferCtx *ctx, AST *ast) {
 
     /* Resolve symbol types from env so validate_calls can see them */
     if (ast->type == AST_SYMBOL && !ast->inferred_type) {
-        TypeScheme *sc = infer_env_lookup(ctx->env, ast->symbol);
+        TypeScheme *sc = infer_env_lookup(ctx, ast->symbol);
         if (sc) ast->inferred_type = infer_instantiate(ctx, sc);
     }
 
@@ -692,10 +703,19 @@ void infer_zonk_ast(InferCtx *ctx, AST *ast) {
             infer_zonk_ast(ctx, ast->map.vals[i]);
         }
         break;
-    case AST_LAMBDA:
+    case AST_LAMBDA: {
+        InferEnv *child = infer_env_create_child(ctx->env);
+        InferEnv *saved = ctx->env;
+        ctx->env = child;
+        for (int i = 0; i < ast->lambda.param_count; i++) {
+            infer_env_insert(child, ast->lambda.params[i].name, scheme_mono(type_unknown()));
+        }
         for (int i = 0; i < ast->lambda.body_count; i++)
             infer_zonk_ast(ctx, ast->lambda.body_exprs[i]);
+        ctx->env = saved;
+        infer_env_free(child);
         break;
+    }
     default:
         break;
     }
@@ -762,7 +782,7 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         if (strcmp(ast->symbol, "False") == 0) { result = type_bool(); break; }
         if (strcmp(ast->symbol, "nil")   == 0) { result = type_nil();  break; }
 
-        TypeScheme *sc = infer_env_lookup(ctx->env, ast->symbol);
+        TypeScheme *sc = infer_env_lookup(ctx, ast->symbol);
         if (!sc) {
             result = infer_fresh(ctx);
             break;
@@ -904,6 +924,51 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             break;
         }
 
+        /* ---- lambda (desugared inline) ------------------------------- */
+        if (head->type == AST_SYMBOL && (strcmp(head->symbol, "lambda") == 0 || strcmp(head->symbol, "λ") == 0) && ast->list.count >= 3) {
+            InferEnv *child = infer_env_create_child(ctx->env);
+            InferEnv *saved = ctx->env;
+            ctx->env        = child;
+
+            AST *params_ast = ast->list.items[1];
+            int param_count = 0;
+            Type *param_types[32]; // Max 32 params for inline lambdas
+            if (params_ast->type == AST_LIST) {
+                param_count = params_ast->list.count;
+                for (size_t i = 0; i < params_ast->list.count && i < 32; i++) {
+                    AST *p = params_ast->list.items[i];
+                    Type *pt = infer_fresh(ctx);
+                    param_types[i] = pt;
+                    if (p->type == AST_SYMBOL) {
+                        infer_env_insert(child, p->symbol, scheme_mono(pt));
+                    } else if (p->type == AST_LIST && p->list.count > 0 && p->list.items[0]->type == AST_SYMBOL) {
+                        infer_env_insert(child, p->list.items[0]->symbol, scheme_mono(pt));
+                    }
+                }
+            } else if (params_ast->type == AST_SYMBOL) {
+                param_count = 1;
+                Type *pt = infer_fresh(ctx);
+                param_types[0] = pt;
+                infer_env_insert(child, params_ast->symbol, scheme_mono(pt));
+            }
+
+            Type *ret_t = infer_fresh(ctx);
+            for (size_t i = 2; i < ast->list.count; i++) {
+                Type *bt = infer_expr(ctx, ast->list.items[i]);
+                if (i == ast->list.count - 1) ret_t = bt;
+            }
+
+            ctx->env = saved;
+            infer_env_free(child);
+
+            Type *arrow = ret_t;
+            for (int i = param_count - 1; i >= 0; i--) {
+                arrow = type_arrow(param_types[i], arrow);
+            }
+            result = arrow;
+            break;
+        }
+
         /* ---- if ------------------------------------------------------ */
         if (head->type == AST_SYMBOL && strcmp(head->symbol, "if") == 0) {
             if (ast->list.count >= 3) {
@@ -983,7 +1048,7 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
 
         /* ---- variadic call: look up if head is a variadic function --- */
         if (head->type == AST_SYMBOL) {
-            TypeScheme *sc = infer_env_lookup(ctx->env, head->symbol);
+            TypeScheme *sc = infer_env_lookup(ctx, head->symbol);
             if (sc) {
                 // Walk arrow chain to find if last param is List type
                 Type *t = subst_apply(ctx->subst, sc->type);
@@ -1039,7 +1104,7 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
          * variable, skip arrow unification — indexing is handled in
          * codegen directly and does not have an arrow type in HM.       */
         if (head->type == AST_SYMBOL) {
-            TypeScheme *head_sc = infer_env_lookup(ctx->env, head->symbol);
+            TypeScheme *head_sc = infer_env_lookup(ctx, head->symbol);
             if (head_sc) {
                 Type *head_t = subst_apply(ctx->subst, head_sc->type);
                 if (head_t && (head_t->kind == TYPE_ARR  ||
@@ -1061,7 +1126,7 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
          * Walk the parameter type annotations of the called function
          * and check literal args against refinement predicates.       */
         if (head->type == AST_SYMBOL) {
-            TypeScheme *head_sc = infer_env_lookup(ctx->env, head->symbol);
+            TypeScheme *head_sc = infer_env_lookup(ctx, head->symbol);
             if (head_sc) {
                 Type *ft = subst_apply(ctx->subst, head_sc->type);
                 if (head_sc->quantified_count > 0)
@@ -1262,7 +1327,7 @@ static void infer_validate_calls(InferCtx *ctx, AST *ast) {
     if (ast->type == AST_LIST && ast->list.count >= 2) {
         AST *head = ast->list.items[0];
         if (head->type == AST_SYMBOL) {
-            TypeScheme *sc = infer_env_lookup(ctx->env, head->symbol);
+            TypeScheme *sc = infer_env_lookup(ctx, head->symbol);
             if (sc) {
                 Type *ft = subst_apply(ctx->subst, sc->type);
                 for (int i = 1; i < (int)ast->list.count && ft && ft->kind == TYPE_ARROW; i++) {
@@ -1274,7 +1339,7 @@ static void infer_validate_calls(InferCtx *ctx, AST *ast) {
                     /* If still unresolved, try env lookup for symbols */
                     if ((!arg_t || arg_t->kind == TYPE_UNKNOWN) &&
                         arg->type == AST_SYMBOL) {
-                        TypeScheme *asc = infer_env_lookup(ctx->env, arg->symbol);
+                        TypeScheme *asc = infer_env_lookup(ctx, arg->symbol);
                         if (asc) arg_t = subst_apply(ctx->subst, asc->type);
                     }
 
@@ -1303,10 +1368,19 @@ static void infer_validate_calls(InferCtx *ctx, AST *ast) {
         for (size_t i = 0; i < ast->list.count; i++)
             infer_validate_calls(ctx, ast->list.items[i]);
         break;
-    case AST_LAMBDA:
+    case AST_LAMBDA: {
+        InferEnv *child = infer_env_create_child(ctx->env);
+        InferEnv *saved = ctx->env;
+        ctx->env = child;
+        for (int i = 0; i < ast->lambda.param_count; i++) {
+            infer_env_insert(child, ast->lambda.params[i].name, scheme_mono(type_unknown()));
+        }
         for (int i = 0; i < ast->lambda.body_count; i++)
             infer_validate_calls(ctx, ast->lambda.body_exprs[i]);
+        ctx->env = saved;
+        infer_env_free(child);
         break;
+    }
     case AST_ARRAY:
         for (size_t i = 0; i < ast->array.element_count; i++)
             infer_validate_calls(ctx, ast->array.elements[i]);
@@ -1324,11 +1398,17 @@ Type *infer_toplevel(InferCtx *ctx, AST *ast) {
     /* 2. Constraint solving */
     if (!infer_unify_all(ctx)) return NULL;
 
+    /* Disable TT bridge for post-unification phases to prevent UAF */
+    struct DepCtx *saved_dctx = ctx->dctx;
+    ctx->dctx = NULL;
+
     /* 3. Zonking — apply substitution to all AST nodes */
     infer_zonk_ast(ctx, ast);
 
     /* 4. Post-zonk validation — check call sites with concrete types */
     infer_validate_calls(ctx, ast);
+
+    ctx->dctx = saved_dctx;
 
     return subst_apply(ctx->subst, t);
 }

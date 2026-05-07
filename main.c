@@ -886,6 +886,11 @@ static CompiledModule *compile_one(const char *source_path,
     ctx.module_ctx = mod_ctx;
     ctx.test_mode  = flags->test_mode;
     ctx.ffi        = get_global_ffi();
+
+    DepCtx *dep_ctx = dep_ctx_create(my_source_path);
+    dep_register_builtins(dep_ctx);
+    ctx.env->dep_ctx = dep_ctx;
+
     PHASE_END("llvm init");
     PHASE_START();
     register_builtins(&ctx);
@@ -970,9 +975,6 @@ static CompiledModule *compile_one(const char *source_path,
 
 /// Phase 6.5: Dependent Type Checking (Shadow Pass)
 
-    DepCtx *dep_ctx = dep_ctx_create(my_source_path);
-    dep_register_builtins(dep_ctx);
-
     printf("  [dep] running bidirectional type checker...\n");
     bool dep_failed = false;
 
@@ -1010,8 +1012,6 @@ static CompiledModule *compile_one(const char *source_path,
         dep_ctx_free(dep_ctx);
         exit(1);
     }
-
-    dep_ctx_free(dep_ctx);
 
 /// Phase 7: Codegen top-level expressions
 
@@ -1239,6 +1239,7 @@ static CompiledModule *compile_one(const char *source_path,
 
 ///// Cleanup
 
+    dep_ctx_free(dep_ctx);
     ffi_libs_add(g_ffi);
     ctx.ffi = NULL;  /* don't free the global */
     codegen_dispose(&ctx);

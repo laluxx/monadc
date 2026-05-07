@@ -1174,21 +1174,16 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                         const char *inline_pipe = NULL;
                         {
                             const char *_sp = lscan;
-                            if (*_sp == '|') {
-                                /* guard-only line, handled below */
-                            } else {
-                                /* scan for | at depth 0 */
-                                int _bd = 0; bool _bs = false;
-                                for (; *_sp; _sp++) {
-                                    if (_bs) { if (*_sp=='\\') _sp++; else if (*_sp=='"') _bs=false; continue; }
-                                    if (*_sp=='"') { _bs=true; continue; }
-                                    if (*_sp=='('||*_sp=='['||*_sp=='{') _bd++;
-                                    if (*_sp==')'||*_sp==']'||*_sp=='}') _bd--;
-                                    if (_bd==0 && *_sp=='|' &&
-                                        (_sp==lscan || *(_sp-1)==' '||*(_sp-1)=='\t') &&
-                                        (*(  _sp+1)==' '||*(  _sp+1)=='\t'||*(  _sp+1)=='\0')) {
-                                        inline_pipe = _sp; break;
-                                    }
+                            int _bd = 0; bool _bs = false;
+                            for (; *_sp; _sp++) {
+                                if (_bs) { if (*_sp=='\\') _sp++; else if (*_sp=='"') _bs=false; continue; }
+                                if (*_sp=='"') { _bs=true; continue; }
+                                if (*_sp=='('||*_sp=='['||*_sp=='{') _bd++;
+                                if (*_sp==')'||*_sp==']'||*_sp=='}') _bd--;
+                                if (_bd==0 && *_sp=='|' &&
+                                    (_sp==lscan || *(_sp-1)==' '||*(_sp-1)=='\t') &&
+                                    (*(  _sp+1)==' '||*(  _sp+1)=='\t'||*(  _sp+1)=='\0')) {
+                                    inline_pipe = _sp; break;
                                 }
                             }
                         }
@@ -2516,6 +2511,7 @@ ASTList wisp_parse_all(const char *source, const char *filename) {
     g_is_known_function  = wisp_is_known_function;
 
     parser_set_context(filename, transformed);
+    parser_set_original_source(source);
     ASTList result = parse_all(transformed);
     result = macro_expand_all(result.exprs, result.count);
 

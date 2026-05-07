@@ -12,20 +12,19 @@ type Natural { x ∈ Int | x >= 0 }
   :doc "Natural number type"
   :alias ℕ
 
+define passedNatural? [x : ℕ] -> Bool
+  Natural? x
 
-(define (passedNatural? [x :: ℕ] -> Bool)
-  (Natural? x))
-
-;; define passedNatural? :: ℕ -> Bool
-;;   x -> Natural? x
-
+;; This function can't return False
 show (passedNatural? 1); passing -1 is a compile time ERROR
 
-
-
 ;; TODO
+;; Now that we have dependent types this should be possible..
 ;; type Even { x ∈ ℤ | ∃k ∈ ℤ, x = 2k }
 ;;   "Existential form."
+
+
+
 
 ;; type Even { x ∈ Int | x % 2 = 0 }
 ;;   "Even integers"

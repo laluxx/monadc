@@ -2006,7 +2006,7 @@ static char *strip_comments(const char *src) {
 
 static bool repl_infer(REPLContext *ctx, AST *ast) {
     InferEnv *ienv = env_get_infer(ctx->cg.env);
-    InferCtx *ictx = infer_ctx_create(ienv, parser_get_filename());
+    InferCtx *ictx = infer_ctx_create(ienv, ctx->cg.env->dep_ctx, parser_get_filename());
     Type *t = infer_toplevel(ictx, ast);
     if (ictx->had_error) {
         fprintf(stderr, "%s\n", ictx->error_msg);

@@ -9177,11 +9177,11 @@ if (ast->list.count >= 5) {
             }
 
             /* Closure call: variable of type Fn or unknown used in call position */
-            fprintf(stderr, "DEBUG closure-check: sym=%s entry=%p kind=%d type_kind=%d\n",
-                    head->type == AST_SYMBOL ? head->symbol : "?",
-                    (void*)entry,
-                    entry ? entry->kind : -1,
-                    (entry && entry->type) ? entry->type->kind : -1);
+            /* fprintf(stderr, "DEBUG closure-check: sym=%s entry=%p kind=%d type_kind=%d\n", */
+            /*         head->type == AST_SYMBOL ? head->symbol : "?", */
+            /*         (void*)entry, */
+            /*         entry ? entry->kind : -1, */
+            /*         (entry && entry->type) ? entry->type->kind : -1); */
             if (entry && entry->kind == ENV_VAR &&
                 entry->type && (entry->type->kind == TYPE_FN ||
                                 entry->type->kind == TYPE_ARROW ||
@@ -9787,9 +9787,9 @@ if (ast->list.count >= 5) {
                             }
                             _atypes[_i] = _arg_t ? _arg_t : type_unknown();
                         }
-                        fprintf(stderr, "DEBUG _atypes[%d] kind=%d for arg '%s'\n",
-                                _i, _atypes[_i] ? (int)_atypes[_i]->kind : -1,
-                                _arg->type == AST_SYMBOL ? _arg->symbol : "<expr>");
+                        /* fprintf(stderr, "DEBUG _atypes[%d] kind=%d for arg '%s'\n", */
+                        /*         _i, _atypes[_i] ? (int)_atypes[_i]->kind : -1, */
+                        /*         _arg->type == AST_SYMBOL ? _arg->symbol : "<expr>"); */
                     }
                     env_hm_check_call(ctx->env, head->symbol, _atypes, declared_params,
                                       parser_get_filename(), ast->list.items[1]->line,
@@ -10399,12 +10399,12 @@ if (ast->list.count >= 5) {
                         }
                     }
 
-                    fprintf(stderr, "LAST DEBUG arg[%d] to '%s': actual_type_kind=%d arr_is_fat=%d expected_type_kind=%d llvm_type_kind=%d\n",
-                            i, head->symbol,
-                            actual_type ? actual_type->kind : -1,
-                            actual_type ? actual_type->arr_is_fat : -1,
-                            expected_type ? expected_type->kind : -1,
-                            (int)LLVMGetTypeKind(LLVMTypeOf(converted_arg)));
+                    /* fprintf(stderr, "LAST DEBUG arg[%d] to '%s': actual_type_kind=%d arr_is_fat=%d expected_type_kind=%d llvm_type_kind=%d\n", */
+                    /*         i, head->symbol, */
+                    /*         actual_type ? actual_type->kind : -1, */
+                    /*         actual_type ? actual_type->arr_is_fat : -1, */
+                    /*         expected_type ? expected_type->kind : -1, */
+                    /*         (int)LLVMGetTypeKind(LLVMTypeOf(converted_arg))); */
 
                     /* Fat array passed to a raw pointer param — unwrap to data pointer.
                      * actual_type may be TYPE_UNKNOWN for top-level fat array globals

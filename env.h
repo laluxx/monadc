@@ -6,6 +6,7 @@
 
 /* Forward declaration — full definition in infer.h */
 struct TypeScheme;
+struct DepCtx;
 
 #define WISP_MAX_PARAMS 16
 typedef enum { PARAM_VALUE, PARAM_FUNC } ParamKind;
@@ -71,6 +72,7 @@ typedef struct Env {
     size_t count;
     struct Env *parent;
     struct InferEnv *infer_env;  // owned by root Env only; NULL on child scopes
+    struct DepCtx *dep_ctx;      // TT Master Global Scope (owned by main)
 } Env;
 
 Env *env_create(void);

@@ -1,7 +1,7 @@
 #ifndef DEP_H
 #define DEP_H
 
-/*  dep.h — Full Dependent Type Checker
+/*  dep.h — Dependent Type Checker
  *
  *  Implements a kernel of Intensional Type Theory (ITT) with:
  *    · Π-types  (dependent functions)
@@ -16,24 +16,6 @@
  *        — free  variables  ->  global names (readable error messages)
  *    · Interop with the existing ground-type system (types.h)
  *        — TERM_EMBED wraps a Type* so ground types are valid terms
- *
- *  Relationship to infer.h / infer.c
- *  ----------------------------------
- *  The HM system in infer.h handles the existing language fragment
- *  (non-dependent functions, let-polymorphism).  dep.h provides a
- *  *separate* elaboration pipeline that activates when the programmer
- *  uses Π, Σ, dependent pattern-matching, or proof terms.  Both
- *  pipelines share the same AST (reader.h) and ground-type set (types.h)
- *  but maintain independent contexts and substitution tables.
- *
- *  Usage
- *  -----
- *    DepCtx *ctx = dep_ctx_create(NULL);
- *    dep_register_builtins(ctx);
- *    Term *t   = dep_term_of_ast(ctx, ast);       // surface -> core
- *    Term *ty  = dep_infer(ctx, t);               // bidirectional infer
- *    bool  ok  = dep_check(ctx, t, ty);           // or check against known
- *    dep_ctx_free(ctx);
  */
 
 #include <stdbool.h>
@@ -160,8 +142,9 @@ typedef enum {
     TERM_NUM_LIT,   // n : Nat (fast path)
     TERM_NAT_ELIM,  // Nat-elim P pz ps n — primitive recursion on Nat
 
-    // ── Let-bindings ──────────────────────────────────────────────────
+    // ── Let-bindings & Control Flow ───────────────────────────────────
     TERM_LET,       // let x : A = t in body
+    TERM_IF,        // if cond then t else e
 
     // ── Metavariables ────────────────────────────────────────────────
     TERM_META,      // ?₁, ?₂, … — holes to be solved by elaboration
@@ -230,6 +213,11 @@ struct Term {
     struct Term  *succ_pred;      // predecessor
     unsigned long long num_lit;   // primitive integer value
 
+    // ── TERM_IF ────────────────────────────────────────────────────
+    struct Term  *if_cond;
+    struct Term  *if_then;
+    struct Term  *if_else;
+
     // ── TERM_NAT_ELIM ──────────────────────────────────────────────
     struct Term  *nelim_motive;   // P : Nat -> Type
     struct Term  *nelim_zero;     // pz : P zero
@@ -276,6 +264,7 @@ Term *term_zero(void);
 Term *term_succ(Term *pred);
 Term *term_num_lit(unsigned long long n);
 Term *term_nat_elim(Term *motive, Term *pz, Term *ps, Term *n);
+Term *term_if(Term *cond, Term *t, Term *e);
 Term *term_let(const char *name, Term *type, Term *val, Term *body);
 Term *term_meta(int id);
 Term *term_hole(void);
@@ -347,6 +336,7 @@ typedef enum {
     VAL_NUM_LIT,    // primitive integer value
     VAL_EQ,         // a ≡ b : A (all values)
     VAL_REFL,       // refl v
+    VAL_IF,         // stuck if expression
     VAL_NEUTRAL,    // stuck term: a free var or meta applied to a spine
     VAL_EMBED,      // ground Type* from types.h
     VAL_META,       // unsolved metavariable ?n applied to a spine
@@ -388,6 +378,11 @@ struct Value {
     // VAL_REFL
     Value    *refl_val;
 
+    // VAL_IF
+    Value    *if_cond_val;
+    Value    *if_then_val;
+    Value    *if_else_val;
+
     // VAL_NEUTRAL / VAL_META
     char     *neutral_name;   // VAL_NEUTRAL: free variable name
     int       neutral_level;  // VAL_NEUTRAL: binding level (-1 for globals)
@@ -410,6 +405,7 @@ Value *val_succ(Value *pred);
 Value *val_num_lit(unsigned long long n);
 Value *val_eq(Value *lhs, Value *rhs, Value *type);
 Value *val_refl(Value *v);
+Value *val_if(Value *c, Value *t, Value *e);
 Value *val_neutral(const char *name, int level, Spine spine);
 Value *val_meta(int id, Spine spine);
 Value *val_embed(Type *t);
@@ -447,6 +443,7 @@ EvalEnv *eval_env_empty(void);
 EvalEnv *eval_env_extend(EvalEnv *e, Value *v);  // push v; returns new EvalEnv (owned)
 Value   *eval_env_lookup(EvalEnv *e, int index); // De Bruijn index lookup
 void     eval_env_free(EvalEnv *e);              // frees the chain but not values
+void     eval_env_discard_top(EvalEnv *e);       // frees only the top entry
 EvalEnv *eval_env_clone(EvalEnv *e);
 
 

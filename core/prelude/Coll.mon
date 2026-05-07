@@ -184,36 +184,3 @@ define both :: (a -> Bool) -> (a -> Bool) -> (a -> Bool)
   (assert-eq (foldl + 0 (zipwith * [1 2 3]    [4 5 6]))    32 "dot product Arrays")
 )
 
-
-
-;; show (map double "ciao")
-
-
-;; define square :: Int -> Int
-;;   x -> * x x
-
-;; show (map square [1 2 3 4])
-
-;; TODO
-;; define ∘ :: (b -> c) -> (a -> b) -> a -> c
-;;   f g x -> f (g x)
-
-;; define square :: Int -> Int
-;;   x -> x * x
-
-;; define add1 :: Int -> Int
-;;   x -> x + 1
-
-;; define square-then-add1 :: Int -> Int
-;;   (add1 . square)
-
-;; show (square-then-add1 5)  ;; 26 (square 5 = 25, +1 = 26)
-
-
-;; TODO Better error message for types
-;; define xs '(1 2 3)
-;; define add :: Int -> Int -> Int
-;;   x y -> (x + y)
-;; define double :: Int -> Int
-;;   x -> (x * 2)
-;; show map add xs

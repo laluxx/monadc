@@ -520,11 +520,19 @@ void env_print(Env *table) {
 
 /// HM integration
 
+static struct DepCtx *env_get_dep(Env *env) {
+    while (env) {
+        if (env->dep_ctx) return env->dep_ctx;
+        env = env->parent;
+    }
+    return NULL;
+}
+
 void env_init_infer(Env *root) {
     if (root->infer_env) return;   /* idempotent */
     root->infer_env = infer_env_create();
     /* Bootstrap built-in type schemes into the infer env */
-    InferCtx *bctx = infer_ctx_create(root->infer_env, "<builtins>");
+    InferCtx *bctx = infer_ctx_create(root->infer_env, env_get_dep(root), "<builtins>");
     infer_register_builtins(bctx);
     infer_ctx_free(bctx);
 }
@@ -553,7 +561,7 @@ struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
     if (!ienv) return NULL;
 
     InferEnv *child = infer_env_create_child(ienv);
-    InferCtx *ctx   = infer_ctx_create(child, filename ? filename : "<unknown>");
+    InferCtx *ctx   = infer_ctx_create(child, env_get_dep(env), filename ? filename : "<unknown>");
     /* Pre-bind with a fresh var so recursive calls resolve.
      * We use a high ID so it doesn't pollute the visible var names. */
     ctx->subst->next_id = 1000;
@@ -616,17 +624,20 @@ bool env_hm_check_call(Env *env, const char *name, Type **arg_types, int n,
     InferEnv *ienv = env_get_infer(env);
     if (!ienv) return true;
 
-    TypeScheme *sc = infer_env_lookup(ienv, name);
-    if (!sc) return true;
+    InferCtx *ctx = infer_ctx_create(ienv, env_get_dep(env), filename ? filename : "<check>");
 
-    InferCtx *ctx = infer_ctx_create(ienv, filename ? filename : "<check>");
+    TypeScheme *sc = infer_env_lookup(ctx, name);
+    if (!sc) {
+        infer_ctx_free(ctx);
+        return true;
+    }
     Type *inst = infer_instantiate(ctx, sc);
     Type *cursor = inst;
-    fprintf(stderr, "DEBUG hm_check_call entry: name=%s sc->quantified_count=%d sc->type_kind=%d inst_kind=%d\n",
-            name,
-            sc->quantified_count,
-            sc->type ? sc->type->kind : -1,
-            inst ? inst->kind : -1);
+    /* fprintf(stderr, "DEBUG hm_check_call entry: name=%s sc->quantified_count=%d sc->type_kind=%d inst_kind=%d\n", */
+    /*         name, */
+    /*         sc->quantified_count, */
+    /*         sc->type ? sc->type->kind : -1, */
+    /*         inst ? inst->kind : -1); */
     bool ok = true;
 
     for (int i = 0; i < n && cursor && cursor->kind == TYPE_ARROW; i++) {
@@ -634,10 +645,10 @@ bool env_hm_check_call(Env *env, const char *name, Type **arg_types, int n,
         Type *arg       = arg_types[i];
         Type *orig_param = param;
         Type *orig_arg   = arg;
-        fprintf(stderr, "DEBUG hm_check_call: name=%s i=%d param_kind=%d arg_kind=%d\n",
-                name, i,
-                param ? (int)param->kind : -1,
-                arg   ? (int)arg->kind   : -1);
+        /* fprintf(stderr, "DEBUG hm_check_call: name=%s i=%d param_kind=%d arg_kind=%d\n", */
+        /*         name, i, */
+        /*         param ? (int)param->kind : -1, */
+        /*         arg   ? (int)arg->kind   : -1); */
         if (param && param->kind != TYPE_VAR && param->kind != TYPE_UNKNOWN &&
             arg   && arg->kind   != TYPE_VAR && arg->kind   != TYPE_UNKNOWN) {
             /* If param is TYPE_FN, check if it carries an arrow annotation
@@ -832,10 +843,13 @@ bool env_hm_instantiate_call(Env *env, const char *name, Type **out_params,
     InferEnv *ienv = env_get_infer(env);
     if (!ienv) return false;
 
-    TypeScheme *sc = infer_env_lookup(ienv, name);
-    if (!sc) return false;
+    InferCtx *ctx  = infer_ctx_create(ienv, env_get_dep(env), "<instantiate>");
 
-    InferCtx *ctx  = infer_ctx_create(ienv, "<instantiate>");
+    TypeScheme *sc = infer_env_lookup(ctx, name);
+    if (!sc) {
+        infer_ctx_free(ctx);
+        return false;
+    }
     Type *inst     = infer_instantiate(ctx, sc);
     Type *cursor   = inst;
 
