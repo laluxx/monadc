@@ -1580,6 +1580,20 @@ static bool dep_conv_vals_internal(ConvCtx *cctx, Value *v1, Value *v2, Value *t
     v1 = dep_force(v1, mctx);
     v2 = dep_force(v2, mctx);
 
+    /* Fast-path and occurs-check bypass for identical metavariables */
+    if (v1 && v2 && v1->kind == VAL_META && v2->kind == VAL_META && v1->meta_id == v2->meta_id) {
+        if (v1->spine.count != v2->spine.count) {
+            snprintf(cctx->error_msg, sizeof(cctx->error_msg),
+                     "dep: spine length mismatch for meta ?%d", v1->meta_id);
+            cctx->had_error = true;
+            return false;
+        }
+        for (int i = 0; i < v1->spine.count; i++) {
+            if (!dep_conv_vals(cctx, v1->spine.args[i], v2->spine.args[i], NULL)) return false;
+        }
+        return true;
+    }
+
     /* Solve metavariables when one side is an unsolved meta.
      * Simple pattern: meta ?n applied to distinct neutral variables.
      * This is "pattern unification" — the most tractable fragment.     */
@@ -2764,11 +2778,16 @@ Term *dep_term_of_ast(DepCtx *ctx, AST *ast) {
 }
 
 Term *dep_term_of_type_ast(DepCtx *ctx, AST *ast) {
-    if (!ast) return term_hole();
+    if (!ast) return term_meta(meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, "?ty"));
 
     Term *res = NULL;
 
-    if (ast->type == AST_ARRAY) {
+    if (ast->type == AST_SYMBOL) {
+        if (ast->symbol[0] >= 'a' && ast->symbol[0] <= 'z') {
+            int id = meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, ast->symbol);
+            return term_meta(id);
+        }
+    } else if (ast->type == AST_ARRAY) {
         if (ast->array.element_count == 3 &&
                 ast->array.elements[0]->type == AST_SYMBOL && strcmp(ast->array.elements[0]->symbol, "Fn") == 0 &&
                 ast->array.elements[1]->type == AST_SYMBOL && strcmp(ast->array.elements[1]->symbol, "::") == 0) {
@@ -2780,7 +2799,7 @@ Term *dep_term_of_type_ast(DepCtx *ctx, AST *ast) {
             res = term_app(term_fvar("List"), args, 1);
         } else if (ast->array.element_count == 0) {
             Term **args = malloc(sizeof(Term*));
-            args[0] = term_hole();
+            args[0] = term_meta(meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, "?arr_elem"));
             res = term_app(term_fvar("List"), args, 1);
         }
     } else if (ast->type == AST_LIST) {
@@ -2808,7 +2827,7 @@ Term *dep_term_of_type_ast(DepCtx *ctx, AST *ast) {
                 lhs_ast->column = ast->list.items[0]->column;
                 for(size_t i=0; i<arrow_idx; i++) ast_list_append(lhs_ast, ast_clone(ast->list.items[i]));
             }
-            Term *dom = lhs_ast ? dep_term_of_type_ast(ctx, lhs_ast) : term_hole();
+            Term *dom = lhs_ast ? dep_term_of_type_ast(ctx, lhs_ast) : term_meta(meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, "?dom"));
             /* Intentional leak of lhs_ast to prevent UAF in HM phase */
 
             AST *rhs_ast = NULL;
@@ -2820,10 +2839,12 @@ Term *dep_term_of_type_ast(DepCtx *ctx, AST *ast) {
                 rhs_ast->column = ast->list.items[arrow_idx + 1]->column;
                 for(size_t i=arrow_idx+1; i<ast->list.count; i++) ast_list_append(rhs_ast, ast_clone(ast->list.items[i]));
             }
-            Term *ret = rhs_ast ? dep_term_of_type_ast(ctx, rhs_ast) : term_hole();
+            Term *ret = rhs_ast ? dep_term_of_type_ast(ctx, rhs_ast) : term_meta(meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, "?ret"));
             /* Intentional leak of rhs_ast to prevent UAF in HM phase */
 
             res = term_pi("_", dom, ret, IMPLICIT_EXPLICIT);
+        } else {
+            res = term_meta(meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, "?ty"));
         }
     }
 

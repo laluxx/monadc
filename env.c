@@ -640,11 +640,90 @@ bool env_hm_check_call(Env *env, const char *name, Type **arg_types, int n,
     /*         inst ? inst->kind : -1); */
     bool ok = true;
 
+    EnvEntry *ee = env_lookup(env, name);
+
     for (int i = 0; i < n && cursor && cursor->kind == TYPE_ARROW; i++) {
         Type *param     = cursor->arrow_param;
         Type *arg       = arg_types[i];
         Type *orig_param = param;
         Type *orig_arg   = arg;
+
+        if (ee && i < ee->param_count && ee->params[i].type && arg) {
+            Type *decl_param = ee->params[i].type;
+            if (decl_param->kind == TYPE_LIST && decl_param->list_count > 1 &&
+                arg->kind == TYPE_LIST && arg->list_count > 0) {
+
+                /* Copy strings locally since type_to_string uses static buffers */
+                char exp_t_str[256];
+                strncpy(exp_t_str, type_to_string(decl_param), sizeof(exp_t_str) - 1);
+                exp_t_str[sizeof(exp_t_str) - 1] = '\0';
+
+                char act_t_str[256];
+                strncpy(act_t_str, type_to_string(arg), sizeof(act_t_str) - 1);
+                act_t_str[sizeof(act_t_str) - 1] = '\0';
+
+                if (decl_param->list_count != arg->list_count) {
+                    READER_ERROR(line, col,
+                        "\n"
+                        "    • Couldn't match expected list size %d with actual size %d\n"
+                        "    • In argument %d of a call to ‘%s’\n"
+                        "    • Expected type: %s\n"
+                        "    • Provided type: %s\n"
+                        "  - Hint: the function expects exactly %d elements, but you passed a list of %d",
+                        decl_param->list_count, arg->list_count,
+                        i + 1, name,
+                        exp_t_str,
+                        act_t_str,
+                        decl_param->list_count, arg->list_count);
+                } else {
+                    for (int j = 0; j < decl_param->list_count; j++) {
+                        Type *dt = decl_param->list_types[j];
+                        Type *at = arg->list_types[j];
+                        bool mismatch = false;
+
+                        if (dt->kind != at->kind) {
+                            bool dt_int = (dt->kind == TYPE_INT || dt->kind == TYPE_HEX || dt->kind == TYPE_BIN || dt->kind == TYPE_OCT || dt->kind == TYPE_INT_ARBITRARY);
+                            bool at_int = (at->kind == TYPE_INT || at->kind == TYPE_HEX || at->kind == TYPE_BIN || at->kind == TYPE_OCT || at->kind == TYPE_INT_ARBITRARY);
+                            bool dt_float = (dt->kind == TYPE_FLOAT || dt->kind == TYPE_F32 || dt->kind == TYPE_F80);
+                            bool at_float = (at->kind == TYPE_FLOAT || at->kind == TYPE_F32 || at->kind == TYPE_F80);
+
+                            /* Allow standard numeric widening but catch hard mismatches */
+                            if (!(dt_int && at_int) && !(dt_float && at_float) &&
+                                !(dt_float && at_int) &&
+                                !(dt->kind == TYPE_UNKNOWN || at->kind == TYPE_UNKNOWN || dt->kind == TYPE_VAR || at->kind == TYPE_VAR)) {
+                                mismatch = true;
+                            }
+                        }
+
+                        if (mismatch) {
+                            char dt_str[128];
+                            strncpy(dt_str, type_to_string(dt), sizeof(dt_str) - 1);
+                            dt_str[sizeof(dt_str) - 1] = '\0';
+
+                            char at_str[128];
+                            strncpy(at_str, type_to_string(at), sizeof(at_str) - 1);
+                            at_str[sizeof(at_str) - 1] = '\0';
+
+                            const char *suffix = (j == 0) ? "st" : (j == 1) ? "nd" : (j == 2) ? "rd" : "th";
+
+                            READER_ERROR(line, col,
+                                "\n"
+                                "    • Couldn't match expected type '%s' with actual type '%s' at list index %d\n"
+                                "    • In argument %d of a call to ‘%s’\n"
+                                "    • Expected type: %s\n"
+                                "    • Provided type: %s\n"
+                                "  - Hint: the function expects the %d%s element to be '%s', but you passed '%s'",
+                                dt_str, at_str, j,
+                                i + 1, name,
+                                exp_t_str,
+                                act_t_str,
+                                j + 1, suffix, dt_str, at_str);
+                        }
+                    }
+                }
+            }
+        }
+
         /* fprintf(stderr, "DEBUG hm_check_call: name=%s i=%d param_kind=%d arg_kind=%d\n", */
         /*         name, i, */
         /*         param ? (int)param->kind : -1, */

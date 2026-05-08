@@ -4,6 +4,8 @@
 #include <string.h>
 #include <stdio.h>
 
+static Type *make_type(TypeKind kind);
+
 /// Type alias
 
 TypeAlias *g_aliases = NULL;
@@ -228,6 +230,50 @@ Type *type_from_name(const char *name) {
     if (!name) return NULL;
 
     size_t len = strlen(name);
+
+    // Parameterized List: (T) or (T1 T2 ...)
+    if (len > 1 && name[0] == '(' && name[len - 1] == ')') {
+        char *inner_name = strndup(name + 1, len - 2);
+        Type *t = make_type(TYPE_LIST);
+        t->list_count = 0;
+        t->list_types = NULL;
+
+        char *p = inner_name;
+        while (*p) {
+            while (*p == ' ') p++;
+            if (!*p) break;
+
+            char *start = p;
+            int depth = 0;
+            while (*p) {
+                if (*p == '(' || *p == '[' || *p == '{') depth++;
+                if (*p == ')' || *p == ']' || *p == '}') depth--;
+                if (depth == 0 && *p == ' ') break;
+                p++;
+            }
+            char *elem_str = strndup(start, p - start);
+            Type *elem_t = type_from_name(elem_str);
+            if (!elem_t) elem_t = type_unknown();
+            free(elem_str);
+
+            t->list_count++;
+            t->list_types = realloc(t->list_types, t->list_count * sizeof(Type*));
+            t->list_types[t->list_count - 1] = elem_t;
+        }
+        free(inner_name);
+        return t;
+    }
+
+    // Parameterized Collection: [T]
+    if (len > 2 && name[0] == '[' && name[len - 1] == ']') {
+        char *inner_name = strndup(name + 1, len - 2);
+        Type *inner = type_from_name(inner_name);
+        free(inner_name);
+        Type *t = type_coll();
+        t->element_type = inner;
+        return t;
+    }
+
     if (len > 1 && name[len - 1] == '?') {
         char *inner_name = strndup(name, len - 1);
         Type *inner = type_from_name(inner_name);
@@ -280,7 +326,7 @@ Type *type_from_name(const char *name) {
     if (strcmp(name, "Oct")     == 0) return type_oct();
     if (strcmp(name, "Keyword") == 0) return type_keyword();
     if (strcmp(name, "Ratio")   == 0) return type_ratio();
-    if (strcmp(name, "List")    == 0) return type_list(NULL);
+    if (strcmp(name, "List")    == 0) return type_list(NULL, 0);
     if (strcmp(name, "Arr")     == 0) return type_arr_fat(NULL);
     if (strcmp(name, "Set")     == 0) return type_set();
     if (strcmp(name, "Map")     == 0) return type_map();
@@ -379,9 +425,16 @@ Type *type_optional(Type *inner) {
     return t;
 }
 
-Type *type_list(Type *element_type) {
+Type *type_list(Type **types, int count) {
     Type *t = make_type(TYPE_LIST);
-    t->element_type = element_type;
+    t->list_types = NULL;
+    if (count > 0 && types) {
+        t->list_types = malloc(count * sizeof(Type*));
+        for (int i = 0; i < count; i++) {
+            t->list_types[i] = types[i];
+        }
+    }
+    t->list_count = count;
     return t;
 }
 
@@ -465,6 +518,11 @@ bool types_equal(Type *a, Type *b) {
         return types_equal(a->arrow_param, b->arrow_param)
             && types_equal(a->arrow_ret,   b->arrow_ret);
     case TYPE_LIST:
+        if (a->list_count != b->list_count) return false;
+        for (int i = 0; i < a->list_count; i++) {
+            if (!types_equal(a->list_types[i], b->list_types[i])) return false;
+        }
+        return true;
     case TYPE_OPTIONAL:
         return types_equal(a->element_type, b->element_type);
     case TYPE_ARR:
@@ -551,7 +609,17 @@ Type *type_clone(Type *t) {
         case TYPE_OCT:     return type_oct();
         case TYPE_KEYWORD: return type_keyword();
         case TYPE_RATIO:   return type_ratio();
-        case TYPE_LIST:    return type_list(type_clone(t->element_type));
+        case TYPE_LIST: {
+            Type *c = type_list(NULL, 0);
+            c->list_count = t->list_count;
+            if (t->list_count > 0) {
+                c->list_types = malloc(t->list_count * sizeof(Type*));
+                for (int i = 0; i < t->list_count; i++) {
+                    c->list_types[i] = type_clone(t->list_types[i]);
+                }
+            }
+            return c;
+        }
         case TYPE_COLL:    return type_coll();
         case TYPE_F32:     return type_f32();
         case TYPE_I8:      return type_i8();
@@ -605,7 +673,13 @@ void type_free(Type *t) {
         }
         type_free(t->return_type);
     }
-    if (t->kind == TYPE_LIST || t->kind == TYPE_PTR || t->kind == TYPE_OPTIONAL) {
+    if (t->kind == TYPE_LIST) {
+        for (int i = 0; i < t->list_count; i++) {
+            type_free(t->list_types[i]);
+        }
+        free(t->list_types);
+    }
+    if (t->kind == TYPE_PTR || t->kind == TYPE_OPTIONAL || t->kind == TYPE_COLL) {
         type_free(t->element_type);
     }
     if (t->kind == TYPE_ARR) {
@@ -627,7 +701,10 @@ void type_free(Type *t) {
 const char *type_to_string(Type *t) {
     if (!t) return "?";
 
-    static char buf[512];
+    static char bufs[32][512];
+    static int buf_idx = 0;
+    char *buf = bufs[buf_idx];
+    buf_idx = (buf_idx + 1) % 32;
 
     switch (t->kind) {
     case TYPE_INT:     return "Int";
@@ -657,83 +734,61 @@ const char *type_to_string(Type *t) {
     case TYPE_UNKNOWN: return "?";
     case TYPE_NIL:     return "Nil";
     case TYPE_F80:     return "F80";
-    case TYPE_INT_ARBITRARY: {
-        static char ibuf[16];
-        snprintf(ibuf, sizeof(ibuf), "%c%d",
-                 t->numeric_signed ? 'I' : 'U', t->numeric_width);
-        return ibuf;
-    }
-    case TYPE_PTR: {
-        static char pbuf[256];
-        snprintf(pbuf, sizeof(pbuf), "Pointer :: %s",
-                 type_to_string(t->element_type));
-        return pbuf;
-    }
-    case TYPE_OPTIONAL: {
-        static char obuf[256];
-        snprintf(obuf, sizeof(obuf), "%s?", type_to_string(t->element_type));
-        return obuf;
-    }
-    case TYPE_VAR: {
-        static char vbuf[32];
-        snprintf(vbuf, sizeof(vbuf), "'%c",
-                 'a' + (t->var_id % 26));
+    case TYPE_INT_ARBITRARY:
+        snprintf(buf, 512, "%c%d", t->numeric_signed ? 'I' : 'U', t->numeric_width);
+        return buf;
+    case TYPE_PTR:
+        snprintf(buf, 512, "Pointer :: %s", type_to_string(t->element_type));
+        return buf;
+    case TYPE_OPTIONAL:
+        snprintf(buf, 512, "%s?", type_to_string(t->element_type));
+        return buf;
+    case TYPE_VAR:
+        snprintf(buf, 512, "'%c", 'a' + (t->var_id % 26));
         if (t->var_id >= 26)
-            snprintf(vbuf + 2, sizeof(vbuf) - 2, "%d", t->var_id / 26);
-        return vbuf;
-    }
-
-    case TYPE_ARROW: {
-        static char abuf[256];
-        snprintf(abuf, sizeof(abuf), "(%s -> %s)",
-                 type_to_string(t->arrow_param),
-                 type_to_string(t->arrow_ret));
-        return abuf;
-    }
-
+            snprintf(buf + 2, 512 - 2, "%d", t->var_id / 26);
+        return buf;
+    case TYPE_ARROW:
+        snprintf(buf, 512, "(%s -> %s)", type_to_string(t->arrow_param), type_to_string(t->arrow_ret));
+        return buf;
     case TYPE_LIST: {
-        if (t->element_type) {
-            snprintf(buf, sizeof(buf), "(%s)", type_to_string(t->element_type));
-        } else {
-            snprintf(buf, sizeof(buf), "(a)");
-        }
-        return buf;
-    }
-    case TYPE_COLL:    return "[a]";
-
-    case TYPE_ARR: {
-        if (t->arr_element_type && t->arr_size >= 0) {
-            snprintf(buf, sizeof(buf), "Arr :: %s :: %d",
-                     type_to_string(t->arr_element_type), t->arr_size);
-        } else if (t->arr_element_type) {
-            snprintf(buf, sizeof(buf), "Arr :: %s", type_to_string(t->arr_element_type));
-        } else if (t->arr_size >= 0) {
-            snprintf(buf, sizeof(buf), "Arr :: ? :: %d", t->arr_size);
-        } else {
-            snprintf(buf, sizeof(buf), "Arr");
-        }
-        return buf;
-    }
-
-    case TYPE_LAYOUT:
-        return t->layout_name ? t->layout_name : "<layout>";
-
-    case TYPE_FN: {
-        if (t->param_count == 0) {
-            // Fn with no params — variadic list style
-            snprintf(buf, sizeof(buf), "Fn");
+        if (t->list_count == 0) {
+            snprintf(buf, 512, "()");
             return buf;
         }
-
-        // Build the arity signature
+        int offset = snprintf(buf, 512, "(");
+        for (int i = 0; i < t->list_count; i++) {
+            if (i > 0) offset += snprintf(buf + offset, 512 - offset, " ");
+            offset += snprintf(buf + offset, 512 - offset, "%s", type_to_string(t->list_types[i]));
+        }
+        snprintf(buf + offset, 512 - offset, ")");
+        return buf;
+    }
+    case TYPE_COLL:
+        return "[a]";
+    case TYPE_ARR:
+        if (t->arr_element_type && t->arr_size >= 0) {
+            snprintf(buf, 512, "Arr :: %s :: %d", type_to_string(t->arr_element_type), t->arr_size);
+        } else if (t->arr_element_type) {
+            snprintf(buf, 512, "Arr :: %s", type_to_string(t->arr_element_type));
+        } else if (t->arr_size >= 0) {
+            snprintf(buf, 512, "Arr :: ? :: %d", t->arr_size);
+        } else {
+            snprintf(buf, 512, "Arr");
+        }
+        return buf;
+    case TYPE_LAYOUT:
+        return t->layout_name ? t->layout_name : "<layout>";
+    case TYPE_FN: {
+        if (t->param_count == 0) {
+            snprintf(buf, 512, "Fn");
+            return buf;
+        }
         char sig[400] = {0};
         bool first_opt_seen = false;
-
         for (int i = 0; i < t->param_count; i++) {
             FnParam *p = &t->params[i];
-
             if (p->rest) {
-                // rest arg: ". _"
                 if (i > 0) strcat(sig, " ");
                 strcat(sig, ". _");
             } else {
@@ -746,8 +801,7 @@ const char *type_to_string(Type *t) {
                 strcat(sig, "_");
             }
         }
-
-        snprintf(buf, sizeof(buf), "Fn (%s)", sig);
+        snprintf(buf, 512, "Fn (%s)", sig);
         return buf;
     }
     }

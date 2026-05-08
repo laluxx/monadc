@@ -18,8 +18,6 @@
    takeWhile dropWhile
    map all? foldl foldr])
 
-import Ascii
-
 
 define take :: Int -> [a] -> [a]
   _ []            -> []

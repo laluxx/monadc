@@ -361,7 +361,7 @@ static void arity_prescan(ArityTable *t, const char *source) {
                             tok = lexer_next_token(&lex);
                             if (tok.type == TOK_SYMBOL && tok.value &&
                                 tok.value[0] >= 'a' && tok.value[0] <= 'z') {
-                                fprintf(stderr, "DEBUG prescan: registered param '%s' arity=0\n", tok.value);
+                                /* fprintf(stderr, "DEBUG prescan: registered param '%s' arity=0\n", tok.value); */
                                 arity_set(t, tok.value, 0);
                             }
                             free(tok.value);
@@ -516,7 +516,7 @@ static void arity_prescan(ArityTable *t, const char *source) {
                              * so wisp's infix promotion treats it as lhs, not a callable */
                             if (param_var_name[0]) {
                                 arity_set(t, param_var_name, 0);
-                                fprintf(stderr, "DEBUG prescan: registered param '%s' arity=0\n", param_var_name);
+                                /* fprintf(stderr, "DEBUG prescan: registered param '%s' arity=0\n", param_var_name); */
                             }
                             if (arity < WISP_MAX_PARAMS)
                                 kinds[arity] = is_fn ? PARAM_FUNC : PARAM_VALUE;

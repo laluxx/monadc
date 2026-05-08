@@ -81,7 +81,11 @@ typedef struct Type {
     struct Type    *return_type;
 
     // TYPE_LIST
-    struct Type *element_type;   // NULL = polymorphic/unknown
+    struct Type **list_types;
+    int list_count;
+
+    // SINGLE ELEMENT (used by PTR, OPTIONAL, COLL)
+    struct Type *element_type;
 
     // TYPE_ARR — fat pointer { T* data, i64 size }
     struct Type *arr_element_type;
@@ -163,7 +167,7 @@ Type *type_int_arbitrary(int width, bool is_signed); // I<n> or U<n>
 
 /// Constructors — compound types
 
-Type *type_list(Type *element_type);
+Type *type_list(Type **types, int count);
 Type *type_arr(Type *element_type, int size);
 Type *type_arr_fat(Type *element_type); // runtime fat pointer {data, size}
 Type *type_fn(FnParam *params, int param_count, Type *return_type);

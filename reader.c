@@ -116,7 +116,6 @@ void comment_map_build(const char *source) {
              * paragraph comment. Reset i to the new -| so the outer loop
              * processes it next.                                             */
             int close_pos = -1;
-            int saved_i = i;
             while (i < len - 1) {
                 if (source[i] == '|' && source[i+1] == '-') {
                     close_pos = i;
@@ -144,8 +143,8 @@ void comment_map_build(const char *source) {
                     if (source[j] == '\n') {
                         /* Check if next line is blank (empty or whitespace only) */
                         int k = j + 1;
-                        while (k < len && source[k] == ' ' ||
-                               k < len && source[k] == '\t') k++;
+                        while ((k < len && source[k] == ' ') ||
+                               (k < len && source[k] == '\t')) k++;
                         if (k >= len || source[k] == '\n') {
                             /* blank line found — paragraph ends here */
                             para_end = j;
@@ -1778,70 +1777,97 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
             }
             if (!has_arrow_inside) free(peek_tok.value);
 
-            if (has_arrow_inside) {
-                /* Parenthesized arrow type e.g. (Int -> Int) — anonymous Fn param.
-                 * Consume the whole (...) and build a type string from its contents. */
-                p->current = lexer_next_token(p->lexer); /* skip '(' */
-                char type_buf[512] = {0};
-                int depth = 0;
-                while (!(p->current.type == TOK_RPAREN && depth == 0) &&
-                       p->current.type != TOK_EOF) {
-                    if (p->current.type == TOK_LPAREN) depth++;
-                    if (p->current.type == TOK_RPAREN) depth--;
-                    const char *tok_str = p->current.value
-                                       ? p->current.value
-                                       : (p->current.type == TOK_ARROW ? "->" : NULL);
-                    if (tok_str) {
-                        if (type_buf[0]) strncat(type_buf, " ",
-                            sizeof(type_buf) - strlen(type_buf) - 1);
-                        strncat(type_buf, tok_str,
-                            sizeof(type_buf) - strlen(type_buf) - 1);
+            bool is_type_only = false;
+                if (!has_arrow_inside) {
+                    Lexer tmp_lex2 = *p->lexer;
+                    Token tmp_tok2 = lexer_next_token(&tmp_lex2);
+                    if (tmp_tok2.type == TOK_SYMBOL && tmp_tok2.value &&
+                        ((tmp_tok2.value[0] >= 'A' && tmp_tok2.value[0] <= 'Z') ||
+                         (tmp_tok2.value[1] == '\0' && tmp_tok2.value[0] >= 'a' && tmp_tok2.value[0] <= 'z'))) {
+                        Lexer scan_lex = tmp_lex2;
+                        Token scan_tok = lexer_next_token(&scan_lex);
+                        bool has_colon = false;
+                        int sdepth = 0;
+                        while (!(scan_tok.type == TOK_RPAREN && sdepth == 0) && scan_tok.type != TOK_EOF) {
+                            if (scan_tok.type == TOK_LPAREN) sdepth++;
+                            if (scan_tok.type == TOK_RPAREN) sdepth--;
+                            if (scan_tok.type == TOK_SYMBOL && scan_tok.value && strcmp(scan_tok.value, "::") == 0) has_colon = true;
+                            free(scan_tok.value);
+                            scan_tok = lexer_next_token(&scan_lex);
+                        }
+                        free(scan_tok.value);
+                        if (!has_colon) is_type_only = true;
                     }
-                    p->current = lexer_next_token(p->lexer);
-                }
-                if (p->current.type == TOK_RPAREN)
-                    p->current = lexer_next_token(p->lexer); /* skip ')' */
-
-                if (count >= capacity) {
-                    capacity = capacity == 0 ? 4 : capacity * 2;
-                    params   = realloc(params, sizeof(ASTParam) * capacity);
-                }
-                char gen_name[32];
-                snprintf(gen_name, sizeof(gen_name), "__p_%d", count);
-                /* Store as "Fn :: (type_buf)" so type_from_name resolves it */
-                char fn_type_buf[560];
-                snprintf(fn_type_buf, sizeof(fn_type_buf), "Fn :: (%s)", type_buf);
-                params[count].name      = my_strdup(gen_name);
-                params[count].type_name = my_strdup(fn_type_buf);
-                params[count].is_rest   = false;
-                params[count].is_anon   = true;
-                count++;
-            } else {
-                /* (name) or (name :: Type) — existing behaviour */
-                p->current = lexer_next_token(p->lexer);
-                ASTParam param = parse_one_param(p);
-                if (p->current.type != TOK_RPAREN)
-                    compiler_error(p->current.line, p->current.column,
-                                   "Expected ')' after parameter");
-                p->current = lexer_next_token(p->lexer);
-                if (count >= capacity) {
-                    capacity = capacity == 0 ? 4 : capacity * 2;
-                    params   = realloc(params, sizeof(ASTParam) * capacity);
+                    free(tmp_tok2.value);
                 }
 
-                if (param.type_name == NULL) {
+                if (has_arrow_inside || is_type_only) {
+                    /* Parenthesized arrow type e.g. (Int -> Int) or tuple type e.g. (Int Int)
+                     * Consume the whole (...) and build a type string from its contents. */
+                    p->current = lexer_next_token(p->lexer); /* skip '(' */
+                    char type_buf[512] = {0};
+                    int depth = 0;
+                    while (!(p->current.type == TOK_RPAREN && depth == 0) &&
+                           p->current.type != TOK_EOF) {
+                        if (p->current.type == TOK_LPAREN) depth++;
+                        if (p->current.type == TOK_RPAREN) depth--;
+                        const char *tok_str = p->current.value
+                                           ? p->current.value
+                                           : (p->current.type == TOK_ARROW ? "->" : NULL);
+                        if (tok_str) {
+                            if (type_buf[0]) strncat(type_buf, " ",
+                                sizeof(type_buf) - strlen(type_buf) - 1);
+                            strncat(type_buf, tok_str,
+                                sizeof(type_buf) - strlen(type_buf) - 1);
+                        }
+                        p->current = lexer_next_token(p->lexer);
+                    }
+                    if (p->current.type == TOK_RPAREN)
+                        p->current = lexer_next_token(p->lexer); /* skip ')' */
+
+                    if (count >= capacity) {
+                        capacity = capacity == 0 ? 4 : capacity * 2;
+                        params   = realloc(params, sizeof(ASTParam) * capacity);
+                    }
                     char gen_name[32];
                     snprintf(gen_name, sizeof(gen_name), "__p_%d", count);
-                    free(param.name);
-                    param.name = my_strdup(gen_name);
-                    param.type_name = my_strdup("List");
-                    param.is_anon = true;
+                    char fn_type_buf[560];
+                    if (has_arrow_inside) {
+                        snprintf(fn_type_buf, sizeof(fn_type_buf), "Fn :: (%s)", type_buf);
+                    } else {
+                        snprintf(fn_type_buf, sizeof(fn_type_buf), "(%s)", type_buf);
+                    }
+                    params[count].name      = my_strdup(gen_name);
+                    params[count].type_name = my_strdup(fn_type_buf);
+                    params[count].is_rest   = false;
+                    params[count].is_anon   = true;
+                    count++;
                 } else {
-                    param.is_anon = false;
-                }
+                    /* (name) or (name :: Type) — existing behaviour */
+                    p->current = lexer_next_token(p->lexer);
+                    ASTParam param = parse_one_param(p);
+                    if (p->current.type != TOK_RPAREN)
+                        compiler_error(p->current.line, p->current.column,
+                                       "Expected ')' after parameter");
+                    p->current = lexer_next_token(p->lexer);
+                    if (count >= capacity) {
+                        capacity = capacity == 0 ? 4 : capacity * 2;
+                        params   = realloc(params, sizeof(ASTParam) * capacity);
+                    }
 
-                params[count++] = param;
-            }
+                    if (param.type_name == NULL) {
+                        char gen_name[32];
+                        snprintf(gen_name, sizeof(gen_name), "__p_%d", count);
+                        free(param.name);
+                        param.name = my_strdup(gen_name);
+                        param.type_name = my_strdup("(a)");
+                        param.is_anon = true;
+                    } else {
+                        param.is_anon = false;
+                    }
+
+                    params[count++] = param;
+                }
         } else if (p->current.type == TOK_ARROW) {
             p->current = lexer_next_token(p->lexer);
 

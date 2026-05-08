@@ -166,10 +166,16 @@ Type *subst_apply(Substitution *s, Type *t) {
     case TYPE_VAR:
         return t;   /* unresolved free variable — leave as-is */
 
-    case TYPE_LIST:
-        if (t->list_elem)
-            return type_list(subst_apply(s, t->list_elem));
-        return t;
+    case TYPE_LIST: {
+        if (t->list_count == 0) return t;
+        Type **new_types = malloc(t->list_count * sizeof(Type*));
+        for (int i = 0; i < t->list_count; i++) {
+            new_types[i] = subst_apply(s, t->list_types[i]);
+        }
+        Type *ret = type_list(new_types, t->list_count);
+        free(new_types);
+        return ret;
+    }
 
     case TYPE_OPTIONAL:
         if (t->element_type)
@@ -836,7 +842,7 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             if (p->is_rest) {
                 // Rest param gets type List 'a — body sees it as a list
                 Type *elem = infer_fresh(ctx);
-                pt = type_list(elem);
+                pt = type_list(&elem, 1);
             } else if (p->type_name) {
                 pt = type_from_name(p->type_name);
                 if (!pt) pt = infer_fresh(ctx);
@@ -1009,7 +1015,8 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
 
         /* ---- quote --------------------------------------------------- */
         if (head->type == AST_SYMBOL && strcmp(head->symbol, "quote") == 0) {
-            result = type_list(infer_fresh(ctx));
+            Type *fresh_t = infer_fresh(ctx);
+            result = type_list(&fresh_t, 1);
             break;
         }
 
@@ -1240,7 +1247,7 @@ void infer_register_builtins(InferCtx *ctx) {
     TypeScheme *map_sc = infer_generalise(ctx,
         type_arrow(
             type_arrow(ma, mb),
-            type_arrow(type_list(ma), type_list(mb))),
+            type_arrow(type_list(&ma, 1), type_list(&mb, 1))),
         ctx->env);
     infer_env_insert(ctx->env, "map", map_sc);
 
@@ -1249,7 +1256,7 @@ void infer_register_builtins(InferCtx *ctx) {
     TypeScheme *filter_sc = infer_generalise(ctx,
         type_arrow(
             type_arrow(fa, type_bool()),
-            type_arrow(type_list(fa), type_list(fa))),
+            type_arrow(type_list(&fa, 1), type_list(&fa, 1))),
         ctx->env);
     infer_env_insert(ctx->env, "filter", filter_sc);
 
@@ -1305,10 +1312,12 @@ void infer_register_builtins(InferCtx *ctx) {
     infer_env_insert(ctx->env, "merge",
         scheme_mono(type_arrow(type_map(), type_arrow(type_map(), type_map()))));
 
+    Type *keys_fresh = infer_fresh(ctx);
     infer_env_insert(ctx->env, "keys",
-        scheme_mono(type_arrow(type_map(), type_list(infer_fresh(ctx)))));
+        scheme_mono(type_arrow(type_map(), type_list(&keys_fresh, 1))));
+    Type *vals_fresh = infer_fresh(ctx);
     infer_env_insert(ctx->env, "vals",
-        scheme_mono(type_arrow(type_map(), type_list(infer_fresh(ctx)))));
+        scheme_mono(type_arrow(type_map(), type_list(&vals_fresh, 1))));
 
     /* ADT internal primitives — typed by codegen_data at runtime,
      * registered here as opaque so HM doesn't reject them          */

@@ -14,12 +14,17 @@
 ;; show main
 
 ;; ;; DONE
-;; (define (when condition . body -> Syntax)
-;;   (if condition (begin . body)))
+
+(define (when condition . body -> Syntax)
+  (if condition (begin . body)))
+
 
 ;; ;; TODO Wisp form
+
+
+
 ;; define when :: condition . body -> Syntax
-;;   if condition begin . body
+;;   (if condition (begin . body))
 
 ;; (define (main -> Int)
 ;;   (let [x 0]

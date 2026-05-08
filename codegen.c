@@ -55,12 +55,15 @@ static LLVMValueRef emit_type_cast(CodegenContext *ctx, LLVMValueRef val, LLVMTy
         if (sk == LLVMFloatTypeKind) val = LLVMBuildFPExt(ctx->builder, val, dblt, "fpext");
         return emit_call_1(ctx, get_rt_value_float(ctx), dst_t, val, "box");
     }
-    if (sk == LLVMPointerTypeKind && dk == LLVMIntegerTypeKind) return LLVMBuildPtrToInt(ctx->builder, val, dst_t, "p2i");
-    if (sk == LLVMPointerTypeKind && (dk == LLVMFloatTypeKind || dk == LLVMDoubleTypeKind)) {
-        LLVMTypeRef pt = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+    if (sk == LLVMPointerTypeKind && dk == LLVMIntegerTypeKind) {
         LLVMTypeRef i64t = LLVMInt64TypeInContext(ctx->context);
         LLVMValueRef u = emit_call_1(ctx, get_rt_unbox_int(ctx), i64t, val, "ub");
-        return LLVMBuildSIToFP(ctx->builder, u, dst_t, "u2f");
+        return (dst_t == i64t) ? u : LLVMBuildIntCast2(ctx->builder, u, dst_t, 1, "u2i_cast");
+    }
+    if (sk == LLVMPointerTypeKind && (dk == LLVMFloatTypeKind || dk == LLVMDoubleTypeKind)) {
+        LLVMTypeRef dblt = LLVMDoubleTypeInContext(ctx->context);
+        LLVMValueRef u = emit_call_1(ctx, get_rt_unbox_float(ctx), dblt, val, "ub_f");
+        return (dst_t == dblt) ? u : LLVMBuildFPTrunc(ctx->builder, u, dst_t, "u2f_trunc");
     }
     if (sk == LLVMIntegerTypeKind && (dk == LLVMFloatTypeKind || dk == LLVMDoubleTypeKind)) return LLVMBuildSIToFP(ctx->builder, val, dst_t, "i2f");
     if ((sk == LLVMFloatTypeKind || sk == LLVMDoubleTypeKind) && dk == LLVMIntegerTypeKind) return LLVMBuildFPToSI(ctx->builder, val, dst_t, "f2i");
@@ -200,8 +203,18 @@ static Type *mono_apply_subst(Type *t, TypeSubst *ts) {
     case TYPE_ARROW:
         return type_arrow(mono_apply_subst(t->arrow_param, ts),
                           mono_apply_subst(t->arrow_ret,   ts));
-    case TYPE_LIST:
-        return type_list(mono_apply_subst(t->list_elem, ts));
+    case TYPE_LIST: {
+        Type **new_types = NULL;
+        if (t->list_count > 0) {
+            new_types = malloc(t->list_count * sizeof(Type*));
+            for (int i = 0; i < t->list_count; i++) {
+                new_types[i] = mono_apply_subst(t->list_types[i], ts);
+            }
+        }
+        Type *ret = type_list(new_types, t->list_count);
+        free(new_types);
+        return ret;
+    }
     default:
         return t;
     }
@@ -2232,7 +2245,7 @@ static CodegenResult codegen_map_op(CodegenContext *ctx, AST *ast,
     LLVMValueRef op_fn = fn_getter(ctx);
     if (expect_args == 1) {
         result.value = emit_call_1(ctx, op_fn, ptr, raw_map, op_name);
-        result.type  = type_list(NULL);
+        result.type  = type_list(NULL, 0);
         return result;
     }
 
@@ -3762,7 +3775,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             }
         }
 
-        result.type = type_list(NULL);
+        result.type = type_list(NULL, 0);
         return result;
     }
 
@@ -3959,7 +3972,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                             env_params[i].name = strdup(param->name);
                             // Typed rest . [args :: T] stores type_list(T) so the
                             // call site can enforce element types. Bare . args stays
-                            // type_list(NULL) meaning untyped.
+                            // type_list(NULL, 0) meaning untyped.
                             if (param->type_name) {
                                 Type *elem = type_from_name(param->type_name);
                                 if (!elem)
@@ -3967,9 +3980,9 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                                         "%s:%d:%d: error: unknown type ‘%s’ for rest parameter ‘%s’",
                                         parser_get_filename(), lambda->line, lambda->column,
                                         param->type_name, param->name);
-                                env_params[i].type = type_list(elem);
+                                env_params[i].type = type_list(&elem, 1);
                             } else {
-                                env_params[i].type = type_list(NULL);
+                                env_params[i].type = type_list(NULL, 0);
                             }
                             /* closure ABI: param_types already set, skip */
                             if (!use_closure_abi)
@@ -5321,7 +5334,7 @@ if (ast->list.count >= 5) {
                     LLVMTypeRef  vl_ft = LLVMFunctionType(vl_pt, &vl_pt, 1, 0);
                     LLVMValueRef vl_a[] = {list};
                     result.value = LLVMBuildCall2(ctx->builder, vl_ft, vl_fn, vl_a, 1, "quoted_list");
-                    result.type = type_list(NULL);
+                    result.type = type_list(NULL, 0);
                     return result;
                 }
                 else if (quoted->type == AST_SYMBOL) {
@@ -6195,7 +6208,7 @@ if (ast->list.count >= 5) {
                 LLVMValueRef fn  = get_rt_list_new(ctx);  // was get_rt_list_empty
                 LLVMTypeRef  ft  = LLVMFunctionType(ptr, NULL, 0, 0);
                 result.value = LLVMBuildCall2(ctx->builder, ft, fn, NULL, 0, "list");
-                result.type  = type_list(NULL);
+                result.type  = type_list(NULL, 0);
                 return result;
             }
 
@@ -6481,7 +6494,7 @@ if (ast->list.count >= 5) {
                 if (col_r.type && col_r.type->kind == TYPE_LIST) {
                     LLVMTypeRef  ft = LLVMFunctionType(ptr_t, &ptr_t, 1, 0);
                     result.value = LLVMBuildCall2(ctx->builder, ft, get_rt_list_cdr(ctx), &val, 1, "list_tail");
-                    result.type  = type_list(NULL);
+                    result.type  = type_list(NULL, 0);
                     return result;
                 }
                 // 5. Unknown/Coll: unbox to list then call rt_list_cdr
@@ -6489,7 +6502,7 @@ if (ast->list.count >= 5) {
                     LLVMTypeRef  ft_ul = LLVMFunctionType(ptr_t, &ptr_t, 1, 0);
                     LLVMValueRef lst   = LLVMBuildCall2(ctx->builder, ft_ul, get_rt_unbox_list(ctx), &val, 1, "unboxed_list");
                     result.value = LLVMBuildCall2(ctx->builder, ft_ul, get_rt_list_cdr(ctx), &lst, 1, "coll_tail");
-                    result.type  = type_list(NULL);
+                    result.type  = type_list(NULL, 0);
                     return result;
                 }
             }
@@ -6509,7 +6522,7 @@ if (ast->list.count >= 5) {
                 CodegenResult lr = codegen_expr(ctx, ast->list.items[1]);
                 LLVMValueRef raw = emit_call_1(ctx, get_rt_unbox_list(ctx), ptr_t, codegen_box(ctx, lr.value, lr.type), "cdr_l");
                 result.value = emit_call_1(ctx, get_rt_value_list(ctx), ptr_t, emit_call_1(ctx, get_rt_list_cdr(ctx), ptr_t, raw, "cdr_raw"), "cdr");
-                result.type = type_list(NULL); return result;
+                result.type = type_list(NULL, 0); return result;
             }
 
             if (strcmp(head->symbol, "rt_coll_wrap") == 0) {
@@ -6775,14 +6788,14 @@ if (ast->list.count >= 5) {
                 REQUIRE_ARGS(1);
                 LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
                 result.value = emit_call_1(ctx, get_rt_list_copy(ctx), ptr, codegen_expr(ctx, ast->list.items[1]).value, "list_copy");
-                result.type = type_list(NULL); return result;
+                result.type = type_list(NULL, 0); return result;
             }
 
             if (strcmp(head->symbol, "append!") == 0) {
                 REQUIRE_ARGS(2);
                 CodegenResult lr = codegen_expr(ctx, ast->list.items[1]), vr = codegen_expr(ctx, ast->list.items[2]);
                 emit_call_2(ctx, get_rt_list_append(ctx), LLVMVoidTypeInContext(ctx->context), lr.value, codegen_box(ctx, vr.value, vr.type), "");
-                result.value = lr.value; result.type = type_list(NULL); return result;
+                result.value = lr.value; result.type = type_list(NULL, 0); return result;
             }
 
             // (make-list n) or (make-list n val) -> List
@@ -6805,7 +6818,7 @@ if (ast->list.count >= 5) {
                 LLVMTypeRef   ft      = LLVMFunctionType(ptr, ft_args, 2, 0);
                 LLVMValueRef  args[]  = {n_r.value, fill};
                 result.value = LLVMBuildCall2(ctx->builder, ft, fn, args, 2, "make_list");
-                result.type  = type_list(NULL);
+                result.type  = type_list(NULL, 0);
                 return result;
             }
 
@@ -9771,19 +9784,46 @@ if (ast->list.count >= 5) {
                         } else {
                             /* Resolve type for non-symbol expressions */
                             Type *_arg_t = _arg->inferred_type;
-                            /* quote always produces a List */
-                            if (!_arg_t || _arg_t->kind == TYPE_UNKNOWN) {
-                                if (_arg->type == AST_LIST &&
-                                    _arg->list.count >= 1 &&
-                                    _arg->list.items[0]->type == AST_SYMBOL &&
-                                    strcmp(_arg->list.items[0]->symbol, "quote") == 0)
-                                    _arg_t = type_list(NULL);
-                                else if (_arg->type == AST_ARRAY)
+                            /* Always recount literal quoted lists to enforce strict tuple boundaries,
+                             * overriding the generic 1-element HM 'List a' inference */
+                            if (_arg->type == AST_LIST &&
+                                _arg->list.count >= 1 &&
+                                _arg->list.items[0]->type == AST_SYMBOL &&
+                                strcmp(_arg->list.items[0]->symbol, "quote") == 0) {
+                                if (_arg->list.count == 2 && _arg->list.items[1]->type == AST_LIST) {
+                                    int qcnt = _arg->list.items[1]->list.count;
+                                    Type **qtypes = malloc(sizeof(Type*) * (qcnt ? qcnt : 1));
+                                    for (int qi = 0; qi < qcnt; qi++) {
+                                        AST *qelem = _arg->list.items[1]->list.items[qi];
+                                        if (qelem->inferred_type && qelem->inferred_type->kind != TYPE_UNKNOWN) {
+                                            qtypes[qi] = qelem->inferred_type;
+                                        } else if (qelem->type == AST_NUMBER) {
+                                            qtypes[qi] = type_int();
+                                        } else if (qelem->type == AST_STRING) {
+                                            qtypes[qi] = type_string();
+                                        } else if (qelem->type == AST_CHAR) {
+                                            qtypes[qi] = type_char();
+                                        } else if (qelem->type == AST_SYMBOL) {
+                                            qtypes[qi] = type_symbol();
+                                        } else if (qelem->type == AST_KEYWORD) {
+                                            qtypes[qi] = type_keyword();
+                                        } else {
+                                            qtypes[qi] = type_unknown();
+                                        }
+                                    }
+                                    _arg_t = type_list(qtypes, qcnt);
+                                    free(qtypes);
+                                } else {
+                                    _arg_t = type_list(NULL, 0);
+                                }
+                            } else if (!_arg_t || _arg_t->kind == TYPE_UNKNOWN) {
+                                if (_arg->type == AST_ARRAY) {
                                     _arg_t = type_arr(NULL, -1);
-                                else if (_arg->type == AST_NUMBER)
+                                } else if (_arg->type == AST_NUMBER) {
                                     _arg_t = type_int();
-                                else if (_arg->type == AST_STRING)
+                                } else if (_arg->type == AST_STRING) {
                                     _arg_t = type_string();
+                                }
                             }
                             _atypes[_i] = _arg_t ? _arg_t : type_unknown();
                         }
@@ -10163,7 +10203,7 @@ if (ast->list.count >= 5) {
 
                         // Resolve the declared element type for typed rest params.
                         // entry->params[i].type is type_list(T) for `. [args :: T]`
-                        // and type_list(NULL) for bare rest params.
+                        // and type_list(NULL, 0) for bare rest params.
                         Type *rest_elem_type = NULL;
                         {
                             Type *rpt = entry->params[i].type;

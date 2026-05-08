@@ -965,7 +965,8 @@ static CompiledModule *compile_one(const char *source_path,
     }
 
     ast_free(feat_ast);
-    Type *ft = type_list(type_keyword());
+    Type *kw_t = type_keyword();
+    Type *ft = type_list(&kw_t, 1);
     LLVMTypeRef flt = type_to_llvm(&ctx, ft);
     LLVMValueRef fgv = LLVMAddGlobal(ctx.module, flt, "__features__");
     LLVMSetInitializer(fgv, LLVMConstNull(flt));

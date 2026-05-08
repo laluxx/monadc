@@ -27,42 +27,37 @@
    proper-superset?
    disjoint?])
 
-
-
-define empty-set {}
-  :alias ∅
-
 ;;; Construction
 
 (define (singleton [x] -> Set)
   "Create a set containing exactly one element."
   (set x))
 
-(define (singleton? [x :: Set] -> Bool)
+(define (singleton? [x : Set] -> Bool)
   "Return True if x is a set containing exactly one element."
   (and (Set? x) (= 1 (count x))))
 
 ;;; Set algebra
 
-(define (union [a :: Set] -> [b :: Set] -> Set)
+(define (union [a : Set] -> [b : Set] -> Set)
   :doc "Return a set containing all elements from both a and b."
   :alias ∪
-  (foldl (lambda ([acc :: Set] [x] -> Set)
+  (foldl (lambda ([acc : Set] [x] -> Set)
     (conj acc x)) a b))
 
-(define (intersection [a :: Set] -> [b :: Set] -> Set)
+(define (intersection [a : Set] -> [b : Set] -> Set)
   :doc "Return a set containing only elements present in both a and b."
   :alias ∩
-  (foldl (lambda ([acc :: Set] [x] -> Set)
+  (foldl (lambda ([acc : Set] [x] -> Set)
     (if (contains? b x) (conj acc x) acc)) (set) a))
 
-(define (difference [a :: Set] -> [b :: Set] -> Set)
+(define (difference [a : Set] -> [b : Set] -> Set)
   :doc "Return a set of elements in a that are not in b."
   ;; :alias \
-  (foldl (lambda ([acc :: Set] [x] -> Set)
+  (foldl (lambda ([acc : Set] [x] -> Set)
     (disj acc x)) a b))
 
-(define (symmetric-difference [a :: Set] -> [b :: Set] -> Set)
+(define (symmetric-difference [a : Set] -> [b : Set] -> Set)
   :doc "Return a set of elements in either a or b but not both."
   :alias △
   (difference (union a b) (intersection a b)))
@@ -70,28 +65,28 @@ define empty-set {}
 
 ;;; Set relations
 
-(define (subset? [a :: Set] -> [b :: Set] -> Bool)
+(define (subset? [a : Set] -> [b : Set] -> Bool)
   :doc "Return True if every element of a is in b."
   :alias ⊆
-  (foldl (lambda ([acc :: Bool] [x] -> Bool)
+  (foldl (lambda ([acc : Bool] [x] -> Bool)
     (and acc (contains? b x))) True a))
 
-(define (proper-subset? [a :: Set] -> [b :: Set] -> Bool)
+(define (proper-subset? [a : Set] -> [b : Set] -> Bool)
   :doc "Return True if a is a subset of b and a != b."
   :alias ⊂
   (and (subset? a b) (!= (count a) (count b))))
 
-(define (superset? [a :: Set] -> [b :: Set] -> Bool)
+(define (superset? [a : Set] -> [b : Set] -> Bool)
   :doc "Return True if every element of b is in a."
   :alias ⊇
   (subset? b a))
 
-(define (proper-superset? [a :: Set] -> [b :: Set] -> Bool)
+(define (proper-superset? [a : Set] -> [b : Set] -> Bool)
   :doc "Return True if a is a superset of b and a != b."
   :alias ⊃
   (proper-subset? b a))
 
-(define (disjoint? [a :: Set] -> [b :: Set] -> Bool)
+(define (disjoint? [a : Set] -> [b : Set] -> Bool)
   :doc "Return True if a and b share no elements."
   :alias ⟂
   (= (count (intersection a b)) 0))
