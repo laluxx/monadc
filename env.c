@@ -582,6 +582,28 @@ struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
             name, ctx->error_msg);
     } else {
         infer_unify_one(ctx, self_t, inferred, lambda_ast->line, lambda_ast->column);
+
+        EnvEntry *ee = env_lookup(env, name);
+        if (ee) {
+            Type *sig = ee->return_type ? type_clone(ee->return_type) : infer_fresh(ctx);
+            for (int i = ee->param_count - 1; i >= 0; i--) {
+                Type *p = ee->params[i].type ? type_clone(ee->params[i].type) : infer_fresh(ctx);
+                sig = type_arrow(p, sig);
+            }
+
+            TypeScheme *sig_sc = infer_generalise(ctx, sig, ienv);
+            Type *inst_sig = infer_instantiate(ctx, sig_sc);
+            scheme_free(sig_sc);
+
+            if (!infer_unify_one(ctx, inferred, inst_sig, lambda_ast->line, lambda_ast->column)) {
+                READER_ERROR(lambda_ast->line, lambda_ast->column,
+                    "\n"
+                    "    • Signature mismatch for definition '%s'\n"
+                    "    • %s",
+                    name, ctx->error_msg);
+            }
+        }
+
         /* Fully apply substitution so the scheme's type nodes are concrete
          * ground types — no TYPE_VAR nodes that reference the now-dead ctx */
         scheme = infer_generalise(ctx, inferred, ienv);

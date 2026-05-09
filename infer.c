@@ -168,9 +168,15 @@ Type *subst_apply(Substitution *s, Type *t) {
 
     case TYPE_LIST: {
         if (t->list_count == 0) return t;
+        bool changed = false;
         Type **new_types = malloc(t->list_count * sizeof(Type*));
         for (int i = 0; i < t->list_count; i++) {
             new_types[i] = subst_apply(s, t->list_types[i]);
+            if (new_types[i] != t->list_types[i]) changed = true;
+        }
+        if (!changed) {
+            free(new_types);
+            return t;
         }
         Type *ret = type_list(new_types, t->list_count);
         free(new_types);
@@ -178,19 +184,31 @@ Type *subst_apply(Substitution *s, Type *t) {
     }
 
     case TYPE_OPTIONAL:
-        if (t->element_type)
-            return type_optional(subst_apply(s, t->element_type));
-        return t;
+    case TYPE_PTR:
+    case TYPE_COLL: {
+        if (!t->element_type) return t;
+        Type *inner = subst_apply(s, t->element_type);
+        if (inner == t->element_type) return t;
+        Type *ret = calloc(1, sizeof(Type));
+        ret->kind = t->kind;
+        ret->element_type = inner;
+        return ret;
+    }
 
-    case TYPE_ARR:
-        if (t->arr_element_type)
-            return type_arr(subst_apply(s, t->arr_element_type), t->arr_size);
-        return t;
+    case TYPE_ARR: {
+        if (!t->arr_element_type) return t;
+        Type *inner = subst_apply(s, t->arr_element_type);
+        if (inner == t->arr_element_type) return t;
+        Type *ret = type_arr(inner, t->arr_size);
+        ret->arr_is_fat = t->arr_is_fat;
+        return ret;
+    }
 
     case TYPE_ARROW: {
         /* function type: param → return */
         Type *p = subst_apply(s, t->arrow_param);
         Type *r = subst_apply(s, t->arrow_ret);
+        if (p == t->arrow_param && r == t->arrow_ret) return t;
         return type_arrow(p, r);
     }
 
@@ -247,7 +265,13 @@ bool infer_occurs(Substitution *s, int var_id, Type *t) {
     case TYPE_VAR:
         return subst_find(s, t->var_id) == subst_find(s, var_id);
     case TYPE_LIST:
+        for (int i = 0; i < t->list_count; i++) {
+            if (infer_occurs(s, var_id, t->list_types[i])) return true;
+        }
+        return false;
     case TYPE_OPTIONAL:
+    case TYPE_PTR:
+    case TYPE_COLL:
         return infer_occurs(s, var_id, t->element_type);
     case TYPE_ARR:
         return infer_occurs(s, var_id, t->arr_element_type);
@@ -350,12 +374,31 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
         /* Collection acting as a function: (Coll -> 'a) ~ (Int -> 'a) */
         if ((a->kind == TYPE_COLL || a->kind == TYPE_LIST || a->kind == TYPE_ARR || a->kind == TYPE_STRING) &&
             b->kind == TYPE_ARROW) {
-            // Unify the arrow parameter with Int
-            return infer_unify_one(ctx, type_int(), b->arrow_param, line, col);
+            bool ok = infer_unify_one(ctx, type_int(), b->arrow_param, line, col);
+            if (!ok) return false;
+            if (a->kind == TYPE_COLL) return infer_unify_one(ctx, a->element_type, b->arrow_ret, line, col);
+            if (a->kind == TYPE_ARR) return infer_unify_one(ctx, a->arr_element_type, b->arrow_ret, line, col);
+            if (a->kind == TYPE_STRING) {
+                Type *tc = type_char();
+                ok = infer_unify_one(ctx, tc, b->arrow_ret, line, col);
+                type_free(tc);
+                return ok;
+            }
+            return true;
         }
         if ((b->kind == TYPE_COLL || b->kind == TYPE_LIST || b->kind == TYPE_ARR || b->kind == TYPE_STRING) &&
             a->kind == TYPE_ARROW) {
-            return infer_unify_one(ctx, a->arrow_param, type_int(), line, col);
+            bool ok = infer_unify_one(ctx, a->arrow_param, type_int(), line, col);
+            if (!ok) return false;
+            if (b->kind == TYPE_COLL) return infer_unify_one(ctx, a->arrow_ret, b->element_type, line, col);
+            if (b->kind == TYPE_ARR) return infer_unify_one(ctx, a->arrow_ret, b->arr_element_type, line, col);
+            if (b->kind == TYPE_STRING) {
+                Type *tc = type_char();
+                ok = infer_unify_one(ctx, a->arrow_ret, tc, line, col);
+                type_free(tc);
+                return ok;
+            }
+            return true;
         }
 
         if (a->kind == TYPE_ARROW && b->kind == TYPE_FN) return true;
@@ -378,12 +421,39 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
         if (a->kind == TYPE_INT_ARBITRARY && b->kind == TYPE_CHAR) return true;
         if (a->kind == TYPE_CHAR && b->kind == TYPE_INT_ARBITRARY) return true;
         /* TYPE_COLL is compatible with any collection type */
-        if (a->kind == TYPE_COLL && (b->kind == TYPE_LIST ||
-                                     b->kind == TYPE_SET  ||
-                                     b->kind == TYPE_ARR)) return true;
-        if (b->kind == TYPE_COLL && (a->kind == TYPE_LIST ||
-                                     a->kind == TYPE_SET  ||
-                                     a->kind == TYPE_ARR)) return true;
+        if (a->kind == TYPE_COLL && b->kind == TYPE_LIST) {
+            if (b->list_count == 1) {
+                return infer_unify_one(ctx, a->element_type, b->list_types[0], line, col);
+            }
+            /* A collection of tuples: unify the element type with the whole tuple */
+            return infer_unify_one(ctx, a->element_type, b, line, col);
+        }
+        if (b->kind == TYPE_COLL && a->kind == TYPE_LIST) {
+            if (a->list_count == 1) {
+                return infer_unify_one(ctx, b->element_type, a->list_types[0], line, col);
+            }
+            return infer_unify_one(ctx, b->element_type, a, line, col);
+        }
+        if (a->kind == TYPE_COLL && b->kind == TYPE_ARR) {
+            return infer_unify_one(ctx, a->element_type, b->arr_element_type, line, col);
+        }
+        if (b->kind == TYPE_COLL && a->kind == TYPE_ARR) {
+            return infer_unify_one(ctx, b->element_type, a->arr_element_type, line, col);
+        }
+        if (a->kind == TYPE_COLL && b->kind == TYPE_STRING) {
+            Type *tc = type_char();
+            bool ok = infer_unify_one(ctx, a->element_type, tc, line, col);
+            type_free(tc);
+            return ok;
+        }
+        if (b->kind == TYPE_COLL && a->kind == TYPE_STRING) {
+            Type *tc = type_char();
+            bool ok = infer_unify_one(ctx, b->element_type, tc, line, col);
+            type_free(tc);
+            return ok;
+        }
+        if (a->kind == TYPE_COLL && b->kind == TYPE_SET) return true;
+        if (b->kind == TYPE_COLL && a->kind == TYPE_SET) return true;
 
         /* Hard error: Coll cannot be a scalar primitive */
         /* TYPE_OPTIONAL ~ TYPE_OPTIONAL */
@@ -433,8 +503,33 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
 
     /* Recurse for compound types */
     switch (a->kind) {
-    case AST_LIST:
-        return infer_unify_one(ctx, a->list_elem, b->list_elem, line, col);
+    case TYPE_LIST:
+        if (a->list_count == 1 && b->list_count > 1) {
+            for (int i = 0; i < b->list_count; i++) {
+                if (!infer_unify_one(ctx, a->list_types[0], b->list_types[i], line, col)) return false;
+            }
+            return true;
+        }
+        if (b->list_count == 1 && a->list_count > 1) {
+            for (int i = 0; i < a->list_count; i++) {
+                if (!infer_unify_one(ctx, a->list_types[i], b->list_types[0], line, col)) return false;
+            }
+            return true;
+        }
+        if (a->list_count != b->list_count) {
+            snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                     "%s:%d:%d: type error: tuple size mismatch (%d vs %d)",
+                     ctx->filename, line, col, a->list_count, b->list_count);
+            ctx->had_error = true;
+            return false;
+        }
+        for (int i = 0; i < a->list_count; i++) {
+            if (!infer_unify_one(ctx, a->list_types[i], b->list_types[i], line, col)) return false;
+        }
+        return true;
+
+    case TYPE_COLL:
+        return infer_unify_one(ctx, a->element_type, b->element_type, line, col);
 
     case TYPE_OPTIONAL:
         return infer_unify_one(ctx, a->element_type, b->element_type, line, col);
@@ -484,7 +579,13 @@ void infer_free_vars_type(Substitution *s, Type *t, int *out, int *count, int ca
         break;
     }
     case TYPE_LIST:
+        for (int i = 0; i < t->list_count; i++) {
+            infer_free_vars_type(s, t->list_types[i], out, count, cap);
+        }
+        break;
     case TYPE_OPTIONAL:
+    case TYPE_PTR:
+    case TYPE_COLL:
         infer_free_vars_type(s, t->element_type, out, count, cap);
         break;
     case TYPE_ARR:
@@ -1186,7 +1287,6 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
          * This bridges the two systems: HM gets the superpowers of dependent types. */
         fprintf(stderr, "├─ \033[34mInterop\033[0m HM unifies with prior Dependent Type check: %s\n", type_to_string(ast->inferred_type));
         infer_constrain(ctx, result, ast->inferred_type, ast->line, ast->column);
-        result = ast->inferred_type; // Use the rich type going forward
     } else {
         ast->inferred_type = result;
     }
@@ -1259,6 +1359,37 @@ void infer_register_builtins(InferCtx *ctx) {
             type_arrow(type_list(&fa, 1), type_list(&fa, 1))),
         ctx->env);
     infer_env_insert(ctx->env, "filter", filter_sc);
+
+    /* ∀a b. a → b → (a, b)   (cons / .) */
+    Type *cons_a = infer_fresh(ctx);
+    Type *cons_b = infer_fresh(ctx);
+    Type **pair_types = malloc(2 * sizeof(Type*));
+    pair_types[0] = type_clone(cons_a);
+    pair_types[1] = type_clone(cons_b);
+    Type *pair_t = type_list(pair_types, 2);
+    TypeScheme *cons_sc = infer_generalise(ctx,
+        type_arrow(cons_a, type_arrow(cons_b, pair_t)), ctx->env);
+    infer_env_insert(ctx->env, ".", cons_sc);
+
+    /* ∀a. a → Coll a → Coll a   (append / ++) */
+    Type *app_a = infer_fresh(ctx);
+    Type *app_coll = type_coll();
+    app_coll->element_type = type_clone(app_a);
+    TypeScheme *app_sc = infer_generalise(ctx,
+        type_arrow(app_a, type_arrow(app_coll, type_clone(app_coll))), ctx->env);
+    infer_env_insert(ctx->env, "++", app_sc);
+
+    /* ∀a. List a → a   (head) */
+    Type *head_a = infer_fresh(ctx);
+    TypeScheme *head_sc = infer_generalise(ctx,
+        type_arrow(type_list(&head_a, 1), head_a), ctx->env);
+    infer_env_insert(ctx->env, "head", head_sc);
+
+    /* ∀a. List a → List a   (tail) */
+    Type *tail_a = infer_fresh(ctx);
+    TypeScheme *tail_sc = infer_generalise(ctx,
+        type_arrow(type_list(&tail_a, 1), type_list(&tail_a, 1)), ctx->env);
+    infer_env_insert(ctx->env, "tail", tail_sc);
 
     // Arithmetic: ∀a. a -> List a -> a
     // The first arg is the accumulator, rest args come as a list.
@@ -1443,9 +1574,12 @@ void infer_print_type(Type *t, Substitution *s) {
         fprintf(stderr, ")");
         break;
     case TYPE_LIST:
-        fprintf(stderr, "List<");
-        infer_print_type(t->list_elem, s);
-        fprintf(stderr, ">");
+        fprintf(stderr, "(");
+        for (int i = 0; i < t->list_count; i++) {
+            if (i > 0) fprintf(stderr, " ");
+            infer_print_type(t->list_types[i], s);
+        }
+        fprintf(stderr, ")");
         break;
     case TYPE_OPTIONAL:
         infer_print_type(t->element_type, s);

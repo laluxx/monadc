@@ -1,7 +1,12 @@
 #+title: TODO.org
 
-* TODO Stuff [0/36]
-- [ ] #if (expr) ...  #---
+* TODO Stuff [0/29]
+- [ ] Referential assignment E.g <--, <+-, <*-
+- [ ] Multiple definitions E.g def u v w :: Float (we know it's a multi definition because there are no [])
+- [ ] type-level computation via the same mechanisms as value-level computation. E.g (Int String) ++ (Int) = (Int String Int)
+- [ ] ITT based fuzzing
+- [ ] QTT based Compile-time reference counting
+- [ ] Compile time IFs: #if (expr) ...  #---
 - [ ] Serialize modules with types
 - [ ] eval
 - [ ] labels like :label that create continuations that you can goto
@@ -9,36 +14,35 @@
 - [ ] Builtin Path type and Path literals e.g ~/path/to/file.c (also support windows)
 - [ ] The coll type: [a] should NOT be a runtime thing, it should just do monomorphization
 - [ ] Haskell like hole driven development
-- [ ] (Type) or [Type] for lists of type and arrays of type
 - [ ] Fat strings... fuck my life
 - [ ] pmatch backtracking on failure with =<-=
 - [ ] anonymous Algebraic Data Types (tagged unions)
 - [ ] cmove instruction instead of branching
-- [ ] Aceept .org files as input
+- [ ] Aceept .org files as input (We continue the tradition)
 - [ ] Syntax for compiler directives: -|[ INLINE (/=) ]|-
 - [ ] Regex literal #""
-- [ ] When we write wisp error column and numbers are wrong!
+- [ ] Make arrays APL style arrays with rank and embed an array language
 - [ ] allow lazy lists to go both ways so we can have =define ℤ (..0..)=
-- [ ] Proper let-polymorphism 
-- [ ] type predicates with the =type= keyword
 - [ ] Reader sugar macro turn: ln(3) -> (ln 3)
 - [ ] Reader sugar macro turn: anything! -> (! anything)
 - [ ] A way to dump an enviroment to a loadable file.env 
 - [ ] A module that implements a DSL to write SPIRV
 - [ ] ==> Optional arguments that default to *unspecified*
 - [ ] Default values on layouts so when they are 0 initialized they have those
-- [ ] Auto curry only if -> is used in the function definition, not otherwise
 - [ ] Optimize infix function call, if the function is variadic turn =(3 + 4 + 5)= int a single call =(+ 3 4 5)= and not =(+ 5 (+ 3 4))=
-- [ ] Allow _ as name of parameters (defun monad-repl--eldoc-function (callback &rest _)
-- [ ] Look into dependent types and make it a general concept that you can do in the language
+- [ ] Allow _ as name of parameters you don't care about (defun monad-repl--eldoc-function (callback &rest _)
 - [ ] IMPORTANT C FFI Enums should probably become ADTs
 - [ ] :inline True or :inline False (The default) inside functions
-- [ ] in monad-mode add a function to type check the function and
-      substitute the type of the function with the inferred one
 - [ ] Make lists immutable by removing all builtins that can mutate them
-- [ ] in monad-mode add a function to turn wisp into lisp in region/buffer
 - [ ] Connect to a running process with the repl
       We should embed the env into the executable i guess
+
+* TODO monad-mode [0/2]
+- [ ] in monad-mode add a function to type check the function and
+      substitute the type of the function with the inferred one
+- [ ] in monad-mode add a function to turn wisp into lisp in region/buffer
+
+
 
 * Stuff to look into
 - Higher order functors
@@ -61,6 +65,25 @@
   - [ ] CRITICAL: Ensure the static type checker (`::`) remains 100% deterministic. Confine all Bayesian math and sigmoid evaluations strictly to the runtime evaluator (`∈`).
 
 
+* TODO [RESEARCH] Coq-style Type Classes
+
+1. Dependent instances — instances can depend on VALUES, not just types
+   - Example: Eq (Vector A n) depends on the LENGTH n
+
+2. Programmable resolution — I can add custom search hints/tactics
+   - The type checker becomes a Prolog engine I can extend
+
+3. Instance selection can use PROOFS, not just type matching
+   - Backtracking search, constraints, theorem proving
+
+ What I already have (Haskell-style):
+
+- Type-based dispatch (Eq a, Show a, etc.)
+- Default methods
+- Deriving
+
+Cool but probably overkill for now. Keep my Haskell-style classes
+
 
 * TODO Destructuring in def and define
 
@@ -77,91 +100,6 @@ def {name age} (get-user)  ; assumes map with keys :name and :age
 
 From: ∀a. a -> a
 To:   Π [A : Type] -> [x : A] -> A
-
-Full dependent types means the type checker becomes a partial evaluator.
-The infer_unify_one function — that simple structural comparison — dies today.
-It is not being extended. The entire paradigm is being replaced.
-
-** What full dependent types actually mean for the code
-
-The current system:
-  - Types are trees. Unification compares trees.
-  - Type equality is decidable and fast.
-  - Type checking is separate from evaluation.
-
-Dependent types:
-  - Types are terms. The same AST nodes used for programs are used for types.
-  - Type equality requires evaluating both sides to normal form and comparing.
-  - Type checking is evaluation. The boundary disappears.
-
-A proof assistant disguised as a programming language is being built.
-
-** What needs to be rewritten or replaced
-
-*** 1. The unification algorithm (delete it)
-
-The subst_find and subst_union mechanisms can be kept for term variables.
-But type equality is no longer syntactic — it becomes definitional equality
-based on reduction.
-
-A definitional equality function is needed that:
-  - β-reduces both terms
-  - Compares normal forms modulo α-equivalence
-  - Handles Π-types (dependent functions)
-  - Handles Σ-types (dependent pairs)
-
-This is algorithmic and decidable for total languages, but significantly
-slower than the original unification.
-
-Related concepts: weak head normal form (WHNF), conversion checking,
-intensional type theory, η-expansion.
-
-*** 2. The representation of type variables
-
-Currently TYPE_VAR with an integer ID.
-
-For dependent types, three distinct concepts are needed:
-
-Bound variables — variables introduced by Π or λ. De Bruijn indices make
-α-equivalence trivial and are recommended.
-
-Free variables — global names that refer to definitions in the environment.
-
-Unification variables — holes that are filled during inference. The existing
-union-find structure can be kept for these.
-
-A second binding mechanism for Π-bound variables must be built alongside
-the union-find.
-
-Related concepts: locally nameless representation, De Bruijn levels,
-parametric higher-order abstract syntax (PHOAS).
-
-*** 3. The generalisation function
-
-ML-style let-polymorphism (∀a. a -> a) quantifies only over types.
-Dependent types quantify over terms.
-
-Instead of a type variable, a Π-binding can bind a term variable of any type,
-including Type itself. The TypeScheme structure must store term variables
-with their kinds, not just type variable IDs.
-
-Related concepts: dependent function type, Π-type (pi type), function
-extensionality, implicit arguments, bidirectional typing.
-
-*** 4. The environment
-
-InferEnv currently maps names to TypeScheme. For dependent types, the
-environment becomes a context that tracks:
-
-  - Term variables with their types (x : T)
-  - Type variables with their kinds (X : Type)
-  - Quantities (for QTT) describing usage
-
-The hash table approach works for global definitions. For local binders
-(Π, λ, let) a linked list of binders with De Bruijn indices is required.
-
-Related concepts: typing context, telescope (a sequence of Π-bindings),
-kind hierarchy (Type₀ : Type₁ : Type₂), universe polymorphism.
 
 
 * TODO QTT (Quantitative Type Theory)
@@ -190,9 +128,7 @@ semantics, erasure analysis, uniqueness typing.
 
 
 
-
-
-* TODO LATER Dependent Refinement Types with existential quantifiers
+* TODO Dependent Refinement Types with existential quantifiers
 
 #+begin_src monad
 type Even { x ∈ ℤ | ∃k ∈ ℤ, x = 2k }
@@ -203,30 +139,6 @@ type Even { x ∈ ℤ | ∃k ∈ ℤ, x = 2k }
   a Σ-type: Σ (k : ℤ) (x : ℤ) (x = 2k)
   and the type checker must construct the pair (k, x, refl).
 
-** Roadmap
-
-  =✓= compile-time evaluation approach: 
-   - Works on pure functions with known arguments
-   - Fails on impure functions (! suffix) — We shouldn't evaluate side effects at compile time
-   - Fails on functions with unknown arguments — defers to runtime, which is correct
-   - Fails on recursive functions that don't terminate — needs a fuel/depth limit
-
-  ~⨯~ Liquid types can handle:
-   - Functions with unknown arguments — reasons symbolically: =∀x. P(x) → Q(f(x))=
-   - Impure functions — through effect typing (monadic refinements in F*)
-   - Recursive functions — through measure/termination proofs
-
-  ~⨯~ Dependent types can handle everything liquid types can, plus:
-   - Types that depend on values: Vec n a (list of exactly n elements)
-   - Existential witnesses: ={ x ∈ ℤ | ∃k ∈ ℤ, x = 2k}=
-   - Full theorem proving
-
-They are ~NOT~ mutually exclusive. The hierarchy is:
-#+begin_src txt
-Compile-time evaluation (what I'm doing now)
-    ⊂ Liquid types (adds SMT for symbolic reasoning)
-        ⊂ Dependent types (adds proof terms, full expressiveness)
-#+end_src
 
 
 * TODO Complex Numbers Design
@@ -343,62 +255,4 @@ Point
 Point.x
 <input>:1:1: error: qualified symbol 'Point.x' used but no module context
 #+end_src
-
-
-* ΒUGS
-
-#+begin_src monad
-(cons 120 10)
->>> CODEGEN NUMBER: literal_str='120', number=120
-iii>>> INFERRED TYPE: Int
->>> CODEGEN NUMBER: literal_str='10', number=10
->>> INFERRED TYPE: Int
-Call parameter type does not match function signature!
-i64 10
- ptr  %cons = call ptr @rt_list_cons(ptr %boxed_int, i64 10)
-Error: IR verification failed
-
-(cons '(1) '(20))
-((1)
- 20)
-
-
-(cons '1 '(20))
->>> CODEGEN NUMBER: literal_str='1', number=1
->>> INFERRED TYPE: Int
-(1 20)
-#+end_src
-
-
-Parser BUG
-#+begin_src monad
-(define (return-string [x :: CompanyEmail?] -> CompanyEmail)
-  "String returned from a function")
-#+end_src
-           |
-           v
-#+begin_src txt
-RefinementType.mon:74:36: error: unexpected token type: 2
-   74 |   "String returned from a function")
-      |                                    ^
-#+end_src
-
-
-* On Pragmatic Purity
-
-why is mutation forbidden even locally? If a function always returns the same output
-for the same input, and nothing escapes, why does internal mutation matter?
-
-The key insight: unobservable implementation details don't affect purity.
-   - Local variables (even mutable) are born and die within the function
-   - Memory allocation addresses can't be observed if pointers don't escape
-   - Same input -> same output is all that matters
-
-This leads to a simple rule:
-    - Local mutation/allocation  -> pure (implementation detail)
-    - Global mutation/allocation -> impure (observable side effect)
-
-The language remains deterministic and optimizable (CSE works!)
-while giving programmers imperative flexibility when they need it.
-Pure at the boundaries, imperative under the hood.
 

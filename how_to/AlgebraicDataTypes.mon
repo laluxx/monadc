@@ -39,20 +39,20 @@
 ;; show Yellow
 ;; show Green
 
-define foldl :: (b -> a -> b) -> b -> [a] -> b
-  _ acc []     -> acc
-  f acc [x|xs] -> foldl f (f acc x) xs
+;; define foldl :: (b -> a -> b) -> b -> [a] -> b
+;;   _ acc []     -> acc
+;;   f acc [x|xs] -> foldl f (f acc x) xs
 
-define sumAll :: (Int Int Int) -> Int
-  xs -> foldl + 0 xs
+;; define sumAll :: (Int Int Int) -> Int
+;;   xs -> foldl + 0 xs
 
-show sumAll '("ciao" 3 3)
+;; show sumAll '(3 "ciao" 3)
 
-;; define char-upcase :: Char -> Char
-;;   c | c >= 'a' and c <= 'z' -> c - 32
-;;     | otherwise             -> c
+define char-upcase :: Char -> Char
+  c | c >= 'a' and c <= 'z' -> c - 32
+    | otherwise             -> c
 
-;; show char-upcase 'a'
+show char-upcase 'a'
 
 
 

@@ -52,6 +52,12 @@ define map :: (a -> b) -> [a] -> [b]
   f [x|xs] -> ((f x) ++ (map f xs))
 
 
+;; TODO Test this
+define any? :: (a -> Bool) -> [a] -> Bool
+  _ []     -> False
+  p [x|xs] -> p x or any? p xs
+
+
 define all? :: (a -> Bool) -> [a] -> Bool
   _ []            -> True
   p [x|xs]
@@ -99,6 +105,7 @@ define filter :: (a -> Bool) -> [a] -> [a]
 ;; TODO Move in Applicative and make variadic
 define both :: (a -> Bool) -> (a -> Bool) -> (a -> Bool)
   f g -> (lambda (x) (and (f x) (g x)))
+
 
 (tests
   ;; [filter]

@@ -2578,6 +2578,13 @@ Type *dep_ground_of_value(Value *v, MetaCtx *mctx) {
 
 static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
     if (!ast) return term_hole();
+
+    /* Bypass Dependent Checker for value-level Strings and Arrays.
+     * This allows polymorphic collections to pass cleanly as holes to the
+     * HM checker which natively handles the Coll interfaces and exact types. */
+    if (ast->type == AST_STRING || ast->type == AST_ARRAY) {
+        return term_hole();
+    }
     switch (ast->type) {
     case AST_NUMBER:
         {
@@ -2787,20 +2794,19 @@ Term *dep_term_of_type_ast(DepCtx *ctx, AST *ast) {
             int id = meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, ast->symbol);
             return term_meta(id);
         }
+        if (strcmp(ast->symbol, "List") == 0 || strcmp(ast->symbol, "Coll") == 0) {
+            return term_meta(meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, "?coll"));
+        }
     } else if (ast->type == AST_ARRAY) {
         if (ast->array.element_count == 3 &&
                 ast->array.elements[0]->type == AST_SYMBOL && strcmp(ast->array.elements[0]->symbol, "Fn") == 0 &&
                 ast->array.elements[1]->type == AST_SYMBOL && strcmp(ast->array.elements[1]->symbol, "::") == 0) {
                 res = dep_term_of_type_ast(ctx, ast->array.elements[2]);
-            } else if (ast->array.element_count == 1) {
-            Term *elem = dep_term_of_type_ast(ctx, ast->array.elements[0]);
-            Term **args = malloc(sizeof(Term*));
-            args[0] = elem;
-            res = term_app(term_fvar("List"), args, 1);
-        } else if (ast->array.element_count == 0) {
-            Term **args = malloc(sizeof(Term*));
-            args[0] = term_meta(meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, "?arr_elem"));
-            res = term_app(term_fvar("List"), args, 1);
+        } else if (ast->array.element_count == 1 || ast->array.element_count == 0) {
+            /* Treat [a] and [] as generic polymorphic collections (?coll),
+             * not strictly 'List'. This allows Strings and Arrays to pass
+             * through to the HM checker for accurate Coll validation. */
+            res = term_meta(meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, "?coll"));
         }
     } else if (ast->type == AST_LIST) {
         bool is_arrow = false;
@@ -3060,26 +3066,48 @@ void dep_register_builtins(DepCtx *ctx) {
     // Helper to generate A -> B
     #define ARROW(a, b) term_pi("_", (a), (b), IMPLICIT_EXPLICIT)
 
-    Term *int_int_int  = ARROW(term_clone(t_int), ARROW(term_clone(t_int), term_clone(t_int)));
-    Term *int_int_bool = ARROW(term_clone(t_int), ARROW(term_clone(t_int), term_clone(t_bool)));
     Term *bool_bool_bool = ARROW(term_clone(t_bool), ARROW(term_clone(t_bool), term_clone(t_bool)));
+
+    Term *poly_poly_bool =
+        term_pi("A", term_type_n(0),
+            term_pi("B", term_type_n(0),
+                term_pi("_", term_bvar(1),
+                    term_pi("_", term_bvar(1),
+                        term_clone(t_bool),
+                        IMPLICIT_EXPLICIT),
+                    IMPLICIT_EXPLICIT),
+                IMPLICIT_IMPLICIT),
+            IMPLICIT_IMPLICIT);
+
+    Term *poly_poly_poly =
+        term_pi("A", term_type_n(0),
+            term_pi("B", term_type_n(0),
+                term_pi("C", term_type_n(0),
+                    term_pi("_", term_bvar(2),
+                        term_pi("_", term_bvar(2),
+                            term_bvar(2),
+                            IMPLICIT_EXPLICIT),
+                        IMPLICIT_EXPLICIT),
+                    IMPLICIT_IMPLICIT),
+                IMPLICIT_IMPLICIT),
+            IMPLICIT_IMPLICIT);
 
     EvalEnv *ee = eval_env_empty();
 
     // Math & Logic
-    dep_env_declare(env, "+",   dep_eval(int_int_int, ee, NULL));
-    dep_env_declare(env, "-",   dep_eval(int_int_int, ee, NULL));
-    dep_env_declare(env, "*",   dep_eval(int_int_int, ee, NULL));
-    dep_env_declare(env, "/",   dep_eval(int_int_int, ee, NULL));
+    dep_env_declare(env, "+",   dep_eval(poly_poly_poly, ee, NULL));
+    dep_env_declare(env, "-",   dep_eval(poly_poly_poly, ee, NULL));
+    dep_env_declare(env, "*",   dep_eval(poly_poly_poly, ee, NULL));
+    dep_env_declare(env, "/",   dep_eval(poly_poly_poly, ee, NULL));
     dep_env_declare(env, "and", dep_eval(bool_bool_bool, ee, NULL));
     dep_env_declare(env, "or",  dep_eval(bool_bool_bool, ee, NULL));
 
-    dep_env_declare(env, ">=",  dep_eval(int_int_bool, ee, NULL));
-    dep_env_declare(env, "<=",  dep_eval(int_int_bool, ee, NULL));
-    dep_env_declare(env, ">",   dep_eval(int_int_bool, ee, NULL));
-    dep_env_declare(env, "<",   dep_eval(int_int_bool, ee, NULL));
-    dep_env_declare(env, "=",   dep_eval(int_int_bool, ee, NULL));
-    dep_env_declare(env, "!=",  dep_eval(int_int_bool, ee, NULL));
+    dep_env_declare(env, ">=",  dep_eval(poly_poly_bool, ee, NULL));
+    dep_env_declare(env, "<=",  dep_eval(poly_poly_bool, ee, NULL));
+    dep_env_declare(env, ">",   dep_eval(poly_poly_bool, ee, NULL));
+    dep_env_declare(env, "<",   dep_eval(poly_poly_bool, ee, NULL));
+    dep_env_declare(env, "=",   dep_eval(poly_poly_bool, ee, NULL));
+    dep_env_declare(env, "!=",  dep_eval(poly_poly_bool, ee, NULL));
 
     // show : Π{A : Type 0}. A -> String
     Term *show_ty = term_pi("A", term_type_n(0),

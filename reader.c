@@ -1959,8 +1959,23 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                     continue;
                 }
 
+                char type_buf[512] = {0};
+                p->current = lexer_next_token(p->lexer); /* skip '[' */
+                while (p->current.type != TOK_RBRACKET && p->current.type != TOK_EOF) {
+                    const char *tok_str = p->current.value ? p->current.value : (p->current.type == TOK_ARROW ? "->" : NULL);
+                    if (tok_str) {
+                        if (type_buf[0]) strncat(type_buf, " ", sizeof(type_buf) - strlen(type_buf) - 1);
+                        strncat(type_buf, tok_str, sizeof(type_buf) - strlen(type_buf) - 1);
+                    }
+                    p->current = lexer_next_token(p->lexer);
+                }
+                if (p->current.type == TOK_RBRACKET) {
+                    p->current = lexer_next_token(p->lexer); /* skip ']' */
+                }
+                char arr_type_buf[560];
+                snprintf(arr_type_buf, sizeof(arr_type_buf), "[%s]", type_buf);
+
                 if (has_more_arrow) {
-                    /* [a] is a parameter type — treat as Coll */
                     if (count >= capacity) {
                         capacity = capacity == 0 ? 4 : capacity * 2;
                         params   = realloc(params, sizeof(ASTParam) * capacity);
@@ -1968,26 +1983,13 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                     char gen_name[32];
                     snprintf(gen_name, sizeof(gen_name), "__p_%d", count);
                     params[count].name      = my_strdup(gen_name);
-                    params[count].type_name = my_strdup("Coll");
+                    params[count].type_name = my_strdup(arr_type_buf);
                     params[count].is_rest   = false;
                     params[count].is_anon   = true;
                     count++;
-                    /* Consume the bracketed type: [ a ] */
-                    p->current = lexer_next_token(p->lexer); /* skip '[' */
-                    while (p->current.type != TOK_RBRACKET &&
-                           p->current.type != TOK_EOF)
-                        p->current = lexer_next_token(p->lexer);
-                    p->current = lexer_next_token(p->lexer); /* skip ']' */
                 } else {
-                    /* [a] is the return type — consume and store as "Coll" */
-                    /* Consume the bracketed type: [ a ] */
-                    p->current = lexer_next_token(p->lexer); /* skip '[' */
-                    while (p->current.type != TOK_RBRACKET &&
-                           p->current.type != TOK_EOF)
-                        p->current = lexer_next_token(p->lexer);
-                    p->current = lexer_next_token(p->lexer); /* skip ']' */
                     free(ret_type);
-                    ret_type = my_strdup("Coll");
+                    ret_type = my_strdup(arr_type_buf);
                 }
             } else if (p->current.type == TOK_LPAREN) {
                 /* Type is (a) or (Int) etc. — peek past the (...) to check
@@ -2057,7 +2059,9 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                         snprintf(fn_type_buf, sizeof(fn_type_buf), "Fn :: (%s)", type_buf);
                         params[count].type_name = my_strdup(fn_type_buf);
                     } else {
-                        params[count].type_name = my_strdup("List");
+                        char tup_type_buf[560];
+                        snprintf(tup_type_buf, sizeof(tup_type_buf), "(%s)", type_buf);
+                        params[count].type_name = my_strdup(tup_type_buf);
                     }
                     params[count].is_rest   = false;
                     params[count].is_anon   = true;
@@ -2069,7 +2073,9 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                         snprintf(fn_type_buf, sizeof(fn_type_buf), "Fn :: (%s)", type_buf);
                         ret_type = my_strdup(fn_type_buf);
                     } else {
-                        ret_type = my_strdup("List");
+                        char tup_type_buf[560];
+                        snprintf(tup_type_buf, sizeof(tup_type_buf), "(%s)", type_buf);
+                        ret_type = my_strdup(tup_type_buf);
                     }
                 }
             }

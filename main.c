@@ -976,7 +976,7 @@ static CompiledModule *compile_one(const char *source_path,
 
 /// Phase 6.5: Dependent Type Checking (Shadow Pass)
 
-    printf("  [dep] running bidirectional type checker...\n");
+    printf("[dep] running bidirectional type checker...\n");
     bool dep_failed = false;
 
     for (size_t i = first_code; i < exprs.count; i++) {

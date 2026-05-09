@@ -6312,19 +6312,9 @@ if (ast->list.count >= 5) {
                     env_insert(ctx->env, free_vars[i], type_clone(cap_type), alloca);
                 }
 
-                // Codegen tail — this produces a RuntimeList* (ptr)
-                // DO NOT call codegen_box or rt_value_list on it —
-                // _force_tail expects the thunk fn to return RuntimeValue* where
-                // .type == RT_LIST and .data.list_val == RuntimeList*.
-                // codegen_box on TYPE_LIST already calls rt_value_list, so use that
-                // directly. The key: tail_r.value is already a RuntimeList* ptr,
-                // codegen_box wraps it once into RuntimeValue*(RT_LIST). That is
-                // exactly what _force_tail needs. Do NOT wrap again.
                 CodegenResult tail_r = codegen_expr(ctx, ast->list.items[2]);
 
                 LLVMValueRef ret_val;
-                // tail_r.value is already a RuntimeValue* from codegen_expr (function calls
-                // return boxed values directly). Use it as-is — do NOT call rt_value_list again.
                 ret_val = tail_r.value;
                 LLVMBuildRet(ctx->builder, ret_val);
 
@@ -6349,7 +6339,7 @@ if (ast->list.count >= 5) {
                 LLVMTypeRef  vl_ft = LLVMFunctionType(ptr, (LLVMTypeRef[]){ptr}, 1, 0);
                 result.value = LLVMBuildCall2(ctx->builder, vl_ft, vl_fn,
                                              &lazy_cons_raw, 1, "lazy_cons");
-                result.type  = type_unknown();
+                result.type  = ast->inferred_type ? type_clone(ast->inferred_type) : type_unknown();
 
                 for (int i = 0; i < free_count; i++) free(free_vars[i]);
                 free(free_vars);
@@ -6406,21 +6396,26 @@ if (ast->list.count >= 5) {
                     result.type  = col_r.type->arr_element_type;
                     return result;
                 }
-                // 3. String: load byte at index 0, return as i64
+                // 3. String: load byte at index 0, return as Char
                 if (col_r.type && col_r.type->kind == TYPE_STRING) {
                     LLVMTypeRef  i8_t = LLVMInt8TypeInContext(ctx->context);
                     LLVMValueRef zero  = LLVMConstInt(i64_t, 0, 0);
                     LLVMValueRef gep   = LLVMBuildGEP2(ctx->builder, i8_t, val, &zero, 1, "str_head_ptr");
                     LLVMValueRef ch    = LLVMBuildLoad2(ctx->builder, i8_t, gep, "str_head");
                     result.value = LLVMBuildZExt(ctx->builder, ch, i64_t, "str_head_i64");
-                    result.type  = type_int();
+                    result.type  = type_char();
                     return result;
                 }
-                // 4. Known list: call rt_list_car directly
+                // 4. Known list: unbox then call rt_list_car
                 if (col_r.type && col_r.type->kind == TYPE_LIST) {
-                    LLVMTypeRef  ft = LLVMFunctionType(ptr_t, &ptr_t, 1, 0);
-                    result.value = LLVMBuildCall2(ctx->builder, ft, get_rt_list_car(ctx), &val, 1, "list_head");
-                    result.type  = type_unknown();
+                    LLVMTypeRef  ft   = LLVMFunctionType(ptr_t, &ptr_t, 1, 0);
+                    LLVMValueRef boxed = codegen_box(ctx, val, col_r.type);
+                    LLVMValueRef lst   = LLVMBuildCall2(ctx->builder, ft, get_rt_unbox_list(ctx), &boxed, 1, "head_unboxed");
+                    result.value = LLVMBuildCall2(ctx->builder, ft, get_rt_list_car(ctx), &lst, 1, "list_head");
+                    Type *elem_t = (col_r.type->list_count > 0 && col_r.type->list_types)
+                                 ? col_r.type->list_types[0]
+                                 : type_unknown();
+                    result.type  = elem_t;
                     return result;
                 }
                 // 5. Unknown/Coll: unbox to list then call rt_list_car
@@ -6602,12 +6597,51 @@ if (ast->list.count >= 5) {
                     return result;
                 }
 
-                /* Coll / List: do NOT evaluate rhs eagerly — it may be recursive.
+                /* If HM tells us the left argument is an element (e.g. a tuple RT_LIST) being prepended
+                 * to a generic collection, wrap it so rt_coll_lazy_cons doesn't flatten it! */
+                bool should_wrap = false;
+                if (ast->inferred_type) {
+                    Type *elem_t = NULL;
+                    if (ast->inferred_type->kind == TYPE_COLL) {
+                        elem_t = ast->inferred_type->element_type;
+                    } else if (ast->inferred_type->kind == TYPE_LIST && ast->inferred_type->list_count == 1) {
+                        elem_t = ast->inferred_type->list_types[0];
+                    }
+
+                    if (elem_t && left_r.type && types_equal(left_r.type, elem_t)) {
+                        should_wrap = true;
+                    }
+                }
+
+                if (!should_wrap && left_r.type) {
+                    bool is_coll = (left_r.type->kind == TYPE_COLL) ||
+                        (left_r.type->kind == TYPE_STRING) ||
+                        (left_r.type->kind == TYPE_ARR) ||
+                        (left_r.type->kind == TYPE_LIST && left_r.type->list_count <= 1);
+                    if (!is_coll) {
+                        should_wrap = true;
+                    }
+                }
+
+                if (should_wrap) {
+                    LLVMValueRef nl_fn = get_rt_list_new(ctx);
+                    LLVMTypeRef nl_ft = LLVMFunctionType(ptr, NULL, 0, 0);
+                    LLVMValueRef nl = LLVMBuildCall2(ctx->builder, nl_ft, nl_fn, NULL, 0, "nl");
+                    LLVMValueRef vl_fn = get_rt_value_list(ctx);
+                    LLVMTypeRef vl_ft = LLVMFunctionType(ptr, &ptr, 1, 0);
+                    LLVMValueRef boxed_nl = LLVMBuildCall2(ctx->builder, vl_ft, vl_fn, &nl, 1, "boxed_nl");
+
+                    left_r.value = emit_call_2(ctx, get_rt_coll_wrap(ctx), ptr, boxed_nl,
+                                               codegen_box(ctx, left_r.value, left_r.type), "wrapped_elem");
+                }
+
+                /* Coll / List: do NOT evaluate rhs eagerly ...
                  * Capture all ENV_VAR symbols referenced in the rhs AST into a
                  * malloc'd env array, emit a thunk function that re-evaluates rhs
                  * with those locals restored, then call rt_coll_lazy_cons(lhs, thunk). */
                 {
 #define MAX_CAPS 64
+
                     const char  *cap_names[MAX_CAPS];
                     LLVMValueRef cap_vals[MAX_CAPS];
                     int          ncaps = 0;

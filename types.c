@@ -231,6 +231,10 @@ Type *type_from_name(const char *name) {
 
     size_t len = strlen(name);
 
+    if (len == 1 && name[0] >= 'a' && name[0] <= 'z') {
+        return type_var(2000 + (name[0] - 'a'));
+    }
+
     // Parameterized List: (T) or (T1 T2 ...)
     if (len > 1 && name[0] == '(' && name[len - 1] == ')') {
         char *inner_name = strndup(name + 1, len - 2);
@@ -524,6 +528,8 @@ bool types_equal(Type *a, Type *b) {
         }
         return true;
     case TYPE_OPTIONAL:
+    case TYPE_PTR:
+    case TYPE_COLL:
         return types_equal(a->element_type, b->element_type);
     case TYPE_ARR:
         return a->arr_size == b->arr_size
@@ -620,7 +626,11 @@ Type *type_clone(Type *t) {
             }
             return c;
         }
-        case TYPE_COLL:    return type_coll();
+        case TYPE_COLL: {
+            Type *c = type_coll();
+            c->element_type = type_clone(t->element_type);
+            return c;
+        }
         case TYPE_F32:     return type_f32();
         case TYPE_I8:      return type_i8();
         case TYPE_U8:      return type_u8();
@@ -751,22 +761,23 @@ const char *type_to_string(Type *t) {
     case TYPE_ARROW:
         snprintf(buf, 512, "(%s -> %s)", type_to_string(t->arrow_param), type_to_string(t->arrow_ret));
         return buf;
-    case TYPE_LIST: {
-        if (t->list_count == 0) {
-            snprintf(buf, 512, "()");
+        case TYPE_LIST: {
+            if (t->list_count == 0) {
+                snprintf(buf, 512, "()");
+                return buf;
+            }
+            int offset = snprintf(buf, 512, "(");
+            for (int i = 0; i < t->list_count; i++) {
+                if (i > 0) offset += snprintf(buf + offset, 512 - offset, " ");
+                offset += snprintf(buf + offset, 512 - offset, "%s", type_to_string(t->list_types[i]));
+            }
+            snprintf(buf + offset, 512 - offset, ")");
             return buf;
         }
-        int offset = snprintf(buf, 512, "(");
-        for (int i = 0; i < t->list_count; i++) {
-            if (i > 0) offset += snprintf(buf + offset, 512 - offset, " ");
-            offset += snprintf(buf + offset, 512 - offset, "%s", type_to_string(t->list_types[i]));
-        }
-        snprintf(buf + offset, 512 - offset, ")");
-        return buf;
-    }
-    case TYPE_COLL:
-        return "[a]";
-    case TYPE_ARR:
+        case TYPE_COLL:
+            snprintf(buf, 512, "[%s]", type_to_string(t->element_type));
+            return buf;
+        case TYPE_ARR:
         if (t->arr_element_type && t->arr_size >= 0) {
             snprintf(buf, 512, "Arr :: %s :: %d", type_to_string(t->arr_element_type), t->arr_size);
         } else if (t->arr_element_type) {
@@ -861,6 +872,32 @@ Type *infer_literal_type(double value, const char *literal_str) {
     return type_int();
 }
 
+static Type *parse_type_node(struct AST *node) {
+    if (!node) return NULL;
+    if (node->type == AST_ARRAY) {
+        Type *t = type_coll();
+        if (node->array.element_count == 1) {
+            t->element_type = parse_type_node(node->array.elements[0]);
+        }
+        return t;
+    }
+    if (node->type == AST_LIST) {
+        Type **elems = malloc(sizeof(Type*) * node->list.count);
+        for (size_t j = 0; j < node->list.count; j++) {
+            elems[j] = parse_type_node(node->list.items[j]);
+        }
+        Type *t = type_list(elems, node->list.count);
+        free(elems);
+        return t;
+    }
+    if (node->type == AST_SYMBOL) {
+        Type *g = type_from_name(node->symbol);
+        if (!g) g = type_unknown();
+        return g;
+    }
+    return type_unknown();
+}
+
 // Parse type annotation [name :: TypeName] or [name :: Arr :: Int :: 3]
 Type *parse_type_annotation(struct AST *ast) {
     if (!ast) return NULL;
@@ -903,40 +940,36 @@ Type *parse_type_annotation(struct AST *ast) {
 
         struct AST *type_node = items[i + 1];
 
-        // ALIAS: Treat any array literal in a type signature as Coll
-        if (type_node->type == AST_ARRAY) {
-            return type_coll();
-        }
-
-        if (type_node->type != AST_SYMBOL) return NULL;
-        const char *tn = type_node->symbol;
-
-        if (strcmp(tn, "Arr") == 0) {
-            Type *elem_type = NULL;
-            int   size      = -1;
-            if (i + 2 < count && items[i+2]->type == AST_SYMBOL &&
-                strcmp(items[i+2]->symbol, "::") == 0 &&
-                i + 3 < count && items[i+3]->type == AST_SYMBOL) {
-                elem_type = type_from_name(items[i+3]->symbol);
-                if (i + 4 < count && items[i+4]->type == AST_SYMBOL &&
-                    strcmp(items[i+4]->symbol, "::") == 0 &&
-                    i + 5 < count && items[i+5]->type == AST_NUMBER) {
-                    size = (int)items[i+5]->number;
+        if (type_node->type == AST_SYMBOL) {
+            const char *tn = type_node->symbol;
+            if (strcmp(tn, "Arr") == 0) {
+                Type *elem_type = NULL;
+                int   size      = -1;
+                if (i + 2 < count && items[i+2]->type == AST_SYMBOL &&
+                    strcmp(items[i+2]->symbol, "::") == 0 &&
+                    i + 3 < count && items[i+3]->type == AST_SYMBOL) {
+                    elem_type = type_from_name(items[i+3]->symbol);
+                    if (i + 4 < count && items[i+4]->type == AST_SYMBOL &&
+                        strcmp(items[i+4]->symbol, "::") == 0 &&
+                        i + 5 < count && items[i+5]->type == AST_NUMBER) {
+                        size = (int)items[i+5]->number;
+                    }
                 }
+                return type_arr(elem_type, size);
             }
-            return type_arr(elem_type, size);
-        }
-        if (strcmp(tn, "Pointer") == 0) {
-            if (i + 2 < count && items[i+2]->type == AST_SYMBOL &&
-                strcmp(items[i+2]->symbol, "::") == 0 &&
-                i + 3 < count && items[i+3]->type == AST_SYMBOL) {
-                Type *inner = type_from_name(items[i+3]->symbol);
-                if (!inner) inner = type_layout_ref(items[i+3]->symbol);
-                return type_ptr(inner);
+            if (strcmp(tn, "Pointer") == 0) {
+                if (i + 2 < count && items[i+2]->type == AST_SYMBOL &&
+                    strcmp(items[i+2]->symbol, "::") == 0 &&
+                    i + 3 < count && items[i+3]->type == AST_SYMBOL) {
+                    Type *inner = type_from_name(items[i+3]->symbol);
+                    if (!inner) inner = type_layout_ref(items[i+3]->symbol);
+                    return type_ptr(inner);
+                }
+                return type_ptr(NULL);
             }
-            return type_ptr(NULL);
         }
-        return type_from_name(tn);
+
+        return parse_type_node(type_node);
     }
     return NULL;
 }
