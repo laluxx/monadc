@@ -1,6 +1,11 @@
 #+title: TODO.org
 
+* TODO Program synthesis [0/1]
+- [ ] Holes in functions type signature, let the compiler fill them in
+- A bidirectional type system is complete for synthesis if every type has at least one term.
+
 * TODO Stuff [0/29]
+- [ ] in REPL termination checker
 - [ ] Referential assignment E.g <--, <+-, <*-
 - [ ] Multiple definitions E.g def u v w :: Float (we know it's a multi definition because there are no [])
 - [ ] type-level computation via the same mechanisms as value-level computation. E.g (Int String) ++ (Int) = (Int String Int)

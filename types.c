@@ -754,12 +754,14 @@ const char *type_to_string(Type *t) {
         snprintf(buf, 512, "%s?", type_to_string(t->element_type));
         return buf;
     case TYPE_VAR:
-        snprintf(buf, 512, "'%c", 'a' + (t->var_id % 26));
-        if (t->var_id >= 26)
-            snprintf(buf + 2, 512 - 2, "%d", t->var_id / 26);
+        if (t->var_id >= 2000 && t->var_id < 2026) {
+            snprintf(buf, 512, "%c", 'a' + (t->var_id - 2000));
+            return buf;
+        }
+        snprintf(buf, 512, "%c", 'a' + (t->var_id % 26));
         return buf;
     case TYPE_ARROW:
-        snprintf(buf, 512, "(%s -> %s)", type_to_string(t->arrow_param), type_to_string(t->arrow_ret));
+        snprintf(buf, 512, "%s -> %s", type_to_string(t->arrow_param), type_to_string(t->arrow_ret));
         return buf;
         case TYPE_LIST: {
             if (t->list_count == 0) {
@@ -775,7 +777,7 @@ const char *type_to_string(Type *t) {
             return buf;
         }
         case TYPE_COLL:
-            snprintf(buf, 512, "[%s]", type_to_string(t->element_type));
+            snprintf(buf, 512, "(%s)", type_to_string(t->element_type));
             return buf;
         case TYPE_ARR:
         if (t->arr_element_type && t->arr_size >= 0) {

@@ -961,10 +961,8 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                 if (ast->lambda.return_type) {
                     Type *ann = type_from_name(ast->lambda.return_type);
                     if (ann) infer_constrain(ctx, bt, ann, ast->line, ast->column);
-                    ret_t = ann ? ann : bt;
-                } else {
-                    ret_t = bt;
                 }
+                ret_t = bt;
             }
         }
 
@@ -1533,10 +1531,10 @@ static void infer_validate_calls(InferCtx *ctx, AST *ast) {
 Type *infer_toplevel(InferCtx *ctx, AST *ast) {
     /* 1. Constraint generation */
     Type *t = infer_expr(ctx, ast);
-    if (ctx->had_error) return NULL;
+    if (ctx->had_error) return subst_apply(ctx->subst, t);
 
     /* 2. Constraint solving */
-    if (!infer_unify_all(ctx)) return NULL;
+    if (!infer_unify_all(ctx)) return subst_apply(ctx->subst, t);
 
     /* Disable TT bridge for post-unification phases to prevent UAF */
     struct DepCtx *saved_dctx = ctx->dctx;

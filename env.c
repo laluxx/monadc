@@ -555,6 +555,37 @@ void env_set_scheme(Env *env, const char *name, struct TypeScheme *scheme) {
     e->scheme = scheme ? scheme_clone(scheme) : NULL;
 }
 
+static void normalize_vars(Type *t, int *map, int *next_id) {
+    if (!t) return;
+    if (t->kind == TYPE_VAR) {
+        if (t->var_id >= 2000) return;
+        for (int i=0; i<*next_id; i++) {
+            if (map[i*2] == t->var_id) {
+                t->var_id = map[i*2 + 1];
+                return;
+            }
+        }
+        map[*next_id * 2] = t->var_id;
+        t->var_id = 2000 + *next_id;
+        map[*next_id * 2 + 1] = t->var_id;
+        (*next_id)++;
+        return;
+    }
+    if (t->kind == TYPE_ARROW) {
+        normalize_vars(t->arrow_param, map, next_id);
+        normalize_vars(t->arrow_ret, map, next_id);
+    }
+    if (t->kind == TYPE_LIST) {
+        for (int i=0; i<t->list_count; i++) normalize_vars(t->list_types[i], map, next_id);
+    }
+    if (t->kind == TYPE_COLL || t->kind == TYPE_PTR || t->kind == TYPE_OPTIONAL) {
+        normalize_vars(t->element_type, map, next_id);
+    }
+    if (t->kind == TYPE_ARR) {
+        normalize_vars(t->arr_element_type, map, next_id);
+    }
+}
+
 struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
                                        AST *lambda_ast, const char *filename) {
     InferEnv *ienv = env_get_infer(env);
@@ -570,16 +601,59 @@ struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
     infer_env_insert(child, name, scheme_mono(self_t));
     Type *inferred = infer_toplevel(ctx, lambda_ast);
 
-
     TypeScheme *scheme = NULL;
 
-    if (!inferred || ctx->had_error) {
-        /* Halt compilation violently with a high-quality visual error */
-        READER_ERROR(lambda_ast->line, lambda_ast->column,
-            "\n"
-            "    • Type inference failed for definition '%s'\n"
-            "    • %s",
-            name, ctx->error_msg);
+    if (ctx->had_error) {
+        Type *sig = NULL;
+        if (lambda_ast && lambda_ast->type == AST_LAMBDA && lambda_ast->lambda.return_type) {
+            sig = type_from_name(lambda_ast->lambda.return_type);
+            if (!sig) sig = type_unknown();
+            for (int i = lambda_ast->lambda.param_count - 1; i >= 0; i--) {
+                Type *p = NULL;
+                if (lambda_ast->lambda.params[i].type_name) {
+                    p = type_from_name(lambda_ast->lambda.params[i].type_name);
+                }
+                if (!p) p = type_unknown();
+                sig = type_arrow(p, sig);
+            }
+        }
+
+        if (inferred && inferred->kind == TYPE_ARROW && sig && sig->kind == TYPE_ARROW) {
+            Type *inf_ret = inferred; while(inf_ret->kind == TYPE_ARROW) inf_ret = inf_ret->arrow_ret;
+            Type *sig_ret = sig; while(sig_ret->kind == TYPE_ARROW) sig_ret = sig_ret->arrow_ret;
+            if (inf_ret && inf_ret->kind == TYPE_COLL && sig_ret && sig_ret->kind == TYPE_LIST) {
+                Type *wrap = type_coll();
+                wrap->element_type = sig_ret;
+                Type *cur = sig;
+                while (cur->arrow_ret->kind == TYPE_ARROW) cur = cur->arrow_ret;
+                cur->arrow_ret = wrap;
+            }
+        }
+
+        int vmap[128];
+        int next_id = 0;
+        normalize_vars(inferred, vmap, &next_id);
+
+        char *core_msg = strstr(ctx->error_msg, "type error: ");
+        if (core_msg) core_msg += 12; /* skip "type error: " */
+        else core_msg = ctx->error_msg;
+
+        if (sig) {
+            READER_ERROR(lambda_ast->line, lambda_ast->column,
+                "\n"
+                "    • Type inference failed for function ‘%s’\n"
+                "    • Expected signature :: %s\n"
+                "    • Provided signature :: %s\n"
+                "   - Hint: %s",
+                name, type_to_string(inferred), type_to_string(sig), core_msg);
+        } else {
+            READER_ERROR(lambda_ast->line, lambda_ast->column,
+                "\n"
+                "    • Type inference failed for function ‘%s’\n"
+                "    • Expected signature :: %s\n"
+                "   - Hint: %s",
+                name, type_to_string(inferred), core_msg);
+        }
     } else {
         infer_unify_one(ctx, self_t, inferred, lambda_ast->line, lambda_ast->column);
 
@@ -596,11 +670,15 @@ struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
             scheme_free(sig_sc);
 
             if (!infer_unify_one(ctx, inferred, inst_sig, lambda_ast->line, lambda_ast->column)) {
+                Type *show_exp = subst_apply(ctx->subst, inst_sig);
+                Type *show_inf = subst_apply(ctx->subst, inferred);
                 READER_ERROR(lambda_ast->line, lambda_ast->column,
                     "\n"
                     "    • Signature mismatch for definition '%s'\n"
-                    "    • %s",
-                    name, ctx->error_msg);
+                    "    • Expected type: %s\n"
+                    "    • Inferred type: %s\n"
+                    "    • Details: %s",
+                    name, type_to_string(show_exp), type_to_string(show_inf), ctx->error_msg);
             }
         }
 
