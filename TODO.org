@@ -4,7 +4,8 @@
 - [ ] Holes in functions type signature, let the compiler fill them in
 - A bidirectional type system is complete for synthesis if every type has at least one term.
 
-* TODO Stuff [0/29]
+* TODO Stuff [0/37]
+- [ ] Generalized Algebraic Data types (GADTs)
 - [ ] Auto parallelization also explore auto parallelization on the GPU
 - [ ] in REPL termination checker
 - [ ] Referential assignment E.g <--, <+-, <*-

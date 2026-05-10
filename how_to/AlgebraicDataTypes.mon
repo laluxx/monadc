@@ -80,10 +80,37 @@ define abs :: Float -> Float
   [y :: Float]
   [z :: Float])
 
+class Pow a where
+  type Result a
+  (^) :: a -> Int -> Result a
 
+instance Pow Float where
+  type Result Float = Float
+  (^ base exp) =>
+    (if (exp = 0) 1.0
+        (if (exp > 0)
+            (base * (base ^ (exp - 1)))
+            (1.0 / (base ^ (0 - exp)))))
+
+instance Pow Vec3 where
+  type Result Vec3 = Float
+  (^ v exp) =>
+    (if (exp = 2)
+        ((v.x * v.x) + (v.y * v.y) + (v.z * v.z))
+        0.0) ; Fallback for unsupported vector powers
+
+
+
+
+
+
+;; DONE Make this compile
 define normalize :: Vec3 -> Vec3
-  [x y z] -> def len (sqrt (x * x + y * y + z * z))
-             Vec3 (x / len) (y / len) (z / len)
+  v[x y z] -> def len √v²
+                    x   y   z
+              Vec3 ─── ─── ───
+                   len len len
+
 
 
 define v (Vec3 3.0 4.0 5.0)
@@ -92,23 +119,7 @@ show v
 (newline)
 show normalize v
 
-(define (pow [base : Float] [exp : Float] -> Float)
-  :doc "Raise BASE to the power EXP."
-  :alias ^
-  (if (exp = 0.0) 1.0
-      (if (exp > 0.0)
-          (base * (pow base (exp - 1.0)))
-          (1.0 / (pow base (0.0 - exp))))))
 
-define x 30
-show √x²
-
-;; TODO Make this compile
-define normalize :: Vec3 -> Vec3
-  v[x y z] -> def len √v²
-                    x   y   z
-              Vec3 ─── ─── ───
-                   len len len
 
 
 

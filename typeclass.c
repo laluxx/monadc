@@ -24,6 +24,8 @@ void tc_registry_free(TypeClassRegistry *reg) {
         TCClass *c = &reg->classes[i];
         free(c->name);
         free(c->type_var);
+        for (int j = 0; j < c->assoc_count; j++) free(c->assoc_types[j]);
+        if (c->assoc_types) free(c->assoc_types);
         for (int j = 0; j < c->method_count; j++) {
             free(c->methods[j].name);
             free(c->methods[j].type_str);
@@ -42,6 +44,12 @@ void tc_registry_free(TypeClassRegistry *reg) {
         TCInstance *inst = &reg->instances[i];
         free(inst->class_name);
         free(inst->type_name);
+        for (int j = 0; j < inst->assoc_count; j++) {
+            free(inst->assoc_names[j]);
+            free(inst->assoc_values[j]);
+        }
+        if (inst->assoc_names) free(inst->assoc_names);
+        if (inst->assoc_values) free(inst->assoc_values);
         for (int j = 0; j < inst->method_count; j++)
             free(inst->method_names[j]);
         free(inst->method_names);
@@ -147,6 +155,13 @@ void tc_register_class(TypeClassRegistry *reg, AST *ast) {
     c->name       = strdup(ast->class_decl.name);
     c->type_var   = strdup(ast->class_decl.type_var);
 
+    /* Connect associated types */
+    c->assoc_count = ast->class_decl.assoc_count;
+    c->assoc_types = malloc(sizeof(char*) * (c->assoc_count ? c->assoc_count : 1));
+    for (int i = 0; i < c->assoc_count; i++) {
+        c->assoc_types[i] = strdup(ast->class_decl.assoc_types[i]);
+    }
+
     /* Copy method signatures */
     c->method_count = ast->class_decl.method_count;
     c->methods = malloc(sizeof(TCMethod) * (c->method_count ? c->method_count : 1));
@@ -204,6 +219,16 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
     TCInstance *inst = &reg->instances[reg->instance_count++];
     inst->class_name   = strdup(class_name);
     inst->type_name    = strdup(type_name);
+
+    /* Connect associated values */
+    inst->assoc_count  = ast->instance_decl.assoc_count;
+    inst->assoc_names  = malloc(sizeof(char*) * (inst->assoc_count ? inst->assoc_count : 1));
+    inst->assoc_values = malloc(sizeof(char*) * (inst->assoc_count ? inst->assoc_count : 1));
+    for (int i = 0; i < inst->assoc_count; i++) {
+        inst->assoc_names[i]  = strdup(ast->instance_decl.assoc_names[i]);
+        inst->assoc_values[i] = strdup(ast->instance_decl.assoc_values[i]);
+    }
+
     inst->method_count = c->method_count; /* all methods, including defaults */
     inst->method_names = malloc(sizeof(char*)        * c->method_count);
     inst->method_funcs = malloc(sizeof(LLVMValueRef) * c->method_count);
@@ -223,6 +248,20 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
         if (!fn) {
             char sig_buf[512];
             snprintf(sig_buf, sizeof(sig_buf), "Fn :: %s", c->methods[mi].type_str);
+
+            /* Compile-time Associated Type Rewriting (e.g. "Result a" -> "Float") */
+            for (int k = 0; k < inst->assoc_count; k++) {
+                char target[128];
+                snprintf(target, sizeof(target), "%s %s", inst->assoc_names[k], c->type_var);
+                char *pos;
+                while ((pos = strstr(sig_buf, target)) != NULL) {
+                    char temp[512];
+                    int len_before = pos - sig_buf;
+                    snprintf(temp, sizeof(temp), "%.*s%s%s", len_before, sig_buf, inst->assoc_values[k], pos + strlen(target));
+                    strncpy(sig_buf, temp, sizeof(sig_buf) - 1);
+                }
+            }
+
             Type *method_sig = type_parse_fn_arrow(sig_buf);
 
             int param_count = 0;
@@ -316,6 +355,20 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
         AST *typed_lam = ast_clone(body_lam);
         char sig_buf[512];
         snprintf(sig_buf, sizeof(sig_buf), "Fn :: %s", c->methods[mi].type_str);
+
+        /* Apply the exact same rewriting to the implementation signature */
+        for (int k = 0; k < inst->assoc_count; k++) {
+            char target[128];
+            snprintf(target, sizeof(target), "%s %s", inst->assoc_names[k], c->type_var);
+            char *pos;
+            while ((pos = strstr(sig_buf, target)) != NULL) {
+                char temp[512];
+                int len_before = pos - sig_buf;
+                snprintf(temp, sizeof(temp), "%.*s%s%s", len_before, sig_buf, inst->assoc_values[k], pos + strlen(target));
+                strncpy(sig_buf, temp, sizeof(sig_buf) - 1);
+            }
+        }
+
         Type *method_sig = type_parse_fn_arrow(sig_buf);
         Type *t_iter = method_sig;
 

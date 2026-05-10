@@ -227,10 +227,29 @@ static void arity_prescan(ArityTable *t, const char *source) {
                 if (tok.type == TOK_EOF) {
                     lex = saved; free(tok.value); break;
                 }
+                if (tok.type == TOK_SYMBOL && strcmp(tok.value, "type") == 0) {
+                    Lexer peek = lex;
+                    Token pt = lexer_next_token(&peek);
+                    if (pt.type == TOK_SYMBOL && pt.value[0] >= 'A' && pt.value[0] <= 'Z') {
+                        free(pt.value);
+                        free(tok.value);
+                        tok = lexer_next_token(&lex); // consume name
+                        free(tok.value);
+                        Lexer peek2 = lex;
+                        Token pt2 = lexer_next_token(&peek2);
+                        if (pt2.type == TOK_SYMBOL && pt2.value[0] >= 'a' && pt2.value[0] <= 'z') {
+                            lex = peek2; // consume type var
+                        }
+                        free(pt2.value);
+                        continue;
+                    }
+                    free(pt.value);
+                    lex = saved; free(tok.value); break; // break on top-level type
+                }
                 if (tok.type == TOK_SYMBOL &&
                     (strcmp(tok.value, "define") == 0 || strcmp(tok.value, "class") == 0 ||
                      strcmp(tok.value, "instance") == 0 || strcmp(tok.value, "data") == 0 ||
-                     strcmp(tok.value, "layout") == 0 || strcmp(tok.value, "type") == 0)) {
+                     strcmp(tok.value, "layout") == 0)) {
                     lex = saved; free(tok.value); break;
                 }
 
@@ -2541,6 +2560,128 @@ static char *strip_comments(const char *source) {
     return out;
 }
 
+typedef struct { char bytes[1024]; int is_blank; } VChar;
+typedef struct { VChar *chars; int len; } VLine;
+
+static VLine parse_vline(const char *s) {
+    VLine vl = { .chars = malloc((strlen(s) + 1) * sizeof(VChar)), .len = 0 };
+    while (*s) {
+        VChar vc = {0};
+        if ((*s & 0x80) == 0) {
+            vc.bytes[0] = *s; vc.bytes[1] = '\0'; s++;
+        } else if ((*s & 0xE0) == 0xC0) {
+            vc.bytes[0] = *s; vc.bytes[1] = *(s+1); vc.bytes[2] = '\0'; s += 2;
+        } else if ((*s & 0xF0) == 0xE0) {
+            vc.bytes[0] = *s; vc.bytes[1] = *(s+1); vc.bytes[2] = *(s+2); vc.bytes[3] = '\0'; s += 3;
+        } else if ((*s & 0xF8) == 0xF0) {
+            vc.bytes[0] = *s; vc.bytes[1] = *(s+1); vc.bytes[2] = *(s+2); vc.bytes[3] = *(s+3); vc.bytes[4] = '\0'; s += 4;
+        } else {
+            vc.bytes[0] = *s; vc.bytes[1] = '\0'; s++;
+        }
+        vc.is_blank = (vc.bytes[0] == ' ' || vc.bytes[0] == '\t');
+        vl.chars[vl.len++] = vc;
+    }
+    return vl;
+}
+
+static char *vline_to_str(VLine vl) {
+    char *res = malloc(vl.len * 1024 + 1);
+    int pos = 0;
+    for (int i = 0; i < vl.len; i++) {
+        strcpy(res + pos, vl.chars[i].bytes);
+        pos += strlen(vl.chars[i].bytes);
+    }
+    res[pos] = '\0';
+    return res;
+}
+
+static char *desugar_fractions(char *source) {
+    int line_count = 0;
+    int cap = 16;
+    char **lines = malloc(sizeof(char*) * cap);
+    const char *p = source;
+    while (*p) {
+        const char *s = p;
+        while (*p && *p != '\n') p++;
+        if (line_count >= cap) { cap *= 2; lines = realloc(lines, sizeof(char*) * cap); }
+        lines[line_count++] = strndup(s, p - s);
+        if (*p == '\n') p++;
+    }
+
+    for (int i = 1; i < line_count - 1; i++) {
+        if (strstr(lines[i], "\xE2\x94\x80")) { /* UTF-8 encoding of U+2500 '─' */
+            VLine L_prev = parse_vline(lines[i-1]);
+            VLine L_curr = parse_vline(lines[i]);
+            VLine L_next = parse_vline(lines[i+1]);
+
+            bool changed = false;
+            int j = 0;
+            while (j < L_curr.len) {
+                if (strcmp(L_curr.chars[j].bytes, "\xE2\x94\x80") == 0) {
+                    int run_start = j;
+                    while (j < L_curr.len && strcmp(L_curr.chars[j].bytes, "\xE2\x94\x80") == 0) j++;
+                    int run_end = j;
+
+                    int n_start = run_start, n_end = run_end - 1;
+                    while (n_start < L_prev.len && n_start <= n_end && L_prev.chars[n_start].is_blank) n_start++;
+                    while (n_end >= 0 && n_end >= n_start && (n_end >= L_prev.len || L_prev.chars[n_end].is_blank)) n_end--;
+
+                    int d_start = run_start, d_end = run_end - 1;
+                    while (d_start < L_next.len && d_start <= d_end && L_next.chars[d_start].is_blank) d_start++;
+                    while (d_end >= 0 && d_end >= d_start && (d_end >= L_next.len || L_next.chars[d_end].is_blank)) d_end--;
+
+                    SB n_sb; sb_init(&n_sb);
+                    for (int k = n_start; k <= n_end && k < L_prev.len; k++) sb_puts(&n_sb, L_prev.chars[k].bytes);
+                    char *N_str = sb_take(&n_sb);
+                    if (N_str[0] == '\0') { free(N_str); N_str = strdup("_"); }
+
+                    SB d_sb; sb_init(&d_sb);
+                    for (int k = d_start; k <= d_end && k < L_next.len; k++) sb_puts(&d_sb, L_next.chars[k].bytes);
+                    char *D_str = sb_take(&d_sb);
+                    if (D_str[0] == '\0') { free(D_str); D_str = strdup("_"); }
+
+                    char repl[1024];
+                    snprintf(repl, sizeof(repl), "(/ %s %s)", N_str, D_str);
+                    free(N_str); free(D_str);
+
+                    strcpy(L_curr.chars[run_start].bytes, repl);
+                    for (int k = run_start + 1; k < run_end; k++) {
+                        strcpy(L_curr.chars[k].bytes, " ");
+                        L_curr.chars[k].is_blank = 1;
+                    }
+
+                    for (int k = run_start; k < run_end; k++) {
+                        if (k < L_prev.len) { strcpy(L_prev.chars[k].bytes, " "); L_prev.chars[k].is_blank = 1; }
+                        if (k < L_next.len) { strcpy(L_next.chars[k].bytes, " "); L_next.chars[k].is_blank = 1; }
+                    }
+                    changed = true;
+                } else {
+                    j++;
+                }
+            }
+
+            if (changed) {
+                free(lines[i-1]); lines[i-1] = vline_to_str(L_prev);
+                free(lines[i]);   lines[i]   = vline_to_str(L_curr);
+                free(lines[i+1]); lines[i+1] = vline_to_str(L_next);
+            }
+            free(L_prev.chars); free(L_curr.chars); free(L_next.chars);
+        }
+    }
+
+    SB final_sb; sb_init(&final_sb);
+    for (int i = 0; i < line_count; i++) {
+        sb_puts(&final_sb, lines[i]);
+        if (i < line_count - 1) sb_putc(&final_sb, '\n');
+        free(lines[i]);
+    }
+    free(lines);
+
+    char *ret = sb_take(&final_sb);
+    free(source);
+    return ret;
+}
+
 static int wisp_param_kind_is_func(const char *func_name, int arg_index) {
     if (!g_ffi_arities_init) return 0;
     ArityEntry *e = arity_get_entry(&g_ffi_arities, func_name);
@@ -2557,6 +2698,9 @@ static int wisp_is_known_function(const char *name) {
 ASTList wisp_parse_all(const char *source, const char *filename) {
     /* Strip comments first, preserving line structure */
     char *stripped = strip_comments(source);
+
+    /* 2D Fraction Desugaring */
+    stripped = desugar_fractions(stripped);
 
     /* Check if file has any wisp-style lines at all */
     bool has_wisp = false;

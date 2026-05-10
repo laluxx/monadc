@@ -25,13 +25,15 @@ typedef struct TCMethod {
 // and any default implementations provided in the class body.
 //
 typedef struct TCClass {
-    char     *name;            // "Eq"
-    char     *type_var;        // "a"
-    TCMethod *methods;         // method signatures
-    int       method_count;
-    char    **default_names;   // methods with default impls
-    AST     **default_bodies;  // lambda ASTs for defaults
-    int       default_count;
+    char      *name;             // "Eq"
+    char      *type_var;         // "a"
+    char     **assoc_types;      // Associated types e.g. ["Result"]
+    int        assoc_count;      // Number of associated types
+    TCMethod  *methods;          // method signatures
+    int        method_count;
+    char     **default_names;    // methods with default impls
+    AST      **default_bodies;   // lambda ASTs for defaults
+    int        default_count;
 } TCClass;
 
 /// Type Class Instance
@@ -44,6 +46,9 @@ typedef struct TCClass {
 typedef struct TCInstance {
     char         *class_name;    // "Eq"
     char         *type_name;     // "TrafficLight"
+    char        **assoc_names;   // e.g. ["Result"]
+    char        **assoc_values;  // e.g. ["Float"]
+    int           assoc_count;
     LLVMValueRef  dict_global;   // @__dict_Eq_TrafficLight global
     char        **method_names;  // method names in this instance
     LLVMValueRef *method_funcs;  // LLVM functions implementing each method

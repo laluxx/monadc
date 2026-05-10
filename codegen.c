@@ -1879,7 +1879,7 @@ void codegen_data(CodegenContext *ctx, AST *ast) {
         printf(" -> %s\n", type_name);
     }
 
-printf("Data type: %s (%d constructors)\n", type_name, nctors);
+    printf("Data type: %s (%d constructors)\n", type_name, nctors);
 
     /* Auto-derive requested typeclasses */
     for (int di = 0; di < ast->data.deriving_count; di++) {
@@ -1921,6 +1921,9 @@ printf("Data type: %s (%d constructors)\n", type_name, nctors);
                 clauses[ci].patterns      = pats;
                 clauses[ci].pattern_count = 2;
                 clauses[ci].body          = ast_new_symbol("True");
+                clauses[ci].guard_conds   = NULL;
+                clauses[ci].guard_bodies  = NULL;
+                clauses[ci].guard_count   = 0;
             }
 
             /* Wildcard clause: (_ = _) => False */
@@ -1936,6 +1939,9 @@ printf("Data type: %s (%d constructors)\n", type_name, nctors);
             clauses[nctors].patterns      = wild_pats;
             clauses[nctors].pattern_count = 2;
             clauses[nctors].body          = ast_new_symbol("False");
+            clauses[nctors].guard_conds   = NULL;
+            clauses[nctors].guard_bodies  = NULL;
+            clauses[nctors].guard_count   = 0;
 
             /* Desugar pmatch into a lambda */
             ASTParam *params = malloc(sizeof(ASTParam) * 2);
@@ -1958,6 +1964,7 @@ printf("Data type: %s (%d constructors)\n", type_name, nctors);
                                               false, desugared, body_exprs, 1);
 
             AST *inst_ast = ast_new_instance("Eq", type_name,
+                                             NULL, NULL, 0,
                                              method_names, method_bodies, 1);
             tc_register_instance(ctx->tc_registry, inst_ast, ctx);
             ast_free(inst_ast);
@@ -2020,15 +2027,15 @@ printf("Data type: %s (%d constructors)\n", type_name, nctors);
             to_exprs[0] = cur;
             method_bodies[1] = ast_new_lambda(to_params, 1, type_name, NULL, NULL, false, cur, to_exprs, 1);
 
-            AST *inst_ast = ast_new_instance("Enum", type_name, method_names, method_bodies, 2);
+            AST *inst_ast = ast_new_instance("Enum", type_name, NULL, NULL, 0, method_names, method_bodies, 2);
             tc_register_instance(ctx->tc_registry, inst_ast, ctx);
             ast_free(inst_ast);
 
             printf("Derived: instance Enum %s\n", type_name);
         }
     }
-}
 
+}
 
 void codegen_layout(CodegenContext *ctx, AST *ast) {
     const char *name = ast->layout.name;

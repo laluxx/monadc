@@ -204,9 +204,23 @@ ASTPattern parse_single_pattern(Parser *p) {
 
     // Variable binding (lowercase symbol)
     if (parser_at(p, TOK_SYMBOL)) {
-        pat.kind     = PAT_VAR;
-        pat.var_name = my_strdup(p->current.value);
+        char *vname = my_strdup(p->current.value);
         parser_advance(p);
+
+        // If a bracket immediately follows, it's an as-pattern! e.g. v[x y z]
+        if (parser_at(p, TOK_LBRACKET)) {
+            pat = parse_single_pattern(p);
+            // Attach the variable name to the list pattern so pmatch binds it
+            if (pat.kind == PAT_LIST || pat.kind == PAT_LIST_EMPTY) {
+                pat.var_name = vname;
+            } else {
+                free(vname);
+            }
+            return pat;
+        }
+
+        pat.kind     = PAT_VAR;
+        pat.var_name = vname;
         return pat;
     }
 
@@ -679,6 +693,9 @@ static void build_pattern_conditions(
     }
 
     case PAT_LIST_EMPTY:
+        if (pat->var_name) {
+            PUSH_BIND(pat->var_name, sym(param_name));
+        }
         PUSH_GUARD(make_coll_is_empty(param_name));
         break;
 
@@ -799,6 +816,9 @@ static void build_pattern_conditions(
     }
 
     case PAT_LIST: {
+        if (pat->var_name) {
+            PUSH_BIND(pat->var_name, sym(param_name));
+        }
         int n = pat->element_count;
         bool has_tail = (pat->tail != NULL);
 

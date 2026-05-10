@@ -259,6 +259,8 @@ typedef struct AST {
         struct {
             char  *name;           // "Eq"
             char  *type_var;       // "a"
+            char **assoc_types;    // ["Result"]
+            int    assoc_count;
             // Method signatures: name + type string
             char **method_names;   // ["=", "!="]
             char **method_types;   // ["a -> a -> Bool", "a -> a -> Bool"]
@@ -273,6 +275,9 @@ typedef struct AST {
         struct {
             char  *class_name;     // "Eq"
             char  *type_name;      // "TrafficLight"
+            char **assoc_names;    // ["Result"]
+            char **assoc_values;   // ["Float"]
+            int    assoc_count;
             // Method implementations: name + pmatch clauses as lambda
             char **method_names;
             AST  **method_bodies;  // lambda ASTs
@@ -329,9 +334,11 @@ AST *ast_new_data(const char *name,
                   ASTDataConstructor *constructors, int constructor_count,
                   char **deriving, int deriving_count);
 AST *ast_new_class(const char *name, const char *type_var,
+                   char **assoc_types, int assoc_count,
                    char **method_names, char **method_types, int method_count,
                    char **default_names, AST **default_bodies, int default_count);
 AST *ast_new_instance(const char *class_name, const char *type_name,
+                      char **assoc_names, char **assoc_values, int assoc_count,
                       char **method_names, AST **method_bodies, int method_count);
 void ast_pattern_free(ASTPattern *p);
 

@@ -513,12 +513,15 @@ AST *ast_new_data(const char *name,
 }
 
 AST *ast_new_class(const char *name, const char *type_var,
+                   char **assoc_types, int assoc_count,
                    char **method_names, char **method_types, int method_count,
                    char **default_names, AST **default_bodies, int default_count) {
     AST *a = calloc(1, sizeof(AST));
     a->type                          = AST_CLASS;
     a->class_decl.name               = my_strdup(name);
     a->class_decl.type_var           = my_strdup(type_var);
+    a->class_decl.assoc_types        = assoc_types;
+    a->class_decl.assoc_count        = assoc_count;
     a->class_decl.method_names       = method_names;
     a->class_decl.method_types       = method_types;
     a->class_decl.method_count       = method_count;
@@ -529,11 +532,15 @@ AST *ast_new_class(const char *name, const char *type_var,
 }
 
 AST *ast_new_instance(const char *class_name, const char *type_name,
+                      char **assoc_names, char **assoc_values, int assoc_count,
                       char **method_names, AST **method_bodies, int method_count) {
     AST *a = calloc(1, sizeof(AST));
     a->type                            = AST_INSTANCE;
     a->instance_decl.class_name        = my_strdup(class_name);
     a->instance_decl.type_name         = my_strdup(type_name);
+    a->instance_decl.assoc_names       = assoc_names;
+    a->instance_decl.assoc_values      = assoc_values;
+    a->instance_decl.assoc_count       = assoc_count;
     a->instance_decl.method_names      = method_names;
     a->instance_decl.method_bodies     = method_bodies;
     a->instance_decl.method_count      = method_count;
@@ -771,6 +778,8 @@ void ast_free(AST *ast) {
     case AST_CLASS:
         free(ast->class_decl.name);
         free(ast->class_decl.type_var);
+        for (int i = 0; i < ast->class_decl.assoc_count; i++) free(ast->class_decl.assoc_types[i]);
+        free(ast->class_decl.assoc_types);
         for (int i = 0; i < ast->class_decl.method_count; i++) {
             free(ast->class_decl.method_names[i]);
             free(ast->class_decl.method_types[i]);
@@ -788,6 +797,12 @@ void ast_free(AST *ast) {
     case AST_INSTANCE:
         free(ast->instance_decl.class_name);
         free(ast->instance_decl.type_name);
+        for (int i = 0; i < ast->instance_decl.assoc_count; i++) {
+            free(ast->instance_decl.assoc_names[i]);
+            free(ast->instance_decl.assoc_values[i]);
+        }
+        free(ast->instance_decl.assoc_names);
+        free(ast->instance_decl.assoc_values);
         for (int i = 0; i < ast->instance_decl.method_count; i++) {
             free(ast->instance_decl.method_names[i]);
             ast_free(ast->instance_decl.method_bodies[i]);
@@ -1427,16 +1442,8 @@ Token lexer_next_token(Lexer *lex) {
             size_t start = lex->pos;
             while (true) {
                 char nc = peek(lex);
-                if (nc == '\0') break;
-                if (nc == '.') {
-                    char after2 = lex->source[lex->pos + 1];
-                    if ((after2>='a'&&after2<='z') || (after2>='A'&&after2<='Z') ||
-                        (after2>='0'&&after2<='9') || after2=='_') {
-                        advance(lex);
-                        continue;
-                    } else break;
-                }
-                if (is_symbol_char(nc) && nc != '.') {
+                if (nc == '\0' || nc == '.') break;
+                if (is_symbol_char(nc)) {
                     advance(lex);
                 } else break;
             }
@@ -1578,17 +1585,8 @@ Token lexer_next_token(Lexer *lex) {
             /* Break on multi-byte UTF-8 characters so they get lexed as standalone tokens (like superscripts) */
             if ((unsigned char)nc > 127) break;
 
-            if (nc == '.') {
-                /* peek at the character after the dot */
-                char after = lex->source[lex->pos + 1];
-                if ((after>='a'&&after<='z') || (after>='A'&&after<='Z') ||
-                    (after>='0'&&after<='9') || after=='_') {
-                    advance(lex); // consume '.'
-                    continue;
-                } else {
-                    break; // trailing dot – stop here
-                }
-            }
+            if (nc == '.') break; // Let TOK_DOT handle it
+
             if (is_symbol_char(nc) && nc != '.') {
                 advance(lex);
             } else {
@@ -3480,6 +3478,8 @@ static AST *parse_list(Parser *p) {
             strcmp(p->current.value, "where") == 0)
             p->current = lexer_next_token(p->lexer);
 
+        char **assoc_types    = NULL;
+        int    assoc_count    = 0;
         char **method_names   = NULL;
         char **method_types   = NULL;
         int    method_count   = 0;
@@ -3489,6 +3489,22 @@ static AST *parse_list(Parser *p) {
 
         while (p->current.type != TOK_RPAREN &&
                p->current.type != TOK_EOF) {
+
+            /* Associated type declaration: type Result a */
+            if (p->current.type == TOK_SYMBOL && strcmp(p->current.value, "type") == 0) {
+                p->current = lexer_next_token(p->lexer); // consume 'type'
+                if (p->current.type == TOK_SYMBOL) {
+                    assoc_types = realloc(assoc_types, sizeof(char*) * (assoc_count + 1));
+                    assoc_types[assoc_count++] = my_strdup(p->current.value);
+                    p->current = lexer_next_token(p->lexer); // consume Name
+
+                    // optionally consume the type var (e.g. 'a')
+                    if (p->current.type == TOK_SYMBOL && strcmp(p->current.value, type_var) == 0) {
+                        p->current = lexer_next_token(p->lexer);
+                    }
+                }
+                continue;
+            }
 
             /* Method signature: (=) :: a -> a -> Bool
              * Must check for (method) :: pattern BEFORE checking
@@ -3550,6 +3566,7 @@ static AST *parse_list(Parser *p) {
                                            sizeof(char*) * (method_count + 1));
                     method_names[method_count] = peek_name;
                     method_types[method_count] = my_strdup(type_buf);
+                    register_local_func(peek_name);
                     method_count++;
                     continue;
                 }
@@ -3713,11 +3730,14 @@ static AST *parse_list(Parser *p) {
             p->current = lexer_next_token(p->lexer);
         }
 
-        if (p->current.type == TOK_RPAREN)
-            p->current = lexer_next_token(p->lexer);
+        if (p->current.type != TOK_RPAREN)
+            compiler_error(p->current.line, p->current.column,
+                           "Expected ')' to close class definition");
+        p->current = lexer_next_token(p->lexer);
 
         ast_free(list);
         AST *node = ast_new_class(cls_name, type_var,
+                                   assoc_types, assoc_count,
                                    method_names, method_types, method_count,
                                    default_names, default_bodies, default_count);
         free(cls_name); free(type_var);
@@ -3765,8 +3785,48 @@ static AST *parse_list(Parser *p) {
         MethodClauses *methods = NULL;
         int nethods = 0;
 
+        char **assoc_names  = NULL;
+        char **assoc_values = NULL;
+        int    assoc_count  = 0;
+
         while (p->current.type != TOK_RPAREN &&
                p->current.type != TOK_EOF) {
+
+            /* Associated type value: type Result Vec3 = Float */
+            if (p->current.type == TOK_SYMBOL && strcmp(p->current.value, "type") == 0) {
+                p->current = lexer_next_token(p->lexer); // consume 'type'
+                char *aname = NULL;
+                if (p->current.type == TOK_SYMBOL) {
+                    aname = my_strdup(p->current.value);
+                    p->current = lexer_next_token(p->lexer);
+                }
+
+                if (p->current.type == TOK_SYMBOL && strcmp(p->current.value, type_name) == 0) {
+                    p->current = lexer_next_token(p->lexer);
+                }
+
+                if (p->current.type == TOK_SYMBOL && strcmp(p->current.value, "=") == 0) {
+                    p->current = lexer_next_token(p->lexer);
+                }
+
+                char *avalue = NULL;
+                if (p->current.type == TOK_SYMBOL) {
+                    avalue = my_strdup(p->current.value);
+                    p->current = lexer_next_token(p->lexer);
+                }
+
+                if (aname && avalue) {
+                    assoc_names = realloc(assoc_names, sizeof(char*) * (assoc_count + 1));
+                    assoc_values = realloc(assoc_values, sizeof(char*) * (assoc_count + 1));
+                    assoc_names[assoc_count] = aname;
+                    assoc_values[assoc_count] = avalue;
+                    assoc_count++;
+                } else {
+                    if (aname) free(aname);
+                    if (avalue) free(avalue);
+                }
+                continue;
+            }
 
             if (p->current.type != TOK_LPAREN)
                 compiler_error(p->current.line, p->current.column,
@@ -3796,25 +3856,34 @@ static AST *parse_list(Parser *p) {
             pat1 = parse_single_pattern(&pm_parser);
             p->current = pm_parser.current;
 
-            if (p->current.type == TOK_SYMBOL &&
-                p->current.value && pat1.kind != PAT_CONSTRUCTOR) {
-                /* infix: pat1 method pat2 */
-                method_name = my_strdup(p->current.value);
-                p->current = lexer_next_token(p->lexer); // consume method
-                pm_parser.current = p->current;
-                pat2 = parse_single_pattern(&pm_parser);
-                p->current = pm_parser.current;
-                has_pat2 = true;
-            } else if (p->current.type == TOK_SYMBOL &&
-                       pat1.kind == PAT_CONSTRUCTOR) {
-                /* prefix: (method pat1 pat2) — first token was method */
-                method_name = my_strdup(pat1.var_name);
-                /* pat1 was actually the method name, pat2 is first real pat */
-                pat1 = (ASTPattern){0};
-                pm_parser.current = p->current;
-                pat1 = parse_single_pattern(&pm_parser);
-                p->current = pm_parser.current;
-                if (p->current.type != TOK_RPAREN) {
+            if (p->current.type == TOK_SYMBOL && p->current.value) {
+                bool pat1_is_op = false;
+                if (pat1.kind == PAT_VAR && pat1.var_name) {
+                    char c = pat1.var_name[0];
+                    /* If it doesn't start with a letter or underscore, it's an operator */
+                    if (!(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') && c != '_') {
+                        pat1_is_op = true;
+                    }
+                }
+
+                if (pat1_is_op || pat1.kind == PAT_CONSTRUCTOR) {
+                    /* prefix: (method pat1 pat2) — first token was method */
+                    method_name = my_strdup(pat1.var_name);
+                    if (pat1.var_name) free(pat1.var_name);
+                    pat1 = (ASTPattern){0};
+                    pm_parser.current = p->current;
+                    pat1 = parse_single_pattern(&pm_parser);
+                    p->current = pm_parser.current;
+                    if (p->current.type != TOK_RPAREN) {
+                        pm_parser.current = p->current;
+                        pat2 = parse_single_pattern(&pm_parser);
+                        p->current = pm_parser.current;
+                        has_pat2 = true;
+                    }
+                } else {
+                    /* infix: pat1 method pat2 */
+                    method_name = my_strdup(p->current.value);
+                    p->current = lexer_next_token(p->lexer); // consume method
                     pm_parser.current = p->current;
                     pat2 = parse_single_pattern(&pm_parser);
                     p->current = pm_parser.current;
@@ -3868,6 +3937,9 @@ static AST *parse_list(Parser *p) {
             if (has_pat2) cl->patterns[1] = pat2;
             cl->pattern_count = npats;
             cl->body          = body;
+            cl->guard_conds   = NULL;
+            cl->guard_bodies  = NULL;
+            cl->guard_count   = 0;
         }
 
         if (p->current.type == TOK_RPAREN)
@@ -3901,6 +3973,16 @@ static AST *parse_list(Parser *p) {
              * the clauses themselves.                                  */
             free(pm); /* free only the AST node, not via ast_free */
 
+            /* pmatch_desugar forcefully sets untyped params to "Coll".
+             * We must clear this so tc_register_instance can inject the
+             * mathematically correct types from the class signature! */
+            for (int pi = 0; pi < npats; pi++) {
+                if (params[pi].type_name && strcmp(params[pi].type_name, "Coll") == 0) {
+                    free(params[pi].type_name);
+                    params[pi].type_name = NULL;
+                }
+            }
+
             AST **body_exprs = malloc(sizeof(AST*));
             body_exprs[0] = desugared;
             inst_method_bodies[mi] = ast_new_lambda(params, npats, NULL, NULL,
@@ -3914,6 +3996,7 @@ static AST *parse_list(Parser *p) {
 
         ast_free(list);
         AST *node = ast_new_instance(cls_name, type_name,
+                                     assoc_names, assoc_values, assoc_count,
                                      inst_method_names, inst_method_bodies,
                                      nethods);
         free(cls_name); free(type_name);
@@ -5242,8 +5325,8 @@ AST *parse_expr(Parser *p) {
         /* Build a synthetic symbol "____postfix_dot" list:
          * represent as (dot-access expr "field") so codegen can handle it,
          * OR synthesize a combined symbol if expr is already a symbol.     */
-        if (expr_result->type == AST_SYMBOL) {
-            /* Merge into a.b style symbol that codegen_dot_chain handles */
+        if (expr_result->type == AST_SYMBOL && expr_result->symbol[0] >= 'A' && expr_result->symbol[0] <= 'Z') {
+            /* Merge Uppercase (Module) prefixes */
             char combined[512];
             snprintf(combined, sizeof(combined), "%s.%s",
                      expr_result->symbol, field);
@@ -5755,6 +5838,14 @@ static void ast_to_json_sb(SB *b, AST *ast) {
         json_escape(b, ast->class_decl.name ? ast->class_decl.name : "");
         sb_puts(b, ",\"type_var\":");
         json_escape(b, ast->class_decl.type_var ? ast->class_decl.type_var : "");
+        if (ast->class_decl.assoc_count > 0) {
+            sb_puts(b, ",\"assoc_types\":[");
+            for (int i = 0; i < ast->class_decl.assoc_count; i++) {
+                if (i) sb_putc(b, ',');
+                json_escape(b, ast->class_decl.assoc_types[i]);
+            }
+            sb_puts(b, "]");
+        }
         sb_puts(b, ",\"methods\":[");
         for (int i = 0; i < ast->class_decl.method_count; i++) {
             if (i) sb_putc(b, ',');
@@ -5784,6 +5875,18 @@ static void ast_to_json_sb(SB *b, AST *ast) {
         json_escape(b, ast->instance_decl.class_name ? ast->instance_decl.class_name : "");
         sb_puts(b, ",\"type\":");
         json_escape(b, ast->instance_decl.type_name ? ast->instance_decl.type_name : "");
+        if (ast->instance_decl.assoc_count > 0) {
+            sb_puts(b, ",\"assoc_types\":[");
+            for (int i = 0; i < ast->instance_decl.assoc_count; i++) {
+                if (i) sb_putc(b, ',');
+                sb_puts(b, "{\"name\":");
+                json_escape(b, ast->instance_decl.assoc_names[i]);
+                sb_puts(b, ",\"value\":");
+                json_escape(b, ast->instance_decl.assoc_values[i]);
+                sb_putc(b, '}');
+            }
+            sb_puts(b, "]");
+        }
         sb_puts(b, ",\"methods\":[");
         for (int i = 0; i < ast->instance_decl.method_count; i++) {
             if (i) sb_putc(b, ',');
