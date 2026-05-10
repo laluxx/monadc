@@ -28,6 +28,42 @@ int g_scope_depth       = 0;
 int (*g_param_kind_is_func)(const char *func_name, int arg_index) = NULL;
 int (*g_is_known_function)(const char *name) = NULL;
 
+/// Layout Registry for Pattern Matching
+typedef struct {
+    char *name;
+    char **fields;
+    int field_count;
+} LayoutRegistryEntry;
+static LayoutRegistryEntry *g_layouts = NULL;
+static int g_layout_count = 0;
+static int g_layout_cap = 0;
+
+void register_layout_fields(const char *name, ASTLayoutField *fields, int count) {
+    if (g_layout_count >= g_layout_cap) {
+        g_layout_cap = g_layout_cap == 0 ? 8 : g_layout_cap * 2;
+        g_layouts = realloc(g_layouts, sizeof(LayoutRegistryEntry) * g_layout_cap);
+    }
+    g_layouts[g_layout_count].name = strdup(name);
+    g_layouts[g_layout_count].fields = malloc(sizeof(char*) * count);
+    for (int i = 0; i < count; i++) {
+        g_layouts[g_layout_count].fields[i] = strdup(fields[i].name);
+    }
+    g_layouts[g_layout_count].field_count = count;
+    g_layout_count++;
+}
+
+const char *layout_get_field_name(const char *layout_name, int index) {
+    if (!layout_name) return NULL;
+    for (int i = 0; i < g_layout_count; i++) {
+        if (strcmp(g_layouts[i].name, layout_name) == 0) {
+            if (index >= 0 && index < g_layouts[i].field_count)
+                return g_layouts[i].fields[index];
+            return NULL;
+        }
+    }
+    return NULL;
+}
+
 /// Local function tracking for the parser
 static char **g_local_funcs = NULL;
 static int g_local_func_count = 0;
@@ -1523,12 +1559,25 @@ Token lexer_next_token(Lexer *lex) {
         size_t start = lex->pos;
         advance(lex); // consume the first character
 
+        /* Single Unicode Prefix: If it's a multi-byte char, consume just this codepoint and yield */
+        if ((unsigned char)c > 127) {
+            if (((unsigned char)c & 0xE0) == 0xC0) { advance(lex); }
+            else if (((unsigned char)c & 0xF0) == 0xE0) { advance(lex); advance(lex); }
+            else if (((unsigned char)c & 0xF8) == 0xF0) { advance(lex); advance(lex); advance(lex); }
+            tok.value = my_strndup(lex->source+start, lex->pos-start);
+            tok.type  = TOK_SYMBOL; return tok;
+        }
+
         /* Continue consuming symbol characters.  For '.', only consume it
            when it is followed by a letter/digit (module-access dot), not
            when it might be trailing punctuation. */
         while (true) {
             char nc = peek(lex);
             if (nc == '\0') break;
+
+            /* Break on multi-byte UTF-8 characters so they get lexed as standalone tokens (like superscripts) */
+            if ((unsigned char)nc > 127) break;
+
             if (nc == '.') {
                 /* peek at the character after the dot */
                 char after = lex->source[lex->pos + 1];
@@ -2832,7 +2881,6 @@ static AST *parse_list(Parser *p) {
                 compiler_error(p->current.line, p->current.column,
                                "Expected symbol in let binding");
             char *bname = strdup(p->current.value);
-            register_local_func(bname);
             p->current = lexer_next_token(p->lexer);
             AST *init_expr = parse_expr(p);
             if (p->current.type != TOK_RBRACKET)
@@ -2852,7 +2900,6 @@ static AST *parse_list(Parser *p) {
                     compiler_error(p->current.line, p->current.column,
                                    "Expected symbol in let binding");
                 char *bname = strdup(p->current.value);
-                register_local_func(bname);
                 p->current = lexer_next_token(p->lexer);
                 AST *init_expr = parse_expr(p);
                 if (p->current.type != TOK_RBRACKET)
@@ -3122,7 +3169,6 @@ static AST *parse_list(Parser *p) {
                 if (p->current.type != TOK_SYMBOL)
                     compiler_error(p->current.line, p->current.column,
                                    "Expected variable name in typed define");
-                register_local_func(p->current.value);
                 /* Build a list AST [name :: Type] so parse_type_annotation works */
                 AST *bracket_list = ast_new_list();
                 bracket_list->line   = bracket_line;
@@ -3168,7 +3214,6 @@ static AST *parse_list(Parser *p) {
                 p->current = lexer_next_token(p->lexer); // consume ']'
                 name_ast = bracket_list;
             } else if (p->current.type == TOK_SYMBOL) {
-                register_local_func(p->current.value);
                 name_ast = ast_new_symbol(p->current.value);
                 name_ast->line   = p->current.line;
                 name_ast->column = p->current.column;
@@ -4185,6 +4230,9 @@ static AST *parse_list(Parser *p) {
 
         ast_free(list);
         AST *node = ast_new_layout(lay_name, fields, nfields, packed, align);
+
+        register_layout_fields(lay_name, fields, nfields);
+
         free(lay_name);
         node->line       = lay_line;
         node->column     = lay_col;
@@ -4401,8 +4449,17 @@ static AST *parse_list(Parser *p) {
                 }
 
                 if (has_rhs && !head_wants_func) {
-                    /* Infix rewrite — consume chain */
-                    AST *acc = first;
+                    /* Infix rewrite with proper operator precedence */
+                    int op_cap = 4;
+                    int op_count = 0;
+                    AST **operands = malloc(sizeof(AST*) * op_cap);
+                    char **operators = malloc(sizeof(char*) * op_cap);
+                    int *op_lines = malloc(sizeof(int) * op_cap);
+                    int *op_cols = malloc(sizeof(int) * op_cap);
+
+                    operands[0] = first;
+                    int num_operands = 1;
+
                     while (p->current.type == TOK_SYMBOL && p->current.value) {
                         bool chain_is_known_fn = true;
                         if (g_is_known_function)
@@ -4420,18 +4477,18 @@ static AST *parse_list(Parser *p) {
                         free(after2.value);
                         if (!has_rhs2) break;
 
-                        /* check the current acc head's next slot */
+                        /* check the current acc head's next slot (for left-most only) */
                         bool wants_func = false;
                         if (g_param_kind_is_func) {
                             const char *hname = NULL;
                             int sl = 0;
-                            if (acc->type == AST_LIST &&
-                                acc->list.count >= 1 &&
-                                acc->list.items[0]->type == AST_SYMBOL) {
-                                hname = acc->list.items[0]->symbol;
-                                sl    = (int)acc->list.count - 1;
-                            } else if (acc->type == AST_SYMBOL) {
-                                hname = acc->symbol;
+                            if (operands[num_operands-1]->type == AST_LIST &&
+                                operands[num_operands-1]->list.count >= 1 &&
+                                operands[num_operands-1]->list.items[0]->type == AST_SYMBOL) {
+                                hname = operands[num_operands-1]->list.items[0]->symbol;
+                                sl    = (int)operands[num_operands-1]->list.count - 1;
+                            } else if (operands[num_operands-1]->type == AST_SYMBOL) {
+                                hname = operands[num_operands-1]->symbol;
                                 sl    = 0;
                             }
                             if (hname)
@@ -4439,26 +4496,74 @@ static AST *parse_list(Parser *p) {
                         }
                         if (wants_func) break;
 
-                        int fn_line   = p->current.line;
-                        int fn_col    = p->current.column;
-                        char *fn_name = my_strdup(p->current.value);
-                        p->current    = lexer_next_token(p->lexer);
+                        if (num_operands >= op_cap) {
+                            op_cap *= 2;
+                            operands = realloc(operands, sizeof(AST*) * op_cap);
+                            operators = realloc(operators, sizeof(char*) * op_cap);
+                            op_lines = realloc(op_lines, sizeof(int) * op_cap);
+                            op_cols = realloc(op_cols, sizeof(int) * op_cap);
+                        }
 
-                        AST *rhs  = parse_expr(p);
-                        AST *fn_sym = ast_new_symbol(fn_name);
-                        free(fn_name);
-                        fn_sym->line   = fn_line;
-                        fn_sym->column = fn_col;
-                        AST *call = ast_new_list();
-                        call->line   = fn_line;
-                        call->column = fn_col;
-                        ast_list_append(call, fn_sym);
-                        ast_list_append(call, acc);
-                        ast_list_append(call, rhs);
-                        acc = call;
+                        op_lines[op_count] = p->current.line;
+                        op_cols[op_count]  = p->current.column;
+                        operators[op_count++] = my_strdup(p->current.value);
+                        p->current = lexer_next_token(p->lexer);
+
+                        operands[num_operands++] = parse_expr(p);
 
                         if (p->current.type == TOK_RPAREN) break;
                     }
+
+                    /* Reduce operands according to precedence */
+                    while (op_count > 0) {
+                        int max_prec = -1;
+                        int best_idx = -1;
+                        for (int i = 0; i < op_count; i++) {
+                            int prec = 6;
+                            if (strcmp(operators[i], "*") == 0 || strcmp(operators[i], "/") == 0 || strcmp(operators[i], "%") == 0) prec = 5;
+                            else if (strcmp(operators[i], "+") == 0 || strcmp(operators[i], "-") == 0) prec = 4;
+                            else if (strcmp(operators[i], "=") == 0 || strcmp(operators[i], "!=") == 0 ||
+                                     strcmp(operators[i], "<") == 0 || strcmp(operators[i], ">") == 0 ||
+                                     strcmp(operators[i], "<=") == 0 || strcmp(operators[i], ">=") == 0) prec = 3;
+                            else if (strcmp(operators[i], "and") == 0) prec = 2;
+                            else if (strcmp(operators[i], "or") == 0) prec = 1;
+
+                            if (prec > max_prec) {
+                                max_prec = prec;
+                                best_idx = i;
+                            }
+                        }
+
+                        AST *fn_sym = ast_new_symbol(operators[best_idx]);
+                        fn_sym->line   = op_lines[best_idx];
+                        fn_sym->column = op_cols[best_idx];
+
+                        AST *call = ast_new_list();
+                        call->line   = op_lines[best_idx];
+                        call->column = op_cols[best_idx];
+                        ast_list_append(call, fn_sym);
+                        ast_list_append(call, operands[best_idx]);
+                        ast_list_append(call, operands[best_idx + 1]);
+
+                        free(operators[best_idx]);
+
+                        operands[best_idx] = call;
+                        for (int i = best_idx + 1; i < num_operands - 1; i++)
+                            operands[i] = operands[i + 1];
+                        for (int i = best_idx; i < op_count - 1; i++) {
+                            operators[i] = operators[i + 1];
+                            op_lines[i] = op_lines[i + 1];
+                            op_cols[i] = op_cols[i + 1];
+                        }
+                        num_operands--;
+                        op_count--;
+                    }
+
+                    AST *acc = operands[0];
+                    free(operands);
+                    free(operators);
+                    free(op_lines);
+                    free(op_cols);
 
                     if (p->current.type != TOK_RPAREN)
                         compiler_error(p->current.line, p->current.column,
@@ -4943,6 +5048,41 @@ static AST *parse_expr_base(Parser *p) {
             ast->end_column = tok.column + 1;
             return ast;
         }
+
+        // Single-unicode prefix function application (e.g. √123 -> (√ 123))
+        if (tok.value && (unsigned char)tok.value[0] > 127) {
+            p->current = lexer_next_token(p->lexer);
+            int next_col = p->current.column;
+            int sym_col  = tok.column;
+            bool adjacent = (next_col == sym_col + (int)strlen(tok.value));
+
+            if (adjacent &&
+                (p->current.type == TOK_SYMBOL ||
+                 p->current.type == TOK_NUMBER ||
+                 p->current.type == TOK_LPAREN ||
+                 p->current.type == TOK_LBRACKET ||
+                 p->current.type == TOK_STRING)) {
+
+                int call_line = tok.line, call_col = tok.column;
+                AST *operand = parse_expr(p);
+
+                AST *call = ast_new_list();
+                ast_list_append(call, ast_new_symbol(tok.value));
+                ast_list_append(call, operand);
+
+                call->line       = call_line;
+                call->column     = call_col;
+                call->end_column = operand->end_column;
+                return call;
+            }
+
+            AST *ast = ast_new_symbol(tok.value);
+            ast->line       = tok.line;
+            ast->column     = tok.column;
+            ast->end_column = tok.column + (int)strlen(tok.value);
+            return ast;
+        }
+
         int end_col = tok.column + (tok.value ? strlen(tok.value) : 1);
         p->current = lexer_next_token(p->lexer);
         AST *ast = ast_new_symbol(tok.value);
@@ -5050,6 +5190,47 @@ AST *parse_expr(Parser *p) {
     Token tok = p->current;
 
     AST *expr_result = parse_expr_base(p);
+
+    /* Postfix superscripts: v²³ -> (^ v 23) */
+    if (p->current.type == TOK_SYMBOL && p->current.value && p->current.column == expr_result->end_column) {
+        int power = 0;
+        bool is_super = false;
+        int end_col = expr_result->end_column;
+
+        while (p->current.type == TOK_SYMBOL && p->current.value && p->current.column == end_col) {
+            const char *sv = p->current.value;
+            unsigned char u0 = sv[0], u1 = sv[1], u2 = sv[2];
+            int d = -1;
+            /* Map UTF-8 superscript codepoints to their integer values */
+            if (u0 == 0xC2 && u1 == 0xB9) d = 1;
+            else if (u0 == 0xC2 && u1 == 0xB2) d = 2;
+            else if (u0 == 0xC2 && u1 == 0xB3) d = 3;
+            else if (u0 == 0xE2 && u1 == 0x81) {
+                if (u2 == 0xB0) d = 0;
+                else if (u2 >= 0xB4 && u2 <= 0xB9) d = u2 - 0xB0;
+            }
+            if (d == -1) break;
+
+            power = power * 10 + d;
+            is_super = true;
+            end_col += strlen(sv);
+            p->current = lexer_next_token(p->lexer);
+        }
+
+        if (is_super) {
+            AST *pow_node = ast_new_list();
+            ast_list_append(pow_node, ast_new_symbol("^"));
+            ast_list_append(pow_node, expr_result);
+            char num_buf[32];
+            snprintf(num_buf, sizeof(num_buf), "%d", power);
+            ast_list_append(pow_node, ast_new_number((double)power, num_buf));
+
+            pow_node->line = expr_result->line;
+            pow_node->column = expr_result->column;
+            pow_node->end_column = end_col;
+            expr_result = pow_node;
+        }
+    }
 
     /* Postfix dot: (expr).field.field2 */
     while (p->current.type == TOK_DOT && p->current.value) {

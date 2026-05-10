@@ -5,6 +5,8 @@
 #include <string.h>
 #include <stdbool.h>
 
+extern const char *layout_get_field_name(const char *layout_name, int index);
+
 static char *my_strdup(const char *s) {
     char *r = malloc(strlen(s) + 1);
     strcpy(r, s);
@@ -220,6 +222,91 @@ ASTPattern parse_pattern(Parser *p) {
     return parse_single_pattern(p);
 }
 
+static bool is_at_pmatch_clause(Parser *p) {
+    Lexer peek_lex = *p->lexer;
+    Token peek_cur = p->current;
+    /* Do not free peek_cur.value on the very first token since it belongs to p->current! */
+    bool has_arrow = (peek_cur.type == TOK_ARROW);
+    bool has_pipe  = (peek_cur.type == TOK_PIPE ||
+                      (peek_cur.type == TOK_SYMBOL && peek_cur.value &&
+                       strcmp(peek_cur.value, "|") == 0));
+    int depth = 0;
+    bool is_first = true;
+    while (!has_arrow && !has_pipe &&
+           peek_cur.type != TOK_RPAREN &&
+           peek_cur.type != TOK_EOF    &&
+           peek_cur.type != TOK_KEYWORD) {
+        if (peek_cur.type == TOK_LPAREN || peek_cur.type == TOK_LBRACKET) depth++;
+        if ((peek_cur.type == TOK_RPAREN || peek_cur.type == TOK_RBRACKET) && depth > 0) depth--;
+        if (peek_cur.type == TOK_ARROW && depth == 0) { has_arrow = true; break; }
+        if (peek_cur.type == TOK_PIPE  && depth == 0) { has_pipe = true; break; }
+        if (peek_cur.type == TOK_SYMBOL && peek_cur.value &&
+            strcmp(peek_cur.value, "|") == 0 && depth == 0) {
+            has_pipe = true; break;
+        }
+        if (!is_first && peek_cur.value) free(peek_cur.value);
+        is_first = false;
+        peek_cur = lexer_next_token(&peek_lex);
+    }
+    if (!is_first && peek_cur.value) free(peek_cur.value);
+    return has_arrow || has_pipe;
+}
+
+static AST *parse_clause_body(Parser *p) {
+    AST **body_exprs = NULL;
+    int body_count = 0;
+    int body_cap = 0;
+
+    while (!parser_at(p, TOK_RPAREN) && !parser_at(p, TOK_EOF) && !parser_at(p, TOK_KEYWORD)) {
+        if (body_count > 0 && is_at_pmatch_clause(p)) break;
+
+        /* Skip #line directive nodes */
+        if (p->current.type == TOK_LPAREN) {
+            Lexer saved_lex = *p->lexer;
+            Token saved_cur = p->current;
+            Token peek = lexer_next_token(p->lexer);
+            if (peek.type == TOK_SYMBOL && peek.value && strcmp(peek.value, "#line") == 0) {
+                free(peek.value);
+                while (p->current.type != TOK_RPAREN && p->current.type != TOK_EOF) {
+                    if (p->current.value) free(p->current.value);
+                    p->current = lexer_next_token(p->lexer);
+                }
+                if (p->current.type == TOK_RPAREN) {
+                    if (p->current.value) free(p->current.value);
+                    p->current = lexer_next_token(p->lexer);
+                }
+                continue;
+            } else {
+                free(peek.value);
+                *p->lexer = saved_lex;
+                p->current = saved_cur;
+            }
+        }
+
+        AST *expr = parse_expr(p);
+        if (body_count >= body_cap) {
+            body_cap = body_cap == 0 ? 4 : body_cap * 2;
+            body_exprs = realloc(body_exprs, sizeof(AST*) * body_cap);
+        }
+        body_exprs[body_count++] = expr;
+    }
+
+    AST *body;
+    if (body_count == 0) {
+        body = ast_new_symbol("undefined");
+    } else if (body_count == 1) {
+        body = body_exprs[0];
+        free(body_exprs);
+    } else {
+        body = ast_new_list();
+        ast_list_append(body, ast_new_symbol("begin"));
+        for (int _i = 0; _i < body_count; _i++)
+            ast_list_append(body, body_exprs[_i]);
+        free(body_exprs);
+    }
+    return body;
+}
+
 // Parse one full clause: pattern... -> expr
 // For multi-param functions, reads `param_count` patterns then ->
 static ASTPMatchClause parse_one_clause(Parser *p, int param_count) {
@@ -259,7 +346,7 @@ static ASTPMatchClause parse_one_clause(Parser *p, int param_count) {
                 parser_advance(p);
             }
 
-            AST *body = parse_expr(p);
+            AST *body = parse_clause_body(p);
 
             if (guard_count >= guard_cap) {
                 guard_cap = guard_cap == 0 ? 4 : guard_cap * 2;
@@ -289,7 +376,7 @@ static ASTPMatchClause parse_one_clause(Parser *p, int param_count) {
         parser_advance(p);
     }
 
-    AST *body = parse_expr(p);
+    AST *body = parse_clause_body(p);
 
     clause.patterns      = patterns;
     clause.pattern_count = param_count;
@@ -310,37 +397,11 @@ AST *parse_pmatch_clauses(Parser *p, int param_count) {
     while (!parser_at(p, TOK_RPAREN) &&
            !parser_at(p, TOK_EOF)    &&
            !parser_at(p, TOK_KEYWORD)) {
-        /* Peek ahead to confirm there is a '->' at depth 0 before
-         * committing to parsing this as a pmatch clause. If no '->'
-         * exists, the remaining tokens are plain body expressions,
-         * not pattern clauses. */
-        {
-            Lexer peek_lex = *p->lexer;
-            Token peek_cur = lexer_next_token(&peek_lex); /* start AFTER p->current */
-            bool has_arrow = (p->current.type == TOK_ARROW);
-            /* Also treat a top-level '|' as a clause signal (guarded clause) */
-            bool has_pipe  = (p->current.type == TOK_PIPE ||
-                              (p->current.type == TOK_SYMBOL &&
-                               p->current.value &&
-                               strcmp(p->current.value, "|") == 0));
-            int depth = 0;
-            while (!has_arrow && !has_pipe &&
-                   peek_cur.type != TOK_RPAREN &&
-                   peek_cur.type != TOK_EOF     &&
-                   peek_cur.type != TOK_KEYWORD) {
-                if (peek_cur.type == TOK_LPAREN || peek_cur.type == TOK_LBRACKET) depth++;
-                if ((peek_cur.type == TOK_RPAREN || peek_cur.type == TOK_RBRACKET) && depth > 0) depth--;
-                if (peek_cur.type == TOK_ARROW && depth == 0) { has_arrow = true; free(peek_cur.value); break; }
-                if (peek_cur.type == TOK_PIPE  && depth == 0) { has_pipe  = true; free(peek_cur.value); break; }
-                if (peek_cur.type == TOK_SYMBOL && peek_cur.value &&
-                    strcmp(peek_cur.value, "|") == 0 && depth == 0) {
-                    has_pipe = true; free(peek_cur.value); break;
-                }
-                free(peek_cur.value);
-                peek_cur = lexer_next_token(&peek_lex);
-            }
-            if (!has_arrow && !has_pipe) { free(peek_cur.value); break; }
+
+        if (!is_at_pmatch_clause(p)) {
+            break;
         }
+
         ASTPMatchClause clause = parse_one_clause(p, param_count);
         if (count >= cap) {
             cap = cap == 0 ? 4 : cap * 2;
@@ -737,10 +798,51 @@ static void build_pattern_conditions(
         break;
     }
 
-
     case PAT_LIST: {
         int n = pat->element_count;
         bool has_tail = (pat->tail != NULL);
+
+        /* Type-aware destructuring: if we know the exact ADT/Layout type,
+         * destructure it as a zero-overhead struct instead of a dynamic list. */
+        bool is_layout = false;
+        if (elem_type_name) {
+            const char *f0 = layout_get_field_name(elem_type_name, 0);
+            if (f0 != NULL) is_layout = true;
+        }
+
+        if (is_layout) {
+            for (int i = 0; i < n; i++) {
+                ASTPattern *ep = &pat->elements[i];
+                const char *fname = layout_get_field_name(elem_type_name, i);
+                if (!fname) break; /* Ignore extra elements safely */
+
+                char acc_sym[256];
+                snprintf(acc_sym, sizeof(acc_sym), "%s.%s", param_name, fname);
+                AST *elem_expr = sym(acc_sym);
+
+                switch (ep->kind) {
+                case PAT_WILDCARD:
+                    break;
+                case PAT_VAR:
+                    PUSH_BIND(ep->var_name, elem_expr);
+                    break;
+                case PAT_LITERAL_INT:
+                    PUSH_GUARD(make_eq_int(elem_expr, (long long)ep->lit_value));
+                    break;
+                case PAT_LITERAL_FLOAT:
+                    PUSH_GUARD(make_eq_float(elem_expr, ep->lit_value));
+                    break;
+                case PAT_LITERAL_STRING: {
+                    AST *items[] = {sym("="), elem_expr, ast_new_string(ep->var_name)};
+                    PUSH_GUARD(make_list(items, 3));
+                    break;
+                }
+                default:
+                    break;
+                }
+            }
+            break;
+        }
 
         if (has_tail) {
             if (n > 0) {

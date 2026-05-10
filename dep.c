@@ -2123,12 +2123,20 @@ static Value *dep_infer_internal(DepCtx *ctx, Term *t) {
 
     // ── Lambda (Fallback Inference) ────────────────────────────────
     case TERM_LAM: {
+        // If no domain annotation, generate a fresh metavariable for the
+        // parameter type. This supports let-as-lambda and other unannotated
+        // lambdas where the argument type is determined from the call site.
+        Value *dom_val;
+        Term  *dom_term;
         if (!t->binder_dom || t->binder_dom->kind == TERM_HOLE) {
-            dep_error_set(ctx, t->line, t->col,
-                          "cannot infer type of lambda without parameter type annotation");
-            return NULL;
+            int meta_id = meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth,
+                                     t->binder_name ? t->binder_name : "?lam");
+            dom_val  = val_meta(meta_id, val_spine_empty());
+            dom_term = term_meta(meta_id);
+        } else {
+            dom_val  = dep_eval(t->binder_dom, ctx->env, ctx->mctx);
+            dom_term = term_clone(t->binder_dom);
         }
-        Value *dom_val = dep_eval(t->binder_dom, ctx->env, ctx->mctx);
         dep_ctx_push(ctx, t->binder_name, dom_val);
         Value *body_ty = dep_infer(ctx, t->binder_body);
 
@@ -2139,7 +2147,7 @@ static Value *dep_infer_internal(DepCtx *ctx, Term *t) {
         Term *body_ty_term = dep_quote(body_ty, ctx->depth, ctx->mctx);
         dep_ctx_pop(ctx);
 
-        Term *pi_term = term_pi(t->binder_name, term_clone(t->binder_dom), body_ty_term, IMPLICIT_EXPLICIT);
+        Term *pi_term = term_pi(t->binder_name, dom_term, body_ty_term, IMPLICIT_EXPLICIT);
         Value *pi_val = dep_eval(pi_term, ctx->env, ctx->mctx);
         /* DO NOT FREE pi_term: pi_val captures its body in a closure! */
         return pi_val;
@@ -2552,11 +2560,22 @@ Type *dep_ground_of_value(Value *v, MetaCtx *mctx) {
         return type_clone(v->embed_type);
     }
     if (v->kind == VAL_PI) {
-        // Idris-style Erasure: Skip implicit compile-time arguments when projecting to runtime HM types
+        // Skip implicit compile-time arguments entirely.
         if (v->implicit != IMPLICIT_EXPLICIT) {
             Value *dummy = val_neutral("hm_impl", -1, val_spine_empty());
             Value *codom = dep_closure_apply(v->closure, dummy);
             return dep_ground_of_value(codom, mctx);
+        }
+
+        // Skip explicit universe-level (Type u) arguments - compile-time
+        // type parameters. We pass a VAL_EMBED(unknown) as the dummy so
+        // that when the body refers to this type variable it resolves to
+        // TYPE_UNKNOWN rather than a neutral that produces NULL.
+        if (v->domain && v->domain->kind == VAL_UNIVERSE) {
+            Value *dummy = val_embed(type_unknown());
+            Value *codom = dep_closure_apply(v->closure, dummy);
+            Type *result = dep_ground_of_value(codom, mctx);
+            return result;
         }
 
         Type *param = dep_ground_of_value(v->domain, mctx);
@@ -2570,9 +2589,11 @@ Type *dep_ground_of_value(Value *v, MetaCtx *mctx) {
         return type_unknown();
     }
     if (v->kind == VAL_NAT || v->kind == VAL_SUCC || v->kind == VAL_ZERO || v->kind == VAL_NUM_LIT) {
-        return type_int(); // Peano Nats lower to Ints in the HM/LLVM layer
+        return type_int();
     }
 
+    // VAL_NEUTRAL introduced as a type-arg dummy resolves to unknown.
+    // VAL_META that is unsolved also resolves to unknown.
     return type_unknown();
 }
 
@@ -2588,6 +2609,25 @@ static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
     switch (ast->type) {
     case AST_NUMBER:
         {
+            /* Float literals must stay as embedded Float, not Nat.
+             * Check the literal string first — if it contains '.' or 'e'/'E'
+             * it is a float and must be embedded as TYPE_FLOAT so the dep
+             * checker's conversion rules handle it correctly (Float ≠ Nat).
+             * Negative integers also go through as embedded Int.           */
+            bool is_float = false;
+            if (ast->literal_str) {
+                for (const char *_p = ast->literal_str; *_p; _p++) {
+                    if (*_p == '.' || *_p == 'e' || *_p == 'E') {
+                        is_float = true;
+                        break;
+                    }
+                }
+            } else {
+                is_float = (ast->number != (double)(long long)ast->number);
+            }
+            if (is_float) {
+                return term_ann(term_hole(), term_embed(type_float()));
+            }
             long long n = (long long)ast->number;
             if (n >= 0) {
                 return term_num_lit((unsigned long long)n);
@@ -2604,12 +2644,24 @@ static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
     }
     case AST_KEYWORD: return term_embed(type_keyword());
     case AST_SYMBOL:
+        // Explicit hole — ? in any position
+        if (strcmp(ast->symbol, "?") == 0) {
+            Term *h = term_hole();
+            h->line = ast->line;
+            h->col  = ast->column;
+            return h;
+        }
         // Check if it is a universe literal "Type" or "Type N"
         if (strcmp(ast->symbol, "Type") == 0) return term_type_n(0);
         if (strcmp(ast->symbol, "Nat")  == 0) return term_nat();
         if (strcmp(ast->symbol, "zero") == 0) return term_zero();
-        // Check if it is a known ground type name
-        {
+        if (ast->symbol[0] >= 'A' && ast->symbol[0] <= 'Z') {
+            char ctor_name[256];
+            snprintf(ctor_name, sizeof(ctor_name), "__ctor_%s", ast->symbol);
+            if (dep_env_lookup(ctx->globals, ctor_name)) {
+                return term_fvar(ctor_name);
+            }
+
             Type *ground = type_from_name(ast->symbol);
             if (ground) return term_embed(ground);
         }
@@ -2790,12 +2842,27 @@ Term *dep_term_of_type_ast(DepCtx *ctx, AST *ast) {
     Term *res = NULL;
 
     if (ast->type == AST_SYMBOL) {
+        /* Explicit hole in type position: (a) -> (? a) or define f :: ? */
+        if (strcmp(ast->symbol, "?") == 0) {
+            int id = meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, "?");
+            Term *t = term_meta(id);
+            t->line = ast->line;
+            t->col  = ast->column;
+            return t;
+        }
         if (ast->symbol[0] >= 'a' && ast->symbol[0] <= 'z') {
             int id = meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, ast->symbol);
             return term_meta(id);
         }
         if (strcmp(ast->symbol, "List") == 0 || strcmp(ast->symbol, "Coll") == 0) {
             return term_meta(meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, "?coll"));
+        }
+        if (ast->symbol[0] >= 'A' && ast->symbol[0] <= 'Z') {
+            char type_name[256];
+            snprintf(type_name, sizeof(type_name), "__type_%s", ast->symbol);
+            if (dep_env_lookup(ctx->globals, type_name)) {
+                return term_fvar(type_name);
+            }
         }
     } else if (ast->type == AST_ARRAY) {
         if (ast->array.element_count == 3 &&
@@ -2890,6 +2957,90 @@ Value *dep_elab_and_infer(DepCtx *ctx, AST *ast) {
 
 Term *dep_toplevel(DepCtx *ctx, AST *ast, Term **out_type) {
     if (!ast) return NULL;
+
+    /* Intercept top-level (layout ...) */
+    if (ast->type == AST_LAYOUT) {
+        char type_name[256];
+        snprintf(type_name, sizeof(type_name), "__type_%s", ast->layout.name);
+        dep_env_declare(ctx->globals, type_name, val_universe_n(0));
+
+        Term *ctor_ty = term_fvar(type_name);
+        for (int i = ast->layout.field_count - 1; i >= 0; i--) {
+            ASTLayoutField *f = &ast->layout.fields[i];
+            Term *dom = NULL;
+            if (f->is_array) {
+                dom = term_hole();
+            } else {
+                AST *tast = parse(f->type_name);
+                dom = dep_term_of_type_ast(ctx, tast);
+                ast_free(tast);
+            }
+
+            char acc_name[256];
+            snprintf(acc_name, sizeof(acc_name), "__field_%s_%d", ast->layout.name, i);
+
+            Term *acc_ty = term_pi("v", term_fvar(type_name), term_clone(dom), IMPLICIT_EXPLICIT);
+            EvalEnv *empty_env1 = eval_env_empty();
+            Value *acc_val_ty = dep_eval(acc_ty, empty_env1, ctx->mctx);
+            eval_env_free(empty_env1);
+            dep_env_declare(ctx->globals, acc_name, acc_val_ty);
+            /* DO NOT FREE acc_ty: acc_val_ty captures its body in a closure! */
+
+            /* Use purely synthetic internal variable names to prevent shadowing user variables */
+            char synthetic_pname[64];
+            snprintf(synthetic_pname, sizeof(synthetic_pname), "__ctor_p%d", i);
+            ctor_ty = term_pi(synthetic_pname, dom, ctor_ty, IMPLICIT_EXPLICIT);
+        }
+
+        char ctor_name[256];
+        snprintf(ctor_name, sizeof(ctor_name), "__ctor_%s", ast->layout.name);
+
+        EvalEnv *empty_env2 = eval_env_empty();
+        Value *ctor_val_ty = dep_eval(ctor_ty, empty_env2, ctx->mctx);
+        eval_env_free(empty_env2);
+
+        dep_env_declare(ctx->globals, ctor_name, ctor_val_ty);
+        /* DO NOT FREE ctor_ty: ctor_val_ty captures its body in a closure! */
+
+        return term_fvar("True");
+    }
+
+    /* Intercept top-level (data ...) */
+    if (ast->type == AST_DATA) {
+        char type_name[256];
+        snprintf(type_name, sizeof(type_name), "__type_%s", ast->data.name);
+        dep_env_declare(ctx->globals, type_name, val_universe_n(0));
+
+        for (int i = 0; i < ast->data.constructor_count; i++) {
+            ASTDataConstructor *c = &ast->data.constructors[i];
+            Term *ctor_ty = term_fvar(type_name);
+            for (int j = c->field_count - 1; j >= 0; j--) {
+                AST *tast = parse(c->field_types[j]);
+                Term *dom = dep_term_of_type_ast(ctx, tast);
+                ast_free(tast);
+
+                char acc_name[256];
+                snprintf(acc_name, sizeof(acc_name), "__field_%s_%d", c->name, j);
+                Term *acc_ty = term_pi("v", term_fvar(type_name), term_clone(dom), IMPLICIT_EXPLICIT);
+                EvalEnv *empty_env1 = eval_env_empty();
+                Value *acc_val_ty = dep_eval(acc_ty, empty_env1, ctx->mctx);
+                eval_env_free(empty_env1);
+                dep_env_declare(ctx->globals, acc_name, acc_val_ty);
+                /* DO NOT FREE acc_ty: acc_val_ty captures its body in a closure! */
+
+                char pname[32]; snprintf(pname, sizeof(pname), "__ctor_p%d", j);
+                ctor_ty = term_pi(pname, dom, ctor_ty, IMPLICIT_EXPLICIT);
+            }
+            char ctor_name[256];
+            snprintf(ctor_name, sizeof(ctor_name), "__ctor_%s", c->name);
+            EvalEnv *empty_env2 = eval_env_empty();
+            Value *ctor_val_ty = dep_eval(ctor_ty, empty_env2, ctx->mctx);
+            eval_env_free(empty_env2);
+            dep_env_declare(ctx->globals, ctor_name, ctor_val_ty);
+            /* DO NOT FREE ctor_ty: ctor_val_ty captures its body in a closure! */
+        }
+        return term_fvar("True");
+    }
 
     /* Intercept top-level (define name value) */
     if (ast->type == AST_LIST && ast->list.count >= 3 &&
@@ -3141,6 +3292,51 @@ void dep_error_set(DepCtx *ctx, int line, int col, const char *fmt, ...) {
     snprintf(ctx->error_msg, sizeof(ctx->error_msg),
              "%s:%d:%d: Dependent Type Error%s",
              ctx->filename, line, col, msg);
+}
+
+void dep_report_holes(DepCtx *ctx) {
+    if (!ctx || !ctx->mctx) return;
+    int hole_count = 0;
+    for (int i = 0; i < ctx->mctx->count; i++) {
+        MetaEntry *e = &ctx->mctx->entries[i];
+        /* Only report metas that came from explicit ? holes */
+        if (!e->hint) continue;
+        bool is_hole = (strcmp(e->hint, "_") == 0 || strcmp(e->hint, "?") == 0);
+        if (!is_hole) continue;
+        hole_count++;
+    }
+    if (hole_count == 0) return;
+
+    fprintf(stderr, "\n");
+    for (int i = 0; i < ctx->mctx->count; i++) {
+        MetaEntry *e = &ctx->mctx->entries[i];
+        if (!e->hint) continue;
+        bool is_hole = (strcmp(e->hint, "_") == 0 || strcmp(e->hint, "?") == 0);
+        if (!is_hole) continue;
+
+        int line = 0, col = 0;
+        const char *file = ctx->filename ? ctx->filename : "<unknown>";
+        /* Try to recover source location from the meta's source term */
+        /* We use depth as a proxy for now; real location needs Term->line */
+
+        if (e->state == META_SOLVED) {
+            Term *sol = e->solution;
+            const char *sol_str = sol ? term_to_string(sol) : "?";
+            /* Emit in compiler-clickable format */
+            fprintf(stderr, "%s:%d:%d: hole ?%d filled: %s\n",
+                    file, line, col, e->id, sol_str);
+        } else {
+            /* Unsolved hole — show what type was expected */
+            const char *ty_str = "unknown";
+            if (e->type) {
+                Term *qt = dep_quote(e->type, 0, ctx->mctx);
+                ty_str = term_to_string(qt);
+            }
+            fprintf(stderr, "%s:%d:%d: hole ?%d has type: %s\n",
+                    file, line, col, e->id, ty_str);
+        }
+    }
+    fprintf(stderr, "\n");
 }
 
 void dep_error_print(DepCtx *ctx) {

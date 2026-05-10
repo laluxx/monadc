@@ -39,6 +39,8 @@
 ;; show Yellow
 ;; show Green
 
+
+
 ;; define foldl :: (b -> a -> b) -> b -> [a] -> b
 ;;   _ acc []     -> acc
 ;;   f acc [x|xs] -> foldl f (f acc x) xs
@@ -48,17 +50,65 @@
 
 ;; show sumAll '(3 "ciao" 3)
 
-define char-upcase :: Char -> Char
-  c | c >= 'a' and c <= 'z' -> c - 32
-    | otherwise             -> c
+;; define char-upcase :: Char -> Char
+;;   c | c >= 'a' and c <= 'z' -> c - 32
+;;     | otherwise             -> c
 
-show char-upcase 'a'
+;; show char-upcase 'a'
+
+define newline -> a
+  show ""
+
+define abs :: Float -> Float
+  x -> (if (x < 0.0) (0.0 - x) x)
+
+(define (sqrt [x : Float] -> Float)
+  :doc "Square root of X via Newton-Raphson."
+  :alias √
+  (def (iter [guess : Float] -> Float)
+    (def next ((guess + (x / guess)) / 2.0))
+      (if ((abs (next - guess)) < 1e-10)
+        next
+        (iter next)))
+  (if (x <= 0.0) 0.0 (iter (x / 2.0))))
 
 
 
 
+(layout Vec3
+  [x :: Float]
+  [y :: Float]
+  [z :: Float])
 
 
+define normalize :: Vec3 -> Vec3
+  [x y z] -> def len (sqrt (x * x + y * y + z * z))
+             Vec3 (x / len) (y / len) (z / len)
+
+
+define v (Vec3 3.0 4.0 5.0)
+
+show v
+(newline)
+show normalize v
+
+(define (pow [base : Float] [exp : Float] -> Float)
+  :doc "Raise BASE to the power EXP."
+  :alias ^
+  (if (exp = 0.0) 1.0
+      (if (exp > 0.0)
+          (base * (pow base (exp - 1.0)))
+          (1.0 / (pow base (0.0 - exp))))))
+
+define x 30
+show √x²
+
+;; TODO Make this compile
+define normalize :: Vec3 -> Vec3
+  v[x y z] -> def len √v²
+                    x   y   z
+              Vec3 ─── ─── ───
+                   len len len
 
 
 

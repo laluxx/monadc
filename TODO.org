@@ -5,6 +5,7 @@
 - A bidirectional type system is complete for synthesis if every type has at least one term.
 
 * TODO Stuff [0/29]
+- [ ] Auto parallelization also explore auto parallelization on the GPU
 - [ ] in REPL termination checker
 - [ ] Referential assignment E.g <--, <+-, <*-
 - [ ] Multiple definitions E.g def u v w :: Float (we know it's a multi definition because there are no [])

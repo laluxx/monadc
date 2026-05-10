@@ -776,6 +776,7 @@ struct DepError {
 
 void dep_error_set(DepCtx *ctx, int line, int col, const char *fmt, ...);
 void dep_error_print(DepCtx *ctx);
+void dep_report_holes(DepCtx *ctx);
 
 
 /// Pretty printing

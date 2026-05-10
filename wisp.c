@@ -392,8 +392,20 @@ static void arity_prescan(ArityTable *t, const char *source) {
                                 memcpy(e->param_fn_arities, fn_arities, sizeof(fn_arities));
                                 break;
                             }
+                    } else {
+                        /* define name :: ?  — hole type, treat as arity -1 (unknown) */
+                        Lexer _peek = lex;
+                        Token _pt = lexer_next_token(&_peek);
+                        bool sig_is_hole = (_pt.type == TOK_SYMBOL && _pt.value &&
+                                            _pt.value[0] == '?' && _pt.value[1] == '\0');
+                        free(_pt.value);
+                        if (sig_is_hole) {
+                            tok = lexer_next_token(&lex);
+                            free(tok.value);
+                            arity_set(t, fname, -1);
+                        }
                     }
-                    /* no arrow = variable definition, not a function, skip */
+                    /* no arrow, no hole = variable definition, not a function, skip */
                 } else if (tok.type == TOK_ARROW ||
                            (tok.type == TOK_SYMBOL && strcmp(tok.value, "->") == 0)) {
                     /* define name -> RetType — nullary function, arity 0 */
@@ -1858,9 +1870,17 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                 const char *after_name = name_end;
                 while (*after_name == ' ' || *after_name == '\t') after_name++;
 
-                /* Case 1: define name :: T -> ... -> Ret */
+                /* Case 1: define name :: T -> ... -> Ret
+                 * Also handles bare hole: define name :: ?  (no arrow needed) */
+                const char *sig_after_colons = after_name + 2;
+                while (*sig_after_colons == ' ' || *sig_after_colons == '\t') sig_after_colons++;
+                bool sig_is_hole = (sig_after_colons[0] == '?' &&
+                                    (sig_after_colons[1] == '\0' ||
+                                     sig_after_colons[1] == ' '  ||
+                                     sig_after_colons[1] == '\t' ||
+                                     sig_after_colons[1] == ';'));
                 if (after_name[0] == ':' && after_name[1] == ':' &&
-                    strstr(after_name + 2, "->")) {
+                    (strstr(after_name + 2, "->") || sig_is_hole)) {
                     size_t name_len = name_end - after_define;
                     char *fname = strndup(after_define, name_len);
                     const char *sig_rest = after_name + 2;
@@ -1912,6 +1932,83 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                         }
                     }
                     arity_set_with_kinds(at, fname, arr_count, sig_kinds);
+
+                    /* Hole-only signature: define encode :: ?
+                     * Emit as bare variable define — body provides the value.
+                     * Reader sees (define encode <body>) which is correct. */
+                    const char *sr = sig_rest;
+                    while (*sr == ' ' || *sr == '\t') sr++;
+                    bool sr_is_hole = (sr[0] == '?' &&
+                                       (sr[1] == '\0' || sr[1] == ' ' ||
+                                        sr[1] == '\t' || sr[1] == ';'));
+                    if (sr_is_hole) {
+                        /* Hole-typed define with no signature: emit as a plain
+                         * variable define. The body line(s) — which may be
+                         * pattern clauses like "xs -> ..." — will be consumed
+                         * by the define's variadic body loop because define has
+                         * arity 2 and the second arg is fname (a bare symbol),
+                         * so _define_is_func is false. Instead we want the body
+                         * to be parsed as a lambda with inferred param count.
+                         *
+                         * Strategy: scan the first body line to count how many
+                         * tokens appear before the first top-level '->'. Those
+                         * are the parameters. Emit a typed header like
+                         * (fname __hole_0 __hole_1 -> ?) so the reader builds
+                         * a proper lambda with the right param count.           */
+                        int inferred_arity = 0;
+                        {
+                            /* Peek at the next line in the token stream.
+                             * We already have the raw source pointer `p`
+                             * positioned at the next line. Scan it. */
+                            const char *scan = p;
+                            /* skip blank/comment lines */
+                            while (*scan) {
+                                const char *ls = scan;
+                                while (*scan && *scan != '\n') scan++;
+                                if (*scan == '\n') scan++;
+                                const char *t2 = ls;
+                                while (*t2 == ' ' || *t2 == '\t') t2++;
+                                if (!*t2 || *t2 == ';') continue;
+                                /* measure indent — only process lines deeper than current */
+                                int sc_indent = measure_indent(ls);
+                                if (sc_indent <= indent && ls != source) break;
+                                /* tokenise this line and count tokens before '->' */
+                                Lexer sl; lexer_init(&sl, t2);
+                                int depth2 = 0;
+                                while (true) {
+                                    Token st = lexer_next_token(&sl);
+                                    if (st.type == TOK_EOF) { free(st.value); break; }
+                                    if (st.type == TOK_ARROW && depth2 == 0) {
+                                        free(st.value); break;
+                                    }
+                                    if (st.type == TOK_LBRACKET || st.type == TOK_LPAREN) depth2++;
+                                    if (st.type == TOK_RBRACKET || st.type == TOK_RPAREN) depth2--;
+                                    if (depth2 == 0) inferred_arity++;
+                                    free(st.value);
+                                }
+                                break; /* only look at first body line */
+                            }
+                        }
+                        /* Build header: (fname __h0 __h1 ... -> ?) */
+                        SB hdr; sb_init(&hdr);
+                        sb_putc(&hdr, '(');
+                        sb_puts(&hdr, fname);
+                        for (int _hi = 0; _hi < inferred_arity; _hi++) {
+                            char _hbuf[32];
+                            snprintf(_hbuf, sizeof(_hbuf), " __h%d", _hi);
+                            sb_puts(&hdr, _hbuf);
+                        }
+                        sb_puts(&hdr, " -> [a])");
+                        char *header = sb_take(&hdr);
+                        arity_set(at, fname, inferred_arity);
+                        wts_push(&s, "define", indent, lineno);
+                        wts_push(&s, header,   indent, lineno);
+                        free(header);
+                        free(fname);
+                        free(raw);
+                        lineno++;
+                        continue;
+                    }
 
                     size_t siglen = strlen(sig_rest);
                     size_t hlen = 1 + name_len + 1 + siglen + 1 + 1;

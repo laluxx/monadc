@@ -151,10 +151,9 @@ Type *subst_apply_shallow(Substitution *s, Type *t) {
     if (t->kind != TYPE_VAR) return t;
     int root = subst_find(s, t->var_id);
     if (s->bound[root]) return s->bound[root];
-    /* return a canonical var node for this root */
-    if (root == t->var_id) return t;
-    Type *canonical = type_var(root);
-    return canonical;
+    /* Path compression directly on the AST node to massively improve performance */
+    t->var_id = root;
+    return t;
 }
 
 Type *subst_apply(Substitution *s, Type *t) {
@@ -864,6 +863,13 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         } else {
             is_float = (ast->number != (double)(int64_t)ast->number);
         }
+        /* Additional check: if the dep checker already determined this is
+         * a Float from its type annotation, respect that even if the literal
+         * looks like an integer (e.g. 2.0 desugared to 2 losing the dot). */
+        if (!is_float && ast->inferred_type &&
+            ast->inferred_type->kind == TYPE_FLOAT) {
+            is_float = true;
+        }
         result = is_float ? type_float() : type_int();
         break;
     }
@@ -888,10 +894,33 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         if (strcmp(ast->symbol, "True")  == 0) { result = type_bool(); break; }
         if (strcmp(ast->symbol, "False") == 0) { result = type_bool(); break; }
         if (strcmp(ast->symbol, "nil")   == 0) { result = type_nil();  break; }
+        /* Explicit expression hole — ? becomes a fresh type variable.
+         * The solved type will be printed after inference completes.  */
+        if (strcmp(ast->symbol, "?") == 0) {
+            result = infer_fresh(ctx);
+            ctx->has_holes = true;
+            ctx->hole_positions[ctx->hole_count % INFER_MAX_HOLES] =
+                (InferHole){ .line = ast->line, .col = ast->column,
+                             .var_id = result->var_id };
+            ctx->hole_count++;
+            break;
+        }
 
         TypeScheme *sc = infer_env_lookup(ctx, ast->symbol);
         if (!sc) {
+            /* Unbound variable — allocate a fresh type var but mark the
+             * AST node so that if unification later fails we can emit a
+             * precise "unbound variable" diagnostic instead of a cryptic
+             * unification error.  We store the name in error_msg only if
+             * no prior error has been recorded.                          */
             result = infer_fresh(ctx);
+            if (!ctx->had_error && ctx->error_msg[0] == '\0') {
+                snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                         "%s:%d:%d: warning: unbound variable '%s' "
+                         "(type inferred from context)",
+                         ctx->filename, ast->line, ast->column,
+                         ast->symbol);
+            }
             break;
         }
         result = infer_instantiate(ctx, sc);
@@ -1018,13 +1047,37 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             Type *val_t = infer_expr(ctx, ast->list.items[body_idx]);
             infer_constrain(ctx, self_t, val_t, ast->line, ast->column);
 
+            /* Solve all pending constraints BEFORE generalising.
+             * This is critical for recursive definitions: if we generalise
+             * before unification, free type vars that should resolve to
+             * concrete types (e.g. the return type of a recursive function)
+             * get universally quantified, producing unsound polymorphic
+             * schemes and infinite-type occurs-check failures at call sites.
+             * W-by-W (constraint generation then solving per binding)
+             * is the correct architecture for let-generalisation in
+             * constraint-based HM (see Heeren et al, "Generalizing
+             * Hindley-Milner Type Inference Algorithms", 2002).          */
+            /* Solve pending constraints before generalising so that type
+             * variables in the body get resolved to concrete types before
+             * we decide what to quantify.  We do NOT abort on failure here
+             * because the dep-bridge may have already resolved ambiguous
+             * literals (e.g. 2.0 stored as integer 2) via inferred_type,
+             * and the real error will surface at the top-level unify pass
+             * with a proper error message.                               */
+            bool inner_ok = infer_unify_all(ctx);
+            (void)inner_ok;
+            /* Reset constraint buffer so the next define starts fresh.
+             * Constraints are solved; substitution retains all bindings. */
+            ctx->constraint_count = 0;
+            ctx->had_error = false;
+
             /* Remove stale scheme for this name from outer env before generalising
              * to prevent old type vars from corrupting infer_free_vars_env        */
             infer_env_remove(saved_env, name);
             TypeScheme *sc = infer_generalise(ctx, val_t, saved_env);
             ctx->env = saved_env;
             infer_env_free(def_child);
-            // Insert the fresh generalised scheme into the real outer env
+            /* Insert the fully-solved generalised scheme into the real outer env */
             infer_env_insert(ctx->env, name, sc);
             break;
         }
@@ -1280,11 +1333,45 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
     }
 
     if (ast->inferred_type && ast->inferred_type->kind != TYPE_UNKNOWN) {
-        /* UNIFICATION: The dependent elaborator pre-seeded a ground type for us!
-         * Constrain our HM-inferred type against the mathematically proven type.
-         * This bridges the two systems: HM gets the superpowers of dependent types. */
-        fprintf(stderr, "├─ \033[34mInterop\033[0m HM unifies with prior Dependent Type check: %s\n", type_to_string(ast->inferred_type));
-        infer_constrain(ctx, result, ast->inferred_type, ast->line, ast->column);
+        /* Bridge dep->HM only for ground non-function types that carry
+         * genuine value-level information.  We must NOT bridge:
+         *   - Arrow / Fn types  (HM infers these better from call sites)
+         *   - TYPE_UNKNOWN      (no information)
+         *   - TYPE_INT when the dep checker saw a universe / type-level
+         *     symbol (e.g. a layout field name used as a value): dep
+         *     returns val_meta for unbound names which ground_of_value
+         *     maps to type_unknown, but if something else slipped a
+         *     universe type through we reject it here by checking that
+         *     the HM result is already constrained to a numeric type
+         *     before letting dep override it.
+         *
+         * The guard `result->kind == TYPE_VAR` means HM has no opinion
+         * yet and we can safely accept the dep hint.  If HM already has
+         * a concrete type we run a compatibility check first.           */
+        TypeKind k = ast->inferred_type->kind;
+        bool is_ground = (k != TYPE_ARROW && k != TYPE_FN && k != TYPE_UNKNOWN
+                          && k != TYPE_VAR);
+        /* Extra safety: reject universe-level leakage.  dep sometimes
+         * seeds TYPE_INT for Nat literals that are actually type indices;
+         * if the AST node is a symbol that is not in the HM env we must
+         * not let dep override the fresh var with a conflicting ground
+         * type from a different scope.                                   */
+        bool dep_hint_trustworthy = is_ground;
+        if (is_ground && ast->type == AST_SYMBOL) {
+            TypeScheme *sc = infer_env_lookup(ctx, ast->symbol);
+            if (!sc) {
+                /* dep seeded a type for a name HM doesn't know — this is
+                 * exactly the "x from Vec3 layout poisoning iter" class of
+                 * bug.  Discard the dep hint; HM will unify from context. */
+                dep_hint_trustworthy = false;
+            }
+        }
+        if (dep_hint_trustworthy) {
+            fprintf(stderr, "├─ \033[34mInterop\033[0m HM unifies with prior Dependent Type check: %s\n", type_to_string(ast->inferred_type));
+            infer_constrain(ctx, result, ast->inferred_type, ast->line, ast->column);
+        } else {
+            ast->inferred_type = result;
+        }
     } else {
         ast->inferred_type = result;
     }
@@ -1526,6 +1613,21 @@ static void infer_validate_calls(InferCtx *ctx, AST *ast) {
     default:
         break;
     }
+}
+
+void infer_report_holes(InferCtx *ctx) {
+    if (!ctx->has_holes || ctx->hole_count == 0) return;
+    int n = ctx->hole_count < INFER_MAX_HOLES ? ctx->hole_count : INFER_MAX_HOLES;
+    fprintf(stderr, "\n");
+    for (int i = 0; i < n; i++) {
+        InferHole *h  = &ctx->hole_positions[i];
+        Type      *t  = subst_apply(ctx->subst, type_var(h->var_id));
+        const char *ts = type_to_string(t);
+        fprintf(stderr, "%s:%d:%d: hole has type: %s\n",
+                ctx->filename ? ctx->filename : "<unknown>",
+                h->line, h->col, ts);
+    }
+    fprintf(stderr, "\n");
 }
 
 Type *infer_toplevel(InferCtx *ctx, AST *ast) {

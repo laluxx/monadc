@@ -1316,7 +1316,7 @@ static void compile(CompilerFlags *flags) {
     printf("[link] %.0f ms\n", _lms);
     if (rc == 0) {
         /* printf("[done] %s", exec_name); */
-        printf("[done] %s\n", exec_name);
+        printf("[done] %s\n\n", exec_name);
         if (!flags->emit_obj)
             for (size_t i = 0; i < n; i++) remove(objs[i]);
     } else {

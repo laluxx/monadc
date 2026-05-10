@@ -17,7 +17,14 @@ typedef struct InferCtx InferCtx;
 //  free (bound == NULL) or resolved (bound points to a concrete type or
 //  another variable).  The union-find structure lives in the Substitution.
 //
-#define INFER_MAX_VARS 4096
+#define INFER_MAX_VARS  4096
+#define INFER_MAX_HOLES 256
+
+typedef struct InferHole {
+    int line;
+    int col;
+    int var_id;   /* the fresh type variable ID assigned to this hole */
+} InferHole;
 
 
 /// Type Schemes
@@ -136,6 +143,10 @@ typedef struct InferCtx {
     const char      *filename;       // for error messages
     bool             had_error;
     char             error_msg[512];
+    /* Hole tracking — explicit ? in expressions */
+    bool             has_holes;
+    int              hole_count;
+    InferHole        hole_positions[INFER_MAX_HOLES];
 } InferCtx;
 
 InferCtx *infer_ctx_create(InferEnv *env, struct DepCtx *dctx, const char *filename);
@@ -244,6 +255,7 @@ Type *infer_toplevel(InferCtx *ctx, AST *ast);
 void infer_print_type(Type *t, Substitution *s);
 void infer_print_scheme(TypeScheme *s);
 void infer_print_constraints(InferCtx *ctx);
+void infer_report_holes(InferCtx *ctx);
 
 
 #endif // INFER_H
