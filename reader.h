@@ -248,11 +248,13 @@ typedef struct AST {
 
         // AST_DATA
         struct {
-            char *name;           // "Color", "Shape"
+            char  *name;              // "Maybe", "Color"
+            char **type_params;       // e.g. ["a"] for Maybe a
+            int    type_param_count;
             ASTDataConstructor *constructors;
-            int constructor_count;
-            char **deriving;      // ["show", "eq", ...]
-            int deriving_count;
+            int    constructor_count;
+            char **deriving;          // ["show", "eq", ...]
+            int    deriving_count;
         } data;
 
         // AST_CLASS
@@ -331,6 +333,7 @@ AST *ast_new_set(void);
 AST *ast_new_map(void);
 AST *ast_new_pmatch(ASTPMatchClause *clauses, int clause_count);
 AST *ast_new_data(const char *name,
+                  char **type_params, int type_param_count,
                   ASTDataConstructor *constructors, int constructor_count,
                   char **deriving, int deriving_count);
 AST *ast_new_class(const char *name, const char *type_var,

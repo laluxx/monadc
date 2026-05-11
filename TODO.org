@@ -49,12 +49,22 @@
       substitute the type of the function with the inferred one
 - [ ] in monad-mode add a function to turn wisp into lisp in region/buffer
 
+* TODO Repl [0/1]
+- [ ] ,doc should also show the alias if it exists
 
 
-* Stuff to look into
-- Higher order functors
-- first class modules
 
+* TODO nil bubble tracing
+nil cannot crash. ?? catching a nil in debug mode prints a trace.
+
+?? caught nil:
+  old-safe-last [] -> nil               (File.mon:12) <- origin
+  └─ safe-last [_|xs]                   (File.mon:8 )
+     └─ process-file filename           (File.mon:34)
+        └─ handled: result ?? "default" (File.mon:67)
+
+debug: fat pointer — raw pointer + static string table baked into binary
+release: thin pointer — ?? is a single null check, table stripped entirely
 
 
 * TODO Implement distinct semantics for :: vs ∈
@@ -97,8 +107,8 @@ Cool but probably overkill for now. Keep my Haskell-style classes
 Pattern matching works in pmatch and macro arguments. Bring it to regular bindings.
 
 #+begin_src monad
-def [x|xs] (list 1 2 3)    ; x=1, xs=[2 3]
-def {name age} (get-user)  ; assumes map with keys :name and :age
+def [x|xs] (list 1 2 3)     ; x=1, xs=[2 3]
+def #{name age} (get-user)  ; assumes map with keys :name and :age
 #+end_src
 
 

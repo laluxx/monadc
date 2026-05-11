@@ -1598,103 +1598,111 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     size_t pat_len = fat_arrow - lt;
                     while (pat_len > 0 &&
                            (lt[pat_len-1]==' '||lt[pat_len-1]=='\t')) pat_len--;
+                    char *pat_str = strndup(lt, pat_len);
 
-                    /* Body part: run through wisp token stream + parser */
+                    /* Body part: everything after => on this line */
                     const char *body_start = fat_arrow + 2;
                     while (*body_start==' '||*body_start=='\t') body_start++;
-                    size_t body_len = lt_end - body_start;
-                    char *body_str = strndup(body_start, body_len);
+                    size_t body_inline_len = lt_end - body_start;
 
-                    WTokenStream body_ts = {0};
-                    tokenise_into(at, &body_ts, body_str, l_indent, lineno);
-                    free(body_str);
+                    /* Accumulate body: inline part + all subsequent deeper lines */
+                    size_t body_acc_cap = 256;
+                    char *body_acc = malloc(body_acc_cap);
+                    size_t body_acc_len = 0;
+                    body_acc[0] = '\0';
 
-                    SB body_sb; sb_init(&body_sb);
-                    /* Parse the entire body as ONE expression from the
-                     * token stream. Since body_ts tokens all share the
-                     * same lineno, the first wisp_parse_expr call will
-                     * consume everything via last-arg infix promotion.
-                     * We force this by setting parent_remaining=1 so
-                     * the call knows it is filling a slot — but the
-                     * real driver is that the head's arity loop with
-                     * infix promotion sees all tokens on the same line. */
-                    while (body_ts.pos < body_ts.count) {
-                        if (body_ts.pos > 0) sb_putc(&body_sb, ' ');
-
-                        bool promoted = false;
-                        if (body_ts.pos + 1 < body_ts.count) {
-                            WToken *cand_lhs = &body_ts.tokens[body_ts.pos];
-                            WToken *cand_op  = &body_ts.tokens[body_ts.pos + 1];
-                            bool lhs_is_atom = (cand_lhs->text[0] != '(' && cand_lhs->text[0] != '[' && cand_lhs->text[0] != '{');
-                            int  op_arity    = arity_get(at, cand_op->text);
-                            bool op_known    = (op_arity != -2);
-                            bool op_is_atom  = (cand_op->text[0] != '(' && cand_op->text[0] != '[' && cand_op->text[0] != '{');
-
-                            if (lhs_is_atom && op_is_atom && op_known && (op_arity >= 2 || op_arity == -1)) {
-                                char *accum = strdup(cand_lhs->text);
-                                body_ts.pos++; /* consume lhs */
-                                while (body_ts.pos < body_ts.count) {
-                                    WToken *op_tok2 = &body_ts.tokens[body_ts.pos];
-                                    if (op_tok2->text[0] == '(' || op_tok2->text[0] == '[' || op_tok2->text[0] == '{') break;
-                                    int oa = arity_get(at, op_tok2->text);
-                                    if (oa == -2) break;
-                                    if (oa < 2 && oa != -1) break;
-
-                                    char *op_name = strdup(op_tok2->text);
-                                    body_ts.pos++; /* consume op */
-
-                                    SB next_acc; sb_init(&next_acc);
-                                    sb_putc(&next_acc, '('); sb_puts(&next_acc, op_name);
-                                    sb_putc(&next_acc, ' '); sb_puts(&next_acc, accum);
-                                    free(op_name); free(accum);
-
-                                    int rhs_slots = (oa > 0) ? (oa - 1) : -1;
-                                    if (rhs_slots == -1) {
-                                        while (body_ts.pos < body_ts.count) {
-                                            sb_putc(&next_acc, ' ');
-                                            wisp_parse_expr(at, &body_ts, &next_acc, l_indent, 1);
-                                        }
-                                    } else {
-                                        for (int r = 0; r < rhs_slots && body_ts.pos < body_ts.count; r++) {
-                                            sb_putc(&next_acc, ' ');
-                                            wisp_parse_expr(at, &body_ts, &next_acc, l_indent, 1);
-                                        }
-                                    }
-                                    sb_putc(&next_acc, ')');
-                                    accum = sb_take(&next_acc);
-                                }
-                                sb_puts(&body_sb, accum);
-                                free(accum);
-                                promoted = true;
-                            }
+                    if (body_inline_len > 0) {
+                        while (body_acc_len + body_inline_len + 2 >= body_acc_cap) {
+                            body_acc_cap *= 2; body_acc = realloc(body_acc, body_acc_cap);
                         }
-                        if (!promoted) {
-                            wisp_parse_expr(at, &body_ts, &body_sb, l_indent, 1);
-                        }
+                        memcpy(body_acc, body_start, body_inline_len);
+                        body_acc_len = body_inline_len;
+                        body_acc[body_acc_len] = '\0';
                     }
-                    char *body_expanded = sb_take(&body_sb);
-                    wts_free(&body_ts);
 
-                    size_t need = acc_len + _ld2len + pat_len + 4
-                                  + strlen(body_expanded) + 4;
-                    while (need >= acc_cap) { acc_cap*=2; acc=realloc(acc,acc_cap); }
-                    memcpy(acc+acc_len, _ld2, _ld2len); acc_len += _ld2len;
-                    memcpy(acc+acc_len, lt, pat_len);   acc_len += pat_len;
-                    acc[acc_len++]=' '; acc[acc_len++]='='; acc[acc_len++]='>';
-                    acc[acc_len++]=' ';
+                    /* Accumulate all subsequent deeper lines */
+                    while (*p) {
+                        const char *nls = p;
+                        while (*p && *p != '\n') p++;
+                        if (*p == '\n') p++;
+                        int nll = (int)(p - nls);
+                        if (nll == 0) continue;
+
+                        char *nlraw = strndup(nls, nll);
+                        const char *nlt = nlraw;
+                        while (*nlt == ' ' || *nlt == '\t') nlt++;
+
+                        if (!*nlt || *nlt == ';') {
+                            free(nlraw);
+                            lineno++;
+                            continue;
+                        }
+
+                        int nl_indent = measure_indent(nlraw);
+                        if (nl_indent <= l_indent) {
+                            p = nls;
+                            free(nlraw);
+                            break;
+                        }
+
+                        const char *nlt_end = nlt;
+                        while (*nlt_end && *nlt_end != ';') nlt_end++;
+                        while (nlt_end > nlt && (*(nlt_end-1)==' '||*(nlt_end-1)=='\t')) nlt_end--;
+                        size_t nlt_len = nlt_end - nlt;
+
+                        while (body_acc_len + nlt_len + 3 >= body_acc_cap) {
+                            body_acc_cap *= 2; body_acc = realloc(body_acc, body_acc_cap);
+                        }
+                        body_acc[body_acc_len++] = ' ';
+                        memcpy(body_acc + body_acc_len, nlt, nlt_len);
+                        body_acc_len += nlt_len;
+                        body_acc[body_acc_len] = '\0';
+                        free(nlraw);
+                        lineno++;
+                    }
+
+                    /* Wrap body in parens if multi-token and not already grouped,
+                     * so the reader treats it as one expression (e.g. match ... with) */
+                    char *body_expanded;
+                    bool body_already_grouped = (body_acc[0] == '(' || body_acc[0] == '[' || body_acc[0] == '{');
+                    bool body_single_token = (strchr(body_acc, ' ') == NULL);
+                    if (body_acc_len == 0) {
+                        /* empty body — should not happen but be safe */
+                        body_expanded = strdup("(undefined)");
+                        free(body_acc);
+                    } else if (!body_already_grouped && !body_single_token) {
+                        size_t bflen = body_acc_len;
+                        body_expanded = malloc(bflen + 3);
+                        body_expanded[0] = '(';
+                        memcpy(body_expanded + 1, body_acc, bflen);
+                        body_expanded[bflen + 1] = ')';
+                        body_expanded[bflen + 2] = '\0';
+                        free(body_acc);
+                    } else {
+                        body_expanded = body_acc;
+                    }
+
+                    /* Build: (#line N 1) pat_str => body_expanded */
+                    size_t need = acc_len + _ld2len + pat_len + 4 + strlen(body_expanded) + 4;
+                    while (need >= acc_cap) { acc_cap *= 2; acc = realloc(acc, acc_cap); }
+                    memcpy(acc + acc_len, _ld2, _ld2len); acc_len += _ld2len;
+                    memcpy(acc + acc_len, pat_str, pat_len); acc_len += pat_len;
+                    acc[acc_len++] = ' '; acc[acc_len++] = '='; acc[acc_len++] = '>';
+                    acc[acc_len++] = ' ';
                     size_t bel = strlen(body_expanded);
-                    while (acc_len+bel+2 >= acc_cap) { acc_cap*=2; acc=realloc(acc,acc_cap); }
-                    memcpy(acc+acc_len, body_expanded, bel); acc_len += bel;
+                    while (acc_len + bel + 2 >= acc_cap) { acc_cap *= 2; acc = realloc(acc, acc_cap); }
+                    memcpy(acc + acc_len, body_expanded, bel); acc_len += bel;
                     acc[acc_len] = '\0';
                     free(body_expanded);
+                    free(pat_str);
                 } else {
-                    /* Signature line (::) or other -- verbatim */
+                    /* :: signature line or other -- keep verbatim */
                     size_t ltlen = lt_end - lt;
                     while (acc_len + (size_t)_ld2len + ltlen + 4 >= acc_cap) {
                         acc_cap *= 2; acc = realloc(acc, acc_cap);
                     }
-                    memcpy(acc+acc_len, _ld2, _ld2len); acc_len += _ld2len;
-                    memcpy(acc+acc_len, lt, ltlen);      acc_len += ltlen;
+                    memcpy(acc + acc_len, _ld2, _ld2len); acc_len += _ld2len;
+                    memcpy(acc + acc_len, lt, ltlen); acc_len += ltlen;
                     acc[acc_len] = '\0';
                 }
                 free(lraw);
@@ -1811,21 +1819,71 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     size_t body_len = lt_end - body_start;
                     char *body_str = strndup(body_start, body_len);
 
-                    /* Run wisp infix promotion on the body.
-                     * Parse as a single expression with parent_remaining=1
-                     * so the last-argument infix promotion fires correctly.
-                     * This makes "not x = y" -> "(not (= x y))" because
-                     * not has arity 1, its last (only) slot sees "=" next,
-                     * and promotion builds (= x y) as the argument.        */
                     WTokenStream body_ts = {0};
                     tokenise_into(at, &body_ts, body_str, l_indent, lineno);
-                    SB body_sb; sb_init(&body_sb);
-                    if (body_ts.count > 0) {
-                        wisp_parse_expr(at, &body_ts, &body_sb, -1, 1);
-                    }
-                    char *body_expanded = sb_take(&body_sb);
-                    wts_free(&body_ts);
                     free(body_str);
+
+                    /* Accumulate all subsequent deeper lines into body_ts */
+                    while (*p) {
+                        const char *nls = p;
+                        while (*p && *p != '\n') p++;
+                        if (*p == '\n') p++;
+                        int nll = (int)(p - nls);
+                        if (nll == 0) continue;
+
+                        char *nlraw = strndup(nls, nll);
+                        const char *nlt = nlraw;
+                        while (*nlt == ' ' || *nlt == '\t') nlt++;
+
+                        if (!*nlt || *nlt == ';') {
+                            free(nlraw);
+                            lineno++;
+                            continue;
+                        }
+
+                        int nl_indent = measure_indent(nlraw);
+                        if (nl_indent <= l_indent) {
+                            p = nls;
+                            free(nlraw);
+                            break;
+                        }
+
+                        tokenise_into(at, &body_ts, nlt, nl_indent, lineno + 1);
+                        free(nlraw);
+                        lineno++;
+                    }
+
+                    /* Convert body_ts tokens back to a source string and
+                     * re-tokenize as a single grouped token so that
+                     * multi-line bodies like "match ma with ..." are treated
+                     * as one unit by the reader. This is the correct approach:
+                     * we build the flat text, wrap it in parens if needed, and
+                     * push it as a single pre-grouped token.                  */
+                    SB body_src; sb_init(&body_src);
+                    for (int _bti = 0; _bti < body_ts.count; _bti++) {
+                        if (_bti > 0) sb_putc(&body_src, ' ');
+                        sb_puts(&body_src, body_ts.tokens[_bti].text);
+                    }
+                    char *body_flat = sb_take(&body_src);
+                    wts_free(&body_ts);
+
+                    /* Wrap in parens so the reader sees it as one expression.
+                     * Only wrap if not already grouped and has more than one token
+                     * (single grouped tokens like "(Just x)" need no extra wrap). */
+                    char *body_expanded;
+                    bool already_grouped = (body_flat[0] == '(' || body_flat[0] == '[' || body_flat[0] == '{');
+                    bool single_token = (strchr(body_flat, ' ') == NULL);
+                    if (!already_grouped && !single_token) {
+                        size_t bflen = strlen(body_flat);
+                        body_expanded = malloc(bflen + 3);
+                        body_expanded[0] = '(';
+                        memcpy(body_expanded + 1, body_flat, bflen);
+                        body_expanded[bflen + 1] = ')';
+                        body_expanded[bflen + 2] = '\0';
+                        free(body_flat);
+                    } else {
+                        body_expanded = body_flat;
+                    }
 
                     /* Build: (#line N 1) pat_str => body_expanded */
                     size_t need = acc_len + _ldlen + pat_len + 4 + strlen(body_expanded) + 4;
@@ -2102,6 +2160,260 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     continue;
                 }
             }
+        }
+
+        /* Bare wisp-style if expression.
+         * Form 1 - indentation with else keyword at same indent as if:
+         *   if expr
+         *     then_line1
+         *     then_line2
+         *   else
+         *     else_line1
+         *     else_line2
+         * Form 2 - then/else keywords at same indent as if:
+         *   if expr
+         *   then stuff
+         *   else stuff
+         * Form 3 - fully inline:
+         *   if expr then stuff else stuff
+         * All forms emit: (if (expr) (then_body) (else_body))
+         * Multiple body lines are wrapped in (begin ...).            */
+        if (strncmp(t, "if", 2) == 0 &&
+            (t[2] == ' ' || t[2] == '\t')) {
+
+            const char *after_if = t + 2;
+            while (*after_if == ' ' || *after_if == '\t') after_if++;
+            const char *if_line_end = get_logical_line_end(after_if);
+
+            /* Helper: wrap a string in parens if multi-token and not grouped */
+            #define WRAP(src, dst) do { \
+                bool _ag = ((src)[0]=='('||(src)[0]=='['||(src)[0]=='{'); \
+                bool _st = (strchr((src),' ')==NULL && strchr((src),'\n')==NULL); \
+                if (_ag || _st) { (dst) = strdup(src); } \
+                else { \
+                    size_t _l = strlen(src); \
+                    (dst) = malloc(_l + 3); \
+                    (dst)[0] = '('; \
+                    memcpy((dst) + 1, (src), _l); \
+                    (dst)[_l + 1] = ')'; \
+                    (dst)[_l + 2] = '\0'; \
+                } \
+            } while(0)
+
+            /* Helper: build a body string from an array of line strings.
+             * Single line: wrap if needed. Multiple: (begin line1 line2 ...) */
+            #define BUILD_BODY(lines, count, out) do { \
+                if ((count) == 0) { \
+                    (out) = strdup("(undefined)"); \
+                } else if ((count) == 1) { \
+                    WRAP((lines)[0], (out)); \
+                } else { \
+                    SB _bsb; sb_init(&_bsb); \
+                    sb_puts(&_bsb, "(begin"); \
+                    for (int _bi = 0; _bi < (count); _bi++) { \
+                        sb_putc(&_bsb, ' '); \
+                        char *_bw = NULL; \
+                        WRAP((lines)[_bi], _bw); \
+                        sb_puts(&_bsb, _bw); \
+                        free(_bw); \
+                    } \
+                    sb_putc(&_bsb, ')'); \
+                    (out) = sb_take(&_bsb); \
+                } \
+            } while(0)
+
+            /* Check for Form 3: inline 'then' on same line */
+            const char *inline_then = NULL;
+            {
+                int bdepth = 0; bool bins = false;
+                for (const char *q = after_if; q < if_line_end - 4; q++) {
+                    if (bins) {
+                        if (*q=='\\') q++;
+                        else if (*q=='"') bins = false;
+                        continue;
+                    }
+                    if (*q=='"') { bins=true; continue; }
+                    if (*q=='('||*q=='['||*q=='{') bdepth++;
+                    if (*q==')'||*q==']'||*q=='}') bdepth--;
+                    if (bdepth==0 &&
+                        *q==' ' &&
+                        strncmp(q+1,"then",4)==0 &&
+                        (q[5]==' '||q[5]=='\t')) {
+                        inline_then = q + 1;
+                        break;
+                    }
+                }
+            }
+
+            char *cond_str  = NULL;
+            char *then_body = NULL;
+            char *else_body = NULL;
+
+            if (inline_then) {
+                /* Form 3: if expr then stuff [else stuff] */
+                size_t cond_len = inline_then - after_if - 1;
+                cond_str = strndup(after_if, cond_len);
+
+                const char *after_then = inline_then + 5;
+                while (*after_then==' '||*after_then=='\t') after_then++;
+
+                /* Find inline else */
+                const char *inline_else = NULL;
+                {
+                    int bdepth = 0; bool bins = false;
+                    for (const char *q = after_then; q < if_line_end - 4; q++) {
+                        if (bins) {
+                            if (*q=='\\') q++;
+                            else if (*q=='"') bins = false;
+                            continue;
+                        }
+                        if (*q=='"') { bins=true; continue; }
+                        if (*q=='('||*q=='['||*q=='{') bdepth++;
+                        if (*q==')'||*q==']'||*q=='}') bdepth--;
+                        if (bdepth==0 &&
+                            *q==' ' &&
+                            strncmp(q+1,"else",4)==0 &&
+                            (q[5]==' '||q[5]=='\t'||q[5]=='\0')) {
+                            inline_else = q + 1;
+                            break;
+                        }
+                    }
+                }
+
+                if (inline_else) {
+                    size_t then_len = inline_else - after_then - 1;
+                    char *then_raw = strndup(after_then, then_len);
+                    WRAP(then_raw, then_body);
+                    free(then_raw);
+                    const char *after_else = inline_else + 5;
+                    while (*after_else==' '||*after_else=='\t') after_else++;
+                    size_t else_len = if_line_end - after_else;
+                    char *else_raw = strndup(after_else, else_len);
+                    WRAP(else_raw, else_body);
+                    free(else_raw);
+                } else {
+                    size_t then_len = if_line_end - after_then;
+                    char *then_raw = strndup(after_then, then_len);
+                    WRAP(then_raw, then_body);
+                    free(then_raw);
+                    else_body = strdup("(undefined)");
+                }
+
+            } else {
+                /* Form 1 or Form 2: condition is rest of if line */
+                cond_str = strndup(after_if, if_line_end - after_if);
+
+                /* Collect then-lines and else-lines from subsequent lines */
+                char **then_lines = NULL; int then_count = 0; int then_cap = 0;
+                char **else_lines = NULL; int else_count = 0; int else_cap = 0;
+                bool in_else = false;
+
+                while (*p) {
+                    const char *ls = p;
+                    while (*p && *p != '\n') p++;
+                    if (*p == '\n') p++;
+                    char *lraw2 = strndup(ls, p - ls);
+                    const char *lt2 = lraw2;
+                    while (*lt2==' '||*lt2=='\t') lt2++;
+                    if (!*lt2||*lt2==';') { free(lraw2); lineno++; continue; }
+
+                    int li2 = measure_indent(lraw2);
+
+                    /* Same-indent 'then' keyword (Form 2) */
+                    if (li2 == indent &&
+                        strncmp(lt2,"then",4)==0 &&
+                        (lt2[4]==' '||lt2[4]=='\t')) {
+                        const char *ta = lt2 + 4;
+                        while (*ta==' '||*ta=='\t') ta++;
+                        const char *te = get_logical_line_end(ta);
+                        if (then_count >= then_cap) {
+                            then_cap = then_cap ? then_cap*2 : 4;
+                            then_lines = realloc(then_lines, sizeof(char*)*then_cap);
+                        }
+                        then_lines[then_count++] = strndup(ta, te - ta);
+                        free(lraw2); lineno++;
+                        continue;
+                    }
+
+                    /* Same-indent 'else' keyword (Form 1 and Form 2) */
+                    if (li2 == indent &&
+                        strncmp(lt2,"else",4)==0 &&
+                        (lt2[4]==' '||lt2[4]=='\t'||lt2[4]=='\0')) {
+                        in_else = true;
+                        /* If 'else' has content on same line, grab it */
+                        if (lt2[4]==' '||lt2[4]=='\t') {
+                            const char *ea = lt2 + 4;
+                            while (*ea==' '||*ea=='\t') ea++;
+                            const char *ee = get_logical_line_end(ea);
+                            if (ea < ee) {
+                                if (else_count >= else_cap) {
+                                    else_cap = else_cap ? else_cap*2 : 4;
+                                    else_lines = realloc(else_lines, sizeof(char*)*else_cap);
+                                }
+                                else_lines[else_count++] = strndup(ea, ee - ea);
+                            }
+                        }
+                        free(lraw2); lineno++;
+                        continue;
+                    }
+
+                    /* Deeper indent = body line for current branch */
+                    if (li2 > indent) {
+                        const char *le2 = get_logical_line_end(lt2);
+                        if (!in_else) {
+                            if (then_count >= then_cap) {
+                                then_cap = then_cap ? then_cap*2 : 4;
+                                then_lines = realloc(then_lines, sizeof(char*)*then_cap);
+                            }
+                            then_lines[then_count++] = strndup(lt2, le2 - lt2);
+                        } else {
+                            if (else_count >= else_cap) {
+                                else_cap = else_cap ? else_cap*2 : 4;
+                                else_lines = realloc(else_lines, sizeof(char*)*else_cap);
+                            }
+                            else_lines[else_count++] = strndup(lt2, le2 - lt2);
+                        }
+                        free(lraw2); lineno++;
+                        continue;
+                    }
+
+                    /* Lesser or same indent, not a keyword = end of if */
+                    p = ls;
+                    free(lraw2);
+                    break;
+                }
+
+                BUILD_BODY(then_lines, then_count, then_body);
+                BUILD_BODY(else_lines, else_count, else_body);
+
+                for (int _i = 0; _i < then_count; _i++) free(then_lines[_i]);
+                for (int _i = 0; _i < else_count; _i++) free(else_lines[_i]);
+                free(then_lines);
+                free(else_lines);
+            }
+
+            /* Wrap condition */
+            char *wrap_cond = NULL;
+            WRAP(cond_str, wrap_cond);
+
+            size_t total = strlen(wrap_cond) + strlen(then_body) +
+                           strlen(else_body) + 16;
+            char *result = malloc(total);
+            snprintf(result, total, "(if %s %s %s)",
+                     wrap_cond, then_body, else_body);
+            wts_push(&s, result, indent, lineno);
+            free(result);
+            free(wrap_cond);
+            free(cond_str);
+            free(then_body);
+            free(else_body);
+
+            #undef WRAP
+            #undef BUILD_BODY
+
+            free(raw);
+            lineno++;
+            continue;
         }
 
         tokenise_into(at, &s, t, indent, lineno);

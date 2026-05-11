@@ -993,7 +993,7 @@ void val_spine_free(Spine sp) {
 
 Value *val_neutral(const char *name, int level, Spine spine) {
     Value *v         = val_alloc(VAL_NEUTRAL);
-    v->neutral_name  = strdup(name);
+    v->neutral_name  = strdup(name ? name : "?null");
     v->neutral_level = level;
     v->spine         = spine;
     return v;
@@ -1771,11 +1771,13 @@ static bool dep_conv_vals_internal(ConvCtx *cctx, Value *v1, Value *v2, Value *t
 
     case VAL_NEUTRAL: {
         // Both neutral: heads must match, spines must match element-wise
-        if (strcmp(v1->neutral_name, v2->neutral_name) != 0) {
+        const char *n1 = v1->neutral_name ? v1->neutral_name : "";
+        const char *n2 = v2->neutral_name ? v2->neutral_name : "";
+        if (strcmp(n1, n2) != 0) {
             // Try δ-unfolding both heads in the global env
-            DepEnvEntry *e1 = cctx->dctx
+            DepEnvEntry *e1 = (cctx->dctx && v1->neutral_name)
                 ? dep_env_lookup(cctx->dctx->globals, v1->neutral_name) : NULL;
-            DepEnvEntry *e2 = cctx->dctx
+            DepEnvEntry *e2 = (cctx->dctx && v2->neutral_name)
                 ? dep_env_lookup(cctx->dctx->globals, v2->neutral_name) : NULL;
             bool unfolded = false;
             if (e1 && e1->def_val && !e1->opaque) {
@@ -1793,7 +1795,8 @@ static bool dep_conv_vals_internal(ConvCtx *cctx, Value *v1, Value *v2, Value *t
             (void)unfolded;
             snprintf(cctx->error_msg, sizeof(cctx->error_msg),
                      "dep: cannot unify %s with %s",
-                     v1->neutral_name, v2->neutral_name);
+                     v1->neutral_name ? v1->neutral_name : "?null",
+                     v2->neutral_name ? v2->neutral_name : "?null");
             cctx->had_error = true;
             return false;
         }
@@ -1836,6 +1839,7 @@ bool dep_conv_terms(DepCtx *dctx, Term *t1, Term *t2, int depth) {
 /// Global environment
 
 static size_t dep_env_hash(const char *name) {
+    if (!name) return 0;
     size_t h = 5381;
     for (; *name; name++) h = h * 33 ^ (unsigned char)*name;
     return h % DEP_ENV_BUCKETS;
@@ -1899,10 +1903,11 @@ void dep_env_define(DepEnv *env, const char *name, Value *type,
 }
 
 DepEnvEntry *dep_env_lookup(DepEnv *env, const char *name) {
+    if (!env || !name) return NULL;
     for (DepEnv *cur = env; cur; cur = cur->parent) {
         size_t idx = dep_env_hash(name);
         for (DepEnvEntry *e = cur->buckets[idx]; e; e = e->next)
-            if (strcmp(e->name, name) == 0) return e;
+            if (e->name && strcmp(e->name, name) == 0) return e;
     }
     return NULL;
 }
@@ -2592,8 +2597,29 @@ Type *dep_ground_of_value(Value *v, MetaCtx *mctx) {
         return type_int();
     }
 
-    // VAL_NEUTRAL introduced as a type-arg dummy resolves to unknown.
-    // VAL_META that is unsolved also resolves to unknown.
+    /* VAL_NEUTRAL introduced as a type-arg dummy resolves to unknown.
+     * EXCEPT: if the neutral is a known ADT type constructor (__type_X)
+     * applied to a spine, we can recover a TYPE_APP. This is the bridge
+     * that lets (Maybe a) in dep produce TYPE_APP("Maybe", unknown) in HM,
+     * which the HM unifier can then unify against bare Maybe (TYPE_LAYOUT). */
+    if (v->kind == VAL_NEUTRAL && v->neutral_name) {
+        const char *name = v->neutral_name;
+        /* Strip __type_ prefix to get the constructor name */
+        const char *ctor = NULL;
+        if (strncmp(name, "__type_", 7) == 0) {
+            ctor = name + 7;
+        }
+        if (ctor) {
+            /* If there is one spine argument, it is the type parameter */
+            Type *arg = NULL;
+            if (v->spine.count == 1) {
+                arg = dep_ground_of_value(v->spine.args[0], mctx);
+            }
+            if (!arg) arg = type_unknown();
+            return type_app(ctor, arg);
+        }
+    }
+    /* VAL_META that is unsolved also resolves to unknown. */
     return type_unknown();
 }
 
@@ -3013,11 +3039,44 @@ Term *dep_toplevel(DepCtx *ctx, AST *ast, Term **out_type) {
 
         for (int i = 0; i < ast->data.constructor_count; i++) {
             ASTDataConstructor *c = &ast->data.constructors[i];
-            Term *ctor_ty = term_fvar(type_name);
+            if (!c->name) continue;
+            /* Build result type: if data has type params, apply them.
+             * data Maybe a => __type_Maybe applied to fresh meta for a */
+            Term *ctor_result = term_fvar(type_name);
+            /* For parameterized types, the constructor returns the applied type.
+             * We represent Maybe a as __type_Maybe for now (monomorphic codegen). */
+            Term *ctor_ty = ctor_result;
             for (int j = c->field_count - 1; j >= 0; j--) {
-                AST *tast = parse(c->field_types[j]);
-                Term *dom = dep_term_of_type_ast(ctx, tast);
-                ast_free(tast);
+                const char *ftype_str = c->field_types[j];
+                Term *dom = NULL;
+                /* Check if the field type is a type parameter of the data type */
+                bool is_type_param = false;
+                if (ftype_str) {
+                    for (int tp = 0; tp < ast->data.type_param_count; tp++) {
+                        if (ast->data.type_params[tp] &&
+                            strcmp(ftype_str, ast->data.type_params[tp]) == 0) {
+                            is_type_param = true;
+                            break;
+                        }
+                    }
+                }
+                if (is_type_param) {
+                    /* Type parameter 'a' is erased to Universe at the dep level.
+                     * Codegen handles it via pointer indirection (opaque/generic).
+                     * We do NOT call meta_fresh here — the meta would be immediately
+                     * unsolved and term_pi wrapping it causes dep_eval to return a
+                     * VAL_META domain, which is correct but unnecessary overhead.
+                     * A TERM_HOLE is lighter and has identical semantics here. */
+                    dom = term_hole();
+                } else {
+                    if (!ftype_str) {
+                        dom = term_hole();
+                    } else {
+                        AST *tast = parse(ftype_str);
+                        dom = dep_term_of_type_ast(ctx, tast);
+                        ast_free(tast);
+                    }
+                }
 
                 char acc_name[256];
                 snprintf(acc_name, sizeof(acc_name), "__field_%s_%d", c->name, j);

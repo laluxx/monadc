@@ -659,26 +659,48 @@ struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
 
         EnvEntry *ee = env_lookup(env, name);
         if (ee) {
-            Type *sig = ee->return_type ? type_clone(ee->return_type) : infer_fresh(ctx);
-            for (int i = ee->param_count - 1; i >= 0; i--) {
-                Type *p = ee->params[i].type ? type_clone(ee->params[i].type) : infer_fresh(ctx);
-                sig = type_arrow(p, sig);
-            }
+            /* Skip signature check for instance method implementations.
+             * Instance methods are registered with params that have no
+             * type annotations (type_name = NULL) because the class type
+             * variable (e.g. 'm') has not been substituted with the
+             * concrete type (e.g. 'Maybe'). Attempting to build a sig
+             * from NULL param types produces a chain of fresh vars that
+             * cannot meaningfully constrain the inferred type, and any
+             * mismatch error message would be misleading. The dep checker
+             * already verified the instance body is well-typed. */
+            bool is_instance_method = (strncmp(name, "__impl_", 7) == 0);
 
-            TypeScheme *sig_sc = infer_generalise(ctx, sig, ienv);
-            Type *inst_sig = infer_instantiate(ctx, sig_sc);
-            scheme_free(sig_sc);
+            if (!is_instance_method) {
+                /* Build expected signature from registered param types */
+                bool has_concrete_params = true;
+                for (int i = 0; i < ee->param_count; i++) {
+                    if (!ee->params[i].type) { has_concrete_params = false; break; }
+                    if (ee->params[i].type->kind == TYPE_UNKNOWN) { has_concrete_params = false; break; }
+                }
 
-            if (!infer_unify_one(ctx, inferred, inst_sig, lambda_ast->line, lambda_ast->column)) {
-                Type *show_exp = subst_apply(ctx->subst, inst_sig);
-                Type *show_inf = subst_apply(ctx->subst, inferred);
-                READER_ERROR(lambda_ast->line, lambda_ast->column,
-                    "\n"
-                    "    • Signature mismatch for definition '%s'\n"
-                    "    • Expected type: %s\n"
-                    "    • Inferred type: %s\n"
-                    "    • Details: %s",
-                    name, type_to_string(show_exp), type_to_string(show_inf), ctx->error_msg);
+                if (has_concrete_params || ee->return_type) {
+                    Type *sig = ee->return_type ? type_clone(ee->return_type) : infer_fresh(ctx);
+                    for (int i = ee->param_count - 1; i >= 0; i--) {
+                        Type *p = ee->params[i].type ? type_clone(ee->params[i].type) : infer_fresh(ctx);
+                        sig = type_arrow(p, sig);
+                    }
+
+                    TypeScheme *sig_sc = infer_generalise(ctx, sig, ienv);
+                    Type *inst_sig = infer_instantiate(ctx, sig_sc);
+                    scheme_free(sig_sc);
+
+                    if (!infer_unify_one(ctx, inferred, inst_sig, lambda_ast->line, lambda_ast->column)) {
+                        Type *show_exp = subst_apply(ctx->subst, inst_sig);
+                        Type *show_inf = subst_apply(ctx->subst, inferred);
+                        READER_ERROR(lambda_ast->line, lambda_ast->column,
+                            "\n"
+                            "    • Signature mismatch for definition '%s'\n"
+                            "    • Expected type: %s\n"
+                            "    • Inferred type: %s\n"
+                            "    • Details: %s",
+                            name, type_to_string(show_exp), type_to_string(show_inf), ctx->error_msg);
+                    }
+                }
             }
         }
 

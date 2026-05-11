@@ -451,8 +451,55 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
             type_free(tc);
             return ok;
         }
-        if (a->kind == TYPE_COLL && b->kind == TYPE_SET) return true;
-        if (b->kind == TYPE_COLL && a->kind == TYPE_SET) return true;
+        if (a->kind == TYPE_COLL && b->kind == TYPE_SET   ) return true;
+        if (b->kind == TYPE_COLL && a->kind == TYPE_SET   ) return true;
+        if (a->kind == TYPE_APP && b->kind  == TYPE_LAYOUT) return true;
+        if (b->kind == TYPE_APP && a->kind  == TYPE_LAYOUT) return true;
+        if (a->kind == TYPE_APP && b->kind  == TYPE_APP   ) return true;
+
+        /* TYPE_APP ~ TYPE_APP: both are type constructor applications (e.g. Maybe a ~ Maybe b) */
+        if (a->kind == TYPE_APP && b->kind == TYPE_APP) {
+            if (a->app_constructor && b->app_constructor &&
+                strcmp(a->app_constructor, b->app_constructor) == 0) {
+                /* Same constructor: unify arguments */
+                if (a->app_arg && b->app_arg)
+                    return infer_unify_one(ctx, a->app_arg, b->app_arg, line, col);
+                return true;
+            }
+            char a_str[64], b_str[64];
+            snprintf(a_str, sizeof(a_str), "%s", type_to_string(a));
+            snprintf(b_str, sizeof(b_str), "%s", type_to_string(b));
+            snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                     "%s:%d:%d: type error: cannot unify %s with %s",
+                     ctx->filename, line, col, a_str, b_str);
+            ctx->had_error = true;
+            return false;
+        }
+
+        /* TYPE_APP ~ TYPE_LAYOUT: e.g. (? a) ~ Maybe
+         * This happens when a monomorphic ADT (Maybe) is unified with
+         * a polymorphic instantiation (Maybe a). Since codegen erases
+         * type parameters to opaque pointers, we accept this by checking
+         * that the constructor name matches the layout name. */
+        if (a->kind == TYPE_APP && b->kind == TYPE_LAYOUT) {
+            if (a->app_constructor && b->layout_name &&
+                strcmp(a->app_constructor, b->layout_name) == 0)
+                return true;
+            /* Also accept __type_ prefix stripping */
+            const char *bname = b->layout_name ? b->layout_name : "";
+            if (strncmp(bname, "__type_", 7) == 0 && a->app_constructor &&
+                strcmp(a->app_constructor, bname + 7) == 0)
+                return true;
+        }
+        if (b->kind == TYPE_APP && a->kind == TYPE_LAYOUT) {
+            if (b->app_constructor && a->layout_name &&
+                strcmp(b->app_constructor, a->layout_name) == 0)
+                return true;
+            const char *aname = a->layout_name ? a->layout_name : "";
+            if (strncmp(aname, "__type_", 7) == 0 && b->app_constructor &&
+                strcmp(b->app_constructor, aname + 7) == 0)
+                return true;
+        }
 
         /* Hard error: Coll cannot be a scalar primitive */
         /* TYPE_OPTIONAL ~ TYPE_OPTIONAL */
@@ -525,6 +572,9 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
         for (int i = 0; i < a->list_count; i++) {
             if (!infer_unify_one(ctx, a->list_types[i], b->list_types[i], line, col)) return false;
         }
+        return true;
+
+    case TYPE_APP:
         return true;
 
     case TYPE_COLL:

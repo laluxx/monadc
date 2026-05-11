@@ -87,20 +87,22 @@ ASTPattern parse_single_pattern(Parser *p) {
     }
 
     // [Constructor field1 field2 ...] — destructuring constructor pattern
-    if (parser_at(p, TOK_LBRACKET)) {
+    if (parser_at(p, TOK_LBRACKET) || parser_at(p, TOK_LPAREN)) {
+        TokenType close_tok = parser_at(p, TOK_LBRACKET) ? TOK_RBRACKET : TOK_RPAREN;
+        parser_advance(p); // consume '[' or '('
+
         // Peek: only treat as constructor pattern if first token inside is uppercase
-        parser_advance(p); // consume '['
         if (parser_at(p, TOK_SYMBOL) &&
             p->current.value[0] >= 'A' && p->current.value[0] <= 'Z') {
             pat.kind     = PAT_CONSTRUCTOR;
             pat.var_name = my_strdup(p->current.value);
             parser_advance(p);
 
-            // Parse field patterns until ']'
+            // Parse field patterns until ']' or ')'
             ASTPattern *fields = NULL;
             int         fcount = 0;
             int         fcap   = 0;
-            while (!parser_at(p, TOK_RBRACKET) && !parser_at(p, TOK_EOF)) {
+            while (!parser_at(p, close_tok) && !parser_at(p, TOK_EOF)) {
                 ASTPattern fp = parse_single_pattern(p);
                 if (fcount >= fcap) {
                     fcap = fcap == 0 ? 4 : fcap * 2;
@@ -108,10 +110,10 @@ ASTPattern parse_single_pattern(Parser *p) {
                 }
                 fields[fcount++] = fp;
             }
-            if (!parser_at(p, TOK_RBRACKET)) {
-                fprintf(stderr, "pmatch: expected ']' to close constructor pattern\n");
+            if (!parser_at(p, close_tok)) {
+                fprintf(stderr, "pmatch: expected closing bracket/paren to close constructor pattern\n");
             } else {
-                parser_advance(p); // consume ']'
+                parser_advance(p); // consume closing token
             }
             pat.ctor_fields      = fields;
             pat.ctor_field_count = fcount;
@@ -120,7 +122,7 @@ ASTPattern parse_single_pattern(Parser *p) {
         /* Not a constructor pattern — fall through to existing list pattern
          * handling by re-entering the list pattern code. But we already
          * consumed '[', so handle as empty or non-constructor list pattern. */
-        if (parser_at(p, TOK_RBRACKET)) {
+        if (parser_at(p, close_tok)) {
             parser_advance(p);
             pat.kind = PAT_LIST_EMPTY;
             return pat;
@@ -131,7 +133,7 @@ ASTPattern parse_single_pattern(Parser *p) {
         int count = 0, cap = 0;
         ASTPattern *tail = NULL;
 
-        while (!parser_at(p, TOK_RBRACKET) &&
+        while (!parser_at(p, close_tok) &&
                !parser_at(p, TOK_PIPE)     &&
                !(parser_at(p, TOK_SYMBOL) && p->current.value &&
                  strcmp(p->current.value, "|") == 0) &&
@@ -190,8 +192,8 @@ ASTPattern parse_single_pattern(Parser *p) {
                 tail->kind = PAT_WILDCARD;
             }
         }
-        if (!parser_at(p, TOK_RBRACKET)) {
-            fprintf(stderr, "pmatch: expected ']' to close list pattern\n");
+        if (!parser_at(p, close_tok)) {
+            fprintf(stderr, "pmatch: expected closing bracket/paren to close list pattern\n");
         } else {
             parser_advance(p);
         }
@@ -531,7 +533,9 @@ static AST *ast_substitute(AST *node,
 
     // Check if this node is a symbol that should be substituted
     if (node->type == AST_SYMBOL) {
+        if (!node->symbol) return ast_clone(node);
         for (int i = 0; i < count; i++) {
+            if (!names[i]) continue;
             if (strcmp(node->symbol, names[i]) == 0)
                 return ast_clone(exprs[i]);
         }
@@ -577,7 +581,7 @@ static AST *ast_substitute(AST *node,
         for (int i = 0; i < count; i++) {
             bool shadowed = false;
             for (int j = 0; j < node->lambda.param_count; j++) {
-                if (strcmp(node->lambda.params[j].name, names[i]) == 0) {
+                if (node->lambda.params[j].name && names[i] && strcmp(node->lambda.params[j].name, names[i]) == 0) {
                     shadowed = true;
                     break;
                 }
@@ -959,12 +963,6 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
         for (int j = 0; j < cl->pattern_count && j < param_count; j++) {
             const char *elem_type = params[j].type_name;
 
-            // Force type to Coll if no specific type is known
-            // This triggers unified collection codegen (count/indexing)
-            if (!elem_type) {
-                params[j].type_name = strdup("Coll");
-            }
-
             build_pattern_conditions(
                 &cl->patterns[j],
                 params[j].name,
@@ -1079,10 +1077,16 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
 
     // Fallthrough: non-exhaustive pattern match
     // Only add if the last clause wasn't already a wildcard (else)
-    AST *last_clause = cond_list->list.items[cond_list->list.count - 1];
-    AST *last_guard  = last_clause->list.items[0];
-    bool has_else = (last_guard->type == AST_SYMBOL &&
-                     strcmp(last_guard->symbol, "else") == 0);
+    bool has_else = false;
+    if (cond_list->list.count > 1) {
+        AST *last_clause = cond_list->list.items[cond_list->list.count - 1];
+        if (last_clause && last_clause->type == AST_LIST && last_clause->list.count > 0) {
+            AST *last_guard  = last_clause->list.items[0];
+            if (last_guard && last_guard->type == AST_SYMBOL && last_guard->symbol) {
+                has_else = (strcmp(last_guard->symbol, "else") == 0);
+            }
+        }
+    }
     if (!has_else) {
         AST *undef_call = ast_new_list();
         ast_list_append(undef_call, sym("undefined"));

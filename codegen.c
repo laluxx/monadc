@@ -677,6 +677,15 @@ LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *t) {
     case TYPE_FN:
     case TYPE_ARROW:
         return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+    case TYPE_APP: {
+        if (t->app_constructor) {
+            char struct_name[256];
+            snprintf(struct_name, sizeof(struct_name), "layout.%s", t->app_constructor);
+            LLVMTypeRef existing = LLVMGetTypeByName2(ctx->context, struct_name);
+            if (existing) return LLVMPointerType(existing, 0);
+        }
+        return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+    }
     case TYPE_LAYOUT: {
         /* Resolve name-only refs (from FFI) to the full registered layout */
         /* When used as a nested field, return raw struct not pointer */
@@ -739,6 +748,7 @@ LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *t) {
          * tracked in the type system only for user-facing display/safety */
         return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
     case TYPE_UNKNOWN:
+    case TYPE_VAR:
         return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
     default:
         return LLVMDoubleTypeInContext(ctx->context);
@@ -1163,20 +1173,22 @@ static void codegen_show_value(CodegenContext *ctx, LLVMValueRef val, Type *type
         emit_call_1(ctx, get_rt_print_value_newline(ctx), void_t, val, "");
     } else if (type->kind == TYPE_PTR) {
         emit_call_2(ctx, printf_fn, i32, LLVMBuildGlobalStringPtr(ctx->builder, newline ? "%p\n" : "%p", "fmt_ptr"), val, "");
-    } else if (type->kind == TYPE_LAYOUT) {
-        /* Check if this is an ADT type by looking for constructors */
-        /* Collect all constructors for this type */
-        typedef struct { const char *name; int tag; int nfields; } CtorInfo;
-        CtorInfo ctors[64];
+    } else if (type->kind == TYPE_LAYOUT || type->kind == TYPE_APP) {
+            const char *lay_name = type->kind == TYPE_APP ? type->app_constructor : type->layout_name;
+            /* Check if this is an ADT type by looking for constructors */
+            /* Collect all constructors for this type */
+            typedef struct { const char *name; int tag; int nfields; EnvParam *params; } CtorInfo;
+            CtorInfo ctors[64];
         int nctors = 0;
         for (size_t _bi = 0; _bi < ctx->env->size && nctors < 64; _bi++) {
             for (EnvEntry *_e = ctx->env->buckets[_bi]; _e; _e = _e->next) {
                 if (_e->kind == ENV_ADT_CTOR && _e->type &&
-                    _e->type->kind == TYPE_LAYOUT &&
-                    strcmp(_e->type->layout_name, type->layout_name) == 0) {
+                    _e->type->kind == TYPE_LAYOUT && lay_name &&
+                    strcmp(_e->type->layout_name, lay_name) == 0) {
                     ctors[nctors].name    = _e->name;
                     ctors[nctors].tag     = _e->adt_tag;
                     ctors[nctors].nfields = _e->param_count;
+                    ctors[nctors].params  = _e->params;
                     nctors++;
                 }
             }
@@ -1189,12 +1201,12 @@ static void codegen_show_value(CodegenContext *ctx, LLVMValueRef val, Type *type
 
             /* Get the struct LLVM type */
             char sname[256];
-            snprintf(sname, sizeof(sname), "data.%s", type->layout_name);
+            snprintf(sname, sizeof(sname), "data.%s", lay_name ? lay_name : "Unknown");
             LLVMTypeRef struct_t = LLVMGetTypeByName2(ctx->context, sname);
 
             /* Print "TypeName :: " prefix */
             char prefix[256];
-            snprintf(prefix, sizeof(prefix), "%s :: ", type->layout_name);
+            snprintf(prefix, sizeof(prefix), "%s :: ", lay_name ? lay_name : "Unknown");
             LLVMValueRef pfx_str = LLVMBuildGlobalStringPtr(ctx->builder, prefix, "adt_pfx");
             LLVMValueRef pfx_args[] = {pfx_str};
             LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
@@ -1251,12 +1263,47 @@ static void codegen_show_value(CodegenContext *ctx, LLVMValueRef val, Type *type
                                                             val, idxs, 2, "fgep");
                         /* Fields are stored as i64 in the struct — load and reinterpret */
                         LLVMValueRef fval  = LLVMBuildLoad2(ctx->builder, i64, fgep, "fval");
-                        /* Reinterpret as double for Float fields */
-                        LLVMValueRef fdbl  = LLVMBuildBitCast(ctx->builder, fval, dbl, "fdbl");
-                        LLVMValueRef fmt_f = get_fmt_float_no_newline(ctx);
-                        LLVMValueRef fa[]  = {fmt_f, fdbl};
-                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
-                                       printf_fn, fa, 2, "");
+
+                        Type *ft = ctors[ci].params[fi].type;
+                        if (ft && ft->kind == TYPE_VAR && type->kind == TYPE_APP) {
+                            ft = type->app_arg;
+                        }
+                        if (!ft) ft = type_unknown();
+
+                        /* When the field type is unknown/unresolved (type variable
+                         * that was never concretised), the field is stored as a
+                         * RuntimeValue* pointer — treat it as an opaque pointer
+                         * and print via rt_print_value so we get a meaningful
+                         * representation instead of garbage float bytes.          */
+                        bool ft_is_unknown = (ft->kind == TYPE_UNKNOWN ||
+                                              ft->kind == TYPE_VAR);
+                        if (ft_is_unknown) {
+                            /* Field is stored as i64 bits of a pointer — cast to ptr */
+                            LLVMTypeRef void_ptr = LLVMPointerType(
+                                LLVMInt8TypeInContext(ctx->context), 0);
+                            LLVMValueRef real_val = LLVMBuildIntToPtr(
+                                ctx->builder, fval, void_ptr, "fval_rtv");
+                            emit_call_1(ctx, get_rt_print_value(ctx),
+                                        LLVMVoidTypeInContext(ctx->context),
+                                        real_val, "");
+                            continue;
+                        }
+
+                        LLVMTypeRef target_t = type_to_llvm(ctx, ft);
+                        LLVMTypeKind rk = LLVMGetTypeKind(target_t);
+                        LLVMValueRef real_val;
+
+                        if (rk == LLVMDoubleTypeKind || rk == LLVMFloatTypeKind) {
+                            real_val = LLVMBuildBitCast(ctx->builder, fval, target_t, "fval_fp");
+                        } else if (rk == LLVMPointerTypeKind) {
+                            real_val = LLVMBuildIntToPtr(ctx->builder, fval, target_t, "fval_ptr");
+                        } else if (LLVMGetIntTypeWidth(target_t) < 64) {
+                            real_val = LLVMBuildTrunc(ctx->builder, fval, target_t, "fval_trunc");
+                        } else {
+                            real_val = fval;
+                        }
+
+                        codegen_show_value(ctx, real_val, ft, false);
                     }
 
                     LLVMValueRef rp = LLVMBuildGlobalStringPtr(ctx->builder, ")", "rp");
@@ -1837,16 +1884,15 @@ void codegen_data(CodegenContext *ctx, AST *ast) {
             LLVMValueRef fptr64   = LLVMBuildBitCast(ctx->builder, fptr_i8, i64ptr, "fptr64");
             LLVMValueRef fval_i64 = LLVMBuildLoad2(ctx->builder, i64, fptr64, "fval");
 
-            /* Reinterpret to correct type */
+            /* Reinterpret to correct type based on LLVM return type */
+            LLVMTypeKind rk = LLVMGetTypeKind(ret_llvm);
             LLVMValueRef fval;
-            if (type_is_float(ft)) {
-                fval = LLVMBuildBitCast(ctx->builder, fval_i64,
-                                        LLVMDoubleTypeInContext(ctx->context), "fval_dbl");
-            } else if (ft->kind == TYPE_LAYOUT) {
-                fval = LLVMBuildIntToPtr(ctx->builder, fval_i64, ptr_t, "fval_ptr");
-            } else if (ft->kind == TYPE_CHAR) {
-                fval = LLVMBuildTrunc(ctx->builder, fval_i64,
-                                      LLVMInt8TypeInContext(ctx->context), "fval_char");
+            if (rk == LLVMDoubleTypeKind || rk == LLVMFloatTypeKind) {
+                fval = LLVMBuildBitCast(ctx->builder, fval_i64, ret_llvm, "fval_fp");
+            } else if (rk == LLVMPointerTypeKind) {
+                fval = LLVMBuildIntToPtr(ctx->builder, fval_i64, ret_llvm, "fval_ptr");
+            } else if (LLVMGetIntTypeWidth(ret_llvm) < 64) {
+                fval = LLVMBuildTrunc(ctx->builder, fval_i64, ret_llvm, "fval_trunc");
             } else {
                 fval = fval_i64;
             }
@@ -7273,7 +7319,7 @@ if (ast->list.count >= 5) {
                 }
 
                 /* Classify branch types */
-                bool then_is_ptr = then_result.type->kind == TYPE_SET     ||
+                bool then_is_ptr = then_result.type->kind == TYPE_SET      ||
                     then_result.type->kind == TYPE_MAP     ||
                     then_result.type->kind == TYPE_LIST    ||
                     then_result.type->kind == TYPE_STRING  ||
@@ -7282,8 +7328,14 @@ if (ast->list.count >= 5) {
                     then_result.type->kind == TYPE_RATIO   ||
                     then_result.type->kind == TYPE_UNKNOWN ||
                     then_result.type->kind == TYPE_OPTIONAL||
-                    then_result.type->kind == TYPE_NIL;
-                bool else_is_ptr = else_result.type->kind == TYPE_SET     ||
+                    then_result.type->kind == TYPE_NIL     ||
+                    then_result.type->kind == TYPE_LAYOUT  ||
+                    then_result.type->kind == TYPE_PTR     ||
+                    then_result.type->kind == TYPE_VAR     ||
+                    then_result.type->kind == TYPE_FN      ||
+                    then_result.type->kind == TYPE_ARROW   ||
+                    then_result.type->kind == TYPE_APP;
+                bool else_is_ptr = else_result.type->kind == TYPE_SET      ||
                     else_result.type->kind == TYPE_MAP     ||
                     else_result.type->kind == TYPE_LIST    ||
                     else_result.type->kind == TYPE_STRING  ||
@@ -7292,7 +7344,13 @@ if (ast->list.count >= 5) {
                     else_result.type->kind == TYPE_RATIO   ||
                     else_result.type->kind == TYPE_UNKNOWN ||
                     else_result.type->kind == TYPE_OPTIONAL||
-                    else_result.type->kind == TYPE_NIL;
+                    else_result.type->kind == TYPE_NIL     ||
+                    else_result.type->kind == TYPE_LAYOUT  ||
+                    else_result.type->kind == TYPE_PTR     ||
+                    else_result.type->kind == TYPE_VAR     ||
+                    else_result.type->kind == TYPE_FN      ||
+                    else_result.type->kind == TYPE_ARROW   ||
+                    else_result.type->kind == TYPE_APP;
 
                 bool then_is_arr = then_result.type->kind == TYPE_ARR;
                 bool else_is_arr = else_result.type->kind == TYPE_ARR;
@@ -8446,6 +8504,19 @@ if (ast->list.count >= 5) {
                             type_name = e->type->layout_name;
                     }
 
+                    /* Resolve from actual LLVM type of the first argument.
+                     * This prevents infinite recursion when a typeclass method
+                     * calls another typeclass method on a primitive field —
+                     * e.g. (v.x ^ exp) inside __impl_Pow_Vec3_^ must dispatch
+                     * to Float, not back to Vec3. */
+                    if (!type_name) {
+                        const char *llvm_tname = tc_type_name_from_llvm(lhs.value);
+                        if (llvm_tname) {
+                            TCInstance *probe_inst = tc_find_instance(ctx->tc_registry, cls, llvm_tname);
+                            if (probe_inst) type_name = llvm_tname;
+                        }
+                    }
+
                     /* If we can't determine a concrete layout type, the call is
                      * either inside a polymorphic default implementation or an
                      * internal helper — fall through to normal comparison.     */
@@ -9084,20 +9155,27 @@ if (ast->list.count >= 5) {
                     type_name = ast->inferred_type->layout_name;
                 }
 
-                /* Contextual fallback: if we are inside an instance method, use its type! */
-                if (!type_name && ctx->current_function_name && strncmp(ctx->current_function_name, "__impl_", 7) == 0) {
-                    const char *p = ctx->current_function_name + 7;
-                    const char *c_end = strchr(p, '_');
-                    if (c_end) {
-                        const char *t_start = c_end + 1;
-                        const char *t_end = strchr(t_start, '_');
-                        if (t_end) {
-                            static char inferred_tname[256];
-                            size_t len = t_end - t_start;
-                            if (len < sizeof(inferred_tname)) {
+                /* Contextual fallback: derive type from the enclosing function's type.
+                 * This handles legitimate self-dispatch inside instances where HM
+                 * cannot fully infer the generic wrapper type. */
+                if (!type_name && ast->list.count >= 2) {
+                    if (ctx->current_function_name &&
+                        strncmp(ctx->current_function_name, "__impl_", 7) == 0) {
+                        const char *p = ctx->current_function_name + 7;
+                        const char *c_end = strchr(p, '_');
+                        if (c_end) {
+                            const char *t_start = c_end + 1;
+                            const char *t_end = strchr(t_start, '_');
+                            if (t_end) {
+                                size_t len = t_end - t_start;
+                                char *inferred_tname = malloc(len + 1);
                                 memcpy(inferred_tname, t_start, len);
                                 inferred_tname[len] = '\0';
-                                type_name = inferred_tname;
+                                /* Only use this if the instance actually exists
+                                 * for this type — prevents false dispatch */
+                                TCInstance *ctx_inst = tc_find_instance(ctx->tc_registry, cls, inferred_tname);
+                                if (ctx_inst) type_name = ctx_inst->type_name; /* Use safe instance pointer */
+                                free(inferred_tname);
                             }
                         }
                     }
@@ -10288,22 +10366,34 @@ if (ast->list.count >= 5) {
                         /* Also check env_params return type from the outer function */
                         Type *rec_ret = entry->return_type;
                         if (rec_ret) {
-                            LLVMTypeRef expected = type_to_llvm(ctx, entry->return_type);
-                            LLVMTypeRef got      = LLVMTypeOf(result.value);
-                            if (got == ptr_t && expected != ptr_t) {
-                                if (type_is_float(entry->return_type)) {
-                                    LLVMTypeRef dbl = LLVMDoubleTypeInContext(ctx->context);
-                                    LLVMTypeRef uft = LLVMFunctionType(dbl, &ptr_t, 1, 0);
-                                    result.value = LLVMBuildCall2(ctx->builder, uft,
-                                                      get_rt_unbox_float(ctx), &result.value, 1, "unbox_rec");
-                                    result.type  = type_float();
-                                } else if (type_is_integer(entry->return_type)) {
-                                    LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
-                                    LLVMTypeRef uft = LLVMFunctionType(i64, &ptr_t, 1, 0);
-                                    result.value = LLVMBuildCall2(ctx->builder, uft,
-                                                      get_rt_unbox_int(ctx), &result.value, 1, "unbox_rec");
-                                    result.type  = type_int();
+                            /* Never unbox ADT/layout/unknown return types — they are
+                             * already heap pointers from the closure ABI. Unboxing
+                             * only makes sense for primitive scalar return types.   */
+                            bool ret_is_adt = (rec_ret->kind == TYPE_LAYOUT ||
+                                               rec_ret->kind == TYPE_UNKNOWN ||
+                                               rec_ret->kind == TYPE_COLL   ||
+                                               rec_ret->kind == TYPE_APP);
+                            if (!ret_is_adt) {
+                                LLVMTypeRef expected = type_to_llvm(ctx, entry->return_type);
+                                LLVMTypeRef got      = LLVMTypeOf(result.value);
+                                if (got == ptr_t && expected != ptr_t) {
+                                    if (type_is_float(entry->return_type)) {
+                                        LLVMTypeRef dbl = LLVMDoubleTypeInContext(ctx->context);
+                                        LLVMTypeRef uft = LLVMFunctionType(dbl, &ptr_t, 1, 0);
+                                        result.value = LLVMBuildCall2(ctx->builder, uft,
+                                                          get_rt_unbox_float(ctx), &result.value, 1, "unbox_rec");
+                                        result.type  = type_float();
+                                    } else if (type_is_integer(entry->return_type)) {
+                                        LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+                                        LLVMTypeRef uft = LLVMFunctionType(i64, &ptr_t, 1, 0);
+                                        result.value = LLVMBuildCall2(ctx->builder, uft,
+                                                          get_rt_unbox_int(ctx), &result.value, 1, "unbox_rec");
+                                        result.type  = type_int();
+                                    }
                                 }
+                            } else {
+                                /* ADT return — keep as ptr, set result type to layout */
+                                result.type = type_clone(rec_ret);
                             }
                         }
                         return result;
@@ -12550,6 +12640,7 @@ void register_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "not", 1, -1, "Logical NOT", NULL);
 
     // Control flow
+    env_insert_builtin(ctx->env, "match",  1, -1, "Pattern matching expression: (match expr with ...)", NULL);
     env_insert_builtin(ctx->env, "if",     3,  0, "Conditional: (if cond then else)", NULL);
     env_insert_builtin(ctx->env, "for",    2, -1, "Loop with binding: (for [i 0 10] body) or (for [n] body)", NULL);
     env_insert_builtin(ctx->env, "while",  2, -1, "Loop while condition is true: (while cond body...)", NULL);

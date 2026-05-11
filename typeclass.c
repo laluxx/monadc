@@ -187,6 +187,65 @@ void tc_register_class(TypeClassRegistry *reg, AST *ast) {
         printf("  default: %s\n", c->default_names[i]);
 }
 
+static Type *my_type_parse_fn_arrow(const char *sig) {
+    while (*sig == ' ') sig++;
+    if (strncmp(sig, "Fn :: ", 6) == 0) sig += 6;
+    while (*sig == ' ') sig++;
+
+    int depth = 0;
+    const char *arrow = NULL;
+    for (const char *p = sig; *p; p++) {
+        if (*p == '(' || *p == '[') depth++;
+        else if (*p == ')' || *p == ']') depth--;
+        else if (depth == 0 && *p == '-' && *(p+1) == '>') {
+            arrow = p;
+            break;
+        }
+    }
+
+    if (arrow) {
+        char lhs_str[256] = {0};
+        strncpy(lhs_str, sig, arrow - sig);
+        char *lhs_start = lhs_str;
+        while (*lhs_start == ' ') lhs_start++;
+        for (int i = strlen(lhs_start)-1; i >= 0 && lhs_start[i] == ' '; i--) lhs_start[i] = '\0';
+
+        if (lhs_start[0] == '(' && lhs_start[strlen(lhs_start)-1] == ')') {
+            lhs_start[strlen(lhs_start)-1] = '\0';
+            lhs_start++;
+        }
+
+        Type *param = my_type_parse_fn_arrow(lhs_start);
+
+        const char *rhs_start = arrow + 2;
+        Type *ret = my_type_parse_fn_arrow(rhs_start);
+
+        return type_arrow(param, ret);
+    }
+
+    char base[256] = {0};
+    strncpy(base, sig, 255);
+    char *start = base;
+    while (*start == ' ') start++;
+    for (int i = strlen(start)-1; i >= 0 && start[i] == ' '; i--) start[i] = '\0';
+
+    if (start[0] == '(' && start[strlen(start)-1] == ')') {
+        start[strlen(start)-1] = '\0';
+        start++;
+        return my_type_parse_fn_arrow(start);
+    }
+
+    for (int i = 0; start[i]; i++) {
+        if (start[i] == ' ' || start[i] == '\t') {
+            start[i] = '\0';
+            break;
+        }
+    }
+    Type *t = type_from_name(start);
+    if (!t) return type_unknown();
+    return t;
+}
+
 /// Instance registration
 //
 // For each method in the instance:
@@ -249,7 +308,38 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
             char sig_buf[512];
             snprintf(sig_buf, sizeof(sig_buf), "Fn :: %s", c->methods[mi].type_str);
 
-            /* Compile-time Associated Type Rewriting (e.g. "Result a" -> "Float") */
+            /* Rewrite ALL type variables: both associated types and the
+             * class type variable itself, before anything else sees the string.
+             * This must happen before HM and before LLVM type parsing.       */
+            {
+                char temp_sig[512];
+                strcpy(temp_sig, sig_buf);
+                char *pos = temp_sig;
+                const char *tv = c->type_var;
+                size_t t_len = strlen(tv);
+                while ((pos = strstr(pos, tv)) != NULL) {
+                    bool left_ok  = (pos == temp_sig) ||
+                                    !(*(pos-1) >= 'a' && *(pos-1) <= 'z') &&
+                                    !(*(pos-1) >= 'A' && *(pos-1) <= 'Z') &&
+                                    !(*(pos-1) >= '0' && *(pos-1) <= '9') &&
+                                    *(pos-1) != '_';
+                    bool right_ok = !(*(pos+t_len) >= 'a' && *(pos+t_len) <= 'z') &&
+                                    !(*(pos+t_len) >= 'A' && *(pos+t_len) <= 'Z') &&
+                                    !(*(pos+t_len) >= '0' && *(pos+t_len) <= '9') &&
+                                    *(pos+t_len) != '_';
+                    if (left_ok && right_ok) {
+                        char temp[512];
+                        int len_before = pos - temp_sig;
+                        snprintf(temp, sizeof(temp), "%.*s%s%s",
+                                 len_before, temp_sig, inst->type_name, pos + t_len);
+                        strcpy(temp_sig, temp);
+                        pos = temp_sig + len_before + strlen(inst->type_name);
+                    } else {
+                        pos += t_len;
+                    }
+                }
+                strcpy(sig_buf, temp_sig);
+            }
             for (int k = 0; k < inst->assoc_count; k++) {
                 char target[128];
                 snprintf(target, sizeof(target), "%s %s", inst->assoc_names[k], c->type_var);
@@ -261,8 +351,36 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
                     strncpy(sig_buf, temp, sizeof(sig_buf) - 1);
                 }
             }
+            /* Rewrite class type variable "m" to instance type "Maybe" */
+            {
+                char bare_target[64];
+                snprintf(bare_target, sizeof(bare_target), "%s", c->type_var);
+                char bare_replace[128];
+                snprintf(bare_replace, sizeof(bare_replace), "%s", inst->type_name);
 
-            Type *method_sig = type_parse_fn_arrow(sig_buf);
+                char temp_sig[512];
+                strcpy(temp_sig, sig_buf);
+                char *pos = temp_sig;
+                size_t t_len = strlen(bare_target);
+
+                while ((pos = strstr(pos, bare_target)) != NULL) {
+                    bool left_bound = (pos == temp_sig) || !((*(pos - 1) >= 'a' && *(pos - 1) <= 'z') || (*(pos - 1) >= 'A' && *(pos - 1) <= 'Z') || (*(pos - 1) >= '0' && *(pos - 1) <= '9') || *(pos - 1) == '_');
+                    bool right_bound = !((*(pos + t_len) >= 'a' && *(pos + t_len) <= 'z') || (*(pos + t_len) >= 'A' && *(pos + t_len) <= 'Z') || (*(pos + t_len) >= '0' && *(pos + t_len) <= '9') || *(pos + t_len) == '_');
+
+                    if (left_bound && right_bound) {
+                        char temp[512];
+                        int len_before = pos - temp_sig;
+                        snprintf(temp, sizeof(temp), "%.*s%s%s", len_before, temp_sig, bare_replace, pos + t_len);
+                        strcpy(temp_sig, temp);
+                        pos = temp_sig + len_before + strlen(bare_replace);
+                    } else {
+                        pos += t_len;
+                    }
+                }
+                strcpy(sig_buf, temp_sig);
+            }
+
+            Type *method_sig = my_type_parse_fn_arrow(sig_buf);
 
             int param_count = 0;
             Type *t_iter = method_sig;
@@ -324,6 +442,7 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
         /* Find this method in the instance declaration */
         AST *body_lam = NULL;
         for (int ji = 0; ji < ast->instance_decl.method_count; ji++) {
+            if (!ast->instance_decl.method_names[ji]) continue;
             if (strcmp(ast->instance_decl.method_names[ji], mname) == 0) {
                 body_lam = ast->instance_decl.method_bodies[ji];
                 break;
@@ -368,36 +487,133 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
                 strncpy(sig_buf, temp, sizeof(sig_buf) - 1);
             }
         }
+        {
+            char bare_target[64];
+            snprintf(bare_target, sizeof(bare_target), "%s", c->type_var);
+            char bare_replace[128];
+            snprintf(bare_replace, sizeof(bare_replace), "%s", inst->type_name);
 
-        Type *method_sig = type_parse_fn_arrow(sig_buf);
+            char temp_sig[512];
+            strcpy(temp_sig, sig_buf);
+            char *pos = temp_sig;
+            size_t t_len = strlen(bare_target);
+
+            while ((pos = strstr(pos, bare_target)) != NULL) {
+                bool left_bound = (pos == temp_sig) || !((*(pos - 1) >= 'a' && *(pos - 1) <= 'z') || (*(pos - 1) >= 'A' && *(pos - 1) <= 'Z') || (*(pos - 1) >= '0' && *(pos - 1) <= '9') || *(pos - 1) == '_');
+                bool right_bound = !((*(pos + t_len) >= 'a' && *(pos + t_len) <= 'z') || (*(pos + t_len) >= 'A' && *(pos + t_len) <= 'Z') || (*(pos + t_len) >= '0' && *(pos + t_len) <= '9') || *(pos + t_len) == '_');
+
+                if (left_bound && right_bound) {
+                    char temp[512];
+                    int len_before = pos - temp_sig;
+                    snprintf(temp, sizeof(temp), "%.*s%s%s", len_before, temp_sig, bare_replace, pos + t_len);
+                    strcpy(temp_sig, temp);
+                    pos = temp_sig + len_before + strlen(bare_replace);
+                } else {
+                    pos += t_len;
+                }
+            }
+            strcpy(sig_buf, temp_sig);
+        }
+
+        Type *method_sig = my_type_parse_fn_arrow(sig_buf);
         Type *t_iter = method_sig;
 
         for (int pi = 0; pi < typed_lam->lambda.param_count; pi++) {
             if (!typed_lam->lambda.params[pi].type_name) {
-                Type *pt = NULL;
-                if (t_iter && t_iter->kind == TYPE_ARROW) {
-                    pt = t_iter->arrow_param;
+                int current_idx = 0;
+                int depth = 0;
+                const char *start = sig_buf;
+                while (*start == ' ' || *start == '\t') start++;
+                if (strncmp(start, "Fn :: ", 6) == 0) start += 6;
+                while (*start == ' ' || *start == '\t') start++;
+
+                const char *p = start;
+                char *extracted = NULL;
+                while (*p) {
+                    if (*p == '(' || *p == '[') depth++;
+                    else if (*p == ')' || *p == ']') depth--;
+                    else if (depth == 0 && *p == '-' && *(p+1) == '>') {
+                        if (current_idx == pi) {
+                            char buf[512] = {0};
+                            buf[0] = '(';
+                            int len = p - start < 509 ? p - start : 509;
+                            strncpy(buf + 1, start, len);
+                            for (int i = strlen(buf)-1; i >= 0 && (buf[i] == ' ' || buf[i] == '\t'); i--) buf[i] = '\0';
+                            strcat(buf, ")");
+                            extracted = strdup(buf);
+                            break;
+                        }
+                        current_idx++;
+                        p += 2;
+                        start = p;
+                        while (*start == ' ' || *start == '\t') start++;
+                        p = start - 1;
+                    }
+                    p++;
                 }
-                bool is_var = !pt || (pt->kind == TYPE_VAR) || (pt->kind == TYPE_UNKNOWN);
-                if (is_var) {
-                    typed_lam->lambda.params[pi].type_name = strdup(type_name);
-                } else {
-                    typed_lam->lambda.params[pi].type_name = strdup(type_to_string(pt));
+                if (!extracted && current_idx == pi) {
+                    char buf[512] = {0};
+                    buf[0] = '(';
+                    int len = p - start < 509 ? p - start : 509;
+                    strncpy(buf + 1, start, len);
+                    for (int i = strlen(buf)-1; i >= 0 && (buf[i] == ' ' || buf[i] == '\t'); i--) buf[i] = '\0';
+                    strcat(buf, ")");
+                    extracted = strdup(buf);
                 }
-            }
-            if (t_iter && t_iter->kind == TYPE_ARROW) {
-                t_iter = t_iter->arrow_ret;
+
+                if (extracted) {
+                    typed_lam->lambda.params[pi].type_name = extracted;
+                }
             }
         }
         if (!typed_lam->lambda.return_type) {
-            Type *rt = t_iter;
-            bool ret_is_var = !rt || (rt->kind == TYPE_VAR) || (rt->kind == TYPE_UNKNOWN);
-            if (ret_is_var) {
-                typed_lam->lambda.return_type = strdup(type_name);
-            } else {
-                typed_lam->lambda.return_type = strdup(type_to_string(rt));
+            int target_idx = typed_lam->lambda.param_count;
+            int current_idx = 0;
+            int depth = 0;
+            const char *start = sig_buf;
+            while (*start == ' ' || *start == '\t') start++;
+            if (strncmp(start, "Fn :: ", 6) == 0) start += 6;
+            while (*start == ' ' || *start == '\t') start++;
+
+            const char *p = start;
+            char *extracted = NULL;
+            while (*p) {
+                if (*p == '(' || *p == '[') depth++;
+                else if (*p == ')' || *p == ']') depth--;
+                else if (depth == 0 && *p == '-' && *(p+1) == '>') {
+                    if (current_idx == target_idx) {
+                        char buf[512] = {0};
+                        buf[0] = '(';
+                        int len = p - start < 509 ? p - start : 509;
+                        strncpy(buf + 1, start, len);
+                        for (int i = strlen(buf)-1; i >= 0 && (buf[i] == ' ' || buf[i] == '\t'); i--) buf[i] = '\0';
+                        strcat(buf, ")");
+                        extracted = strdup(buf);
+                        break;
+                    }
+                    current_idx++;
+                    p += 2;
+                    start = p;
+                    while (*start == ' ' || *start == '\t') start++;
+                    p = start - 1;
+                }
+                p++;
+            }
+            if (!extracted && current_idx == target_idx) {
+                char buf[512] = {0};
+                buf[0] = '(';
+                int len = p - start < 509 ? p - start : 509;
+                strncpy(buf + 1, start, len);
+                for (int i = strlen(buf)-1; i >= 0 && (buf[i] == ' ' || buf[i] == '\t'); i--) buf[i] = '\0';
+                strcat(buf, ")");
+                extracted = strdup(buf);
+            }
+
+            if (extracted) {
+                typed_lam->lambda.return_type = extracted;
             }
         }
+
         if (method_sig) type_free(method_sig);
 
         AST *define_node = ast_new_list();
@@ -447,7 +663,12 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
     /* Store each method function pointer into the dict struct */
     LLVMTypeRef i32 = LLVMInt32TypeInContext(ctx->context);
     for (int mi = 0; mi < c->method_count; mi++) {
-        if (!inst->method_funcs[mi]) continue;
+        if (!inst->method_funcs[mi]) {
+            fprintf(stderr, "instance %s %s: method '%s' has no LLVM function, skipping dict slot\n",
+                    class_name, type_name,
+                    inst->method_names[mi] ? inst->method_names[mi] : "?");
+            continue;
+        }
 
         LLVMValueRef fn_ptr = LLVMBuildBitCast(ctx->builder,
                                   inst->method_funcs[mi], ptr_t, "mptr");
@@ -510,6 +731,22 @@ LLVMValueRef tc_get_method(TypeClassRegistry *reg, const char *class_name,
         if (strcmp(inst->method_names[i], method_name) == 0)
             return inst->method_funcs[i];
     }
+    return NULL;
+}
+
+const char *tc_type_name_from_llvm(LLVMValueRef val) {
+    if (!val) return NULL;
+    LLVMTypeRef t = LLVMTypeOf(val);
+    LLVMTypeKind k = LLVMGetTypeKind(t);
+    if (k == LLVMDoubleTypeKind) return "Float";
+    if (k == LLVMFloatTypeKind)  return "Float";
+    if (k == LLVMIntegerTypeKind) {
+        unsigned w = LLVMGetIntTypeWidth(t);
+        if (w == 1)  return "Bool";
+        if (w == 64) return "Int";
+        if (w == 32) return "Int";
+    }
+    if (k == LLVMPointerTypeKind) return NULL; /* could be Vec3 or anything heap-allocated */
     return NULL;
 }
 

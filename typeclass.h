@@ -44,8 +44,8 @@ typedef struct TCClass {
 // one per method — that implements the class for this type.
 //
 typedef struct TCInstance {
-    char         *class_name;    // "Eq"
-    char         *type_name;     // "TrafficLight"
+    char         *class_name;    // "Monad"
+    char         *type_name;     // "Maybe" (constructor name, not applied type)
     char        **assoc_names;   // e.g. ["Result"]
     char        **assoc_values;  // e.g. ["Float"]
     int           assoc_count;
@@ -110,6 +110,7 @@ LLVMValueRef tc_get_method(TypeClassRegistry *reg, const char *class_name,
                             CodegenContext *ctx);
 
 // Returns the dictionary global for a class+type pair.
+const char *tc_type_name_from_llvm(LLVMValueRef val);
 LLVMValueRef tc_get_dict(TypeClassRegistry *reg, const char *class_name,
                          const char *type_name, CodegenContext *ctx);
 

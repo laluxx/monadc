@@ -374,6 +374,26 @@ Type *type_from_name(const char *name) {
         next_iteration:;
     }
 
+    /* Type application: "Maybe Float", "Maybe a" etc.
+     * If the arg is an unknown type variable, use TYPE_UNKNOWN as
+     * the arg — codegen treats all ADT fields as opaque pointers anyway. */
+    {
+        const char *space = strchr(name, ' ');
+        if (space && space > name) {
+            char constructor[256];
+            size_t clen = space - name;
+            if (clen < sizeof(constructor)) {
+                memcpy(constructor, name, clen);
+                constructor[clen] = '\0';
+                const char *arg_str = space + 1;
+                while (*arg_str == ' ') arg_str++;
+                Type *arg = type_from_name(arg_str);
+                if (!arg) arg = type_unknown();
+                return type_app(constructor, arg);
+            }
+        }
+    }
+
     return NULL;  // unknown type
 }
 
@@ -422,6 +442,13 @@ Type *type_int_arbitrary(int width, bool is_signed) {
 }
 
 Type *type_nil(void) { return make_type(TYPE_NIL); }
+
+Type *type_app(const char *constructor, Type *arg) {
+    Type *t = make_type(TYPE_APP);
+    t->app_constructor = constructor ? strdup(constructor) : NULL;
+    t->app_arg = arg;
+    return t;
+}
 
 Type *type_optional(Type *inner) {
     Type *t = make_type(TYPE_OPTIONAL);
@@ -650,6 +677,7 @@ Type *type_clone(Type *t) {
         case TYPE_PTR:          return type_ptr(type_clone(t->element_type));
         case TYPE_OPTIONAL:     return type_optional(type_clone(t->element_type));
         case TYPE_NIL:          return type_nil();
+        case TYPE_APP:          return type_app(t->app_constructor, type_clone(t->app_arg));
         case TYPE_F80:          return type_f80();
         case TYPE_INT_ARBITRARY: return type_int_arbitrary(t->numeric_width, t->numeric_signed);
         case TYPE_VAR:     return type_var(t->var_id);
@@ -703,6 +731,10 @@ void type_free(Type *t) {
         type_free(t->arrow_param);
         type_free(t->arrow_ret);
     }
+    if (t->kind == TYPE_APP) {
+        free(t->app_constructor);
+        type_free(t->app_arg);
+    }
     if (t->kind == TYPE_VAR) {}
     free(t);
 }
@@ -743,6 +775,12 @@ const char *type_to_string(Type *t) {
     case TYPE_U128:    return "U128";
     case TYPE_UNKNOWN: return "?";
     case TYPE_NIL:     return "Nil";
+    case TYPE_APP:
+        if (t->app_constructor && t->app_arg) {
+            snprintf(buf, 512, "%s %s", t->app_constructor, type_to_string(t->app_arg));
+            return buf;
+        }
+        return t->app_constructor ? t->app_constructor : "?";
     case TYPE_F80:     return "F80";
     case TYPE_INT_ARBITRARY:
         snprintf(buf, 512, "%c%d", t->numeric_signed ? 'I' : 'U', t->numeric_width);

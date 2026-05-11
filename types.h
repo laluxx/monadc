@@ -43,6 +43,7 @@ typedef enum {
     TYPE_F80,           // F80                 — x87 extended precision
     TYPE_OPTIONAL,      // T?                  — optional type
     TYPE_NIL,           // nil
+    TYPE_APP,           // type application: M a (e.g. Maybe Float)
 } TypeKind;
 
 
@@ -105,6 +106,10 @@ typedef struct Type {
     // TYPE_INT_ARBITRARY
     int  numeric_width;   // bit-width: 1–64 or 128
     bool numeric_signed;  // true = I (signed), false = U (unsigned)
+
+    // TYPE_APP — type constructor application: M a
+    char        *app_constructor;  // e.g. "Maybe"
+    struct Type *app_arg;          // e.g. Float
 } Type;
 
 #define list_elem element_type
@@ -178,6 +183,7 @@ Type *type_layout_ref(const char *name);
 Type *type_ptr(Type *pointee);
 Type *type_optional(Type *inner);
 Type *type_nil(void);
+Type *type_app(const char *constructor, Type *arg);
 
 
 /// Constructors — HM types
