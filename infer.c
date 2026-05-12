@@ -130,7 +130,11 @@ int subst_find(Substitution *s, int id) {
 }
 
 void subst_bind(Substitution *s, int id, Type *t) {
-    int root   = subst_find(s, id);
+    int root = subst_find(s, id);
+    /* Never overwrite an existing concrete binding — doing so loses
+     * the original type and can create substitution cycles where
+     * subst_apply_depth chases var -> type -> var -> type forever. */
+    if (s->bound[root]) return;
     s->bound[root] = t;
 }
 
@@ -138,6 +142,11 @@ bool subst_union(Substitution *s, int a, int b) {
     int ra = subst_find(s, a);
     int rb = subst_find(s, b);
     if (ra == rb) return true;
+    /* If both roots have concrete bindings, do not merge — the caller
+     * (infer_unify_one_internal) will handle structural unification.
+     * Merging here would silently overwrite one binding with the other,
+     * which can create dangling references and substitution cycles.   */
+    if (s->bound[ra] && s->bound[rb]) return true;
     /* merge rb into ra */
     s->union_find[rb] = ra;
     /* if rb had a concrete binding, carry it to ra */
@@ -156,8 +165,9 @@ Type *subst_apply_shallow(Substitution *s, Type *t) {
     return t;
 }
 
-Type *subst_apply(Substitution *s, Type *t) {
+static Type *subst_apply_depth(Substitution *s, Type *t, int depth) {
     if (!t) return NULL;
+    if (depth > 64) return t;  /* cycle guard: stop recursion */
     t = subst_apply_shallow(s, t);
     if (!t) return NULL;
 
@@ -170,7 +180,7 @@ Type *subst_apply(Substitution *s, Type *t) {
         bool changed = false;
         Type **new_types = malloc(t->list_count * sizeof(Type*));
         for (int i = 0; i < t->list_count; i++) {
-            new_types[i] = subst_apply(s, t->list_types[i]);
+            new_types[i] = subst_apply_depth(s, t->list_types[i], depth + 1);
             if (new_types[i] != t->list_types[i]) changed = true;
         }
         if (!changed) {
@@ -186,7 +196,7 @@ Type *subst_apply(Substitution *s, Type *t) {
     case TYPE_PTR:
     case TYPE_COLL: {
         if (!t->element_type) return t;
-        Type *inner = subst_apply(s, t->element_type);
+        Type *inner = subst_apply_depth(s, t->element_type, depth + 1);
         if (inner == t->element_type) return t;
         Type *ret = calloc(1, sizeof(Type));
         ret->kind = t->kind;
@@ -196,7 +206,7 @@ Type *subst_apply(Substitution *s, Type *t) {
 
     case TYPE_ARR: {
         if (!t->arr_element_type) return t;
-        Type *inner = subst_apply(s, t->arr_element_type);
+        Type *inner = subst_apply_depth(s, t->arr_element_type, depth + 1);
         if (inner == t->arr_element_type) return t;
         Type *ret = type_arr(inner, t->arr_size);
         ret->arr_is_fat = t->arr_is_fat;
@@ -204,16 +214,19 @@ Type *subst_apply(Substitution *s, Type *t) {
     }
 
     case TYPE_ARROW: {
-        /* function type: param → return */
-        Type *p = subst_apply(s, t->arrow_param);
-        Type *r = subst_apply(s, t->arrow_ret);
+        Type *p = subst_apply_depth(s, t->arrow_param, depth + 1);
+        Type *r = subst_apply_depth(s, t->arrow_ret,   depth + 1);
         if (p == t->arrow_param && r == t->arrow_ret) return t;
         return type_arrow(p, r);
     }
 
     default:
-        return t;   /* ground types are already fully concrete */
+        return t;
     }
+}
+
+Type *subst_apply(Substitution *s, Type *t) {
+    return subst_apply_depth(s, t, 0);
 }
 
 
@@ -333,6 +346,16 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
 
     /* Both free variables — merge their roots */
     if (a->kind == TYPE_VAR && b->kind == TYPE_VAR) {
+        int ra = subst_find(s, a->var_id);
+        int rb = subst_find(s, b->var_id);
+        if (ra == rb) return true;
+        /* If either root is already bound to a concrete type, unify
+         * those concrete types structurally rather than merging roots.
+         * Merging two bound roots silently drops one binding.         */
+        if (s->bound[ra] && s->bound[rb])
+            return infer_unify_one_internal(ctx, s->bound[ra], s->bound[rb], line, col);
+        if (s->bound[ra]) { subst_bind(s, rb, s->bound[ra]); return true; }
+        if (s->bound[rb]) { subst_bind(s, ra, s->bound[rb]); return true; }
         subst_union(s, a->var_id, b->var_id);
         return true;
     }
@@ -340,6 +363,9 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
     /* Left is a free variable — bind it */
     if (a->kind == TYPE_VAR) {
         int root = subst_find(s, a->var_id);
+        /* If already bound, unify the existing binding with b */
+        if (s->bound[root])
+            return infer_unify_one_internal(ctx, s->bound[root], b, line, col);
         if (infer_occurs(s, root, b)) {
             snprintf(ctx->error_msg, sizeof(ctx->error_msg),
                      "%s:%d:%d: type error: infinite type (occurs check failed)",
@@ -354,6 +380,9 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
     /* Right is a free variable — bind it */
     if (b->kind == TYPE_VAR) {
         int root = subst_find(s, b->var_id);
+        /* If already bound, unify the existing binding with a */
+        if (s->bound[root])
+            return infer_unify_one_internal(ctx, a, s->bound[root], line, col);
         if (infer_occurs(s, root, a)) {
             snprintf(ctx->error_msg, sizeof(ctx->error_msg),
                      "%s:%d:%d: type error: infinite type (occurs check failed)",
@@ -370,34 +399,56 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
         /* TYPE_FN (unannotated Fn) is compatible with any arrow type */
         if (a->kind == TYPE_FN && b->kind == TYPE_ARROW) return true;
 
-        /* Collection acting as a function: (Coll -> 'a) ~ (Int -> 'a) */
-        if ((a->kind == TYPE_COLL || a->kind == TYPE_LIST || a->kind == TYPE_ARR || a->kind == TYPE_STRING) &&
+        /* Collection acting as a function: (Coll -> 'a) ~ (Int -> 'a)
+         * SAFETY GUARD: only allow this coercion when the arrow param is
+         * already a concrete integer/char type or an unbound fresh var.
+         * Never allow it when the arrow param is itself an arrow type —
+         * that means we are inside a polymorphic instantiation and the
+         * coercion would bind a shared type var to both String and an
+         * arrow type, creating a cycle in subst_apply.                  */
+        if ((a->kind == TYPE_COLL || a->kind == TYPE_LIST || a->kind == TYPE_ARR) &&
             b->kind == TYPE_ARROW) {
-            bool ok = infer_unify_one(ctx, type_int(), b->arrow_param, line, col);
-            if (!ok) return false;
-            if (a->kind == TYPE_COLL) return infer_unify_one(ctx, a->element_type, b->arrow_ret, line, col);
-            if (a->kind == TYPE_ARR) return infer_unify_one(ctx, a->arr_element_type, b->arrow_ret, line, col);
-            if (a->kind == TYPE_STRING) {
-                Type *tc = type_char();
-                ok = infer_unify_one(ctx, tc, b->arrow_ret, line, col);
-                type_free(tc);
-                return ok;
+            /* Collection indexing coercion: Coll a ~ (Int -> a)
+             * Only applies to actual collection types, never to String.
+             * String indexing is handled entirely in codegen; exposing it
+             * here as an arrow type causes cascading unification explosions
+             * when String appears as an argument to polymorphic operators
+             * like = and >= which have type forall a. a -> a -> Bool.    */
+            Type *bp = subst_apply_shallow(ctx->subst, b->arrow_param);
+            if (bp && (bp->kind == TYPE_ARROW || bp->kind == TYPE_FN ||
+                       bp->kind == TYPE_COLL  || bp->kind == TYPE_LIST ||
+                       bp->kind == TYPE_ARR   || bp->kind == TYPE_STRING ||
+                       bp->kind == TYPE_BOOL  || bp->kind == TYPE_FLOAT ||
+                       bp->kind == TYPE_INT   || bp->kind == TYPE_CHAR)) {
+                goto skip_coll_as_fn_ab;
             }
-            return true;
+            {
+                bool ok = infer_unify_one(ctx, type_int(), b->arrow_param, line, col);
+                if (!ok) return false;
+                if (a->kind == TYPE_COLL) return infer_unify_one(ctx, a->element_type, b->arrow_ret, line, col);
+                if (a->kind == TYPE_ARR) return infer_unify_one(ctx, a->arr_element_type, b->arrow_ret, line, col);
+                return true;
+            }
+            skip_coll_as_fn_ab:;
         }
-        if ((b->kind == TYPE_COLL || b->kind == TYPE_LIST || b->kind == TYPE_ARR || b->kind == TYPE_STRING) &&
+        if ((b->kind == TYPE_COLL || b->kind == TYPE_LIST || b->kind == TYPE_ARR) &&
             a->kind == TYPE_ARROW) {
-            bool ok = infer_unify_one(ctx, a->arrow_param, type_int(), line, col);
-            if (!ok) return false;
-            if (b->kind == TYPE_COLL) return infer_unify_one(ctx, a->arrow_ret, b->element_type, line, col);
-            if (b->kind == TYPE_ARR) return infer_unify_one(ctx, a->arrow_ret, b->arr_element_type, line, col);
-            if (b->kind == TYPE_STRING) {
-                Type *tc = type_char();
-                ok = infer_unify_one(ctx, a->arrow_ret, tc, line, col);
-                type_free(tc);
-                return ok;
+            Type *ap = subst_apply_shallow(ctx->subst, a->arrow_param);
+            if (ap && (ap->kind == TYPE_ARROW || ap->kind == TYPE_FN ||
+                       ap->kind == TYPE_COLL  || ap->kind == TYPE_LIST ||
+                       ap->kind == TYPE_ARR   || ap->kind == TYPE_STRING ||
+                       ap->kind == TYPE_BOOL  || ap->kind == TYPE_FLOAT ||
+                       ap->kind == TYPE_INT   || ap->kind == TYPE_CHAR)) {
+                goto skip_coll_as_fn_ba;
             }
-            return true;
+            {
+                bool ok = infer_unify_one(ctx, a->arrow_param, type_int(), line, col);
+                if (!ok) return false;
+                if (b->kind == TYPE_COLL) return infer_unify_one(ctx, a->arrow_ret, b->element_type, line, col);
+                if (b->kind == TYPE_ARR) return infer_unify_one(ctx, a->arrow_ret, b->arr_element_type, line, col);
+                return true;
+            }
+            skip_coll_as_fn_ba:;
         }
 
         if (a->kind == TYPE_ARROW && b->kind == TYPE_FN) return true;
@@ -456,6 +507,14 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
         if (a->kind == TYPE_APP && b->kind  == TYPE_LAYOUT) return true;
         if (b->kind == TYPE_APP && a->kind  == TYPE_LAYOUT) return true;
         if (a->kind == TYPE_APP && b->kind  == TYPE_APP   ) return true;
+
+        /* Single-element TYPE_LIST is a parenthesized scalar type, e.g. (Float).
+         * The dep checker wraps annotated param types like [x : Float] as
+         * TYPE_LIST{Float} — unwrap and retry so (Float) ~ Float succeeds.   */
+        if (a->kind == TYPE_LIST && a->list_count == 1 && b->kind != TYPE_LIST)
+            return infer_unify_one_internal(ctx, a->list_types[0], b, line, col);
+        if (b->kind == TYPE_LIST && b->list_count == 1 && a->kind != TYPE_LIST)
+            return infer_unify_one_internal(ctx, a, b->list_types[0], line, col);
 
         /* TYPE_APP ~ TYPE_APP: both are type constructor applications (e.g. Maybe a ~ Maybe b) */
         if (a->kind == TYPE_APP && b->kind == TYPE_APP) {
@@ -1024,7 +1083,31 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                 Type *elem = infer_fresh(ctx);
                 pt = type_list(&elem, 1);
             } else if (p->type_name) {
-                pt = type_from_name(p->type_name);
+                /* Strip surrounding parens from type names like "(Float)"
+                 * produced by bracketed annotations [x : Float].
+                 * type_from_name("(Float)") returns TYPE_LIST(Float) which
+                 * poisons HM with spurious single-element tuple types.    */
+                const char *tname = p->type_name;
+                char tname_buf[256];
+                /* Strip surrounding parens only for compound types that were
+                 * wrapped in reader.c: "(Pointer :: T)" -> "Pointer :: T".
+                 * Simple types no longer arrive with parens after the reader
+                 * fix, but we keep this as a safety net for any edge cases. */
+                if (tname[0] == '(' && tname[strlen(tname)-1] == ')') {
+                    size_t len = strlen(tname);
+                    if (len >= 3 && len - 2 < sizeof(tname_buf)) {
+                        memcpy(tname_buf, tname + 1, len - 2);
+                        tname_buf[len - 2] = '\0';
+                        tname = tname_buf;
+                    }
+                }
+                pt = type_from_name(tname);
+                /* type_from_name only knows builtin scalars. For user-defined
+                 * layout types like Vec3 it returns NULL. If the name starts
+                 * with an uppercase letter, treat it as a layout type so HM
+                 * gets a concrete type instead of a fresh variable.          */
+                if (!pt && tname[0] >= 'A' && tname[0] <= 'Z')
+                    pt = type_layout(tname, NULL, 0, 0, false, 0);
                 if (!pt) pt = infer_fresh(ctx);
             } else {
                 pt = infer_fresh(ctx);
@@ -1309,20 +1392,28 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         }
 
         /* ---- function application ------------------------------------ */
-        /* If the head is a symbol that resolves to an Arr, Set, or Map
-         * variable, skip arrow unification — indexing is handled in
-         * codegen directly and does not have an arrow type in HM.       */
+        /* If the head is a symbol that resolves to a collection, String,
+         * Arr, Set, or Map variable, skip arrow unification entirely.
+         * Indexing (s[i]) is lowered to rt_coll_index in codegen and
+         * has no arrow type in HM — generating String ~ (Int -> 'a)
+         * here is always wrong and causes unification explosions.       */
         if (head->type == AST_SYMBOL) {
             TypeScheme *head_sc = infer_env_lookup(ctx, head->symbol);
             if (head_sc) {
                 Type *head_t = subst_apply(ctx->subst, head_sc->type);
-                if (head_t && (head_t->kind == TYPE_ARR  ||
-                               head_t->kind == TYPE_SET  ||
-                               head_t->kind == TYPE_MAP)) {
+                if (head_t && (head_t->kind == TYPE_ARR     ||
+                               head_t->kind == TYPE_SET     ||
+                               head_t->kind == TYPE_MAP     ||
+                               head_t->kind == TYPE_STRING  ||
+                               head_t->kind == TYPE_COLL)) {
                     /* Infer arg expressions for side-effects only */
                     for (size_t i = 1; i < ast->list.count; i++)
                         infer_expr(ctx, ast->list.items[i]);
-                    result = infer_fresh(ctx);
+                    /* Return Char for String indexing, unknown for others */
+                    if (head_t->kind == TYPE_STRING)
+                        result = type_char();
+                    else
+                        result = infer_fresh(ctx);
                     break;
                 }
             }
@@ -1387,35 +1478,51 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
          * genuine value-level information.  We must NOT bridge:
          *   - Arrow / Fn types  (HM infers these better from call sites)
          *   - TYPE_UNKNOWN      (no information)
-         *   - TYPE_INT when the dep checker saw a universe / type-level
-         *     symbol (e.g. a layout field name used as a value): dep
-         *     returns val_meta for unbound names which ground_of_value
-         *     maps to type_unknown, but if something else slipped a
-         *     universe type through we reject it here by checking that
-         *     the HM result is already constrained to a numeric type
-         *     before letting dep override it.
-         *
-         * The guard `result->kind == TYPE_VAR` means HM has no opinion
-         * yet and we can safely accept the dep hint.  If HM already has
-         * a concrete type we run a compatibility check first.           */
+         *   - TYPE_LIST with >1 elements: these are tuple/product types from
+         *     the dep checker representing (Json String) etc. — they must
+         *     never be unified against HM scalar or arrow types, which would
+         *     create a TYPE_ARROW -> TYPE_LIST cycle causing infinite recursion
+         *     in subst_apply when the list element contains an arrow type var.
+         */
         TypeKind k = ast->inferred_type->kind;
+
+        /* Reject multi-element LIST hints: (Json String) is a product type
+         * in the dep world but HM has no product types — unifying would bind
+         * a type var 'a to TYPE_LIST(Json,String) which subst_apply would then
+         * chase through every arrow in >=, creating an infinite TYPE_ARROW cycle. */
+        bool is_multi_tuple = (k == TYPE_LIST &&
+                               ast->inferred_type->list_count > 1);
+
         bool is_ground = (k != TYPE_ARROW && k != TYPE_FN && k != TYPE_UNKNOWN
-                          && k != TYPE_VAR);
-        /* Extra safety: reject universe-level leakage.  dep sometimes
-         * seeds TYPE_INT for Nat literals that are actually type indices;
-         * if the AST node is a symbol that is not in the HM env we must
-         * not let dep override the fresh var with a conflicting ground
-         * type from a different scope.                                   */
+                          && k != TYPE_VAR && !is_multi_tuple);
+
+        /* Extra safety: reject universe-level leakage and symbol-scope mismatches. */
         bool dep_hint_trustworthy = is_ground;
         if (is_ground && ast->type == AST_SYMBOL) {
             TypeScheme *sc = infer_env_lookup(ctx, ast->symbol);
             if (!sc) {
-                /* dep seeded a type for a name HM doesn't know — this is
-                 * exactly the "x from Vec3 layout poisoning iter" class of
-                 * bug.  Discard the dep hint; HM will unify from context. */
                 dep_hint_trustworthy = false;
             }
         }
+
+        /* Additional guard: if HM already inferred a concrete arrow/structured
+         * type for this node, never overwrite it with a dep scalar hint.
+         * This prevents Bool seeded on a `>=` function symbol from being
+         * unified against the arrow type `'a -> 'a -> Bool`, which would
+         * bind 'a to Bool and then Bool -> Bool -> Bool against (Json String). */
+        if (dep_hint_trustworthy && result->kind != TYPE_VAR) {
+            bool result_is_arrow = (result->kind == TYPE_ARROW ||
+                                    result->kind == TYPE_FN);
+            bool hint_is_scalar  = (k == TYPE_BOOL || k == TYPE_INT ||
+                                    k == TYPE_FLOAT || k == TYPE_CHAR ||
+                                    k == TYPE_STRING);
+            if (result_is_arrow && hint_is_scalar) {
+                /* dep annotated the *call result* Bool on the function node
+                 * itself; HM correctly sees the full arrow type — trust HM. */
+                dep_hint_trustworthy = false;
+            }
+        }
+
         if (dep_hint_trustworthy) {
             fprintf(stderr, "├─ \033[34mInterop\033[0m HM unifies with prior Dependent Type check: %s\n", type_to_string(ast->inferred_type));
             infer_constrain(ctx, result, ast->inferred_type, ast->line, ast->column);
@@ -1623,6 +1730,11 @@ static void infer_validate_calls(InferCtx *ctx, AST *ast) {
                         param_t->kind != TYPE_UNKNOWN &&
                         arg_t->kind   != TYPE_VAR &&
                         arg_t->kind   != TYPE_UNKNOWN) {
+                        /* Unwrap single-element TYPE_LIST — (Float) is just Float */
+                        if (param_t->kind == TYPE_LIST && param_t->list_count == 1)
+                            param_t = param_t->list_types[0];
+                        if (arg_t->kind == TYPE_LIST && arg_t->list_count == 1)
+                            arg_t = arg_t->list_types[0];
                         bool arg_is_fn   = (arg_t->kind   == TYPE_ARROW || arg_t->kind   == TYPE_FN);
                         bool param_is_fn = (param_t->kind == TYPE_ARROW || param_t->kind == TYPE_FN);
                         if (arg_is_fn && !param_is_fn) {

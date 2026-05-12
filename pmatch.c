@@ -50,6 +50,14 @@ ASTPattern parse_single_pattern(Parser *p) {
         return pat;
     }
 
+    // Character literal — treat as integer (ASCII value)
+    if (parser_at(p, TOK_CHAR)) {
+        pat.kind      = PAT_LITERAL_INT;
+        pat.lit_value = (double)(unsigned char)p->current.value[0];
+        parser_advance(p);
+        return pat;
+    }
+
     // String literal
     if (parser_at(p, TOK_STRING)) {
         pat.kind = PAT_LITERAL_STRING;

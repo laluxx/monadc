@@ -4046,10 +4046,22 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         }
                         Type *param_type = NULL;
                         if (param->type_name) {
-                            param_type = type_from_name(param->type_name);
+                            /* Strip surrounding parens from type names like "(Float)"
+                             * produced by bracketed annotations [x : Float].        */
+                            const char *tname = param->type_name;
+                            char tname_buf[256];
+                            if (tname[0] == '(' && tname[strlen(tname)-1] == ')') {
+                                size_t len = strlen(tname);
+                                if (len >= 3 && len - 2 < sizeof(tname_buf)) {
+                                    memcpy(tname_buf, tname + 1, len - 2);
+                                    tname_buf[len - 2] = '\0';
+                                    tname = tname_buf;
+                                }
+                            }
+                            param_type = type_from_name(tname);
                             /* Not a primitive — check ADT/layout registry */
                             if (!param_type || param_type->kind == TYPE_UNKNOWN) {
-                                Type *lay = env_lookup_layout(ctx->env, param->type_name);
+                                Type *lay = env_lookup_layout(ctx->env, tname);
                                 if (lay) param_type = type_clone(lay);
                             }
                             if (!param_type || param_type->kind == TYPE_UNKNOWN) {

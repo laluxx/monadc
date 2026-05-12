@@ -16,7 +16,7 @@
 - [ ] Compile time IFs: #if (expr) ...  #---
 - [ ] Serialize modules with types
 - [ ] eval
-- [ ] labels like :label that create continuations that you can goto
+- [ ] labels like :label that create continuations that you can =goto=
 - [ ] arbitrary return at any point of execution using =->=
 - [ ] Builtin Path type and Path literals e.g ~/path/to/file.c (also support windows)
 - [ ] The coll type: [a] should NOT be a runtime thing, it should just do monomorphization
@@ -52,6 +52,9 @@
 * TODO Repl [0/1]
 - [ ] ,doc should also show the alias if it exists
 
+* TODO Build System [0/1]
+- [ ] Generate a Tree Graph of the package dependencies
+
 
 
 * TODO nil bubble tracing
@@ -65,6 +68,31 @@ nil cannot crash. ?? catching a nil in debug mode prints a trace.
 
 debug: fat pointer — raw pointer + static string table baked into binary
 release: thin pointer — ?? is a single null check, table stripped entirely
+
+* TODO Explicit Parameter Copy (@) for Local Mutation
+
+- The idea is allowing the programmer to decide move semantics:
+
+Function parameters are immutable references by default (no copy).
+Prefix with =@= to get a mutable owned copy:
+
+#+begin_src monad
+define quicksort :: (Int) -> (Int)
+  @list -> sort-in-place list
+#+end_src
+
+Default -> zero copy, pure.
+=@=       -> one copy, local mutation allowed. Caller never sees changes.
+
+
+* TODO Unified Monadic Bind (No Do Blocks)
+- [ ] Implement =<-= as the ONE binding operator for BOTH pure and monadic contexts
+- [ ] Compiler automatically detects if RHS is monadic (implements =>>==) or pure
+- [ ] Monadic: desugar ~x <- expr~ to ~expr >>= \x -> ...~
+- [ ] Pure: ~x <- expr~ becomes regular assignment
+- [ ] Automatic lifting: in monadic context, pure RHS gets wrapped in =return= / =pure=
+- [ ] Type inference determines the monad from context (function return type, etc.)
+- Result: No =do= keyword needed anywhere. Ever.
 
 
 * TODO Implement distinct semantics for :: vs ∈

@@ -1,0 +1,15 @@
+
+
+
+
+
+
+data T = A | B | C deriving [Bounded Enum Show]
+
+;;                       Optional semicolon
+;;                               ↓
+define toEnumSafe :: ∀ t. [Enum t, Bounded t] => Int -> Maybe t
+  n | n >= 0 && n <= size -> Just (toEnum n)
+    | otherwise           -> Nothing
+    where
+      size = fromEnum (maxBound :: t) - fromEnum (minBound :: t)

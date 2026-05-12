@@ -1179,7 +1179,7 @@ static bool is_symbol_start(unsigned char c) {
 }
 
 static bool is_symbol_char(unsigned char c) {
-    return is_symbol_start(c) || (c>='0'&&c<='9') || c=='.';
+    return is_symbol_start(c) || (c>='0'&&c<='9') || c=='.' || c=='\'';
 }
 
 /* When we are inside a symbol and see '.', only consume it if the next
@@ -1664,9 +1664,18 @@ static ASTParam parse_one_param(Parser *p) {
                 p->current = lexer_next_token(p->lexer);
             }
             if (type_buf[0]) {
-                char wrapped[560];
-                snprintf(wrapped, sizeof(wrapped), "(%s)", type_buf);
-                param.type_name = my_strdup(wrapped);
+                /* Only wrap in parens when the type is compound (contains
+                 * spaces), e.g. "Pointer :: T" -> "(Pointer :: T)".
+                 * Simple types like "Vec3" or "Float" are stored as-is so
+                 * that type_from_name / codegen see the bare name without
+                 * spurious parentheses causing lookup failures.           */
+                if (strchr(type_buf, ' ')) {
+                    char wrapped[560];
+                    snprintf(wrapped, sizeof(wrapped), "(%s)", type_buf);
+                    param.type_name = my_strdup(wrapped);
+                } else {
+                    param.type_name = my_strdup(type_buf);
+                }
             }
         }
     }
@@ -1808,15 +1817,15 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
             }
 
             if (param.type_name == NULL) {
-                    char gen_name[32];
-                    snprintf(gen_name, sizeof(gen_name), "__p_%d", count);
-                    char tbuf[64];
-                    snprintf(tbuf, sizeof(tbuf), "[%s]", param.name);
-                    free(param.name);
-                    param.name = my_strdup(gen_name);
-                    param.type_name = my_strdup(tbuf);
-                    param.is_anon = true;
-                } else {
+                char gen_name[32];
+                snprintf(gen_name, sizeof(gen_name), "__p_%d", count);
+                char tbuf[64];
+                snprintf(tbuf, sizeof(tbuf), "[%s]", param.name);
+                free(param.name);
+                param.name = my_strdup(gen_name);
+                param.type_name = my_strdup(tbuf);
+                param.is_anon = true;
+            } else {
                 param.is_anon = false;
             }
 
@@ -1977,14 +1986,25 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                     count++;
                     p->current = lexer_next_token(p->lexer);
                 } else {
-                    /* Final return type — consume it */
+                    /* Final return type — consume it.
+                     * depth starts at -1 because we are already inside the
+                     * signature paren (parseVal ...) which was opened before
+                     * parse_fn_signature was called. Every '(' we see opens
+                     * a nested type like (Json String). A ')' at depth -1
+                     * means we hit the signature's own closing paren — stop.
+                     * A ')' at depth >= 0 closes a nested type — include it. */
                     char type_buf[512] = {0};
-                    int depth = 0;
+                    int depth = -1;
                     while (p->current.type != TOK_EOF) {
-                        if (p->current.type == TOK_LPAREN || p->current.type == TOK_LBRACKET || p->current.type == TOK_LBRACE || p->current.type == TOK_HASH_LBRACE) depth++;
-                        if ((p->current.type == TOK_RPAREN || p->current.type == TOK_RBRACKET || p->current.type == TOK_RBRACE) && depth > 0) depth--;
-
-                        if (depth == 0 && (p->current.type == TOK_RPAREN || p->current.type == TOK_ARROW)) break;
+                        if (p->current.type == TOK_LPAREN) depth++;
+                        if (p->current.type == TOK_RPAREN) {
+                            if (depth < 0) break; /* signature's closing paren — stop */
+                            depth--;
+                        }
+                        if (p->current.type == TOK_ARROW && depth < 0) break;
+                        /* brackets never appear inside type expressions —
+                         * hitting [ at depth < 0 means we've reached the body */
+                        if (depth < 0 && p->current.type == TOK_LBRACKET) break;
 
                         const char *tok_str = p->current.value ? p->current.value
                                             : (p->current.type == TOK_ARROW    ? "->" :
@@ -2888,6 +2908,61 @@ static AST *parse_list(Parser *p) {
         return result;
     }
 
+    // Detect (match target with clauses...)
+    if (p->current.type == TOK_SYMBOL &&
+        strcmp(p->current.value, "match") == 0) {
+        p->current = lexer_next_token(p->lexer);
+
+        AST *target = parse_expr(p);
+
+        if (p->current.type != TOK_SYMBOL || strcmp(p->current.value, "with") != 0) {
+            compiler_error(p->current.line, p->current.column,
+                           "Expected 'with' after match expression");
+        }
+        p->current = lexer_next_token(p->lexer);
+
+        AST *pm = parse_pmatch_clauses(p, 1);
+
+        ASTParam *pm_params = malloc(sizeof(ASTParam));
+        pm_params[0].name = my_strdup("__match_target");
+        pm_params[0].type_name = NULL;
+        pm_params[0].is_rest = false;
+        pm_params[0].is_anon = true;
+
+        AST *desugared = pmatch_desugar(pm, pm_params, 1);
+
+        for (int _i = 0; _i < pm->pmatch.clause_count; _i++) {
+            ASTPMatchClause *cl = &pm->pmatch.clauses[_i];
+            for (int _j = 0; _j < cl->pattern_count; _j++) {
+                ast_pattern_free(&cl->patterns[_j]);
+            }
+            free(cl->patterns);
+        }
+        free(pm->pmatch.clauses);
+        free(pm);
+
+        AST **body_exprs = malloc(sizeof(AST*));
+        body_exprs[0] = desugared;
+        AST *lam = ast_new_lambda(pm_params, 1, NULL, NULL, NULL, false, desugared, body_exprs, 1);
+
+        AST *call = ast_new_list();
+        ast_list_append(call, lam);
+        ast_list_append(call, target);
+
+        call->line = start_line;
+        call->column = start_column;
+        call->end_column = desugared->end_column;
+
+        if (p->current.type != TOK_RPAREN) {
+            compiler_error(p->current.line, p->current.column,
+                           "Expected ')' to close match expression");
+        }
+        p->current = lexer_next_token(p->lexer);
+
+        ast_free(list);
+        return call;
+    }
+
     if (p->current.type == TOK_SYMBOL &&
         (strcmp(p->current.value, "let") == 0 ||
          strcmp(p->current.value, "let*") == 0)) {
@@ -3067,6 +3142,36 @@ static AST *parse_list(Parser *p) {
                     while (peek_cur.type != TOK_RPAREN &&
                            peek_cur.type != TOK_EOF     &&
                            peek_cur.type != TOK_KEYWORD) {
+                        /* Skip #line directive tokens transparently:
+                         * (#line N COL) — the lexer normally handles these but
+                         * in peek mode we are using a cloned lexer that does NOT
+                         * call lexer_next_token's #line handler, so the tokens
+                         * leak through as LPAREN + SYMBOL("#line") + NUMBER + NUMBER + RPAREN.
+                         * A stray LPAREN from a #line directive inflates depth and
+                         * hides the '->' tokens we are looking for at depth 0.
+                         * Detect and skip the entire (#line N COL) sequence here. */
+                        if (peek_cur.type == TOK_LPAREN) {
+                            Lexer tmp_lex = peek_lex;
+                            Token tmp_tok = lexer_next_token(&tmp_lex);
+                            bool is_line_directive = (tmp_tok.type == TOK_SYMBOL &&
+                                                      tmp_tok.value &&
+                                                      strcmp(tmp_tok.value, "#line") == 0);
+                            free(tmp_tok.value);
+                            if (is_line_directive) {
+                                /* consume (#line N COL) entirely in peek_lex */
+                                free(peek_cur.value);
+                                peek_cur = lexer_next_token(&peek_lex); /* '#line' */
+                                free(peek_cur.value);
+                                peek_cur = lexer_next_token(&peek_lex); /* N */
+                                free(peek_cur.value);
+                                peek_cur = lexer_next_token(&peek_lex); /* COL */
+                                free(peek_cur.value);
+                                peek_cur = lexer_next_token(&peek_lex); /* ')' */
+                                free(peek_cur.value);
+                                peek_cur = lexer_next_token(&peek_lex); /* next real token */
+                                continue;
+                            }
+                        }
                         if (peek_cur.type == TOK_LPAREN ||
                             peek_cur.type == TOK_LBRACKET) depth++;
                         if ((peek_cur.type == TOK_RPAREN ||
@@ -4394,6 +4499,45 @@ static AST *parse_list(Parser *p) {
                             sizeof(char*) * (ctor.field_count + 1));
                         ctor.field_types[ctor.field_count++] = my_strdup(type_buf);
                     }
+                } else if (p->current.type == TOK_LPAREN) {
+                    /* Parenthesized type: (Json) or (String Json) or ((String Json))
+                     * Collect the entire (...) including nested parens as a type string */
+                    char type_buf[512] = {0};
+                    int depth = 0;
+                    while (p->current.type != TOK_EOF) {
+                        if (p->current.type == TOK_LPAREN) {
+                            depth++;
+                            if (type_buf[0]) strncat(type_buf, " ",
+                                sizeof(type_buf) - strlen(type_buf) - 1);
+                            strncat(type_buf, "(",
+                                sizeof(type_buf) - strlen(type_buf) - 1);
+                            p->current = lexer_next_token(p->lexer);
+                        } else if (p->current.type == TOK_RPAREN) {
+                            depth--;
+                            strncat(type_buf, ")",
+                                sizeof(type_buf) - strlen(type_buf) - 1);
+                            p->current = lexer_next_token(p->lexer);
+                            if (depth == 0) break;
+                        } else {
+                            if (type_buf[0] && type_buf[strlen(type_buf)-1] != '(') {
+                                strncat(type_buf, " ",
+                                    sizeof(type_buf) - strlen(type_buf) - 1);
+                            }
+                            if (p->current.value) {
+                                strncat(type_buf, p->current.value,
+                                    sizeof(type_buf) - strlen(type_buf) - 1);
+                            } else if (p->current.type == TOK_ARROW) {
+                                strncat(type_buf, "->",
+                                    sizeof(type_buf) - strlen(type_buf) - 1);
+                            }
+                            p->current = lexer_next_token(p->lexer);
+                        }
+                    }
+                    if (type_buf[0]) {
+                        ctor.field_types = realloc(ctor.field_types,
+                            sizeof(char*) * (ctor.field_count + 1));
+                        ctor.field_types[ctor.field_count++] = my_strdup(type_buf);
+                    }
                 } else {
                     p->current = lexer_next_token(p->lexer);
                 }
@@ -5334,54 +5478,6 @@ static AST *parse_expr_base(Parser *p) {
 
     }
     case TOK_SYMBOL: {
-        if (tok.value && strcmp(tok.value, "match") == 0) {
-            int match_line = tok.line;
-            int match_col = tok.column;
-            p->current = lexer_next_token(p->lexer);
-
-            AST *target = parse_expr(p);
-
-            if (p->current.type != TOK_SYMBOL || strcmp(p->current.value, "with") != 0) {
-                compiler_error(p->current.line, p->current.column,
-                               "Expected 'with' after match expression");
-            }
-            p->current = lexer_next_token(p->lexer);
-
-            AST *pm = parse_pmatch_clauses(p, 1);
-
-            ASTParam *pm_params = malloc(sizeof(ASTParam));
-            pm_params[0].name = my_strdup("__match_target");
-            pm_params[0].type_name = NULL;
-            pm_params[0].is_rest = false;
-            pm_params[0].is_anon = true;
-
-            AST *desugared = pmatch_desugar(pm, pm_params, 1);
-
-            for (int _i = 0; _i < pm->pmatch.clause_count; _i++) {
-                ASTPMatchClause *cl = &pm->pmatch.clauses[_i];
-                for (int _j = 0; _j < cl->pattern_count; _j++) {
-                    ast_pattern_free(&cl->patterns[_j]);
-                }
-                free(cl->patterns);
-            }
-            free(pm->pmatch.clauses);
-            free(pm);
-
-            AST **body_exprs = malloc(sizeof(AST*));
-            body_exprs[0] = desugared;
-            AST *lam = ast_new_lambda(pm_params, 1, NULL, NULL, NULL, false, desugared, body_exprs, 1);
-
-            AST *call = ast_new_list();
-            ast_list_append(call, lam);
-            ast_list_append(call, target);
-
-            call->line = match_line;
-            call->column = match_col;
-            call->end_column = desugared->end_column;
-
-            return call;
-        }
-
         // & is address-of only when the & is immediately adjacent to the next
         // token (no whitespace between them), meaning tok.end_column == next tok.column.
         // We detect this by comparing columns: if & is at col N and next token

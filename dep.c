@@ -2232,6 +2232,22 @@ static Value *dep_infer_internal(DepCtx *ctx, Term *t) {
             }
 
             if (!fn_ty || fn_ty->kind != VAL_PI) {
+                /* Tuple/product formation: (A b c ...) where A is not a Pi.
+                 * This implements the "lists and tuples are the same" semantic:
+                 * (JNull r) is a 2-tuple of (Json, String), not a function call.
+                 * We accept remaining args as tuple elements and return a LIST type
+                 * whose elements are the types of all components.              */
+                if (fn_ty && (fn_ty->kind == VAL_EMBED   ||
+                              fn_ty->kind == VAL_NEUTRAL ||
+                              fn_ty->kind == VAL_UNIVERSE)) {
+                    /* Consume all remaining args as tuple elements, infer each */
+                    for (int j = i; j < t->app_argc; j++) {
+                        dep_infer(ctx, t->app_args[j]);
+                    }
+                    /* Return unknown — HM will resolve the tuple type from context */
+                    int meta_id = meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, "?tuple");
+                    return val_meta(meta_id, val_spine_empty());
+                }
                 dep_error_set(ctx, t->line, t->col,
                               "\n"
                               "    • Applied too many arguments to function\n"

@@ -21,6 +21,7 @@
 ;; data TrafficLight Red | Yellow | Green
 ;;   deriving [Eq Enum]
 
+
 ;; show Red = Red
 ;; show Red = Green
 ;; show Red != Green
@@ -56,61 +57,59 @@
 
 ;; show char-upcase 'a'
 
-;---
-;; define newline -> a
-;;   show ""
+;; ---
+define newline -> a
+  show ""
 
-;; define abs :: Float -> Float
-;;   x -> (if (x < 0.0) (0.0 - x) x)
+define abs :: Float -> Float
+  x -> (if (x < 0.0) (0.0 - x) x)
 
-;; (define (sqrt [x : Float] -> Float)
-;;   :doc "Square root of X via Newton-Raphson."
-;;   :alias √
-;;   (def (iter [guess : Float] -> Float)
-;;     (def next ((guess + (x / guess)) / 2.0))
-;;       (if ((abs (next - guess)) < 1e-10)
-;;         next
-;;         (iter next)))
-;;   (if (x <= 0.0) 0.0 (iter (x / 2.0))))
-
-
+(define (sqrt [x : Float] -> Float)
+  :doc "Square root of X via Newton-Raphson."
+  :alias √
+  (def (iter [guess : Float] -> Float)
+    (def next ((guess + (x / guess)) / 2.0))
+      (if ((abs (next - guess)) < 1e-10)
+        next
+        (iter next)))
+  (if (x <= 0.0) 0.0 (iter (x / 2.0))))
 
 
-;; (layout Vec3
-;;   [x :: Float]
-;;   [y :: Float]
-;;   [z :: Float])
+(layout Vec3
+  [x :: Float]
+  [y :: Float]
+  [z :: Float])
 
-;; class Pow a where
-;;   type Result a
-;;   (^) :: a -> Int -> Result a
+class Pow a where
+  type Result a
+  (^) :: a -> Int -> Result a
 
-;; instance Pow Float where
-;;   type Result Float = Float
-;;   (^ base exp) =>
-;;     (if (exp = 0) 1.0
-;;         (if (exp > 0)
-;;             (base * (base ^ (exp - 1)))
-;;             (1.0 / (base ^ (0 - exp)))))
+instance Pow Float where
+  type Result Float = Float
+  (^ base exp) =>
+    (if (exp = 0) 1.0
+        (if (exp > 0)
+            (base * (base ^ (exp - 1)))
+            (1.0 / (base ^ (0 - exp)))))
 
-;; instance Pow Vec3 where
-;;   type Result Vec3 = Float
-;;   (v ^ exp) =>
-;;     ((v.x ^ exp) + (v.y ^ exp) + (v.z ^ exp))
+instance Pow Vec3 where
+  type Result Vec3 = Float
+  (v ^ exp) =>
+    ((v.x ^ exp) + (v.y ^ exp) + (v.z ^ exp))
 
-;; ;; DONE Make this compile
-;; define normalize :: Vec3 -> Vec3
-;;   v[x y z] -> def len √v²
-;;                     x   y   z
-;;               Vec3 ─── ─── ───
-;;                    len len len
+;; DONE Make this compile
+define normalize :: Vec3 -> Vec3
+  v[x y z] -> def len √v²
+                    x   y   z
+              Vec3 ─── ─── ───
+                   len len len
 
 
-;; define v (Vec3 3.0 4.0 5.0)
+define v (Vec3 3.0 4.0 5.0)
 
-;; show v
-;; (newline)
-;; show normalize v
+show v
+(newline)
+show normalize v
 
 ;---
 

@@ -462,7 +462,7 @@ Type *type_list(Type **types, int count) {
     if (count > 0 && types) {
         t->list_types = malloc(count * sizeof(Type*));
         for (int i = 0; i < count; i++) {
-            t->list_types[i] = types[i];
+            t->list_types[i] = types[i] ? type_clone(types[i]) : type_unknown();
         }
     }
     t->list_count = count;
