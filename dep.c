@@ -2429,16 +2429,7 @@ static bool dep_check_internal(DepCtx *ctx, Term *t, Value *expected_type) {
     // ── Lambda — check against Π ──────────────────────────────────
     case TERM_LAM: {
         if (expected_type->kind != VAL_PI) {
-            // Insert implicit argument if the Π is implicit
-            if (expected_type->kind == VAL_PI &&
-                expected_type->implicit == IMPLICIT_IMPLICIT) {
-                // skip — handled below in the default path
-            } else {
-                dep_error_set(ctx, t->line, t->col,
-                              "lambda in non-function position: expected %s",
-                              term_to_string(dep_quote(expected_type, ctx->depth, ctx->mctx)));
-                return false;
-            }
+            goto check_default;
         }
         // Check domain annotation (if provided and not a hole) matches the expected Π
         if (t->binder_dom && t->binder_dom->kind != TERM_HOLE) {
@@ -2529,6 +2520,7 @@ static bool dep_check_internal(DepCtx *ctx, Term *t, Value *expected_type) {
         return true;
     }
 
+    check_default:
     // ── Default: infer and compare ────────────────────────────────
     default: {
         Value *inferred = dep_infer(ctx, t);

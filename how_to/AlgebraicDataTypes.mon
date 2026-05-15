@@ -42,6 +42,8 @@
 
 
 
+
+
 ;; define foldl :: (b -> a -> b) -> b -> [a] -> b
 ;;   _ acc []     -> acc
 ;;   f acc [x|xs] -> foldl f (f acc x) xs
@@ -58,87 +60,128 @@
 ;; show char-upcase 'a'
 
 ;; ---
-define newline -> a
-  show ""
+;; define newline -> a
+;;   show ""
 
-define abs :: Float -> Float
-  x -> (if (x < 0.0) (0.0 - x) x)
+;; define abs :: Float -> Float
+;;   x -> (if (x < 0.0) (0.0 - x) x)
 
-(define (sqrt [x : Float] -> Float)
-  :doc "Square root of X via Newton-Raphson."
-  :alias √
-  (def (iter [guess : Float] -> Float)
-    (def next ((guess + (x / guess)) / 2.0))
-      (if ((abs (next - guess)) < 1e-10)
-        next
-        (iter next)))
-  (if (x <= 0.0) 0.0 (iter (x / 2.0))))
-
-
-(layout Vec3
-  [x :: Float]
-  [y :: Float]
-  [z :: Float])
-
-class Pow a where
-  type Result a
-  (^) :: a -> Int -> Result a
-
-instance Pow Float where
-  type Result Float = Float
-  (^ base exp) =>
-    (if (exp = 0) 1.0
-        (if (exp > 0)
-            (base * (base ^ (exp - 1)))
-            (1.0 / (base ^ (0 - exp)))))
-
-instance Pow Vec3 where
-  type Result Vec3 = Float
-  (v ^ exp) =>
-    ((v.x ^ exp) + (v.y ^ exp) + (v.z ^ exp))
-
-;; DONE Make this compile
-define normalize :: Vec3 -> Vec3
-  v[x y z] -> def len √v²
-                    x   y   z
-              Vec3 ─── ─── ───
-                   len len len
+;; (define (sqrt [x : Float] -> Float)
+;;   :doc "Square root of X via Newton-Raphson."
+;;   :alias √
+;;   (def (iter [guess : Float] -> Float)
+;;     (def next ((guess + (x / guess)) / 2.0))
+;;       (if ((abs (next - guess)) < 1e-10)
+;;         next
+;;         (iter next)))
+;;   (if (x <= 0.0) 0.0 (iter (x / 2.0))))
 
 
-define v (Vec3 3.0 4.0 5.0)
+;; data Vec (A : Type a) : ℕ -> Type a
+;;   []  : Vec A zero
+;;    .  : ∀ (x : A) (xs : Vec A n) → Vec A (suc n)
 
-show v
-(newline)
-show normalize v
+
+;; show ((lambda (x) x) 10)
+
+
+;; define test-set :: Int -> Int
+;;   _ -> result
+;;   where
+;;     result = 42
+
+;; show test-set 0
+
+
+
+define until :: (a -> Bool) -> (a -> a) -> a -> a
+  p f                -> go
+  where
+    go x | p x       -> x
+         | otherwise -> go (f x)
+
+
+show until (> 10) (+ 1) 5
+
+
+
+
+;; define abs :: Float -> Float
+;;   x -> if x < 0.0 then 0.0 - x else x
+
+;; define sqrt :: Float -> Float
+;;   x | x <= 0    -> 0
+;;     | otherwise -> until goodEnough improve (x / 2)
+;;     where
+;;       improve    g -> (g + x / g) / 2
+;;       goodEnough g -> abs (improve g - g) < 1e-12 * max 1 g
+
+
+
+
+;; (layout Vec3
+;;   [x :: Float]
+;;   [y :: Float]
+;;   [z :: Float])
+
+;; class Pow a where
+;;   type Result a
+;;   (^) :: a -> Int -> Result a
+
+;; instance Pow Float where
+;;   type Result Float = Float
+;;   (^ base exp) =>
+;;     (if (exp = 0) 1.0
+;;         (if (exp > 0)
+;;             (base * (base ^ (exp - 1)))
+;;             (1.0 / (base ^ (0 - exp)))))
+
+;; instance Pow Vec3 where
+;;   type Result Vec3 = Float
+;;   (v ^ exp) =>
+;;     ((v.x ^ exp) + (v.y ^ exp) + (v.z ^ exp))
+
+;; ;; DONE Make this compile
+;; define normalize :: Vec3 -> Vec3
+;;   v[x y z] -> def len √v²
+;;                     x   y   z
+;;               Vec3 ─── ─── ───
+;;                    len len len
+
+
+;; define v (Vec3 3.0 4.0 5.0)
+
+;; show v
+;; (newline)
+;; show normalize v
 
 ;---
 
 
 
 
-class Monad m where
-  (>>=)  :: m a -> (a -> m b) -> m b
-  return :: a -> m a
+;; class Monad m where
+;;   (>>=)  :: m a -> (a -> m b) -> m b
+;;   return :: a -> m a
 
-data Maybe a = Nothing | Just a
-
-
-instance Monad Maybe where
-  (ma >>= f) =>
-    match ma with
-      Nothing -> Nothing
-      Just x  -> f x
-  (return x) => (Just x)
-
-define safe-last :: [a] -> Maybe a
-  []     -> Nothing
-  [x]    -> Just x
-  [_|xs] -> safe-last xs
+;; data Maybe a = Nothing | Just a
 
 
-show safe-last "ciao"
+;; instance Monad Maybe where
+;;   (ma >>= f) =>
+;;     match ma with
+;;       Nothing -> Nothing
+;;       Just x  -> f x
+;;   (return x) => (Just x)
 
-if True then show "hello" else show "ciao"
+;; define safe-last :: [a] -> Maybe a
+;;   []     -> Nothing
+;;   [x]    -> Just x
+;;   [_|xs] -> safe-last xs
+
+
+;; show safe-last "ciao"
+
 
 ;; TODO Force the ?
 ;; TODO Bubble it up

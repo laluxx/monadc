@@ -1,7 +1,7 @@
 #ifndef WISP_H
 #define WISP_H
 /*
- * wisp — arity-driven syntax expansion
+ * wisp — arity and type driven syntax expansion
  *
  * PHILOSOPHY
  * Arity is structure. Indentation only marks where variadic forms end.

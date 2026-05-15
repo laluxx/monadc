@@ -51,9 +51,9 @@ define parseVal :: String -> Maybe (Json String)
   ['n' 'u' 'l' 'l'     | r] -> Just (JNull r)
   ['t' 'r' 'u' 'e'     | r] -> Just (JBool True  r)
   ['f' 'a' 'l' 's' 'e' | r] -> Just (JBool False r)
-  ['"'                 | r] -> parseStr r      >>= ([s   r'] => Just (JStr s   r'))
-  ['['                 | r] -> parseArr (ws r) >>= ([vs  r'] => Just (JArr vs  r'))
-  ['{'                 | r] -> parseObj (ws r) >>= ([kvs r'] => Just (JObj kvs r'))
+  ['"'                 | r] -> parseStr r      >>= [s   r'] => Just (JStr s   r')
+  ['['                 | r] -> parseArr (ws r) >>= [vs  r'] => Just (JArr vs  r')
+  ['{'                 | r] -> parseObj (ws r) >>= [kvs r'] => Just (JObj kvs r')
   s                         -> parseNum s
 
 

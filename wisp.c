@@ -424,15 +424,32 @@ static void arity_prescan(ArityTable *t, const char *source) {
                     ParamKind kinds[WISP_MAX_PARAMS];
                     memset(kinds, PARAM_VALUE, sizeof(kinds));
                     bool found_arrow = false;
+
+                    /* Parse full signature until newline or next top-level form */
                     while (true) {
+                        /* Peek to check if we hit the next definition/form */
+                        Lexer peek = lex;
+                        Token ptok = lexer_next_token(&peek);
+                        if (ptok.type == TOK_EOF ||
+                            (ptok.type == TOK_SYMBOL && ptok.value &&
+                             (strcmp(ptok.value, "define") == 0 || strcmp(ptok.value, "def") == 0 ||
+                              strcmp(ptok.value, "layout") == 0 || strcmp(ptok.value, "data") == 0 ||
+                              strcmp(ptok.value, "class") == 0 || strcmp(ptok.value, "instance") == 0))) {
+                            free(ptok.value);
+                            break;
+                        }
+                        free(ptok.value);
+
                         tok = lexer_next_token(&lex);
                         if (tok.type == TOK_EOF) { free(tok.value); break; }
-                        if (tok.type == TOK_ARROW) {
-                            free(tok.value); found_arrow = true; break;
+
+                        if (tok.type == TOK_ARROW || (tok.type == TOK_SYMBOL && strcmp(tok.value, "->") == 0)) {
+                            free(tok.value);
+                            found_arrow = true;
+                            arity++; /* Every arrow means the previous chunk was a param */
+                            continue;
                         }
-                        if (tok.type == TOK_SYMBOL && strcmp(tok.value, "->") == 0) {
-                            free(tok.value); found_arrow = true; break;
-                        }
+
                         /* bracketed type like (a -> b -> b) — count inner arrows */
                         if (tok.type == TOK_LPAREN) {
                             free(tok.value);
@@ -445,7 +462,7 @@ static void arity_prescan(ArityTable *t, const char *source) {
                                 if (tok.type == TOK_LPAREN) depth++;
                                 if (tok.type == TOK_RPAREN) { depth--; if (!depth) { free(tok.value); break; } }
                                 if (depth > 0 && (tok.type == TOK_ARROW ||
-                                    (tok.type == TOK_SYMBOL && strcmp(tok.value, "->") == 0))) {
+                                                  (tok.type == TOK_SYMBOL && strcmp(tok.value, "->") == 0))) {
                                     inner_arrows++;
                                     is_fn = true;
                                 }
@@ -455,7 +472,6 @@ static void arity_prescan(ArityTable *t, const char *source) {
                                 kinds[arity] = is_fn ? PARAM_FUNC : PARAM_VALUE;
                                 fn_arities[arity] = is_fn ? inner_arrows : -1;
                             }
-                            arity++;
                             continue;
                         }
                         /* bracketed param [x : T] or [x :: T] — extract param name */
@@ -464,7 +480,6 @@ static void arity_prescan(ArityTable *t, const char *source) {
                             tok = lexer_next_token(&lex);
                             if (tok.type == TOK_SYMBOL && tok.value &&
                                 tok.value[0] >= 'a' && tok.value[0] <= 'z') {
-                                /* fprintf(stderr, "DEBUG prescan: registered param '%s' arity=0\n", tok.value); */
                                 arity_set(t, tok.value, 0);
                             }
                             free(tok.value);
@@ -476,17 +491,11 @@ static void arity_prescan(ArityTable *t, const char *source) {
                                 if (tok.type == TOK_RBRACKET) _bd--;
                                 free(tok.value);
                             }
-                            arity++;
                             continue;
                         }
-                        if (tok.type == TOK_SYMBOL && strcmp(tok.value, "::") != 0)
-                            arity++;
                         free(tok.value);
                     }
                     if (found_arrow) {
-                        /* skip just the return type token */
-                        tok = lexer_next_token(&lex);
-                        free(tok.value);
                         arity_set_with_kinds(t, fname, arity, kinds);
                         /* store per-param fn arities */
                         unsigned int h = arity_hash(fname);
@@ -1142,6 +1151,88 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                 size_t left_len = arrow - t;
                 while (left_len > 0 && (t[left_len-1] == ' ' || t[left_len-1] == '\t')) left_len--;
 
+                char *left_str = strndup(t, left_len);
+                const char *lscan = left_str;
+                while (*lscan == ' ' || *lscan == '\t') lscan++;
+
+                /* Register pattern variable arities from the enclosing
+                 * define's param_fn_arities so body calls like
+                 * "f x xs" expand correctly when f :: (a->b->b).
+                 * We look backwards in the token stream for the most
+                 * recent "define" token and use its fn_arities.      */
+                {
+                    /* Find the define name from recent tokens */
+                    char def_name[128] = {0};
+                    bool found_def = false;
+                    for (int _ti = s.count - 1; _ti >= 0; _ti--) {
+                        if (strcmp(s.tokens[_ti].text, "define") == 0 &&
+                            _ti + 1 < s.count) {
+                            const char *dn = s.tokens[_ti + 1].text;
+                            /* strip leading '(' if present */
+                            if (dn[0] == '(') dn++;
+                            int _fi = 0;
+                            while (dn[_fi] && dn[_fi] != ' ' && dn[_fi] != '\t' && dn[_fi] != ')' && _fi < 127) {
+                                def_name[_fi] = dn[_fi];
+                                _fi++;
+                            }
+                            def_name[_fi] = '\0';
+                            found_def = true;
+                            break;
+                        }
+                    }
+                    if (found_def) {
+                        unsigned int _h = arity_hash(def_name);
+                        ArityEntry *_de = NULL;
+                        for (ArityEntry *_e = at->buckets[_h]; _e; _e = _e->next)
+                            if (strcmp(_e->name, def_name) == 0) { _de = _e; break; }
+                        if (_de) {
+                            /* Walk pattern tokens and assign arities */
+                            const char *_ps = lscan;
+                            if (*_ps == '|') { /* skip guard marker */
+                                while (*_ps && *_ps != ' ' && *_ps != '\t') _ps++;
+                                while (*_ps == ' ' || *_ps == '\t') _ps++;
+                            }
+                            int _pi = 0;
+                            while (*_ps && _pi < _de->arity) {
+                                while (*_ps == ' ' || *_ps == '\t') _ps++;
+                                if (!*_ps) break;
+                                /* skip wildcard '_' */
+                                if (*_ps == '_') {
+                                    _pi++;
+                                    while (*_ps && *_ps != ' ' && *_ps != '\t') _ps++;
+                                    continue;
+                                }
+                                /* skip grouped pattern like [] or [x|xs] */
+                                if (*_ps == '[' || *_ps == '(') {
+                                    char _oc = *_ps;
+                                    char _cc = _oc == '[' ? ']' : ')';
+                                    int _d = 0;
+                                    while (*_ps) {
+                                        if (*_ps == _oc) _d++;
+                                        else if (*_ps == _cc) { _d--; _ps++; if (!_d) break; continue; }
+                                        _ps++;
+                                    }
+                                    _pi++;
+                                    continue;
+                                }
+                                /* plain variable name */
+                                const char *_ve = _ps;
+                                while (*_ve && *_ve != ' ' && *_ve != '\t') _ve++;
+                                size_t _vl = _ve - _ps;
+                                if (_vl > 0 && _de->param_fn_arities[_pi] > 0) {
+                                    char _vname[128];
+                                    size_t _vn = _vl < 127 ? _vl : 127;
+                                    memcpy(_vname, _ps, _vn);
+                                    _vname[_vn] = '\0';
+                                    arity_set(at, _vname, _de->param_fn_arities[_pi]);
+                                }
+                                _ps = _ve;
+                                _pi++;
+                            }
+                        }
+                    }
+                }
+
                 const char *right_start = arrow + 2;
                 while (*right_start == ' ' || *right_start == '\t') right_start++;
                 const char *right_end = right_start;
@@ -1178,6 +1269,12 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                             const char *clt = clraw;
                             while (*clt == ' ' || *clt == '\t') clt++;
                             if (!*clt || *clt == ';') { free(clraw); lineno++; continue; }
+                            /* Stop accumulating body if this line starts a new
+                             * guard clause (begins with '|' after whitespace).
+                             * This prevents the next guard from being swallowed
+                             * into the current guard's body during where-block
+                             * and multi-guard clause expansion.                */
+                            if (*clt == '|') { p = cls; free(clraw); break; }
                             const char *clt_end = get_logical_line_end(clt);
                             size_t cltlen = clt_end - clt;
                             while (body_acc_len + cltlen + 3 >= body_acc_cap) {
@@ -1194,6 +1291,345 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                             free(clraw);
                             lineno++;
                         }
+
+                        /* --- where desugaring ---
+                         * Scan ahead for a 'where' keyword on the next
+                         * non-blank line indented deeper than the clause head.
+                         * Collect all bindings and wrap body_acc in letrec. */
+                        {
+                            /* Step 1: find next non-blank line and check for 'where' */
+                            const char *wscan = p;
+                            int where_kw_indent = -1;
+                            const char *after_where = NULL;
+                            while (*wscan) {
+                                /* read one line */
+                                const char *wls = wscan;
+                                while (*wscan && *wscan != '\n') wscan++;
+                                if (*wscan == '\n') wscan++;
+                                /* strip to content */
+                                const char *wlt = wls;
+                                while (*wlt == ' ' || *wlt == '\t') wlt++;
+                                /* skip blank/comment lines — advance and loop */
+                                if (!*wlt || *wlt == ';') continue;
+                                /* non-blank line found - check if it's 'where' */
+                                int wl_ind = measure_indent(wls);
+                                if (wl_ind < indent) break; /* not deeper, no where */
+                                if (strncmp(wlt, "where", 5) == 0 &&
+                                    (wlt[5]==' '||wlt[5]=='\t'||
+                                     wlt[5]=='\n'||wlt[5]=='\0'||wlt[5]==';')) {
+                                    where_kw_indent = wl_ind;
+                                    after_where = wscan;
+                                }
+                                break; /* only check the one next non-blank line */
+                            }
+
+                            if (after_where) {
+                                p = after_where; /* consume through 'where' line */
+
+                                /* Step 2: collect bindings.
+                                 * Each binding: name rest_of_first_line
+                                 *               [continuation lines at deeper indent]
+                                 * New binding starts when indent == first-binding-indent.
+                                 * Continuation is anything deeper than that. */
+                                typedef struct {
+                                    char *name;
+                                    char *rest; /* first line after name */
+                                    char *cont; /* '\n'-joined continuation lines */
+                                } WBind;
+                                WBind *wb = NULL;
+                                int wb_n = 0, wb_cap = 0;
+                                int bind_indent = -1;
+
+                                while (*p) {
+                                    const char *bls = p;
+                                    while (*p && *p != '\n') p++;
+                                    if (*p == '\n') p++;
+                                    char *blraw = strndup(bls, p - bls);
+                                    const char *blt = blraw;
+                                    while (*blt == ' ' || *blt == '\t') blt++;
+                                    if (!*blt || *blt == ';') {
+                                        free(blraw); lineno++; continue;
+                                    }
+                                    int bl_ind = measure_indent(blraw);
+                                    /* stop when indent drops back to where-kw level or less */
+                                    if (bl_ind <= where_kw_indent) {
+                                        p = bls; free(blraw); break;
+                                    }
+                                    if (bind_indent < 0) bind_indent = bl_ind;
+
+                                    const char *le = get_logical_line_end(blt);
+                                    char *ltext = strndup(blt, le - blt);
+
+                                    if (bl_ind <= bind_indent) {
+                                        /* new binding */
+                                        const char *np = ltext;
+                                        const char *ns = np;
+                                        while (*np && *np != ' ' && *np != '\t') np++;
+                                        if (wb_n >= wb_cap) {
+                                            wb_cap = wb_cap ? wb_cap*2 : 4;
+                                            wb = realloc(wb, sizeof(WBind)*wb_cap);
+                                        }
+                                        wb[wb_n].name = strndup(ns, np - ns);
+                                        while (*np == ' ' || *np == '\t') np++;
+                                        wb[wb_n].rest = strdup(np);
+                                        wb[wb_n].cont = strdup("");
+                                        wb_n++;
+                                    } else {
+                                        /* continuation of previous binding */
+                                        if (wb_n > 0) {
+                                            size_t ol = strlen(wb[wb_n-1].cont);
+                                            size_t nl2 = strlen(ltext);
+                                            wb[wb_n-1].cont = realloc(wb[wb_n-1].cont, ol+nl2+3);
+                                            if (ol > 0) wb[wb_n-1].cont[ol++] = '\n';
+                                            memcpy(wb[wb_n-1].cont + ol, ltext, nl2+1);
+                                        }
+                                    }
+                                    free(ltext);
+                                    free(blraw);
+                                    lineno++;
+                                }
+
+                                /* Step 3: build (letrec ([name val] ...) body_acc) */
+                                #define EXPAND_WISP(out_str, src_str) do {                  \
+                                    WTokenStream _ts = {0}; \
+                                    tokenise_into(at, &_ts, (src_str), bind_indent, lineno); \
+                                    SB _sb; sb_init(&_sb); \
+                                    bool _first = true; \
+                                    while (_ts.pos < _ts.count) { \
+                                        if (!_first) sb_putc(&_sb, ' '); \
+                                        _first = false; \
+                                        wisp_parse_expr(at, &_ts, &_sb, -1, 1); \
+                                    } \
+                                    wts_free(&_ts); \
+                                    (out_str) = sb_take(&_sb); \
+                                } while(0)
+
+                                /* Expand body_acc FIRST before registering arities.
+                                 * A bare body like "go" means return go as a value.
+                                 * If we registered go's arity first, wisp_parse_expr
+                                 * would turn "go" into "(go)" — a zero-arg call. */
+                                {
+                                    char *_early_body;
+                                    EXPAND_WISP(_early_body, body_acc);
+                                    free(body_acc);
+                                    body_acc = _early_body;
+                                }
+
+                                /* Now register arities so binding bodies that call
+                                 * go internally expand correctly. */
+                                for (int bi = 0; bi < wb_n; bi++) {
+                                    WBind *b = &wb[bi];
+                                    int b_arity = 0;
+                                    const char *ps = b->rest;
+                                    while (*ps) {
+                                        while (*ps == ' ' || *ps == '\t') ps++;
+                                        if (!*ps) break;
+                                        if (*ps == '|') break;
+                                        if (*ps == '-' && *(ps+1) == '>') break;
+                                        if (*ps == '(' || *ps == '[') {
+                                            char oc = *ps, cc = oc=='('?')':']';
+                                            int gd = 0;
+                                            while (*ps) {
+                                                if (*ps==oc) gd++;
+                                                else if (*ps==cc){gd--;ps++;if(!gd)break;continue;}
+                                                ps++;
+                                            }
+                                        } else {
+                                            while (*ps && *ps!=' ' && *ps!='\t' &&
+                                                   *ps!='|' &&
+                                                   !(*ps=='-'&&*(ps+1)=='>')) ps++;
+                                        }
+                                        b_arity++;
+                                    }
+                                    if (b_arity > 0)
+                                        arity_set(at, b->name, b_arity);
+                                }
+
+                                SB lr; sb_init(&lr);
+                                sb_puts(&lr, "(letrec (");
+
+                                for (int bi = 0; bi < wb_n; bi++) {
+                                    WBind *b = &wb[bi];
+                                    sb_puts(&lr, "[");
+                                    sb_puts(&lr, b->name);
+                                    sb_puts(&lr, " ");
+
+                                    /* Classify binding: '=' value/function, or '->'/'|' guard */
+                                    const char *rt = b->rest;
+                                    bool has_eq = false, has_arrow_or_guard = false;
+                                    int fd = 0;
+                                    for (const char *q = rt; *q && *q != '\n'; q++) {
+                                        if (*q=='('||*q=='[') fd++;
+                                        if (*q==')'||*q==']') fd--;
+                                        if (fd==0 && *q=='=' && *(q+1)!='=') { has_eq=true; break; }
+                                        if (fd==0 && *q=='-' && *(q+1)=='>') { has_arrow_or_guard=true; break; }
+                                        if (fd==0 && *q=='|') { has_arrow_or_guard=true; break; }
+                                    }
+                                    if (!has_arrow_or_guard && b->cont[0]) {
+                                        for (const char *q = b->cont; *q; q++) {
+                                            if (*q=='|') { has_arrow_or_guard=true; break; }
+                                            if (*q=='-'&&*(q+1)=='>') { has_arrow_or_guard=true; break; }
+                                        }
+                                    }
+
+                                    if (has_eq && !has_arrow_or_guard) {
+                                        /* '=' binding: name arg1 arg2 = expr */
+                                        const char *ep = rt;
+                                        char **eargs = NULL; int eac=0, eacap=0;
+                                        while (*ep && !(*ep=='='&&*(ep+1)!='=')) {
+                                            while (*ep==' '||*ep=='\t') ep++;
+                                            if (!*ep||(*ep=='='&&*(ep+1)!='=')) break;
+                                            const char *as2 = ep;
+                                            while (*ep&&*ep!=' '&&*ep!='\t'&&!(*ep=='='&&*(ep+1)!='=')) ep++;
+                                            if (ep>as2) {
+                                                if (eac>=eacap){eacap=eacap?eacap*2:4; eargs=realloc(eargs,sizeof(char*)*eacap);}
+                                                eargs[eac++]=strndup(as2,ep-as2);
+                                            }
+                                        }
+                                        if (*ep=='=') ep++;
+                                        while (*ep==' '||*ep=='\t') ep++;
+
+                                        SB raw_body; sb_init(&raw_body);
+                                        {
+                                            const char *ep_scan = ep;
+                                            while (*ep_scan == ' ' || *ep_scan == '\t') ep_scan++;
+                                            size_t ep_len = strlen(ep_scan);
+                                            while (ep_len > 0 &&
+                                                   (ep_scan[ep_len-1] == '\n' ||
+                                                    ep_scan[ep_len-1] == '\r' ||
+                                                    ep_scan[ep_len-1] == ' '  ||
+                                                    ep_scan[ep_len-1] == '\t'))
+                                                ep_len--;
+                                            for (size_t _ei = 0; _ei < ep_len; _ei++)
+                                                sb_putc(&raw_body, ep_scan[_ei]);
+                                        }
+                                        if (b->cont[0]) { sb_putc(&raw_body, '\n'); sb_puts(&raw_body, b->cont); }
+                                        char *raw_str = sb_take(&raw_body);
+                                        char *expanded; EXPAND_WISP(expanded, raw_str);
+                                        free(raw_str);
+
+                                        if (eac > 0) {
+                                            sb_puts(&lr, "(lambda (");
+                                            for (int ai=0; ai<eac; ai++) {
+                                                if (ai) sb_putc(&lr,' ');
+                                                sb_putc(&lr,'['); sb_puts(&lr,eargs[ai]); sb_putc(&lr,']');
+                                                free(eargs[ai]);
+                                            }
+                                            sb_puts(&lr, ") "); sb_puts(&lr, expanded); sb_putc(&lr, ')');
+                                        } else {
+                                            sb_puts(&lr, expanded);
+                                        }
+                                        free(expanded);
+                                        free(eargs);
+                                    } else {
+                                        /* '->'/'|' binding or bare value */
+                                        int argc = 0;
+                                        if (has_arrow_or_guard) {
+                                            const char *q = rt;
+                                            while (*q && *q != '\n') {
+                                                while (*q==' '||*q=='\t') q++;
+                                                if (!*q||*q=='\n'||*q=='|'||(*q=='-'&&*(q+1)=='>')) break;
+                                                if (*q=='('||*q=='[') {
+                                                    char oc=*q, cc=oc=='('?')':']'; int gd=0;
+                                                    while (*q){if(*q==oc)gd++;else if(*q==cc){gd--;q++;if(!gd)break;continue;}q++;}
+                                                } else {
+                                                    while (*q&&*q!=' '&&*q!='\t'&&*q!='|'&&!(*q=='-'&&*(q+1)=='>')) q++;
+                                                }
+                                                argc++;
+                                            }
+                                        }
+
+                                        SB raw_body; sb_init(&raw_body);
+                                        sb_puts(&raw_body, rt);
+                                        if (b->cont[0]) { sb_putc(&raw_body, '\n'); sb_puts(&raw_body, b->cont); }
+                                        char *raw_str = sb_take(&raw_body);
+                                        char *expanded; EXPAND_WISP(expanded, raw_str);
+                                        free(raw_str);
+
+                                        if (has_arrow_or_guard) {
+                                        /* Extract actual param names from the binding LHS
+                                         * (tokens before the first | or ->) so the lambda
+                                         * param names match what the body references.
+                                         * e.g. "go x | p x -> x" -> param name is "x"  */
+                                        char *param_names[16];
+                                        int param_name_count = 0;
+                                        {
+                                            const char *ps = b->rest;
+                                            while (*ps && param_name_count < 16) {
+                                                while (*ps == ' ' || *ps == '\t') ps++;
+                                                if (!*ps) break;
+                                                if (*ps == '|') break;
+                                                if (*ps == '-' && *(ps+1) == '>') break;
+                                                if (*ps == '(' || *ps == '[') {
+                                                    char oc = *ps, cc = oc=='('?')':']';
+                                                    int gd = 0;
+                                                    const char *gs = ps;
+                                                    while (*ps) {
+                                                        if (*ps==oc) gd++;
+                                                        else if (*ps==cc) { gd--; ps++; if (!gd) break; continue; }
+                                                        ps++;
+                                                    }
+                                                    param_name_count++;
+                                                } else {
+                                                    const char *ve = ps;
+                                                    while (*ve && *ve!=' ' && *ve!='\t' &&
+                                                           *ve!='|' &&
+                                                           !(*ve=='-' && *(ve+1)=='>')) ve++;
+                                                    size_t vl = ve - ps;
+                                                    if (vl > 0) {
+                                                        param_names[param_name_count] = strndup(ps, vl);
+                                                        param_name_count++;
+                                                    }
+                                                    ps = ve;
+                                                }
+                                            }
+                                        }
+                                        int use_count = param_name_count > 0 ? param_name_count : argc;
+                                        sb_puts(&lr, "(lambda (");
+                                        for (int ai=0; ai<use_count; ai++) {
+                                            if (ai) sb_putc(&lr,' ');
+                                            if (ai < param_name_count) {
+                                                sb_puts(&lr, param_names[ai]);
+                                                free(param_names[ai]);
+                                            } else {
+                                                char pn[20]; snprintf(pn,sizeof(pn),"__w%d",ai);
+                                                sb_puts(&lr, pn);
+                                            }
+                                        }
+                                        sb_puts(&lr, ") ");
+                                        sb_puts(&lr, expanded);
+                                        sb_putc(&lr, ')');
+                                        } else {
+                                            sb_puts(&lr, expanded);
+                                        }
+                                        free(expanded);
+                                    }
+                                    sb_puts(&lr, "] ");
+                                    free(b->name); free(b->rest); free(b->cont);
+                                }
+                                free(wb);
+                                sb_puts(&lr, ") ");
+
+                                /* body_acc was already expanded before the arity
+                                 * registration above, so emit it directly. */
+                                const char *ba = body_acc;
+                                while (*ba==' '||*ba=='\t') ba++;
+                                if (ba[0] != '(' && ba[0] != '[' && ba[0] != '{' && strchr(ba, ' ')) {
+                                    sb_putc(&lr, '(');
+                                    sb_puts(&lr, ba);
+                                    sb_putc(&lr, ')');
+                                } else {
+                                    sb_puts(&lr, ba);
+                                }
+                                sb_putc(&lr, ')');
+                                free(body_acc);
+                                body_acc = sb_take(&lr);
+                                fprintf(stderr, "DEBUG where: letrec = %s\n", body_acc);
+                                #undef EXPAND_WISP
+                            }
+                        }
+                        /* --- end where desugaring --- */
+
 
                         char *body_raw = body_acc;
                         WTokenStream body_ts = {0};
@@ -1304,80 +1740,8 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                         wts_free(&body_ts);
                         free(body_raw);
 
-                        char *left_str = strndup(t, left_len);
-                        const char *lscan = left_str;
+                        lscan = left_str;
                         while (*lscan == ' ' || *lscan == '\t') lscan++;
-
-                        /* Register pattern variable arities from the enclosing
-                         * define's param_fn_arities so body calls like
-                         * "f x xs" expand correctly when f :: (a->b->b).
-                         * We look backwards in the token stream for the most
-                         * recent "define" token and use its fn_arities.      */
-                        {
-                            /* Find the define name from recent tokens */
-                            const char *def_name = NULL;
-                            for (int _ti = s.count - 1; _ti >= 0; _ti--) {
-                                if (strcmp(s.tokens[_ti].text, "define") == 0 &&
-                                    _ti + 1 < s.count) {
-                                    const char *dn = s.tokens[_ti + 1].text;
-                                    /* strip leading '(' if present */
-                                    if (dn[0] == '(') dn++;
-                                    def_name = dn;
-                                    break;
-                                }
-                            }
-                            if (def_name) {
-                                unsigned int _h = arity_hash(def_name);
-                                ArityEntry *_de = NULL;
-                                for (ArityEntry *_e = at->buckets[_h]; _e; _e = _e->next)
-                                    if (strcmp(_e->name, def_name) == 0) { _de = _e; break; }
-                                if (_de) {
-                                    /* Walk pattern tokens and assign arities */
-                                    const char *_ps = lscan;
-                                    if (*_ps == '|') { /* skip guard marker */
-                                        while (*_ps && *_ps != ' ' && *_ps != '\t') _ps++;
-                                        while (*_ps == ' ' || *_ps == '\t') _ps++;
-                                    }
-                                    int _pi = 0;
-                                    while (*_ps && _pi < _de->arity) {
-                                        while (*_ps == ' ' || *_ps == '\t') _ps++;
-                                        if (!*_ps) break;
-                                        /* skip wildcard '_' */
-                                        if (*_ps == '_') {
-                                            _pi++;
-                                            while (*_ps && *_ps != ' ' && *_ps != '\t') _ps++;
-                                            continue;
-                                        }
-                                        /* skip grouped pattern like [] or [x|xs] */
-                                        if (*_ps == '[' || *_ps == '(') {
-                                            char _oc = *_ps;
-                                            char _cc = _oc == '[' ? ']' : ')';
-                                            int _d = 0;
-                                            while (*_ps) {
-                                                if (*_ps == _oc) _d++;
-                                                else if (*_ps == _cc) { _d--; _ps++; if (!_d) break; continue; }
-                                                _ps++;
-                                            }
-                                            _pi++;
-                                            continue;
-                                        }
-                                        /* plain variable name */
-                                        const char *_ve = _ps;
-                                        while (*_ve && *_ve != ' ' && *_ve != '\t') _ve++;
-                                        size_t _vl = _ve - _ps;
-                                        if (_vl > 0 && _de->param_fn_arities[_pi] > 0) {
-                                            char _vname[128];
-                                            size_t _vn = _vl < 127 ? _vl : 127;
-                                            memcpy(_vname, _ps, _vn);
-                                            _vname[_vn] = '\0';
-                                            arity_set(at, _vname, _de->param_fn_arities[_pi]);
-                                        }
-                                        _ps = _ve;
-                                        _pi++;
-                                    }
-                                }
-                            }
-                        }
 
                         /* Check if left_str contains '|' not at start —
                          * pattern with inline guard: "c | guard -> body"
@@ -1405,8 +1769,11 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                                    (lscan[pat_part_len-1]==' '||lscan[pat_part_len-1]=='\t'))
                                 pat_part_len--;
                             if (pat_part_len > 0) {
-                                char *pat_part = strndup(lscan, pat_part_len);
-                                tokenise_into(at, &s, pat_part, indent, lineno);
+                                char *pat_part = malloc(pat_part_len + 2);
+                                memcpy(pat_part, lscan, pat_part_len);
+                                pat_part[pat_part_len] = ' ';
+                                pat_part[pat_part_len+1] = '\0';
+                                wts_push(&s, pat_part, indent, lineno);
                                 free(pat_part);
                             }
                             /* emit | as a TOK_PIPE-equivalent marker */
@@ -1530,11 +1897,227 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                                 free(guard_expanded);
                             }
                         } else {
-                            tokenise_into(at, &s, left_str, indent, lineno);
+                            char *pat_part = malloc(strlen(lscan) + 2);
+                            strcpy(pat_part, lscan);
+                            strcat(pat_part, " ");
+                            wts_push(&s, pat_part, indent, lineno);
+                            free(pat_part);
                         }
                         free(left_str);
 
                         wts_push(&s, (arrow[0] == '=') ? "=>" : "->", indent, lineno);
+                        /* Check for a 'where' block following this clause.
+                         * A where block appears at the same or deeper indent
+                         * as the clause head, after the body, and contains
+                         * name [args] = expr bindings.
+                         * We collect them and wrap body in (let ...).      */
+                        {
+                            /* Scan ahead in source for 'where' keyword */
+                            const char *where_scan = p;
+                            int where_indent = -1;
+                            const char *where_pos = NULL;
+                            /* skip blank/comment lines */
+                            while (*where_scan) {
+                                const char *wls = where_scan;
+                                while (*where_scan && *where_scan != '\n') where_scan++;
+                                if (*where_scan == '\n') where_scan++;
+                                const char *wlt = wls;
+                                while (*wlt == ' ' || *wlt == '\t') wlt++;
+                                if (!*wlt || *wlt == ';') { lineno++; continue; }
+                                int wl_indent = measure_indent(wls);
+                                /* where must be indented deeper than the define head
+                                 * but at least as deep as the clause */
+                                if (wl_indent <= indent) break;
+                                if (strncmp(wlt, "where", 5) == 0 &&
+                                    (wlt[5] == ' ' || wlt[5] == '\t' || wlt[5] == '\n' || wlt[5] == '\0')) {
+                                    where_indent = wl_indent;
+                                    where_pos = where_scan;
+                                    break;
+                                }
+                                /* non-where line deeper than indent: could be
+                                 * another clause or body continuation — stop */
+                                break;
+                            }
+
+                            if (where_pos) {
+                                /* Consume source up to and including where line */
+                                p = where_pos;
+
+                                /* Collect where bindings until indent drops */
+                                /* Each binding: name [arg1 arg2 ...] = expr
+                                 * We build a (let ([name (lambda (args) expr)] ...) body) */
+
+                                typedef struct {
+                                    char *name;
+                                    char **args;
+                                    int arg_count;
+                                    char *expr;
+                                } WhereBind;
+
+                                WhereBind *binds = NULL;
+                                int bind_count = 0;
+                                int bind_cap = 0;
+
+                                while (*p) {
+                                    const char *bls = p;
+                                    while (*p && *p != '\n') p++;
+                                    if (*p == '\n') p++;
+                                    char *blraw = strndup(bls, p - bls);
+                                    const char *blt = blraw;
+                                    while (*blt == ' ' || *blt == '\t') blt++;
+                                    if (!*blt || *blt == ';') { free(blraw); lineno++; continue; }
+                                    int bl_indent = measure_indent(blraw);
+                                    if (bl_indent <= where_indent) {
+                                        p = bls; free(blraw); break;
+                                    }
+                                    /* Parse: name [arg ...] = expr */
+                                    const char *bp = blt;
+                                    /* read name */
+                                    const char *name_start = bp;
+                                    while (*bp && *bp != ' ' && *bp != '\t' && *bp != '=') bp++;
+                                    if (bp == name_start) { free(blraw); lineno++; continue; }
+                                    char *bname = strndup(name_start, bp - name_start);
+                                    while (*bp == ' ' || *bp == '\t') bp++;
+                                    /* read args until '=' */
+                                    char **bargs = NULL;
+                                    int barg_count = 0, barg_cap = 0;
+                                    while (*bp && *bp != '=') {
+                                        if (*bp == '(' || *bp == '[') {
+                                            /* skip grouped token */
+                                            char oc = *bp, cc = oc == '(' ? ')' : ']';
+                                            const char *gs = bp;
+                                            int gd = 0;
+                                            while (*bp) {
+                                                if (*bp == oc) gd++;
+                                                else if (*bp == cc) { gd--; bp++; if (!gd) break; continue; }
+                                                bp++;
+                                            }
+                                            if (barg_count >= barg_cap) {
+                                                barg_cap = barg_cap ? barg_cap * 2 : 4;
+                                                bargs = realloc(bargs, sizeof(char*) * barg_cap);
+                                            }
+                                            bargs[barg_count++] = strndup(gs, bp - gs);
+                                        } else {
+                                            const char *as = bp;
+                                            while (*bp && *bp != ' ' && *bp != '\t' && *bp != '=') bp++;
+                                            if (bp > as) {
+                                                if (barg_count >= barg_cap) {
+                                                    barg_cap = barg_cap ? barg_cap * 2 : 4;
+                                                    bargs = realloc(bargs, sizeof(char*) * barg_cap);
+                                                }
+                                                bargs[barg_count++] = strndup(as, bp - as);
+                                            }
+                                        }
+                                        while (*bp == ' ' || *bp == '\t') bp++;
+                                    }
+                                    if (*bp == '=') bp++;
+                                    while (*bp == ' ' || *bp == '\t') bp++;
+                                    /* rest of line is the expr */
+                                    const char *expr_start = bp;
+                                    const char *expr_end = get_logical_line_end(expr_start);
+                                    char *bexpr = strndup(expr_start, expr_end - expr_start);
+
+                                    /* Accumulate continuation lines (deeper indent) */
+                                    size_t bexpr_cap = strlen(bexpr) + 256;
+                                    char *bexpr_acc = malloc(bexpr_cap);
+                                    size_t bexpr_len = strlen(bexpr);
+                                    memcpy(bexpr_acc, bexpr, bexpr_len + 1);
+                                    free(bexpr);
+
+                                    while (*p) {
+                                        const char *cls = p;
+                                        while (*p && *p != '\n') p++;
+                                        if (*p == '\n') p++;
+                                        char *clraw = strndup(cls, p - cls);
+                                        const char *clt = clraw;
+                                        while (*clt == ' ' || *clt == '\t') clt++;
+                                        if (!*clt || *clt == ';') { free(clraw); lineno++; continue; }
+                                        int cl_ind = measure_indent(clraw);
+                                        if (cl_ind <= bl_indent) { p = cls; free(clraw); break; }
+                                        const char *clt_end = get_logical_line_end(clt);
+                                        size_t clt_len = clt_end - clt;
+                                        while (bexpr_len + clt_len + 3 >= bexpr_cap) {
+                                            bexpr_cap *= 2; bexpr_acc = realloc(bexpr_acc, bexpr_cap);
+                                        }
+                                        bexpr_acc[bexpr_len++] = ' ';
+                                        memcpy(bexpr_acc + bexpr_len, clt, clt_len);
+                                        bexpr_len += clt_len;
+                                        bexpr_acc[bexpr_len] = '\0';
+                                        free(clraw);
+                                        lineno++;
+                                    }
+
+                                    if (bind_count >= bind_cap) {
+                                        bind_cap = bind_cap ? bind_cap * 2 : 4;
+                                        binds = realloc(binds, sizeof(WhereBind) * bind_cap);
+                                    }
+                                    binds[bind_count].name = bname;
+                                    binds[bind_count].args = bargs;
+                                    binds[bind_count].arg_count = barg_count;
+                                    binds[bind_count].expr = bexpr_acc;
+                                    bind_count++;
+                                    free(blraw);
+                                    lineno++;
+                                }
+
+                                /* Build let-wrapped body:
+                                 * (let ([name (lambda ([a] [b]) expr)] ...) body) */
+                                if (bind_count > 0) {
+                                    SB wb; sb_init(&wb);
+                                    sb_puts(&wb, "(let (");
+                                    for (int bi = 0; bi < bind_count; bi++) {
+                                        WhereBind *wb_bind = &binds[bi];
+                                        sb_puts(&wb, "[");
+                                        sb_puts(&wb, wb_bind->name);
+                                        sb_puts(&wb, " ");
+                                        if (wb_bind->arg_count > 0) {
+                                            sb_puts(&wb, "(lambda (");
+                                            for (int ai = 0; ai < wb_bind->arg_count; ai++) {
+                                                if (ai) sb_putc(&wb, ' ');
+                                                sb_putc(&wb, '[');
+                                                sb_puts(&wb, wb_bind->args[ai]);
+                                                sb_putc(&wb, ']');
+                                            }
+                                            sb_puts(&wb, ") ");
+                                            sb_puts(&wb, wb_bind->expr);
+                                            sb_putc(&wb, ')');
+                                        } else {
+                                            sb_puts(&wb, wb_bind->expr);
+                                        }
+                                        sb_puts(&wb, "] ");
+                                    }
+                                    sb_puts(&wb, ") ");
+                                    /* append the original body */
+                                    if (body_expanded[0] != '(' && body_expanded[0] != '[' &&
+                                        body_expanded[0] != '{' && strchr(body_expanded, ' ')) {
+                                        sb_putc(&wb, '(');
+                                        sb_puts(&wb, body_expanded);
+                                        sb_putc(&wb, ')');
+                                    } else {
+                                        sb_puts(&wb, body_expanded);
+                                    }
+                                    sb_putc(&wb, ')');
+                                    char *let_body = sb_take(&wb);
+                                    wts_push(&s, let_body, indent, lineno);
+                                    free(let_body);
+
+                                    for (int bi = 0; bi < bind_count; bi++) {
+                                        free(binds[bi].name);
+                                        free(binds[bi].expr);
+                                        for (int ai = 0; ai < binds[bi].arg_count; ai++)
+                                            free(binds[bi].args[ai]);
+                                        free(binds[bi].args);
+                                    }
+                                    free(binds);
+                                    free(body_expanded);
+                                    free(raw);
+                                    lineno++;
+                                    continue;
+                                }
+                                free(binds);
+                            }
+                        }
+
                         /* If body is a bare multi-token call (not already grouped),
                          * wrap it so wisp_parse_expr emits it as a single s-expr. */
                         if (body_expanded[0] != '(' && body_expanded[0] != '[' &&
@@ -3031,25 +3614,11 @@ static char *strip_comments(const char *source) {
             if (source[j] == '\n') { is_single_line = false; break; }
         }
 
-        if (is_single_line) {
-            /* Inline comment — remove entirely by shifting remaining content left */
-            int span_len = end - start;
-            memmove(out + start, out + end, len - end + 1);
-            len -= span_len;
-            /* Adjust all subsequent span positions */
-            for (int k = i + 1; k < g_comment_count; k++) {
-                if (g_comment_spans[k].open_pos > start)
-                    g_comment_spans[k].open_pos -= span_len;
-                if (g_comment_spans[k].close_pos > start)
-                    g_comment_spans[k].close_pos -= span_len;
-                if (g_comment_spans[k].para_end > start)
-                    g_comment_spans[k].para_end -= span_len;
-            }
-        } else {
-            /* Multiline comment — replace with spaces/newlines to preserve line numbers */
-            for (int j = start; j < end && j < len; j++)
-                out[j] = (source[j] == '\n') ? '\n' : ' ';
-        }
+        /* All comments - replace with spaces/newlines to preserve exact line and column numbers.
+         * This improves error reporting accuracy and massively improves performance
+         * from O(N^2) to O(N) by eliminating memmove operations. */
+        for (int j = start; j < end && j < len; j++)
+            out[j] = (source[j] == '\n') ? '\n' : ' ';
     }
 
     return out;

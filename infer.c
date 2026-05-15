@@ -1292,6 +1292,19 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             break;
         }
 
+        /* ---- begin --------------------------------------------------- */
+        if (head->type == AST_SYMBOL && strcmp(head->symbol, "begin") == 0) {
+            if (ast->list.count < 2) {
+                result = type_int();
+                break;
+            }
+            for (size_t i = 1; i < ast->list.count - 1; i++) {
+                infer_expr(ctx, ast->list.items[i]);
+            }
+            result = infer_expr(ctx, ast->list.items[ast->list.count - 1]);
+            break;
+        }
+
         /* ---- let ----------------------------------------------------- */
         if (head->type == AST_SYMBOL && strcmp(head->symbol, "let") == 0) {
             result = infer_fresh(ctx);

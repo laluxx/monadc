@@ -4884,40 +4884,53 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                                                      clo_fn, clo_args, 4, "closure");
                     }
 
-           ///// Register in symbol table
+         ///// Register in symbol table
 
-                    env_insert_func(ctx->env, var_name, env_params, total_params,
-                                    ret_type, func, lambda->lambda.docstring, NULL);
-                    if (hm_scheme) env_set_scheme(ctx->env, var_name, hm_scheme);
-                    EnvEntry *efinal = env_lookup(ctx->env, var_name);
-                    if (efinal) {
-                        efinal->lifted_count   = 0;
-                        efinal->is_closure_abi = use_closure_abi;
-                        // Clone the lambda AFTER body desugaring so source_ast
-                        // contains the expanded if-chain, not the raw AST_PMATCH.
-                        efinal->source_ast     = ast_clone(lambda);
+                    if (self_alloca) {
+                        if (hm_scheme) env_set_scheme(ctx->env, var_name, hm_scheme);
+                        EnvEntry *efinal = env_lookup(ctx->env, var_name);
+                        if (efinal) efinal->source_ast = ast_clone(lambda);
+                    } else {
+                        env_insert_func(ctx->env, var_name, env_params, total_params,
+                                        ret_type, func, lambda->lambda.docstring, NULL);
+                        if (hm_scheme) env_set_scheme(ctx->env, var_name, hm_scheme);
+                        EnvEntry *efinal = env_lookup(ctx->env, var_name);
+                        if (efinal) {
+                            efinal->lifted_count   = 0;
+                            efinal->is_closure_abi = use_closure_abi;
+                            // Clone the lambda AFTER body desugaring so source_ast
+                            // contains the expanded if-chain, not the raw AST_PMATCH.
+                            efinal->source_ast     = ast_clone(lambda);
+                        }
                     }
 
                     if (lambda->lambda.alias_name) {
                         const char *alias_sym = lambda->lambda.alias_name;
-                        env_insert_func(ctx->env, alias_sym,
-                                        clone_params(env_params, total_params),
-                                        total_params, type_clone(ret_type),
-                                        func, lambda->lambda.docstring, NULL);
-                        if (hm_scheme)
-                            env_set_scheme(ctx->env, alias_sym, hm_scheme);
-                        EnvEntry *alias_e = env_lookup(ctx->env, alias_sym);
-                        if (alias_e) {
-                            alias_e->is_closure_abi = use_closure_abi;
-                            alias_e->lifted_count   = 0;
-                            alias_e->source_ast     = ast_clone(lambda);
-                            alias_e->func_ref       = func;
-                            alias_e->llvm_name      = strdup(LLVMGetValueName(func));
+                        if (self_alloca) {
+                            if (hm_scheme) env_set_scheme(ctx->env, alias_sym, hm_scheme);
+                            EnvEntry *alias_e = env_lookup(ctx->env, alias_sym);
+                            if (alias_e) alias_e->source_ast = ast_clone(lambda);
+                        } else {
+                            env_insert_func(ctx->env, alias_sym,
+                                            clone_params(env_params, total_params),
+                                            total_params, type_clone(ret_type),
+                                            func, lambda->lambda.docstring, NULL);
+                            if (hm_scheme)
+                                env_set_scheme(ctx->env, alias_sym, hm_scheme);
+                            EnvEntry *alias_e = env_lookup(ctx->env, alias_sym);
+                            if (alias_e) {
+                                alias_e->is_closure_abi = use_closure_abi;
+                                alias_e->lifted_count   = 0;
+                                alias_e->source_ast     = ast_clone(lambda);
+                                alias_e->func_ref       = func;
+                                alias_e->llvm_name      = strdup(LLVMGetValueName(func));
+                            }
                         }
 
                         /* For non-ASCII alias names, also register under
                          * a mangled ASCII name so LLVM JIT can find it   */
                         char *mangled = mangle_unicode_name(alias_sym);
+
                         if (mangled) {
                             /* Create a true LLVM alias pointing to the same function */
                             LLVMValueRef mfn = LLVMGetNamedFunction(ctx->module, mangled);
@@ -7542,48 +7555,6 @@ if (ast->list.count >= 5) {
                 LLVMPositionBuilderAtEnd(ctx->builder, exit_bb);
                 result.value = codegen_current_fn_zero_value(ctx);
                 result.type  = type_unknown();
-                return result;
-            }
-
-            if (strcmp(head->symbol, "until") == 0) {
-                REQUIRE_MIN_ARGS(2);
-                /* (until cond body) = (while (not cond) body) */
-                LLVMValueRef func     = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder));
-                LLVMBasicBlockRef cond_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "until_cond");
-                LLVMBasicBlockRef body_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "until_body");
-                LLVMBasicBlockRef exit_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "until_exit");
-
-                LLVMBuildBr(ctx->builder, cond_bb);
-
-                LLVMPositionBuilderAtEnd(ctx->builder, cond_bb);
-                CodegenResult cond_r = codegen_expr(ctx, ast->list.items[1]);
-                LLVMValueRef cond_val = cond_r.value;
-                if (type_is_float(cond_r.type)) {
-                    cond_val = LLVMBuildFCmp(ctx->builder, LLVMRealONE, cond_val,
-                                             LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0),
-                                             "until_cond_f");
-                } else if (cond_r.type && cond_r.type->kind != TYPE_BOOL) {
-                    cond_val = LLVMBuildICmp(ctx->builder, LLVMIntNE, cond_val,
-                                             LLVMConstInt(LLVMTypeOf(cond_val), 0, 0),
-                                             "until_cond_i");
-                }
-                /* Negate — loop while condition is FALSE */
-                LLVMValueRef neg = LLVMBuildNot(ctx->builder, cond_val, "until_neg");
-                LLVMBuildCondBr(ctx->builder, neg, body_bb, exit_bb);
-
-                LLVMPositionBuilderAtEnd(ctx->builder, body_bb);
-                Env *saved_env = ctx->env;
-                ctx->env = env_create_child(saved_env);
-                for (size_t bi = 2; bi < ast->list.count; bi++)
-                    codegen_expr(ctx, ast->list.items[bi]);
-                env_free(ctx->env);
-                ctx->env = saved_env;
-                if (!LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)))
-                    LLVMBuildBr(ctx->builder, cond_bb);
-
-                LLVMPositionBuilderAtEnd(ctx->builder, exit_bb);
-                result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0);
-                result.type  = type_int();
                 return result;
             }
 
@@ -12105,10 +12076,6 @@ if (ast->list.count >= 5) {
             CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown function: %s",
                     parser_get_filename(), ast->line, ast->column, head->symbol);
         }
-        result.value = codegen_current_fn_zero_value(ctx);
-        result.type = type_unknown();
-        return result;
-
 
         // Handle ((expr) args...) — calling a non-symbol expression in head position
         // e.g. ((true 1) 2) where (true 1) returns a closure
@@ -12656,7 +12623,6 @@ void register_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "if",     3,  0, "Conditional: (if cond then else)", NULL);
     env_insert_builtin(ctx->env, "for",    2, -1, "Loop with binding: (for [i 0 10] body) or (for [n] body)", NULL);
     env_insert_builtin(ctx->env, "while",  2, -1, "Loop while condition is true: (while cond body...)", NULL);
-    env_insert_builtin(ctx->env, "until",  2, -1, "Loop until condition is true: (until cond body...)", NULL);
     env_insert_builtin(ctx->env, "unless", 2,  0, "Execute body if condition is False: (unless cond body)", NULL);
     env_insert_builtin(ctx->env, "when",   2, -1, "Execute when condition is true", NULL);
     env_insert_builtin(ctx->env, "unless", 2, -1, "Execute unless condition is true", NULL);

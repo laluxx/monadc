@@ -255,11 +255,11 @@ static bool is_at_pmatch_clause(Parser *p) {
                       (peek_cur.type == TOK_SYMBOL && peek_cur.value &&
                        strcmp(peek_cur.value, "|") == 0));
     int depth = 0;
-    bool is_first = true;
-    while (!has_arrow && !has_pipe &&
-           peek_cur.type != TOK_RPAREN &&
-           peek_cur.type != TOK_EOF    &&
-           peek_cur.type != TOK_KEYWORD) {
+            bool is_first = true;
+            while (!has_arrow && !has_pipe &&
+                   !(peek_cur.type == TOK_RPAREN && depth == 0) &&
+                   peek_cur.type != TOK_EOF    &&
+                   peek_cur.type != TOK_KEYWORD) {
         if (peek_cur.type == TOK_LPAREN || peek_cur.type == TOK_LBRACKET) depth++;
         if ((peek_cur.type == TOK_RPAREN || peek_cur.type == TOK_RBRACKET) && depth > 0) depth--;
         if (peek_cur.type == TOK_ARROW && depth == 0) { has_arrow = true; break; }
@@ -332,17 +332,22 @@ static AST *parse_clause_body(Parser *p) {
 }
 
 // Parse one full clause: pattern... -> expr
-// For multi-param functions, reads `param_count` patterns then ->
+// Reads patterns dynamically until it hits an arrow or guard
 static ASTPMatchClause parse_one_clause(Parser *p, int param_count) {
     ASTPMatchClause clause = {0};
 
-    ASTPattern *patterns = malloc(sizeof(ASTPattern) * (param_count ? param_count : 1));
-    for (int i = 0; i < param_count; i++) {
-        patterns[i] = parse_single_pattern(p);
-        fprintf(stderr, "DEBUG parse_one_clause: pattern[%d] kind=%d var_name='%s' ctor_field_count=%d\n",
-                i, patterns[i].kind,
-                patterns[i].var_name ? patterns[i].var_name : "NULL",
-                patterns[i].ctor_field_count);
+    ASTPattern *patterns = NULL;
+    int act_count = 0;
+    int cap = 0;
+
+    while (!parser_at(p, TOK_ARROW) && !parser_at(p, TOK_PIPE) &&
+           !(parser_at(p, TOK_SYMBOL) && p->current.value && strcmp(p->current.value, "|") == 0) &&
+           !parser_at(p, TOK_EOF)) {
+        if (act_count >= cap) {
+            cap = cap == 0 ? 4 : cap * 2;
+            patterns = realloc(patterns, sizeof(ASTPattern) * cap);
+        }
+        patterns[act_count++] = parse_single_pattern(p);
     }
 
     // Check for guards: '|' means guarded clause, no '->' expected at top level
@@ -383,7 +388,7 @@ static ASTPMatchClause parse_one_clause(Parser *p, int param_count) {
         }
 
         clause.patterns      = patterns;
-        clause.pattern_count = param_count;
+        clause.pattern_count = act_count;
         clause.body          = NULL;
         clause.guard_conds   = guard_conds;
         clause.guard_bodies  = guard_bodies;
@@ -403,7 +408,7 @@ static ASTPMatchClause parse_one_clause(Parser *p, int param_count) {
     AST *body = parse_clause_body(p);
 
     clause.patterns      = patterns;
-    clause.pattern_count = param_count;
+    clause.pattern_count = act_count;
     clause.body          = body;
     clause.guard_conds   = NULL;
     clause.guard_bodies  = NULL;
@@ -1034,6 +1039,15 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
                     ast_list_append(gbody, sym(coll_param));
                 }
 
+                if (cl->pattern_count < param_count) {
+                    AST *app = ast_new_list();
+                    ast_list_append(app, gbody);
+                    for (int k = cl->pattern_count; k < param_count; k++) {
+                        ast_list_append(app, sym(params[k].name));
+                    }
+                    gbody = app;
+                }
+
                 AST *branch = ast_new_list();
                 ast_list_append(branch, combined);
                 ast_list_append(branch, gbody);
@@ -1071,6 +1085,42 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
 
             if (bind_count > 0)
                 body = make_let(bind_names, bind_exprs, bind_count, body);
+
+            if (cl->pattern_count < param_count) {
+                /* If body is a letrec/let result: ((lambda ([binding]) ... sym) init)
+                 * we must push the remaining-param application INSIDE the lambda body
+                 * rather than outside, otherwise the type checker sees an extra function
+                 * arrow wrapping the whole letrec expression.
+                 * Detect: body is AST_LIST, items[0] is AST_LIST (the lambda call),
+                 * items[0].items[0] is AST_LAMBDA — this is build_let's output.       */
+                bool pushed_inside = false;
+                if (body->type == AST_LIST &&
+                    body->list.count >= 1 &&
+                    body->list.items[0]->type == AST_LAMBDA) {
+                    /* body is ((lambda ([go]) ... final_expr) init)
+                     * Find the last body expression of the lambda and wrap it. */
+                    AST *lam = body->list.items[0];
+                    if (lam->lambda.body_count > 0) {
+                        AST *last = lam->lambda.body_exprs[lam->lambda.body_count - 1];
+                        AST *app = ast_new_list();
+                        ast_list_append(app, last);
+                        for (int k = cl->pattern_count; k < param_count; k++) {
+                            ast_list_append(app, sym(params[k].name));
+                        }
+                        lam->lambda.body_exprs[lam->lambda.body_count - 1] = app;
+                        lam->lambda.body = app;
+                        pushed_inside = true;
+                    }
+                }
+                if (!pushed_inside) {
+                    AST *app = ast_new_list();
+                    ast_list_append(app, body);
+                    for (int k = cl->pattern_count; k < param_count; k++) {
+                        ast_list_append(app, sym(params[k].name));
+                    }
+                    body = app;
+                }
+            }
 
             AST *clause = ast_new_list();
             ast_list_append(clause, guard);

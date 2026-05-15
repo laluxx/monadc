@@ -20,7 +20,7 @@
 - [ ] arbitrary return at any point of execution using =->=
 - [ ] Builtin Path type and Path literals e.g ~/path/to/file.c (also support windows)
 - [ ] The coll type: [a] should NOT be a runtime thing, it should just do monomorphization
-- [ ] Haskell like hole driven development
+- [ ] Full idris like hole driven development
 - [ ] Fat strings... fuck my life
 - [ ] pmatch backtracking on failure with =<-=
 - [ ] anonymous Algebraic Data Types (tagged unions)
@@ -55,6 +55,12 @@
 * TODO Build System [0/1]
 - [ ] Generate a Tree Graph of the package dependencies
 
+
+* TODO QTT Exact Multiplicity Tracking [0/4]
+- [ ] Replace ω with precise compile-time known counts (0,1,2,3,...,n)
+- [ ] Compiler tracks exact usage count statically, frees after last use
+- [ ] No runtime fallback — no GC, no reference counting, ever
+- [ ] ω reserved for truly dynamic cases (explicitly annotated, discouraged)
 
 
 * TODO nil bubble tracing

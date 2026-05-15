@@ -612,10 +612,10 @@ AST *ast_clone(AST *ast) {
         c->lambda.return_type = ast->lambda.return_type ? strdup(ast->lambda.return_type) : NULL;
         c->lambda.docstring   = ast->lambda.docstring   ? strdup(ast->lambda.docstring)   : NULL;
         c->lambda.alias_name  = ast->lambda.alias_name  ? strdup(ast->lambda.alias_name)  : NULL;
-        c->lambda.body        = ast_clone(ast->lambda.body);
         c->lambda.body_exprs  = malloc(sizeof(AST*) * (ast->lambda.body_count ? ast->lambda.body_count : 1));
         for (int i = 0; i < ast->lambda.body_count; i++)
             c->lambda.body_exprs[i] = ast_clone(ast->lambda.body_exprs[i]);
+        c->lambda.body        = c->lambda.body_exprs[c->lambda.body_count - 1];
         break;
     }
     case AST_ARRAY: {
@@ -1817,14 +1817,26 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
             }
 
             if (param.type_name == NULL) {
-                char gen_name[32];
-                snprintf(gen_name, sizeof(gen_name), "__p_%d", count);
-                char tbuf[64];
-                snprintf(tbuf, sizeof(tbuf), "[%s]", param.name);
-                free(param.name);
-                param.name = my_strdup(gen_name);
-                param.type_name = my_strdup(tbuf);
-                param.is_anon = true;
+                /* [name] with no type annotation — keep the name as-is,
+                 * treat as an untyped named parameter, NOT anonymous.
+                 * Anonymous params only arise from truly typeless bracket
+                 * groups like [Int] where Int is a type, not a name.    */
+                bool name_is_lowercase = (param.name && param.name[0] >= 'a' &&
+                                          param.name[0] <= 'z');
+                if (name_is_lowercase) {
+                    /* Named untyped param: [x] -> name="x", type=NULL */
+                    param.is_anon = false;
+                } else {
+                    /* Uppercase or operator: treat as anonymous typed param */
+                    char gen_name[32];
+                    snprintf(gen_name, sizeof(gen_name), "__p_%d", count);
+                    char tbuf[64];
+                    snprintf(tbuf, sizeof(tbuf), "[%s]", param.name);
+                    free(param.name);
+                    param.name = my_strdup(gen_name);
+                    param.type_name = my_strdup(tbuf);
+                    param.is_anon = true;
+                }
             } else {
                 param.is_anon = false;
             }
@@ -2319,7 +2331,7 @@ static AST *parse_lambda(Parser *p) {
         Lexer peek_lex = *p->lexer;
         Token peek_tok = lexer_next_token(&peek_lex);
         int depth = 0;
-        while (peek_tok.type != TOK_RPAREN && peek_tok.type != TOK_EOF && peek_tok.type != TOK_KEYWORD) {
+        while (!(peek_tok.type == TOK_RPAREN && depth == 0) && peek_tok.type != TOK_EOF && peek_tok.type != TOK_KEYWORD) {
             if (peek_tok.type == TOK_LPAREN || peek_tok.type == TOK_LBRACKET) depth++;
             if ((peek_tok.type == TOK_RPAREN || peek_tok.type == TOK_RBRACKET) && depth > 0) depth--;
             if (depth == 0 && (peek_tok.type == TOK_ARROW || peek_tok.type == TOK_PIPE ||
@@ -2360,7 +2372,8 @@ static AST *parse_lambda(Parser *p) {
              * Clone the lexer and scan from there. */
             Lexer scan_lex = *p->lexer;
             Token scan_tok = p->current;
-            while (scan_tok.type != TOK_RPAREN &&
+            if (scan_tok.value) scan_tok.value = my_strdup(scan_tok.value);
+            while (!(scan_tok.type == TOK_RPAREN && depth == 0) &&
                    scan_tok.type != TOK_EOF     &&
                    scan_tok.type != TOK_KEYWORD) {
                 if (scan_tok.type == TOK_LPAREN ||
@@ -2372,7 +2385,7 @@ static AST *parse_lambda(Parser *p) {
                     free(scan_tok.value);
                     break;
                 }
-                if (scan_tok.type == TOK_PIPE && depth == 0) {
+                if ((scan_tok.type == TOK_PIPE || (scan_tok.type == TOK_SYMBOL && scan_tok.value && strcmp(scan_tok.value, "|") == 0)) && depth == 0) {
                     lambda_has_pmatch = true;
                     free(scan_tok.value);
                     break;
@@ -2460,10 +2473,11 @@ static DefineMetadata parse_define_metadata(Parser *p) {
             p->current = lexer_next_token(p->lexer);
 
             bool has_pmatch = false;
-            Lexer peek_lex = *p->lexer;
-            Token peek_tok = p->current;
-            int depth = 0;
-            while (peek_tok.type != TOK_RPAREN && peek_tok.type != TOK_EOF && peek_tok.type != TOK_KEYWORD) {
+                Lexer peek_lex = *p->lexer;
+                Token peek_tok = p->current;
+                if (peek_tok.value) peek_tok.value = my_strdup(peek_tok.value);
+                int depth = 0;
+                while (!(peek_tok.type == TOK_RPAREN && depth == 0) && peek_tok.type != TOK_EOF && peek_tok.type != TOK_KEYWORD) {
                 if (peek_tok.type == TOK_LPAREN || peek_tok.type == TOK_LBRACKET) depth++;
                 if ((peek_tok.type == TOK_RPAREN || peek_tok.type == TOK_RBRACKET) && depth > 0) depth--;
                 if (depth == 0 && (peek_tok.type == TOK_ARROW || peek_tok.type == TOK_PIPE ||
@@ -2965,8 +2979,10 @@ static AST *parse_list(Parser *p) {
 
     if (p->current.type == TOK_SYMBOL &&
         (strcmp(p->current.value, "let") == 0 ||
-         strcmp(p->current.value, "let*") == 0)) {
+         strcmp(p->current.value, "let*") == 0 ||
+         strcmp(p->current.value, "letrec") == 0)) {
         bool is_sequential = (strcmp(p->current.value, "let*") == 0);
+        bool is_letrec = (strcmp(p->current.value, "letrec") == 0);
         p->current = lexer_next_token(p->lexer);
 
         // Support both (let ([x e] ...) body) and (let [x e] body)
@@ -3039,6 +3055,38 @@ static AST *parse_list(Parser *p) {
         p->current = lexer_next_token(p->lexer); // consume final ')'
 
         ast_free(list);
+        if (is_letrec) {
+            /* letrec: desugar to ((lambda () (begin (def name val) ... body)))
+             * This perfectly leverages native recursion in define/def while
+             * maintaining strict scoping, avoiding set! and dummy value hacks! */
+            AST *begin = ast_new_list();
+            ast_list_append(begin, ast_new_symbol("begin"));
+            for (int i = 0; i < param_count; i++) {
+                AST *defnode = ast_new_list();
+                ast_list_append(defnode, ast_new_symbol("def"));
+                ast_list_append(defnode, ast_new_symbol(params[i].name));
+                ast_list_append(defnode, inits[i]);
+                ast_list_append(begin, defnode);
+            }
+            for (int i = 0; i < body_count; i++)
+                ast_list_append(begin, body_exprs[i]);
+
+            AST **lam_body = malloc(sizeof(AST*));
+            lam_body[0] = begin;
+            AST *lam = ast_new_lambda(NULL, 0, NULL, NULL, NULL, false, begin, lam_body, 1);
+
+            AST *call = ast_new_list();
+            ast_list_append(call, lam);
+
+            free(body_exprs);
+            for (int i = 0; i < param_count; i++) free(params[i].name);
+            free(params);
+            free(inits);
+
+            call->line   = start_line;
+            call->column = start_column;
+            return call;
+        }
         if (!is_sequential || param_count <= 1) {
             return build_let(params, param_count, inits, body_exprs, body_count, start_line, start_column);
         }
@@ -3139,7 +3187,7 @@ static AST *parse_list(Parser *p) {
                      * since p->current is still live and will be parsed below. */
                     Token peek_cur = lexer_next_token(&peek_lex);
                     int depth = 0;
-                    while (peek_cur.type != TOK_RPAREN &&
+                    while (!(peek_cur.type == TOK_RPAREN && depth == 0) &&
                            peek_cur.type != TOK_EOF     &&
                            peek_cur.type != TOK_KEYWORD) {
                         /* Skip #line directive tokens transparently:
@@ -3181,15 +3229,7 @@ static AST *parse_list(Parser *p) {
                             free(peek_cur.value);
                             break;
                         }
-                        if (peek_cur.type == TOK_PIPE && depth == 0) {
-                            body_has_arrow = true;
-                            free(peek_cur.value);
-                            break;
-                        }
-                        if (peek_cur.type == TOK_SYMBOL &&
-                            peek_cur.value &&
-                            strcmp(peek_cur.value, "|") == 0 &&
-                            depth == 0) {
+                        if ((peek_cur.type == TOK_PIPE || (peek_cur.type == TOK_SYMBOL && peek_cur.value && strcmp(peek_cur.value, "|") == 0)) && depth == 0) {
                             body_has_arrow = true;
                             free(peek_cur.value);
                             break;
