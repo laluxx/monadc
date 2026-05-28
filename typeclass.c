@@ -348,7 +348,7 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
                 char temp[512];
                 int len_before = pos - sig_buf;
                 snprintf(temp, sizeof(temp), "%.*s%s%s", len_before, sig_buf, inst->assoc_values[k], pos + strlen(target));
-                strncpy(sig_buf, temp, sizeof(sig_buf) - 1);
+                strcpy(sig_buf, temp);
             }
         }
         {
@@ -384,98 +384,20 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
 
         for (int pi = 0; pi < typed_lam->lambda.param_count; pi++) {
             if (!typed_lam->lambda.params[pi].type_name) {
-                int current_idx = 0;
-                int depth = 0;
-                const char *start = sig_buf;
-                while (*start == ' ' || *start == '\t') start++;
-                if (strncmp(start, "Fn :: ", 6) == 0) start += 6;
-                while (*start == ' ' || *start == '\t') start++;
-
-                const char *p = start;
-                char *extracted = NULL;
-                while (*p) {
-                    if (*p == '(' || *p == '[') depth++;
-                    else if (*p == ')' || *p == ']') depth--;
-                    else if (depth == 0 && *p == '-' && *(p+1) == '>') {
-                        if (current_idx == pi) {
-                            char buf[512] = {0};
-                            buf[0] = '(';
-                            int len = p - start < 509 ? p - start : 509;
-                            strncpy(buf + 1, start, len);
-                            for (int i = strlen(buf)-1; i >= 0 && (buf[i] == ' ' || buf[i] == '\t'); i--) buf[i] = '\0';
-                            strcat(buf, ")");
-                            extracted = strdup(buf);
-                            break;
-                        }
-                        current_idx++;
-                        p += 2;
-                        start = p;
-                        while (*start == ' ' || *start == '\t') start++;
-                        p = start - 1;
-                    }
-                    p++;
+                if (t_iter && t_iter->kind == TYPE_ARROW) {
+                    typed_lam->lambda.params[pi].type_name = strdup(type_to_string(t_iter->arrow_param));
+                } else if (t_iter) {
+                    typed_lam->lambda.params[pi].type_name = strdup(type_to_string(t_iter));
                 }
-                if (!extracted && current_idx == pi) {
-                    char buf[512] = {0};
-                    buf[0] = '(';
-                    int len = p - start < 509 ? p - start : 509;
-                    strncpy(buf + 1, start, len);
-                    for (int i = strlen(buf)-1; i >= 0 && (buf[i] == ' ' || buf[i] == '\t'); i--) buf[i] = '\0';
-                    strcat(buf, ")");
-                    extracted = strdup(buf);
-                }
-
-                if (extracted) {
-                    typed_lam->lambda.params[pi].type_name = extracted;
-                }
+            }
+            if (t_iter && t_iter->kind == TYPE_ARROW) {
+                t_iter = t_iter->arrow_ret;
+            } else {
+                t_iter = NULL;
             }
         }
-        if (!typed_lam->lambda.return_type) {
-            int target_idx = typed_lam->lambda.param_count;
-            int current_idx = 0;
-            int depth = 0;
-            const char *start = sig_buf;
-            while (*start == ' ' || *start == '\t') start++;
-            if (strncmp(start, "Fn :: ", 6) == 0) start += 6;
-            while (*start == ' ' || *start == '\t') start++;
-
-            const char *p = start;
-            char *extracted = NULL;
-            while (*p) {
-                if (*p == '(' || *p == '[') depth++;
-                else if (*p == ')' || *p == ']') depth--;
-                else if (depth == 0 && *p == '-' && *(p+1) == '>') {
-                    if (current_idx == target_idx) {
-                        char buf[512] = {0};
-                        buf[0] = '(';
-                        int len = p - start < 509 ? p - start : 509;
-                        strncpy(buf + 1, start, len);
-                        for (int i = strlen(buf)-1; i >= 0 && (buf[i] == ' ' || buf[i] == '\t'); i--) buf[i] = '\0';
-                        strcat(buf, ")");
-                        extracted = strdup(buf);
-                        break;
-                    }
-                    current_idx++;
-                    p += 2;
-                    start = p;
-                    while (*start == ' ' || *start == '\t') start++;
-                    p = start - 1;
-                }
-                p++;
-            }
-            if (!extracted && current_idx == target_idx) {
-                char buf[512] = {0};
-                buf[0] = '(';
-                int len = p - start < 509 ? p - start : 509;
-                strncpy(buf + 1, start, len);
-                for (int i = strlen(buf)-1; i >= 0 && (buf[i] == ' ' || buf[i] == '\t'); i--) buf[i] = '\0';
-                strcat(buf, ")");
-                extracted = strdup(buf);
-            }
-
-            if (extracted) {
-                typed_lam->lambda.return_type = extracted;
-            }
+        if (!typed_lam->lambda.return_type && t_iter) {
+            typed_lam->lambda.return_type = strdup(type_to_string(t_iter));
         }
 
         if (method_sig) type_free(method_sig);

@@ -5,22 +5,25 @@
 - A bidirectional type system is complete for synthesis if every type has at least one term.
 
 * TODO Stuff [0/37]
+- [ ] Automatic tsan and asan in debug builds.
+- [ ] Allow upcase functions and keywords, it will make the language more expressive, both or and OR should work.
+- [ ] Don't box for lists.. They are homogeneous now
 - [ ] Generalized Algebraic Data types (GADTs)
-- [ ] Auto parallelization also explore auto parallelization on the GPU
-- [ ] in REPL termination checker
-- [ ] Referential assignment E.g <--, <+-, <*-
+- [ ] Auto parallelization also explore auto parallelization on the GPU (for arrays first)
+- [ ] in REPL program termination checker
+- [ ] Referential assignment E.g <--, <+-, <*- (ideally the operator could be user defined)
 - [ ] Multiple definitions E.g def u v w :: Float (we know it's a multi definition because there are no [])
-- [ ] type-level computation via the same mechanisms as value-level computation. E.g (Int String) ++ (Int) = (Int String Int)
+- [ ] type-level computation via the same mechanisms as value-level computation. E.g (Int String) ++ (Int) = (Int String Int) it's both a type and a list
 - [ ] ITT based fuzzing
-- [ ] QTT based Compile-time reference counting
-- [ ] Compile time IFs: #if (expr) ...  #---
+- [ ] QTT based Compile-time memory management
+- [ ] Compile time IFs: #if (expr)
 - [ ] Serialize modules with types
 - [ ] eval
 - [ ] labels like :label that create continuations that you can =goto=
 - [ ] arbitrary return at any point of execution using =->=
-- [ ] Builtin Path type and Path literals e.g ~/path/to/file.c (also support windows)
+- [ ] Builtin Path type and Path literals e.g ~/path/to/file.c (also support for windows)
 - [ ] The coll type: [a] should NOT be a runtime thing, it should just do monomorphization
-- [ ] Full idris like hole driven development
+- [ ] Full idris-like hole driven development
 - [ ] Fat strings... fuck my life
 - [ ] pmatch backtracking on failure with =<-=
 - [ ] anonymous Algebraic Data Types (tagged unions)
@@ -29,9 +32,9 @@
 - [ ] Syntax for compiler directives: -|[ INLINE (/=) ]|-
 - [ ] Regex literal #""
 - [ ] Make arrays APL style arrays with rank and embed an array language
-- [ ] allow lazy lists to go both ways so we can have =define ℤ (..0..)=
-- [ ] Reader sugar macro turn: ln(3) -> (ln 3)
-- [ ] Reader sugar macro turn: anything! -> (! anything)
+- [ ] allow lazy lists and sets to go both ways so we can have =define ℤ {..0..}=
+- [ ] MAYBE Reader sugar macro turn: ln(3) -> (ln 3)
+- [ ] MAYBE Reader sugar macro turn: anything! -> (! anything)
 - [ ] A way to dump an enviroment to a loadable file.env 
 - [ ] A module that implements a DSL to write SPIRV
 - [ ] ==> Optional arguments that default to *unspecified*
@@ -49,11 +52,12 @@
       substitute the type of the function with the inferred one
 - [ ] in monad-mode add a function to turn wisp into lisp in region/buffer
 
-* TODO Repl [0/1]
+* TODO Repl [0/2]
+- [ ] It's broken right now, i've left it behind. It doesn't understand multi line wisp
 - [ ] ,doc should also show the alias if it exists
 
 * TODO Build System [0/1]
-- [ ] Generate a Tree Graph of the package dependencies
+- [ ] Generate a Tree Graph of the package dependencies (I like trees)
 
 
 * TODO QTT Exact Multiplicity Tracking [0/4]
@@ -61,6 +65,55 @@
 - [ ] Compiler tracks exact usage count statically, frees after last use
 - [ ] No runtime fallback — no GC, no reference counting, ever
 - [ ] ω reserved for truly dynamic cases (explicitly annotated, discouraged)
+
+
+* TODO Prolog [/]
+
+#+begin_src monad
+define square x ↦ x²
+square x -> 9  ; it returns the set {-3 3}    (reads as square x returns 9)
+
+square x -> 9 AND x > 0 ; Conjunction and disjunction of constraints
+x + y = 10 AND x - y = 4
+
+define parent #{ 'tom 'bob
+                 'tom 'liz
+                 'bob 'ann }
+
+define grandparent? x z ↦ ∃y. parent x y ∧ parent y z
+grandparent? 'tom z -> true ; Returns the symbol 'ann directly not a set because there is only one answer.
+parent 'tom 'ann -> ∅       ; the solution is the empty set, this returns True.
+
+#+end_src
+
+
+* TODO DSLs
+
+I’m Dreaming, but if the language is expressive enough to allow
+implementing this as a library.. We have won.
+
+** Html
+
+#+begin_src monad
+html :lang "en"
+  head
+    title "dream-html first look"
+  body
+    h1 "Hello, _!" who
+    p  "This page is at: " a :href "/me" "this URL" "."
+#+end_src
+                                        ↓
+#+begin_src html
+<html lang="en">
+  <head>
+    <title>dream-html first look</title>
+  </head>
+  <body>
+    <h1>Hello, World!</h1>
+    <p>This page is at: <a href="/me">this URL</a>.</p>
+  </body>
+</html>
+#+end_src
 
 
 * TODO nil bubble tracing
@@ -83,12 +136,19 @@ Function parameters are immutable references by default (no copy).
 Prefix with =@= to get a mutable owned copy:
 
 #+begin_src monad
-define quicksort :: (Int) -> (Int)
+define quicksort :: (a) -> (a)
   @list -> sort-in-place list
 #+end_src
 
 Default -> zero copy, pure.
 =@=       -> one copy, local mutation allowed. Caller never sees changes.
+
+...
+
+Even better, don't let the user think about move semantics, if he mutates a
+parameter, then it will be automatically copied for him.
+Keeping the function referentially transparent.
+
 
 
 * TODO Unified Monadic Bind (No Do Blocks)
@@ -133,7 +193,7 @@ Default -> zero copy, pure.
 - Default methods
 - Deriving
 
-Cool but probably overkill for now. Keep my Haskell-style classes
+Cool but probably overkill for now. Keep Haskell-style classes
 
 
 * TODO Destructuring in def and define
@@ -141,16 +201,141 @@ Cool but probably overkill for now. Keep my Haskell-style classes
 Pattern matching works in pmatch and macro arguments. Bring it to regular bindings.
 
 #+begin_src monad
-def [x|xs] (list 1 2 3)     ; x=1, xs=[2 3]
+def [x|xs] (list 1 2 3)     ; x = 1, xs = [2 3]
 def #{name age} (get-user)  ; assumes map with keys :name and :age
 #+end_src
 
 
-* DONE Dependent types
-  CLOSED: [2026-05-07 Thu 09:47]
+* TODO Dependent types
 
 From: ∀a. a -> a
 To:   Π [A : Type] -> [x : A] -> A
+
+(Not really done until everything has a type..)
+
+
+** TODO Fix Soundness Holes [0/6]
+*** TODO Move all implicit coercions out of dep_conv
+
+    =dep_conv_vals= must be strict definitional equality only.
+    Currently allows ~Int ≡ Float~, ~Int ≡ Char~, ~Nat ≡ Int~ inside conversion
+    which is mathematically unsound — ~Vec Nat~ and ~Vec Int~ become definitionally
+    equal, opening a path to proving =False=.
+    - Move all coercions to the elaboration layer only
+    - =dep_conv= should never return =True= for structurally different ground types
+
+*** TODO Fix meta_solve occurs check
+
+    Currently evaluates the solution in the empty environment:
+
+#+begin_src c
+bool occurs = meta_occurs(mctx, id, dep_eval(solution, empty, mctx));
+#+end_src
+
+    De Bruijn indices in =solution= can refer to variables that don't exist in
+    the empty env, so =dep_eval= produces neutrals and =meta_occurs= misses
+    occurrences inside those neutrals' spines.
+    - Occurs check must run in the same environment the solution was elaborated in
+
+*** TODO Implement proper Miller pattern unification
+
+    The current stub is labeled TODO and is unsound:
+
+#+begin_src c
+/* TODO: Proper pattern unification requires checking that v1->spine
+ * contains only distinct bound variables */
+Term *sol = dep_quote(v2, cctx->depth, mctx);
+bool ok = meta_solve(mctx, v1->meta_id, sol);
+#+end_src
+
+    Without checking the Miller pattern condition, metas can be solved with
+    terms containing variables outside the meta's scope — a real scoping
+    soundness hole, not a missing optimization.
+    - Check that spine of =v1= contains only distinct bound variables
+    - Prune variables not in scope before solving
+
+*** TODO Fix ownership model for closures — eliminate intentional leaks
+
+    Currently has dozens of intentional leaks:
+
+#+begin_src c
+/* DO NOT FREE pi_term: pi_val captures its body in a closure! */
+/* Intentional leak to prevent UAF in HM codegen phase */
+// free(ctx); // Intentional leak to prevent use-after-free segfault
+#+end_src
+
+    The root cause is that closures capture raw =Term *= pointers without
+    cloning. Choose one fix:
+    - Option A: closures own a deep-cloned copy of their body term
+    - Option B: arena allocator — all terms allocated in a single arena,
+      freed at the end of the compilation unit
+
+*** TODO Fix HM error suppression inside define
+
+    Currently silently discards type errors inside definitions:
+
+#+begin_src c
+bool inner_ok = infer_unify_all(ctx);
+(void)inner_ok;            // error ignored
+ctx->constraint_count = 0;
+ctx->had_error = false;    // silently reset
+#+end_src
+
+    Real type errors inside function bodies are swallowed here and never
+    reported to the user.
+    - Preserve and propagate inner unification errors
+    - Only reset constraint buffer, never reset =had_error=
+
+*** TODO Fix dep_ground_of_value for dependent polymorphic functions
+
+    When skipping implicit args by passing a dummy neutral, the closure
+    is applied to a value that was never type-checked:
+
+#+begin_src c
+Value *dummy = val_neutral("hm_impl", -1, val_spine_empty());
+Value *codom = dep_closure_apply(v->closure, dummy);
+return dep_ground_of_value(codom, mctx);
+#+end_src
+
+    If the codomain depends on the implicit argument (which it often does),
+    the resulting HM type is wrong for polymorphic functions.
+    - Thread actual instantiation witnesses through =dep_ground_of_value=
+    - Or mark the result =TYPE_UNKNOWN= when the codom depends on the dummy
+
+
+** TODO Fix Missing Type Theory Features [0/4]
+*** TODO Universe level consistency — enforce ≤ not just =
+
+    =dep_infer_level= returns 0 for unknown levels instead of failing.
+    Universe levels in Π and Σ formation use ~max(u,v)~ correctly, but
+    =dep_conv= checks equality of levels not ~≤~, which is too strict for
+    cumulativity.
+    - Decide: is the system cumulative or not?
+    - If cumulative: ~Type u~ is a subtype of ~Type v~ when ~u ≤ v~, update conv
+    - If not: document this explicitly and make =dep_infer_level= hard-fail on unknown
+
+*** TODO Add termination checker for recursive definitions
+
+    The fuel limit in =dep_conv= prevents infinite loops in the checker but
+    does not prevent user programs from writing non-terminating functions
+    that are accepted by the type checker.
+    - Structural recursion checker on =Nat-elim= and user-defined recursion
+    - At minimum: warn when a definition is not structurally recursive
+
+*** TODO Σ-type η-expansion for neutrals
+
+    Currently η-expands concrete pairs but not neutral Σ-typed terms.
+    Two neutrals of Σ type should be compared by projecting =fst= and =snd=
+    and comparing component-wise.
+    - In =dep_conv_vals=, when both sides are neutral with a Σ type annotation,
+      project and compare components
+
+*** TODO Proper spine δ-unfolding before spine-length mismatch errors
+
+    When two neutrals have the same head but different spine lengths, the
+    checker errors immediately. It should try δ-unfolding first.
+    - Before emitting spine-length mismatch, attempt δ-unfolding both heads
+    - Only error if unfolding does not resolve the mismatch
 
 
 * TODO QTT (Quantitative Type Theory)
@@ -179,20 +364,238 @@ semantics, erasure analysis, uniqueness typing.
 
 
 
-* TODO Dependent Refinement Types with existential quantifiers
+
+* Subtypes
+
+** TODO Dependent Refinement Types with existential quantifiers
+
+ #+begin_src monad
+ type Even { x ∈ ℤ | ∃k ∈ ℤ, x = 2k }
+   "The Even type."
+ #+end_src
+
+   The existential ={ x ∈ ℤ | ∃k ∈ ℤ, x = 2k }= becomes
+   a Σ-type: Σ (k : ℤ) (x : ℤ) (x = 2k)
+   and the type checker must construct the pair (k, x, refl).
+
+
+** TODO Subtype operators
+
+   To allow something like this, we probably need
+   to keep a hierarcical tree of subtypes at runtime,
+   if <: or :> are never used optimize it away.
+
+  Example:
+
+   #+begin_src monad
+   if Nat <: Int
+     show "meow"
+   #+end_src
+
+   #+begin_src monad
+   I8 <: I16 <: I32 <: I64 <: 128 ; => True
+   #+end_src
+
+
+* TODO First-class judgments
+
+Allow the full type judgment syntax:
+
+A type in my language is expressed as Γ ⊢ e : t
+
+  ⌜Γ⌝ Is A _set_ of assumption.
+  ⌜⊢⌝ Is the turnstyle separating the assumptions.
+  ⌜e⌝ Is an arbitrary expression.
+  ⌜:⌝ Is a Type judgment.
+  ⌜t⌝ Is An arbitrary Type.
 
 #+begin_src monad
-type Even { x ∈ ℤ | ∃k ∈ ℤ, x = 2k }
-  "The Even type."
+{x: Int} ⊢ (λx. x + 3) 5 : Int        ; typing
+{x: Int} ⊢ (λx. x + 3) 5 ≡ 8 : Int    ; equality
 #+end_src
 
-  The existential ={ x ∈ ℤ | ∃k ∈ ℤ, x = 2k }= becomes
-  a Σ-type: Σ (k : ℤ) (x : ℤ) (x = 2k)
-  and the type checker must construct the pair (k, x, refl).
+If you omit ⌜Γ⌝ and ⌜⊢⌝ it will use the inferred context,
+that's how ~98% of code will be written.
+
+But it's nice to have for teaching/educational purposes
+and to limit gamma to see how the type system reacts to it.
+
+There seem to also be prfound implication about having first class
+contexts, specifically for meta meta programming with the lisp layer.
+
+TODO allow all those:
+
+Γ ⊢ t : Type
+Γ ⊢ e₁ ≡ e₂ : t
+Γ ⊢ t₁ ≡ t₂ : Type
+Γ ⊢
+
+* Inference rules
+
+Inference rules come in this form:
+
+                   ⌜P₁⌝ is the first  Premise.
+     P₁ P₂         ⌜P₂⌝ is the second Premise.
+    ───────        ⌜──⌝ is the inference line.
+       C           ⌜C⌝  is the Conclusion.
+
+The idea is to make them first class in the language.
+
+ Example:
+
+ #+begin_src monad
+
+     x : Int   3 : Int
+if  ───────────────────
+        x + 3 : Int
+
+then printLn "It type checked!"
+
+ #+end_src
+
+** Derivations
+
+ #+begin_src monad
+
+            x : Int
+         ─────────────
+          x + 3 : Int
+if ──────────────────────────
+    (λx. x + 3) : Int -> Int
+
+then printLn "It type checked again!"
+
+ #+end_src
+
+
+** Rule schemas
+
+ — An inference rule with metavariables (define once, instance many times)
+
+ #+begin_src monad
+
+schema plus where
+
+   Γ ⊢ e₁ : Int    Γ ⊢ e₂ : Int
+  ──────────────────────────────
+        Γ ⊢ e₁ + e₂ : Int
+
+ #+end_src
+
+** Rule instance
+
+ — A particular application with concrete judgments substituted in
+
+Think of ⌜plus⌝ as a function that takes ⌜Γ⌝, ⌜e₁⌝, ⌜e₂⌝ and returns an inference rule:
+
+ #+begin_src monad
+
+instance plus with {x : Int} x 3
+
+;; produces:
+
+   {x : Int} ⊢ x : Int    {x : Int} ⊢ 3 : Int
+  ────────────────────────────────────────────
+          {x : Int} ⊢ x + 3 : Int
+
+;; A proof object?
+
+ #+end_src
 
 
 
-* TODO Complex Numbers Design
+** Bidirectional judgments
+
+   #+begin_src monad
+   Γ ⊢ e ⇒ t ; Expression ⌜e⌝ synthesizes type ⌜t⌝
+   Γ ⊢ e ⇐ t ; Expression ⌜e⌝ can be checked to have type ⌜t⌝
+   #+end_src
+
+
+
+* TODO β reduction tracing
+
+Show a trace of Beta reductions just like we do for type checking.
+
+
+
+
+* TODO Sweet Matrix
+
+#+begin_src monad
+
+No sugar, Bleh!
+
+[ 1 1 1 1 1 1
+  1 0 0 0 0 1
+  1 0 1 0 1 1
+  0 0 1 0 0 0
+  1 0 1 1 0 1
+  1 1 1 1 1 1 ]
+
+You can rewrite as:
+
+╭─
+  1 1 1 1 1 1
+  1 0 0 0 0 1
+  1 0 1 0 1 1
+  0 0 1 0 0 0
+  1 0 1 1 0 1
+  1 1 1 1 1 1
+             ─╯
+
+You can rewrite as:
+
+╭─
+  ■ ■ ■ ■ ■ ■
+  ■ □ □ □ □ ■
+  ■ □ ■ □ ■ ■
+  □ □ ■ □ □ □
+  ■ □ ■ ■ □ ■
+  ■ ■ ■ ■ ■ ■
+             ─╯
+
+2 is the right path:
+
+╭─
+  ■ ■ ■ ■ ■ ■
+  ■ 2 2 2 □ ■
+  ■ 2 ■ 2 ■ ■
+  2 2 ■ 2 2 2
+  ■ □ ■ ■ □ ■
+  ■ ■ ■ ■ ■ ■
+             ─╯
+
+You can rewrite as:
+
+╭─
+  ■ ■ ■ ■ ■ ■
+  ■ ┌───┐ □ ■
+  ■ │ ■ │ ■ ■
+  ──┘ ■ └────
+  ■ □ ■ ■ □ ■
+  ■ ■ ■ ■ ■ ■
+             ─╯
+
+This achieves no distinction between the problem representation
+and the data rappresentation.
+
+
+Btw, This is a 2x2x2 matrix:
+
+╭─
+  0 1  0 1
+  1 0  1 0
+
+  0 1  1 0
+  1 0  0 1
+          ─╯
+
+
+#+end_src
+
+
+* TODO Complex Numbers Design (Can be better)
 ** Literals
 
 #+BEGIN_SRC monad

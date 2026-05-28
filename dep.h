@@ -24,7 +24,6 @@
 #include "types.h"    // Type*, TypeKind — ground types are embedded as terms
 #include "reader.h"   // AST — surface syntax elaborated into Term
 
-
 /// Forward declarations
 
 typedef struct Term        Term;
@@ -127,8 +126,8 @@ typedef enum {
     // ── Σ-types / pairs ──────────────────────────────────────────────
     TERM_SIGMA,     // Σ(x:A). B  — dependent pair type
     TERM_PAIR,      // ⟨t, s⟩     — pair introduction
-    TERM_FST,       // fst p       — first projection
-    TERM_SND,       // snd p       — second projection
+    TERM_FST,       // fst p      — first projection
+    TERM_SND,       // snd p      — second projection
 
     // ── Identity / equality ───────────────────────────────────────────
     TERM_EQ,        // t ≡ s : A   — propositional equality type

@@ -7,16 +7,15 @@
 ;; ; `Code` will inherit everything from list
 ;; ; including the docstring if not specified.
 
-
 type Natural { x ∈ Int | x >= 0 }
   :doc "Natural number type"
   :alias ℕ
 
-define passedNatural? [x : ℕ] -> Bool
-  Natural? x
+;; define passedNatural? [x : ℕ] -> Bool
+;;   Natural? x
 
-;; This function can't return False
-show (passedNatural? 1); passing -1 is a compile time ERROR
+;; ;; This function can't return False
+;; show (passedNatural? 1); passing -1 is a compile time ERROR
 
 ;; TODO
 ;; Now that we have dependent types this should be possible..
@@ -49,34 +48,44 @@ show (passedNatural? 1); passing -1 is a compile time ERROR
 
 ;; (show (passedPositiveEven? 2))
 
-(type Email
-  { s ∈ String
-  | (and (s contains? "@")
-         (s contains? ".")
-         ((count s) > 5)
-         (not (s contains? " "))) })
+
+;; Email e' un subset di String
+;; Questo and si applica su tutte e 4 le clause.
+;; (type Email
+;;   { s ∈ String
+;;   | and s contains? "@"
+;;         s contains? "."
+;;         count s > 5
+;;         not s contains? " " })
 
 
-(define (passedEmail? [x :: Email] -> Bool)
-  (Email? x))
 
-(show (passedEmail? "ciao.@"))
 
-(type CompanyEmail
-  { s ∈ Email
-  | (s ends-with? "@company.com") })
+;; Questa funzione non potra' MAI ritornare False,
+;; Perche' puoi SOLTANTO passare email, e' un compile time error altrimenti.
+;; define passedEmail? :: Email -> Bool
+;;   e -> Email? e
 
-(define (passedCompanyEmail? [x :: CompanyEmail] -> Bool)
-  (CompanyEmail? x))
+;; show passedEmail? "ciao.@"
 
-(define (return-string -> CompanyEmail)
-  "ciao@wrong.com")
+;; CompanyEmail e' un subset di Email.
+;; Puoi immaginarli come set sempre piu' piccoli e specifici
+;; (type CompanyEmail
+;;   { s ∈ Email
+;;   | s ends-with? "@company.com" })
+
+;; Stessa storia dell'altra
+;; define passedCompanyEmail? :: CompanyEmail -> Bool
+;;   e -> CompanyEmail? e
+
+;; define return-string -> CompanyEmail
+;;   "ciao@wrong.com"
 
 ;; define the-email "email@company.com"
 
-;; (show (return-string))
-;; (show (passedCompanyEmail? the-email))
-;; (show (passedCompanyEmail? (return-string)))
+;; show return-string
+;; show passedCompanyEmail? the-email
+;; show passedCompanyEmail? return-string
 
 
 

@@ -375,6 +375,20 @@ static LLVMValueRef codegen_specialize(CodegenContext *ctx,
         spec_entry->lifted_count   = 0;
         spec_entry->is_closure_abi = false;
     }
+    // Shadow the original name so recursive calls inside the specialized
+    // body (including thunks for lazy cons tails) resolve to the
+    // specialized function, not the generic Main__append base entry.
+    env_insert_func(ctx->env, fn_name,
+                    clone_params(env_params, total_params),
+                    total_params, type_clone(ret_type),
+                    func, NULL, NULL);
+    EnvEntry *shadow_entry = env_lookup(ctx->env, fn_name);
+    if (shadow_entry) {
+        shadow_entry->lifted_count   = 0;
+        shadow_entry->is_closure_abi = false;
+        shadow_entry->source_ast     = entry->source_ast;
+        shadow_entry->scheme         = NULL;
+    }
 
     // Compile the body
     LLVMBasicBlockRef entry_block = LLVMAppendBasicBlockInContext(
@@ -1041,11 +1055,16 @@ static EnvEntry *resolve_symbol_with_modules(CodegenContext *ctx, const char *sy
         // Find the import with this prefix
         ImportDecl *import = module_context_find_import(ctx->module_ctx, module_prefix);
         if (!import) {
+            EnvEntry *base = env_lookup(ctx->env, module_prefix);
+            if (base) {
+                free(module_prefix);
+                return NULL;
+            }
             char _mp_copy[256];
             strncpy(_mp_copy, module_prefix, sizeof(_mp_copy) - 1);
             _mp_copy[sizeof(_mp_copy)-1] = '\0';
             free(module_prefix);
-            CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown module prefix ‘%s’",
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown module prefix '%s'",
                     parser_get_filename(), ast->line, ast->column, _mp_copy);
         }
 
@@ -2957,9 +2976,15 @@ static LLVMValueRef codegen_dot_chain(CodegenContext *ctx, const char *symbol, T
     var_name[vlen] = '\0';
 
     EnvEntry *base_entry = resolve_symbol_with_modules(ctx, var_name, ast);
-    if (!base_entry || !base_entry->type) {
-        return NULL; // Might be a module prefix
+    if (!base_entry) {
+        base_entry = env_lookup(ctx->env, var_name);
+        if (!base_entry) {
+            return NULL;
+        }
     }
+    fprintf(stderr, "DEBUG dot_chain: var='%s' base_entry=%p type_kind=%d\n",
+            var_name, (void*)base_entry,
+            (base_entry && base_entry->type) ? base_entry->type->kind : -1);
 
     Type *current_lay = base_entry->type;
 
@@ -4545,6 +4570,21 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         for (int i = 0; i < total_params; i++) {
                             if (lambda->lambda.naked) continue;
                             Type        *param_type = env_params[i].type;
+                            /* If param type is unknown, consult the HM scheme.
+                             * This handles where-clause lambdas whose params have
+                             * no annotation but whose types were fully inferred,
+                             * e.g. "improve g -> ..." where g :: Float.          */
+                            if ((!param_type || param_type->kind == TYPE_UNKNOWN) && hm_scheme) {
+                                Type *t = hm_scheme->type;
+                                for (int j = 0; j < i && t && t->kind == TYPE_ARROW; j++)
+                                    t = t->arrow_ret;
+                                if (t && t->kind == TYPE_ARROW && t->arrow_param &&
+                                    t->arrow_param->kind != TYPE_UNKNOWN &&
+                                    t->arrow_param->kind != TYPE_VAR) {
+                                    param_type = t->arrow_param;
+                                    env_params[i].type = type_clone(param_type);
+                                }
+                            }
                             LLVMTypeRef  typed_llvm = type_to_llvm(ctx, param_type);
 
                             /* Load boxed arg from args[i] — args is RuntimeValue**,
@@ -6921,15 +6961,11 @@ if (ast->list.count >= 5) {
                 }
 
                 if (should_wrap) {
-                    LLVMValueRef nl_fn = get_rt_list_new(ctx);
-                    LLVMTypeRef nl_ft = LLVMFunctionType(ptr, NULL, 0, 0);
-                    LLVMValueRef nl = LLVMBuildCall2(ctx->builder, nl_ft, nl_fn, NULL, 0, "nl");
-                    LLVMValueRef vl_fn = get_rt_value_list(ctx);
-                    LLVMTypeRef vl_ft = LLVMFunctionType(ptr, &ptr, 1, 0);
-                    LLVMValueRef boxed_nl = LLVMBuildCall2(ctx->builder, vl_ft, vl_fn, &nl, 1, "boxed_nl");
-
-                    left_r.value = emit_call_2(ctx, get_rt_coll_wrap(ctx), ptr, boxed_nl,
-                                               codegen_box(ctx, left_r.value, left_r.type), "wrapped_elem");
+                    CodegenResult rhs_template_r = codegen_expr(ctx, ast->list.items[2]);
+                    left_r.value = emit_call_2(ctx, get_rt_coll_wrap(ctx), ptr,
+                                               rhs_template_r.value,
+                                               codegen_box(ctx, left_r.value, left_r.type),
+                                               "wrapped_elem");
                 }
 
                 /* Coll / List: do NOT evaluate rhs eagerly ...
@@ -8476,28 +8512,43 @@ if (ast->list.count >= 5) {
                         if (is_adt_tag_call) goto normal_comparison;
                     }
 
-                    /* Determine concrete type name from lhs */
+                    /* Determine concrete type name from lhs.
+                     * PRIORITY ORDER (most reliable first):
+                     *   1. Actual LLVM value type — ground truth after codegen.
+                     *      A double is always Float; an i64 is always Int.
+                     *      This must come FIRST to prevent infinite recursion
+                     *      when a layout method (e.g. Pow Vec3) calls the same
+                     *      typeclass on a primitive field (e.g. v.x ^ exp must
+                     *      dispatch to Float, not back to Vec3).
+                     *   2. lhs.type layout annotation — for heap-allocated
+                     *      layout types whose LLVM type is just a pointer.
+                     *   3. Env symbol lookup — fallback for named variables.   */
                     const char *type_name = NULL;
-                    if (lhs.type && lhs.type->kind == TYPE_LAYOUT)
+
+                    /* 1. LLVM value type — only reliable for non-pointer primitives */
+                    if (lhs.value) {
+                        LLVMTypeKind vk = LLVMGetTypeKind(LLVMTypeOf(lhs.value));
+                        if (vk == LLVMDoubleTypeKind || vk == LLVMFloatTypeKind) {
+                            TCInstance *probe = tc_find_instance(ctx->tc_registry, cls, "Float");
+                            if (probe) type_name = "Float";
+                        } else if (vk == LLVMIntegerTypeKind) {
+                            unsigned w = LLVMGetIntTypeWidth(LLVMTypeOf(lhs.value));
+                            if (w == 64 || w == 32) {
+                                TCInstance *probe = tc_find_instance(ctx->tc_registry, cls, "Int");
+                                if (probe) type_name = "Int";
+                            }
+                        }
+                    }
+
+                    /* 2. Layout type from lhs.type — for heap pointers */
+                    if (!type_name && lhs.type && lhs.type->kind == TYPE_LAYOUT)
                         type_name = lhs.type->layout_name;
 
+                    /* 3. Env symbol lookup for named layout variables */
                     if (!type_name && ast->list.items[1]->type == AST_SYMBOL) {
                         EnvEntry *e = env_lookup(ctx->env, ast->list.items[1]->symbol);
                         if (e && e->type && e->type->kind == TYPE_LAYOUT)
                             type_name = e->type->layout_name;
-                    }
-
-                    /* Resolve from actual LLVM type of the first argument.
-                     * This prevents infinite recursion when a typeclass method
-                     * calls another typeclass method on a primitive field —
-                     * e.g. (v.x ^ exp) inside __impl_Pow_Vec3_^ must dispatch
-                     * to Float, not back to Vec3. */
-                    if (!type_name) {
-                        const char *llvm_tname = tc_type_name_from_llvm(lhs.value);
-                        if (llvm_tname) {
-                            TCInstance *probe_inst = tc_find_instance(ctx->tc_registry, cls, llvm_tname);
-                            if (probe_inst) type_name = llvm_tname;
-                        }
                     }
 
                     /* If we can't determine a concrete layout type, the call is
@@ -8529,6 +8580,15 @@ if (ast->list.count >= 5) {
                         if (strcmp(inst->method_names[_mi], op) == 0) {
                             method_fn = inst->method_funcs[_mi];
                             break;
+                        }
+                    }
+
+                    if (!method_fn) {
+                        char constructed_name[256];
+                        snprintf(constructed_name, sizeof(constructed_name), "__impl_%s_%s_%s", cls, type_name, op);
+                        EnvEntry *impl_entry = env_lookup(ctx->env, constructed_name);
+                        if (impl_entry && impl_entry->func_ref) {
+                            method_fn = impl_entry->func_ref;
                         }
                     }
 
@@ -8871,15 +8931,35 @@ if (ast->list.count >= 5) {
                                                  LLVMInt64TypeInContext(ctx->context), "char_to_int");
                     result_type  = type_int();
                 }
-                // Coerce TYPE_UNKNOWN or TYPE_FN ptr to Int via unbox
+                // Coerce TYPE_UNKNOWN or TYPE_FN ptr — peek at first rhs to decide int vs float
                 if (result_type->kind == TYPE_UNKNOWN ||
                     result_type->kind == TYPE_FN) {
                     LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-                    LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
-                    LLVMTypeRef uft   = LLVMFunctionType(i64_t, &ptr_t, 1, 0);
-                    result_value = LLVMBuildCall2(ctx->builder, uft,
-                                       get_rt_unbox_int(ctx), &result_value, 1, "unbox_arith");
-                    result_type  = type_int();
+                    bool peek_float = false;
+                    if (ast->list.count > 2) {
+                        AST *peek_ast = ast->list.items[2];
+                        Type *peek_t = peek_ast->inferred_type;
+                        if (peek_t && type_is_float(peek_t)) peek_float = true;
+                        if (!peek_float && peek_ast->type == AST_NUMBER && peek_ast->number != (double)(long long)peek_ast->number)
+                            peek_float = true;
+                        if (!peek_float) {
+                            EnvEntry *pe = (peek_ast->type == AST_SYMBOL) ? env_lookup(ctx->env, peek_ast->symbol) : NULL;
+                            if (pe && pe->type && type_is_float(pe->type)) peek_float = true;
+                        }
+                    }
+                    if (peek_float) {
+                        LLVMTypeRef dbl_t = LLVMDoubleTypeInContext(ctx->context);
+                        LLVMTypeRef uft   = LLVMFunctionType(dbl_t, &ptr_t, 1, 0);
+                        result_value = LLVMBuildCall2(ctx->builder, uft,
+                                           get_rt_unbox_float(ctx), &result_value, 1, "unbox_arith");
+                        result_type  = type_float();
+                    } else {
+                        LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
+                        LLVMTypeRef uft   = LLVMFunctionType(i64_t, &ptr_t, 1, 0);
+                        result_value = LLVMBuildCall2(ctx->builder, uft,
+                                           get_rt_unbox_int(ctx), &result_value, 1, "unbox_arith");
+                        result_type  = type_int();
+                    }
                 }
 
                 if (ast->list.count == 2) {
@@ -9028,15 +9108,23 @@ if (ast->list.count >= 5) {
                                                   LLVMInt64TypeInContext(ctx->context), "char_to_int");
                         rhs.type  = type_int();
                     }
-                    // Coerce TYPE_UNKNOWN or TYPE_FN rhs to Int via unbox
+                    // Coerce TYPE_UNKNOWN or TYPE_FN rhs — use lhs type to decide int vs float
                     if (rhs.type->kind == TYPE_UNKNOWN ||
                         rhs.type->kind == TYPE_FN) {
                         LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-                        LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
-                        LLVMTypeRef uft   = LLVMFunctionType(i64_t, &ptr_t, 1, 0);
-                        rhs.value = LLVMBuildCall2(ctx->builder, uft,
-                                        get_rt_unbox_int(ctx), &rhs.value, 1, "unbox_arith");
-                        rhs.type  = type_int();
+                        if (type_is_float(result_type)) {
+                            LLVMTypeRef dbl_t = LLVMDoubleTypeInContext(ctx->context);
+                            LLVMTypeRef uft   = LLVMFunctionType(dbl_t, &ptr_t, 1, 0);
+                            rhs.value = LLVMBuildCall2(ctx->builder, uft,
+                                            get_rt_unbox_float(ctx), &rhs.value, 1, "unbox_arith");
+                            rhs.type  = type_float();
+                        } else {
+                            LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
+                            LLVMTypeRef uft   = LLVMFunctionType(i64_t, &ptr_t, 1, 0);
+                            rhs.value = LLVMBuildCall2(ctx->builder, uft,
+                                            get_rt_unbox_int(ctx), &rhs.value, 1, "unbox_arith");
+                            rhs.type  = type_int();
+                        }
                     }
 
                     // Check incompatible base types
@@ -9169,7 +9257,14 @@ if (ast->list.count >= 5) {
                     if (inst) {
                         for (int _mi = 0; _mi < inst->method_count; _mi++) {
                             if (strcmp(inst->method_names[_mi], op) == 0) {
-                                const char *impl_name = LLVMGetValueName(inst->method_funcs[_mi]);
+                                const char *impl_name = NULL;
+                                char constructed_name[256];
+                                if (inst->method_funcs[_mi]) {
+                                    impl_name = LLVMGetValueName(inst->method_funcs[_mi]);
+                                } else {
+                                    snprintf(constructed_name, sizeof(constructed_name), "__impl_%s_%s_%s", cls, type_name, op);
+                                    impl_name = constructed_name;
+                                }
                                 EnvEntry *impl_entry = env_lookup(ctx->env, impl_name);
                                 if (impl_entry) entry = impl_entry;
                                 break;
@@ -9429,7 +9524,8 @@ if (ast->list.count >= 5) {
 
             // Handle (coll i) - inline indexing on any expression of type Coll
             if (entry && entry->kind == ENV_VAR &&
-                entry->type && entry->type->kind == TYPE_COLL &&
+                entry->type && (entry->type->kind == TYPE_COLL ||
+                                entry->type->kind == TYPE_LIST) &&
                 ast->list.count == 2) {
                 LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
                 LLVMTypeRef i64   = LLVMInt64TypeInContext(ctx->context);
@@ -9793,7 +9889,14 @@ if (ast->list.count >= 5) {
                         if (inst) {
                             for (int _mi = 0; _mi < inst->method_count; _mi++) {
                                 if (strcmp(inst->method_names[_mi], op) == 0) {
-                                    const char *impl_name = LLVMGetValueName(inst->method_funcs[_mi]);
+                                    const char *impl_name = NULL;
+                                    char constructed_name[256];
+                                    if (inst->method_funcs[_mi]) {
+                                        impl_name = LLVMGetValueName(inst->method_funcs[_mi]);
+                                    } else {
+                                        snprintf(constructed_name, sizeof(constructed_name), "__impl_%s_%s_%s", cls, type_name, op);
+                                        impl_name = constructed_name;
+                                    }
                                     EnvEntry *impl_entry = env_lookup(ctx->env, impl_name);
                                     if (impl_entry) entry = impl_entry;
                                     break;
@@ -10243,22 +10346,7 @@ if (ast->list.count >= 5) {
                                     LLVMTypeRef dblt = LLVMDoubleTypeInContext(ctx->context);
                                     LLVMTypeRef i1t  = LLVMInt1TypeInContext(ctx->context);
                                     if (at != et) {
-                                        if (LLVMGetTypeKind(et) == LLVMIntegerTypeKind && LLVMGetTypeKind(at) == LLVMIntegerTypeKind)
-                                            call_args[i] = LLVMBuildIntCast2(ctx->builder, ar.value, et, 0, "coerce_int");
-                                        else if (LLVMGetTypeKind(et) == LLVMFloatTypeKind && LLVMGetTypeKind(at) == LLVMDoubleTypeKind)
-                                            call_args[i] = LLVMBuildFPTrunc(ctx->builder, ar.value, et, "coerce_fptrunc");
-                                        else if (LLVMGetTypeKind(et) == LLVMDoubleTypeKind && LLVMGetTypeKind(at) == LLVMFloatTypeKind)
-                                            call_args[i] = LLVMBuildFPExt(ctx->builder, ar.value, et, "coerce_fpext");
-                                        else if (LLVMGetTypeKind(et) == LLVMDoubleTypeKind && type_is_integer(ar.type))
-                                            call_args[i] = LLVMBuildSIToFP(ctx->builder, ar.value, et, "coerce_sitofp");
-                                        else if (LLVMGetTypeKind(et) == LLVMIntegerTypeKind && LLVMGetTypeKind(at) == LLVMDoubleTypeKind)
-                                            call_args[i] = LLVMBuildFPToSI(ctx->builder, ar.value, et, "coerce_fptosi");
-                                        else if (LLVMGetTypeKind(et) == LLVMPointerTypeKind && LLVMGetTypeKind(at) == LLVMIntegerTypeKind)
-                                            call_args[i] = LLVMBuildIntToPtr(ctx->builder, ar.value, et, "coerce_i2p");
-                                        else if (LLVMGetTypeKind(et) == LLVMIntegerTypeKind && LLVMGetTypeKind(at) == LLVMPointerTypeKind)
-                                            call_args[i] = LLVMBuildPtrToInt(ctx->builder, ar.value, et, "coerce_p2i");
-                                        else
-                                            call_args[i] = LLVMBuildBitCast(ctx->builder, ar.value, et, "coerce_bc");
+                                        call_args[i] = emit_type_cast(ctx, ar.value, et);
                                     }
                                 }
 
@@ -10784,9 +10872,18 @@ if (ast->list.count >= 5) {
                      * (their i8* global loses array type on load), so also check the
                      * env entry's original type via the argument symbol.             */
                     if (ast->list.items[i + 1]->type == AST_SYMBOL) {
-                        EnvEntry *ae = env_lookup(ctx->env, ast->list.items[i + 1]->symbol);
+                        const char *arg_sym = ast->list.items[i + 1]->symbol;
+                        EnvEntry *ae = env_lookup(ctx->env, arg_sym);
+                        if (!ae && strchr(arg_sym, '.')) {
+                            Type *dot_type = NULL;
+                            LLVMValueRef dot_ptr = codegen_dot_chain(ctx, arg_sym, &dot_type, ast->list.items[i + 1]);
+                            if (dot_ptr && dot_type) {
+                                LLVMTypeRef dot_llvm = type_to_llvm(ctx, dot_type);
+                                converted_arg = LLVMBuildLoad2(ctx->builder, dot_llvm, dot_ptr, arg_sym);
+                            }
+                        }
                         fprintf(stderr, "SYMBOL ARG '%s' to '%s': ae=%p kind=%d type_kind=%d arr_is_fat=%d\n",
-                                ast->list.items[i + 1]->symbol, head->symbol,
+                                arg_sym, head->symbol,
                                 (void*)ae,
                                 ae ? ae->kind : -1,
                                 (ae && ae->type) ? ae->type->kind : -1,

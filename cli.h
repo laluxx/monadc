@@ -20,6 +20,7 @@ typedef struct {
     bool emit_asm;
     bool emit_obj;
     bool emit_json;
+    bool emit_typst;
     bool start_repl;    bool test_mode;      // emit test blocks
     bool test_run;       // run and delete test binary (monad test)
     char *output_name;

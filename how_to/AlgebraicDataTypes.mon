@@ -40,41 +40,56 @@
 ;; show Yellow
 ;; show Green
 
+;; NEXT
+;; define square λx.x²
+
+;; define square x ↦ x²
 
 
+
+
+;; define f :: Enum => a -> a
+;;   x | x > 0     -> f (x - 1)
+;;     | otherwise -> x
+
+
+
+;; define square :: Num => a -> a
+;;   x -> x²
 
 
 ;; define foldl :: (b -> a -> b) -> b -> [a] -> b
 ;;   _ acc []     -> acc
 ;;   f acc [x|xs] -> foldl f (f acc x) xs
 
+
+;; show foldl + 0 '(1 2 3 4)
+
+
+
+
+
+
+
 ;; define sumAll :: (Int Int Int) -> Int
 ;;   xs -> foldl + 0 xs
 
-;; show sumAll '(3 "ciao" 3)
+;; show sumAll '(3 3 3)
+
+
 
 ;; define char-upcase :: Char -> Char
 ;;   c | c >= 'a' and c <= 'z' -> c - 32
 ;;     | otherwise             -> c
 
+
+
 ;; show char-upcase 'a'
 
 ;; ---
-;; define newline -> a
-;;   show ""
 
 ;; define abs :: Float -> Float
 ;;   x -> (if (x < 0.0) (0.0 - x) x)
-
-;; (define (sqrt [x : Float] -> Float)
-;;   :doc "Square root of X via Newton-Raphson."
-;;   :alias √
-;;   (def (iter [guess : Float] -> Float)
-;;     (def next ((guess + (x / guess)) / 2.0))
-;;       (if ((abs (next - guess)) < 1e-10)
-;;         next
-;;         (iter next)))
-;;   (if (x <= 0.0) 0.0 (iter (x / 2.0))))
 
 
 ;; data Vec (A : Type a) : ℕ -> Type a
@@ -82,8 +97,9 @@
 ;;    .  : ∀ (x : A) (xs : Vec A n) → Vec A (suc n)
 
 
-;; show ((lambda (x) x) 10)
 
+
+;; show ((lambda (x) x) 103)
 
 ;; define test-set :: Int -> Int
 ;;   _ -> result
@@ -93,6 +109,15 @@
 ;; show test-set 0
 
 
+;; TODO The cool arr iter stuff.
+;; for 10 show "10 times!?"
+
+;; for [i 0 10 2] show "iterazione _" i
+;;          ↑
+;;         Step
+
+
+;; show until (> 10) (+ 1) 5
 
 define until :: (a -> Bool) -> (a -> a) -> a -> a
   p f                -> go
@@ -101,61 +126,83 @@ define until :: (a -> Bool) -> (a -> a) -> a -> a
          | otherwise -> go (f x)
 
 
-show until (> 10) (+ 1) 5
+define newline -> a
+  show ""
 
 
+define abs :: Float -> Float
+  x -> if x < 0.0 then 0.0 - x else x
 
 
-;; define abs :: Float -> Float
-;;   x -> if x < 0.0 then 0.0 - x else x
-
-;; define sqrt :: Float -> Float
-;;   x | x <= 0    -> 0
-;;     | otherwise -> until goodEnough improve (x / 2)
-;;     where
-;;       improve    g -> (g + x / g) / 2
-;;       goodEnough g -> abs (improve g - g) < 1e-12 * max 1 g
+define max :: a -> a -> a
+  x y | x >= y    -> x
+      | otherwise -> y
 
 
+define sqrt :: Float -> Float
+  :alias √
+  x | x <= 0    -> 0
+    | otherwise -> until goodEnough? improve (x / 2)
+    where
+      improve    g -> (g + x / g) / 2
+      goodEnough g -> (< (abs (- (improve g) g)) (* 1e-12 (max 1 g)))
+
+;; show √3
 
 
-;; (layout Vec3
-;;   [x :: Float]
-;;   [y :: Float]
-;;   [z :: Float])
-
-;; class Pow a where
-;;   type Result a
-;;   (^) :: a -> Int -> Result a
-
-;; instance Pow Float where
-;;   type Result Float = Float
-;;   (^ base exp) =>
-;;     (if (exp = 0) 1.0
-;;         (if (exp > 0)
-;;             (base * (base ^ (exp - 1)))
-;;             (1.0 / (base ^ (0 - exp)))))
-
-;; instance Pow Vec3 where
-;;   type Result Vec3 = Float
-;;   (v ^ exp) =>
-;;     ((v.x ^ exp) + (v.y ^ exp) + (v.z ^ exp))
-
-;; ;; DONE Make this compile
-;; define normalize :: Vec3 -> Vec3
-;;   v[x y z] -> def len √v²
-;;                     x   y   z
-;;               Vec3 ─── ─── ───
-;;                    len len len
+(layout Vec3
+  [x :: Float]
+  [y :: Float]
+  [z :: Float])
 
 
-;; define v (Vec3 3.0 4.0 5.0)
+class Pow a where
+  type Result a
+  (^) :: a -> Int -> Result a
 
-;; show v
-;; (newline)
-;; show normalize v
+
+instance Pow Float where
+  type Result Float = Float
+  (base ^ exp) =>
+    (if (exp = 0) 1.0
+        (if (exp > 0)
+            (base * (base ^ (exp - 1)))
+            (1.0 / (base ^ (0 - exp)))))
+
+
+instance Pow Vec3 where
+  type Result Vec3 = Float
+  (v ^ exp) =>
+    ((v.x ^ exp) + (v.y ^ exp) + (v.z ^ exp))
+
+
+;; DONE Make this compile
+define normalize :: Vec3 -> Vec3
+  v[x y z] -> def len √v²
+                    x   y   z
+              Vec3 ─── ─── ───
+                   len len len
+
+
+define v Vec3 3.0 4.0 5.0
+
+show v
+(newline)
+show normalize v
+
+
 
 ;---
+
+
+
+
+;; TODO Make this compile
+;; define invert-string :: String -> String
+;;   s  -> map invert s
+;;   where
+;;     invert c | c lower?  -> c upcase
+;;              | otherwise -> c downcase
 
 
 
@@ -179,8 +226,6 @@ show until (> 10) (+ 1) 5
 ;;   [x]    -> Just x
 ;;   [_|xs] -> safe-last xs
 
-
-;; show safe-last "ciao"
 
 
 ;; TODO Force the ?

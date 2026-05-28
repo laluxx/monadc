@@ -19,6 +19,7 @@
 #include "ffi.h"
 #include "wisp.h"
 #include "dep.h"
+#include "typst_emit.h"
 
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
@@ -750,6 +751,16 @@ static CompiledModule *compile_one(const char *source_path,
     ast_free(_feat_early);
     ASTList exprs = wisp_parse_all(source, my_source_path);
 
+    /* Surface AST for typst emission — parsed before wisp desugaring.
+     * We re-parse from the original source so the emitter sees the
+     * user's actual syntax: named params, pattern clauses, clean types.
+     * This is cheap — parse_all is a pure read with no codegen side effects. */
+    ASTList surface_exprs = {0};
+    if (flags->emit_typst) {
+        parser_set_context(my_source_path, source);
+        surface_exprs = parse_all(source);
+    }
+
     /* Show fully desugared AST after all reader transforms */
     fprintf(stderr, "\n=== desugared AST (%s) ===\n", my_source_path);
     for (size_t i = 0; i < exprs.count; i++) {
@@ -795,6 +806,43 @@ static CompiledModule *compile_one(const char *source_path,
         wisp_clear_arities();
         type_alias_free_all();
         return NULL;
+    }
+
+    if (flags->emit_typst) {
+        char typ_path[512];
+        if (flags->output_name)
+            snprintf(typ_path, sizeof(typ_path), "%s.typ", flags->output_name);
+        else {
+            strncpy(typ_path, my_source_path, sizeof(typ_path) - 6);
+            char *dot = strrchr(typ_path, '.');
+            if (dot) strcpy(dot, ".typ");
+            else strncat(typ_path, ".typ", sizeof(typ_path) - strlen(typ_path) - 1);
+        }
+
+        TypstEmitOpts topts = {
+            .mode                  = TYPST_DOC_FULL,
+            .prefer_inferred_types = true,
+            .sequent_style         = true,
+            .emit_labels           = true,
+            .number_equations      = false,
+            .title                 = my_source_path,
+            .author                = "",
+            .paper                 = "a4",
+        };
+
+        char *pdf_path = NULL;
+        int trc = typst_emit_pdf(surface_exprs.exprs, surface_exprs.count,
+                                 typ_path, &pdf_path, &topts);
+        if (trc == 0)
+            printf("  wrote typst: %s  ->  %s\n", typ_path,
+                   pdf_path ? pdf_path : "(no pdf)");
+        else
+            fprintf(stderr, "  typst compile failed (is `typst` on PATH?)\n");
+        free(pdf_path);
+
+        for (size_t i = 0; i < surface_exprs.count; i++)
+            ast_free(surface_exprs.exprs[i]);
+        free(surface_exprs.exprs);
     }
 
     PHASE_END("wisp+parse");

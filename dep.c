@@ -1580,6 +1580,10 @@ static bool dep_conv_vals_internal(ConvCtx *cctx, Value *v1, Value *v2, Value *t
     v1 = dep_force(v1, mctx);
     v2 = dep_force(v2, mctx);
 
+    /* Hole sentinel (-1): always succeeds — it is an intentional wildcard */
+    if (v1 && v1->kind == VAL_META && v1->meta_id == -1) return true;
+    if (v2 && v2->kind == VAL_META && v2->meta_id == -1) return true;
+
     /* Fast-path and occurs-check bypass for identical metavariables */
     if (v1 && v2 && v1->kind == VAL_META && v2->kind == VAL_META && v1->meta_id == v2->meta_id) {
         if (v1->spine.count != v2->spine.count) {
@@ -1690,14 +1694,25 @@ static bool dep_conv_vals_internal(ConvCtx *cctx, Value *v1, Value *v2, Value *t
             int k2 = v2->embed_type ? v2->embed_type->kind : -1;
             if ((k1 == TYPE_INT && k2 == TYPE_CHAR) || (k1 == TYPE_CHAR && k2 == TYPE_INT)) return true;
             if ((k1 == TYPE_INT_ARBITRARY && k2 == TYPE_CHAR) || (k1 == TYPE_CHAR && k2 == TYPE_INT_ARBITRARY)) return true;
+            /* Allow implicit Int <-> Float coercion in dependent checker */
+            if ((k1 == TYPE_INT && k2 == TYPE_FLOAT) || (k1 == TYPE_FLOAT && k2 == TYPE_INT)) return true;
+            if ((k1 == TYPE_INT_ARBITRARY && k2 == TYPE_FLOAT) || (k1 == TYPE_FLOAT && k2 == TYPE_INT_ARBITRARY)) return true;
+            if ((k1 == TYPE_INT && k2 == TYPE_F80) || (k1 == TYPE_F80 && k2 == TYPE_INT)) return true;
+            if ((k1 == TYPE_INT_ARBITRARY && k2 == TYPE_F80) || (k1 == TYPE_F80 && k2 == TYPE_INT_ARBITRARY)) return true;
             return false;
         }
 
-        // Allow Nat (literals < 64) to implicitly coerce to Int and Char signatures smoothly
+        // Allow String to act as Coll in the dependent checker (HM handles the exact element types)
+        if (v1->kind == VAL_EMBED && v1->embed_type && v1->embed_type->kind == TYPE_STRING &&
+            v2->kind == VAL_NEUTRAL && v2->neutral_name && strcmp(v2->neutral_name, "Coll") == 0) return true;
+        if (v2->kind == VAL_EMBED && v2->embed_type && v2->embed_type->kind == TYPE_STRING &&
+            v1->kind == VAL_NEUTRAL && v1->neutral_name && strcmp(v1->neutral_name, "Coll") == 0) return true;
+
+        // Allow Nat (literals < 64) to implicitly coerce to Int, Char, and Float signatures smoothly
         bool v1_nat = (v1->kind == VAL_NAT || v1->kind == VAL_SUCC || v1->kind == VAL_ZERO || v1->kind == VAL_NUM_LIT);
         bool v2_nat = (v2->kind == VAL_NAT || v2->kind == VAL_SUCC || v2->kind == VAL_ZERO || v2->kind == VAL_NUM_LIT);
-        bool v1_target = (v1->kind == VAL_EMBED && v1->embed_type && (v1->embed_type->kind == TYPE_INT || v1->embed_type->kind == TYPE_CHAR));
-        bool v2_target = (v2->kind == VAL_EMBED && v2->embed_type && (v2->embed_type->kind == TYPE_INT || v2->embed_type->kind == TYPE_CHAR));
+        bool v1_target = (v1->kind == VAL_EMBED && v1->embed_type && (v1->embed_type->kind == TYPE_INT || v1->embed_type->kind == TYPE_CHAR || v1->embed_type->kind == TYPE_FLOAT));
+        bool v2_target = (v2->kind == VAL_EMBED && v2->embed_type && (v2->embed_type->kind == TYPE_INT || v2->embed_type->kind == TYPE_CHAR || v2->embed_type->kind == TYPE_FLOAT));
 
         if ((v1_nat && v2_target) || (v1_target && v2_nat)) return true;
 
@@ -2634,10 +2649,10 @@ Type *dep_ground_of_value(Value *v, MetaCtx *mctx) {
 static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
     if (!ast) return term_hole();
 
-    /* Bypass Dependent Checker for value-level Strings and Arrays.
+    /* Bypass Dependent Checker for value-level Arrays.
      * This allows polymorphic collections to pass cleanly as holes to the
      * HM checker which natively handles the Coll interfaces and exact types. */
-    if (ast->type == AST_STRING || ast->type == AST_ARRAY) {
+    if (ast->type == AST_ARRAY) {
         return term_hole();
     }
     switch (ast->type) {
@@ -2668,15 +2683,15 @@ static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
             }
             return term_embed(type_int());
         }
-    case AST_STRING:  return term_embed(type_string());
+    case AST_STRING:  return term_ann(term_hole(), term_embed(type_string()));
     case AST_CHAR: {
         long long n = (long long)ast->character;
         if (n >= 0) {
             return term_num_lit((unsigned long long)n);
         }
-        return term_embed(type_char());
+        return term_ann(term_hole(), term_embed(type_char()));
     }
-    case AST_KEYWORD: return term_embed(type_keyword());
+    case AST_KEYWORD: return term_ann(term_hole(), term_embed(type_keyword()));
     case AST_SYMBOL:
         // Explicit hole — ? in any position
         if (strcmp(ast->symbol, "?") == 0) {
@@ -3127,7 +3142,6 @@ Term *dep_toplevel(DepCtx *ctx, AST *ast, Term **out_type) {
 
         Value *ty = dep_infer(ctx, val_term);
         if (!ty || ctx->had_error) {
-            dep_error_print(ctx);
             term_free(val_term);
             return NULL;
         }
@@ -3165,7 +3179,6 @@ Term *dep_toplevel(DepCtx *ctx, AST *ast, Term **out_type) {
     // 2. Bidirectional inference
     Value *ty = dep_infer(ctx, t);
     if (!ty || ctx->had_error) {
-        dep_error_print(ctx);
         return NULL;
     }
 
@@ -3288,26 +3301,20 @@ void dep_register_builtins(DepCtx *ctx) {
 
     Term *poly_poly_bool =
         term_pi("A", term_type_n(0),
-            term_pi("B", term_type_n(0),
+            term_pi("_", term_bvar(0),
                 term_pi("_", term_bvar(1),
-                    term_pi("_", term_bvar(1),
-                        term_clone(t_bool),
-                        IMPLICIT_EXPLICIT),
+                    term_clone(t_bool),
                     IMPLICIT_EXPLICIT),
-                IMPLICIT_IMPLICIT),
+                IMPLICIT_EXPLICIT),
             IMPLICIT_IMPLICIT);
 
     Term *poly_poly_poly =
         term_pi("A", term_type_n(0),
-            term_pi("B", term_type_n(0),
-                term_pi("C", term_type_n(0),
-                    term_pi("_", term_bvar(2),
-                        term_pi("_", term_bvar(2),
-                            term_bvar(2),
-                            IMPLICIT_EXPLICIT),
-                        IMPLICIT_EXPLICIT),
-                    IMPLICIT_IMPLICIT),
-                IMPLICIT_IMPLICIT),
+            term_pi("_", term_bvar(0),
+                term_pi("_", term_bvar(1),
+                    term_bvar(2),
+                    IMPLICIT_EXPLICIT),
+                IMPLICIT_EXPLICIT),
             IMPLICIT_IMPLICIT);
 
     EvalEnv *ee = eval_env_empty();

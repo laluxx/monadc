@@ -29,11 +29,13 @@ int (*g_param_kind_is_func)(const char *func_name, int arg_index) = NULL;
 int (*g_is_known_function)(const char *name) = NULL;
 
 /// Layout Registry for Pattern Matching
+
 typedef struct {
     char *name;
     char **fields;
     int field_count;
 } LayoutRegistryEntry;
+
 static LayoutRegistryEntry *g_layouts = NULL;
 static int g_layout_count = 0;
 static int g_layout_cap = 0;
@@ -65,6 +67,7 @@ const char *layout_get_field_name(const char *layout_name, int index) {
 }
 
 /// Local function tracking for the parser
+
 static char **g_local_funcs = NULL;
 static int g_local_func_count = 0;
 static int g_local_func_cap = 0;
@@ -1682,12 +1685,41 @@ static ASTParam parse_one_param(Parser *p) {
     return param;
 }
 
+static int g_anon_param_counter = 0;
+
 static void parse_fn_signature(Parser *p, ASTParam **out_params,
                                int *out_count, char **out_return_type) {
     ASTParam *params   = NULL;
     int       count    = 0;
     int       capacity = 0;
     char     *ret_type = NULL;
+
+    bool is_arrow_sig = false;
+    {
+        Lexer peek_lex = *p->lexer;
+        Token peek_tok = p->current;
+        if (peek_tok.value) peek_tok.value = my_strdup(peek_tok.value);
+        int depth = 0;
+        while (peek_tok.type != TOK_EOF) {
+            if (peek_tok.type == TOK_LPAREN || peek_tok.type == TOK_LBRACKET) {
+                depth++;
+            } else if (peek_tok.type == TOK_RPAREN || peek_tok.type == TOK_RBRACKET) {
+                if (depth > 0) {
+                    depth--;
+                } else if (peek_tok.type == TOK_RPAREN) {
+                    break;
+                }
+            }
+            if (depth == 0 && peek_tok.type == TOK_ARROW) {
+                is_arrow_sig = true;
+                free(peek_tok.value);
+                break;
+            }
+            free(peek_tok.value);
+            peek_tok = lexer_next_token(&peek_lex);
+        }
+        if (!is_arrow_sig) free(peek_tok.value);
+    }
 
     while (p->current.type != TOK_RPAREN &&
            p->current.type != TOK_EOF) {
@@ -1948,9 +1980,11 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                     if (param.type_name == NULL) {
                         char gen_name[32];
                         snprintf(gen_name, sizeof(gen_name), "__p_%d", count);
+                        char tbuf[64];
+                        snprintf(tbuf, sizeof(tbuf), "(%s)", param.name);
                         free(param.name);
                         param.name = my_strdup(gen_name);
-                        param.type_name = my_strdup("(a)");
+                        param.type_name = my_strdup(tbuf);
                         param.is_anon = true;
                     } else {
                         param.is_anon = false;
@@ -1981,8 +2015,10 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                         capacity = capacity == 0 ? 4 : capacity * 2;
                         params   = realloc(params, sizeof(ASTParam) * capacity);
                     }
-                    bool is_type_only = (p->current.value[0] >= 'A' && p->current.value[0] <= 'Z') ||
-                                        (p->current.value[1] == '\0' && p->current.value[0] >= 'a' && p->current.value[0] <= 'z');
+                    /* Single lowercase letter (a, b, c) = type variable → anonymous.
+                     * Multi-char lowercase (val, xs, acc) = parameter name → named. */
+                    bool is_type_only = (p->current.value[0] >= 'A' && p->current.value[0] <= 'Z')
+                                     || (p->current.value[1] == '\0');
                     if (is_type_only) {
                         char gen_name[32];
                         snprintf(gen_name, sizeof(gen_name), "__p_%d", count);
@@ -2198,7 +2234,7 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                 params   = realloc(params, sizeof(ASTParam) * capacity);
             }
             /* Heuristic: starts with uppercase -> type-only anonymous param */
-            bool is_type_only = (sym[0] >= 'A' && sym[0] <= 'Z');
+            bool is_type_only = is_arrow_sig || (sym[0] >= 'A' && sym[0] <= 'Z');
             if (is_type_only) {
                 char gen_name[32];
                 snprintf(gen_name, sizeof(gen_name), "__p_%d", count);
@@ -3011,6 +3047,7 @@ static AST *parse_list(Parser *p) {
                 compiler_error(p->current.line, p->current.column,
                                "Expected symbol in let binding");
             char *bname = strdup(p->current.value);
+            register_local_func(bname);
             p->current = lexer_next_token(p->lexer);
             AST *init_expr = parse_expr(p);
             if (p->current.type != TOK_RBRACKET)
@@ -3030,6 +3067,7 @@ static AST *parse_list(Parser *p) {
                     compiler_error(p->current.line, p->current.column,
                                    "Expected symbol in let binding");
                 char *bname = strdup(p->current.value);
+                register_local_func(bname);
                 p->current = lexer_next_token(p->lexer);
                 AST *init_expr = parse_expr(p);
                 if (p->current.type != TOK_RBRACKET)
@@ -3408,6 +3446,7 @@ static AST *parse_list(Parser *p) {
                 name_ast = ast_new_symbol(p->current.value);
                 name_ast->line   = p->current.line;
                 name_ast->column = p->current.column;
+                register_local_func(p->current.value);
                 p->current = lexer_next_token(p->lexer);
             } else {
                 compiler_error(p->current.line, p->current.column,
@@ -4275,14 +4314,19 @@ static AST *parse_list(Parser *p) {
             MethodClauses *mc = &methods[mi];
             inst_method_names[mi] = my_strdup(mc->method);
 
-            /* Create params for the lambda — use generic names */
+            /* Create params for the lambda — use generic names.
+             * Param 0 is always the instance type (the 'self' parameter),
+             * so annotate it with type_name so the type checker and codegen
+             * can resolve field accesses like v.x on layout types.
+             * Subsequent params get NULL type so the class signature's type
+             * inference fills them in correctly (e.g. Int for exponent).   */
             int npats = mc->clauses[0].pattern_count;
             ASTParam *params = malloc(sizeof(ASTParam) * npats);
             for (int pi = 0; pi < npats; pi++) {
                 char pname[32];
                 snprintf(pname, sizeof(pname), "__inst_p%d", pi);
                 params[pi].name      = my_strdup(pname);
-                params[pi].type_name = NULL;
+                params[pi].type_name = (pi == 0) ? my_strdup(type_name) : NULL;
                 params[pi].is_rest   = false;
                 params[pi].is_anon   = false;
             }
@@ -5742,8 +5786,8 @@ AST *parse_expr(Parser *p) {
         /* Build a synthetic symbol "____postfix_dot" list:
          * represent as (dot-access expr "field") so codegen can handle it,
          * OR synthesize a combined symbol if expr is already a symbol.     */
-        if (expr_result->type == AST_SYMBOL && expr_result->symbol[0] >= 'A' && expr_result->symbol[0] <= 'Z') {
-            /* Merge Uppercase (Module) prefixes */
+        if (expr_result->type == AST_SYMBOL) {
+            /* Merge any symbol.field into a fused string for codegen_dot_chain */
             char combined[512];
             snprintf(combined, sizeof(combined), "%s.%s",
                      expr_result->symbol, field);

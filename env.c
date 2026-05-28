@@ -707,10 +707,7 @@ struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
         /* Fully apply substitution so the scheme's type nodes are concrete
          * ground types — no TYPE_VAR nodes that reference the now-dead ctx */
         scheme = infer_generalise(ctx, inferred, ienv);
-        /* Walk the full type tree applying the substitution deeply so no
-         * TYPE_VAR nodes remain that reference the now-dead substitution */
         scheme->type = subst_apply(ctx->subst, scheme->type);
-        /* Also walk arrow chain and concretize each node */
         {
             Type *t = scheme->type;
             while (t && t->kind == TYPE_ARROW) {
@@ -719,9 +716,38 @@ struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
                 t = t->arrow_ret;
             }
         }
-        /* ienv owns the original scheme for future instantiation.
+
+        /* Sanity check: if HM poisoned the first param to an arrow type
          * EnvEntry gets its own clone so free_entry_fields() can
          * safely call scheme_free() without double-freeing.        */
+        infer_env_insert(ienv, name, scheme);
+        /* with '?' but the inferred return type resolves to Nil or
+         * Optional, the function can return nil without declaring it.
+         * Force the user to annotate the return type with '?'.        */
+        if (lambda_ast && lambda_ast->type == AST_LAMBDA &&
+            lambda_ast->lambda.return_type) {
+            const char *decl_ret = lambda_ast->lambda.return_type;
+            size_t decl_len = strlen(decl_ret);
+            bool decl_is_optional = (decl_len > 0 && decl_ret[decl_len - 1] == '?');
+
+            if (!decl_is_optional) {
+                /* Walk the inferred arrow chain to find the return type */
+                Type *inf_ret = subst_apply(ctx->subst, inferred);
+                while (inf_ret && inf_ret->kind == TYPE_ARROW)
+                    inf_ret = inf_ret->arrow_ret;
+                inf_ret = subst_apply(ctx->subst, inf_ret);
+
+                if (inf_ret && (inf_ret->kind == TYPE_NIL ||
+                                inf_ret->kind == TYPE_OPTIONAL)) {
+                    READER_ERROR(lambda_ast->line, lambda_ast->column,
+                        "\n"
+                        "    • Function ‘%s’ can return nil but return type '%s' does not end with ‘?’\n"
+                        "  - Hint: change the return type to '%s?' to allow nil returns",
+                        name, decl_ret, decl_ret);
+                }
+            }
+        }
+
         infer_env_insert(ienv, name, scheme);
         env_set_scheme(env, name, scheme_clone(scheme));
     }

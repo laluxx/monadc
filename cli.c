@@ -56,9 +56,7 @@ static char *read_file_str(const char *path) {
     return buf;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// YAML parsing
-// ─────────────────────────────────────────────────────────────────────────────
+/// YAML parsing
 
 static char *yaml_scalar(const char *content, const char *key) {
     char search[128];
@@ -166,9 +164,7 @@ static char *yaml_first_exe(const char *content) {
     return strndup(line, end - line);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// print_usage / parse_flags / get_base_executable_name
-// ─────────────────────────────────────────────────────────────────────────────
+/// Usage
 
 void print_usage(const char *prog) {
     fprintf(stderr, "Usage: %s [options] [<file.mon>]\n", prog);
@@ -188,6 +184,7 @@ void print_usage(const char *prog) {
     fprintf(stderr, "  --emit-asm     Emit assembly (.s)\n");
     fprintf(stderr, "  --emit-obj     Emit object file (.o)\n");
     fprintf(stderr, "  --emit-json    Emit AST as JSON (.json)\n");
+    fprintf(stderr, "  --emit-typst   Emit Typst math document (.typ) and compile to PDF\n");
     fprintf(stderr, "  -Wall          Enable all warnings (accepted, no-op)\n");
     fprintf(stderr, "  -Wextra        Enable extra warnings (accepted, no-op)\n");
     fprintf(stderr, "  -h, --help     Show this help message\n");
@@ -238,7 +235,8 @@ CompilerFlags parse_flags(int argc, char **argv) {
             else if (!strcmp(argv[i], "--emit-bc"))   flags.emit_bc   = true;
             else if (!strcmp(argv[i], "--emit-asm"))  flags.emit_asm  = true;
             else if (!strcmp(argv[i], "--emit-obj"))  flags.emit_obj  = true;
-            else if (!strcmp(argv[i], "--emit-json")) flags.emit_json = true;
+            else if (!strcmp(argv[i], "--emit-json"))  flags.emit_json  = true;
+            else if (!strcmp(argv[i], "--emit-typst")) flags.emit_typst = true;
             else if (!strcmp(argv[i], "-Wall"))   {}
             else if (!strcmp(argv[i], "-Wextra")) {}
             else if (!strcmp(argv[i], "-o")) {
@@ -261,17 +259,18 @@ CompilerFlags parse_flags(int argc, char **argv) {
         return flags;
     }
 
-    // monad <file.mon> [flags...]  →  normal compile
+    // monad <file.mon> [flags...]  ->  normal compile
     flags.input_file = argv[1];
     for (int i = 2; i < argc; i++) {
-        if      (!strcmp(argv[i], "--emit-ir"))   flags.emit_ir   = true;
-        else if (!strcmp(argv[i], "--emit-bc"))   flags.emit_bc   = true;
-        else if (!strcmp(argv[i], "--emit-asm"))  flags.emit_asm  = true;
-        else if (!strcmp(argv[i], "--emit-obj"))  flags.emit_obj  = true;
-        else if (!strcmp(argv[i], "--emit-json")) flags.emit_json = true;
-        else if (!strcmp(argv[i], "-Wall"))   {}
-        else if (!strcmp(argv[i], "-Wextra")) {}
-        else if (!strcmp(argv[i], "-o")) {
+        if      (!strcmp(argv[i], "--emit-ir"   )) flags.emit_ir    = true;
+        else if (!strcmp(argv[i], "--emit-bc"   )) flags.emit_bc    = true;
+        else if (!strcmp(argv[i], "--emit-asm"  )) flags.emit_asm   = true;
+        else if (!strcmp(argv[i], "--emit-obj"  )) flags.emit_obj   = true;
+        else if (!strcmp(argv[i], "--emit-json" )) flags.emit_json  = true;
+        else if (!strcmp(argv[i], "--emit-typst")) flags.emit_typst = true;
+        else if (!strcmp(argv[i], "-Wall"       )) {}
+        else if (!strcmp(argv[i], "-Wextra"     )) {}
+        else if (!strcmp(argv[i], "-o"          )) {
             if (i + 1 >= argc) { fprintf(stderr, "-o requires an argument\n"); exit(1); }
             flags.output_name = argv[++i];
         } else {
@@ -354,9 +353,7 @@ void cmd_new(const char *package_name) {
     free(author); free(email); free(year);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Build helpers
-// ─────────────────────────────────────────────────────────────────────────────
+/// Build helpers
 
 static bool file_has_main_module(const char *path) {
     char *src = read_file_str(path);

@@ -373,6 +373,17 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
             ctx->had_error = true;
             return false;
         }
+        /* Never bind a free variable directly to Nil — Nil is not a
+         * concrete element type, it only makes sense as Optional(a).
+         * Binding 'x ~ Nil poisons any later constraint 'x ~ element_type
+         * because Nil wins the race and element_type never gets a chance.
+         * Instead bind to Optional(fresh) so subsequent constraints can
+         * still resolve the inner element type correctly.               */
+        if (b->kind == TYPE_NIL) {
+            Type *inner = infer_fresh(ctx);
+            subst_bind(s, root, type_optional(inner));
+            return true;
+        }
         subst_bind(s, root, b);
         return true;
     }
@@ -389,6 +400,12 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
                      ctx->filename, line, col);
             ctx->had_error = true;
             return false;
+        }
+        /* Same Nil-binding guard for the right-hand variable */
+        if (a->kind == TYPE_NIL) {
+            Type *inner = infer_fresh(ctx);
+            subst_bind(s, root, type_optional(inner));
+            return true;
         }
         subst_bind(s, root, a);
         return true;
@@ -413,13 +430,16 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
              * String indexing is handled entirely in codegen; exposing it
              * here as an arrow type causes cascading unification explosions
              * when String appears as an argument to polymorphic operators
-             * like = and >= which have type forall a. a -> a -> Bool.    */
+             * like = and >= which have type forall a. a -> a -> Bool.
+             * Guard: skip coercion only when the arrow param is a complex
+             * type (another arrow, collection, bool, float, string) that
+             * can never be an index. Allow when param is Int, Char, or an
+             * unbound fresh variable — those are all valid index types.  */
             Type *bp = subst_apply_shallow(ctx->subst, b->arrow_param);
             if (bp && (bp->kind == TYPE_ARROW || bp->kind == TYPE_FN ||
                        bp->kind == TYPE_COLL  || bp->kind == TYPE_LIST ||
                        bp->kind == TYPE_ARR   || bp->kind == TYPE_STRING ||
-                       bp->kind == TYPE_BOOL  || bp->kind == TYPE_FLOAT ||
-                       bp->kind == TYPE_INT   || bp->kind == TYPE_CHAR)) {
+                       bp->kind == TYPE_BOOL  || bp->kind == TYPE_FLOAT)) {
                 goto skip_coll_as_fn_ab;
             }
             {
@@ -437,8 +457,7 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
             if (ap && (ap->kind == TYPE_ARROW || ap->kind == TYPE_FN ||
                        ap->kind == TYPE_COLL  || ap->kind == TYPE_LIST ||
                        ap->kind == TYPE_ARR   || ap->kind == TYPE_STRING ||
-                       ap->kind == TYPE_BOOL  || ap->kind == TYPE_FLOAT ||
-                       ap->kind == TYPE_INT   || ap->kind == TYPE_CHAR)) {
+                       ap->kind == TYPE_BOOL  || ap->kind == TYPE_FLOAT)) {
                 goto skip_coll_as_fn_ba;
             }
             {
@@ -464,6 +483,11 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
         /* TYPE_F80 ~ TYPE_FLOAT */
         if (a->kind == TYPE_F80 && b->kind == TYPE_FLOAT) return true;
         if (a->kind == TYPE_FLOAT && b->kind == TYPE_F80) return true;
+        /* Implicit Int -> Float coercion */
+        if (a->kind == TYPE_INT && b->kind == TYPE_FLOAT) return true;
+        if (a->kind == TYPE_FLOAT && b->kind == TYPE_INT) return true;
+        if (a->kind == TYPE_INT_ARBITRARY && b->kind == TYPE_FLOAT) return true;
+        if (a->kind == TYPE_FLOAT && b->kind == TYPE_INT_ARBITRARY) return true;
         /* TYPE_INT ~ TYPE_CHAR — chars are small integers, coercion is always valid */
         if (a->kind == TYPE_INT && b->kind == TYPE_CHAR) return true;
         if (a->kind == TYPE_CHAR && b->kind == TYPE_INT) return true;
@@ -475,14 +499,19 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
             if (b->list_count == 1) {
                 return infer_unify_one(ctx, a->element_type, b->list_types[0], line, col);
             }
-            /* A collection of tuples: unify the element type with the whole tuple */
-            return infer_unify_one(ctx, a->element_type, b, line, col);
+            for (int i = 0; i < b->list_count; i++) {
+                if (!infer_unify_one(ctx, a->element_type, b->list_types[i], line, col)) return false;
+            }
+            return true;
         }
         if (b->kind == TYPE_COLL && a->kind == TYPE_LIST) {
             if (a->list_count == 1) {
                 return infer_unify_one(ctx, b->element_type, a->list_types[0], line, col);
             }
-            return infer_unify_one(ctx, b->element_type, a, line, col);
+            for (int i = 0; i < a->list_count; i++) {
+                if (!infer_unify_one(ctx, b->element_type, a->list_types[i], line, col)) return false;
+            }
+            return true;
         }
         if (a->kind == TYPE_COLL && b->kind == TYPE_ARR) {
             return infer_unify_one(ctx, a->element_type, b->arr_element_type, line, col);
@@ -1110,7 +1139,18 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                     pt = type_layout(tname, NULL, 0, 0, false, 0);
                 if (!pt) pt = infer_fresh(ctx);
             } else {
-                pt = infer_fresh(ctx);
+                /* A bare collection param — seed as TYPE_COLL by default.
+                 * This prevents HM from unifying it with (Int -> fresh)
+                 * when it sees (a 0) indexing in the body.
+                 * If the param has a type_name (e.g. "(a)" for List or
+                 * "[a]" for Coll), use it directly so the distinction
+                 * between List and Coll is preserved.                   */
+                if (p->type_name) {
+                    pt = type_from_name(p->type_name);
+                    if (!pt) pt = type_coll();
+                } else {
+                    pt = type_coll();
+                }
             }
             param_types[i] = pt;
             infer_env_insert(child, p->name, scheme_mono(pt));
@@ -1190,6 +1230,7 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
              * is the correct architecture for let-generalisation in
              * constraint-based HM (see Heeren et al, "Generalizing
              * Hindley-Milner Type Inference Algorithms", 2002).          */
+
             /* Solve pending constraints before generalising so that type
              * variables in the body get resolved to concrete types before
              * we decide what to quantify.  We do NOT abort on failure here
@@ -1615,23 +1656,24 @@ void infer_register_builtins(InferCtx *ctx) {
         ctx->env);
     infer_env_insert(ctx->env, "filter", filter_sc);
 
-    /* ∀a b. a → b → (a, b)   (cons / .) */
+    /* ∀a. a -> [a] -> [a]   (cons / .) */
     Type *cons_a = infer_fresh(ctx);
-    Type *cons_b = infer_fresh(ctx);
-    Type **pair_types = malloc(2 * sizeof(Type*));
-    pair_types[0] = type_clone(cons_a);
-    pair_types[1] = type_clone(cons_b);
-    Type *pair_t = type_list(pair_types, 2);
+    Type *cons_list_in  = type_list(&cons_a, 1);
+    Type *cons_list_out = type_list(&cons_a, 1);
     TypeScheme *cons_sc = infer_generalise(ctx,
-        type_arrow(cons_a, type_arrow(cons_b, pair_t)), ctx->env);
+        type_arrow(cons_a, type_arrow(cons_list_in, cons_list_out)), ctx->env);
     infer_env_insert(ctx->env, ".", cons_sc);
 
-    /* ∀a. a → Coll a → Coll a   (append / ++) */
-    Type *app_a = infer_fresh(ctx);
-    Type *app_coll = type_coll();
-    app_coll->element_type = type_clone(app_a);
+    /* ∀a. Coll(a) → Coll(a) → Coll(a)   (append / ++) */
+    Type *app_a     = infer_fresh(ctx);
+    Type *app_coll1 = type_coll();
+    Type *app_coll2 = type_coll();
+    Type *app_coll3 = type_coll();
+    app_coll1->element_type = type_clone(app_a);
+    app_coll2->element_type = type_clone(app_a);
+    app_coll3->element_type = type_clone(app_a);
     TypeScheme *app_sc = infer_generalise(ctx,
-        type_arrow(app_a, type_arrow(app_coll, type_clone(app_coll))), ctx->env);
+        type_arrow(app_coll1, type_arrow(app_coll2, app_coll3)), ctx->env);
     infer_env_insert(ctx->env, "++", app_sc);
 
     /* ∀a. List a → a   (head) */
@@ -1748,12 +1790,21 @@ static void infer_validate_calls(InferCtx *ctx, AST *ast) {
                             param_t = param_t->list_types[0];
                         if (arg_t->kind == TYPE_LIST && arg_t->list_count == 1)
                             arg_t = arg_t->list_types[0];
+
+                        /* Implicit Coercion: Int -> Float */
+                        /* We proactively mutate the AST node's type so that subsequent
+                         * strict passes and codegen see the correctly coerced type */
+                        if ((param_t->kind == TYPE_FLOAT || param_t->kind == TYPE_F80) &&
+                            (arg_t->kind == TYPE_INT || arg_t->kind == TYPE_INT_ARBITRARY || arg_t->kind == TYPE_CHAR)) {
+                            arg->inferred_type = type_clone(param_t);
+                        }
+
                         bool arg_is_fn   = (arg_t->kind   == TYPE_ARROW || arg_t->kind   == TYPE_FN);
                         bool param_is_fn = (param_t->kind == TYPE_ARROW || param_t->kind == TYPE_FN);
                         if (arg_is_fn && !param_is_fn) {
                             READER_ERROR(arg->line, arg->column,
-                                "argument %d to '%s' must be %s, but got a function",
-                                i, head->symbol, type_to_string(param_t));
+                                         "argument %d to '%s' must be %s, but got a function",
+                                         i, head->symbol, type_to_string(param_t));
                         }
                     }
                     ft = ft->arrow_ret;

@@ -815,7 +815,7 @@ const char *type_to_string(Type *t) {
             return buf;
         }
         case TYPE_COLL:
-            snprintf(buf, 512, "(%s)", type_to_string(t->element_type));
+            snprintf(buf, 512, "[%s]", type_to_string(t->element_type));
             return buf;
         case TYPE_ARR:
         if (t->arr_element_type && t->arr_size >= 0) {

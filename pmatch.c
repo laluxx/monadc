@@ -214,11 +214,12 @@ ASTPattern parse_single_pattern(Parser *p) {
 
     // Variable binding (lowercase symbol)
     if (parser_at(p, TOK_SYMBOL)) {
+        Token sym_tok = p->current;
         char *vname = my_strdup(p->current.value);
         parser_advance(p);
 
-        // If a bracket immediately follows, it's an as-pattern! e.g. v[x y z]
-        if (parser_at(p, TOK_LBRACKET)) {
+        // If a bracket immediately follows (no space), it's an as-pattern! e.g. v[x y z]
+        if (parser_at(p, TOK_LBRACKET) && p->current.column == sym_tok.column + (int)strlen(vname)) {
             pat = parse_single_pattern(p);
             // Attach the variable name to the list pattern so pmatch binds it
             if (pat.kind == PAT_LIST || pat.kind == PAT_LIST_EMPTY) {
@@ -322,10 +323,31 @@ static AST *parse_clause_body(Parser *p) {
         body = body_exprs[0];
         free(body_exprs);
     } else {
-        body = ast_new_list();
-        ast_list_append(body, ast_new_symbol("begin"));
-        for (int _i = 0; _i < body_count; _i++)
-            ast_list_append(body, body_exprs[_i]);
+        /* Heuristic: if all expressions are on the SAME LINE, they must be a
+         * function call (e.g. `f x y`) because a begin-sequence requires multiple lines.
+         * This elegantly fixes Wisp preprocessing bugs where Wisp incorrectly
+         * splits single-line function calls due to flawed infix heuristics. */
+        bool looks_like_call = false;
+        if (body_count > 1) {
+            looks_like_call = true;
+            int first_line = body_exprs[0]->line;
+            for (int _i = 1; _i < body_count; _i++) {
+                if (body_exprs[_i]->line != first_line) {
+                    looks_like_call = false;
+                    break;
+                }
+            }
+        }
+        if (looks_like_call) {
+            body = ast_new_list();
+            for (int _i = 0; _i < body_count; _i++)
+                ast_list_append(body, body_exprs[_i]);
+        } else {
+            body = ast_new_list();
+            ast_list_append(body, ast_new_symbol("begin"));
+            for (int _i = 0; _i < body_count; _i++)
+                ast_list_append(body, body_exprs[_i]);
+        }
         free(body_exprs);
     }
     return body;
@@ -541,7 +563,7 @@ static AST *make_and(AST **exprs, int count) {
 // Substitute all occurrences of names[i] with exprs[i] in body.
 // Returns a new AST with substitutions applied (deep clone with replacements).
 static AST *ast_substitute(AST *node,
-                            const char **names, AST **exprs, int count) {
+                           const char **names, AST **exprs, int count) {
     if (!node) return NULL;
 
     // Check if this node is a symbol that should be substituted
@@ -551,6 +573,28 @@ static AST *ast_substitute(AST *node,
             if (!names[i]) continue;
             if (strcmp(node->symbol, names[i]) == 0)
                 return ast_clone(exprs[i]);
+
+            size_t nlen = strlen(names[i]);
+            if (strncmp(node->symbol, names[i], nlen) == 0 && node->symbol[nlen] == '.') {
+                if (exprs[i]->type == AST_SYMBOL) {
+                    char new_sym[512];
+                    snprintf(new_sym, sizeof(new_sym), "%s%s", exprs[i]->symbol, node->symbol + nlen);
+                    AST *ns = ast_new_symbol(new_sym);
+                    ns->line = node->line;
+                    ns->column = node->column;
+                    ns->end_column = node->end_column;
+                    return ns;
+                } else {
+                    AST *dot_node = ast_new_list();
+                    ast_list_append(dot_node, ast_new_symbol("dot"));
+                    ast_list_append(dot_node, ast_clone(exprs[i]));
+                    ast_list_append(dot_node, ast_new_symbol(node->symbol + nlen + 1));
+                    dot_node->line = node->line;
+                    dot_node->column = node->column;
+                    dot_node->end_column = node->end_column;
+                    return dot_node;
+                }
+            }
         }
         return ast_clone(node);
     }
@@ -566,16 +610,10 @@ static AST *ast_substitute(AST *node,
         return result;
     }
 
-    // For arrays, recurse into each element
+    // For arrays, recurse into each element — pure substitution only,
+    // no rt_coll_wrap emission here (that happens in pmatch_desugar where
+    // the collection param name is known).
     if (node->type == AST_ARRAY) {
-        if (node->array.element_count == 1) {
-            AST *item = ast_substitute(node->array.elements[0], names, exprs, count);
-            AST *call = ast_new_list();
-            ast_list_append(call, ast_new_symbol("rt_coll_wrap"));
-            ast_list_append(call, ast_new_symbol("__p_0"));
-            ast_list_append(call, item);
-            return call;
-        }
         AST *cloned = ast_clone(node);
         for (size_t i = 0; i < cloned->array.element_count; i++) {
             AST *new_elem = ast_substitute(cloned->array.elements[i], names, exprs, count);
@@ -717,7 +755,9 @@ static void build_pattern_conditions(
         break;
 
     case PAT_CONSTRUCTOR: {
-        /* Guard: (= param.__tag __adt_tag_CtorName) */
+        /* Guard: (= param.__tag __adt_tag_CtorName)
+         * Use the fused string form so codegen_dot_chain handles it
+         * exactly as it did before — it parses the dot-chain itself. */
         char tag_sym[256];
         snprintf(tag_sym, sizeof(tag_sym), "__adt_tag_%s", pat->var_name);
         char dot_sym[256];
@@ -954,6 +994,37 @@ static void build_pattern_conditions(
     #undef PUSH_BIND
 }
 
+// Rewrite single-element array literals [x] -> (rt_coll_wrap coll_param x)
+// in a body AST, now that we know the collection param name.
+static AST *rewrite_array_literals(AST *node, const char *coll_param) {
+    if (!node) return node;
+    if (node->type == AST_ARRAY) {
+        if (node->array.element_count == 1) {
+            // [x] -> (rt_coll_wrap coll_param x)
+            // Do NOT recurse into the element — it is a plain value, not
+            // a nested array literal. Recursing would double-wrap it.
+            AST *elem = node->array.elements[0];
+            node->array.elements[0] = NULL;
+            AST *call = ast_new_list();
+            ast_list_append(call, ast_new_symbol("rt_coll_wrap"));
+            ast_list_append(call, ast_new_symbol(coll_param));
+            ast_list_append(call, elem);
+            ast_free(node);
+            return call;
+        }
+        // zero-element array [] in body position is already handled by
+        // the rt_coll_empty branch above; if we see it here, leave it alone.
+        return node;
+    }
+    if (node->type == AST_LIST) {
+        for (size_t i = 0; i < node->list.count; i++) {
+            node->list.items[i] = rewrite_array_literals(node->list.items[i], coll_param);
+        }
+        return node;
+    }
+    return node;
+}
+
 AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
     if (!node || node->type != AST_PMATCH) return node;
 
@@ -1023,7 +1094,7 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
                 if ((gbody->type == AST_LIST  && gbody->list.count == 0) ||
                     (gbody->type == AST_ARRAY && gbody->array.element_count == 0)) {
                     ast_free(gbody);
-                    const char *coll_param = "__p_0";
+                    const char *coll_param = (param_count > 0) ? params[0].name : "a";
                     for (int _pi = 0; _pi < param_count; _pi++) {
                         const char *tn = params[_pi].type_name;
                         if (tn && (strcmp(tn, "Coll") == 0 ||
@@ -1032,6 +1103,9 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
                                    tn[0] == '[')) {
                             coll_param = params[_pi].name;
                             break;
+                        }
+                        if (!tn && params[_pi].name) {
+                            coll_param = params[_pi].name;
                         }
                     }
                     gbody = ast_new_list();
@@ -1067,7 +1141,7 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
                 (body->type == AST_ARRAY && body->array.element_count == 0)) {
                 ast_free(body);
                 /* Find the first parameter that is a collection type */
-                const char *coll_param = "__p_0";
+                const char *coll_param = (param_count > 0) ? params[0].name : "a";
                 for (int _pi = 0; _pi < param_count; _pi++) {
                     const char *tn = params[_pi].type_name;
                     if (tn && (strcmp(tn, "Coll") == 0 ||
@@ -1077,6 +1151,9 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
                         coll_param = params[_pi].name;
                         break;
                     }
+                    if (!tn && params[_pi].name) {
+                        coll_param = params[_pi].name;
+                    }
                 }
                 body = ast_new_list();
                 ast_list_append(body, sym("rt_coll_empty"));
@@ -1085,6 +1162,24 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
 
             if (bind_count > 0)
                 body = make_let(bind_names, bind_exprs, bind_count, body);
+
+            {
+                const char *coll_param = (param_count > 0) ? params[0].name : "a";
+                for (int _pi = 0; _pi < param_count; _pi++) {
+                    const char *tn = params[_pi].type_name;
+                    if (tn && (strcmp(tn, "Coll") == 0 ||
+                               strcmp(tn, "List") == 0 ||
+                               strcmp(tn, "[a]") == 0  ||
+                               tn[0] == '[')) {
+                        coll_param = params[_pi].name;
+                        break;
+                    }
+                    if (!tn && params[_pi].name) {
+                        coll_param = params[_pi].name;
+                    }
+                }
+                body = rewrite_array_literals(body, coll_param);
+            }
 
             if (cl->pattern_count < param_count) {
                 /* If body is a letrec/let result: ((lambda ([binding]) ... sym) init)

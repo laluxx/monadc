@@ -15,8 +15,8 @@
 
 ;; ;; DONE
 
-(define (when condition . body -> Syntax)
-  (if condition (begin . body)))
+define when :: condition . body -> Syntax
+  if condition (begin . body)
 
 
 ;; ;; TODO Wisp form
