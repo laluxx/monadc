@@ -6,6 +6,9 @@
 - “A bidirectional type system is complete for synthesis if every type has at least one term.”
 
 
+* TODO Refinement types [0/1]
+
+
 * TODO Optimizations [0/2]
 - [ ] Make sure pattern matching become jump tables
 - [ ] The coll type: [a] should NOT be a runtime thing, it should just do monomorphization
@@ -71,6 +74,27 @@
 - [ ] No runtime fallback -- no GC, no reference counting, ever
 - [ ] ω reserved for truly dynamic cases (explicitly annotated, discouraged)
 
+
+
+
+* TODO Purity
+
+=define= can only _define_ costants (functions are also costants)
+=variable= will be used to define variables
+
+#+begin_src monad
+
+define readFile :: IO ()
+  slurp ~/file.yon
+
+variable global 3
+
+define incrementCounter :: IO ()
+  global
+
+
+define file readFile
+#+end_src
 
 * TODO Prolog
 

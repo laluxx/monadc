@@ -27,52 +27,44 @@
 ;;   :doc "Natural number type"
 ;;   :alias ℕ
 
-;; ;; This function can't return False
+;; ;; ;; This function can't return False
 ;; define passedNatural? :: ℕ -> Bool
 ;;   x -> Natural? x
 
 ;; ;; passing -1 is a compile time ERROR
-;; show passedNatural? -1
+;; show passedNatural? 3
 
 
 
-type Even { x ∈ Int | x % 2 = 0 }
-  "Even integers"
+
+
+
+
+
+
+;; type Even { x ∈ Int | x % 2 = 0 }
+;;   "Even integers"
 
 ;; define passedEven? :: Even -> Bool
 ;;   x -> Even? x
 
-;; show passedEven? 3
+;; show passedEven? -2
 
 
-type Positive { x ∈ Int | x > 0 }
-  "Integers greater than zero"
+;; type Positive { x ∈ Int | x > 0 }
+;;   "Integers greater than zero"
 
-type PositiveEven
-  { n ∈ Int
-  | ((Positive? n) and (Even? n)) }
-  "Positive even integers"
+;; type PositiveEven
+;;   { n ∈ Int
+;;   | ((Positive? n) and (Even? n)) }
+;;   "Positive even integers"
 
-define passedPositiveEven? :: PositiveEven -> Bool
-  x -> PositiveEven? x
+;; define passedPositiveEven? :: PositiveEven -> Bool
+;;   x -> PositiveEven? x
 
-show passedPositiveEven? 2  ; -2 is even but not positive
-
-layout Vec3 [x :: Float]
-            [y :: Float]
-            [z :: Float]
+;; show passedPositiveEven? 2  ; -2 is even but not positive
 
 
-
-layout Matrix3x3
-  [m11 :: Float] [m12 :: Float] [m13 :: Float]
-  [m21 :: Float] [m22 :: Float] [m23 :: Float]
-  [m31 :: Float] [m32 :: Float] [m33 :: Float]
-
-
-Vec3
-
-Matrix3x3
 
 ;; (type Email
 ;;   { s ∈ String

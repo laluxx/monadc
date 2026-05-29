@@ -2382,6 +2382,15 @@ static Value *dep_infer_internal(DepCtx *ctx, Term *t) {
     }
 
     // ── Meta ──────────────────────────────────────────────────────
+    case TERM_HOLE: {
+        /* Hole in infer position: mint a fresh meta of unknown type.
+         * This mirrors dep_check's TERM_HOLE handling and is required
+         * for array literals (which return term_hole() to defer to HM)
+         * and any other unannotated wildcard in synthesis position.    */
+        int id = meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, "_hole_infer");
+        return val_meta(id, val_spine_empty());
+    }
+
     case TERM_META: {
         MetaEntry *e = meta_lookup(ctx->mctx, t->meta_id);
         if (!e) {

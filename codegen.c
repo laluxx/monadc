@@ -7651,13 +7651,6 @@ if (ast->list.count >= 5) {
                 LLVMTypeRef  i64  = LLVMInt64TypeInContext(ctx->context);
                 LLVMValueRef func = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder));
 
-                if (binding->type != AST_ARRAY ||
-                    binding->array.element_count < 1 ||
-                    binding->array.element_count > 4) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'for' binding must be [n], [var start end], or [var start end step]",
-                            parser_get_filename(), ast->line, ast->column);
-                }
-
                 LLVMValueRef start_val;
                 LLVMValueRef end_val;
                 LLVMValueRef step_val;
@@ -7665,7 +7658,71 @@ if (ast->list.count >= 5) {
                 bool         has_var;
                 bool         negative_step;
 
-                if (binding->array.element_count == 1) {
+                if (binding->type == AST_NUMBER || binding->type == AST_SYMBOL) {
+                    if (binding->type == AST_SYMBOL && ast->list.count > 3 &&
+                    !(ast->list.count >= 3 &&
+                      ast->list.items[2]->type == AST_SYMBOL &&
+                      strcmp(ast->list.items[2]->symbol, "in") == 0)) {
+                        /* Reconstruct the binding from the extra args for a helpful message.
+                         * ast->list: [for, var, arg1, arg2, ...argN, body]
+                         * binding args are items[2] .. items[count-2], body is items[count-1] */
+                        char binding_str[256] = {0};
+                        strncat(binding_str, binding->symbol, sizeof(binding_str) - 1);
+                        for (size_t bi = 2; bi < ast->list.count - 1; bi++) {
+                            AST *a = ast->list.items[bi];
+                            char tmp[64];
+                            if (a->type == AST_NUMBER)
+                                snprintf(tmp, sizeof(tmp), " %g", a->number);
+                            else if (a->type == AST_SYMBOL)
+                                snprintf(tmp, sizeof(tmp), " %s", a->symbol);
+                            else
+                                snprintf(tmp, sizeof(tmp), " _");
+                            strncat(binding_str, tmp, sizeof(binding_str) - strlen(binding_str) - 1);
+                        }
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'for' binding must be wrapped in brackets.\n"
+                            "\n"
+                            "    • Did you mean?\n"
+                            "        for [%s] body\n"
+                            "\n"
+                            "    • Bracket-free syntax is only valid for simple repeat counts:\n"
+                            "        for 10 body   -- repeats body 10 times\n"
+                            "        for n  body   -- repeats body n times\n"
+                            "\n"
+                            "    • For ranges and named variables, always use brackets:\n"
+                            "        for [i 0 10]   body   -- i from 0 to 9\n"
+                            "        for [i 0 10 2] body   -- i from 0 to 9, step 2\n"
+                            "\n"
+                            "  - Hint: wrap the binding in [] to fix this: for [%s] body",
+                            parser_get_filename(), ast->line, ast->column,
+                            binding_str, binding_str);
+                    }
+                    /* for c in collection — not yet implemented */
+                    if (ast->list.count >= 3 &&
+                        ast->list.items[2]->type == AST_SYMBOL &&
+                        strcmp(ast->list.items[2]->symbol, "in") == 0) {
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'for x in y' iterator syntax is not yet implemented.\n"
+                            "\n"
+                            "    • Use a range loop instead:\n"
+                            "\n"
+                            "        for [i 0 (count coll)] body",
+                            parser_get_filename(), ast->line, ast->column);
+                    }
+                    CodegenResult count_r = codegen_expr(ctx, binding);
+                    start_val     = LLVMConstInt(i64, 0, 0);
+                    end_val       = type_is_float(count_r.type)
+                        ? LLVMBuildFPToSI(ctx->builder, count_r.value, i64, "count")
+                        : (LLVMTypeOf(count_r.value) != i64 ? LLVMBuildSExt(ctx->builder, count_r.value, i64, "count_ext") : count_r.value);
+                    step_val      = LLVMConstInt(i64, 1, 0);
+                    var_name      = "__for_i";
+                    has_var       = false;
+                    negative_step = false;
+                } else if (binding->type != AST_ARRAY ||
+                    binding->array.element_count < 1 ||
+                    binding->array.element_count > 4) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'for' binding must be [n], [var start end], or [var start end step]",
+                            parser_get_filename(), ast->line, ast->column);
+                } else if (binding->array.element_count == 1) {
+
                     CodegenResult count_r = codegen_expr(ctx, binding->array.elements[0]);
                     start_val     = LLVMConstInt(i64, 0, 0);
                     end_val       = type_is_float(count_r.type)
@@ -12735,7 +12792,7 @@ void register_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "type",       1, -1, "Define a refinement type", NULL);
     env_insert_builtin(ctx->env, "lambda",     2, -1, "Create anonymous function", NULL);
     env_insert_builtin(ctx->env, "quote",      1,  0, "Quote expression without evaluation", NULL);
-    env_insert_builtin(ctx->env, "show",       1,  0, "Print a value to stdout", NULL);
+    env_insert_builtin(ctx->env, "show",       1, -1, "Print a value to stdout", NULL);
     env_insert_builtin(ctx->env, "let",        2, -1, "Bind variables in scope: (let ([x e] ...) body)", NULL);
     env_insert_builtin(ctx->env, "let*",       2, -1, "Bind variables sequentially, each visible to the next:\n (let* ([x e] [y (f x)] ...) body)", NULL);
     env_insert_builtin(ctx->env, "letrec",     2, -1, "Bind mutually recursive variables:\n (letrec ([f (lambda ...)]) body)", NULL);

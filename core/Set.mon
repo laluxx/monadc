@@ -39,6 +39,7 @@
 
 ;;; Set algebra
 
+
 (define (union [a : Set] -> [b : Set] -> Set)
   :doc "Return a set containing all elements from both a and b."
   :alias ∪
@@ -50,6 +51,8 @@
   :alias ∩
   (foldl (lambda ([acc : Set] [x] -> Set)
     (if (contains? b x) (conj acc x) acc)) (set) a))
+
+
 
 (define (difference [a : Set] -> [b : Set] -> Set)
   :doc "Return a set of elements in a that are not in b."

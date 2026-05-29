@@ -1104,6 +1104,8 @@ static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
 // Build token stream from source.
 // Multi-line grouped expressions (starting with '(' '[' '{') are
 // accumulated across lines and emitted as a single token.
+static int g_for_iter_depth = 0;
+
 static WTokenStream build_token_stream(const char *source, ArityTable *at) {
     WTokenStream s = {0};
     const char *p = source;
@@ -1126,6 +1128,154 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
 
         /* Check for pmatch clause: "pattern -> body" or "| guard -> body".
          * We split the line at top-level '->'. */
+        /* for c -> iterable body... or for c <- iterable body...
+         * Desugar before the generic arrow-clause handler fires.
+         * for c -> expr  =>  (for [iter 0 (count expr)] (define c (expr iter)) body)
+         * for c <- expr  =>  (for [iter (count expr) 0 -1] (define c (expr iter)) body) */
+        if ((strncmp(t, "for", 3) == 0 && (t[3] == ' ' || t[3] == '\t'))) {
+            const char *after_for = t + 3;
+            while (*after_for == ' ' || *after_for == '\t') after_for++;
+            /* read binding name: must be a plain symbol (no bracket) */
+            if (*after_for && *after_for != '[' && *after_for != '(') {
+                const char *name_end = after_for;
+                while (*name_end && *name_end != ' ' && *name_end != '\t') name_end++;
+                const char *after_name = name_end;
+                while (*after_name == ' ' || *after_name == '\t') after_name++;
+                bool is_forward  = (after_name[0] == '-' && after_name[1] == '>');
+                bool is_backward = (after_name[0] == '<' && after_name[1] == '-');
+                if (is_forward || is_backward) {
+                    char *bind_name = strndup(after_for, name_end - after_for);
+                    const char *iter_expr_start = after_name + 2;
+                    while (*iter_expr_start == ' ' || *iter_expr_start == '\t') iter_expr_start++;
+                    const char *iter_expr_end = get_logical_line_end(iter_expr_start);
+                    char *iter_expr = strndup(iter_expr_start, iter_expr_end - iter_expr_start);
+
+                    /* Nesting depth is tracked via the recursive call stack:
+                     * g_for_iter_depth is incremented before we recurse into
+                     * the body and decremented after, so each level of nested
+                     * for sugar gets a unique iterator name automatically.    */
+                    g_for_iter_depth++;
+                    int iter_depth = g_for_iter_depth;
+                    /* Build iter variable name: iter, iter2, iter3 ... */
+                    char iter_var[32];
+                    if (iter_depth == 1)
+                        snprintf(iter_var, sizeof(iter_var), "iter");
+                    else
+                        snprintf(iter_var, sizeof(iter_var), "iter%d", iter_depth);
+
+                    /* Collect ALL body lines (deeper indent) into a raw source buffer
+                     * so we can run build_token_stream recursively on them.
+                     * This is the key: nested for sugar must fire via the full pipeline,
+                     * not via tokenise_into which skips the for-desugaring path.       */
+                    size_t body_src_cap = 256;
+                    char *body_src = malloc(body_src_cap);
+                    size_t body_src_len = 0;
+                    body_src[0] = '\0';
+
+                    while (*p) {
+                        const char *bls = p;
+                        while (*p && *p != '\n') p++;
+                        if (*p == '\n') p++;
+                        char *blraw = strndup(bls, p - bls);
+                        const char *blt = blraw;
+                        while (*blt == ' ' || *blt == '\t') blt++;
+                        if (!*blt || *blt == ';') { free(blraw); lineno++; continue; }
+                        int bl_ind = measure_indent(blraw);
+                        /* Skip truly blank lines (only whitespace/newline) — the
+                         * \n separator inserted between body_src lines appears as
+                         * a zero-indent blank line and must never trigger a stop. */
+                        bool line_is_blank = true;
+                        for (const char *_bc = blraw; *_bc; _bc++) {
+                            if (*_bc != ' ' && *_bc != '\t' && *_bc != '\r' && *_bc != '\n') {
+                                line_is_blank = false;
+                                break;
+                            }
+                        }
+                        if (line_is_blank) { free(blraw); lineno++; continue; }
+                        if (bl_ind <= indent) { p = bls; free(blraw); break; }
+                        /* Preserve the raw line (with original indentation stripped to
+                         * relative indent) so nested for sugar sees correct structure. */
+                        const char *blt_end = get_logical_line_end(blt);
+                        size_t blt_len = blt_end - blt;
+                        /* Indent body lines by (bl_ind - indent - 1) spaces so that
+                         * the recursive build_token_stream sees correct relative depth. */
+                        int rel_indent = bl_ind - indent;
+                        if (rel_indent < 0) rel_indent = 0;
+                        size_t need = body_src_len + rel_indent + blt_len + 3;
+                        while (need >= body_src_cap) { body_src_cap *= 2; body_src = realloc(body_src, body_src_cap); }
+                        if (body_src_len > 0) body_src[body_src_len++] = '\n';
+                        for (int _si = 0; _si < rel_indent; _si++) body_src[body_src_len++] = ' ';
+                        memcpy(body_src + body_src_len, blt, blt_len);
+                        body_src_len += blt_len;
+                        body_src[body_src_len] = '\0';
+                        free(blraw);
+                        lineno++;
+                    }
+
+                    /* Recursively expand body source through the full pipeline.
+                     * The recursive call inherits g_for_iter_depth so nested
+                     * for sugar inside this body gets iter(depth+1) names.   */
+                    SB body_expanded_sb; sb_init(&body_expanded_sb);
+                    if (body_src_len > 0) {
+                        WTokenStream _bts = build_token_stream(body_src, at);
+                        bool _bfirst = true;
+                        while (_bts.pos < _bts.count) {
+                            if (!_bfirst) sb_putc(&body_expanded_sb, ' ');
+                            _bfirst = false;
+                            wisp_parse_expr(at, &_bts, &body_expanded_sb, -1, 1, 0);
+                        }
+                        wts_free(&_bts);
+                    }
+                    free(body_src);
+                    g_for_iter_depth--;
+                    char *body_expanded = sb_take(&body_expanded_sb);
+
+                    /* Build desugared s-expression */
+                    SB ds; sb_init(&ds);
+                    if (is_forward) {
+                        sb_puts(&ds, "(for [");
+                        sb_puts(&ds, iter_var);
+                        sb_puts(&ds, " 0 (count ");
+                        sb_puts(&ds, iter_expr);
+                        sb_puts(&ds, ")] (define ");
+                        sb_puts(&ds, bind_name);
+                        sb_puts(&ds, " (");
+                        sb_puts(&ds, iter_expr);
+                        sb_puts(&ds, " ");
+                        sb_puts(&ds, iter_var);
+                        sb_puts(&ds, "))");
+                    } else {
+                        sb_puts(&ds, "(for [");
+                        sb_puts(&ds, iter_var);
+                        sb_puts(&ds, " (- (count ");
+                        sb_puts(&ds, iter_expr);
+                        sb_puts(&ds, ") 1) -1 -1] (define ");
+                        sb_puts(&ds, bind_name);
+                        sb_puts(&ds, " (");
+                        sb_puts(&ds, iter_expr);
+                        sb_puts(&ds, " ");
+                        sb_puts(&ds, iter_var);
+                        sb_puts(&ds, "))");
+                    }
+                    if (body_expanded[0] != '\0') {
+                        sb_putc(&ds, ' ');
+                        sb_puts(&ds, body_expanded);
+                    }
+                    sb_putc(&ds, ')');
+                    free(body_expanded);
+
+                    char *desugared = sb_take(&ds);
+                    wts_push(&s, desugared, indent, lineno);
+                    free(desugared);
+                    free(iter_expr);
+                    free(bind_name);
+                    free(raw);
+                    lineno++;
+                    goto next_line;
+                }
+            }
+        }
+
         if (strncmp(t, "define", 6) != 0 && strncmp(t, "layout", 6) != 0 && strncmp(t, "data", 4) != 0) {
             const char *arrow = NULL;
             int bdepth = 0;
@@ -3211,6 +3361,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
         tokenise_into(at, &s, t, indent, lineno);
         free(raw);
         lineno++;
+        next_line:;
     }
     return s;
 }
@@ -3302,6 +3453,9 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
             }
         } else {
             /* Variadic (-1) */
+            bool is_for_or_while = (strcmp(text, "for")   == 0 ||
+                                    strcmp(text, "while")  == 0);
+            bool first_arg_done = false;
             while (s->pos < s->count) {
                 WToken *next = &s->tokens[s->pos];
                 bool same_line  = (next->lineno == my_lineno);
@@ -3314,7 +3468,11 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
                                   strcmp(next->text, "else") == 0)) break;
 
                 sb_putc(&prefix_sb, same_line ? ' ' : '\n');
-                wisp_parse_expr(t, s, &prefix_sb, my_indent, 1, 0);
+                /* For 'for'/'while', the binding (first arg) must be consumed
+                 * as a raw token with no Pratt infix promotion.             */
+                int prec = (is_for_or_while && !first_arg_done) ? 999 : 0;
+                first_arg_done = true;
+                wisp_parse_expr(t, s, &prefix_sb, my_indent, 1, prec);
             }
         }
         sb_putc(&prefix_sb, ')');
