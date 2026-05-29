@@ -25,8 +25,7 @@
    sum  product  sum-range  product-range
    pi  e  tau  phi
    floor ceiling round truncate
-   deg->rad sin mod-f ls exp pow
-])
+   deg->rad sin mod-f ls exp pow])
 
 import Coll
 

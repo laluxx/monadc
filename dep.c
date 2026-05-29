@@ -1624,6 +1624,22 @@ static bool dep_conv_vals_internal(ConvCtx *cctx, Value *v1, Value *v2, Value *t
 
     if (!v1 || !v2) return v1 == v2;
 
+    /* delta-unfold refinement/alias neutrals early, before the kind check.
+     * When one side is a named neutral (e.g. N) that resolves to a ground
+     * embed (e.g. val_embed(Int)), unfold it so Nat vs N succeeds. */
+    if (v1->kind == VAL_NEUTRAL && v1->spine.count == 0 && cctx->dctx) {
+        DepEnvEntry *e = dep_env_lookup(cctx->dctx->globals, v1->neutral_name);
+        if (e && e->def_val && e->def_val->kind == VAL_EMBED) {
+            return dep_conv_vals(cctx, e->def_val, v2, ty);
+        }
+    }
+    if (v2->kind == VAL_NEUTRAL && v2->spine.count == 0 && cctx->dctx) {
+        DepEnvEntry *e = dep_env_lookup(cctx->dctx->globals, v2->neutral_name);
+        if (e && e->def_val && e->def_val->kind == VAL_EMBED) {
+            return dep_conv_vals(cctx, v1, e->def_val, ty);
+        }
+    }
+
     // η-expand functions: compare (λx.v1 x) and (λx.v2 x)
     if (v1->kind == VAL_LAM || v2->kind == VAL_LAM) {
         Value *var = fresh_neutral(cctx, "η");
@@ -2051,7 +2067,7 @@ Value *dep_infer(DepCtx *ctx, Term *t) {
     Value *res = dep_infer_internal(ctx, t);
 
     if (res && t && t->source_ast) {
-        Type *hm_ty = dep_ground_of_value(res, ctx->mctx);
+        Type *hm_ty = dep_ground_of_value_env(res, ctx->mctx, ctx->globals);
         if (hm_ty) {
             if (t->source_ast->inferred_type) type_free(t->source_ast->inferred_type);
             t->source_ast->inferred_type = hm_ty;
@@ -2417,7 +2433,7 @@ bool dep_check(DepCtx *ctx, Term *t, Value *expected_type) {
     bool res = dep_check_internal(ctx, t, expected_type);
 
     if (res && t && t->source_ast) {
-        Type *hm_ty = dep_ground_of_value(expected_type, ctx->mctx);
+        Type *hm_ty = dep_ground_of_value_env(expected_type, ctx->mctx, ctx->globals);
         if (hm_ty) {
             if (t->source_ast->inferred_type) type_free(t->source_ast->inferred_type);
             t->source_ast->inferred_type = hm_ty;
@@ -2435,6 +2451,7 @@ bool dep_check(DepCtx *ctx, Term *t, Value *expected_type) {
     }
     return res;
 }
+
 
 static bool dep_check_internal(DepCtx *ctx, Term *t, Value *expected_type) {
     expected_type = dep_force(expected_type, ctx->mctx);
@@ -2581,6 +2598,10 @@ Term *dep_term_of_ground(Type *ground_type) {
 }
 
 Type *dep_ground_of_value(Value *v, MetaCtx *mctx) {
+    return dep_ground_of_value_env(v, mctx, NULL);
+}
+
+Type *dep_ground_of_value_env(Value *v, MetaCtx *mctx, DepEnv *globals) {
     if (!v) return NULL;
     v = dep_force(v, mctx);
 
@@ -2592,7 +2613,7 @@ Type *dep_ground_of_value(Value *v, MetaCtx *mctx) {
         if (v->implicit != IMPLICIT_EXPLICIT) {
             Value *dummy = val_neutral("hm_impl", -1, val_spine_empty());
             Value *codom = dep_closure_apply(v->closure, dummy);
-            return dep_ground_of_value(codom, mctx);
+            return dep_ground_of_value_env(codom, mctx, globals);
         }
 
         // Skip explicit universe-level (Type u) arguments - compile-time
@@ -2602,14 +2623,14 @@ Type *dep_ground_of_value(Value *v, MetaCtx *mctx) {
         if (v->domain && v->domain->kind == VAL_UNIVERSE) {
             Value *dummy = val_embed(type_unknown());
             Value *codom = dep_closure_apply(v->closure, dummy);
-            Type *result = dep_ground_of_value(codom, mctx);
+            Type *result = dep_ground_of_value_env(codom, mctx, globals);
             return result;
         }
 
-        Type *param = dep_ground_of_value(v->domain, mctx);
+        Type *param = dep_ground_of_value_env(v->domain, mctx, globals);
         Value *dummy = val_neutral("hm_arg", -1, val_spine_empty());
         Value *codom = dep_closure_apply(v->closure, dummy);
-        Type *ret = dep_ground_of_value(codom, mctx);
+        Type *ret = dep_ground_of_value_env(codom, mctx, globals);
 
         if (param && ret) return type_arrow(param, ret);
         if (param) type_free(param);
@@ -2624,19 +2645,37 @@ Type *dep_ground_of_value(Value *v, MetaCtx *mctx) {
      * EXCEPT: if the neutral is a known ADT type constructor (__type_X)
      * applied to a spine, we can recover a TYPE_APP. This is the bridge
      * that lets (Maybe a) in dep produce TYPE_APP("Maybe", unknown) in HM,
-     * which the HM unifier can then unify against bare Maybe (TYPE_LAYOUT). */
+     * which the HM unifier can then unify against bare Maybe (TYPE_LAYOUT).
+     * REFINEMENT TYPES: if __type_X resolves to a VAL_EMBED in globals
+     * (i.e. it is a refinement type over a base ground type like Int),
+     * return that base type directly. This prevents Even from becoming
+     * TYPE_APP("Even", unknown) which HM cannot unify against Int. */
     if (v->kind == VAL_NEUTRAL && v->neutral_name) {
         const char *name = v->neutral_name;
+        /* First: try to resolve via globals — handles refinement type aliases */
+        if (globals && v->spine.count == 0) {
+            DepEnvEntry *e = dep_env_lookup(globals, name);
+            if (e && e->def_val && e->def_val->kind == VAL_EMBED) {
+                return type_clone(e->def_val->embed_type);
+            }
+        }
         /* Strip __type_ prefix to get the constructor name */
         const char *ctor = NULL;
         if (strncmp(name, "__type_", 7) == 0) {
             ctor = name + 7;
+            /* Try globals lookup for __type_X with empty spine too */
+            if (globals && v->spine.count == 0) {
+                DepEnvEntry *e = dep_env_lookup(globals, name);
+                if (e && e->def_val && e->def_val->kind == VAL_EMBED) {
+                    return type_clone(e->def_val->embed_type);
+                }
+            }
         }
         if (ctor) {
             /* If there is one spine argument, it is the type parameter */
             Type *arg = NULL;
             if (v->spine.count == 1) {
-                arg = dep_ground_of_value(v->spine.args[0], mctx);
+                arg = dep_ground_of_value_env(v->spine.args[0], mctx, globals);
             }
             if (!arg) arg = type_unknown();
             return type_app(ctor, arg);
@@ -2681,7 +2720,9 @@ static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
             if (n >= 0) {
                 return term_num_lit((unsigned long long)n);
             }
-            return term_embed(type_int());
+            /* Negative integer: annotate a hole as Int so it passes as a
+             * VALUE of type Int, not as the TYPE Int itself. */
+            return term_ann(term_hole(), term_embed(type_int()));
         }
     case AST_STRING:  return term_ann(term_hole(), term_embed(type_string()));
     case AST_CHAR: {
@@ -3006,6 +3047,33 @@ Value *dep_elab_and_infer(DepCtx *ctx, AST *ast) {
 
 Term *dep_toplevel(DepCtx *ctx, AST *ast, Term **out_type) {
     if (!ast) return NULL;
+
+    /* Intercept top-level (type Name { x in T | pred }) refinement definitions */
+    if (ast->type == AST_REFINEMENT) {
+        Type *base_ground = type_from_name(ast->refinement.base_type);
+        if (!base_ground) base_ground = type_int();
+        Term *base_term = term_embed(base_ground);
+        Value *base_val = val_embed(base_ground);
+
+        /* Register __type_Name so field type lookups work */
+        char type_name[256];
+        snprintf(type_name, sizeof(type_name), "__type_%s", ast->refinement.name);
+        dep_env_define(ctx->globals, type_name, val_universe_n(0),
+                       term_clone(base_term), val_embed(type_clone(base_ground)), true);
+
+        /* Register the full name (e.g. "Natural") as the base embed type */
+        dep_env_define(ctx->globals, ast->refinement.name, val_universe_n(0),
+                       term_clone(base_term), base_val, true);
+
+        /* Register the alias (e.g. "N") as the same base embed type */
+        if (ast->refinement.alias_name && strlen(ast->refinement.alias_name) > 0) {
+            dep_env_define(ctx->globals, ast->refinement.alias_name, val_universe_n(0),
+                           term_clone(base_term), val_embed(type_clone(base_ground)), true);
+        }
+
+        if (out_type) *out_type = term_type_n(0);
+        return term_fvar("True");
+    }
 
     /* Intercept top-level (layout ...) */
     if (ast->type == AST_LAYOUT) {

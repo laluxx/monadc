@@ -2,6 +2,7 @@ include <raylib.h>
 
 InitWindow 1920 1080 "No Bindings!?"
 
+
 define color Color 33 33 33 0
   "docstring"
 

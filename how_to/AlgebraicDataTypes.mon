@@ -109,12 +109,6 @@
 ;; show test-set 0
 
 
-;; TODO The cool arr iter stuff.
-;; for 10 show "10 times!?"
-
-;; for [i 0 10 2] show "iterazione _" i
-;;          ↑
-;;         Step
 
 
 ;; show until (> 10) (+ 1) 5
@@ -140,12 +134,17 @@ define max :: a -> a -> a
 
 
 define sqrt :: Float -> Float
-  :alias √
   x | x <= 0    -> 0
     | otherwise -> until goodEnough? improve (x / 2)
     where
       improve    g -> (g + x / g) / 2
       goodEnough g -> (< (abs (- (improve g) g)) (* 1e-12 (max 1 g)))
+
+;; define sqrt :: Float -> Float
+;;   x | x <= 0    -> 0
+;;     | otherwise -> improve improve (x / 2)
+;;     where
+;;       improve g -> (g + x / g) / 2
 
 ;; show √3
 

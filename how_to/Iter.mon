@@ -1,0 +1,14 @@
+;; TODO The cool arr iter stuff.
+for [10] show "10 times!?"
+
+;; for [i 0 10 2] show "iterazione _" i
+;; ;           ↑
+;; ;          Step
+
+;; for c in "ciao"
+;;    show c
+
+;; for fruit in fruits        ; iter
+;;    for nut in nuts         ; iter2
+;;       for piece in pieces  ; iter3
+;;          show "counts: _ _ _" iter iter2 iter3

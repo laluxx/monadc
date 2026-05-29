@@ -1,8 +1,15 @@
 #+title: TODO.org
 
-* TODO Program synthesis [0/1]
+* TODO Program synthesis [0/2]
+- [ ] Full idris-like hole driven development
 - [ ] Holes in functions type signature, let the compiler fill them in
-- A bidirectional type system is complete for synthesis if every type has at least one term.
+- “A bidirectional type system is complete for synthesis if every type has at least one term.”
+
+
+* TODO Optimizations [0/2]
+- [ ] Make sure pattern matching become jump tables
+- [ ] The coll type: [a] should NOT be a runtime thing, it should just do monomorphization
+
 
 * TODO Stuff [0/37]
 - [ ] Automatic tsan and asan in debug builds.
@@ -13,7 +20,7 @@
 - [ ] in REPL program termination checker
 - [ ] Referential assignment E.g <--, <+-, <*- (ideally the operator could be user defined)
 - [ ] Multiple definitions E.g def u v w :: Float (we know it's a multi definition because there are no [])
-- [ ] type-level computation via the same mechanisms as value-level computation. E.g (Int String) ++ (Int) = (Int String Int) it's both a type and a list
+- [ ] type-level computation via the same mechanisms as value-level computation. E.g (Int String) ++ (Int) = (Int String Int) it's both a type and a Tuple
 - [ ] ITT based fuzzing
 - [ ] QTT based Compile-time memory management
 - [ ] Compile time IFs: #if (expr)
@@ -22,8 +29,6 @@
 - [ ] labels like :label that create continuations that you can =goto=
 - [ ] arbitrary return at any point of execution using =->=
 - [ ] Builtin Path type and Path literals e.g ~/path/to/file.c (also support for windows)
-- [ ] The coll type: [a] should NOT be a runtime thing, it should just do monomorphization
-- [ ] Full idris-like hole driven development
 - [ ] Fat strings... fuck my life
 - [ ] pmatch backtracking on failure with =<-=
 - [ ] anonymous Algebraic Data Types (tagged unions)
@@ -63,11 +68,13 @@
 * TODO QTT Exact Multiplicity Tracking [0/4]
 - [ ] Replace ω with precise compile-time known counts (0,1,2,3,...,n)
 - [ ] Compiler tracks exact usage count statically, frees after last use
-- [ ] No runtime fallback — no GC, no reference counting, ever
+- [ ] No runtime fallback -- no GC, no reference counting, ever
 - [ ] ω reserved for truly dynamic cases (explicitly annotated, discouraged)
 
 
-* TODO Prolog [/]
+* TODO Prolog
+
+This is the design, at least.
 
 #+begin_src monad
 define square x ↦ x²
@@ -84,6 +91,19 @@ define grandparent? x z ↦ ∃y. parent x y ∧ parent y z
 grandparent? 'tom z -> true ; Returns the symbol 'ann directly not a set because there is only one answer.
 parent 'tom 'ann -> ∅       ; the solution is the empty set, this returns True.
 
+#+end_src
+
+* TODO For superpowers
+
+#+begin_src monad
+for c in "ciao"
+   show c
+
+
+for fruit in fruits        ; iter
+   for nut in nuts         ; iter2
+      for piece in pieces  ; iter3
+         show "counts: _ _ _" iter iter2 iter3
 #+end_src
 
 

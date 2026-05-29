@@ -723,7 +723,8 @@ Term *dep_term_of_ground(Type *ground_type);
 //  normalised Value.  Returns NULL if the value is not a ground type.
 //  Used by codegen to bridge back to the existing backend.
 //
-Type *dep_ground_of_value(Value *v, MetaCtx *mctx);
+Type  *dep_ground_of_value(Value *v, MetaCtx *mctx);
+Type  *dep_ground_of_value_env(Value *v, MetaCtx *mctx, DepEnv *globals);
 
 
 /// Top-level elaboration pipeline

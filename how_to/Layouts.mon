@@ -1,0 +1,11 @@
+;; memory layouts are C compatible structs.
+
+layout Vec3 [x :: Float]
+            [y :: Float]
+            [z :: Float]
+
+layout Matrix3x3
+  [m11 :: Float] [m12 :: Float] [m13 :: Float]
+  [m21 :: Float] [m22 :: Float] [m23 :: Float]
+  [m31 :: Float] [m32 :: Float] [m33 :: Float]
+

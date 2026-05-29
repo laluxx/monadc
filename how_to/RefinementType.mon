@@ -7,58 +7,79 @@
 ;; ; `Code` will inherit everything from list
 ;; ; including the docstring if not specified.
 
-type Natural { x ∈ Int | x >= 0 }
-  :doc "Natural number type"
-  :alias ℕ
-
-;; define passedNatural? [x : ℕ] -> Bool
-;;   Natural? x
-
-;; ;; This function can't return False
-;; show (passedNatural? 1); passing -1 is a compile time ERROR
+;; TODO catchall runtime error handling
+;; type Natural { x ∈ Int | x >= 0 }
+;;   otherwise
+;;     -> error "Wrong type? AGAIN!?"
 
 ;; TODO
 ;; Now that we have dependent types this should be possible..
 ;; type Even { x ∈ ℤ | ∃k ∈ ℤ, x = 2k }
 ;;   "Existential form."
 
+;; TODO If Types are sets, this should be possible.
+;; type PositiveEven = Positive ∩ Even
+;;   "Cool positive even integers"
 
 
 
-;; type Even { x ∈ Int | x % 2 = 0 }
-;;   "Even integers"
+;; type Natural { x ∈ Int | x >= 0 }
+;;   :doc "Natural number type"
+;;   :alias ℕ
 
-;; (define (passedEven? [x :: Even] -> Bool)
-;;   (Even? x))
+;; ;; This function can't return False
+;; define passedNatural? :: ℕ -> Bool
+;;   x -> Natural? x
 
-;; (show (passedEven? 2))
-
-
-;; type Positive { x ∈ Int | x > 0 }
-;;   "Integers greater than zero"
-
-
-;; (type PositiveEven
-;;   { n ∈ Int
-;;   | ((Positive? n) and (Even? n)) }
-;;   "Positive even integers")
-
-;; (define (passedPositiveEven? [x :: PositiveEven] -> Bool)
-;;   (PositiveEven? x))
-
-;; (show (passedPositiveEven? 2))
+;; ;; passing -1 is a compile time ERROR
+;; show passedNatural? -1
 
 
-;; Email e' un subset di String
-;; Questo and si applica su tutte e 4 le clause.
+
+type Even { x ∈ Int | x % 2 = 0 }
+  "Even integers"
+
+;; define passedEven? :: Even -> Bool
+;;   x -> Even? x
+
+;; show passedEven? 3
+
+
+type Positive { x ∈ Int | x > 0 }
+  "Integers greater than zero"
+
+type PositiveEven
+  { n ∈ Int
+  | ((Positive? n) and (Even? n)) }
+  "Positive even integers"
+
+define passedPositiveEven? :: PositiveEven -> Bool
+  x -> PositiveEven? x
+
+show passedPositiveEven? 2  ; -2 is even but not positive
+
+layout Vec3 [x :: Float]
+            [y :: Float]
+            [z :: Float]
+
+
+
+layout Matrix3x3
+  [m11 :: Float] [m12 :: Float] [m13 :: Float]
+  [m21 :: Float] [m22 :: Float] [m23 :: Float]
+  [m31 :: Float] [m32 :: Float] [m33 :: Float]
+
+
+Vec3
+
+Matrix3x3
+
 ;; (type Email
 ;;   { s ∈ String
 ;;   | and s contains? "@"
 ;;         s contains? "."
 ;;         count s > 5
 ;;         not s contains? " " })
-
-
 
 
 ;; Questa funzione non potra' MAI ritornare False,
