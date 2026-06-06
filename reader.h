@@ -377,6 +377,10 @@ typedef enum {
     TOK_PIPE,           // |
     TOK_COLON,          // :  (bare single colon, parameter type separator)
     TOK_LINE_DIRECTIVE, // #line N COL (internal, emitted by wisp, never reaches parser)
+    TOK_QUASI_OPEN,     // U+231C  corner bracket open  (quasiquote sugar)
+    TOK_QUASI_CLOSE,    // U+231D  corner bracket close
+    TOK_UNQUOTE_OPEN,   // U+231E  bottom-left corner   (unquote hole open)
+    TOK_UNQUOTE_CLOSE,  // U+231F  bottom-right corner  (unquote hole close)
 } TokenType;
 
 typedef struct {

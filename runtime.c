@@ -2186,6 +2186,10 @@ int64_t rt_array_length(RuntimeValue *array) {
     return (int64_t)array->data.array_val.length;
 }
 
+RuntimeValue *rt_ratio_from_int(int64_t n) {
+    return rt_value_ratio(n, 1);
+}
+
 RuntimeValue *rt_ratio_add(RuntimeValue *a, RuntimeValue *b) {
     int64_t n = a->data.ratio_val.numerator   * b->data.ratio_val.denominator
               + b->data.ratio_val.numerator   * a->data.ratio_val.denominator;
@@ -2562,12 +2566,13 @@ void declare_runtime_functions(CodegenContext *ctx) {
     DECL("rt_value_thunk",   ptr, ptr);
 
     // --- Ratio ---
-    DECL("rt_value_ratio",   ptr, i64, i64);
-    DECL("rt_ratio_add",     ptr, ptr, ptr);
-    DECL("rt_ratio_sub",     ptr, ptr, ptr);
-    DECL("rt_ratio_mul",     ptr, ptr, ptr);
-    DECL("rt_ratio_div",     ptr, ptr, ptr);
-    DECL("rt_ratio_to_int",  i64, ptr);
+    DECL("rt_value_ratio",    ptr, i64, i64);
+    DECL("rt_ratio_from_int", ptr, i64);
+    DECL("rt_ratio_add",      ptr, ptr, ptr);
+    DECL("rt_ratio_sub",      ptr, ptr, ptr);
+    DECL("rt_ratio_mul",      ptr, ptr, ptr);
+    DECL("rt_ratio_div",      ptr, ptr, ptr);
+    DECL("rt_ratio_to_int",   i64, ptr);
     DECL("rt_ratio_to_float", dbl, ptr);
 
     // --- Array ---
@@ -2719,6 +2724,7 @@ GET_RUNTIME_FUNCTION(rt_print_value)
 GET_RUNTIME_FUNCTION(rt_print_list)
 
 GET_RUNTIME_FUNCTION(rt_value_ratio)
+GET_RUNTIME_FUNCTION(rt_ratio_from_int)
 GET_RUNTIME_FUNCTION(rt_ratio_add)
 GET_RUNTIME_FUNCTION(rt_ratio_sub)
 GET_RUNTIME_FUNCTION(rt_ratio_mul)

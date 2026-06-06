@@ -967,6 +967,40 @@ static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
             p += 4; continue;
         }
 
+        /* corner-bracket quasiquote: ⌜...⌝ — treat as single atomic token
+         * U+231C ⌜ = E2 8C 9C,  U+231D ⌝ = E2 8C 9D
+         * U+231E ⌞ = E2 8C 9E,  U+231F ⌟ = E2 8C 9F
+         * We collect everything from ⌜ to the matching ⌝ as one token so
+         * wisp never tries to parse the interior as separate identifiers.
+         * The reader already knows how to handle this token correctly.    */
+        if ((unsigned char)p[0] == 0xE2 &&
+            (unsigned char)p[1] == 0x8C &&
+            (unsigned char)p[2] == 0x9C) {
+            const char *start = p;
+            p += 3; /* skip ⌜ */
+            /* scan forward until matching ⌝, skipping nested ⌞⌟ pairs */
+            while (*p) {
+                if ((unsigned char)p[0] == 0xE2 &&
+                    (unsigned char)p[1] == 0x8C &&
+                    (unsigned char)p[2] == 0x9D) {
+                    p += 3; /* skip ⌝ */
+                    break;
+                }
+                /* skip string literals inside the bracket */
+                if (*p == '"') {
+                    p++;
+                    while (*p && !(*p == '"' && *(p-1) != '\\')) p++;
+                    if (*p == '"') p++;
+                    continue;
+                }
+                p++;
+            }
+            char *tok = strndup(start, p - start);
+            wts_push(s, tok, indent, lineno);
+            free(tok);
+            continue;
+        }
+
         /* quote prefix: '(...) — treat as single token */
         if (*p == '\'' && (*(p+1) == '(' || *(p+1) == '[' || *(p+1) == '{')) {
             const char *start = p++;
@@ -1085,6 +1119,15 @@ static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
             continue;
         }
 
+        /* ↦ (U+21A6, UTF-8: E2 86 A6) — sugar for -> */
+        if ((unsigned char)p[0] == 0xE2 &&
+            (unsigned char)p[1] == 0x86 &&
+            (unsigned char)p[2] == 0xA6) {
+            p += 3;
+            wts_push(s, "->", indent, lineno);
+            continue;
+        }
+
         /* regular token */
         const char *start = p;
         while (*p && *p != ' ' && *p != '\t' && *p != ';') p++;
@@ -1118,6 +1161,43 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
         if (*p == '\n') p++;
 
         char *raw = strndup(line_start, len);
+
+        /* Normalize ↦ (U+21A6, UTF-8: E2 86 A6) to -> before any scanning.
+         * This runs on the raw line so all downstream code sees only '->'. */
+        {
+            size_t raw_len = strlen(raw);
+            /* Count occurrences to size the output buffer */
+            int mapsto_count = 0;
+            for (size_t _i = 0; _i + 2 < raw_len; _i++) {
+                if ((unsigned char)raw[_i]   == 0xE2 &&
+                    (unsigned char)raw[_i+1] == 0x86 &&
+                    (unsigned char)raw[_i+2] == 0xA6) {
+                    mapsto_count++;
+                    _i += 2;
+                }
+            }
+            if (mapsto_count > 0) {
+                /* Each ↦ (3 bytes) becomes -> (2 bytes): net -1 byte each */
+                char *normalized = malloc(raw_len - mapsto_count + 1);
+                size_t _r = 0, _w = 0;
+                while (_r < raw_len) {
+                    if (_r + 2 < raw_len &&
+                        (unsigned char)raw[_r]   == 0xE2 &&
+                        (unsigned char)raw[_r+1] == 0x86 &&
+                        (unsigned char)raw[_r+2] == 0xA6) {
+                        normalized[_w++] = '-';
+                        normalized[_w++] = '>';
+                        _r += 3;
+                    } else {
+                        normalized[_w++] = raw[_r++];
+                    }
+                }
+                normalized[_w] = '\0';
+                free(raw);
+                raw = normalized;
+            }
+        }
+
         const char *t = raw;
         while (*t == ' ' || *t == '\t') t++;
 
@@ -2413,7 +2493,105 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                 char _ld[48];
                 snprintf(_ld, sizeof(_ld), " (#line %d 1) ", lineno);
                 sb_puts(&acc, _ld);
-                sb_puts(&acc, line_expanded);
+
+                /* If this continuation line starts with '|' inside a { } set
+                 * literal, it is a refinement predicate. Run the expression
+                 * after '|' through wisp infix promotion so that e.g.
+                 * "Positive? n and Even? n" becomes "(and (Positive? n) (Even? n))"
+                 * instead of being left as raw tokens for the reader.          */
+                const char *le_scan = line_expanded;
+                while (*le_scan == ' ' || *le_scan == '\t') le_scan++;
+                if (*le_scan == '|' &&
+                    (le_scan[1] == ' ' || le_scan[1] == '\t' || le_scan[1] == '\0')) {
+                    sb_puts(&acc, "| ");
+                    const char *pred_start = le_scan + 1;
+                    while (*pred_start == ' ' || *pred_start == '\t') pred_start++;
+                    if (*pred_start) {
+                        /* Collect the first predicate line plus ALL subsequent
+                         * continuation lines (deeper indent than the { block's
+                         * indent) into one source buffer, then run the whole
+                         * thing through build_token_stream + wisp_parse_expr.
+                         * This lets multi-line variadic calls like:
+                         *   | and s contains? "@"
+                         *         s contains? "."
+                         *         count s > 5
+                         * expand correctly as a single (and ...) expression.
+                         * We must NOT emit #line markers inside this buffer
+                         * because they confuse the variadic indent tracking.  */
+                        SB pred_src; sb_init(&pred_src);
+                        sb_puts(&pred_src, pred_start);
+
+                        /* Consume deeper continuation lines from p */
+                        while (*p) {
+                            const char *cls = p;
+                            while (*p && *p != '\n') p++;
+                            if (*p == '\n') p++;
+                            char *clraw = strndup(cls, p - cls);
+                            const char *clt = clraw;
+                            while (*clt == ' ' || *clt == '\t') clt++;
+                            if (!*clt || *clt == ';') { free(clraw); lineno++; continue; }
+                            int cl_ind = measure_indent(clraw);
+                            /* Stop when we reach a line at or shallower than
+                             * the enclosing { block's indent level.
+                             * If the line contains '}' it closes the set —
+                             * strip everything from '}' onward and include
+                             * only the predicate content before it, then stop. */
+                            if (cl_ind <= indent) {
+                                p = cls;
+                                free(clraw);
+                                break;
+                            }
+                            if (strchr(clt, '}')) {
+                                /* Include content before '}' then stop */
+                                const char *brace = strchr(clt, '}');
+                                const char *seg_end = brace;
+                                while (seg_end > clt &&
+                                       (*(seg_end-1) == ' ' || *(seg_end-1) == '\t'))
+                                    seg_end--;
+                                if (seg_end > clt) {
+                                    int rel = cl_ind - indent;
+                                    sb_putc(&pred_src, '\n');
+                                    for (int _si = 0; _si < rel; _si++)
+                                        sb_putc(&pred_src, ' ');
+                                    for (const char *_cp = clt; _cp < seg_end; _cp++)
+                                        sb_putc(&pred_src, *_cp);
+                                }
+                                /* Rewind p to the '}' so the outer accumulator
+                                 * still sees and emits the closing brace.       */
+                                p = cls + (brace - clraw);
+                                free(clraw);
+                                break;
+                            }
+                            /* Compute indent relative to the | line so that
+                             * wisp's variadic consumer sees correct structure. */
+                            int rel = cl_ind - indent;
+                            sb_putc(&pred_src, '\n');
+                            for (int _si = 0; _si < rel; _si++) sb_putc(&pred_src, ' ');
+                            const char *clt_end = get_logical_line_end(clt);
+                            for (const char *_cp = clt; _cp < clt_end; _cp++)
+                                sb_putc(&pred_src, *_cp);
+                            free(clraw);
+                            lineno++;
+                        }
+
+                        char *pred_src_str = sb_take(&pred_src);
+                        WTokenStream pred_ts = build_token_stream(pred_src_str, at);
+                        free(pred_src_str);
+                        SB pred_sb; sb_init(&pred_sb);
+                        bool pred_first = true;
+                        while (pred_ts.pos < pred_ts.count) {
+                            if (!pred_first) sb_putc(&pred_sb, ' ');
+                            pred_first = false;
+                            wisp_parse_expr(at, &pred_ts, &pred_sb, -1, 1, 0);
+                        }
+                        wts_free(&pred_ts);
+                        char *pred_expanded = sb_take(&pred_sb);
+                        sb_puts(&acc, pred_expanded);
+                        free(pred_expanded);
+                    }
+                } else {
+                    sb_puts(&acc, line_expanded);
+                }
                 free(line_expanded);
 
                 /* update depth */
@@ -3042,6 +3220,108 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     continue;
                 }
 
+                /* Case 1b: define name param1 param2 ... -> body
+                 * No '::' signature — bare params before '->'.
+                 * e.g. "define square x -> x²"
+                 * Desugar to a function header: (square x -> [a]) so the
+                 * reader builds a lambda with the correct param list.
+                 * We detect this by: no '::' after name, first char after
+                 * name is a lowercase symbol (param name), and '->' appears
+                 * somewhere on the line.                                    */
+                if (after_name[0] >= 'a' && after_name[0] <= 'z' &&
+                    strstr(after_name, "->")) {
+                    size_t name_len = name_end - after_define;
+                    char *fname = strndup(after_define, name_len);
+
+                    /* Count params (tokens before '->') and find arrow */
+                    const char *scan = after_name;
+                    int arr_count = 0;
+                    const char *arrow_pos = NULL;
+                    while (*scan && *scan != ';') {
+                        while (*scan == ' ' || *scan == '\t') scan++;
+                        if (!*scan || *scan == ';') break;
+                        if (*scan == '-' && *(scan+1) == '>') {
+                            arrow_pos = scan;
+                            break;
+                        }
+                        /* skip one token */
+                        if (*scan == '[' || *scan == '(') {
+                            char oc = *scan, cc = oc=='['?']':')';
+                            int d = 0;
+                            while (*scan) {
+                                if (*scan==oc) d++;
+                                else if (*scan==cc){d--;scan++;if(!d)break;continue;}
+                                scan++;
+                            }
+                        } else {
+                            while (*scan && *scan!=' ' && *scan!='\t' &&
+                                   !(*scan=='-'&&*(scan+1)=='>')) scan++;
+                        }
+                        arr_count++;
+                    }
+
+                    if (arrow_pos && arr_count > 0) {
+                        arity_set(at, fname, arr_count);
+
+                        /* Emit three tokens: "define" "(fname p1 p2)" "body"
+                         * so reader sees (define (fname p1 p2) body) —
+                         * the standard short-form with body outside parens. */
+
+                        /* Param string: everything before '->' */
+                        size_t params_len = arrow_pos - after_name;
+                        while (params_len > 0 &&
+                               (after_name[params_len-1] == ' ' ||
+                                after_name[params_len-1] == '\t'))
+                            params_len--;
+
+                        size_t hlen = 1 + name_len + 1 + params_len + 2;
+                        char *header = malloc(hlen);
+                        snprintf(header, hlen, "(%s %.*s)",
+                                 fname, (int)params_len, after_name);
+
+                        /* Body string: everything after '->' */
+                        const char *body_start = arrow_pos + 2;
+                        while (*body_start == ' ' || *body_start == '\t')
+                            body_start++;
+                        const char *body_end = get_logical_line_end(body_start);
+                        size_t body_len = body_end - body_start;
+
+                        /* Wrap in parens if multi-token and not already grouped */
+                        bool body_has_space = false;
+                        for (size_t _bi = 0; _bi < body_len; _bi++) {
+                            if (body_start[_bi] == ' ' || body_start[_bi] == '\t') {
+                                body_has_space = true;
+                                break;
+                            }
+                        }
+                        bool body_grouped = (body_len > 0 &&
+                                             (body_start[0] == '(' ||
+                                              body_start[0] == '[' ||
+                                              body_start[0] == '{'));
+                        char *body_tok;
+                        if (body_has_space && !body_grouped) {
+                            body_tok = malloc(body_len + 3);
+                            body_tok[0] = '(';
+                            memcpy(body_tok + 1, body_start, body_len);
+                            body_tok[body_len + 1] = ')';
+                            body_tok[body_len + 2] = '\0';
+                        } else {
+                            body_tok = strndup(body_start, body_len);
+                        }
+
+                        free(fname);
+                        wts_push(&s, "define", indent, lineno);
+                        wts_push(&s, header,   indent, lineno);
+                        wts_push(&s, body_tok, indent, lineno);
+                        free(header);
+                        free(body_tok);
+                        free(raw);
+                        lineno++;
+                        continue;
+                    }
+                    free(fname);
+                }
+
                 /* Case 2: define name -> Ret  (zero-param, return type only) */
                 if (after_name[0] == '-' && after_name[1] == '>') {
                     size_t name_len = name_end - after_define;
@@ -3413,7 +3693,43 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
         sb_putc(&prefix_sb, ')');
     }
     else if (is_grouped || arity == 0 || arity == -2) {
-        sb_puts(&prefix_sb, text);
+        /* Ratio literal in function position: if the next token is on the
+         * same line and is a value (not an operator), treat the ratio as
+         * a 1-arity scaling function: 25% 100 -> (25/100 100).
+         * We detect ratio literals by the presence of '/' or a trailing '%'. */
+        bool is_ratio_lit = false;
+        if (!is_grouped && arity == -2) {
+            /* Check for N/M or N% pattern */
+            const char *sl = text;
+            bool has_slash = (strchr(sl, '/') != NULL);
+            bool has_pct   = (sl[strlen(sl) - 1] == '%');
+            /* Must start with a digit or minus-digit to be a number */
+            bool starts_num = (sl[0] >= '0' && sl[0] <= '9') ||
+                              (sl[0] == '-' && sl[1] >= '0' && sl[1] <= '9');
+            if (starts_num && (has_slash || has_pct))
+                is_ratio_lit = true;
+        }
+        if (is_ratio_lit && s->pos < s->count &&
+            s->tokens[s->pos].lineno == my_lineno) {
+            /* Check the next token is a value, not an operator that would
+             * be handled by the infix loop (arity >= 2). */
+            int next_ar = arity_get(t, s->tokens[s->pos].text);
+            bool next_is_value = (next_ar == 0 || next_ar == -2 ||
+                                  s->tokens[s->pos].text[0] == '(' ||
+                                  s->tokens[s->pos].text[0] == '[' ||
+                                  s->tokens[s->pos].text[0] == '{');
+            if (next_is_value) {
+                sb_putc(&prefix_sb, '(');
+                sb_puts(&prefix_sb, text);
+                sb_putc(&prefix_sb, ' ');
+                wisp_parse_expr(t, s, &prefix_sb, my_indent, 1, 6);
+                sb_putc(&prefix_sb, ')');
+            } else {
+                sb_puts(&prefix_sb, text);
+            }
+        } else {
+            sb_puts(&prefix_sb, text);
+        }
     }
     else {
         /* Fixed or variadic function */

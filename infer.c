@@ -488,6 +488,15 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
         if (a->kind == TYPE_FLOAT && b->kind == TYPE_INT) return true;
         if (a->kind == TYPE_INT_ARBITRARY && b->kind == TYPE_FLOAT) return true;
         if (a->kind == TYPE_FLOAT && b->kind == TYPE_INT_ARBITRARY) return true;
+        /* Ratio is a numeric type — compatible with Int and Float */
+        if (a->kind == TYPE_RATIO && b->kind == TYPE_INT) return true;
+        if (a->kind == TYPE_INT && b->kind == TYPE_RATIO) return true;
+        if (a->kind == TYPE_RATIO && b->kind == TYPE_FLOAT) return true;
+        if (a->kind == TYPE_FLOAT && b->kind == TYPE_RATIO) return true;
+        if (a->kind == TYPE_RATIO && b->kind == TYPE_INT_ARBITRARY) return true;
+        if (a->kind == TYPE_INT_ARBITRARY && b->kind == TYPE_RATIO) return true;
+        /* Ratio ~ Ratio always ok */
+        if (a->kind == TYPE_RATIO && b->kind == TYPE_RATIO) return true;
         /* TYPE_INT ~ TYPE_CHAR — chars are small integers, coercion is always valid */
         if (a->kind == TYPE_INT && b->kind == TYPE_CHAR) return true;
         if (a->kind == TYPE_CHAR && b->kind == TYPE_INT) return true;
@@ -1608,10 +1617,17 @@ void infer_register_builtins(InferCtx *ctx) {
     infer_env_insert(ctx->env, "disj",  conj_sc);
     infer_env_insert(ctx->env, "disj!", conj_sc);
 
-    /* ∀a. Set → a → Bool */
-    Type *a3 = infer_fresh(ctx);
+    /* forall a b. Coll(a) -> b -> Bool
+     * contains? works on String, Set, Map, and any generic collection.
+     * Using type_coll() mirrors how count is registered and allows the
+     * same coercion rules in infer_unify_one_internal to fire correctly
+     * (Coll ~ String, Coll ~ Set, Coll ~ Map all succeed there).       */
+    Type *a3     = infer_fresh(ctx);
+    Type *a3_col = type_coll();
+    a3_col->element_type = a3;
+    Type *a3_key = infer_fresh(ctx);
     TypeScheme *contains_sc = infer_generalise(ctx,
-        type_arrow(type_set(), type_arrow(a3, type_bool())), ctx->env);
+        type_arrow(a3_col, type_arrow(a3_key, type_bool())), ctx->env);
     infer_env_insert(ctx->env, "contains?", contains_sc);
 
     /* ∀a. Coll → Int  (count works on sets, maps, lists, arrays, strings) */

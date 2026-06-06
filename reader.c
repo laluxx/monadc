@@ -1420,6 +1420,18 @@ Token lexer_next_token(Lexer *lex) {
             if (peek(lex) == '+' || peek(lex) == '-') advance(lex);
             while (is_digit(peek(lex)) || peek(lex) == '_') advance(lex);
         }
+        /* Percentage sugar: -33% -> -33/100 */
+        if (peek(lex) == '%') {
+            advance(lex); // consume '%'
+            char *raw = my_strndup(lex->source+start, lex->pos-1-start);
+            char *clean = strip_underscores(raw, strlen(raw));
+            free(raw);
+            char buf[128];
+            snprintf(buf, sizeof(buf), "%s/100", clean);
+            free(clean);
+            tok.value = my_strdup(buf);
+            tok.type  = TOK_NUMBER; return tok;
+        }
         char *raw = my_strndup(lex->source+start, lex->pos-start);
         tok.value = strip_underscores(raw, strlen(raw));
         free(raw);
@@ -1505,6 +1517,84 @@ Token lexer_next_token(Lexer *lex) {
         if (peek(lex) == '.' && peek_ahead(lex, 1) != '.') {
             advance(lex); /* consume '.' */
             while (is_digit(peek(lex)) || peek(lex) == '_') advance(lex);
+
+            /* Periodic decimal sugar: A.B(C) -> ratio at compile time
+             * Formula: numerator   = ABC - AB  (digits without dot, minus non-repeating part)
+             *          denominator = 999...000  (len(C) nines, len(B) zeros)
+             * Examples: 0.(3) -> 1/3,  1.08(3) -> 13/120,  0.(142857) -> 1/7  */
+            if (peek(lex) == '(') {
+                /* Extract the digits we have so far (the A.B part) */
+                char *raw_so_far = my_strndup(lex->source + start, lex->pos - start);
+                char *clean_so_far = strip_underscores(raw_so_far, strlen(raw_so_far));
+                free(raw_so_far);
+
+                /* Find the dot to split A and B */
+                char *dot_pos = strchr(clean_so_far, '.');
+                char *int_part_str;   /* A */
+                char *dec_part_str;   /* B (non-repeating decimal digits) */
+                if (dot_pos) {
+                    int_part_str = my_strndup(clean_so_far, dot_pos - clean_so_far);
+                    dec_part_str = my_strdup(dot_pos + 1);
+                } else {
+                    int_part_str = my_strdup(clean_so_far);
+                    dec_part_str = my_strdup("");
+                }
+                free(clean_so_far);
+
+                advance(lex); /* consume '(' */
+
+                /* Collect repeating block digits until ')' */
+                size_t rep_start = lex->pos;
+                while (is_digit(peek(lex)) || peek(lex) == '_') advance(lex);
+                if (peek(lex) != ')') {
+                    free(int_part_str); free(dec_part_str);
+                    READER_ERROR(lex->line, lex->column,
+                                 "Expected ')' to close periodic decimal repeating block");
+                }
+                char *rep_raw = my_strndup(lex->source + rep_start, lex->pos - rep_start);
+                char *rep_str = strip_underscores(rep_raw, strlen(rep_raw));
+                free(rep_raw);
+                advance(lex); /* consume ')' */
+
+                if (rep_str[0] == '\0') {
+                    free(int_part_str); free(dec_part_str); free(rep_str);
+                    READER_ERROR(lex->line, lex->column,
+                                 "Periodic decimal repeating block cannot be empty");
+                }
+
+                /* Build AB string (integer digits + non-repeating decimals, no dot) */
+                char ab_str[256];
+                snprintf(ab_str, sizeof(ab_str), "%s%s", int_part_str, dec_part_str);
+
+                /* Build ABC string (AB + repeating block) */
+                char abc_str[512];
+                snprintf(abc_str, sizeof(abc_str), "%s%s", ab_str, rep_str);
+
+                long long ab  = atoll(ab_str);
+                long long abc = atoll(abc_str);
+
+                int len_b = (int)strlen(dec_part_str);
+                int len_c = (int)strlen(rep_str);
+
+                free(int_part_str); free(dec_part_str); free(rep_str);
+
+                /* denominator = 10^len_b * (10^len_c - 1)
+                 * = len_c nines followed by len_b zeros              */
+                long long nines = 0;
+                for (int _i = 0; _i < len_c; _i++) nines = nines * 10 + 9;
+                long long zeros = 1;
+                for (int _i = 0; _i < len_b; _i++) zeros *= 10;
+
+                long long numerator   = abc - ab;
+                long long denominator = nines * zeros;
+
+                /* Build ratio string for the normal ratio parser path below */
+                char ratio_buf[128];
+                snprintf(ratio_buf, sizeof(ratio_buf), "%lld/%lld", numerator, denominator);
+                tok.value = my_strdup(ratio_buf);
+                tok.type  = TOK_NUMBER;
+                return tok;
+            }
         }
         if (peek(lex) == '/') {
             advance(lex); /* consume '/' */
@@ -1518,6 +1608,38 @@ Token lexer_next_token(Lexer *lex) {
             advance(lex); /* consume 'e' */
             if (peek(lex) == '+' || peek(lex) == '-') advance(lex);
             while (is_digit(peek(lex)) || peek(lex) == '_') advance(lex);
+        }
+        /* Percentage sugar: 33% -> 33/100, 12.5% -> 125/1000 */
+        if (peek(lex) == '%') {
+            advance(lex); // consume '%'
+            char *raw = my_strndup(lex->source + start, lex->pos - 1 - start);
+            char *clean = strip_underscores(raw, strlen(raw));
+            free(raw);
+            /* If it contains a decimal point, convert to integer ratio.
+             * e.g. 12.5% -> 125/1000, 0.5% -> 5/1000               */
+            char *dot = strchr(clean, '.');
+            if (dot) {
+                int decimal_places = (int)strlen(dot + 1);
+                /* Build denominator: 100 * 10^decimal_places         */
+                long long denom = 100;
+                for (int _i = 0; _i < decimal_places; _i++) denom *= 10;
+                /* Build numerator: digits without the dot            */
+                char nodot[128];
+                size_t pre = dot - clean;
+                memcpy(nodot, clean, pre);
+                strcpy(nodot + pre, dot + 1);
+                long long numer = atoll(nodot);
+                char buf[128];
+                snprintf(buf, sizeof(buf), "%lld/%lld", numer, denom);
+                free(clean);
+                tok.value = my_strdup(buf);
+            } else {
+                char buf[128];
+                snprintf(buf, sizeof(buf), "%s/100", clean);
+                free(clean);
+                tok.value = my_strdup(buf);
+            }
+            tok.type = TOK_NUMBER; return tok;
         }
         char *raw = my_strndup(lex->source + start, lex->pos - start);
         tok.value = strip_underscores(raw, strlen(raw));
@@ -1568,6 +1690,25 @@ Token lexer_next_token(Lexer *lex) {
         tok.type  = TOK_LAMBDA_LIT;
         tok.value = param_name;
         return tok;
+    }
+
+    // Corner-bracket quasiquote sugar
+    // U+231C  ⌜  E2 8C 9C  -> TOK_QUASI_OPEN
+    // U+231D  ⌝  E2 8C 9D  -> TOK_QUASI_CLOSE
+    // U+231E  ⌞  E2 8C 9E  -> TOK_UNQUOTE_OPEN
+    // U+231F  ⌟  E2 8C 9F  -> TOK_UNQUOTE_CLOSE
+    if ((unsigned char)c == 0xE2 &&
+        (unsigned char)lex->source[lex->pos + 1] == 0x8C) {
+        unsigned char third = (unsigned char)lex->source[lex->pos + 2];
+        if (third == 0x9C || third == 0x9D ||
+            third == 0x9E || third == 0x9F) {
+            advance(lex); advance(lex); advance(lex);
+            if      (third == 0x9C) tok.type = TOK_QUASI_OPEN;
+            else if (third == 0x9D) tok.type = TOK_QUASI_CLOSE;
+            else if (third == 0x9E) tok.type = TOK_UNQUOTE_OPEN;
+            else                    tok.type = TOK_UNQUOTE_CLOSE;
+            return tok;
+        }
     }
 
     // Symbol  (letters, operator chars, digits mid-token, and '.' mid-token)
@@ -3211,6 +3352,7 @@ static AST *parse_list(Parser *p) {
             if (ret_type != NULL &&
                 p->current.type != TOK_RPAREN &&
                 p->current.type != TOK_EOF) {
+
                 /* Peek ahead to confirm '->' exists at depth 0 before
                  * entering pmatch mode. A plain expression body (e.g.
                  * just `x`) has no '->' and must be parsed normally. */
@@ -5125,16 +5267,15 @@ static AST *parse_list(Parser *p) {
             }
 
             /* Guard: literals cannot appear in function position
-             * unless we are inside a quoted form or were rewritten as infix. */
+             * unless we are inside a quoted form or were rewritten as infix.
+             * Ratios are intentionally excluded — (1/4 x) is valid sugar for scaling. */
             if (g_quote_depth == 0 &&
                 (first->type == AST_NUMBER  ||
                  first->type == AST_CHAR    ||
-                 first->type == AST_RATIO   ||
                  first->type == AST_KEYWORD)) {
                 const char *kind =
                     first->type == AST_NUMBER  ? "number"    :
-                    first->type == AST_CHAR    ? "character" :
-                    first->type == AST_RATIO   ? "ratio"     : "keyword";
+                    first->type == AST_CHAR    ? "character" : "keyword";
                 const char *lit =
                     first->literal_str         ? first->literal_str :
                     first->type == AST_KEYWORD ? first->keyword     : "?";
@@ -5520,6 +5661,59 @@ static AST *parse_expr_base(Parser *p) {
         int end_col = tok.column + (tok.value ? strlen(tok.value) : 1);
         p->current = lexer_next_token(p->lexer);
 
+        // Implicit multiplication sugar: 3x -> (* 3 x)
+        // Only when the symbol is immediately adjacent (no space) and is a plain identifier
+        if (p->current.type == TOK_SYMBOL &&
+            p->current.value &&
+            p->current.column == end_col &&
+            p->current.line == tok.line) {
+            const char *sv = p->current.value;
+            char fc = sv[0];
+            // Only trigger for plain identifiers (alpha or underscore start), not operators
+            if ((fc >= 'a' && fc <= 'z') || (fc >= 'A' && fc <= 'Z') || fc == '_' ||
+                (unsigned char)fc > 127) {
+                // Parse the adjacent expression as the RHS
+                // We do NOT call parse_expr here to avoid consuming too much;
+                // we just take the single symbol token as the variable.
+                AST *num_ast = ast_new_number(0.0, tok.value);
+                if (tok.value) {
+                    if (tok.value[0] == '0' && (tok.value[1] == 'x' || tok.value[1] == 'X')) {
+                        num_ast->raw_int = strtoull(tok.value, NULL, 16);
+                        num_ast->has_raw_int = true;
+                        num_ast->number = (double)(uint64_t)num_ast->raw_int;
+                    } else if (tok.value[0] == '0' && (tok.value[1] == 'b' || tok.value[1] == 'B')) {
+                        num_ast->raw_int = strtoull(tok.value + 2, NULL, 2);
+                        num_ast->has_raw_int = true;
+                        num_ast->number = (double)(uint64_t)num_ast->raw_int;
+                    } else if (tok.value[0] == '0' && (tok.value[1] == 'o' || tok.value[1] == 'O')) {
+                        num_ast->raw_int = strtoull(tok.value + 2, NULL, 8);
+                        num_ast->has_raw_int = true;
+                        num_ast->number = (double)(uint64_t)num_ast->raw_int;
+                    } else {
+                        num_ast->number = atof(tok.value);
+                    }
+                }
+                num_ast->line = tok.line;
+                num_ast->column = tok.column;
+                num_ast->end_column = end_col;
+
+                AST *var_ast = ast_new_symbol(p->current.value);
+                var_ast->line = p->current.line;
+                var_ast->column = p->current.column;
+                var_ast->end_column = p->current.column + (int)strlen(p->current.value);
+                p->current = lexer_next_token(p->lexer);
+
+                AST *mul = ast_new_list();
+                ast_list_append(mul, ast_new_symbol("*"));
+                ast_list_append(mul, num_ast);
+                ast_list_append(mul, var_ast);
+                mul->line = tok.line;
+                mul->column = tok.column;
+                mul->end_column = var_ast->end_column;
+                return mul;
+            }
+        }
+
         // Check if it's a ratio (contains '/')
         if (tok.value && strchr(tok.value, '/')) {
             char *slash = strchr(tok.value, '/');
@@ -5677,6 +5871,159 @@ static AST *parse_expr_base(Parser *p) {
         return list;
     }
 
+    case TOK_QUASI_OPEN: {
+        /* ⌜e1 e2 ⌞expr⌟ e3⌝
+         * No ⌞⌟ holes  ->  (quote      (e1 e2 e3))
+         * Has ⌞⌟ holes ->  (quasiquote (e1 e2 (unquote expr) e3))
+         * parse_expr's infix rewriter handles  a + b  ->  (+ a b)  naturally;
+         * TOK_UNQUOTE_CLOSE is not a symbol so the infix loop stops at ⌟. */
+        int ql = tok.line, qc = tok.column;
+        p->current = lexer_next_token(p->lexer); /* consume ⌜ */
+
+        AST *inner = ast_new_list();
+        inner->line   = ql;
+        inner->column = qc;
+        bool has_unquote = false;
+
+        while (p->current.type != TOK_QUASI_CLOSE &&
+               p->current.type != TOK_EOF) {
+            if (p->current.type == TOK_UNQUOTE_OPEN) {
+                /* ⌞expr⌟  ->  (unquote expr) */
+                int ul = p->current.line, uc = p->current.column;
+                p->current = lexer_next_token(p->lexer); /* consume ⌞ */
+
+                if (p->current.type == TOK_UNQUOTE_CLOSE)
+                    compiler_error(p->current.line, p->current.column,
+                                   "Empty unquote ⌞⌟ — expected an expression inside");
+                if (p->current.type == TOK_LPAREN)
+                    compiler_error(p->current.line, p->current.column,
+                                   "⌞(...)⌟ is invalid — do not wrap the expression in parens inside an unquote; write ⌞expr⌟ not ⌞(expr)⌟");
+
+                /* Collect all tokens until ⌟ into a temporary source string,
+                 * wrap in parens, and re-parse so the infix rewriter fires
+                 * normally on the whole expression e.g. 2 + 2 -> (+ 2 2).
+                 * We cannot call parse_expr once because it returns after the
+                 * first atom and leaves  + 2 ⌟  unconsumed.                 */
+                AST *uexpr = NULL;
+                {
+                    SB tmp; sb_init(&tmp);
+                    sb_putc(&tmp, '(');
+                    /* Drain tokens into a source string until ⌟ */
+                    Lexer drain = *p->lexer;
+                    Token dtok  = p->current;
+                    /* We already have p->current as first token past ⌞.
+                     * Walk forward using a cloned lexer to build the string,
+                     * then reparse it fresh.                                 */
+                    /* Reset: re-lex from the same position using a clone */
+                    Lexer relex = *p->lexer;
+                    /* p->current is already lexed; put its text in first */
+                    bool first_dt = true;
+                    Token cur = p->current;
+                    /* We need to collect the raw source between ⌞ and ⌟.
+                     * The cleanest way: use the lexer position directly.
+                     * p->lexer->pos points just AFTER p->current was lexed.
+                     * We scan source bytes from (pos - len(cur)) forward to
+                     * the ⌟ bytes and grab that slice.                      */
+                    const char *src   = p->lexer->source;
+                    /* Find start: rewind by re-scanning from last known safe
+                     * point is fragile. Instead just re-lex into SB.        */
+                    /* Simpler: lex tokens from p->current forward into SB,
+                     * stopping before TOK_UNQUOTE_CLOSE.                    */
+                    {
+                        /* cur = p->current (already consumed from lexer) */
+                        Token t2 = cur;
+                        Lexer l2 = *p->lexer; /* position AFTER cur */
+                        while (t2.type != TOK_UNQUOTE_CLOSE &&
+                               t2.type != TOK_QUASI_CLOSE   &&
+                               t2.type != TOK_EOF) {
+                            if (!first_dt) sb_putc(&tmp, ' ');
+                            first_dt = false;
+                            if (t2.value)
+                                sb_puts(&tmp, t2.value);
+                            else if (t2.type == TOK_ARROW)
+                                sb_puts(&tmp, "->");
+                            else if (t2.type == TOK_LPAREN)
+                                sb_putc(&tmp, '(');
+                            else if (t2.type == TOK_RPAREN)
+                                sb_putc(&tmp, ')');
+                            else if (t2.type == TOK_LBRACKET)
+                                sb_putc(&tmp, '[');
+                            else if (t2.type == TOK_RBRACKET)
+                                sb_putc(&tmp, ']');
+                            free(t2.value);
+                            t2 = lexer_next_token(&l2);
+                        }
+                        /* l2 is positioned just after the ⌟ was lexed.
+                         * t2 held TOK_UNQUOTE_CLOSE when the loop broke —
+                         * we need p->current = that token, not the next one.
+                         * Restore lexer to l2 state and synthesize the close
+                         * token so the check below sees TOK_UNQUOTE_CLOSE.  */
+                        *p->lexer         = l2;
+                        p->current.type   = TOK_UNQUOTE_CLOSE;
+                        p->current.value  = NULL;
+                        p->current.line   = tok.line;
+                        p->current.column = tok.column;
+                        /* p->current is now TOK_UNQUOTE_CLOSE */
+                    }
+                    sb_putc(&tmp, ')');
+                    char *expr_src = sb_take(&tmp);
+
+                    /* Parse the wrapped expression */
+                    int saved_qd = g_quote_depth;
+                    g_quote_depth = 0;
+                    Lexer el; lexer_init(&el, expr_src);
+                    Parser ep; ep.lexer = &el; ep.current = lexer_next_token(&el);
+                    uexpr = parse_expr(&ep);
+                    g_quote_depth = saved_qd;
+                    free(expr_src);
+                }
+
+                if (p->current.type != TOK_UNQUOTE_CLOSE)
+                    compiler_error(p->current.line, p->current.column,
+                                   "Expected ⌟ to close unquote expression");
+                int ue = p->current.column + 3;
+                p->current = lexer_next_token(p->lexer); /* consume ⌟ */
+
+                AST *unquote_node = ast_new_list();
+                ast_list_append(unquote_node, ast_new_symbol("unquote"));
+                ast_list_append(unquote_node, uexpr);
+                unquote_node->line       = ul;
+                unquote_node->column     = uc;
+                unquote_node->end_column = ue;
+                ast_list_append(inner, unquote_node);
+                has_unquote = true;
+            } else {
+                g_quote_depth++;
+                ast_list_append(inner, parse_expr(p));
+                g_quote_depth--;
+            }
+        }
+
+        if (p->current.type != TOK_QUASI_CLOSE)
+            compiler_error(ql, qc, "Expected ⌝ to close quasiquote");
+        int qe = p->current.column + 3;
+        p->current = lexer_next_token(p->lexer); /* consume ⌝ */
+        inner->end_column = qe;
+
+        AST *result = ast_new_list();
+        ast_list_append(result, ast_new_symbol(has_unquote ? "quasiquote" : "quote"));
+        ast_list_append(result, inner);
+        result->line       = ql;
+        result->column     = qc;
+        result->end_column = qe;
+        return result;
+    }
+
+    case TOK_UNQUOTE_OPEN:
+        compiler_error(tok.line, tok.column,
+                       "Unquote bracket used outside of a quasiquote block");
+        break;
+
+    case TOK_QUASI_CLOSE:
+        compiler_error(tok.line, tok.column,
+                       "Unexpected closing corner bracket with no matching open");
+        break;
+
     case TOK_ARROW: {
         int end_col = tok.column + 2;
         p->current = lexer_next_token(p->lexer);
@@ -5774,6 +6121,51 @@ AST *parse_expr(Parser *p) {
             pow_node->end_column = end_col;
             expr_result = pow_node;
         }
+    }
+
+    /* Postfix index: expr[x] -> (expr x), expr[1 2 3] -> (expr 1 2 3) */
+    /* Only when adjacent (no space): arr[0] yes, arr [0] no            */
+    while (p->current.type == TOK_LBRACKET &&
+           p->current.column == expr_result->end_column &&
+           p->current.line == expr_result->line) {
+        int idx_line = p->current.line;
+        int idx_col  = p->current.column;
+        p->current = lexer_next_token(p->lexer); /* consume '[' */
+        AST *call = ast_new_list();
+        ast_list_append(call, expr_result);
+        while (p->current.type != TOK_RBRACKET && p->current.type != TOK_EOF)
+            ast_list_append(call, parse_expr(p));
+        if (p->current.type != TOK_RBRACKET)
+            compiler_error(p->current.line, p->current.column,
+                           "Expected ']' to close index expression");
+        int end_col = p->current.column + 1;
+        p->current = lexer_next_token(p->lexer); /* consume ']' */
+        call->line       = idx_line;
+        call->column     = idx_col;
+        call->end_column = end_col;
+        expr_result = call;
+    }
+
+    /* Postfix call: expr(args...) -> (expr args...), only when adjacent (no space) */
+    while (p->current.type == TOK_LPAREN &&
+           p->current.column == expr_result->end_column &&
+           p->current.line == expr_result->line) {
+        int call_line = p->current.line;
+        int call_col  = p->current.column;
+        p->current = lexer_next_token(p->lexer); /* consume '(' */
+        AST *call = ast_new_list();
+        ast_list_append(call, expr_result);
+        while (p->current.type != TOK_RPAREN && p->current.type != TOK_EOF)
+            ast_list_append(call, parse_expr(p));
+        if (p->current.type != TOK_RPAREN)
+            compiler_error(p->current.line, p->current.column,
+                           "Expected ')' to close postfix call");
+        int end_col = p->current.column + 1;
+        p->current = lexer_next_token(p->lexer); /* consume ')' */
+        call->line       = call_line;
+        call->column     = call_col;
+        call->end_column = end_col;
+        expr_result = call;
     }
 
     /* Postfix dot: (expr).field.field2 */

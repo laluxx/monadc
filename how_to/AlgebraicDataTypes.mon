@@ -41,11 +41,9 @@
 ;; show Green
 
 ;; NEXT
-;; define square λx.x²
+;; DEFINE square λx.x²
 
 ;; define square x ↦ x²
-
-
 
 
 ;; define f :: Enum => a -> a
@@ -96,7 +94,10 @@
 ;;   []  : Vec A zero
 ;;    .  : ∀ (x : A) (xs : Vec A n) → Vec A (suc n)
 
+;; define double :: Int -> Int
+;;   x -> x * 2
 
+;; double double 3 3
 
 
 ;; show ((lambda (x) x) 103)

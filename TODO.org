@@ -556,6 +556,31 @@ instance plus with {x : Int} x 3
    #+end_src
 
 
+* TODO Layer modal type theory
+
+Wwe should go to this: =Ψ | Γ ⊢ t : Type=
+
+Where:
+  =Ψ= (meta context)   = variables bound at the current layer (cannot be analyzed intensionally)
+  =Γ= (object context) = variables bound one layer down       (can be analyzed)
+
+A type =A= is annotated with its layer level ~ℓ ∈ ℕ~.
+
+
+** The Modal Operators (not S4!)
+
+Two key modalities:
+
+    1. Box =□A= : "Code of type =A= at the next layer up"
+      - =□A= is a type at layer =ℓ= when =A= is a type at layer =ℓ=
+      - Introduction: from ~Ψ | Γ ⊢ M : A~, derive ~Ψ | Γ ⊢ box M : □A~
+
+    2. Diamond =◇A= : "Suspended computation that will yield =A= after evaluation"
+        This is the type of =eval=
+
+
+
+
 
 * TODO β reduction tracing
 

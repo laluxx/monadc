@@ -22,7 +22,6 @@
 ;;   "Cool positive even integers"
 
 
-
 ;; type Natural { x ∈ Int | x >= 0 }
 ;;   :doc "Natural number type"
 ;;   :alias ℕ
@@ -36,12 +35,6 @@
 
 
 
-
-
-
-
-
-
 ;; type Even { x ∈ Int | x % 2 = 0 }
 ;;   "Even integers"
 
@@ -50,20 +43,20 @@
 
 ;; show passedEven? -2
 
-
 ;; type Positive { x ∈ Int | x > 0 }
 ;;   "Integers greater than zero"
 
+;; show Positive? 3
+
 ;; type PositiveEven
 ;;   { n ∈ Int
-;;   | ((Positive? n) and (Even? n)) }
+;;   | Positive? n and Even? n }
 ;;   "Positive even integers"
 
 ;; define passedPositiveEven? :: PositiveEven -> Bool
 ;;   x -> PositiveEven? x
 
 ;; show passedPositiveEven? 2  ; -2 is even but not positive
-
 
 
 ;; (type Email
@@ -73,19 +66,15 @@
 ;;         count s > 5
 ;;         not s contains? " " })
 
-
-;; Questa funzione non potra' MAI ritornare False,
-;; Perche' puoi SOLTANTO passare email, e' un compile time error altrimenti.
 ;; define passedEmail? :: Email -> Bool
 ;;   e -> Email? e
 
 ;; show passedEmail? "ciao.@"
 
-;; CompanyEmail e' un subset di Email.
-;; Puoi immaginarli come set sempre piu' piccoli e specifici
-;; (type CompanyEmail
+;; type CompanyEmail
 ;;   { s ∈ Email
-;;   | s ends-with? "@company.com" })
+;;   | s ends-with? "@company.com" }
+;;   "Email but a company one!"
 
 ;; Stessa storia dell'altra
 ;; define passedCompanyEmail? :: CompanyEmail -> Bool

@@ -1,20 +1,64 @@
 
+;; define x 3
+
+;; show 2x + 3x
+
+;; define square λx.x²
+
+;; show map square numbers
+
+;; define double x ↦ 2x
+
+;; define square x ↦ x²
+
+define add x y ↦ x + y
 
 
 
-define string->int :: String -> Int?
-  "1" -> 1
-  "2" -> 2
-  "3" -> 3
-  "4" -> 4
-  _   -> nil
 
 
-define double :: Int -> Int
-  n -> n * 2
+
+;; TODO Matrix literals
+;; define matrix
+;;  ╭─
+;;    1 2 3 4 5 6 7 9
+;;    1 2 3 4 5 6 7 9
+;;    1 2 3 4 5 6 7 9
+;;    1 2 3 4 5 6 7 9
+;;    1 2 3 4 5 6 7 9
+;;    1 2 3 4 5 6 7 9
+;;    1 2 3 4 5 6 7 9
+;;                   ─╯
 
 
-show double string->int "1" ?? error "ciao"
+;; define numbers ⌜1 2 3 4⌝
+
+;; define numbers ⌜1 2 3 ⌞2 + 2⌟ 5 6 7⌝
+
+;; define codice ⌜3 + 3⌝
+
+;; eval codice
+
+
+;; define string->int :: String -> Int?
+;;   "1" -> 1
+;;   "2" -> 2
+;;   "3" -> 3
+;;   "4" -> 4
+;;   _   -> nil
+
+
+;; show string->int "1"
+
+
+;; show Char 65
+
+
+;; define double :: Int -> Int
+;;   n -> n * 2
+
+
+;; show double string->int "1" ?? error "ciao"
 
 
 
@@ -30,26 +74,22 @@ show double string->int "1" ?? error "ciao"
 ;;     | otherwise     -> nil
 
 
-;; fn atoi(s){
-;;    "Parses a decimal integer from string `s`."
-;;    if(!is_str(s)){ return 0 }
-;;    mut n = str_len(s)
-;;    if(n == 0){ return 0 }
-;;    mut i = 0
-;;    mut sign = 1
-;;    if(load8(s, 0) == 45){
-;;       sign = -1
-;;       i = 1
-;;    }
-;;    mut val = 0
-;;    while(i < n){
-;;       mut c = load8(s, i)
-;;       if(c < 48 || c > 57){ break }
-;;       val = val * 10 + (c - 48)
-;;       i += 1
-;;    }
-;;    if(sign < 0){ val = 0 - val }
-;;    val
-;; }
+
+
+;; define returnString -> String
+;;   "porcoddio"
+
+;; show returnString
+
+;; define square :: a -> a
+;;   x -> x * x
+
+;; show square(3)
+
+;; define add :: Int -> Int -> Int
+;;   x y -> x + y
+
+
+;; show add(3 2)
 
 

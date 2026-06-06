@@ -294,6 +294,7 @@ int64_t       rt_array_length(RuntimeValue *array);
 
 /// Ratio
 
+RuntimeValue *rt_ratio_from_int(int64_t n);
 RuntimeValue *rt_ratio_add(RuntimeValue *a, RuntimeValue *b);
 RuntimeValue *rt_ratio_sub(RuntimeValue *a, RuntimeValue *b);
 RuntimeValue *rt_ratio_mul(RuntimeValue *a, RuntimeValue *b);
@@ -481,6 +482,7 @@ LLVMValueRef get_rt_array_length(CodegenContext *ctx);
 
 //// Ratio
 
+LLVMValueRef get_rt_ratio_from_int(CodegenContext *ctx);
 LLVMValueRef get_rt_ratio_add(CodegenContext *ctx);
 LLVMValueRef get_rt_ratio_sub(CodegenContext *ctx);
 LLVMValueRef get_rt_ratio_mul(CodegenContext *ctx);

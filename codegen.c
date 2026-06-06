@@ -3944,6 +3944,30 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             return result;
         }
 
+        // Handle (1/4 x) — ratio applied as scaling function: returns (x * numer) / denom
+        if (head->type == AST_RATIO && ast->list.count == 2) {
+            CodegenResult arg_r = codegen_expr(ctx, ast->list.items[1]);
+            long long numer = head->ratio.numerator;
+            long long denom = head->ratio.denominator;
+            if (type_is_float(arg_r.type)) {
+                LLVMTypeRef  dbl  = LLVMDoubleTypeInContext(ctx->context);
+                LLVMValueRef scale = LLVMConstReal(dbl, (double)numer / (double)denom);
+                result.value = LLVMBuildFMul(ctx->builder, arg_r.value, scale, "ratio_scale");
+                result.type  = type_float();
+            } else {
+                LLVMTypeRef  i64   = LLVMInt64TypeInContext(ctx->context);
+                LLVMValueRef arg64 = arg_r.value;
+                if (LLVMTypeOf(arg64) != i64)
+                    arg64 = LLVMBuildIntCast2(ctx->builder, arg64, i64, 1, "arg64");
+                LLVMValueRef n = LLVMConstInt(i64, (unsigned long long)numer, 1);
+                LLVMValueRef d = LLVMConstInt(i64, (unsigned long long)denom, 0);
+                LLVMValueRef mul = LLVMBuildMul(ctx->builder, arg64, n, "ratio_mul");
+                result.value     = LLVMBuildSDiv(ctx->builder, mul, d, "ratio_div");
+                result.type      = type_int();
+            }
+            return result;
+        }
+
         if (head->type == AST_SYMBOL) {
             /* check_purity(ctx, ctx->current_function_name, head->symbol, ast); */ // TODO HERE
 
@@ -5420,6 +5444,83 @@ if (ast->list.count >= 5) {
                 return result;
             }
 
+
+            if (strcmp(head->symbol, "quasiquote") == 0) {
+                if (ast->list.count != 2) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'quasiquote' requires 1 argument",
+                            parser_get_filename(), ast->line, ast->column);
+                }
+                AST *quoted = ast->list.items[1];
+                if (quoted->type != AST_LIST) {
+                    /* Non-list quasiquote — just evaluate it directly */
+                    return codegen_expr(ctx, quoted);
+                }
+                /* Build a runtime list, evaluating (unquote e) holes
+                 * and treating everything else as a literal.          */
+                LLVMValueRef list_fn = get_rt_list_new(ctx);
+                LLVMValueRef list = LLVMBuildCall2(ctx->builder,
+                                                   LLVMGlobalGetValueType(list_fn),
+                                                   list_fn, NULL, 0, "qlist");
+                for (size_t i = 0; i < quoted->list.count; i++) {
+                    AST *elem = quoted->list.items[i];
+                    LLVMValueRef elem_val = NULL;
+
+                    /* Check for (unquote e) */
+                    bool is_unquote = (elem->type == AST_LIST &&
+                                       elem->list.count == 2 &&
+                                       elem->list.items[0]->type == AST_SYMBOL &&
+                                       strcmp(elem->list.items[0]->symbol, "unquote") == 0);
+                    if (is_unquote) {
+                        /* Evaluate the expression inside the hole, then box
+                         * the result so it matches the ptr the list expects. */
+                        CodegenResult r = codegen_expr(ctx, elem->list.items[1]);
+                        elem_val = r.value;
+                        if (elem_val) {
+                            /* If the result is an unboxed integer, box it */
+                            LLVMTypeRef val_type = LLVMTypeOf(elem_val);
+                            if (val_type == LLVMInt64TypeInContext(ctx->context) ||
+                                val_type == LLVMInt32TypeInContext(ctx->context) ||
+                                val_type == LLVMInt1TypeInContext(ctx->context)) {
+                                LLVMValueRef box_fn = get_rt_value_int(ctx);
+                                /* widen to i64 if needed */
+                                if (val_type != LLVMInt64TypeInContext(ctx->context)) {
+                                    elem_val = LLVMBuildSExt(ctx->builder, elem_val,
+                                                             LLVMInt64TypeInContext(ctx->context),
+                                                             "box_widen");
+                                }
+                                LLVMValueRef box_args[] = {elem_val};
+                                elem_val = LLVMBuildCall2(ctx->builder,
+                                                          LLVMGlobalGetValueType(box_fn),
+                                                          box_fn, box_args, 1, "boxed");
+                            } else if (val_type == LLVMDoubleTypeInContext(ctx->context)) {
+                                LLVMValueRef box_fn = get_rt_value_float(ctx);
+                                LLVMValueRef box_args[] = {elem_val};
+                                elem_val = LLVMBuildCall2(ctx->builder,
+                                                          LLVMGlobalGetValueType(box_fn),
+                                                          box_fn, box_args, 1, "boxed");
+                            }
+                            /* If already a ptr (already boxed), use as-is */
+                        }
+                    } else {
+                        /* Treat as literal — same as quote */
+                        elem_val = ast_to_runtime_value(ctx, elem);
+                    }
+
+                    if (elem_val) {
+                        LLVMValueRef append_fn = get_rt_list_append(ctx);
+                        LLVMValueRef args[] = {list, elem_val};
+                        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(append_fn),
+                                       append_fn, args, 2, "");
+                    }
+                }
+                LLVMValueRef vl_fn = get_rt_value_list(ctx);
+                LLVMTypeRef  vl_pt = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMTypeRef  vl_ft = LLVMFunctionType(vl_pt, &vl_pt, 1, 0);
+                LLVMValueRef vl_a[] = {list};
+                result.value = LLVMBuildCall2(ctx->builder, vl_ft, vl_fn, vl_a, 1, "quasiquoted_list");
+                result.type = type_list(NULL, 0);
+                return result;
+            }
 
             if (strcmp(head->symbol, "quote") == 0) {
                 if (ast->list.count != 2) {
@@ -9127,27 +9228,56 @@ if (ast->list.count >= 5) {
                     return result;
                 }
 
-                // Ratio arithmetic
-                if (result_type->kind == TYPE_RATIO) {
-                    for (size_t i = 2; i < ast->list.count; i++) {
-                        CodegenResult rhs = codegen_expr(ctx, ast->list.items[i]);
-                        if (rhs.type->kind != TYPE_RATIO) {
-                            CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot mix Ratio with other numeric types",
-                                    parser_get_filename(), ast->line, ast->column);
+                // Ratio arithmetic — fires when ANY operand is a Ratio.
+                // If the first operand is Int/Float, we scan ahead to detect
+                // a Ratio rhs and promote lhs to Ratio before proceeding.
+                {
+                    bool any_ratio = (result_type->kind == TYPE_RATIO);
+                    if (!any_ratio) {
+                        for (size_t i = 2; i < ast->list.count && !any_ratio; i++) {
+                            AST *peek_ast = ast->list.items[i];
+                            if (peek_ast->inferred_type &&
+                                peek_ast->inferred_type->kind == TYPE_RATIO)
+                                any_ratio = true;
+                            else if (peek_ast->type == AST_RATIO)
+                                any_ratio = true;
                         }
-                        LLVMValueRef fn = NULL;
-                        if      (strcmp(op, "+") == 0) fn = get_rt_ratio_add(ctx);
-                        else if (strcmp(op, "-") == 0) fn = get_rt_ratio_sub(ctx);
-                        else if (strcmp(op, "*") == 0) fn = get_rt_ratio_mul(ctx);
-                        else if (strcmp(op, "/") == 0) fn = get_rt_ratio_div(ctx);
-                        LLVMValueRef args[] = {result_value, rhs.value};
-                        result_value = LLVMBuildCall2(ctx->builder,
-                                                      LLVMGlobalGetValueType(fn),
-                                                      fn, args, 2, "ratio_op");
                     }
-                    result.type  = result_type;
-                    result.value = result_value;
-                    return result;
+                    if (any_ratio) {
+                        /* Promote lhs to Ratio if it is a plain integer */
+                        if (result_type->kind != TYPE_RATIO) {
+                            LLVMValueRef promote_fn = get_rt_ratio_from_int(ctx);
+                            LLVMValueRef args[] = {result_value};
+                            result_value = LLVMBuildCall2(ctx->builder,
+                                               LLVMGlobalGetValueType(promote_fn),
+                                               promote_fn, args, 1, "int_to_ratio");
+                            result_type = type_ratio();
+                        }
+                        for (size_t i = 2; i < ast->list.count; i++) {
+                            CodegenResult rhs = codegen_expr(ctx, ast->list.items[i]);
+                            /* Promote rhs if needed */
+                            if (rhs.type->kind != TYPE_RATIO) {
+                                LLVMValueRef promote_fn = get_rt_ratio_from_int(ctx);
+                                LLVMValueRef args[] = {rhs.value};
+                                rhs.value = LLVMBuildCall2(ctx->builder,
+                                                LLVMGlobalGetValueType(promote_fn),
+                                                promote_fn, args, 1, "int_to_ratio");
+                                rhs.type = type_ratio();
+                            }
+                            LLVMValueRef fn = NULL;
+                            if      (strcmp(op, "+") == 0) fn = get_rt_ratio_add(ctx);
+                            else if (strcmp(op, "-") == 0) fn = get_rt_ratio_sub(ctx);
+                            else if (strcmp(op, "*") == 0) fn = get_rt_ratio_mul(ctx);
+                            else if (strcmp(op, "/") == 0) fn = get_rt_ratio_div(ctx);
+                            LLVMValueRef ratio_args[] = {result_value, rhs.value};
+                            result_value = LLVMBuildCall2(ctx->builder,
+                                                          LLVMGlobalGetValueType(fn),
+                                                          fn, ratio_args, 2, "ratio_op");
+                        }
+                        result.type  = type_ratio();
+                        result.value = result_value;
+                        return result;
+                    }
                 }
 
                 // Binary operations
@@ -12744,10 +12874,10 @@ void register_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "disj",         2,  0, "Remove an element from a set", NULL);
     env_insert_builtin(ctx->env, "conj!",        2,  0, "Mutate a set by adding an element in place", NULL);
     env_insert_builtin(ctx->env, "disj!",        2,  0, "Mutate a set by removing an element in place", NULL);
-    env_insert_builtin(ctx->env, "contains?",    2,  0, "Test if a set contains an element", NULL);
-    env_insert_builtin(ctx->env, "ends-with?",   2,  0, "Test if a string, list or array ends with a suffix", NULL);
-    env_insert_builtin(ctx->env, "starts-with?", 2,  0, "Test if a string, list or array starts with a prefix", NULL);
-    env_insert_builtin(ctx->env, "count",        1,  0, "Get number of elements in a set", NULL);
+    env_insert_builtin(ctx->env, "contains?",    2,  0, "Test if a collection contains an element", NULL);
+    env_insert_builtin(ctx->env, "ends-with?",   2,  0, "Test if a collection ends with a suffix", NULL);
+    env_insert_builtin(ctx->env, "starts-with?", 2,  0, "Test if a collection starts with a prefix", NULL);
+    env_insert_builtin(ctx->env, "count",        1,  0, "Get number of elements in a collection", NULL);
 
     // List operations
     env_insert_builtin(ctx->env, "list",    0, -1, "Create a list from arguments", NULL);
