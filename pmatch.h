@@ -28,6 +28,8 @@ ASTPattern parse_single_pattern(Parser *p);
 
 /// Desugarer
 
+void pmatch_rename_anon_params(AST *pm, ASTParam *params, int param_count);
+
 // Transform an AST_PMATCH node into an equivalent (cond ...) AST
 // given the function's parameter list.
 // The returned AST is freshly allocated and owned by the caller.

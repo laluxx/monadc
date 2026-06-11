@@ -365,19 +365,24 @@ static LLVMValueRef codegen_specialize(CodegenContext *ctx,
                                               total_params, 0);
     LLVMValueRef func     = LLVMAddFunction(ctx->module, spec_name, func_type);
 
-    // Register in env so recursive calls resolve
-    env_insert_func(ctx->env, spec_name,
+    // Create the child env FIRST before any insertions.
+    // spec_name goes into the OUTER env so the call site can find it
+    // after this function returns and the child is freed.
+    // fn_name shadow goes into the CHILD env only, so scheme=NULL
+    // never touches the outer polymorphic entry.
+    Env *spec_outer_env = ctx->env;
+    ctx->env = env_create_child(spec_outer_env);
+
+    env_insert_func(spec_outer_env, spec_name,
                     clone_params(env_params, total_params),
                     total_params, type_clone(ret_type),
                     func, NULL, NULL);
-    EnvEntry *spec_entry = env_lookup(ctx->env, spec_name);
+    EnvEntry *spec_entry = env_lookup(spec_outer_env, spec_name);
     if (spec_entry) {
         spec_entry->lifted_count   = 0;
         spec_entry->is_closure_abi = false;
     }
-    // Shadow the original name so recursive calls inside the specialized
-    // body (including thunks for lazy cons tails) resolve to the
-    // specialized function, not the generic Main__append base entry.
+
     env_insert_func(ctx->env, fn_name,
                     clone_params(env_params, total_params),
                     total_params, type_clone(ret_type),
@@ -389,6 +394,7 @@ static LLVMValueRef codegen_specialize(CodegenContext *ctx,
         shadow_entry->source_ast     = entry->source_ast;
         shadow_entry->scheme         = NULL;
     }
+
 
     // Compile the body
     LLVMBasicBlockRef entry_block = LLVMAppendBasicBlockInContext(
@@ -440,9 +446,11 @@ static LLVMValueRef codegen_specialize(CodegenContext *ctx,
 
     LLVMBuildRet(ctx->builder, ret_val);
 
-    // Restore
-    env_free(ctx->env);
-    ctx->env = saved_env;
+    // Restore — free the params child, then the shadow child,
+    // then restore to spec_outer_env (not owned here, do not free).
+    env_free(ctx->env);   // free params child
+    env_free(saved_env);  // free shadow child (saved_env == the child we created)
+    ctx->env = spec_outer_env;
     if (saved_block)
         LLVMPositionBuilderAtEnd(ctx->builder, saved_block);
 
@@ -671,7 +679,7 @@ LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *t) {
         }
         /* Known-size stack array */
         LLVMTypeRef elem_type = type_to_llvm(ctx, t->arr_element_type);
-        return LLVMArrayType(elem_type, t->arr_size);
+        return LLVMArrayType2(elem_type, (uint64_t)t->arr_size);
     }
     case TYPE_SET:
         return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
@@ -2355,17 +2363,20 @@ static LLVMValueRef wrap_func_as_closure(CodegenContext *ctx, EnvEntry *e) {
         /* Closure-ABI function — wrap directly without typed trampoline.
          * The function already expects (ptr env, i32 n, ptr args).     */
         LLVMValueRef fn_ptr = LLVMBuildBitCast(ctx->builder, fn_to_wrap, ptr_t, "fn_ptr");
-        LLVMValueRef clo_fn = get_rt_value_closure(ctx);
-        LLVMTypeRef  cp[]   = {ptr_t, ptr_t, i32, i32};
-        LLVMTypeRef  cft    = LLVMFunctionType(ptr_t, cp, 4, 0);
+        LLVMValueRef clo_fn = get_rt_value_closure_named(ctx);
+        LLVMTypeRef  cp[]   = {ptr_t, ptr_t, i32, i32, ptr_t};
+        LLVMTypeRef  cft    = LLVMFunctionType(ptr_t, cp, 5, 0);
         int declared = e->param_count - e->lifted_count;
+        const char *fn_name = e->name ? e->name : "?";
+        LLVMValueRef name_str = LLVMBuildGlobalStringPtr(ctx->builder, fn_name, "fn_name");
         LLVMValueRef cargs[] = {
             fn_ptr,
             LLVMConstPointerNull(ptr_t),
             LLVMConstInt(i32, 0, 0),
-            LLVMConstInt(i32, declared, 0)
+            LLVMConstInt(i32, declared, 0),
+            name_str
         };
-        return LLVMBuildCall2(ctx->builder, cft, clo_fn, cargs, 4, "closure");
+        return LLVMBuildCall2(ctx->builder, cft, clo_fn, cargs, 5, "closure");
     }
 
     if (!e->is_closure_abi) {
@@ -2470,18 +2481,21 @@ static LLVMValueRef wrap_func_as_closure(CodegenContext *ctx, EnvEntry *e) {
         fn_to_wrap = tramp;
     }
 
-    /* Wrap fn_to_wrap in rt_value_closure with empty env */
+    /* Wrap fn_to_wrap in rt_value_closure_named with empty env */
     LLVMValueRef fn_ptr = LLVMBuildBitCast(ctx->builder, fn_to_wrap, ptr_t, "fn_ptr");
-    LLVMValueRef clo_fn = get_rt_value_closure(ctx);
-    LLVMTypeRef  cp[]   = {ptr_t, ptr_t, i32, i32};
-    LLVMTypeRef  cft    = LLVMFunctionType(ptr_t, cp, 4, 0);
+    LLVMValueRef clo_fn = get_rt_value_closure_named(ctx);
+    LLVMTypeRef  cp[]   = {ptr_t, ptr_t, i32, i32, ptr_t};
+    LLVMTypeRef  cft    = LLVMFunctionType(ptr_t, cp, 5, 0);
+    const char *fn_name = e->name ? e->name : "?";
+    LLVMValueRef name_str = LLVMBuildGlobalStringPtr(ctx->builder, fn_name, "fn_name");
     LLVMValueRef cargs[] = {
         fn_ptr,
         LLVMConstPointerNull(ptr_t),
         LLVMConstInt(i32, 0, 0),
-        LLVMConstInt(i32, declared, 0)
+        LLVMConstInt(i32, declared, 0),
+        name_str
     };
-    return LLVMBuildCall2(ctx->builder, cft, clo_fn, cargs, 4, "closure");
+    return LLVMBuildCall2(ctx->builder, cft, clo_fn, cargs, 5, "closure");
 }
 
 static LLVMValueRef resolve_to_closure(CodegenContext *ctx, AST *fn_node) {
@@ -4258,6 +4272,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     /* fprintf(stderr, "DEBUG all_params_unknown=%d has_type_vars=%d use_closure_abi=%d\n", */
                     /*         all_params_unknown, has_type_vars, use_closure_abi); */
                     bool is_poly_stub  = !use_closure_abi && all_params_unknown && has_type_vars;
+
                     /* fprintf(stderr, "DEBUG is_poly_stub=%d\n", is_poly_stub); */
 
                     /* ── Compile-time refinement check for 0-arg functions ──
@@ -4555,6 +4570,44 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     Env *saved_env = ctx->env;
                     ctx->env = env_create_child(saved_env);
 
+                    /* A fully-polymorphic function with no annotations and quantified
+                     * type vars should never have its body compiled at definition time.
+                     * Emit only a declaration; codegen_specialize produces typed
+                     * versions at every call site with concrete types.              */
+                    if (is_poly_stub) {
+                        LLVMPositionBuilderAtEnd(ctx->builder, entry_block);
+                        LLVMBuildUnreachable(ctx->builder);
+                        LLVMSetLinkage(func, LLVMExternalWeakLinkage);
+
+                        ctx->init_fn = saved_init;
+                        env_free(ctx->env);
+                        ctx->env = saved_env;
+                        if (saved_block)
+                            LLVMPositionBuilderAtEnd(ctx->builder, saved_block);
+
+                        env_insert_func(ctx->env, var_name, env_params, total_params,
+                                        ret_type, func, lambda->lambda.docstring, NULL);
+                        if (hm_scheme) env_set_scheme(ctx->env, var_name, hm_scheme);
+                        EnvEntry *epoly = env_lookup(ctx->env, var_name);
+                        if (epoly) {
+                            epoly->lifted_count   = 0;
+                            epoly->is_closure_abi = false;
+                            epoly->source_ast     = ast_clone(lambda);
+                            epoly->llvm_name      = strdup(LLVMGetValueName(func));
+                        }
+
+                        bool is_private2 = ctx->module_ctx &&
+                                           !should_export_symbol(ctx->module_ctx, var_name);
+                        print_defined(var_name, ret_type, ctx->env, is_private2);
+
+                        free(param_types);
+                        for (int i = 0; i < captured_count; i++) free(captured_vars[i]);
+                        free(captured_vars);
+                        result.value = codegen_current_fn_zero_value(ctx);
+                        result.type  = type_unknown();
+                        return result;
+                    }
+
                     // env param (index 0 in closure ABI)
                     LLVMValueRef env_llvm_param = NULL;
                     if (use_closure_abi) {
@@ -4828,12 +4881,19 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         if (lambda->lambda.body->type == AST_ASM) {
                             RegisterAllocator reg_alloc;
                             reg_alloc_init(&reg_alloc);
+                            fprintf(stderr, "DEBUG asm env_params:\n");
+                            for (int i = 0; i < total_params; i++)
+                                fprintf(stderr, "  env_params[%d].name = '%s'\n", i, env_params[i].name ? env_params[i].name : "(null)");
+                            fprintf(stderr, "DEBUG lambda params:\n");
+                            for (int i = 0; i < lambda->lambda.param_count; i++)
+                                fprintf(stderr, "  lambda->lambda.params[%d].name = '%s'\n", i, lambda->lambda.params[i].name ? lambda->lambda.params[i].name : "(null)");
                             AsmContext asm_ctx = {
                                 .params      = env_params,
                                 .param_count = total_params,
                                 .reg_alloc   = &reg_alloc,
                                 .naked       = lambda->lambda.naked
                             };
+
                             int asm_inst_count;
                             AsmInstruction *asm_instructions = preprocess_asm(
                                 lambda->lambda.body, &asm_ctx, &asm_inst_count);
@@ -10460,6 +10520,12 @@ if (ast->list.count >= 5) {
                         break;
                     }
                 }
+                fprintf(stderr, "DEBUG guard: has_rest=%d has_arr=%d scheme=%p qcount=%d src=%p fn='%s'\n",
+                        has_rest, has_arr_param,
+                        (void*)(entry->scheme),
+                        entry->scheme ? entry->scheme->quantified_count : -1,
+                        (void*)(entry->source_ast),
+                        head->symbol);
                 if (!has_rest && !has_arr_param &&
                     entry->scheme && entry->scheme->quantified_count > 0
                     && entry->source_ast) {
@@ -10471,14 +10537,58 @@ if (ast->list.count >= 5) {
                     ts.to    = malloc(sizeof(Type*)  * nq);
 
                     // Map each quantified var to the concrete type of the
-                    // corresponding argument
+                    // corresponding argument. We derive the type directly from
+                    // the argument AST/env rather than trusting inferred_type,
+                    // which is a mutable field that may have been stamped by a
+                    // previous call site (the entire bug we are fixing here).
                     for (int i = 0; i < nq && i < declared_params; i++) {
                         ts.from[i] = entry->scheme->quantified[i];
                         AST *arg_ast = ast->list.items[i + 1];
-                        Type *arg_type = arg_ast->inferred_type
-                                       ? arg_ast->inferred_type
-                                       : type_unknown();
-                        ts.to[i] = arg_type;
+                        Type *arg_type = NULL;
+
+                        // Derive type from the argument itself, not inferred_type.
+                        // Priority: literal kind > env lookup > inferred_type fallback.
+                        if (arg_ast->type == AST_NUMBER) {
+                            bool is_float = false;
+                            if (arg_ast->literal_str) {
+                                for (const char *_p = arg_ast->literal_str; *_p; _p++) {
+                                    if (*_p == '.' || *_p == 'e' || *_p == 'E') {
+                                        is_float = true; break;
+                                    }
+                                }
+                            } else {
+                                is_float = (arg_ast->number != (double)(long long)arg_ast->number);
+                            }
+                            arg_type = is_float ? type_float() : type_int();
+                        } else if (arg_ast->type == AST_STRING) {
+                            arg_type = type_string();
+                        } else if (arg_ast->type == AST_CHAR) {
+                            arg_type = type_char();
+                        } else if (arg_ast->type == AST_KEYWORD) {
+                            arg_type = type_keyword();
+                        } else if (arg_ast->type == AST_SYMBOL) {
+                            // For symbols, look up the env entry for the freshest type.
+                            EnvEntry *ae = env_lookup(ctx->env, arg_ast->symbol);
+                            if (ae && ae->type && ae->type->kind != TYPE_UNKNOWN &&
+                                ae->type->kind != TYPE_VAR) {
+                                arg_type = ae->type;
+                            } else if (ae && ae->scheme && ae->scheme->type) {
+                                arg_type = ae->scheme->type;
+                            } else {
+                                arg_type = arg_ast->inferred_type
+                                         ? arg_ast->inferred_type : type_unknown();
+                            }
+                        } else if (arg_ast->type == AST_ARRAY) {
+                            arg_type = type_arr(NULL, -1);
+                        } else {
+                            // For complex expressions (nested calls etc.), fall back
+                            // to inferred_type. This is less reliable but unavoidable
+                            // without running a full codegen pass on the subexpression.
+                            arg_type = arg_ast->inferred_type
+                                     ? arg_ast->inferred_type : type_unknown();
+                        }
+
+                        ts.to[i] = arg_type ? arg_type : type_unknown();
                     }
 
                     // Fill remaining type vars with unknown if fewer args
@@ -10500,10 +10610,17 @@ if (ast->list.count >= 5) {
                         }
                     }
 
+                    fprintf(stderr, "DEBUG mono: all_concrete=%d nq=%d fn='%s'\n",
+                            all_concrete, nq, head->symbol);
+                    for (int _di = 0; _di < nq; _di++)
+                        fprintf(stderr, "  ts.to[%d] kind=%d\n", _di,
+                                ts.to[_di] ? ts.to[_di]->kind : -1);
                     if (all_concrete) {
                         LLVMValueRef spec_fn = codegen_specialize(ctx,
                                                   head->symbol, entry, &ts);
+                        fprintf(stderr, "DEBUG mono: spec_fn=%p\n", (void*)spec_fn);
                         if (spec_fn) {
+
                             // Look up the specialized entry
                             char *spec_name = mono_make_name(head->symbol,
                                                  ts.to, ts.count);

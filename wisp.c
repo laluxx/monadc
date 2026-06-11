@@ -848,6 +848,96 @@ static const char *skip_balanced_chars(const char *q) {
     return p;
 }
 
+/* Expand pointer-type sugar in a type string: *U8 -> Pointer :: U8, **U8 -> Pointer :: Pointer :: U8 */
+static char *wisp_expand_ptr_type(const char *s) {
+    if (!s || s[0] != '*') return strdup(s);
+    int stars = 0;
+    while (s[stars] == '*') stars++;
+    const char *base = s + stars;
+    char buf[512];
+    buf[0] = '\0';
+    for (int i = 0; i < stars; i++) {
+        if (i > 0) strncat(buf, " :: ", sizeof(buf) - strlen(buf) - 1);
+        strncat(buf, "Pointer", sizeof(buf) - strlen(buf) - 1);
+    }
+    if (base[0]) {
+        strncat(buf, " :: ", sizeof(buf) - strlen(buf) - 1);
+        strncat(buf, base, sizeof(buf) - strlen(buf) - 1);
+    }
+    return strdup(buf);
+}
+
+/* Desugar size-based array literals: [16kb], [16mb I32], etc.
+ * Converts size suffix + optional element type into element count.
+ * [16kb]       -> [16384 U8]
+ * [16kb I32]   -> [4096 I32]
+ * [1mb F64]    -> [131072 F64]
+ * Returns a malloc'd replacement string, or NULL if not this form. */
+static char *desugar_size_array(const char *tok) {
+    /* Must start with '[' */
+    if (!tok || tok[0] != '[') return NULL;
+    const char *p = tok + 1;
+    while (*p == ' ' || *p == '\t') p++;
+
+    /* Must start with a digit */
+    if (*p < '0' || *p > '9') return NULL;
+
+    /* Parse the numeric prefix */
+    char *endptr;
+    unsigned long long num = strtoull(p, &endptr, 10);
+    if (endptr == p) return NULL;
+
+    /* Parse the suffix: kb, mb, gb, tb (case-insensitive) */
+    unsigned long long multiplier = 0;
+    const char *after_suffix = endptr;
+    if      ((endptr[0]=='k'||endptr[0]=='K') && (endptr[1]=='b'||endptr[1]=='B')) { multiplier = 1024ULL;                    after_suffix = endptr + 2; }
+    else if ((endptr[0]=='m'||endptr[0]=='M') && (endptr[1]=='b'||endptr[1]=='B')) { multiplier = 1024ULL*1024;               after_suffix = endptr + 2; }
+    else if ((endptr[0]=='g'||endptr[0]=='G') && (endptr[1]=='b'||endptr[1]=='B')) { multiplier = 1024ULL*1024*1024;          after_suffix = endptr + 2; }
+    else if ((endptr[0]=='t'||endptr[0]=='T') && (endptr[1]=='b'||endptr[1]=='B')) { multiplier = 1024ULL*1024*1024*1024;     after_suffix = endptr + 2; }
+    else return NULL;  /* no size suffix, not our form */
+
+    unsigned long long byte_count = num * multiplier;
+
+    /* Skip whitespace after suffix to find optional element type */
+    while (*after_suffix == ' ' || *after_suffix == '\t') after_suffix++;
+
+    /* Collect optional type name up to ']' */
+    char elem_type[32] = "U8";  /* default: byte */
+    unsigned long long elem_size = 1;
+
+    if (*after_suffix != ']' && *after_suffix != '\0') {
+        /* Read the type token */
+        const char *type_start = after_suffix;
+        const char *type_end   = after_suffix;
+        while (*type_end && *type_end != ']' && *type_end != ' ' && *type_end != '\t')
+            type_end++;
+        size_t tlen = type_end - type_start;
+        if (tlen == 0 || tlen >= sizeof(elem_type)) return NULL;
+        memcpy(elem_type, type_start, tlen);
+        elem_type[tlen] = '\0';
+
+        /* Map type to byte size */
+        if      (strcmp(elem_type,"I8")  ==0||strcmp(elem_type,"U8")  ==0) elem_size = 1;
+        else if (strcmp(elem_type,"I16") ==0||strcmp(elem_type,"U16") ==0) elem_size = 2;
+        else if (strcmp(elem_type,"I32") ==0||strcmp(elem_type,"U32") ==0||
+                 strcmp(elem_type,"F32") ==0)                               elem_size = 4;
+        else if (strcmp(elem_type,"I64") ==0||strcmp(elem_type,"U64") ==0||
+                 strcmp(elem_type,"F64") ==0)                               elem_size = 8;
+        else if (strcmp(elem_type,"I128")==0||strcmp(elem_type,"U128")==0) elem_size = 16;
+        else return NULL;  /* unknown type, leave it alone */
+    }
+
+    /* Validate: byte_count must be divisible by elem_size */
+    if (byte_count == 0 || elem_size == 0 || (byte_count % elem_size) != 0) return NULL;
+
+    unsigned long long elem_count = byte_count / elem_size;
+
+    /* Build replacement token: [count Type] */
+    char buf[128];
+    snprintf(buf, sizeof(buf), "[%llu %s]", elem_count, elem_type);
+    return strdup(buf);
+}
+
 static bool try_consume_type_annotation(WTokenStream *s, const char **p_ptr, const char *tok, int indent, int lineno) {
     const char *peek = *p_ptr;
     while (*peek == ' ' || *peek == '\t') peek++;
@@ -1053,6 +1143,12 @@ static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
             }
             char *tok = strndup(start, end - start);
 
+            /* Desugar size-based array literals before any further processing */
+            {
+                char *desugared = desugar_size_array(tok);
+                if (desugared) { free(tok); tok = desugared; }
+            }
+
             /* After a grouped token, apply the same :: annotation grouping */
             const char *peek = p;
             while (*peek == ' ' || *peek == '\t') peek++;
@@ -1135,6 +1231,22 @@ static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
 
         /* Peek ahead: if next non-space token is '::', group entire chain */
         if (try_consume_type_annotation(s, &p, tok, indent, lineno)) {
+            free(tok);
+            continue;
+        }
+
+        /* Expand pointer-type sugar: *U8 -> [Pointer :: U8] as a bracketed annotation */
+        if (tok[0] == '*' && tok[1] >= 'A' && tok[1] <= 'Z') {
+            char *expanded = wisp_expand_ptr_type(tok);
+            size_t elen = strlen(expanded);
+            char *bracketed = malloc(elen + 3);
+            bracketed[0] = '[';
+            memcpy(bracketed + 1, expanded, elen);
+            bracketed[elen + 1] = ']';
+            bracketed[elen + 2] = '\0';
+            free(expanded);
+            wts_push(s, bracketed, indent, lineno);
+            free(bracketed);
             free(tok);
             continue;
         }
@@ -3067,6 +3179,142 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                 const char *after_name = name_end;
                 while (*after_name == ' ' || *after_name == '\t') after_name++;
 
+                /* Case 0: define name :: [N] or define name :: [N Type] or define name :: [NNkb] etc.
+                 * Pure array-type variable declaration — no function, no arrow.
+                 * Desugars to: (define [name :: Arr :: N :: Type] [])
+                 * Examples:
+                 *   define buffer :: [512]        -> (define [buffer :: Arr :: 512 :: U8] [])
+                 *   define buffer :: [16kb]       -> (define [buffer :: Arr :: 16384 :: U8] [])
+                 *   define buffer :: [16kb I32]   -> (define [buffer :: Arr :: 4096 :: I32] [])
+                 */
+                if (after_name[0] == ':' && after_name[1] == ':') {
+                    const char *_arr_sig = after_name + 2;
+                    while (*_arr_sig == ' ' || *_arr_sig == '\t') _arr_sig++;
+                    if (*_arr_sig == '[') {
+                        /* Parse [N] or [N Type] or [Nkb] or [Nkb Type] */
+                        const char *_inner = _arr_sig + 1;
+                        while (*_inner == ' ' || *_inner == '\t') _inner++;
+                        /* Must start with a digit (plain count or size suffix) */
+                        if (*_inner >= '0' && *_inner <= '9') {
+                            /* Read numeric prefix */
+                            char *_endptr;
+                            unsigned long long _num = strtoull(_inner, &_endptr, 10);
+                            /* Check for size suffix */
+                            unsigned long long _multiplier = 0;
+                            const char *_after_suf = _endptr;
+                            if ((_endptr[0]=='k'||_endptr[0]=='K') && (_endptr[1]=='b'||_endptr[1]=='B')) { _multiplier = 1024ULL;                   _after_suf = _endptr + 2; }
+                            else if ((_endptr[0]=='m'||_endptr[0]=='M') && (_endptr[1]=='b'||_endptr[1]=='B')) { _multiplier = 1024ULL*1024;              _after_suf = _endptr + 2; }
+                            else if ((_endptr[0]=='g'||_endptr[0]=='G') && (_endptr[1]=='b'||_endptr[1]=='B')) { _multiplier = 1024ULL*1024*1024;         _after_suf = _endptr + 2; }
+                            else if ((_endptr[0]=='t'||_endptr[0]=='T') && (_endptr[1]=='b'||_endptr[1]=='B')) { _multiplier = 1024ULL*1024*1024*1024;    _after_suf = _endptr + 2; }
+                            unsigned long long _byte_count = (_multiplier > 0) ? (_num * _multiplier) : 0;
+                            /* Skip whitespace after number/suffix to find optional element type */
+                            while (*_after_suf == ' ' || *_after_suf == '\t') _after_suf++;
+                            /* Collect optional element type token */
+                            char _elem_type[32] = "U8";
+                            unsigned long long _elem_size = 1;
+                            const char *_after_type = _after_suf;
+                            if (*_after_suf != ']' && *_after_suf != '\0' && *_after_suf != ';') {
+                                const char *_te = _after_suf;
+                                while (*_te && *_te != ']' && *_te != ' ' && *_te != '\t') _te++;
+                                size_t _tl = _te - _after_suf;
+                                if (_tl > 0 && _tl < sizeof(_elem_type)) {
+                                    memcpy(_elem_type, _after_suf, _tl);
+                                    _elem_type[_tl] = '\0';
+                                    /* Map type to byte size */
+                                    if      (strcmp(_elem_type,"I8")  ==0||strcmp(_elem_type,"U8")  ==0) _elem_size = 1;
+                                    else if (strcmp(_elem_type,"I16") ==0||strcmp(_elem_type,"U16") ==0) _elem_size = 2;
+                                    else if (strcmp(_elem_type,"I32") ==0||strcmp(_elem_type,"U32") ==0||strcmp(_elem_type,"F32")==0) _elem_size = 4;
+                                    else if (strcmp(_elem_type,"I64") ==0||strcmp(_elem_type,"U64") ==0||strcmp(_elem_type,"F64")==0) _elem_size = 8;
+                                    else if (strcmp(_elem_type,"I128")==0||strcmp(_elem_type,"U128")==0) _elem_size = 16;
+                                    else { strcpy(_elem_type, "U8"); _elem_size = 1; }
+                                    _after_type = _te;
+                                }
+                            }
+                            /* Skip to closing ] */
+                            while (*_after_type == ' ' || *_after_type == '\t') _after_type++;
+                            if (*_after_type == ']') {
+                                /* Valid array declaration — compute element count */
+                                unsigned long long _elem_count;
+                                if (_multiplier > 0) {
+                                    /* Size-based: byte_count / elem_size */
+                                    if (_elem_size == 0 || (_byte_count % _elem_size) != 0) {
+                                        /* Fall through to normal handling */
+                                        goto _not_array_decl;
+                                    }
+                                    _elem_count = _byte_count / _elem_size;
+                                } else {
+                                    /* Plain count: use as-is */
+                                    _elem_count = _num;
+                                }
+                                /* Architecture static array size limit check.
+                                 * x86-64 uses R_X86_64_PC32 relocations for .bss
+                                 * which are signed 32-bit PC-relative — the hard
+                                 * ceiling is 2gb, but the runtime's own .bss
+                                 * already consumes space so anything at or above
+                                 * 1gb is unsafe in practice. Other architectures
+                                 * have their own constraints. We catch this here,
+                                 * at the earliest possible moment, before codegen. */
+#if defined(__x86_64__) || defined(_M_X64)
+#define MONAD_STATIC_ARR_MAX  (1ULL * 1024ULL * 1024ULL * 1024ULL)
+#define MONAD_STATIC_ARR_ARCH "x86-64"
+#define MONAD_STATIC_ARR_WHY  "R_X86_64_PC32 relocations are signed 32-bit; the hard ceiling is 2gb, but runtime .bss overhead makes 1gb the safe limit"
+#elif defined(__aarch64__) || defined(_M_ARM64)
+#define MONAD_STATIC_ARR_MAX  (4ULL * 1024ULL * 1024ULL * 1024ULL)
+#define MONAD_STATIC_ARR_ARCH "aarch64"
+#define MONAD_STATIC_ARR_WHY  "AArch64 PC-relative addressing is limited to 4gb"
+#elif defined(__riscv) && __riscv_xlen == 64
+#define MONAD_STATIC_ARR_MAX  (2ULL * 1024ULL * 1024ULL * 1024ULL)
+#define MONAD_STATIC_ARR_ARCH "riscv64"
+#define MONAD_STATIC_ARR_WHY  "RISC-V PC-relative addressing uses signed 32-bit offsets"
+#else
+#define MONAD_STATIC_ARR_MAX  (1ULL * 1024ULL * 1024ULL * 1024ULL)
+#define MONAD_STATIC_ARR_ARCH "this architecture"
+#define MONAD_STATIC_ARR_WHY  "static arrays are limited by the platform's relocation range"
+#endif
+                                size_t _name_len = name_end - after_define;
+                                unsigned long long _total_bytes = _elem_count * _elem_size;
+                                if (_total_bytes >= MONAD_STATIC_ARR_MAX) {
+
+                                    READER_ERROR(lineno, 0,
+                                        "\n"
+                                        "    • Static array '%.*s' is too large to allocate on %s\n"
+                                        "    • Requested size : %llu bytes (%llu elements of %llu bytes)\n"
+                                        "    • Maximum allowed: %llu bytes (1gb) on %s\n"
+                                        "    • Reason         : %s\n"
+                                        "  - Hint: use a heap-allocated fat pointer instead:\n"
+                                        "      define %.*s :: Arr %s\n"
+                                        "      set    %.*s (malloc %llu)",
+                                        (int)_name_len, after_define,
+                                        MONAD_STATIC_ARR_ARCH,
+                                        _total_bytes, _elem_count, _elem_size,
+                                        MONAD_STATIC_ARR_MAX, MONAD_STATIC_ARR_ARCH,
+                                        MONAD_STATIC_ARR_WHY,
+                                        (int)_name_len, after_define, _elem_type,
+                                        (int)_name_len, after_define, _total_bytes);
+                                }
+#undef MONAD_STATIC_ARR_MAX
+#undef MONAD_STATIC_ARR_ARCH
+#undef MONAD_STATIC_ARR_WHY
+                                /* Get the variable name */
+                                char *_varname = strndup(after_define, _name_len);
+
+                                /* Build: [varname :: Arr :: count :: ElemType] */
+                                char _bracket[512];
+                                snprintf(_bracket, sizeof(_bracket),
+                                         "[%s :: Arr :: %llu :: %s]",
+                                         _varname, _elem_count, _elem_type);
+                                free(_varname);
+                                wts_push(&s, "define", indent, lineno);
+                                wts_push(&s, _bracket, indent, lineno);
+                                wts_push(&s, "[]", indent, lineno);
+                                free(raw);
+                                lineno++;
+                                goto next_line;
+                            }
+                        }
+                    }
+                }
+                _not_array_decl:;
                 /* Case 1: define name :: T -> ... -> Ret
                  * Also handles bare hole: define name :: ?  (no arrow needed) */
                 const char *sig_after_colons = after_name + 2;
@@ -3076,8 +3324,16 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                                      sig_after_colons[1] == ' '  ||
                                      sig_after_colons[1] == '\t' ||
                                      sig_after_colons[1] == ';'));
+                /* Also fire for pure array-type declarations: define buf :: [512]
+                 * define buf :: [16kb] etc. — no '->' but a bracketed type. */
+                bool _sig_is_array_decl = false;
+                {
+                    const char *_sr = after_name + 2;
+                    while (*_sr == ' ' || *_sr == '\t') _sr++;
+                    if (*_sr == '[') _sig_is_array_decl = true;
+                }
                 if (after_name[0] == ':' && after_name[1] == ':' &&
-                    (strstr(after_name + 2, "->") || sig_is_hole)) {
+                    (strstr(after_name + 2, "->") || sig_is_hole || _sig_is_array_decl)) {
                     size_t name_len = name_end - after_define;
                     char *fname = strndup(after_define, name_len);
                     const char *sig_rest = after_name + 2;
@@ -3214,6 +3470,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     free(fname);
                     wts_push(&s, "define", indent, lineno);
                     wts_push(&s, header, indent, lineno);
+                    wts_push(&s, "[]", indent, lineno);
                     free(header);
                     free(raw);
                     lineno++;
@@ -3341,6 +3598,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     free(fname);
                     wts_push(&s, "define", indent, lineno);
                     wts_push(&s, header, indent, lineno);
+                    wts_push(&s, "[]", indent, lineno);
                     free(header);
                     free(raw);
                     lineno++;
@@ -3351,7 +3609,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                  * The first non-space token after the name starts with '['.
                  * Only treat as function header if the bracket contains '::' or '->'
                  * (i.e. it's a typed parameter, not an array literal value). */
-                if (after_name[0] == '[' && (strstr(after_name, "::") || strstr(after_name, "->"))) {
+                if (after_name[0] == '[' && strstr(after_name, "->")) {
                     size_t name_len = name_end - after_define;
                     char *fname = strndup(after_define, name_len);
 
@@ -3376,6 +3634,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     free(fname);
                     wts_push(&s, "define", indent, lineno);
                     wts_push(&s, header, indent, lineno);
+                    wts_push(&s, "[]", indent, lineno);
                     free(header);
                     free(raw);
                     lineno++;

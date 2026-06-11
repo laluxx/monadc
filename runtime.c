@@ -113,6 +113,7 @@ RuntimeValue *rt_value_closure(void *fn_ptr, void **env, int env_size, int arity
     c->fn_ptr   = fn_ptr;
     c->env_size = env_size;
     c->arity    = arity;
+    c->name     = NULL;
     if (env_size > 0 && env) {
         c->env = malloc(sizeof(void*) * env_size);
         memcpy(c->env, env, sizeof(void*) * env_size);
@@ -122,6 +123,12 @@ RuntimeValue *rt_value_closure(void *fn_ptr, void **env, int env_size, int arity
     RuntimeValue *v = malloc(sizeof(RuntimeValue));
     v->type = RT_CLOSURE;
     v->data.closure_val = c;
+    return v;
+}
+
+RuntimeValue *rt_value_closure_named(void *fn_ptr, void **env, int env_size, int arity, const char *name) {
+    RuntimeValue *v = rt_value_closure(fn_ptr, env, env_size, arity);
+    if (name) v->data.closure_val->name = strdup(name);
     return v;
 }
 
@@ -1772,7 +1779,12 @@ static void rt_print_value_indent(RuntimeValue *val, int indent) {
         case RT_KEYWORD: printf(":%s", val->data.keyword_val);  break;
         case RT_NIL:     printf("nil"); break;
         case RT_LIST:    rt_print_list_indent(val->data.list_val, indent); break;
-        case RT_CLOSURE: printf("<closure/%d>", val->data.closure_val->arity); break;
+        case RT_CLOSURE:
+            if (val->data.closure_val->name)
+                printf("%s/%d", val->data.closure_val->name, val->data.closure_val->arity);
+            else
+                printf("#<function/%d>", val->data.closure_val->arity);
+            break;
         case RT_RATIO:
             if (val->data.ratio_val.denominator == 1)
                 printf("%ld", val->data.ratio_val.numerator);
@@ -2497,6 +2509,7 @@ void declare_runtime_functions(CodegenContext *ctx) {
 
     // --- Closure ---
     DECL("rt_value_closure", ptr, ptr, ptr, i32, i32);  // fn_ptr, env, env_size, arity
+    DECL("rt_value_closure_named", ptr, ptr, ptr, i32, i32, ptr);  // fn_ptr, env, env_size, arity, name
     DECL("rt_closure_calln", ptr, ptr, i32, ptr);       // closure, n, args_array
     DECL("rt_closure_get_env", ptr, ptr);               // closure -> env ptr
 
@@ -2683,6 +2696,7 @@ LLVMValueRef get_rt_list_is_empty(CodegenContext *ctx) {
 GET_RUNTIME_FUNCTION(rt_ast_to_runtime_value)
 
 GET_RUNTIME_FUNCTION(rt_value_closure)
+GET_RUNTIME_FUNCTION(rt_value_closure_named)
 GET_RUNTIME_FUNCTION(rt_closure_calln)
 
 GET_RUNTIME_FUNCTION(rt_list_car)

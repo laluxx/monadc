@@ -102,20 +102,20 @@
 
 ;; show ((lambda (x) x) 103)
 
-;; define test-set :: Int -> Int
-;;   _ -> result
-;;   where
-;;     result = 42
+define test-set :: Int -> Int
+  _ -> result
+  where
+    result = 42
 
 ;; show test-set 0
 
 
 
-;; define until :: (a -> Bool) -> (a -> a) -> a -> a
-;;   p f                -> go
-;;   where
-;;     go x | p x       -> x
-;;          | otherwise -> go (f x)
+define until :: (a -> Bool) -> (a -> a) -> a -> a
+  p f                -> go
+  where
+    go x | p x       -> x
+         | otherwise -> go (f x)
 
 
 ;; show until (> 10) (+ 1) 5
@@ -135,12 +135,12 @@
 ;;       | otherwise -> y
 
 
-;; define sqrt :: Float -> Float
-;;   x | x <= 0    -> 0
-;;     | otherwise -> until goodEnough? improve (x / 2)
-;;     where
-;;       improve    g -> (g + x / g) / 2
-;;       goodEnough g -> (< (abs (- (improve g) g)) (* 1e-12 (max 1 g)))
+define sqrt :: Float -> Float
+  x | <= 0      -> 0
+    | otherwise -> until goodEnough? improve (x / 2)
+    where
+      improve    g -> (g + x / g) / 2
+      goodEnough g -> (< (abs (- (improve g) g)) (* 1e-12 (max 1 g)))
 
 ;; define sqrt :: Float -> Float
 ;;   x | x <= 0    -> 0

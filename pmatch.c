@@ -1025,6 +1025,23 @@ static AST *rewrite_array_literals(AST *node, const char *coll_param) {
     return node;
 }
 
+// Propagate PAT_VAR names from the first pmatch clause back into params.
+// When a signature uses type-only anonymous params (is_anon=true, name=__p_0),
+// and the first clause binds them with user names (fd, buf, len),
+// rename the param in-place so the rest of the pipeline sees the real name.
+void pmatch_rename_anon_params(AST *pm, ASTParam *params, int param_count) {
+    if (!pm || pm->type != AST_PMATCH || pm->pmatch.clause_count == 0) return;
+    ASTPMatchClause *cl = &pm->pmatch.clauses[0];
+    int n = cl->pattern_count < param_count ? cl->pattern_count : param_count;
+    for (int i = 0; i < n; i++) {
+        if (params[i].is_anon && cl->patterns[i].kind == PAT_VAR && cl->patterns[i].var_name) {
+            free(params[i].name);
+            params[i].name = my_strdup(cl->patterns[i].var_name);
+            params[i].is_anon = false;
+        }
+    }
+}
+
 AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
     if (!node || node->type != AST_PMATCH) return node;
 

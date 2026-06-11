@@ -36,8 +36,8 @@ typedef struct {
 } AsmContext;
 
 // Preprocess AST_ASM node:
-// - Replace parameter names with registers
-// - Convert AST instructions to AsmInstruction array
+//  - Replace parameter names with registers
+//  - Convert AST instructions to AsmInstruction array
 AsmInstruction *preprocess_asm(AST *asm_node, AsmContext *ctx, int *out_count);
 
 // Free preprocessed instructions

@@ -311,7 +311,7 @@ Type *type_from_name(const char *name) {
         if (delim) {
             *delim = '\0';
             Type *elem_type = type_from_name(buf);
-            int size = atoi(delim + 4);
+            int64_t size = (int64_t)strtoll(delim + 4, NULL, 10);
             return type_arr(elem_type, size);
         } else {
             Type *elem_type = type_from_name(buf);
@@ -469,7 +469,7 @@ Type *type_list(Type **types, int count) {
     return t;
 }
 
-Type *type_arr(Type *element_type, int size) {
+Type *type_arr(Type *element_type, int64_t size) {
     Type *t = make_type(TYPE_ARR);
     t->arr_element_type = element_type;
     t->arr_size = size;
@@ -984,15 +984,29 @@ Type *parse_type_annotation(struct AST *ast) {
             const char *tn = type_node->symbol;
             if (strcmp(tn, "Arr") == 0) {
                 Type *elem_type = NULL;
-                int   size      = -1;
+                int64_t size    = -1;
+                /* Support both orderings:
+                 *   Arr :: ElemType :: Size  (e.g. Arr :: U8 :: 256)
+                 *   Arr :: Size :: ElemType  (e.g. Arr :: 256 :: U8) */
                 if (i + 2 < count && items[i+2]->type == AST_SYMBOL &&
-                    strcmp(items[i+2]->symbol, "::") == 0 &&
-                    i + 3 < count && items[i+3]->type == AST_SYMBOL) {
-                    elem_type = type_from_name(items[i+3]->symbol);
-                    if (i + 4 < count && items[i+4]->type == AST_SYMBOL &&
-                        strcmp(items[i+4]->symbol, "::") == 0 &&
-                        i + 5 < count && items[i+5]->type == AST_NUMBER) {
-                        size = (int)items[i+5]->number;
+                    strcmp(items[i+2]->symbol, "::") == 0 && i + 3 < count) {
+                    struct AST *a = items[i+3];
+                    if (a->type == AST_NUMBER) {
+                        /* Arr :: Size :: ElemType */
+                        size = (int64_t)a->number;
+                        if (i + 4 < count && items[i+4]->type == AST_SYMBOL &&
+                            strcmp(items[i+4]->symbol, "::") == 0 &&
+                            i + 5 < count && items[i+5]->type == AST_SYMBOL) {
+                            elem_type = type_from_name(items[i+5]->symbol);
+                        }
+                    } else if (a->type == AST_SYMBOL) {
+                        /* Arr :: ElemType :: Size */
+                        elem_type = type_from_name(a->symbol);
+                        if (i + 4 < count && items[i+4]->type == AST_SYMBOL &&
+                            strcmp(items[i+4]->symbol, "::") == 0 &&
+                            i + 5 < count && items[i+5]->type == AST_NUMBER) {
+                            size = (int64_t)items[i+5]->number;
+                        }
                     }
                 }
                 return type_arr(elem_type, size);

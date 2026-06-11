@@ -50,11 +50,11 @@ typedef struct DepError    DepError;
 //  The predicative universe rule is:
 //
 //    ──────────────────────────────────────  (universe)
-//    Γ ⊢  Type u  :  Type (u+1)
+//          Γ ⊢  Type u  :  Type (u+1)
 //
-//    Γ ⊢ A : Type u    Γ, x:A ⊢ B : Type v
-//    ──────────────────────────────────────  (Π-formation)
-//    Γ ⊢ Π(x:A).B  :  Type (max u v)
+//     Γ ⊢ A : Type u    Γ, x:A ⊢ B : Type v
+//    ───────────────────────────────────────  (Π-formation)
+//        Γ ⊢ Π(x:A).B  :  Type (max u v)
 //
 #define DEP_LEVEL_MAX 64   // hard ceiling; prevents runaway universe ladders
 
@@ -204,9 +204,9 @@ struct Term {
     struct Term  *refl_val;       // the term t in refl {A} t
 
     // ── TERM_SUBST ─────────────────────────────────────────────────
-    struct Term  *subst_proof;    // proof h : a ≡ b
+    struct Term  *subst_proof;    // proof  h : a ≡ b
     struct Term  *subst_motive;   // motive P : A -> Type
-    struct Term  *subst_base;     // proof pa : P a
+    struct Term  *subst_base;     // proof  pa : P a
 
     // ── TERM_SUCC_T / TERM_NUM_LIT ─────────────────────────────────
     struct Term  *succ_pred;      // predecessor
@@ -218,7 +218,7 @@ struct Term {
     struct Term  *if_else;
 
     // ── TERM_NAT_ELIM ──────────────────────────────────────────────
-    struct Term  *nelim_motive;   // P : Nat -> Type
+    struct Term  *nelim_motive;   // P  : Nat -> Type
     struct Term  *nelim_zero;     // pz : P zero
     struct Term  *nelim_succ;     // ps : Π(n:Nat). P n -> P (succ n)
     struct Term  *nelim_arg;      // n  : Nat

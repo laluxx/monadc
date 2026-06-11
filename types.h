@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 typedef enum {
     TYPE_INT,
@@ -90,7 +91,7 @@ typedef struct Type {
 
     // TYPE_ARR — fat pointer { T* data, i64 size }
     struct Type *arr_element_type;
-    int          arr_size;          // -1 = unknown at compile time
+    int64_t      arr_size;          // -1 = unknown at compile time
     bool         arr_is_fat;        // true = runtime fat pointer
 
     // TYPE_LAYOUT
@@ -173,7 +174,7 @@ Type *type_int_arbitrary(int width, bool is_signed); // I<n> or U<n>
 /// Constructors — compound types
 
 Type *type_list(Type **types, int count);
-Type *type_arr(Type *element_type, int size);
+Type *type_arr(Type *element_type, int64_t size);
 Type *type_arr_fat(Type *element_type); // runtime fat pointer {data, size}
 Type *type_fn(FnParam *params, int param_count, Type *return_type);
 Type *type_fn_builtin(int min_args, int opt_args, bool variadic);

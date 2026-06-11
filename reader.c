@@ -329,6 +329,28 @@ static char *my_strdup(const char *s) {
     return my_strndup(s, strlen(s));
 }
 
+/* Expand pointer-type sugar: *U8 -> "Pointer :: U8", **U8 -> "Pointer :: Pointer :: U8"
+ * Returns a newly malloc'd string. If no expansion needed, returns my_strdup(s). */
+static char *expand_ptr_type(const char *s) {
+    if (!s || s[0] != '*') return my_strdup(s);
+    /* Count leading '*' */
+    int stars = 0;
+    while (s[stars] == '*') stars++;
+    /* Build "Pointer :: Pointer :: ... Base" */
+    const char *base = s + stars;
+    char buf[512];
+    buf[0] = '\0';
+    for (int i = 0; i < stars; i++) {
+        if (i > 0) strncat(buf, " :: ", sizeof(buf) - strlen(buf) - 1);
+        strncat(buf, "Pointer", sizeof(buf) - strlen(buf) - 1);
+    }
+    if (base[0]) {
+        strncat(buf, " :: ", sizeof(buf) - strlen(buf) - 1);
+        strncat(buf, base, sizeof(buf) - strlen(buf) - 1);
+    }
+    return my_strdup(buf);
+}
+
 /// AST constructors
 
 AST *ast_new_number(double value, const char *literal) {
@@ -1789,11 +1811,11 @@ static ASTParam parse_one_param(Parser *p) {
 
             while (p->current.type != TOK_RBRACKET && p->current.type != TOK_EOF) {
                 const char *tok_str = p->current.value ? p->current.value
-                                            : (p->current.type == TOK_ARROW ? "->" :
-                                               p->current.type == TOK_LPAREN ? "(" :
-                                               p->current.type == TOK_RPAREN ? ")" :
-                                               p->current.type == TOK_LBRACKET ? "[" :
-                                               p->current.type == TOK_RBRACKET ? "]" : NULL);
+                                            : (p->current.type == TOK_ARROW    ? "->" :
+                                               p->current.type == TOK_LPAREN   ? "("  :
+                                               p->current.type == TOK_RPAREN   ? ")"  :
+                                               p->current.type == TOK_LBRACKET ? "["  :
+                                               p->current.type == TOK_RBRACKET ? "]"  : NULL);
                 if (tok_str) {
                     size_t cur_len = strlen(type_buf);
                     size_t tok_len = strlen(tok_str);
@@ -1827,6 +1849,7 @@ static ASTParam parse_one_param(Parser *p) {
 }
 
 static int g_anon_param_counter = 0;
+static int g_typevar_counter    = 0;
 
 static void parse_fn_signature(Parser *p, ASTParam **out_params,
                                int *out_count, char **out_return_type) {
@@ -1834,6 +1857,9 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
     int       count    = 0;
     int       capacity = 0;
     char     *ret_type = NULL;
+    /* Reset type variable counter per function so each function's
+     * unannotated params get fresh 'a', 'b', 'c' from the start. */
+    g_typevar_counter = 0;
 
     bool is_arrow_sig = false;
     {
@@ -1993,11 +2019,32 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                 /* [name] with no type annotation — keep the name as-is,
                  * treat as an untyped named parameter, NOT anonymous.
                  * Anonymous params only arise from truly typeless bracket
-                 * groups like [Int] where Int is a type, not a name.    */
+                 * groups like [Int] where Int is a type, not a name.
+                 * Special case: [*U8] means pointer type — treat as
+                 * anonymous param of type "Pointer :: U8".              */
+                bool name_is_ptr_type = (param.name && param.name[0] == '*' &&
+                                         param.name[1] >= 'A' && param.name[1] <= 'Z');
+                if (name_is_ptr_type) {
+                    /* *U8 -> anonymous param with type "Pointer :: U8" */
+                    char gen_name[32];
+                    snprintf(gen_name, sizeof(gen_name), "__p_%d", count);
+                    char tbuf[128];
+                    snprintf(tbuf, sizeof(tbuf), "Pointer :: %s", param.name + 1);
+                    free(param.name);
+                    param.name = my_strdup(gen_name);
+                    param.type_name = my_strdup(tbuf);
+                    param.is_anon = true;
+                } else {
                 bool name_is_lowercase = (param.name && param.name[0] >= 'a' &&
                                           param.name[0] <= 'z');
                 if (name_is_lowercase) {
-                    /* Named untyped param: [x] -> name="x", type=NULL */
+
+                    /* Named untyped param: [x] -> assign fresh type var 'a', 'b', etc.
+                     * This makes every bare parameter genuinely polymorphic so the
+                     * dep checker sees ∀a. and doesn't freeze the type on first use. */
+                    char tvar[8];
+                    snprintf(tvar, sizeof(tvar), "%c", 'a' + (g_typevar_counter++ % 26));
+                    param.type_name = my_strdup(tvar);
                     param.is_anon = false;
                 } else {
                     /* Uppercase or operator: treat as anonymous typed param */
@@ -2010,6 +2057,7 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                     param.type_name = my_strdup(tbuf);
                     param.is_anon = true;
                 }
+                } /* close name_is_ptr_type else */
             } else {
                 param.is_anon = false;
             }
@@ -2159,12 +2207,13 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                     /* Single lowercase letter (a, b, c) = type variable → anonymous.
                      * Multi-char lowercase (val, xs, acc) = parameter name → named. */
                     bool is_type_only = (p->current.value[0] >= 'A' && p->current.value[0] <= 'Z')
+                                     || (p->current.value[0] == '*')
                                      || (p->current.value[1] == '\0');
                     if (is_type_only) {
                         char gen_name[32];
                         snprintf(gen_name, sizeof(gen_name), "__p_%d", count);
                         params[count].name      = my_strdup(gen_name);
-                        params[count].type_name = my_strdup(p->current.value);
+                        params[count].type_name = expand_ptr_type(p->current.value);
                         params[count].is_anon   = true;
                     } else {
                         params[count].name      = my_strdup(p->current.value);
@@ -2380,12 +2429,16 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                 char gen_name[32];
                 snprintf(gen_name, sizeof(gen_name), "__p_%d", count);
                 params[count].name      = my_strdup(gen_name);
-                params[count].type_name = sym;  /* sym is the type name */
+                params[count].type_name = expand_ptr_type(sym);
+                free(sym);
                 params[count].is_rest   = false;
                 params[count].is_anon   = true;
             } else {
                 params[count].name      = sym;
-                params[count].type_name = NULL;
+                /* Bare lowercase param — assign fresh type variable */
+                char tvar[8];
+                snprintf(tvar, sizeof(tvar), "%c", 'a' + (g_typevar_counter++ % 26));
+                params[count].type_name = my_strdup(tvar);
                 params[count].is_rest   = false;
                 params[count].is_anon   = false;
             }
@@ -2578,6 +2631,7 @@ static AST *parse_lambda(Parser *p) {
     if (lambda_has_pmatch && count > 0) {
         /* Parse clauses using the same param count as the lambda */
         AST *pm = parse_pmatch_clauses(p, count);
+        pmatch_rename_anon_params(pm, params, count);
         AST *desugared = pmatch_desugar(pm, params, count);
         for (int _i = 0; _i < pm->pmatch.clause_count; _i++) {
             ASTPMatchClause *cl = &pm->pmatch.clauses[_i];
@@ -3316,6 +3370,30 @@ static AST *parse_list(Parser *p) {
         Token define_token = p->current;
         p->current = lexer_next_token(p->lexer);
 
+        // Check if next token is '[' with no '->' inside — typed variable binding
+        // e.g. (define [bufffer :: Arr :: 256 :: U8] [])
+        if (p->current.type == TOK_LBRACKET) {
+            Lexer peek_lex = *p->lexer;
+            Token peek_tok = p->current;
+            bool has_arrow = false;
+            int peek_depth = 0;
+            while (peek_tok.type != TOK_EOF) {
+                if (peek_tok.type == TOK_LBRACKET) peek_depth++;
+                if (peek_tok.type == TOK_RBRACKET) { peek_depth--; if (peek_depth <= 0) break; }
+                if (peek_tok.type == TOK_ARROW) { has_arrow = true; break; }
+                free(peek_tok.value);
+                peek_tok = lexer_next_token(&peek_lex);
+            }
+            free(peek_tok.value);
+            if (!has_arrow) {
+                /* No arrow — fall through to the existing [name :: Type] variable
+                 * binding path below which already builds bracket_list correctly
+                 * and passes the full type annotation to codegen via name_ast.  */
+                goto define_value_path;
+            }
+            /* Has arrow — fall through to function definition parsing below */
+        }
+
         // Check if next token is '(' (function definition)
         if (p->current.type == TOK_LPAREN) {
             // Parse as (define (fname signature...) metadata? body)
@@ -3421,6 +3499,7 @@ static AST *parse_list(Parser *p) {
                 }
                 if (body_has_arrow) {
                     AST *pm = parse_pmatch_clauses(p, count);
+                    pmatch_rename_anon_params(pm, params, count);
                     ASTParam *pm_params = params;
                     AST *desugared = pmatch_desugar(pm, pm_params, count);
                     for (int _i = 0; _i < pm->pmatch.clause_count; _i++) {
@@ -3531,6 +3610,7 @@ static AST *parse_list(Parser *p) {
 
         } else {
             // (define name value [:doc ""] [:alias sym])
+          define_value_path:;
             AST *name_ast;
 
             if (p->current.type == TOK_LBRACKET) {
@@ -3567,17 +3647,41 @@ static AST *parse_list(Parser *p) {
                             p->current = lexer_next_token(p->lexer);
                         }
                     } else {
-                        /* Collect full type annotation (may be multi-token: Pointer :: T) */
-                        while (p->current.type == TOK_SYMBOL &&
-                               p->current.type != TOK_RBRACKET) {
-                            ast_list_append(bracket_list, ast_new_symbol(p->current.value));
+                        /* Collect full type annotation (may be multi-token: Arr :: 256 :: U8).
+                         * Accept symbols, numbers, and '::' separators until ']'. */
+                        while (p->current.type != TOK_RBRACKET &&
+                               p->current.type != TOK_EOF) {
+                            if (p->current.type == TOK_SYMBOL) {
+                                ast_list_append(bracket_list, ast_new_symbol(p->current.value));
+                            } else if (p->current.type == TOK_NUMBER) {
+                                AST *num = ast_new_number(0.0, p->current.value);
+                                const char *v = p->current.value;
+                                if (v[0] == '0' && (v[1] == 'x' || v[1] == 'X')) {
+                                    num->raw_int = strtoull(v, NULL, 16);
+                                    num->has_raw_int = true;
+                                    num->number = (double)(uint64_t)num->raw_int;
+                                } else if (strchr(v, '.') || strchr(v, 'e')) {
+                                    num->number = atof(v);
+                                } else {
+                                    num->raw_int = strtoull(v, NULL, 10);
+                                    num->has_raw_int = true;
+                                    num->number = (double)num->raw_int;
+                                }
+                                ast_list_append(bracket_list, num);
+                            } else {
+                                break;
+                            }
                             p->current = lexer_next_token(p->lexer);
-                            if (p->current.type != TOK_SYMBOL ||
-                                strcmp(p->current.value, "::") != 0) break;
-                            ast_list_append(bracket_list, ast_new_symbol("::"));
-                            p->current = lexer_next_token(p->lexer); // consume '::'
+                            if (p->current.type == TOK_SYMBOL &&
+                                strcmp(p->current.value, "::") == 0) {
+                                ast_list_append(bracket_list, ast_new_symbol("::"));
+                                p->current = lexer_next_token(p->lexer);
+                            } else {
+                                break;
+                            }
                         }
                     }
+
                 }
                 if (p->current.type != TOK_RBRACKET)
                     compiler_error(p->current.line, p->current.column,
@@ -4475,6 +4579,7 @@ static AST *parse_list(Parser *p) {
 
             /* Desugar pmatch clauses */
             AST *pm = ast_new_pmatch(mc->clauses, mc->clause_count);
+            pmatch_rename_anon_params(pm, params, npats);
             AST *desugared = pmatch_desugar(pm, params, npats);
             /* Do NOT ast_free(pm) — pmatch_desugar takes ownership of
              * clause bodies. Just free the container without freeing
@@ -5321,12 +5426,86 @@ static AST *parse_list(Parser *p) {
     }
 }
 
+/* Helper: parse a size suffix (kb/mb/gb/tb) from a token string.
+ * Returns byte count, or 0 if not a size literal.
+ * elem_type_out receives the optional type token that follows (may be NULL). */
+static unsigned long long parse_size_suffix(const char *s) {
+    if (!s || s[0] < '0' || s[0] > '9') return 0;
+    char *endptr;
+    unsigned long long num = strtoull(s, &endptr, 10);
+    if (endptr == s || num == 0) return 0;
+    if ((endptr[0]=='k'||endptr[0]=='K') && (endptr[1]=='b'||endptr[1]=='B') && endptr[2]=='\0')
+        return num * 1024ULL;
+    if ((endptr[0]=='m'||endptr[0]=='M') && (endptr[1]=='b'||endptr[1]=='B') && endptr[2]=='\0')
+        return num * 1024ULL * 1024;
+    if ((endptr[0]=='g'||endptr[0]=='G') && (endptr[1]=='b'||endptr[1]=='B') && endptr[2]=='\0')
+        return num * 1024ULL * 1024 * 1024;
+    if ((endptr[0]=='t'||endptr[0]=='T') && (endptr[1]=='b'||endptr[1]=='B') && endptr[2]=='\0')
+        return num * 1024ULL * 1024 * 1024 * 1024;
+    return 0;
+}
+
+static unsigned long long elem_type_size(const char *t) {
+    if (!t) return 1;
+    if (strcmp(t,"I8")==0||strcmp(t,"U8")==0)   return 1;
+    if (strcmp(t,"I16")==0||strcmp(t,"U16")==0)  return 2;
+    if (strcmp(t,"I32")==0||strcmp(t,"U32")==0||strcmp(t,"F32")==0) return 4;
+    if (strcmp(t,"I64")==0||strcmp(t,"U64")==0||strcmp(t,"F64")==0) return 8;
+    if (strcmp(t,"I128")==0||strcmp(t,"U128")==0) return 16;
+    return 0;
+}
+
 static AST *parse_bracket_list(Parser *p) {
     int start_line = p->current.line;
     int start_column = p->current.column;
 
     AST *list = ast_new_list();
     p->current = lexer_next_token(p->lexer);
+
+    /* Size-literal sugar: [16kb] -> [16384 U8], [16kb I32] -> [4096 I32]
+     * Detected when the first token is a symbol matching NNNkb/mb/gb/tb.  */
+    if (p->current.type == TOK_SYMBOL && p->current.value) {
+        unsigned long long byte_count = parse_size_suffix(p->current.value);
+        if (byte_count > 0) {
+            p->current = lexer_next_token(p->lexer); /* consume size token */
+            const char *type_name = "U8";
+            unsigned long long esz = 1;
+            if (p->current.type == TOK_SYMBOL && p->current.value &&
+                elem_type_size(p->current.value) > 0) {
+                esz = elem_type_size(p->current.value);
+                type_name = p->current.value;
+                p->current = lexer_next_token(p->lexer); /* consume type */
+            }
+            if (p->current.type != TOK_RBRACKET)
+                compiler_error(p->current.line, p->current.column,
+                               "Expected ']' after size literal");
+            int end_col = p->current.column + 1;
+            p->current = lexer_next_token(p->lexer); /* consume ']' */
+            if (byte_count % esz != 0)
+                compiler_error(start_line, start_column,
+                               "buffer size %llu bytes not divisible by element size %llu",
+                               byte_count, esz);
+            unsigned long long count = byte_count / esz;
+            /* Build [count :: Type] list so codegen sees a typed array annotation */
+            char count_buf[32];
+            snprintf(count_buf, sizeof(count_buf), "%llu", count);
+            AST *count_ast = ast_new_number((double)count, count_buf);
+            count_ast->has_raw_int = true;
+            count_ast->raw_int = count;
+            count_ast->line = start_line;
+            count_ast->column = start_column;
+            AST *result = ast_new_list();
+            ast_list_append(result, count_ast);
+            ast_list_append(result, ast_new_symbol("::"));
+            ast_list_append(result, ast_new_symbol(type_name));
+            result->line       = start_line;
+            result->column     = start_column;
+            result->end_column = end_col;
+            free(list->list.items);
+            free(list);
+            return result;
+        }
+    }
 
     /* Range detection: [start..end] or [start,step..end] */
     if (p->current.type != TOK_RBRACKET && p->current.type != TOK_EOF) {
@@ -6042,7 +6221,12 @@ static AST *parse_expr_base(Parser *p) {
 
         ASTParam *params  = malloc(sizeof(ASTParam));
         params[0].name      = my_strdup(tok.value);
-        params[0].type_name = NULL;
+        /* Assign a fresh type variable so this lambda is genuinely
+         * polymorphic: λx.x gets type 'a -> 'a, not ?0 -> ?0.
+         * Without this, the first call site locks the type forever. */
+        char tvar[8];
+        snprintf(tvar, sizeof(tvar), "%c", 'a' + (g_typevar_counter++ % 26));
+        params[0].type_name = my_strdup(tvar);
         params[0].is_rest   = false;
         params[0].is_anon   = false;
 

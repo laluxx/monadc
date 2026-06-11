@@ -1148,19 +1148,20 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                     pt = type_layout(tname, NULL, 0, 0, false, 0);
                 if (!pt) pt = infer_fresh(ctx);
             } else {
-                /* A bare collection param — seed as TYPE_COLL by default.
-                 * This prevents HM from unifying it with (Int -> fresh)
-                 * when it sees (a 0) indexing in the body.
-                 * If the param has a type_name (e.g. "(a)" for List or
-                 * "[a]" for Coll), use it directly so the distinction
-                 * between List and Coll is preserved.                   */
+                /* Bare unannotated parameter — always a fresh type variable.
+                 * TYPE_COLL was wrong here: it poisoned polymorphic functions
+                 * like (define double x -> (* 2 x)) by making x a collection,
+                 * which then failed to unify with Int at the call site.
+                 * Only named params that explicitly carry a collection type_name
+                 * like "(a)" or "[a]" should get TYPE_COLL — bare names get 'a. */
                 if (p->type_name) {
                     pt = type_from_name(p->type_name);
-                    if (!pt) pt = type_coll();
+                    if (!pt) pt = infer_fresh(ctx);
                 } else {
-                    pt = type_coll();
+                    pt = infer_fresh(ctx);
                 }
             }
+
             param_types[i] = pt;
             infer_env_insert(child, p->name, scheme_mono(pt));
         }

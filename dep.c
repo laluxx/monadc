@@ -2052,6 +2052,82 @@ Value *dep_ctx_type_at_level(DepCtx *ctx, int level) {
 //  Returns the synthesised type Value, or NULL on ERROR.
 //  Annotates ctx->had_error on failure.
 //
+// dep_freshen_type: walk a Term (already quoted from a Value) and replace
+// every TERM_META node with a brand-new fresh meta. This implements
+// let-polymorphism: each call site to a polymorphic global gets its own
+// independent unification variables, so (id "ciao") and (id 3) never
+// interfere with each other's solutions.
+//
+// We pass a small parallel arrays of (old_id -> new_id) mappings so that
+// the same meta appearing multiple times in one type (e.g. Π(x:?0).?0)
+// gets consistently renamed to the same fresh meta throughout.
+//
+static Value *dep_freshen_type_val(DepCtx *ctx, Value *v, int *old_ids, int *new_ids, int *count, int cap);
+
+static Term *dep_freshen_term(DepCtx *ctx, Term *t, int *old_ids, int *new_ids, int *count, int cap) {
+    if (!t) return NULL;
+    switch (t->kind) {
+    case TERM_META: {
+        int id = t->meta_id;
+        // Look for an existing mapping
+        for (int i = 0; i < *count; i++) {
+            if (old_ids[i] == id) return term_meta(new_ids[i]);
+        }
+        // Create a new fresh meta
+        int fresh_id = meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, "?inst");
+        if (*count < cap) {
+            old_ids[(*count)] = id;
+            new_ids[(*count)] = fresh_id;
+            (*count)++;
+        }
+        return term_meta(fresh_id);
+    }
+    case TERM_BVAR:    return term_bvar(t->bvar_index);
+    case TERM_FVAR:    return term_fvar(t->fvar_name);
+    case TERM_TYPE:    return term_type(level_clone(t->type_level));
+    case TERM_KIND:    return term_kind();
+    case TERM_NAT:     return term_nat();
+    case TERM_ZERO:    return term_zero();
+    case TERM_HOLE:    return term_hole();
+    case TERM_EMBED:   return term_embed(t->embed_type);
+    case TERM_NUM_LIT: return term_num_lit(t->num_lit);
+    case TERM_PI: {
+        Term *dom  = dep_freshen_term(ctx, t->binder_dom,  old_ids, new_ids, count, cap);
+        Term *body = dep_freshen_term(ctx, t->binder_body, old_ids, new_ids, count, cap);
+        return term_pi(t->binder_name, dom, body, t->implicit);
+    }
+    case TERM_LAM: {
+        Term *dom  = dep_freshen_term(ctx, t->binder_dom,  old_ids, new_ids, count, cap);
+        Term *body = dep_freshen_term(ctx, t->binder_body, old_ids, new_ids, count, cap);
+        return term_lam(t->binder_name, dom, body);
+    }
+    case TERM_SIGMA: {
+        Term *dom  = dep_freshen_term(ctx, t->binder_dom,  old_ids, new_ids, count, cap);
+        Term *body = dep_freshen_term(ctx, t->binder_body, old_ids, new_ids, count, cap);
+        return term_sigma(t->binder_name, dom, body);
+    }
+    case TERM_APP: {
+        Term  *fn   = dep_freshen_term(ctx, t->app_fn, old_ids, new_ids, count, cap);
+        Term **args = malloc(sizeof(Term *) * t->app_argc);
+        for (int i = 0; i < t->app_argc; i++)
+            args[i] = dep_freshen_term(ctx, t->app_args[i], old_ids, new_ids, count, cap);
+        return term_app(fn, args, t->app_argc);
+    }
+    default:
+        return term_clone(t);
+    }
+}
+
+Value *dep_freshen_type(DepCtx *ctx, Term *quoted_type) {
+    int old_ids[256], new_ids[256], count = 0;
+    Term *fresh_term = dep_freshen_term(ctx, quoted_type, old_ids, new_ids, &count, 256);
+    EvalEnv *ee = eval_env_empty();
+    Value *v = dep_eval(fresh_term, ee, ctx->mctx);
+    eval_env_free(ee);
+    // fresh_term is intentionally not freed: v's closures may reference it
+    return v;
+}
+
 static Value *dep_infer_internal(DepCtx *ctx, Term *t);
 
 Value *dep_infer(DepCtx *ctx, Term *t) {
@@ -2141,7 +2217,17 @@ static Value *dep_infer_internal(DepCtx *ctx, Term *t) {
         DepCtxEntry *local = dep_ctx_lookup_local(ctx, t->fvar_name);
         if (local) return local->type;
         DepEnvEntry *global = dep_env_lookup(ctx->globals, t->fvar_name);
-        if (global) return global->type;
+        if (global) {
+            // Instantiate the global's type by quoting it and re-evaluating
+            // with fresh metavariables. This is the core of let-polymorphism:
+            // every call site gets an independent copy of the type variables
+            // so that e.g. (id "ciao") and (id 3) can each solve ?0 freely
+            // without the first call permanently specializing the function.
+            Term *quoted = dep_quote(global->type, 0, ctx->mctx);
+            Value *instantiated = dep_freshen_type(ctx, quoted);
+            term_free(quoted);
+            return instantiated;
+        }
 
         // TEMPORARY SHADOW PASS HACK:
         // Automatically invent a hole for any unbound global function (like 'show' or 'if')
@@ -2149,7 +2235,8 @@ static Value *dep_infer_internal(DepCtx *ctx, Term *t) {
         return val_meta(id, val_spine_empty());
     }
 
-        // ── Annotation — explicit type ascription ─────────────────────
+
+    // ── Annotation — explicit type ascription ─────────────────────
     case TERM_ANN: {
         Value *ann_ty = dep_eval(t->ann_type, ctx->env, ctx->mctx);
         // Check the term against the ascribed type
@@ -2573,7 +2660,7 @@ static bool dep_check_internal(DepCtx *ctx, Term *t, Value *expected_type) {
                           "    • Couldn't match expected type:  %s\n"
                           "    • with actual type:              %s\n"
                           "    • While checking the expression: %s\n"
-                          "    - Hint: %s",
+                          "   - Hint: %s",
                           term_to_string(dep_quote(expected_type,  ctx->depth, ctx->mctx)),
                           term_to_string(dep_quote(inferred,       ctx->depth, ctx->mctx)),
                           term_to_string(t),
@@ -2915,9 +3002,13 @@ static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
     case AST_CLASS:
     case AST_INSTANCE:
     case AST_LAYOUT:
-    case AST_ASM:
         /* Bypass top-level definitions that the dependent checker doesn't fully intercept yet */
         return term_fvar("True");
+    case AST_ASM:
+        /* asm blocks are opaque to the type checker — trust the declared signature.
+         * term_hole() defers to whatever type is expected (check position: always OK,
+         * infer position: mints a fresh meta). This is the correct "trust the sig" semantics. */
+        return term_hole();
     default:
         return term_hole();
     }
@@ -3208,6 +3299,13 @@ Term *dep_toplevel(DepCtx *ctx, AST *ast, Term **out_type) {
 
         AST *name_ast = ast->list.items[1];
         AST *val_ast  = ast->list.items[2];
+
+        /* Support typed variable binding: (define [name :: Type] value)
+         * The bracket list has the name at position 0. */
+        if (name_ast->type == AST_LIST && name_ast->list.count >= 1 &&
+            name_ast->list.items[0]->type == AST_SYMBOL) {
+            name_ast = name_ast->list.items[0];
+        }
 
         if (name_ast->type != AST_SYMBOL) {
             dep_error_set(ctx, name_ast->line, name_ast->column, "expected symbol for define");

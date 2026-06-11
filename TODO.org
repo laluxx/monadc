@@ -55,6 +55,15 @@
 - [ ] Connect to a running process with the repl
       We should embed the env into the executable i guess
 
+
+* Compiler directives [0/3]
+ Those could also be used as module metadatas for something like melpa,
+  or for semantical analysis.
+  - [ ] =-|[ PURE ]|-=         The module is pure  
+  - [ ] =-|[ CamelCase ]|-=    The module is written in CamelCase
+  - [ ] =-|[ kebab-case ]|-=   The module is written in kebab-case
+  - [ ] =-|[ ASM ]|-=          The module has asm
+
 * TODO monad-mode [0/2]
 - [ ] in monad-mode add a function to type check the function and
       substitute the type of the function with the inferred one
@@ -98,7 +107,7 @@ define file readFile
 
 * TODO Prolog
 
-This is the design, at least.
+This is the design, alas.
 
 #+begin_src monad
 define square x ↦ x²
