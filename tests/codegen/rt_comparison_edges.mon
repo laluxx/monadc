@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-comparison-edges
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime comparison edge operators compile and return booleans.
+;; TEST-ATOM: !=, <=, and > produce expected runtime booleans.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (!= 3 4))
+(show (<= 3 3))
+(show (> 9 2))

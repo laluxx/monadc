@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-string-concat
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime string concatenation with ++ operator (binary).
+;; TEST-ATOM: (++ "ab" "cd") = "abcd"; (++ "x" "yz") = "xyz".
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (++ "ab" "cd"))
+(show (++ "x" "yz"))

@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-define-predicate
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Define function returning Bool works at runtime.
+;; TEST-ATOM: (define (is-pos? [x : Int] -> Bool) (> x 0)) then (show (is-pos? 5)) prints True.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define (is-pos? [x : Int] -> Bool) (> x 0))
+(show (is-pos? 5))

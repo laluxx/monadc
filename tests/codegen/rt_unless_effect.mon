@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-unless-effect
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Runtime unless with side effect works.
+;; TEST-ATOM: (unless False (set! x 42)) mutates x.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define x 0)
+(unless False (set! x 42))
+(show x)

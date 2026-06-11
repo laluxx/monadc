@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-begin-side-effect
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Runtime begin with mutation and return value works.
+;; TEST-ATOM: (begin (set! x (+ x 1)) x) with x=1 returns 2.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define x 1)
+(show (begin (set! x (+ x 1)) (set! x (+ x 1)) x))

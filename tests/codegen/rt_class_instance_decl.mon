@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-class-instance-decl
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime class and instance declarations compile alongside executable code.
+;; TEST-ATOM: A simple class declaration and empty instance declaration do not block following codegen.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(class Show a where (display) :: a -> String)
+(instance Show Int)
+(show 42)

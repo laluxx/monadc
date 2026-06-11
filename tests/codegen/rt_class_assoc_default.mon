@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-class-assoc-default
+;; TEST-CONTEXT: monadc.context.language.reader-header-coverage
+;; TEST-PURPOSE: Runtime class declarations cover associated types and default methods.
+;; TEST-ATOM: Associated-type and default-method class declarations compile before executable code.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(class Collection c where type Elem c (insert) :: c -> Elem c -> c)
+(class Eq a where (=) :: a -> a -> Bool (!=) :: a -> a -> Bool (x != y) => (not (x = y)))
+(show 42)

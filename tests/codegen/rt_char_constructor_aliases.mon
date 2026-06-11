@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-char-constructor-aliases
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime char constructor aliases are codegen-backed coverage points.
+;; TEST-ATOM: (char 65) and (int->char 66) should produce character values.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (char 65))
+(show (int->char 66))

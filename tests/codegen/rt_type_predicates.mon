@@ -1,0 +1,12 @@
+;; TEST-ID: tests.codegen.rt-type-predicates
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Runtime type predicate functions work.
+;; TEST-ATOM: (Int? 42) = True, (Int? "hi") = False, (String? "hi") = True, (nil? nil) = True.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (Int? 42))
+(show (Int? "hi"))
+(show (String? "hi"))
+(show (nil? nil))
+(show (nil? 0))

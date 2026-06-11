@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-make-string
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Runtime make-string function works.
+;; TEST-ATOM: (make-string 5 'x') = "xxxxx".
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (make-string 5 'x'))

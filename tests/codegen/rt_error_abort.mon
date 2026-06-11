@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-error-abort
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime error form aborts execution with a diagnostic.
+;; TEST-ATOM: (error "boom") compiles and exits nonzero with the message boom.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(error "boom")

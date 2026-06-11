@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-size-array-value
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime size-array value syntax is a codegen-backed coverage point.
+;; TEST-ATOM: [16kb] as a value should construct an array-like buffer with count 16384.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define buffer [16kb])
+(show (Arr? buffer))
+(show (count buffer))

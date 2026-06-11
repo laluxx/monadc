@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-adjacent-strings
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime adjacent string literal handling is a codegen-backed coverage point.
+;; TEST-ATOM: "hello""world" should concatenate or otherwise produce a coherent string value.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show "hello""world")

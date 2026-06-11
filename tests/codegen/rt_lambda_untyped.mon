@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-lambda-untyped
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Untyped lambda with paren syntax works at runtime.
+;; TEST-ATOM: ((lambda (x) (+ x 1)) 41) = 42.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show ((lambda (x) (+ x 1)) 41))

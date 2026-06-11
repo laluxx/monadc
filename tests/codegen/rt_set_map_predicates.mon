@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-set-map-predicates
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime set and map predicates observe literal values.
+;; TEST-ATOM: Set? recognizes a set literal and Map? recognizes a map literal.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (Set? {1 2}))
+(show (Map? #{:a 1}))

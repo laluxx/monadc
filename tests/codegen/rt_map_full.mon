@@ -1,0 +1,15 @@
+;; TEST-ID: tests.codegen.rt-map-full
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime map literal predicates and queries.
+;; TEST-ATOM: Map? recognizes map literals; contains? checks key presence; find/key/value access.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define m #{:x 10 :y 20})
+(show (Map? m))
+(show (contains? m :x))
+(show (contains? m :z))
+(show (find m :y))
+(show (keys m))
+(show (vals m))
+(show (count m))

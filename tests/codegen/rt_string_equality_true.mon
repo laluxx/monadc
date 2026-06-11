@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-string-equality-true
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: String equality via = evaluates to True for identical strings.
+;; TEST-ATOM: (= "abc" "abc") evaluates to True.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (= "abc" "abc"))

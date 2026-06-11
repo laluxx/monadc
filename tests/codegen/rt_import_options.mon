@@ -1,0 +1,11 @@
+;; TEST-ID: tests.codegen.rt-import-options
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Import option forms are codegen-backed coverage points for module resolution.
+;; TEST-ATOM: Qualified, only, and except import option forms should compile before following code.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(import Core :qualified)
+(import Core :only [show])
+(import Core :except [bad])
+(show 42)

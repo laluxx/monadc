@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-hm-polymorphic-const
+;; TEST-CONTEXT: monadc.context.language.type-system-surface, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: HM generalisation supports a two-argument polymorphic function.
+;; TEST-ATOM: const can be instantiated as Int -> String -> Int and String -> Int -> String.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define const (lambda (x y) x))
+(show (const 7 "ignored"))
+(show (const "left" 99))

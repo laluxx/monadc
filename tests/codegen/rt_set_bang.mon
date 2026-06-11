@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-set-bang
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Runtime set! mutation works.
+;; TEST-ATOM: (define x 0) then (set! x 42) then (show x) prints 42.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define x 0)
+(set! x 42)
+(show x)

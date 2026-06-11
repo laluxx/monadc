@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-cond-branches
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Runtime cond expression evaluates correct branch.
+;; TEST-ATOM: (cond [(> 5 3) 1] [else 0]) = 1.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (cond [(> 5 3) 1] [else 0]))

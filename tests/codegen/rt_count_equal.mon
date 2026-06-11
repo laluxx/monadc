@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-count-equal
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Runtime count and equal? functions work.
+;; TEST-ATOM: (count '(1 2 3)) = 3, (equal? '(1 2) '(1 2)) = True.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (count '(1 2 3)))
+(show (equal? '(1 2) '(1 2)))
+(show (equal? '(1 2) '(3 4)))

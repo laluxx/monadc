@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-mutual-recursion-forward
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime mutually recursive top-level functions are a codegen-backed forward-reference coverage point.
+;; TEST-ATOM: even? calls odd? before odd? is defined and should still evaluate even? 10.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define (even? [n : Int] -> Bool) (if (= n 0) True (odd? (- n 1))))
+(define (odd? [n : Int] -> Bool) (if (= n 0) False (even? (- n 1))))
+(show (even? 10))

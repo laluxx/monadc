@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-or-comparison
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Compound or with comparisons works at runtime.
+;; TEST-ATOM: (or (> 5 10) (< 3 6)) evaluates to True.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (or (> 5 10) (< 3 6)))

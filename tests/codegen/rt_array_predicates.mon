@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-array-predicates
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime array predicates and count observe array values.
+;; TEST-ATOM: Arr?, collection?, and count recognize [1 2 3].
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (Arr? [1 2 3]))
+(show (collection? [1 2 3]))
+(show (count [1 2 3]))

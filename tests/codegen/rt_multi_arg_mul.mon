@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-multi-arg-mul
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Multi-argument multiplication multiplies all arguments.
+;; TEST-ATOM: (* 2 3 4) evaluates to 24.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (* 2 3 4))

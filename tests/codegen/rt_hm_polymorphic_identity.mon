@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-hm-polymorphic-identity
+;; TEST-CONTEXT: monadc.context.language.type-system-surface, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: HM generalisation and instantiation allow one identity binding at multiple concrete types.
+;; TEST-ATOM: An unannotated identity function can be used at Int and String call sites.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define id (lambda (x) x))
+(show (id 42))
+(show (id "ok"))

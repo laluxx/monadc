@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-pair-p
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Runtime pair? predicate works on dotted pairs.
+;; TEST-ATOM: (pair? '(1 . 2)) = True.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (pair? '(1 . 2)))

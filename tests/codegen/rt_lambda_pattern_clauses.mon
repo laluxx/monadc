@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-lambda-pattern-clauses
+;; TEST-CONTEXT: monadc.context.language.reader-header-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Pattern codegen coverage for AST_LAMBDA bodies backed by AST_PMATCH clauses.
+;; TEST-ATOM: A lambda with integer and wildcard pattern clauses should be callable.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define classify (lambda ([x : Int] -> Int) | 0 -> 10 | _ -> 20))
+(show (classify 0))
+(show (classify 7))

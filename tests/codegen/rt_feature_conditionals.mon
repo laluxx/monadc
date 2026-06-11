@@ -1,0 +1,14 @@
+;; TEST-ID: tests.codegen.rt-feature-conditionals
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime feature conditional preprocessing keeps active blocks and drops inactive blocks.
+;; TEST-ATOM: LINUX block emits output while WINDOWS block is skipped before codegen.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+#+LINUX
+(show 42)
+#---
+#+WINDOWS
+(show 99)
+#---
+(show 7)

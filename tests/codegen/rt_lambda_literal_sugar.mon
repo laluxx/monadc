@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-lambda-literal-sugar
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime lambda literal sugar compiles to an immediately callable lambda.
+;; TEST-ATOM: (λx.x 42) evaluates to 42.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (λx.x 42))

@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-closure-partial-application
+;; TEST-CONTEXT: monadc.context.language.type-system-surface, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Closure codegen covers partial application of a two-argument function.
+;; TEST-ATOM: (add 10) returns a closure that can later be called with the remaining argument.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define add (lambda ([x : Int] [y : Int] -> Int) (+ x y)))
+(define add10 (add 10))
+(show (add10 5))

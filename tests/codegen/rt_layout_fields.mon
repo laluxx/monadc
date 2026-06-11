@@ -1,0 +1,11 @@
+;; TEST-ID: tests.codegen.rt-layout-fields
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime layout construction and field access work for positional fields.
+;; TEST-ATOM: (Point 3 4) constructs a layout value whose .x and .y fields print 3 and 4.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(layout Point [x :: Int] [y :: Int])
+(define p (Point 3 4))
+(show p.x)
+(show p.y)

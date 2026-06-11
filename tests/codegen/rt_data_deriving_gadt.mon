@@ -1,0 +1,11 @@
+;; TEST-ID: tests.codegen.rt-data-deriving-gadt
+;; TEST-CONTEXT: monadc.context.language.reader-header-coverage
+;; TEST-PURPOSE: Runtime data declarations cover deriving clauses and parameterized constructor fields.
+;; TEST-ATOM: Data deriving and Vec-style parameterized constructors compile as declarations.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(data Color Red | Green | Blue deriving [Eq Show])
+(data Vec a | Nil | Cons a (Vec a))
+(define c Red)
+(define xs Nil)

@@ -1,0 +1,11 @@
+;; TEST-ID: tests.codegen.rt-data-constructors
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime ADT declarations and constructors compile and execute.
+;; TEST-ATOM: Nullary and fielded ADT constructors can be referenced and called in a program.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(data Color Red | Green | Blue)
+(data Maybe Nothing | Just Int)
+(define c Red)
+(define m (Just 42))

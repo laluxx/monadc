@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-refinement-type
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime refinement type declarations can annotate values that reach codegen.
+;; TEST-ATOM: Positive refinement annotation accepts and prints a positive integer.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(type Positive { x ∈ Int | (> x 0) } :doc "positive ints" :alias Natural)
+(define [x :: Positive] 3)
+(show x)

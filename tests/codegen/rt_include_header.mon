@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-include-header
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime include forms compile alongside executable code.
+;; TEST-ATOM: (include "math.h") does not block following show output.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(include "math.h")
+(show 42)

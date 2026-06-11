@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-postfix-index-sugar
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime postfix index sugar compiles to collection indexing.
+;; TEST-ATOM: xs[0] and xs[2] index an array value.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define xs [10 20 30])
+(show xs[0])
+(show xs[2])

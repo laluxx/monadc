@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-let-star
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Runtime let* sequential binding works.
+;; TEST-ATOM: (let* [x 1] x) evaluates to 1.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (let* [x 1] x))

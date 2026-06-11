@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-data-record-constructor
+;; TEST-CONTEXT: monadc.context.language.reader-header-coverage
+;; TEST-PURPOSE: Runtime record-like ADT constructors are a codegen-backed coverage point.
+;; TEST-ATOM: (data Person | Person {name String, age Int}) should construct from name and age.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(data Person | Person {name String, age Int})
+(define p (Person "ada" 37))

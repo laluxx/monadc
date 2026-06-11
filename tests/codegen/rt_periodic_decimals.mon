@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-periodic-decimals
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime periodic decimal sugar compiles to exact ratio values.
+;; TEST-ATOM: Repeating decimal forms print as normalized ratios.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show 0.(3))
+(show 1.08(3))

@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-string-prefix-suffix
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime string prefix and suffix predicates check string boundaries.
+;; TEST-ATOM: starts-with? and ends-with? recognize matching string boundaries.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (starts-with? "monadc" "mon"))
+(show (ends-with? "monadc" "adc"))

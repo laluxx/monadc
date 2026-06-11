@@ -1,0 +1,11 @@
+;; TEST-ID: tests.codegen.rt-postfix-call-sugar
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime postfix function-call sugar compiles to ordinary calls.
+;; TEST-ATOM: f(x) and f(x y) call functions with one and two arguments.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define (inc [x : Int] -> Int) (+ x 1))
+(define (add [x : Int] [y : Int] -> Int) (+ x y))
+(show inc(41))
+(show add(3 4))

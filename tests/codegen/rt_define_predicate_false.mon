@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-define-predicate-false
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Define Bool function returning False works.
+;; TEST-ATOM: (define (is-pos? [x : Int] -> Bool) (> x 0)) then (show (is-pos? -1)) prints False.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define (is-pos? [x : Int] -> Bool) (> x 0))
+(show (is-pos? -1))

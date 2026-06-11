@@ -1,0 +1,12 @@
+;; TEST-ID: tests.codegen.rt-map-queries
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime map predicates and query helpers operate on map literals.
+;; TEST-ATOM: Map?, find, keys, and vals observe a literal keyword map.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define m #{:a 1 :b 2})
+(show (Map? m))
+(show (find m :a))
+(show (keys m))
+(show (vals m))

@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-begin-value
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Begin returns its last expression value.
+;; TEST-ATOM: (begin 42) evaluates to 42.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (begin 42))

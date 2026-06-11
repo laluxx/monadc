@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-char-keyword-symbol-predicates
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime predicates recognize character, keyword, and quoted symbol values.
+;; TEST-ATOM: Char?, Keyword?, and Symbol? return True for their corresponding literal forms.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (Char? 'a'))
+(show (Keyword? :ok))
+(show (Symbol? 'alpha))

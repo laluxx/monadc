@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-tests-block
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime tests blocks compile alongside executable code.
+;; TEST-ATOM: (tests (= 1 1)) does not block following show output.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(tests (= 1 1))
+(show 42)

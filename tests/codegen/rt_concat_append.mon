@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-concat-append
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Runtime ++ (concat) function works.
+;; TEST-ATOM: (++ '(1 2) '(3 4)) = (1 2 3 4).
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (++ '(1 2) '(3 4)))

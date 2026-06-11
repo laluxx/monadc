@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-map-key-variants
+;; TEST-CONTEXT: monadc.context.language.reader-header-coverage
+;; TEST-PURPOSE: Runtime map literals cover mixed key token families.
+;; TEST-ATOM: String, number, and keyword keys can coexist in a map literal.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define m #{"a" 1 2 "two" :k 3})
+(show (Map? m))
+(show (count m))

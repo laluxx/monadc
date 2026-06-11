@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-closure-capture
+;; TEST-CONTEXT: monadc.context.language.type-system-surface, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Closure codegen pressure for lambdas that capture an outer variable.
+;; TEST-ATOM: make-adder should return a closure that captures x and adds it to y.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define make-adder (lambda ([x : Int] -> Fn) (lambda ([y : Int] -> Int) (+ x y))))
+(define add5 (make-adder 5))
+(show (add5 7))

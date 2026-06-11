@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-radix-literals
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Hex/bin/oct literal display works at runtime.
+;; TEST-ATOM: (show 0xFF) prints 0xFF, (show 0b1010) prints 0b1010.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show 0xFF)
+(show 0b1010)
+(show 0o755)

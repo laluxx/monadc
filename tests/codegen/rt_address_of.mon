@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-address-of
+;; TEST-CONTEXT: monadc.context.language.reader-header-coverage
+;; TEST-PURPOSE: Runtime address-of expressions compile and produce an address-like value.
+;; TEST-ATOM: &x on a bound integer value reaches codegen and prints a pointer representation.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define x 42)
+(show &x)

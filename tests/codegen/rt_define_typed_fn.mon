@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-define-typed-fn
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Typed define function shorthand compiles and returns value.
+;; TEST-ATOM: (define (double [x : Int] -> Int) (* 2 x)) then (show (double 5)) prints 10.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define (double [x : Int] -> Int) (* 2 x))
+(show (double 5))

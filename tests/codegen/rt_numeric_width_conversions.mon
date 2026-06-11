@@ -1,0 +1,11 @@
+;; TEST-ID: tests.codegen.rt-numeric-width-conversions
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime fixed-width integer conversion helpers wrap large values.
+;; TEST-ATOM: I8, U8, I16, and U16 convert out-of-range positive integers to low-width values.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (I8 257))
+(show (U8 257))
+(show (I16 65537))
+(show (U16 65537))

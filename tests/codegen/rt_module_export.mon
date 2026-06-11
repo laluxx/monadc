@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-module-export
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime module declarations with export lists compile and allow exported code to run.
+;; TEST-ATOM: (module Main [show]) followed by (show 42) compiles and prints 42.
+;; TEST-EXPECT: compile, run
+
+(module Main [show])
+(show 42)

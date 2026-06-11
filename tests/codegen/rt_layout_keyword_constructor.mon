@@ -1,0 +1,11 @@
+;; TEST-ID: tests.codegen.rt-layout-keyword-constructor
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime layout construction with keyword fields is a codegen-backed coverage point.
+;; TEST-ATOM: (Point :x 3 :y 4) should construct the same layout value as positional construction.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(layout Point [x :: Int] [y :: Int])
+(define p (Point :x 3 :y 4))
+(show p.x)
+(show p.y)

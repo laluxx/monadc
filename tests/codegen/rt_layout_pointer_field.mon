@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-layout-pointer-field
+;; TEST-CONTEXT: monadc.context.language.reader-header-coverage
+;; TEST-PURPOSE: Runtime layout declarations cover pointer fields from reader.h.
+;; TEST-ATOM: (layout Node [value :: Int] [next -> Node]) compiles before executable code.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(layout Node [value :: Int] [next -> Node])
+(show 42)

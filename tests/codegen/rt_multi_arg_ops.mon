@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-multi-arg-ops
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime multi-argument subtraction and division.
+;; TEST-ATOM: (- 10 3 2) = 5; (/ 24 3 2) = 4.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (- 10 3 2))
+(show (/ 24 3 2))

@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.comparison-le
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Less-than-or-equal operator evaluates at runtime.
+;; TEST-ATOM: (<= 3 4) evaluates to True.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (<= 3 4))

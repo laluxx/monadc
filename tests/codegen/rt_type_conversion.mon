@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-type-conversion
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime type conversion functions on primitive types.
+;; TEST-ATOM: Int from Float truncates; Float from Int displays; String from Int.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (Int 3.14))
+(show (Float 42))
+(show (String 123))

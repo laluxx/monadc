@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-instance-method-body
+;; TEST-CONTEXT: monadc.context.language.reader-header-coverage
+;; TEST-PURPOSE: Runtime instance declarations cover method bodies.
+;; TEST-ATOM: An instance declaration with pattern-style method clauses compiles before executable code.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(instance Eq Int where (0 = 0) => True (_ = _) => False)
+(show 42)

@@ -1,0 +1,11 @@
+;; TEST-ID: tests.codegen.rt-type-casts
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Runtime type conversion functions work.
+;; TEST-ATOM: (Int 3.14) = 3, (Float 42) = 42.0, (Char 65) = 'A', (String 42) = "42".
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (Int 3.14))
+(show (Float 42))
+(show (Char 65))
+(show (String 42))

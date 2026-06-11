@@ -1,0 +1,12 @@
+;; TEST-ID: tests.codegen.rt-array-full
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime array literal predicates and count.
+;; TEST-ATOM: Arr? on array literals; count on empty and multi-element arrays.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define a [100 200 300])
+(show (Arr? a))
+(show (Arr? []))
+(show (count a))
+(show (count []))

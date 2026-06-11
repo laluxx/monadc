@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-bitwise-xor-not-rshift
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Runtime bitwise xor, not, and logical right shift work.
+;; TEST-ATOM: (bit-xor 5 3) = 6, (~ 42) = -43, (>>> 16 2) = 4.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (bit-xor 5 3))
+(show (~ 42))
+(show (>>> 16 2))

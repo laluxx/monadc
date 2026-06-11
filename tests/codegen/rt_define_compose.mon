@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-define-compose
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Composition of a typed define function with itself works.
+;; TEST-ATOM: (double (double 3)) evaluates to 12.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define (double [x : Int] -> Int) (* 2 x))
+(show (double (double 3)))

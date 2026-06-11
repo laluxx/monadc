@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-infix-sugar
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime infix sugar compiles with arithmetic precedence and comparison operators.
+;; TEST-ATOM: Infix +, *, /, and >= desugar and run.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (3 + 4 * 5))
+(show (10 / 2))
+(show (5 >= 3))

@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-cons-list
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Runtime cons function works on lists.
+;; TEST-ATOM: (cons 1 '(2 3)) = (1 2 3).
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (cons 1 '(2 3)))
