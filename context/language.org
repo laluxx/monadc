@@ -1,0 +1,70 @@
+#+TITLE: Language Formalization Context
+#+AUTHOR: Codex
+#+DATE: 2026-06-11
+#+CREATED: 2026-06-11
+#+LAST_MODIFIED: 2026-06-11
+#+LANGUAGE: en
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:language:tests:syntax:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.language.file-metadata
+:CUSTOM_ID: language-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/language.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.language.file src:context/language.org conf:high]
+This file records the executable formalization layer for Monad language syntax.
+
+* Syntax Corpus
+:PROPERTIES:
+:ID: monadc.context.language.syntax-corpus
+:CUSTOM_ID: syntax-corpus
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: tests/language_corpus.tsv
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.language.syntax-corpus date:2026-06-11 by:codex]
+=tests/language_corpus.tsv= is a table-driven parser conformance corpus. Each
+row is one small language atom that must parse and serialize through
+=--emit-json=.
+
+[DEC id:dec.language.stdout-golden date:2026-06-11 by:human]
+Executable fixtures may have a sibling =.stdout= file. When present, the test
+runner executes the compiled program and requires the program output to end with
+that file exactly, allowing stable suffix checks while ignoring noisy compiler
+output.

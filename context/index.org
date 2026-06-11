@@ -1,0 +1,324 @@
+#+TITLE: MonadC Context Index
+#+AUTHOR: Codex
+#+DATE: 2026-06-11
+#+CREATED: 2026-06-11
+#+LAST_MODIFIED: 2026-06-11
+#+LANGUAGE: en
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:index:format:llm:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+#+TAGS: format(F) schema(S) visual(V) llm(L) decision(D) observation(O)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.index.file-metadata
+:CUSTOM_ID: file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:SOURCE: context/index.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.index.file src:context/index.org conf:high]
+This file is the central index and formal format specification for repository
+context.
+
+#+CAPTION: Context Corpus Navigation
+| Node Class | Org Feature                     | Stable Key | Human Use          | LLM Use               |
+|------------+---------------------------------+------------+--------------------+-----------------------|
+| File       | =#+TITLE=, =#+FILETAGS=, =#+PROPERTY= | path       | quick orientation  | corpus metadata       |
+| Heading    | property drawer                 | =:ID:=       | section navigation | durable node identity |
+| Record     | fixed bracket notation          | =id:=        | audit trail        | fact extraction       |
+| Link       | Org file/id link                | target     | jump to source     | dependency graph      |
+| Table      | Org table                       | caption    | visual scan        | structured summary    |
+
+* Format Specification
+:PROPERTIES:
+:ID: monadc.context.format
+:CUSTOM_ID: format-specification
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:SOURCE: context/index.org
+:CONFIDENCE: high
+:END:
+
+** Purpose
+:PROPERTIES:
+:ID: monadc.context.format.purpose
+:CUSTOM_ID: format-purpose
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:SOURCE: context/index.org
+:CONFIDENCE: high
+:END:
+
+The context corpus records stable, source-grounded knowledge about the MonadC
+compiler. It is designed for humans and LLM agents. Every durable claim should
+point to a source location, a command result, or a clearly marked inference.
+
+#+BEGIN_CENTER
+*=Context = Org tree + metadata drawers + fixed LLM records + source links=*
+#+END_CENTER
+
+** File Layout
+:PROPERTIES:
+:ID: monadc.context.format.layout
+:CUSTOM_ID: format-layout
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:SOURCE: context/index.org
+:CONFIDENCE: high
+:END:
+
+- =context.org= is the root entry point.
+- =context/index.org= is the navigable index and formal notation reference.
+- Topic files live under =context/= and use kebab-case names.
+- Cross-file links use Org file links: =[[file:reader.org::*AST and Token Header][...]]=.
+- Stable node references use =ID= properties prefixed with =monadc.context.=.
+
+#+CAPTION: Required File Topology
+| Path              | Role           | Included By | May Include                    |
+|-------------------+----------------+-------------+--------------------------------|
+| =context.org=       | Root portal    | none        | =context/index.org=              |
+| =context/index.org= | Schema and map | =context.org= | topic links                    |
+| =context/*.org=     | Topic memory   | index links | examples, tables, source facts |
+
+** Node Schema
+:PROPERTIES:
+:ID: monadc.context.format.node-schema
+:CUSTOM_ID: node-schema
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:SOURCE: context/index.org
+:CONFIDENCE: high
+:END:
+
+Each significant heading may use this property drawer:
+
+#+BEGIN_EXAMPLE
+* Heading
+:PROPERTIES:
+:ID: monadc.context.<domain>.<stable-name>
+:CUSTOM_ID: <kebab-name>
+:CONTEXT_KIND: component|format|observation|decision|task
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local|external
+:CONTEXT_OWNER: human|codex|unknown
+:CONTEXT_MAINTAINER: human|codex|unknown
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: YYYY-MM-DD
+:CONTEXT_UPDATED: YYYY-MM-DD
+:CONTEXT_STABILITY: stable|evolving|volatile
+:CONTEXT_STATUS: active|superseded|archived
+:CONTEXT_OPEN_POLICY: showeverything
+:SOURCE: relative/path.c:123
+:CONFIDENCE: high|medium|low
+:END:
+#+END_EXAMPLE
+
+Required fields for long-lived nodes are =ID= and =CUSTOM_ID=. =SOURCE= is
+required for source-code observations. =CONFIDENCE= is required when the node
+contains inference rather than direct facts.
+
+** File Metadata Schema
+:PROPERTIES:
+:ID: monadc.context.format.file-metadata-schema
+:CUSTOM_ID: file-metadata-schema
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/index.org
+:CONFIDENCE: high
+:END:
+
+Every context file should include these file-level Org keywords when applicable:
+
+#+BEGIN_EXAMPLE
+#+TITLE: <human title>
+#+AUTHOR: Codex
+#+DATE: YYYY-MM-DD
+#+CREATED: YYYY-MM-DD
+#+LAST_MODIFIED: YYYY-MM-DD
+#+LANGUAGE: en
+#+STARTUP: showeverything
+#+OPTIONS: toc:<depth> num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:<topic>:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+END_EXAMPLE
+
+[DEC id:dec.context.startup-showeverything date:2026-06-11 by:human]
+Context files must use =#+STARTUP: showeverything= so headings are expanded
+when opened in Org.
+
+** Visual Design Rules
+:PROPERTIES:
+:ID: monadc.context.format.visual-design
+:CUSTOM_ID: visual-design-rules
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.context.visual-richness date:2026-06-11 by:human]
+The context corpus should be highly visual and use Org features broadly while
+remaining plain-text, self-contained, and machine-readable.
+
+#+CAPTION: Visual Org Feature Budget
+| Feature                   | Required Use           | Purpose            |
+|---------------------------+------------------------+--------------------|
+| =#+STARTUP: showeverything= | every file             | open expanded      |
+| =#+FILETAGS=                | every file             | fast filtering     |
+| property drawers          | every durable heading  | metadata           |
+| Org tables                | maps and summaries     | visual scanning    |
+| =#+BEGIN_QUOTE=             | high-level guidance    | callouts           |
+| =#+BEGIN_EXAMPLE=           | syntax contracts       | literal notation   |
+| =#+CAPTION=                 | every important table  | semantic labels    |
+| internal links            | cross-topic references | navigation         |
+| TODO keywords             | actionable status      | task tracking      |
+| COLUMNS spec              | metadata views         | agenda/table views |
+
+** LLM Notation
+:PROPERTIES:
+:ID: monadc.context.format.llm-notation
+:CUSTOM_ID: llm-notation
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:SOURCE: context/index.org
+:CONFIDENCE: high
+:END:
+
+LLM-oriented statements use bracketed records with fixed keys:
+
+#+BEGIN_EXAMPLE
+[OBS id:<id> src:<file:line> conf:<high|medium|low>] <direct observation>
+[INF id:<id> from:<obs-id[,obs-id...]> conf:<high|medium|low>] <inference>
+[DEC id:<id> date:<YYYY-MM-DD> by:<human|codex>] <decision>
+[TODO id:<id> owner:<human|codex|unknown> status:done] <task>
+#+END_EXAMPLE
+
+Rules:
+
+- =OBS= is reserved for facts read from files or command output.
+- =INF= must name the observation IDs it depends on.
+- =DEC= records repository-local choices that future work should preserve.
+- =TODO= records pending work only when it is specific and actionable.
+- IDs are immutable once published.
+- Prefer one claim per record.
+- Do not silently rewrite history; append a superseding record when facts change.
+
+** Current Topic Files
+:PROPERTIES:
+:ID: monadc.context.files
+:CUSTOM_ID: current-topic-files
+:CONTEXT_KIND: index
+:CONTEXT_VERSION: 1
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:SOURCE: context/index.org
+:CONFIDENCE: high
+:END:
+
+- [[file:reader.org][Reader and parser context]]
+- [[file:language.org][Language formalization context]]
+- [[file:build.org][Build and installation context]]
+- [[file:tests.org][Test system context]]
+- [[file:workflow.org][Agent workflow context]]
+- [[file:rules.org][Repository rules context]]
+- [[file:todo.org][Migrated project TODO]]
+- [[file:visualizer.org][Context visualizer]]
+
+* Current Task Notes
+:PROPERTIES:
+:ID: monadc.context.current-task
+:CUSTOM_ID: current-task-notes
+:CONTEXT_KIND: task
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.2026-06-11.reader-path-heap-request src:user-request conf:high]
+The active request is to make =reader.h= compile with existing =reader.c=
+changes for path literals of type =Path= and dynamic array literals of type
+=Heap=.
+
+[DEC id:dec.2026-06-11.context-format date:2026-06-11 by:codex]
+Use Org files with stable =ID= drawers and fixed LLM records as the project
+context notation.
+
+[OBS id:obs.2026-06-11.path-heap-fixed src:command-output conf:high]
+The focused fixture =tests/path_heap_literals.mon= parses
+=~/xos/projects/c/monadc/context= as =AST_PATH= and =~[1 2 3]= as an
+=AST_ARRAY= with =is_heap=true= in emitted JSON.
+
+[OBS id:obs.2026-06-11.path-heap-types src:command-output conf:high]
+Compiling =tests/path_heap_literals.mon= defines =path :: Path= and
+=darr :: Heap :: Int=.

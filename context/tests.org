@@ -1,0 +1,196 @@
+#+TITLE: Test System Context
+#+AUTHOR: Codex
+#+DATE: 2026-06-11
+#+CREATED: 2026-06-11
+#+LAST_MODIFIED: 2026-06-11
+#+LANGUAGE: en
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:tests:verification:llm:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+#+TAGS: tests(t) metadata(m) context(c) llm(l) philosophy(p)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.tests.file-metadata
+:CUSTOM_ID: tests-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/tests.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.tests.file src:context/tests.org conf:high]
+This file records the test metadata format and the relationship between tests
+and the repository context corpus.
+
+* LLM Orientation
+:PROPERTIES:
+:ID: monadc.context.tests.llm-orientation
+:CUSTOM_ID: llm-orientation
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: llm,human
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+#+BEGIN_QUOTE
+LLMs should treat this repository as a living memory system. The =context/=
+Org files explain why behavior exists, while =tests/*.mon= fixtures prove the
+smallest observable atoms of that behavior. A test header reconnects executable
+evidence to context IDs: when a test fails, read its =TEST-CONTEXT= nodes before
+changing code; when code changes, add or update the smallest test atom and its
+context record.
+#+END_QUOTE
+
+[DEC id:dec.tests.context-reconnection date:2026-06-11 by:human]
+Tests must carry metadata that links them back to context nodes so future
+humans and LLM agents can recover the purpose, scope, and expected behavior of
+each fixture without guessing.
+
+* Philosophy
+:PROPERTIES:
+:ID: monadc.context.tests.philosophy
+:CUSTOM_ID: test-philosophy
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.tests.smallest-atoms date:2026-06-11 by:human]
+The test suite should be separated into the smallest possible behavioral atoms.
+Each atom should prove one compiler promise, point at the context that explains
+that promise, and be cheap enough to run continuously.
+
+[DEC id:dec.tests.living-system date:2026-06-11 by:human]
+Documentation, philosophy, context, and tests are all part of the same living
+system. The system records not only what the compiler does, but why that
+behavior matters and how it is verified.
+
+#+CAPTION: Living Verification Loop
+| Layer      | Artifact          | Role                                     | Update Trigger                 |
+|------------+-------------------+------------------------------------------+--------------------------------|
+| Philosophy | =context/tests.org= | why tests are atomic and connected       | standing preference changes    |
+| Context    | =context/*.org=     | durable facts, decisions, and inferences | behavior is learned or changed |
+| Fixture    | =tests/*.mon=       | smallest source example                  | bug report or feature contract |
+| Runner     | =tests/run.py=      | executable verification                  | new assertion style is needed  |
+
+* Test Metadata Format
+:PROPERTIES:
+:ID: monadc.context.tests.metadata-format
+:CUSTOM_ID: test-metadata-format
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: tests/run.py
+:CONFIDENCE: high
+:END:
+
+Every =tests/*.mon= fixture starts with comment metadata. The runner validates
+the required keys before running behavioral checks.
+
+#+BEGIN_EXAMPLE
+;; TEST-ID: tests.<domain>.<atom>
+;; TEST-CONTEXT: monadc.context.<topic>.<node>[, monadc.context.<topic>.<node>...]
+;; TEST-PURPOSE: one sentence describing the exact behavior under test
+;; TEST-ATOM: one smallest observable promise
+;; TEST-EXPECT: parse|compile|run|fail:<diagnostic>|json:<shape>
+#+END_EXAMPLE
+
+#+CAPTION: Test Metadata Keys
+| Key          | Required | Meaning                                |
+|--------------+----------+----------------------------------------|
+| =TEST-ID=      | yes      | stable test identity                   |
+| =TEST-CONTEXT= | yes      | context node IDs that explain the test |
+| =TEST-PURPOSE= | yes      | human-readable reason                  |
+| =TEST-ATOM=    | yes      | one behavior, not a scenario bundle    |
+| =TEST-EXPECT=  | yes      | observable outcome class               |
+
+[DEC id:dec.tests.comment-metadata date:2026-06-11 by:codex]
+Test metadata uses =;; TEST-*= comments so fixtures remain ordinary Monad
+programs and the metadata is visible to both the compiler and plain-text tools.
+
+[DEC id:dec.tests.sidecar-metadata date:2026-06-11 by:human]
+Each durable regression may also have a sidecar Org file named after the test
+fixture, for example =tests/path_heap_literals.org= for
+=tests/path_heap_literals.mon=. The sidecar records richer metadata, context
+links, regression contracts, and historical notes that would make the executable
+fixture noisy.
+
+#+CAPTION: Test Artifact Pairing
+| Artifact | Naming           | Purpose                                      |
+|----------+------------------+----------------------------------------------|
+| Fixture  | =tests/<name>.mon= | executable behavior atom                     |
+| Sidecar  | =tests/<name>.org= | metadata, context links, regression contract |
+| Runner   | =tests/run.py=     | formatted execution and assertions           |
+
+[TODO id:todo.tests.metadata-expand owner:codex status:done]
+As the suite grows, extend =tests/run.py= so =TEST-EXPECT= drives more
+assertions directly instead of requiring hand-written shell checks per fixture.
+
+[DEC id:dec.tests.runner-output date:2026-06-11 by:human]
+The test runner should present a high-signal suite report with a framed header,
+registered test count, one timed status row per test, a summary block, and a
+clear all-passed or failed footer.
+
+[DEC id:dec.tests.runner-colors-cleanup date:2026-06-11 by:human]
+The test runner is named =tests/run.py=. It must delete test-generated
+artifacts immediately after each test, render the arrow in yellow, dots in gray,
+success checkmark in green, =PASS= in bold green, =FAIL= in bold red, and time
+units such as =ms= in cyan.
+
+[DEC id:dec.tests.stdout-golden-suffix date:2026-06-11 by:human]
+If a fixture has a sibling =.stdout= file with the same basename, =tests/run.py=
+must compile and execute the fixture and require executable stdout to end with
+that file exactly. This supports stable golden-output checks even when compiler
+logs are noisy.
+
+[DEC id:dec.tests.table-driven-language-corpus date:2026-06-11 by:codex]
+=tests/language_corpus.tsv= expands into individual registered parser
+conformance tests. Each row records one language atom, its context target, its
+purpose, and its source text.

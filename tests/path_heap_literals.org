@@ -1,0 +1,73 @@
+#+TITLE: path_heap_literals Test Metadata
+#+AUTHOR: Codex
+#+DATE: 2026-06-11
+#+CREATED: 2026-06-11
+#+LAST_MODIFIED: 2026-06-11
+#+LANGUAGE: en
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-test
+#+FILETAGS: :monadc:compiler:test:reader:codegen:regression:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: TEST_FIXTURE tests/path_heap_literals.mon
+#+PROPERTY: TEST_RUNNER tests/run.py
+#+PROPERTY: TEST_ID tests.reader.path-heap-literals
+
+* Test Metadata
+:PROPERTIES:
+:ID: monadc.test.path-heap-literals.metadata
+:CUSTOM_ID: path-heap-literals-metadata
+:CONTEXT_KIND: test-metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: tests/path_heap_literals.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests.path-heap-literals.fixture src:tests/path_heap_literals.mon conf:high]
+The fixture verifies that home-relative Path literals and heap array literals
+survive Wisp, parse, JSON emission, code generation, and runtime startup.
+
+#+CAPTION: Test Identity
+| Key     | Value                                                                                  |
+|---------+----------------------------------------------------------------------------------------|
+| TEST-ID | =tests.reader.path-heap-literals=                                                        |
+| Fixture | =tests/path_heap_literals.mon=                                                           |
+| Runner  | =tests/run.py=                                                                           |
+| Context | =monadc.context.reader.path-literals=                                                    |
+| Context | =monadc.context.reader.heap-arrays=                                                      |
+| Context | =monadc.context.tests.metadata-format=                                                   |
+| Expect  | JSON contains Path literal and heap array marker; compile succeeds; executable exits 0 |
+
+* Regression Contract
+:PROPERTIES:
+:ID: monadc.test.path-heap-literals.contract
+:CUSTOM_ID: path-heap-literals-contract
+:CONTEXT_KIND: test-contract
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/run.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.tests.path-heap-literals.contract date:2026-06-11 by:codex]
+This regression is not only a parser check. The runner must exercise JSON
+emission, compilation, generated executable creation, and execution so future
+changes cannot silently reintroduce the =unknown AST type: 3= codegen failure or
+drop the heap-array marker.

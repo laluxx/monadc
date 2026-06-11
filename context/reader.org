@@ -1,0 +1,208 @@
+#+TITLE: Reader and Parser Context
+#+AUTHOR: Codex
+#+DATE: 2026-06-11
+#+CREATED: 2026-06-11
+#+LAST_MODIFIED: 2026-06-11
+#+LANGUAGE: en
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:reader:parser:ast:lexer:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+#+TAGS: reader(r) parser(p) lexer(l) ast(a) token(t) wisp(w) heap(h) path(P)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.reader.file-metadata
+:CUSTOM_ID: reader-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/reader.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.reader.file src:context/reader.org conf:high]
+This file records context about =reader.h= and =reader.c=.
+
+#+CAPTION: Reader/Wisp Boundary Map
+| Surface Form | Wisp Responsibility     | Reader Responsibility | AST Result                   |
+|--------------+-------------------------+-----------------------+------------------------------|
+| =~[1 2 3]=     | preserve balanced token | lex =~= + adjacent =[]=   | =AST_ARRAY.array.is_heap=true= |
+| =~/path=       | pass token text through | lex as =TOK_PATH=       | =AST_PATH=                     |
+| =./path=       | pass token text through | lex as =TOK_PATH=       | =AST_PATH=                     |
+| =/abs/path=    | pass token text through | lex as =TOK_PATH=       | =AST_PATH=                     |
+
+* AST and Token Header
+:PROPERTIES:
+:ID: monadc.context.reader.header
+:CUSTOM_ID: ast-and-token-header
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: reader.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.reader.ast-enum src:reader.h:39 conf:high]
+=ASTType= defines parser node tags shared by parser, AST utilities, and later
+compiler phases.
+
+[OBS id:obs.reader.token-enum src:reader.h:357 conf:high]
+=TokenType= defines lexer token tags consumed by =parse_expr=.
+
+[OBS id:obs.reader.array-payload src:reader.h:164 conf:high]
+=AST_ARRAY= stores element pointers, element count, element capacity, and a heap
+literal flag.
+
+[OBS id:obs.reader.path-node src:reader.h:42 conf:high]
+=AST_PATH= is represented with the union =string= field, matching the existing
+=reader.c= constructor and JSON/print handling.
+
+#+CAPTION: Header Additions for Path and Heap Literals
+| Symbol        | Kind             | Source              | Consumer                    |
+|---------------+------------------+---------------------+-----------------------------|
+| =AST_PATH=      | AST tag          | =reader.h=            | AST utilities, parser, JSON |
+| =TOK_PATH=      | token tag        | =reader.h=            | lexer/parser                |
+| =ast_new_path=  | constructor      | =reader.h= / =reader.c= | parser                      |
+| =array.is_heap= | AST payload flag | =reader.h=            | parser and later stages     |
+
+* Path Literals
+:PROPERTIES:
+:ID: monadc.context.reader.path-literals
+:CUSTOM_ID: path-literals
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: reader.c:1760
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.reader.path-lexer src:reader.c:1760 conf:high]
+The lexer recognizes path-like tokens starting with absolute, home-relative, or
+dot-relative prefixes and emits =TOK_PATH=.
+
+[OBS id:obs.reader.path-parser src:reader.c:6118 conf:high]
+=parse_expr= turns =TOK_PATH= into =ast_new_path(tok.value)= and preserves source
+location.
+
+[OBS id:obs.reader.path-ast src:reader.c:430 conf:high]
+=ast_new_path= creates =AST_PATH= and stores the path text in =ast->string=.
+
+* Heap Array Literals
+:PROPERTIES:
+:ID: monadc.context.reader.heap-arrays
+:CUSTOM_ID: heap-array-literals
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: reader.c:6005
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.reader.heap-array-parser src:reader.c:6005 conf:high]
+The parser treats adjacent =~[...]= as a heap array literal.
+
+[OBS id:obs.reader.heap-array-flag src:reader.c:6019 conf:high]
+When =~[...]= parses as =AST_ARRAY=, =array.is_heap= is set to =true=.
+
+[INF id:inf.reader.heap-array-contract from:obs.reader.heap-array-parser,obs.reader.heap-array-flag conf:medium]
+Later stages can distinguish stack array literals from heap array literals by
+checking =AST_ARRAY.array.is_heap=.
+
+* Wisp Heap Array Preservation
+:PROPERTIES:
+:ID: monadc.context.reader.wisp-heap-array-preservation
+:CUSTOM_ID: wisp-heap-array-preservation
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: wisp.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.reader.wisp-bug-heap-array-split src:user-report conf:high]
+Before the Wisp fix, =define darr ~[1 2 3]= expanded as =(define darr ~[1)=
+followed by orphaned =2= and =3]= tokens.
+
+[OBS id:obs.reader.wisp-heap-array-token src:wisp.c:1118 conf:high]
+Wisp tokenization now treats =~[...]= as one balanced token.
+
+[OBS id:obs.reader.wisp-heap-array-grouped src:wisp.c:3931 conf:high]
+Wisp expression parsing now classifies tokens beginning with =~[= as grouped
+atomic expressions.
+
+[INF id:inf.reader.heap-array-flow from:obs.reader.wisp-heap-array-token,obs.reader.heap-array-parser conf:high]
+The intended flow is Wisp preserves =~[1 2 3]=, then the reader lexes it as
+adjacent =~= and =[...]= and marks the parsed array as heap-backed.
+
+[OBS id:obs.reader.heap-array-clone src:reader.c conf:high]
+=ast_clone= preserves =AST_ARRAY.array.is_heap= so desugaring or AST copying
+does not erase heap literal status.
+
+[OBS id:obs.reader.heap-array-infer src:infer.c conf:high]
+Inference returns =type_arr_heap(elem_t)= for =AST_ARRAY= nodes whose
+=array.is_heap= flag is true.
+
+[OBS id:obs.reader.heap-array-json src:reader.c conf:high]
+AST JSON emission includes =is_heap= for array nodes, making =~[]= behavior
+visible in focused fixtures.
+
+[OBS id:obs.reader.path-heap-fixture src:tests/path_heap_literals.mon conf:high]
+=tests/path_heap_literals.mon= covers a home-relative =Path= literal and a
+heap array literal.
+
+#+BEGIN_EXAMPLE
+Input:
+define darr ~[1 2 3]
+
+Expected Wisp shape:
+(define darr ~[1 2 3])
+#+END_EXAMPLE

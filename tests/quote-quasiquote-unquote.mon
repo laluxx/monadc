@@ -1,0 +1,9 @@
+;; TEST-ID: tests.reader.quote-quasiquote-unquote
+;; TEST-CONTEXT: monadc.context.tests.metadata-format
+;; TEST-PURPOSE: Track the quote/quasiquote/unquote fixture as a small syntax atom.
+;; TEST-ATOM: A quasiquoted sequence with one unquoted arithmetic expression remains a dedicated fixture.
+;; TEST-EXPECT: compile
+
+define numbers ⌜1 2 3 ⌞2 + 2⌟ 5 6 7⌝
+
+show numbers

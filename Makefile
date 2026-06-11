@@ -75,4 +75,7 @@ uninstall:
 	rm -rf $(INCDIR)
 	rm -rf $(PREFIX)/lib/monad/core
 
-.PHONY: all clean release install uninstall asan
+test: all
+	python3 tests/run.py
+
+.PHONY: all clean release install uninstall asan test

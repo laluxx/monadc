@@ -1025,6 +1025,10 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         result = type_string();
         break;
 
+    case AST_PATH:
+        result = type_path();
+        break;
+
     case AST_CHAR:
         result = type_char();
         break;
@@ -1103,7 +1107,9 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             Type *et = infer_expr(ctx, ast->array.elements[i]);
             infer_constrain(ctx, et, elem_t, ast->line, ast->column);
         }
-        result = type_arr(elem_t, (int)ast->array.element_count);
+        result = ast->array.is_heap
+            ? type_arr_heap(elem_t)
+            : type_arr(elem_t, (int)ast->array.element_count);
         break;
     }
 

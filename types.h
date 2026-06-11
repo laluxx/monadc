@@ -45,6 +45,7 @@ typedef enum {
     TYPE_OPTIONAL,      // T?                  — optional type
     TYPE_NIL,           // nil
     TYPE_APP,           // type application: M a (e.g. Maybe Float)
+    TYPE_PATH,          // Path literal      -- filesystem path
 } TypeKind;
 
 
@@ -92,7 +93,8 @@ typedef struct Type {
     // TYPE_ARR — fat pointer { T* data, i64 size }
     struct Type *arr_element_type;
     int64_t      arr_size;          // -1 = unknown at compile time
-    bool         arr_is_fat;        // true = runtime fat pointer
+    bool         arr_is_fat;        // true = runtime fat pointer {data, size}
+    bool         arr_is_heap;       // true = heap-growable    {data, size, cap}
 
     // TYPE_LAYOUT
     char        *layout_name;
@@ -175,7 +177,9 @@ Type *type_int_arbitrary(int width, bool is_signed); // I<n> or U<n>
 
 Type *type_list(Type **types, int count);
 Type *type_arr(Type *element_type, int64_t size);
-Type *type_arr_fat(Type *element_type); // runtime fat pointer {data, size}
+Type *type_arr_fat(Type *element_type);  // runtime fat pointer  {data, size}
+Type *type_arr_heap(Type *element_type); // heap growable array  {data, size, cap}
+Type *type_path(void);
 Type *type_fn(FnParam *params, int param_count, Type *return_type);
 Type *type_fn_builtin(int min_args, int opt_args, bool variadic);
 Type *type_layout(const char *name, LayoutField *fields, int field_count,

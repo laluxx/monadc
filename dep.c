@@ -2821,6 +2821,7 @@ static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
             return term_ann(term_hole(), term_embed(type_int()));
         }
     case AST_STRING:  return term_ann(term_hole(), term_embed(type_string()));
+    case AST_PATH:    return term_ann(term_hole(), term_embed(type_path()));
     case AST_CHAR: {
         long long n = (long long)ast->character;
         if (n >= 0) {

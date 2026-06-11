@@ -40,6 +40,7 @@ typedef enum {
     AST_NUMBER,
     AST_SYMBOL,
     AST_STRING,
+    AST_PATH,       // path literal (./file, ../file, /abs, ~/file)
     AST_CHAR,
     AST_LIST,
     AST_KEYWORD,    // :keyword
@@ -166,6 +167,7 @@ typedef struct AST {
             struct AST **elements;
             size_t element_count;
             size_t element_capacity;
+            bool is_heap; // true for heap array literal ~[...]
         } array;
 
         // AST_LAMBDA
@@ -306,6 +308,7 @@ typedef struct AST {
 AST *ast_new_number(double value, const char *literal);
 AST *ast_new_symbol(const char *name);
 AST *ast_new_string(const char *value);
+AST *ast_new_path(const char *value);
 AST *ast_new_char(char value);
 AST *ast_new_keyword(const char *name);
 AST *ast_new_ratio(long long numerator, long long denominator);
@@ -363,6 +366,7 @@ typedef enum {
     TOK_SYMBOL,
     TOK_NUMBER,
     TOK_STRING,
+    TOK_PATH,
     TOK_CHAR,
     TOK_KEYWORD,
     TOK_QUOTE,          // '

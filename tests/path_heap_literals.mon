@@ -1,0 +1,10 @@
+;; TEST-ID: tests.reader.path-heap-literals
+;; TEST-CONTEXT: monadc.context.reader.path-literals, monadc.context.reader.heap-arrays, monadc.context.tests.metadata-format
+;; TEST-PURPOSE: Verify that home-relative Path literals and heap array literals survive Wisp, parse, codegen, and runtime startup.
+;; TEST-ATOM: A top-level Path define named path and a top-level heap array define must compile and run.
+;; TEST-EXPECT: json:path+array.is_heap, compile, run
+
+(module PathHeapLiterals)
+
+(define path ~/xos/projects/c/monadc/context)
+(define darr ~[1 2 3])

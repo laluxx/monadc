@@ -1,0 +1,6 @@
+Those are the TODOs about the context system
+
+* DONE [0/1]
+ # The system is honest about CONFIDENCE levels, but high-confidence OBS nodes still depend on source locations staying accurate.
+ # After heavy refactoring, src:reader.c:1760 might point to the wrong line.
+   - [ ] Git blame integration? "Last verified at commit X"

@@ -655,6 +655,7 @@ LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *t) {
     case TYPE_CHAR:
         return LLVMInt8TypeInContext(ctx->context);
     case TYPE_STRING:
+    case TYPE_PATH:
     case TYPE_SYMBOL:
     case TYPE_KEYWORD:
         return LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
@@ -925,7 +926,8 @@ void codegen_print_ast(CodegenContext *ctx, AST *ast) {
         emit_call_2(ctx, printf_fn, i32, get_fmt_str_no_newline(ctx), LLVMBuildGlobalStringPtr(ctx->builder, ast->symbol, "sym"), "");
         break;
     case AST_STRING:
-        emit_call_2(ctx, printf_fn, i32, LLVMBuildGlobalStringPtr(ctx->builder, "\"%s\"", "fmt"), LLVMBuildGlobalStringPtr(ctx->builder, ast->string, "str"), "");
+    case AST_PATH:
+        emit_call_2(ctx, printf_fn, i32, LLVMBuildGlobalStringPtr(ctx->builder, "\"%s\"", "fmt"), LLVMBuildGlobalStringPtr(ctx->builder, ast->string, ast->type == AST_PATH ? "__monad_path_lit" : "__monad_str_lit"), "");
         break;
     case AST_CHAR:
         emit_call_2(ctx, printf_fn, i32, LLVMBuildGlobalStringPtr(ctx->builder, "'%c'", "fmt"), LLVMConstInt(LLVMInt8TypeInContext(ctx->context), ast->character, 0), "");
@@ -983,7 +985,10 @@ static LLVMValueRef ast_to_runtime_value(CodegenContext *ctx, AST *ast_elem) {
             rt_val = emit_call_1(ctx, get_rt_value_char(ctx), ptr, LLVMConstInt(LLVMInt8TypeInContext(ctx->context), ast_elem->character, 0), "rtval");
             break;
         case AST_STRING:
-            rt_val = emit_call_1(ctx, get_rt_value_string(ctx), ptr, LLVMBuildGlobalStringPtr(ctx->builder, ast_elem->string, "str"), "rtval");
+            rt_val = emit_call_1(ctx, get_rt_value_string(ctx), ptr, LLVMBuildGlobalStringPtr(ctx->builder, ast_elem->string, "__monad_str_lit"), "rtval");
+            break;
+        case AST_PATH:
+            rt_val = emit_call_1(ctx, get_rt_value_string(ctx), ptr, LLVMBuildGlobalStringPtr(ctx->builder, ast_elem->string, "__monad_path_lit"), "rtval");
             break;
         case AST_KEYWORD:
             rt_val = emit_call_1(ctx, get_rt_value_keyword(ctx), ptr, LLVMBuildGlobalStringPtr(ctx->builder, ast_elem->keyword, "kw"), "rtval");
@@ -1165,7 +1170,7 @@ static void codegen_show_value(CodegenContext *ctx, LLVMValueRef val, Type *type
     LLVMTypeRef void_t = LLVMVoidTypeInContext(ctx->context);
     LLVMValueRef nl_str = LLVMBuildGlobalStringPtr(ctx->builder, "\n", "nl");
 
-    if (type->kind == TYPE_STRING) emit_call_2(ctx, printf_fn, i32, newline ? get_fmt_str(ctx) : get_fmt_str_no_newline(ctx), val, "");
+    if (type->kind == TYPE_STRING || type->kind == TYPE_PATH) emit_call_2(ctx, printf_fn, i32, newline ? get_fmt_str(ctx) : get_fmt_str_no_newline(ctx), val, "");
     else if (type->kind == TYPE_CHAR) emit_call_2(ctx, printf_fn, i32, newline ? get_fmt_char(ctx) : get_fmt_char_no_newline(ctx), val, "");
     else if (type->kind == TYPE_FLOAT) emit_call_2(ctx, printf_fn, i32, newline ? get_fmt_float(ctx) : get_fmt_float_no_newline(ctx), val, "");
     else if (type->kind == TYPE_HEX || type->kind == TYPE_OCT) {
@@ -1422,6 +1427,7 @@ static LLVMValueRef codegen_box(CodegenContext *ctx, LLVMValueRef val, Type *typ
         case TYPE_CHAR:
             return emit_call_1(ctx, get_rt_value_char(ctx), ptr, val, "boxed_char");
         case TYPE_STRING:
+        case TYPE_PATH:
             return emit_call_1(ctx, get_rt_value_string(ctx), ptr, val, "boxed_str");
         case TYPE_BOOL:
             return emit_call_1(ctx, get_rt_value_int(ctx), ptr,
@@ -3580,7 +3586,13 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
     case AST_STRING: {
         result.type = type_string();
-        result.value = LLVMBuildGlobalStringPtr(ctx->builder, ast->string, "str");
+        result.value = LLVMBuildGlobalStringPtr(ctx->builder, ast->string, "__monad_str_lit");
+        return result;
+    }
+
+    case AST_PATH: {
+        result.type = type_path();
+        result.value = LLVMBuildGlobalStringPtr(ctx->builder, ast->string, "__monad_path_lit");
         return result;
     }
 
@@ -3667,8 +3679,11 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
         }
 
         result.value = arr_make_fat(ctx, stack, n, elem_type);
-        result.type  = type_arr_fat(type_clone(elem_type));
-        result.type->arr_size = n;
+        result.type  = ast->array.is_heap
+            ? type_arr_heap(type_clone(elem_type))
+            : type_arr_fat(type_clone(elem_type));
+        if (!ast->array.is_heap)
+            result.type->arr_size = n;
         return result;
     }
 
@@ -3883,7 +3898,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
         if (head->type == AST_STRING && ast->list.count == 2) {
             LLVMTypeRef  i8  = LLVMInt8TypeInContext(ctx->context);
             LLVMTypeRef  i64 = LLVMInt64TypeInContext(ctx->context);
-            LLVMValueRef str_val = LLVMBuildGlobalStringPtr(ctx->builder, head->string, "str");
+            LLVMValueRef str_val = LLVMBuildGlobalStringPtr(ctx->builder, head->string, "__monad_str_lit");
             CodegenResult idx_r  = codegen_expr(ctx, ast->list.items[1]);
             LLVMValueRef idx = type_is_float(idx_r.type)
                 ? LLVMBuildFPToSI(ctx->builder, idx_r.value, i64, "idx")
@@ -5842,7 +5857,7 @@ if (ast->list.count >= 5) {
 
                 // String literal
                 if (arg->type == AST_STRING) {
-                    LLVMValueRef str  = LLVMBuildGlobalStringPtr(ctx->builder, arg->string, "str");
+                    LLVMValueRef str  = LLVMBuildGlobalStringPtr(ctx->builder, arg->string, "__monad_str_lit");
                     LLVMValueRef args[] = {get_fmt_str(ctx), str};
                     LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn), printf_fn, args, 2, "");
                     result.type  = type_float();

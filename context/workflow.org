@@ -1,0 +1,96 @@
+#+TITLE: Agent Workflow Context
+#+AUTHOR: Codex
+#+DATE: 2026-06-11
+#+CREATED: 2026-06-11
+#+LAST_MODIFIED: 2026-06-11
+#+LANGUAGE: en
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:workflow:agent:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+#+TAGS: workflow(w) codex(c) user(u) context(x) response(r)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.workflow.file-metadata
+:CUSTOM_ID: workflow-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/workflow.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.workflow.file src:context/workflow.org conf:high]
+This file records standing workflow preferences for future compiler work.
+
+#+CAPTION: Standing Workflow Preferences
+| Preference         | Required Behavior                                  |
+|--------------------+----------------------------------------------------|
+| Completion phrase  | Start final job reports with =I've finished my job=  |
+| Context upkeep     | Add important discoveries to Org context           |
+| Build verification | Try full requested build/install path              |
+
+* Completion Phrase
+:PROPERTIES:
+:ID: monadc.context.workflow.completion-phrase
+:CUSTOM_ID: completion-phrase
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.workflow.completion-phrase date:2026-06-11 by:human]
+When a requested job is finished, the response must start with: =I've finished
+my job!=, followed by a detailed explanation of the work completed.
+
+* Context Maintenance
+:PROPERTIES:
+:ID: monadc.context.workflow.context-maintenance
+:CUSTOM_ID: context-maintenance
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.workflow.context-maintenance date:2026-06-11 by:human]
+Maintain repository context in Org files, adding important discoveries as work
+progresses.

@@ -107,7 +107,7 @@ define file readFile
 
 * TODO Prolog
 
-This is the design, alas.
+This is the design, at least.
 
 #+begin_src monad
 define square x ↦ x²
@@ -125,20 +125,6 @@ grandparent? 'tom z -> true ; Returns the symbol 'ann directly not a set because
 parent 'tom 'ann -> ∅       ; the solution is the empty set, this returns True.
 
 #+end_src
-
-* TODO For superpowers
-
-#+begin_src monad
-for c in "ciao"
-   show c
-
-
-for fruit in fruits        ; iter
-   for nut in nuts         ; iter2
-      for piece in pieces  ; iter3
-         show "counts: _ _ _" iter iter2 iter3
-#+end_src
-
 
 * TODO DSLs
 
@@ -555,9 +541,9 @@ instance plus with {x : Int} x 3
 
  #+end_src
 
-
-
 ** Bidirectional judgments
+
+   Maybe there is a way to expose the mechanism to the user.
 
    #+begin_src monad
    Γ ⊢ e ⇒ t ; Expression ⌜e⌝ synthesizes type ⌜t⌝
@@ -587,16 +573,9 @@ Two key modalities:
     2. Diamond =◇A= : "Suspended computation that will yield =A= after evaluation"
         This is the type of =eval=
 
-
-
-
-
 * TODO β reduction tracing
 
 Show a trace of Beta reductions just like we do for type checking.
-
-
-
 
 * TODO Sweet Matrix
 
@@ -668,8 +647,6 @@ Btw, This is a 2x2x2 matrix:
   0 1  1 0
   1 0  0 1
           ─╯
-
-
 #+end_src
 
 
@@ -776,6 +753,9 @@ Mesh
   [vboId         :: Pointer :: U32])
 #+end_src
 
+
+* TODO Dependent types [0/2]
+ - [ ]
 Point.x should return the Float type itself, once we can return types.
 
 #+begin_src monad
@@ -787,4 +767,4 @@ Point
 Point.x
 <input>:1:1: error: qualified symbol 'Point.x' used but no module context
 #+end_src
-
+ - [ ] This notations is pretty cool

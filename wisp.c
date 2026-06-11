@@ -1115,6 +1115,39 @@ static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
             continue;
         }
 
+        /* heap array literal: ~[...] — keep as one balanced token.
+         * The reader expects this exact surface form so it can lex '~'
+         * adjacent to '[' and mark the resulting AST_ARRAY as heap-backed. */
+        if (*p == '~' && *(p+1) == '[') {
+            const char *start = p;
+            p++; /* leave p on '[' so the balanced scanner includes it */
+            char open = *p;
+            char close = ']';
+            int depth = 0; bool in_str = false;
+            while (*p) {
+                if (in_str) {
+                    if (*p == '\\') p++;
+                    else if (*p == '"') in_str = false;
+                    p++; continue;
+                }
+                if (*p == '"') { in_str = true; p++; continue; }
+                if (*p == ';') break;
+                if (*p == open) depth++;
+                if (*p == close) { depth--; p++; if (!depth) break; continue; }
+                p++;
+            }
+            const char *end = p;
+            if (*p == ';') {
+                end = p;
+                while (end > start && (*(end-1) == ' ' || *(end-1) == '\t'))
+                    end--;
+            }
+            char *tok = strndup(start, end - start);
+            wts_push(s, tok, indent, lineno);
+            free(tok);
+            continue;
+        }
+
         /* grouped expression — keep as single token */
         if (*p == '(' || *p == '[' || *p == '{' ||
             (*p == '#' && *(p+1) == '{')) {
@@ -3929,6 +3962,7 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
     }
 
     bool is_grouped = (text[0] == '(' || text[0] == '[' || text[0] == '{' ||
+                       (text[0] == '~' && text[1] == '[') ||
                        (text[0] == '#' && text[1] == '{'));
 
     int arity = is_grouped ? 0 : arity_get(t, text);
@@ -3976,6 +4010,8 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
             bool next_is_value = (next_ar == 0 || next_ar == -2 ||
                                   s->tokens[s->pos].text[0] == '(' ||
                                   s->tokens[s->pos].text[0] == '[' ||
+                                  (s->tokens[s->pos].text[0] == '~' &&
+                                   s->tokens[s->pos].text[1] == '[') ||
                                   s->tokens[s->pos].text[0] == '{');
             if (next_is_value) {
                 sb_putc(&prefix_sb, '(');
@@ -4060,6 +4096,7 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
         if (op_tok->lineno != my_lineno) break;
         bool op_atom = (op_tok->text[0] != '(' &&
                         op_tok->text[0] != '[' &&
+                        !(op_tok->text[0] == '~' && op_tok->text[1] == '[') &&
                         op_tok->text[0] != '{');
         if (!op_atom) break;
         int op_ar = arity_get(t, op_tok->text);

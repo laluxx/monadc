@@ -427,6 +427,13 @@ AST *ast_new_keyword(const char *name) {
     return a;
 }
 
+AST *ast_new_path(const char *value) {
+    AST *a = calloc(1, sizeof(AST));
+    a->type   = AST_PATH;
+    a->string = my_strdup(value); // reuse string field — same semantics
+    return a;
+}
+
 AST *ast_new_ratio(long long numerator, long long denominator) {
     AST *a = calloc(1, sizeof(AST));
     a->type = AST_RATIO;
@@ -614,6 +621,9 @@ AST *ast_clone(AST *ast) {
     case AST_STRING:
         c->string = ast->string ? strdup(ast->string) : NULL;
         break;
+    case AST_PATH:
+        c->string = ast->string ? strdup(ast->string) : NULL;
+        break;
     case AST_KEYWORD:
         c->keyword = ast->keyword ? strdup(ast->keyword) : NULL;
         break;
@@ -647,6 +657,7 @@ AST *ast_clone(AST *ast) {
         c->array.elements        = malloc(sizeof(AST*) * (ast->array.element_capacity ? ast->array.element_capacity : 1));
         c->array.element_count    = ast->array.element_count;
         c->array.element_capacity = ast->array.element_capacity;
+        c->array.is_heap          = ast->array.is_heap;
         for (size_t i = 0; i < ast->array.element_count; i++)
             c->array.elements[i] = ast_clone(ast->array.elements[i]);
         break;
@@ -700,6 +711,10 @@ void ast_free(AST *ast) {
         break;
 
     case AST_STRING:
+        free(ast->string);
+        break;
+
+    case AST_PATH:
         free(ast->string);
         break;
 
@@ -886,6 +901,7 @@ void ast_print(AST *ast) {
     break;
     case AST_SYMBOL:  printf("%s", ast->symbol); break;
     case AST_STRING:  printf("\"%s\"", ast->string); break;
+    case AST_PATH:    printf("%s", ast->string ? ast->string : ""); break;
     case AST_CHAR:    printf("'%c'", ast->character); break;
     case AST_LIST:
         printf("(");
@@ -1729,6 +1745,58 @@ Token lexer_next_token(Lexer *lex) {
             else if (third == 0x9D) tok.type = TOK_QUASI_CLOSE;
             else if (third == 0x9E) tok.type = TOK_UNQUOTE_OPEN;
             else                    tok.type = TOK_UNQUOTE_CLOSE;
+            return tok;
+        }
+    }
+
+    // Path literal  — /abs/path  ~/home/path  ./rel  ../parent/path
+    // Detected before the symbol branch so the lexer consumes the full path.
+    // Rules:
+    //   /X    — absolute path: '/' followed by letter, digit, '_', or '.'
+    //   ~/    — home-relative path
+    //   ./    — current-directory-relative path
+    //   ../   — parent-directory-relative path
+    // We do NOT treat bare '/' as a path (it's the division operator).
+    {
+        bool is_path = false;
+        if (c == '/' && (is_digit((unsigned char)peek_ahead(lex, 1)) ||
+                         ((unsigned char)peek_ahead(lex, 1) >= 'a' && (unsigned char)peek_ahead(lex, 1) <= 'z') ||
+                         ((unsigned char)peek_ahead(lex, 1) >= 'A' && (unsigned char)peek_ahead(lex, 1) <= 'Z') ||
+                         peek_ahead(lex, 1) == '_' || peek_ahead(lex, 1) == '.')) {
+            is_path = true;
+        }
+        if (c == '~' && peek_ahead(lex, 1) == '/') {
+            is_path = true;
+        }
+        if (c == '.' && peek_ahead(lex, 1) == '/') {
+            is_path = true;
+        }
+        if (c == '.' && peek_ahead(lex, 1) == '.' && peek_ahead(lex, 2) == '/') {
+            is_path = true;
+        }
+        if (is_path) {
+            size_t start = lex->pos;
+            // Consume all valid path characters:
+            // alpha, digit, '/', '.', '-', '_', '~', '+', '@', '%', '=', ':'
+            while (true) {
+                char nc = peek(lex);
+                if (nc == '\0' || nc == ' ' || nc == '\t' || nc == '\n' ||
+                    nc == '\r' || nc == ')' || nc == '(' || nc == ']'  ||
+                    nc == '[' || nc == '}' || nc == '{' || nc == '"'   ||
+                    nc == ';') break;
+                // Allow only path-legal characters
+                if ((nc >= 'a' && nc <= 'z') || (nc >= 'A' && nc <= 'Z') ||
+                    (nc >= '0' && nc <= '9') ||
+                    nc == '/' || nc == '.' || nc == '-' || nc == '_' ||
+                    nc == '~' || nc == '+' || nc == '@' || nc == '%' ||
+                    nc == '=' || nc == ':') {
+                    advance(lex);
+                } else {
+                    break;
+                }
+            }
+            tok.value = my_strndup(lex->source + start, lex->pos - start);
+            tok.type  = TOK_PATH;
             return tok;
         }
     }
@@ -5935,6 +6003,41 @@ static AST *parse_expr_base(Parser *p) {
 
     }
     case TOK_SYMBOL: {
+        // ~[ heap array literal: ~[1 2 3] -> AST_ARRAY with is_heap=true
+        if (tok.value && strcmp(tok.value, "~") == 0) {
+            int heap_line = tok.line;
+            int heap_col  = tok.column;
+            p->current = lexer_next_token(p->lexer);
+
+            if (p->current.type == TOK_LBRACKET &&
+                p->current.column == tok.column + 1 &&
+                p->current.line == tok.line) {
+                // parse_bracket_list consumes '[' through ']'
+                AST *inner = parse_bracket_list(p);
+                if (inner->type == AST_ARRAY) {
+                    inner->array.is_heap = true;
+                } else {
+                    // Typed annotation or range inside ~[] — wrap in a heap marker.
+                    AST *wrapper = ast_new_list();
+                    ast_list_append(wrapper, ast_new_symbol("heap-array"));
+                    ast_list_append(wrapper, inner);
+                    wrapper->line       = heap_line;
+                    wrapper->column     = heap_col;
+                    wrapper->end_column = inner->end_column;
+                    return wrapper;
+                }
+                inner->line   = heap_line;
+                inner->column = heap_col;
+                return inner;
+            }
+
+            AST *ast = ast_new_symbol("~");
+            ast->line       = tok.line;
+            ast->column     = tok.column;
+            ast->end_column = tok.column + 1;
+            return ast;
+        }
+
         // & is address-of only when the & is immediately adjacent to the next
         // token (no whitespace between them), meaning tok.end_column == next tok.column.
         // We detect this by comparing columns: if & is at col N and next token
@@ -6014,6 +6117,15 @@ static AST *parse_expr_base(Parser *p) {
         AST *ast = ast_new_string(tok.value);
         ast->line = tok.line;
         ast->column = tok.column;
+        ast->end_column = end_col;
+        return ast;
+    }
+    case TOK_PATH: {
+        int end_col = tok.column + (tok.value ? (int)strlen(tok.value) : 1);
+        p->current = lexer_next_token(p->lexer);
+        AST *ast = ast_new_path(tok.value);
+        ast->line       = tok.line;
+        ast->column     = tok.column;
         ast->end_column = end_col;
         return ast;
     }
@@ -6659,6 +6771,11 @@ static void ast_to_json_sb(SB *b, AST *ast) {
         json_escape(b, ast->string ? ast->string : "");
         break;
 
+    case AST_PATH:
+        sb_puts(b, "\"path\",\"value\":");
+        json_escape(b, ast->string ? ast->string : "");
+        break;
+
     case AST_CHAR: {
         char buf[3] = {ast->character, 0};
         sb_puts(b, "\"char\",\"value\":");
@@ -6689,7 +6806,9 @@ static void ast_to_json_sb(SB *b, AST *ast) {
         break;
 
     case AST_ARRAY:
-        sb_puts(b, "\"array\",\"elements\":[");
+        sb_puts(b, "\"array\",\"is_heap\":");
+        sb_puts(b, ast->array.is_heap ? "true" : "false");
+        sb_puts(b, ",\"elements\":[");
         for (size_t i = 0; i < ast->array.element_count; i++) {
             if (i) sb_putc(b, ',');
             ast_to_json_sb(b, ast->array.elements[i]);

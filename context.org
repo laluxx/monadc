@@ -1,0 +1,79 @@
+#+TITLE: MonadC Compiler Context
+#+AUTHOR: Codex
+#+DATE: 2026-06-11
+#+CREATED: 2026-06-11
+#+LAST_MODIFIED: 2026-06-11
+#+LANGUAGE: en
+#+STARTUP: showeverything
+#+OPTIONS: toc:3 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:root:llm:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_ENTRYPOINT true
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+#+TAGS: architecture(a) build(b) reader(r) wisp(w) workflow(f) decision(d) observation(o) inference(i) task(t)
+
+#+BEGIN: monadc-context
+:format-version: 1
+:index: context/index.org
+:scope: repository-local compiler context
+:invariant: Use stable node IDs, explicit observations, and source links.
+:open-policy: showeverything
+:id-prefix: monadc.context
+:record-types: OBS INF DEC TODO
+:created: 2026-06-11
+:last-modified: 2026-06-11
+:source-root: /home/l/xos/projects/c/monadc
+:primary-consumer: human+llm
+:mutation-policy: append-or-supersede
+:link-policy: org-file-links + stable-ID properties
+#+END:
+
+* Index
+:PROPERTIES:
+:ID: monadc.context.root
+:CUSTOM_ID: root
+:CONTEXT_KIND: index
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_INDEX: context/index.org
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:SOURCE: context.org
+:CONFIDENCE: high
+:END:
+
+This file is the stable entry point for compiler context. Detailed notes live in
+[[file:context/index.org][context/index.org]] and are included below for single-file reading.
+
+#+BEGIN_QUOTE
+Read this as a self-contained compiler memory system: headings are durable
+nodes, property drawers are machine-readable metadata, and bracketed records are
+stable LLM facts.
+#+END_QUOTE
+
+| Area     | File                 | Purpose                                  |
+|----------+----------------------+------------------------------------------|
+| Format   | [[file:context/index.org][context/index.org]]    | Schema, notation, visual conventions     |
+| Reader   | [[file:context/reader.org][context/reader.org]]   | AST, tokens, parser and Wisp boundary    |
+| Build    | [[file:context/build.org][context/build.org]]    | Build/install commands and verification  |
+| Tests    | [[file:context/tests.org][context/tests.org]]    | Test metadata, philosophy, context links |
+| Workflow | [[file:context/workflow.org][context/workflow.org]] | Standing user preferences                |
+| Rules    | [[file:context/rules.org][context/rules.org]]    | Standing repository rules                |
+| TODO     | [[file:context/todo.org][context/todo.org]]     | Migrated project TODO notes              |
+
+#+INCLUDE: "context/index.org"

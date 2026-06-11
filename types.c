@@ -349,6 +349,8 @@ Type *type_from_name(const char *name) {
     if (strcmp(name, "Fn")      == 0) return type_fn(NULL, 0, NULL);
     if (strcmp(name, "Pointer") == 0) return type_ptr(NULL);
     if (strcmp(name, "F80")     == 0) return type_f80();
+    if (strcmp(name, "Path")    == 0) return type_path();
+    if (strcmp(name, "Heap")    == 0) return type_arr_heap(NULL);
 
     /* Arbitrary-width integers: I<n> and U<n> */
     {
@@ -433,6 +435,16 @@ Type *type_u64    (void) { return make_type(TYPE_U64);     }
 Type *type_i128   (void) { return make_type(TYPE_I128);    }
 Type *type_u128   (void) { return make_type(TYPE_U128);    }
 Type *type_f80    (void) { return make_type(TYPE_F80);     }
+Type *type_path   (void) { return make_type(TYPE_PATH);    }
+
+Type *type_arr_heap(Type *element_type) {
+    Type *t = make_type(TYPE_ARR);
+    t->arr_element_type = element_type;
+    t->arr_size    = -1;
+    t->arr_is_fat  = false;
+    t->arr_is_heap = true;
+    return t;
+}
 
 Type *type_int_arbitrary(int width, bool is_signed) {
     Type *t = make_type(TYPE_INT_ARBITRARY);
@@ -671,12 +683,14 @@ Type *type_clone(Type *t) {
         case TYPE_U128:    return type_u128();
         case TYPE_ARR: {
             Type *c = type_arr(type_clone(t->arr_element_type), t->arr_size);
-            c->arr_is_fat = t->arr_is_fat;
+            c->arr_is_fat  = t->arr_is_fat;
+            c->arr_is_heap = t->arr_is_heap;
             return c;
         }
         case TYPE_PTR:          return type_ptr(type_clone(t->element_type));
         case TYPE_OPTIONAL:     return type_optional(type_clone(t->element_type));
         case TYPE_NIL:          return type_nil();
+        case TYPE_PATH:         return type_path();
         case TYPE_APP:          return type_app(t->app_constructor, type_clone(t->app_arg));
         case TYPE_F80:          return type_f80();
         case TYPE_INT_ARBITRARY: return type_int_arbitrary(t->numeric_width, t->numeric_signed);
@@ -817,13 +831,22 @@ const char *type_to_string(Type *t) {
         case TYPE_COLL:
             snprintf(buf, 512, "[%s]", type_to_string(t->element_type));
             return buf;
+        case TYPE_PATH: return "Path";
         case TYPE_ARR:
+        if (t->arr_is_heap) {
+            if (t->arr_element_type)
+                snprintf(buf, 512, "Heap :: %s", type_to_string(t->arr_element_type));
+            else
+                snprintf(buf, 512, "Heap");
+            return buf;
+        }
         if (t->arr_element_type && t->arr_size >= 0) {
-            snprintf(buf, 512, "Arr :: %s :: %d", type_to_string(t->arr_element_type), t->arr_size);
+            snprintf(buf, 512, "Arr :: %s :: %lld",
+                     type_to_string(t->arr_element_type), (long long)t->arr_size);
         } else if (t->arr_element_type) {
             snprintf(buf, 512, "Arr :: %s", type_to_string(t->arr_element_type));
         } else if (t->arr_size >= 0) {
-            snprintf(buf, 512, "Arr :: ? :: %d", t->arr_size);
+            snprintf(buf, 512, "Arr :: ? :: %lld", (long long)t->arr_size);
         } else {
             snprintf(buf, 512, "Arr");
         }

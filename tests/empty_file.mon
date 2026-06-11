@@ -1,0 +1,5 @@
+;; TEST-ID: tests.reader.empty-file
+;; TEST-CONTEXT: monadc.context.tests.metadata-format
+;; TEST-PURPOSE: Preserve an intentionally empty Monad fixture as a metadata-bearing test atom.
+;; TEST-ATOM: A comment-only fixture should be valid test inventory input.
+;; TEST-EXPECT: inventory

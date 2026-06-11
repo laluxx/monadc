@@ -1,0 +1,103 @@
+#+TITLE: Build and Installation Context
+#+AUTHOR: Codex
+#+DATE: 2026-06-11
+#+CREATED: 2026-06-11
+#+LAST_MODIFIED: 2026-06-11
+#+LANGUAGE: en
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:build:install:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+#+TAGS: build(b) install(i) verify(v) make(m)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.build.file-metadata
+:CUSTOM_ID: build-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/build.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.build.file src:context/build.org conf:high]
+This file records build, verification, and installation context.
+
+#+CAPTION: Build Verification Ladder
+| Step | Command | Privilege | Required Before |
+|------+---------+-----------+-----------------|
+| Clean | =make clean= | user | compile |
+| Compile | =make= | user | install |
+| Install | =sudo make install= | root | system use |
+
+* Build Command
+:PROPERTIES:
+:ID: monadc.context.build.command
+:CUSTOM_ID: build-command
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.build.requested-command src:user-request conf:high]
+The requested full build/install command is =make clean && make && sudo make
+install=.
+
+[OBS id:obs.build.makefile src:Makefile conf:medium]
+The repository root contains a =Makefile= and is expected to build from the root
+directory.
+
+* Verification Policy
+:PROPERTIES:
+:ID: monadc.context.build.verification
+:CUSTOM_ID: verification-policy
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.build.verify-after-reader-header date:2026-06-11 by:codex]
+After modifying compiler headers, run at least =make clean= and =make=. Run
+=sudo make install= only after the non-privileged build succeeds.
+
+[OBS id:obs.build.sudo-password-required src:command-output conf:high]
+In this environment, =sudo make install= can require an interactive password and
+may fail if no password is provided.
