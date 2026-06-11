@@ -77,3 +77,322 @@ This file records the executable formalization layer for Monad language syntax.
   runner executes the compiled program and requires the program output to end with
   that file exactly, allowing stable suffix checks while ignoring noisy compiler
   output.
+
+* Runtime Codegen Corpus
+:PROPERTIES:
+:ID: monadc.context.language.runtime-codegen-corpus
+:CUSTOM_ID: runtime-codegen-corpus
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.language.runtime-codegen-corpus date:2026-06-11 by:codex]
+  =tests/codegen/*.mon= fixtures are the executable language corpus. New
+  runtime promises should be captured as small compile/run atoms with sibling
+  =.stdout= golden files whenever behavior reaches code generation.
+
+[OBS id:obs.language.runtime-builtins-coverage src:codegen.c:12960 conf:high]
+  The runtime builtin registry exposes arithmetic, bitwise, comparison,
+  collection, control-flow, conversion, predicate, and string helpers. The
+  codegen corpus should grow across these families so parser-only syntax atoms
+  gain executable coverage where possible.
+
+[OBS id:obs.language.runtime-codegen-batch-2026-06-11 src:tests/codegen conf:high]
+  Added codegen-backed atoms for comparison edges, collection access, string
+  measurement helpers, and extended runtime type predicates.
+
+[INF id:inf.language.registered-vs-codegen-callable from:obs.language.runtime-builtins-coverage conf:medium]
+  The builtin registry is broader than the set of names currently callable by
+  codegen. Coverage expansion should prove runtime-callable behavior first and
+  leave unsupported registered helpers as future implementation targets.
+
+[OBS id:obs.language.runtime-codegen-batch-2026-06-11b src:tests/codegen conf:high]
+  Added codegen-backed coverage atoms for =when=, =unless= skip behavior,
+  =for= accumulation, array predicates/count, set/map predicates, and string
+  prefix/suffix predicates. These fixtures are allowed to expose deep codegen
+  gaps while preserving syntactically valid language examples.
+
+[OBS id:obs.language.codegen-gaps-2026-06-11 src:tests/codegen conf:high]
+  Current codegen-backed coverage exposes these non-syntax implementation gaps:
+  =rt_collection_access= parses and links but crashes at runtime for =head= /
+  =tail= on quoted lists; =rt_string_helpers= parses but =length= is not
+  codegen-callable; =rt_when_effect= parses but =when= is not codegen-callable.
+
+[OBS id:obs.language.runtime-codegen-batch-2026-06-11c src:tests/codegen conf:high]
+  Added codegen-backed coverage for character/keyword/symbol predicates,
+  fixed-width integer conversions, map query helpers, set literal
+  predicate/count behavior, and =code= reflection on a defined function.
+
+[OBS id:obs.language.codegen-gaps-2026-06-11c src:tests/codegen conf:high]
+  Exploration found that =(contains? value set)= parses but lowers to an
+  invalid =rt_set_contains= call signature, while =(contains? set value)= is
+  treated like set-function application. =code= reflection parses but currently
+  reports no stored source for a freshly defined function.
+
+[OBS id:obs.language.runtime-codegen-batch-2026-06-11d src:tests/codegen conf:high]
+  Added structured-data coverage for positional layout construction with field
+  access, keyword-style layout construction, and ADT constructor declarations.
+  Positional layout fields compile/run with deterministic output; ADT
+  constructors compile/run as values; keyword layout construction currently
+  remains implementation pressure.
+
+[OBS id:obs.language.layout-keyword-gap-2026-06-11 src:tests/codegen/rt_layout_keyword_constructor.mon conf:high]
+  =(Point :x 3 :y 4)= parses as a layout constructor call but dependent type
+  checking treats the keyword tokens as positional arguments, so construction
+  fails before codegen instead of mapping keywords to fields.
+
+[OBS id:obs.language.runtime-codegen-batch-2026-06-11e src:tests/codegen conf:high]
+  Added codegen-backed reader-sugar coverage for percentage literals, periodic
+  decimals, infix arithmetic/comparison, postfix function calls, postfix array
+  indexing, assignment-arrow mutation, lambda literal calls, and superscript
+  exponent syntax.
+
+[OBS id:obs.language.sugar-gaps-2026-06-11 src:tests/codegen/rt_superscript_sugar.mon conf:high]
+  Superscript sugar parses and desugars to =(^ x n)=, but =^= is not currently
+  codegen-callable. A pipe example shaped as =(41 |> inc)= fails during reader
+  validation because the desugaring attempts to call the numeric literal.
+
+[OBS id:obs.language.runtime-codegen-batch-2026-06-11f src:tests/codegen conf:high]
+  Added codegen-backed coverage for begin variants, feature conditional
+  preprocessing, module export declarations, type aliases, refinement
+  annotations, simple class/instance declarations, do sequencing, with bindings,
+  and top-level mutual-recursion forward references.
+
+[OBS id:obs.language.form-gaps-2026-06-11 src:tests/codegen conf:high]
+  =do= and =with= forms parse and emit JSON but are not currently
+  codegen-callable. A top-level mutually recursive pair where the first function
+  calls the second before its definition also parses but fails as an unknown
+  function. A compact multi-binding =letrec= probe failed reader validation and
+  was not promoted to the codegen corpus.
+
+[OBS id:obs.language.current-codegen-pressure-2026-06-11 src:tests/run.py conf:high]
+  The current codegen corpus intentionally includes syntactically valid fixtures
+  that expose implementation pressure: multi-argument arithmetic edge cases,
+  nested collection display, set =contains?= lowering, string =++= on strings,
+  =do=, =with=, superscript exponent calls, keyword layout construction,
+  function code reflection, collection =head=/=tail= runtime behavior, and
+  top-level mutual recursion forward references.
+
+[OBS id:obs.language.runtime-codegen-batch-2026-06-11g src:tests/codegen conf:high]
+  Added codegen-backed coverage for bound-array count/index behavior, record
+  declarations, char constructor aliases, adjacent string literals, and
+  size-array value syntax. Also added the missing golden stdout for the existing
+  =rt_array_full= fixture.
+
+[OBS id:obs.language.literal-form-gaps-2026-06-11 src:tests/codegen conf:high]
+  =record= declarations, =char= / =int->char= aliases, adjacent string literal
+  application, and =[16kb]= as a value all parse and emit JSON but currently
+  expose deeper codegen/type behavior gaps. Quoting a parenthesized list via
+  =(quote (1 2 3))= failed reader validation in the tested shape and was not
+  promoted as a codegen fixture.
+
+[OBS id:obs.language.runtime-codegen-batch-2026-06-11h src:tests/codegen conf:high]
+  Added codegen-backed coverage for =tests= blocks, =include= headers, runtime
+  =error= aborts, top-level =asm= placement, and import option forms.
+
+[OBS id:obs.language.special-form-gaps-2026-06-11 src:tests/codegen conf:high]
+  =(tests ...)= and =(include "math.h")= parse, compile, and allow following
+  code to run. =(error "boom")= compiles and aborts at runtime, but the runner
+  lacks expected-nonzero support. Top-level =asm= parses but is rejected because
+  inline assembly is currently only valid as a function body. Import option
+  forms emit JSON but are rejected by current import validation or module
+  resolution.
+
+* Reader Header Coverage Checklist
+:PROPERTIES:
+:ID: monadc.context.language.reader-header-coverage
+:CUSTOM_ID: reader-header-coverage
+:CONTEXT_KIND: task
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: reader.h
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.language.reader-header-driven-coverage date:2026-06-11 by:human]
+  Coverage expansion must be driven from =reader.h=: every AST kind, token
+  family, pattern kind, and payload variant should gain parser coverage and,
+  where possible, codegen-backed fixtures. Combinations of atoms should be added
+  continuously as living regression pressure.
+
+[OBS id:obs.language.reader-ast-surface src:reader.h:39 conf:high]
+  =reader.h= exposes these AST families for coverage: numbers, symbols, strings,
+  paths, chars, lists, keywords, ratios, arrays, lambdas, asm, refinements,
+  tests blocks, address-of, ranges, layouts, sets, maps, pattern matching, data
+  declarations, classes, instances, and lambda literals.
+
+[OBS id:obs.language.reader-payload-surface src:reader.h:66 conf:high]
+  Payload-level coverage should include lambda rest/anonymous/typed params,
+  lambda docstrings and aliases, asm instruction lists, refinement doc/alias,
+  array heap flags, ranges with start/step/end/infinite and array/list shapes,
+  layout inline/pointer/array fields with packed/aligned options, data type
+  parameters and deriving clauses, class associated types/default methods, and
+  instance associated values/method bodies.
+
+[OBS id:obs.language.reader-token-surface src:reader.h:360 conf:high]
+  Token-family coverage should include parentheses, brackets, braces, hash-map
+  braces, symbols, numbers, strings, paths, chars, keywords, quote, arrows,
+  feature conditionals, ranges, dot field access, pipes, colons, line directives,
+  and corner-bracket quasiquote/unquote tokens.
+
+[OBS id:obs.language.runtime-codegen-batch-2026-06-11i src:tests/codegen conf:high]
+  Added reader-header-driven codegen fixtures for address-of expressions,
+  docstring lambdas, rest parameters, array ranges, layout pointer fields,
+  class associated/default payloads, instance method bodies, data deriving and
+  parameterized constructors, record-like ADT constructors, and mixed-key maps.
+
+[OBS id:obs.language.reader-payload-gaps-2026-06-11 src:tests/codegen conf:high]
+   Rest parameters parse but a call shaped as =(sum-rest 1 2 3)= currently
+   type-checks as if the function accepted one tuple/list argument. Record-like
+   ADT constructor syntax parses, but constructor field parsing includes record
+   labels/punctuation in the expected positional signature. Bounded array ranges
+   compile but currently print empty arrays in the probe instead of materialized
+   range contents.
+
+[OBS id:obs.language.codegen-finer-batch-2026-06-11 src:tests/codegen conf:high]
+   Added finer-grained codegen coverage splitting comparison bundles into
+   individual atom tests (=comparison_lt=, =comparison_gt=, =comparison_le=,
+   =comparison_ne=) and adding new coverage for multi-argument arithmetic
+   (=(+ 1 2 3)=, =(* 2 3 4)=), begin value semantics (=(begin 42)=,
+   =(begin (+ 1 2) (* 3 4))=), string equality via == (=="abc" "abc"=),
+   compound and/or with comparison results, typed function define shorthand
+   (=(define (double [x :: Int] -> Int) (* 2 x))=, two-arg and composed forms),
+   Bool-predicate function shorthand with the naming convention, nested
+   car/cdr on quoted lists, count on string literals, mod edge cases, and
+   if with equality conditions.
+
+[INF id:inf.language.codegen-finer-patterns from:obs.language.codegen-finer-batch-2026-06-11 conf:high]
+   Key findings from expansion: typed define function shorthand
+   (=(define (name [x :: Int] -> Int) body)=) compiles to working codegen but
+   untyped function shorthand (=(define name (lambda (x) ...))=) returns
+   incorrect results at runtime. Predicate functions returning =Bool= must end
+   with =?= per compiler naming convention. String equality via == works at
+   codegen level but specialized string functions (=string-length=, =string-append=,
+   =string=?=) are not codegen-callable. The =count= function works on both
+   lists and strings.
+
+[OBS id:obs.language.lambda-literal-space-dot-2026-06-12 src:tests/reader-atoms.tsv conf:high]
+   Three new λ-literal parser entries added: =λx. x= (space after dot),
+   =λx.λy. x + y= (curried with infix body), and =λxy. x + y= (multi-char
+   single param name). All pass at parse level (--emit-json succeeds). The
+   curried form produces nested lambdas: =(lambda ([x :: a]) (lambda ([y :: b])
+   (+ x y)))=. Multi-param λ-literal (=λx y. body=) is not tested because wisp
+   splits on whitespace between params. Application of λ-literals
+   (=(λx. x) 42=) is split by wisp into separate top-level forms; use
+   =((λx. x) 42)= with double parens instead.
+
+[OBS id:obs.language.pattern-codegen-batch-2026-06-11 src:tests/codegen/rt_match_int_var_wildcard.mon conf:high]
+   Added granular pattern codegen fixtures for =reader.h= =PatternKind= atoms:
+   integer, float, and string literal patterns; wildcard and variable binding;
+   empty-list, fixed-list, and tail-list patterns; guarded clauses; lambda
+   pattern clauses; bare ADT constructor patterns; and constructor patterns
+   that bind fields.
+
+[FIX id:fix.language.pmatch-leading-pipe-2026-06-11 src:pmatch.c conf:high]
+   Match clauses written with a leading separator, e.g.
+   =(match x with | 0 -> a | _ -> b)=, must parse the token after =|=
+   as the pattern. Previously =parse_one_clause= treated that leading pipe as a
+   guard marker before any pattern was parsed, causing =pmatch_desugar= to emit
+   malformed applications such as =(10 __match_target)=. The parser now consumes
+   an optional leading clause separator before reading clause patterns.
+
+[OBS id:obs.language.pmatch-exhaustive-constructor-gap-2026-06-11 src:tests/codegen/rt_match_constructor_pattern.mon conf:medium]
+   Constructor pattern matching works when the final clause is an explicit
+   wildcard. A probe with all known constructors but no wildcard still emitted
+   an =(undefined)= fallback that codegen rejected outside function scope, so
+   exhaustiveness-aware fallback removal remains future compiler work.
+
+[OBS id:obs.language.reader-atom-contract-fixes-2026-06-11 src:tests/reader-atoms.tsv conf:high]
+   Replaced invalid parser rows with forms supported by =reader.h= and
+   =reader.c=: =#-else= is not a token family, an unescaped TSV tab corrupts the
+   table field split, Unicode =λ= is lambda syntax rather than a single-byte
+   character literal, and ='\xNN'= hex char escapes are not implemented. The
+   replacement rows cover sequential feature blocks and supported escaped char
+   literals.
+
+[OBS id:obs.language.current-codegen-pressure-2026-06-11j src:tests/run.py conf:high]
+   After the pattern parser fix and reader-row corrections, the current suite
+   registers 803 tests with 21 remaining failures. Remaining failures are
+   codegen/runtime pressure: adjacent string application, top-level asm,
+   char-constructor aliases, code reflection, collection access runtime behavior,
+   record-like ADT constructors, do/with forms, runtime error expected-nonzero
+   handling, import option validation, lambda rest calls, keyword layout
+   constructors, mutual-recursion forward references, bounded range arrays,
+   record declarations, size-array values, string helper lowering, superscript
+   exponent lowering, when lowering, string concatenation, and wisp define.
+
+* Type System Surface
+:PROPERTIES:
+:ID: monadc.context.language.type-system-surface
+:CUSTOM_ID: type-system-surface
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: infer.h,dep.h,infer.c,dep.c
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.language.type-system-coverage date:2026-06-11 by:human]
+   The living coverage system must include HM inference from =infer.h/c= and
+   dependent type checking from =dep.h/c=, not only reader syntax and runtime
+   codegen. Passing executable fixtures should cover well-typed HM behavior;
+   parser rows should cover dependent-term/type surfaces until the runner can
+   assert typed diagnostics directly.
+
+[OBS id:obs.language.hm-surface-2026-06-11 src:infer.h conf:high]
+   HM coverage targets include fresh type variables, schemes, generalisation,
+   instantiation, constraint collection/unification, zonking, builtin schemes,
+   lambda inference, typed parameter constraints, and polymorphic let/define
+   call sites.
+
+[OBS id:obs.language.dep-surface-2026-06-11 src:dep.h conf:high]
+   Dependent-type coverage targets include universe levels, =TERM_PI=,
+   =TERM_SIGMA=, equality/refl/subst, Nat/zero/succ/Nat-elim, annotations,
+   holes/metavariables, closure-based evaluation, definitional equality, and
+   bidirectional infer/check entry points.
+
+[OBS id:obs.language.type-system-codegen-batch-2026-06-11 src:tests/codegen/rt_hm_polymorphic_identity.mon conf:high]
+   Added executable HM and closure coverage: polymorphic identity and const
+   definitions instantiate at multiple concrete types; partial application of a
+   typed binary function returns a callable closure. Added closure pressure for
+   captured outer variables and =Fn= parameters, both of which emit JSON but
+   currently fail compile-time type/codegen handling.
+
+[OBS id:obs.language.dep-parser-batch-2026-06-11 src:tests/reader-atoms.tsv conf:high]
+   Added parser coverage for dependent-type surface forms mapped in =dep.c=:
+   =(Type 0)=, =Pi=, =Sigma=, equality type forms, =refl=, =succ=, =Nat=,
+   annotations, paren lambda form, and =if= terms.
+
+[OBS id:obs.language.current-codegen-pressure-2026-06-11k src:tests/run.py conf:high]
+   After the type-system and closure coverage batch, the suite registers 818
+   tests with 23 failures. New deliberate pressure points are
+   =rt_closure_capture= and =rt_closure_hof_argument=; existing pressure remains
+   in adjacent strings, top-level asm, char aliases, code reflection, collection
+   access, record-like ADTs, do/with, expected-nonzero errors, import options,
+   rest params, keyword layout construction, forward mutual recursion, range
+   arrays, record declarations, size-array values, string helpers, superscript,
+   when, string concat, and wisp define.

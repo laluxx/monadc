@@ -533,6 +533,9 @@ lambda_no_body	monadc.context.language.syntax-corpus	Lambda with no body (identi
 lambda_multi_clause	monadc.context.language.syntax-corpus	Lambda with multiple pattern clauses parses.	(lambda ([x : Int] -> Bool) | 0 -> False | _ -> True)
 lambda_immediate_call	monadc.context.language.syntax-corpus	Immediate lambda application parses.	((lambda (x) (+ x 1)) 41)
 lambda_literal_two_arg	monadc.context.language.syntax-corpus	Two-arg lambda literal parses.	λx.λy.x
+lambda_literal_space_dot	monadc.context.language.syntax-corpus	Lambda literal with space after dot parses.	λx. x
+lambda_literal_curried_body	monadc.context.language.syntax-corpus	Curried lambda literal with infix body parses.	λx.λy. x + y
+lambda_literal_multi_char_param	monadc.context.language.syntax-corpus	Lambda literal with multi-char param name parses.	λxy. x + y
 # ── For Comprehension Variants ──────────────────────────────────────────────
 for_with_let	monadc.context.language.syntax-corpus	For with :let binding parses.	(for [x [1 2 3]] :let [y (* x 2)] y)
 for_with_while	monadc.context.language.syntax-corpus	For with :while guard parses.	(for [x [1 2 3]] :while (> x 1) x)
@@ -590,3 +593,71 @@ comment_semicolons_only	monadc.context.language.syntax-corpus	Multiple semicolon
 comment_mixed_line_block	monadc.context.language.syntax-corpus	Line comment then block comment parses.	;; line\n-| block |-\n42
 comment_after_expression	monadc.context.language.syntax-corpus	Comment after expression on same line parses.	42 ;; trailing comment
 comment_block_empty	monadc.context.language.syntax-corpus	Empty block comment parses.	-||-
+# ── Error Form ────────────────────────────────────────────────────────────
+error_simple	monadc.context.language.syntax-corpus	Error form with string parses.	(error "boom")
+error_var	monadc.context.language.syntax-corpus	Error form with variable parses.	(error msg)
+# ── While Loop ────────────────────────────────────────────────────────────
+while_simple	monadc.context.language.syntax-corpus	While loop with condition and body parses.	(while cond body)
+while_multi_body	monadc.context.language.syntax-corpus	While loop with multiple body forms parses.	(while cond body1 body2)
+# ── Include Form ──────────────────────────────────────────────────────────
+include_simple	monadc.context.language.syntax-corpus	Include form with string path parses.	(include "header.h")
+include_expr	monadc.context.language.syntax-corpus	Include form with expression path parses.	(include libpath)
+# ── Asm Form ──────────────────────────────────────────────────────────────
+asm_nop	monadc.context.language.syntax-corpus	Assembly nop form parses.	(asm nop)
+asm_block	monadc.context.language.syntax-corpus	Assembly block form parses.	(asm block)
+# ── Tests Form ────────────────────────────────────────────────────────────
+tests_simple	monadc.context.language.syntax-corpus	Tests block with assertion parses.	(tests (= 1 1))
+tests_multi	monadc.context.language.syntax-corpus	Tests block with multiple assertions parses.	(tests (= 1 1) (= 2 2))
+# ── Code Reflection ────────────────────────────────────────────────────────
+code_function	monadc.context.language.syntax-corpus	Code reflection on a function parses.	(code fn)
+code_define	monadc.context.language.syntax-corpus	Code reflection on a defined binding parses.	(code x)
+# ── Define Function Shorthand ─────────────────────────────────────────────
+define_fn_shorthand	monadc.context.language.syntax-corpus	Define function shorthand (unary) parses.	(define (id x) x)
+define_fn_typed	monadc.context.language.syntax-corpus	Define function shorthand with type parses.	(define (id [x : Int] -> Int) x)
+define_fn_binary_typed	monadc.context.language.syntax-corpus	Define binary function with types parses.	(define (add [x : Int] [y : Int] -> Int) (+ x y))
+# ── Layout Keyword Constructor ────────────────────────────────────────────
+layout_keyword_constructor	monadc.context.language.syntax-corpus	Layout keyword constructor call parses.	(Point :x 3 :y 4)
+layout_keyword_partial	monadc.context.language.syntax-corpus	Layout keyword constructor with partial args parses.	(Point :x 3)
+# ── Record Declaration ────────────────────────────────────────────────────
+record_decl_simple	monadc.context.language.syntax-corpus	Record with single field parses.	(record Wrap [value Int])
+record_decl_multi_field	monadc.context.language.syntax-corpus	Record with multiple fields parses.	(record Point [x Int] [y Int])
+record_decl_typed_field	monadc.context.language.syntax-corpus	Record with typed field parses.	(record Person [name String] [age Int])
+# ── Refinement Type ───────────────────────────────────────────────────────
+refinement_type_simple	monadc.context.language.syntax-corpus	Refinement type with set notation parses.	(type Pos { x ∈ Int | (> x 0) })
+refinement_type_string	monadc.context.language.syntax-corpus	Refinement type with string constraint parses.	(type ShortString { s ∈ String | (< (count s) 10) })
+# ── Feature Conditionals (top-level) ──────────────────────────────────────
+feature_cond_linux_active	monadc.context.language.syntax-corpus	Active feature conditional keeps expression.	#+LINUX\n42\n#---
+feature_cond_inactive_skip	monadc.context.language.syntax-corpus	Inactive feature conditional drops expression.	#+WINDOWS\n99\n#---\n42
+feature_cond_reopen	monadc.context.language.syntax-corpus	Sequential active feature conditional blocks parse.	#+LINUX\n42\n#---\n#+LINUX\n43\n#---
+# ── Additional Numeric Edge Cases ─────────────────────────────────────────
+number_negative_zero	monadc.context.language.syntax-corpus	Negative zero float parses.	-0.0
+number_very_large	monadc.context.language.syntax-corpus	Very large integer literal parses.	9999999999999999999
+number_tiny_float	monadc.context.language.syntax-corpus	Very small float literal parses.	1e-100
+number_hex_upper_x	monadc.context.language.syntax-corpus	Uppercase 0X hex prefix parses.	0XABCDEF
+# ── Additional Char Edge Cases ────────────────────────────────────────────
+char_space	monadc.context.language.syntax-corpus	Space character literal parses.	' '
+char_escape_tab_edge	monadc.context.language.syntax-corpus	Escaped tab character literal parses.	'\t'
+char_escape_return	monadc.context.language.syntax-corpus	Escaped carriage-return character literal parses.	'\r'
+char_escape_zero	monadc.context.language.syntax-corpus	NUL character literal parses.	'\0'
+# ── Additional String Edge Cases ──────────────────────────────────────────
+string_unicode	monadc.context.language.syntax-corpus	String with unicode parses.	"hello λ"
+string_empty_adjacent	monadc.context.language.syntax-corpus	Adjacent empty string literals parse.	""""
+string_only_whitespace	monadc.context.language.syntax-corpus	String of only spaces parses.	"   "
+# ── Additional Keyword/Symbol Edge Cases ──────────────────────────────────
+keyword_single_char	monadc.context.language.syntax-corpus	Single-char keyword parses.	:a
+keyword_long	monadc.context.language.syntax-corpus	Long keyword with path separators parses.	:very/long/qualified/name
+keyword_numbers	monadc.context.language.syntax-corpus	Keyword with numbers parses.	:version2
+symbol_all_caps	monadc.context.language.syntax-corpus	ALL_CAPS symbol parses.	CONSTANT_VALUE
+symbol_trailing_question	monadc.context.language.syntax-corpus	Symbol ending in question mark parses.	valid?
+symbol_double_underscore	monadc.context.language.syntax-corpus	Symbol with double underscore parses.	__init__
+# ── Dependent Type Surface ────────────────────────────────────────────────
+dep_type_zero	monadc.context.language.type-system-surface	Universe Type 0 expression parses.	(Type 0)
+dep_pi_simple	monadc.context.language.type-system-surface	Pi type surface parses.	(Pi Int Int)
+dep_sigma_simple	monadc.context.language.type-system-surface	Sigma type surface parses.	(Sigma Int String)
+dep_eq_type	monadc.context.language.type-system-surface	Dependent equality type surface parses.	(= Int 1 1)
+dep_refl	monadc.context.language.type-system-surface	Reflexivity proof term parses.	(refl 1)
+dep_succ	monadc.context.language.type-system-surface	Nat successor term parses.	(succ 0)
+dep_nat_symbol	monadc.context.language.type-system-surface	Nat type symbol parses.	Nat
+dep_ann_term	monadc.context.language.type-system-surface	Annotation surface for dependent elaboration parses.	(ann 1 Int)
+dep_lambda_paren	monadc.context.language.type-system-surface	Paren lambda form used by dependent elaboration parses.	(lambda (x) x)
+dep_if_term	monadc.context.language.type-system-surface	If term surface used by dependent elaboration parses.	(if True 1 0)

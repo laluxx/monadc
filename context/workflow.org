@@ -94,3 +94,46 @@ This file records standing workflow preferences for future compiler work.
 [DEC id:dec.workflow.context-maintenance date:2026-06-11 by:human]
   Maintain repository context in Org files, adding important discoveries as work
   progresses.
+
+* Living Coverage Workflow
+:PROPERTIES:
+:ID: monadc.context.workflow.living-coverage
+:CUSTOM_ID: living-coverage-workflow
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.workflow.living-coverage date:2026-06-11 by:human]
+  Explore MonadC as a living language system: keep adding small behavioral
+  tests as language behavior is discovered, prefer codegen-backed compile/run
+  fixtures when possible, and update context records continuously so the test
+  suite and repository memory evolve together.
+
+[DEC id:dec.workflow.coverage-over-green date:2026-06-11 by:human]
+  Do not stop coverage expansion merely because a codegen-backed test exposes a
+  deep compiler/runtime failure. Fix only trivial fixture syntax mistakes during
+  coverage work; leave meaningful deep failures visible as executable pressure
+  on the implementation.
+
+[DEC id:dec.workflow.coverage-then-triage date:2026-06-11 by:human]
+  After a coverage subset is large enough to reveal useful behavior, triage the
+  failing tests instead of treating every failure the same. Classify each failure
+  as an invalid fixture, a missing runner expectation mode, or a compiler/runtime
+  defect; fix syntax/contract mistakes immediately and use the linked context
+  record when choosing the next compiler fix.
+
+[DEC id:dec.workflow.skip-uncertain-failures date:2026-06-11 by:human]
+  During broad coverage expansion, do not spend long debugging an uncertain
+  failure. If a fixture emits JSON and the failure is not clearly a syntax or
+  test-contract mistake, keep the coverage and move on so reader, codegen,
+  closure, HM, and dependent-type surfaces continue expanding.

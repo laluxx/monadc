@@ -1695,7 +1695,7 @@ Token lexer_next_token(Lexer *lex) {
     }
 
     // λ — pure lambda calculus literal (UTF-8: 0xCE 0xBB)
-    // Syntax: λx.body  where x is a single param name
+    // Syntax: λx.body, λx y.body (multi-param), λx.λy.body (curried)
     if ((unsigned char)c == 0xCE &&
         (unsigned char)lex->source[lex->pos + 1] == 0xBB) {
         advance(lex); // consume 0xCE
@@ -1703,30 +1703,78 @@ Token lexer_next_token(Lexer *lex) {
 
         skip_whitespace(lex);
 
-        // Read exactly one param name — stop at '.' or whitespace
         if (!is_symbol_start((unsigned char)peek(lex))) {
             READER_ERROR(lex->line, lex->column,
                          "expected parameter name after λ");
         }
-        size_t start = lex->pos;
-        while (peek(lex) != '.' && peek(lex) != ' ' &&
-               peek(lex) != '\t' && peek(lex) != '\n' &&
-               peek(lex) != '\0' &&
-               is_symbol_char((unsigned char)peek(lex))) advance(lex);
-        char *param_name = my_strndup(lex->source + start, lex->pos - start);
 
-        skip_whitespace(lex);
+        // Collect up to 32 space-separated param names
+        char *param_names[32];
+        int param_count = 0;
+        while (param_count < 32) {
+            size_t start = lex->pos;
+            while (peek(lex) != '.' && peek(lex) != ' ' &&
+                   peek(lex) != '\t' && peek(lex) != '\n' &&
+                   peek(lex) != '\0' &&
+                   is_symbol_char((unsigned char)peek(lex))) advance(lex);
+            param_names[param_count] = my_strndup(lex->source + start, lex->pos - start);
+            param_count++;
 
-        // Must be followed by '.' — if not, user wrote λx y. which is invalid
-        if (peek(lex) != '.') {
-            READER_ERROR(lex->line, lex->column,
-                         "λ-literal takes exactly one parameter — "
-                         "use λx.λy.body for curried functions, not λx y.body");
+            skip_whitespace(lex);
+
+            // Skip wisp #line directives that may appear between λ params
+            while (peek(lex) == '(' &&
+                   strncmp(lex->source + lex->pos, "(#line", 6) == 0) {
+                while (peek(lex) != ')' && peek(lex) != '\0')
+                    advance(lex);
+                if (peek(lex) == ')') advance(lex);
+                skip_whitespace(lex);
+            }
+
+            // Also skip wisp line comments: ; ... \n
+            while (peek(lex) == ';') {
+                skip_line_comment(lex);
+                skip_whitespace(lex);
+                while (peek(lex) == '(' &&
+                       strncmp(lex->source + lex->pos, "(#line", 6) == 0) {
+                    while (peek(lex) != ')' && peek(lex) != '\0')
+                        advance(lex);
+                    if (peek(lex) == ')') advance(lex);
+                    skip_whitespace(lex);
+                }
+            }
+
+            if (peek(lex) == '.')
+                break;
+
+            fprintf(stderr, "DBG_LEX λ param=%d name='%s' peek='%c'(0x%02x) is_sym_start=%d\n",
+                    param_count-1, param_names[param_count-1],
+                    (char)peek(lex), (unsigned char)peek(lex),
+                    is_symbol_start((unsigned char)peek(lex)));
+
+            if (!is_symbol_start((unsigned char)peek(lex))) {
+                for (int i = 0; i < param_count; i++) free(param_names[i]);
+                READER_ERROR(lex->line, lex->column,
+                             "expected '.' or another parameter after λ parameter name");
+            }
         }
         advance(lex); // consume '.'
 
+        // Join param names with space separator
+        size_t total = 0;
+        for (int i = 0; i < param_count; i++)
+            total += strlen(param_names[i]) + 1;
+        char *joined = malloc(total ? total : 1);
+        joined[0] = '\0';
+        for (int i = 0; i < param_count; i++) {
+            if (i > 0) strcat(joined, " ");
+            strcat(joined, param_names[i]);
+            free(param_names[i]);
+        }
+
         tok.type  = TOK_LAMBDA_LIT;
-        tok.value = param_name;
+        tok.value = joined;
+        fprintf(stderr, "DBG_LEX_RET λ value='%s' line=%d col=%d\n", tok.value, tok.line, tok.column);
         return tok;
     }
 
@@ -6326,30 +6374,44 @@ static AST *parse_expr_base(Parser *p) {
     }
 
     case TOK_LAMBDA_LIT: {
-        // tok.value is the single param name (e.g. "x" from λx.body)
+        // tok.value holds space-separated param names ("x" or "x y" etc.)
         int lam_line = tok.line;
         int lam_col  = tok.column;
         p->current   = lexer_next_token(p->lexer);
 
-        ASTParam *params  = malloc(sizeof(ASTParam));
-        params[0].name      = my_strdup(tok.value);
-        /* Assign a fresh type variable so this lambda is genuinely
-         * polymorphic: λx.x gets type 'a -> 'a, not ?0 -> ?0.
-         * Without this, the first call site locks the type forever. */
-        char tvar[8];
-        snprintf(tvar, sizeof(tvar), "%c", 'a' + (g_typevar_counter++ % 26));
-        params[0].type_name = my_strdup(tvar);
-        params[0].is_rest   = false;
-        params[0].is_anon   = false;
+        // Count param names by splitting on spaces
+        char *val_copy = my_strdup(tok.value);
+        int param_count = 1;
+        for (char *s = val_copy; *s; s++)
+            if (*s == ' ') param_count++;
+        free(val_copy);
 
-        // Parse body — if it starts with another λ it naturally nests:
-        // λx.λy.x → (lambda (x) (lambda (y) x))
+        ASTParam *params = malloc(sizeof(ASTParam) * param_count);
+        char *rest = tok.value;
+        for (int i = 0; i < param_count; i++) {
+            char *space = strchr(rest, ' ');
+            if (space) *space = '\0';
+            params[i].name    = my_strdup(rest);
+            char tvar[8];
+            snprintf(tvar, sizeof(tvar), "%c", 'a' + (g_typevar_counter++ % 26));
+            params[i].type_name = my_strdup(tvar);
+            params[i].is_rest   = false;
+            params[i].is_anon   = false;
+            if (space) rest = space + 1;
+        }
+
+        fprintf(stderr, "DBG λ params='%s' p->current.type=%d val='%s'\n",
+                tok.value, p->current.type, p->current.value ? p->current.value : "(null)");
         AST *body = parse_expr(p);
+
+        fprintf(stderr, "DBG λ body: ");
+        ast_print(body);
+        fprintf(stderr, "\n");
 
         AST **body_exprs  = malloc(sizeof(AST*));
         body_exprs[0]     = body;
 
-        AST *lam = ast_new_lambda(params, 1,
+        AST *lam = ast_new_lambda(params, param_count,
                                   NULL, NULL, NULL, false,
                                   body, body_exprs, 1);
         lam->line   = lam_line;

@@ -362,6 +362,11 @@ static ASTPMatchClause parse_one_clause(Parser *p, int param_count) {
     int act_count = 0;
     int cap = 0;
 
+    if (parser_at(p, TOK_PIPE) ||
+        (parser_at(p, TOK_SYMBOL) && p->current.value && strcmp(p->current.value, "|") == 0)) {
+        parser_advance(p);
+    }
+
     while (!parser_at(p, TOK_ARROW) && !parser_at(p, TOK_PIPE) &&
            !(parser_at(p, TOK_SYMBOL) && p->current.value && strcmp(p->current.value, "|") == 0) &&
            !parser_at(p, TOK_EOF)) {
@@ -1072,11 +1077,6 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
                 &bind_names,  &bind_exprs,
                 &bind_count,  &bind_cap);
         }
-
-        fprintf(stderr, "DEBUG pmatch_desugar: clause %d guard_count=%d bind_count=%d\n",
-                i, guard_count, bind_count);
-        for (int _bi = 0; _bi < bind_count; _bi++)
-            fprintf(stderr, "  bind[%d] name='%s'\n", _bi, bind_names[_bi] ? bind_names[_bi] : "NULL");
 
         if (cl->guard_count > 0) {
             // Guarded clause: pattern conditions are shared across all guards.

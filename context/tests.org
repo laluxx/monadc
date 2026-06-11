@@ -212,3 +212,72 @@ assertions directly instead of requiring hand-written shell checks per fixture.
   type quantifiers (all/forall/some/exists), annotation forms (::/ann), import
   renaming, arithmetic/built-in operators, define function shorthand, and layout
   variants.
+
+[DEC id:dec.tests.codegen-first-expansion date:2026-06-11 by:human]
+   As language exploration continues, add executable codegen coverage alongside
+   parser coverage. Prefer the smallest compile/run fixture with a sibling
+   =.stdout= golden file for behavior that can already reach runtime.
+
+[OBS id:obs.tests.corpus-size-2026-06-11c src:tests conf:high]
+   The combined test corpus has grown to 802 total tests (716→802, +86 tests).
+   This includes:
+   - ~150 codegen =tests/codegen/*.mon= fixtures (was 128, +24 finer-grained)
+   - ~650 parser entries in =tests/reader-atoms.tsv= (was 592, +57 finer-grained)
+   - 128 sugar entries in =tests/reader-sugars.tsv=
+
+[OBS id:obs.tests.codegen-finer-subsets-2026-06-11 src:tests/codegen conf:high]
+   Added finer-grained codegen atoms that split multi-behavior bundles into
+   individual test files. Multi-assertion files like =comparison_ops.mon=
+   (5 assertions) now have individual companion atoms such as =comparison_lt.mon=,
+   =comparison_gt.mon=, =comparison_le.mon=, =comparison_ne.mon=. New coverage
+   categories added: typed function define shorthand, compound boolean/comparison
+   expressions, begin value semantics, string equality via ==, function composition,
+   and predicate function naming convention verification.
+
+[OBS id:obs.tests.reader-atoms-expanded-2026-06-11 src:tests/reader-atoms.tsv conf:high]
+   Added parser corpus entries for previously uncovered forms: =error= abort,
+   =while= loops, =include= directive, =asm= blocks, =tests= blocks, =code=
+   reflection, layout keyword constructors, record declarations, refinement
+   types, define function shorthand (typed), feature conditional else clauses,
+   additional numeric/char/string/keyword/symbol edge cases, and unicode literals.
+   Each entry is linked to =monadc.context.language.syntax-corpus= or more
+   specific context nodes as they are created.
+
+[TODO id:todo.tests.codegen-finer-subsets owner:codex status:open]
+   Continue splitting multi-behavior codegen files into individual test atoms.
+   Candidates for further splitting: =rt_map_full.mon= (7 assertions),
+   =rt_type_predicates.mon= (5 assertions), =rt_type_predicates_extended.mon=
+   (5 assertions), =comparison_ops.mon= (5 assertions), =rt_basic_values_display.mon=
+   (4 assertions), =rt_set_full.mon= (4 assertions). Each split should produce a
+   single-atom test with its own =.stdout= golden file and context link.
+
+[OBS id:obs.tests.pattern-codegen-subset-2026-06-11 src:tests/codegen conf:high]
+   Added and verified a pattern-focused codegen subset:
+   =rt_match_int_var_wildcard=, =rt_match_string_literal=,
+   =rt_match_float_literal=, =rt_match_empty_list=, =rt_match_list_literal=,
+   =rt_match_list_tail=, =rt_match_guard_clause=,
+   =rt_match_constructor_pattern=, =rt_match_bare_constructor=, and
+   =rt_lambda_pattern_clauses=. These fixtures link back to
+   =monadc.context.language.reader-header-coverage= and exercise
+   =PatternKind= behavior through compile/run output.
+
+[OBS id:obs.tests.current-suite-2026-06-11d src:tests/run.py conf:high]
+   Current full command: =python3 tests/run.py=. Latest observed result:
+   803 registered tests, 21 failures. The parser corpus is green after replacing
+   invalid reader rows; remaining failures are all codegen/runtime fixtures.
+
+[OBS id:obs.tests.type-system-subset-2026-06-11 src:tests conf:high]
+   Added type-system coverage linked to
+   =monadc.context.language.type-system-surface=. Passing codegen fixtures:
+   =rt_hm_polymorphic_identity=, =rt_hm_polymorphic_const=, and
+   =rt_closure_partial_application=. Deliberate closure pressure fixtures:
+   =rt_closure_capture= and =rt_closure_hof_argument=. Parser rows now cover
+   =dep_type_zero=, =dep_pi_simple=, =dep_sigma_simple=, =dep_eq_type=,
+   =dep_refl=, =dep_succ=, =dep_nat_symbol=, =dep_ann_term=,
+   =dep_lambda_paren=, and =dep_if_term=.
+
+[OBS id:obs.tests.current-suite-2026-06-11e src:tests/run.py conf:high]
+   Current full command: =python3 tests/run.py=. Latest observed result:
+   818 registered tests, 23 failures. The added HM/partial-application fixtures
+   pass; the two added closure ABI fixtures are valid syntax and remain
+   implementation pressure.

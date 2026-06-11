@@ -5,3 +5,4 @@ libmonad.a
 *.a
 *.o
 **/*.ll
+tests/.test-results.json

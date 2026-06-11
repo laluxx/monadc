@@ -13,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 TEST_ROOT = ROOT / "tests"
 MONAD = ROOT / "monad"
+RESULTS_FILE = TEST_ROOT / ".test-results.json"
 WIDTH = 78
 
 RESET      = "\033[0m"
@@ -350,7 +351,54 @@ def indent_output(output: str) -> str:
     return "\n".join(f"    {line}" for line in output.rstrip().splitlines())
 
 
+def load_previous_results(path: Path) -> dict[str, bool]:
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data.get("results", {})
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def save_results(path: Path, results: list[TestResult]) -> None:
+    data = {
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "results": {r.name: {"passed": r.passed, "message": r.message} for r in results},
+    }
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def compute_changes(
+    previous: dict[str, bool],
+    results: list[TestResult],
+) -> tuple[list[str], list[str]]:
+    current = {r.name: r.passed for r in results}
+    regressions = [name for name, passed in current.items() if not passed and previous.get(name, True)]
+    fixes = [name for name, passed in current.items() if passed and name in previous and not previous[name]]
+    return sorted(regressions), sorted(fixes)
+
+
+def print_changes(regressions: list[str], fixes: list[str]) -> None:
+    if not regressions and not fixes:
+        return
+    print()
+    BOLD_RED = "\033[1;31m"
+    BOLD_GREEN = "\033[1;32m"
+    YELLOW = "\033[33m"
+    RESET = "\033[0m"
+    if regressions:
+        print(f"  {BOLD_RED}REGRESSIONS (pass → fail):{RESET}")
+        for name in regressions:
+            print(f"    {BOLD_RED}✗{RESET} {name}")
+    if fixes:
+        print(f"  {BOLD_GREEN}FIXES (fail → pass):{RESET}")
+        for name in fixes:
+            print(f"    {BOLD_GREEN}✓{RESET} {name}")
+
+
 def main() -> int:
+    previous = load_previous_results(RESULTS_FILE)
     tests = discover_tests()
 
     print()
@@ -367,6 +415,8 @@ def main() -> int:
             runner.run(case, suite_tmpdir)
     suite_elapsed_ns = time.perf_counter_ns() - suite_start
 
+    save_results(RESULTS_FILE, runner.results)
+
     passed = len(runner.results) - runner.failures
 
     print()
@@ -377,6 +427,9 @@ def main() -> int:
     print(f"Failed: {runner.failures:6d} tests".center(WIDTH + 2))
     print(f"Time:   {format_duration(suite_elapsed_ns)}".center(WIDTH + 2))
     print()
+
+    regressions, fixes = compute_changes(previous, runner.results)
+    print_changes(regressions, fixes)
 
     if runner.failures:
         print_box(f"✗ {runner.failures} TEST(S) FAILED ✗")
