@@ -54,17 +54,26 @@ This file records the executable formalization layer for Monad language syntax.
 :CONTEXT_UPDATED: 2026-06-11
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
-:SOURCE: tests/language_corpus.tsv
+:SOURCE: tests/reader-atoms.tsv
 :CONFIDENCE: high
 :END:
 
 [DEC id:dec.language.syntax-corpus date:2026-06-11 by:codex]
-=tests/language_corpus.tsv= is a table-driven parser conformance corpus. Each
-row is one small language atom that must parse and serialize through
-=--emit-json=.
+  =tests/reader-atoms.tsv= is a table-driven parser conformance corpus. Each
+  row is one small language atom that must parse and serialize through
+  =--emit-json=.
+
+[DEC id:dec.language.corpus-size date:2026-06-11 by:codex]
+  The corpus has been expanded to 237+ entries covering: numeric literals,
+  string/char literals, path literals, keywords, symbols, arrays, heap arrays,
+  sets, maps, ranges, wisp forms, comment forms, quoted/quasiquoted forms,
+  lambda forms, let/let*/letrec forms, case/match/cond control forms, do/begin
+  sequences, with/set! mutations, pipe/dot operators, for comprehensions,
+  data/type/class/instance/module/import declarations, buffer type declarations,
+  refinement types, address-of expressions, and feature conditionals.
 
 [DEC id:dec.language.stdout-golden date:2026-06-11 by:human]
-Executable fixtures may have a sibling =.stdout= file. When present, the test
-runner executes the compiled program and requires the program output to end with
-that file exactly, allowing stable suffix checks while ignoring noisy compiler
-output.
+  Executable fixtures may have a sibling =.stdout= file. When present, the test
+  runner executes the compiled program and requires the program output to end with
+  that file exactly, allowing stable suffix checks while ignoring noisy compiler
+  output.

@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.arithmetic-add
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Integer addition evaluates at runtime.
+;; TEST-ATOM: (+ 1 2) evaluates to 3.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (+ 1 2))

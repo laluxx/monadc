@@ -80,30 +80,42 @@ def discover_tests() -> list[TestCase]:
             continue
         name = test_id.removeprefix("tests.")
         cases.append(TestCase(name=name, fixture=fixture, metadata=metadata))
-    corpus = TEST_ROOT / "language_corpus.tsv"
-    if corpus.exists():
-        cases.extend(read_corpus(corpus))
+    for corpus_name in ("reader-atoms.tsv", "reader-sugars.tsv"):
+        corpus = TEST_ROOT / corpus_name
+        if corpus.exists():
+            prefix = path_to_prefix(corpus_name)
+            cases.extend(read_corpus(corpus, prefix))
     return cases
 
 
-def read_corpus(path: Path) -> list[TestCase]:
+def path_to_prefix(name: str) -> str:
+    table = {"reader-atoms.tsv": "language", "reader-sugars.tsv": "sugar"}
+    return table.get(name, "language")
+
+
+def read_corpus(path: Path, prefix: str = "language") -> list[TestCase]:
     cases: list[TestCase] = []
     for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         if not line or line.startswith("#"):
             continue
         fields = line.split("\t")
-        if len(fields) != 4:
-            raise ValueError(f"{path}:{line_number}: expected 4 tab-separated fields")
-        name, context, purpose, source = fields
+        if len(fields) < 4:
+            raise ValueError(f"{path}:{line_number}: expected at least 4 tab-separated fields")
+        name, context, purpose, source = fields[:4]
+        expected = fields[4].strip() if len(fields) >= 5 else ""
+        test_id = f"tests.{prefix}.{name}"
+        meta = {
+            "TEST-ID": test_id,
+            "TEST-CONTEXT": context,
+            "TEST-PURPOSE": purpose,
+            "TEST-EXPECT": "parse-json",
+        }
+        if expected:
+            meta["TEST-EXPECT-DESUGAR"] = expected
         cases.append(
             TestCase(
-                name=f"language.{name}",
-                metadata={
-                    "TEST-ID": f"tests.language.{name}",
-                    "TEST-CONTEXT": context,
-                    "TEST-PURPOSE": purpose,
-                    "TEST-EXPECT": "parse-json",
-                },
+                name=f"{prefix}.{name}",
+                metadata=meta,
                 source=source.replace("\\n", "\n"),
             )
         )
@@ -145,6 +157,12 @@ def run_case(case: TestCase, tmpdir: Path) -> tuple[bool, str, str]:
     special = run_special_assertions(case, emitted)
     if special:
         return special
+
+    expected_desugar = case.metadata.get("TEST-EXPECT-DESUGAR")
+    if expected_desugar:
+        actual = extract_desugared_ast(result.stdout)
+        if actual != expected_desugar:
+            return False, f"desugared AST mismatch: expected {expected_desugar!r}, got {actual!r}", result.stdout
 
     stdout_path = case.fixture.with_suffix(".stdout") if case.fixture else None
     should_compile = "compile" in expect or "run" in expect or bool(stdout_path and stdout_path.exists())
@@ -200,6 +218,24 @@ def run_special_assertions(case: TestCase, emitted: object) -> tuple[bool, str, 
         if not contains_object(emitted, {"type": "array", "is_heap": True}):
             return False, "JSON did not mark ~[1 2 3] as a heap array", ""
     return None
+
+
+def extract_desugared_ast(output: str) -> str:
+    lines = output.split("\n")
+    in_block = False
+    parts = []
+    for line in lines:
+        if line.startswith("=== desugared AST"):
+            in_block = True
+            continue
+        if in_block:
+            if line.startswith("=== end desugared AST"):
+                break
+            if line.startswith("[compile]") or line.startswith("  wrote"):
+                continue
+            if line.strip():
+                parts.append(line.strip())
+    return "\n".join(parts)
 
 
 def run_monad(args: list[str]) -> subprocess.CompletedProcess[str]:

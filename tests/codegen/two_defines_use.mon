@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.two-defines-use
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Two defines compute a combined expression.
+;; TEST-ATOM: (define ...) twice then (+ x y) evaluates correctly.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define x 10)
+(define y 32)
+(show (+ x y))

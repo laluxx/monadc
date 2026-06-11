@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.nested-call
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Nested function calls compile and output correct result.
+;; TEST-ATOM: (+ 1 (+ 2 3)) nests and prints 6
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (+ 1 (+ 2 3)))

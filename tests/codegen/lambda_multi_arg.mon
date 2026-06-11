@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.lambda-multi-arg
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Lambda with two arguments evaluates correctly.
+;; TEST-ATOM: ((lambda ([x : Int] [y : Int] -> Int) (+ x y)) 3 4) evaluates to 7.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show ((lambda ([x : Int] [y : Int] -> Int) (+ x y)) 3 4))

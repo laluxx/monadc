@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.list-ops
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Basic list operations compile and evaluate.
+;; TEST-ATOM: car and cdr of a quoted list work.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (car '(1 2 3)))
+(show (cdr '(1 2 3)))

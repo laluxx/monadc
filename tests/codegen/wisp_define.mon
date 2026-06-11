@@ -1,0 +1,12 @@
+;; TEST-ID: tests.codegen.wisp-define
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Wisp-style define compiles and runs correctly.
+;; TEST-ATOM: A Wisp-defined function square :: Int -> Int called from paren code.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+
+define square :: Int -> Int
+  x -> x * x
+
+(show (square 12))

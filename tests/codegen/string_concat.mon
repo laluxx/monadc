@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.string-concat
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: String concatenation at runtime works.
+;; TEST-ATOM: ("hello " ++ "world") concatenates to "hello world".
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show ("hello " ++ "world"))

@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.boolean-and
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Boolean and evaluates correctly.
+;; TEST-ATOM: (and True False) = False, (and True True) = True.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (and True False))
+(show (and True True))

@@ -1,0 +1,579 @@
+#+TITLE: Commit Message Format
+#+AUTHOR: Codex
+#+DATE: 2026-06-11
+#+CREATED: 2026-06-11
+#+LAST_MODIFIED: 2026-06-11
+#+LANGUAGE: en
+#+STARTUP: showeverything
+#+OPTIONS: toc:3 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:workflow:commits:git:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+#+TAGS: commit(c) git(g) workflow(w) format(f) magit(m)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.commit.file-metadata
+:CUSTOM_ID: commit-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/commit.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.commit.file src:context/commit.org conf:high]
+This file is the canonical specification for commit messages in this
+repository. It was written to work well in Magit, to read cleanly as
+plain text in =git log=, and to serve as a machine-readable context
+source for LLM agents working on the codebase.
+
+#+CAPTION: Commit Format Navigation
+| Section          | Purpose                                       |
+|------------------+-----------------------------------------------|
+| [[*Philosophy]]      | Why commit messages are written this way      |
+| [[*Structure]]       | The overall shape of every commit             |
+| [[*First Line]]      | Type, scope, summary rules and allowed values |
+| [[*Body]]            | Section format, prose rules, ordering         |
+| [[*Style]]           | Tense, voice, naming conventions              |
+| [[*LLM Integration]] | How messages feed the context corpus          |
+| [[*Examples]]        | Minimal and full worked examples              |
+| [[*Quick Reference]] | One-page card for daily use                   |
+
+* Philosophy
+:PROPERTIES:
+:ID: monadc.context.commit.philosophy
+:CUSTOM_ID: commit-philosophy
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.commit.purpose date:2026-06-11 by:human]
+  A commit message is a durable record of what changed, why it changed,
+  and what future readers need to know to work safely near this code. It
+  is not a summary of the diff — the diff speaks for itself. The message
+  explains the decision, the constraint, the invariant, and the contract.
+
+[DEC id:dec.commit.three-questions date:2026-06-11 by:codex]
+  Every commit message must answer three questions:
+
+1. What is the shape of this change? /the first line/
+2. What are the major areas of work and how do they fit together? /the section headers/
+3. What does a future reader need to know that the diff does not show? /the body prose/
+
+* Structure
+:PROPERTIES:
+:ID: monadc.context.commit.structure
+:CUSTOM_ID: commit-structure
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/commit.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.commit.structure date:2026-06-11 by:codex]
+  Every commit message follows this shape. All three parts are mandatory.
+
+#+BEGIN_EXAMPLE
+<type>(<scope>): <summary>
+
+<body>
+#+END_EXAMPLE
+
+There is no optional footer section. Notes that would go in a footer
+(breaking changes, issue references, co-authors) go in the body prose
+of the relevant section, inline with context.
+
+* First Line
+:PROPERTIES:
+:ID: monadc.context.commit.first-line
+:CUSTOM_ID: commit-first-line
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/commit.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.commit.first-line-limit date:2026-06-11 by:codex]
+  The first line has a hard limit of 72 characters. No period at the end.
+  Magit displays this line as the commit subject; exceeding 72 characters
+  causes it to wrap or truncate in most interfaces.
+
+** Type
+:PROPERTIES:
+:ID: monadc.context.commit.type
+:CUSTOM_ID: commit-type
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:SOURCE: context/commit.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.commit.types date:2026-06-11 by:codex]
+  The type prefix must be one of the values in the table below. No other
+  values are permitted. When a commit genuinely spans multiple types, use
+  the type of the primary intent — use =feat= if a new capability is the
+  reason the commit exists.
+
+#+CAPTION: Allowed Commit Types
+| Type     | When to use                                                       |
+|----------+-------------------------------------------------------------------|
+| =feat=     | A new language feature, compiler pass, or user-visible capability |
+| =fix=      | A bug fix — something was wrong and is now correct                |
+| =refactor= | Code restructuring with no behaviour change                       |
+| =test=     | New or updated tests, corpus rows, or test infrastructure         |
+| =context=  | Changes only to =context/= Org files or the visualizer              |
+| =build=    | Makefile, CI, install, or toolchain changes                       |
+| =docs=     | Documentation outside the context corpus (READMEs, man pages)     |
+| =perf=     | A measurable performance improvement                              |
+| =chore=    | Maintenance with no semantic effect (renaming, moves, cleanup)    |
+
+[DEC id:dec.commit.context-type date:2026-06-11 by:human]
+  =context= is a first-class type alongside =feat= and =fix=. Updating the
+  Org corpus is real work that deserves its own commit and its own history.
+  It must not be hidden inside =chore=.
+
+** Scope
+:PROPERTIES:
+:ID: monadc.context.commit.scope
+:CUSTOM_ID: commit-scope
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:SOURCE: context/commit.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.commit.scope date:2026-06-11 by:codex]
+  The scope names the primary subsystem affected. Keep it to one word or
+  a hyphenated compound. When a commit spans many subsystems equally the
+  scope may be omitted entirely: =feat: path literals, heap arrays, and
+  context corpus=.
+
+#+CAPTION: Allowed Scopes
+| Scope      | Covers                                     |
+|------------+--------------------------------------------|
+| =reader=     | =reader.h=, =reader.c=, lexer, parser, AST     |
+| =wisp=       | =wisp.c=, the Wisp surface-syntax layer      |
+| =types=      | =types.h=, =types.c=, the type system          |
+| =infer=      | =infer.c=, type inference                    |
+| =codegen=    | =codegen.c=, LLVM code generation            |
+| =dep=        | =dep.c=, dependency and term elaboration     |
+| =tests=      | =tests/run.py=, =tests/*.mon=, corpus TSV      |
+| =context=    | =context/= Org files                         |
+| =visualizer= | =context-visualizer.py=, =context/visualizer/= |
+| =build=      | =Makefile=, install scripts                  |
+
+** Summary
+:PROPERTIES:
+:ID: monadc.context.commit.summary
+:CUSTOM_ID: commit-summary
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:SOURCE: context/commit.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.commit.summary-voice date:2026-06-11 by:codex]
+  The summary uses imperative mood, sentence case, and no trailing period.
+  It describes what the commit /does/, not what it /did/ or what the
+  author /did/.
+
+#+BEGIN_EXAMPLE
+feat(reader): add path literal token and AST node          ✓
+feat(reader): Added path literal support.                  ✗ past tense, period
+feat(reader): Path literals                                ✗ not imperative
+#+END_EXAMPLE
+
+* Body
+:PROPERTIES:
+:ID: monadc.context.commit.body
+:CUSTOM_ID: commit-body
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/commit.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.commit.body-sections date:2026-06-11 by:codex]
+  The body is organised into sections. Each section covers one coherent
+  area of work. Sections are separated by a horizontal rule and a title
+  line. When a commit has only one area of work the section header may be
+  omitted and the body written as continuous prose.
+
+** Section Header Format
+:PROPERTIES:
+:ID: monadc.context.commit.section-header
+:CUSTOM_ID: commit-section-header
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:SOURCE: context/commit.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.commit.section-header-format date:2026-06-11 by:codex]
+  The section header uses exactly 72 =─= characters (U+2500 BOX DRAWINGS
+  LIGHT HORIZONTAL) as a rule above and below the title. The title is
+  ALL CAPS followed by a colon and a short descriptor phrase. This
+  character was chosen because it renders as a solid rule in Magit,
+  terminals, and GitHub, and is distinct enough to be parsed
+  unambiguously by a script or the context visualizer reading =git log=.
+
+#+BEGIN_EXAMPLE
+────────────────────────────────────────────────────────────────────────
+AREA NAME: Short descriptor
+────────────────────────────────────────────────────────────────────────
+#+END_EXAMPLE
+
+** Section Body Prose
+:PROPERTIES:
+:ID: monadc.context.commit.section-prose
+:CUSTOM_ID: commit-section-prose
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:SOURCE: context/commit.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.commit.prose-not-bullets date:2026-06-11 by:human]
+  Write prose, not bullet lists. Each paragraph covers one decision, one
+  constraint, or one contract. Bullet lists obscure the relationship
+  between ideas and make the message harder to parse as a context record.
+
+#+CAPTION: What Belongs in the Body
+| Include                                            | Exclude                              |
+|----------------------------------------------------+--------------------------------------|
+| New invariants introduced by the change            | A prose retelling of the diff        |
+| Constraints the diff does not make obvious         | Vague statements of intent           |
+| Reasoning behind non-obvious design choices        | Praise or self-congratulation        |
+| Subsystem boundary descriptions                    | Bullet lists                         |
+| Known limitations or named follow-up work          | Anything already visible in the diff |
+| =TEST-ID= values for new tests                       |                                      |
+| Context node =:ID:= values for new or updated nodes  |                                      |
+
+** Section Ordering
+:PROPERTIES:
+:ID: monadc.context.commit.section-ordering
+:CUSTOM_ID: commit-section-ordering
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:SOURCE: context/commit.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.commit.ordering date:2026-06-11 by:codex]
+  Sections are ordered to mirror the compilation pipeline so a reader can
+  build understanding incrementally through the layers the compiler itself
+  traverses. Omit layers the commit does not touch.
+
+#+CAPTION: Section Ordering
+| Order | Layer                    | Typical scopes          |
+|-------+--------------------------+-------------------------|
+|     1 | Surface syntax           | =wisp=, =reader=            |
+|     2 | Type system, inference   | =types=, =infer=, =dep=       |
+|     3 | Code generation, backend | =codegen=                 |
+|     4 | Tests                    | =tests=                   |
+|     5 | Context and tooling      | =context=, =visualizer=     |
+
+* Style
+:PROPERTIES:
+:ID: monadc.context.commit.style
+:CUSTOM_ID: commit-style
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/commit.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.commit.tense date:2026-06-11 by:codex]
+  Use imperative mood throughout. The commit /adds/, /fixes/, /removes/,
+  /introduces/, /extends/ — never /added/, /fixed/, /I added/, /we
+  changed/. Use active voice. Use present tense for invariants: "All
+  =AST_PATH= nodes store their text in the =string= union field" — this is
+  true now and must remain true.
+
+[DEC id:dec.commit.naming date:2026-06-11 by:codex]
+  Name every symbol exactly as it appears in source: =AST_PATH=, not "the
+  path AST node" or "ASTPath". Symbol names, file names, function names,
+  flag names, and type names are written in =monospace= inline. Line-wrap
+  prose at 72 characters. Code examples or file paths that cannot be
+  wrapped may exceed 72 characters on a single line.
+
+* LLM Integration
+:PROPERTIES:
+:ID: monadc.context.commit.llm-integration
+:CUSTOM_ID: commit-llm-integration
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/commit.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.commit.llm-audience date:2026-06-11 by:human]
+  Commit messages in this repository are parsed by =context-visualizer.py=
+  and read by LLM agents consuming the context corpus. Write with both
+  audiences in mind. The combination of exact symbol names, stated
+  invariants, and named =TEST-ID= and =:ID:= values makes the commit
+  history a queryable secondary context source.
+
+#+CAPTION: LLM-Oriented Commit Conventions
+| Convention                   | Why                                             |
+|------------------------------+-------------------------------------------------|
+| Exact symbol names in =mono=   | Greppable across history and source             |
+| Invariants as positive facts | LLM can extract and reason about contracts      |
+| Explicit phase boundaries    | LLM knows which layer to modify for a given bug |
+| =TEST-ID= in test sections     | Links commit history to test metadata           |
+| =:ID:= in context sections     | Links commit history to context graph nodes     |
+
+* Examples
+:PROPERTIES:
+:ID: monadc.context.commit.examples
+:CUSTOM_ID: commit-examples
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/commit.org
+:CONFIDENCE: high
+:END:
+
+** Minimal Example
+:PROPERTIES:
+:ID: monadc.context.commit.example-minimal
+:CUSTOM_ID: commit-example-minimal
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:SOURCE: context/commit.org
+:CONFIDENCE: high
+:END:
+
+For a small, single-area change with no section headers needed:
+
+#+BEGIN_EXAMPLE
+fix(wisp): preserve ~[ as one balanced token before ]
+
+The Wisp tokeniser was splitting `define darr ~[1 2 3]` into
+`(define darr ~[1)` followed by orphaned `2` and `3]` tokens.
+The fix detects `~[` at the start of a token and scans forward
+to the matching `]`, respecting nested brackets and string literals.
+The expression parser and infix collector are updated to treat tokens
+beginning with `~[` as grouped atomic expressions so they are never
+placed in operator position.
+
+This is a prerequisite for the reader correctly receiving `~[...]` as
+adjacent `~` and `[...]` and setting `AST_ARRAY.array.is_heap = true`.
+#+END_EXAMPLE
+
+** Full Example
+:PROPERTIES:
+:ID: monadc.context.commit.example-full
+:CUSTOM_ID: commit-example-full
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:SOURCE: context/commit.org
+:CONFIDENCE: high
+:END:
+
+For a large, multi-area change spanning several compiler layers:
+
+#+BEGIN_EXAMPLE
+feat: path literals, heap arrays, test suite, and context corpus
+
+────────────────────────────────────────────────────────────────────────
+READER: Path literals (AST_PATH / TOK_PATH)
+────────────────────────────────────────────────────────────────────────
+
+Filesystem path literals are now first-class expressions. The lexer
+recognises four surface forms before the symbol branch so the full
+token is consumed greedily: `/abs/path`, `~/home/path`, `./rel/path`,
+and `../parent/path`. Bare `/` is excluded so the division operator is
+unaffected.
+
+`AST_PATH` stores its text in the `string` union field — the same field
+used by `AST_STRING`. This is intentional: the runtime representation is
+identical (a bare `i8*`), but the distinct AST and type tags allow
+future passes to apply path-specific static checks without changing the
+codegen ABI.
+
+All compiler phases have been updated: `ast_clone`, `ast_free`,
+`ast_print`, `ast_to_json_sb`, `infer_expr`, `dep_term_of_ast_internal`,
+and all codegen paths that previously switched on `AST_STRING` now also
+handle `AST_PATH`. `TYPE_PATH` maps to a pointer at the LLVM level and
+is exposed to users as the type name `Path`.
+
+────────────────────────────────────────────────────────────────────────
+WISP / READER: Heap array literals (~[...])
+────────────────────────────────────────────────────────────────────────
+
+Stack array literals `[1 2 3]` now have a heap-backed counterpart
+`~[1 2 3]`. Wisp's responsibility is to preserve `~[...]` as a single
+balanced token; the reader's responsibility is to set `is_heap = true`
+on the resulting `AST_ARRAY` node. These two responsibilities must not
+be conflated: a future change to either layer should not need to touch
+the other.
+
+`type_arr_heap(T)` constructs a `TYPE_ARR` with `arr_size = -1`,
+`arr_is_fat = false`, and `arr_is_heap = true`. `type_to_string`
+renders this as `"Heap :: T"`. `type_from_name("Heap")` resolves to
+this type. `ast_clone` preserves `is_heap` so desugaring passes cannot
+silently drop the flag.
+
+────────────────────────────────────────────────────────────────────────
+TESTS: Structured suite with table-driven language corpus
+────────────────────────────────────────────────────────────────────────
+
+`tests/run.py` is a new test runner. Tests are discovered in two modes:
+fixture tests (`tests/*.mon` files with `TEST-ID` comment metadata) and
+corpus rows (`tests/language_corpus.tsv`, one language atom per row).
+`TEST-EXPECT` drives assertions: `inventory`, `parse-json`, `compile`,
+`run`. A `.stdout` sidecar triggers a golden-suffix check.
+
+New fixture `tests.reader.path-heap-literals` covers the full pipeline
+from Wisp through parse, JSON emission, codegen, and runtime execution.
+The `make test` target now builds all and runs the full suite.
+
+────────────────────────────────────────────────────────────────────────
+CONTEXT: Repository memory corpus and live visualizer
+────────────────────────────────────────────────────────────────────────
+
+`context/` is a new directory of Org files recording why the compiler
+is the way it is, not only what it does. Nodes carry stable `:ID:`
+properties prefixed `monadc.context.`; inline `[OBS]`, `[INF]`, and
+`[DEC]` records separate direct observations from inferences and
+decisions. IDs are immutable once published; superseding records must
+be appended rather than rewriting history.
+
+`context-visualizer.py` serves the corpus as a live typed graph at
+`/api/context` and exposes `POST /api/todo` for writing TODO state
+back to the Org files. The dashboard (`context/visualizer/`) renders
+the graph as an animated canvas with a fuzzy finder, TODO work queue,
+and a Hoogle-style method browser. New context nodes introduced:
+`monadc.context.reader.path-literals`,
+`monadc.context.reader.heap-arrays`,
+`monadc.context.tests.metadata-format`.
+#+END_EXAMPLE
+
+* Quick Reference
+:PROPERTIES:
+:ID: monadc.context.commit.quick-reference
+:CUSTOM_ID: commit-quick-reference
+:CONTEXT_KIND: format
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/commit.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Commit Format Quick Reference
+| Element       | Rule                                                      |
+|---------------+-----------------------------------------------------------|
+| First line    | =<type>(<scope>): <summary>=, max 72 chars, no period       |
+| Blank line    | Mandatory between first line and body                     |
+| Body wrap     | 72 characters                                             |
+| Section rule  | Exactly 72 × =─= (U+2500)                                   |
+| Section title | =ALL CAPS: Short descriptor=                                |
+| Section order | wisp → reader → types → infer → codegen → tests → context |
+| Voice         | Imperative, active, present tense for invariants          |
+| Symbol names  | Exact, in =monospace=                                       |
+| Bullets       | Never                                                     |
+| Footers       | Never — put everything in the body                        |
+
+#+CAPTION: Type Cheat Sheet
+| =feat= | =fix= | =refactor= | =test= | =context= | =build= | =docs= | =perf= | =chore= |

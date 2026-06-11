@@ -206,3 +206,149 @@ define darr ~[1 2 3]
 Expected Wisp shape:
 (define darr ~[1 2 3])
 #+END_EXAMPLE
+
+* Char Escape Parsing
+:PROPERTIES:
+:ID: monadc.context.reader.char-escapes
+:CUSTOM_ID: char-escapes
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: wisp.c, reader.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.reader.char-escape-tab src:reader.c conf:high]
+=Char= literals with ='\t'= are handled by Wisp expansion. Wisp converts the
+escape to a tab character before the reader sees it, so the reader receives a
+literal tab character inside single quotes.
+
+[OBS id:obs.reader.char-escape-newline-fails src:wisp.c,reader.c conf:high]
+=Char= literals with ='\n'= fail because Wisp expands =\\n= to a real newline,
+splitting the literal across two lines. The paragraph tokenizer then sees an
+orphan closing ='= token on line 2. This is a Wisp limitation: escape sequences
+that produce whitespace or newline characters cannot be used inside char
+literals in standalone expressions.
+
+* Lambda Parameter Syntax
+:PROPERTIES:
+:ID: monadc.context.reader.lambda-params
+:CUSTOM_ID: lambda-params
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: reader.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.reader.lambda-paren-params src:reader.c conf:high]
+=Lambda= requires parenthesized parameter lists: =(lambda (x) body)=. Square
+bracket =[x : Type]= syntax inside lambda requires the arrow-return form:
+=(lambda ([x : Int] -> Int) body)=.
+
+[OBS id:obs.reader.lambda-no-bracket-standalone src:reader.c conf:high]
+=(lambda [x] body)= and =(lambda [x : Int] body)= (without =-> ReturnType=)
+fail with "Expected '(' after 'lambda'". The bracket form is only valid when
+followed by =->= and a return type.
+
+* Buffer Type Declarations
+:PROPERTIES:
+:ID: monadc.context.reader.buffer-types
+:CUSTOM_ID: buffer-types
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: reader.c, wisp.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.reader.buffer-wisp-syntax src:wisp.c conf:high]
+Wisp form =define buffer :: [16kb I32]= expands to
+=(define [buffer :: Arr :: 16kb :: I32] [])=. The =::= syntax inside brackets
+creates a typed variable binding where =Arr= is the array type constructor,
+the size suffix (=kb=, =mb=) is a symbol, and the element type follows.
+
+[OBS id:obs.reader.buffer-paren-syntax src:reader.c conf:high]
+Parenthesized form =(define buffer [16kb I32])= creates a define with an array
+literal as the value. The =[16kb I32]= is parsed as an =AST_ARRAY= containing
+=[(* 16 kb) I32]= where =kb= is a symbol and =*= is inferred as multiplication.
+
+[OBS id:obs.reader.buffer-size-limit src:reader.c conf:high]
+Static arrays exceeding 1gb (=[16gb]=, =[16tb]=) are rejected at compile time
+with "Static array is too large to allocate on x86-64". They still parse
+correctly but fail in codegen. Wisp form also fails since =[16gb]= expands to
+a static array exceeding the limit.
+
+* Match Expression Syntax
+:PROPERTIES:
+:ID: monadc.context.reader.match-syntax
+:CUSTOM_ID: match-syntax
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: reader.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.reader.match-requires-with src:reader.c conf:high]
+=Match= expressions require the =with= keyword: =(match expr with | pat -> body)=.
+=(match expr | pat -> body)= (without =with=) fails with "Expected 'with' after
+match expression".
+
+[OBS id:obs.reader.match-arrow-syntax src:reader.c conf:high]
+Match clauses use =->= not ="=>"=: =(match 1 with | 0 -> 1 | _ -> 0)=.
+Using ='=> '= fails with "expected '->' after guard condition".
+
+* For Comprehension Syntax
+:PROPERTIES:
+:ID: monadc.context.reader.for-syntax
+:CUSTOM_ID: for-syntax
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: reader.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.reader.for-bindings src:reader.c conf:high]
+=For= comprehensions support destructured bindings: =(for [[x y] [[1 2] [3 4]]] (+ 1 x))=.
+Bindings can be simple symbols or nested lists for destructuring.
+
+[OBS id:obs.reader.for-collect src:reader.c conf:high]
+=For= comprehensions accept =:collect= keyword: =(for [x [1 2 3]] :collect x)=.
+The =:collect= keyword is parsed as a symbol in the body position.

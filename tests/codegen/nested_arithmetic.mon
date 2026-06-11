@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.nested-arithmetic
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Nested arithmetic compiles and prints correct result.
+;; TEST-ATOM: (+ 1 (* 2 3)) compiles and prints 7
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (+ 1 (* 2 3)))

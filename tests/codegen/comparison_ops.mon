@@ -1,0 +1,12 @@
+;; TEST-ID: tests.codegen.comparison-ops
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Comparison operators evaluate at runtime.
+;; TEST-ATOM: (< 3 5) evaluates to True, (> 5 3) evaluates to True, (= 4 4) evaluates to True.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (< 3 5))
+(show (> 5 3))
+(show (= 4 4))
+(show (<= 3 3))
+(show (>= 5 5))

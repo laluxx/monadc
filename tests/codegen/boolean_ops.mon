@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.boolean-ops
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Boolean and/or/not evaluate correctly at runtime.
+;; TEST-ATOM: (and True False) = False, (or True False) = True, (not True) = False.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (and True False))
+(show (or True False))
+(show (not True))

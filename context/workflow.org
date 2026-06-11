@@ -70,8 +70,8 @@ This file records standing workflow preferences for future compiler work.
 :END:
 
 [DEC id:dec.workflow.completion-phrase date:2026-06-11 by:human]
-When a requested job is finished, the response must start with: =I've finished
-my job!=, followed by a detailed explanation of the work completed.
+  When a requested job is finished, the response must start with: =I've finished
+  my job!=, followed by a detailed explanation of the work completed.
 
 * Context Maintenance
 :PROPERTIES:
@@ -92,5 +92,5 @@ my job!=, followed by a detailed explanation of the work completed.
 :END:
 
 [DEC id:dec.workflow.context-maintenance date:2026-06-11 by:human]
-Maintain repository context in Org files, adding important discoveries as work
-progresses.
+  Maintain repository context in Org files, adding important discoveries as work
+  progresses.

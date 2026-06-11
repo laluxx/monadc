@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.function-call
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Define and call a function via short-form define.
+;; TEST-ATOM: (define (inc [x : Int] -> Int) (+ 1 x)) compiles and (show (inc 5)) prints 6.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define (inc [x : Int] -> Int) (+ 1 x))
+(show (inc 5))

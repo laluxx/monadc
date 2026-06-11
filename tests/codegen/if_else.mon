@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.if-else
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: If-else evaluates the correct branch at runtime.
+;; TEST-ATOM: (if True 42 0) evaluates to 42.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (if True 42 0))

@@ -4320,6 +4320,47 @@ static int wisp_is_known_function(const char *name) {
     return arity_get_entry(&g_ffi_arities, name) != NULL ? 1 : 0;
 }
 
+static int pure_is_known_function(const char *name) {
+    if (!name) return 0;
+    if (strcmp(name, "if") == 0 || strcmp(name, "cond") == 0 ||
+        strcmp(name, "let") == 0 || strcmp(name, "let*") == 0 ||
+        strcmp(name, "letrec") == 0 || strcmp(name, "lambda") == 0 ||
+        strcmp(name, "match") == 0 || strcmp(name, "define") == 0 ||
+        strcmp(name, "quote") == 0 || strcmp(name, "begin") == 0 ||
+        strcmp(name, "set!") == 0 || strcmp(name, "for") == 0 ||
+        strcmp(name, "while") == 0 || strcmp(name, "when") == 0 ||
+        strcmp(name, "unless") == 0 || strcmp(name, "case") == 0 ||
+        strcmp(name, "data") == 0 || strcmp(name, "class") == 0 ||
+        strcmp(name, "instance") == 0 || strcmp(name, "type") == 0 ||
+        strcmp(name, "layout") == 0 || strcmp(name, "module") == 0 ||
+        strcmp(name, "import") == 0 || strcmp(name, "show") == 0 ||
+        strcmp(name, "do") == 0)
+        return 1;
+    if (strcmp(name, "+") == 0 || strcmp(name, "-") == 0 ||
+        strcmp(name, "*") == 0 || strcmp(name, "/") == 0 ||
+        strcmp(name, "%") == 0)
+        return 1;
+    if (strcmp(name, "=") == 0 || strcmp(name, "!=") == 0 ||
+        strcmp(name, "<") == 0 || strcmp(name, ">") == 0 ||
+        strcmp(name, "<=") == 0 || strcmp(name, ">=") == 0)
+        return 1;
+    if (strcmp(name, "and") == 0 || strcmp(name, "or") == 0 ||
+        strcmp(name, "not") == 0)
+        return 1;
+    if (strcmp(name, "car") == 0 || strcmp(name, "cdr") == 0 ||
+        strcmp(name, "cons") == 0 || strcmp(name, "list") == 0 ||
+        strcmp(name, "map") == 0 || strcmp(name, "filter") == 0 ||
+        strcmp(name, "foldl") == 0 || strcmp(name, "foldr") == 0)
+        return 1;
+    if (strcmp(name, ">>=") == 0 || strcmp(name, ">>") == 0 ||
+        strcmp(name, "=<<") == 0 || strcmp(name, ">=>") == 0 ||
+        strcmp(name, "<=<") == 0)
+        return 1;
+    if (strcmp(name, "True") == 0 || strcmp(name, "False") == 0)
+        return 1;
+    return 0;
+}
+
 ASTList wisp_parse_all(const char *source, const char *filename) {
     /* Strip comments first, preserving line structure */
     char *stripped = strip_comments(source);
@@ -4339,9 +4380,11 @@ ASTList wisp_parse_all(const char *source, const char *filename) {
         if (*p) p++;
     }
     if (!has_wisp) {
+        g_is_known_function = pure_is_known_function;
         parser_set_context(filename, stripped);
         ASTList result = parse_all(stripped);
         result = macro_expand_all(result.exprs, result.count);
+        g_is_known_function = NULL;
         free(stripped);
         return result;
     }

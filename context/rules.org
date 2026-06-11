@@ -64,9 +64,9 @@ work.
 :END:
 
 [DEC id:dec.rules.always-improve-context date:2026-06-11 by:human]
-Always improve the repository context as work progresses. Add important
-discoveries, decisions, verification results, and follow-up tasks to the Org
-context corpus when they would help future work.
+  Always improve the repository context as work progresses. Add important
+  discoveries, decisions, verification results, and follow-up tasks to the Org
+  context corpus when they would help future work.
 
 #+CAPTION: Context Upkeep Triggers
 | Trigger                            | Required Context Action                          |
@@ -77,11 +77,11 @@ context corpus when they would help future work.
 | A follow-up task is identified     | Add it to =context/todo.org= or a topic TODO       |
 
 [DEC id:dec.rules.context-during-conversation date:2026-06-11 by:human]
-When the user states a standing preference or describes a durable workflow
-during conversation, add it to the context corpus during the same work session
-instead of leaving it only in chat history.
+  When the user states a standing preference or describes a durable workflow
+  during conversation, add it to the context corpus during the same work session
+  instead of leaving it only in chat history.
 
 [DEC id:dec.rules.visualizer-quality-bar date:2026-06-11 by:human]
-Project visualizations should meet a high usability and design bar: clear
-dashboard structure, standard interaction patterns, smooth motion, and direct
-editing where the visualization represents mutable project state.
+  Project visualizations should meet a high usability and design bar: clear
+  dashboard structure, standard interaction patterns, smooth motion, and direct
+  editing where the visualization represents mutable project state.

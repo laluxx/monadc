@@ -59,10 +59,10 @@ This file documents the browser visualizer for the repository context graph.
 :END:
 
 [DEC id:dec.visualizer.category-theory-foundation date:2026-06-11 by:human]
-The context system should be understood through category theory. Context nodes,
-tests, TODOs, files, decisions, observations, and source anchors are objects.
-Links, evidence relations, support relations, containment, and test verification
-are morphisms.
+  The context system should be understood through category theory. Context nodes,
+  tests, TODOs, files, decisions, observations, and source anchors are objects.
+  Links, evidence relations, support relations, containment, and test verification
+  are morphisms.
 
 #+CAPTION: Context Category
 | Category concept | Repository artifact                            | Example morphism                            |
@@ -100,42 +100,42 @@ The visualizer assets live in =context/visualizer/= as plain HTML, CSS, and
 JavaScript.
 
 [DEC id:dec.visualizer.dashboard-material-live date:2026-06-11 by:human]
-The context visualizer should be a project dashboard, not a static diagram. It
-should use a Material-style interface with elevated surfaces, project cards,
-TODO controls, a live graph stage, and an inspector.
+  The context visualizer should be a project dashboard, not a static diagram. It
+  should use a Material-style interface with elevated surfaces, project cards,
+  TODO controls, a live graph stage, and an inspector.
 
 [DEC id:dec.visualizer.living-graph date:2026-06-11 by:human]
-The graph should update every animation frame like a game scene. Nodes should
-feel alive through continuous motion, and selecting a node should smoothly ease
-the camera toward it while the details panel updates.
+  The graph should update every animation frame like a game scene. Nodes should
+  feel alive through continuous motion, and selecting a node should smoothly ease
+  the camera toward it while the details panel updates.
 
 [OBS id:obs.visualizer.todo-writeback src:context-visualizer.py conf:high]
 The local server exposes =POST /api/todo= so the dashboard can update TODO
 status in the backing Org files and then reload the graph.
 
 [DEC id:dec.visualizer.graph-as-background date:2026-06-11 by:human]
-The animated node graph should be the main page background, not a small framed
-area. UI controls should float at the sides as translucent overlays.
+  The animated node graph should be the main page background, not a small framed
+  area. UI controls should float at the sides as translucent overlays.
 
 [DEC id:dec.visualizer.fuzzy-camera-search date:2026-06-11 by:human]
-The top search should be a fuzzy finder. =C-n= and =C-p= move through
-completion candidates, and the camera should smoothly follow and zoom to the
-candidate while showing its information.
+  The top search should be a fuzzy finder. =C-n= and =C-p= move through
+  completion candidates, and the camera should smoothly follow and zoom to the
+  candidate while showing its information.
 
 [DEC id:dec.visualizer.todo-yellow date:2026-06-11 by:human]
-TODO information should be yellow everywhere: TODO nodes, TODO labels, TODO
-cards, TODO candidates, and TODO work queue items.
+  TODO information should be yellow everywhere: TODO nodes, TODO labels, TODO
+  cards, TODO candidates, and TODO work queue items.
 
 [DEC id:dec.visualizer.hoogle-method-browser date:2026-06-11 by:human]
-The dashboard should include a Hoogle-like browser for all Core and Prelude
-methods, separated into Core and Prelude groups and searchable by method name or
-type signature.
+  The dashboard should include a Hoogle-like browser for all Core and Prelude
+  methods, separated into Core and Prelude groups and searchable by method name or
+  type signature.
 
 [DEC id:dec.visualizer.directed-method-tree date:2026-06-11 by:human]
-Clicking a Hoogle method should project a focused method tree onto the graph:
-the selected method is the center object, called methods are outgoing morphisms,
-callers are incoming morphisms, and every canvas edge should show direction with
-an arrow tip.
+  Clicking a Hoogle method should project a focused method tree onto the graph:
+  the selected method is the center object, called methods are outgoing morphisms,
+  callers are incoming morphisms, and every canvas edge should show direction with
+  an arrow tip.
 
 [OBS id:obs.visualizer.performance-camera src:context/visualizer/app.js conf:high]
 The canvas loop keeps interaction smooth by throttling context force simulation,
@@ -143,30 +143,30 @@ bucketizing nearby node collision checks, and easing wheel zoom around the
 pointer anchor instead of applying immediate linear zoom jumps.
 
 [DEC id:dec.visualizer.done-category-timestamps date:2026-06-11 by:human]
-DONE TODOs are their own visual category. Marking a heading TODO as DONE should
-write an Org =CLOSED:= timestamp with day and time, and the UI should color DONE
-state separately from open TODO and blocked state.
+  DONE TODOs are their own visual category. Marking a heading TODO as DONE should
+  write an Org =CLOSED:= timestamp with day and time, and the UI should color DONE
+  state separately from open TODO and blocked state.
 
 [DEC id:dec.visualizer.morphisms-as-arrows date:2026-06-11 by:human]
-In the category-theory visual model, functions are morphisms represented by
-selectable arrows, not nodes. Function-focused views should draw type/context
-objects as nodes and allow the arrow itself to be clicked and inspected.
+  In the category-theory visual model, functions are morphisms represented by
+  selectable arrows, not nodes. Function-focused views should draw type/context
+  objects as nodes and allow the arrow itself to be clicked and inspected.
 
 [DEC id:dec.visualizer.cascade-composition date:2026-06-11 by:human]
-Selecting an object or morphism should reveal the composed upstream/downstream
-cascade through the category. The closure must use visited sets so cycles are
-finite in the interface, while still showing how changes propagate through
-related objects and morphisms.
+  Selecting an object or morphism should reveal the composed upstream/downstream
+  cascade through the category. The closure must use visited sets so cycles are
+  finite in the interface, while still showing how changes propagate through
+  related objects and morphisms.
 
 [DEC id:dec.visualizer.editor-open date:2026-06-11 by:human]
-File citations in the visualizer should open directly in the user's editor via
-=$EDITOR=, falling back to =emacsclient=. The server must validate the path
-stays inside the repository before launching the editor.
+  File citations in the visualizer should open directly in the user's editor via
+  =$EDITOR=, falling back to =emacsclient=. The server must validate the path
+  stays inside the repository before launching the editor.
 
 [DEC id:dec.visualizer.fast-world-grid date:2026-06-11 by:human]
-Graph navigation should feel immediate: dragging moves the camera directly,
-finder navigation uses arrow keys, and the background grid is a world-space
-multi-scale grid with stable major/minor steps and origin axes.
+  Graph navigation should feel immediate: dragging moves the camera directly,
+  finder navigation uses arrow keys, and the background grid is a world-space
+  multi-scale grid with stable major/minor steps and origin axes.
 
 * Test Metadata Connection
 :PROPERTIES:
@@ -187,6 +187,6 @@ multi-scale grid with stable major/minor steps and origin axes.
 :END:
 
 [OBS id:obs.visualizer.tests-as-functor src:tests/run.py conf:high]
-The visualizer reads =TEST-ID= and =TEST-CONTEXT= metadata from fixtures plus
-=tests/language_corpus.tsv=. Each test becomes an object with =verifies=
-morphisms into its context objects.
+  The visualizer reads =TEST-ID= and =TEST-CONTEXT= metadata from fixtures plus
+  =tests/language_corpus.tsv=. Each test becomes an object with =verifies=
+  morphisms into its context objects.

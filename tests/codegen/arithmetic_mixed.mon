@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.arithmetic-mixed
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Mixed arithmetic operations evaluate with operator precedence.
+;; TEST-ATOM: (+ (* 2 3) (- 10 4)) evaluates to 12.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (+ (* 2 3) (- 10 4)))

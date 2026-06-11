@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.wisp-show-string
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Wisp show string literal evaluates correctly.
+;; TEST-ATOM: (show "hello") prints hello.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+show "hello"

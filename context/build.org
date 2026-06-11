@@ -95,8 +95,8 @@ directory.
 :END:
 
 [DEC id:dec.build.verify-after-reader-header date:2026-06-11 by:codex]
-After modifying compiler headers, run at least =make clean= and =make=. Run
-=sudo make install= only after the non-privileged build succeeds.
+  After modifying compiler headers, run at least =make clean= and =make=. Run
+  =sudo make install= only after the non-privileged build succeeds.
 
 [OBS id:obs.build.sudo-password-required src:command-output conf:high]
 In this environment, =sudo make install= can require an interactive password and

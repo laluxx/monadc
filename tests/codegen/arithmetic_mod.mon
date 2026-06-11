@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.arithmetic-mod
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Modulo operation evaluates at runtime.
+;; TEST-ATOM: (mod 10 3) evaluates to 1.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (mod 10 3))

@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.comparison-eq
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Equality comparison evaluates at runtime.
+;; TEST-ATOM: (= 3 3) = True, (= 3 4) = False.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (= 3 3))
+(show (= 3 4))

@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.two-shows
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Multiple show expressions in sequence both run.
+;; TEST-ATOM: Two sequential (show ...) calls
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show 1)
+(show 2)

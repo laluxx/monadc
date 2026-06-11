@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.let-binding
+;; TEST-CONTEXT: monadc.context.reader.sugar.let-desugar
+;; TEST-PURPOSE: Let binding desugars to immediately-invoked lambda and evaluates at runtime.
+;; TEST-ATOM: (let [x 5] (+ x 3)) evaluates to 8.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (let [x 5] (+ x 3)))

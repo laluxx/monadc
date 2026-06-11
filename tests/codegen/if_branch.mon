@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.if-branch
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: If expression compiles and prints the true branch.
+;; TEST-ATOM: (if (> 1 0) 42 0) compiles and prints 42
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (if (> 1 0) 42 0))

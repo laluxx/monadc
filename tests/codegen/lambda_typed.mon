@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.lambda-typed
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Typed lambda with explicit return type evaluates correctly.
+;; TEST-ATOM: ((lambda ([x : Int] -> Int) (+ x 1)) 41) evaluates to 42.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show ((lambda ([x : Int] -> Int) (+ x 1)) 41))

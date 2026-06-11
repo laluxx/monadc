@@ -73,9 +73,9 @@ context record.
 #+END_QUOTE
 
 [DEC id:dec.tests.context-reconnection date:2026-06-11 by:human]
-Tests must carry metadata that links them back to context nodes so future
-humans and LLM agents can recover the purpose, scope, and expected behavior of
-each fixture without guessing.
+  Tests must carry metadata that links them back to context nodes so future
+  humans and LLM agents can recover the purpose, scope, and expected behavior of
+  each fixture without guessing.
 
 * Philosophy
 :PROPERTIES:
@@ -96,14 +96,14 @@ each fixture without guessing.
 :END:
 
 [DEC id:dec.tests.smallest-atoms date:2026-06-11 by:human]
-The test suite should be separated into the smallest possible behavioral atoms.
-Each atom should prove one compiler promise, point at the context that explains
-that promise, and be cheap enough to run continuously.
+  The test suite should be separated into the smallest possible behavioral atoms.
+  Each atom should prove one compiler promise, point at the context that explains
+  that promise, and be cheap enough to run continuously.
 
 [DEC id:dec.tests.living-system date:2026-06-11 by:human]
-Documentation, philosophy, context, and tests are all part of the same living
-system. The system records not only what the compiler does, but why that
-behavior matters and how it is verified.
+  Documentation, philosophy, context, and tests are all part of the same living
+  system. The system records not only what the compiler does, but why that
+  behavior matters and how it is verified.
 
 #+CAPTION: Living Verification Loop
 | Layer      | Artifact          | Role                                     | Update Trigger                 |
@@ -152,15 +152,15 @@ the required keys before running behavioral checks.
 | =TEST-EXPECT=  | yes      | observable outcome class               |
 
 [DEC id:dec.tests.comment-metadata date:2026-06-11 by:codex]
-Test metadata uses =;; TEST-*= comments so fixtures remain ordinary Monad
-programs and the metadata is visible to both the compiler and plain-text tools.
+  Test metadata uses =;; TEST-*= comments so fixtures remain ordinary Monad
+  programs and the metadata is visible to both the compiler and plain-text tools.
 
 [DEC id:dec.tests.sidecar-metadata date:2026-06-11 by:human]
-Each durable regression may also have a sidecar Org file named after the test
-fixture, for example =tests/path_heap_literals.org= for
-=tests/path_heap_literals.mon=. The sidecar records richer metadata, context
-links, regression contracts, and historical notes that would make the executable
-fixture noisy.
+  Each durable regression may also have a sidecar Org file named after the test
+  fixture, for example =tests/path_heap_literals.org= for
+  =tests/path_heap_literals.mon=. The sidecar records richer metadata, context
+  links, regression contracts, and historical notes that would make the executable
+  fixture noisy.
 
 #+CAPTION: Test Artifact Pairing
 | Artifact | Naming           | Purpose                                      |
@@ -169,28 +169,46 @@ fixture noisy.
 | Sidecar  | =tests/<name>.org= | metadata, context links, regression contract |
 | Runner   | =tests/run.py=     | formatted execution and assertions           |
 
-[TODO id:todo.tests.metadata-expand owner:codex status:done]
+[TODO id:todo.tests.metadata-expand owner:codex status:open]
 As the suite grows, extend =tests/run.py= so =TEST-EXPECT= drives more
 assertions directly instead of requiring hand-written shell checks per fixture.
 
 [DEC id:dec.tests.runner-output date:2026-06-11 by:human]
-The test runner should present a high-signal suite report with a framed header,
-registered test count, one timed status row per test, a summary block, and a
-clear all-passed or failed footer.
+  The test runner should present a high-signal suite report with a framed header,
+  registered test count, one timed status row per test, a summary block, and a
+  clear all-passed or failed footer.
 
 [DEC id:dec.tests.runner-colors-cleanup date:2026-06-11 by:human]
-The test runner is named =tests/run.py=. It must delete test-generated
-artifacts immediately after each test, render the arrow in yellow, dots in gray,
-success checkmark in green, =PASS= in bold green, =FAIL= in bold red, and time
-units such as =ms= in cyan.
+  The test runner is named =tests/run.py=. It must delete test-generated
+  artifacts immediately after each test, render the arrow in yellow, dots in gray,
+  success checkmark in green, =PASS= in bold green, =FAIL= in bold red, and time
+  units such as =ms= in cyan.
 
 [DEC id:dec.tests.stdout-golden-suffix date:2026-06-11 by:human]
-If a fixture has a sibling =.stdout= file with the same basename, =tests/run.py=
-must compile and execute the fixture and require executable stdout to end with
-that file exactly. This supports stable golden-output checks even when compiler
-logs are noisy.
+  If a fixture has a sibling =.stdout= file with the same basename, =tests/run.py=
+  must compile and execute the fixture and require executable stdout to end with
+  that file exactly. This supports stable golden-output checks even when compiler
+  logs are noisy.
 
 [DEC id:dec.tests.table-driven-language-corpus date:2026-06-11 by:codex]
-=tests/language_corpus.tsv= expands into individual registered parser
-conformance tests. Each row records one language atom, its context target, its
-purpose, and its source text.
+  =tests/reader-atoms.tsv= expands into individual registered parser
+  conformance tests. Each row records one language atom, its context target, its
+  purpose, and its source text.
+
+[DEC id:dec.tests.codegen-directory date:2026-06-11 by:codex]
+  =tests/codegen/*.mon= are compile-and-run fixtures. Each file must carry
+  =TEST-EXPECT: compile, run= (and optional =.stdout= golden file). The test
+  runner compiles the file, executes the binary, and (when =.stdout= exists)
+  checks executable output ends with the golden file content.
+
+[DEC id:dec.tests.corpus-size date:2026-06-11 by:codex]
+  The parser corpus has grown to ~300 entries covering: numeric literals
+  (int/float/hex/bin/oct/radix/underscore), string/char literals, path literals,
+  keywords, symbols, arrays, heap arrays, sets, maps, ranges, wisp forms, comment
+  forms, quoted/quasiquoted forms, lambda/let/let*/letrec/case/match/cond forms,
+  do/begin sequences, with/set! mutations, pipe/dot operators, for comprehensions,
+  data/type/class/instance/module/import declarations, buffer type declarations
+  (wisp + paren), refinement types, address-of expressions, feature conditionals,
+  type quantifiers (all/forall/some/exists), annotation forms (::/ann), import
+  renaming, arithmetic/built-in operators, define function shorthand, and layout
+  variants.

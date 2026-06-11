@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.list-ops-car-cdr
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Car and cdr of nested list evaluate correctly.
+;; TEST-ATOM: (car (cdr '(1 2 3))) evaluates to 2.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (car (cdr '(1 2 3))))

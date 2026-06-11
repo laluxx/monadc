@@ -1,0 +1,592 @@
+# name	context	purpose	source
+literal_int_zero	monadc.context.language.syntax-corpus	Integer literal zero parses as a standalone expression.	0
+literal_int_positive	monadc.context.language.syntax-corpus	Positive integer literals parse as standalone expressions.	123
+literal_int_negative	monadc.context.language.syntax-corpus	Negative integer literals parse as standalone expressions.	-456
+literal_float_simple	monadc.context.language.syntax-corpus	Decimal float literals parse as standalone expressions.	3.14
+literal_float_leading_zero	monadc.context.language.syntax-corpus	Float literals with leading zero parse as standalone expressions.	0.5
+literal_float_negative	monadc.context.language.syntax-corpus	Negative float literals parse as standalone expressions.	-2.75
+literal_string_empty	monadc.context.language.syntax-corpus	Empty string literals parse as standalone expressions.	""
+literal_string_simple	monadc.context.language.syntax-corpus	Simple string literals parse as standalone expressions.	"hello"
+literal_string_spaces	monadc.context.language.syntax-corpus	String literals preserve embedded spaces.	"hello world"
+literal_string_punctuation	monadc.context.language.syntax-corpus	String literals preserve punctuation.	"hello, world!"
+literal_char_alpha	monadc.context.language.syntax-corpus	Alphabetic character literals parse as standalone expressions.	'a'
+literal_char_digit	monadc.context.language.syntax-corpus	Digit character literals parse as standalone expressions.	'7'
+literal_keyword_plain	monadc.context.language.syntax-corpus	Plain keyword literals parse as standalone expressions.	:keyword
+literal_keyword_dash	monadc.context.language.syntax-corpus	Dashed keyword literals parse as standalone expressions.	:with-dash
+literal_symbol_plain	monadc.context.language.syntax-corpus	Plain symbols parse as standalone expressions.	alpha
+literal_symbol_operator	monadc.context.language.syntax-corpus	Operator symbols parse as standalone expressions.	+
+path_home	monadc.context.reader.path-literals	Home-relative path literals parse as Path atoms.	~/xos/projects/c/monadc
+path_dot_relative	monadc.context.reader.path-literals	Dot-relative path literals parse as Path atoms.	./relative/path
+path_absolute	monadc.context.reader.path-literals	Absolute path literals parse as Path atoms.	/tmp/monad
+array_empty	monadc.context.language.syntax-corpus	Empty array literals parse.	[]
+array_numbers	monadc.context.language.syntax-corpus	Array literals of numbers parse.	[1 2 3]
+array_strings	monadc.context.language.syntax-corpus	Array literals of strings parse.	["a" "b" "c"]
+array_keywords	monadc.context.language.syntax-corpus	Array literals of keywords parse.	[:a :b :c]
+array_nested	monadc.context.language.syntax-corpus	Nested array literals parse.	[[1 2] [3 4]]
+array_mixed	monadc.context.language.syntax-corpus	Mixed atom array literals parse.	[1 "two" :three]
+heap_array_empty	monadc.context.reader.heap-arrays	Empty heap array literals parse.	~[]
+heap_array_numbers	monadc.context.reader.heap-arrays	Heap array literals of numbers parse.	~[1 2 3]
+heap_array_strings	monadc.context.reader.heap-arrays	Heap array literals of strings parse.	~["a" "b"]
+heap_array_nested	monadc.context.reader.heap-arrays	Nested heap array literals parse.	~[[1 2] [3 4]]
+set_empty	monadc.context.language.syntax-corpus	Empty set literals parse.	{}
+set_numbers	monadc.context.language.syntax-corpus	Set literals of numbers parse.	{1 2 3}
+set_strings	monadc.context.language.syntax-corpus	Set literals of strings parse.	{"a" "b"}
+set_keywords	monadc.context.language.syntax-corpus	Set literals of keywords parse.	{:a :b}
+map_empty	monadc.context.language.syntax-corpus	Empty map literals parse.	#{}
+map_string_numbers	monadc.context.language.syntax-corpus	Map literals with string keys and numeric values parse.	#{"a" 1 "b" 2}
+map_keyword_strings	monadc.context.language.syntax-corpus	Map literals with keyword keys and string values parse.	#{:a "alpha" :b "beta"}
+map_number_strings	monadc.context.language.syntax-corpus	Map literals with numeric keys and string values parse.	#{1 "one" 2 "two"}
+range_array_closed	monadc.context.language.syntax-corpus	Closed array ranges parse.	[0..10]
+range_array_step	monadc.context.language.syntax-corpus	Stepped array ranges parse.	[1,3..9]
+range_array_negative	monadc.context.language.syntax-corpus	Array ranges with negative endpoints parse.	[-3..3]
+range_list_infinite	monadc.context.language.syntax-corpus	Infinite list ranges parse.	(0..)
+range_list_step	monadc.context.language.syntax-corpus	Stepped infinite list ranges parse.	(1,2..)
+address_symbol	monadc.context.language.syntax-corpus	Address-of symbol expressions parse.	&x
+quote_simple	monadc.context.language.syntax-corpus	Quoted symbols parse.	'alpha
+quote_list	monadc.context.language.syntax-corpus	Quoted lists parse.	'(1 2 3)
+quasiquote_simple	monadc.context.language.syntax-corpus	Quasiquoted sequences parse.	⌜1 2 3⌝
+list_define_simple	monadc.context.language.syntax-corpus	Parenthesized simple defines parse.	(define x 1)
+list_define_string	monadc.context.language.syntax-corpus	Parenthesized string defines parse.	(define name "monad")
+list_define_array	monadc.context.language.syntax-corpus	Parenthesized array defines parse.	(define xs [1 2 3])
+list_define_heap_array	monadc.context.reader.heap-arrays	Parenthesized heap array defines parse.	(define xs ~[1 2 3])
+list_define_path	monadc.context.reader.path-literals	Parenthesized path defines parse.	(define root ~/xos/projects/c/monadc)
+list_module_decl	monadc.context.language.syntax-corpus	Module declarations parse.	(module SyntaxCase)
+list_import_decl	monadc.context.language.syntax-corpus	Import declarations parse.	(import Core)
+list_type_alias	monadc.context.language.syntax-corpus	Type alias declarations parse.	(type Code List)
+list_data_simple	monadc.context.language.syntax-corpus	Simple ADT declarations parse.	(data Color Red | Green | Blue)
+list_data_fields	monadc.context.language.syntax-corpus	ADT declarations with constructor fields parse.	(data Shape Circle Float | Rectangle Float Float)
+list_layout_basic	monadc.context.language.syntax-corpus	Layout declarations with scalar fields parse.	(layout Point [x :: Float] [y :: Float])
+list_layout_array_field	monadc.context.language.syntax-corpus	Layout declarations with array fields parse.	(layout Buffer [data :: [Int 4]])
+list_tests_basic	monadc.context.language.syntax-corpus	Tests forms parse.	(tests (= 1 1))
+list_asm_nop	monadc.context.language.syntax-corpus	Assembly forms parse.	(asm nop)
+lambda_identity	monadc.context.language.syntax-corpus	Unary typed lambdas parse.	(lambda (Int -> Int) x -> x)
+lambda_string	monadc.context.language.syntax-corpus	String identity lambdas parse.	(lambda (String -> String) s -> s)
+lambda_two_args	monadc.context.language.syntax-corpus	Two-argument lambdas parse.	(lambda (Int -> Int -> Int) x y -> (+ x y))
+wisp_define_int	monadc.context.language.syntax-corpus	Wisp integer defines parse.	define x 1
+wisp_define_string	monadc.context.language.syntax-corpus	Wisp string defines parse.	define message "hello"
+wisp_define_array	monadc.context.language.syntax-corpus	Wisp array defines parse.	define xs [1 2 3]
+wisp_define_heap_array	monadc.context.reader.heap-arrays	Wisp heap array defines parse.	define xs ~[1 2 3]
+wisp_define_path	monadc.context.reader.path-literals	Wisp path defines parse.	define root ~/xos/projects/c/monadc
+wisp_define_return_string	monadc.context.language.syntax-corpus	Wisp return-typed zero-argument defines parse.	define return-string -> String\n  "ciao"
+wisp_define_square	monadc.context.language.syntax-corpus	Wisp unary typed function defines parse.	define square :: Int -> Int\n  x -> x * x
+wisp_type_refinement	monadc.context.language.syntax-corpus	Wisp refinement type declarations parse.	type Natural { x ∈ Int | x >= 0 }
+comment_line_then_number	monadc.context.language.syntax-corpus	Line comments before expressions parse.	;; comment\n42
+comment_block_then_string	monadc.context.language.syntax-corpus	Block comments before expressions parse.	-| block comment |-\n"after"
+array_with_comments	monadc.context.language.syntax-corpus	Array literals tolerate embedded comments.	[1 ;; inline\n 2 3]
+string_escaped_quote	monadc.context.language.syntax-corpus	String literals preserve escaped quotes.	"hello \"monad\""
+string_backslash	monadc.context.language.syntax-corpus	String literals preserve backslashes.	"a\\b"
+number_large	monadc.context.language.syntax-corpus	Large integer literals parse.	123456789
+number_zero_float	monadc.context.language.syntax-corpus	Zero-valued float literals parse.	0.0
+number_integer_float	monadc.context.language.syntax-corpus	Integer-looking float literals parse.	10.0
+keyword_question	monadc.context.language.syntax-corpus	Question-mark keyword literals parse.	:predicate?
+symbol_question	monadc.context.language.syntax-corpus	Question-mark symbols parse.	ready?
+symbol_dash	monadc.context.language.syntax-corpus	Dashed symbols parse.	with-dash
+symbol_star	monadc.context.language.syntax-corpus	Star-delimited symbols parse.	*special*
+array_paths	monadc.context.reader.path-literals	Arrays containing path literals parse.	[~/xos/projects/c/monadc ./relative/path]
+heap_array_paths	monadc.context.reader.heap-arrays	Heap arrays containing path literals parse.	~[~/xos/projects/c/monadc ./relative/path]
+set_paths	monadc.context.reader.path-literals	Sets containing path literals parse.	{~/xos/projects/c/monadc ./relative/path}
+map_path_values	monadc.context.reader.path-literals	Maps containing path values parse.	#{:root ~/xos/projects/c/monadc :rel ./relative/path}
+range_array_single	monadc.context.language.syntax-corpus	Single-value array ranges parse.	[1..1]
+range_array_descending	monadc.context.language.syntax-corpus	Descending array ranges parse.	[3..1]
+range_list_negative_infinite	monadc.context.language.syntax-corpus	Negative infinite ranges parse.	(-1..)
+quote_symbol_dash	monadc.context.language.syntax-corpus	Quoted dashed symbols parse.	'with-dash
+quote_string	monadc.context.language.syntax-corpus	Quoted strings parse.	'"literal"
+quasiquote_empty	monadc.context.language.syntax-corpus	Empty quasiquotes parse.	⌜⌝
+define_empty_array	monadc.context.language.syntax-corpus	Defines of empty arrays parse.	(define empty [])
+define_empty_heap_array	monadc.context.reader.heap-arrays	Defines of empty heap arrays parse.	(define empty ~[])
+define_empty_map	monadc.context.language.syntax-corpus	Defines of empty maps parse.	(define m #{})
+define_empty_set	monadc.context.language.syntax-corpus	Defines of empty sets parse.	(define s {})
+typed_define_int	monadc.context.language.syntax-corpus	Parenthesized typed integer binding syntax parses.	(define [x :: Int] 1)
+# Numeric Literal Variants
+ratio_simple	monadc.context.language.syntax-corpus	Ratio literals parse as standalone expressions.	1/3
+ratio_negative	monadc.context.language.syntax-corpus	Negative ratio literals parse.	-1/3
+ratio_zero	monadc.context.language.syntax-corpus	Zero numerator ratio literals parse.	0/1
+hex_literal	monadc.context.language.syntax-corpus	Hex literal expressions parse as number nodes.	0xFF
+bin_literal	monadc.context.language.syntax-corpus	Binary literal expressions parse as number nodes.	0b1010
+oct_literal	monadc.context.language.syntax-corpus	Octal literal expressions parse as number nodes.	0o755
+sci_notation_pos	monadc.context.language.syntax-corpus	Positive scientific notation float literals parse.	1e10
+sci_notation_neg	monadc.context.language.syntax-corpus	Negative scientific notation float literals parse.	-1.5e-3
+# Lambda Literal
+lambda_literal_simple	monadc.context.language.syntax-corpus	Lambda literal syntax desugars to lambda AST.	λx.x
+lambda_literal_curried	monadc.context.language.syntax-corpus	Curried lambda literal syntax parses.	λx.λy.x
+# Collection Edge Cases
+set_nested	monadc.context.language.syntax-corpus	Nested set literals parse.	{{1 2} {3 4}}
+set_mixed	monadc.context.language.syntax-corpus	Mixed atom set literals parse.	{1 "two" :three}
+map_nested_values	monadc.context.language.syntax-corpus	Maps containing collection values parse.	#{:arr [1 2] :set {3 4}}
+map_keyword_keyword	monadc.context.language.syntax-corpus	Maps with keyword keys and keyword values parse.	#{:a :b :c :d}
+list_empty	monadc.context.language.syntax-corpus	Empty quoted list literals parse.	'()
+list_numbers	monadc.context.language.syntax-corpus	Quoted numeric list literals parse.	'(1 2 3)
+list_nested	monadc.context.language.syntax-corpus	Nested quoted list literals parse.	'((1 2) (3 4))
+# Declarations
+data_type_params	monadc.context.language.syntax-corpus	ADT declarations with type parameters parse.	(data Maybe a Nothing | Just a)
+data_deriving	monadc.context.language.syntax-corpus	ADT declarations with deriving clauses parse.	(data Color Red | Green | Blue deriving [Eq Show])
+data_multi_constructor	monadc.context.language.syntax-corpus	ADT with many constructors and fields parses.	(data Shape Circle Float | Rectangle Float Float | Triangle Point Point Point)
+data_single_constructor	monadc.context.language.syntax-corpus	ADT with single constructor parses.	(data Point Float Float)
+layout_packed	monadc.context.language.syntax-corpus	Layout with packed and align options parses.	(layout Point [x :: Float] [y :: Float] :packed True :align 16)
+layout_ptr_field	monadc.context.language.syntax-corpus	Layout with pointer field syntax parses.	(layout Node [value :: Int] [next -> Node])
+class_simple	monadc.context.language.syntax-corpus	Simple type class declarations parse.	(class Eq a where (=) :: a -> a -> Bool)
+class_default_impl	monadc.context.language.syntax-corpus	Type class with default implementation parses.	(class Eq a where (=) :: a -> a -> Bool (!=) :: a -> a -> Bool (x != y) => (not (x = y)))
+class_assoc_type	monadc.context.language.syntax-corpus	Type class with associated type parses.	(class Collection c where type Elem c (insert) :: c -> Elem c -> c)
+instance_simple	monadc.context.reader.path-literals	Simple instance declarations parse.	(instance Eq TrafficLight where (Red = Red) => True (_ = _) => False)
+refinement_doc_alias	monadc.context.language.syntax-corpus	Refinement type with doc and alias parses.	(type Positive { x ∈ Int | (> x 0) } :doc "positive ints" :alias ℕ)
+# Control Forms
+if_expression	monadc.context.language.syntax-corpus	If expressions with list condition parse as list AST.	(if (> 3 2) 1 0)
+begin_sequence	monadc.context.language.syntax-corpus	Begin sequences parse as list AST.	(begin 1 2 3)
+with_binding	monadc.context.language.syntax-corpus	With binding forms parse.	(with [x 1 y 2] (+ x y))
+set_mutation	monadc.context.language.syntax-corpus	Set! mutation forms parse as list AST.	(set! x 5)
+feature_conditional_active	monadc.context.language.syntax-corpus	Active feature conditional blocks parse the included expression.	#+LINUX\n42\n#---
+feature_conditional_inactive	monadc.context.language.syntax-corpus	Inactive feature conditional blocks (without prior #+) are ignored.	#+NOT_A_FEATURE\n99\n#---\n42
+# Module and Import
+module_decl	monadc.context.language.syntax-corpus	Module declarations parse.	(module Main)
+import_simple	monadc.context.language.syntax-corpus	Simple import declarations parse.	(import Foo)
+import_selected	monadc.context.language.syntax-corpus	Selective import declarations parse.	(import Foo [a b c])
+module_import_combo	monadc.context.language.syntax-corpus	Module followed by import parses.	(module Main)\n(import Foo)
+# Comments and Whitespace
+comment_only_file	monadc.context.language.syntax-corpus	Files containing only comments parse as empty.	;; only a comment
+blank_lines_between	monadc.context.language.syntax-corpus	Blank lines between top-level expressions are tolerated.	42\n\n\n"hello"
+# Multiple Expressions
+two_numbers	monadc.context.language.syntax-corpus	Multiple top-level number literals parse individually.	42\n"hello"
+define_then_expr	monadc.context.language.syntax-corpus	Define followed by expression parses both.	(define x 1)\nx
+# Pipe and Dot
+pipe_cons	monadc.context.language.syntax-corpus	Pipe cons expressions parse.	(x | xs)
+dot_field_access	monadc.context.language.syntax-corpus	Dot field access expressions parse.	(. field)
+# String Edge Cases
+string_backslash_n	monadc.context.language.syntax-corpus	String literals preserve backslash-n sequences.	"hello\\nworld"
+string_backslash_t	monadc.context.language.syntax-corpus	String literals preserve backslash-t sequences.	"tab\\there"
+string_multiline_raw	monadc.context.language.syntax-corpus	String literals spanning multiple lines parse.	"hello\nworld"
+# Radix and Base-Prefix Numeric Variants
+hex_upper	monadc.context.language.syntax-corpus	Uppercase hex literals parse as number.	0XFF
+bin_upper	monadc.context.language.syntax-corpus	Uppercase binary literals parse as number.	0B1010
+oct_upper	monadc.context.language.syntax-corpus	Uppercase octal literals parse as number.	0O755
+radix_binary	monadc.context.language.syntax-corpus	Radix-r binary notation parses.	2r1010
+radix_hex	monadc.context.language.syntax-corpus	Radix-r hex notation parses.	16rFF
+underscore_num	monadc.context.language.syntax-corpus	Underscore-grouped number literals parse.	1_000_000
+# Ratio Variants (more edges)
+ratio_half	monadc.context.language.syntax-corpus	Ratio 1/2 parses.	1/2
+ratio_hundred_to_one	monadc.context.language.syntax-corpus	Ratio 100/1 parses.	100/1
+# String Escape Variants (more)
+string_backslash_escape	monadc.context.language.syntax-corpus	Double-backslash in strings parses.	"\\\\"
+string_mixed_escapes	monadc.context.language.syntax-corpus	Multiple mixed escapes in one string parses.	"hello\\nworld\\\\more"
+# Keyword Variants
+keyword_hyphenated	monadc.context.language.syntax-corpus	Hyphenated keywords parse.	:hyphenated-word
+keyword_slash	monadc.context.language.syntax-corpus	Slash-containing keywords parse.	:with/slash
+keyword_dotted	monadc.context.language.syntax-corpus	Dotted keywords parse.	:dotted.name
+# Symbol Variants
+symbol_fat_arrow	monadc.context.language.syntax-corpus	Fat arrow => parses as symbol.	=>
+symbol_spaceship	monadc.context.language.syntax-corpus	Spaceship <=> parses as symbol.	<=>
+symbol_bind	monadc.context.language.syntax-corpus	Monadic bind >>= parses as symbol.	>>=
+symbol_underscore	monadc.context.language.syntax-corpus	Underscore parses as symbol.	_
+symbol_wildcard_fn	monadc.context.language.syntax-corpus	cons?-style symbol parses.	cons?
+symbol_dash_arrow	monadc.context.language.syntax-corpus	Arrow in symbol name (a->b) parses.	a->b
+symbol_alpha	monadc.context.language.syntax-corpus	Greek alpha parses as symbol.	α
+symbol_sigma	monadc.context.language.syntax-corpus	Greek Sigma parses as symbol.	Σ
+symbol_pi	monadc.context.language.syntax-corpus	Greek Pi parses as symbol.	Π
+## Address-of
+address_of_simple	monadc.context.reader.path-literals	Address-of expression parses.	&x
+# More Control Forms
+cond_bracket	monadc.context.language.syntax-corpus	Cond with bracket syntax and else parses.	(cond [(> 3 2) 1] [else 0])
+lambda_pmatch	monadc.context.language.syntax-corpus	Lambda with pattern-matching clauses parses.	(lambda ([x : Int] -> Bool) | 0 -> False | _ -> True)
+# Quasiquote with Multiple Holes
+quasiquote_multi_hole	monadc.context.language.syntax-corpus	Quasiquote with list items parses.	⌜1 2 3⌝
+# Define with Metadata
+define_with_doc_alias	monadc.context.language.syntax-corpus	Define with :doc and :alias metadata parses.	(define x 42 :doc "the answer" :alias answer)
+# Char Escape Variants
+char_escape_tab	monadc.context.language.syntax-corpus	Char literal with backslash-t escape parses.	'\t'
+# Ratio Variants (more)
+ratio_two_thirds	monadc.context.language.syntax-corpus	Ratio 2/3 parses.	2/3
+ratio_five_eighths	monadc.context.language.syntax-corpus	Ratio 5/8 parses.	5/8
+# Hex/Bin/Oct Edge Cases
+hex_min	monadc.context.language.syntax-corpus	Minimal hex literal parses.	0x0
+hex_single_digit	monadc.context.language.syntax-corpus	Single-digit hex literal parses.	0x1
+hex_multi_alpha	monadc.context.language.syntax-corpus	All-alpha hex literal parses.	0xABCDEF
+bin_min	monadc.context.language.syntax-corpus	Minimal binary literal parses.	0b0
+bin_single_bit	monadc.context.language.syntax-corpus	Single-bit binary literal parses.	0b1
+bin_full_byte	monadc.context.language.syntax-corpus	Full-byte binary literal parses.	0b11111111
+oct_min	monadc.context.language.syntax-corpus	Minimal octal literal parses.	0o0
+oct_max_three_digit	monadc.context.language.syntax-corpus	Max three-digit octal literal parses.	0o777
+# Buffer Type Declarations (Wisp form)
+buffer_wisp_512	monadc.context.language.syntax-corpus	Wisp buffer of 512 U8 parses.	define buffer :: [512]
+buffer_wisp_16kb	monadc.context.language.syntax-corpus	Wisp buffer of 16kb U8 parses.	define buffer :: [16kb]
+buffer_wisp_16mb	monadc.context.language.syntax-corpus	Wisp buffer of 16mb U8 parses.	define buffer :: [16mb]
+buffer_wisp_16kb_I128	monadc.context.language.syntax-corpus	Wisp buffer of 16kb I128 parses.	define buffer :: [16kb I128]
+buffer_wisp_16kb_I64	monadc.context.language.syntax-corpus	Wisp buffer of 16kb I64 parses.	define buffer :: [16kb I64]
+buffer_wisp_16kb_I32	monadc.context.language.syntax-corpus	Wisp buffer of 16kb I32 parses.	define buffer :: [16kb I32]
+buffer_wisp_16kb_I16	monadc.context.language.syntax-corpus	Wisp buffer of 16kb I16 parses.	define buffer :: [16kb I16]
+buffer_wisp_16kb_I8	monadc.context.language.syntax-corpus	Wisp buffer of 16kb I8 parses.	define buffer :: [16kb I8]
+# Buffer Type Declarations (Parenthesized form)
+buffer_paren_512	monadc.context.language.syntax-corpus	Parenthesized buffer of size 512 parses.	(define buffer [512])
+buffer_paren_16kb	monadc.context.language.syntax-corpus	Parenthesized buffer 16kb parses.	(define buffer [16kb])
+buffer_paren_16mb	monadc.context.language.syntax-corpus	Parenthesized buffer 16mb parses.	(define buffer [16mb])
+buffer_paren_16kb_I32	monadc.context.language.syntax-corpus	Parenthesized buffer 16kb I32 parses.	(define buffer [16kb I32])
+# Wisp Top-Level Define Variants
+wisp_define_int	monadc.context.language.syntax-corpus	Wisp define of integer parses.	define x 42
+wisp_define_string	monadc.context.language.syntax-corpus	Wisp define of string parses.	define x "hello"
+wisp_define_array	monadc.context.language.syntax-corpus	Wisp define of array parses.	define x [1 2 3]
+wisp_define_path	monadc.context.language.syntax-corpus	Wisp define of path parses.	define x ~/path
+wisp_define_keyword	monadc.context.language.syntax-corpus	Wisp define of keyword parses.	define x :foo
+typed_define_string	monadc.context.language.syntax-corpus	Typed define with string type parses.	(define [name :: String] "hello")
+# Lambda with Proper Paren Syntax
+lambda_no_args	monadc.context.language.syntax-corpus	Lambda with zero arguments parses.	(lambda () 42)
+lambda_simple_paren	monadc.context.language.syntax-corpus	Lambda with parenthesized parameter parses.	(lambda (x) x)
+lambda_typed_arrow	monadc.context.language.syntax-corpus	Lambda with typed param and return type parses.	(lambda ([x : Int] -> Int) x)
+# Let Binding Forms
+let_simple	monadc.context.language.syntax-corpus	Simple let binding parses.	(let [x 1] x)
+let_star	monadc.context.language.syntax-corpus	Sequential let* binding parses.	(let* [x 1] x)
+# Case Expression
+case_simple	monadc.context.language.syntax-corpus	Case expression with pipe clauses parses.	(case 1 [0 => 1] [_ => 0])
+# Do Block
+do_simple	monadc.context.language.syntax-corpus	Do block sequences parse.	(do 1 2 3)
+# Match Expression with Pipe
+match_pipe_arrow	monadc.context.language.syntax-corpus	Match with pipe and -> parses.	(match 1 with | 0 -> 1 | _ -> 0)
+# Data Declaration Variants
+data_zero_constructors	monadc.context.language.syntax-corpus	Data with zero constructors parses.	(data Empty)
+data_gadt_style	monadc.context.language.syntax-corpus	Data with GADT-style constructors parses.	(data Vec a | Nil | Cons a (Vec a))
+# Class with Multiple Methods
+class_multi_method	monadc.context.language.syntax-corpus	Class with two methods parses.	(class Show a where (display) :: a -> String (to_str) :: a -> String)
+# Type Alias
+type_alias_simple	monadc.context.language.syntax-corpus	Simple type alias parses.	(type Str String)
+# Module with Export List
+module_exports	monadc.context.language.syntax-corpus	Module with export list parses.	(module Main [show])
+# Import Qualified
+import_qualified	monadc.context.language.syntax-corpus	Qualified import parses.	(import Foo :qualified)
+# Pipe Application and Expression Forms
+pipe_app	monadc.context.language.syntax-corpus	Pipe application expression parses.	(x |> f)
+pipe_cons_expr	monadc.context.language.syntax-corpus	Pipe cons expression parses.	(| x xs)
+# Dot Field Access
+dot_field_expr	monadc.context.language.syntax-corpus	Dot field access on expression parses.	(obj . field)
+# For Comprehension
+for_simple	monadc.context.language.syntax-corpus	Simple for comprehension parses.	(for [x [1 2 3]] x)
+for_collect	monadc.context.language.syntax-corpus	For comprehension with :collect parses.	(for [x [1 2 3]] :collect x)
+for_destructured	monadc.context.language.syntax-corpus	For with destructured bindings parses.	(for [[x y] [[1 2] [3 4]]] (+ 1 x))
+# Immediate Application
+paren_call	monadc.context.language.syntax-corpus	Immediate function application parses.	((lambda (x) x) 42)
+prefix_call	monadc.context.language.syntax-corpus	Prefix function call syntax parses.	(+(1 2))
+# String Edge Cases
+string_empty	monadc.context.language.syntax-corpus	Empty string literal parses.	""
+string_embedded_semicolons	monadc.context.language.syntax-corpus	String with comment-like characters parses.	";;embedded"
+# Define With Doc (Parenthesized)
+define_doc_simple	monadc.context.language.syntax-corpus	Define with :doc annotation parses.	(define x 1 :doc "hello")
+define_typed_doc	monadc.context.language.syntax-corpus	Typed define with :doc annotation parses.	(define [x :: Int] 1 :doc "hello")
+# Type-Level Syntax
+arrow_type_binary	monadc.context.language.syntax-corpus	Arrow function type with two args parses.	(-> Int Int)
+arrow_type_zero	monadc.context.language.syntax-corpus	Zero-argument arrow type parses.	(->)
+fn_type_binary	monadc.context.language.syntax-corpus	Fn function type with two args parses.	(Fn Int Int)
+# Quote/Quasiquote Paren Forms
+quote_paren	monadc.context.language.syntax-corpus	Quote expressed as function call parses.	(quote x)
+quasiquote_paren	monadc.context.language.syntax-corpus	Quasiquote+unquote via paren forms parses.	(quasiquote (unquote x))
+# Layout with :: Colon
+layout_double_colon	monadc.context.language.syntax-corpus	Layout with :: field syntax parses.	(layout Point [x :: Float] [y :: Float])
+# Import with Renaming
+import_renaming	monadc.context.language.syntax-corpus	Import with :as renaming parses.	(import Foo [a :as b])
+# Type Annotation Forms
+annotation_double_colon	monadc.context.language.syntax-corpus	Type annotation with :: parses.	(:: x Int)
+annotation_ann	monadc.context.language.syntax-corpus	Ann form type annotation parses.	(ann x Int)
+# For Comprehension Variants
+for_typed_binding	monadc.context.language.syntax-corpus	For with typed binding parses.	(for [x :: Int [1 2 3]] x)
+for_into_acc	monadc.context.language.syntax-corpus	For with :into accumulator parses.	(for [x [1 2 3]] :into acc x)
+# Symbol Operator Variants
+symbol_mod	monadc.context.language.syntax-corpus	Percent operator parses as symbol.	%
+symbol_equal	monadc.context.language.syntax-corpus	Equality operator parses as symbol.	==
+symbol_not_equal	monadc.context.language.syntax-corpus	Not-equal operator parses as symbol.	!=
+symbol_lte	monadc.context.language.syntax-corpus	Less-than-or-equal operator parses as symbol.	<=
+symbol_gte	monadc.context.language.syntax-corpus	Greater-than-or-equal operator parses as symbol.	>=
+symbol_lt	monadc.context.language.syntax-corpus	Less-than operator parses as symbol.	<
+symbol_gt	monadc.context.language.syntax-corpus	Greater-than operator parses as symbol.	>
+symbol_shiftl	monadc.context.language.syntax-corpus	Left-shift operator parses as symbol.	<<
+symbol_shiftr	monadc.context.language.syntax-corpus	Right-shift operator parses as symbol.	>>
+symbol_xor	monadc.context.language.syntax-corpus	XOR operator parses as symbol.	^^
+symbol_bang	monadc.context.language.syntax-corpus	Bang operator parses as symbol.	!
+symbol_tilde	monadc.context.language.syntax-corpus	Tilde operator parses as symbol.	~
+symbol_question	monadc.context.language.syntax-corpus	Question-mark symbol parses.	symbol?
+symbol_set_bang	monadc.context.language.syntax-corpus	Set-bang symbol parses.	set!
+symbol_dot_in_name	monadc.context.language.syntax-corpus	Dot-in-symbol-name parses.	a.b
+symbol_colon_in_name	monadc.context.language.syntax-corpus	Colon-in-symbol-name parses.	a:b
+# Built-in Function Calls
+builtin_list	monadc.context.language.syntax-corpus	List built-in call parses.	(list 1 2 3)
+builtin_vector	monadc.context.language.syntax-corpus	Vector built-in call parses.	(vector 1 2 3)
+# Bitwise Operations
+bitwise_and	monadc.context.language.syntax-corpus	Bitwise and function parses.	(bit-and x y)
+bitwise_or	monadc.context.language.syntax-corpus	Bitwise or function parses.	(bit-or x y)
+bitwise_xor	monadc.context.language.syntax-corpus	Bitwise xor function parses.	(bit-xor x y)
+bitwise_not	monadc.context.language.syntax-corpus	Bitwise not function parses.	(bit-not x)
+complement_fn	monadc.context.language.syntax-corpus	Complement function parses.	(complement x)
+# Math Built-ins
+abs_fn	monadc.context.language.syntax-corpus	Absolute value function parses.	(abs x)
+negate_fn	monadc.context.language.syntax-corpus	Negate function parses.	(neg x)
+not_fn	monadc.context.language.syntax-corpus	Logical not function parses.	(not x)
+and_fn	monadc.context.language.syntax-corpus	Logical and function parses.	(and x y)
+or_fn	monadc.context.language.syntax-corpus	Logical or function parses.	(or x y)
+# Nested / Compound Expressions
+nested_begin_define	monadc.context.language.syntax-corpus	Begin with nested define parses.	(begin (define x 1) (show x))
+nested_arithmetic	monadc.context.language.syntax-corpus	Nested arithmetic expression parses.	(+ (* 2 3) 4)
+if_greater	monadc.context.language.syntax-corpus	If with comparison condition parses.	(if (> 1 0) 1 0)
+# Empty Collection Standalone Atoms
+set_empty_standalone	monadc.context.language.syntax-corpus	Empty set literal standalone parses.	{}
+map_empty_standalone	monadc.context.language.syntax-corpus	Empty map literal standalone parses.	#{}
+array_empty_standalone	monadc.context.language.syntax-corpus	Empty array literal standalone parses.	[]
+heap_array_empty_standalone	monadc.context.language.syntax-corpus	Empty heap array literal standalone parses.	~[]
+# Arithmetic Operator Prefix Forms
+add_multi_arg	monadc.context.language.syntax-corpus	Multi-argument addition parses.	(+ 1 2 3)
+mul_multi_arg	monadc.context.language.syntax-corpus	Multi-argument multiplication parses.	(* 1 2 3)
+sub_prefix	monadc.context.language.syntax-corpus	Prefix subtraction parses.	(- 10 5)
+div_prefix	monadc.context.language.syntax-corpus	Prefix division parses.	(/ 10 2)
+# Lambda Multi-Argument Forms
+lambda_two_paren_args	monadc.context.language.syntax-corpus	Lambda with two parenthesized args parses.	(lambda (x y) x)
+lambda_two_typed_args	monadc.context.language.syntax-corpus	Lambda with two typed args and return parses.	(lambda ([x : Int] [y : Int] -> Int) x)
+# For with Range/List Sources
+for_range	monadc.context.language.syntax-corpus	For comprehension with range source parses.	(for [x (range 1 10)] x)
+for_list_source	monadc.context.language.syntax-corpus	For comprehension with list source parses.	(for [x (list 1 2 3)] x)
+# Define Function Shorthand
+define_fn_shorthand_unary	monadc.context.language.syntax-corpus	Define function shorthand (unary) parses.	(define (id x) x)
+define_fn_shorthand_binary	monadc.context.language.syntax-corpus	Define function shorthand (binary) parses.	(define (add x y) (+ 1 x))
+# Type Quantifier Forms
+all_quantifier	monadc.context.language.syntax-corpus	Universal type quantifier parses.	(all (a) (-> a a))
+forall_quantifier	monadc.context.language.syntax-corpus	Forall type quantifier parses.	(forall (a) (-> a a))
+some_quantifier	monadc.context.language.syntax-corpus	Existential type quantifier parses.	(some (a) a)
+exists_quantifier	monadc.context.language.syntax-corpus	Exists type quantifier parses.	(exists (a) a)
+# Single-Element Array
+array_single_element	monadc.context.language.syntax-corpus	Single-element array literal parses.	[5]
+# Block String Triple-Quotes
+string_double_quote_sequence	monadc.context.language.syntax-corpus	Adjacent string literals parse.	"hello""world"
+# ── Additional Symbols ──────────────────────────────────────────────────────
+symbol_pipe_gt	monadc.context.language.syntax-corpus	Pipe-gt symbol parses.	|>
+symbol_pipe	monadc.context.language.syntax-corpus	Pipe symbol parses.	|
+symbol_pipe_cons	monadc.context.language.syntax-corpus	Pipe cons symbol parses.	|:
+symbol_plus_plus	monadc.context.language.syntax-corpus	String concat ++ symbol parses.	++
+symbol_arrow_r	monadc.context.language.syntax-corpus	Right arrow symbol parses.	->
+symbol_arrow_l	monadc.context.language.syntax-corpus	Left arrow symbol parses.	<-
+symbol_fat_arrow_sym	monadc.context.language.syntax-corpus	Fat arrow => parses as symbol.	=>
+symbol_and_and	monadc.context.language.syntax-corpus	Logical AND && symbol parses.	&&
+symbol_or_or	monadc.context.language.syntax-corpus	Logical OR || symbol parses.	||
+symbol_pipe_eq	monadc.context.language.syntax-corpus	Pipe-equal symbol parses.	|=
+symbol_bind_gt	monadc.context.language.syntax-corpus	Bind >> symbol parses.	>>
+symbol_bind_lt	monadc.context.language.syntax-corpus	Reverse bind << symbol parses.	<<
+symbol_kleisli_gt	monadc.context.language.syntax-corpus	Kleisli right fish >=> parses.	>=>
+symbol_kleisli_lt	monadc.context.language.syntax-corpus	Kleisli left fish <=< parses.	<=<
+symbol_mod_op	monadc.context.language.syntax-corpus	Modulo operator parses as symbol.	%
+symbol_caret	monadc.context.language.syntax-corpus	Caret symbol parses.	^
+# @, #, $, ` are not valid standalone symbols (reserved or trigger tokens)
+# ── Additional String Escape Variants ────────────────────────────────────────
+string_escape_cr	monadc.context.language.syntax-corpus	String with carriage return escape parses.	"hello\rmonad"
+string_escape_bell	monadc.context.language.syntax-corpus	String with bell escape parses.	"bell\a"
+string_escape_formfeed	monadc.context.language.syntax-corpus	String with form feed escape parses.	"page\fbreak"
+string_escape_vertical_tab	monadc.context.language.syntax-corpus	String with vertical tab escape parses.	"col\vtab"
+string_escape_hex_byte	monadc.context.language.syntax-corpus	String with hex byte escape parses.	"\x48\x65\x79"
+string_escaped_brace	monadc.context.language.syntax-corpus	String with escaped brace parses.	"hello {world}"
+string_raw_backslash_n	monadc.context.language.syntax-corpus	String with literal backslash-n preserves chars.	"line1\\nline2"
+# ── More Char Literals ──────────────────────────────────────────────────────
+# NOTE: Char escape sequences (\n, \t, \x41, etc.) need literal escaping in TSV source fields.
+# Standard punctuation chars (all ASCII printable) are covered below.
+char_punctuation_excl	monadc.context.language.syntax-corpus	Exclamation char parses.	'!'
+char_punctuation_at	monadc.context.language.syntax-corpus	At-sign char parses.	'@'
+char_punctuation_hash	monadc.context.language.syntax-corpus	Hash char parses.	'#'
+char_punctuation_dollar	monadc.context.language.syntax-corpus	Dollar char parses.	'$'
+char_punctuation_percent	monadc.context.language.syntax-corpus	Percent char parses.	'%'
+char_punctuation_caret	monadc.context.language.syntax-corpus	Caret char parses.	'^'
+char_punctuation_ampersand	monadc.context.language.syntax-corpus	Ampersand char parses.	'&'
+char_punctuation_star	monadc.context.language.syntax-corpus	Star char parses.	'*'
+char_punctuation_paren_open	monadc.context.language.syntax-corpus	Open paren char parses.	'('
+char_punctuation_paren_close	monadc.context.language.syntax-corpus	Close paren char parses.	')'
+char_punctuation_brace_open	monadc.context.language.syntax-corpus	Open brace char parses.	'{'
+char_punctuation_brace_close	monadc.context.language.syntax-corpus	Close brace char parses.	'}'
+char_punctuation_bracket_open	monadc.context.language.syntax-corpus	Open bracket char parses.	'['
+char_punctuation_bracket_close	monadc.context.language.syntax-corpus	Close bracket char parses.	']'
+char_punctuation_semicolon	monadc.context.language.syntax-corpus	Semicolon char parses.	';'
+char_punctuation_colon	monadc.context.language.syntax-corpus	Colon char parses.	':'
+char_punctuation_question	monadc.context.language.syntax-corpus	Question mark char parses.	'?'
+char_punctuation_dot	monadc.context.language.syntax-corpus	Dot char parses.	'.'
+char_punctuation_comma	monadc.context.language.syntax-corpus	Comma char parses.	','
+char_punctuation_lt	monadc.context.language.syntax-corpus	Less-than char parses.	'<'
+char_punctuation_gt	monadc.context.language.syntax-corpus	Greater-than char parses.	'>'
+char_punctuation_slash	monadc.context.language.syntax-corpus	Slash char parses.	'/'
+char_punctuation_backslash	monadc.context.language.syntax-corpus	Backslash char parses.	'\\'
+char_punctuation_tilde	monadc.context.language.syntax-corpus	Tilde char parses.	'~'
+char_punctuation_backtick	monadc.context.language.syntax-corpus	Backtick char parses.	'`'
+char_punctuation_underscore	monadc.context.language.syntax-corpus	Underscore char parses.	'_'
+char_punctuation_pipe	monadc.context.language.syntax-corpus	Pipe char parses.	'|'
+char_punctuation_plus	monadc.context.language.syntax-corpus	Plus char parses.	'+'
+char_punctuation_minus	monadc.context.language.syntax-corpus	Minus char parses.	'-'
+char_punctuation_equal	monadc.context.language.syntax-corpus	Equal char parses.	'='
+# ── More Numeric Edge Cases ─────────────────────────────────────────────────
+hex_all_alpha	monadc.context.language.syntax-corpus	All-alpha hex literal parses.	0xABCDEF
+hex_mixed_case	monadc.context.language.syntax-corpus	Mixed-case hex literal parses.	0xDeAdBeEf
+hex_leading_zeros	monadc.context.language.syntax-corpus	Hex literal with leading zeros parses.	0x00000FF
+hex_max_32bit	monadc.context.language.syntax-corpus	Max 32-bit hex literal parses.	0xFFFFFFFF
+bin_leading_zeros	monadc.context.language.syntax-corpus	Binary with leading zeros parses.	0b00001010
+bin_mixed_nibbles	monadc.context.language.syntax-corpus	Binary with mixed bits parses.	0b10110011
+oct_leading_zeros	monadc.context.language.syntax-corpus	Octal with leading zeros parses.	0o000755
+oct_max_value	monadc.context.language.syntax-corpus	Max octal value parses.	0o77777777
+underscore_num_large	monadc.context.language.syntax-corpus	Large grouped number parses.	1_000_000_000
+underscore_hex	monadc.context.language.syntax-corpus	Underscore-grouped hex parses.	0xFF_FF_FF
+underscore_bin	monadc.context.language.syntax-corpus	Underscore-grouped binary parses.	0b1010_0101
+underscore_oct	monadc.context.language.syntax-corpus	Underscore-grouped octal parses.	0o777_777
+# ── More Ratio Variants ─────────────────────────────────────────────────────
+# NOTE: 1/-3 is invalid - negative denominator not supported in ratio syntax
+ratio_large_num	monadc.context.language.syntax-corpus	Large numerator ratio parses.	1000/1
+ratio_large_denom	monadc.context.language.syntax-corpus	Large denominator ratio parses.	1/1000
+ratio_equal	monadc.context.language.syntax-corpus	Equal numerator and denominator ratio parses.	5/5
+ratio_minimal	monadc.context.language.syntax-corpus	Minimal ratio parses.	0/1
+# ── Additional Scientific Notation ──────────────────────────────────────────
+sci_notation_pos_exp	monadc.context.language.syntax-corpus	Positive exponent scientific notation parses.	1.5e2
+sci_notation_large_exp	monadc.context.language.syntax-corpus	Large exponent scientific notation parses.	1e100
+sci_notation_neg_exp	monadc.context.language.syntax-corpus	Negative exponent scientific notation parses.	1e-5
+sci_notation_upper_e	monadc.context.language.syntax-corpus	Uppercase E scientific notation parses.	1E10
+# ── Predicate Functions ────────────────────────────────────────────────────
+pred_zero_question	monadc.context.language.syntax-corpus	Zero? predicate call parses.	(zero? 0)
+pred_positive	monadc.context.language.syntax-corpus	Positive? predicate call parses.	(positive? 5)
+pred_negative	monadc.context.language.syntax-corpus	Negative? predicate call parses.	(negative? -1)
+pred_even	monadc.context.language.syntax-corpus	Even? predicate call parses.	(even? 4)
+pred_odd	monadc.context.language.syntax-corpus	Odd? predicate call parses.	(odd? 3)
+pred_null	monadc.context.language.syntax-corpus	Null? predicate call parses.	(null? ())
+pred_boolean	monadc.context.language.syntax-corpus	Boolean? predicate call parses.	(boolean? True)
+pred_char	monadc.context.language.syntax-corpus	Char? predicate call parses.	(char? 'a')
+pred_string	monadc.context.language.syntax-corpus	String? predicate call parses.	(string? "hello")
+pred_number	monadc.context.language.syntax-corpus	Number? predicate call parses.	(number? 42)
+pred_pair	monadc.context.language.syntax-corpus	Pair? predicate call parses.	(pair? (cons 1 2))
+pred_list	monadc.context.language.syntax-corpus	List? predicate call parses.	(list? (list 1 2))
+pred_symbol	monadc.context.language.syntax-corpus	Symbol? predicate call parses.	(symbol? 'x)
+pred_procedure	monadc.context.language.syntax-corpus	Procedure? predicate call parses.	(procedure? (lambda (x) x))
+# ── Conversion Functions ────────────────────────────────────────────────────
+conv_char_to_int	monadc.context.language.syntax-corpus	Char to integer conversion parses.	(char->integer 'a')
+conv_int_to_char	monadc.context.language.syntax-corpus	Integer to char conversion parses.	(integer->char 65)
+conv_number_to_string	monadc.context.language.syntax-corpus	Number to string conversion parses.	(number->string 42)
+conv_string_to_number	monadc.context.language.syntax-corpus	String to number conversion parses.	(string->number "42")
+conv_string_to_symbol	monadc.context.language.syntax-corpus	String to symbol conversion parses.	(string->symbol "hello")
+conv_symbol_to_string	monadc.context.language.syntax-corpus	Symbol to string conversion parses.	(symbol->string 'hello)
+# ── String Library Functions ────────────────────────────────────────────────
+str_length	monadc.context.language.syntax-corpus	String length function parses.	(string-length "hello")
+str_ref	monadc.context.language.syntax-corpus	String ref function parses.	(string-ref "hello" 0)
+str_substring	monadc.context.language.syntax-corpus	Substring function parses.	(substring "hello" 1 3)
+str_append	monadc.context.language.syntax-corpus	String append function parses.	(string-append "a" "b" "c")
+str_equality	monadc.context.language.syntax-corpus	String equality function parses.	(string=? "a" "b")
+str_lt	monadc.context.language.syntax-corpus	String less-than function parses.	(string<? "a" "b")
+str_copy	monadc.context.language.syntax-corpus	String copy function parses.	(string-copy "hello")
+str_fill	monadc.context.language.syntax-corpus	String fill function parses.	(string-fill! buf 'x')
+str_downcase	monadc.context.language.syntax-corpus	String downcase function parses.	(string-downcase "HELLO")
+str_upcase	monadc.context.language.syntax-corpus	String upcase function parses.	(string-upcase "hello")
+str_trim	monadc.context.language.syntax-corpus	String trim function parses.	(string-trim "  hi  ")
+str_split	monadc.context.language.syntax-corpus	String split function parses.	(string-split "a b c" " ")
+str_join	monadc.context.language.syntax-corpus	String join function parses.	(string-join '("a" "b") ", ")
+str_contains	monadc.context.language.syntax-corpus	String contains function parses.	(string-contains? "hello" "ll")
+# ── Arithmetic Functions (Prefix) ───────────────────────────────────────────
+arith_add_three	monadc.context.language.syntax-corpus	Three-argument addition parses.	(+ 1 2 3)
+arith_mul_three	monadc.context.language.syntax-corpus	Three-argument multiplication parses.	(* 1 2 3)
+arith_mod	monadc.context.language.syntax-corpus	Modulo function parses.	(mod 10 3)
+arith_rem	monadc.context.language.syntax-corpus	Remainder function parses.	(rem 10 3)
+arith_quot	monadc.context.language.syntax-corpus	Quotient function parses.	(quot 10 3)
+arith_floor	monadc.context.language.syntax-corpus	Floor function parses.	(floor 3.14)
+arith_ceiling	monadc.context.language.syntax-corpus	Ceiling function parses.	(ceiling 3.14)
+arith_truncate	monadc.context.language.syntax-corpus	Truncate function parses.	(truncate 3.14)
+arith_round	monadc.context.language.syntax-corpus	Round function parses.	(round 3.14)
+arith_abs	monadc.context.language.syntax-corpus	Absolute value function parses.	(abs -5)
+arith_negate	monadc.context.language.syntax-corpus	Negate function parses.	(- 5)
+# ── List Library Functions ──────────────────────────────────────────────────
+list_car	monadc.context.language.syntax-corpus	Car function parses.	(car '(1 2 3))
+list_cdr	monadc.context.language.syntax-corpus	Cdr function parses.	(cdr '(1 2 3))
+list_cons	monadc.context.language.syntax-corpus	Cons function parses.	(cons 1 '(2 3))
+list_append	monadc.context.language.syntax-corpus	List append function parses.	(append '(1 2) '(3 4))
+list_reverse	monadc.context.language.syntax-corpus	List reverse function parses.	(reverse '(1 2 3))
+list_length	monadc.context.language.syntax-corpus	List length function parses.	(length '(1 2 3))
+list_map	monadc.context.language.syntax-corpus	Map function parses.	(map (lambda (x) (+ 1 x)) '(1 2 3))
+list_filter	monadc.context.language.syntax-corpus	Filter function parses.	(filter (lambda (x) (> x 1)) '(1 2 3))
+list_foldl	monadc.context.language.syntax-corpus	Fold-left function parses.	(foldl (lambda (acc x) (+ acc x)) 0 '(1 2 3))
+list_foldr	monadc.context.language.syntax-corpus	Fold-right function parses.	(foldr (lambda (x acc) (+ x acc)) 0 '(1 2 3))
+list_member	monadc.context.language.syntax-corpus	Member function parses.	(member 2 '(1 2 3))
+list_assoc	monadc.context.language.syntax-corpus	Assoc function parses.	(assoc 'b '((a 1) (b 2)))
+list_remove	monadc.context.language.syntax-corpus	Remove function parses.	(remove 2 '(1 2 3 2))
+list_take	monadc.context.language.syntax-corpus	Take function parses.	(take 2 '(1 2 3 4))
+list_drop	monadc.context.language.syntax-corpus	Drop function parses.	(drop 2 '(1 2 3 4))
+# ── Vector Library Functions ────────────────────────────────────────────────
+vec_make	monadc.context.language.syntax-corpus	Make-vector function parses.	(make-vector 5 0)
+vec_length	monadc.context.language.syntax-corpus	Vector length function parses.	(vector-length (vector 1 2 3))
+vec_ref	monadc.context.language.syntax-corpus	Vector ref function parses.	(vector-ref (vector 1 2 3) 0)
+vec_set	monadc.context.language.syntax-corpus	Vector set function parses.	(vector-set! vec 0 42)
+# ── Type Quantifier Forms ───────────────────────────────────────────────────
+quant_all_arrow	monadc.context.language.syntax-corpus	Universal quantifier in type parses.	(all (a) (-> a a))
+quant_forall_arrow	monadc.context.language.syntax-corpus	Forall quantifier in type parses.	(forall (a) (-> a a))
+quant_some	monadc.context.language.syntax-corpus	Existential quantifier parses.	(some (a) a)
+quant_exists	monadc.context.language.syntax-corpus	Exists quantifier parses.	(exists (a) a)
+# ── Type-Level Operators ────────────────────────────────────────────────────
+type_arrow_binary	monadc.context.language.syntax-corpus	Binary arrow type parses.	(-> Int String)
+type_arrow_zero	monadc.context.language.syntax-corpus	Zero-arg arrow type parses.	(->)
+type_fn_binary	monadc.context.language.syntax-corpus	Binary fn type parses.	(Fn Int String)
+type_fn_zero	monadc.context.language.syntax-corpus	Zero-arg fn type parses.	(Fn)
+type_pair	monadc.context.language.syntax-corpus	Pair type parses.	(Pair Int String)
+type_list_of	monadc.context.language.syntax-corpus	List-of type parses.	(List Int)
+type_vector_of	monadc.context.language.syntax-corpus	Vector-of type parses.	(Vector Int)
+type_maybe	monadc.context.language.syntax-corpus	Maybe type parses.	(Maybe Int)
+type_either	monadc.context.language.syntax-corpus	Either type parses.	(Either Int String)
+type_ref	monadc.context.language.syntax-corpus	Ref type parses.	(Ref Int)
+# ── Record Type ─────────────────────────────────────────────────────────────
+record_point	monadc.context.language.syntax-corpus	Record declaration parses.	(record Point [x Float] [y Float])
+record_person	monadc.context.language.syntax-corpus	Record with multiple fields parses.	(record Person [name String] [age Int] [email String])
+# ── More Cond Variants ──────────────────────────────────────────────────────
+cond_three_clauses	monadc.context.language.syntax-corpus	Cond with three clauses parses.	(cond [(> 3 2) 1] [(< 3 2) 0] [else -1])
+cond_single_clause	monadc.context.language.syntax-corpus	Cond with single clause parses.	(cond [else 42])
+cond_no_else	monadc.context.language.syntax-corpus	Cond with no else clause parses.	(cond [(> 3 2) 1])
+# ── More Match Variants ─────────────────────────────────────────────────────
+match_simple	monadc.context.language.syntax-corpus	Match with two clauses parses.	(match 1 with | 0 => "zero" | _ => "other")
+match_lambda	monadc.context.language.syntax-corpus	Match with two clauses parses.	(match 1 with | 0 => "zero" | _ => "other")
+match_nested	monadc.context.language.syntax-corpus	Nested match expression parses.	(match 1 with | 0 => (match 2 with | 1 => 3) | _ => 0)
+# ── Lambda Variants ─────────────────────────────────────────────────────────
+lambda_no_body	monadc.context.language.syntax-corpus	Lambda with no body (identity) parses.	(lambda (x) x)
+lambda_multi_clause	monadc.context.language.syntax-corpus	Lambda with multiple pattern clauses parses.	(lambda ([x : Int] -> Bool) | 0 -> False | _ -> True)
+lambda_immediate_call	monadc.context.language.syntax-corpus	Immediate lambda application parses.	((lambda (x) (+ x 1)) 41)
+lambda_literal_two_arg	monadc.context.language.syntax-corpus	Two-arg lambda literal parses.	λx.λy.x
+# ── For Comprehension Variants ──────────────────────────────────────────────
+for_with_let	monadc.context.language.syntax-corpus	For with :let binding parses.	(for [x [1 2 3]] :let [y (* x 2)] y)
+for_with_while	monadc.context.language.syntax-corpus	For with :while guard parses.	(for [x [1 2 3]] :while (> x 1) x)
+for_with_collect	monadc.context.language.syntax-corpus	For with :collect parses.	(for [x [1 2 3]] :collect x)
+for_multi_binding	monadc.context.language.syntax-corpus	For with multiple bindings parses.	(for [x [1 2 3] y [4 5 6]] (+ x y))
+# ── Additional When/Unless ──────────────────────────────────────────────────
+when_simple	monadc.context.language.syntax-corpus	When form parses.	(when True (show 42))
+when_multi_body	monadc.context.language.syntax-corpus	When with multiple body forms parses.	(when True (show 1) (show 2))
+unless_simple	monadc.context.language.syntax-corpus	Unless form parses.	(unless False (show 42))
+# ── Let Bindings ────────────────────────────────────────────────────────────
+let_nested	monadc.context.language.syntax-corpus	Nested let binding parses.	(let [x 1] (let [y 2] (+ x y)))
+# NOTE: (let [[x :: Int] 1] x) does not parse - type annotation in let binding uses different syntax
+# ── More Infix Expression Forms ─────────────────────────────────────────────
+infix_boolean_and	monadc.context.language.syntax-corpus	Infix boolean AND parses.	True && False
+infix_boolean_or	monadc.context.language.syntax-corpus	Infix boolean OR parses.	True || False
+infix_pipe_chain	monadc.context.language.syntax-corpus	Chained pipe-forward parses.	x |> f |> g
+# ── Character Constructor ───────────────────────────────────────────────────
+char_constructor	monadc.context.language.syntax-corpus	Char constructor function parses.	(char 65)
+char_integer_conversion	monadc.context.language.syntax-corpus	Char to int conversion parses.	(int->char 65)
+# ── Additional Data Declarations ────────────────────────────────────────────
+data_multi_param	monadc.context.language.syntax-corpus	Data with two type params parses.	(data Either a b | Left a | Right b)
+data_record_constructor	monadc.context.language.syntax-corpus	Data with record-like constructor parses.	(data Person | Person {name String, age Int})
+data_mixed_constructors	monadc.context.language.syntax-corpus	Data with fielded and fieldless constructors parses.	(data Shape | Circle {radius Float} | Rectangle Float Float | Empty)
+# ── Instance Declarations ───────────────────────────────────────────────────
+# NOTE: Instance declarations with method bodies need specific syntax that varies by type class.
+# Simple instance declaration without methods parses:
+instance_decl_simple	monadc.context.language.syntax-corpus	Simple instance declaration parses.	(instance Show Int)
+instance_decl_empty	monadc.context.language.syntax-corpus	Empty instance declaration parses.	(instance Eq Int)
+# ── Additional Module / Import ──────────────────────────────────────────────
+module_export_selected	monadc.context.language.syntax-corpus	Module with export list parses.	(module Main [run show])
+import_qualified_as	monadc.context.language.syntax-corpus	Qualified import with alias parses.	(import Foo :qualified :as F)
+import_renaming_two	monadc.context.language.syntax-corpus	Import with two renames parses.	(import Foo [a :as b c :as d])
+import_only_prefix	monadc.context.language.syntax-corpus	Import with only prefix parses.	(import Foo :only [a b c])
+import_except	monadc.context.language.syntax-corpus	Import with except clause parses.	(import Foo :except [bad])
+# ── Do Notation ─────────────────────────────────────────────────────────────
+do_bind_arrow	monadc.context.language.syntax-corpus	Do with bind arrow parses.	(do [x <- (list 1 2)] x)
+do_let_inline	monadc.context.language.syntax-corpus	Do with inline let parses.	(do [x <- (list 1 2) y <- (list 3 4)] (+ x y))
+do_pure	monadc.context.language.syntax-corpus	Do with pure expression parses.	(do 42)
+# ── Set Bang Mutation ───────────────────────────────────────────────────────
+set_bang_symbol	monadc.context.language.syntax-corpus	Set! with symbol target parses.	(set! x 5)
+set_bang_path	monadc.context.language.syntax-corpus	Set! with field path target parses.	(set! (obj . field) 5)
+# ── Begin Variants ──────────────────────────────────────────────────────────
+begin_empty	monadc.context.language.syntax-corpus	Empty begin block parses.	(begin)
+begin_single	monadc.context.language.syntax-corpus	Single-expression begin parses.	(begin 42)
+begin_nested	monadc.context.language.syntax-corpus	Nested begin blocks parse.	(begin (begin 1 2) 3)
+# ── With Binding Variants ───────────────────────────────────────────────────
+with_binding_one	monadc.context.language.syntax-corpus	With single binding parses.	(with [x 1] x)
+with_binding_three	monadc.context.language.syntax-corpus	With three bindings parses.	(with [x 1 y 2 z 3] (+ x y z))
+# ── Additional Quoted Forms ─────────────────────────────────────────────────
+quote_quasiquote_interop	monadc.context.language.syntax-corpus	Quasiquote with quote inside parses.	⌜'x⌝
+quote_nested	monadc.context.language.syntax-corpus	Nested quote parses.	''x
+quasiquote_unquote_splicing	monadc.context.language.syntax-corpus	Unquote-splicing via paren form parses.	⌜1 2 (unquote-splicing list) 3⌝
+# ── Comment Edge Cases ──────────────────────────────────────────────────────
+comment_semicolons_only	monadc.context.language.syntax-corpus	Multiple semicolons in comment parses.	;;;; some comment
+comment_mixed_line_block	monadc.context.language.syntax-corpus	Line comment then block comment parses.	;; line\n-| block |-\n42
+comment_after_expression	monadc.context.language.syntax-corpus	Comment after expression on same line parses.	42 ;; trailing comment
+comment_block_empty	monadc.context.language.syntax-corpus	Empty block comment parses.	-||-

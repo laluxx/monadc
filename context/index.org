@@ -197,8 +197,8 @@ Every context file should include these file-level Org keywords when applicable:
 #+END_EXAMPLE
 
 [DEC id:dec.context.startup-showeverything date:2026-06-11 by:human]
-Context files must use =#+STARTUP: showeverything= so headings are expanded
-when opened in Org.
+  Context files must use =#+STARTUP: showeverything= so headings are expanded
+  when opened in Org.
 
 ** Visual Design Rules
 :PROPERTIES:
@@ -219,8 +219,8 @@ when opened in Org.
 :END:
 
 [DEC id:dec.context.visual-richness date:2026-06-11 by:human]
-The context corpus should be highly visual and use Org features broadly while
-remaining plain-text, self-contained, and machine-readable.
+  The context corpus should be highly visual and use Org features broadly while
+  remaining plain-text, self-contained, and machine-readable.
 
 #+CAPTION: Visual Org Feature Budget
 | Feature                   | Required Use           | Purpose            |
@@ -254,7 +254,7 @@ LLM-oriented statements use bracketed records with fixed keys:
 [OBS id:<id> src:<file:line> conf:<high|medium|low>] <direct observation>
 [INF id:<id> from:<obs-id[,obs-id...]> conf:<high|medium|low>] <inference>
 [DEC id:<id> date:<YYYY-MM-DD> by:<human|codex>] <decision>
-[TODO id:<id> owner:<human|codex|unknown> status:done] <task>
+[TODO id:<id> owner:<human|codex|unknown> status:open] <task>
 #+END_EXAMPLE
 
 Rules:
@@ -311,8 +311,8 @@ changes for path literals of type =Path= and dynamic array literals of type
 =Heap=.
 
 [DEC id:dec.2026-06-11.context-format date:2026-06-11 by:codex]
-Use Org files with stable =ID= drawers and fixed LLM records as the project
-context notation.
+  Use Org files with stable =ID= drawers and fixed LLM records as the project
+  context notation.
 
 [OBS id:obs.2026-06-11.path-heap-fixed src:command-output conf:high]
 The focused fixture =tests/path_heap_literals.mon= parses
