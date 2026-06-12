@@ -67,7 +67,7 @@ survive Wisp, parse, JSON emission, code generation, and runtime startup.
 :END:
 
 [DEC id:dec.tests.path-heap-literals.contract date:2026-06-11 by:codex]
-This regression is not only a parser check. The runner must exercise JSON
-emission, compilation, generated executable creation, and execution so future
-changes cannot silently reintroduce the =unknown AST type: 3= codegen failure or
-drop the heap-array marker.
+  This regression is not only a parser check. The runner must exercise JSON
+  emission, compilation, generated executable creation, and execution so future
+  changes cannot silently reintroduce the =unknown AST type: 3= codegen failure or
+  drop the heap-array marker.

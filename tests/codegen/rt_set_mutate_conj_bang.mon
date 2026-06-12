@@ -1,0 +1,11 @@
+;; TEST-ID: tests.codegen.rt-set-mutate-conj-bang
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: conj! mutates a set by adding an element in place.
+;; TEST-ATOM: (conj! s 3) adds 3 to set s, observable via contains? and count.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define [s :: Set] {1 2})
+(conj! s 3)
+(show (contains? s 3))
+(show (count s))

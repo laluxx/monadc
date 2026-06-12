@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-list-mutate-append-bang
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: append! destructively appends a value to a list in place.
+;; TEST-ATOM: (append! xs 1) appends 1 to list xs, observable via car.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define [xs :: List] (list))
+(append! xs 1)
+(show (car xs))

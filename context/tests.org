@@ -281,3 +281,33 @@ assertions directly instead of requiring hand-written shell checks per fixture.
    818 registered tests, 23 failures. The added HM/partial-application fixtures
    pass; the two added closure ABI fixtures are valid syntax and remain
    implementation pressure.
+
+[OBS id:obs.tests.mutable-collection-coverage-2026-06-12 src:tests/codegen conf:high]
+   Added codegen coverage for mutable collection operations and set operations:
+   - =rt_set_conj_functional.mon=: (conj s 3) returns new set immutably (PASS)
+   - =rt_set_disj_functional.mon=: (disj s 2) removes immutably (PASS)
+   - =rt_set_mutate_conj_bang.mon=: (conj! s 3) mutates in-place (PASS)
+   - =rt_set_mutate_disj_bang.mon=: (disj! s 2) removes in-place (PASS)
+   - =rt_list_mutate_append_bang.mon=: (append! xs 1) appends in-place (PASS)
+   All require =::= type annotation on bound variable to avoid Wisp method-call sugar.
+
+[OBS id:obs.tests.inline-asm-coverage-2026-06-12 src:tests/codegen conf:high]
+   Added codegen coverage for inline assembly in function bodies:
+   - =rt_asm_function_naked.mon=: (asm ...) with :naked True compiles and runs
+     but returns first param only (current output: 60, expected: 130). Documents
+     that the add instruction result is not propagated through LLVM inline asm.
+   - =rt_asm_function_nonaked.mon=: (asm add x y) with :naked False fails due to
+     size-suffix inference (32-bit 'l' suffix for Int/i64 params). Documents
+     asm.c:reg_size_suffix fix needed: Int (i64) should infer 'q' suffix, not 'l'.
+
+[DEC id:dec.tests.wisp-bang-sugar date:2026-06-12 by:codex]
+   The Wisp desugaring transforms (fn! var args) to (var fn! args) when var is
+   an untyped symbol. All mutable collection tests must bind variables with a
+   type annotation (e.g., [s :: Set]) to preserve normal function-call syntax.
+   This is by design: !-suffixed symbols signal method-call sugar in Wisp mode.
+
+[OBS id:obs.tests.reader-atoms-set-ops-2026-06-12 src:tests/reader-atoms.tsv conf:high]
+   Added 7 reader-atoms rows to cover previously unexercised parser atoms:
+   set_conj, set_disj, set_conj_bang, set_disj_bang, list_append_bang,
+   pred_collection. All parse as normal function-call syntax; no special
+   parser handling needed beyond the existing builtin-registration pattern.

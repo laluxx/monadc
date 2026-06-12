@@ -396,3 +396,31 @@ This file records the executable formalization layer for Monad language syntax.
    rest params, keyword layout construction, forward mutual recursion, range
    arrays, record declarations, size-array values, string helpers, superscript,
    when, string concat, and wisp define.
+
+[OBS id:obs.language.mutable-collections-builtins-2026-06-12 src:codegen.c:13007 conf:high]
+   The builtin set =conj!= and =disj!= mutate an existing set in place via
+   =rt_set_conj_mut= / =rt_set_disj_mut= in runtime.c (which return the same
+   =RuntimeSet *= pointer after insertion/removal). =append!= mutates a list
+   in place via =rt_list_append=. All are registered in =register_builtins()=
+   with arity 2. The codegen handler shares =codegen_set_op= for conj/disj
+   variants; =append!= has a dedicated handler that passes the raw list value
+   (=RuntimeList *=) to =rt_list_append=.
+
+[OBS id:obs.language.inline-asm-limitations-2026-06-12 src:asm.c:346 conf:high]
+   Inline assembly in function bodies has two paths with known issues:
+   - Naked path (=:naked True=): =codegen_inline_asm= generates raw asm with
+     no constraints. The function body is emitted verbatim. Current test shows
+     =add y %rax= does not propagate result (returns first param only).
+   - Non-naked path (=:naked False=): uses LLVM inline asm with constraints.
+     Currently fails because =reg_size_suffix= infers 32-bit 'l' suffix for
+     Int parameters (which are i64), producing invalid =addl= with 64-bit
+     registers. Fix: check LLVM type width or Int type kind to emit 'q'.
+
+[DEC id:dec.language.wisp-bang-sugar date:2026-06-12 by:codex]
+   The Wisp desugaring treats !-suffixed symbols as method-call sugar when the
+   first argument is an untyped symbol: =(conj! s 3)= → =(s conj! 3)=. This is
+   by design for method-call syntax but silently breaks calls to !-suffixed
+   builtins when the variable has no type annotation. The workaround is to bind
+   the set/list variable with a =:: Set= / =:: List= annotation, which prevents
+   the Wisp sugar from firing. This affects =conj!=, =disj!=, =append!=, and
+   any future !-suffixed builtins.

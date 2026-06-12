@@ -1,19 +1,16 @@
 
-;; layout Color
-;;   [r :: U8]
-;;   [g :: U8]
-;;   [b :: U8]
-;;   where
-;;     method fromRGB :: U8 -> U8 -> U8 -> Color
-;;       r g b -> (Color r g b)
+layout Color
+  [r :: U8]
+  [g :: U8]
+  [b :: U8]
+  where
+    method fromRGB :: U8 -> U8 -> U8 -> Color
+      r g b -> (Color r g b)
 
-;;     method eql :: Self -> Color -> Bool
-;;       s o -> and s.r = o.r
-;;                  s.g = o.g
-;;                  s.b = o.b
-
-
-
+    method eql :: Self -> Color -> Bool
+      s o -> and s.r = o.r
+                 s.g = o.g
+                 s.b = o.b
 
 
 

@@ -774,3 +774,12 @@ unicode_forall	monadc.context.language.syntax-corpus	Unicode forall in type sign
 type_class_constraint	monadc.context.language.syntax-corpus	Type class constraint bracket syntax parses.	define id :: [Eq a] => a -> a
 # ─── Mapsto Arrow ─────────────────────────────────────────────────────────────
 mapsto_arrow	monadc.context.language.syntax-corpus	Mapsto arrow in lambda parses.	(define double x ↦ (* 2 x))
+# ─── Set Operations ─────────────────────────────────────────────────────────
+set_conj	monadc.context.language.syntax-corpus	Conj (functional set add) function parses.	(conj {1 2 3} 4)
+set_disj	monadc.context.language.syntax-corpus	Disj (functional set remove) function parses.	(disj {1 2 3} 2)
+set_conj_bang	monadc.context.language.syntax-corpus	Conj! (mutable set add) function parses.	(conj! my-set 4)
+set_disj_bang	monadc.context.language.syntax-corpus	Disj! (mutable set remove) function parses.	(disj! my-set 2)
+# ─── Mutable List Operations ───────────────────────────────────────────────
+list_append_bang	monadc.context.language.syntax-corpus	Append! (mutable list append) function parses.	(append! my-list 42)
+# ─── Collection Predicate ──────────────────────────────────────────────────
+pred_collection	monadc.context.language.syntax-corpus	Collection? predicate call parses.	(collection? (list 1 2))

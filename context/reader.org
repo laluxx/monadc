@@ -42,7 +42,7 @@
 :END:
 
 [OBS id:obs.context.reader.file src:context/reader.org conf:high]
-This file records context about =reader.h= and =reader.c=.
+  This file records context about =reader.h= and =reader.c=.
 
 #+CAPTION: Reader/Wisp Boundary Map
 | Surface Form | Wisp Responsibility     | Reader Responsibility | AST Result                   |
@@ -71,19 +71,19 @@ This file records context about =reader.h= and =reader.c=.
 :END:
 
 [OBS id:obs.reader.ast-enum src:reader.h:39 conf:high]
-=ASTType= defines parser node tags shared by parser, AST utilities, and later
-compiler phases.
+  =ASTType= defines parser node tags shared by parser, AST utilities, and later
+  compiler phases.
 
 [OBS id:obs.reader.token-enum src:reader.h:357 conf:high]
-=TokenType= defines lexer token tags consumed by =parse_expr=.
+=  TokenType= defines lexer token tags consumed by =parse_expr=.
 
 [OBS id:obs.reader.array-payload src:reader.h:164 conf:high]
-=AST_ARRAY= stores element pointers, element count, element capacity, and a heap
-literal flag.
+  =AST_ARRAY= stores element pointers, element count, element capacity, and a heap
+  literal flag.
 
 [OBS id:obs.reader.path-node src:reader.h:42 conf:high]
-=AST_PATH= is represented with the union =string= field, matching the existing
-=reader.c= constructor and JSON/print handling.
+  =AST_PATH= is represented with the union =string= field, matching the existing
+  =reader.c= constructor and JSON/print handling.
 
 #+CAPTION: Header Additions for Path and Heap Literals
 | Symbol        | Kind             | Source              | Consumer                    |
@@ -112,15 +112,15 @@ literal flag.
 :END:
 
 [OBS id:obs.reader.path-lexer src:reader.c:1760 conf:high]
-The lexer recognizes path-like tokens starting with absolute, home-relative, or
-dot-relative prefixes and emits =TOK_PATH=.
+  The lexer recognizes path-like tokens starting with absolute, home-relative, or
+  dot-relative prefixes and emits =TOK_PATH=.
 
 [OBS id:obs.reader.path-parser src:reader.c:6118 conf:high]
-=parse_expr= turns =TOK_PATH= into =ast_new_path(tok.value)= and preserves source
-location.
+  =parse_expr= turns =TOK_PATH= into =ast_new_path(tok.value)= and preserves source
+  location.
 
 [OBS id:obs.reader.path-ast src:reader.c:430 conf:high]
-=ast_new_path= creates =AST_PATH= and stores the path text in =ast->string=.
+  =ast_new_path= creates =AST_PATH= and stores the path text in =ast->string=.
 
 * Heap Array Literals
 :PROPERTIES:
@@ -141,14 +141,14 @@ location.
 :END:
 
 [OBS id:obs.reader.heap-array-parser src:reader.c:6005 conf:high]
-The parser treats adjacent =~[...]= as a heap array literal.
+  The parser treats adjacent =~[...]= as a heap array literal.
 
 [OBS id:obs.reader.heap-array-flag src:reader.c:6019 conf:high]
-When =~[...]= parses as =AST_ARRAY=, =array.is_heap= is set to =true=.
+  When =~[...]= parses as =AST_ARRAY=, =array.is_heap= is set to =true=.
 
 [INF id:inf.reader.heap-array-contract from:obs.reader.heap-array-parser,obs.reader.heap-array-flag conf:medium]
-Later stages can distinguish stack array literals from heap array literals by
-checking =AST_ARRAY.array.is_heap=.
+  Later stages can distinguish stack array literals from heap array literals by
+  checking =AST_ARRAY.array.is_heap=.
 
 * Wisp Heap Array Preservation
 :PROPERTIES:
@@ -169,35 +169,35 @@ checking =AST_ARRAY.array.is_heap=.
 :END:
 
 [OBS id:obs.reader.wisp-bug-heap-array-split src:user-report conf:high]
-Before the Wisp fix, =define darr ~[1 2 3]= expanded as =(define darr ~[1)=
-followed by orphaned =2= and =3]= tokens.
+  Before the Wisp fix, =define darr ~[1 2 3]= expanded as =(define darr ~[1)=
+  followed by orphaned =2= and =3]= tokens.
 
 [OBS id:obs.reader.wisp-heap-array-token src:wisp.c:1118 conf:high]
-Wisp tokenization now treats =~[...]= as one balanced token.
+  Wisp tokenization now treats =~[...]= as one balanced token.
 
 [OBS id:obs.reader.wisp-heap-array-grouped src:wisp.c:3931 conf:high]
-Wisp expression parsing now classifies tokens beginning with =~[= as grouped
-atomic expressions.
+  Wisp expression parsing now classifies tokens beginning with =~[= as grouped
+  atomic expressions.
 
 [INF id:inf.reader.heap-array-flow from:obs.reader.wisp-heap-array-token,obs.reader.heap-array-parser conf:high]
-The intended flow is Wisp preserves =~[1 2 3]=, then the reader lexes it as
-adjacent =~= and =[...]= and marks the parsed array as heap-backed.
+  The intended flow is Wisp preserves =~[1 2 3]=, then the reader lexes it as
+  adjacent =~= and =[...]= and marks the parsed array as heap-backed.
 
 [OBS id:obs.reader.heap-array-clone src:reader.c conf:high]
-=ast_clone= preserves =AST_ARRAY.array.is_heap= so desugaring or AST copying
-does not erase heap literal status.
+  =ast_clone= preserves =AST_ARRAY.array.is_heap= so desugaring or AST copying
+  does not erase heap literal status.
 
 [OBS id:obs.reader.heap-array-infer src:infer.c conf:high]
-Inference returns =type_arr_heap(elem_t)= for =AST_ARRAY= nodes whose
-=array.is_heap= flag is true.
+  Inference returns =type_arr_heap(elem_t)= for =AST_ARRAY= nodes whose
+  =array.is_heap= flag is true.
 
 [OBS id:obs.reader.heap-array-json src:reader.c conf:high]
-AST JSON emission includes =is_heap= for array nodes, making =~[]= behavior
-visible in focused fixtures.
+  AST JSON emission includes =is_heap= for array nodes, making =~[]= behavior
+  visible in focused fixtures.
 
 [OBS id:obs.reader.path-heap-fixture src:tests/path_heap_literals.mon conf:high]
-=tests/path_heap_literals.mon= covers a home-relative =Path= literal and a
-heap array literal.
+  =tests/path_heap_literals.mon= covers a home-relative =Path= literal and a
+  heap array literal.
 
 #+BEGIN_EXAMPLE
 Input:
@@ -226,16 +226,16 @@ Expected Wisp shape:
 :END:
 
 [OBS id:obs.reader.char-escape-tab src:reader.c conf:high]
-=Char= literals with ='\t'= are handled by Wisp expansion. Wisp converts the
-escape to a tab character before the reader sees it, so the reader receives a
-literal tab character inside single quotes.
+  =Char= literals with ='\t'= are handled by Wisp expansion. Wisp converts the
+  escape to a tab character before the reader sees it, so the reader receives a
+  literal tab character inside single quotes.
 
 [OBS id:obs.reader.char-escape-newline-fails src:wisp.c,reader.c conf:high]
-=Char= literals with ='\n'= fail because Wisp expands =\\n= to a real newline,
-splitting the literal across two lines. The paragraph tokenizer then sees an
-orphan closing ='= token on line 2. This is a Wisp limitation: escape sequences
-that produce whitespace or newline characters cannot be used inside char
-literals in standalone expressions.
+  =Char= literals with ='\n'= fail because Wisp expands =\\n= to a real newline,
+  splitting the literal across two lines. The paragraph tokenizer then sees an
+  orphan closing ='= token on line 2. This is a Wisp limitation: escape sequences
+  that produce whitespace or newline characters cannot be used inside char
+  literals in standalone expressions.
 
 * Lambda Parameter Syntax
 :PROPERTIES:
@@ -256,14 +256,14 @@ literals in standalone expressions.
 :END:
 
 [OBS id:obs.reader.lambda-paren-params src:reader.c conf:high]
-=Lambda= requires parenthesized parameter lists: =(lambda (x) body)=. Square
-bracket =[x : Type]= syntax inside lambda requires the arrow-return form:
-=(lambda ([x : Int] -> Int) body)=.
+  =Lambda= requires parenthesized parameter lists: =(lambda (x) body)=. Square
+  bracket =[x : Type]= syntax inside lambda requires the arrow-return form:
+  =(lambda ([x : Int] -> Int) body)=.
 
 [OBS id:obs.reader.lambda-no-bracket-standalone src:reader.c conf:high]
-=(lambda [x] body)= and =(lambda [x : Int] body)= (without =-> ReturnType=)
-fail with "Expected '(' after 'lambda'". The bracket form is only valid when
-followed by =->= and a return type.
+  =(lambda [x] body)= and =(lambda [x : Int] body)= (without =-> ReturnType=)
+  fail with "Expected '(' after 'lambda'". The bracket form is only valid when
+  followed by =->= and a return type.
 
 * Buffer Type Declarations
 :PROPERTIES:
@@ -284,21 +284,21 @@ followed by =->= and a return type.
 :END:
 
 [OBS id:obs.reader.buffer-wisp-syntax src:wisp.c conf:high]
-Wisp form =define buffer :: [16kb I32]= expands to
-=(define [buffer :: Arr :: 16kb :: I32] [])=. The =::= syntax inside brackets
-creates a typed variable binding where =Arr= is the array type constructor,
-the size suffix (=kb=, =mb=) is a symbol, and the element type follows.
+  Wisp form =define buffer :: [16kb I32]= expands to
+  =(define [buffer :: Arr :: 16kb :: I32] [])=. The =::= syntax inside brackets
+  creates a typed variable binding where =Arr= is the array type constructor,
+  the size suffix (=kb=, =mb=) is a symbol, and the element type follows.
 
 [OBS id:obs.reader.buffer-paren-syntax src:reader.c conf:high]
-Parenthesized form =(define buffer [16kb I32])= creates a define with an array
-literal as the value. The =[16kb I32]= is parsed as an =AST_ARRAY= containing
-=[(* 16 kb) I32]= where =kb= is a symbol and =*= is inferred as multiplication.
+  Parenthesized form =(define buffer [16kb I32])= creates a define with an array
+  literal as the value. The =[16kb I32]= is parsed as an =AST_ARRAY= containing
+  =[(* 16 kb) I32]= where =kb= is a symbol and =*= is inferred as multiplication.
 
 [OBS id:obs.reader.buffer-size-limit src:reader.c conf:high]
-Static arrays exceeding 1gb (=[16gb]=, =[16tb]=) are rejected at compile time
-with "Static array is too large to allocate on x86-64". They still parse
-correctly but fail in codegen. Wisp form also fails since =[16gb]= expands to
-a static array exceeding the limit.
+  Static arrays exceeding 1gb (=[16gb]=, =[16tb]=) are rejected at compile time
+  with "Static array is too large to allocate on x86-64". They still parse
+  correctly but fail in codegen. Wisp form also fails since =[16gb]= expands to
+  a static array exceeding the limit.
 
 * Match Expression Syntax
 :PROPERTIES:
@@ -319,13 +319,13 @@ a static array exceeding the limit.
 :END:
 
 [OBS id:obs.reader.match-requires-with src:reader.c conf:high]
-=Match= expressions require the =with= keyword: =(match expr with | pat -> body)=.
-=(match expr | pat -> body)= (without =with=) fails with "Expected 'with' after
-match expression".
+  =Match= expressions require the =with= keyword: =(match expr with | pat -> body)=.
+  =(match expr | pat -> body)= (without =with=) fails with "Expected 'with' after
+  match expression".
 
 [OBS id:obs.reader.match-arrow-syntax src:reader.c conf:high]
-Match clauses use =->= not ="=>"=: =(match 1 with | 0 -> 1 | _ -> 0)=.
-Using ='=> '= fails with "expected '->' after guard condition".
+  Match clauses use =->= not ="=>"=: =(match 1 with | 0 -> 1 | _ -> 0)=.
+  Using ='=> '= fails with "expected '->' after guard condition".
 
 * For Comprehension Syntax
 :PROPERTIES:
@@ -346,12 +346,12 @@ Using ='=> '= fails with "expected '->' after guard condition".
 :END:
 
 [OBS id:obs.reader.for-bindings src:reader.c conf:high]
-=For= comprehensions support destructured bindings: =(for [[x y] [[1 2] [3 4]]] (+ 1 x))=.
-Bindings can be simple symbols or nested lists for destructuring.
+  =For= comprehensions support destructured bindings: =(for [[x y] [[1 2] [3 4]]] (+ 1 x))=.
+  Bindings can be simple symbols or nested lists for destructuring.
 
 [OBS id:obs.reader.for-collect src:reader.c conf:high]
-=For= comprehensions accept =:collect= keyword: =(for [x [1 2 3]] :collect x)=.
-The =:collect= keyword is parsed as a symbol in the body position.
+  =For= comprehensions accept =:collect= keyword: =(for [x [1 2 3]] :collect x)=.
+  The =:collect= keyword is parsed as a symbol in the body position.
 
 [DEC id:dec.reader.sugar-registry-added date:2026-06-12 by:codex]
   Added a =Sugar Registry= section to this file documenting 17 sugar types
@@ -380,94 +380,94 @@ The =:collect= keyword is parsed as a symbol in the body position.
 :END:
 
 [OBS id:obs.reader.sugar.implicit-mul src:reader.c conf:high]
-Implicit multiplication: when a literal (number, hex, binary, octal, float) is
-immediately adjacent to a variable name (e.g. =3x=, =0xFFx=, =-3y=), the reader
-desugars it to =(* 3 x)=. Greek-letter prefix calls are not yet supported.
+  Implicit multiplication: when a literal (number, hex, binary, octal, float) is
+  immediately adjacent to a variable name (e.g. =3x=, =0xFFx=, =-3y=), the reader
+  desugars it to =(* 3 x)=. Greek-letter prefix calls are not yet supported.
 
 [OBS id:obs.reader.sugar.percent src:reader.c conf:high]
-Percentage sugar: =N%= desugars to =N/100=. Float percentages (=3.5%=) and negative
-percentages (=-50%=) are supported. High-precision decimal percentages are
-preserved as exact ratios.
+  Percentage sugar: =N%= desugars to =N/100=. Float percentages (=3.5%=) and negative
+  percentages (=-50%=) are supported. High-precision decimal percentages are
+  preserved as exact ratios.
 
 [OBS id:obs.reader.sugar.periodic src:reader.c conf:high]
-Periodic decimal sugar: =0.(3)= desugars to =3/9= (the repeating digit as an exact
-ratio). Multi-digit repeating blocks are supported: =0.(12)= → =12/99=.
-Integer parts preserve the whole: =1.(6)= → =1 + 6/9=.
+  Periodic decimal sugar: =0.(3)= desugars to =3/9= (the repeating digit as an exact
+  ratio). Multi-digit repeating blocks are supported: =0.(12)= → =12/99=.
+  Integer parts preserve the whole: =1.(6)= → =1 + 6/9=.
 
 [OBS id:obs.reader.sugar.superscript src:reader.c conf:high]
-Superscript sugar: Unicode superscript digits (=x²=, =y³=, =x²⁰=) desugar to
-=(^ x 2)=, =(^ y 3)=, =(^ x 20)= respectively. Only whole-number exponents are
-supported.
+  Superscript sugar: Unicode superscript digits (=x²=, =y³=, =x²⁰=) desugar to
+  =(^ x 2)=, =(^ y 3)=, =(^ x 20)= respectively. Only whole-number exponents are
+  supported.
 
 [OBS id:obs.reader.sugar.ptr-type src:reader.c conf:high]
-Pointer type sugar: =*Int= desugars to =(Pointer Int)=, =**Int= desugars to
-=(Pointer (Pointer Int))=, and so on for any number of star prefixes.
+  Pointer type sugar: =*Int= desugars to =(Pointer Int)=, =**Int= desugars to
+  =(Pointer (Pointer Int))=, and so on for any number of star prefixes.
 
 [OBS id:obs.reader.sugar.unicode-prefix src:reader.c conf:high]
-Unicode prefix call sugar: Greek letters immediately adjacent to a form
-(=δx=, =Σexpr=) desugar to prefix calls: =(δ x)=, =(Σ expr)=. The recognized
-prefix characters include δ, γ, ω, Σ (sigma), and the standard sqrt/sin symbols.
+  Unicode prefix call sugar: Greek letters immediately adjacent to a form
+  (=δx=, =Σexpr=) desugar to prefix calls: =(δ x)=, =(Σ expr)=. The recognized
+  prefix characters include δ, γ, ω, Σ (sigma), and the standard sqrt/sin symbols.
 
 [OBS id:obs.reader.sugar.periodic src:reader.c conf:high]
-Periodic decimal sugar: =0.(3)= desugars to =3/9= (the repeating digit as an exact
-ratio). Multi-digit repeating blocks are supported: =0.(12)= → =12/99=.
+  Periodic decimal sugar: =0.(3)= desugars to =3/9= (the repeating digit as an exact
+  ratio). Multi-digit repeating blocks are supported: =0.(12)= → =12/99=.
 
 [OBS id:obs.reader.sugar.postfix-call src:reader.c conf:high]
-Postfix call sugar: =f(x)= desugars to =(f x)=, allowing function-call syntax
-similar to C/Java. Multiple arguments work: =f(x, y)= → =(f x y)=. Index access:
-=arr[i]= → =(index arr i)=. Chained postfix: =obj.method(arg)= → =(method obj arg)=.
+  Postfix call sugar: =f(x)= desugars to =(f x)=, allowing function-call syntax
+  similar to C/Java. Multiple arguments work: =f(x, y)= → =(f x y)=. Index access:
+  =arr[i]= → =(index arr i)=. Chained postfix: =obj.method(arg)= → =(method obj arg)=.
 
 [OBS id:obs.reader.sugar.dot-access src:reader.c conf:high]
-Dot field access sugar: =expr.field= desugars to =(. expr field)=. Nested access
-(=obj.field.subfield=) chains: =(. (. obj field) subfield)=. Works on parenthesized
-expressions and function call results.
-
+  Dot field access sugar: =expr.field= desugars to =(. expr field)=. Nested access
+  (=obj.field.subfield=) chains: =(. (. obj field) subfield)=. Works on parenthesized
+  expressions and function call results.
+  
 [OBS id:obs.reader.sugar.assign-arrow src:reader.c conf:high]
-Assignment arrow sugar: =x <- expr= desugars to =(set! x expr)=. This supports
-field mutation: =p.x <- 5= → =(set! p.x 5)= and compound assignments:
-=x <- x + 1= → =(set! x (+ x 1))=.
+  Assignment arrow sugar: =x <- expr= desugars to =(set! x expr)=. This supports
+  field mutation: =p.x <- 5= → =(set! p.x 5)= and compound assignments:
+  =x <- x + 1= → =(set! x (+ x 1))=.
 
 [OBS id:obs.reader.sugar.pipe src:reader.c conf:high]
-Pipe sugar: =x |> f= desugars to =(f x)=. Pipe chains are handled by the wisp
-transformer, not the reader desugarer. The reader preserves =|>= as infix syntax.
+  Pipe sugar: =x |> f= desugars to =(f x)=. Pipe chains are handled by the wisp
+  transformer, not the reader desugarer. The reader preserves =|>= as infix syntax.
 
 [OBS id:obs.reader.sugar.address-of src:reader.c conf:high]
-Address-of sugar: =&x= desugars to =(address-of x)=. Supports field addressing:
-=&p.x= → =(address-of (. p x))=.
+  Address-of sugar: =&x= desugars to =(address-of x)=. Supports field addressing:
+  =&p.x= → =(address-of (. p x))=.
 
 [OBS id:obs.reader.sugar.quasiquote-corner src:reader.c conf:high]
-Quasiquote corner syntax: Unicode corner brackets =⌜expr⌟= desugar to
-=(quasiquote expr)=, and =⌞expr⌟= desugars to =(unquote expr)=. Supports
-quasiquote/unquote splicing for template-based code generation.
-
+  Quasiquote corner syntax: Unicode corner brackets =⌜expr⌟= desugar to
+  =(quasiquote expr)=, and =⌞expr⌟= desugars to =(unquote expr)=. Supports
+  quasiquote/unquote splicing for template-based code generation.
+  
 [OBS id:obs.reader.sugar.cond-to-if src:reader.c conf:high]
-Cond desugaring: =(cond [test1 body1] [test2 body2] [else body3])= desugars to
-nested if expressions: =(if test1 body1 (if test2 body2 body3))=. The =[else
-body]= clause becomes the final branch with no test.
+  Cond desugaring: =(cond [test1 body1] [test2 body2] [else body3])= desugars to
+  nested if expressions: =(if test1 body1 (if test2 body2 body3))=. The =[else
+  body]= clause becomes the final branch with no test.
 
 [OBS id:obs.reader.sugar.let-desugar src:reader.c conf:high]
-Let desugaring: =(let [x val] body)= desugars to =((lambda (x) body) val)=.
-Multiple bindings =[x1 v1 x2 v2]= produce nested applications.
-=let*= and =letrec= are desugared into sequences of =let= and =Y= combinator
-applications.
+  Let desugaring: =(let [x val] body)= desugars to =((lambda (x) body) val)=.
+  Multiple bindings =[x1 v1 x2 v2]= produce nested applications.
+  =let*= and =letrec= are desugared into sequences of =let= and =Y= combinator
+  applications.
 
 [OBS id:obs.reader.sugar.size-array src:reader.c conf:high]
-Size array sugar: =[N unit Type]= in a type context desugars to the sized
-array annotation =(Arr :: N :: unit :: Type)=. Supported size units are =kb=,
-=mb=, =gb=, =tb=. Only =kb= and =mb= sizes are currently within the
-x86-64 static array size limit.
+  Size array sugar: =[N unit Type]= in a type context desugars to the sized
+  array annotation =(Arr :: N :: unit :: Type)=. Supported size units are =kb=,
+  =mb=, =gb=, =tb=. Only =kb= and =mb= sizes are currently within the
+  x86-64 static array size limit.
 
 [OBS id:obs.reader.sugar.path-literal src:reader.c conf:high]
-Path literal sugar: path-like tokens starting with =/=, =~/=, or =./(...)/=
-are lexed as =TOK_PATH= and parsed as =AST_PATH=. This covers absolute,
-home-relative, and dot-relative path references.
+  Path literal sugar: path-like tokens starting with =/=, =~/=, or =./(...)/=
+  are lexed as =TOK_PATH= and parsed as =AST_PATH=. This covers absolute,
+  home-relative, and dot-relative path references.
 
 [OBS id:obs.reader.sugar.range-array src:reader.c conf:high]
-Range array sugar: =[start .. end]= desugars to a range array literal,
-producing a list (or array) of consecutive integers. Step variant:
-=[start .. end step]= produces non-consecutive elements.
+  Range array sugar: =[start .. end]= desugars to a range array literal,
+  producing a list (or array) of consecutive integers. Step variant:
+  =[start .. end step]= produces non-consecutive elements.
 
 [OBS id:obs.reader.sugar.wisp-arrow src:wisp.c conf:high]
-Wisp arrow sugar: the =->= token in wisp form defines function parameter
-bindings. =x -> body= in lambda position creates a lambda with parameter =x=.
-In define position, =define f x -> body= creates (define (f x) body).
+  Wisp arrow sugar: the =->= token in wisp form defines function parameter
+  bindings. =x -> body= in lambda position creates a lambda with parameter =x=.
+  In define position, =define f x -> body= creates (define (f x) body).

@@ -1,0 +1,11 @@
+;; TEST-ID: tests.codegen.rt-set-mutate-disj-bang
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: disj! mutates a set by removing an element in place.
+;; TEST-ATOM: (disj! s 2) removes 2 from set s, observable via contains? and count.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define [s :: Set] {1 2 3})
+(disj! s 2)
+(show (contains? s 2))
+(show (count s))
