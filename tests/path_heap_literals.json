@@ -1,5 +1,156 @@
 [
-  {"line":1,"col":1,"type":"list","items":[{"line":1,"col":2,"type":"symbol","name":"module"},{"line":1,"col":9,"type":"symbol","name":"PathHeapLiterals"}]},
-  {"line":3,"col":1,"type":"list","items":[{"line":0,"col":0,"type":"symbol","name":"define"},{"line":3,"col":9,"type":"symbol","name":"path"},{"line":3,"col":14,"type":"path","value":"~/xos/projects/c/monadc/context"}]},
-  {"line":4,"col":1,"type":"list","items":[{"line":0,"col":0,"type":"symbol","name":"define"},{"line":4,"col":9,"type":"symbol","name":"darr"},{"line":4,"col":14,"type":"array","is_heap":true,"elements":[{"line":4,"col":16,"type":"number","value":"1"},{"line":4,"col":18,"type":"number","value":"2"},{"line":4,"col":20,"type":"number","value":"3"}]}]}
+  {
+    "type": "list",
+    "items": [
+      {
+        "type": "symbol",
+        "name": "module"
+      },
+      {
+        "type": "symbol",
+        "name": "HeapLiterals"
+      }
+    ]
+  },
+  {
+    "type": "list",
+    "items": [
+      {
+        "type": "symbol",
+        "name": "define"
+      },
+      {
+        "type": "symbol",
+        "name": "heap"
+      },
+      {
+        "type": "array",
+        "is_heap": true,
+        "elements": [
+          {
+            "type": "number",
+            "value": "1"
+          },
+          {
+            "type": "number",
+            "value": "2"
+          },
+          {
+            "type": "number",
+            "value": "3"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "type": "list",
+    "items": [
+      {
+        "type": "symbol",
+        "name": "show"
+      },
+      {
+        "type": "symbol",
+        "name": "heap"
+      }
+    ]
+  },
+  {
+    "type": "list",
+    "items": [
+      {
+        "type": "symbol",
+        "name": "show"
+      },
+      {
+        "type": "list",
+        "items": [
+          {
+            "type": "symbol",
+            "name": "count"
+          },
+          {
+            "type": "symbol",
+            "name": "heap"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "type": "list",
+    "items": [
+      {
+        "type": "symbol",
+        "name": "for"
+      },
+      {
+        "type": "array",
+        "is_heap": false,
+        "elements": [
+          {
+            "type": "symbol",
+            "name": "iter"
+          },
+          {
+            "type": "number",
+            "value": "0"
+          },
+          {
+            "type": "list",
+            "items": [
+              {
+                "type": "symbol",
+                "name": "count"
+              },
+              {
+                "type": "symbol",
+                "name": "heap"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "list",
+        "items": [
+          {
+            "type": "symbol",
+            "name": "define"
+          },
+          {
+            "type": "symbol",
+            "name": "i"
+          },
+          {
+            "type": "list",
+            "items": [
+              {
+                "type": "symbol",
+                "name": "heap"
+              },
+              {
+                "type": "symbol",
+                "name": "iter"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "list",
+        "items": [
+          {
+            "type": "symbol",
+            "name": "show"
+          },
+          {
+            "type": "symbol",
+            "name": "i"
+          }
+        ]
+      }
+    ]
+  }
 ]

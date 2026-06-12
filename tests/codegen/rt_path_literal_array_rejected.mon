@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-path-literal-array-rejected
+;; TEST-CONTEXT: monadc.context.reader.path-literals, monadc.context.language.path-literals, monadc.context.tests.expected-failures
+;; TEST-PURPOSE: Verify Unix path literals nested inside arrays are rejected before they become runtime values.
+;; TEST-ATOM: A syntactically valid home-relative Unix path literal inside an array literal must be a compile-time type error; use a String literal for filesystem path values.
+;; TEST-EXPECT: fail:compile
+;; TEST-EXPECT-DIAGNOSTIC: error: ill-typed path literal
+
+(module PathLiteralArrayRejected)
+(define bad [~/xos/projects/c/monadc/context/])
+(show bad)

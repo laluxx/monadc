@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-type-preds-all
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Every type predicate from type_preds[] array plus nil? (separate handler).
+;; TEST-ATOM: (Int? 42) = True, (Float? 3.14) = True, (Number? 42) = True, (Char? (Char 65)) = True,
+;;           (String? "hi") = True, (Bool? True) = True, (Symbol? (quote foo)) = True,
+;;           (Keyword? :hello) = True, (List? (list)) = True, (Set? {1 2 3}) = True,
+;;           (nil? nil) = True
+;; TEST-EXPECT: compile, run
+(module Main)
+(show (Int? 42))
+(show (Float? 3.14))
+(show (Number? 42))
+(show (Number? 3.14))
+(show (Char? (Char 65)))
+(show (String? "hi"))
+(show (Bool? True))
+(show (Bool? False))
+(show (Symbol? (quote foo)))
+(show (Keyword? :hello))
+(show (List? (list)))
+(show (Set? {1 2 3}))
+(show (nil? nil))

@@ -1,0 +1,263 @@
+#+TITLE: Project Guidelines: Hard Constraints and Soft Preferences
+#+AUTHOR: Codex
+#+DATE: 2026-06-12
+#+CREATED: 2026-06-12
+#+LAST_MODIFIED: 2026-06-12
+#+LANGUAGE: en
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:guidelines:rules:workflow:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+#+TAGS: hard(h) soft(s) context(c) codex(a)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.guidelines.file-metadata
+:CUSTOM_ID: guidelines-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/guidelines.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.guidelines.merged src:context/rules.org,context/workflow.org conf:high]
+  This file merges the former =context/rules.org= (hard constraints) and
+  =context/workflow.org= (soft preferences) into a single guidelines document.
+  The old files now contain redirect records pointing here.
+
+[DEC id:dec.guidelines.hard-vs-soft date:2026-06-12 by:human]
+  =Hard Constraints= are mandatory rules that must always be followed ("must do").
+  =Soft Preferences= are recommended practices that should be followed when
+  practical ("should do"). Violating a soft preference is acceptable when there
+  is a good reason, but the reason should be documented.
+
+* Hard Constraints
+
+** Context Upkeep Rule
+:PROPERTIES:
+:ID: monadc.context.guidelines.context-upkeep
+:CUSTOM_ID: context-upkeep-rule
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.guidelines.always-improve-context date:2026-06-11 by:human]
+  Always improve the repository context as work progresses. Add important
+  discoveries, decisions, verification results, and follow-up tasks to the Org
+  context corpus when they would help future work.
+
+#+CAPTION: Context Upkeep Triggers
+| Trigger                            | Required Context Action                          |
+|------------------------------------+--------------------------------------------------|
+| New compiler behavior is fixed     | Record the observed bug and implemented contract |
+| A standing user preference appears | Add or update a rule in guidelines.org           |
+| A reusable workflow is discovered  | Add it to the relevant topic file                |
+| A follow-up task is identified     | Add it to context/todo.org or a topic TODO       |
+
+[DEC id:dec.guidelines.context-during-conversation date:2026-06-11 by:human]
+  When the user states a standing preference or describes a durable workflow
+  during conversation, add it to the context corpus during the same work
+  session instead of leaving it only in chat history.
+
+[DEC id:dec.guidelines.visualizer-quality-bar date:2026-06-11 by:human]
+  Project visualizations should meet a high usability and design bar: clear
+  dashboard structure, standard interaction patterns, smooth motion, and
+  direct editing where the visualization represents mutable project state.
+
+[DEC id:dec.guidelines.extend-not-replace date:2026-06-12 by:codex]
+  When improving the context corpus, always extend (add new headings, records,
+  files) rather than silently replacing existing content. Use superseding
+  records when correcting factual errors. This preserves the audit trail.
+
+** Stale Context Cleanup
+:PROPERTIES:
+:ID: monadc.context.guidelines.stale-cleanup
+:CUSTOM_ID: stale-context-cleanup
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.guidelines.stale-cleanup date:2026-06-12 by:human]
+  When the LLM encounters a context fact that is stale, outdated, or superseded
+  by newer code, it must delete or supersede it. Do not let dead facts accumulate.
+  Pruning is as important as adding. Use =SUPERSEDED= status on headings or
+  remove records that no longer reflect reality. The context should be a
+  faithful model of the current codebase, not an archive of everything ever
+  believed.
+
+** Always Extend Context
+:PROPERTIES:
+:ID: monadc.context.guidelines.always-extend
+:CUSTOM_ID: always-extend-context
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.guidelines.always-extend-context date:2026-06-12 by:human]
+  Never forget to write back and extend the context. Everything the LLM does
+  should leave a trace in the context corpus. Every discovery, decision,
+  observation, TODO, and interaction that adds durable value must be recorded
+  before the session ends. This is the core mechanism that turns ephemeral
+  conversations into permanent collaborative memory.
+
+[DEC id:dec.guidelines.context-first date:2026-06-12 by:human]
+  Before starting any work, read the relevant context files. After finishing,
+  extend the context with what was done, discovered, decided, and left undone.
+  Never leave the context behind — always extend it.
+
+** Opinions Are TODOs
+:PROPERTIES:
+:ID: monadc.context.guidelines.opinions-are-todos
+:CUSTOM_ID: opinions-are-todos
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.guidelines.opinions-are-todos date:2026-06-12 by:human]
+  Every opinion recorded in =context/opinions.org= must be tracked as a TODO
+  item in =context/todo.org=. Opinions are not decorative commentary — they
+  are identified improvement opportunities that carry an implicit action
+  item. When an opinion is written, a corresponding TODO must be created.
+  When an opinion is addressed, its TODO is marked done. This ensures the
+  opinions file drives real change instead of becoming noise.
+
+* Soft Preferences
+
+** Completion Phrase
+:PROPERTIES:
+:ID: monadc.context.guidelines.completion-phrase
+:CUSTOM_ID: completion-phrase
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.guidelines.completion-phrase date:2026-06-11 by:human]
+  When a requested job is finished, the response should start with:
+  =I've finished my job!=, followed by a detailed explanation of the work
+  completed.
+
+** Living Coverage Workflow
+:PROPERTIES:
+:ID: monadc.context.guidelines.living-coverage
+:CUSTOM_ID: living-coverage-workflow
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.guidelines.living-coverage date:2026-06-11 by:human]
+  Explore MonadC as a living language system: keep adding small behavioral
+  tests as language behavior is discovered, prefer codegen-backed compile/run
+  fixtures when possible, and update context records continuously so the test
+  suite and repository memory evolve together.
+
+[DEC id:dec.guidelines.coverage-over-green date:2026-06-11 by:human]
+  Do not stop coverage expansion merely because a codegen-backed test exposes a
+  deep compiler/runtime failure. Fix only trivial fixture syntax mistakes during
+  coverage work; leave meaningful deep failures visible as executable pressure
+  on the implementation.
+
+[DEC id:dec.guidelines.coverage-then-triage date:2026-06-11 by:human]
+  After a coverage subset is large enough to reveal useful behavior, triage the
+  failing tests instead of treating every failure the same. Classify each failure
+  as an invalid fixture, a missing runner expectation mode, or a compiler/runtime
+  defect; fix syntax/contract mistakes immediately and use the linked context
+  record when choosing the next compiler fix.
+
+[DEC id:dec.guidelines.skip-uncertain-failures date:2026-06-11 by:human]
+  During broad coverage expansion, do not spend long debugging an uncertain
+  failure. If a fixture emits JSON and the failure is not clearly a syntax or
+  test-contract mistake, keep the coverage and move on so reader, codegen,
+  closure, HM, and dependent-type surfaces continue expanding.
+
+[DEC id:dec.guidelines.context-recurring-todos date:2026-06-12 by:codex]
+  Use =context/todo.org= for durable, cross-session TODOs discovered during
+  work. Small ephemeral TODOs ("fix this one fixture") should go in the
+  conversation summary, not in permanent context records.
+
+#+CAPTION: Standing Workflow Preferences
+| Preference         | Required Behavior                                  |
+|--------------------+----------------------------------------------------|
+| Completion phrase  | Start final job reports with =I've finished my job=  |
+| Context upkeep     | Add important discoveries to Org context           |
+| Build verification | Try full requested build/install path              |

@@ -1,0 +1,270 @@
+#+TITLE: Wisp Syntax Expander
+#+AUTHOR: Codex
+#+DATE: 2026-06-12
+#+CREATED: 2026-06-12
+#+LAST_MODIFIED: 2026-06-12
+#+LANGUAGE: en
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:wisp:syntax:expander:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+#+TAGS: wisp(w) expander(e) syntax(s) arity(a) sugar(g)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.wisp.file-metadata
+:CUSTOM_ID: wisp-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: wisp.c, wisp.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.wisp.file src:wisp.c,wisp.h conf:high]
+  Wisp is an indentation-based surface syntax that expands to standard
+  S-expressions before the reader parses them. Both forms produce identical ASTs.
+  Wisp and s-expr can be mixed freely within a single file. The expander is a
+  pre-parse transform — it runs before the reader.
+
+* Architecture
+:PROPERTIES:
+:ID: monadc.context.wisp.architecture
+:CUSTOM_ID: wisp-architecture
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: wisp.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.wisp.two-pass src:wisp.c conf:high]
+  Wisp expansion is a two-pass process:
+  1. Tokenization: split source into tokens (parens, brackets, symbols, strings,
+     numbers, etc.). Balanced brackets (=~[...]=, =[...]=, ={...}=) are preserved
+     as single tokens.
+  2. Layout expansion: use indentation and arity tables to insert parentheses
+     where needed, converting indentation-driven blocks into S-expression trees.
+
+[OBS id:obs.wisp.output src:wisp.c conf:high]
+  The output of wisp expansion is a flat list of standard S-expressions that feed
+  directly into =reader.c:'s =parse_expr=. The reader has no awareness that the
+  source was originally wisp — it sees only parenthesized forms.
+
+* Arity Table
+:PROPERTIES:
+:ID: monadc.context.wisp.arity-table
+:CUSTOM_ID: wisp-arity-table
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: wisp.c:120-180
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.wisp.arity-table src:wisp.c:120-180 conf:high]
+  The arity table maps function names to parameter counts. It is used by the
+  layout expander to infer correct parenthesization: a known function with arity
+  N consumes the next N indented forms as its arguments. Unknown forms fall back
+  to generic layout rules.
+
+[OBS id:obs.wisp.arity-sources src:wisp.c conf:high]
+  The arity table is populated from three sources:
+  - Builtin functions: =wisp_register_arities_from_env= scans the env for
+    registered functions and inserts their param counts.
+  - FFI C headers: libclang-parsed function signatures from =include= directives
+    register their arities during the Phase 0 pre-pass.
+  - Layout constructors: struct field counts from =layout= declarations and FFI
+    structs are registered as constructor arities.
+
+[OBS id:obs.wisp.arity-ordering src:main.c conf:high]
+  Arity registration order matters: FFI arities must be registered before the
+  main wisp expansion pass so that imported C functions get correct layout
+  inference. =main.c:'s Phase 0 (FFI pre-pass) handles this before Phase 1
+  (wisp expansion).
+
+* Sugar Transforms
+:PROPERTIES:
+:ID: monadc.context.wisp.sugar-transforms
+:CUSTOM_ID: wisp-sugar-transforms
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: wisp.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.wisp.qmark-sugar src:wisp.c conf:high]
+  =?-sugar= (method-call sugar): =(contains? var arg)= transforms to
+  =(var contains? arg)= when =var= is an untyped symbol. This enables
+  object.method() style calls in wisp. It fires only when the first argument
+  is a bare identifier — literals and function calls bypass the transform.
+  Workaround: bind the variable with a type annotation to prevent the sugar.
+
+[OBS id:obs.wisp.bang-sugar src:wisp.c conf:high]
+  =!-sugar= (mutation-call sugar): =(conj! var arg)= transforms to
+  =(var conj! arg)= when =var= is an untyped symbol. Same mechanism and
+  constraints as ?-sugar. Affects all !-suffixed builtins: =conj!=, =disj!=,
+  =append!=, and any future !-suffixed functions.
+
+[OBS id:obs.wisp.at-sugar src:wisp.c conf:high]
+  =@-sugar= (indexing shorthand): array/list indexing via =@= syntax.
+
+[OBS id:obs.wisp.infix-sugar src:wisp.c conf:high]
+  Infix detection: =3 + 4= transforms to =(+ 3 4)=. Standard arithmetic and
+  comparison operators are recognized as infix when they appear between two
+  expressions on the same line.
+
+[OBS id:obs.wisp.pipe-sugar src:wisp.c conf:high]
+  Pipe sugar: =x |> f= transforms to =(f x)=. Pipe chains are handled by the
+  wisp transformer using the arity table to determine correct grouping.
+
+* Integration Points
+:PROPERTIES:
+:ID: monadc.context.wisp.integration
+:CUSTOM_ID: wisp-integration
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: wisp.c, main.c, ffi.c
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.wisp.ffi-arity-flow from:obs.wisp.arity-sources conf:high]
+  The FFI pre-pass (=main.c: Phase 0) parses =include= headers via libclang and
+  registers every C function's arity with wisp before the main expansion pass.
+  This means that =include <raylib.h>= followed by =InitWindow 1920 1080 "Hi"=
+  correctly generates =(InitWindow 1920 1080 "Hi")= because wisp knows
+  InitWindow takes 3 params.
+
+[INF id:inf.wisp.builtin-arity-flow from:obs.wisp.arity-sources conf:high]
+  Builtin arities are registered twice: once from a temporary env before wisp
+  expansion (so forms like =define=, =if=, =until= get correct layout), and
+  again from the real codegen env during Phase 3.
+
+[OBS id:obs.wisp.env-arity-registration src:wisp.c conf:high]
+  =wisp_register_arities_from_env= walks the entire env hash table and
+  registers =ENV_FUNC= entries by their param count. =ENV_BUILTIN= entries
+  with known arity tables are also registered.
+
+* Known Limitations
+:PROPERTIES:
+:ID: monadc.context.wisp.limitations
+:CUSTOM_ID: wisp-limitations
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: wisp.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.wisp.define-multiline-broken src:command-output conf:high]
+  Wisp-style =define= with multi-line lambda body is broken:
+  #+BEGIN_EXAMPLE
+  define square :: Int -> Int
+    x -> x * x
+  #+END_EXAMPLE
+  =x= remains unbound. The wisp expander does not correctly create lambda
+  bindings from multi-line define syntax with =->= arrows.
+
+[OBS id:obs.wisp.typed-value-broken src:command-output conf:high]
+  Wisp-style =define x :: Type value= is not supported:
+  #+BEGIN_EXAMPLE
+  define x :: Int 42
+  #+END_EXAMPLE
+  Error: =Expected ')' to close define=.
+
+[OBS id:obs.wisp.char-escape-newline src:wisp.c,reader.c conf:high]
+  Char literals with ='\n'= fail because wisp expands =\\n= to a real newline
+  character, splitting the literal across two lines. The paragraph tokenizer
+  then sees an orphan closing ='= token on the next line. This is inherent to
+  wisp's line-based tokenization — escape sequences that produce whitespace or
+  newlines cannot be used inside char literals in wisp mode.
+
+[OBS id:obs.wisp.sugar-first-arg src:wisp.c conf:high]
+  Both ?-sugar and !-sugar fire only when the first argument is a bare,
+  untyped symbol. This means =(conj! {1 2 3} 4)= works correctly (first arg is
+  a literal), while =(conj! s 3)= with untyped =s= becomes =(s conj! 3)=
+  (method-call sugar). The workaround is to type-annotate the variable:
+  =(define [s :: Set] ...)=.
+
+* Coverage
+:PROPERTIES:
+:ID: monadc.context.wisp.coverage
+:CUSTOM_ID: wisp-coverage
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: tests/
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.wisp.sugar-tests src:tests/sugar/ conf:high]
+  Wisp desugaring is tested by =tests/sugar/= (192 TSV entries covering all
+  sugar types). Full compile/run tests are in =tests/wisp/=.
+
+[OBS id:obs.wisp.reader-atoms-overlap src:tests/reader-atoms.tsv conf:high]
+  Many =reader-atoms.tsv= entries also exercise wisp paths since the test
+  runner feeds source through the full wisp→reader pipeline.

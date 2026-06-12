@@ -1,0 +1,121 @@
+[
+  {
+    "type": "list",
+    "items": [
+      {
+        "type": "symbol",
+        "name": "module"
+      },
+      {
+        "type": "symbol",
+        "name": "Main"
+      }
+    ]
+  },
+  {
+    "type": "list",
+    "items": [
+      {
+        "type": "symbol",
+        "name": "define"
+      },
+      {
+        "type": "symbol",
+        "name": "heap"
+      },
+      {
+        "type": "array",
+        "is_heap": true,
+        "elements": [
+          {
+            "type": "number",
+            "value": "1"
+          },
+          {
+            "type": "number",
+            "value": "2"
+          },
+          {
+            "type": "number",
+            "value": "3"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "type": "list",
+    "items": [
+      {
+        "type": "symbol",
+        "name": "for"
+      },
+      {
+        "type": "array",
+        "is_heap": false,
+        "elements": [
+          {
+            "type": "symbol",
+            "name": "iter"
+          },
+          {
+            "type": "number",
+            "value": "0"
+          },
+          {
+            "type": "list",
+            "items": [
+              {
+                "type": "symbol",
+                "name": "count"
+              },
+              {
+                "type": "symbol",
+                "name": "heap"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "list",
+        "items": [
+          {
+            "type": "symbol",
+            "name": "define"
+          },
+          {
+            "type": "symbol",
+            "name": "i"
+          },
+          {
+            "type": "list",
+            "items": [
+              {
+                "type": "symbol",
+                "name": "heap"
+              },
+              {
+                "type": "symbol",
+                "name": "iter"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "list",
+        "items": [
+          {
+            "type": "symbol",
+            "name": "show"
+          },
+          {
+            "type": "symbol",
+            "name": "i"
+          }
+        ]
+      }
+    ]
+  }
+]

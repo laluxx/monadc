@@ -332,14 +332,34 @@ void free_asm_instructions(AsmInstruction *instructions, int count) {
 
 static bool operand_is_immediate(const char *op) {
     if (!op) return false;
-    /* LLVM placeholder: $$N or $N */
-    if (op[0] == '$') return true;
+    /* LLVM inline-asm literal immediate: $$N. Single-dollar $N is an operand
+     * placeholder and its width must come from the constrained LLVM value. */
+    if (op[0] == '$' && op[1] == '$') return true;
     return false;
 }
 
 static bool operand_is_register(const char *op) {
     if (!op) return false;
     return op[0] == '%';
+}
+
+static int operand_placeholder_index(const char *op) {
+    if (!op || op[0] != '$' || op[1] == '$') return -1;
+    char *end = NULL;
+    long value = strtol(op + 1, &end, 10);
+    if (!end || *end != '\0' || value < 0 || value > 1024) return -1;
+    return (int)value;
+}
+
+static char llvm_int_suffix(LLVMValueRef value) {
+    if (!value) return 'l';
+    LLVMTypeRef ty = LLVMTypeOf(value);
+    if (!ty || LLVMGetTypeKind(ty) != LLVMIntegerTypeKind) return 'l';
+    unsigned width = LLVMGetIntTypeWidth(ty);
+    if (width <= 8) return 'b';
+    if (width <= 16) return 'w';
+    if (width <= 32) return 'l';
+    return 'q';
 }
 
 /* Infer AT&T size suffix from a register name, e.g. %eax->l, %rax->q, %ax->w, %al->b */
@@ -376,7 +396,8 @@ static bool needs_size_suffix(const char *mn) {
 
 // Build the AT&T syntax assembly string
 static char *build_asm_string(AsmInstruction *instructions, int count,
-                               Type *return_type, bool naked) {
+                               Type *return_type, LLVMValueRef *params,
+                               int param_count, bool naked) {
     // Estimate buffer size
     size_t bufsize = 4096;
     char *asm_str = malloc(bufsize);
@@ -395,8 +416,11 @@ static char *build_asm_string(AsmInstruction *instructions, int count,
                 const char *op = instructions[i].operands[j];
                 if (operand_is_immediate(op)) has_imm = true;
                 if (operand_is_register(op))  suffix = reg_size_suffix(op);
+                int placeholder = operand_placeholder_index(op);
+                if (placeholder > 0 && placeholder <= param_count)
+                    suffix = llvm_int_suffix(params[placeholder - 1]);
             }
-            if (has_imm) {
+            if (has_imm || !naked) {
                 snprintf(mnemonic_buf, sizeof(mnemonic_buf), "%s%c", mn, suffix);
                 mn = mnemonic_buf;
             }
@@ -429,8 +453,11 @@ static char *build_asm_string(AsmInstruction *instructions, int count,
 
         bool first_is_reg = (instructions[i].operand_count >= 1 &&
                              operand_is_register(instructions[i].operands[0]));
+        bool first_is_placeholder = (instructions[i].operand_count >= 1 &&
+                                     operand_placeholder_index(instructions[i].operands[0]) >= 0);
 
-        if (is_two_operand && instructions[i].operand_count == 2 && first_is_reg) {
+        if (is_two_operand && instructions[i].operand_count == 2 &&
+            (first_is_reg || (!naked && first_is_placeholder))) {
             // Swap operands: user wrote (add x y) → add $1, $2
             // We generate: add $2, $1 (add y to x, result in x)
             strcat(asm_str, " ");
@@ -465,7 +492,8 @@ LLVMValueRef codegen_inline_asm(LLVMContextRef context,
                                  LLVMValueRef *params,
                                  int param_count,
                                  bool naked) {          // <-- add
-    char *asm_str = build_asm_string(instructions, instruction_count, return_type, naked);
+    char *asm_str = build_asm_string(instructions, instruction_count, return_type,
+                                     params, param_count, naked);
 
     fprintf(stderr, "=== INLINE ASM ===\n");
     fprintf(stderr, "Assembly: %s\n", asm_str);

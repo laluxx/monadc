@@ -1,8 +1,8 @@
 ;; TEST-ID: tests.codegen.rt-make-string
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Runtime make-string function works.
-;; TEST-ATOM: (make-string 5 'x') = "xxxxx".
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: make-string edge cases.
+;; TEST-ATOM: (make-string 5 (Char 65)) has length 5 and all #\A
 ;; TEST-EXPECT: compile, run
-
 (module Main)
-(show (make-string 5 'x'))
+(show (make-string 5 (Char 65)))
+(show (make-string 0 (Char 66)))

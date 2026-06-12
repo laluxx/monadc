@@ -1,0 +1,7 @@
+;; TEST-ID: tests.codegen.rt-set-empty-ops
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Empty set operations (empty? returns False for sets — runtime bug).
+;; TEST-ATOM: (empty? {}) currently returns False (bug), (s1 1) checks containment
+;; TEST-EXPECT: compile, run
+(module Main)
+(show (empty? {}))

@@ -1,8 +1,8 @@
 ;; TEST-ID: tests.codegen.rt-string-adjacent
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Adjacent string literals concatenate at compile time.
-;; TEST-ATOM: "hello" "world" concatenates to "helloworld".
-;; TEST-EXPECT: compile, run
+;; TEST-CONTEXT: monadc.context.language.adjacent-strings, monadc.context.tests.expected-failures
+;; TEST-PURPOSE: Duplicate coverage for the connected-string diagnostic in the runtime/codegen corpus.
+;; TEST-ATOM: "hello""world" is not implicit compile-time concatenation.
+;; TEST-EXPECT: fail:compile
 
 (module Main)
 (show "hello""world")

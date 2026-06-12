@@ -1,0 +1,10 @@
+;; TEST-ID: tests.wisp.rt-wisp-quote
+;; TEST-CONTEXT: monadc.context.wisp.quote
+;; TEST-PURPOSE: Wisp quote syntax works
+;; TEST-ATOM: define sym 'hello creates a symbol
+;; TEST-EXPECT: compile, run
+module Main
+define sym 'hello
+show sym
+define lst '(1 2 3)
+show lst

@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.rt-str-predicates
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: String predicate functions starts-with?, ends-with?, contains?.
+;; TEST-ATOM: (starts-with? "hello world" "hello") = True,
+;;           (ends-with? "hello world" "world") = True,
+;;           (contains? "hello world" "lo wo") = True
+;; TEST-EXPECT: compile, run
+(module Main)
+(show (starts-with? "hello world" "hello"))
+(show (ends-with? "hello world" "world"))
+(show (contains? "hello world" "lo wo"))
+(show (starts-with? "hello" "x"))
+(show (contains? "abc" "xyz"))

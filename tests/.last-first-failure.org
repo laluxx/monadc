@@ -1,0 +1,188 @@
+#+TITLE: Last First Failing Test
+#+DATE: 2026-06-12T18:57:05
+
+[OBS id:obs.tests.last-first-failure src:tests/run.py conf:high]
+  This generated record captures the first failing test from the latest
+  suite run. It is intentionally overwritten on each run so the next
+  debugging pass can start from the earliest observed failure.
+
+* Failure
+- Test: =codegen.rt-data-bounded-enum=
+- Status: =FAIL=
+- Duration: =[  24.03 ] ms=
+- Reason: =compile failed=
+- Fixture: =tests/codegen/rt_data_bounded_enum.mon=
+
+** Metadata
+- =TEST-ATOM=: (data T A | B | C deriving [Bounded Enum]) should enumerate.
+- =TEST-CONTEXT=: monadc.context.language.runtime-codegen-corpus
+- =TEST-EXPECT=: compile, run
+- =TEST-ID=: tests.codegen.rt-data-bounded-enum
+- =TEST-PURPOSE=: Data deriving Bounded and Enum supports fromEnum and maxBound.
+
+** Context Links
+- =monadc.context.language.runtime-codegen-corpus=
+
+** Output
+#+BEGIN_EXAMPLE
+
+=== desugared AST (<repo>/tests/codegen/rt_data_bounded_enum.mon) ===
+[compile] <repo>/tests/codegen/rt_data_bounded_enum.mon
+(module Main)
+(data T A | B | C deriving [Bounded Enum Show])
+(show (fromEnum A))
+(show (fromEnum B))
+(show (fromEnum C))
+(show (fromEnum (maxBound :: T)))
+(show (fromEnum (minBound :: T)))
+=== end desugared AST ===
+
+├─ Infer (show (fromEnum __ctor_A))
+│   ├─ Infer show
+│   └─ OK: show : Π(A : Type 0). Π(_ : #0). String
+│   ├─ Check (fromEnum __ctor_A) ⇐ ?0
+│   │   ├─ Infer (fromEnum __ctor_A)
+│   │   │   ├─ Infer fromEnum
+│   │   │   └─ OK: fromEnum : ?1
+│   │   └─ OK: (fromEnum __ctor_A) : ?2
+│   │   ├─ Conv  ?2 ≡ ?0
+│   │   └─ OK
+│   └─ OK
+└─ OK: (show (fromEnum __ctor_A)) : String
+
+  [dep] Warning: 2 unsolved metavariable(s) remain
+    • ?0 [?impl] at depth 0
+      Expected type: Type 0
+    • ?1 [fromEnum] at depth 0
+      Expected type: Type 0
+  - Hint: This is expected during bootstrap. Untyped library functions (like '>=') generate holes.
+
+├─ Infer (show (fromEnum __ctor_B))
+│   ├─ Infer show
+│   └─ OK: show : Π(A : Type 0). Π(_ : #0). String
+│   ├─ Check (fromEnum __ctor_B) ⇐ ?3
+│   │   ├─ Infer (fromEnum __ctor_B)
+│   │   │   ├─ Infer fromEnum
+│   │   │   └─ OK: fromEnum : ?4
+│   │   └─ OK: (fromEnum __ctor_B) : ?5
+│   │   ├─ Conv  ?5 ≡ ?3
+│   │   └─ OK
+│   └─ OK
+└─ OK: (show (fromEnum __ctor_B)) : String
+
+  [dep] Warning: 4 unsolved metavariable(s) remain
+    • ?0 [?impl] at depth 0
+      Expected type: Type 0
+    • ?1 [fromEnum] at depth 0
+      Expected type: Type 0
+    • ?3 [?impl] at depth 0
+      Expected type: Type 0
+    • ?4 [fromEnum] at depth 0
+      Expected type: Type 0
+  - Hint: This is expected during bootstrap. Untyped library functions (like '>=') generate holes.
+
+├─ Infer (show (fromEnum __ctor_C))
+│   ├─ Infer show
+│   └─ OK: show : Π(A : Type 0). Π(_ : #0). String
+│   ├─ Check (fromEnum __ctor_C) ⇐ ?6
+│   │   ├─ Infer (fromEnum __ctor_C)
+│   │   │   ├─ Infer fromEnum
+│   │   │   └─ OK: fromEnum : ?7
+│   │   └─ OK: (fromEnum __ctor_C) : ?8
+│   │   ├─ Conv  ?8 ≡ ?6
+│   │   └─ OK
+│   └─ OK
+└─ OK: (show (fromEnum __ctor_C)) : String
+
+  [dep] Warning: 6 unsolved metavariable(s) remain
+    • ?0 [?impl] at depth 0
+      Expected type: Type 0
+    • ?1 [fromEnum] at depth 0
+      Expected type: Type 0
+    • ?3 [?impl] at depth 0
+      Expected type: Type 0
+    • ?4 [fromEnum] at depth 0
+      Expected type: Type 0
+    • ?6 [?impl] at depth 0
+      Expected type: Type 0
+    • ?7 [fromEnum] at depth 0
+      Expected type: Type 0
+  - Hint: This is expected during bootstrap. Untyped library functions (like '>=') generate holes.
+
+├─ Infer (show (fromEnum (maxBound :: T)))
+│   ├─ Infer show
+│   └─ OK: show : Π(A : Type 0). Π(_ : #0). String
+│   ├─ Check (fromEnum (maxBound :: T)) ⇐ ?9
+│   │   ├─ Infer (fromEnum (maxBound :: T))
+│   │   │   ├─ Infer fromEnum
+│   │   │   └─ OK: fromEnum : ?10
+│   │   └─ OK: (fromEnum (maxBound :: T)) : ?11
+│   │   ├─ Conv  ?11 ≡ ?9
+│   │   └─ OK
+│   └─ OK
+└─ OK: (show (fromEnum (maxBound :: T))) : String
+
+  [dep] Warning: 8 unsolved metavariable(s) remain
+    • ?0 [?impl] at depth 0
+      Expected type: Type 0
+    • ?1 [fromEnum] at depth 0
+      Expected type: Type 0
+    • ?3 [?impl] at depth 0
+      Expected type: Type 0
+    • ?4 [fromEnum] at depth 0
+      Expected type: Type 0
+    • ?6 [?impl] at depth 0
+      Expected type: Type 0
+    • ?7 [fromEnum] at depth 0
+      Expected type: Type 0
+    • ?9 [?impl] at depth 0
+      Expected type: Type 0
+    • ?10 [fromEnum] at depth 0
+      Expected type: Type 0
+  - Hint: This is expected during bootstrap. Untyped library functions (like '>=') generate holes.
+
+├─ Infer (show (fromEnum (minBound :: T)))
+│   ├─ Infer show
+│   └─ OK: show : Π(A : Type 0). Π(_ : #0). String
+│   ├─ Check (fromEnum (minBound :: T)) ⇐ ?12
+│   │   ├─ Infer (fromEnum (minBound :: T))
+│   │   │   ├─ Infer fromEnum
+│   │   │   └─ OK: fromEnum : ?13
+│   │   └─ OK: (fromEnum (minBound :: T)) : ?14
+│   │   ├─ Conv  ?14 ≡ ?12
+│   │   └─ OK
+│   └─ OK
+└─ OK: (show (fromEnum (minBound :: T))) : String
+
+  [dep] Warning: 10 unsolved metavariable(s) remain
+    • ?0 [?impl] at depth 0
+      Expected type: Type 0
+    • ?1 [fromEnum] at depth 0
+      Expected type: Type 0
+    • ?3 [?impl] at depth 0
+      Expected type: Type 0
+    • ?4 [fromEnum] at depth 0
+      Expected type: Type 0
+    • ?6 [?impl] at depth 0
+      Expected type: Type 0
+    • ?7 [fromEnum] at depth 0
+      Expected type: Type 0
+    • ?9 [?impl] at depth 0
+      Expected type: Type 0
+    • ?10 [fromEnum] at depth 0
+      Expected type: Type 0
+    • ?12 [?impl] at depth 0
+      Expected type: Type 0
+    • ?13 [fromEnum] at depth 0
+      Expected type: Type 0
+  - Hint: This is expected during bootstrap. Untyped library functions (like '>=') generate holes.
+
+warning: deriving Enum for 'T' but Enum class not defined
+<repo>/tests/codegen/rt_data_bounded_enum.mon:9:7: error: unknown function: fromEnum
+  module: Main
+[dep] running bidirectional type checker...
+Constructor: A -> T
+Constructor: B -> T
+Constructor: C -> T
+Data type: T (3 constructors)
+#+END_EXAMPLE

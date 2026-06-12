@@ -1,8 +1,8 @@
-#+TITLE: Language Formalization Context
+#+TITLE: Language Formalization
 #+AUTHOR: Codex
-#+DATE: 2026-06-11
+#+DATE: 2026-06-12
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-11
+#+LAST_MODIFIED: 2026-06-12
 #+LANGUAGE: en
 #+STARTUP: showeverything
 #+OPTIONS: toc:2 num:t
@@ -14,7 +14,7 @@
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -30,7 +30,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-11
-:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
 :SOURCE: context/language.org
@@ -38,7 +38,8 @@
 :END:
 
 [OBS id:obs.context.language.file src:context/language.org conf:high]
-This file records the executable formalization layer for Monad language syntax.
+  This file records the durable formalization of Monad language syntax, type
+  system, and known codegen gaps. It is not a changelog — it is a reference.
 
 * Syntax Corpus
 :PROPERTIES:
@@ -51,7 +52,7 @@ This file records the executable formalization layer for Monad language syntax.
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-11
-:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
 :SOURCE: tests/reader-atoms.tsv
@@ -61,282 +62,302 @@ This file records the executable formalization layer for Monad language syntax.
 [DEC id:dec.language.syntax-corpus date:2026-06-11 by:codex]
   =tests/reader-atoms.tsv= is a table-driven parser conformance corpus. Each
   row is one small language atom that must parse and serialize through
-  =--emit-json=.
+  =--emit-json=. It is the primary mechanism for testing reader correctness.
 
-[DEC id:dec.language.corpus-size date:2026-06-11 by:codex]
-  The corpus has been expanded to 237+ entries covering: numeric literals,
+[DEC id:dec.language.corpus-coverage date:2026-06-11 by:codex]
+  The corpus covers: numeric literals (int/float/hex/bin/oct/radix/underscore),
   string/char literals, path literals, keywords, symbols, arrays, heap arrays,
   sets, maps, ranges, wisp forms, comment forms, quoted/quasiquoted forms,
-  lambda forms, let/let*/letrec forms, case/match/cond control forms, do/begin
-  sequences, with/set! mutations, pipe/dot operators, for comprehensions,
-  data/type/class/instance/module/import declarations, buffer type declarations,
-  refinement types, address-of expressions, and feature conditionals.
+  lambda/let/let*/letrec/case/match/cond forms, do/begin sequences, with/set!
+  mutations, pipe/dot operators, for comprehensions, data/type/class/instance/
+  module/import declarations, buffer type declarations (wisp + paren),
+  refinement types, address-of expressions, feature conditionals, type
+  quantifiers (all/forall/some/exists), annotation forms (::/ann), import
+  renaming, arithmetic/built-in operators, define function shorthand, and
+  layout variants.
 
 [DEC id:dec.language.stdout-golden date:2026-06-11 by:human]
   Executable fixtures may have a sibling =.stdout= file. When present, the test
-  runner executes the compiled program and requires the program output to end with
-  that file exactly, allowing stable suffix checks while ignoring noisy compiler
-  output.
+  runner executes the compiled program and requires the program output to end
+  with that file exactly, allowing stable suffix checks while ignoring noisy
+  compiler output.
 
-* Runtime Codegen Corpus
+
+* Runtime-Sized Arrays and Path Literal Validation
 :PROPERTIES:
-:ID: monadc.context.language.runtime-codegen-corpus
-:CUSTOM_ID: runtime-codegen-corpus
+:ID: monadc.context.language.runtime-sized-arrays
+:CUSTOM_ID: runtime-sized-arrays
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c,infer.c,tests/codegen/rt_path_literal_rejected.mon,tests/path_heap_literals.mon
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.language.path-literals-compile-time-error date:2026-06-12 by:codex]
+  Path literals are lexer/parser artifacts only. Syntactically valid Unix path
+  tokens such as =~/dir/=, =/tmp/file=, and =./file= may be parsed as
+  =AST_PATH= for diagnostics and JSON, but they are ill-typed as values.
+  Inference rejects them directly, including inside quoted data, and codegen
+  keeps a fallback rejection path. Filesystem paths used as values should be
+  quoted strings.
+
+[OBS id:obs.language.heap-array-fat-shape src:types.c:440,codegen.c:647 conf:high]
+  =type_arr_heap(elem)= records heap arrays with =arr_is_heap=true= and
+  =arr_size=-1=; =type_to_llvm= maps all runtime-sized arrays to the shared
+  =arr.fat*= representation.
+
+[FIX id:fix.language.heap-array-show-count-for date:2026-06-12 by:codex]
+  =show=, =count=, =head=, =tail=, and array-as-function indexing now use the
+  same runtime-sized predicate for fat arrays, heap arrays, and unknown-size
+  arrays. This fixes Wisp =for i -> heap= because that sugar expands through
+  =(count heap)= and =(heap iter)=.
+
+* Adjacent String Literals
+:PROPERTIES:
+:ID: monadc.context.language.adjacent-strings
+:CUSTOM_ID: adjacent-string-literals
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/rt_adjacent_strings.mon
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.language.adjacent-strings-error date:2026-06-12 by:human]
+  MonadC does not support implicit adjacent string literal concatenation. A
+  connected spelling such as ="hello""world"= is a compile-time syntax error.
+  Users should write one literal, for example ="helloworld"=, or use an
+  explicit string operation when concatenation is intended.
+
+[INF id:inf.language.adjacent-strings-rationale from:dec.language.adjacent-strings-error conf:high]
+  Rejecting connected string literals keeps the surface language unambiguous:
+  strings already support multi-line contents inside one pair of quotes, so
+  C-style literal adjacency would mostly hide typos and produce confusing
+  downstream type errors.
+
+* Codegen Dispatch Architecture
+:PROPERTIES:
+:ID: monadc.context.language.codegen-dispatch
+:CUSTOM_ID: codegen-dispatch
 :CONTEXT_KIND: component
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: codex
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
-:CONTEXT_CREATED: 2026-06-11
-:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.language.dispatch-architecture src:codegen.c conf:high]
+  Codegen dispatch has three layers:
+  1. =codegen_expr= switches on AST type (AST_LIST, AST_SYMBOL, AST_NUMBER, etc.)
+  2. For =AST_LIST=, it strcmp's the head symbol against 83+ known symbols
+     (codegen.c:3889-12492). These ARE callable from paren-mode.
+  3. =register_builtins= (codegen.c:12960-13119) registers 94 entries in the
+     env. These are NOT callable unless they also have a strcmp handler.
+
+[DEC id:dec.language.dispatch-rule date:2026-06-12 by:codex]
+  A function is callable from paren-mode ONLY if it has a strcmp handler in
+  =codegen_expr=. =register_builtins=-only functions (=concat=, =substring=,
+  =reverse=, =nth=, =length=, =reduce=, =fn=, =lambda=, =cond=, =when=, =let=,
+  =let*=, =letrec=) are NOT directly callable.
+
+* Working Dispatch
+:PROPERTIES:
+:ID: monadc.context.language.working-dispatch
+:CUSTOM_ID: working-dispatch
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.language.working-arithmetic src:tests/codegen conf:high]
+  Arithmetic dispatches: + - * / % mod. Supports int, float, mixed, variadic,
+  and nested forms.
+
+[OBS id:obs.language.working-bitwise src:tests/codegen conf:high]
+  Bitwise dispatches: & ~ bit-xor << >> >>>.
+
+[OBS id:obs.language.working-comparison src:tests/codegen conf:high]
+  Comparison dispatches: = != < > <= >=. Works for int, float, mixed.
+
+[OBS id:obs.language.working-logic src:tests/codegen conf:high]
+  Logic dispatches: and or not. Short-circuit evaluation works.
+
+[OBS id:obs.language.working-control src:tests/codegen conf:high]
+  Control dispatches: if begin unless while.
+
+[OBS id:obs.language.working-type-preds src:tests/codegen conf:high]
+  All 17 type predicates work: Int? Float? Number? Char? String? Bool? Symbol?
+  Keyword? List? Ratio? Set? Map? Fn? Hex? Bin? Oct? Arr?. Also nil? empty?
+  pair? Set? collection? Map?.
+
+[OBS id:obs.language.working-type-convs src:tests/codegen conf:high]
+  Type conversions work: Int Float Char Hex Oct Bin.
+
+[OBS id:obs.language.working-string src:tests/codegen conf:high]
+  String operations work: make-string count starts-with? ends-with? contains?
+  string-indexing ("str" i). Notably =count= works on both strings and lists.
+
+[OBS id:obs.language.working-list src:tests/codegen conf:high]
+  List operations work: list (zero-arg), car cdr cons . ++ empty? nil? pair?
+  count make-list. =(list 1 2 3)= with multiple args is broken (see gaps).
+
+[OBS id:obs.language.working-set src:tests/codegen conf:high]
+  Set operations work: conj disj conj! disj! contains? Set? collection?
+  set-as-function (=(s 1)=). Requires type annotation on the bound variable to
+  avoid wisp !-sugar.
+
+[OBS id:obs.language.working-other src:tests/codegen conf:high]
+  Other working dispatches: quote, define, set!, show, ?? (null-coalesce),
+  address-of, array indexing, quoted-list indexing, equal?, list-empty?,
+  fraction-as-function (=(1/4 x)=).
+
+* Known Codegen Gaps
+:PROPERTIES:
+:ID: monadc.context.language.codegen-gaps
+:CUSTOM_ID: codegen-gaps
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
 :SOURCE: tests/codegen
 :CONFIDENCE: high
 :END:
 
-[DEC id:dec.language.runtime-codegen-corpus date:2026-06-11 by:codex]
-  =tests/codegen/*.mon= fixtures are the executable language corpus. New
-  runtime promises should be captured as small compile/run atoms with sibling
-  =.stdout= golden files whenever behavior reaches code generation.
+[OBS id:obs.language.gap-closures src:codegen.c conf:high]
+  Closures are broken: =fn=, =lambda=, =defn= have no strcmp dispatch handler.
+  No closure allocation exists in codegen. This blocks higher-order functions:
+  =map=, =filter=, =apply=, =partial=.
 
-[OBS id:obs.language.runtime-builtins-coverage src:codegen.c:12960 conf:high]
-  The runtime builtin registry exposes arithmetic, bitwise, comparison,
-  collection, control-flow, conversion, predicate, and string helpers. The
-  codegen corpus should grow across these families so parser-only syntax atoms
-  gain executable coverage where possible.
+[OBS id:obs.language.gap-registered-only src:codegen.c conf:high]
+  These functions are =register_builtins=-only — registered in env but lack
+  strcmp dispatch and are unreachable from paren-mode: =concat=, =substring=,
+  =reverse=, =nth=, =length=, =reduce=.
 
-[OBS id:obs.language.runtime-codegen-batch-2026-06-11 src:tests/codegen conf:high]
-  Added codegen-backed atoms for comparison edges, collection access, string
-  measurement helpers, and extended runtime type predicates.
+[OBS id:obs.language.gap-control-forms src:codegen.c conf:high]
+  These control forms have no strcmp handler: =cond=, =when=, =let=, =let*=,
+  =letrec=, =do=, =with=. =cond= is treated as an ordinary variable reference
+  by the parser.
 
-[INF id:inf.language.registered-vs-codegen-callable from:obs.language.runtime-builtins-coverage conf:medium]
-  The builtin registry is broader than the set of names currently callable by
-  codegen. Coverage expansion should prove runtime-callable behavior first and
-  leave unsupported registered helpers as future implementation targets.
+[OBS id:obs.language.gap-map-runtime src:runtime.c conf:high]
+  Map and set runtime construction is broken for untyped contexts. Literals
+  like ={:a 1}= and ={1 2 3}= produce garbage values without explicit =:: Map=
+  / =:: Set= type annotation. Functional (=assoc=, =dissoc=, =merge=) always
+  receive garbage inputs. Only =assoc! / find= with typed variables work.
 
-[OBS id:obs.language.runtime-codegen-batch-2026-06-11b src:tests/codegen conf:high]
-  Added codegen-backed coverage atoms for =when=, =unless= skip behavior,
-  =for= accumulation, array predicates/count, set/map predicates, and string
-  prefix/suffix predicates. These fixtures are allowed to expose deep codegen
-  gaps while preserving syntactically valid language examples.
+[OBS id:obs.language.gap-list-variadic src:codegen.c:7345 conf:high]
+  =(list 1 2 3)= with multiple arguments produces a list that returns =nil= for
+  =(car (list 1 2 3))=. Only zero-arg =(list)= works. =(make-list n val)= works
+  correctly. The bug is in runtime list construction from variadic args.
 
-[OBS id:obs.language.codegen-gaps-2026-06-11 src:tests/codegen conf:high]
-  Current codegen-backed coverage exposes these non-syntax implementation gaps:
-  =rt_collection_access= parses and links but crashes at runtime for =head= /
-  =tail= on quoted lists; =rt_string_helpers= parses but =length= is not
-  codegen-callable; =rt_when_effect= parses but =when= is not codegen-callable.
+[OBS id:obs.language.gap-tail src:runtime.c conf:high]
+  =tail= on lists segfaults. Runtime list implementation bug.
 
-[OBS id:obs.language.runtime-codegen-batch-2026-06-11c src:tests/codegen conf:high]
-  Added codegen-backed coverage for character/keyword/symbol predicates,
-  fixed-width integer conversions, map query helpers, set literal
-  predicate/count behavior, and =code= reflection on a defined function.
+[OBS id:obs.language.gap-asm-naked src:asm.c conf:high]
+  Inline assembly with =:naked True= compiles but does not propagate results —
+  =add y %rax= returns the first parameter only, not the sum. The raw asm
+  output has no LLVM constraint wiring.
 
-[OBS id:obs.language.codegen-gaps-2026-06-11c src:tests/codegen conf:high]
-  Exploration found that =(contains? value set)= parses but lowers to an
-  invalid =rt_set_contains= call signature, while =(contains? set value)= is
-  treated like set-function application. =code= reflection parses but currently
-  reports no stored source for a freshly defined function.
+[OBS id:obs.language.gap-asm-nonaked src:asm.c:346 conf:high]
+  Inline assembly with =:naked False= fails because =reg_size_suffix= infers
+  32-bit 'l' suffix for Int parameters (which are i64), producing invalid
+  instructions like =addl= with 64-bit registers. Fix: check LLVM type width
+  or Int type kind to emit 'q'.
 
-[OBS id:obs.language.runtime-codegen-batch-2026-06-11d src:tests/codegen conf:high]
-  Added structured-data coverage for positional layout construction with field
-  access, keyword-style layout construction, and ADT constructor declarations.
-  Positional layout fields compile/run with deterministic output; ADT
-  constructors compile/run as values; keyword layout construction currently
-  remains implementation pressure.
+[OBS id:obs.language.asm-nonaked-i64-fixed src:asm.c conf:high]
+  Non-naked inline asm now infers bare integer instruction suffixes from LLVM
+  placeholder operand widths. For =Int= parameters this emits =q=, and
+  two-operand arithmetic swaps LLVM placeholders so =(asm add x y)= lowers to
+  =addq $2, $1= under constraints =r,0,r=. Verified by
+  =rt_asm_function_nonaked.mon= printing =30= for =(add 10 20)=.
 
-[OBS id:obs.language.layout-keyword-gap-2026-06-11 src:tests/codegen/rt_layout_keyword_constructor.mon conf:high]
-  =(Point :x 3 :y 4)= parses as a layout constructor call but dependent type
-  checking treats the keyword tokens as positional arguments, so construction
-  fails before codegen instead of mapping keywords to fields.
+[OBS id:obs.language.gap-superscript src:tests/codegen conf:high]
+  Superscript sugar (=x²=) desugars to =(^ x 2)=, but =^= has no strcmp
+  dispatch handler despite being a registered builtin.
 
-[OBS id:obs.language.runtime-codegen-batch-2026-06-11e src:tests/codegen conf:high]
-  Added codegen-backed reader-sugar coverage for percentage literals, periodic
-  decimals, infix arithmetic/comparison, postfix function calls, postfix array
-  indexing, assignment-arrow mutation, lambda literal calls, and superscript
-  exponent syntax.
+[OBS id:obs.language.gap-keyword-layout src:dep.c conf:high]
+  Keyword-style layout construction (=(Point :x 3 :y 4)=) parses but the
+  dependent type checker treats keyword tokens as positional arguments, so
+  construction fails before codegen.
 
-[OBS id:obs.language.sugar-gaps-2026-06-11 src:tests/codegen/rt_superscript_sugar.mon conf:high]
-  Superscript sugar parses and desugars to =(^ x n)=, but =^= is not currently
-  codegen-callable. A pipe example shaped as =(41 |> inc)= fails during reader
-  validation because the desugaring attempts to call the numeric literal.
+[OBS id:obs.language.gap-wisp-define src:wisp.c conf:high]
+  Wisp-style multi-line =define= with =->= arrow syntax does not create correct
+  lambda bindings. The workaround is to use s-expression form.
 
-[OBS id:obs.language.runtime-codegen-batch-2026-06-11f src:tests/codegen conf:high]
-  Added codegen-backed coverage for begin variants, feature conditional
-  preprocessing, module export declarations, type aliases, refinement
-  annotations, simple class/instance declarations, do sequencing, with bindings,
-  and top-level mutual-recursion forward references.
+[OBS id:obs.language.gap-core-prelude src:core/ conf:high]
+  Core prelude (=Coll.mon=, =Test.mon=) is NOT automatically imported. Users
+  must add explicit =import= declarations. Additionally, core modules have
+  compilation failures: variadic =gcd= in =Math.mon=, =takeWhile= inference in
+  =Coll.mon=, Wisp =tests= block parsing in =Set.mon=, old =::= annotation
+  syntax in =Ascii.mon=.
 
-[OBS id:obs.language.form-gaps-2026-06-11 src:tests/codegen conf:high]
-  =do= and =with= forms parse and emit JSON but are not currently
-  codegen-callable. A top-level mutually recursive pair where the first function
-  calls the second before its definition also parses but fails as an unknown
-  function. A compact multi-binding =letrec= probe failed reader validation and
-  was not promoted to the codegen corpus.
-
-[OBS id:obs.language.current-codegen-pressure-2026-06-11 src:tests/run.py conf:high]
-  The current codegen corpus intentionally includes syntactically valid fixtures
-  that expose implementation pressure: multi-argument arithmetic edge cases,
-  nested collection display, set =contains?= lowering, string =++= on strings,
-  =do=, =with=, superscript exponent calls, keyword layout construction,
-  function code reflection, collection =head=/=tail= runtime behavior, and
-  top-level mutual recursion forward references.
-
-[OBS id:obs.language.runtime-codegen-batch-2026-06-11g src:tests/codegen conf:high]
-  Added codegen-backed coverage for bound-array count/index behavior, record
-  declarations, char constructor aliases, adjacent string literals, and
-  size-array value syntax. Also added the missing golden stdout for the existing
-  =rt_array_full= fixture.
-
-[OBS id:obs.language.literal-form-gaps-2026-06-11 src:tests/codegen conf:high]
-  =record= declarations, =char= / =int->char= aliases, adjacent string literal
-  application, and =[16kb]= as a value all parse and emit JSON but currently
-  expose deeper codegen/type behavior gaps. Quoting a parenthesized list via
-  =(quote (1 2 3))= failed reader validation in the tested shape and was not
-  promoted as a codegen fixture.
-
-[OBS id:obs.language.runtime-codegen-batch-2026-06-11h src:tests/codegen conf:high]
-  Added codegen-backed coverage for =tests= blocks, =include= headers, runtime
-  =error= aborts, top-level =asm= placement, and import option forms.
-
-[OBS id:obs.language.special-form-gaps-2026-06-11 src:tests/codegen conf:high]
-  =(tests ...)= and =(include "math.h")= parse, compile, and allow following
-  code to run. =(error "boom")= compiles and aborts at runtime, but the runner
-  lacks expected-nonzero support. Top-level =asm= parses but is rejected because
-  inline assembly is currently only valid as a function body. Import option
-  forms emit JSON but are rejected by current import validation or module
-  resolution.
-
-* Reader Header Coverage Checklist
+* Pattern Matching
 :PROPERTIES:
-:ID: monadc.context.language.reader-header-coverage
-:CUSTOM_ID: reader-header-coverage
-:CONTEXT_KIND: task
+:ID: monadc.context.language.pattern-matching
+:CUSTOM_ID: pattern-matching
+:CONTEXT_KIND: component
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
-:CONTEXT_OWNER: human
+:CONTEXT_OWNER: codex
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
-:CONTEXT_CREATED: 2026-06-11
-:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
-:SOURCE: reader.h
+:SOURCE: pmatch.c
 :CONFIDENCE: high
 :END:
 
-[DEC id:dec.language.reader-header-driven-coverage date:2026-06-11 by:human]
-  Coverage expansion must be driven from =reader.h=: every AST kind, token
-  family, pattern kind, and payload variant should gain parser coverage and,
-  where possible, codegen-backed fixtures. Combinations of atoms should be added
-  continuously as living regression pressure.
+[OBS id:obs.language.pmatch-pattern-types src:pmatch.c conf:high]
+  Supported patterns: integer literal, float literal, string literal, wildcard
+  (=_=), variable binding, empty-list, fixed-list, tail-list (=head | tail=),
+  guard clauses, lambda pattern clauses, bare ADT constructors, constructor
+  patterns with field bindings.
 
-[OBS id:obs.language.reader-ast-surface src:reader.h:39 conf:high]
-  =reader.h= exposes these AST families for coverage: numbers, symbols, strings,
-  paths, chars, lists, keywords, ratios, arrays, lambdas, asm, refinements,
-  tests blocks, address-of, ranges, layouts, sets, maps, pattern matching, data
-  declarations, classes, instances, and lambda literals.
+[OBS id:obs.language.pmatch-leading-pipe src:pmatch.c conf:high]
+  Match clauses may have an optional leading =|= before the pattern:
+  =(match x with | 0 -> a | _ -> b)=. The parser consumes this as a clause
+  separator rather than treating it as part of the pattern.
 
-[OBS id:obs.language.reader-payload-surface src:reader.h:66 conf:high]
-  Payload-level coverage should include lambda rest/anonymous/typed params,
-  lambda docstrings and aliases, asm instruction lists, refinement doc/alias,
-  array heap flags, ranges with start/step/end/infinite and array/list shapes,
-  layout inline/pointer/array fields with packed/aligned options, data type
-  parameters and deriving clauses, class associated types/default methods, and
-  instance associated values/method bodies.
-
-[OBS id:obs.language.reader-token-surface src:reader.h:360 conf:high]
-  Token-family coverage should include parentheses, brackets, braces, hash-map
-  braces, symbols, numbers, strings, paths, chars, keywords, quote, arrows,
-  feature conditionals, ranges, dot field access, pipes, colons, line directives,
-  and corner-bracket quasiquote/unquote tokens.
-
-[OBS id:obs.language.runtime-codegen-batch-2026-06-11i src:tests/codegen conf:high]
-  Added reader-header-driven codegen fixtures for address-of expressions,
-  docstring lambdas, rest parameters, array ranges, layout pointer fields,
-  class associated/default payloads, instance method bodies, data deriving and
-  parameterized constructors, record-like ADT constructors, and mixed-key maps.
-
-[OBS id:obs.language.reader-payload-gaps-2026-06-11 src:tests/codegen conf:high]
-   Rest parameters parse but a call shaped as =(sum-rest 1 2 3)= currently
-   type-checks as if the function accepted one tuple/list argument. Record-like
-   ADT constructor syntax parses, but constructor field parsing includes record
-   labels/punctuation in the expected positional signature. Bounded array ranges
-   compile but currently print empty arrays in the probe instead of materialized
-   range contents.
-
-[OBS id:obs.language.codegen-finer-batch-2026-06-11 src:tests/codegen conf:high]
-   Added finer-grained codegen coverage splitting comparison bundles into
-   individual atom tests (=comparison_lt=, =comparison_gt=, =comparison_le=,
-   =comparison_ne=) and adding new coverage for multi-argument arithmetic
-   (=(+ 1 2 3)=, =(* 2 3 4)=), begin value semantics (=(begin 42)=,
-   =(begin (+ 1 2) (* 3 4))=), string equality via == (=="abc" "abc"=),
-   compound and/or with comparison results, typed function define shorthand
-   (=(define (double [x :: Int] -> Int) (* 2 x))=, two-arg and composed forms),
-   Bool-predicate function shorthand with the naming convention, nested
-   car/cdr on quoted lists, count on string literals, mod edge cases, and
-   if with equality conditions.
-
-[INF id:inf.language.codegen-finer-patterns from:obs.language.codegen-finer-batch-2026-06-11 conf:high]
-   Key findings from expansion: typed define function shorthand
-   (=(define (name [x :: Int] -> Int) body)=) compiles to working codegen but
-   untyped function shorthand (=(define name (lambda (x) ...))=) returns
-   incorrect results at runtime. Predicate functions returning =Bool= must end
-   with =?= per compiler naming convention. String equality via == works at
-   codegen level but specialized string functions (=string-length=, =string-append=,
-   =string=?=) are not codegen-callable. The =count= function works on both
-   lists and strings.
-
-[OBS id:obs.language.lambda-literal-space-dot-2026-06-12 src:tests/reader-atoms.tsv conf:high]
-   Three new λ-literal parser entries added: =λx. x= (space after dot),
-   =λx.λy. x + y= (curried with infix body), and =λxy. x + y= (multi-char
-   single param name). All pass at parse level (--emit-json succeeds). The
-   curried form produces nested lambdas: =(lambda ([x :: a]) (lambda ([y :: b])
-   (+ x y)))=. Multi-param λ-literal (=λx y. body=) is not tested because wisp
-   splits on whitespace between params. Application of λ-literals
-   (=(λx. x) 42=) is split by wisp into separate top-level forms; use
-   =((λx. x) 42)= with double parens instead.
-
-[OBS id:obs.language.pattern-codegen-batch-2026-06-11 src:tests/codegen/rt_match_int_var_wildcard.mon conf:high]
-   Added granular pattern codegen fixtures for =reader.h= =PatternKind= atoms:
-   integer, float, and string literal patterns; wildcard and variable binding;
-   empty-list, fixed-list, and tail-list patterns; guarded clauses; lambda
-   pattern clauses; bare ADT constructor patterns; and constructor patterns
-   that bind fields.
-
-[FIX id:fix.language.pmatch-leading-pipe-2026-06-11 src:pmatch.c conf:high]
-   Match clauses written with a leading separator, e.g.
-   =(match x with | 0 -> a | _ -> b)=, must parse the token after =|=
-   as the pattern. Previously =parse_one_clause= treated that leading pipe as a
-   guard marker before any pattern was parsed, causing =pmatch_desugar= to emit
-   malformed applications such as =(10 __match_target)=. The parser now consumes
-   an optional leading clause separator before reading clause patterns.
-
-[OBS id:obs.language.pmatch-exhaustive-constructor-gap-2026-06-11 src:tests/codegen/rt_match_constructor_pattern.mon conf:medium]
-   Constructor pattern matching works when the final clause is an explicit
-   wildcard. A probe with all known constructors but no wildcard still emitted
-   an =(undefined)= fallback that codegen rejected outside function scope, so
-   exhaustiveness-aware fallback removal remains future compiler work.
-
-[OBS id:obs.language.reader-atom-contract-fixes-2026-06-11 src:tests/reader-atoms.tsv conf:high]
-   Replaced invalid parser rows with forms supported by =reader.h= and
-   =reader.c=: =#-else= is not a token family, an unescaped TSV tab corrupts the
-   table field split, Unicode =λ= is lambda syntax rather than a single-byte
-   character literal, and ='\xNN'= hex char escapes are not implemented. The
-   replacement rows cover sequential feature blocks and supported escaped char
-   literals.
-
-[OBS id:obs.language.current-codegen-pressure-2026-06-11j src:tests/run.py conf:high]
-   After the pattern parser fix and reader-row corrections, the current suite
-   registers 803 tests with 21 remaining failures. Remaining failures are
-   codegen/runtime pressure: adjacent string application, top-level asm,
-   char-constructor aliases, code reflection, collection access runtime behavior,
-   record-like ADT constructors, do/with forms, runtime error expected-nonzero
-   handling, import option validation, lambda rest calls, keyword layout
-   constructors, mutual-recursion forward references, bounded range arrays,
-   record declarations, size-array values, string helper lowering, superscript
-   exponent lowering, when lowering, string concatenation, and wisp define.
+[OBS id:obs.language.pmatch-exhaustive-gap src:tests/codegen conf:medium]
+  Constructor pattern matching works when the final clause is an explicit
+  wildcard. Without a wildcard, the compiler emits an =(undefined)= fallback
+  that codegen rejects outside function scope. Exhaustiveness-aware fallback
+  removal is future work.
 
 * Type System Surface
 :PROPERTIES:
@@ -349,7 +370,7 @@ This file records the executable formalization layer for Monad language syntax.
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-11
-:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
 :SOURCE: infer.h,dep.h,infer.c,dep.c
@@ -357,70 +378,251 @@ This file records the executable formalization layer for Monad language syntax.
 :END:
 
 [DEC id:dec.language.type-system-coverage date:2026-06-11 by:human]
-   The living coverage system must include HM inference from =infer.h/c= and
-   dependent type checking from =dep.h/c=, not only reader syntax and runtime
-   codegen. Passing executable fixtures should cover well-typed HM behavior;
-   parser rows should cover dependent-term/type surfaces until the runner can
-   assert typed diagnostics directly.
+  Coverage must include HM inference (=infer.h/c=) and dependent type checking
+  (=dep.h/c=), not only reader syntax and runtime codegen.
 
-[OBS id:obs.language.hm-surface-2026-06-11 src:infer.h conf:high]
-   HM coverage targets include fresh type variables, schemes, generalisation,
-   instantiation, constraint collection/unification, zonking, builtin schemes,
-   lambda inference, typed parameter constraints, and polymorphic let/define
-   call sites.
+[OBS id:obs.language.hm-surface src:infer.h conf:high]
+  HM coverage targets: fresh type variables, schemes, generalisation,
+  instantiation, constraint collection/unification, zonking, builtin schemes,
+  lambda inference, typed parameter constraints, and polymorphic let/define
+  call sites.
 
-[OBS id:obs.language.dep-surface-2026-06-11 src:dep.h conf:high]
-   Dependent-type coverage targets include universe levels, =TERM_PI=,
-   =TERM_SIGMA=, equality/refl/subst, Nat/zero/succ/Nat-elim, annotations,
-   holes/metavariables, closure-based evaluation, definitional equality, and
-   bidirectional infer/check entry points.
+[OBS id:obs.language.dep-surface src:dep.h conf:high]
+  Dependent-type coverage targets: universe levels, =TERM_PI=, =TERM_SIGMA=,
+  equality/refl/subst, Nat/zero/succ/Nat-elim, annotations, holes/metavariables,
+  closure-based evaluation, definitional equality via NbE, and bidirectional
+  infer/check entry points.
 
-[OBS id:obs.language.type-system-codegen-batch-2026-06-11 src:tests/codegen/rt_hm_polymorphic_identity.mon conf:high]
-   Added executable HM and closure coverage: polymorphic identity and const
-   definitions instantiate at multiple concrete types; partial application of a
-   typed binary function returns a callable closure. Added closure pressure for
-   captured outer variables and =Fn= parameters, both of which emit JSON but
-   currently fail compile-time type/codegen handling.
+[OBS id:obs.language.hm-polymorphism src:tests/codegen conf:high]
+  Polymorphic identity (=id x = x)= and const (==const x y = x)= instantiate
+  correctly at multiple concrete types via monomorphization. Partial application
+  of a typed binary function returns a callable closure.
 
-[OBS id:obs.language.dep-parser-batch-2026-06-11 src:tests/reader-atoms.tsv conf:high]
-   Added parser coverage for dependent-type surface forms mapped in =dep.c=:
-   =(Type 0)=, =Pi=, =Sigma=, equality type forms, =refl=, =succ=, =Nat=,
-   annotations, paren lambda form, and =if= terms.
+[DEC id:dec.language.dep-bare-fn-annotation date:2026-06-12 by:human]
+  In dependent type annotations, bare =Fn= is an existential callable
+  placeholder, not a definitional-equality rule that makes every =TERM_PI=
+  equal to an embedded HM =TYPE_FN=. This keeps =dep_conv= closer to strict
+  definitional equality while allowing HM/codegen interop fixtures such as
+  =rt_closure_capture= to infer the concrete Pi type of a returned closure.
+  Precise callable types should use Pi/arrow syntax or =Fn :: (...)= when the
+  programmer wants to state the full function shape.
 
-[OBS id:obs.language.current-codegen-pressure-2026-06-11k src:tests/run.py conf:high]
-   After the type-system and closure coverage batch, the suite registers 818
-   tests with 23 failures. New deliberate pressure points are
-   =rt_closure_capture= and =rt_closure_hof_argument=; existing pressure remains
-   in adjacent strings, top-level asm, char aliases, code reflection, collection
-   access, record-like ADTs, do/with, expected-nonzero errors, import options,
-   rest params, keyword layout construction, forward mutual recursion, range
-   arrays, record declarations, size-array values, string helpers, superscript,
-   when, string concat, and wisp define.
+[OBS id:obs.language.dep-parser-coverage src:tests/reader-atoms.tsv conf:high]
+  Parser coverage exists for dependent-type surface forms: =(Type 0)=, Pi,
+  Sigma, equality types, =refl=, =succ=, =Nat=, annotations, paren lambda, and
+  =if= terms.
 
-[OBS id:obs.language.mutable-collections-builtins-2026-06-12 src:codegen.c:13007 conf:high]
-   The builtin set =conj!= and =disj!= mutate an existing set in place via
-   =rt_set_conj_mut= / =rt_set_disj_mut= in runtime.c (which return the same
-   =RuntimeSet *= pointer after insertion/removal). =append!= mutates a list
-   in place via =rt_list_append=. All are registered in =register_builtins()=
-   with arity 2. The codegen handler shares =codegen_set_op= for conj/disj
-   variants; =append!= has a dedicated handler that passes the raw list value
-   (=RuntimeList *=) to =rt_list_append=.
+[OBS id:obs.language.nbe-kernel src:dep.h:304-320 conf:high]
+  The dependent type checker uses Normalization by Evaluation with a semantic
+  Value domain supporting stuck neutral terms. This is the right foundation for
+  full dependent types — it will scale to inductive families, higher universes,
+  and cubical extensions without architectural rewrites.
 
-[OBS id:obs.language.inline-asm-limitations-2026-06-12 src:asm.c:346 conf:high]
-   Inline assembly in function bodies has two paths with known issues:
-   - Naked path (=:naked True=): =codegen_inline_asm= generates raw asm with
-     no constraints. The function body is emitted verbatim. Current test shows
-     =add y %rax= does not propagate result (returns first param only).
-   - Non-naked path (=:naked False=): uses LLVM inline asm with constraints.
-     Currently fails because =reg_size_suffix= infers 32-bit 'l' suffix for
-     Int parameters (which are i64), producing invalid =addl= with 64-bit
-     registers. Fix: check LLVM type width or Int type kind to emit 'q'.
+* Wisp Sugar Effects on Language Semantics
+:PROPERTIES:
+:ID: monadc.context.language.wisp-sugar-effects
+:CUSTOM_ID: wisp-sugar-effects
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: wisp.c
+:CONFIDENCE: high
+:END:
 
-[DEC id:dec.language.wisp-bang-sugar date:2026-06-12 by:codex]
-   The Wisp desugaring treats !-suffixed symbols as method-call sugar when the
-   first argument is an untyped symbol: =(conj! s 3)= → =(s conj! 3)=. This is
-   by design for method-call syntax but silently breaks calls to !-suffixed
-   builtins when the variable has no type annotation. The workaround is to bind
-   the set/list variable with a =:: Set= / =:: List= annotation, which prevents
-   the Wisp sugar from firing. This affects =conj!=, =disj!=, =append!=, and
-   any future !-suffixed builtins.
+[OBS id:obs.language.wisp-bang-sugar-effect src:wisp.c conf:high]
+  Wisp !-sugar transforms =(fn! var args)= to =(var fn! args)= when =var= is
+  an untyped symbol. This affects all !-suffixed builtins (=conj!=, =disj!=,
+  =append!=). Workaround: bind the variable with a type annotation to prevent
+  the sugar from firing.
+
+[OBS id:obs.language.wisp-qmark-sugar-effect src:wisp.c conf:high]
+  Wisp ?-sugar transforms =(pred? var arg)= to =(var pred? arg)= when =var= is
+  an untyped symbol. This affects =(contains? s 1)= for set variables.
+  Workaround: inline the set construction (=(contains? (conj {} 1) 1)=) or use
+  set-as-function syntax (=(s 1)=) for containment check.
+
+[OBS id:obs.language.predicate-naming src:codegen.c conf:high]
+  Predicate functions returning =Bool= must end with =?= per the compiler's
+  naming convention. Functions without =?= suffix that return Bool may not be
+  recognized as predicates by some compiler passes.
+
+* Reader-Header-Driven Coverage
+:PROPERTIES:
+:ID: monadc.context.language.reader-header-coverage
+:CUSTOM_ID: reader-header-coverage
+:CONTEXT_KIND: task
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: reader.h
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.language.reader-header-driven-coverage date:2026-06-11 by:human]
+  Coverage expansion must be driven from =reader.h=: every AST kind, token
+  family, pattern kind, and payload variant should gain parser coverage and,
+  where possible, codegen-backed fixtures.
+
+[OBS id:obs.language.reader-ast-surface src:reader.h:39 conf:high]
+  AST families needing coverage: numbers, symbols, strings, paths, chars, lists,
+  keywords, ratios, arrays, lambdas, asm, refinements, tests blocks, address-of,
+  ranges, layouts, sets, maps, pattern matching, data declarations, classes,
+  instances, lambda literals.
+
+[OBS id:obs.language.reader-payload-surface src:reader.h:66 conf:high]
+  Payload-level coverage targets: lambda rest/anonymous/typed params,
+  docstrings and aliases, asm instruction lists, refinement doc/alias, array
+  heap flags, ranges with start/step/end/infinite and array/list shapes, layout
+  inline/pointer/array fields with packed/aligned options, data type parameters
+  and deriving clauses, class associated types/default methods, instance
+  associated values/method bodies.
+
+[OBS id:obs.language.reader-token-surface src:reader.h:360 conf:high]
+  Token-family coverage targets: parentheses, brackets, braces, hash-map braces,
+  symbols, numbers, strings, paths, chars, keywords, quote, arrows, feature
+  conditionals, ranges, dot field access, pipes, colons, line directives,
+  corner-bracket quasiquote/unquote tokens.
+
+[OBS id:obs.language.remaining-dispatch-gaps src:tests/codegen conf:high]
+  Strconv dispatch symbols with zero test coverage (aspirational or broken at
+  runtime): assoc, assoc!, dissoc, dissoc!, merge, set, list-copy, dot, assert-eq,
+  expand, doc, show-value, color-to-string, undefined.
+
+[OBS id:obs.language.code-reflection-aot-values src:codegen.c conf:high]
+  =(code name)= must not embed compiler-process heap pointers into generated
+  ahead-of-time binaries. When raw =source_text= is unavailable, code reflection
+  may use the retained =source_ast= and emit runtime construction calls via the
+  codegen-side AST-to-runtime-value helper. This preserves reflected code as a
+  runtime value and avoids invalid pointer constants after linking.
+
+* Heap Array Codegen Regression Coverage
+:PROPERTIES:
+:ID: monadc.context.language.heap-array-codegen-regression
+:CUSTOM_ID: heap-array-codegen-regression
+:CONTEXT_KIND: test-coverage
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/rt_heap_array_runtime.mon,tests/codegen/rt_heap_array_for.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.language.heap-array-runtime-codegen-fixture src:tests/codegen/rt_heap_array_runtime.mon conf:high]
+  =tests/codegen/rt_heap_array_runtime.mon= is the focused runtime-codegen
+  fixture for heap array value operations. It covers =show=, =count=,
+  array-as-function indexing, =head=, and =tail= on =~[1 2 3]=.
+
+[OBS id:obs.language.heap-array-for-codegen-fixture src:tests/codegen/rt_heap_array_for.mon conf:high]
+  =tests/codegen/rt_heap_array_for.mon= is the focused runtime-codegen fixture
+  for Wisp =for i -> heap= over a heap array. The loop exercises the same
+  =count= and array-as-function indexing path used by collection iteration.
+
+* Path Literal Codegen Rejection Coverage
+:PROPERTIES:
+:ID: monadc.context.language.path-literal-codegen-regression
+:CUSTOM_ID: path-literal-codegen-regression
+:CONTEXT_KIND: test-coverage
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/rt_path_literal_rejected.mon,tests/codegen/rt_path_literal_quote_rejected.mon,tests/codegen/rt_path_literal_array_rejected.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.language.path-literal-direct-codegen-fixture src:tests/codegen/rt_path_literal_rejected.mon conf:high]
+  =tests/codegen/rt_path_literal_rejected.mon= covers direct use of a parsed
+  Unix path literal as a value.
+
+[OBS id:obs.language.path-literal-quoted-codegen-fixture src:tests/codegen/rt_path_literal_quote_rejected.mon conf:high]
+  =tests/codegen/rt_path_literal_quote_rejected.mon= covers a path literal
+  nested under =quote= so quoted data cannot hide an ill-typed path value.
+
+[OBS id:obs.language.path-literal-array-codegen-fixture src:tests/codegen/rt_path_literal_array_rejected.mon conf:high]
+  =tests/codegen/rt_path_literal_array_rejected.mon= covers a path literal
+  nested inside an array literal so aggregate literals cannot hide ill-typed
+  path values.
+
+[OBS id:obs.language.path-literal-negative-goldens src:tests/codegen/rt_path_literal_rejected.json,tests/codegen/rt_path_literal_quote_rejected.json,tests/codegen/rt_path_literal_array_rejected.json conf:high]
+  Ill-typed Unix path literal fixtures now assert two layers: =--emit-json=
+  still sees the syntactically valid =AST_PATH= shape, while normal compilation
+  rejects the value during inference/codegen fallback with =error: ill-typed path
+  literal=. This keeps syntax recognition separate from value-level typing.
+
+[OBS id:obs.language.heap-array-codegen-goldens src:tests/codegen/rt_heap_array_runtime.json,tests/codegen/rt_heap_array_runtime.stdout conf:high]
+  Heap array codegen coverage now checks the AST sidecar before the runtime
+  stdout golden. This links =arr_is_heap= preservation to the runtime-sized array
+  operations =show=, =count=, indexing, =head=, and =tail=.
+
+* Regression note: control string branches and ADT show goldens
+:PROPERTIES:
+:ID: monadc.context.language.codegen-review-cleanup
+:CUSTOM_ID: codegen-review-cleanup
+:CONTEXT_KIND: test-coverage
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c,tests/codegen/rt_control_all.mon,tests/codegen/rt_control_comp.mon,tests/codegen/rt_data_single_constructor.stdout
+:CONFIDENCE: medium
+:END:
+
+[OBS id:obs.language.if-string-branch-type-preserved src:codegen.c conf:medium]
+  The codegen =if= PHI path must preserve the exact pointer-like type when both
+  branches agree. In particular, two =String= branches must remain =TYPE_STRING=
+  so =(show (if True "yes" "no"))= prints =yes= rather than handing a raw C
+  string pointer to the opaque RuntimeValue printer and producing blank output.
+
+[OBS id:obs.language.control-goldens-cover-string-if src:tests/codegen/rt_control_all.mon conf:medium]
+  =tests/codegen/rt_control_all.mon= and =tests/codegen/rt_control_comp.mon=
+  intentionally include =if= expressions whose then/else arms are both strings.
+  Their stdout goldens start with =yes= and =no= to catch regressions in the
+  pointer-like PHI type preservation path.
+
+[DEC id:dec.language.unless-statement-test-shape date:2026-06-12 by:human]
+  Until =unless= has a well-defined value-level return convention, codegen
+  fixtures should test it as a statement form with an observable body side
+  effect, e.g. =(unless False (show "executed"))=, rather than pretending that
+  =(show (unless False "executed"))= returns the body string.
+
+[OBS id:obs.language.adt-show-golden-must-not-mask-pointer src:tests/codegen/rt_data_single_constructor.stdout conf:high]
+  The single-constructor ADT stdout golden must remain =(Point 3.0 4.0)=. A raw
+  floating pointer-looking value is a codegen/display regression and must not be
+  accepted as an expected output update.
+
+[OBS id:obs.language.adt-show-codegen-canonical src:codegen.c conf:medium]
+  =show= now routes layout-typed values through the ADT printer when their
+  layout has registered constructors. The ADT printer emits canonical data
+  syntax =(Ctor field0 field1 ...)=, which is why
+  =tests/codegen/rt_data_single_constructor.stdout= expects =(Point 3.0 4.0)=
+  rather than a layout pointer or an implementation-specific float-looking bit
+  pattern.

@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-cmp-mixed-types
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Mixed int/float comparisons
+;; TEST-ATOM: (= 3 3.0) = True, (< 3 3.5) = True, (> 4.5 4) = True, (<= 5.0 5) = True
+;; TEST-EXPECT: compile, run
+(module Main)
+(show (= 3 3.0))
+(show (< 3 3.5))
+(show (> 4.5 4))
+(show (<= 5.0 5))

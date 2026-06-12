@@ -14,7 +14,7 @@
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -205,3 +205,26 @@ pointer anchor instead of applying immediate linear zoom jumps.
   language + 137 sugar + 201 codegen + 3 reader) and 1351 edges. Compare to
   the prior state where =language_corpus.tsv= was absent so only .mon fixtures
   and .org headings contributed test nodes (~201 codegen + ~3 reader ~= 204).
+
+* Regression note: visualizer asset syntax
+:PROPERTIES:
+:ID: monadc.context.visualizer.asset-syntax-regression
+:CUSTOM_ID: visualizer-asset-syntax-regression
+:CONTEXT_KIND: source-hygiene
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/visualizer/app.js
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.visualizer.app-js-no-trailing-garbage src:context/visualizer/app.js conf:high]
+  =context/visualizer/app.js= must end with the =escapeHtml= function closing
+  brace only. A stray trailing character after the final brace is a JavaScript
+  syntax/runtime asset bug, not acceptable generated noise.

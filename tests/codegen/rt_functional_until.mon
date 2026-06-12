@@ -5,6 +5,6 @@
 ;; TEST-EXPECT: compile, run
 
 (module Main)
-(define (until [p :: (Fn a -> Bool)] [f :: (Fn a -> a)] [x :: a] -> a)
+(define (until [p : (a -> Bool)] [f : (a -> a)] [x : a] -> a)
   (if (p x) x (until p f (f x))))
 (show (until (> 10) (+ 1) 5))

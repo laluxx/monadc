@@ -1,8 +1,8 @@
 ;; TEST-ID: tests.codegen.rt-let-multi-bind-show
 ;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
 ;; TEST-PURPOSE: Let with multiple bindings shows each value.
-;; TEST-ATOM: (let [x 1 y 2] (show x) (show y))
+;; TEST-ATOM: (let ([x 1] [y 2]) ...)
 ;; TEST-EXPECT: compile, run
 
 (module Main)
-(let [x 1 y 2] (begin (show x) (show y)))
+(let ([x 1] [y 2]) (begin (show x) (show y)))

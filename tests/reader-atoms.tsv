@@ -347,7 +347,7 @@ exists_quantifier	monadc.context.language.syntax-corpus	Exists type quantifier p
 # Single-Element Array
 array_single_element	monadc.context.language.syntax-corpus	Single-element array literal parses.	[5]
 # Block String Triple-Quotes
-string_double_quote_sequence	monadc.context.language.syntax-corpus	Adjacent string literals parse.	"hello""world"
+string_double_quote_sequence	monadc.context.language.adjacent-strings	Connected string literals are rejected with a targeted diagnostic.	"hello""world"	fail:compile	adjacent string literals are not supported
 # ── Additional Symbols ──────────────────────────────────────────────────────
 symbol_pipe_gt	monadc.context.language.syntax-corpus	Pipe-gt symbol parses.	|>
 symbol_pipe	monadc.context.language.syntax-corpus	Pipe symbol parses.	|
@@ -641,7 +641,7 @@ char_escape_return	monadc.context.language.syntax-corpus	Escaped carriage-return
 char_escape_zero	monadc.context.language.syntax-corpus	NUL character literal parses.	'\0'
 # ── Additional String Edge Cases ──────────────────────────────────────────
 string_unicode	monadc.context.language.syntax-corpus	String with unicode parses.	"hello λ"
-string_empty_adjacent	monadc.context.language.syntax-corpus	Adjacent empty string literals parse.	""""
+string_empty_adjacent	monadc.context.language.adjacent-strings	Connected empty string literals are rejected with a targeted diagnostic.	""""	fail:compile	adjacent string literals are not supported
 string_only_whitespace	monadc.context.language.syntax-corpus	String of only spaces parses.	"   "
 # ── Additional Keyword/Symbol Edge Cases ──────────────────────────────────
 keyword_single_char	monadc.context.language.syntax-corpus	Single-char keyword parses.	:a
@@ -741,7 +741,7 @@ range_list_fractional	monadc.context.language.syntax-corpus	List range with frac
 string_escape_unicode_lower	monadc.context.language.syntax-corpus	Lowercase unicode escape in string parses.	"\u03bb"
 string_escape_unicode_upper	monadc.context.language.syntax-corpus	Uppercase unicode escape in string parses.	"\U000003BB"
 # ─── String Adjacent Concatenation ─────────────────────────────────────────
-string_adjacent_three	monadc.context.language.syntax-corpus	Three adjacent string literals parse.	"a""b""c"
+string_adjacent_three	monadc.context.language.adjacent-strings	Three connected string literals are rejected with a targeted diagnostic.	"a""b""c"	fail:compile	adjacent string literals are not supported
 string_adjacent_mixed_spaces	monadc.context.language.syntax-corpus	Adjacent strings with mix of spaces parse.	"a" "b" "c"
 # ─── For with Multiple Body Forms ──────────────────────────────────────────
 for_multi_body	monadc.context.language.syntax-corpus	For with multiple body expressions parses.	(for [x [1 2 3]] (show x) x)
@@ -783,3 +783,9 @@ set_disj_bang	monadc.context.language.syntax-corpus	Disj! (mutable set remove) f
 list_append_bang	monadc.context.language.syntax-corpus	Append! (mutable list append) function parses.	(append! my-list 42)
 # ─── Collection Predicate ──────────────────────────────────────────────────
 pred_collection	monadc.context.language.syntax-corpus	Collection? predicate call parses.	(collection? (list 1 2))
+# ─── Arithmetic Shifts ──────────────────────────────────────────────────────
+shift_right	monadc.context.language.runtime-codegen-corpus	Arithmetic right shift parses.	(>> 16 2)
+# ─── List Predicates ────────────────────────────────────────────────────────
+list_empty	monadc.context.language.runtime-codegen-corpus	List emptiness predicate parses.	(empty? (list))
+# ─── List Construction ──────────────────────────────────────────────────────
+make_list_n	monadc.context.language.runtime-codegen-corpus	Make-list (n copies of val) parses.	(make-list 3 "x")

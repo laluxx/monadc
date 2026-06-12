@@ -1,0 +1,61 @@
+#+TITLE: Context Navigation
+#+AUTHOR: Codex
+#+DATE: 2026-06-12
+#+CREATED: 2026-06-12
+#+LAST_MODIFIED: 2026-06-12
+#+LANGUAGE: en
+#+STARTUP: showeverything
+#+OPTIONS: toc:nil num:nil
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:navigation:llm:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+[OBS id:obs.navigation.purpose src:context/navigation.org conf:high]
+  This file is a routing table for LLMs. Given a context ID like
+  =monadc.context.reader.sugar.percent=, read the prefix to find which file
+  contains the node. Read this file first before writing new records.
+
+* ID Prefix → File Map
+
+The second segment of an ID (after =monadc.context.=) maps directly to a topic
+file in =context/*.org=:
+
+| ID prefix (monadc.context.<prefix>) | File                   | Contents                |
+|-------------------------------------+------------------------+-------------------------|
+| =index=                               | [[file:index.org][context/index.org]]      | Schema, format, index   |
+| =reader=                              | [[file:reader.org][context/reader.org]]     | Lexer, parser, AST      |
+| =wisp=                                | [[file:wisp.org][context/wisp.org]]       | Wisp syntax expander    |
+| =language=                            | [[file:language.org][context/language.org]]   | Type system, semantics  |
+| =build=                               | [[file:build.org][context/build.org]]      | Build, install          |
+| =tests=                               | [[file:tests.org][context/tests.org]]      | Test metadata, coverage |
+| =guidelines=                          | [[file:guidelines.org][context/guidelines.org]] | Rules + workflow        |
+| =todo=                                | [[file:todo.org][context/todo.org]]       | TODO items              |
+| =visualizer=                          | [[file:visualizer.org][context/visualizer.org]] | Context visualizer      |
+| =opinions=                            | [[file:opinions.org][context/opinions.org]]   | LLM critique            |
+| =philosophy=                          | [[file:philosophy.org][context/philosophy.org]] | Project philosophy      |
+| =source-map=                          | [[file:source-map.org][context/source-map.org]] | Source file map         |
+| =style=                               | [[file:style.org][context/style.org]]      | MonadC code styles      |
+
+* How to Use
+
+1. To find a node: match the ID's second segment against the table above.
+2. To add a new record: use the prefix that matches the topic's file.
+3. If no prefix matches, use =context/index.org= and add a new prefix entry here.
+4. For new topics: add a row to this table first, then create the file.
+
+[DEC id:dec.navigation.routing-table date:2026-06-12 by:human+llm]
+  The ID prefix→file mapping in this file is the authoritative routing table.
+  Every context file's =CONTEXT_ID_PREFIX= should match its segment in
+  =monadc.context.<segment>.*= IDs. When adding a new context file, add a row
+  here first.

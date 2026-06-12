@@ -1,98 +1,15 @@
-#+TITLE: Repository Rules Context
+#+TITLE: Repository Rules (Redirect → guidelines.org)
 #+AUTHOR: Codex
-#+DATE: 2026-06-11
-#+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-11
-#+LANGUAGE: en
+#+DATE: 2026-06-12
+#+LAST_MODIFIED: 2026-06-12
 #+STARTUP: showeverything
-#+OPTIONS: toc:2 num:t
-#+CATEGORY: monadc-context
-#+FILETAGS: :monadc:compiler:context:rules:workflow:
-#+PROPERTY: CONTEXT_VERSION 1
-#+PROPERTY: CONTEXT_SCOPE repository-local
-#+PROPERTY: CONTEXT_AUDIENCE human llm codex
-#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
-#+PROPERTY: CONTEXT_DIALECT org-mode
-#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO
-#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
-#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
-#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
-#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
-#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
-#+TAGS: rules(r) context(c) workflow(w) codex(a)
+#+FILETAGS: :monadc:compiler:context:rules:redirect:
 
-* File Metadata
-:PROPERTIES:
-:ID: monadc.context.rules.file-metadata
-:CUSTOM_ID: rules-file-metadata
-:CONTEXT_KIND: metadata
-:CONTEXT_VERSION: 1
-:CONTEXT_SCOPE: repository-local
-:CONTEXT_OWNER: human
-:CONTEXT_MAINTAINER: codex
-:CONTEXT_AUDIENCE: human,llm
-:CONTEXT_OPEN_POLICY: showeverything
-:CONTEXT_CREATED: 2026-06-11
-:CONTEXT_UPDATED: 2026-06-11
-:CONTEXT_STABILITY: stable
-:CONTEXT_STATUS: active
-:SOURCE: context/rules.org
-:CONFIDENCE: high
-:END:
+[OBS id:obs.rules.redirected src:context/guidelines.org conf:high]
+  This file has been merged into =context/guidelines.org= (Hard Constraints
+  section). All decisions previously recorded here now live there.
 
-[OBS id:obs.context.rules.file src:context/rules.org conf:high]
-This file records standing repository rules that should guide future compiler
-work.
-
-* Context Upkeep Rule
-:PROPERTIES:
-:ID: monadc.context.rules.context-upkeep
-:CUSTOM_ID: context-upkeep-rule
-:CONTEXT_KIND: decision
-:CONTEXT_VERSION: 1
-:CONTEXT_SCOPE: repository-local
-:CONTEXT_OWNER: human
-:CONTEXT_MAINTAINER: codex
-:CONTEXT_AUDIENCE: human,llm
-:CONTEXT_CREATED: 2026-06-11
-:CONTEXT_UPDATED: 2026-06-11
-:CONTEXT_STABILITY: stable
-:CONTEXT_STATUS: active
-:SOURCE: user-request
-:CONFIDENCE: high
-:END:
-
-[DEC id:dec.rules.always-improve-context date:2026-06-11 by:human]
-  Always improve the repository context as work progresses. Add important
-  discoveries, decisions, verification results, and follow-up tasks to the Org
-  context corpus when they would help future work.
-
-#+CAPTION: Context Upkeep Triggers
-| Trigger                            | Required Context Action                          |
-|------------------------------------+--------------------------------------------------|
-| New compiler behavior is fixed     | Record the observed bug and implemented contract |
-| A standing user preference appears | Add or update a rule in =context/rules.org=        |
-| A reusable workflow is discovered  | Add it to the relevant topic file                |
-| A follow-up task is identified     | Add it to =context/todo.org= or a topic TODO       |
-
-[DEC id:dec.rules.context-during-conversation date:2026-06-11 by:human]
-  When the user states a standing preference or describes a durable workflow
-  during conversation, add it to the context corpus during the same work session
-  instead of leaving it only in chat history.
-
-[DEC id:dec.rules.visualizer-quality-bar date:2026-06-11 by:human]
-  Project visualizations should meet a high usability and design bar: clear
-  dashboard structure, standard interaction patterns, smooth motion, and direct
-  editing where the visualization represents mutable project state.
-
-[DEC id:dec.rules.opinions-file date:2026-06-12 by:human]
-  An =context/opinions.org= file may exist to record LLM perspectives on the
-  context system itself. Its content is advisory, not normative. Opinions are
-  labeled with the model that generated them. They may propose format changes
-  but must not override decisions in =rules.org= or =workflow.org=.
-
-[DEC id:dec.rules.extend-not-replace date:2026-06-12 by:codex]
-  When improving the context corpus, always extend (add new headings, records,
-  files) rather than silently replacing existing content. Use superseding
-  records when correcting factual errors. This preserves the audit trail.
+[DEC id:dec.rules.redirect date:2026-06-12 by:human]
+  This file is superseded by =context/guidelines.org=. All future rule additions
+  should go in guidelines.org under the Hard Constraints section. This file
+  remains as a redirect to avoid breaking existing context links.

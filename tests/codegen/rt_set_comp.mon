@@ -1,0 +1,14 @@
+;; TEST-ID: tests.codegen.rt-set-comp
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: All working set operations: Set?, collection?, contains?, conj, disj, set-as-function
+;; TEST-ATOM: (Set? {1 2 3}) = True, (Set? 42) = False, (collection? {1 2 3}) = True, (contains? (conj {1 2} 3) 3) = True, (contains? (disj {1 2 3} 2) 2) = False
+;; TEST-EXPECT: compile, run
+(module Main)
+(show (Set? {1 2 3}))
+(show (Set? 42))
+(show (collection? {1 2 3}))
+(show (collection? 42))
+(show (contains? (conj {1 2} 3) 3))
+(show (contains? (disj {1 2 3} 2) 2))
+(show (contains? {1 2 3} 2))
+(show (contains? {1 2 3} 99))

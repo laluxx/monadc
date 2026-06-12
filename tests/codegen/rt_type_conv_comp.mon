@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.rt-type-conv-comp
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: All type conversion builtins with strcmp handlers: Int Float Char Hex Oct Bin
+;; TEST-ATOM: (Float 42) = 42.0, (Int 3.14) = 3, (Int 42.9) = 42, (Hex 255) = 0xFF, (Oct 255) = 0o377, (Bin 7) = 0b111, (Char 65) = #\A
+;; TEST-EXPECT: compile, run
+(module Main)
+(show (Float 42))
+(show (Int 3.14))
+(show (Int 42.9))
+(show (Hex 255))
+(show (Oct 255))
+(show (Bin 7))
+(show (Char 65))

@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-heap-array-for
+;; TEST-CONTEXT: monadc.context.reader.heap-arrays, monadc.context.reader.wisp-heap-array-preservation, monadc.context.language.runtime-sized-arrays, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime codegen supports Wisp for iteration over heap array literals.
+;; TEST-ATOM: for i -> heap must expand through count/indexing and print each heap array element.
+;; TEST-EXPECT: json:ast, compile, run
+
+(module Main)
+(define heap ~[1 2 3])
+for i -> heap
+  show i

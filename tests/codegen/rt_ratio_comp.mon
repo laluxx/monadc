@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-ratio-comp
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Ratio-literal-as-function (3/4 x) = x * 3 / 4 with int and float
+;; TEST-ATOM: (1/4 100) = 25, (1/2 10) = 5, (3/4 100) = 75, (1/4 2.0) = 0.5
+;; TEST-EXPECT: compile, run
+(module Main)
+(show (1/4 100))
+(show (1/2 10))
+(show (3/4 100))
+(show (1/4 2.0))

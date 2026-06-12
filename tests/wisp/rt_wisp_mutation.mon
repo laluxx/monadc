@@ -1,0 +1,12 @@
+;; TEST-ID: tests.wisp.rt-wisp-mutation
+;; TEST-CONTEXT: monadc.context.wisp.mutation
+;; TEST-PURPOSE: Wisp set! mutation works
+;; TEST-ATOM: set! x 5 changes x from 0 to 5
+;; TEST-EXPECT: compile, run
+module Main
+define x 0
+show x
+set! x 5
+show x
+set! x (+ x 1)
+show x

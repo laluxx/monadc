@@ -1,0 +1,17 @@
+;; TEST-ID: tests.codegen.rt-bitwise-comp
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Complete bitwise coverage: & ~ bit-xor << >> >>> with edge cases
+;; TEST-ATOM: (& 12 5) = 4, (& 7 3) = 3, (~ 0) = -1, (~ -1) = 0, (bit-xor 12 5) = 9, (bit-xor 7 3) = 4, (<< 1 4) = 16, (<< 3 2) = 12, (>> 16 2) = 4, (>> -16 2) = -4, (>>> 16 2) = 4
+;; TEST-EXPECT: compile, run
+(module Main)
+(show (& 12 5))
+(show (& 7 3))
+(show (~ 0))
+(show (~ -1))
+(show (bit-xor 12 5))
+(show (bit-xor 7 3))
+(show (<< 1 4))
+(show (<< 3 2))
+(show (>> 16 2))
+(show (>> -16 2))
+(show (>>> 16 2))

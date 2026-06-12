@@ -1,0 +1,42 @@
+[
+  {
+    "type": "list",
+    "items": [
+      {
+        "type": "symbol",
+        "name": "module"
+      },
+      {
+        "type": "symbol",
+        "name": "PathLiteralQuoteRejected"
+      }
+    ]
+  },
+  {
+    "type": "list",
+    "items": [
+      {
+        "type": "symbol",
+        "name": "show"
+      },
+      {
+        "type": "list",
+        "items": [
+          {
+            "type": "symbol",
+            "name": "quote"
+          },
+          {
+            "type": "list",
+            "items": [
+              {
+                "type": "path",
+                "value": "~/xos/projects/c/monadc/context/"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

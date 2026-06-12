@@ -1,0 +1,15 @@
+;; TEST-ID: tests.codegen.rt-cmp-comp
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: All comparison ops binary: = != < > <= >= with int, float, mixed
+;; TEST-ATOM: (= 5 5) = True, (= 5 6) = False, (!= 5 6) = True, (< 3 5) = True, (> 5 3) = True, (<= 5 5) = True, (>= 5 5) = True, (= 3.0 3) = True, (< 3.5 4) = True
+;; TEST-EXPECT: compile, run
+(module Main)
+(show (= 5 5))
+(show (= 5 6))
+(show (!= 5 6))
+(show (< 3 5))
+(show (> 5 3))
+(show (<= 5 5))
+(show (>= 5 5))
+(show (= 3.0 3))
+(show (< 3.5 4))

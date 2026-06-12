@@ -1,0 +1,10 @@
+;; TEST-ID: tests.wisp.rt-wisp-if
+;; TEST-CONTEXT: monadc.context.wisp.if-form
+;; TEST-PURPOSE: Wisp if form works
+;; TEST-ATOM: show if True 42 0 → 42
+;; TEST-EXPECT: compile, run
+module Main
+show if True 42 0
+show if False 1 99
+define x 10
+show if (> x 5) "big" "small"

@@ -1,0 +1,12 @@
+;; TEST-ID: tests.codegen.rt-var-mut-comp
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Variable mutation with set! and define
+;; TEST-ATOM: (define x 1) then (set! x 2) then x = 2
+;; TEST-EXPECT: compile, run
+(module Main)
+(define x 1)
+(set! x 2)
+(show x)
+(define y 42)
+(set! y 100)
+(show y)

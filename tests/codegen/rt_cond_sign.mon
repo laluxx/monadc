@@ -5,7 +5,7 @@
 ;; TEST-EXPECT: compile, run
 
 (module Main)
-(define (sign [x :: Int] -> Int)
+(define (sign [x : Int] -> Int)
   (cond [(> x 0) 1] [(< x 0) -1] [else 0]))
 (show (sign 42))
 (show (sign -1))

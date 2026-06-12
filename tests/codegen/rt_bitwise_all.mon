@@ -1,0 +1,14 @@
+;; TEST-ID: tests.codegen.rt-bitwise-all
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Complete bitwise operator coverage: & ~ bit-xor << >> >>> (not |, reserved for pipe)
+;; TEST-ATOM: (& 12 5) = 4, (~ 0) = -1, (~ -1) = 0, (bit-xor 12 5) = 9, (<< 1 4) = 16, (>> 16 2) = 4, (>>> 16 2) = 4, (>> -16 2) = -4
+;; TEST-EXPECT: compile, run
+(module Main)
+(show (& 12 5))
+(show (~ 0))
+(show (~ -1))
+(show (bit-xor 12 5))
+(show (<< 1 4))
+(show (>> 16 2))
+(show (>>> 16 2))
+(show (>> -16 2))

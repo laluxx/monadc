@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-null-quest
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Null-coalescing operator ?? provides default for nil values
+;; TEST-ATOM: (?? nil "default") = "default", (?? 42 "default") = 42
+;; TEST-EXPECT: compile, run
+(module Main)
+(show (?? nil "default"))
+(show (?? 42 "default"))

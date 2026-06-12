@@ -1,0 +1,18 @@
+;; TEST-ID: tests.codegen.rt-str-comp
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: All working string ops: make-string, count, starts-with?, ends-with?, contains?, string indexing
+;; TEST-ATOM: (count "hello") = 5, (make-string 3 #\A) = "AAA", (starts-with? "hello" "hel") = True, (ends-with? "hello" "llo") = True, (contains? "hello" "ell") = True, ("hello" 0) = #\h, ("hello" 4) = #\o, ("abc" 2) = #\c
+;; TEST-EXPECT: compile, run
+(module Main)
+(show (count "hello"))
+(show (make-string 3 (Char 65)))
+(show (make-string 0 (Char 66)))
+(show (starts-with? "hello" "hel"))
+(show (starts-with? "hello" "x"))
+(show (ends-with? "hello" "llo"))
+(show (ends-with? "hello" "x"))
+(show (contains? "hello" "ell"))
+(show (contains? "hello" "x"))
+(show ("hello" 0))
+(show ("hello" 4))
+(show ("abc" 2))

@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-make-list
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: make-list catches uncovered dispatch path codegen.c:7345.
+;; TEST-ATOM: (make-list 3 "x") produces ("x" "x" "x").
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (make-list 3 "x"))

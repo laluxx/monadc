@@ -1,0 +1,153 @@
+#+TITLE: MonadC Code Style Context
+#+AUTHOR: Codex
+#+DATE: 2026-06-12
+#+CREATED: 2026-06-12
+#+LAST_MODIFIED: 2026-06-12
+#+LANGUAGE: en
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:style:syntax:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.style
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+#+TAGS: style(s) wisp(w) lisp(l) cstyle(c) surface(f)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.style.file-metadata
+:CUSTOM_ID: style-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STATUS: active
+:SOURCE: context/style.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.style.file src:context/style.org conf:high]
+  This file records MonadC source-code style families. It is about how valid
+  MonadC programs are written and read, not about compiler implementation style.
+
+* Style Taxonomy
+:PROPERTIES:
+:ID: monadc.context.style.taxonomy
+:CUSTOM_ID: style-taxonomy
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.style.category-created date:2026-06-12 by:human]
+  The context corpus has a dedicated =style= subset for source-code style
+  families in MonadC. Use =monadc.context.style.*= IDs for records about
+  notation choices, mixed syntax modes, and examples of preferred program
+  shape.
+
+[INF id:inf.style.connects-to-language from:dec.style.category-created conf:high]
+  connects-to -> =monadc.context.language.syntax-corpus= and
+  =monadc.context.wisp.architecture=. Code style records describe user-facing
+  surfaces that may be implemented by reader syntax, Wisp expansion, or both.
+
+* Hybrid C-Signature Lisp-Body Style
+:PROPERTIES:
+:ID: monadc.context.style.hybrid-c-signature-lisp-body
+:CUSTOM_ID: hybrid-c-signature-lisp-body
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.style.hybrid-c-signature-lisp-body src:user-request conf:high]
+  MonadC supports a hybrid style where the function head/signature reads closer
+  to C-like parameter and return declarations, while the body remains Lisp-like
+  S-expression code. Example shape:
+
+#+BEGIN_SRC monad
+(define (push-vertex [x :: F32] [y :: F32]
+                     [u :: F32] [v :: F32]
+                     [c :: Color])
+  (unless (g-vertex-count >= MAX-VERTICES)
+    (define [vtx -> Vertex]
+      (g-vertices g-vertex-count))
+    (set! vtx.x x)
+    (set! vtx.y y)
+    (set! vtx.u u)
+    (set! vtx.v v)
+    (set! vtx.r c.r)
+    (set! vtx.g c.g)
+    (set! vtx.b c.b)
+    (set! vtx.a c.a)
+    (set! g-vertex-count (g-vertex-count + 1))))
+#+END_SRC
+
+[THINK id:think.style.hybrid-c-lisp-use src:user-request conf:high]
+  Human framing: this style is useful because the type/ABI surface looks
+  concrete and C-adjacent, while the body keeps Lisp's uniform expression
+  syntax. It is especially relevant for low-level graphics/runtime code where
+  fields, scalar types, buffers, and mutation are prominent.
+
+* Pure Wisp Prelude Style
+:PROPERTIES:
+:ID: monadc.context.style.pure-wisp-prelude
+:CUSTOM_ID: pure-wisp-prelude
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STATUS: active
+:SOURCE: core/prelude/Coll.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.style.pure-wisp-prelude src:core/prelude/Coll.mon conf:high]
+  Pure Wisp style appears in =core/prelude/Coll.mon=. It uses indentation,
+  equation-style definitions, type signatures, pattern clauses, and guards
+  instead of parenthesized Lisp forms for the main program shape.
+
+#+BEGIN_SRC monad
+define take :: Int -> [a] -> [a]
+  _ []            -> []
+  n [x|xs]
+      | n > 0     -> (x ++ (take (n - 1) xs))
+      | otherwise -> []
+#+END_SRC
+
+[INF id:inf.style.pure-wisp-connects-to-wisp from:obs.style.pure-wisp-prelude conf:high]
+  connects-to -> =monadc.context.wisp.architecture=. Pure Wisp style is a
+  source-level style that expands into ordinary S-expressions before reader and
+  codegen phases.

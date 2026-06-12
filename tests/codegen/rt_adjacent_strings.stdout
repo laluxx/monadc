@@ -1,1 +1,4 @@
-helloworld
+<repo>/tests/codegen/rt_adjacent_strings.mon:8:14: error: adjacent string literals are not supported
+  - Hint: write one string literal, for example "helloworld"; strings may already span multiple lines inside one pair of quotes
+    8 | (show "hello""world")
+      |              ^

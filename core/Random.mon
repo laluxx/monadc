@@ -120,7 +120,7 @@ Uses hardware RNG if available, otherwise advances the PRNG."
   "Return a random Bool with equal probability."
   (= 1 (& (gen64) 1)))
 
-(define (random-list [gen] -> [n :: Int] -> List)
+(define (random-list [gen] [n :: Int] -> List)
   "Return a list of N random values produced by GEN.
 GEN is a zero-argument function returning a random value, e.g. random-bool."
   (if (<= n 0)

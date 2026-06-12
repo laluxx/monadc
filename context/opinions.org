@@ -14,7 +14,7 @@
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC THINK
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -47,6 +47,30 @@
   of the context corpus over several work sessions. This file uses a nonstandard
   THINK record type because most of what follows is reasoned opinion, not
   direct observation, formal inference, or binding decision.
+
+* Human Opinions
+:PROPERTIES:
+:ID: monadc.context.opinions.human
+:CUSTOM_ID: human-opinions
+:CONTEXT_KIND: opinion
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.opinions.human.codegen-too-long src:user-request conf:high]
+  Human opinion: =codegen.c= has become too long and should be split into
+  smaller modules. This should be queryable as a human-owned opinion in the
+  context visualizer and tracked by an urgent TODO.
 
 * What Works Well
 :PROPERTIES:
@@ -342,3 +366,158 @@
   context. I found myself grepping for IDs to find the right file. An index or
   reverse-lookup file (=id → file= mapping) would speed up navigation
   significantly.
+
+* Taxonomy Rule: A Hard Constraint for Classification
+:PROPERTIES:
+:ID: monadc.context.opinions.taxonomy-rule
+:CUSTOM_ID: taxonomy-rule
+:CONTEXT_KIND: think
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: context/opinions.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.opinions.taxonomy-intro conf:high]
+  The current context system has no formal classification structure. IDs like
+  =obs.reader.sugar.periodic= follow naming conventions but the taxonomy is
+  implicit — nothing enforces that a reader observation belongs under a reader
+  heading. This leaks: records about codegen dispatch live in language.org,
+  records about tests live in index.org, and nothing stops an entry from
+  floating anywhere.
+
+[THINK id:think.opinions.taxonomy-proposal conf:high]
+  A Taxonomy Rule would make classification a hard constraint: every entry
+  must sit in a declared hierarchy, its ID path must mirror the heading tree,
+  and no entry can exist without a taxonomic parent. This is not a new record
+  type — it is a structural rule that governs all existing record types.
+
+[DEC id:dec.opinions.taxonomy-rule-shape date:2026-06-12 by:big-pickle]
+  The rule would work like this:
+  - Every context file declares a root taxonomy node in its header
+    (e.g., =#+CONTEXT_TAXONOMY_ROOT: monadc.compiler.reader=)
+  - Every heading's nesting level corresponds to one segment of the ID path.
+    Heading =** Dispatch / strcmp= under =* Codegen= produces ID prefix
+    =monadc.compiler.codegen.dispatch.strcmp=.
+  - Records inherit the heading's path as their ID prefix. An OBS under that
+    heading uses =obs.codegen.dispatch.strcmp.unique-suffix=, not
+    =obs.reader.something=.
+  - Files without a declared taxonomy root are invalid. Orphan records
+    (whose ID path doesn't match any heading path) are invalid.
+
+[THINK id:think.opinions.taxonomy-effects conf:high]
+  Effects if adopted:
+  - ID collisions become impossible — every path is unique by construction
+  - Navigation becomes path traversal: "show me everything under
+    =monadc.compiler.codegen.dispatch=" instead of grep across 5 files
+  - File boundaries become secondary — you can find an entry by its taxonomy
+    path without knowing which file it's in
+  - Duplicate facts die naturally — =strcmp= facts can't live in both
+    language.org and tests.org because the taxonomy forces them into one place
+
+[THINK id:think.opinions.taxonomy-risk conf:high]
+  The risk: taxonomy is a forced choice. If the root ontology is wrong
+  (e.g., =monadc.compiler= but not =monadc.lang.syntax=), entries get
+  misclassified and the hierarchy fights reality. A bad taxonomy is worse
+  than no taxonomy because it actively misdirects. The first taxonomy
+  definition session needs to be careful and maybe use a few real entries
+  as test cases before committing.
+
+[THINK id:think.opinions.taxonomy-compare conf:medium]
+  Compared to the other pain points in this file, taxonomy has the highest
+  leverage and the highest cost. Property drawer inheritance (S-3) saves
+  tokens but doesn't change how we find information. THINK type (S-1) adds
+  expressiveness but doesn't prevent duplication. Taxonomy fixes the
+  structural root cause of several pains at once — but it requires
+  restructuring the entire corpus. Worth doing if there is appetite for
+  a one-time rewrite pass. Not worth doing incrementally (half-taxonomy
+  is pure confusion).
+
+* General-Purpose Context Tool
+:PROPERTIES:
+:ID: monadc.context.opinions.general-tool
+:CUSTOM_ID: general-purpose-context-tool
+:CONTEXT_KIND: think
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: context/opinions.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.opinions.general-tool-intro conf:high]
+  The context system is currently embedded in the monadc repo — it lives in
+  =context/=, uses monadc-specific IDs (=monadc.context.*=), and is tangled
+  with monadc's specific compiler concerns. But the format itself (org-mode
+  files, OBS/INF/DEC/TODO/THINK records, property drawers, source anchors,
+  visualizer) is not monadc-specific at all. It is a general-purpose project
+  memory system that happens to have one user.
+
+[THINK id:think.opinions.general-tool-extract conf:high]
+  Extracting it into a separate repo (say =opencode-context= or =projctx=)
+  with an =init= script that scaffolds =context/= in any project would:
+  - Force the format to clean up its monadc-specific assumptions
+    (=CONTEXT_ID_PREFIX= becomes configurable, =navigation.org= is generated
+    from file names, not hand-written)
+  - Make it discoverable — other LLM-augmented projects can adopt it
+  - Decouple tooling from content — the visualizer, validator, and TSV
+    bridge become upstream packages, monadc's context files become just
+    one deployment
+  - Create a community — bug fixes, format improvements, new record types
+    benefit every project using it, not just monadc
+
+[THINK id:think.opinions.general-tool-shape conf:medium]
+  The extraction surface:
+  - =context-visualizer.py= — already general (parses org-mode, renders
+    graph). Only hard-coded monadc path is =CONTEXT_SOURCE_ROOT=.
+  - =context/visualizer/= — pure HTML/JS/CSS, no project-specific code
+  - The record format (OBS/INF/DEC/TODO/THINK) — already project-agnostic
+  - =navigation.org= pattern — is useful for any project, should be
+    auto-generated from =CONTEXT_ID_PREFIX= + file listing
+  - =init= script — =opencode-context init= that creates the directory
+    structure, file templates, and a sample =guidelines.org=
+
+[THINK id:think.opinions.general-tool-objection conf:high]
+  Counter-argument: this is scope creep. The context system is already useful
+  for monadc. Extracting it is engineering effort that doesn't make monadc
+  itself better. And the context format is still evolving — premature
+  generalization could lock in design mistakes. Better to let monadc be the
+  testbed for another 10-20 sessions until the format stabilizes, then
+  extract once the design is proven.
+
+* Human Test Runner Opinions
+:PROPERTIES:
+:ID: monadc.context.opinions.human-test-runner
+:CUSTOM_ID: human-test-runner-opinions
+:CONTEXT_KIND: think
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.opinions.human.test-runner-rich-output src:user-request conf:high]
+  Human opinion: =tests/run.py= should present the suite in named sections,
+  color-code those sections, and make the output look better while exposing as
+  much useful information as possible. This should preserve the current
+  last-first-failure record behavior and test semantics.

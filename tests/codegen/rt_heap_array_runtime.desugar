@@ -1,0 +1,7 @@
+(module Main)
+(define heap [1 2 3])
+(show heap)
+(show (count heap))
+(show (heap 1))
+(show (head heap))
+(show (tail heap))

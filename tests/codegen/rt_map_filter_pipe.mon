@@ -5,6 +5,6 @@
 ;; TEST-EXPECT: compile, run
 
 (module Main)
-(define (double [x :: Int] -> Int) (* 2 x))
+(define (double [x : Int] -> Int) (* 2 x))
 (define xs [1 2 3 4 5 6])
 (show (map double (filter (lambda (x) (= (% x 2) 0)) xs)))

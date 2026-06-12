@@ -15,7 +15,7 @@
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -89,10 +89,11 @@ The LLM opinions file proposes adding a THINK record type for speculative
 reasoning, exploration notes, and chain-of-thought. It would complement the
 existing OBS/INF/DEC/TODO set.
 
-[TODO id:todo.context.add-think-type date:2026-06-12 owner:human status:open]
-  Consider adding THINK record type to the context standard. Update
-  =context/index.org= format spec, =context-visualizer.py= parser, and
-  =context/visualizer/app.js= display.
+[TODO id:todo.context.add-think-type date:2026-06-12 owner:human status:partial]
+  Standard updated in =context/index.org= (format spec + rules). Used in
+  practice in =context/opinions.org= and =context/philosophy.org=. Still
+  needed: =context-visualizer.py= parser (currently only handles
+  OBS/INF/DEC/TODO) and =context/visualizer/app.js= display.
 
 * Dangling Reference Validation
 :PROPERTIES:
@@ -163,3 +164,109 @@ context-visualizer.py that checks every context ID reference in TSV files and
   camera animation, category switching, search response time, and overall
   frame rate. The goal is smooth 60fPS interaction even with 1258+ nodes and
   1351+ edges.
+
+* TODO Priority Format
+:PROPERTIES:
+:ID: monadc.context.todo.priority-format
+:CUSTOM_ID: todo-priority-format
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.todo.priority-format date:2026-06-12 by:human]
+  Durable TODOs may use Org priority cookies on headings, with =[#A]= for
+  urgent work, =[#B]= for high-priority work, and =[#C]= for normal work. The
+  bracket TODO record should also include a machine-friendly =priority:<level>=
+  field, using =urgent=, =high=, =normal=, or =low=.
+
+* TODO [#A] Split codegen.c
+:PROPERTIES:
+:ID: monadc.context.todo.split-codegen
+:CUSTOM_ID: split-codegen-c
+:CONTEXT_KIND: todo
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.todo.codegen-too-long-opinion src:context/opinions.org conf:high]
+  The human opinion =think.opinions.human.codegen-too-long= states that
+  =codegen.c= has become too long and should be split.
+
+[TODO id:todo.compiler.split-codegen-c date:2026-06-12 owner:human status:open priority:urgent]
+  Split =codegen.c= into smaller modules. Keep behavior covered by the codegen
+  corpus while separating major responsibilities such as expression dispatch,
+  closures, inline asm, data/layout lowering, collections, and runtime builtin
+  calls.
+
+* TODO [#B] Improve test runner output
+:PROPERTIES:
+:ID: monadc.context.todo.test-runner-output
+:CUSTOM_ID: test-runner-output
+:CONTEXT_KIND: todo
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.todo.test-runner-output-opinion src:context/opinions.org conf:high]
+  The human opinion =think.opinions.human.test-runner-rich-output= states that
+  =tests/run.py= should use named, color-coded sections and expose richer
+  information in the terminal output.
+
+[TODO id:todo.tests.runner-rich-output date:2026-06-12 owner:human status:open priority:high]
+  Improve =tests/run.py= presentation with named sections, section-specific
+  color, clearer progress context, richer summary information, and preservation
+  of the last-first-failure record semantics.
+
+* TODO [#B] Organize codegen tests into feature directories
+:PROPERTIES:
+:ID: monadc.context.todo.codegen-test-subdirs
+:CUSTOM_ID: codegen-test-subdirs
+:CONTEXT_KIND: todo
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[TODO id:todo.tests.codegen-subdir-migration date:2026-06-12 owner:human status:open priority:high]
+  Migrate existing flat =tests/codegen/*.mon= fixtures into semantic
+  subdirectories, keeping matching =.stdout= files beside their fixtures and
+  preserving stable =TEST-ID= metadata. Candidate sections include arithmetic,
+  strings, lists, collections, closures, asm, data, layout, wisp, and errors.
+  The goal is for the web interface and runner output to show codegen coverage
+  divided by feature section.

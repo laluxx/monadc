@@ -594,6 +594,23 @@ define BLUE   (Color 0.0 0.0 1.0 1.0)
     (set! vtx.a c.a)
  (set! g-vertex-count (g-vertex-count + 1))))
 
+
+(define (push-vertex [x :: F32] [y :: F32]
+                     [u :: F32] [v :: F32]
+                     [c :: Color])
+  (unless (g-vertex-count >= MAX-VERTICES)
+    (define [vtx -> Vertex]
+      (g-vertices g-vertex-count))
+    (set! vtx.x x)
+    (set! vtx.y y)
+    (set! vtx.u u)
+    (set! vtx.v v)
+    (set! vtx.r c.r)
+    (set! vtx.g c.g)
+    (set! vtx.b c.b)
+    (set! vtx.a c.a)
+ (set! g-vertex-count (g-vertex-count + 1))))
+
 ;;; Internal: get or open a batch for a texture
 
 (define (get-batch [tex -> Texture2D] -> I32)

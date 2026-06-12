@@ -1,0 +1,548 @@
+#+TITLE: Source File Map
+#+AUTHOR: Codex
+#+DATE: 2026-06-12
+#+CREATED: 2026-06-12
+#+LAST_MODIFIED: 2026-06-12
+#+LANGUAGE: en
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:source-map:architecture:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+#+TAGS: reader(r) parser(p) codegen(g) type(t) runtime(m) frontend(f) backend(b) util(u)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.source-map.file-metadata
+:CUSTOM_ID: source-map-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/source-map.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.purpose src:user-request conf:high]
+  This file maps every C source file to its purpose and its connections to other
+  files. It is designed as an LLM-first dependency graph. For detailed purpose
+  descriptions, see the README's source file guide.
+
+* Reader & Frontend
+
+** reader.c/h — Lexer, Parser, AST Construction
+:PROPERTIES:
+:ID: monadc.context.source-map.reader
+:CUSTOM_ID: source-reader
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: reader.c, reader.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.reader.purpose src:reader.c,reader.h conf:high]
+  Frontend entry point: lexer → parser → AST (22 node types), pattern-match
+  desugar, comment mapping, JSON emission, context tracking.
+
+[INF id:inf.source-map.reader-connects-to from:obs.source-map.reader.purpose conf:high]
+  connects-to → wisp.c/h (wisp expands to S-exprs, reader parses them) ·
+  codegen.c/h (AST → LLVM IR) · dep.c/h (AST → dependent type checking) ·
+  infer.c/h (AST → HM inference) · typst_emit.c/h (AST → Typst math docs)
+
+** wisp.c/h — Wisp Syntax Expander
+:PROPERTIES:
+:ID: monadc.context.source-map.wisp
+:CUSTOM_ID: source-wisp
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: wisp.c, wisp.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.wisp.purpose src:wisp.c,wisp.h conf:high]
+  Converts indentation-based Wisp to S-expressions before parsing. Arity table,
+  sugar transforms (?-sugar, !-sugar, infix), FFI arity registration.
+
+[INF id:inf.source-map.wisp-connects-to from:obs.source-map.wisp.purpose conf:high]
+  connects-to → reader.c/h (output feeds into parser) · ffi.c/h (arity
+  registration from C headers) · codegen.c/h (arity from builtins env) ·
+  env.c/h (env → arity registration)
+
+* Type System
+
+** types.c/h — Type Representation
+:PROPERTIES:
+:ID: monadc.context.source-map.types
+:CUSTOM_ID: source-types
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: types.c, types.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.types.purpose src:types.c,types.h conf:high]
+  Type representation used across the entire compiler: =TypeKind= (26 kinds),
+  =Type= struct with union fields, =FnParam=, =LayoutField=. Operations: clone,
+  free, substitute, unify, to_llvm.
+
+[INF id:inf.source-map.types-connects-to from:obs.source-map.types.purpose conf:high]
+  connects-to → EVERY other module (types are universal currency) · codegen.c/h
+  (type_to_llvm for IR) · infer.c/h (HM unification on Type structs)
+
+** infer.c/h — Hindley-Milner Type Inference
+:PROPERTIES:
+:ID: monadc.context.source-map.infer
+:CUSTOM_ID: source-infer
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: infer.c, infer.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.infer.purpose src:infer.c,infer.h conf:high]
+  HM type inference: constraint generation → unification (Robinson) →
+  generalization (quantify → TypeScheme) → instantiation → zonking.
+
+[INF id:inf.source-map.infer-connects-to from:obs.source-map.infer.purpose conf:high]
+  connects-to → types.c/h (unification on Type structs) · reader.c/h (infers
+  from AST) · codegen.c/h (inferred types inform codegen)
+
+** dep.c/h — Dependent Type Checker (ITT Kernel)
+:PROPERTIES:
+:ID: monadc.context.source-map.dep
+:CUSTOM_ID: source-dep
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: dep.c, dep.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.dep.purpose src:dep.c,dep.h conf:high]
+  Full ITT kernel with NbE: universe hierarchy, Pi/Sigma, propositional
+  equality, bidirectional checking, definitional equality via NbE (100k fuel),
+  locally nameless representation, metavariables, TERM_EMBED ground bridge.
+
+[INF id:inf.source-map.dep-connects-to from:obs.source-map.dep.purpose conf:high]
+  connects-to → reader.c/h (AST → Term) · codegen.c/h (dep ctx in codegen ctx) ·
+  env.c/h (dep ctx in env) · main.c (Phase 6.5 shadow pass)
+
+** typeclass.c/h — Type Class System
+:PROPERTIES:
+:ID: monadc.context.source-map.typeclass
+:CUSTOM_ID: source-typeclass
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: typeclass.c, typeclass.h
+:CONFIDENCE: medium
+:END:
+
+[OBS id:obs.source-map.typeclass.purpose src:typeclass.c,typeclass.h conf:high]
+  Class/instance declaration and resolution. Instance derivation (Eq, Enum,
+  Bounded, Show) is aspirational.
+
+[INF id:inf.source-map.typeclass-connects-to from:obs.source-map.typeclass.purpose conf:high]
+  connects-to → reader.c/h (parses class/instance AST) · codegen.c/h (method
+  dispatch)
+
+* Code Generation
+
+** codegen.c/h — LLVM IR Code Generator
+:PROPERTIES:
+:ID: monadc.context.source-map.codegen
+:CUSTOM_ID: source-codegen
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c, codegen.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.codegen.purpose src:codegen.c,codegen.h conf:high]
+  Largest file (~13K lines). Translates desugared AST → LLVM IR. 83+ strcmp
+  dispatch entries, 94 env builtins, 17 type predicates, monomorphization.
+
+[DEC id:dec.source-map.codegen-dispatch-rule date:2026-06-12 by:codex]
+  A function is callable from paren-mode ONLY if it has a strcmp handler.
+  =register_builtins=-only functions are NOT directly callable.
+
+[INF id:inf.source-map.codegen-connects-to from:obs.source-map.codegen.purpose conf:high]
+  connects-to → types.c/h (type_to_llvm) · env.c/h (variable/func lookup) ·
+  runtime.c/h (runtime function calls) · ffi.c/h (FFI declaration) · asm.c/h
+  (inline assembly) · main.c (Phase 7)
+
+* Runtime & Low-Level
+
+** runtime.c/h — Runtime Library
+:PROPERTIES:
+:ID: monadc.context.source-map.runtime
+:CUSTOM_ID: source-runtime
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: runtime.c, runtime.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.runtime.purpose src:runtime.c,runtime.h conf:high]
+  =libmonad.a= runtime: cons cells, list/set/map ops, GC (ref-count + cycle
+  detect), value constructors, =show= printer.
+
+[INF id:inf.source-map.runtime-connects-to from:obs.source-map.runtime.purpose conf:high]
+  connects-to → arena.c/h (bump allocator) · codegen.c/h (declares and calls
+  runtime functions)
+
+** arena.c/h — Arena Allocator
+:PROPERTIES:
+:ID: monadc.context.source-map.arena
+:CUSTOM_ID: source-arena
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: arena.c, arena.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.arena.purpose src:arena.c,arena.h conf:high]
+  Bump allocator (4MB blocks, O(1) allocation). Used by compiler and runtime.
+
+[INF id:inf.source-map.arena-connects-to from:obs.source-map.arena.purpose conf:high]
+  connects-to → runtime.c/h (runtime allocations) · reader.c/h (AST nodes)
+
+** asm.c/h — Inline Assembly Translator
+:PROPERTIES:
+:ID: monadc.context.source-map.asm
+:CUSTOM_ID: source-asm
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: asm.c, asm.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.asm.purpose src:asm.c,asm.h conf:high]
+  Inline =asm= blocks → LLVM IR. Register allocator, naked function support.
+
+[INF id:inf.source-map.asm-connects-to from:obs.source-map.asm.purpose conf:high]
+  connects-to → codegen.c/h (asm in generated IR) · runtime.c/h (address-of)
+
+* FFI & External Interop
+
+** ffi.c/h — C Foreign Function Interface
+:PROPERTIES:
+:ID: monadc.context.source-map.ffi
+:CUSTOM_ID: source-ffi
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: ffi.c, ffi.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.ffi.purpose src:ffi.c,ffi.h conf:high]
+  Direct C header inclusion via libclang. Header parsing, type mapping (C →
+  Monad), struct/layout registration, arity registration with wisp.
+
+[INF id:inf.source-map.ffi-connects-to from:obs.source-map.ffi.purpose conf:high]
+  connects-to → wisp.c/h (arity registration) · codegen.c/h (FFI in LLVM) ·
+  main.c (Phase 0 pre-pass)
+
+* Environment & Module System
+
+** env.c/h — Symbol Table
+:PROPERTIES:
+:ID: monadc.context.source-map.env
+:CUSTOM_ID: source-env
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: env.c, env.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.env.purpose src:env.c,env.h conf:high]
+  Hash-map symbol table: VAR, FUNC, BUILTIN, LAYOUT, MACRO, MODULE entries.
+
+[INF id:inf.source-map.env-connects-to from:obs.source-map.env.purpose conf:high]
+  connects-to → codegen.c/h (LLVM values for bindings) · infer.c/h (type info) ·
+  wisp.c/h (arity registration) · repl.c/h (interaction state)
+
+** module.c/h — Module System Core
+:PROPERTIES:
+:ID: monadc.context.source-map.module
+:CUSTOM_ID: source-module
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: module.c, module.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.module.purpose src:module.c,module.h conf:high]
+  Module/import parsing, dependency resolution, compiled module registry.
+
+** module_export.c/h — Module Export Resolution
+:PROPERTIES:
+:ID: monadc.context.source-map.module-export
+:CUSTOM_ID: source-module-export
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: module_export.c, module_export.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.module-export.purpose src:module_export.c,module_export.h conf:high]
+  Export resolution: visible names per module (export-all, selective, hiding).
+
+** buildsystem.c/h — Package Build System
+:PROPERTIES:
+:ID: monadc.context.source-map.buildsystem
+:CUSTOM_ID: source-buildsystem
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: buildsystem.c, buildsystem.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.buildsystem.purpose src:buildsystem.c,buildsystem.h conf:high]
+  Package CLI (=monad new/build/run/install/clean=), =package.yaml= parsing.
+
+* Pattern Matching & Macros
+
+** pmatch.c/h — Pattern Match Compiler
+:PROPERTIES:
+:ID: monadc.context.source-map.pmatch
+:CUSTOM_ID: source-pmatch
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: pmatch.c, pmatch.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.pmatch.purpose src:pmatch.c,pmatch.h conf:high]
+  Pattern clauses → nested if/case chains with coverage verification.
+
+** macro.c/h — Macro System
+:PROPERTIES:
+:ID: monadc.context.source-map.macro
+:CUSTOM_ID: source-macro
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: macro.c, macro.h
+:CONFIDENCE: medium
+:END:
+
+[OBS id:obs.source-map.macro.purpose src:macro.c,macro.h conf:high]
+  =define-macro=, =syntax-rules= expansion during parsing.
+
+* CLI & REPL
+
+** cli.c/h — CLI Argument Parser
+:PROPERTIES:
+:ID: monadc.context.source-map.cli
+:CUSTOM_ID: source-cli
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: cli.c, cli.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.cli.purpose src:cli.c,cli.h conf:high]
+  CLI flags/modes: compile, REPL, new, build, run, clean, install, test. All
+  emit flags.
+
+** repl.c/h — Interactive REPL
+:PROPERTIES:
+:ID: monadc.context.source-map.repl
+:CUSTOM_ID: source-repl
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: repl.c, repl.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.repl.purpose src:repl.c,repl.h conf:high]
+  JIT-compile REPL with readline, expression history, error recovery.
+
+* Other
+
+** features.c/h — Conditional Compilation
+:PROPERTIES:
+:ID: monadc.context.source-map.features
+:CUSTOM_ID: source-features
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: features.c, features.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.features.purpose src:features.c,features.h conf:high]
+  Platform feature detection (=#+LINUX=, =#+X86-64=), =*features*= list.
+
+** typst_emit.c/h — Typst Document Emission
+:PROPERTIES:
+:ID: monadc.context.source-map.typst-emit
+:CUSTOM_ID: source-typst-emit
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: typst_emit.c, typst_emit.h
+:CONFIDENCE: medium
+:END:
+
+[OBS id:obs.source-map.typst-emit.purpose src:typst_emit.c,typst_emit.h conf:high]
+  Surface AST → Typst math documents → PDF (via =typst= CLI).
+
+** main.c — Entry Point and Pipeline Orchestrator
+:PROPERTIES:
+:ID: monadc.context.source-map.main
+:CUSTOM_ID: source-main
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: main.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.main.purpose src:main.c conf:high]
+  =main= entry, =compile_one= orchestrator (12-phase pipeline). Module registry,
+  name mangling, C linker invocation.
+
+* Core Library Files
+
+** core/ — Standard Library
+:PROPERTIES:
+:ID: monadc.context.source-map.core-libs
+:CUSTOM_ID: source-core-libs
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: core/
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.core-libs.purpose src:core/ conf:high]
+  Standard library (Monad source): prelude (Coll, Test), List, Set, Math,
+  Random, text (Ascii, String), json, Assert, TODO. NOT automatically imported.

@@ -1,1 +1,1 @@
-I'm trying to let the LLMs express themself in a format they designed for themself.
+I'm trying to let the LLMs express themself in a format they design and extend for themself.

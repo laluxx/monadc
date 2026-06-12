@@ -1025,6 +1025,37 @@ static int op_precedence(const char *name) {
 
 static int g_infix_fence = -1; /* stream pos: infix promotion stops before this */
 
+static void wisp_syntax_error(int line, int column, const char *message, const char *hint) {
+    snprintf(g_reader_error_msg, sizeof(g_reader_error_msg), "%s", message);
+    fprintf(stderr, "%s:%d:%d: error: %s\n",
+            current_filename ? current_filename : "<input>",
+            line, column, message);
+
+    const char *src = original_source ? original_source : current_source;
+    if (src) {
+        const char *line_start = src;
+        int current_line = 1;
+        while (current_line < line && *line_start) {
+            if (*line_start == '\n') current_line++;
+            line_start++;
+        }
+        const char *line_end = line_start;
+        while (*line_end && *line_end != '\n') line_end++;
+        fprintf(stderr, "%5d | %.*s\n", line, (int)(line_end - line_start), line_start);
+        fprintf(stderr, "      | ");
+        for (int i = 1; i < column; i++) fprintf(stderr, " ");
+        fprintf(stderr, "^\n");
+    }
+
+    if (hint && hint[0]) fprintf(stderr, "  - Hint: %s\n", hint);
+
+    if (g_reader_escape_set) {
+        g_reader_escape_set = false;
+        longjmp(g_reader_escape, 1);
+    }
+    exit(1);
+}
+
 /* Tokenise one line into the stream */
 static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
                            int indent, int lineno) {
@@ -1042,6 +1073,13 @@ static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
             char *tok = strndup(start, p - start);
             wts_push(s, tok, indent, lineno);
             free(tok);
+            if (*p == '"') {
+                wisp_syntax_error(
+                    lineno,
+                    (int)(p - line) + 1,
+                    "adjacent string literals are not supported",
+                    "write one string literal, for example \"helloworld\"; strings may already span multiple lines inside one pair of quotes");
+            }
             continue;
         }
 
@@ -4398,6 +4436,7 @@ ASTList wisp_parse_all(const char *source, const char *filename) {
                 arity_set_with_kinds(&t, e->name, e->arity, e->param_kinds);
 
     arity_set(&t, "match", -1);
+    arity_set(&t, "assert-eq", 3);
 
     arity_prescan(&t, stripped);
 

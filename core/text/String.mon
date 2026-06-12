@@ -23,39 +23,39 @@
 
 ;;; Queries
 
-(define (string-empty? [s :: String] -> Bool)
+(define (string-empty? [s : String] -> Bool)
   "Return True if S is the empty string."
   (= (count s) 0))
 
-(define (string-prefix? [prefix :: String] -> [s :: String] -> Bool)
-  (define [plen   :: Int]  (count prefix))
-  (define [slen   :: Int]  (count s))
-  (define [result :: Bool] (and (<= plen slen) True))
+(define (string-prefix? [prefix : String] [s : String] -> Bool)
+  (def [plen :: Int]  (count prefix))
+  (def [slen :: Int]  (count s))
+  (def [result :: Bool] (and (<= plen slen) True))
   (if (<= plen slen)
     (for [i 0 plen]
       (if (!= (prefix i) (s i))
         (set! result False))))
   result)
 
-(define (string-suffix? [suffix :: String] -> [s :: String] -> Bool)
+(define (string-suffix? [suffix : String] [s : String] -> Bool)
   "Return True if S ends with SUFFIX."
-  (define [suflen :: Int]  (count suffix))
-  (define [slen   :: Int]  (count s))
-  (define [offset :: Int]  (- slen suflen))
-  (define [result :: Bool] (and (<= suflen slen) True))
+  (def [suflen :: Int]  (count suffix))
+  (def [slen :: Int]  (count s))
+  (def [offset :: Int]  (- slen suflen))
+  (def [result :: Bool] (and (<= suflen slen) True))
   (if (<= suflen slen)
     (for [i 0 suflen]
       (if (!= (suffix i) (s (+ offset i)))
         (set! result False))))
   result)
 
-(define (string-contains? [s :: String] -> [sub :: String] -> Bool)
+(define (string-contains? [s : String] [sub : String] -> Bool)
   "Return True if S contains SUB."
-  (define [slen   :: Int]  (count s))
-  (define [sublen :: Int]  (count sub))
-  (define [result :: Bool] False)
-  (define [limit  :: Int]  (- slen sublen))
-  (define [match  :: Bool] True)
+  (def [slen :: Int]  (count s))
+  (def [sublen :: Int]  (count sub))
+  (def [result :: Bool] False)
+  (def [limit :: Int]  (- slen sublen))
+  (def [match :: Bool] True)
   (if (<= sublen slen)
     (for [i 0 (+ limit 1)]
       (begin
@@ -69,103 +69,103 @@
 
 ;;; Copying and construction
 
-(define (string-copy [s :: String] -> String)
+(define (string-copy [s : String] -> String)
   "Return a fresh mutable copy of S."
-  (define [len    :: Int]    (count s))
-  (define [result :: String] (make-string len 'a'))
+  (def [len :: Int]    (count s))
+  (def [result :: String] (make-string len 'a'))
   (for [i 0 len]
     (set! (result i) (s i)))
   result)
 
 ;; TODO It should be able to take String or Character as `b'
-(define (string-append [a :: String] -> [b :: String] -> String)
+(define (string-append [a : String] [b : String] -> String)
   "Return a new string that is A followed by B."
-  (define [alen   :: Int]    (count a))
-  (define [blen   :: Int]    (count b))
-  (define [result :: String] (make-string (+ alen blen) 'a'))
+  (def [alen :: Int]    (count a))
+  (def [blen :: Int]    (count b))
+  (def [result :: String] (make-string (+ alen blen) 'a'))
   (for [i 0 alen]
     (set! (result i) (a i)))
   (for [i 0 blen]
     (set! (result (+ alen i)) (b i)))
   result)
 
-(define (substring [s :: String] -> [start :: Int] -> [end :: Int] -> String)
+(define (substring [s : String] [start : Int] [end : Int] -> String)
   "Return a new string containing chars of S from START to END."
-  (define [len    :: Int]    (- end start))
-  (define [result :: String] (make-string len 'a'))
+  (def [len :: Int]    (- end start))
+  (def [result :: String] (make-string len 'a'))
   (for [i 0 len]
     (set! (result i) (s (+ start i))))
   result)
 
 ;;; Trimming
 
-(define (string-trim [s :: String] -> String)
+(define (string-trim [s : String] -> String)
   "Return S with leading whitespace removed."
-  (define [len   :: Int] (count s))
-  (define [start :: Int] 0)
+  (def [len :: Int] (count s))
+  (def [start :: Int] 0)
   (for [i 0 len]
     (if (and (= start i) (char-whitespace? (s i)))
       (set! start (+ start 1))))
   (substring s start len))
 
-(define (string-trim-right [s :: String] -> String)
+(define (string-trim-right [s : String] -> String)
   "Return S with trailing whitespace removed."
-  (define [len :: Int] (count s))
-  (define [end :: Int] len)
+  (def [len :: Int] (count s))
+  (def [end :: Int] len)
   (for [i 0 len]
     (if (char-whitespace? (s (- len (+ i 1))))
       (if (= end (- len i))
         (set! end (- end 1)))))
   (substring s 0 end))
 
-(define (string-trim-both [s :: String] -> String)
+(define (string-trim-both [s : String] -> String)
   "Return S with leading and trailing whitespace removed."
   (string-trim (string-trim-right s)))
 
 ;;; Padding
 
-(define (string-pad-left [s :: String] -> [n :: Int] -> [c :: Char] -> String)
+(define (string-pad-left [s : String] [n : Int] [c : Char] -> String)
   "Pad S on the left with C to length N."
-  (define [len    :: Int]    (count s))
+  (def [len :: Int]    (count s))
   (if (<= n len)
     s
     (begin
-      (define [pad    :: Int]    (- n len))
-      (define [result :: String] (make-string n c))
+      (def [pad :: Int]    (- n len))
+      (def [result :: String] (make-string n c))
       (for [i 0 len]
         (set! (result (+ pad i)) (s i)))
       result)))
 
-(define (string-pad-right [s :: String] -> [n :: Int] -> [c :: Char] -> String)
+(define (string-pad-right [s : String] [n : Int] [c : Char] -> String)
   "Pad S on the right with C to length N."
-  (define [len    :: Int]    (count s))
+  (def [len :: Int]    (count s))
   (if (<= n len)
     s
     (begin
-      (define [result :: String] (make-string n c))
+      (def [result :: String] (make-string n c))
       (for [i 0 len]
         (set! (result i) (s i)))
       result)))
 
 ;;;; Case conversion
 
-(define (upcase [input :: String] -> String)
+(define (upcase [input : String] -> String)
   "Convert INPUT to upper case."
-  (define [result :: String] (make-string (count input) 'a'))
+  (def [result :: String] (make-string (count input) 'a'))
   (for [i 0 (count input)]
     (set! (result i) (char-upcase (input i))))
   result)
 
-(define (downcase [input :: String] -> String)
+(define (downcase [input : String] -> String)
   "Convert INPUT to lower case."
-  (define [result :: String] (make-string (count input) 'a'))
+  (def [result :: String] (make-string (count input) 'a'))
   (for [i 0 (count input)]
     (set! (result i) (char-downcase (input i))))
   result)
 
-(define (capitalize [input :: String] -> String)
+(define (capitalize [input : String] -> String)
   "Capitalize INPUT."
-  (define [result :: String] (make-string (count input) 'a'))
+  (def [result :: String] (make-string (count input) 'a'))
   (for [i 0 (count input)]
     (set! (result i)
       (if (= i 0)
@@ -173,24 +173,24 @@
         (char-downcase (input i)))))
   result)
 
-(tests
-  (assert-eq (string-empty?     "")                     True            "string-empty? empty")
-  (assert-eq (string-empty?     "hello")                False           "string-empty? nonempty")
-  (assert-eq (string-prefix?    "he"  "hello")          True            "string-prefix? yes")
-  (assert-eq (string-prefix?    "wo"  "hello")          False           "string-prefix? no")
-  (assert-eq (string-prefix?    "hello" "hi")           False           "string-prefix? too long")
-  (assert-eq (string-suffix?    "lo"  "hello")          True            "string-suffix? yes")
-  (assert-eq (string-suffix?    "he"  "hello")          False           "string-suffix? no")
-  (assert-eq (string-contains?  "hello world" "world")  True            "string-contains? yes")
-  (assert-eq (string-contains?  "hello world" "xyz")    False           "string-contains? no")
-  (assert-eq (string-copy       "hello")                "hello"         "string-copy")
-  (assert-eq (string-append     "hello" " world")       "hello world"   "string-append")
-  (assert-eq (substring         "hello" 1 4)            "ell"           "substring")
-  (assert-eq (string-trim       "  hello  ")            "hello  "       "string-trim")
-  (assert-eq (string-trim-right "  hello  ")            "  hello"       "string-trim-right")
-  (assert-eq (string-trim-both  "  hello  ")            "hello"         "string-trim-both")
-  (assert-eq (string-pad-left   "hi" 5 '-')             "---hi"         "string-pad-left")
-  (assert-eq (string-pad-right  "hi" 5 '-')             "hi---"         "string-pad-right")
-  (assert-eq (upcase            "meow!")                "MEOW!"         "upcase")
-  (assert-eq (downcase          "DOWNCASE!")            "downcase!"     "downcase")
-  (assert-eq (capitalize        "caPiTaliZED!")         "Capitalized!"  "capitalize"))
+tests
+  assert-eq (string-empty? "") True "string-empty? empty"
+  assert-eq (string-empty? "hello") False "string-empty? nonempty"
+  assert-eq (string-prefix? "he" "hello") True "string-prefix? yes"
+  assert-eq (string-prefix? "wo" "hello") False "string-prefix? no"
+  assert-eq (string-prefix? "hello" "hi") False "string-prefix? too long"
+  assert-eq (string-suffix? "lo" "hello") True "string-suffix? yes"
+  assert-eq (string-suffix? "he" "hello") False "string-suffix? no"
+  assert-eq (string-contains? "hello world" "world") True "string-contains? yes"
+  assert-eq (string-contains? "hello world" "xyz") False "string-contains? no"
+  assert-eq (string-copy "hello") "hello" "string-copy"
+  assert-eq (string-append "hello" " world") "hello world" "string-append"
+  assert-eq (substring "hello" 1 4) "ell" "substring"
+  assert-eq (string-trim " hello ") "hello " "string-trim"
+  assert-eq (string-trim-right " hello ") " hello" "string-trim-right"
+  assert-eq (string-trim-both " hello ") "hello" "string-trim-both"
+  assert-eq (string-pad-left "hi" 5 '-') "---hi" "string-pad-left"
+  assert-eq (string-pad-right "hi" 5 '-') "hi---" "string-pad-right"
+  assert-eq (upcase "meow!") "MEOW!" "upcase"
+  assert-eq (downcase "DOWNCASE!") "downcase!" "downcase"
+  assert-eq (capitalize "caPiTaliZED!") "Capitalized!" "capitalize"

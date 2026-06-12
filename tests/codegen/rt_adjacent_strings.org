@@ -1,0 +1,34 @@
+#+TITLE: Adjacent String Diagnostic Test Metadata
+#+AUTHOR: Codex
+#+DATE: 2026-06-12
+#+STARTUP: showeverything
+
+* Adjacent String Diagnostic
+:PROPERTIES:
+:ID: monadc.test.codegen.rt-adjacent-strings.metadata
+:CUSTOM_ID: codegen-rt-adjacent-strings-metadata
+:CONTEXT_KIND: test-metadata
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/rt_adjacent_strings.mon
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.test.rt-adjacent-strings.expected-failure date:2026-06-12 by:human]
+  =tests/codegen/rt_adjacent_strings.mon= is a supposed-to-fail fixture. Its
+  sibling =.stdout= is the expected diagnostic golden, not program output.
+
+[DEC id:dec.test.rt-adjacent-strings.contract date:2026-06-12 by:codex]
+  Connected string literals such as ="hello""world"= should fail at the
+  reader/Wisp boundary with a targeted syntax error. They must not fall through
+  to dependent type checking as =(show "hello" "world")=, because that reports
+  an unrelated =String= versus =Int= mismatch.
+
+#+CAPTION: Regression Contract
+| Field      | Value                                                                   |
+|------------+-------------------------------------------------------------------------|
+| Fixture    | =tests/codegen/rt_adjacent_strings.mon=                                   |
+| Golden     | =tests/codegen/rt_adjacent_strings.stdout=                                |
+| Runner     | =python3 tests/run.py=                                                    |
+| Expect     | =TEST-EXPECT: fail:compile=                                               |
+| Diagnostic | =adjacent string literals are not supported=                              |
+| Guidance   | write one string literal; strings may span multiple lines inside quotes |

@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.wisp-pattern-second-arg
+;; TEST-CONTEXT: monadc.context.tests.core-prelude-module-tests, monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Wisp pattern clauses must match the collection argument, not an earlier scalar argument.
+;; TEST-ATOM: A scalar first parameter plus [x|xs] second parameter desugars to a valid runtime function.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+
+(define (firstItem [n : Int] [xs : Arr] -> Int)
+  _ []     -> 0
+  n [x|xs] -> x)
+
+(show (firstItem 9 [7 8]))

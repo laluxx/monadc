@@ -66,15 +66,15 @@ nodes, property drawers are machine-readable metadata, and bracketed records are
 stable LLM facts.
 #+END_QUOTE
 
-| Area     | File                 | Purpose                                  |
-|----------+----------------------+------------------------------------------|
-| Format   | [[file:context/index.org][context/index.org]]    | Schema, notation, visual conventions     |
-| Reader   | [[file:context/reader.org][context/reader.org]]   | AST, tokens, parser and Wisp boundary    |
-| Build    | [[file:context/build.org][context/build.org]]    | Build/install commands and verification  |
-| Tests    | [[file:context/tests.org][context/tests.org]]    | Test metadata, philosophy, context links |
-| Workflow | [[file:context/workflow.org][context/workflow.org]] | Standing user preferences                |
-| Rules    | [[file:context/rules.org][context/rules.org]]    | Standing repository rules                |
-| TODO     | [[file:context/todo.org][context/todo.org]]     | Migrated project TODO notes              |
+| Area       | File                   | Purpose                                     |
+|------------+------------------------+---------------------------------------------|
+| Format     | [[file:context/index.org][context/index.org]]      | Schema, notation, visual conventions        |
+| Reader     | [[file:context/reader.org][context/reader.org]]     | AST, tokens, parser and Wisp boundary       |
+| Build      | [[file:context/build.org][context/build.org]]      | Build/install commands and verification     |
+| Tests      | [[file:context/tests.org][context/tests.org]]      | Test metadata, philosophy, context links    |
+| Workflow   | [[file:context/workflow.org][context/workflow.org]]   | Standing user preferences                   |
+| Rules      | [[file:context/rules.org][context/rules.org]]      | Standing repository rules                   |
+| TODO       | [[file:context/todo.org][context/todo.org]]       | Migrated project TODO notes                 |
 | Philosophy | [[file:context/philosophy.org][context/philosophy.org]] | Language and project philosophy (witnessed) |
 
 #+INCLUDE: "context/index.org"

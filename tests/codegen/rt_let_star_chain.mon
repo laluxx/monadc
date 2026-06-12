@@ -1,8 +1,8 @@
 ;; TEST-ID: tests.codegen.rt-let-star-chain
 ;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
 ;; TEST-PURPOSE: Let* allows chained bindings where later ones reference earlier ones.
-;; TEST-ATOM: (let* [x 1 y (+ x 1)] y) evaluates to 2.
+;; TEST-ATOM: (let* ([x 1] [y (+ x 1)]) y) evaluates to 2.
 ;; TEST-EXPECT: compile, run
 
 (module Main)
-(show (let* [x 1 y (+ x 1)] y))
+(show (let* ([x 1] [y (+ x 1)]) y))

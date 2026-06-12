@@ -3041,6 +3041,13 @@ Term *dep_term_of_type_ast(DepCtx *ctx, AST *ast) {
             t->col  = ast->column;
             return t;
         }
+        if (strcmp(ast->symbol, "Fn") == 0) {
+            int id = meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, "?fn");
+            Term *t = term_meta(id);
+            t->line = ast->line;
+            t->col  = ast->column;
+            return t;
+        }
         if (ast->symbol[0] >= 'a' && ast->symbol[0] <= 'z') {
             int id = meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, ast->symbol);
             return term_meta(id);

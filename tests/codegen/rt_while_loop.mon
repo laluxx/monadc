@@ -1,9 +1,8 @@
 ;; TEST-ID: tests.codegen.rt-while-loop
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Runtime while loop evaluates correctly.
-;; TEST-ATOM: (while (< i 3) ...) loops 3 times.
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: While loop with counter and mutation
+;; TEST-ATOM: while loop prints 0, 1, 2
 ;; TEST-EXPECT: compile, run
-
 (module Main)
 (define i 0)
 (while (< i 3) (begin (show i) (set! i (+ i 1))))

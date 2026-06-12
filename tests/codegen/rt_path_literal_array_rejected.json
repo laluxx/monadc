@@ -1,0 +1,51 @@
+[
+  {
+    "type": "list",
+    "items": [
+      {
+        "type": "symbol",
+        "name": "module"
+      },
+      {
+        "type": "symbol",
+        "name": "PathLiteralArrayRejected"
+      }
+    ]
+  },
+  {
+    "type": "list",
+    "items": [
+      {
+        "type": "symbol",
+        "name": "define"
+      },
+      {
+        "type": "symbol",
+        "name": "bad"
+      },
+      {
+        "type": "array",
+        "is_heap": false,
+        "elements": [
+          {
+            "type": "path",
+            "value": "~/xos/projects/c/monadc/context/"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "type": "list",
+    "items": [
+      {
+        "type": "symbol",
+        "name": "show"
+      },
+      {
+        "type": "symbol",
+        "name": "bad"
+      }
+    ]
+  }
+]

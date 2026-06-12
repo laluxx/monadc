@@ -6162,6 +6162,16 @@ static AST *parse_expr_base(Parser *p) {
     case TOK_STRING: {
         int end_col = tok.column + (tok.value ? strlen(tok.value) : 1) + 2;
         p->current = lexer_next_token(p->lexer);
+        if (p->current.type == TOK_STRING &&
+            p->current.line == tok.line &&
+            p->current.column == end_col) {
+            compiler_error_range(
+                p->current.line,
+                p->current.column,
+                p->current.column + 1,
+                "adjacent string literals are not supported\n"
+                "  - Hint: write one string literal, for example \"helloworld\"; strings may already span multiple lines inside one pair of quotes");
+        }
         AST *ast = ast_new_string(tok.value);
         ast->line = tok.line;
         ast->column = tok.column;

@@ -14,7 +14,7 @@
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -101,3 +101,40 @@ directory.
 [OBS id:obs.build.sudo-password-required src:command-output conf:high]
 In this environment, =sudo make install= can require an interactive password and
 may fail if no password is provided.
+
+* Test Targets
+:PROPERTIES:
+:ID: monadc.context.build.test-targets
+:CUSTOM_ID: build-test-targets
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: Makefile
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.build.test-target src:Makefile conf:high]
+  =make test= builds the compiler (=all=) then runs =tests/run.py=. This exercises
+  the full pipeline: reader parsing (atoms + sugar TSV entries), codegen
+  compile/run fixtures, and language feature tests. It is a codegen test — every
+  fixture is compiled to a binary and executed.
+
+[OBS id:obs.build.test-core-target src:Makefile conf:high]
+  =make test core= builds the compiler then runs =tests/run_core.py=. This
+  compiles and runs the per-module =tests= sections in =core/**/*.mon= (prelude,
+  List, Set, Math, text/, etc.). Each module is compiled to a binary and
+  executed — this is also a codegen test, since the compiler must generate
+  working code for core library definitions.
+
+#+CAPTION: Make Test Targets
+| Target            | Command                    | What It Tests                        |
+|-------------------+----------------------------+--------------------------------------|
+| =test=              | =python3 tests/run.py=       | Codegen + reader (atoms, sugar, lang) |
+| =test core=         | =python3 tests/run_core.py=  | Core module per-module tests         |

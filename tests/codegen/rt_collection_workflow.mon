@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.rt-collection-workflow
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Connected workflow exercising set ops (conj!, disj!, contains?, count),
+;;               list ops (append!, car, cdr), and predicates (collection?).
+;;               Demonstrates cross-type collection operations in a single program.
+;; TEST-ATOM: Set mutation + query + list mutation + car/cdr + collection? predicates.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define [s :: Set] {1 2 3})
+(conj! s 4)
+(show (contains? s 4))
+(disj! s 1)
+(show (contains? s 1))
+(show (count s))
+
+(define [xs :: List] (list))
+(append! xs 10)
+(append! xs 20)
+(show (car xs))
+(show (car (cdr xs)))
+
+(show (collection? s))
+(show (collection? xs))
+(show (collection? 42))

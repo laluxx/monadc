@@ -1,12 +1,16 @@
 ;; TEST-ID: tests.codegen.rt-type-predicates
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Runtime type predicate functions work.
-;; TEST-ATOM: (Int? 42) = True, (Int? "hi") = False, (String? "hi") = True, (nil? nil) = True.
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: All primitive type predicates.
+;; TEST-ATOM: (Int? 42) = True, (Float? 3.14) = True, (String? "hi") = True,
+;;           (Bool? True) = True, (Char? (Char 65)) = True, (nil? nil) = True,
+;;           (Number? 42) = True, (Number? 3.14) = True
 ;; TEST-EXPECT: compile, run
-
 (module Main)
 (show (Int? 42))
-(show (Int? "hi"))
+(show (Float? 3.14))
 (show (String? "hi"))
+(show (Bool? True))
+(show (Char? (Char 65)))
 (show (nil? nil))
-(show (nil? 0))
+(show (Number? 42))
+(show (Number? 3.14))

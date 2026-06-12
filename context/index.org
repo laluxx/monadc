@@ -14,7 +14,7 @@
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -190,7 +190,7 @@ Every context file should include these file-level Org keywords when applicable:
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -255,6 +255,7 @@ LLM-oriented statements use bracketed records with fixed keys:
 [INF id:<id> from:<obs-id[,obs-id...]> conf:<high|medium|low>] <inference>
 [DEC id:<id> date:<YYYY-MM-DD> by:<human|codex>] <decision>
 [TODO id:<id> owner:<human|codex|unknown> status:open] <task>
+[THINK id:<id> conf:<high|medium|low>] <speculative reasoning, exploration note, chain-of-thought>
 #+END_EXAMPLE
 
 Rules:
@@ -263,6 +264,7 @@ Rules:
 - =INF= must name the observation IDs it depends on.
 - =DEC= records repository-local choices that future work should preserve.
 - =TODO= records pending work only when it is specific and actionable.
+- =THINK= records speculative reasoning, exploration notes, or chain-of-thought that is neither a certain observation nor a formal inference nor a binding decision. THINK records are visually distinguished in the dashboard (purple) and filtered out from decisions and formal inferences.
 - IDs are immutable once published.
 - Prefer one claim per record.
 - Do not silently rewrite history; append a superseding record when facts change.
@@ -283,12 +285,17 @@ Rules:
 - [[file:language.org][Language formalization context]]
 - [[file:build.org][Build and installation context]]
 - [[file:tests.org][Test system context]]
-- [[file:workflow.org][Agent workflow context]]
-- [[file:rules.org][Repository rules context]]
+- [[file:workflow.org][Agent workflow context]] (redirects to guidelines.org)
+- [[file:rules.org][Repository rules context]] (redirects to guidelines.org)
+- [[file:guidelines.org][Consolidated guidelines: hard constraints + soft preferences]]
 - [[file:todo.org][Migrated project TODO]]
 - [[file:visualizer.org][Context visualizer]]
 - [[file:opinions.org][LLM opinions on the context system]]
 - [[file:philosophy.org][Language and project philosophy (human+LLM witness)]]
+- [[file:wisp.org][Wisp syntax expander context]]
+- [[file:source-map.org][Source file map — every file's purpose and connections]]
+- [[file:style.org][MonadC code-style taxonomy]]
+- [[file:navigation.org][ID prefix→file routing table for quick LLM navigation]]
 
 * Current Task Notes
 :PROPERTIES:
@@ -307,10 +314,8 @@ Rules:
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.2026-06-11.reader-path-heap-request src:user-request conf:high]
-The active request is to make =reader.h= compile with existing =reader.c=
-changes for path literals of type =Path= and dynamic array literals of type
-=Heap=.
+[OBS id:obs.2026-06-11.reader-path-heap-request src:user-request conf:high status:done]
+Completed — see =obs.2026-06-11.path-heap-fixed= and =obs.2026-06-11.path-heap-types=.
 
 [DEC id:dec.2026-06-11.context-format date:2026-06-11 by:codex]
   Use Org files with stable =ID= drawers and fixed LLM records as the project
@@ -388,11 +393,6 @@ Compiling =tests/path_heap_literals.mon= defines =path :: Path= and
   suggestions for improvement. The file uses a proposed =THINK= record type
   (not yet in the standard) for speculative reasoning content.
 
-[OBS id:obs.2026-06-12.current-failures src:command-output conf:high]
-  After coverage expansion: 58 tests fail (23 pre-existing + 35 new). All 35
-  new failures are genuine feature gaps where the compiler does not yet support
-  the syntax or runtime behavior being tested. Zero failures from test-data
-  mistakes after the TSV desugar-expectation fixes.
 
 * Philosophy Witness (2026-06-12)
 :PROPERTIES:

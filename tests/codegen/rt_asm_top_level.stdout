@@ -1,1 +1,1 @@
-42
+<repo>/tests/codegen/rt_asm_top_level.mon:8:2: error: inline asm can only be used as a function body

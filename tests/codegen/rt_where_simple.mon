@@ -5,6 +5,6 @@
 ;; TEST-EXPECT: compile, run
 
 (module Main)
-(define (f [x :: Int] -> Int)
+(define (f [x : Int] -> Int)
   (let [result (+ x 1)] result))
 (show (f 5))

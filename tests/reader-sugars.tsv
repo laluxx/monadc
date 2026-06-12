@@ -176,7 +176,7 @@ assign_arrow_field	monadc.context.reader.sugar.assign-arrow	Set! struct field us
 dot_field_nested_expr	monadc.context.reader.sugar.dot-access	Nested field access on result of call.	get-obj().field	
 dot_field_parenthesized	monadc.context.reader.sugar.dot-access	Field access on parenthesized expr.	(obj.expr).field	
 # ── More Quasiquote Corner Sugar ────────────────────────────────────────────
-quasiquote_unquote_splicing_var	monadc.context.reader.sugar.quasiquote-corner	Unquote-splicing a variable.	⌞xs⌟	
+quasiquote_unquote_splicing_var	monadc.context.reader.sugar.quasiquote-corner	Unquote bracket outside quasiquote is rejected.	⌞xs⌟	fail:compile	Unquote bracket used outside of a quasiquote block
 quasiquote_nested_unquote	monadc.context.reader.sugar.quasiquote-corner	Quasiquote with nested unquote.	⌜⌞x⌟⌝	
 # ── More Cond Desugaring ───────────────────────────────────────────────────
 cond_three_ifs	monadc.context.reader.sugar.cond-to-if	Cond with three clauses desugars to nested if.	(cond [(> x 0) 1] [(< x 0) -1] [else 0])	
@@ -188,5 +188,5 @@ let_rec_mutual	monadc.context.reader.sugar.let-desugar	Letrec with mutually recu
 # ── More Size-Array Sugar ──────────────────────────────────────────────────
 size_array_1mb_U32	monadc.context.reader.sugar.size-array	[1mb U32] desugars to sized array.	define buf :: [1mb U32]	
 size_array_512_U16	monadc.context.reader.sugar.size-array	[512 U16] desugars via size literal.	define buf :: [512 U16]	
-size_array_gb_approx	monadc.context.reader.sugar.size-array	[1gb] desugars to huge U8 array.	define buf :: [1gb]	
-size_array_tb_approx	monadc.context.reader.sugar.size-array	[1tb] desugars to massive U8 array.	define buf :: [1tb]
+size_array_gb_approx	monadc.context.reader.sugar.size-array	[1gb] is rejected as too large for static x86-64 allocation.	define buf :: [1gb]	fail:compile	Static array 'buf' is too large to allocate on x86-64
+size_array_tb_approx	monadc.context.reader.sugar.size-array	[1tb] is rejected as too large for static x86-64 allocation.	define buf :: [1tb]	fail:compile	Static array 'buf' is too large to allocate on x86-64

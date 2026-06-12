@@ -42,7 +42,7 @@ import Coll
   (foldl f (car xs) (cdr xs)))
 
 
-(define (list-tail [xs : List] -> [k : Int] -> List)
+(define (list-tail [xs : List] [k : Int] -> List)
   "Return the sublist of XS starting at index K."
   (def [result :: List] xs)
   (for [i 0 k]

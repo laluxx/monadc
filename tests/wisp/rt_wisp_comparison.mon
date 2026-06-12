@@ -1,0 +1,12 @@
+;; TEST-ID: tests.wisp.rt-wisp-comparison
+;; TEST-CONTEXT: monadc.context.wisp.comparison-operators
+;; TEST-PURPOSE: Wisp infix comparisons work
+;; TEST-ATOM: 3 < 5 → True, 4 = 4 → True, 5 > 3 → True
+;; TEST-EXPECT: compile, run
+module Main
+show 3 < 5
+show 4 = 4
+show 5 > 3
+show 3 <= 4
+show 5 >= 3
+show 4 != 5

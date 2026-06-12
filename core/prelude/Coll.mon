@@ -190,4 +190,3 @@ define both :: (a -> Bool) -> (a -> Bool) -> (a -> Bool)
   (assert-eq (foldl + 0 (zipwith * '(1 2 3 4) '(1 2 3 4))) 30 "dot product squares")
   (assert-eq (foldl + 0 (zipwith * [1 2 3]    [4 5 6]))    32 "dot product Arrays")
 )
-

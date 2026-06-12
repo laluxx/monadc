@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-logic-nested
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Nested logical operators with and/or/not.
+;; TEST-ATOM: (and True (or False True)) = True, (not (and True True)) = False
+;; TEST-EXPECT: compile, run
+(module Main)
+(show (and True (or False True)))
+(show (not (and True False)))
+(show (not (or False False)))

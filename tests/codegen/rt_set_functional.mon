@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-set-functional
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Functional set operations conj and disj (untyped).
+;; TEST-ATOM: (contains? (conj {1 2 3} 4) 4) = True,
+;;           (contains? (disj {1 2 3} 3) 3) = False
+;; TEST-EXPECT: compile, run
+(module Main)
+(show (contains? (conj {1 2 3} 4) 4))
+(show (contains? (disj {1 2 3} 3) 3))
