@@ -75,5 +75,6 @@ stable LLM facts.
 | Workflow | [[file:context/workflow.org][context/workflow.org]] | Standing user preferences                |
 | Rules    | [[file:context/rules.org][context/rules.org]]    | Standing repository rules                |
 | TODO     | [[file:context/todo.org][context/todo.org]]     | Migrated project TODO notes              |
+| Philosophy | [[file:context/philosophy.org][context/philosophy.org]] | Language and project philosophy (witnessed) |
 
 #+INCLUDE: "context/index.org"

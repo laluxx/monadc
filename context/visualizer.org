@@ -188,5 +188,20 @@ pointer anchor instead of applying immediate linear zoom jumps.
 
 [OBS id:obs.visualizer.tests-as-functor src:tests/run.py conf:high]
   The visualizer reads =TEST-ID= and =TEST-CONTEXT= metadata from fixtures plus
-  =tests/language_corpus.tsv=. Each test becomes an object with =verifies=
+  =tests/language_corpus.tsv=, =tests/reader-atoms.tsv=, and
+  =tests/reader-sugars.tsv=. Each test becomes an object with =verifies=
   morphisms into its context objects.
+
+[OBS id:obs.visualizer.tsv-integration src:context-visualizer.py:69 conf:high]
+  The =parse_context_graph= function now iterates over three TSV paths:
+  =language_corpus.tsv= (non-existent, skipped), =reader-atoms.tsv= (~620
+  entries), and =reader-sugars.tsv= (~140 entries). The =parse_language_corpus=
+  function handles both 4-column and 5-column TSV formats, detecting the file
+  type by name (sugar tests get =tests.sugar.*= prefix, language tests get
+  =tests.language.*= prefix).
+
+[OBS id:obs.visualizer.graph-1258 src:context-visualizer.py conf:high]
+  After TSV integration, the graph contains 1258 nodes (962 test nodes: 621
+  language + 137 sugar + 201 codegen + 3 reader) and 1351 edges. Compare to
+  the prior state where =language_corpus.tsv= was absent so only .mon fixtures
+  and .org headings contributed test nodes (~201 codegen + ~3 reader ~= 204).

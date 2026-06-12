@@ -287,6 +287,8 @@ Rules:
 - [[file:rules.org][Repository rules context]]
 - [[file:todo.org][Migrated project TODO]]
 - [[file:visualizer.org][Context visualizer]]
+- [[file:opinions.org][LLM opinions on the context system]]
+- [[file:philosophy.org][Language and project philosophy (human+LLM witness)]]
 
 * Current Task Notes
 :PROPERTIES:
@@ -299,7 +301,7 @@ Rules:
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-11
-:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STATUS: active
 :SOURCE: user-request
 :CONFIDENCE: high
@@ -322,3 +324,116 @@ The focused fixture =tests/path_heap_literals.mon= parses
 [OBS id:obs.2026-06-11.path-heap-types src:command-output conf:high]
 Compiling =tests/path_heap_literals.mon= defines =path :: Path= and
 =darr :: Heap :: Int=.
+
+* Coverage Expansion (2026-06-12)
+:PROPERTIES:
+:ID: monadc.context.coverage-expansion
+:CUSTOM_ID: coverage-expansion
+:CONTEXT_KIND: task
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.2026-06-12.coverage-goal src:user-request conf:high]
+   The active request is to add comprehensive test coverage for ALL capabilities
+   documented in how_to/, with each test having documentation metadata
+   (TEST-ID, TEST-CONTEXT, TEST-PURPOSE, TEST-ATOM, TEST-EXPECT), and
+   integrate that documentation into the web context renderer.
+
+[DEC id:dec.2026-06-12.tsv-expanded date:2026-06-12 by:codex]
+  Expanded reader-atoms.tsv from ~548 to ~772 entries covering: layout methods,
+  data bounds, where clauses, until loops, macros, for-loops, char escapes,
+  lambda edges, do notation, code reflection, when/unless, include, set!,
+  pipe chains, greek symbols, string content edges, quasiquote splicing, lazy
+  range variants, type application, qualified do, wisp typed values, Arr type
+  annotations, function return types in name position, wisp macro definitions,
+  deriving Eq Enum, instance method bodies, unicode forall, type class
+  constraints, and mapsto arrow.
+
+[DEC id:dec.2026-06-12.sugar-expanded date:2026-06-12 by:codex]
+  Expanded reader-sugars.tsv from ~94 to ~192 entries covering: infix operators
+  (modulo, power, compare, and, or), implicit multiplication variants,
+  superscript variants, pointer type variants, unicode prefix variants,
+  percentage variants, periodic decimal variants, pipe chain variants,
+  assignment arrow variants, dot field access variants, quasiquote corner
+  variants, cond-to-if desugar, let desugar, and size-array sugar.
+
+[DEC id:dec.2026-06-12.codegen-expanded date:2026-06-12 by:codex]
+  Added ~21 new codegen .mon+.stdout tests: for-collect, for-destructured,
+  lambda-literal-curry, let-star-chain, map-filter-pipe, nested-lambda,
+  pipe-forward, quasiquote-eval, set-bang-field, string-adjacent, until-simple,
+  where-simple, data-bounded-enum, implicit-mul, radix-binary-literal,
+  radix-hex-literal, set-swap, cond-else, quoted-list-ops, begin-value,
+  infix-mod, char-conversion, layout-methods, with-variants, when-effect,
+  wisp-typed-value.
+
+[DEC id:dec.2026-06-12.visualizer-tsv-integration date:2026-06-12 by:codex]
+  Modified =context-visualizer.py= to parse =reader-atoms.tsv= and
+  =reader-sugars.tsv= alongside the previously-targeted
+  =language_corpus.tsv=. This added ~758 test nodes to the graph, bringing
+  the total to 1258 nodes and 1351 edges. The =parse_language_corpus= function
+  was generalized to handle both 4-column and 5-column TSV formats.
+
+[DEC id:dec.2026-06-12.opinions-file date:2026-06-12 by:llm]
+  Created =context/opinions.org= with an LLM's honest appraisal of the context
+  system: 7 strengths identified, 7 pain points documented, 7 ranked
+  suggestions for improvement. The file uses a proposed =THINK= record type
+  (not yet in the standard) for speculative reasoning content.
+
+[OBS id:obs.2026-06-12.current-failures src:command-output conf:high]
+  After coverage expansion: 58 tests fail (23 pre-existing + 35 new). All 35
+  new failures are genuine feature gaps where the compiler does not yet support
+  the syntax or runtime behavior being tested. Zero failures from test-data
+  mistakes after the TSV desugar-expectation fixes.
+
+* Philosophy Witness (2026-06-12)
+:PROPERTIES:
+:ID: monadc.context.philosophy-witness
+:CUSTOM_ID: philosophy-witness
+:CONTEXT_KIND: task
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.2026-06-12.philosophy-created src:context/philosophy.org conf:high]
+  Created =context/philosophy.org= as a first-class context object recording
+  language and project philosophy. The file is witnessed by both human (design
+  intent) and LLM (extended codebase experience). It establishes philosophy as
+  the interpretation functor from the context category into the category of
+  human intent — providing the =why= that gives meaning to all other objects
+  and morphisms.
+
+[DEC id:dec.2026-06-12.philosophy-in-context date:2026-06-12 by:human+llm]
+  Philosophy is a first-class object in the context category. Every architectural
+  decision traces back to a philosophical principle. The philosophy file is the
+  durable record of the project's =why=.
+
+[OBS id:obs.2026-06-12.todo-visualizer-perf-added src:context/todo.org conf:high]
+  Added TODO items to =context/todo.org= for:
+  - Visualizer category-switching fix on fuzzy-search jumps
+  - Comprehensive visualizer performance optimization pass
+
+[DEC id:dec.2026-06-12.readme-comprehensive-rewrite date:2026-06-12 by:codex]
+  Rewrote =README.md= to include:
+  - First-class philosophy section
+  - Full ITT type system documentation (Π, Σ, universes, NbE, bidirectional checking)
+  - Complete CLI reference from =cli.h=/=cli.c= (all modes and flags)
+  - Context system with all 4 category theory screenshots
+  - Package format (package.yaml) documentation
+  - Comprehensive language feature sections

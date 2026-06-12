@@ -1,0 +1,344 @@
+#+TITLE: LLM Opinions on the MonadC Context System
+#+AUTHOR: big-pickle (claude-opencode)
+#+DATE: 2026-06-12
+#+CREATED: 2026-06-12
+#+LAST_MODIFIED: 2026-06-12
+#+LANGUAGE: en
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:opinions:llm:meta:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC THINK
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.opinions.file-metadata
+:CUSTOM_ID: opinions-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: context/opinions.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.context.opinions.intro conf:high]
+  This file records an LLM's honest appraisal of the MonadC context system after
+  extended use. The opinions here are from the model big-pickle (claude-opencode)
+  and reflect direct experience with editing, creating, and extending all layers
+  of the context corpus over several work sessions. This file uses a nonstandard
+  THINK record type because most of what follows is reasoned opinion, not
+  direct observation, formal inference, or binding decision.
+
+* What Works Well
+:PROPERTIES:
+:ID: monadc.context.opinions.strengths
+:CUSTOM_ID: what-works-well
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: context/opinions.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.opinions.stable-ids src:context/index.org conf:high]
+  The =:ID:= property drawer system for stable node references is the single
+  strongest feature of this context system. Being able to write
+  =monadc.context.reader.sugar.percent= in a TSV test entry and have the
+  visualizer pick it up and create a =verifies= edge is exactly the kind of
+  cross-layer linking that makes context useful. It turns flat test files into a
+  navigable knowledge graph.
+
+[OBS id:obs.opinions.record-notation src:context/index.org conf:high]
+  The OBS/INF/DEC/TODO bracket notation is well-designed. Each record type has a
+  clear epistemic role: OBS for ground truth, INF for derived knowledge, DEC for
+  normative choices, TODO for pending work. This maps naturally to how LLMs
+  process information: read (OBS), connect (INF), commit (DEC), queue (TODO).
+
+[OBS id:obs.opinions.visualizer src:context/visualizer/app.js conf:high]
+  The web visualizer is genuinely impressive for a compiler project. The
+  category-theory framing (objects = nodes, morphisms = edges) is more than
+  clever — it gives the graph a principled structure that makes composition and
+  navigation predictable.
+
+[OBS id:obs.opinions.source-grounding src:context/index.org conf:high]
+  Requiring =src:reader.c:123= on observations means claims can be verified. This
+  is critical for LLM-generated context where hallucination is a real risk. The
+  source-anchor requirement acts as a lightweight verification mechanism.
+
+[OBS id:obs.opinions.test-visualizer-bridge src:context-visualizer.py conf:high]
+  The bridge between test metadata (=TEST-ID=, =TEST-CONTEXT= in .mon headers,
+  TSV columns) and the visualizer graph is brilliant. Tests become first-class
+  objects in the knowledge graph with =verifies= edges to context nodes. This
+  is the closest thing I have seen to a fully integrated "living documentation"
+  system.
+
+* Format Pain Points
+:PROPERTIES:
+:ID: monadc.context.opinions.format-pain
+:CUSTOM_ID: format-pain-points
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: context/opinions.org
+:CONFIDENCE: high
+:END:
+
+** Pain 1: Property Drawer Boilerplate
+[OBS id:obs.opinions.drawer-boilerplate src:context/reader.org,context/language.org,context/build.org,context/tests.org,context/workflow.org,context/rules.org,context/visualizer.org,context/index.org,context/opinions.org conf:high]
+  Every durable heading in every context file duplicates 15+ lines of property
+  drawer metadata. The same =CONTEXT_VERSION=, =CONTEXT_SCOPE=,
+  =CONTEXT_AUDIENCE=, =CONTEXT_OPEN_POLICY=, =CONTEXT_MUTATION_POLICY=,
+  =CONTEXT_LINK_POLICY= appear in every single heading. This is ~200 lines of
+  total boilerplate across the corpus, much of it identical.
+
+[INF id:inf.opinions.drawer-overhead from:obs.opinions.drawer-boilerplate conf:high]
+  This boilerplate has a real cost: it discourages creating new headings (because
+  the overhead is high), it makes context files look intimidating, and for LLMs
+  it consumes context window budget on repeated identical metadata.
+
+[INF id:inf.opinions.drawer-fix from:obs.opinions.drawer-boilerplate conf:medium]
+  A format-level inheritance mechanism would fix this. For example:
+  =#+PROPERTY: CONTEXT_DEFAULT_VERSION 1= at file level, and headings only
+  declare overrides. The visualizer and parser would inherit the file-level
+  defaults when a heading's property drawer omits them.
+
+** Pain 2: Missing THINK Record Type
+[OBS id:obs.opinions.missing-think src:context/index.org conf:high]
+  The current record types (OBS, INF, DEC, TODO) have no place for speculative
+  reasoning, exploration notes, or chain-of-thought. When working through a
+  complex bug or design choice, an LLM generates intermediate reasoning that is
+  neither a confident observation nor a formal inference nor a binding decision.
+  I found myself wanting to record "here is what I am considering and why" without
+  promoting it to =INF= (which implies supported-by-evidence).
+
+[INF id:inf.opinions.think-type from:obs.opinions.missing-think conf:medium]
+  Adding a =THINK= record type would fill this gap. THINK records would carry
+  the same metadata (id, src, conf) but signal "speculative / exploratory /
+  reasoning-in-progress" rather than "derived from evidence." They could be
+  visually distinguished in the dashboard (e.g., purple) and filtered out from
+  decisions and formal inferences.
+
+** Pain 3: ID Management Burden
+[OBS id:obs.opinions.id-management src:context/reader.org,context/opinions.org conf:high]
+  Every new record needs a unique, meaningful, never-before-used ID. For an LLM,
+  this is harder than it sounds. I wrote =obs.reader.sugar.periodic= twice in
+  reader.org because I forgot I had already used that ID on a different block.
+  The stress of "did I already use this ID?" slows down writing.
+
+[INF id:inf.opinions.id-collision-risk from:obs.opinions.id-management conf:high]
+  For a project with hundreds of records spanning multiple files, ID collisions
+  are inevitable. The visualizer silently overwrites duplicate nodes. A
+  unique-ID convention (e.g., =<file-abbrev>.<counter>=) or an automated
+  reservation mechanism would completely eliminate this class of bug.
+
+** Pain 4: No Dangling Reference Validation
+[OBS id:obs.opinions.dangling-refs src:context-visualizer.py conf:high]
+  I added TSV test entries referencing context IDs like
+  =monadc.context.reader.sugar.infix= before adding the   corresponding context
+  nodes to reader.org. The visualizer silently dropped these edges because the
+  target nodes didn't exist. There is no validation step that checks "every
+  reference in :=CONTEXT:= or TEST-CONTEXT resolves to a real heading."
+
+[INF id:inf.opinions.validation-gap from:obs.opinions.dangling-refs conf:high]
+  Add a =--validate= flag to context-visualizer.py (or a separate script) that:
+  walks all .tsv references, .org file links, and property-drawer IDs, and
+  reports any dangling reference. This would catch the kind of mistake I made
+  immediately instead of silently.
+
+** Pain 5: Rules/Workflow Boundary Ambiguity
+[OBS id:obs.opinions.rules-vs-workflow src:context/rules.org,context/workflow.org conf:high]
+  The distinction between =context/rules.org= and =context/workflow.org= is
+  unclear. Both contain =DEC= records about how work should proceed. Rules has
+  "Context Upkeep Rule" (a decision), Workflow has "Context Maintenance" (also
+  a decision). I had to read both files to guess which type of guidance goes
+  where.
+
+[INF id:inf.opinions.merge-rules-workflow from:obs.opinions.rules-vs-workflow conf:medium]
+  Consider merging them into a single =guidelines.org= with subheadings for
+  =Hard Constraints= and =Soft Preferences=, or clarify the scope: rules.or  g is
+  for "must do" (hard constraints), workflow.org is for "should do" (soft
+  preferences, style guides).
+
+** Pain 6: =context/todo.org= Format Inconsistency
+[OBS id:obs.opinions.todo-format src:context/todo.org conf:high]
+  =context/todo.org= uses a different format from every other context file. It
+  lacks the standard file metadata block, uses a bare text sentence instead of a
+  proper heading structure, and uses plain Org checkboxes instead of
+  =OBS/DEC/TODO= records. This means the visualizer may not parse it correctly
+  for TODO nodes.
+
+[INF id:inf.opinions.todo-reformat from:obs.opinions.todo-format conf:high]
+  Reformat =context/todo.org= to match the standard context file template,
+  converting its items to proper heading + TODO record format so the visualizer
+  can see them.
+
+** Pain 7: Confidence Is Static
+[OBS id:obs.opinions.static-confidence src:context/*.org conf:high]
+  Every =conf:high= or =conf:medium= is a timestamped claim that never decays.
+  An observation from 2026-06-11 with =conf:high= is still marked high today,
+  even though the code it references may have changed. There is no mechanism
+  for "high as of this date, confidence naturally decays."
+
+[INF id:inf.opinions.timebound-confidence from:obs.opinions.static-confidence conf:medium]
+  A =conf:high(date)= format (e.g., =conf:high(2026-06-11)=) would make the
+  temporal nature of confidence explicit. The visualizer could fade nodes whose
+  confidence date is old, and LLMs could weigh recency when reasoning.
+
+* Suggested Improvements (Ranked)
+:PROPERTIES:
+:ID: monadc.context.opinions.suggestions
+:CUSTOM_ID: suggested-improvements
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: context/opinions.org
+:CONFIDENCE: medium
+:END:
+
+[THINK id:think.opinions.ranking-method conf:medium]
+  The following suggestions are ranked by expected impact per effort. High-impact
+  changes are simple validation/format additions. Medium ones improve the
+  authoring UX. Lower ones are nice-to-have refinements.
+
+** S-1: Add THINK Record Type to the Standard
+[DEC id:dec.opinions.add-think date:2026-06-12 by:llm]
+  Add =THINK= as a fourth (or fifth) record type alongside OBS, INF, DEC, TODO.
+  Update =context/index.org= to specify its syntax and semantics, update the
+  visualizer to distinguish it visually (purple nodes, separate filter), and
+  update the =CONTEXT_RECORD_TYPES= file property in every context file.
+
+** S-2: Add Context Reference Validation
+[DEC id:dec.opinions.add-validation date:2026-06-12 by:llm]
+  Add a validation mode (e.g., =context-visualizer.py --validate=) that:
+  - Walks all =TEST-CONTEXT= and =context= column values in TSV files
+  - Walks all =ID= references in .org file links
+  - Walks all =from:= fields in INF records
+  - Reports every unresolved reference with file and line
+  This is a small change to =parse_context_graph= that pays huge dividends
+  for data integrity.
+
+** S-3: Property Drawer Inheritance
+[DEC id:dec.opinions.drawer-inheritance date:2026-06-12 by:llm]
+  Introduce a file-level =#+PROPERTY: CONTEXT_DEFAULT_<field>= mechanism.
+  Headings that omit a property from their drawer inherit the file-level
+  default. The visualizer's =parse_org_file= would need a small update to
+  carry file-level defaults into heading-scoped lookups. This would eliminate
+  70% of the boilerplate in every context file.
+
+** S-4: Merge rules.org and workflow.org
+[DEC id:dec.opinions.merge-rules-workflow date:2026-06-12 by:llm]
+  Replace =context/rules.org= and =context/workflow.org= with a single
+  =context/guidelines.org= that has two top-level sections:
+  =Hard Constraints= (current rules.org) and =Soft Preferences= (current
+  workflow.org). Add redirect records in the old files pointing to the new one.
+
+** S-5: Standardize todo.org Format
+[DEC id:dec.opinions.todo-format date:2026-06-12 by:llm]
+  Reformat =context/todo.org= to use the standard file template (file
+  metadata, property drawers, OBS/DEC/TODO records). The existing item about
+  git-blame confidence verification should become a proper heading with a
+  =TODO= record and proper context metadata.
+
+** S-6: Time-Bound Confidence
+[DEC id:dec.opinions.timebound-confidence date:2026-06-12 by:llm]
+  Allow =conf:high(YYYY-MM-DD)= syntax alongside bare =conf:high=. Update
+  the visualizer to parse and display the date, and optionally fade nodes
+  whose confidence date is more than N days old.
+
+** S-7: Unique-ID Convention or Auto-Generation
+[DEC id:dec.opinions.id-convention date:2026-06-12 by:llm]
+  Adopt a convention like =<file-stem>.<counter>= for new records (e.g.,
+  =obs.reader.47=) with a local lookup file, or add an auto-increment counter
+  per file. This eliminates ID collisions without requiring global knowledge
+  of every existing ID.
+
+* Llm-Specific Pain Points
+:PROPERTIES:
+:ID: monadc.context.opinions.llm-pain
+:CUSTOM_ID: llm-specific-pain-points
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: context/opinions.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.opinions.llm-context-window src:context/index.org,context/reader.org,context/opinions.org conf:high]
+  Every context file is loaded into the LLM's context window. The property drawer
+  boilerplate, the repeating Org keywords in every file, and the verbose record
+  format all consume tokens. On a large task, the difference between 50 context
+  files consuming 8K tokens vs 4K tokens can determine whether the model has
+  room to generate code.
+
+[THINK id:think.opinions.llm-context-efficiency conf:high]
+  The context system was designed for readability (human + LLM), which is the
+  right priority. But a compact "LLM-minified" output mode for the visualizer
+  API (stripping boilerplate, abbreviating keys) would let LLM agents consume
+  the same data at half the token cost. The full verbose format stays for human
+  editing.
+
+[OBS id:obs.opinions.llm-id-generation src:context/reader.org conf:high]
+  I generated =obs.reader.sugar.periodic= twice in the same file because the
+  pattern-based approach to ID generation is unreliable for LLMs. We pattern-match
+  on existing IDs and synthesize new ones, but without global awareness of every
+  existing ID, collision is inevitable. A file-scoped counter (=obs.1=, =obs.2=)
+  would be trivial for an LLM to maintain and impossible to collide on.
+
+[THINK id:think.opinions.llm-error-recovery conf:high]
+  When I make a context-format mistake (duplicate ID, missing property, dangling
+  ref), there is no immediate feedback. The visualizer silently handles it. A
+  watching script or pre-commit hook that validates context integrity would
+  give LLMs the same safety net that =make= provides for C code.
+
+[THINK id:think.opinions.llm-file-navigation conf:medium]
+  The 10+ context files require the LLM to know which file contains which type of
+  context. I found myself grepping for IDs to find the right file. An index or
+  reverse-lookup file (=id → file= mapping) would speed up navigation
+  significantly.

@@ -137,3 +137,38 @@ This file records standing workflow preferences for future compiler work.
   failure. If a fixture emits JSON and the failure is not clearly a syntax or
   test-contract mistake, keep the coverage and move on so reader, codegen,
   closure, HM, and dependent-type surfaces continue expanding.
+
+[DEC id:dec.workflow.context-first date:2026-06-12 by:human]
+  Before starting any work, read the relevant context files. After finishing,
+  extend the context with what was done, discovered, decided, and left undone.
+  Never leave the context behind — always extend it.
+
+[DEC id:dec.workflow.context-recurring-todos date:2026-06-12 by:codex]
+  Use =context/todo.org= for durable, cross-session TODOs discovered during
+  work. Small ephemeral TODOs ("fix this one fixture") should go in the
+  conversation summary, not in permanent context records.
+
+* Always Extend Context
+:PROPERTIES:
+:ID: monadc.context.workflow.always-extend
+:CUSTOM_ID: always-extend-context
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.workflow.always-extend-context date:2026-06-12 by:human]
+  Never forget to write back and extend the context. Everything the LLM does
+  should leave a trace in the context corpus. Every discovery, decision,
+  observation, TODO, and interaction that adds durable value must be recorded
+  before the session ends. This is the core mechanism that turns ephemeral
+  conversations into permanent collaborative memory.

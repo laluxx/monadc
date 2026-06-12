@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-wisp-return-string
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Wisp return-typed function compiles and displays.
+;; TEST-ATOM: define return-string -> String "ciao" defines a function returning "ciao".
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define return-string -> String "ciao")
+(show return-string)

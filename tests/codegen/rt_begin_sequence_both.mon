@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-begin-sequence-both
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Begin sequence with both side effects and final value.
+;; TEST-ATOM: (begin (show 1) (show 2) 42) prints 1, 2 and returns 42.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define x (begin (show 1) (show 2) 42))
+(show x)

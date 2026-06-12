@@ -352,3 +352,122 @@ Bindings can be simple symbols or nested lists for destructuring.
 [OBS id:obs.reader.for-collect src:reader.c conf:high]
 =For= comprehensions accept =:collect= keyword: =(for [x [1 2 3]] :collect x)=.
 The =:collect= keyword is parsed as a symbol in the body position.
+
+[DEC id:dec.reader.sugar-registry-added date:2026-06-12 by:codex]
+  Added a =Sugar Registry= section to this file documenting 17 sugar types
+  (implicit-mul, percent, periodic, superscript, ptr-type, unicode-prefix,
+  postfix-call, dot-access, assign-arrow, pipe, address-of, quasiquote-corner,
+  cond-to-if, let-desugar, size-array, path-literal, range-array, wisp-arrow).
+  Each sugar type has an =id:monadc.context.reader.sugar.<name>= for cross-linking
+  from reader-atoms.tsv and reader-sugars.tsv test entries via the visualizer.
+
+* Sugar Registry
+:PROPERTIES:
+:ID: monadc.context.reader.sugar
+:CUSTOM_ID: sugar-registry
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: reader.c, wisp.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.reader.sugar.implicit-mul src:reader.c conf:high]
+Implicit multiplication: when a literal (number, hex, binary, octal, float) is
+immediately adjacent to a variable name (e.g. =3x=, =0xFFx=, =-3y=), the reader
+desugars it to =(* 3 x)=. Greek-letter prefix calls are not yet supported.
+
+[OBS id:obs.reader.sugar.percent src:reader.c conf:high]
+Percentage sugar: =N%= desugars to =N/100=. Float percentages (=3.5%=) and negative
+percentages (=-50%=) are supported. High-precision decimal percentages are
+preserved as exact ratios.
+
+[OBS id:obs.reader.sugar.periodic src:reader.c conf:high]
+Periodic decimal sugar: =0.(3)= desugars to =3/9= (the repeating digit as an exact
+ratio). Multi-digit repeating blocks are supported: =0.(12)= → =12/99=.
+Integer parts preserve the whole: =1.(6)= → =1 + 6/9=.
+
+[OBS id:obs.reader.sugar.superscript src:reader.c conf:high]
+Superscript sugar: Unicode superscript digits (=x²=, =y³=, =x²⁰=) desugar to
+=(^ x 2)=, =(^ y 3)=, =(^ x 20)= respectively. Only whole-number exponents are
+supported.
+
+[OBS id:obs.reader.sugar.ptr-type src:reader.c conf:high]
+Pointer type sugar: =*Int= desugars to =(Pointer Int)=, =**Int= desugars to
+=(Pointer (Pointer Int))=, and so on for any number of star prefixes.
+
+[OBS id:obs.reader.sugar.unicode-prefix src:reader.c conf:high]
+Unicode prefix call sugar: Greek letters immediately adjacent to a form
+(=δx=, =Σexpr=) desugar to prefix calls: =(δ x)=, =(Σ expr)=. The recognized
+prefix characters include δ, γ, ω, Σ (sigma), and the standard sqrt/sin symbols.
+
+[OBS id:obs.reader.sugar.periodic src:reader.c conf:high]
+Periodic decimal sugar: =0.(3)= desugars to =3/9= (the repeating digit as an exact
+ratio). Multi-digit repeating blocks are supported: =0.(12)= → =12/99=.
+
+[OBS id:obs.reader.sugar.postfix-call src:reader.c conf:high]
+Postfix call sugar: =f(x)= desugars to =(f x)=, allowing function-call syntax
+similar to C/Java. Multiple arguments work: =f(x, y)= → =(f x y)=. Index access:
+=arr[i]= → =(index arr i)=. Chained postfix: =obj.method(arg)= → =(method obj arg)=.
+
+[OBS id:obs.reader.sugar.dot-access src:reader.c conf:high]
+Dot field access sugar: =expr.field= desugars to =(. expr field)=. Nested access
+(=obj.field.subfield=) chains: =(. (. obj field) subfield)=. Works on parenthesized
+expressions and function call results.
+
+[OBS id:obs.reader.sugar.assign-arrow src:reader.c conf:high]
+Assignment arrow sugar: =x <- expr= desugars to =(set! x expr)=. This supports
+field mutation: =p.x <- 5= → =(set! p.x 5)= and compound assignments:
+=x <- x + 1= → =(set! x (+ x 1))=.
+
+[OBS id:obs.reader.sugar.pipe src:reader.c conf:high]
+Pipe sugar: =x |> f= desugars to =(f x)=. Pipe chains are handled by the wisp
+transformer, not the reader desugarer. The reader preserves =|>= as infix syntax.
+
+[OBS id:obs.reader.sugar.address-of src:reader.c conf:high]
+Address-of sugar: =&x= desugars to =(address-of x)=. Supports field addressing:
+=&p.x= → =(address-of (. p x))=.
+
+[OBS id:obs.reader.sugar.quasiquote-corner src:reader.c conf:high]
+Quasiquote corner syntax: Unicode corner brackets =⌜expr⌟= desugar to
+=(quasiquote expr)=, and =⌞expr⌟= desugars to =(unquote expr)=. Supports
+quasiquote/unquote splicing for template-based code generation.
+
+[OBS id:obs.reader.sugar.cond-to-if src:reader.c conf:high]
+Cond desugaring: =(cond [test1 body1] [test2 body2] [else body3])= desugars to
+nested if expressions: =(if test1 body1 (if test2 body2 body3))=. The =[else
+body]= clause becomes the final branch with no test.
+
+[OBS id:obs.reader.sugar.let-desugar src:reader.c conf:high]
+Let desugaring: =(let [x val] body)= desugars to =((lambda (x) body) val)=.
+Multiple bindings =[x1 v1 x2 v2]= produce nested applications.
+=let*= and =letrec= are desugared into sequences of =let= and =Y= combinator
+applications.
+
+[OBS id:obs.reader.sugar.size-array src:reader.c conf:high]
+Size array sugar: =[N unit Type]= in a type context desugars to the sized
+array annotation =(Arr :: N :: unit :: Type)=. Supported size units are =kb=,
+=mb=, =gb=, =tb=. Only =kb= and =mb= sizes are currently within the
+x86-64 static array size limit.
+
+[OBS id:obs.reader.sugar.path-literal src:reader.c conf:high]
+Path literal sugar: path-like tokens starting with =/=, =~/=, or =./(...)/=
+are lexed as =TOK_PATH= and parsed as =AST_PATH=. This covers absolute,
+home-relative, and dot-relative path references.
+
+[OBS id:obs.reader.sugar.range-array src:reader.c conf:high]
+Range array sugar: =[start .. end]= desugars to a range array literal,
+producing a list (or array) of consecutive integers. Step variant:
+=[start .. end step]= produces non-consecutive elements.
+
+[OBS id:obs.reader.sugar.wisp-arrow src:wisp.c conf:high]
+Wisp arrow sugar: the =->= token in wisp form defines function parameter
+bindings. =x -> body= in lambda position creates a lambda with parameter =x=.
+In define position, =define f x -> body= creates (define (f x) body).

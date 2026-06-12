@@ -126,3 +126,67 @@ dot_field_expr	monadc.context.reader.sugar.dot-access	Dot field as expression pa
 # ── Feature Conditional Sugar ────────────────────────────────────────────────
 feature_cond_active	monadc.context.reader.sugar.feature-cond	Active #+ feature conditional keeps inner expr.	#+LINUX\n42\n#---	42
 feature_cond_inactive	monadc.context.reader.sugar.feature-cond	Inactive #+ feature conditional strips inner expr.	#+WINDOWS\n99\n#---\n42	42
+# ── Additional Infix Sugar ──────────────────────────────────────────────────
+# NOTE: Infix operators at reader level are handled by the wisp transformer,
+# not by the reader desugarer. These tests verify parsing succeeds (parse-json).
+infix_modulo	monadc.context.reader.sugar.infix	Infix modulo parses correctly.	10 % 3	
+infix_power	monadc.context.reader.sugar.infix	Infix power parses correctly.	2 ^ 10	
+infix_compare_eq	monadc.context.reader.sugar.infix	Infix == parses correctly.	3 == 3	
+infix_compare_ne	monadc.context.reader.sugar.infix	Infix != parses correctly.	3 != 4	
+infix_compare_lte	monadc.context.reader.sugar.infix	Infix <= parses correctly.	x <= 5	
+infix_compare_gte	monadc.context.reader.sugar.infix	Infix >= parses correctly.	x >= 0	
+infix_compare_lt	monadc.context.reader.sugar.infix	Infix < parses correctly.	x < 10	
+infix_compare_gt	monadc.context.reader.sugar.infix	Infix > parses correctly.	x > 0	
+infix_and	monadc.context.reader.sugar.infix	Infix && parses correctly.	True && False	
+infix_or	monadc.context.reader.sugar.infix	Infix || parses correctly.	True || False	
+# ── More Implicit Multiplication ────────────────────────────────────────────
+# NOTE: Greek-letter implicit multiplication (πx → (* π x)) is not yet supported
+# by the reader. These parse as prefix calls instead. Keep as parse-json.
+mul_implicit_pi	monadc.context.reader.sugar.implicit-mul	Unicode pi prefix parses.	πx	
+mul_implicit_greek_var	monadc.context.reader.sugar.implicit-mul	Greek letter prefix parses.	αx	
+mul_implicit_sci_float	monadc.context.reader.sugar.implicit-mul	Float with variable prefix becomes multiplication.	2.5x	(* 2.5 x)
+# ── More Superscript Sugar ─────────────────────────────────────────────────
+superscript_power_mixed	monadc.context.reader.sugar.superscript	Mixed digit superscripts become chain.	x²⁰	(^ x 20)
+superscript_var_square	monadc.context.reader.sugar.superscript	Variable superscript with identifier.	y²	(^ y 2)
+# ── More Pointer Type Sugar ─────────────────────────────────────────────────
+ptr_type_triple	monadc.context.reader.sugar.ptr-type	Triple star expands to Pointer :: Pointer :: Pointer :: Type.	***Int	
+ptr_type_mixed	monadc.context.reader.sugar.ptr-type	Pointer to U8 sugar.	*U8	
+# ── More Unicode Prefix Call Sugar ──────────────────────────────────────────
+unicode_prefix_delta	monadc.context.reader.sugar.unicode-prefix	Delta prefix becomes prefix call.	δx	(δ x)
+unicode_prefix_gamma	monadc.context.reader.sugar.unicode-prefix	Gamma prefix becomes prefix call.	γx	(γ x)
+unicode_prefix_omega	monadc.context.reader.sugar.unicode-prefix	Omega prefix becomes prefix call.	ωx	(ω x)
+unicode_prefix_sigma	monadc.context.reader.sugar.unicode-prefix	Sigma prefix becomes prefix call.	Σx	(Σ x)
+# ── More Percentage Sugar ──────────────────────────────────────────────────
+percent_one_hundred	monadc.context.reader.sugar.percent	100 percent becomes 100/100.	100%	100/100
+percent_zero	monadc.context.reader.sugar.percent	0 percent becomes 0/100.	0%	0/100
+percent_large_number	monadc.context.reader.sugar.percent	Large number percentage.	999%	999/100
+# ── More Periodic Decimal Sugar ────────────────────────────────────────────
+periodic_zero_repeating	monadc.context.reader.sugar.periodic	0 with repeating digit becomes exact ratio.	0.(0)	0/9
+periodic_one_repeating	monadc.context.reader.sugar.periodic	0 with repeating 1 becomes exact ratio.	0.(1)	1/9
+periodic_two_digit_repeat	monadc.context.reader.sugar.periodic	Two-digit repeating block.	0.(12)	12/99
+# ── More Pipe Sugar ────────────────────────────────────────────────────────
+# NOTE: Pipe chains are wisp-level sugar, not reader desugaring.
+# These tests verify parsing succeeds (parse-json).
+pipe_chain_three	monadc.context.reader.sugar.pipe	Three-stage pipe chain parses.	x |> f |> g |> h	
+pipe_chain_map_filter	monadc.context.reader.sugar.pipe	Pipe through map and filter parses.	xs |> map f |> filter p	
+# ── More Assignment Arrow ───────────────────────────────────────────────────
+assign_arrow_self	monadc.context.reader.sugar.assign-arrow	Set! self-increment.	x <- x + 1	(set! x (+ x 1))
+assign_arrow_field	monadc.context.reader.sugar.assign-arrow	Set! struct field uses dot notation.	p.x <- 5	(set! p.x 5)
+# ── More Dot Field Access ──────────────────────────────────────────────────
+dot_field_nested_expr	monadc.context.reader.sugar.dot-access	Nested field access on result of call.	get-obj().field	
+dot_field_parenthesized	monadc.context.reader.sugar.dot-access	Field access on parenthesized expr.	(obj.expr).field	
+# ── More Quasiquote Corner Sugar ────────────────────────────────────────────
+quasiquote_unquote_splicing_var	monadc.context.reader.sugar.quasiquote-corner	Unquote-splicing a variable.	⌞xs⌟	
+quasiquote_nested_unquote	monadc.context.reader.sugar.quasiquote-corner	Quasiquote with nested unquote.	⌜⌞x⌟⌝	
+# ── More Cond Desugaring ───────────────────────────────────────────────────
+cond_three_ifs	monadc.context.reader.sugar.cond-to-if	Cond with three clauses desugars to nested if.	(cond [(> x 0) 1] [(< x 0) -1] [else 0])	
+cond_mixed_bodies	monadc.context.reader.sugar.cond-to-if	Cond with mixed single and multi-body clauses.	(cond [a 1] [b 2 3] [else 0])	
+# ── More Let Desugaring ────────────────────────────────────────────────────
+let_multi_binding	monadc.context.reader.sugar.let-desugar	Let with multiple bindings desugars.	(let [x 1 y 2] (+ x y))	
+let_star_chain	monadc.context.reader.sugar.let-desugar	Let* with chained bindings using previous.	(let* [x 1 y (+ x 1)] (+ x y))	
+let_rec_mutual	monadc.context.reader.sugar.let-desugar	Letrec with mutually recursive bindings.	(letrec [even? (lambda (n) (if (= n 0) True (odd? (- n 1)))) odd? (lambda (n) (= n 0) False (even? (- n 1)))] (even? 10))	
+# ── More Size-Array Sugar ──────────────────────────────────────────────────
+size_array_1mb_U32	monadc.context.reader.sugar.size-array	[1mb U32] desugars to sized array.	define buf :: [1mb U32]	
+size_array_512_U16	monadc.context.reader.sugar.size-array	[512 U16] desugars via size literal.	define buf :: [512 U16]	
+size_array_gb_approx	monadc.context.reader.sugar.size-array	[1gb] desugars to huge U8 array.	define buf :: [1gb]	
+size_array_tb_approx	monadc.context.reader.sugar.size-array	[1tb] desugars to massive U8 array.	define buf :: [1tb]

@@ -1,6 +1,165 @@
-Those are the TODOs about the context system
+#+TITLE: Context System TODOs
+#+AUTHOR: Codex
+#+DATE: 2026-06-11
+#+CREATED: 2026-06-11
+#+LAST_MODIFIED: 2026-06-12
+#+FILETAGS: :monadc:compiler:context:todos:visualizer:performance:
+#+LANGUAGE: en
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:todos:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
 
-* TODO [0/1]
- # The system is honest about CONFIDENCE levels, but high-confidence OBS nodes still depend on source locations staying accurate.
- # After heavy refactoring, src:reader.c:1760 might point to the wrong line.
-   - [ ] Git blame integration? "Last verified at commit X"
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.todo.file-metadata
+:CUSTOM_ID: todo-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/todo.org
+:CONFIDENCE: high
+:END:
+
+* Confidence Verification
+:PROPERTIES:
+:ID: monadc.context.todo.confidence-verification
+:CUSTOM_ID: confidence-verification
+:CONTEXT_KIND: todo
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/todo.org
+:CONFIDENCE: medium
+:END:
+
+[OBS id:obs.todo.confidence-drift src:context/opinions.org conf:high]
+The system is honest about CONFIDENCE levels, but high-confidence OBS nodes
+still depend on source locations staying accurate. After heavy refactoring,
+=src:reader.c:1760= might point to the wrong line.
+
+[TODO id:todo.context.git-blame-conf date:2026-06-11 owner:human status:open]
+  Git blame integration: "Last verified at commit X" for each OBS record.
+
+* THINK Record Type
+:PROPERTIES:
+:ID: monadc.context.todo.think-type
+:CUSTOM_ID: think-record-type
+:CONTEXT_KIND: todo
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/opinions.org
+:CONFIDENCE: medium
+:END:
+
+[OBS id:obs.todo.think-proposed src:context/opinions.org conf:high]
+The LLM opinions file proposes adding a THINK record type for speculative
+reasoning, exploration notes, and chain-of-thought. It would complement the
+existing OBS/INF/DEC/TODO set.
+
+[TODO id:todo.context.add-think-type date:2026-06-12 owner:human status:open]
+  Consider adding THINK record type to the context standard. Update
+  =context/index.org= format spec, =context-visualizer.py= parser, and
+  =context/visualizer/app.js= display.
+
+* Dangling Reference Validation
+:PROPERTIES:
+:ID: monadc.context.todo.validate-refs
+:CUSTOM_ID: validate-refs
+:CONTEXT_KIND: todo
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/opinions.org
+:CONFIDENCE: medium
+:END:
+
+[OBS id:obs.todo.validation-proposed src:context/opinions.org conf:high]
+The LLM opinions file suggests adding a --validate flag to
+context-visualizer.py that checks every context ID reference in TSV files and
+.org files resolves to a real node.
+
+[TODO id:todo.context.add-validation date:2026-06-12 owner:human status:open]
+  Add =--validate= flag to context-visualizer.py to check dangling context ID
+  references. See [[file:opinions.org::*Suggested Improvements][suggestions in opinions.org]].
+
+* Visualizer Performance Optimization
+:PROPERTIES:
+:ID: monadc.context.todo.visualizer-perf
+:CUSTOM_ID: visualizer-perf
+:CONTEXT_KIND: todo
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.todo.visualizer-category-jump src:user-request conf:high]
+  When the user searches for and jumps to a node in the web visualizer, the
+  camera moves to the node but the category indicator in the top-right corner
+  does not switch to reflect the jumped-to node's category. The category
+  display updates only when clicking a node, not when navigating via fuzzy
+  search.
+
+[OBS id:obs.todo.visualizer-perf-scope src:user-request conf:high]
+  The user wants a massive and aggressive performance optimization pass on the
+  web interface of the context visualizer. The animated graph, category
+  switching, node search, and overall rendering pipeline should be optimized
+  comprehensively.
+
+[TODO id:todo.context.visualizer-category-fix date:2026-06-12 owner:human status:open]
+  Fix the category display to update when jumping to a node via fuzzy search.
+  The category in the top-right corner should reflect the currently-selected
+  node regardless of how it was selected (click, search, keyboard navigation).
+
+[TODO id:todo.context.visualizer-perf-pass date:2026-06-12 owner:human status:open]
+  Do a comprehensive performance optimization pass on the context visualizer
+  web interface. Target areas: force simulation throttling, node rendering,
+  camera animation, category switching, search response time, and overall
+  frame rate. The goal is smooth 60fPS interaction even with 1258+ nodes and
+  1351+ edges.

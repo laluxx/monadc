@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.rt-data-bounded-enum
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Data deriving Bounded and Enum supports fromEnum and maxBound.
+;; TEST-ATOM: (data T A | B | C deriving [Bounded Enum]) should enumerate.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(data T A | B | C deriving [Bounded Enum Show])
+(show (fromEnum A))
+(show (fromEnum B))
+(show (fromEnum C))
+(show (fromEnum (maxBound :: T)))
+(show (fromEnum (minBound :: T)))

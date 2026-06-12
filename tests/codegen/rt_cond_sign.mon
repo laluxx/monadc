@@ -1,0 +1,12 @@
+;; TEST-ID: tests.codegen.rt-cond-sign
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cond with three clauses matches sign of integer.
+;; TEST-ATOM: (cond [(> x 0) 1] [(< x 0) -1] [else 0])
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define (sign [x :: Int] -> Int)
+  (cond [(> x 0) 1] [(< x 0) -1] [else 0]))
+(show (sign 42))
+(show (sign -1))
+(show (sign 0))

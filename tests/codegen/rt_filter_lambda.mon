@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-filter-lambda
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Filter with lambda predicate works on quoted list.
+;; TEST-ATOM: (filter (lambda (x) (> x 2)) '(1 2 3 4 5)) returns (3 4 5).
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (filter (lambda (x) (> x 2)) '(1 2 3 4 5)))

@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-pipe-forward
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Pipe forward operator |> chains function application.
+;; TEST-ATOM: (x |> f |> g) applies g(f(x)).
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define (double [x :: Int] -> Int) (* 2 x))
+(define (add1 [x :: Int] -> Int) (+ x 1))
+(show (5 |> double |> add1))

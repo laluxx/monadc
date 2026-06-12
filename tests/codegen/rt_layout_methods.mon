@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.rt-layout-methods
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Layout methods with where syntax dispatch correctly.
+;; TEST-ATOM: Vec3 layout with ->array method returns [x y z].
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(layout Vec3 [x :: Float] [y :: Float] [z :: Float] where
+  (->array :: Self -> Array)
+  s -> [s.x s.y s.z])
+
+(define v (Vec3 1.0 2.0 3.0))
+(show v->array)

@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-wisp-typed-value
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Wisp typed value binding compiles and runs.
+;; TEST-ATOM: define x :: Int 42 then (show x) prints 42.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define x :: Int 42)
+(show x)

@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-for-destructured
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: For with destructured pair bindings works.
+;; TEST-ATOM: (for [[x y] [[1 2] [3 4]]] (show (+ x y))) shows sums.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(for [[x y] [[1 2] [3 4]]] (show (+ x y)))

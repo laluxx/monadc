@@ -1,0 +1,14 @@
+;; TEST-ID: tests.codegen.rt-set-swap
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Set! swap pattern exchanges two mutable variables.
+;; TEST-ATOM: (let [tmp a] (set! a b) (set! b tmp)) exchanges a and b.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define a 1)
+(define b 99)
+(let [tmp a]
+  (set! a b)
+  (set! b tmp))
+(show a)
+(show b)

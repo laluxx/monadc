@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-for-collect
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: For comprehension with :collect gathers results into a list.
+;; TEST-ATOM: (for [x [1 2 3]] :collect (* x 2)) returns (2 4 6).
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (for [x [1 2 3]] :collect (* x 2)))

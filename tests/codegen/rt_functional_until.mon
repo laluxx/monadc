@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-functional-until
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Functional higher-order until iterates a function.
+;; TEST-ATOM: (until (> 10) (+ 1) 5) starts at 5, adds 1 until > 10, returns 11.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define (until [p :: (Fn a -> Bool)] [f :: (Fn a -> a)] [x :: a] -> a)
+  (if (p x) x (until p f (f x))))
+(show (until (> 10) (+ 1) 5))

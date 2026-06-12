@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-list-append-ops
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: List append with quoted lists works.
+;; TEST-ATOM: (append '(1 2) '(3 4)) returns (1 2 3 4).
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (append '(1 2) '(3 4)))

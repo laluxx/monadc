@@ -85,3 +85,14 @@ work.
   Project visualizations should meet a high usability and design bar: clear
   dashboard structure, standard interaction patterns, smooth motion, and direct
   editing where the visualization represents mutable project state.
+
+[DEC id:dec.rules.opinions-file date:2026-06-12 by:human]
+  An =context/opinions.org= file may exist to record LLM perspectives on the
+  context system itself. Its content is advisory, not normative. Opinions are
+  labeled with the model that generated them. They may propose format changes
+  but must not override decisions in =rules.org= or =workflow.org=.
+
+[DEC id:dec.rules.extend-not-replace date:2026-06-12 by:codex]
+  When improving the context corpus, always extend (add new headings, records,
+  files) rather than silently replacing existing content. Use superseding
+  records when correcting factual errors. This preserves the audit trail.

@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-lambda-typed-apply
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Lambda with typed parameters applies correctly.
+;; TEST-ATOM: ((lambda ([x :: Int] [y :: Int] -> Int) (+ x y)) 3 4) returns 7.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show ((lambda ([x :: Int] [y :: Int] -> Int) (+ x y)) 3 4))

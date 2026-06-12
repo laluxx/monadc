@@ -661,3 +661,116 @@ dep_nat_symbol	monadc.context.language.type-system-surface	Nat type symbol parse
 dep_ann_term	monadc.context.language.type-system-surface	Annotation surface for dependent elaboration parses.	(ann 1 Int)
 dep_lambda_paren	monadc.context.language.type-system-surface	Paren lambda form used by dependent elaboration parses.	(lambda (x) x)
 dep_if_term	monadc.context.language.type-system-surface	If term surface used by dependent elaboration parses.	(if True 1 0)
+# ── Layout Method Syntax ─────────────────────────────────────────────────---
+layout_method_simple	monadc.context.language.syntax-corpus	Layout with method declaration parses.	(layout Vec3 [x :: Float] [y :: Float] [z :: Float] where (->array :: Self -> Array) s -> [s.x s.y s.z])
+layout_method_no_where	monadc.context.language.syntax-corpus	Layout without where block parses.	(layout Point [x :: Float] [y :: Float])
+# ── Data with Bounds ────────────────────────────────────────────────────────
+data_bounded_enum	monadc.context.language.syntax-corpus	Data with Bounded and Enum deriving parses.	(data T A | B | C deriving [Bounded Enum Show])
+data_bounded_only	monadc.context.language.syntax-corpus	Data with only Bounded deriving parses.	(data Color Red | Green | Blue deriving [Bounded])
+data_deriving_multi	monadc.context.language.syntax-corpus	Data with three deriving classes parses.	(data Weekday Mon | Tue | Wed | Thu | Fri deriving [Bounded Enum Show Eq])
+# ── Where Clause ────────────────────────────────────────────────────────────
+where_simple_value	monadc.context.language.syntax-corpus	Define with where clause and simple value parses.	(define f x -> result where result = x + 1)
+where_fn_binding	monadc.context.language.syntax-corpus	Define with where clause and function binding parses.	(define sqrt x -> good x / 2 where good g = g * g)
+where_multi_binding	monadc.context.language.syntax-corpus	Define with where and multiple bindings parses.	(define f x -> result where a = x b = x result = a + b)
+# ── Until Loop ──────────────────────────────────────────────────────────────
+until_simple	monadc.context.language.syntax-corpus	Until loop form parses.	(until cond body)
+until_block	monadc.context.language.syntax-corpus	Until with begin block body parses.	(until (done? x) (begin (step x) (show x)))
+# ── Macro Definitions ───────────────────────────────────────────────────────
+macro_when	monadc.context.language.syntax-corpus	When macro with rest params parses.	(define (when [condition : Bool] . [body : Syntax] -> Syntax) (if condition (begin . body)))
+macro_unless	monadc.context.language.syntax-corpus	Unless macro with rest params parses.	(define (unless [condition : Bool] . [body : Syntax] -> Syntax) (if condition (begin) (begin . body)))
+macro_swap	monadc.context.language.syntax-corpus	Swap macro with two mutable args parses.	(define (swap! [a] [b] -> Syntax) (let [tmp a] (set! a b) (set! b tmp)))
+macro_assert	monadc.context.language.syntax-corpus	Assert macro with rest body parses.	(define (assert [condition : Bool] . [body : Syntax] -> Syntax) (when condition (begin . body)))
+# ── For Loop C-Style ────────────────────────────────────────────────────────
+for_cstyle_step	monadc.context.language.syntax-corpus	C-style for with step parses.	(for [i 0 10 2] (show i))
+for_cstyle_no_step	monadc.context.language.syntax-corpus	C-style for without step parses.	(for [i 0 10] (show i))
+for_destructured_binding	monadc.context.language.syntax-corpus	For with destructured pair binding parses.	(for [[x y] [[1 2] [3 4]]] (+ x y))
+for_nested_iters	monadc.context.language.syntax-corpus	For with nested iteration over iterable parses.	(for [x [1 2]] (for [y [3 4]] (+ x y)))
+# ── Char Escape Variants ────────────────────────────────────────────────────
+char_escape_hex	monadc.context.language.syntax-corpus	Hex escape char literal parses.	'\x41'
+char_escape_hex_lower	monadc.context.language.syntax-corpus	Lowercase hex escape char literal parses.	'\x7a'
+char_escape_unicode	monadc.context.language.syntax-corpus	Unicode escape char literal parses.	'\u03bb'
+# ── Lambda Edge Cases ───────────────────────────────────────────────────────
+lambda_empty_parens	monadc.context.language.syntax-corpus	Lambda with empty parens parses.	(lambda () 42)
+lambda_multi_clause_guard	monadc.context.language.syntax-corpus	Lambda with guarded pattern clauses parses.	(lambda ([x : Int] -> Bool) | x > 0 -> True | _ -> False)
+lambda_nested	monadc.context.language.syntax-corpus	Nested lambda returns lambda parses.	(lambda (x) (lambda (y) (+ x y)))
+lambda_typed_return	monadc.context.language.syntax-corpus	Lambda with typed return parses.	(lambda ([x : Int] -> Int) (+ x 1))
+# ── Do Notation Variants ────────────────────────────────────────────────────
+do_multi_bind	monadc.context.language.syntax-corpus	Do with multiple binds parses.	(do [x <- (list 1 2) y <- (list 3 4)] (+ x y))
+do_let_inline_body	monadc.context.language.syntax-corpus	Do with inline let body parses.	(do [x <- (list 1 2)] (let [y x] y))
+do_pure_side_effect	monadc.context.language.syntax-corpus	Do with side-effecting expression parses.	(do (show "hello") 42)
+# ── Code Reflection ─────────────────────────────────────────────────────────
+code_function_call	monadc.context.language.syntax-corpus	Code reflection on function definition parses.	(code fn)
+code_value_binding	monadc.context.language.syntax-corpus	Code reflection on value binding parses.	(code x)
+# ── When/Unless Extras ──────────────────────────────────────────────────────
+when_effect_multi	monadc.context.language.syntax-corpus	When with begin block and side effects parses.	(when True (begin (show 1) (show 2)))
+unless_no_effect	monadc.context.language.syntax-corpus	Unless with true condition skips body parses.	(unless True (show 42))
+# ─── Include Paths ──────────────────────────────────────────────────────────
+include_with_angle	monadc.context.language.syntax-corpus	Include with angle-bracket path parses.	(include <stdio.h>)
+include_with_quote	monadc.context.language.syntax-corpus	Include with quoted path parses.	(include "mylib.h")
+# ─── Set! Variants ──────────────────────────────────────────────────────────
+setbang_field_access	monadc.context.language.syntax-corpus	Set! on field of expression parses.	(set! (p . x) 5)
+setbang_nested_field	monadc.context.language.syntax-corpus	Set! on nested field path parses.	(set! (m . a . b) 3)
+# ─── Nested Expressions ────────────────────────────────────────────────────
+nested_lambda_application	monadc.context.language.syntax-corpus	Nested lambda application parses.	((lambda (x) (* x x)) 5)
+nested_if_cond	monadc.context.language.syntax-corpus	Nested if inside cond parses.	(cond [(> x 0) (if (< x 10) "small" "medium")] [else "large"])
+# ─── Pot Calling Syntax ────────────────────────────────────────────────────
+pipe_forward_multi	monadc.context.language.syntax-corpus	Multi-step pipe forward parses.	(x |> f |> g |> h)
+pipe_rev_cons_expr	monadc.context.language.syntax-corpus	Reverse pipe cons expression parses.	(| x xs)
+pipe_cons_var	monadc.context.language.syntax-corpus	Pipe cons with variable parses.	(x | xs)
+# ─── Additional ─────────────────────────────────────────────────────────────
+symbol_bang_in_name	monadc.context.language.syntax-corpus	Bang in symbol name parses.	display!
+symbol_asterisk_name	monadc.context.language.syntax-corpus	Asterisk in symbol name parses.	safe-read*
+symbol_percent_name	monadc.context.language.syntax-corpus	Percent suffix symbol parses.	progress%
+symbol_plus_name	monadc.context.language.syntax-corpus	Plus prefix symbol parses.	+v1
+symbol_minus_gt	monadc.context.language.syntax-corpus	Arrow as symbol parses.	->
+greek_symbol_delta	monadc.context.language.syntax-corpus	Greek delta parses as symbol.	δ
+greek_symbol_gamma	monadc.context.language.syntax-corpus	Greek gamma parses as symbol.	γ
+greek_symbol_omega	monadc.context.language.syntax-corpus	Greek omega parses as symbol.	ω
+# ─── String Content Edges ──────────────────────────────────────────────────
+string_multiple_inline_comments	monadc.context.language.syntax-corpus	String with multiple comment-like chars parses.	";;;; ;; ;"
+string_with_semicolons	monadc.context.language.syntax-corpus	String with embedded semicolons parses.	"hello;world"
+string_with_pipes	monadc.context.language.syntax-corpus	String with embedded pipe chars parses.	"a | b"
+string_with_fat_arrow	monadc.context.language.syntax-corpus	String with embedded fat arrow parses.	"if cond => result"
+string_with_lambda_literal	monadc.context.language.syntax-corpus	String with lambda literal chars parses.	"λx.x"
+# ─── Quasiquote With Unquote Splicing ──────────────────────────────────────
+quasiquote_unquote_splicing_list	monadc.context.language.syntax-corpus	Unquote-splicing list within quasiquote parses.	⌜1 2 (unquote-splicing '(3 4)) 5⌝
+# ─── Lazy Range Variants ───────────────────────────────────────────────────
+range_list_negative_step	monadc.context.language.syntax-corpus	List range with start > end (descending) parses.	(10..1)
+range_list_fractional	monadc.context.language.syntax-corpus	List range with fractional bounds parses.	(0.5..2.5)
+# ─── More String Escapes ───────────────────────────────────────────────────
+string_escape_unicode_lower	monadc.context.language.syntax-corpus	Lowercase unicode escape in string parses.	"\u03bb"
+string_escape_unicode_upper	monadc.context.language.syntax-corpus	Uppercase unicode escape in string parses.	"\U000003BB"
+# ─── String Adjacent Concatenation ─────────────────────────────────────────
+string_adjacent_three	monadc.context.language.syntax-corpus	Three adjacent string literals parse.	"a""b""c"
+string_adjacent_mixed_spaces	monadc.context.language.syntax-corpus	Adjacent strings with mix of spaces parse.	"a" "b" "c"
+# ─── For with Multiple Body Forms ──────────────────────────────────────────
+for_multi_body	monadc.context.language.syntax-corpus	For with multiple body expressions parses.	(for [x [1 2 3]] (show x) x)
+for_bind_two_collect	monadc.context.language.syntax-corpus	For with two bindings and collect parses.	(for [x [1 2] y [3 4]] :collect (+ x y))
+# ─── Case Expression ───────────────────────────────────────────────────────
+case_multi_arm	monadc.context.language.syntax-corpus	Case with three arms parses.	(case 1 [0 => "zero"] [1 => "one"] [_ => "many"])
+case_default_arm	monadc.context.language.syntax-corpus	Case with default arm parses.	(case x [_ => 0])
+# ─── Type Application ──────────────────────────────────────────────────────
+type_app_apply	monadc.context.language.syntax-corpus	Type applied to value parses.	(Int 3.14)
+type_app_string_cast	monadc.context.language.syntax-corpus	String conversion via type application parses.	(String 42)
+# ─── Qualified Do ──────────────────────────────────────────────────────────
+do_with_let	monadc.context.language.syntax-corpus	Do with embedded let binding parses.	(do [x <- (list 1 2)] [y <- (list 3 4)] (+ x y))
+# ─── Wisp Typed Value Binding ─────────────────────────────────────────────────
+wisp_typed_value	monadc.context.language.syntax-corpus	Wisp typed value binding parses.	define x :: Int 42
+# ─── Explicit Arr Type Annotation ─────────────────────────────────────────────
+arr_type_explicit	monadc.context.language.syntax-corpus	Explicit Arr type annotation parses.	(define [arr :: Arr :: 3 :: Int] [1 2 3])
+arr_type_explicit_wisp	monadc.context.language.syntax-corpus	Wisp explicit Arr type annotation parses.	define arr :: Arr :: 3 :: Int [1 2 3]
+# ─── Function Return Type in Name ─────────────────────────────────────────────
+fn_return_type_in_name	monadc.context.language.syntax-corpus	Function with return type in name position parses.	(define (my-count String -> Int) x -> (count x))
+fn_return_type_poly_pat	monadc.context.language.syntax-corpus	Polymorphic pattern-match with return type in name parses.	(define (last List -> a) [] -> nil [x] -> x [_ | xs] -> (last xs))
+# ─── Wisp Macro Definition ────────────────────────────────────────────────────
+wisp_macro_definition	monadc.context.language.syntax-corpus	Wisp-form macro definition parses.	define when :: condition . body -> Syntax
+# ─── Data Deriving Eq Enum ────────────────────────────────────────────────────
+data_deriving_eq_enum	monadc.context.language.syntax-corpus	Data deriving Eq Enum parses.	data T = A | B deriving [Eq Enum]
+# ─── Instance with Method Bodies ──────────────────────────────────────────────
+instance_method_body_eq	monadc.context.language.syntax-corpus	Instance with method body parses.	instance Eq T where (= a b) => True
+# ─── Unicode Forall ───────────────────────────────────────────────────────────
+unicode_forall	monadc.context.language.syntax-corpus	Unicode forall in type signature parses.	define toEnumSafe :: ∀ t . [Enum t, Bounded t] => Int -> Maybe t
+# ─── Type Class Constraint Bracket ────────────────────────────────────────────
+type_class_constraint	monadc.context.language.syntax-corpus	Type class constraint bracket syntax parses.	define id :: [Eq a] => a -> a
+# ─── Mapsto Arrow ─────────────────────────────────────────────────────────────
+mapsto_arrow	monadc.context.language.syntax-corpus	Mapsto arrow in lambda parses.	(define double x ↦ (* 2 x))

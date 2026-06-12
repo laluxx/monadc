@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-quoted-list-ops
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Quoted list operations car/cdr/cons work on list literals.
+;; TEST-ATOM: (car '(1 2 3)) is 1, (cdr '(1 2 3)) is (2 3).
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (car '(1 2 3)))
+(show (cdr '(1 2 3)))
+(show (cons 0 '(1 2 3)))

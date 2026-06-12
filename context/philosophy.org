@@ -1,0 +1,235 @@
+#+TITLE: MonadC Philosophy
+#+AUTHOR: human + big-pickle (claude-opencode)
+#+DATE: 2026-06-12
+#+CREATED: 2026-06-12
+#+LAST_MODIFIED: 2026-06-12
+#+LANGUAGE: en
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:philosophy:witness:human:llm:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.philosophy.file-metadata
+:CUSTOM_ID: philosophy-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/philosophy.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.philosophy.file src:context/philosophy.org conf:high]
+  This file records the philosophical foundations of the Monad language and MonadC
+  compiler. It is witnessed by both human (the language designer) and LLM (a
+  reasoning agent that has worked extensively with the codebase). Philosophy is a
+  first-class object in the context category — it provides the =why= that gives
+  meaning to all other objects and morphisms.
+
+[THINK id:think.context.philosophy.role conf:high]
+  In the context category, philosophy is the interpretation functor from the
+  category of compiler artifacts into the category of human intent. Every object
+  (heading, test, source anchor) and every morphism (verifies, supports,
+  evidenced-by) derives its meaning from the philosophical layer. Without
+  philosophy, context is just structure. With philosophy, context is structure
+  with purpose.
+
+* Human Witness: Language Design Philosophy
+:PROPERTIES:
+:ID: monadc.context.philosophy.human-witness
+:CUSTOM_ID: human-witness
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.philosophy.no-tradeoff date:2026-06-12 by:human]
+  Monad is built on the conviction that the choice between high-level
+  mathematical safety and low-level hardware control is a false dichotomy. A
+  language should give you dependent types AND inline assembly, refinement types
+  AND naked functions, lazy infinite lists AND C-compatible arrays — without
+  binding generators, FFI wrappers, or runtime overhead.
+
+[DEC id:dec.philosophy.purity-is-practical date:2026-06-12 by:human]
+  Mathematical purity is not an academic concern — it is a practical guarantee.
+  When functions are relations, collections have set-theoretic semantics, and
+  types are first-class, the compiler can reason about programs in ways that
+  imperative languages cannot. This enables compile-time predicate checking,
+  exhaustive pattern coverage verification, and zero-cost type abstraction
+  through monomorphization.
+
+[DEC id:dec.philosophy.syntax-is-instrument date:2026-06-12 by:human]
+  Two syntaxes (s-expression and Wisp) are not a gimmick — they are a
+  recognition that different tasks require different notational styles.
+  S-expressions excel for programmatic generation and macro processing; Wisp
+  excels for readability in large codebases. Both must always work for every
+  construct, and they must mix freely within a single file.
+
+[DEC id:dec.philosophy.zero-to-metal date:2026-06-12 by:human]
+  The abstraction ladder must be continuous. A programmer should be able to
+  start with =show "Hello, World!"=, add type annotations, introduce
+  polymorphic functions, use dependent types to prove invariants, drop to
+  layout-based structs for performance, and finally write inline assembly for
+  hardware access — all within the same language, the same file, the same
+  function. No language boundary. No binding layer. No runtime switch.
+
+[DEC id:dec.philosophy.sets-are-the-model date:2026-06-12 by:human]
+  Types are sets. Functions are relations. Refinement types are subsets.
+  Universes are sets of sets. This is not just a metaphor — it is the semantic
+  model of the compiler. When you define =type Positive { x ∈ Int | x > 0 }=,
+  the compiler materializes the infinite set of all positive integers as a value
+  you can inspect. When you define a function =f :: a -> b=, the compiler
+  understands it as a relation =f ⊆ a × b=. This set-theoretic grounding
+  ensures that mathematical intuition is always correct.
+
+* LLM Witness: Observations from Extended Interaction
+:PROPERTIES:
+:ID: monadc.context.philosophy.llm-witness
+:CUSTOM_ID: llm-witness
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/philosophy.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.philosophy.llm-dual-type-system src:dep.h,infer.h conf:high]
+  The dual type system (HM + ITT) is the most distinctive architectural choice
+  in the compiler. Most dependently typed languages go all-in on full dependent
+  types and pay the inference cost everywhere. Monad's approach — fast HM
+  inference for ground types, full ITT for dependent types, bridged through
+  TERM_EMBED — is pragmatic. It means that =define (id x) x= infers
+  =∀a. a -> a= through the fast path, while =Π(x:Nat). Vec Bool x= goes
+  through the full checker. The two paths coexist in the same compilation.
+
+[OBS id:obs.philosophy.llm-nbe-architecture src:dep.h:304-320 conf:high]
+  The use of Normalization by Evaluation (NbE) for the dependent type checker
+  is architecturally significant. Most small compilers implement a simple
+  syntactic evaluation loop. MonadC implements a proper NbE kernel with
+  closures, environments, and a semantic Value domain that supports stuck
+  neutral terms. This is the right foundation for a language that aspires to
+  full dependent types — it will scale to more complex inductive families,
+  higher universes, and cubical extensions without architectural rewrites.
+
+[OBS id:obs.philosophy.llm-context-innovation src:context/*.org conf:high]
+  The context system is a genuine innovation in compiler project organization.
+  Most compilers have documentation (outdated), tests (brittle), and a TODO
+  list (ignored). MonadC has a living knowledge graph where every test links
+  to the context node that explains it, every TODO has a confidence level and
+  source anchor, and the entire corpus is rendered as an interactive
+  category-theory dashboard. This is not a documentation system — it is a
+  project memory system.
+
+[OBS id:obs.philosophy.llm-monadization-pattern src:codegen.c conf:high]
+  Codegen monomorphization of polymorphic schemes is a sound engineering
+  choice. Many HM implementations use boxing or tag-based dispatch for
+  polymorphism. MonadC generates a separate compiled copy for each concrete
+  instantiation, matching C++ templates in performance characteristics. This
+  means =id 42= and =id "hi"= produce separate, maximally-optimized machine
+  code. The trade-off is code size, but for a systems language, performance
+  over binary size is the right default.
+
+[OBS id:obs.philosophy.llm-context-first-workflow src:context/workflow.org conf:high]
+  The =context-first= workflow rule ("never leave the context behind") is the
+  most impactful single convention in this project. It transforms each work
+  session from an ephemeral conversation into a permanent contribution to the
+  project's memory. After 20+ work sessions, the context corpus contains
+  hundreds of records that would otherwise be lost in chat logs. This is how
+  LLM-augmented software development should work — not as a chat, but as a
+  persistent collaborative memory.
+
+* Shared Principles
+:PROPERTIES:
+:ID: monadc.context.philosophy.shared-principles
+:CUSTOM_ID: shared-principles
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/philosophy.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.philosophy.shared-intro conf:high]
+  The following principles are witnessed by both human and LLM, representing
+  points of convergence between design intent and observed impact.
+
+** Principle 1: The smallest testable atom
+[DEC id:dec.philosophy.smallest-atom date:2026-06-12 by:human+llm]
+  Every compiler promise should be provable by the smallest possible test. A
+  single behavior — one parse, one type check, one runtime effect — should be
+  isolable in a fixture that needs no explanation beyond its own headers.
+
+** Principle 2: Source-grounded knowledge
+[DEC id:dec.philosophy.source-grounding date:2026-06-12 by:human+llm]
+  Every claim in the context corpus must point to a source location or a
+  command result. Inference (INF) records must name the observations they
+  derive from. This creates a verifiable chain from claim to evidence.
+
+** Principle 3: Living documentation
+[DEC id:dec.philosophy.living-docs date:2026-06-12 by:human+llm]
+  Documentation, philosophy, context, and tests are all part of the same living
+  system. The system records not only what the compiler does, but why that
+  behavior matters and how it is verified. No artifact is static — they grow
+  together as the language evolves.
+
+** Principle 4: Context as category
+[DEC id:dec.philosophy.context-as-category date:2026-06-12 by:human+llm]
+  The context system is a category in the mathematical sense. Context headings,
+  test atoms, source anchors, TODO items, and decisions are objects. The
+  relations between them — verifies, supports, evidenced-by, contains — are
+  morphisms. The test runner is a functor from the context category into the
+  category of executable verification. Composition of morphisms corresponds to
+  chained meaning preservation: a test verifies a context node, which links to
+  a source anchor, which implements a decision.
+
+** Principle 5: No trade-off between safety and control
+[DEC id:dec.philosophy.no-tradeoff-principle date:2026-06-12 by:human+llm]
+  The central philosophical claim of Monad is that you should not have to
+  choose between dependent types and inline assembly, between mathematical
+  guarantees and hardware control. The entire compiler architecture — from the
+  dual type system through the TERM_EMBED bridge to the naked function support
+  — exists to make this claim true.

@@ -65,9 +65,13 @@ def parse_context_graph() -> dict[str, object]:
         parse_org_file(path, nodes, edges)
     for path in sorted((ROOT / "tests").rglob("*.mon")):
         parse_test_fixture(path, nodes, edges)
-    corpus = ROOT / "tests" / "language_corpus.tsv"
-    if corpus.exists():
-        parse_language_corpus(corpus, nodes, edges)
+    for corpus_path in [
+        ROOT / "tests" / "language_corpus.tsv",
+        ROOT / "tests" / "reader-atoms.tsv",
+        ROOT / "tests" / "reader-sugars.tsv",
+    ]:
+        if corpus_path.exists():
+            parse_language_corpus(corpus_path, nodes, edges)
     for path in sorted((ROOT / "tests").rglob("*.org")):
         parse_org_file(path, nodes, edges)
 
@@ -265,11 +269,12 @@ def parse_language_corpus(path: Path, nodes: dict[str, Node], edges: list[Edge])
         if not line or line.startswith("#"):
             continue
         fields = line.split("\t")
-        if len(fields) != 4:
+        if len(fields) < 3:
             continue
-        name, context_id, purpose, _source = fields
-        test_id = f"tests.language.{name}"
-        nodes[test_id] = Node(test_id, f"language.{name}", "test", rel, purpose)
+        name, context_id, purpose = fields[0], fields[1], fields[2]
+        prefix = "sugar" if path.name == "reader-sugars.tsv" else "language"
+        test_id = f"tests.{prefix}.{name}"
+        nodes[test_id] = Node(test_id, f"{prefix}.{name}", "test", rel, purpose)
         edges.append(Edge(test_id, context_id, "verifies", "verifies"))
 
 

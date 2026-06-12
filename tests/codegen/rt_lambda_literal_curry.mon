@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-lambda-literal-curry
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Lambda literal λx.λy. body desugars to nested lambdas and applies.
+;; TEST-ATOM: (λx.λy. + x y) 3 4 evaluates to 7.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show ((λx.λy. + x y) 3 4))

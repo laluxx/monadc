@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-radix-hex-literal
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Radix-r hex notation 16rFF equals decimal 255.
+;; TEST-ATOM: (show 16rFF) prints 255.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show 16rFF)
