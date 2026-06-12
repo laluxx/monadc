@@ -1,2 +1,2 @@
-(module PathLiteralQuoteRejected)
+(module PathLiteralQuoteValue)
 (show (quote (~/xos/projects/c/monadc/context/)))

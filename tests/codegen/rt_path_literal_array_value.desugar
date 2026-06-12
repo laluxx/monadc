@@ -1,0 +1,3 @@
+(module PathLiteralArrayValue)
+(define paths [~/xos/projects/c/monadc/context/])
+(show paths)

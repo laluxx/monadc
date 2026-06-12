@@ -215,6 +215,8 @@ Phases are timed with `PHASE_START()`/`PHASE_END()` macros and logged to stderr.
 | `AST_INSTANCE` | `(instance Eq Int ...)` | Type class instance |
 | `TOK_LAMBDA_LIT` | `λx. body` | Pure lambda literal |
 
+Path literals are values: `define path ~/xos/projects/c/monadc/context/` defines `path` with type `Path`, and `(show path)` prints the path text.
+
 ### 4.2 Type System
 
 The type system has two interlocking layers, implemented across 4 source files:
@@ -431,12 +433,21 @@ Every construct can be written in two equivalent forms:
 define var :: Int 3
 define square :: Int -> Int
   x -> x * x
+
+;; Parenthesized headers are also valid in bare Wisp define form.
+define (firstItem [n : Int] [xs : Arr] -> Int)
+  _ []     -> 0
+  n [x|xs] -> x
 ```
 
 See `how_to/Syntax.mon` for comprehensive examples.
 
 ### Wisp Sugar Notes
 
+- **Typed value define sugar:** `define x :: Int 42` is Wisp sugar for the Lisp-layer `(define [x :: Int] 42)`. Bracketed `define [x :: Int] 42` and `define [x : Int] 42` remain valid.
+- **Signature clause sugar:** `define square :: Int -> Int` followed by `x -> x * x` binds `x` as the parameter and expands to a normal named-parameter function. Pattern clauses with `_`, literals, `[]`, `[x|xs]`, or guards remain pattern clauses.
+- **Parenthesized Wisp define headers:** `define (f [x : Int] -> Int)` is accepted without wrapping the whole form in parentheses, so Wisp can reuse Lisp-style function headers directly.
+- **Path values:** valid Unix path tokens such as `~/xos/projects/c/monadc/context/` are first-class `Path` values in Wisp and Lisp forms.
 - **`?`-sugar:** `(contains? var arg)` transforms to `(var contains? arg)` when `var` is an identifier (method-call sugar). Workaround: use a literal/non-identifier first arg.
 - **`!`-sugar:** `(conj! var arg)` → `(var conj! arg)`. Workaround: use `(conj! {values} arg)`.
 

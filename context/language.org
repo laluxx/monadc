@@ -83,7 +83,30 @@
   compiler output.
 
 
-* Runtime-Sized Arrays and Path Literal Validation
+* Path Literal Values
+:PROPERTIES:
+:ID: monadc.context.language.path-values
+:CUSTOM_ID: path-values
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: reader.c,infer.c,codegen.c,tests/codegen/rt_path_literal_value.mon
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.language.path-literals-are-values date:2026-06-12 by:human]
+  Path literals are first-class =Path= values. Syntactically valid Unix path
+  tokens such as =~/dir/=, =/tmp/file=, and =./file= parse as =AST_PATH=,
+  infer as =TYPE_PATH=, lower to =i8*= in codegen, and print as their path
+  text under =show=. Validation belongs at the reader boundary for malformed
+  path syntax; valid path tokens must not be rejected merely because they are
+  used as values.
+
+* Runtime-Sized Arrays
 :PROPERTIES:
 :ID: monadc.context.language.runtime-sized-arrays
 :CUSTOM_ID: runtime-sized-arrays
@@ -94,17 +117,9 @@
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
-:SOURCE: codegen.c,infer.c,tests/codegen/rt_path_literal_rejected.mon,tests/path_heap_literals.mon
+:SOURCE: codegen.c,infer.c,tests/codegen/rt_path_literal_value.mon,tests/path_heap_literals.mon
 :CONFIDENCE: high
 :END:
-
-[DEC id:dec.language.path-literals-compile-time-error date:2026-06-12 by:codex]
-  Path literals are lexer/parser artifacts only. Syntactically valid Unix path
-  tokens such as =~/dir/=, =/tmp/file=, and =./file= may be parsed as
-  =AST_PATH= for diagnostics and JSON, but they are ill-typed as values.
-  Inference rejects them directly, including inside quoted data, and codegen
-  keeps a fallback rejection path. Filesystem paths used as values should be
-  quoted strings.
 
 [OBS id:obs.language.heap-array-fat-shape src:types.c:440,codegen.c:647 conf:high]
   =type_arr_heap(elem)= records heap arrays with =arr_is_heap=true= and
@@ -536,10 +551,10 @@
   for Wisp =for i -> heap= over a heap array. The loop exercises the same
   =count= and array-as-function indexing path used by collection iteration.
 
-* Path Literal Codegen Rejection Coverage
+* Path Literal Codegen Value Coverage
 :PROPERTIES:
-:ID: monadc.context.language.path-literal-codegen-regression
-:CUSTOM_ID: path-literal-codegen-regression
+:ID: monadc.context.language.path-literal-codegen-values
+:CUSTOM_ID: path-literal-codegen-values
 :CONTEXT_KIND: test-coverage
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
@@ -550,28 +565,23 @@
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
-:SOURCE: tests/codegen/rt_path_literal_rejected.mon,tests/codegen/rt_path_literal_quote_rejected.mon,tests/codegen/rt_path_literal_array_rejected.mon
+:SOURCE: tests/codegen/rt_path_literal_value.mon,tests/codegen/rt_path_literal_quote_value.mon,tests/codegen/rt_path_literal_array_value.mon
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.language.path-literal-direct-codegen-fixture src:tests/codegen/rt_path_literal_rejected.mon conf:high]
-  =tests/codegen/rt_path_literal_rejected.mon= covers direct use of a parsed
-  Unix path literal as a value.
+[OBS id:obs.language.path-literal-direct-codegen-fixture src:tests/codegen/rt_path_literal_value.mon conf:high]
+  =tests/codegen/rt_path_literal_value.mon= covers direct definition and =show= of a parsed Unix path literal as a =Path= value.
 
-[OBS id:obs.language.path-literal-quoted-codegen-fixture src:tests/codegen/rt_path_literal_quote_rejected.mon conf:high]
-  =tests/codegen/rt_path_literal_quote_rejected.mon= covers a path literal
-  nested under =quote= so quoted data cannot hide an ill-typed path value.
+[OBS id:obs.language.path-literal-quoted-codegen-fixture src:tests/codegen/rt_path_literal_quote_value.mon conf:high]
+  =tests/codegen/rt_path_literal_quote_value.mon= covers a path literal nested under =quote= so AST-to-runtime reflection preserves valid path syntax.
 
-[OBS id:obs.language.path-literal-array-codegen-fixture src:tests/codegen/rt_path_literal_array_rejected.mon conf:high]
-  =tests/codegen/rt_path_literal_array_rejected.mon= covers a path literal
-  nested inside an array literal so aggregate literals cannot hide ill-typed
-  path values.
+[OBS id:obs.language.path-literal-array-codegen-fixture src:tests/codegen/rt_path_literal_array_value.mon conf:high]
+  =tests/codegen/rt_path_literal_array_value.mon= covers a path literal nested inside an array literal so aggregate inference/codegen preserve =TYPE_PATH= elements.
 
-[OBS id:obs.language.path-literal-negative-goldens src:tests/codegen/rt_path_literal_rejected.json,tests/codegen/rt_path_literal_quote_rejected.json,tests/codegen/rt_path_literal_array_rejected.json conf:high]
-  Ill-typed Unix path literal fixtures now assert two layers: =--emit-json=
-  still sees the syntactically valid =AST_PATH= shape, while normal compilation
-  rejects the value during inference/codegen fallback with =error: ill-typed path
-  literal=. This keeps syntax recognition separate from value-level typing.
+[OBS id:obs.language.path-literal-value-goldens src:tests/codegen/rt_path_literal_value.json,tests/codegen/rt_path_literal_quote_value.json,tests/codegen/rt_path_literal_array_value.json conf:high]
+  Path literal fixtures assert both layers: =--emit-json= keeps the syntactic
+  =AST_PATH= shape, while normal compilation accepts valid path tokens as
+  =Path= values. This keeps syntax recognition and value-level typing aligned.
 
 [OBS id:obs.language.heap-array-codegen-goldens src:tests/codegen/rt_heap_array_runtime.json,tests/codegen/rt_heap_array_runtime.stdout conf:high]
   Heap array codegen coverage now checks the AST sidecar before the runtime
@@ -626,3 +636,52 @@
   =tests/codegen/rt_data_single_constructor.stdout= expects =(Point 3.0 4.0)=
   rather than a layout pointer or an implementation-specific float-looking bit
   pattern.
+
+
+* Wisp Typed Define Pattern Parameters
+:PROPERTIES:
+:ID: monadc.context.wisp.typed-define-pattern-params
+:CUSTOM_ID: wisp-typed-define-pattern-params
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: wisp.c,pmatch.c,tests/codegen/wisp_define.mon
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.wisp.typed-define-body-clause-binds-param date:2026-06-12 by:human]
+  A Wisp signature such as =define square :: Int -> Int= followed by
+  =x -> x * x= is valid Monad code. The typed signature supplies the type and
+  the first pattern clause supplies the parameter name; Wisp must not inject a
+  dummy =[]= pattern before the user clause.
+
+* Wisp Bare Parenthesized Define Headers
+:PROPERTIES:
+:ID: monadc.context.wisp.bare-define-headers
+:CUSTOM_ID: wisp-bare-define-headers
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: wisp.c,tests/codegen/wisp_pattern_second_arg.mon
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.wisp.bare-define-parenthesized-header date:2026-06-12 by:human]
+  Bare Wisp =define (name [p : T] ... -> R)= is valid and should desugar to
+  the same reader shape as =(define (name [p : T] ... -> R) ...)=. The
+  parenthesized function header must be kept as one grouped token, not wrapped
+  into =((name ...))=.

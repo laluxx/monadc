@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-path-literal-array-value
+;; TEST-CONTEXT: monadc.context.reader.path-literals, monadc.context.language.path-values, monadc.context.tests.heap-path-regressions
+;; TEST-PURPOSE: Verify Path values are valid array elements.
+;; TEST-ATOM: A home-relative Unix path literal nested inside an array literal compiles and show prints the path element.
+;; TEST-EXPECT: compile, run
+
+(module PathLiteralArrayValue)
+(define paths [~/xos/projects/c/monadc/context/])
+(show paths)

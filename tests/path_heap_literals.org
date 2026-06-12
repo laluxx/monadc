@@ -75,7 +75,7 @@ code generation, and runtime use through =show=, =count=, and Wisp
 
 [DEC id:dec.tests.path-literals-split date:2026-06-12 by:codex]
   Path literal compile-time rejection lives in
-  =tests/codegen/rt_path_literal_rejected.mon= and expects an =ill-typed path
+  =tests/codegen/rt_path_literal_value.mon= and expects a definable =Path= value
   literal= diagnostic for valid Unix path syntax used as a value. Heap array
   runtime coverage stays here so the two behaviors can change independently.
 

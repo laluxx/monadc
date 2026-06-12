@@ -1,3 +1,0 @@
-(module PathLiteralArrayRejected)
-(define bad [~/xos/projects/c/monadc/context/])
-(show bad)

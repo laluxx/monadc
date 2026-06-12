@@ -1,5 +1,5 @@
 #+TITLE: Last First Failing Test
-#+DATE: 2026-06-12T18:57:05
+#+DATE: 2026-06-12T20:08:02
 
 [OBS id:obs.tests.last-first-failure src:tests/run.py conf:high]
   This generated record captures the first failing test from the latest
@@ -9,7 +9,7 @@
 * Failure
 - Test: =codegen.rt-data-bounded-enum=
 - Status: =FAIL=
-- Duration: =[  24.03 ] ms=
+- Duration: =[  23.05 ] ms=
 - Reason: =compile failed=
 - Fixture: =tests/codegen/rt_data_bounded_enum.mon=
 

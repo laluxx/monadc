@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-path-literal-quote-value
+;; TEST-CONTEXT: monadc.context.reader.path-literals, monadc.context.language.path-values, monadc.context.tests.heap-path-regressions
+;; TEST-PURPOSE: Verify quoted syntax can contain Path literals.
+;; TEST-ATOM: A quoted list containing a home-relative path compiles via AST-to-runtime reflection.
+;; TEST-EXPECT: compile, run
+
+(module PathLiteralQuoteValue)
+(show '(~/xos/projects/c/monadc/context/))

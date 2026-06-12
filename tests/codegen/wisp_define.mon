@@ -1,7 +1,7 @@
 ;; TEST-ID: tests.codegen.wisp-define
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus, monadc.context.wisp.typed-define-pattern-params
 ;; TEST-PURPOSE: Wisp-style define compiles and runs correctly.
-;; TEST-ATOM: A Wisp-defined function square :: Int -> Int called from paren code.
+;; TEST-ATOM: A Wisp-defined function square :: Int -> Int binds the body-clause variable x instead of leaving it unbound.
 ;; TEST-EXPECT: compile, run
 
 (module Main)

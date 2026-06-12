@@ -1,3 +1,3 @@
-(module PathLiteralRejected)
+(module PathLiteralValue)
 (define path ~/xos/projects/c/monadc/context/)
 (show path)

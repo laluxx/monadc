@@ -632,7 +632,7 @@ assertions directly instead of requiring hand-written shell checks per fixture.
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
-:SOURCE: tests/codegen/rt_heap_array_runtime.mon,tests/codegen/rt_heap_array_for.mon,tests/codegen/rt_path_literal_rejected.mon,tests/codegen/rt_path_literal_quote_rejected.mon,tests/codegen/rt_path_literal_array_rejected.mon
+:SOURCE: tests/codegen/rt_heap_array_runtime.mon,tests/codegen/rt_heap_array_for.mon,tests/codegen/rt_path_literal_value.mon,tests/codegen/rt_path_literal_quote_value.mon,tests/codegen/rt_path_literal_array_value.mon,tests/codegen/wisp_define.mon,tests/codegen/wisp_pattern_second_arg.mon
 :CONFIDENCE: high
 :END:
 
@@ -641,10 +641,11 @@ assertions directly instead of requiring hand-written shell checks per fixture.
   JSON coverage. =rt_heap_array_runtime= checks the direct runtime operations;
   =rt_heap_array_for= checks Wisp loop iteration over a heap array.
 
-[DEC id:dec.tests.path-literal-rejection-fixtures date:2026-06-12 by:codex]
-  Path-literal rejection needs compile-fail fixtures for direct value use and
-  nested value use. The codegen suite covers direct define/show, quoted data,
-  and array literals containing an =AST_PATH=.
+[DEC id:dec.tests.path-literal-value-fixtures date:2026-06-12 by:human]
+  Path literals need positive codegen fixtures for direct value use and nested
+  value use. The codegen suite covers direct define/show, quoted data, and
+  array literals containing an =AST_PATH=, with JSON/desugar sidecars where
+  available.
 
 * Regression note: fixture hygiene after codegen review
 :PROPERTIES:
@@ -675,3 +676,46 @@ assertions directly instead of requiring hand-written shell checks per fixture.
   The test runner itself must remain syntactically valid. Review cleanups should
   include =python3 -m py_compile tests/run.py= because a formatting change can
   otherwise break the whole suite before any Monad fixture runs.
+
+
+[DEC id:dec.tests.wisp-define-regressions date:2026-06-12 by:human]
+  Wisp define regressions must be witnessed by codegen fixtures, not just reader
+  snapshots. =tests/codegen/wisp_define.mon= covers =define name :: T -> R=
+  with a body-clause variable, and =tests/codegen/wisp_pattern_second_arg.mon=
+  covers bare =define (name [p : T] ... -> R)= with second-argument collection
+  patterns.
+
+* Wisp Define Sugar Regression Fixtures
+:PROPERTIES:
+:ID: monadc.context.tests.wisp-define-sugar
+:CUSTOM_ID: tests-wisp-define-sugar
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: tests/wisp/
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests.wisp-path-value src:tests/wisp/rt_wisp_path_value.mon conf:high]
+  =tests.wisp.rt-wisp-path-value= witnesses that a valid Unix path token in a
+  Wisp =define= is a definable =Path= value and prints through =show=.
+
+[OBS id:obs.tests.wisp-typed-value-sugar src:tests/wisp/rt_wisp_define_typed_value_sugar.mon conf:high]
+  =tests.wisp.rt-wisp-define-typed-value-sugar= witnesses all supported Wisp
+  typed value binding spellings, including the unbracketed sugar
+  =define c :: Int 3=.
+
+[OBS id:obs.tests.wisp-signature-clause src:tests/wisp/rt_wisp_define_signature_clause.mon conf:high]
+  =tests.wisp.rt-wisp-define-signature-clause= prevents regression of
+  =define square :: Int -> Int= followed by a simple =x -> body= clause.
+
+[OBS id:obs.tests.wisp-parenthesized-signature src:tests/wisp/rt_wisp_define_parenthesized_signature.mon conf:high]
+  =tests.wisp.rt-wisp-define-parenthesized-signature= prevents regression of
+  bare Wisp =define (name [p : T] -> R)= headers with indented pattern clauses.

@@ -936,12 +936,6 @@ static bool is_at_top_level(CodegenContext *ctx) {
 }
 
 
-static void codegen_reject_path_literal(CodegenContext *ctx, AST *ast) {
-    CODEGEN_ERROR(ctx,
-                  "%s:%d:%d: error: ill-typed path literal: path literals are not supported as values; use a string literal instead",
-                  parser_get_filename(), ast ? ast->line : 0, ast ? ast->column : 0);
-}
-
 static bool type_has_adt_constructors(CodegenContext *ctx, Type *type) {
     if (!ctx || !ctx->env || !type) return false;
     const char *lay_name = NULL;
@@ -979,7 +973,8 @@ void codegen_print_ast(CodegenContext *ctx, AST *ast) {
         emit_call_2(ctx, printf_fn, i32, LLVMBuildGlobalStringPtr(ctx->builder, "\"%s\"", "fmt"), LLVMBuildGlobalStringPtr(ctx->builder, ast->string, "__monad_str_lit"), "");
         break;
     case AST_PATH:
-        codegen_reject_path_literal(ctx, ast);
+        emit_call_2(ctx, printf_fn, i32, get_fmt_str_no_newline(ctx),
+                    LLVMBuildGlobalStringPtr(ctx->builder, ast->string ? ast->string : "", "path_print"), "");
         return;
     case AST_CHAR:
         emit_call_2(ctx, printf_fn, i32, LLVMBuildGlobalStringPtr(ctx->builder, "'%c'", "fmt"), LLVMConstInt(LLVMInt8TypeInContext(ctx->context), ast->character, 0), "");
@@ -1040,8 +1035,9 @@ static LLVMValueRef ast_to_runtime_value(CodegenContext *ctx, AST *ast_elem) {
             rt_val = emit_call_1(ctx, get_rt_value_string(ctx), ptr, LLVMBuildGlobalStringPtr(ctx->builder, ast_elem->string, "__monad_str_lit"), "rtval");
             break;
         case AST_PATH:
-            codegen_reject_path_literal(ctx, ast_elem);
-            return NULL;
+            rt_val = emit_call_1(ctx, get_rt_value_string(ctx), ptr,
+                LLVMBuildGlobalStringPtr(ctx->builder, ast_elem->string ? ast_elem->string : "", "path_lit"), "rtval");
+            break;
         case AST_KEYWORD:
             rt_val = emit_call_1(ctx, get_rt_value_keyword(ctx), ptr, LLVMBuildGlobalStringPtr(ctx->builder, ast_elem->keyword, "kw"), "rtval");
             break;
@@ -3696,7 +3692,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     }
 
     case AST_PATH: {
-        codegen_reject_path_literal(ctx, ast);
+        result.type = type_path();
+        result.value = LLVMBuildGlobalStringPtr(ctx->builder, ast->string ? ast->string : "", "path_lit");
         return result;
     }
 

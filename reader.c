@@ -3746,11 +3746,12 @@ static AST *parse_list(Parser *p) {
                 ast_list_append(bracket_list, name_ast);
                 p->current = lexer_next_token(p->lexer); // consume name
                 if ((p->current.type == TOK_SYMBOL &&
-                     strcmp(p->current.value, "::") == 0) ||
+                     (strcmp(p->current.value, "::") == 0 ||
+                      strcmp(p->current.value, ":") == 0)) ||
                     p->current.type == TOK_ARROW) {
                     bool is_arrow = (p->current.type == TOK_ARROW);
                     ast_list_append(bracket_list, ast_new_symbol(is_arrow ? "->" : "::"));
-                    p->current = lexer_next_token(p->lexer); // consume '::' or '->'
+                    p->current = lexer_next_token(p->lexer); // consume ':', '::', or '->'
                     /* [name -> T] is sugar for [name :: Pointer :: T] */
                     if (is_arrow) {
                         /* collect all tokens until ']' */
@@ -3789,7 +3790,8 @@ static AST *parse_list(Parser *p) {
                             }
                             p->current = lexer_next_token(p->lexer);
                             if (p->current.type == TOK_SYMBOL &&
-                                strcmp(p->current.value, "::") == 0) {
+                                (strcmp(p->current.value, "::") == 0 ||
+                                 strcmp(p->current.value, ":") == 0)) {
                                 ast_list_append(bracket_list, ast_new_symbol("::"));
                                 p->current = lexer_next_token(p->lexer);
                             } else {

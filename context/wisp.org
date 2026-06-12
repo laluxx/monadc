@@ -213,21 +213,38 @@
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.wisp.define-multiline-broken src:command-output conf:high]
-  Wisp-style =define= with multi-line lambda body is broken:
+[OBS id:obs.wisp.define-signature-clause-fixed src:wisp.c,tests/wisp/rt_wisp_define_signature_clause.mon conf:high]
+  Wisp-style function signatures may take parameter names from a simple
+  indented arrow clause:
   #+BEGIN_EXAMPLE
   define square :: Int -> Int
     x -> x * x
   #+END_EXAMPLE
-  =x= remains unbound. The wisp expander does not correctly create lambda
-  bindings from multi-line define syntax with =->= arrows.
+  The expander desugars this to a named-parameter function header and a direct
+  body, so =x= is bound as the function parameter rather than treated as an
+  unbound pattern variable. Non-simple clauses containing =_=, literals,
+  collection patterns such as =[x|xs]=, or guards keep the pattern-clause path.
 
-[OBS id:obs.wisp.typed-value-broken src:command-output conf:high]
-  Wisp-style =define x :: Type value= is not supported:
+[OBS id:obs.wisp.typed-value-sugar-fixed src:wisp.c,tests/wisp/rt_wisp_define_typed_value_sugar.mon conf:high]
+  Wisp-style =define x :: Type value= is supported as sugar for the Lisp-layer
+  bracketed typed binding:
   #+BEGIN_EXAMPLE
   define x :: Int 42
   #+END_EXAMPLE
-  Error: =Expected ')' to close define=.
+  expands like =(define [x :: Int] 42)=. The explicit bracketed forms remain
+  valid for the Lisp layer and for Wisp code that wants to mirror it directly.
+
+[OBS id:obs.wisp.parenthesized-define-header src:wisp.c,tests/wisp/rt_wisp_define_parenthesized_signature.mon conf:high]
+  Bare Wisp accepts a parenthesized Lisp-style function header after =define=:
+  #+BEGIN_EXAMPLE
+  define (firstItem [n : Int] [xs : Arr] -> Int)
+    _ []     -> 0
+    n [x|xs] -> x
+  #+END_EXAMPLE
+  The header is kept as the grouped first argument to =define=, while the
+  indented clauses remain attached as the function body. This witnesses that
+  pattern clauses match the intended collection argument instead of an earlier
+  scalar argument.
 
 [OBS id:obs.wisp.char-escape-newline src:wisp.c,reader.c conf:high]
   Char literals with ='\n'= fail because wisp expands =\\n= to a real newline

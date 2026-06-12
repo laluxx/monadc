@@ -232,100 +232,6 @@ Type *subst_apply(Substitution *s, Type *t) {
 
 /// Inference Context
 
-static void infer_set_path_literal_error(InferCtx *ctx, AST *ast) {
-    if (!ctx || !ast || ctx->had_error) return;
-    snprintf(ctx->error_msg, sizeof(ctx->error_msg),
-             "%s:%d:%d: error: ill-typed path literal: path literals are not supported as values; use a string literal instead",
-             ctx->filename ? ctx->filename : "<unknown>", ast->line, ast->column);
-    ctx->had_error = true;
-}
-
-static AST *infer_find_path_literal(AST *ast) {
-    if (!ast) return NULL;
-    if (ast->type == AST_PATH) return ast;
-
-    switch (ast->type) {
-    case AST_LIST:
-        for (size_t i = 0; i < ast->list.count; i++) {
-            AST *found = infer_find_path_literal(ast->list.items[i]);
-            if (found) return found;
-        }
-        break;
-    case AST_ARRAY:
-        for (size_t i = 0; i < ast->array.element_count; i++) {
-            AST *found = infer_find_path_literal(ast->array.elements[i]);
-            if (found) return found;
-        }
-        break;
-    case AST_SET:
-        for (size_t i = 0; i < ast->set.element_count; i++) {
-            AST *found = infer_find_path_literal(ast->set.elements[i]);
-            if (found) return found;
-        }
-        break;
-    case AST_MAP:
-        for (size_t i = 0; i < ast->map.count; i++) {
-            AST *found = infer_find_path_literal(ast->map.keys[i]);
-            if (found) return found;
-            found = infer_find_path_literal(ast->map.vals[i]);
-            if (found) return found;
-        }
-        break;
-    case AST_LAMBDA:
-        for (int i = 0; i < ast->lambda.body_count; i++) {
-            AST *found = infer_find_path_literal(ast->lambda.body_exprs[i]);
-            if (found) return found;
-        }
-        return infer_find_path_literal(ast->lambda.body);
-    case AST_RANGE: {
-        AST *found = infer_find_path_literal(ast->range.start);
-        if (found) return found;
-        found = infer_find_path_literal(ast->range.step);
-        if (found) return found;
-        return infer_find_path_literal(ast->range.end);
-    }
-    case AST_REFINEMENT:
-        return infer_find_path_literal(ast->refinement.predicate);
-    case AST_TESTS:
-        for (int i = 0; i < ast->tests.count; i++) {
-            AST *found = infer_find_path_literal(ast->tests.assertions[i]);
-            if (found) return found;
-        }
-        break;
-    case AST_ADDRESS_OF:
-        if (ast->list.count > 0) return infer_find_path_literal(ast->list.items[0]);
-        break;
-    case AST_PMATCH:
-        for (int i = 0; i < ast->pmatch.clause_count; i++) {
-            ASTPMatchClause *clause = &ast->pmatch.clauses[i];
-            for (int j = 0; j < clause->guard_count; j++) {
-                AST *found = infer_find_path_literal(clause->guard_conds[j]);
-                if (found) return found;
-                found = infer_find_path_literal(clause->guard_bodies[j]);
-                if (found) return found;
-            }
-            AST *found = infer_find_path_literal(clause->body);
-            if (found) return found;
-        }
-        break;
-    case AST_CLASS:
-        for (int i = 0; i < ast->class_decl.default_count; i++) {
-            AST *found = infer_find_path_literal(ast->class_decl.default_bodies[i]);
-            if (found) return found;
-        }
-        break;
-    case AST_INSTANCE:
-        for (int i = 0; i < ast->instance_decl.method_count; i++) {
-            AST *found = infer_find_path_literal(ast->instance_decl.method_bodies[i]);
-            if (found) return found;
-        }
-        break;
-    default:
-        break;
-    }
-    return NULL;
-}
-
 InferCtx *infer_ctx_create(InferEnv *env, struct DepCtx *dctx, const char *filename) {
     InferCtx *ctx       = calloc(1, sizeof(InferCtx));
     ctx->subst          = subst_create();
@@ -1120,8 +1026,7 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         break;
 
     case AST_PATH:
-        infer_set_path_literal_error(ctx, ast);
-        result = type_unknown();
+        result = type_path();
         break;
 
     case AST_CHAR:
@@ -1465,10 +1370,6 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
 
         /* ---- quote --------------------------------------------------- */
         if (head->type == AST_SYMBOL && strcmp(head->symbol, "quote") == 0) {
-            if (ast->list.count >= 2) {
-                AST *path_lit = infer_find_path_literal(ast->list.items[1]);
-                if (path_lit) infer_set_path_literal_error(ctx, path_lit);
-            }
             Type *fresh_t = infer_fresh(ctx);
             result = type_list(&fresh_t, 1);
             break;

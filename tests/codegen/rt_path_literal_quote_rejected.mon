@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-path-literal-quote-rejected
-;; TEST-CONTEXT: monadc.context.reader.path-literals, monadc.context.language.path-literals, monadc.context.tests.expected-failures
-;; TEST-PURPOSE: Verify quoted Unix path literals are rejected before they become runtime values.
-;; TEST-ATOM: A syntactically valid home-relative Unix path literal inside quote must still be a compile-time type error; use a String literal for filesystem path values.
-;; TEST-EXPECT: fail:compile
-;; TEST-EXPECT-DIAGNOSTIC: error: ill-typed path literal
-
-(module PathLiteralQuoteRejected)
-(show '(~/xos/projects/c/monadc/context/))

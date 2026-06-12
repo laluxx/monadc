@@ -122,12 +122,12 @@
 [OBS id:obs.reader.path-ast src:reader.c:430 conf:high]
   =ast_new_path= creates =AST_PATH= and stores the path text in =ast->string=.
 
-[DEC id:dec.reader.path-literal-validation date:2026-06-12 by:codex]
+[DEC id:dec.reader.path-literal-validation date:2026-06-12 by:human]
   Path-like tokens remain reader-level syntax so diagnostics and JSON emission can
-  identify Unix-style absolute, home-relative, and dot-relative paths. The reader
-  does not assign value semantics to =AST_PATH=: later stages reject path
-  literals as ill-typed values, so use a string literal when a filesystem path
-  must be stored or shown.
+  identify Unix-style absolute, home-relative, and dot-relative paths. A valid
+  path token becomes =AST_PATH= and is a value-level =Path= literal in later
+  stages. Reader validation should reject malformed path tokens, not valid Unix
+  paths such as =~/xos/projects/c/monadc/context/=.
 
 * Heap Array Literals
 :PROPERTIES:
@@ -211,10 +211,10 @@
   =tests/path_heap_literals.mon= now focuses on heap array literals and their
   runtime behavior: =show=, =count=, and Wisp =for i -> heap= iteration.
 
-[OBS id:obs.reader.path-reject-fixture src:tests/codegen/rt_path_literal_rejected.mon conf:high]
-  =tests/codegen/rt_path_literal_rejected.mon= records that a syntactically valid
+[OBS id:obs.reader.path-value-fixture src:tests/codegen/rt_path_literal_value.mon conf:high]
+  =tests/codegen/rt_path_literal_value.mon= records that a syntactically valid
   home-relative Unix path literal such as =~/xos/projects/c/monadc/context/= is
-  an ill-typed compile-time error when used as a value.
+  a definable =Path= value.
 
 #+BEGIN_EXAMPLE
 Input:
@@ -495,3 +495,27 @@ Expected Wisp shape:
   Wisp heap-array =for= coverage now carries desugar goldens. The expected shape
   is a =for= form over =[iter 0 (count heap)]= with a binding that indexes the
   heap array as =(heap iter)= before executing the body.
+
+* Typed Variable Binding Separator Parity
+:PROPERTIES:
+:ID: monadc.context.reader.typed-variable-colon-parity
+:CUSTOM_ID: reader-typed-variable-colon-parity
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: reader.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.reader.typed-variable-single-colon src:reader.c,tests/wisp/rt_wisp_define_typed_value_sugar.mon conf:high]
+  The value-binding reader path accepts both =[name :: Type]= and
+  =[name : Type]=. Internally the single-colon spelling is normalized to the
+  canonical =::= marker in the bracket list, so downstream type annotation
+  parsing does not need a second representation.
