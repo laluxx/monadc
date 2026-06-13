@@ -2019,7 +2019,263 @@
   `monadc.context.philosophy.purity-is-practical` (macros are pure functions
   at compile time, side-effect-free by construction) ·
   `monadc.context.philosophy.sets-are-the-model` (macros as relations
-  between syntax trees extend the set-theoretic model to metaprogramming)
+   between syntax trees extend the set-theoretic model to metaprogramming)
+
+* Runtime Value System
+:PROPERTIES:
+:ID: monadc.context.language.runtime-value-system
+:CUSTOM_ID: runtime-value-system
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The RuntimeValue type system: the universal value representation (i8* opaque pointer at LLVM level), type tags (RT_INT through RT_CLOSURE), the value construction/unboxing API (rt_value_*/rt_unbox_*), memory management (arena hot path vs heap long-lived), thunk/lazy evaluation, cons-cell list representation, and hash-set/map open-addressing tables.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h:18-34,runtime.h:56-92,runtime.h:258-276,runtime.h:278-288,runtime.c
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.language.runtime-value-system-why conf:high]
+  The RuntimeValue is the bridge between the type system and the runtime. In
+  the set-theoretic model, every value is an element of some set. In the
+  runtime, every value is an `i8*` pointer to a `RuntimeValue` struct whose
+  `type` tag (RuntimeValueType enum) determines which set it belongs to. This
+  is the practical expression of erasure: the type system tracks fine-grained
+  static types, but at runtime every value is a pointer. The tag tells the
+  runtime how to interpret the data union. This design is uniform (every value
+  is a pointer), extensible (new tags can be added), and compatible with C/LLVM
+  (the pointer is opaque at the ABI boundary).
+
+[OBS id:obs.language.runtime-value-tags src:runtime.h:18-34 conf:high]
+  The `RuntimeValueType` enum has 14 tags: `RT_INT`, `RT_FLOAT`, `RT_CHAR`,
+  `RT_STRING`, `RT_SYMBOL`, `RT_KEYWORD`, `RT_LIST`, `RT_RATIO`, `RT_ARRAY`,
+  `RT_NIL`, `RT_THUNK`, `RT_BIGNUM`, `RT_SET`, `RT_MAP`, `RT_CLOSURE`. Each
+  tag selects the active member of the data union in `RuntimeValue`
+  (runtime.h:66-92). The LLVM type is always `i8*` — the tag is stored at
+  offset 0 as a C enum (4 bytes). The codegen never needs to inspect the
+  tag directly; it calls `rt_make_*` and `rt_unbox_*` functions which handle
+  tag dispatch internally.
+
+[OBS id:obs.language.runtime-value-construction src:runtime.h:258-276 conf:high]
+  Values are constructed via `rt_value_*` functions: `rt_value_int(i64)`,
+  `rt_value_float(double)`, `rt_value_char(char)`, `rt_value_string(const
+  char*)`, `rt_value_symbol(const char*)`, `rt_value_keyword(const char*)`,
+  `rt_value_list(RuntimeList*)`, `rt_value_nil()`, `rt_value_thunk(RuntimeThunk*)`,
+  `rt_value_ratio(i64, i64)`, `rt_value_array(size_t)`, `rt_value_set(RuntimeSet*)`,
+  `rt_value_map(RuntimeMap*)`. Hot-path types (int, float, char, list, nil,
+  thunk) use arena allocation (g_eval_arena) for zero-free performance.
+  Long-lived types (string, symbol, keyword, ratio, array, set, map) use
+  heap allocation via `malloc` and are freed by `rt_value_free`.
+
+[OBS id:obs.language.runtime-value-unboxing src:runtime.h:278-288 conf:high]
+  Values are unboxed via `rt_unbox_*` functions: `rt_unbox_int(RuntimeValue*)`
+  returns `int64_t`, `rt_unbox_float` returns `double`, `rt_unbox_char` returns
+  `char`, `rt_unbox_string` returns `char*`, `rt_unbox_list` returns
+  `RuntimeList*`, `rt_unbox_set` returns `RuntimeSet*`, `rt_unbox_map` returns
+  `RuntimeMap*`, `rt_value_is_nil` returns `int`. These functions assert the
+  correct type tag at runtime — calling `rt_unbox_int` on a `RT_FLOAT` value
+  is a fatal error. The codegen inserts these calls automatically based on the
+  static type information from the HM inference pass.
+
+[OBS id:obs.language.runtime-thunk-system src:runtime.h:49-54,runtime.h:169-173 conf:high]
+  Thunks implement lazy evaluation. `RuntimeThunk` (runtime.h:49-54) carries
+  a function pointer `fn`, an environment `env`, a cached `value` pointer, and
+  a `forced` flag. `rt_thunk_create(fn, env)` creates an unevaluated thunk.
+  `rt_force(thunk)` evaluates it and caches the result. Once forced, subsequent
+  calls return the cached value. Thunks are the runtime mechanism for lazy cons
+  (stream programming), lazy ranges (infinite lists), and delayed evaluation
+  in the dependent type checker's NbE kernel.
+
+[OBS id:obs.language.runtime-list-representation src:runtime.h:111-126,128-135 conf:high]
+  Lists are implemented as singly-linked cons cells. `ConsCell` (runtime.h:116-126)
+  has inlined thunks for head and tail (both `fn`+`env`+`val`+`forced` triples)
+  enabling fully lazy cons cells. A `NULL tail_val` with `tail_forced=1`
+  signals end-of-list. `RuntimeList` (runtime.h:133-135) is a thin wrapper
+  around `ConsCell*` — `NULL` cell means empty list. The lazy cons design
+  means `(range 1 1000000)` constructs a thunk, not a million cells. Only
+  accessed elements are forced.
+
+[OBS id:obs.language.runtime-set-representation src:runtime.h:144-149 conf:high]
+  RuntimeSet (runtime.h:144-149) is an open-addressing hash table with linear
+  probing and tombstones. Capacity is always a power of two. Load factor
+  threshold: 0.7. Operations: `rt_set_conj`, `rt_set_disj` (immutable copies),
+  `rt_set_conj_mut`, `rt_set_disj_mut` (in-place mutation), `rt_set_contains`,
+  `rt_set_get`. The hash function is FNV-1a for strings, Knuth multiplicative
+  for integers, XOR-aggregate for collections.
+
+[OBS id:obs.language.runtime-map-representation src:runtime.h:152-166 conf:high]
+  RuntimeMap (runtime.h:156-166) mirrors RuntimeSet but stores key-value pairs
+  in `RuntimeMapEntry` buckets. Open addressing, linear probing, tombstones,
+  power-of-2 capacity starting at 8, load factor 0.7. Operations: `rt_map_assoc`,
+  `rt_map_dissoc` (immutable), `rt_map_assoc_mut`, `rt_map_dissoc_mut` (mutable),
+  `rt_map_get`, `rt_map_contains`, `rt_map_keys`, `rt_map_vals`, `rt_map_merge`.
+
+[OBS id:obs.language.runtime-closure-representation src:runtime.h:58-64 conf:high]
+  RuntimeClosure (runtime.h:58-64) carries an LLVM-compiled function pointer
+  `fn_ptr`, a heap-allocated environment `env` (array of `RuntimeValue*`), the
+  environment size `env_size`, the declared arity `arity`, and an optional debug
+  `name`. Closures are called via `rt_closure_calln` which packs the environment
+  and arguments into a flat array and invokes the compiled function through the
+  closure ABI `(env*, i64 n, RuntimeValue** args)`.
+
+[OBS id:obs.language.runtime-hashing-equality src:runtime.c conf:high]
+  Structural equality is handled by `rt_equal_p` (runtime.h:255) which
+  dispatches on the type tag. Bignum equality uses `mpz_cmp`. Collection
+  equality (list, set, map) traverses structure recursively with cycle
+  detection. Hashing (`rt_hash_value`) uses FNV-1a for strings, Knuth
+  multiplicative for integers, and XOR-aggregate for collections. Hash
+  consistency with equality is guaranteed: `rt_equal_p(a, b)` implies
+  `rt_hash_value(a) == rt_hash_value(b)`.
+
+[OBS id:obs.language.runtime-bignum src:runtime.h:310-317 conf:high]
+  Bignums provide arbitrary-precision integer arithmetic via GMP (gmp.h).
+  `rt_value_bignum_from_str` parses a decimal string. `rt_promote_to_bignum`
+  upgrades an `int64_t` value to bignum on overflow. Operations: add, sub,
+  mul, div. The bignum tag (`RT_BIGNUM`) is distinct from `RT_INT`, allowing
+  the runtime to distinguish machine-word integers from arbitrary-precision ones.
+
+[INF id:inf.language.runtime-connects-to from:obs.language.runtime-value-tags,obs.language.runtime-value-construction,obs.language.runtime-value-unboxing,obs.language.runtime-thunk-system,obs.language.runtime-list-representation,obs.language.runtime-set-representation,obs.language.runtime-map-representation,obs.language.runtime-closure-representation,obs.language.runtime-hashing-equality,obs.language.runtime-bignum,think.language.runtime-value-system-why conf:high]
+  connects-to -> `monadc.context.language.primitive-ground-types` (every ground
+  type has a corresponding runtime tag and value constructor) ·
+  `monadc.context.language.primitive-list` (RuntimeList/ConsCell is the runtime
+  incarnation of TYPE_LIST) ·
+  `monadc.context.language.primitive-set` (RuntimeSet with open-addressing hash
+  table is the runtime incarnation of TYPE_SET) ·
+  `monadc.context.language.primitive-map` (RuntimeMap is the runtime incarnation
+  of TYPE_MAP) ·
+  `monadc.context.language.primitive-function` (RuntimeClosure is the runtime
+  incarnation of TYPE_FN/TERM_PI) ·
+  `monadc.context.language.primitive-array` (RuntimeValue with RT_ARRAY tag is
+  the runtime incarnation of TYPE_ARR) ·
+  `monadc.context.language.codegen-dispatch` (codegen generates calls to
+  rt_value_*/rt_unbox_* based on type information) ·
+  `monadc.context.philosophy.sets-are-the-model` (the RuntimeValue tag is the
+  runtime's answer to "which set does this element belong to?")
+
+* Compilation Pipeline
+:PROPERTIES:
+:ID: monadc.context.language.compilation-pipeline
+:CUSTOM_ID: compilation-pipeline
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The 11-phase MonadC compilation pipeline: from source to object file — module declaration (Phase 1), dependency verification (Phase 2), LLVM setup (Phase 3), extern declarations (Phase 4), init function construction (Phase 5), features global (Phase 6), dependent type shadow pass (Phase 6.5), codegen top-level (Phase 7), function termination (Phase 8), registry/rename (Phase 9), verify/IR dump (Phase 10), object emit (Phase 11).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: main.c:855-1290
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.language.pipeline-why-11-phases conf:high]
+  The 11-phase pipeline is an emergent property of the compiler's architecture,
+  not a designed-in plan. Each phase exists because the previous phase's output
+  is needed by the next: module decls must be parsed before imports can be
+  resolved, LLVM must be initialized before builtins can be registered, the
+  *features* global must exist before codegen can emit expressions. The shadow
+  pass (Phase 6.5) is the only deliberately inserted phase — it runs between
+  HM inference and LLVM codegen because the dependent type checker must see
+  the fully elaborated HM-typed AST before LLVM lowers it to a linear sequence
+  of instructions. The pipeline could be refactored into fewer phases, but the
+  current structure faithfully reflects the actual data dependencies.
+
+[OBS id:obs.language.pipeline-phase1 src:main.c:855-904 conf:high]
+  Phase 1 — Module + Import Declarations. Parses `module` and `import` forms
+  from the top of the source file. Builds a `ModuleContext` with the module
+  name, export policy, and import list. If no explicit `module` form is found,
+  infers the module name from the file path. This phase must complete before
+  any codegen work begins because the module name affects symbol mangling.
+
+[OBS id:obs.language.pipeline-phase2 src:main.c:906-923 conf:high]
+  Phase 2 — Verify Dependencies are Compiled. Checks the module registry for
+  each imported module. If a dependency isn't found, attempts a fallback
+  path-to-name resolution and recursively compiles it via `compile_one`. After
+  compilation, resets the parser context to the current source file.
+
+[OBS id:obs.language.pipeline-phase3 src:main.c:925-947 conf:high]
+  Phase 3 — LLVM Setup. Calls `LLVMInitializeNativeTarget`,
+  `LLVMInitializeNativeAsmPrinter`, `LLVMInitializeNativeAsmParser`.
+  Initializes the `CodegenContext`, creates the LLVM module, builds the
+  `DepCtx` for dependent types, registers builtins via `register_builtins`,
+  registers Wisp arities, and declares runtime functions via
+  `declare_runtime_functions`.
+
+[OBS id:obs.language.pipeline-phase4 src:main.c:949 conf:high]
+  Phase 4 — Declare Externals from Compiled Dependencies. Iterates through
+  imported modules and declares their exported functions, globals, and types
+  in the current LLVM module so codegen can reference them.
+
+[OBS id:obs.language.pipeline-phase5 src:main.c:964 conf:high]
+  Phase 5 — Create Init/Main Function and Position Builder. Creates the
+  entry function (init or main depending on mode), positions the LLVM IR
+  builder, and sets up the per-function allocation arena.
+
+[OBS id:obs.language.pipeline-phase6 src:main.c:987 conf:high]
+  Phase 6 — *features* Global. Emits the `*features*` global constant
+  (a list of keyword symbols advertising compiler capabilities). This must
+  exist before any codegen that reads features for conditional compilation.
+
+[OBS id:obs.language.pipeline-phase6-5 src:main.c:1025-1063 conf:high]
+  Phase 6.5 — Dependent Type Checking (Shadow Pass). Runs the bidirectional
+  ITT type checker with NbE definitional equality. This pass does not emit
+  code — it checks dependent annotations, elaborates surface syntax to core
+  terms, and back-propagates ground types to `ast->inferred_type` via
+  `dep_ground_of_value_env`. The HM inferencer and LLVM codegen then use
+  these annotated types. This is the only deliberately inserted "shadow"
+  phase (see think.language.dep-why-shadow-pass).
+
+[OBS id:obs.language.pipeline-phase7 src:main.c:1065 conf:high]
+  Phase 7 — Codegen Top-Level Expressions. The main code generation pass.
+  Iterates through all top-level expressions, calls `codegen_expr` for each,
+  and emits LLVM IR. This is where the 83+ strcmp dispatch handlers are
+  exercised, closures are compiled, collections are constructed, and all
+  runtime values are allocated.
+
+[OBS id:obs.language.pipeline-phase8 src:main.c:1110 conf:high]
+  Phase 8 — Terminate Function. Emits the return instruction for the entry
+  function (returning the value of the last expression, or nil for
+  module-initialization-only compilation). Runs LLVM verification on the
+  generated function.
+
+[OBS id:obs.language.pipeline-phase9 src:main.c:1122 conf:high]
+  Phase 9 — Build Registry Entry + Rename LLVM Symbols. Builds a
+  `CompiledModule` registry entry with the module name, LLVM module pointer,
+  and exported globals. Renames LLVM symbols from their internal (reader-assigned)
+  names to mangled names based on the module and export policy. This phase must
+  run after all codegen is complete because the rename changes symbol visibility.
+
+[OBS id:obs.language.pipeline-phase10 src:main.c:1243 conf:high]
+  Phase 10 — Verify + Optional IR/ASM Output. Runs LLVM verification on the
+  entire module. If flags request it, dumps the LLVM IR as text (`--emit-llvm`)
+  or assembly (`--emit-asm`). Also handles `--emit-json` test-mode output.
+
+[OBS id:obs.language.pipeline-phase11 src:main.c:1276 conf:high]
+  Phase 11 — Emit Object File. Writes the compiled object file to disk (`.o`
+  file). Skipped if the `.o` is already up to date (incremental compilation).
+  The object file is registered in the module registry so subsequent
+  compilations can link against it.
+
+[INF id:inf.language.pipeline-connects-to from:obs.language.pipeline-phase1,obs.language.pipeline-phase2,obs.language.pipeline-phase3,obs.language.pipeline-phase4,obs.language.pipeline-phase5,obs.language.pipeline-phase6,obs.language.pipeline-phase6-5,obs.language.pipeline-phase7,obs.language.pipeline-phase8,obs.language.pipeline-phase9,obs.language.pipeline-phase10,obs.language.pipeline-phase11,think.language.pipeline-why-11-phases conf:high]
+  connects-to -> `monadc.context.language.codegen-dispatch` (Phase 7 exercises
+  the entire dispatch table) ·
+  `monadc.context.language.primitive-dependent-types` (Phase 6.5 is the shadow
+  pass documented in the dependent types section) ·
+  `monadc.context.language.codegen-gaps` (gaps in the dispatch table are
+  exercised during Phase 7) ·
+  `monadc.context.build` (the build system orchestrates pipeline execution) ·
+  `monadc.context.source-map` (every source file in the repository plays a
+  role in one or more pipeline phases) ·
+  `monadc.context.references.layered-modal` (the dual-pass design is a layered
+  modal architecture: HM is the fast modal layer, ITT is the slow semantic layer)
 
 * Primitive Cross-Cutting Connections
 :PROPERTIES:

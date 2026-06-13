@@ -414,6 +414,7 @@ AREA NAME: Short descriptor
 :ID: monadc.context.commit.examples
 :CUSTOM_ID: commit-examples
 :CONTEXT_KIND: format
+:CONTEXT_DESCRIPTION: Root section: example commit scenarios showing the format in practice.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -432,6 +433,7 @@ AREA NAME: Short descriptor
 :ID: monadc.context.commit.example-minimal
 :CUSTOM_ID: commit-example-minimal
 :CONTEXT_KIND: format
+:CONTEXT_DESCRIPTION: Example: a simple bugfix commit following the format conventions.
 :CONTEXT_VERSION: 1
 :CONTEXT_CREATED: 2026-06-11
 :CONTEXT_UPDATED: 2026-06-11
@@ -461,6 +463,7 @@ adjacent `~` and `[...]` and setting `AST_ARRAY.array.is_heap = true`.
 :ID: monadc.context.commit.example-full
 :CUSTOM_ID: commit-example-full
 :CONTEXT_KIND: format
+:CONTEXT_DESCRIPTION: Example: a feature commit with detailed context and motivation.
 :CONTEXT_VERSION: 1
 :CONTEXT_CREATED: 2026-06-11
 :CONTEXT_UPDATED: 2026-06-11
@@ -552,6 +555,7 @@ and a Hoogle-style method browser. New context nodes introduced:
 :ID: monadc.context.commit.quick-reference
 :CUSTOM_ID: commit-quick-reference
 :CONTEXT_KIND: format
+:CONTEXT_DESCRIPTION: Quick reference card: summary of all format rules in compact form.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human

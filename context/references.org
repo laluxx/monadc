@@ -76,7 +76,31 @@
   predicate generation, and the ITT kernel's conversion checker all derive
   from the Curry-Howard insight.
 
-[INF id:inf.references.propositions-as-types-connects from:doc.references.propositions-as-types,obs.language.set-grounded-in-model conf:high]
+[OBS id:obs.references.propositions-as-types-nbe src:dep.c:884-1506 conf:high]
+  The NbE kernel in dep.c embodies propositions-as-types directly. =dep_eval=
+  normalizes a type (proposition) to its semantic value (canonical proof form).
+  =dep_conv= decides equality of types (propositions) by evaluating both sides
+  and comparing the resulting semantic values (proof normalization). The
+  fuel limit of 100000 (dep.h:544) bounds the proof search depth. The
+  set-theoretic model generalizes Curry-Howard: a type is not just a
+  proposition but a set, and a value is not just a proof but an element.
+
+[OBS id:obs.references.propositions-as-types-refinements src:refinement.c,dep.c:2700-2782 conf:high]
+  Refinement types are propositions-as-types at the subtyping level. A
+  refinement type =Even = Int where even?(x)= defines a subset of Int by a
+  predicate. The predicate IS the proof: a value =x= belongs to =Even= iff
+  =even?(x)= evaluates to =#t=. The dep ground-type bridge (dep.c:2700-2782)
+  implements this by evaluating the predicate at compile time when the value
+  is a literal, or by inserting a runtime predicate check for computed values.
+
+[OBS id:obs.references.propositions-as-types-set-predicate src:codegen.c:690-691 conf:high]
+  The type predicates =Int?=, =Bool?=, =Set?=, =Map?=, etc. are propositions
+  at the compile-time language level. =Set?(t)= is the proposition "is t a set
+  type?" — the compiler answers it by checking =type->kind == TYPE_SET=. A
+  kind-check is a proof, and the set of all compile-time propositions is the
+  set of all TypeKind values.
+
+[INF id:inf.references.propositions-as-types-connects from:doc.references.propositions-as-types,obs.references.propositions-as-types-nbe,obs.references.propositions-as-types-refinements,obs.references.propositions-as-types-set-predicate,obs.language.set-grounded-in-model conf:high]
   connects-to -> `monadc.context.philosophy.sets-are-the-model` (the set-theoretic
   model is Curry-Howard applied to collections) ·
   `monadc.context.language.primitive-dependent-types` (the ITT kernel is a direct
@@ -114,7 +138,26 @@
   and the bidir entry points (=infer=, =check=, =conv=, =normalise=) follow the
   architecture established here.
 
-[INF id:inf.references.typechecking-dependent-connects from:doc.references.typechecking-dependent-types,obs.language.dep-nbe-kernel,obs.language.dep-shadow-pass conf:high]
+[OBS id:obs.references.typechecking-dependent-infer-check src:dep.c conf:high]
+  The bidir entry points in dep.c follow Coquand's algorithm exactly.
+  =dep_ctx_infer= (infer type) implements =Γ ⊢ t ⇒ A=: given a term, produce
+  its type. =dep_ctx_check= (check type) implements =Γ ⊢ t ⇐ A=: given a term
+  and a type, verify the term inhabits the type. =dep_ctx_conv= implements
+  =Γ ⊢ A ≡ B=: decide definitional equality of two types. The key insight
+  from Coquand that MonadC adopts: inference and checking are mutually
+  recursive — =check= calls =infer= for the type of subterms, =infer= calls
+  =check= to verify argument types against parameter types.
+
+[OBS id:obs.references.typechecking-dependent-shadow-pass src:main.c:1025-1063,dep.c:2690-2782 conf:high]
+  The shadow pass design (Phase 6.5) extends Coquand's bidir checking to a
+  non-interactive compiler context. The algorithm was designed for interactive
+  proof assistants where the user provides type annotations. In MonadC, the
+  HM inference pass (Phase 5 pre-6.5) provides the type annotations that
+  bidir checking needs. =dep_ground_of_value_env= (dep.c:2700-2782) back-propagates
+  the ITT-checked ground types into the AST so codegen can use them. This is
+  Coquand's algorithm adapted from interactive to batch compilation.
+
+[INF id:inf.references.typechecking-dependent-connects from:doc.references.typechecking-dependent-types,obs.references.typechecking-dependent-infer-check,obs.references.typechecking-dependent-shadow-pass,obs.language.dep-nbe-kernel,obs.language.dep-shadow-pass conf:high]
   connects-to -> `monadc.context.language.primitive-dependent-types` (the NbE
   kernel's bidir checking is a direct implementation of Coquand's algorithm) ·
   `monadc.context.language.type-system-surface` (the dep surface exercises the
@@ -152,7 +195,24 @@
   that linearity is a property of the operational semantics, not the
   representation.
 
-[INF id:inf.references.linear-lisp-connects from:doc.references.linear-lisp,obs.language.set-two-mutability-modes,obs.language.set-functional-mutability-why conf:high]
+[OBS id:obs.references.linear-lisp-set-mutation src:runtime.c:1371-1383,codegen.c:2392-2415 conf:high]
+  The =conj!/disj!= mutable set operations implement Baker's linear discipline.
+  =codegen_set_op= (codegen.c:2392-2415) generates a call to =rt_set_conj_mut=
+  or =rt_set_disj_mut= when the operation is the !-suffixed form. The runtime
+  functions (runtime.c:1371-1383) modify the hash set in place rather than
+  copying. The type scheme for both =conj= and =conj!= is identical
+  (=∀a. Set → a → Set=) — linearity is a runtime contract, not a type system
+  distinction, exactly as Baker argued.
+
+[OBS id:obs.references.linear-lisp-typed-abi src:codegen.c:4172-4189 conf:high]
+  The typed ABI for closures (codegen.c:4172-4189) follows Baker's linear
+  discipline for uncaptured lambdas. A top-level =lambda= with no captures
+  receives its parameters as unboxed LLVM values — no allocation, no reference
+  counting, no environment. This is the linear path: the parameter is used
+  exactly once (by the body) and consumed. The closure ABI (with captured
+  environment) is the non-linear path where values may be shared.
+
+[INF id:inf.references.linear-lisp-connects from:doc.references.linear-lisp,obs.references.linear-lisp-set-mutation,obs.references.linear-lisp-typed-abi,obs.language.set-two-mutability-modes,obs.language.set-functional-mutability-why conf:high]
   connects-to -> `monadc.context.language.primitive-set` (the conj!/disj! mutable
   variants implement Baker's linear update pattern) ·
   `monadc.context.language.primitive-function` (the typed ABI / closure ABI dual
@@ -187,7 +247,26 @@
   =[1 2 3]= is strict follows directly: lists are computational (evaluated on
   demand), arrays are extensional (materialized in memory).
 
-[INF id:inf.references.cons-lazy-connects from:doc.references.cons-lazy,obs.language.array-as-function,obs.language.set-as-function conf:high]
+[OBS id:obs.references.cons-lazy-thunk-cells src:runtime.h:116-126,runtime.c conf:high]
+  The =ConsCell= struct (runtime.h:116-126) implements this paper directly.
+  Each cell carries inlined =ThunkFn= + =env= + =val= + =forced= for both
+  head and tail. =rt_list_lazy_cons= creates a cell where neither head nor
+  tail is evaluated. =rt_list_car= forces the head thunk, =rt_list_cdr= forces
+  the tail thunk. This is the paper's normal-order cons: arguments are
+  evaluated at access time, not construction time. The infinite range
+  =(0..)= is implemented as a single lazy cons cell whose tail thunk
+  produces the next cell on demand.
+
+[OBS id:obs.references.cons-lazy-list-vs-array src:language.org:1630-1666 conf:high]
+  The paper informs MonadC's fundamental distinction between lists (lazy,
+  computational) and arrays (strict, materialized). A list is a lazy sequence
+  of cons cells — accessing =(lst 1000)= walks 1000 pointers. An array is a
+  contiguous memory block — accessing =(arr 1000)= is pointer arithmetic. Both
+  are functions =Int → elem= in the set-theoretic model, but their operational
+  semantics differ: lists compute on demand, arrays materialize eagerly. The
+  programmer chooses based on the access pattern, not the data model.
+
+[INF id:inf.references.cons-lazy-connects from:doc.references.cons-lazy,obs.references.cons-lazy-thunk-cells,obs.references.cons-lazy-list-vs-array,obs.language.array-as-function,obs.language.set-as-function conf:high]
   connects-to -> `monadc.context.language.primitive-array` (strict arrays are the
   counterpart to lazy lists — the choice between laziness and strictness is
   part of the zero-to-metal ladder) ·
@@ -220,7 +299,25 @@
   where the arena allocator (arena.c) provides the bump-allocation substrate
   for list construction without per-cell GC overhead.
 
-[INF id:inf.references.cons-lazy-alloc-connects from:doc.references.cons-lazy-alloc conf:high]
+[OBS id:obs.references.cons-lazy-alloc-arena src:arena.c,runtime.h:116-126 conf:high]
+  The arena allocator (arena.c) implements the paper's allocation strategy.
+  Cons cells are bump-allocated from =g_eval_arena= — a single contiguous
+  region that grows on demand and is freed all at once after evaluation.
+  The per-cell thunk fields (head_fn, head_env, head_val, head_forced) are
+  inline in the ConsCell struct, matching the paper's design of packing thunk
+  metadata with the cell data to avoid separate thunk object allocations.
+
+[OBS id:obs.references.cons-lazy-alloc-bump-vs-gc src:arena.c,runtime.c conf:high]
+  MonadC avoids per-cell GC overhead by using arena allocation for hot-path
+  values (int, float, char, list, nil, thunk). The arena is freed in bulk
+  after each top-level expression is evaluated. This is the paper's key
+  insight applied at the language level: list-intensive programs don't need
+  a tracing GC because list cells are temporary (they live for one evaluation
+  and die together). Long-lived values (string, symbol, set, map) use heap
+  allocation and reference counting as a fallback for the patterns the arena
+  doesn't cover.
+
+[INF id:inf.references.cons-lazy-alloc-connects from:doc.references.cons-lazy-alloc,obs.references.cons-lazy-alloc-arena,obs.references.cons-lazy-alloc-bump-vs-gc conf:high]
   connects-to -> `monadc.context.language.primitive-function` (lazy evaluation
   and closures share the same thunk infrastructure) ·
   `monadc.context.philosophy.sets-are-the-model` (a lazy list is a function
@@ -256,7 +353,36 @@
   architecture — the compiler runs the modal checker after the ground checker,
   and the two communicate through a well-defined bridge.
 
-[INF id:inf.references.layered-modal-connects from:doc.references.layered-modal,obs.language.function-dual-representation,obs.language.dep-shadow-pass conf:high]
+[OBS id:obs.references.layered-modal-term-embed src:dep.h:153,dep.c:2248-2291 conf:high]
+  =TERM_EMBED= (dep.h:153) is the modal operator that embeds an HM-ground
+  =Type*= into the ITT term language. =dep_eval= for =TERM_EMBED= (dep.c:2248-2291)
+  converts the ground =Type*= to a =VAL_EMBED= value that can participate in
+  NbE conversion checking. This is the modal "lift" operator: a ground type
+  becomes a term in the modal layer. =TERM_EMBED= is also the "lower" bridge:
+  =dep_ground_of_value_env= (dep.c:2700-2782) converts =VAL_EMBED= values
+  back to =Type*= annotations on AST nodes. The dual lift/lower is the modal
+  adjunction between the HM layer and the ITT layer.
+
+[OBS id:obs.references.layered-modal-shadow-pass src:main.c:1025-1063 conf:high]
+  The shadow pass (Phase 6.5) is the layered modal architecture made
+  operational. HM inference (the ground layer) runs first and assigns types
+  to every expression. Then the ITT checker (the modal layer) runs as a
+  shadow — validating dependent annotations, checking universe consistency,
+  and elaborating Pi/Sigma types. The two layers communicate through
+  =TERM_EMBED= values in the typed AST. This design is the compiler's
+  answer to the paper's central question: how to make modal type theory
+  practical for batch compilation.
+
+[OBS id:obs.references.layered-modal-arrow-pi src:types.h:39,dep.h:122-123,codegen.c:705-707 conf:high]
+  The =TYPE_ARROW= / =TERM_PI= distinction mirrors the paper's layering.
+  =TYPE_ARROW= (types.h:39) is the ground-layer function type — simple
+  =param → return=, used by HM inference. =TERM_PI= (dep.h:122-123) is the
+  modal-layer dependent function type — =Π(x:A).B=, checked by the ITT
+  kernel. The codegen treats =TERM_PI= as =TYPE_ARROW= after elaboration
+  (codegen.c:705-707) — the modal type is erased to its ground
+  representation during code generation, exactly as the paper predicts.
+
+[INF id:inf.references.layered-modal-connects from:doc.references.layered-modal,obs.references.layered-modal-term-embed,obs.references.layered-modal-shadow-pass,obs.references.layered-modal-arrow-pi,obs.language.function-dual-representation,obs.language.dep-shadow-pass conf:high]
   connects-to -> `monadc.context.language.primitive-function` (the HM/ITT dual
   representation maps to the layered modal framework) ·
   `monadc.context.language.primitive-dependent-types` (TERM_EMBED is the modal
@@ -292,7 +418,26 @@
   neutral terms, fuel-limited conversion) reflects the research consensus
   captured in these proceedings.
 
-[INF id:inf.references.types-2020-connects from:doc.references.types-2020,obs.language.dep-nbe-kernel,obs.language.dep-soundness-holes conf:high]
+[OBS id:obs.references.types-2020-fuel-limit src:dep.h:544,dep.c:1604-1623 conf:high]
+  The NbE kernel's fuel limit of 100000 (dep.h:544) and stub pattern unification
+  (dep.c:1604-1623) reflect the TYPES 2020 research consensus that NbE is the
+  right foundation but full dependent type checking in a batch compiler requires
+  engineering trade-offs. The fuel limit bounds the conversion checker so that
+  a pathological term cannot hang the compiler. The stub unification means
+  certain dependent programs are rejected that a full checker would accept —
+  the practical cost of the research-to-engineering translation.
+
+[OBS id:obs.references.types-2020-valuedomain src:dep.h:304-393 conf:high]
+  The semantic Value domain (dep.h:304-393) with =VAL_PI=, =VAL_LAM=,
+  =VAL_SIGMA=, =VAL_UNIVERSE=, =VAL_NEUTRAL=, =VAL_EMBED=, =VAL_META=
+  follows the TYPES 2020 consensus on NbE architecture. The use of closures
+  (dep.h:321-324) to capture environment + unevaluated body for lazy evaluation
+  under binders is the standard technique presented across multiple TYPES
+  proceedings. The separation of =dep_eval= (evaluate to value) from =dep_quote=
+  (reify value to term) is the canonical NbE structure documented in these
+  abstracts.
+
+[INF id:inf.references.types-2020-connects from:doc.references.types-2020,obs.references.types-2020-fuel-limit,obs.references.types-2020-valuedomain,obs.language.dep-nbe-kernel,obs.language.dep-soundness-holes conf:high]
   connects-to -> `monadc.context.language.primitive-dependent-types` (the NbE
   kernel reflects the type-theory research mainstream) ·
   `monadc.context.philosophy.purity-is-practical` (the pragmatic choice of HM +

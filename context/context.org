@@ -1,0 +1,230 @@
+#+TITLE: MonadC Context Portal
+#+AUTHOR: Codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:portal:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC DOC TODO THINK
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* Entry Point
+:PROPERTIES:
+:ID: monadc.context.portal
+:CUSTOM_ID: portal
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The root entry point for the MonadC context corpus. Navigate from here to every topic file in the garden.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/context.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.context.portal-purpose conf:high]
+  The context corpus is a living garden of knowledge about the MonadC compiler.
+  Every file records durable, source-grounded facts indexed by stable IDs.
+  This portal is the root — open any topic below to find what the corpus knows.
+
+** Index & Format Spec
+:PROPERTIES:
+:ID: monadc.context.portal.index
+:CUSTOM_ID: portal-index
+:CONTEXT_KIND: link
+:CONTEXT_DESCRIPTION: The central index, format specification, and file navigation table.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/context.org
+:CONFIDENCE: high
+:END:
+
+- [[file:index.org][Index, format schemas, file topology, LLM notation reference]]
+
+** Language & Types
+:PROPERTIES:
+:ID: monadc.context.portal.language
+:CUSTOM_ID: portal-language
+:CONTEXT_KIND: link
+:CONTEXT_DESCRIPTION: Language formalization, primitive types, type composition, codegen dispatch, and dependent types.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/context.org
+:CONFIDENCE: high
+:END:
+
+- [[file:language.org][Primitive types, codegen dispatch, type composition, dependent types, macros]]
+- [[file:language.org::* Runtime Value System][Runtime Value System — RuntimeValue, tags, construction/unboxing, thunks]]
+- [[file:language.org::* Compilation Pipeline][Compilation Pipeline — 11 phases from source to object file]]
+- [[file:reader.org][Reader/parser surface, token families, AST nodes, Wisp interaction]]
+
+** Collections & Set-Theoretic Model
+:PROPERTIES:
+:ID: monadc.context.portal.collections
+:CUSTOM_ID: portal-collections
+:CONTEXT_KIND: link
+:CONTEXT_DESCRIPTION: The set-theoretic model made concrete: Set, Map, List, Array as first-class types grounded in the philosophy of types-are-sets.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/context.org
+:CONFIDENCE: high
+:END:
+
+- [[file:language.org::* Set (TYPE_SET)][Set — the runtime incarnation of types-are-sets]]
+- [[file:language.org::* Map (TYPE_MAP)][Map — sets of pairs, relations as functions]]
+- [[file:language.org::* List (TYPE_LIST)][List — cons cells, tuples, the Lisp soul]]
+- [[file:language.org::* Array (TYPE_ARR)][Array — three forms, materialized set]]
+- [[file:language.org::* Ground Types (INT / FLOAT / STRING / BOOL / CHAR / SYMBOL / KEYWORD / RATIO / NIL / PATH)][Ground types — the Ur-elements]]
+
+** Wisp Syntax
+:PROPERTIES:
+:ID: monadc.context.portal.wisp
+:CUSTOM_ID: portal-wisp
+:CONTEXT_KIND: link
+:CONTEXT_DESCRIPTION: The Wisp syntax expander: sugar transforms, arity table, limitations, and test coverage.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/context.org
+:CONFIDENCE: high
+:END:
+
+- [[file:wisp.org][Wisp architecture, sugar transforms, limitations, coverage]]
+
+** Build & Project
+:PROPERTIES:
+:ID: monadc.context.portal.build
+:CUSTOM_ID: portal-build
+:CONTEXT_KIND: link
+:CONTEXT_DESCRIPTION: Build system, commit conventions, tests, and workflow guidelines.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/context.org
+:CONFIDENCE: high
+:END:
+
+- [[file:build.org][Build system, compilation modes, coverage]]
+- [[file:commit-format.org][Commit message format and conventions]]
+- [[file:tests.org][Test system, organization, and metadata format]]
+- [[file:workflow.org][Agent workflow (redirects to guidelines.org)]]
+
+** Guidelines & Philosophy
+:PROPERTIES:
+:ID: monadc.context.portal.philosophy
+:CUSTOM_ID: portal-philosophy
+:CONTEXT_KIND: link
+:CONTEXT_DESCRIPTION: Hard constraints, soft preferences, and the philosophical principles that ground every architectural decision.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/context.org
+:CONFIDENCE: high
+:END:
+
+- [[file:guidelines.org][Hard constraints and soft preferences]]
+- [[file:philosophy.org][Language and project philosophy — human + LLM witness]]
+- [[file:opinions.org][LLM opinions on the context system]]
+
+** Source Map & References
+:PROPERTIES:
+:ID: monadc.context.portal.references
+:CUSTOM_ID: portal-references
+:CONTEXT_KIND: link
+:CONTEXT_DESCRIPTION: Source file map and academic references that inform the compiler architecture.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/context.org
+:CONFIDENCE: high
+:END:
+
+- [[file:source-map.org][Every source file's purpose and connections]]
+- [[file:references.org][Research papers informing the compiler]]
+- [[file:style.org][Code style taxonomy]]
+- [[file:navigation.org][ID prefix → file routing table]]
+
+** Tasks & Visualizer
+:PROPERTIES:
+:ID: monadc.context.portal.tasks
+:CUSTOM_ID: portal-tasks
+:CONTEXT_KIND: link
+:CONTEXT_DESCRIPTION: Project TODO items and the context graph visualizer.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/context.org
+:CONFIDENCE: high
+:END:
+
+- [[file:todo.org][Project TODO list]]
+- [[file:visualizer.org][Context graph visualizer: category-theory foundation, implementation, test metadata]]
