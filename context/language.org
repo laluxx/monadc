@@ -941,6 +941,7 @@
 :ID: monadc.context.language.primitive-philosophy
 :CUSTOM_ID: primitive-type-philosophy
 :CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: Root section for all primitive type design intent: ten primitive families (Ground Types, List, Array, Set, Map, Function, Dependent Types, Fixed-Width, Type Constructors, Macros) plus Type Composition — each recorded as opinion grounded in source observations, traced through philosophy, and cross-linked to every other primitive.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human+llm
@@ -1474,8 +1475,551 @@
   algorithm is Coquand 1996) ·
   `monadc.context.references.propositions-as-types` (the core insight that types
   are propositions, programs are proofs) ·
-  `monadc.context.references.layered-modal` (the dual HM/ITT type system is a
-  layered modal architecture)
+   `monadc.context.references.layered-modal` (the dual HM/ITT type system is a
+   layered modal architecture)
+
+** Ground Types (INT / FLOAT / STRING / BOOL / CHAR / SYMBOL / KEYWORD / RATIO / NIL / PATH)
+:PROPERTIES:
+:ID: monadc.context.language.primitive-ground-types
+:CUSTOM_ID: primitive-ground-types
+:CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: The ground types (TYPE_INT, TYPE_FLOAT, TYPE_STRING, TYPE_BOOL, TYPE_CHAR, TYPE_SYMBOL, TYPE_KEYWORD, TYPE_RATIO, TYPE_NIL, TYPE_PATH): atomic, closed types that are the Ur-elements of the set-theoretic model. Each is an infinite set (all integers, all strings, all booleans, etc.). They are the atoms that collections contain and functions map between.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: types.h:9-20,types.h:46-48,runtime.c,runtime.h,codegen.c
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.language.ground-intro conf:high]
+  Ground types are the atoms of the type system. In the set-theoretic model,
+  `Int` is the infinite set of all integers, `Float` is the set of all IEEE 754
+  doubles, `String` is the set of all finite sequences of characters, `Bool` is
+  the two-element set `{#t, #f}`, `Char` is the set of all Unicode code points,
+  `Symbol` is the set of interned identifiers, `Keyword` is the set of
+  keyword-flagged symbols, `Ratio` is the set of rational pairs, `Nil` is the
+  singleton set containing only `nil`, and `Path` is the set of valid
+  filesystem paths. These are not primitive in the sense of "simple" — an
+  integer is an infinite set, which is mathematically complex — but in the
+  sense of "given." The type system does not decompose them further. They are
+  the Ur-elements, the ZFC atoms, the base cases of the recursion. Every
+  program ultimately reduces to operations on ground types: arithmetic,
+  string concatenation, symbol comparison, path resolution.
+
+[OBS id:obs.language.ground-runtime-uniform src:runtime.h,codegen.c conf:high]
+  All ground types are uniform at the LLVM level as `i8*` (opaque pointer to
+  `RuntimeValue`). The runtime tag in `RTValueHeader` (runtime.h:29-31)
+  distinguishes which ground type a value is. Codegen uses `rt_make_int`,
+  `rt_make_float`, `rt_make_string`, `rt_make_bool`, `rt_make_char`,
+  `rt_make_symbol`, `rt_make_keyword`, `rt_make_ratio`, and `rt_make_nil` to
+  construct values. The type predicates (`Int?`, `Float?`, `String?`, `Bool?`,
+  `Char?`, `Symbol?`, `Keyword?`, `Ratio?`, `nil?`, `Path?`) are compile-time
+  checks of `type->kind` against the `TypeKind` enum after inference annotates
+  AST nodes.
+
+[INF id:inf.language.ground-grounding from:obs.language.ground-runtime-uniform,think.language.ground-intro,dec.philosophy.sets-are-the-model conf:high]
+  Ground types are the crucial link between the set-theoretic philosophy and
+  the generated machine code. `Int` is a set in the model and an `i8*` pointer
+  in the runtime; the bridge between them is the `RuntimeValue` tag. The type
+  system treats ground types as atoms (unification checks kind equality, not
+  structure). The dep checker treats them as `TERM_EMBED` of a `Type*`. The
+  codegen treats them as opaque pointers managed by the runtime. The
+  consistency of this bridge — that `type_int()` always produces the same
+  `Type*`, that `rt_make_int` always produces the same `RuntimeValue` tag,
+  that the codegen path for `+` dispatches on the same kind tag — is what
+  makes the compiler correct.
+
+[OBS id:obs.language.ground-int src:type_constructor type_int,codegen.c strcmp '+' conf:high]
+  `TYPE_INT` is the integer type. Arbitrary precision at the type level (the
+  infinite set of all integers), fixed C `long` at the runtime level, with
+  bignum overflow promotion on the roadmap. Type: `Int`. Predicate: `Int?`.
+  Operations: all arithmetic (`+ - * / % mod`), comparison (`= != < > <= >=`),
+  conversion (`Int`, `Float`, `Char`, `Hex`, `Oct`, `Bin`). Constructed via
+  `type_int()`. LLVM type: `i8*` → `RuntimeValue` with tag `RT_INT`.
+
+[OBS id:obs.language.ground-float src:type_constructor type_float conf:high]
+  `TYPE_FLOAT` is the double-precision floating-point type. IEEE 754 double
+  at the runtime level. Type: `Float`. Predicate: `Float?`. Operations:
+  arithmetic, comparison, conversion (`Int`, `Float`). Constructed via
+  `type_float()`. LLVM type: `i8*` → `RuntimeValue` with tag `RT_FLOAT`.
+
+[OBS id:obs.language.ground-string src:type_constructor type_string,codegen.c strcmp 'make-string' conf:high]
+  `TYPE_STRING` is the string type. Immutable sequence of characters. Type:
+  `String`. Predicate: `String?`. Operations: `make-string`, `count`,
+  `starts-with?`, `ends-with?`, `contains?`, string indexing `("str" i)`.
+  Constructed via `type_string()`. LLVM type: `i8*` → `RuntimeValue` with tag
+  `RT_STRING` wrapping a C `char*` and length.
+
+[OBS id:obs.language.ground-bool src:type_constructor type_bool conf:high]
+  `TYPE_BOOL` is the boolean type. Two values: `#t` and `#f`. Type: `Bool`.
+  Predicate: `Bool?`. Operations: `and`, `or`, `not` (short-circuit logical
+  operators). Constructed via `type_bool()`. LLVM type: `i8*` → global
+  singleton `RuntimeValue` instances for `#t` and `#f`.
+
+[OBS id:obs.language.ground-char src:type_constructor type_char conf:high]
+  `TYPE_CHAR` is the character type. Unicode code point. Type: `Char`.
+  Predicate: `Char?`. Operations: conversion (`Int`, `Char`). Constructed via
+  `type_char()`. LLVM type: `i8*` → `RuntimeValue` with tag `RT_CHAR`.
+
+[OBS id:obs.language.ground-symbol src:type_constructor type_symbol conf:high]
+  `TYPE_SYMBOL` is the symbol type. Interned identifiers in the global symbol
+  table. Type: `Symbol`. Predicate: `Symbol?`. Operations: comparison
+  (`equal?`), `show` (returns the symbol's string name). Constructed via
+  `type_symbol()`.
+
+[OBS id:obs.language.ground-keyword src:type_constructor type_keyword conf:high]
+  `TYPE_KEYWORD` is the keyword type. Keyword-flagged symbols with a `:`
+  prefix. Type: `Keyword`. Predicate: `Keyword?`. Used for named parameters
+  and map keys. Constructed via `type_keyword()`.
+
+[OBS id:obs.language.ground-ratio src:type_constructor type_ratio conf:high]
+  `TYPE_RATIO` is the rational number type. Represents exact fractions as
+  numerator/denominator pairs. Type: `Ratio`. Predicate: `Ratio?`. Operations:
+  fraction-as-function `(1/4 x)` (divides `x` by 4). Constructed via
+  `type_ratio()`.
+
+[OBS id:obs.language.ground-nil src:type_constructor type_nil conf:high]
+  `TYPE_NIL` is the nil type. A singleton type whose only value is `nil`.
+  Type: `nil`. Predicate: `nil?`. Used as the empty list terminator and as the
+  default absent value from map/set lookup. Constructed via `type_nil()`.
+
+[OBS id:obs.language.ground-path src:type_constructor type_path,reader.c conf:high]
+  `TYPE_PATH` is the filesystem path literal type. Parsed by the reader when
+  it encounters a path token (e.g. `/usr/bin/sh`). Type: `Path`. Predicate:
+  `Path?`. Constructed via `type_path()`. LLVM type: `i8*` wrapping a C string
+  of the canonicalized path.
+
+[OBS id:obs.language.ground-hex src:type_constructor type_hex,reader.c conf:high]
+  `TYPE_HEX` is the hexadecimal literal type. The reader parses `0xFF`, `0x1A`,
+  etc., into this type. Type: `Hex`. Predicate: `Hex?`. Operations: conversion
+  (`Int`, `Hex`). Constructed via `type_hex()`. This is a surface literal type
+  — the bit pattern is the same as `Int` at runtime, but the source representation
+  preserves the programmer's intent about radix.
+
+[OBS id:obs.language.ground-bin src:type_constructor type_bin,reader.c conf:high]
+  `TYPE_BIN` is the binary literal type. The reader parses `0b101`, `0b1101`,
+  etc., into this type. Type: `Bin`. Predicate: `Bin?`. Operations: conversion
+  (`Int`, `Bin`). Constructed via `type_bin()`. Like `HEX`, this preserves the
+  programmer's radix choice through parsing and show.
+
+[OBS id:obs.language.ground-oct src:type_constructor type_oct,reader.c conf:high]
+  `TYPE_OCT` is the octal literal type. The reader parses `0o644`, `0o777`,
+  etc., into this type. Type: `Oct`. Predicate: `Oct?`. Operations: conversion
+  (`Int`, `Oct`). Constructed via `type_oct()`. The third in the radix-literal
+  family (HEX, BIN, OCT) that preserves radix through the compiler pipeline.
+
+[INF id:inf.language.ground-connects-to from:obs.language.ground-int,obs.language.ground-float,obs.language.ground-string,obs.language.ground-bool,obs.language.ground-char,obs.language.ground-symbol,obs.language.ground-keyword,obs.language.ground-ratio,obs.language.ground-nil,obs.language.ground-path,obs.language.ground-hex,obs.language.ground-bin,obs.language.ground-oct,obs.language.ground-runtime-uniform conf:high]
+  connects-to -> `monadc.context.language.primitive-list` (lists contain ground
+  type values) · `monadc.context.language.primitive-array` (arrays of ground
+  elements) · `monadc.context.language.primitive-set` (sets of ground values) ·
+  `monadc.context.language.primitive-map` (maps over ground keys/values) ·
+  `monadc.context.language.primitive-function` (functions between ground types) ·
+  `monadc.context.philosophy.sets-are-the-model` (ground types are the
+  Ur-elements of the set-theoretic model) ·
+  `monadc.context.language.type-composition` (ground types are the leaf nodes
+  of composed types: `(Int)`, `(Float String)`, `(Arr Bool)`) ·
+  `monadc.context.references.propositions-as-types` (each ground type is a
+  proposition whose proofs are its values)
+
+** List (TYPE_LIST)
+:PROPERTIES:
+:ID: monadc.context.language.primitive-list
+:CUSTOM_ID: primitive-list
+:CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: The List (TYPE_LIST) primitive: the Lisp soul — the foundational recursive type with cons-cell runtime representation, dual personality as tuple/lazy-sequence/heterogeneous container, and the only type whose surface syntax `(Int)` is also a type application.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: types.h:18,types.h:86-88,codegen.c:246-258,infer.c:1458-1494,runtime.c:1534-1667
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.language.list-carries-list-types src:types.h:86-88 conf:high]
+  `TYPE_LIST` is unusual among MonadC types: it carries `list_types[]`
+  (an array of `Type*` pointers, count in `list_count`), not a single
+  `element_type`. This means a single list type can encode tuples:
+  `(Int Float String)` is `TYPE_LIST` with three element types. The
+  `list_elem` macro (types.h:118) aliases to `element_type` for backward
+  compatibility with single-element lists. When `list_count == 0`, the
+  list is heterogeneous (any type of element). When `list_count == 1`,
+  it is a homogeneous list. When `list_count > 1`, it is a tuple.
+
+[OBS id:obs.language.list-runtime-cons-cells src:runtime.c:1534-1667 conf:high]
+  The runtime representation is linked cons cells (`RuntimeCons`):
+  each cell has a `car` (RuntimeValue*) and `cdr` (RuntimeValue*,
+  either another cons cell or `nil`). `nil` (TYPE_NIL) terminates the
+  list. Operations: `cons`, `car`, `cdr`, `++` (append), `count`,
+  `empty?`, `pair?`, `list`, `make-list`. Lists are immutable by default;
+  mutable operations use `set-car!`/`set-cdr!` at the runtime level.
+
+[OBS id:obs.language.list-as-function src:codegen.c:9880-9907,infer.c:1474-1477 conf:high]
+  A list can be used as a function: `(lst i)` indexes into the list at
+  position `i`, returning the `i`-th element or `nil` if out of bounds.
+  This is the same collection-as-function coercion as sets, maps, and
+  arrays — in the set-theoretic model, a list IS a function `Int → elem`
+  whose domain is `[0, length)`.
+
+[THINK id:think.language.list-lisp-soul conf:high]
+  Lists are the Lisp soul of MonadC. The cons cell is the ur-data-structure
+  from which McCarthy built the first Lisp. In MonadC, lists serve the role
+  that arrays serve in other languages: the flexible, general-purpose
+  sequential container. But unlike arrays, lists are lazy-capable (the
+  runtime can defer cons cell construction), heterogeneous (a single list
+  can mix types), and structurally recursive (a list is either nil or a
+  cons of head and tail). The `list_types[]` array is the type-level shadow
+  of the cons-cell structure: each element's type is tracked at compile time
+  but all values are uniform `RuntimeValue*` at runtime.
+
+[THINK id:think.language.list-computational-vs-materialized conf:high]
+  Lists are the computational/streaming type; arrays are the materialized
+  type. A list `(1 2 3)` is a chain of three cons cells, each allocated
+  independently, taking O(n) to index. An array `[1 2 3]` is a contiguous
+  block of memory, taking O(1) to index. The distinction is the same as
+  linked list vs vector, or stream vs buffer. In the set-theoretic model,
+  both are functions `Int → elem` — a list is a lazy function (compute
+  the nth cell by walking), an array is an eager function (compute the
+  nth cell by pointer arithmetic). The type system unifies them under
+  collection-as-function; the programmer chooses the performance profile.
+
+[INF id:inf.language.list-connects-to from:obs.language.list-carries-list-types,obs.language.list-runtime-cons-cells,obs.language.list-as-function,think.language.list-lisp-soul,think.language.list-computational-vs-materialized conf:high]
+  connects-to -> `monadc.context.language.primitive-ground-types` (lists
+  contain ground type values; `(Int)` = list of Ints) ·
+  `monadc.context.language.primitive-array` (lists are the computational
+  alternative to arrays) ·
+  `monadc.context.language.primitive-set` (same collection-as-function
+  coercion path) ·
+  `monadc.context.language.primitive-function` (list-as-function is the
+  same machinery as set/map/array-as-function) ·
+  `monadc.context.language.type-composition` (list is the primary type
+  composition form) ·
+  `monadc.context.philosophy.sets-are-the-model` (list as function Int→elem) ·
+  `monadc.context.references.cons-should-not-evaluate` (the classic Lisp
+  debate: cons cells should not evaluate their arguments — MonadC follows
+  this for runtime cons but evaluates eagerly at compile time) ·
+  `monadc.context.references.cons-lazy` (the efficient lazy-cons allocation
+  strategy for stream programming)
+
+** Fixed-Width Numeric Types (I8 / U8 / I16 / U16 / I32 / U32 / I64 / U64 / I128 / U128 / F32 / F80 / INT-ARBITRARY)
+:PROPERTIES:
+:ID: monadc.context.language.primitive-fixed-width
+:CUSTOM_ID: primitive-fixed-width
+:CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: Fixed-width numeric types (TYPE_I8 through TYPE_U128, TYPE_F32, TYPE_F80, TYPE_INT_ARBITRARY): the hardware-level representations that map directly to C primitives. These are the zero-to-metal bridge — `Int` (mathematical) vs `I32` (hardware) — for when the programmer needs exact bit width, signedness, and memory layout.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: types.h:26-36,types.h:43-44,types.h:109-111
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.language.fixed-width-why conf:high]
+  Fixed-width types exist because the type hierarchy from set-theoretic
+  idealization to hardware concrete is a ladder, not a binary choice.
+  `Int` is the infinite set of all integers — mathematically pure,
+  compiler-independent, safe for any value range. `I32` is exactly 32
+  bits, two's complement, with defined wrap-around — the hardware
+  representation. `INT_ARBITRARY` (`I<n>`/`U<n>`) fills the gap for
+  bit widths not in the standard set. The ladder from `Int` to `I32`
+  to `I7` (7-bit signed) to `U1` (1-bit unsigned) is continuous: every
+  step trades mathematical generality for hardware control. This is
+  the zero-to-metal principle at the type level for numbers.
+
+[OBS id:obs.language.fixed-width-representations src:types.h:26-36,types.h:43-44,types.h:109-111 conf:high]
+  Each fixed-width type maps directly to a C primitive: `TYPE_I8` →
+  `int8_t`, `TYPE_U8` → `uint8_t`, `TYPE_I16` → `int16_t`, `TYPE_U16` →
+  `uint16_t`, `TYPE_I32` → `int32_t`, `TYPE_U32` → `uint32_t`, `TYPE_I64` →
+  `int64_t`, `TYPE_U64` → `uint64_t`, `TYPE_I128` → either `__int128` or
+  software-emulated, `TYPE_U128` → corresponding unsigned, `TYPE_F32` →
+  `float` (IEEE 754 single), `TYPE_F80` → `long double` (x87 extended
+  precision). `TYPE_INT_ARBITRARY` carries `numeric_width` (1–64 or 128)
+  and `numeric_signed` (true for I, false for U) to represent any
+  arbitrary-width integer.
+
+[INF id:inf.language.fixed-width-connects-to from:obs.language.fixed-width-representations,think.language.fixed-width-why conf:high]
+  connects-to -> `monadc.context.language.primitive-ground-types`
+  (fixed-width types are the hardware concretions of `Int` and `Float`) ·
+  `monadc.context.philosophy.zero-to-metal` (the abstraction ladder from
+  `Int` to `I1` is the principle in action) ·
+  `monadc.context.references.linear-lisp` (the typed-ABI path for
+  fixed-width values follows linear discipline — unboxed, no allocation)
+
+** Type-Level Constructors (VAR / ARROW / VARIADIC / COLL / PTR / OPTIONAL / APP / UNKNOWN)
+:PROPERTIES:
+:ID: monadc.context.language.primitive-type-constructors
+:CUSTOM_ID: primitive-type-constructors
+:CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: Type-level constructors (TYPE_VAR, TYPE_ARROW, TYPE_VARIADIC, TYPE_COLL, TYPE_PTR, TYPE_OPTIONAL, TYPE_APP, TYPE_UNKNOWN): internal type system types that do not appear at runtime but structure inference, monomorphization, and type-level computation. The meta-types that make the type system work.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: types.h:37-47,types.h:74-79,types.h:113-115,infer.c,dep.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.language.tc-var src:types.h:38,types.h:74-75 conf:high]
+  `TYPE_VAR` is an HM type variable. Carries `var_id` (unique integer
+  identifier). Represents a polymorphic type `'a`, `'b`, etc. Created
+  by `type_var(id)`. Used exclusively by the Hindley-Milner inference
+  engine for unification and generalization. Never appears in the
+  LLVM codegen — all type variables are monomorphized away before
+  code generation.
+
+[OBS id:obs.language.tc-arrow src:types.h:39,types.h:77-79 conf:high]
+  `TYPE_ARROW` is the HM function type. Carries `arrow_param` and
+  `arrow_ret` (both `Type*`). Represents `param → return`. This is
+  the inference-level function type, distinct from `TYPE_FN` (which
+  carries named parameters, optional/rest annotations) and `TERM_PI`
+  (the dependent Π-type). The separation means HM can unify `→`
+  without worrying about named parameters or dependent quantifiers.
+
+[OBS id:obs.language.tc-variadic src:types.h:40 conf:high]
+  `TYPE_VARIADIC` represents a variadic rest parameter `(. args)`.
+  Carries `element_type` (the list element type). Used in function
+  parameter lists to mark the rest argument. The codegen expands
+  variadic calls into loops over the argument array.
+
+[OBS id:obs.language.tc-coll src:types.h:41 conf:high]
+  `TYPE_COLL` is the abstract collection type. Carries `element_type`.
+  Serves as the common supertype for `TYPE_LIST`, `TYPE_SET`, and
+  `TYPE_ARR` during inference. When the inferencer cannot determine
+  which collection type is intended, it unifies against `TYPE_COLL`;
+  the specific type is resolved during monomorphization or by explicit
+  annotation.
+
+[OBS id:obs.language.tc-ptr src:types.h:42,types.h:90 conf:high]
+  `TYPE_PTR` is the typed pointer type. Carries `element_type` (the
+  pointee type via the single-element union field). Represents
+  `Pointer :: T`. Constructed via `type_ptr(T)`. Used for FFI
+  interop and inline assembly. The LLVM type is a raw `i8*` or
+  `T*` depending on context.
+
+[OBS id:obs.language.tc-optional src:types.h:45,types.h:90 conf:high]
+  `TYPE_OPTIONAL` is the optional type. Carries `element_type`.
+  Represents `T?` — a value that may be present or absent. Constructed
+  via `type_optional(T)`. Used for nullable FFI returns and the
+  null-coalescing operator `??`.
+
+[OBS id:obs.language.tc-app src:types.h:47,types.h:113-115 conf:high]
+  `TYPE_APP` is type constructor application. Carries `app_constructor`
+  (a string name like `"Maybe"`, `"Either"`, `"Vec"`) and `app_arg`
+  (the applied type argument). Represents `M a` — a type constructor
+  applied to a type. Used for future parametric data types. Currently
+  a forward-looking node in the type system: the pattern is designed
+  for inductive families but the NbE kernel doesn't yet reduce
+  constructor applications.
+
+[OBS id:obs.language.tc-unknown src:types.h:37 conf:high]
+  `TYPE_UNKNOWN` is the unknown type placeholder. Created by
+  `type_unknown()`. Used as a sentinel for untyped contexts and
+  error recovery. Any operation on `TYPE_UNKNOWN` should produce
+  a type error or be treated as dynamic.
+
+[INF id:inf.language.tc-connects-to from:obs.language.tc-var,obs.language.tc-arrow,obs.language.tc-variadic,obs.language.tc-coll,obs.language.tc-ptr,obs.language.tc-optional,obs.language.tc-app,obs.language.tc-unknown conf:high]
+  connects-to -> `monadc.context.language.primitive-function` (TYPE_ARROW
+  is the inference-level function type) ·
+  `monadc.context.language.primitive-dependent-types` (TYPE_APP is the
+  first step toward inductive families; TYPE_VAR is HM's counterpart to
+  dep's metavariables) ·
+  `monadc.context.language.codegen-dispatch` (TYPE_PTR drives the inline
+  assembly pointer dispatch) ·
+  `monadc.context.language.type-composition` (type constructors are
+  how composed types are built: `(Ptr Int)`, `(Optional Str)`,
+  `(Coll (List Int))`)
+
+** Type Composition ((Int), (a), (Int Int Int), ...)
+:PROPERTIES:
+:ID: monadc.context.language.type-composition
+:CUSTOM_ID: type-composition
+:CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: How types compose: single-element lists `(Int)` = homogeneous list of Ints, polymorphic lists `(a)` = list of anything, tuple lists `(Int Int Int)` = 3-element tuple, and higher-order constructions `(Arr Int)`, `(-> Int Int)`. Every type composition form corresponds to a type constructor in types.h.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: types.h:86-88,types.h:93-97,types.h:113-115,reader.h,reader.c,infer.c,dep.h
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.language.composition-patterns conf:high]
+  Type composition in MonadC follows a uniform pattern: every composed
+  type is a type constructor applied to type arguments. The surface
+  syntax is `(Constructor Arg Arg ...)`. Each form has a specific
+  `TypeKind` representation in types.h and a specific runtime behavior:
+  - `(Int)` → `TYPE_LIST` with `list_count=1, list_types=[Int]` — homogeneous list
+  - `(a)` → `TYPE_LIST` with `list_count=1, list_types=[Var(id)]` — polymorphic list
+  - `(Int Float String)` → `TYPE_LIST` with `list_count=3` — 3-tuple
+  - `()` → `TYPE_LIST` with `list_count=0` — heterogeneous list (any type)
+  - `(Arr Int)` → `TYPE_ARR` with element Int — array of Ints
+  - `(-> Int Int)` → `TYPE_ARROW` with param=Int, ret=Int — function type
+  - `(Ptr Int)` → `TYPE_PTR` with element Int — pointer to Int
+  - `(Optional Str)` → `TYPE_OPTIONAL` with element Str — nullable String
+  - `(Coll (List Int))` → `TYPE_COLL` with element=List[Int] — collection constraint
+  - `(Vec Bool 3)` → `TYPE_APP` with constructor="Vec", arg implies 3
+
+[OBS id:obs.language.composition-list-as-tuple src:types.h:86-88 conf:high]
+  The most general composition is `TYPE_LIST` with multiple `list_types[]`.
+  `(Int Float String)` is a 3-tuple stored as a list of three cons cells.
+  The compiler tracks each element's type separately at inference time but
+  all values are uniform `RuntimeValue*` at runtime. This means tuple
+  access `(my-tuple 0)` returns the first element with type `Int`,
+  `(my-tuple 1)` returns `Float`, etc. — the type system knows the type
+  of each position.
+
+[OBS id:obs.language.composition-list-homogeneous src:types.h:86-88 conf:high]
+  `(Int)` with a single type argument is a homogeneous list. The compiler
+  knows every element is `Int`. The `list_count=1` path triggers the
+  homogeneous list optimization path in inference: all elements unify
+  against the single element type.
+
+[OBS id:obs.language.composition-list-heterogeneous src:types.h:86-88 conf:high]
+  `()` with zero type arguments is a heterogeneous list. The compiler
+  knows nothing about element types at compile time. All element types
+  are inferred from usage. This is the most flexible form and the least
+  optimizable.
+
+[OBS id:obs.language.composition-arr src:types.h:93-97 conf:high]
+  `(Arr Int)` composes the `Arr` type constructor with element type `Int`.
+  The result is `TYPE_ARR` with `arr_element_type = Int`. Size defaults
+  to unknown (`arr_size = -1`) unless specified. The same pattern works
+  for any ground or composed element type: `(Arr (Arr Int))` = 2D array.
+
+[OBS id:obs.language.composition-arrow src:types.h:77-79 conf:high]
+  `(-> Int Int)` composes the arrow type constructor with param `Int`
+  and return `Int`. This is the HM function type `Int → Int`.
+  Multi-argument functions chain: `(-> Int (-> Int Int))` = curried form.
+
+[OBS id:obs.language.composition-ptr-optional src:types.h:90,types.h:42,types.h:45 conf:high]
+  `(Ptr Int)` and `(Optional Str)` use the single-element `element_type`
+  pattern. `TYPE_PTR` and `TYPE_OPTIONAL` share the same union field
+  (types.h:90). The pattern is: a unary type constructor wrapping one
+  inner type.
+
+[THINK id:think.language.composition-unifying-pattern conf:high]
+  The unifying pattern is: every type composition is a constructor applied
+  to arguments. `TYPE_LIST` is the n-ary constructor (0 or more args).
+  `TYPE_ARR`, `TYPE_PTR`, `TYPE_OPTIONAL`, `TYPE_COLL` are the unary
+  constructors (1 arg each). `TYPE_ARROW` is the binary constructor
+  (param + ret). `TYPE_APP` is the general n-ary constructor for future
+  user-defined types (`Vec`, `Maybe`, `Either`, etc.). The type system
+  treats all of these uniformly: they are Type nodes with `kind` and a
+  variable number of child Type pointers. The inference engine traverses
+  them structurally. The codegen dispatches on their kind. The
+  set-theoretic model interprets them as sets: `(Int)` is the set of
+  all lists of integers, `(-> Int Int)` is the set of all integer
+  functions, `(Arr Int)` is the set of all integer arrays. Every
+  composed type is a set of structured values, just like every ground
+  type is a set of atomic values.
+
+[INF id:inf.language.composition-connects-to from:obs.language.composition-list-as-tuple,obs.language.composition-list-homogeneous,obs.language.composition-list-heterogeneous,obs.language.composition-arr,obs.language.composition-arrow,obs.language.composition-ptr-optional,think.language.composition-unifying-pattern conf:high]
+  connects-to -> `monadc.context.language.primitive-list` (TYPE_LIST is
+  the n-ary constructor; `(Int)` = list of Ints) ·
+  `monadc.context.language.primitive-array` (TYPE_ARR is the unary
+  constructor for arrays) ·
+  `monadc.context.language.primitive-function` (TYPE_ARROW is the binary
+  constructor for functions) ·
+  `monadc.context.language.primitive-type-constructors` (TYPE_PTR and
+  TYPE_OPTIONAL are unary type constructors) ·
+  `monadc.context.language.primitive-ground-types` (ground types are
+  the leaf nodes: `(Int)` has leaf `Int`, `(Ptr Float)` has leaf `Float`) ·
+  `monadc.context.language.primitive-dependent-types` (TYPE_APP is the
+  future generalization to user-defined type constructors) ·
+  `monadc.context.philosophy.sets-are-the-model` (every composed type
+  is a set of structured values) ·
+  `monadc.context.philosophy.zero-to-metal` (the type composition ladder:
+   `(Int)` → `TYPE_LIST` → cons cells → `RuntimeValue*` pointers)
+
+** Macros (Syntax Transform Extension Language)
+:PROPERTIES:
+:ID: monadc.context.language.primitive-macros
+:CUSTOM_ID: primitive-macros
+:CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: The Macros (syntax-transform extension) primitive: extensible set-theoretic metaprogramming where macros are type-level computations that rewrite AST at compile time, detected via is_syntax_return, positioned in Phase 4 (after import resolution, before HM inference).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: dep.h,dep.c,main.c,syntax.c
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.language.macros-why-set-theoretic conf:high]
+  Macros in MonadC are not mere token rewriting — they are type-level
+  computations in the set-theoretic model. A macro is a function from AST
+  to AST that runs in Phase 4 (after import resolution, before HM inference).
+  The key insight: if types are sets and functions are relations, then a
+  macro is a relation between syntax trees. `define-macro` creates a new
+  mapping in this relation; `is_syntax_return` detects whether an expression
+  is a macro invocation by checking its residual type. This is the practical
+  expression of the extensible-trait-system: macros are the mechanism by
+  which the programmer extends the language's syntax within the set-theoretic
+  framework, without requiring compiler modifications.
+
+[OBS id:obs.language.macros-phase-position src:main.c,dep.c conf:high]
+  Macros execute in Phase 4 of the compiler pipeline, between import
+  resolution (Phase 3) and HM inference (Phase 5). The dependent type
+  checker (Phase 6.5) can validate macro types retrospectively. Macro
+  expansion is deterministic: given the same AST and the same macro
+  definition, the output AST is always the same. The `is_syntax_return`
+  predicate checks whether a function's return type synthesizes to a
+  syntax type, indicating it is a compile-time macro rather than a
+  runtime function.
+
+[OBS id:obs.language.macros-extensibility conf:high]
+  The macro system is designed as the extensible layer of what would
+  otherwise be compiler built-ins. Pattern matching syntax, type class
+  desugaring, data declarations, and instance deriving are all expressible
+  as macros. The `define-macro` form registers a new syntax transform in
+  the global macro table. Macros can inspect the AST, invoke the type
+  checker, and generate new AST nodes. This is the "purity is practical"
+  principle applied to language extension: the compiler defines the core
+  forms, and macros define everything else in the same language.
+
+[INF id:inf.language.macros-connects-to from:obs.language.macros-phase-position,obs.language.macros-extensibility,think.language.macros-why-set-theoretic conf:high]
+  connects-to -> `monadc.context.language.primitive-function` (macros are
+  functions from AST to AST, sharing the same function abstraction model) ·
+  `monadc.context.language.codegen-dispatch` (macro expansion happens before
+  codegen, so macros can generate any dispatchable form) ·
+  `monadc.context.language.type-composition` (macros compose with types:
+  a macro that generates `(Listof Int)` participates in the type composition
+  system) ·
+  `monadc.context.philosophy.purity-is-practical` (macros are pure functions
+  at compile time, side-effect-free by construction) ·
+  `monadc.context.philosophy.sets-are-the-model` (macros as relations
+  between syntax trees extend the set-theoretic model to metaprogramming)
 
 * Primitive Cross-Cutting Connections
 :PROPERTIES:
@@ -1497,14 +2041,16 @@
 :END:
 
 [THINK id:think.language.primitives-unified-theme conf:high]
-  Five primitives. One pattern repeated at every level: the type system has an
-  ideal representation (set, relation, function, dependent product), and the
-  runtime has a pragmatic representation (hash table, fat pointer, closure env,
-  embedded ground term). The bridge between them is always a translation layer
-  — `arr_make_fat` for arrays, `rt_value_set` for sets, `term_embed` for
-  dependent types, `wrap_func_as_closure` for functions. The bridges are where
-  the compiler's engineering judgment resides. They are always slightly
-  incomplete (map garbage bug, closure dispatch gap, dep_conv soundness holes),
+  Ten primitives, one pattern. The set-theoretic model unifies ground types
+  (atoms), collections (list, array, set, map), functions (arrow, fn, pi),
+  type-level constructors (var, app, ptr, optional), macros (syntax transform),
+  and dependent types (nbe kernel). Every primitive has an ideal representation
+  (set, relation, function, dependent product) and a pragmatic runtime
+  representation (cons cell, hash table, fat pointer, closure env, embedded
+  ground term). The bridge between them is always a translation layer —
+  `arr_make_fat` for arrays, `rt_value_set` for sets, `wrap_func_as_closure`
+  for functions, `term_embed` for dependent types. The bridges are where the
+  compiler's engineering judgment resides. They are always slightly incomplete,
   and completing them is the ongoing work of the project.
 
 [THINK id:think.language.primitives-set-theoretic-core conf:high]
@@ -1520,14 +2066,33 @@
   relations.
 
 [INF id:inf.language.primitives-connect-to-philosophy from:think.language.primitives-unified-theme,think.language.primitives-set-theoretic-core conf:high]
-  connects-to -> `monadc.context.philosophy.sets-are-the-model` (the semantic
-  foundation for all primitive types) ·
+  connects-to -> `monadc.context.language.primitive-ground-types` (the atoms:
+  Int, Float, String, Bool, Char, Symbol, Keyword, Ratio, Nil, Path, Hex, Bin,
+  Oct) ·
+  `monadc.context.language.primitive-list` (the Lisp soul: cons cells, tuples,
+  homogeneous/heterogeneous lists) ·
+  `monadc.context.language.primitive-array` (three forms: stack, fat, heap) ·
+  `monadc.context.language.primitive-set` (the runtime set-theoretic model) ·
+  `monadc.context.language.primitive-map` (sets of pairs, hash-brace syntax) ·
+  `monadc.context.language.primitive-function` (dual representation: HM arrow
+  vs ITT Pi, typed ABI vs closure ABI) ·
+  `monadc.context.language.primitive-dependent-types` (NbE kernel, shadow
+  pass, soundness holes) ·
+  `monadc.context.language.primitive-fixed-width` (I8-U128, F32, F80, I<n>) ·
+  `monadc.context.language.primitive-type-constructors` (Var, Arrow, App,
+  Ptr, Optional, Coll, Unknown) ·
+  `monadc.context.language.primitive-macros` (set-theoretic compile-time
+  syntax transformation) ·
+  `monadc.context.language.type-composition` ((Int), (a), (Int Int), (Arr T),
+  (Ptr T)) ·
+  `monadc.context.philosophy.sets-are-the-model` (the semantic foundation for
+  all primitive types) ·
   `monadc.context.philosophy.no-tradeoff-principle` (every primitive has
   multiple representations on the ladder from abstraction to hardware) ·
   `monadc.context.philosophy.purity-is-practical` (the shadow pass, the
   immutable-default collection operations, the typed-ABI-first closure design) ·
   `monadc.context.philosophy.zero-to-metal` (the three array forms, the five
-  function syntaxes, the two set mutability modes) ·
+  function syntaxes, the two set mutability modes, the ground→fixed-width ladder) ·
   `monadc.context.references.propositions-as-types` (the core insight that
   types-are-sets, functions-are-relations) ·
   `monadc.context.references.linear-lisp` (the immutable-default/mutable-escape-hatch

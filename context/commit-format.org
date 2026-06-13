@@ -37,11 +37,11 @@
 :CONTEXT_UPDATED: 2026-06-11
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
-:SOURCE: context/commit.org
+:SOURCE: context/commit-format.org
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.context.commit.file src:context/commit.org conf:high]
+[OBS id:obs.context.commit.file src:context/commit-format.org conf:high]
 This file is the canonical specification for commit messages in this
 repository. It was written to work well in Magit, to read cleanly as
 plain text in =git log=, and to serve as a machine-readable context
@@ -64,6 +64,7 @@ source for LLM agents working on the codebase.
 :ID: monadc.context.commit.philosophy
 :CUSTOM_ID: commit-philosophy
 :CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: Why commit messages are written this way: as durable records answering what changed, why it changed, and what future readers need to know. Not a summary of the diff — the diff speaks for itself.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -95,6 +96,7 @@ source for LLM agents working on the codebase.
 :ID: monadc.context.commit.structure
 :CUSTOM_ID: commit-structure
 :CONTEXT_KIND: format
+:CONTEXT_DESCRIPTION: Every commit message follows the shape <type>(<scope>): <summary> with a mandatory body. No footer section — everything goes in the body prose.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -104,7 +106,7 @@ source for LLM agents working on the codebase.
 :CONTEXT_UPDATED: 2026-06-11
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
-:SOURCE: context/commit.org
+:SOURCE: context/commit-format.org
 :CONFIDENCE: high
 :END:
 
@@ -126,8 +128,7 @@ of the relevant section, inline with context.
 :ID: monadc.context.commit.first-line
 :CUSTOM_ID: commit-first-line
 :CONTEXT_KIND: format
-:CONTEXT_VERSION: 1
-:CONTEXT_SCOPE: repository-local
+:CONTEXT_DESCRIPTION: The first line is a 72-character hard limit: <type>(<scope>): <summary> in imperative mood, no trailing period. Types are feat/fix/refactor/test/context/build/docs/perf/chore only.
 :CONTEXT_OWNER: human
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
@@ -135,7 +136,7 @@ of the relevant section, inline with context.
 :CONTEXT_UPDATED: 2026-06-11
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
-:SOURCE: context/commit.org
+:SOURCE: context/commit-format.org
 :CONFIDENCE: high
 :END:
 
@@ -152,7 +153,7 @@ of the relevant section, inline with context.
 :CONTEXT_VERSION: 1
 :CONTEXT_CREATED: 2026-06-11
 :CONTEXT_UPDATED: 2026-06-11
-:SOURCE: context/commit.org
+:SOURCE: context/commit-format.org
 :CONFIDENCE: high
 :END:
 
@@ -188,7 +189,7 @@ of the relevant section, inline with context.
 :CONTEXT_VERSION: 1
 :CONTEXT_CREATED: 2026-06-11
 :CONTEXT_UPDATED: 2026-06-11
-:SOURCE: context/commit.org
+:SOURCE: context/commit-format.org
 :CONFIDENCE: high
 :END:
 
@@ -220,7 +221,7 @@ of the relevant section, inline with context.
 :CONTEXT_VERSION: 1
 :CONTEXT_CREATED: 2026-06-11
 :CONTEXT_UPDATED: 2026-06-11
-:SOURCE: context/commit.org
+:SOURCE: context/commit-format.org
 :CONFIDENCE: high
 :END:
 
@@ -240,6 +241,7 @@ feat(reader): Path literals                                ✗ not imperative
 :ID: monadc.context.commit.body
 :CUSTOM_ID: commit-body
 :CONTEXT_KIND: format
+:CONTEXT_DESCRIPTION: The commit body is organised into sections separated by 72-character U+2500 rules. Each section covers one coherent area of work. Prose, not bullet lists. Wrapped at 72 characters.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -249,7 +251,7 @@ feat(reader): Path literals                                ✗ not imperative
 :CONTEXT_UPDATED: 2026-06-11
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
-:SOURCE: context/commit.org
+:SOURCE: context/commit-format.org
 :CONFIDENCE: high
 :END:
 
@@ -267,7 +269,7 @@ feat(reader): Path literals                                ✗ not imperative
 :CONTEXT_VERSION: 1
 :CONTEXT_CREATED: 2026-06-11
 :CONTEXT_UPDATED: 2026-06-11
-:SOURCE: context/commit.org
+:SOURCE: context/commit-format.org
 :CONFIDENCE: high
 :END:
 
@@ -293,7 +295,7 @@ AREA NAME: Short descriptor
 :CONTEXT_VERSION: 1
 :CONTEXT_CREATED: 2026-06-11
 :CONTEXT_UPDATED: 2026-06-11
-:SOURCE: context/commit.org
+:SOURCE: context/commit-format.org
 :CONFIDENCE: high
 :END:
 
@@ -321,7 +323,7 @@ AREA NAME: Short descriptor
 :CONTEXT_VERSION: 1
 :CONTEXT_CREATED: 2026-06-11
 :CONTEXT_UPDATED: 2026-06-11
-:SOURCE: context/commit.org
+:SOURCE: context/commit-format.org
 :CONFIDENCE: high
 :END:
 
@@ -344,6 +346,7 @@ AREA NAME: Short descriptor
 :ID: monadc.context.commit.style
 :CUSTOM_ID: commit-style
 :CONTEXT_KIND: format
+:CONTEXT_DESCRIPTION: Style rules: imperative mood throughout, active voice, present tense for invariants, exact symbol names in monospace, 72-character line wrapping.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -353,7 +356,7 @@ AREA NAME: Short descriptor
 :CONTEXT_UPDATED: 2026-06-11
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
-:SOURCE: context/commit.org
+:SOURCE: context/commit-format.org
 :CONFIDENCE: high
 :END:
 
@@ -376,6 +379,7 @@ AREA NAME: Short descriptor
 :ID: monadc.context.commit.llm-integration
 :CUSTOM_ID: commit-llm-integration
 :CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: Commit messages are parsed by context-visualizer.py and read by LLM agents. Exact symbol names, stated invariants, named TEST-ID and :ID: values make commit history a queryable secondary context source.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -385,7 +389,7 @@ AREA NAME: Short descriptor
 :CONTEXT_UPDATED: 2026-06-11
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
-:SOURCE: context/commit.org
+:SOURCE: context/commit-format.org
 :CONFIDENCE: high
 :END:
 
@@ -419,7 +423,7 @@ AREA NAME: Short descriptor
 :CONTEXT_UPDATED: 2026-06-11
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
-:SOURCE: context/commit.org
+:SOURCE: context/commit-format.org
 :CONFIDENCE: high
 :END:
 
@@ -431,7 +435,7 @@ AREA NAME: Short descriptor
 :CONTEXT_VERSION: 1
 :CONTEXT_CREATED: 2026-06-11
 :CONTEXT_UPDATED: 2026-06-11
-:SOURCE: context/commit.org
+:SOURCE: context/commit-format.org
 :CONFIDENCE: high
 :END:
 
@@ -460,7 +464,7 @@ adjacent `~` and `[...]` and setting `AST_ARRAY.array.is_heap = true`.
 :CONTEXT_VERSION: 1
 :CONTEXT_CREATED: 2026-06-11
 :CONTEXT_UPDATED: 2026-06-11
-:SOURCE: context/commit.org
+:SOURCE: context/commit-format.org
 :CONFIDENCE: high
 :END:
 
@@ -557,7 +561,7 @@ and a Hoogle-style method browser. New context nodes introduced:
 :CONTEXT_UPDATED: 2026-06-11
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
-:SOURCE: context/commit.org
+:SOURCE: context/commit-format.org
 :CONFIDENCE: high
 :END:
 

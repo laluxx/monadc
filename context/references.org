@@ -52,6 +52,7 @@
 :ID: monadc.context.references.propositions-as-types
 :CUSTOM_ID: ref-propositions-as-types
 :CONTEXT_KIND: reference
+:CONTEXT_DESCRIPTION: Wadler 2015 paper establishing Curry-Howard correspondence as the foundation for the set-theoretic model and dependent types
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: codex
@@ -90,6 +91,7 @@
 :ID: monadc.context.references.typechecking-dependent-types
 :CUSTOM_ID: ref-typechecking-dependent
 :CONTEXT_KIND: reference
+:CONTEXT_DESCRIPTION: Coquand 1996 paper introducing bidirectional type checking that the NbE kernel and infer/check judgments implement
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: codex
@@ -125,6 +127,7 @@
 :ID: monadc.context.references.linear-lisp
 :CUSTOM_ID: ref-linear-lisp
 :CONTEXT_KIND: reference
+:CONTEXT_DESCRIPTION: Baker 1992 paper on linear type discipline informing immutable-default mutable-escape-hatch collection design
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: codex
@@ -162,6 +165,7 @@
 :ID: monadc.context.references.cons-lazy
 :CUSTOM_ID: ref-cons-lazy
 :CONTEXT_KIND: reference
+:CONTEXT_DESCRIPTION: Normal-order evaluation paper providing the semantic foundation for lazy lists and the strict array vs lazy list distinction
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: codex
@@ -195,6 +199,7 @@
 :ID: monadc.context.references.cons-lazy-alloc
 :CUSTOM_ID: ref-cons-lazy-alloc
 :CONTEXT_KIND: reference
+:CONTEXT_DESCRIPTION: Memory-efficient thunk allocation techniques informing the arena-based list representation without per-cell GC overhead
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: codex
@@ -226,6 +231,7 @@
 :ID: monadc.context.references.layered-modal
 :CUSTOM_ID: ref-layered-modal
 :CONTEXT_KIND: reference
+:CONTEXT_DESCRIPTION: Modal type theory with multiple layers providing the framework for the dual HM/ITT type system with TERM_EMBED bridge
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: codex
@@ -263,6 +269,7 @@
 :ID: monadc.context.references.types-2020
 :CUSTOM_ID: ref-types-2020
 :CONTEXT_KIND: reference
+:CONTEXT_DESCRIPTION: Conference proceedings providing broader research context for the dependent type checker architecture and NbE kernel design
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: codex
@@ -297,6 +304,7 @@
 :ID: monadc.context.references.overview
 :CUSTOM_ID: references-overview
 :CONTEXT_KIND: index
+:CONTEXT_DESCRIPTION: Index table mapping each research paper to its connections to MonadC compiler design decisions and philosophy
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: codex

@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-11
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-11
+#+LAST_MODIFIED: 2026-06-13
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -45,17 +45,18 @@
 This file records build, verification, and installation context.
 
 #+CAPTION: Build Verification Ladder
-| Step | Command | Privilege | Required Before |
-|------+---------+-----------+-----------------|
-| Clean | =make clean= | user | compile |
-| Compile | =make= | user | install |
-| Install | =sudo make install= | root | system use |
+| Step    | Command           | Privilege | Required Before |
+|---------+-------------------+-----------+-----------------|
+| Clean   | =make clean=        | user      | compile         |
+| Compile | =make=              | user      | install         |
+| Install | =sudo make install= | root      | system use      |
 
 * Build Command
 :PROPERTIES:
 :ID: monadc.context.build.command
 :CUSTOM_ID: build-command
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The full build/install command sequence (make clean && make && sudo make install), prerequisites, and the Makefile structure.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -82,6 +83,7 @@ directory.
 :ID: monadc.context.build.verification
 :CUSTOM_ID: verification-policy
 :CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: Policy for verifying the build after compiler header changes: always run make clean && make before sudo make install.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -147,10 +149,10 @@ may fail if no password is provided.
   =make fuzzing= / =make test-fuzzing= for =tests/fuzzing/fuzz_codegen.py=.
 
 #+CAPTION: Helper Script Make Targets
-| Target                    | Command                                | Purpose                         |
-|---------------------------+----------------------------------------+---------------------------------|
-| =generate-asm-tests=        | =python3 create_asm_tests.py=            | Regenerate asm codegen subset   |
-| =generate-asm-tests-extra=  | =python3 create_asm_tests_extra.py=      | Compatibility asm generator     |
-| =test-runner=               | =python3 tests/test_run.py=              | Unit tests for test runner      |
-| =test-context-visualizer=   | =python3 tests/test_context_visualizer.py= | Unit tests for visualizer     |
-| =test-fuzzing= / =fuzzing=  | =python3 tests/fuzzing/fuzz_codegen.py=  | Deterministic codegen fuzzing   |
+| Target                   | Command                                  | Purpose                       |
+|--------------------------+------------------------------------------+-------------------------------|
+| =generate-asm-tests=       | =python3 create_asm_tests.py=              | Regenerate asm codegen subset |
+| =generate-asm-tests-extra= | =python3 create_asm_tests_extra.py=        | Compatibility asm generator   |
+| =test-runner=              | =python3 tests/test_run.py=                | Unit tests for test runner    |
+| =test-context-visualizer=  | =python3 tests/test_context_visualizer.py= | Unit tests for visualizer     |
+| =test-fuzzing= / =fuzzing=   | =python3 tests/fuzzing/fuzz_codegen.py=    | Deterministic codegen fuzzing |

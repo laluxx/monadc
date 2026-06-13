@@ -48,6 +48,7 @@
 :ID: monadc.context.style.taxonomy
 :CUSTOM_ID: style-taxonomy
 :CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: Declares the style subset classifying MonadC source-code notation choices and mixed syntax modes
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -76,6 +77,7 @@
 :ID: monadc.context.style.hybrid-c-signature-lisp-body
 :CUSTOM_ID: hybrid-c-signature-lisp-body
 :CONTEXT_KIND: observation
+:CONTEXT_DESCRIPTION: Documents the hybrid style where function signatures use C-like parameter declarations while bodies remain Lisp-like S-expressions
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -122,6 +124,7 @@
 :ID: monadc.context.style.pure-wisp-prelude
 :CUSTOM_ID: pure-wisp-prelude
 :CONTEXT_KIND: observation
+:CONTEXT_DESCRIPTION: Documents the indentation-based Wisp style with equation definitions, type signatures, and pattern clauses used in core/prelude
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human

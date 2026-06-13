@@ -53,6 +53,11 @@
   is a good reason, but the reason should be documented.
 
 * Hard Constraints
+:PROPERTIES:
+:CUSTOM_ID: hard-constraints
+:CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: Mandatory rules that must always be followed: context upkeep, stale context cleanup, always extend context, and opinions-as-TODOs.
+:END:
 
 ** Context Upkeep Rule
 :PROPERTIES:
@@ -183,6 +188,11 @@
   opinions file drives real change instead of becoming noise.
 
 * Soft Preferences
+:PROPERTIES:
+:CUSTOM_ID: soft-preferences
+:CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: Recommended practices: completion phrases, living coverage workflow, recurring TODOs. Should be followed when practical; violations should be documented.
+:END:
 
 ** Completion Phrase
 :PROPERTIES:

@@ -45,6 +45,7 @@
 :ID: monadc.context.todo.confidence-verification
 :CUSTOM_ID: confidence-verification
 :CONTEXT_KIND: todo
+:CONTEXT_DESCRIPTION: Tracks work on verifying CONFIDENCE levels against source locations and integrating git blame annotations
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -71,6 +72,7 @@ still depend on source locations staying accurate. After heavy refactoring,
 :ID: monadc.context.todo.think-type
 :CUSTOM_ID: think-record-type
 :CONTEXT_KIND: todo
+:CONTEXT_DESCRIPTION: Tracks the proposed addition of a THINK record type for speculative reasoning and exploration notes
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: llm
@@ -100,6 +102,7 @@ existing OBS/INF/DEC/TODO set.
 :ID: monadc.context.todo.validate-refs
 :CUSTOM_ID: validate-refs
 :CONTEXT_KIND: todo
+:CONTEXT_DESCRIPTION: Tracks adding a validation flag to check every context ID reference resolves to a real node
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: llm
@@ -127,6 +130,7 @@ context-visualizer.py that checks every context ID reference in TSV files and
 :ID: monadc.context.todo.visualizer-perf
 :CUSTOM_ID: visualizer-perf
 :CONTEXT_KIND: todo
+:CONTEXT_DESCRIPTION: Tracks comprehensive performance optimization of the web visualizer at 60fps for 1258+ nodes
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -170,6 +174,7 @@ context-visualizer.py that checks every context ID reference in TSV files and
 :ID: monadc.context.todo.priority-format
 :CUSTOM_ID: todo-priority-format
 :CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: Decision record establishing Org priority cookies and machine-friendly priority fields for durable TODO items
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -194,6 +199,7 @@ context-visualizer.py that checks every context ID reference in TSV files and
 :ID: monadc.context.todo.split-codegen
 :CUSTOM_ID: split-codegen-c
 :CONTEXT_KIND: todo
+:CONTEXT_DESCRIPTION: Urgent work item to split the ~13K line codegen.c into smaller modules by responsibility
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -222,6 +228,7 @@ context-visualizer.py that checks every context ID reference in TSV files and
 :ID: monadc.context.todo.test-runner-output
 :CUSTOM_ID: test-runner-output
 :CONTEXT_KIND: todo
+:CONTEXT_DESCRIPTION: High-priority work to improve tests/run.py with named color-coded sections and richer output
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -250,6 +257,7 @@ context-visualizer.py that checks every context ID reference in TSV files and
 :ID: monadc.context.todo.codegen-test-subdirs
 :CUSTOM_ID: codegen-test-subdirs
 :CONTEXT_KIND: todo
+:CONTEXT_DESCRIPTION: High-priority work to migrate flat codegen test fixtures into semantic subdirectories
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human

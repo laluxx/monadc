@@ -27,6 +27,7 @@
 :ID: monadc.context.index.file-metadata
 :CUSTOM_ID: file-metadata
 :CONTEXT_KIND: metadata
+:CONTEXT_DESCRIPTION: Root section for the MonadC context index: file metadata, format specification, node schema, visual design rules, LLM notation, and the current topic file listing.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -57,6 +58,7 @@ context.
 :ID: monadc.context.format
 :CUSTOM_ID: format-specification
 :CONTEXT_KIND: format
+:CONTEXT_DESCRIPTION: The formal context format specification: file layout topology, node property schema, file metadata schema, visual Org feature budget, and LLM bracketed record notation (OBS/INF/DEC/TODO/THINK/DOC).
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -276,14 +278,16 @@ Rules:
 :ID: monadc.context.files
 :CUSTOM_ID: current-topic-files
 :CONTEXT_KIND: index
-:CONTEXT_VERSION: 1
+:CONTEXT_DESCRIPTION: Navigation index of all context topic files: reader, language, build, tests, workflow, guidelines, todo, visualizer, opinions, philosophy, wisp, source-map, style, navigation, references, commit-format.
+:CONTEXT_VERSION: 2
 :CONTEXT_CREATED: 2026-06-11
-:CONTEXT_UPDATED: 2026-06-11
+:CONTEXT_UPDATED: 2026-06-13
 :SOURCE: context/index.org
 :CONFIDENCE: high
 :END:
 
 - [[file:reader.org][Reader and parser context]]
+- [[file:language.org][Language formalization context]]
 - [[file:language.org][Language formalization context]]
 - [[file:build.org][Build and installation context]]
 - [[file:tests.org][Test system context]]
@@ -299,6 +303,7 @@ Rules:
 - [[file:style.org][MonadC code-style taxonomy]]
 - [[file:navigation.org][ID prefix→file routing table for quick LLM navigation]]
 - [[file:references.org][Research references — papers informing the compiler design]]
+- [[file:commit-format.org][Commit message format and conventions]]
 
 * Current Task Notes
 :PROPERTIES:

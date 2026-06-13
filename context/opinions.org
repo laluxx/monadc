@@ -53,6 +53,7 @@
 :ID: monadc.context.opinions.human
 :CUSTOM_ID: human-opinions
 :CONTEXT_KIND: opinion
+:CONTEXT_DESCRIPTION: Records human-provided opinions about compiler architecture and testing workflow surfaced through direct user requests
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -84,6 +85,7 @@
 :ID: monadc.context.opinions.strengths
 :CUSTOM_ID: what-works-well
 :CONTEXT_KIND: observation
+:CONTEXT_DESCRIPTION: LLM assessment of the context system strongest features including stable IDs, record notation, and the visualizer
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: llm
@@ -134,6 +136,7 @@
 :ID: monadc.context.opinions.format-pain
 :CUSTOM_ID: format-pain-points
 :CONTEXT_KIND: observation
+:CONTEXT_DESCRIPTION: LLM catalog of seven concrete format-level issues with the context system and suggested mitigations
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: llm
@@ -253,6 +256,7 @@
 :ID: monadc.context.opinions.suggestions
 :CUSTOM_ID: suggested-improvements
 :CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: Prioritized list of seven format changes ranked by expected impact per effort from the LLM perspective
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: llm
@@ -328,6 +332,7 @@
 :ID: monadc.context.opinions.llm-pain
 :CUSTOM_ID: llm-specific-pain-points
 :CONTEXT_KIND: observation
+:CONTEXT_DESCRIPTION: Context-window pressure, ID collision, and navigation challenges specific to LLM agents working with the corpus
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: llm
@@ -379,6 +384,7 @@
 :ID: monadc.context.opinions.taxonomy-rule
 :CUSTOM_ID: taxonomy-rule
 :CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: Proposal for a hard structural constraint enforcing hierarchical ID paths that mirror the heading tree
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: llm
@@ -452,6 +458,7 @@
 :ID: monadc.context.opinions.general-tool
 :CUSTOM_ID: general-purpose-context-tool
 :CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: Exploration of extracting the context system into a standalone project-agnostic knowledge management tool
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: llm
@@ -510,6 +517,7 @@
 :ID: monadc.context.opinions.human-test-runner
 :CUSTOM_ID: human-test-runner-opinions
 :CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: Records human-provided opinions on improving tests/run.py output with named color-coded sections
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human

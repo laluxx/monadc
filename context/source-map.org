@@ -47,6 +47,10 @@
   descriptions, see the README's source file guide.
 
 * Reader & Frontend
+:PROPERTIES:
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Maps the lexer, parser, AST construction, and Wisp syntax expander forming the compiler frontend entry points
+:END:
 
 ** reader.c/h — Lexer, Parser, AST Construction
 :PROPERTIES:
@@ -97,6 +101,10 @@
   env.c/h (env → arity registration)
 
 * Type System
+:PROPERTIES:
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Maps type representation, HM inference, dependent type checking, constraint solving, and unification subsystems
+:END:
 
 ** types.c/h — Type Representation
 :PROPERTIES:
@@ -193,6 +201,10 @@
   dispatch)
 
 * Code Generation
+:PROPERTIES:
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Maps the LLVM IR code generator translating desugared AST to LLVM IR as the largest compiler file
+:END:
 
 ** codegen.c/h — LLVM IR Code Generator
 :PROPERTIES:
@@ -223,6 +235,10 @@
   (inline assembly) · main.c (Phase 7)
 
 * Runtime & Low-Level
+:PROPERTIES:
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Maps the runtime library, arena allocator, and inline assembly translator providing the execution substrate
+:END:
 
 ** runtime.c/h — Runtime Library
 :PROPERTIES:
@@ -300,6 +316,10 @@
   =asm.c= branch or contract.
 
 * FFI & External Interop
+:PROPERTIES:
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Maps the C foreign function interface using libclang for header parsing, type mapping, and arity registration
+:END:
 
 ** ffi.c/h — C Foreign Function Interface
 :PROPERTIES:
@@ -325,6 +345,10 @@
   main.c (Phase 0 pre-pass)
 
 * Environment & Module System
+:PROPERTIES:
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Maps the symbol table, module system, export resolution, and package build system for modular compilation
+:END:
 
 ** env.c/h — Symbol Table
 :PROPERTIES:
@@ -403,6 +427,10 @@
   Package CLI (=monad new/build/run/install/clean=), =package.yaml= parsing.
 
 * Pattern Matching & Macros
+:PROPERTIES:
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Maps the pattern match compiler and macro system for syntactic abstraction and clause compilation
+:END:
 
 ** pmatch.c/h — Pattern Match Compiler
 :PROPERTIES:
@@ -441,6 +469,10 @@
   =define-macro=, =syntax-rules= expansion during parsing.
 
 * CLI & REPL
+:PROPERTIES:
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Maps the CLI argument parser and interactive JIT-compile REPL for user-facing compiler interaction
+:END:
 
 ** cli.c/h — CLI Argument Parser
 :PROPERTIES:
@@ -480,6 +512,10 @@
   JIT-compile REPL with readline, expression history, error recovery.
 
 * Other
+:PROPERTIES:
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Maps supporting utilities including platform feature detection, Typst document emission, and the pipeline orchestrator
+:END:
 
 ** features.c/h — Conditional Compilation
 :PROPERTIES:
@@ -537,6 +573,10 @@
   name mangling, C linker invocation.
 
 * Core Library Files
+:PROPERTIES:
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Maps the standard library written in Monad source providing prelude collections, math, text, and test infrastructure
+:END:
 
 ** core/ — Standard Library
 :PROPERTIES:

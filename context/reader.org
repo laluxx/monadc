@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-11
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-11
+#+LAST_MODIFIED: 2026-06-13
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -57,6 +57,7 @@
 :ID: monadc.context.reader.header
 :CUSTOM_ID: ast-and-token-header
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Defines AST node tags and token types forming the shared interface between lexer, parser, and all downstream compiler phases
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -98,6 +99,7 @@
 :ID: monadc.context.reader.path-literals
 :CUSTOM_ID: path-literals
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Lexer recognition and parser handling of absolute, home-relative, and dot-relative Unix path tokens mapped to AST_PATH nodes
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -134,6 +136,7 @@
 :ID: monadc.context.reader.heap-arrays
 :CUSTOM_ID: heap-array-literals
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Parser treatment of adjacent ~[...] as heap-allocated array literals with the is_heap flag for runtime-sized arrays
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -167,6 +170,7 @@
 :ID: monadc.context.reader.wisp-heap-array-preservation
 :CUSTOM_ID: wisp-heap-array-preservation
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Wisp tokenization fix ensuring ~[...] passes as one balanced token to the reader without splitting
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -221,6 +225,7 @@
 :ID: monadc.context.reader.sugar.inline-assembly
 :CUSTOM_ID: inline-assembly-reader-surface
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Parenthesized (asm ...) AST form and Wisp expansion path for inline assembly in typed function bodies
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -262,6 +267,7 @@ Expected Wisp shape:
 :ID: monadc.context.reader.char-escapes
 :CUSTOM_ID: char-escapes
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Wisp expansion handling of char escape sequences and the newline limitation inside char literals
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -292,6 +298,7 @@ Expected Wisp shape:
 :ID: monadc.context.reader.lambda-params
 :CUSTOM_ID: lambda-params
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Required parenthesized parameter lists for lambda and the bracket-form constraint with -> return type
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -320,6 +327,7 @@ Expected Wisp shape:
 :ID: monadc.context.reader.buffer-types
 :CUSTOM_ID: buffer-types
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Wisp and parenthesized syntax for typed fixed-size buffer declarations with size suffixes and element types
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -355,6 +363,7 @@ Expected Wisp shape:
 :ID: monadc.context.reader.match-syntax
 :CUSTOM_ID: match-syntax
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Required with keyword and -> arrow syntax for match expression clause patterns
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -382,6 +391,7 @@ Expected Wisp shape:
 :ID: monadc.context.reader.for-syntax
 :CUSTOM_ID: for-syntax
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Destructured bindings and the :collect keyword in for comprehension iteration expressions
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -416,6 +426,7 @@ Expected Wisp shape:
 :ID: monadc.context.reader.sugar
 :CUSTOM_ID: sugar-registry
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Central registry documenting all 17 reader-level sugar transformations with stable cross-link IDs for test metadata
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -534,6 +545,7 @@ Expected Wisp shape:
 :ID: monadc.context.reader.typed-variable-colon-parity
 :CUSTOM_ID: reader-typed-variable-colon-parity
 :CONTEXT_KIND: observation
+:CONTEXT_DESCRIPTION: Acceptance of single-colon [name : Type] normalized to the canonical :: marker in bracket bindings
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human

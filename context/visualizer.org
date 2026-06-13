@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-11
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-11
+#+LAST_MODIFIED: 2026-06-13
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -45,6 +45,7 @@ This file documents the browser visualizer for the repository context graph.
 :ID: monadc.context.visualizer.category-foundation
 :CUSTOM_ID: category-foundation
 :CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: Decision establishing category theory as the visual model where context nodes are objects and relations are morphisms
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -77,6 +78,7 @@ This file documents the browser visualizer for the repository context graph.
 :ID: monadc.context.visualizer.implementation
 :CUSTOM_ID: visualizer-implementation
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Documents the Python server, HTML/CSS/JS assets, and design decisions for the browser-based context graph visualizer
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: codex
@@ -186,6 +188,7 @@ pointer anchor instead of applying immediate linear zoom jumps.
 :ID: monadc.context.visualizer.test-metadata-connection
 :CUSTOM_ID: test-metadata-connection
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Documents how the visualizer reads TEST-ID and TEST-CONTEXT metadata to create verifies edges between tests and context nodes
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: codex
@@ -224,6 +227,7 @@ pointer anchor instead of applying immediate linear zoom jumps.
 :ID: monadc.context.visualizer.asset-syntax-regression
 :CUSTOM_ID: visualizer-asset-syntax-regression
 :CONTEXT_KIND: source-hygiene
+:CONTEXT_DESCRIPTION: Source-hygiene record documenting that app.js must end cleanly without trailing garbage characters
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human

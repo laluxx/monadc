@@ -46,6 +46,8 @@ file in =context/*.org=:
 | =philosophy=                          | [[file:philosophy.org][context/philosophy.org]] | Project philosophy      |
 | =source-map=                          | [[file:source-map.org][context/source-map.org]] | Source file map         |
 | =style=                               | [[file:style.org][context/style.org]]      | MonadC code styles      |
+| =commit=                              | [[file:commit-format.org][context/commit-format.org]] | Commit message format and conventions |
+| =references=                          | [[file:references.org][context/references.org]]   | Research papers informing compiler design |
 
 * How to Use
 
