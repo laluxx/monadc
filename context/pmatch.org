@@ -1,0 +1,311 @@
+#+TITLE: Pattern Match Compiler
+#+AUTHOR: codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:pmatch:pattern:matching:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.pmatch
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC THINK
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.pmatch.file-metadata
+:CUSTOM_ID: pmatch-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: pmatch.h,pmatch.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.pmatch.file src:pmatch.h,pmatch.c conf:high]
+  The pattern-match compiler translates =pattern -> expr= clauses into
+  equivalent =(cond ...)= chains that the generic codegen can lower. It
+  lives at the boundary between the reader (which produces =AST_PMATCH= nodes)
+  and codegen (which calls =pmatch_desugar= before compiling a lambda body).
+  Header at =pmatch.h=, implementation in =pmatch.c= (≈1270 lines).
+
+[INF id:inf.pmatch.file-connect from:obs.pmatch.file conf:high]
+  connects-to -> `monadc.context.language.pattern-matching` (surface syntax) ·
+  `monadc.context.codegen-ops` (desugared cond chains lowered by codegen) ·
+  `monadc.context.reader` (AST_PMATCH / ASTPattern produced by reader)
+
+[THINK id:think.pmatch.desugar-timing from:obs.pmatch.file conf:medium]
+  Desugaring happens during codegen, not parsing, because the full type
+  environment and ADT definitions are only available after inference.
+  An alternative design would desugar earlier and let infer see the cond
+  chains, but the current pipeline desugars right before LLVM IR emission.
+
+* Pattern Types (ASTPattern / PatternKind)
+:PROPERTIES:
+:ID: monadc.context.pmatch.pattern-types
+:CUSTOM_ID: pattern-types
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The ASTPattern struct and PatternKind enum defining all supported pattern forms, defined in reader.h
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: reader.h:90-112
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.pmatch.pattern-kind-enum src:reader.h:90-99 conf:high]
+  =PatternKind= enum: =PAT_WILDCARD= (underscore), =PAT_VAR= (binds name),
+  =PAT_LITERAL_INT=, =PAT_LITERAL_FLOAT=, =PAT_LITERAL_STRING=,
+  =PAT_LIST_EMPTY= (empty brackets), =PAT_LIST= (with element sub-patterns
+  and optional rest), =PAT_CONSTRUCTOR= (ADT constructor with optional
+  field sub-patterns).
+
+[OBS id:obs.pmatch.astpattern-struct src:reader.h:101-112 conf:high]
+  =ASTPattern= struct: =kind= discriminator, =var_name= (PAT_VAR binding),
+  =lit_value= (numeric literal), =elements=/=element_count= + =tail=
+  (PAT_LIST), =ctor_fields=/=ctor_field_count= (PAT_CONSTRUCTOR).
+
+[OBS id:obs.pmatch.astpmatchclause-struct src:reader.h:114-123 conf:high]
+  =ASTPMatchClause= struct: =patterns=/=pattern_count= (one per param),
+  =body=, =guard_conds=/=guard_bodies=/=guard_count= (guarded clause
+  alternatives separated by pipes).
+
+* Parser Functions
+:PROPERTIES:
+:ID: monadc.context.pmatch.parser-functions
+:CUSTOM_ID: pmatch-parser-functions
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: All pattern-parsing entry points in pmatch.c
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: pmatch.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.pmatch.parse-pattern src:pmatch.c:246 conf:high]
+  =ASTPattern parse_pattern(Parser *p)= — Top-level entry. Consumes one
+  pattern from the token stream. Delegates to =parse_single_pattern= for
+  single-token patterns; handles parenthesized constructor patterns and
+  tuple patterns internally. Returns an =ASTPattern= by value.
+
+[OBS id:obs.pmatch.parse-single-pattern src:pmatch.c:33 conf:high]
+  =ASTPattern parse_single_pattern(Parser *p)= — Parses a single atomic
+  pattern: wildcard (=_=), variable (bare symbol), numeric/float/string
+  literals, list patterns (=[]= / =[p1 p2 ... | tail]=).
+
+[OBS id:obs.pmatch.parse-pmatch-clauses src:pmatch.c:447 conf:high]
+  =AST *parse_pmatch_clauses(Parser *p, int param_count)= — Parses the
+  full set of =pattern -> body= clauses delimited by =TOK_RPAREN= or
+  =TOK_EOF=. Allocates an =AST_PMATCH= node containing all parsed clauses.
+  Each clause is parsed by =parse_one_clause= (line 358), which handles
+  the =| guard -> guard-body = syntax.
+
+[OBS id:obs.pmatch.parse-one-clause src:pmatch.c:358 conf:high]
+  =static ASTPMatchClause parse_one_clause(Parser *p, int param_count)= —
+  Parses a single clause: =patterns ... -> body=, optionally followed by
+  pipe-delimited guard branches.
+
+[OBS id:obs.pmatch.is-at-pmatch-clause src:pmatch.c:250 conf:high]
+  =static bool is_at_pmatch_clause(Parser *p)= — Heuristic: if the next
+  token is a symbol/=_=/number/string/=[/=LPAREN, we are at a pattern clause.
+
+[OBS id:obs.pmatch.clause-body src:pmatch.c:280 conf:high]
+  =static AST *parse_clause_body(Parser *p)= — Parses the right-hand side
+  of a =->= arrow in a pattern clause.
+
+* Desugarer
+:PROPERTIES:
+:ID: monadc.context.pmatch.desugarer
+:CUSTOM_ID: pmatch-desugarer
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The desugaring pipeline that transforms AST_PMATCH into cond-chain ASTs
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: pmatch.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.pmatch.desugar-pipeline src:pmatch.c:1050 conf:high]
+  =AST *pmatch_desugar(AST *node, ASTParam *params, int param_count)= —
+  Transforms an =AST_PMATCH= node into an equivalent =(cond ...)= AST.
+  Called from codegen before compiling the lambda body. The returned AST
+  is freshly allocated and owned by the caller. The pipeline:
+  1. For each clause, generate pattern-match conditions via
+     =build_pattern_conditions= (line 699) which recursively decomposes
+     patterns into equality checks, type-tag checks, list-length tests,
+     and nested destructuring.
+  2. Wrap guards as =(and guard condition)=.
+  3. Chain into =(cond (c1 body1) (c2 body2) ... (else fallback))=.
+
+[OBS id:obs.pmatch.rename-anon-params src:pmatch.c:1037 conf:high]
+  =void pmatch_rename_anon_params(AST *pm, ASTParam *params, int param_count)= —
+  Walks the pattern AST and replaces anonymous parameter references with
+  their generated names. Must be called before =pmatch_desugar= so that
+  patterns refer to the correct variable names.
+
+[OBS id:obs.pmatch.build-pattern-conditions src:pmatch.c:699 conf:high]
+  =static void build_pattern_conditions(...)= — The core recursive pattern
+  compiler. For each =PatternKind= it emits the corresponding condition
+  expression:
+  - =PAT_WILDCARD=: always true
+  - =PAT_VAR=: always true (binds the variable)
+  - =PAT_LITERAL_INT=: =(= param value)=
+  - =PAT_LITERAL_FLOAT=: =(= param value)=
+  - =PAT_LITERAL_STRING=: =(string= param value)=
+  - =PAT_LIST_EMPTY=: =(empty? param)=
+  - =PAT_LIST=: length check + element destructuring via =nth=
+  - =PAT_CONSTRUCTOR=: tag check via =__adt_tag_= + field destructuring
+
+[OBS id:obs.pmatch.helper-builders src:pmatch.c:479-672 conf:high]
+  Suite of static helper constructors that build AST nodes for the
+  desugared output: =sym=, =make_list=, =make_eq_int=, =make_eq_float=,
+  =make_true=, =make_list_length=, =make_count=, =make_coll_wrap=,
+  =make_coll_is_empty=, =make_count_eq=, =make_index_access=, =make_and=,
+  =ast_substitute=, =make_let=, =rewrite_array_literals=. Each produces
+  small AST fragments that combine into the final cond chain.
+
+[OBS id:obs.pmatch.pmatch-rename-anon-params src:pmatch.c:1037 conf:high]
+  Renames auto-generated anonymous parameter placeholders in pattern
+  clauses to match the actual generated parameter names. Without this,
+  anonymous parameters (e.g. =(lambda (Int -> Int) ...)=) would not bind
+  correctly during desugaring.
+
+* Utilities
+:PROPERTIES:
+:ID: monadc.context.pmatch.utilities
+:CUSTOM_ID: pmatch-utilities
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Utility functions for pattern lifecycle management
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: pmatch.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.pmatch.pattern-free src:pmatch.c:1272 conf:high]
+  =void pattern_free(ASTPattern *p)= — Frees all memory owned by a single
+  =ASTPattern=, including sub-patterns (=elements=, =tail=, =ctor_fields=).
+  Thin wrapper around =ast_pattern_free= for stack-allocated patterns.
+
+* Desugaring Pipeline
+:PROPERTIES:
+:ID: monadc.context.pmatch.desugaring-pipeline
+:CUSTOM_ID: pmatch-desugaring-pipeline
+:CONTEXT_KIND: architecture
+:CONTEXT_DESCRIPTION: The complete flow from parsed pattern clauses to codegen-ready cond chains
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: pmatch.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.pmatch.pipeline-flow src:pmatch.c:699,1037,1050 conf:high]
+  Complete desugaring pipeline:
+  1. Reader calls =parse_pmatch_clauses= during parsing, producing
+     =AST_PMATCH= node with =ASTPMatchClause= array.
+  2. =pmatch_rename_anon_params= rewrites anonymous parameter references.
+  3. Codegen calls =pmatch_desugar= which:
+     a. For each clause, calls =build_pattern_conditions= to generate
+        a conjunction of equality / type-tag / length / destructuring checks.
+     b. Wraps guard conditions with =(and ...)=.
+     c. Chains clauses into =(cond (clause1 body1) ... (else default))=.
+  4. Codegen compiles the resulting =(cond ...)= via the normal dispatch path.
+
+[INF id:inf.pmatch.pipeline-codegen from:obs.pmatch.pipeline-flow conf:high]
+  connects-to -> `monadc.context.codegen-ops.cond-handler` (cond is lowered
+  via the standard codegen cond dispatch) ·
+  `monadc.context.language.pattern-matching` (surface pattern syntax) ·
+  `monadc.context.codegen-ops.strcmp.constructor-tag` (ADT tag checks
+  emitted by build_pattern_conditions for PAT_CONSTRUCTOR)
+
+[DEC id:dec.pmatch.pipeline-timing from:obs.pmatch.pipeline-flow by:codex date:2026-06-13]
+  Pattern desugaring is intentionally deferred to codegen time. Early
+  desugaring (during parsing) would lose the connection to the original
+  pattern structure for error messages and source mapping. Desugaring
+  after inference is unnecessary because patterns contain no type-dependent
+  constructs. Codegen-time desugaring is the current sweet spot.
+
+[THINK id:think.pmatch.list-patterns-inference from:obs.pmatch.pipeline-flow conf:medium]
+  List patterns desugar to =(empty? ...)= and =(nth ...)= calls. These
+  are not special-cased in the inferrer; they rely on the generic
+  =(empty? ...)= and =(nth ...)= type signatures registered in
+  =register_builtins=. If list type inference becomes a bottleneck,
+  consider adding first-class list pattern support to inference.
+
+* Cross-References
+:PROPERTIES:
+:ID: monadc.context.pmatch.cross-refs
+:CUSTOM_ID: pmatch-cross-refs
+:CONTEXT_KIND: references
+:CONTEXT_DESCRIPTION: Links to related context files and source locations
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: pmatch.h,pmatch.c
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.pmatch.cross-refs from:obs.pmatch.file conf:high]
+  connects-to ->
+  `monadc.context.reader.ast-pmatch` (AST_PMATCH node and ASTPattern) ·
+  `monadc.context.language.pattern-matching` (surface syntax spec) ·
+  `monadc.context.codegen-ops` (codegen dispatch, cond lowering, tag checks) ·
+  `monadc.context.infer` (type inference for desugared cond/empty?/nth)

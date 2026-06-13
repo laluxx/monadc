@@ -1,0 +1,322 @@
+#+TITLE: Macro System Context — macro.h
+#+AUTHOR: codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:macro:expansion:syntax:hygiene:
+#+PROPERTY: CONTEXT_VERSION 2
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.macro
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.macro.file-metadata
+:CUSTOM_ID: macro-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: macro.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.macro.file src:macro.h conf:high]
+  This file records the architecture of the compile-time macro expansion
+  system (=macro.h= / =macro.c=).  It covers: the Syntax return-type
+  convention, #() quasi-output syntax, hygiene renaming, variadic macro
+  splicing, fixpoint expansion (up to 1024 rounds), and the public API
+  (=macro_expand_all=, =macro_is_registered=, =macro_clear=).
+
+[INF id:inf.context.macro.meta from:obs.context.macro.file conf:high]
+  connects-to -> `monadc.context.language` (macros are defines whose
+  return type is Syntax) ·
+  `monadc.context.reader` (reader produces the AST that macro_expand_all
+  walks; parser desugars multi-clause macros before expansion)
+
+* Syntax Return-Type Convention
+:PROPERTIES:
+:ID: monadc.context.macro.syntax-convention
+:CUSTOM_ID: macro-syntax-convention
+:CONTEXT_KIND: concept
+:CONTEXT_DESCRIPTION: A define whose lambda return type is Syntax is treated as a compile-time macro
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: macro.h:7
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.macro.syntax-convention src:macro.h:7 conf:high]
+  Macros are ordinary =define= forms whose lambda declares =-> Syntax= as
+  the return type.  The expander registers them by scanning all top-level
+  defines before the main expansion pass.  Examples:
+  =(define (when condition . body -> Syntax) (if condition (begin . body) (begin)))=
+  =(define (swap! a b -> Syntax) (let [tmp a] (set! a b) (set! b tmp)))=
+
+[INF id:inf.context.macro.syntax-connect from:obs.context.macro.syntax-convention conf:high]
+  connects-to -> `monadc.context.language.define-form` (macros reuse the
+  define syntax) ·
+  `monadc.context.language.type-system-surface` (Syntax is a first-class
+  type in the surface system)
+
+* #() Quasi-Output Syntax
+:PROPERTIES:
+:ID: monadc.context.macro.quasi-output
+:CUSTOM_ID: marco-quasi-output
+:CONTEXT_KIND: concept
+:CONTEXT_DESCRIPTION: The #() reader macro delimits the template output region of a macro body
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: macro.h:45
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.macro.quasi-output src:macro.h:45 conf:high]
+  If the macro body contains =#(...)= the expander strips the marker and
+  only the inner subtree becomes the macro output.  If no =#(...)= appears,
+  the entire body is the output template.  Example:
+  =(define (assert condition message -> Syntax)
+    (if debug-mode
+      #(when (not condition) (error message))
+      #(begin)))=
+
+[THINK id:think.context.macro.quasi-output-eval date:2026-06-13 by:codex]
+  Full compile-time evaluation of code outside =#()= is TODO.  Currently the
+  whole body is substituted and =#()= is stripped, so conditionals like
+  =(if debug-mode ...)= are not evaluated at compile time — both branches
+  survive into the output.  Future work: evaluate the non-=#()= portion at
+  expansion time.
+
+* Hygiene (Macro-Generated Name Renaming)
+:PROPERTIES:
+:ID: monadc.context.macro.hygiene
+:CUSTOM_ID: macro-hygiene
+:CONTEXT_KIND: concept
+:CONTEXT_DESCRIPTION: Names introduced inside a macro body are renamed to avoid capture
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: macro.h:36
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.macro.hygiene src:macro.h:36 conf:high]
+  Names introduced inside a macro body (lambda params, =let= bindings, inner
+  =define=s) that are NOT pattern variables are renamed to the pattern:
+  =macroname__varname__N=, where N is a global monotonic counter.  Pattern
+  variables and free references to outer definitions pass through unchanged.
+  This prevents unintentional capture between macro-generated code and the
+  surrounding scope.
+
+[THINK id:think.context.macro.hygiene-counter date:2026-06-13 by:codex]
+  The global counter N ensures uniqueness across all macro invocations
+  within a single compilation unit.  The separator =__= (double underscore)
+  is reserved by the compiler and cannot appear in user-written identifiers.
+  On reset between units, =macro_clear()= resets the counter.
+
+* Variadic Macro Splicing
+:PROPERTIES:
+:ID: monadc.context.macro.variadic-splicing
+:CUSTOM_ID: macro-variadic-splicing
+:CONTEXT_KIND: concept
+:CONTEXT_DESCRIPTION: Rest parameters splice captured nodes flat in list position
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: macro.h:53
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.macro.variadic-splicing src:macro.h:53 conf:high]
+  A rest parameter (=is_rest=) captures zero or more trailing arguments.  In
+  the template, if the rest name appears as a list element the captured nodes
+  are *spliced* (inserted flat into the enclosing list).  In non-list position
+  a single-element rest wraps the captured nodes in =(begin ...)=.
+
+[THINK id:think.context.macro.rest-splicing-edge src:macro.h:55 conf:high]
+  Splicing semantics: =(my-and . rest)= → =(if x (my-and . rest) False)=
+  where =rest= splatted into the =if= tail produces N-ary chaining.
+  Single-element capture in non-list position (e.g. =(list . rest)= with one
+  arg) wraps in =(begin captured)= to preserve the single expression.
+
+* Fixpoint Expansion (1024 Rounds)
+:PROPERTIES:
+:ID: monadc.context.macro.fixpoint
+:CUSTOM_ID: macro-fixpoint
+:CONTEXT_KIND: concept
+:CONTEXT_DESCRIPTION: Expansion repeats to fixpoint so macros can expand into macro calls
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: macro.h:32
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.macro.fixpoint src:macro.h:32 conf:high]
+  After the initial registration pass, =macro_expand_all= walks every
+  remaining AST, expands macro call sites, and repeats the walk to a
+  fixpoint capped at 1 024 rounds.  This ensures macros that expand into
+  other macro calls are fully resolved.  If the cap is reached the
+  expansion is aborted (the compiler reports an error or returns the
+  partially-expanded result).
+
+* macro_expand_all
+:PROPERTIES:
+:ID: monadc.context.macro.expand-all
+:CUSTOM_ID: macro-expand-all
+:CONTEXT_KIND: function
+:CONTEXT_DESCRIPTION: Main macro expansion pipeline
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: macro.h:78
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.macro.func-expand-all src:macro.h:78 conf:high]
+  =macro_expand_all(exprs, count)= — Entry point.  Takes a flat list of
+  top-level ASTs from =parse_all= / =wisp_parse_all=.  Pipeline:
+  1. Scan for defines whose lambda has =return_type= ="Syntax"= → register
+     as macros and remove from the output (macros are compile-time only).
+  2. Walk every remaining AST calling =macro_try_expand= at each list node.
+  3. Repeat step 2 to fixpoint (capped at 1024 rounds).  Returns a new
+     =ASTList=.  Caller owns the returned exprs array; individual AST nodes
+     are live.  Macro define nodes consumed in step 1 are freed internally.
+
+[THINK id:think.context.macro.expand-ownership date:2026-06-13 by:codex]
+  The returned =ASTList= contains live AST nodes that are either original
+  (non-macro) or freshly allocated for the macro output.  The caller must
+  =free()= the array but must not free individual AST nodes that belong to
+  the original input.  A flag or side table distinguishes owned vs borrowed
+  nodes if needed.
+
+* macro_is_registered
+:PROPERTIES:
+:ID: monadc.context.macro.is-registered
+:CUSTOM_ID: macro-is-registered
+:CONTEXT_KIND: function
+:CONTEXT_DESCRIPTION: Query whether a name is a registered macro
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: macro.h:86
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.macro.func-is-registered src:macro.h:86 conf:high]
+  =macro_is_registered(name)= — Returns 1 if =name= is a registered macro,
+  0 otherwise.  Used by the type-checker and codegen to skip macro define
+  forms that should not emit LLVM IR.
+
+* macro_clear
+:PROPERTIES:
+:ID: monadc.context.macro.clear
+:CUSTOM_ID: macro-clear
+:CONTEXT_KIND: function
+:CONTEXT_DESCRIPTION: Release all registered macros
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: macro.h:94
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.macro.func-clear src:macro.h:94 conf:high]
+  =macro_clear()= — Frees all registered macro definitions and resets the
+  hygiene counter.  Called between compilation units when macros should not
+  persist across files.
+
+[INF id:inf.context.macro.pipeline-connect from:obs.context.macro.func-expand-all conf:high]
+  connects-to -> `monadc.context.language.define-form` (macro registration
+  detects defines with Syntax return type) ·
+  `monadc.context.language.type-system-surface` (Syntax is a non-codegen
+  type) ·
+  `monadc.context.reader.ast-list` (macro_expand_all consumes/produces
+  ASTList) ·
+  `monadc.context.reader.ast-define` (the AST representation of define
+  forms is inspected for the Syntax return type) ·
+  `monadc.context.codegen-ops` (macro_is_registered tells codegen to skip
+  macro defines)
+
+[THINK id:think.context.macro.pattern-variables date:2026-06-13 by:codex]
+  Pattern variables are the formal parameters of the macro lambda.  During
+  expansion, actual arguments are substituted for pattern variables in the
+  template.  Non-pattern variables (let bindings, inner lambdas) are
+  hygienically renamed.  The current implementation does not support
+  ellipsis ... patterns (Scheme-style) — variadic behaviour is via a single
+  rest parameter.
+
+[THINK id:think.context.macro.expansion-order date:2026-06-13 by:codex]
+  Expansion is outermost-first: the expander walks the AST top-down and
+  expands the outer list first, then recurses into the result.  This means
+  a macro that produces another macro call will have that call expanded
+  in a subsequent fixpoint round, not inline during the same walk.

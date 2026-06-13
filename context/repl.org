@@ -1,0 +1,309 @@
+#+TITLE: Interactive REPL
+#+AUTHOR: codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:repl:jit:interactive:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.repl
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC THINK
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.repl.file-metadata
+:CUSTOM_ID: repl-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: repl.h,repl.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.repl.file src:repl.h,repl.c conf:high]
+  The interactive REPL (Read-Eval-Print Loop) provides a JIT-compiled
+  environment where users enter Monad expressions and see results
+  immediately. Built on top of LLVM's =ExecutionEngine= for in-process
+  JIT compilation and =readline= for line editing and tab-completion.
+  Header at =repl.h=, implementation in =repl.c= (≈3000 lines).
+
+[INF id:inf.repl.file-connect from:obs.repl.file conf:high]
+  connects-to -> `monadc.context.main` (pipeline entry, repl_run dispatch) ·
+  `monadc.context.cli` (CMD_REPL mode selects repl_run) ·
+  `monadc.context.codegen-ops` (codegen_expr compiles each expression) ·
+  `monadc.context.infer` (type inference before codegen) ·
+  `monadc.context.reader` (parse each input line)
+
+* REPLContext
+:PROPERTIES:
+:ID: monadc.context.repl.context-struct
+:CUSTOM_ID: repl-context-struct
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The REPLContext struct holding JIT state across expressions
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: repl.h:11-16
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.repl.context-struct src:repl.h:11-16 conf:high]
+  =REPLContext= holds all persistent REPL state:
+  - =engine= (LLVMExecutionEngineRef): persistent JIT engine across expressions.
+  - =cg= (CodegenContext): module/builder replaced per expression.
+  - =expr_count= (unsigned int): monotonically increasing expression counter
+    used to generate unique wrapper names.
+  - =infer_env= (InferEnv *): persistent Hindley-Milner type environment
+    accumulating definitions across REPL inputs.
+
+[INF id:inf.repl.context-imported from:obs.repl.context-struct conf:high]
+  connects-to -> `monadc.context.codegen-ops` (CodegenContext) ·
+  `monadc.context.infer` (InferEnv persists HM state)
+
+* Lifecycle Functions
+:PROPERTIES:
+:ID: monadc.context.repl.lifecycle
+:CUSTOM_ID: repl-lifecycle
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: REPLContext initialization, teardown, and top-level run loop
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: repl.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.repl.init src:repl.c:1843 conf:high]
+  =void repl_init(REPLContext *ctx)= — Initializes a REPL context:
+  creates the LLVM execution engine, initializes the codegen context,
+  seeds the inference environment with builtins via =register_builtins=,
+  and sets up the runtime symbol table and signal handlers.
+
+[OBS id:obs.repl.dispose src:repl.c:1953 conf:high]
+  =void repl_dispose(REPLContext *ctx)= — Tears down the REPL context:
+  disposes the LLVM engine, frees the codegen context, inference env,
+  and any accumulated runtime symbol data.
+
+[OBS id:obs.repl.run src:repl.c:2885 conf:high]
+  =void repl_run(void)= — The top-level REPL loop. Initializes a local
+  =REPLContext=, configures readline (history file,
+  =rl_attempted_completion_function=), and enters an interactive
+  read-compile-eval-print loop. Accumulates partial input until a
+  complete expression is formed (balanced parens), then calls
+  =repl_eval_line=. On EOF or =(quit)=, exits the loop and disposes
+  the context.
+
+* Evaluation Pipeline
+:PROPERTIES:
+:ID: monadc.context.repl.evaluation
+:CUSTOM_ID: repl-evaluation
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The JIT compilation flow: read → parse → infer → codegen → execute → print
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: repl.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.repl.eval-line src:repl.c:2026 conf:high]
+  =bool repl_eval_line(REPLContext *ctx, const char *line)= — The core
+  evaluation function for a single input line. The JIT pipeline:
+  1. =parse=: parse the input string into an AST.
+  2. =repl_infer= (line 2008): run HM type inference on the AST.
+  3. =codegen_expr=: compile the AST to LLVM IR in a fresh module.
+  4. =LLVMExecutionEngine_addModule=: JIT the module.
+  5. Look up the wrapper function by name and call it via
+     =LLVMGenericValueToFloat=/=LLVMRunFunction=.
+  6. Print the result value.
+  On parse or inference error, uses =longjmp= (via =READER_ERROR= macro or
+  =g_repl_escape=) to recover without exiting the process.
+
+[OBS id:obs.repl.eval-line-error-recovery src:repl.c:2026 conf:high]
+  Error recovery in =repl_eval_line=: before each evaluation, a
+  =jmp_buf= (=g_repl_escape=) is set. If the reader encounters a
+  fatal error (via =READER_ERROR= macro), it =longjmp=s back to the
+  REPL prompt instead of calling =exit(1)=. If inference or codegen
+  fails, error flags are checked and the line is skipped gracefully.
+
+[OBS id:obs.repl.infer src:repl.c:2008 conf:high]
+  =static bool repl_infer(REPLContext *ctx, AST *ast)= — Runs HM type
+  inference on the parsed AST. Returns false on failure.
+
+[DEC id:dec.repl.jit-pipeline from:obs.repl.eval-line by:codex date:2026-06-13]
+  The REPL creates a new LLVM module for every input expression, compiles
+  it, adds it to the execution engine, runs it, then discards the module.
+  Function definitions persist in the =infer_env= but LLVM modules are
+  ephemeral — each expression is a self-contained compilation unit that
+  can call previously defined functions via the execution engine's symbol
+  table.
+
+[THINK id:think.repl.module-perf from:obs.repl.eval-line conf:medium]
+  Creating a new module per expression is simple but may be wasteful for
+  large modules. The =compile_one= path in main.c caches compiled objects.
+  If REPL performance becomes an issue, consider reusing a single module
+  with =LLVMCloneModule= or accumulating declarations.
+
+* Import and Compilation Support
+:PROPERTIES:
+:ID: monadc.context.repl.imports
+:CUSTOM_ID: repl-imports
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Functions supporting module imports within the REPL, defined in main.c
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: main.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.repl.compile-module src:main.c:1381 conf:high]
+  =bool repl_compile_module(CodegenContext *ctx, ImportDecl *imp)= —
+  Implemented in =main.c=. Calls =compile_one= on the module named by
+  =imp=, then calls =declare_externals= to inject the module's exported
+  symbols into the REPL's inference environment. Returns true on success.
+  Used by the import handler when the REPL encounters an =(import ...)=
+  form.
+
+[OBS id:obs.repl.get-compiled-obj-paths src:main.c:252 conf:high]
+  =const char **repl_get_compiled_obj_paths(void)= — Returns the list of
+  object file paths compiled during the current REPL session. Used by the
+  linker to resolve symbols when JIT-compiling modules that depend on
+  compiled native code.
+
+* Readline Integration
+:PROPERTIES:
+:ID: monadc.context.repl.readline
+:CUSTOM_ID: repl-readline
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Tab-completion integration with GNU readline
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: repl.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.repl.completion src:repl.c:2766 conf:high]
+  =char **repl_completion(const char *text, int start, int end)= — Readline
+  completion entry point. Wraps =rl_completion_matches= with
+  =repl_completion_generator= as the generator callback.
+
+[OBS id:obs.repl.completion-generator src:repl.c:2718 conf:high]
+  =char *repl_completion_generator(const char *text, int state)= —
+  Generates tab-completion candidates. Matches =text= against:
+  registered builtin names, REPL meta-commands, and symbols from the
+  current inference environment. Stateful generator pattern: returns
+  one match per call, NULL when exhausted.
+
+* Signal Handling and Runtime Safety
+:PROPERTIES:
+:ID: monadc.context.repl.signals
+:CUSTOM_ID: repl-signals
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Signal handlers for safe REPL interruption
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: repl.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.repl.sigint-handler src:repl.c:69 conf:high]
+  =static void repl_sigint_handler(int sig)= — Handles SIGINT (Ctrl-C)
+  during REPL evaluation. Sets an interrupt flag checked by the runtime.
+  After evaluation, the flag being set prints an interrupt message.
+
+[OBS id:obs.repl.assert-fail src:repl.c:98 conf:high]
+  =void __monad_assert_fail(const char *label)= — Runtime assertion
+  failure handler used by compiled Monad code. When called from JIT'd
+  code inside the REPL, it longjmps back to the REPL prompt via
+  =g_assert_jmp_ptr=.
+
+[OBS id:obs.repl.runtime-error src:repl.c:105 conf:high]
+  =void __monad_runtime_error(const char *file, long line, long col,
+  const char *msg)= — Runtime error handler for JIT'd code. Prints the
+  error location and jumps back to the REPL prompt.
+
+* Cross-References
+:PROPERTIES:
+:ID: monadc.context.repl.cross-refs
+:CUSTOM_ID: repl-cross-refs
+:CONTEXT_KIND: references
+:CONTEXT_DESCRIPTION: Links to related context files and source locations
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: repl.h,repl.c,main.c
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.repl.cross-refs from:obs.repl.file conf:high]
+  connects-to ->
+  `monadc.context.main` (repl_run, repl_compile_module, compile_one pipeline) ·
+  `monadc.context.cli` (CMD_REPL flag selects repl_run) ·
+  `monadc.context.codegen-ops` (codegen_expr compiles each expression) ·
+  `monadc.context.infer` (HM inference, register_builtins, InferEnv) ·
+  `monadc.context.reader` (parse, READER_ERROR, longjmp recovery)

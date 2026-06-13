@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="en">
   <head>
@@ -15,8 +16,7 @@
         <span id="graph-status">loading</span>
       </div>
       <div class="finder">
-        <input id="search" type="search" autocomplete="off" spellcheck="false"
-               placeholder="Search nodes, ids, files, summaries…  ↑ ↓ Enter">
+        <input id="search" type="search" autocomplete="off" placeholder="Search context, docs, titles, opinions...  ↑ / ↓">
         <div id="candidate-list" class="candidate-list"></div>
       </div>
       <button id="refresh" class="icon-button" title="Refresh graph">↻</button>
@@ -41,13 +41,13 @@
     </aside>
 
     <nav class="kind-dock" id="kind-filter" aria-label="Graph filters">
-      <button data-kind="all"           class="active">All</button>
-      <button data-kind="todo"                        >TODO</button>
-      <button data-kind="done"                        >DONE</button>
-      <button data-kind="test"                        >Tests</button>
-      <button data-kind="decision"                    >Decisions</button>
-      <button data-kind="documentation"               >Docs</button>
-      <button data-kind="context"                     >Context</button>
+      <button data-kind="all" class="active">All</button>
+      <button data-kind="todo">TODO</button>
+      <button data-kind="done">DONE</button>
+      <button data-kind="test">Tests</button>
+      <button data-kind="decision">Decisions</button>
+      <button data-kind="documentation">Docs</button>
+      <button data-kind="context">Context</button>
     </nav>
 
     <aside class="method-panel">
@@ -57,23 +57,32 @@
           <h2>Core / Prelude</h2>
         </div>
       </div>
-      <input id="method-search" class="method-search" type="search" autocomplete="off"
-             placeholder="map, Int -> Int, [a] -> [a]">
+      <input id="method-search" class="method-search" type="search" autocomplete="off" placeholder="map, Int -> Int, [a] -> [a]">
       <div class="method-tabs" id="method-tabs">
-        <button data-group="core"    class="active">Core</button>
-        <button data-group="prelude"               >Prelude</button>
+        <button data-group="core" class="active">Core</button>
+        <button data-group="prelude">Prelude</button>
       </div>
       <div id="method-list" class="method-list"></div>
     </aside>
 
     <section class="info-sheet" id="inspector">
-      <div class="sheet-main">
-        <p class="overline" id="detail-overline">Selected Object</p>
-        <h1 id="detail-title">None</h1>
-        <div id="detail-kind" class="kind-chip">No selection</div>
+      <div class="info-sheet-top">
+        <div class="sheet-main">
+          <p class="overline" id="detail-overline">Selected Object</p>
+          <h1 id="detail-title">None</h1>
+          <p id="detail-summary-text" class="sheet-summary-text"></p>
+          <div id="detail-kind" class="kind-chip">No selection</div>
+        </div>
+        <div class="sheet-details">
+          <dl id="detail-list"></dl>
+        </div>
+        <div class="sheet-neighbors">
+          <div id="neighbor-list" class="neighbor-list"></div>
+        </div>
       </div>
-      <dl id="detail-list"></dl>
-      <div id="neighbor-list" class="neighbor-list"></div>
+      <div class="sheet-org" id="sheet-org">
+        <div class="sheet-org-inner" id="sheet-org-inner"></div>
+      </div>
     </section>
 
     <script src="./app.js"></script>

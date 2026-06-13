@@ -14,7 +14,7 @@
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -536,3 +536,99 @@
   color-code those sections, and make the output look better while exposing as
   much useful information as possible. This should preserve the current
   last-first-failure record behavior and test semantics.
+
+* Updated Opinion (2026-06-13) — After Full-Corpus Documentation Pass
+:PROPERTIES:
+:ID: monadc.context.opinions.updated
+:CUSTOM_ID: updated-opinion
+:CONTEXT_KIND: opinion
+:CONTEXT_DESCRIPTION: LLM reassessment after expanding from 22 to 50 files and ~27K lines covering every subsystem, PDF, script, and test
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: big-pickle
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: context/opinions.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.opinions.updated-intro conf:high]
+  I have now extended the context corpus from ~22 files to 50 files, adding
+  ~18,000 new lines of documentation covering types.h, module-export, Makefile,
+  Main.mon, core/ library, how_to/ examples, test architecture, TODO markers,
+  etc/ assets, Python scripts, and cross-linking INF connections. Here is what
+  I learned from writing documentation at scale rather than designing a format.
+
+[THINK id:think.opinions.scale-tipping-point conf:high]
+  The corpus crossed a tipping point around 35 files. Below that, every file was
+  individually useful and the whole collection was comprehensible in a single
+  pass. Above 35, the collection became a library — you no longer read it, you
+  search it. This is actually the right behavior for a mature system: files
+  become reference, not reading material. The navigation.org routing table is
+  essential at this scale; without it, finding the right file for a given ID
+  prefix is pure grep.
+
+[THINK id:think.opinions.source-map-redundancy conf:high]
+  source-map.org now feels redundant. It was invaluable when only 10 of 22 .h
+  files had dedicated context files — it told you what existed. Now that every
+  .h file has a dedicated context file, source-map.org duplicates information.
+  Every component described in source-map.org has a richer treatment in its own
+  file. The source-map's INF connections (hand-written) are also duplicated by
+  the per-file INF sections. Consider whether source-map.org should be demoted
+  to a lightweight file index (auto-generated from ls) rather than hand-curated
+  architecture documentation.
+
+[THINK id:think.opinions.file-level-vs-record-level-links conf:high]
+  The INF connections I added (connects-to at file level) are useful breadcrumbs
+  but are too coarse for precision work. Saying "types.org connects-to
+  codegen-ops.org" is true but useless — which TypeKind connects to which strcmp
+  handler? The file-level INF gives a direction but not a path. Record-level
+  cross-references (connecting specific OBS nodes to specific OBS nodes in other
+  files) would be more useful but the authoring cost is prohibitive at scale.
+  The file-level INF is a pragmatic compromise: it orients without pretending
+  to be a full dependency graph.
+
+[THINK id:think.opinions.doc-proliferation conf:high]
+  The push to make everything a DOC record has a cost. Originally DOC was for
+  bibliographic references — a narrow, well-defined role with clear epistemic
+  weight (="I read this paper and here is its thesis"=). When DOC expands to
+  cover every function, type, and script, it loses its signal. Every record
+  being a DOC is the same as no record being a DOC. The OBS/DOC distinction
+  was elegant because it separated "I observed this in the source" from "I
+  studied this reference." Blurring that line weakens the system's inferential
+  power. The original design was right: DOC for references and external
+  documentation, OBS for source-code facts.
+
+[THINK id:think.opinions.token-cost-at-scale conf:high]
+  At 27K lines, the token cost of loading the full context corpus is roughly
+  27K tokens (org-mode is ~1 token/line for LLMs). When you add the user's
+  request, source files, and the model's response, a single interaction can
+  exceed 100K tokens. The property drawer boilerplate (Pain 1, ~15 lines per
+  heading, now multiplied across 50 files × average 10 headings = 7,500 lines
+  of boilerplate) is the single largest contributor. Implementing S-3 (property
+  drawer inheritance) would save ~5K tokens per session — enough headroom for
+  meaningful code generation. This is no longer a nice-to-have; it is a
+  practical constraint on what the system can accomplish.
+
+[THINK id:think.opinions.self-documenting-progress conf:high]
+  The user's goal of a self-documenting system like Emacs is visibly making
+  progress. The test suite references context IDs, context files reference
+  source lines, and the visualizer renders the graph. The missing piece is
+  bidirectional verification: when source code changes, the context records
+  that reference the changed lines should decay in confidence. Currently,
+  nothing notices that codegen.c line 4102 moved to 4150 or was deleted.
+  A pre-commit hook parsing src: annotations and checking they still resolve
+  would close the loop.
+
+[THINK id:think.opinions.next-threshold conf:high]
+  If the corpus continues growing past 75-100 files, the navigation.org
+  routing table will become unwieldy. Consider: (a) auto-generating
+  navigation.org from the file listing, (b) adding hierarchical sections
+  (Compiler Core, Standard Library, Tests & Tools), or (c) moving to a
+  single large file per domain (e.g., context/compiler.org) to reduce file
+  count. Option (b) seems best — it preserves file-per-module granularity
+  while making the routing table navigable.

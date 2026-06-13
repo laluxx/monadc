@@ -14,7 +14,7 @@
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -156,3 +156,30 @@ may fail if no password is provided.
 | =test-runner=              | =python3 tests/test_run.py=                | Unit tests for test runner    |
 | =test-context-visualizer=  | =python3 tests/test_context_visualizer.py= | Unit tests for visualizer     |
 | =test-fuzzing= / =fuzzing=   | =python3 tests/fuzzing/fuzz_codegen.py=    | Deterministic codegen fuzzing |
+
+* Connections
+:PROPERTIES:
+:ID: monadc.context.build.connections
+:CUSTOM_ID: build-connections
+:CONTEXT_KIND: inference
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.build.connects-to from:obs.build.purpose conf:high]
+  connects-to -> `monadc.context.makefile` (build targets documented in
+  makefile.org correspond to Makefile targets listed here) ·
+  `monadc.context.buildsystem` (cmd_build from cli.c invokes the programmatic
+  build system; makefile.org builds the compiler itself) ·
+  `monadc.context.cli` (make install/test targets correspond to CLI commands
+  CMD_INSTALL, CMD_TEST) ·
+  `monadc.context.scripts` (test runner scripts invoked by make test) ·
+  `monadc.context.tests-arch` (make test runs the full test suite)

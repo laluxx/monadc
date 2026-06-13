@@ -39,6 +39,7 @@ class Node:
     mutable: bool = False
     line: int = 0
     completed_at: str = ""
+    raw_content: str = ""
 
 
 @dataclass
@@ -67,7 +68,7 @@ def parse_context_graph() -> dict[str, object]:
     edges: list[Edge] = []
     for path in sorted((ROOT / "context").glob("*.org")):
         parse_org_file(path, nodes, edges)
-    for path in sorted((ROOT / "tests").rglob("*.mon")):
+    for path in sorted(p for p in (ROOT / "tests").rglob("*.mon") if not p.name.startswith(".")):
         parse_test_fixture(path, nodes, edges)
     for corpus_path in [
         ROOT / "tests" / "language_corpus.tsv",
@@ -89,6 +90,7 @@ def parse_context_graph() -> dict[str, object]:
         "openTodos": sum(1 for node in nodes.values() if node.kind == "todo" and node.status not in {"done", "closed", "DONE"}),
         "tests": sum(1 for node in nodes.values() if node.kind == "test"),
         "decisions": sum(1 for node in nodes.values() if node.kind == "decision"),
+        "documentation": sum(1 for node in nodes.values() if node.kind == "documentation"),
     }
     return {
         "nodes": [asdict(n) for n in nodes.values()],
@@ -100,7 +102,7 @@ def parse_context_graph() -> dict[str, object]:
 
 def parse_core_methods() -> list[Method]:
     records: list[tuple[Method, str]] = []
-    for path in sorted((ROOT / "core").rglob("*.mon")):
+    for path in sorted(p for p in (ROOT / "core").rglob("*.mon") if not p.name.startswith(".")):
         rel = path.relative_to(ROOT).as_posix()
         group = "prelude" if rel.startswith("core/prelude/") else "core"
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -168,7 +170,7 @@ def parse_org_file(path: Path, nodes: dict[str, Node], edges: list[Edge]) -> Non
     text = path.read_text(encoding="utf-8", errors="replace")
     file_id = f"file:{rel}"
     lines = text.splitlines()
-    nodes.setdefault(file_id, Node(file_id, path.stem, "file", rel, first_sentence(text), text[:2000]))
+    nodes.setdefault(file_id, Node(file_id, path.stem, "file", rel, first_sentence(text), text[:2000], raw_content=text))
     current_heading = file_id
     pending_heading = ""
     pending_heading_line = 1
@@ -186,6 +188,7 @@ def parse_org_file(path: Path, nodes: dict[str, Node], edges: list[Edge]) -> Non
                 node_id = f"todo:{rel}:{line_no}"
                 status = heading.group(2).lower()
                 body = org_section_body(lines, pending_heading_line)
+                raw_body = raw_org_section_body(lines, pending_heading_line)
                 nodes[node_id] = Node(
                     node_id,
                     pending_heading,
@@ -200,6 +203,7 @@ def parse_org_file(path: Path, nodes: dict[str, Node], edges: list[Edge]) -> Non
                     status=status,
                     mutable=True,
                     line=line_no,
+                    raw_content=raw_body,
                 )
                 edges.append(Edge(file_id, node_id, "contains", "contains"))
                 current_heading = node_id
@@ -219,6 +223,7 @@ def parse_org_file(path: Path, nodes: dict[str, Node], edges: list[Edge]) -> Non
             if node_id:
                 kind = normalize_kind(drawer.get("CONTEXT_KIND", "todo" if pending_todo else "context"))
                 body = org_section_body(lines, pending_heading_line)
+                raw_body = raw_org_section_body(lines, pending_heading_line)
                 nodes[node_id] = Node(
                     node_id,
                     pending_heading or node_id,
@@ -233,6 +238,7 @@ def parse_org_file(path: Path, nodes: dict[str, Node], edges: list[Edge]) -> Non
                     drawer.get("CONTEXT_STATUS", "open" if pending_todo else ""),
                     pending_todo,
                     line_no,
+                    raw_content=raw_body,
                 )
                 edges.append(Edge(file_id, node_id, "contains", "contains"))
                 current_heading = node_id
@@ -243,13 +249,14 @@ def parse_org_file(path: Path, nodes: dict[str, Node], edges: list[Edge]) -> Non
                 drawer[prop.group(1)] = prop.group(2)
             continue
 
-        record = re.match(r"\[(OBS|INF|DEC|TODO|DOC)\s+([^\]]+)\]\s*(.*)", line)
+        record = re.match(r"\[(OBS|INF|DEC|TODO|DOC|THINK|FIX|IDEA)\s+([^\]]+)\]\s*(.*)", line)
         if record:
             attrs = parse_attrs(record.group(2))
             rec_id = attrs.get("id", f"{rel}:{len(nodes)}")
             record_type = record.group(1)
-            kind = {"OBS": "observation", "INF": "inference", "DEC": "decision", "TODO": "todo", "DOC": "documentation"}[record_type]
+            kind = {"OBS": "observation", "INF": "inference", "DEC": "decision", "TODO": "todo", "DOC": "documentation", "THINK": "think", "FIX": "fix", "IDEA": "idea"}[record_type]
             body = record_body(lines, line_no)
+            raw_body = raw_record_body(lines, line_no)
             summary = record.group(3).strip() or first_sentence(body)
             nodes[rec_id] = Node(
                 rec_id,
@@ -265,6 +272,7 @@ def parse_org_file(path: Path, nodes: dict[str, Node], edges: list[Edge]) -> Non
                 attrs.get("status", ""),
                 kind == "todo",
                 line_no,
+                raw_content=raw_body,
             )
             edges.append(Edge(current_heading, rec_id, "states", "states"))
             for source in split_refs(attrs.get("from", "")):
@@ -272,7 +280,7 @@ def parse_org_file(path: Path, nodes: dict[str, Node], edges: list[Edge]) -> Non
             src = attrs.get("src")
             if src:
                 src_id = f"source:{src}"
-                nodes.setdefault(src_id, Node(src_id, src, "source", src, "source reference"))
+                nodes.setdefault(src_id, Node(src_id, src, "source", src, "source reference", raw_content=src))
                 edges.append(Edge(rec_id, src_id, "evidenced by", "evidence"))
             continue
 
@@ -297,7 +305,7 @@ def parse_test_fixture(path: Path, nodes: dict[str, Node], edges: list[Edge]) ->
     test_id = metadata.get("TEST-ID")
     if not test_id:
         return
-    nodes[test_id] = Node(test_id, test_id.removeprefix("tests."), "test", rel, metadata.get("TEST-PURPOSE", ""))
+    nodes[test_id] = Node(test_id, test_id.removeprefix("tests."), "test", rel, metadata.get("TEST-PURPOSE", ""), raw_content=path.read_text(encoding="utf-8", errors="replace"))
     for context_id in split_refs(metadata.get("TEST-CONTEXT", "")):
         edges.append(Edge(test_id, context_id, "verifies", "verifies"))
 
@@ -319,7 +327,7 @@ def parse_language_corpus(path: Path, nodes: dict[str, Node], edges: list[Edge])
         }.get(path.name, "language")
         test_id = f"tests.{prefix}.{name}"
         source = fields[3] if len(fields) > 3 else ""
-        nodes[test_id] = Node(test_id, f"{prefix}.{name}", "test", rel, purpose, source)
+        nodes[test_id] = Node(test_id, f"{prefix}.{name}", "test", rel, purpose, source, raw_content=line)
         edges.append(Edge(test_id, context_id, "verifies", "verifies"))
 
 
@@ -365,15 +373,35 @@ def org_section_body(lines: list[str], heading_line: int) -> str:
     return strip_org_markup("\n".join(lines[start:end]).strip())
 
 
+def raw_org_section_body(lines: list[str], heading_line: int) -> str:
+    start = max(0, heading_line - 1)
+    end = start + 1
+    while end < len(lines) and not re.match(r"^\*+\s+", lines[end]):
+        end += 1
+    return "\n".join(lines[start:end]).strip()
+
+
 def record_body(lines: list[str], record_line: int) -> str:
     body: list[str] = []
     for line in lines[record_line:]:
-        if re.match(r"^\[(OBS|INF|DEC|TODO|DOC)\s+", line) or re.match(r"^\*+\s+", line):
+        if re.match(r"^\[(OBS|INF|DEC|TODO|DOC|THINK|FIX|IDEA)\s+", line) or re.match(r"^\*+\s+", line):
             break
         if line.strip() == ":PROPERTIES:":
             break
         body.append(line)
     return strip_org_markup("\n".join(body).strip())
+
+
+def raw_record_body(lines: list[str], record_line: int) -> str:
+    start = max(0, record_line - 1)
+    end = record_line
+    while end < len(lines):
+        if end > start and (re.match(r"^\[(OBS|INF|DEC|TODO|DOC|THINK|FIX|IDEA)\s+", lines[end]) or re.match(r"^\*+\s+", lines[end])):
+            break
+        if end > start and lines[end].strip() == ":PROPERTIES:":
+            break
+        end += 1
+    return "\n".join(lines[start:end]).strip()
 
 
 def strip_org_markup(value: str) -> str:

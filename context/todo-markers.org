@@ -1,0 +1,820 @@
+#+TITLE: Source-Level TODO/FIXME/HACK Tracker
+#+AUTHOR: Codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:todo:technical-debt:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.todo-markers
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.todo-markers.file-metadata
+:CUSTOM_ID: todo-markers-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/todo-markers.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.todo-markers.file src:context/todo-markers.org conf:high]
+  Centralized tracker of every TODO, FIXME, and HACK comment found
+  across all C source, header, and Monad source files. Each entry
+  records source location, exact comment text, context/analysis, and
+  priority assessment. Grouped by file with OBS + THINK records.
+
+[THINK id:think.todo-markers.purpose conf:high]
+  This file exists because scattered TODO markers are invisible debt.
+  Centralizing them makes the full surface of incomplete work visible
+  to humans and LLM agents, with cross-references to the context files
+  that explain the affected subsystems. Every marker is a potential
+  bug, a missing feature boundary, or a known fragile path.
+
+* codegen.c — Code Generator
+:PROPERTIES:
+:ID: monadc.context.todo-markers.codegen
+:CUSTOM_ID: todo-codegen
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Two TODO markers in codegen.c: purity checking commented out (line 4102) and generic stub (line 11639).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.todo-markers.codegen.purity-check src:codegen.c:4102 conf:high]
+  Line 4102: =/* check_purity(ctx, ctx->current_function_name, head->symbol, ast); */ // TODO HERE=
+  The purity checking call in the AST_LIST dispatch has been commented
+  out. This means the compiler does not verify that effectful operations
+  (set!, mutation, FFI calls) are properly tracked in pure contexts.
+  The =check_purity= function likely existed in a previous version or
+  was planned but never implemented.
+
+[THINK id:think.todo-markers.codegen.purity-check conf:high]
+  Impact: Without purity checking, the shadow pass type checker cannot
+  distinguish pure from impure expressions. This blocks effect-tracking
+  features like =PURE= and =REC= annotations (see Main.mon:64 TODO IF,
+  PURE, REC) and any future effect system. Priority: medium — the
+  compiler works without it, but correctness guarantees are weaker.
+  Depends on: =check_purity= implementation, dep.c effect context.
+
+[OBS id:obs.todo-markers.codegen.generic-stub src:codegen.c:11639 conf:high]
+  Line 11639: =// TODO HERE=
+  Located in the function call argument coercion path. When an expected
+  type is =TYPE_COLL= and the actual argument is a =TYPE_SET=, there is
+  a conversion path. The // TODO HERE marks an incomplete branch or a
+  placeholder for additional type coercion logic that was not finished.
+
+[THINK id:think.todo-markers.codegen.generic-stub conf:medium]
+  Impact: Unknown — the surrounding code handles TYPE_COLL/ARR/SET/List
+  conversions, so the TODO may mark a missing conversion case (e.g.
+  Map-to-Coll, or a raw-to-boxed bridge). Priority: low — current
+  code compiles and passes tests; this is a defensive marker for an
+  edge case the author anticipated. Connected to codegen-ops.org
+  (collection dispatch), runtime.org (RuntimeValue boxing).
+
+* runtime.c — Runtime System
+:PROPERTIES:
+:ID: monadc.context.todo-markers.runtime
+:CUSTOM_ID: todo-runtime
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: One TODO in runtime.c: bignum unboxing stub (line 1559).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: runtime.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.todo-markers.runtime.bignum-unboxing src:runtime.c:1559 conf:high]
+  Line 1559: =// TODO UNBOX BIGNUM=
+  Before the =rt_unbox_int= function. The current unboxing logic handles
+  raw integer pointers (values below 0x10000), nil (returns 0), thunks
+  (forces then recurse), and RT_INT (reads int_val). Bignum unboxing
+  is missing: when a RuntimeValue holds a bignum (arbitrary-precision
+  integer), this function cannot extract its value.
+
+[THINK id:think.todo-markers.runtime.bignum-unboxing conf:high]
+  Impact: Any integer that exceeds 64 bits stored as a bignum will crash
+  or produce wrong results when passed to =rt_unbox_int=. Currently
+  the compiler only generates 64-bit =Int= values, so this is latent.
+  Priority: low-now, high-later — if bignum literals or big integer
+  arithmetic are added, this becomes a correctness bug. Depends on:
+  bignum representation in RuntimeValue, =RT_BIGNUM= tag.
+  Connected to: [[file:runtime.org][runtime.org]] (value system, unboxing).
+
+* reader.c — Reader/Parser
+:PROPERTIES:
+:ID: monadc.context.todo-markers.reader
+:CUSTOM_ID: todo-reader
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: One TODO in reader.c: lookahead improvement for data type field shorthand detection (line 4813).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: reader.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.todo-markers.reader.lookahead src:reader.c:4813 conf:high]
+  Lines 4808-4813:
+  =/* Scan ahead for | — if none found, it's shorthand */=
+  =/* We can't easily scan ahead with this lexer, so use=
+  = * the known_types check only for now. User-defined types=
+  = * as fields still need explicit constructor name.=
+  = * TODO: improve with lookahead                          */=
+  In the data type parser, when determining whether a constructor
+  definition uses shorthand (=data Triangle Point Point Point= is
+  shorthand for =data Triangle = Triangle Point Point Point=), the
+  parser cannot scan ahead for =|= to distinguish shorthand from
+  full constructor syntax. Currently uses a =known_types= fallback
+  that only works for built-in types.
+
+[THINK id:think.todo-markers.reader.lookahead conf:high]
+  Impact: User-defined types used as field types in data declarations
+  without explicit constructor name will be misparsed. E.g.,
+  =data Pair Int Int= is fine (Int is known), but
+  =data Pair MyType MyType= fails. Priority: medium — this restricts
+  ergonomic data type declarations. A full lookahead or backtracking
+  lexer would fix it. Depends on: lexer redesign or peeking support.
+  Connected to: [[file:reader.org][reader.org]] (data type parsing, AST construction).
+
+* dep.c — Dependent Type Checker
+:PROPERTIES:
+:ID: monadc.context.todo-markers.dep
+:CUSTOM_ID: todo-dep
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Three TODO/HACK markers in dep.c: pattern unification upgrade, and two TEMPORARY SHADOW PASS HACKs.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: dep.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.todo-markers.dep.pattern-unification src:dep.c:1607 conf:high]
+  Lines 1607-1608:
+  =/* TODO (Idris 2 Level): Proper pattern unification requires checking=
+  =   that v1->spine contains only distinct bound variables, and pruning=
+  =   variables not in scope. */=
+  In the metavariable solver (=dep_are_equal=), the current pattern
+  unification is minimal: it solves =?n = v= when one side is an
+  unsolved meta. The TODO notes that proper pattern unification should
+  check spine variables for distinctness and prune out-of-scope variables.
+  This is described as "Idris 2 Level" — the full algorithm used by
+  Idris 2's elaborator.
+
+[THINK id:think.todo-markers.dep.pattern-unification conf:high]
+  Impact: The current stub unification accepts some ill-posed
+  unification problems and rejects some well-posed ones that full
+  pattern unification would solve. This blocks advanced dependent
+  type idioms: higher-order unification, implicit arguments with
+  complex patterns, and type inference through dependent functions.
+  Priority: medium-high — the compiler works for simple cases but
+  will fail on idiomatic dependent programs. Depends on: spine
+  analysis, scope pruning, occurs check. Connected to: [[file:dep.org][dep.org]]
+  (NbE kernel, metavariable solver, conversion checking).
+
+[OBS id:obs.todo-markers.dep.shadow-hack-globals src:dep.c:2232 conf:high]
+  Lines 2232-2235:
+  =// TEMPORARY SHADOW PASS HACK:= newline =
+  =// Automatically invent a hole for any unbound global function=
+  =(like 'show' or 'if')= newline =
+  =int id = meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, t->fvar_name);=
+  =return val_meta(id, val_spine_empty());=
+  In =dep_eval= for =TERM_FVAR=, when a global function variable is not
+  found in the environment, instead of reporting an error, the shadow
+  pass silently invents a fresh meta-variable (hole) of universe 0.
+  This allows =show=, =if=, and other standard-library functions to
+  pass type-checking even though they are not registered in the
+  dependent type environment.
+
+[THINK id:think.todo-markers.dep.shadow-hack-globals conf:high]
+  Impact: This is a deliberate unsoundness in the shadow pass. Any
+  unbound global function gets a hole type, meaning the dependent
+  checker cannot verify that calls to these functions are type-safe.
+  This is the single biggest gap between the current shadow pass and
+  a fully sound dependent type checker. Priority: high — fixing this
+  requires registering ALL standard library functions in =dep_env_init=
+  (dep.c:3398-3529) with their proper dependent types. Depends on:
+  full type signatures for every builtin and prelude function.
+  Connected to: [[file:dep.org][dep.org]] (shadow pass architecture, env initialization).
+
+[OBS id:obs.todo-markers.dep.shadow-hack-term-leak src:dep.c:3529 conf:high]
+  Lines 3529-3534:
+  =/* TEMPORARY SHADOW PASS HACK:= newline =
+  = * We intentionally do NOT free the type terms (int_int_int, if_ty, etc.) here.= newline =
+  = * The NbE 'Closure' struct holds direct C pointers to these Term ASTs for lazy evaluation.= newline =
+  = * Freeing them causes a Use-After-Free memory corruption when the type checker= newline =
+  = * evaluates standard library calls later on! */=
+  At the end of =dep_env_init=, the initial environment setup for the
+  dependent checker leaks memory intentionally. Type terms passed to
+  =dep_eval= are not freed because NbE Closure structs hold raw C
+  pointers to them.
+
+[THINK id:think.todo-markers.dep.shadow-hack-term-leak conf:high]
+  Impact: Each compiler invocation leaks several Term ASTs (one per
+  standard library function signature). For a compiler that runs
+  once per invocation this is acceptable; for a REPL or persistent
+  compilation server it is a memory leak. Priority: medium — fix
+  requires changing Closure to copy or reference-count terms, or
+  using an arena that lives as long as the closures. Depends on:
+  closure representation redesign, arena lifecycle. Connected to:
+  [[file:dep.org][dep.org]] (NbE closures, env initialization, memory management).
+
+* ffi.c — C Foreign Function Interface
+:PROPERTIES:
+:ID: monadc.context.todo-markers.ffi
+:CUSTOM_ID: todo-ffi
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: One TODO in ffi.c: incomplete FFI path stub for debug logging (line 1583).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: ffi.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.todo-markers.ffi.debug-stub src:ffi.c:1583 conf:high]
+  Lines 1583-1585:
+  =// TODO HERE= newline =
+  =/* fprintf(stderr, "FFI doc [%s]: %s\n", f->name,= newline =
+  = *        f->doc ? f->doc : "(null)"); */=
+  In the FFI header parsing path (=ffi_inject_into_env=), a debug
+  print statement is commented out. The TODO HERE marks the spot
+  where additional processing may be needed after a function is
+  injected into the environment.
+
+[THINK id:think.todo-markers.ffi.debug-stub conf:medium]
+  Impact: Negligible — the FFI injection works correctly. The TODO
+  suggests the author considered adding post-injection logic (e.g.,
+  registering the docstring in a look-up table, or handling variadic
+  FFI functions). Priority: low. Depends on: FFI variadic support,
+  docstring registry. Connected to: [[file:ffi.org][ffi.org]] (FFI injection, header parsing).
+
+* env.c — Environment Table
+:PROPERTIES:
+:ID: monadc.context.todo-markers.env
+:CUSTOM_ID: todo-env
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: One TODO in env.c: llvm_name memory leak in env_free (line 59).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: env.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.todo-markers.env.llvm-name-leak src:env.c:59 conf:high]
+  Line 59: =// TODO Free llvm_name=
+  In =env_free=, before freeing entries, the =llvm_name= field of each
+  =EnvEntry= is not freed. The =free_entry_fields= helper (called at
+  line 66 inside the loop) frees other fields but the =llvm_name=
+  string is leaked.
+
+[THINK id:think.todo-markers.env.llvm-name-leak conf:high]
+  Impact: Each environment entry's =llvm_name= string is leaked on
+  environment destruction. For short-lived compiler invocations this
+  is minor; for persistent REPL sessions it accumulates. Priority:
+  medium — fix is a one-line =free(e->llvm_name)= in =free_entry_fields=
+  or in =env_free=. Depends on: ensuring =llvm_name= is always
+  heap-allocated (not pointing to a string literal). Connected to:
+  [[file:env.org][env.org]] (environment entry lifecycle, memory management).
+
+* buildsystem.c — Build System
+:PROPERTIES:
+:ID: monadc.context.todo-markers.buildsystem
+:CUSTOM_ID: todo-buildsystem
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Two TODOs in buildsystem.c: dependency graph stubbed and compile function stubbed.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: buildsystem.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.todo-markers.buildsystem.dep-graph src:buildsystem.c:244 conf:high]
+  Lines 243-244:
+  =// Simple approach: return imports in order (no topological sort yet)= newline =
+  =// TODO: Implement proper dependency graph with cycle detection=
+  In =build_resolve_dependencies=, the function returns imports in
+  declaration order without topological sorting or cycle detection.
+  This works for acyclic dependency trees but will loop infinitely
+  on circular imports.
+
+[THINK id:think.todo-markers.buildsystem.dep-graph conf:high]
+  Impact: Circular module imports cause infinite loops or incorrect
+  compilation order. Simple projects are unaffected, but as the
+  module system grows, this will become a hard blocker. Priority:
+  medium — works for current usage but must be fixed before the
+  module system is used for larger projects. Depends on: topological
+  sort algorithm, cycle detection via DFS. Connected to:
+  [[file:buildsystem.org][buildsystem.org]] (module compilation, dependency resolution).
+
+[OBS id:obs.todo-markers.buildsystem.compile-stub src:buildsystem.c:334 conf:high]
+  Lines 334-336:
+  =// TODO: Call actual compile function= newline =
+  =// For now, this is a placeholder=
+  =printf("%*s[%s] Compiled to %s\n"...);=
+  In =build_compile_module=, instead of invoking the real compilation
+  pipeline, the function prints a message and returns. This is a
+  placeholder that does not actually compile anything.
+
+[THINK id:think.todo-markers.buildsystem.compile-stub conf:critical]
+  Impact: The entire build system module compilation path is a no-op.
+  =build_compile_module= reports success without producing any object
+  file. This means the build system cannot actually compile multi-
+  module projects. Priority: high — this must be wired to the real
+  compilation pipeline (=main.c= entry point or =codegen_compile=)
+  before the build system is usable. Depends on: the compilation
+  pipeline interface, output path management. Connected to:
+  [[file:buildsystem.org][buildsystem.org]] (module compilation flow).
+
+* runtime.h — Runtime Header
+:PROPERTIES:
+:ID: monadc.context.todo-markers.runtime-h
+:CUSTOM_ID: todo-runtime-h
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: One TODO in runtime.h: undescribed field in RuntimeSet (line 154).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.todo-markers.runtime-h.undescribed-field src:runtime.h:154 conf:high]
+  Line 154: =// TODO Write description=
+  Between the =RuntimeSet= struct definition and the =RuntimeMapEntry= /
+  =RuntimeMap= definitions, a comment block with =/// RuntimeSet= and
+  an empty descriptive comment. The struct itself has fields (=buckets=,
+  =capacity=, =count=, =tombstones=) but no documentation of the hash
+  set algorithm, load factor, or collision strategy.
+
+[THINK id:think.todo-markers.runtime-h.undescribed-field conf:low]
+  Impact: Documentation gap only — the RuntimeSet implementation is
+  functionally complete. Priority: low — the code is readable but
+  lacks high-level algorithmic documentation. Connected to:
+  [[file:runtime.org][runtime.org]] (collection runtime representation).
+
+* macro.h — Macro System
+:PROPERTIES:
+:ID: monadc.context.todo-markers.macro-h
+:CUSTOM_ID: todo-macro-h
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: One TODO in macro.h: #() quasi-output substitution incomplete (line 50).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: macro.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.todo-markers.macro-h.hash-paren-substitution src:macro.h:50 conf:high]
+  Lines 48-51:
+  =If #(…) appears, only the subtree inside #(…) is the macro output;= newline =
+  =the surrounding code runs at expand time (full compile-time eval is= newline =
+  = * TODO — currently the whole body is substituted and the #() marker= newline =
+  = * is stripped).=
+  The #() quasi-output mechanism in macros is incomplete. When a macro
+  body contains =#(...)=, the intent is that only the =#(...)= subtree
+  becomes the macro output and the surrounding code is compile-time
+  evaluated. Currently, the entire body is substituted and =#()= is
+  merely stripped, making compile-time computation inside macros
+  impossible.
+
+[THINK id:think.todo-markers.macro-h.hash-paren-substitution conf:high]
+  Impact: Without proper =#()= quasi-output, macros cannot perform
+  compile-time computation or conditional expansion. This blocks
+  hygienic macro systems, procedural macros, and compile-time code
+  generation. Priority: medium — basic macro expansion works (pattern
+  substitution) but advanced macro features are stubbed. Depends on:
+  macro expander redesign to separate compile-time from template code.
+  Connected to: [[file:macro.org][macro.org]] (macro architecture, expansion algorithm).
+
+* Main.mon — Main Playground File
+:PROPERTIES:
+:ID: monadc.context.todo-markers.main-mon
+:CUSTOM_ID: todo-main-mon
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: 23 TODO markers in Main.mon — the primary language exploration and scratch file. Covers language feature aspirations.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: Main.mon
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.todo-markers.main-mon.overview conf:high]
+  Main.mon is the human designer's scratch file for language exploration.
+  Its 23 TODO markers represent aspirational language features,
+  planned syntax extensions, and known compiler gaps. Priority varies
+  by marker — some are critical (typed expressions, parametric
+  polymorphism), others are exploratory (relation type, matrix literals).
+
+[OBS id:obs.todo-markers.main-mon.show-formatting src:Main.mon:49 conf:high]
+  Line 49: =;; TODO= followed by =(show "Value of i is _, f is _, and o is _." i f o)=
+  The format-string show with underscores is commented out. Indicates
+  the format-string show feature exists but may have issues with
+  multiple arguments or specific type formatting.
+
+[OBS id:obs.todo-markers.main-mon.if-pure-rec src:Main.mon:64 conf:high]
+  Line 64: =;; TODO IF, PURE, REC=
+  The recursive Fibonacci function definition is commented out. The
+  TODO references =IF=, =PURE=, =REC= as required annotations for
+  recursive function definitions — language features not yet implemented.
+
+[OBS id:obs.todo-markers.main-mon.type-check-fail src:Main.mon:210 conf:high]
+  Line 210: =;; TODO= followed by a typed return test
+  =(define (return-int -> Int) 3)= / =(define [test :: String] (return-int))=
+  Expected: compile error. Current: segfault. The type checker does
+  not reject the invalid assignment.
+
+[OBS id:obs.todo-markers.main-mon.symbol-define src:Main.mon:249 conf:high]
+  Line 249: =(define symbol 'symbol); TODO=
+  Defining a variable named =symbol= (shadowing the builtin). The TODO
+  likely highlights that this should produce a warning or error.
+
+[OBS id:obs.todo-markers.main-mon.array-show src:Main.mon:281 conf:high]
+  Line 281: =(show [1 2 3 4 5 6]); TODO...=
+  Array display shows wrong output. The TODO + ellipsis indicates
+  the array literal rendering is broken or incomplete.
+
+[OBS id:obs.todo-markers.main-mon.dynamic-arrays src:Main.mon:365 conf:high]
+  Lines 365-372: =;;;; TODO Dynamic arrays=
+  Dynamic heap arrays (~[]) are planned but not implemented. Comments
+  describe the intended type inference (=Dyn :: ?= → =Dyn :: Int=).
+
+[OBS id:obs.todo-markers.main-mon.vector src:Main.mon:374 conf:high]
+  Lines 374-427: =;;;; TODO Vector=
+  A full vector type design (=Vec :: Int=) with homogeneity, SIMD
+  support, and C compatibility is planned. Includes a detailed comment
+  block with API design but no implementation.
+
+[OBS id:obs.todo-markers.main-mon.matrix src:Main.mon:427 conf:high]
+  Lines 427-561: =;;;; TODO Matrix=
+  Multidimensional matrix type with 1D/2D/3D indexing, slicing, and
+  scalar recycling. Extensively designed in comments but not
+  implemented.
+
+[OBS id:obs.todo-markers.main-mon.filling src:Main.mon:563 conf:high]
+  Lines 563-566: =;; TODO Filling:=
+  =(fill [Mat :: [3x3x3] :: Int])= — a =fill= function for creating
+  typed matrices with default values. Commented out.
+
+[OBS id:obs.todo-markers.main-mon.map-todo src:Main.mon:568 conf:high]
+  Line 568: =;;;; TODO Map=
+  Marker above the map literal usage section. Map operations work but
+  some features (merge-with, zipmap) are aspirational.
+
+[OBS id:obs.todo-markers.main-mon.zipmap src:Main.mon:651 conf:high]
+  Line 651: =;; TODO (zipmap players (repeat 0)); => {"Kelly" 0, ...}=
+  =zipmap= and =repeat= functions are not implemented. These are
+  standard Clojure-inspired collection operations.
+
+[OBS id:obs.todo-markers.main-mon.merge-with src:Main.mon:668 conf:high]
+  Line 668: =;; TODO (merge-with + scores new-scores); => ...=
+  =merge-with= (merge maps with a combining function) is not implemented.
+  Only =merge= (rightmost wins) works.
+
+[OBS id:obs.todo-markers.main-mon.set-todo src:Main.mon:672 conf:high]
+  Line 672: =;;;; TODO Set=
+  Marker before the set usage section. Set operations work but
+  set-builder notation and some set-theoretic operations are aspirational.
+
+[OBS id:obs.todo-markers.main-mon.set-operations src:Main.mon:710 conf:high]
+  Line 710: =;; TODO Provide basic set operations like union, difference, intersection=
+  The basic set algebra operations (union, difference, intersection,
+  subset?, etc.) are explicitly listed as not yet implemented.
+
+[OBS id:obs.todo-markers.main-mon.relation src:Main.mon:755 conf:high]
+  Line 755: =;;;; TODO Relation=
+  An extensive relation type design (domain, codomain, image, preimage,
+  compose, transpose, select, project) is documented but not implemented.
+  This is a major language feature for set-theoretic programming.
+
+[OBS id:obs.todo-markers.main-mon.infix-fn-call src:Main.mon:860 conf:high]
+  Line 860: =;;; TODO Infix Function Call=
+  Infix function call syntax (e.g., =x `f` y=) is planned but not
+  implemented. Currently only prefix call syntax works.
+
+[OBS id:obs.todo-markers.main-mon.optional-params src:Main.mon:874 conf:high]
+  Line 874: =;;; TODO Optional parameters=
+  Optional/default function parameters are planned with =⇒= syntax but
+  not implemented. The comment block shows the intended design.
+
+[OBS id:obs.todo-markers.main-mon.parametric-polymorphism src:Main.mon:909 conf:high]
+  Line 909: =;;; TODO Parametric polymorphism=
+  Parametric polymorphic functions (e.g., =(define (add x y) (asm add x y))=
+  without explicit type annotations) are not yet supported. This blocks
+  generic programming.
+
+[OBS id:obs.todo-markers.main-mon.asm-arm src:Main.mon:933 conf:high]
+  Line 933: =;;   (asm mov r7 #20; TODO Support # for ARM=
+  ARM/ARM32 inline assembly syntax has ARM-specific =#= immediate prefix
+  not yet supported in the assembler.
+
+[OBS id:obs.todo-markers.main-mon.list-comprehension src:Main.mon:992 conf:high]
+  Line 992: =;;; TODO List comprehention=
+  List comprehension syntax (Haskell-style =[(x*2) | x <- (1..10)]=) is
+  extensively designed but not implemented. Includes guards, multiple
+  generators, and nested bindings.
+
+[OBS id:obs.todo-markers.main-mon.types-as-types src:Main.mon:1009 conf:high]
+  Line 1009: =;;; TODO Types as types=
+  Types as first-class values — storing types in variables, passing
+  them to functions, and using them polymorphically. This is the
+  dependent type feature where =Type : Type= (or universe hierarchy).
+
+[OBS id:obs.todo-markers.main-mon.typed-expressions src:Main.mon:1100 conf:high]
+  Line 1100: =;;; TODO Typed expressions=
+  Above the extensive casting examples. Typed expressions where every
+  subexpression carries its type annotation — possibly related to the
+  bidirectional type checker's output or a typed intermediate language.
+
+[OBS id:obs.todo-markers.main-mon.todo-dotdot src:Main.mon:1060 conf:high]
+  Line 1060: =;; ;; TODO..=
+  In the types-as-types section, a placeholder for showing type values
+  as runtime values. The examples show =Int=, =Bool=, =[Vec :: Int]=
+  as values but the actual display is pending.
+
+* Additional Source File TODOs
+:PROPERTIES:
+:ID: monadc.context.todo-markers.additional
+:CUSTOM_ID: todo-additional
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: TODO markers in supporting source files: how_to/Macros.mon, how_to/Test.mon, core/Math.mon, core/prelude/Coll.mon, core/text/String.mon, core/Assert.mon, how_to/AlgebraicDataTypes.mon, how_to/RefinementType.mon, how_to/Syntax.mon, how_to/SdlSpeedrun.mon, core/prelude/Test.mon.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: how_to/,core/
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.todo-markers.additional.macros-mon src:how_to/Macros.mon:21,49,64 conf:high]
+  how_to/Macros.mon: 3 TODOs — Wisp form expansion (line 21),
+  wrong result in test 2 (line 49), and test 3 variadic recursive
+  =and= (line 64). All relate to incomplete macro expansion features.
+
+[OBS id:obs.todo-markers.additional.test-mon src:how_to/Test.mon:48,70 conf:high]
+  how_to/Test.mon: 2 TODOs — general placeholder (line 48) and
+  matrix literals (line 70).
+
+[OBS id:obs.todo-markers.additional.math-mon src:core/Math.mon:141 conf:high]
+  core/Math.mon line 141: =;; TODO Find a way to get rid of this i only want mod=
+  The =mod= function's implementation has an unwanted intermediate value.
+
+[OBS id:obs.todo-markers.additional.coll-mon src:core/prelude/Coll.mon:56,95,107 conf:high]
+  core/prelude/Coll.mon: 3 TODOs — test this (line 56), unit type ()
+  pointer and Wisp fix (line 95), move into Applicative and make
+  variadic (line 107).
+
+[OBS id:obs.todo-markers.additional.string-mon src:core/text/String.mon:80 conf:high]
+  core/text/String.mon line 80: =;; TODO It should be able to take String or Character as `b'=
+  The =replace= or similar function should accept both String and
+  Character as argument.
+
+[OBS id:obs.todo-markers.additional.assert-mon src:core/Assert.mon:1,5,9 conf:high]
+  core/Assert.mon: 3 TODOs — write description (line 1), keywords
+  (line 5), write commentary (line 9). The file is essentially a
+  stub.
+
+[OBS id:obs.todo-markers.additional.adt-mon src:how_to/AlgebraicDataTypes.mon:3,4,201,232,233,234,313,350,354,370 conf:high]
+  how_to/AlgebraicDataTypes.mon: ~10 TODOs — constraint propagation
+  (line 3), deriving Eq for non-nullary types (line 4), compile this
+  (line 201), force/ bubble / show bubble trace for ? (lines 232-234),
+  helpful message if :: missing (line 313), Wisp extension (line 350),
+  Pmatch BUG (line 370).
+
+[OBS id:obs.todo-markers.additional.refinement-mon src:how_to/RefinementType.mon:10,15,20,104 conf:high]
+  how_to/RefinementType.mon: 4 TODOs — catchall runtime error
+  handling (line 10), general (line 15), types as sets (line 20),
+  assert-compile-error for =ends-with?= type mismatch (line 104).
+
+[OBS id:obs.todo-markers.additional.syntax-mon src:how_to/Syntax.mon:48,61 conf:high]
+  how_to/Syntax.mon: 2 TODOs — Wisp form (line 48) and general (line 61).
+
+[OBS id:obs.todo-markers.additional.sdl-mon src:how_to/SdlSpeedrun.mon:18 conf:high]
+  how_to/SdlSpeedrun.mon line 18: TODO about ADTs that can map to C
+  enums for FFI interop.
+
+[OBS id:obs.todo-markers.additional.prelude-test-mon src:core/prelude/Test.mon:21,40,51 conf:high]
+  core/prelude/Test.mon: 3 TODOs — Wisp fix (line 21), general (line 40),
+  general (line 51).
+
+* Priority Summary
+:PROPERTIES:
+:ID: monadc.context.todo-markers.priority-summary
+:CUSTOM_ID: todo-priority-summary
+:CONTEXT_KIND: index
+:CONTEXT_DESCRIPTION: Priority assessment of all TODO/FIXME/HACK markers grouped by urgency.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c,runtime.c,reader.c,dep.c,ffi.c,env.c,buildsystem.c,runtime.h,macro.h,Main.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.todo-markers.priority.critical src:buildsystem.c:334 conf:high]
+  **Critical**: buildsystem.c:334 — compile function is a no-op stub.
+  The build system cannot compile anything. Blocks multi-module
+  compilation.
+
+[OBS id:obs.todo-markers.priority.high src:dep.c:2232,dep.c:3529,dep.c:1607,Main.mon:210,Main.mon:1100,Main.mon:909,Main.mon:860,Main.mon:992,Main.mon:1009,env.c:59,codegen.c:4102,reader.c:4813,macro.h:50,Main.mon:365,Main.mon:374,Main.mon:427,Main.mon:568,Main.mon:672,Main.mon:755 conf:high]
+  **High**:
+  - dep.c:2232 — Shadow pass invents holes for unbound globals (unsound)
+  - dep.c:3529 — Intentional term leak in dep_env_init
+  - dep.c:1607 — Pattern unification is stub-level (Idris 2 level needed)
+  - Main.mon:210 — Type error causes segfault instead of compile error
+  - env.c:59 — =llvm_name= memory leak
+  - codegen.c:4102 — Purity checking disabled
+  - reader.c:4813 — No lookahead for data type field shorthand
+  - macro.h:50 — =#()= quasi-output substitution incomplete
+  - Main.mon:365,374,427,568,672,755 — Dynamic arrays, Vector, Matrix,
+    Map, Set, Relation features planned but not implemented
+  - Main.mon:860,909,992,1009,1100 — Infix calls, parametric
+    polymorphism, list comprehensions, types-as-types, typed expressions
+
+[OBS id:obs.todo-markers.priority.medium src:buildsystem.c:244,runtime.c:1559,Main.mon:49,Main.mon:64,Main.mon:281,Main.mon:563,Main.mon:651,Main.mon:668,Main.mon:710,Main.mon:874,Main.mon:933,Main.mon:1060 conf:high]
+  **Medium**:
+  - buildsystem.c:244 — Dependency graph needs topological sort
+  - runtime.c:1559 — Bignum unboxing missing (latent)
+  - Main.mon:49 — Format-string show with multiple args
+  - Main.mon:64 — IF/PURE/REC annotations for recursion
+  - Main.mon:281 — Array display bug
+  - Main.mon:563,651,668,710,874,933,1060 — Various feature gaps
+
+[OBS id:obs.todo-markers.priority.low src:ffi.c:1583,runtime.h:154,codegen.c:11639,Main.mon:249 conf:high]
+  **Low**:
+  - ffi.c:1583 — Commented-out debug print
+  - runtime.h:154 — Undescribed struct field
+  - codegen.c:11639 — Generic stub in coercion path
+  - Main.mon:249 — Shadowing =symbol= builtin
+
+* Cross-References
+:PROPERTIES:
+:ID: monadc.context.todo-markers.cross-refs
+:CUSTOM_ID: todo-cross-refs
+:CONTEXT_KIND: index
+:CONTEXT_DESCRIPTION: Cross-references to every affected context file.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: various
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.todo-markers.codegen-ops from:obs.todo-markers.codegen.purity-check,obs.todo-markers.codegen.generic-stub conf:high]
+  connects-to -> `monadc.context.codegen-ops.architecture` (purity
+  checking is part of the dispatch architecture) ·
+  `monadc.context.codegen-ops.gaps` (the purity gap and coercion gap
+  are documented alongside the known strcmp dispatch gaps)
+
+[INF id:inf.todo-markers.dep from:obs.todo-markers.dep.pattern-unification,obs.todo-markers.dep.shadow-hack-globals,obs.todo-markers.dep.shadow-hack-term-leak conf:high]
+  connects-to -> `monadc.context.dep.nbe-kernel` (pattern unification
+  is part of the NbE conversion checker) ·
+  `monadc.context.dep.shadow-pass` (the SHADOW PASS HACKs are central
+  to the dual type system architecture)
+
+[INF id:inf.todo-markers.runtime from:obs.todo-markers.runtime.bignum-unboxing,obs.todo-markers.runtime-h.undescribed-field conf:high]
+  connects-to -> `monadc.context.runtime.value-system` (bignum unboxing
+  is an extension of the RuntimeValue unboxing infrastructure) ·
+  `monadc.context.runtime.collection-ops` (RuntimeSet documentation)
+
+[INF id:inf.todo-markers.reader from:obs.todo-markers.reader.lookahead conf:high]
+  connects-to -> `monadc.context.reader.data-types` (data type
+  declaration parsing and constructor shorthand)
+
+[INF id:inf.todo-markers.ffi from:obs.todo-markers.ffi.debug-stub conf:high]
+  connects-to -> `monadc.context.ffi.header-parsing` (FFI environment
+  injection path)
+
+[INF id:inf.todo-markers.env from:obs.todo-markers.env.llvm-name-leak conf:high]
+  connects-to -> `monadc.context.env.environment-lifecycle` (entry
+  freeing and memory management)
+
+[INF id:inf.todo-markers.buildsystem from:obs.todo-markers.buildsystem.dep-graph,obs.todo-markers.buildsystem.compile-stub conf:high]
+  connects-to -> `monadc.context.buildsystem.module-compilation`
+  (dependency resolution and compilation pipeline)
+
+[INF id:inf.todo-markers.macro from:obs.todo-markers.macro-h.hash-paren-substitution conf:high]
+  connects-to -> `monadc.context.macro.substitution` (macro expansion
+  and quasi-output)
+
+[INF id:inf.todo-markers.main-mon from:obs.todo-markers.main-mon.show-formatting,obs.todo-markers.main-mon.if-pure-rec,obs.todo-markers.main-mon.type-check-fail,obs.todo-markers.main-mon.symbol-define,obs.todo-markers.main-mon.array-show,obs.todo-markers.main-mon.dynamic-arrays,obs.todo-markers.main-mon.vector,obs.todo-markers.main-mon.matrix,obs.todo-markers.main-mon.filling,obs.todo-markers.main-mon.map-todo,obs.todo-markers.main-mon.zipmap,obs.todo-markers.main-mon.merge-with,obs.todo-markers.main-mon.set-todo,obs.todo-markers.main-mon.set-operations,obs.todo-markers.main-mon.relation,obs.todo-markers.main-mon.infix-fn-call,obs.todo-markers.main-mon.optional-params,obs.todo-markers.main-mon.parametric-polymorphism,obs.todo-markers.main-mon.asm-arm,obs.todo-markers.main-mon.list-comprehension,obs.todo-markers.main-mon.types-as-types,obs.todo-markers.main-mon.typed-expressions,obs.todo-markers.main-mon.todo-dotdot conf:high]
+  connects-to -> `monadc.context.language` (every Main.mon TODO
+  corresponds to a language feature in language.org) ·
+  `monadc.context.codegen-ops` (codegen gaps) ·
+  `monadc.context.philosophy` (aspirational features reflect the
+  language design philosophy)
+
+[INF id:inf.todo-markers.additional from:obs.todo-markers.additional.macros-mon,obs.todo-markers.additional.test-mon,obs.todo-markers.additional.math-mon,obs.todo-markers.additional.coll-mon,obs.todo-markers.additional.string-mon,obs.todo-markers.additional.assert-mon,obs.todo-markers.additional.adt-mon,obs.todo-markers.additional.refinement-mon,obs.todo-markers.additional.syntax-mon,obs.todo-markers.additional.sdl-mon,obs.todo-markers.additional.prelude-test-mon conf:high]
+  connects-to -> `monadc.context.macro` (Macros.mon) ·
+  `monadc.context.wisp` (Wisp-related TODOs in how_to/ and core/) ·
+  `monadc.context.language.primitive-set` (Set/Collection TODOs) ·
+  `monadc.context.language.refinement-types` (RefinementType.mon) ·
+  `monadc.context.dep` (AlgebraicDataTypes.mon type checker gaps) ·
+  `monadc.context.runtime` (runtime error handling in RefinementType)

@@ -1,0 +1,298 @@
+#+TITLE: Type Class System
+#+AUTHOR: Codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:typeclass:type:class:instance:dispatch:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.typeclass
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+#+TAGS: class(c) instance(i) method(m) dispatch(d) dict(D) registry(r)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.typeclass.file-metadata
+:CUSTOM_ID: typeclass-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: typeclass.h, typeclass.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.typeclass.file src:typeclass.h,typeclass.c conf:high]
+  This file records context about =typeclass.h= and =typeclass.c=.
+
+* Data Structures
+:PROPERTIES:
+:ID: monadc.context.typeclass.structs
+:CUSTOM_ID: typeclass-structs
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The four primary structs of the type class system: TCMethod (method signature), TCClass (class declaration with methods/defaults/assoc types), TCInstance (concrete instantiation with LLVM dict global), TypeClassRegistry (central registry of all classes and instances).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: typeclass.h:17-71,typeclass.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.typeclass.struct.tc-method src:typeclass.h:17-20 conf:high]
+  =TCMethod= — A single method signature with =name= (e.g. "=") and =type_str=
+  (e.g. "a -> a -> Bool"). Stored in =TCClass.methods= array.
+
+[OBS id:obs.typeclass.struct.tc-class src:typeclass.h:27-37,typeclass.c:144-188 conf:high]
+  =TCClass= — A type class declaration. Fields: =name= ("Eq"), =type_var= ("a"),
+  =assoc_types= (associated type names e.g. ["Result"]), =methods= (method
+  signatures), =default_names= and =default_bodies= (AST lambda bodies for
+  methods with default implementations). Populated by =tc_register_class=.
+
+[OBS id:obs.typeclass.struct.tc-instance src:typeclass.h:46-56,typeclass.c:258-503 conf:high]
+  =TCInstance= — A concrete instance of a class for a specific type. Fields:
+  =class_name= ("Monad"), =type_name= ("Maybe"), =assoc_names/assoc_values=
+  (associated type bindings), =dict_global= (LLVM global struct of function
+  pointers named =__dict_Class_Type=), =method_names=, =method_funcs= (LLVM
+  functions implementing each method). Populated by =tc_register_instance=.
+
+[OBS id:obs.typeclass.struct.registry src:typeclass.h:64-71,typeclass.c:11-17 conf:high]
+  =TypeClassRegistry= — Central registry holding dynamic arrays of =TCClass=
+  and =TCInstance=. One instance lives on =CodegenContext= and persists across
+  REPL modules. Created by =tc_registry_create=, freed by =tc_registry_free=.
+
+* Lifecycle Functions
+:PROPERTIES:
+:ID: monadc.context.typeclass.lifecycle
+:CUSTOM_ID: typeclass-lifecycle
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Registry creation and teardown: tc_registry_create allocates the struct with initial capacities, tc_registry_free deep-frees all classes, instances, and their owned string/pointer fields.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: typeclass.c:11-60
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.typeclass.lifecycle.create src:typeclass.c:11-18 conf:high]
+  =tc_registry_create()= → =TypeClassRegistry *= — Allocates registry with
+  =class_cap=8= and =instance_cap=16=.
+
+[OBS id:obs.typeclass.lifecycle.free src:typeclass.c:20-60 conf:high]
+  =tc_registry_free(reg)= — Frees all classes (names, type vars, assoc types,
+  method names/type_strs, default names/bodies via =ast_free=) and all instances
+  (class/type names, assoc names/values, method names/funcs arrays), then frees
+  the registry struct itself.
+
+* Class Registration
+:PROPERTIES:
+:ID: monadc.context.typeclass.class-reg
+:CUSTOM_ID: typeclass-class-registration
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: tc_register_class records a class declaration from AST_CLASS into the registry, copying method signatures, associated types, and default implementations.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: typeclass.c:144-188
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.typeclass.class-reg.fn src:typeclass.c:144-188 conf:high]
+  =tc_register_class(reg, ast)= — Called when =AST_CLASS= is encountered during
+  codegen (=codegen.c:13061=). Validates =ast->type == AST_CLASS=, grows the
+  registry if needed, copies =name=, =type_var=, =assoc_types=, =methods= (name
+  + type_str), and =default_names/bodies= (deep-cloned ASTs). Prints diagnostic
+  output showing class name, methods, and defaults.
+
+* Instance Registration and Dictionary Construction
+:PROPERTIES:
+:ID: monadc.context.typeclass.instance-reg
+:CUSTOM_ID: typeclass-instance-registration
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: tc_register_instance compiles instance method bodies, builds the LLVM dictionary struct global with function pointers, and registers methods in the env for direct dispatch.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: typeclass.c:258-503
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.typeclass.instance-reg.fn src:typeclass.c:258-503 conf:high]
+  =tc_register_instance(reg, ast, ctx)= = — Called when =AST_INSTANCE= is
+  encountered (=codegen.c:13068=). Three-step process:
+  1. Compile each method: look up body in AST, fall back to default, clone lambda,
+     substitute type variables with concrete types (=type_var= → =type_name=,
+     =assoc_names= → =assoc_values=), parse function signature via
+     =my_type_parse_fn_arrow=, annotate lambda params, compile via =codegen_expr=
+     as =(define __impl_Class_Type_method lambda)=, store in =method_funcs=.
+  2. Build dictionary global: get or create =__dict_Class_Type= LLVM global struct
+     of =method_count= function pointers. Bitcast each method function to =i8*= and
+     store at the appropriate GEP slot.
+  3. Register in env: for each compiled method, insert an =ENV_FUNC= entry (2-param
+     closure ABI, types unknown) so =tc_is_method= dispatch works.
+
+* Lookup and Dispatch
+:PROPERTIES:
+:ID: monadc.context.typeclass.lookup
+:CUSTOM_ID: typeclass-lookup
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Class/instance lookup functions (tc_find_class, tc_find_instance) and method dispatch (tc_get_method, tc_is_method, tc_method_class) enabling compile-time resolution of type class method calls.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: typeclass.c:77-107,510-521
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.typeclass.lookup.find-class src:typeclass.c:77-82 conf:high]
+  =tc_find_class(reg, class_name)= → =TCClass *= — Linear search of registry
+  classes by =name=. Returns NULL if not found.
+
+[OBS id:obs.typeclass.lookup.find-instance src:typeclass.c:84-93 conf:high]
+  =tc_find_instance(reg, class_name, type_name)= → =TCInstance *= — Linear
+  search of registry instances by =class_name= AND =type_name=. Returns NULL if
+  not found.
+
+[OBS id:obs.typeclass.lookup.get-method src:typeclass.c:510-521 conf:high]
+  =tc_get_method(reg, class_name, type_name, method_name, ctx)= → =LLVMValueRef=
+  — Finds the instance, then iterates =method_names= to return the matching
+  =method_funcs[]. Used for statically-known type dispatch.
+
+[OBS id:obs.typeclass.lookup.type-name-from-llvm src:typeclass.c:523-537 conf:high]
+  =tc_type_name_from_llvm(val)= → =const char *= — Infers type name from LLVM
+  type kind: =Double= → "Float", =Float= → "Float", =Integer= width 1/32/64 →
+  "Bool"/"Int", =Pointer= → NULL (heap-allocated). Used for typeclass dispatch
+  on bare LLVM values.
+
+[OBS id:obs.typeclass.lookup.get-dict src:typeclass.c:539-557 conf:high]
+  =tc_get_dict(reg, class_name, type_name, ctx)= → =LLVMValueRef= — Returns
+  the =__dict_Class_Type= global from the registry. Re-declares in the current
+  LLVM module if not yet present (for REPL cross-module use).
+
+[OBS id:obs.typeclass.lookup.is-method src:typeclass.c:95-97 conf:high]
+  =tc_is_method(reg, method_name)= → =bool= — Returns true if =method_name= is
+  declared in any registered class. Delegates to =tc_method_class=.
+
+[OBS id:obs.typeclass.lookup.method-class src:typeclass.c:99-107 conf:high]
+  =tc_method_class(reg, method_name)= → =const char *= — Linear scan of all
+  registered classes and their methods. Returns the owning =class_name= string
+  or NULL.
+
+* Dictionary Type and Name Generation
+:PROPERTIES:
+:ID: monadc.context.typeclass.dict
+:CUSTOM_ID: typeclass-dict
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: LLVM dictionary struct type creation (tc_dict_type) and mangled name helpers (tc_dict_name, tc_method_name) for the global dictionary dispatch mechanism.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: typeclass.c:64-73,115-136
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.typeclass.dict.type src:typeclass.c:115-136 conf:high]
+  =tc_dict_type(reg, class_name, ctx)= → =LLVMTypeRef= — Creates or retrieves
+  a cached LLVM named struct ="dict.ClassName"= with one =i8*= function pointer
+  field per method. All methods are erased to =ptr= for uniform struct layout.
+
+[OBS id:obs.typeclass.dict.name src:typeclass.c:64-67 conf:high]
+  =tc_dict_name(class_name, type_name, out, out_size)= — Writes
+  ="__dict_ClassName_TypeName"= into the output buffer, e.g.
+  ="__dict_Eq_TrafficLight"=.
+
+[OBS id:obs.typeclass.dict.method-name src:typeclass.c:69-73 conf:high]
+  =tc_method_name(class_name, type_name, method_name, out, out_size)= — Writes
+  ="__impl_ClassName_TypeName_method"= into the output buffer, e.g.
+  ="__impl_Eq_TrafficLight_eq"=.
+
+* Dictionary Dispatch Mechanism
+:PROPERTIES:
+:ID: monadc.context.typeclass.dispatch-mechanism
+:CUSTOM_ID: dispatch-mechanism
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The LLVM global struct-of-function-pointers dispatch mechanism: each instance produces a __dict_* global, method calls resolve at compile time via env-lookup or at runtime via dict-passing.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: typeclass.c:426-467,codegen.c:8905-9121,9653-9724,10291-10355
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.typeclass.dispatch.dict-global src:typeclass.c:438-467 conf:high]
+  The dictionary is an LLVM global variable of the struct type
+  ="dict.ClassName"=. Each slot is initialized with =LLVMBuildBitCast= of the
+  method function (from any calling convention to =i8*=). GEP + Store writes
+  each function pointer into the struct.
+
+[OBS id:obs.typeclass.dispatch.strcmp-dispatch src:codegen.c:8905-9121 conf:high]
+  Typeclass dispatch in codegen's strcmp handler (layers 2/3) works as follows:
+  1. Check if the operation symbol (=op=) is a known method via =tc_method_class=.
+  2. If so, attempt to determine the concrete type from argument types.
+  3. Find the instance via =tc_find_instance= and the method via =tc_get_method=.
+  4. If the type is polymorphic and no instance is resolvable, emit an error
+     referencing the missing instance.
+
+[INF id:inf.typeclass.lang-connects from:obs.typeclass.struct.tc-class,obs.typeclass.struct.tc-instance,obs.typeclass.lookup.find-class,obs.typeclass.lookup.find-instance conf:high]
+  connects-to -> `monadc.context.language.construct.class` (AST_CLASS node
+  parsed and carried to codegen where tc_register_class processes it) ·
+  `monadc.context.language.construct.instance` (AST_INSTANCE node parsed and
+  carried to codegen where tc_register_instance processes it) ·
+  `monadc.context.codegen-ops.comparison` (tc_is_method hook in comparison ops
+  at codegen.c:8907 enables typeclass dispatch for =/= = !=) ·
+  `monadc.context.codegen-ops.misc` (dot access dispatches through
+  typeclass-aware code paths) ·
+  `monadc.context.source-map.typeclass` (source-file-level typeclass map)
+
+[INF id:inf.typeclass.env-connects from:obs.typeclass.instance-reg.fn,obs.typeclass.lookup.method-class conf:high]
+  connects-to -> `monadc.context.codegen-ops.architecture` (strcmp dispatch at
+  layer 2 checks =tc_is_method= to resolve class method calls to instance
+  implementations) ·
+  `monadc.context.env.type` (method names are registered as =ENV_FUNC= entries
+  during instance registration, enabling direct symbol-based dispatch)

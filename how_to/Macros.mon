@@ -18,7 +18,6 @@
 define when :: condition . body -> Syntax
   if condition (begin . body)
 
-
 ;; ;; TODO Wisp form
 
 
@@ -91,20 +90,8 @@ layout Vec2 [x :: Int] [y :: Int]
 
 define swap-components [v -> Vec2]
   let [tmp v.x]
-    set! v.x v.y
-    set! v.y tmp
-
-
-
-
-
-
-
-
-
-
-
-
+    v.x <- v.y
+    v.y <- tmp
 
 
 

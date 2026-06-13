@@ -1,0 +1,398 @@
+#+TITLE: CLI Argument Parser
+#+AUTHOR: codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:cli:command-line:flags:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.cli
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC THINK
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.cli.file-metadata
+:CUSTOM_ID: cli-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: cli.h,cli.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.cli.file src:cli.h,cli.c conf:high]
+  The CLI argument parser maps command-line arguments to a =CompilerFlags=
+  struct and dispatches to the appropriate command handler. Header at
+  =cli.h=, implementation in =cli.c= (≈730 lines). All =cmd_*= functions
+  live in =cli.c= and delegate to the build system or the compiler
+  pipeline in =main.c=.
+
+[INF id:inf.cli.file-connect from:obs.cli.file conf:high]
+  connects-to -> `monadc.context.main` (pipeline dispatch after flag parsing) ·
+  `monadc.context.buildsystem` (cmd_build/cmd_run/cmd_clean delegate to
+  build resolver + do_build)
+
+* CommandMode Enum
+:PROPERTIES:
+:ID: monadc.context.cli.command-mode
+:CUSTOM_ID: cli-command-mode
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The CommandMode enum selecting the compiler's operating mode
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: cli.h:5-14
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.cli.cmd-compile src:cli.h:6 conf:high]
+  =CMD_COMPILE= — Compile a single source file to object code (or emit
+  IR/asm/JSON as specified by flags). The default mode when no subcommand
+  is given and a file argument is present.
+
+[OBS id:obs.cli.cmd-repl src:cli.h:7 conf:high]
+  =CMD_REPL= — Launch the interactive REPL. Selected by =monad repl=
+  or =monad= with no arguments.
+
+[OBS id:obs.cli.cmd-new src:cli.h:8 conf:high]
+  =CMD_NEW= — Scaffold a new Monad project directory with
+  =monad.json=, default source layout, and gitignore. Selected by
+  =monad new <name>=.
+
+[OBS id:obs.cli.cmd-build src:cli.h:9 conf:high]
+  =CMD_BUILD= — Build the project in the current or specified directory.
+  Resolves the build configuration from =monad.json=, compiles all
+  sources, and links the output binary. Selected by =monad build=.
+
+[OBS id:obs.cli.cmd-run src:cli.h:10 conf:high]
+  =CMD_RUN= — Builds and runs the project binary. Selected by
+  =monad run [-- args...]=.
+
+[OBS id:obs.cli.cmd-clean src:cli.h:11 conf:high]
+  =CMD_CLEAN= — Removes all build artifacts (object files, output binary,
+  temporary files) from the project directory. Selected by =monad clean=.
+
+[OBS id:obs.cli.cmd-install src:cli.h:12 conf:high]
+  =CMD_INSTALL= — Builds and copies the project binary to a system
+  location (e.g. =~/.local/bin=). Selected by =monad install=.
+
+[OBS id:obs.cli.cmd-test src:cli.h:13 conf:high]
+  =CMD_TEST= — Compiles and runs test blocks. When =test_run= is set,
+  deletes the test binary after execution. Selected by =monad test
+  [file]=.
+
+* CompilerFlags Struct
+:PROPERTIES:
+:ID: monadc.context.cli.compiler-flags
+:CUSTOM_ID: cli-compiler-flags
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The CompilerFlags struct aggregating all parsed CLI options
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: cli.h:16-29
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.cli.flags-mode src:cli.h:17 conf:high]
+  =mode= (CommandMode) — The selected subcommand.
+
+[OBS id:obs.cli.flags-emit-ir src:cli.h:18 conf:high]
+  =emit_ir= (bool) — Emit LLVM IR (.ll) output. Set by =--emit-ir=.
+
+[OBS id:obs.cli.flags-emit-bc src:cli.h:19 conf:high]
+  =emit_bc= (bool) — Emit LLVM bitcode (.bc) output. Set by =--emit-bc=.
+
+[OBS id:obs.cli.flags-emit-asm src:cli.h:20 conf:high]
+  =emit_asm= (bool) — Emit assembly (.s) output. Set by =--emit-asm=.
+
+[OBS id:obs.cli.flags-emit-obj src:cli.h:21 conf:high]
+  =emit_obj= (bool) — Emit object file (.o) output. Default when
+  compiling.
+
+[OBS id:obs.cli.flags-emit-json src:cli.h:22 conf:high]
+  =emit_json= (bool) — Emit JSON AST dump. Set by =--emit-json=.
+
+[OBS id:obs.cli.flags-emit-typst src:cli.h:23 conf:high]
+  =emit_typst= (bool) — Emit Typst-formatted output. Set by =--emit-typst=.
+
+[OBS id:obs.cli.flags-start-repl src:cli.h:24 conf:high]
+  =start_repl= (bool) — Start REPL after compiling input file. Set by
+  =--repl= or =--interactive=.
+
+[OBS id:obs.cli.flags-test-mode src:cli.h:24 conf:high]
+  =test_mode= (bool) — Emit test blocks during compilation. Set by
+  =--test= or =--test-mode=.
+
+[OBS id:obs.cli.flags-test-run src:cli.h:25 conf:high]
+  =test_run= (bool) — Run tests and delete the test binary after
+  execution. Set by =monad test= subcommand.
+
+[OBS id:obs.cli.flags-output-name src:cli.h:26 conf:high]
+  =output_name= (char *) — Output file name. Set by =--output= or =-o=.
+
+[OBS id:obs.cli.flags-input-file src:cli.h:27 conf:high]
+  =input_file= (char *) — Input source file path.
+
+[OBS id:obs.cli.flags-package-name src:cli.h:28 conf:high]
+  =package_name= (char *) — Package name for =monad new=. Set by the
+  positional argument to =new=.
+
+* Core CLI Functions
+:PROPERTIES:
+:ID: monadc.context.cli.core-functions
+:CUSTOM_ID: cli-core-functions
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: All public and static functions in cli.c
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: cli.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.cli.print-usage src:cli.c:169 conf:high]
+  =void print_usage(const char *prog)= — Prints the full usage message
+  to stdout, listing all subcommands and flags. Called from =parse_flags=
+  when =--help= or =-h= is given, and from =main= when no valid command
+  is provided.
+
+[OBS id:obs.cli.parse-flags src:cli.c:193 conf:high]
+  =CompilerFlags parse_flags(int argc, char **argv)= — The main flag
+  parser. Walks =argv=, recognizes long options (=--emit-ir=,
+  =--emit-json=, =--test-mode=, =--repl=, etc.), short options (=-o=,
+  =-h=), and subcommands (=build=, =run=, =new=, =clean=, =install=,
+  =test=, =repl=). Returns a fully populated =CompilerFlags= struct.
+  Prints usage and calls =exit(0)= on =--help=.
+
+[OBS id:obs.cli.base-executable-name src:cli.c:284 conf:high]
+  =char *get_base_executable_name(const char *path)= — Extracts the base
+  executable name from a path (e.g. =/usr/bin/monadc= → =monadc=). Used
+  in usage messages and build directory naming.
+
+* Command Handlers
+:PROPERTIES:
+:ID: monadc.context.cli.command-handlers
+:CUSTOM_ID: cli-command-handlers
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: All cmd_* functions implementing monad subcommands
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: cli.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.cli.cmd-new src:cli.c:292 conf:high]
+  =void cmd_new(const char *package_name)= — Scaffolds a new Monad
+  project. Creates directory structure (=src/=, =lib/=), writes a
+  =monad.json= manifest with metadata from =git config=, and writes
+  a default =src/main.monad= entry point. Uses static helpers
+  =make_dir=, =write_file=, =git_config=, =current_year=.
+
+[OBS id:obs.cli.cmd-build src:cli.c:520 conf:high]
+  =void cmd_build(void)= — Top-level build command. Calls
+  =resolve_build_info= (line 415) to parse =monad.json= and locate
+  sources, then =do_build= (line 505) which invokes =compile_one= from
+  =main.c= on each source file and links the resulting objects with the
+  Monad runtime into an executable.
+
+[OBS id:obs.cli.cmd-run src:cli.c:536 conf:high]
+  =void cmd_run(void)= — Builds (via =cmd_build= internally through
+  =do_build=) and executes the resulting binary. Looks up the executable
+  path from the build info and runs it with any additional arguments.
+
+[OBS id:obs.cli.cmd-clean src:cli.c:593 conf:high]
+  =void cmd_clean(void)= — Removes build artifacts: object files
+  (via =clean_ext_in_dir=), the output binary, and the =target/=
+  directory (via =rmdir_recursive=). Walks all source directories
+  to find and remove =.o= files.
+
+[OBS id:obs.cli.cmd-install src:cli.c:620 conf:high]
+  =void cmd_install(void)= — Builds the project then copies the output
+  binary to =~/.local/bin= (or =$PREFIX/bin= if set). Creates the target
+  directory if it does not exist.
+
+[OBS id:obs.cli.cmd-test src:cli.c:675 conf:high]
+  =void cmd_test(const char *input_file)= — Compiles the given input
+  file (or project) with =test_mode= enabled, runs the resulting test
+  binary, and (when =test_run=) deletes it after execution.
+
+* Static Helpers
+:PROPERTIES:
+:ID: monadc.context.cli.static-helpers
+:CUSTOM_ID: cli-static-helpers
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Internal utility functions used by command handlers
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: cli.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.cli.make-dir src:cli.c:15 conf:high]
+  =static void make_dir(const char *path)= — Creates a directory (and
+  parents) with =mkdir -p= via =system()=.
+
+[OBS id:obs.cli.write-file src:cli.c:22 conf:high]
+  =static void write_file(const char *path, const char *content)= —
+  Writes content to a file. Used by =cmd_new= to scaffold project files.
+
+[OBS id:obs.cli.git-config src:cli.c:29 conf:high]
+  =static char *git_config(const char *key)= — Reads a git config value
+  (e.g. =user.name=) by spawning =git config --get=. Used by =cmd_new= to
+  populate author fields in =monad.json=.
+
+[OBS id:obs.cli.current-year src:cli.c:42 conf:high]
+  =static char *current_year(void)= — Returns the current year as a
+  string. Used in license/copyright boilerplate during =cmd_new=.
+
+[OBS id:obs.cli.read-file-str src:cli.c:50 conf:high]
+  =static char *read_file_str(const char *path)= — Reads the entire
+  content of a file into a malloc'd string. Used by the YAML helpers.
+
+[OBS id:obs.cli.yaml-scalar src:cli.c:61 conf:high]
+  =static char *yaml_scalar(const char *content, const char *key)= —
+  Parses a YAML scalar value for a given key from =monad.json=. Used
+  by the build info resolver.
+
+[OBS id:obs.cli.yaml-list src:cli.c:87 conf:high]
+  =static char **yaml_list(const char *content, const char *key,
+  int *count)= — Parses a YAML list value for a given key. Used to
+  extract source file lists and executable definitions from =monad.json=.
+
+[OBS id:obs.cli.yaml-exe-field src:cli.c:121 conf:high]
+  =static char *yaml_exe_field(const char *content, const char *exe_name,
+  const char *field)= — Extracts a specific field from an executable
+  definition in the YAML build config.
+
+[OBS id:obs.cli.yaml-first-exe src:cli.c:151 conf:high]
+  =static char *yaml_first_exe(const char *content)= — Gets the name of
+  the first executable defined in =monad.json=.
+
+* Build Resolution
+:PROPERTIES:
+:ID: monadc.context.cli.build-resolution
+:CUSTOM_ID: cli-build-resolution
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Build info resolution from monad.json manifest
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: cli.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.cli.file-has-main-module src:cli.c:358 conf:high]
+  =static bool file_has_main_module(const char *path)= — Scans a source
+  file for a =main= module definition. Used by =find_main_recursive=.
+
+[OBS id:obs.cli.find-main-recursive src:cli.c:379 conf:high]
+  =static char *find_main_recursive(const char *dir)= — Recursively
+  searches a directory tree for a file containing a =main= module.
+  Returns the path or NULL.
+
+[OBS id:obs.cli.resolve-build-info src:cli.c:415 conf:high]
+  =static BuildInfo resolve_build_info(void)= — Reads =monad.json= from
+  the current directory, parses sources, executables, dependencies, and
+  build configuration. Returns a =BuildInfo= struct.
+
+[OBS id:obs.cli.build-info-free src:cli.c:499 conf:high]
+  =static void build_info_free(BuildInfo *bi)= — Frees all memory owned
+  by the =BuildInfo= struct.
+
+[OBS id:obs.cli.do-build src:cli.c:505 conf:high]
+  =static int do_build(const BuildInfo *bi)= — The core build
+  orchestrator. For each executable defined in the build info,
+  compiles all source files via =compile_one= (in =main.c=) and links
+  them with the Monad runtime into the output binary.
+
+* Cross-References
+:PROPERTIES:
+:ID: monadc.context.cli.cross-refs
+:CUSTOM_ID: cli-cross-refs
+:CONTEXT_KIND: references
+:CONTEXT_DESCRIPTION: Links to related context files and source locations
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: cli.h,cli.c,main.c
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.cli.cross-refs from:obs.cli.file conf:high]
+  connects-to ->
+  `monadc.context.main` (compile_one pipeline, main dispatch) ·
+  `monadc.context.buildsystem` (BuildInfo, build resolution,
+  monad.json schema) ·
+  `monadc.context.repl` (CMD_REPL → repl_run) ·
+  `monadc.context.codegen-ops` (emit flags control codegen output) ·
+  `monadc.context.runtime` (runtime linking in do_build)
+
+[THINK id:think.cli.flag-proliferation from:obs.cli.parse-flags conf:medium]
+  The number of emit flags is growing. Consider grouping them into a
+  bitmask or a sub-struct. The =start_repl= flag mixed with emit flags
+  is a design smell — it controls behavior, not output format.

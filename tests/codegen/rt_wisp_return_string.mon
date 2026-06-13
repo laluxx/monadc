@@ -4,6 +4,13 @@
 ;; TEST-ATOM: define return-string -> String "ciao" defines a function returning "ciao".
 ;; TEST-EXPECT: compile, run
 
-(module Main)
-(define return-string -> String "ciao")
-(show return-string)
+module Main
+
+(define return-string -> String
+  "the")
+
+define return-string-wisp -> String
+  "same"
+
+show return-string
+show return-string-wisp

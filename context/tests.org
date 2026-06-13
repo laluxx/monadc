@@ -14,7 +14,7 @@
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -669,7 +669,7 @@ assertions directly instead of requiring hand-written shell checks per fixture.
     Reduction: 4 test-specific fixes + 3 other pre-existing tests now passing.
     All 31 new tests in codegen/ PASS. No regressions introduced.
 
-[OBS id:obs.tests.wisp-sugar-affects-predicates-2026-06-12 src:reader/wisp conf:medium]
+[OBS id:obs.tests.wisp-sugar-affects-predicates-2026-06-12 src:wisp.c conf:medium]
     Wisp ?-sugar transforms (contains? var arg) → (var contains? arg) when var is
     an identifier, treating it as method-call sugar. This breaks (contains? s1 1)
     for set variables. Workaround: inline the set construction (contains? (conj {} 1) 1)
@@ -866,3 +866,36 @@ assertions directly instead of requiring hand-written shell checks per fixture.
 [OBS id:obs.tests.wisp-parenthesized-signature src:tests/codegen/rt_wisp_define_parenthesized_signature.mon conf:high]
   =tests.codegen.rt-wisp-define-parenthesized-signature= prevents regression of
   bare Wisp =define (name [p : T] -> R)= headers with indented pattern clauses.
+
+* Connections
+:PROPERTIES:
+:ID: monadc.context.tests.connections
+:CUSTOM_ID: tests-connections
+:CONTEXT_KIND: inference
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.tests.connects-to from:obs.tests.purpose conf:high]
+  connects-to -> `monadc.context.tests-arch` (tests.org is the metadata/schema
+  file; tests-arch.org is the full architecture of 923 test files) ·
+  `monadc.context.codegen-ops` (each rt_*.mon test exercises a codegen
+  dispatch handler and validates output against .stdout) ·
+  `monadc.context.reader` (reader-atoms.tsv, reader-sugars.tsv corpora test
+  reader edge cases) ·
+  `monadc.context.wisp` (wisp tests exercise Wisp expansion paths) ·
+  `monadc.context.asm` (60 asm/ test pairs exercise inline assembly) ·
+  `monadc.context.types` (tests exercise all 40 TypeKind values through
+  codegen) ·
+  `monadc.context.ffi` (C FFI tests validate header parsing and call
+  generation) ·
+  `monadc.context.typeclass` (type class instance dispatch tests) ·
+  `monadc.context.module` (module/import resolution tests)

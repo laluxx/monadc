@@ -1,0 +1,276 @@
+#+TITLE: Ideas and Proposals
+#+AUTHOR: human+llm
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:ideas:proposals:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.ideas.file-metadata
+:CUSTOM_ID: ideas-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/ideas.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.ideas.file src:context/ideas.org conf:high]
+  This file records design ideas and language feature proposals. Each idea is a
+  well-formed proposal with a rationale, an implementation sketch, and known
+  concerns. Ideas follow a natural lifecycle: IDEA → THINK (analysis) →
+  DEC (accept/reject) or IDEA → TODO (commit to implement) → DONE. This file
+  is where ideas live before they mature into decisions or work items.
+
+* Idea Lifecycle
+:PROPERTIES:
+:ID: monadc.context.ideas.lifecycle
+:CUSTOM_ID: idea-lifecycle
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/ideas.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.context.ideas.lifecycle date:2026-06-13 by:human+llm]
+  Ideas have a natural maturation lifecycle:
+
+  1. **IDEA** — A concrete proposal is recorded with author, date, rationale,
+     implementation sketch, and known concerns. No commitment. Multiple ideas
+     may compete.
+  2. **THINK** — Analysis phase: the idea is explored, compared, evaluated.
+     Observations about feasibility, cost, and interaction with existing
+     features are recorded. An idea may stay in THINK indefinitely.
+  3. **DEC** — A decision is made: accept (→ TODO) or reject (→ SUPERSEDED).
+     The DEC record explains why.
+  4. **TODO** — Someone commits to implement. The idea becomes a tracked work
+     item in todo.org.
+  5. **DONE** — Implemented. The idea becomes part of the language.
+
+  An IDEA record should link to related OBS (existing behavior it builds on),
+  DEC (decisions it interacts with), and THINK (speculative analysis). When an
+  IDEA matures to TODO, the todo.org entry links back to the idea.
+
+* Fixed-Address Buffer Placement
+:PROPERTIES:
+:ID: monadc.context.ideas.fixed-address-buffer
+:CUSTOM_ID: fixed-address-buffer
+:CONTEXT_KIND: idea
+:CONTEXT_DESCRIPTION: Proposal: allow defining buffers at fixed memory addresses using `define buffer :: [16k] -> 0xFFFFFF` syntax, with automatic linker section placement.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: speculative
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: medium
+:END:
+
+[IDEA id:idea.language.fixed-address-buffer author:human date:2026-06-13]
+  Proposal: `define buffer :: [16k] -> 0xFFFFFF` to specify the exact memory
+  address where a buffer should be placed. The `-> address` suffix on a
+  definition specifies the virtual address where the global allocation lands.
+
+[OBS id:obs.ideas.fixed-address-use-cases src:user-request conf:high]
+  Fixed-address allocation is needed for:
+  - MMIO registers at hardware-defined addresses (embedded, OS dev)
+  - Page tables, GDT/IDT, interrupt vectors at architecturally-mandated
+    addresses (x86-64 OS development)
+  - DMA buffers at addresses known to peripheral hardware
+  - Shared memory segments between processes at a predetermined address
+  - Cache-line-controlled buffers where address bits select cache partition
+
+[THINK id:think.ideas.fixed-address-implementation conf:medium]
+  Implementation sketch at the LLVM level:
+  - Emit each fixed-address global into a specially-named section
+    `.fixed.0xFFFFFF` (the address encoded in the section name).
+  - Generate an auxiliary linker script that maps each `.fixed.*` section
+    to its absolute address using the `AT()` directive or by creating an
+    output section at the specific address: `. = 0xFFFFFF; .fixed : { *(.fixed.0xFFFFFF) }`.
+  - Alternatively, use `__attribute__((section(".fixed")))` + a linker script
+    that places `.fixed` at the requested address. A single section with
+    per-variable address metadata in a companion data structure is cleaner
+    than one section per address.
+  - Alternative approach: emit a `GlobalVariable` with initializer and use
+    LLVM `__attribute__((address_space(N)))` where N encodes the fixed
+    address. This avoids linker scripts but is platform-specific.
+  - At parse time: extend the `define` reader to accept `-> hex-literal`
+    after the type annotation. Store the address in a new AST field.
+  - At codegen time: when the address field is set, emit into a fixed
+    section and register the address for the linker script generator.
+
+[THINK id:think.ideas.fixed-address-pie-concern conf:medium]
+  The no-PIE flag concern has two sides. On one hand, PIE is a security
+  boundary (ASLR), and silently disabling it for any use of fixed addresses
+  weakens security for programs that only need one or two fixed mappings
+  (e.g., an MMIO register in an otherwise position-independent binary). On
+  the other hand, having the user manually pass `-no-pie` is poor ergonomics
+  — the compiler knows when it emits fixed addresses and should guide the
+  user. The pragmatic middle ground: emit a compiler warning/error that says
+  "fixed-address buffer requires the linker to place it; pass --fixed-addresses
+  or use a linker script" and provide a compiler flag that explicitly enables
+  the feature, which internally passes the needed linker flags. This keeps
+  the safety decision explicit while still making it convenient.
+
+[THINK id:think.ideas.fixed-address-syntax conf:medium]
+  Two syntax candidates:
+
+  1. `define buffer :: [16k] -> 0xFFFFFF` — the `->` reads as "placed at"
+     and reuses the arrow token. It creates a potential ambiguity: does
+     `define f :: Int -> Int -> 0xFFFFFF` mean a function `Int → Int` at
+     address 0xFFFFFF, or a function `Int → (Int → 0xFFFFFF)`? The parser
+     would need to disambiguate by context (a literal hex number after
+     `->` in a define's type position is the address, not a return type).
+
+  2. `define [buffer :: [16k] :: 0xFFFFFF]` — extends the existing `::`
+     annotation chain: `:: Type` for the type, `:: address` for placement.
+     This is syntactically unambiguous: every `::` after the first type
+     is an attribute (address, alignment, section, etc.). More extensible
+     for future placement attributes like `:: .bss` or `:: align 64`.
+
+  The user's `->` syntax is more visually direct. The `::` syntax is more
+  extensible and unambiguous. Either can work; the decision affects the
+  reader (reader.c) and the define codegen path (codegen.c).
+
+[INF id:inf.ideas.fixed-address-connects-to from:idea.language.fixed-address-buffer,obs.ideas.fixed-address-use-cases,think.ideas.fixed-address-implementation,think.ideas.fixed-address-pie-concern,think.ideas.fixed-address-syntax conf:medium]
+  connects-to -> `monadc.context.language.constructs.binding` (define is the
+  binding form that would carry the address annotation) ·
+  `monadc.context.language.constructs.structural` (address-of is the existing
+  pointer-address construct; fixed-address buffers are its converse: named
+  allocations at known addresses) ·
+  `monadc.context.language.compilation-pipeline` (Phase 11 emit object file;
+  a linker script generation phase would slot in after it) ·
+  `monadc.context.language.inline-asm` (inline assembly often needs to know
+  buffer addresses for syscall arguments; fixed addresses eliminate runtime
+  address resolution) ·
+  `monadc.context.references.propositions-as-types` (a buffer at a fixed
+  address is a dependent type: `Buffer :: (size: Nat) × (addr: Ptr)`, where
+  the address is a compile-time constant)
+
+[IDEA id:idea.language.fixed-address-buffer-resolved date:2026-06-13 by:human+llm]
+  This idea is open for analysis. Candidates for next step:
+  - Expand into a THINK record with implementation feasibility study
+    (linker script generation, object file format interaction)
+  - If accepted, create TODO to implement fixed-address syntax + linker
+    script generator in codegen.c / a new linker.c module
+  - If rejected, mark SUPERSEDED and document why (e.g., "too platform-specific,
+    defer to extern C FFI with inline assembly")
+
+* Quoted Forms and Evaluation Judgments
+:PROPERTIES:
+:ID: monadc.context.ideas.quoted-eval-judgment
+:CUSTOM_ID: quoted-eval-judgment
+:CONTEXT_KIND: idea
+:CONTEXT_DESCRIPTION: Proposal: optional quoted forms ⌜expr⌝ for compile-time evaluation intent, and ::: triple-colon as an evaluation judgment operator that asserts a truth at compile time.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: speculative
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: medium
+:END:
+
+[IDEA id:idea.language.quoted-eval author:human date:2026-06-13]
+  Proposal: quoted forms using Unicode corner brackets `⌜expr⌝` should be
+  optional — not mandatory — but good practice to express compile-time
+  evaluation intent. The compiler constant-folds when possible; quoted
+  forms work at runtime otherwise.
+
+  Examples:
+  ```
+  3x + 2x = 150 => x
+  ⌜3x + 2x⌝ = 150 => x
+  ```
+
+  Both should work. The quoted form is an annotation that says "I intend
+  this to be computed at compile time." The compiler is free to constant-fold
+  even without the quote, but the quote makes the intent explicit and may
+  enable additional optimization passes.
+
+[THINK id:think.ideas.quoted-eval-impl conf:medium]
+  Implementation sketch:
+  - `⌜expr⌝` desugars to a (quote expr) AST node during parsing
+  - Codegen recognizes quote nodes and attempts constant folding via LLVM
+    ConstantExpr or by evaluating the expression in a mini interpreter
+  - For expressions that cannot be constant-folded (e.g., with runtime
+    variables), emit runtime code and possibly a warning
+  - The quote is purely a readability/optimization hint — never required for
+    correctness, only for intent communication
+
+[IDEA id:idea.language.eval-judgment author:human date:2026-06-13]
+  Proposal: `x = 30 ::: True` as an evaluation judgment syntax.
+  The triple colon `:::` introduces a compile-time assertion: evaluate the
+  left-hand side and verify that the right-hand side proposition holds.
+
+  Semantics:
+  - `x = 30 ::: True` means "evaluate x = 30 and assert it is True"
+  - The `:::` operator is an evaluation judgment — relates an expression to
+    its truth value at compile time
+  - Done at compile time if possible; if the expression cannot be reduced
+    at compile time, emit a runtime check
+
+[OBS id:obs.ideas.eval-judgment-relation src:user-request conf:medium]
+  The `:::` syntax extends the existing `::` type annotation chain:
+  - `x :: Int` — type annotation
+  - `x :: 30` — singleton type / refinement
+  - `x = 30 ::: True` — evaluation judgment (compile-time assertion)
+  This creates a natural hierarchy: `:: Type` → `:: Value` → `::: Truth`.
+
+[THINK id:think.ideas.eval-judgment-impl conf:medium]
+  Implementation sketch:
+  - `expr ::: bool-expr` desugars to a compile-time if/assert form
+  - If deptype (dep.h) can reduce `bool-expr` to a canonical truth value
+    during NbE, the assertion is discharged at compile time
+  - Otherwise, emit `assert(bool-expr)` in LLVM IR
+  - Could be extended to `::: Proof` for full dependent type propositions
+    (Curry-Howard: `::: True` is the unit type, `:::` is the proof judgment)
+
+[INF id:inf.ideas.eval-judgment-connects-to from:idea.language.quoted-eval,obs.ideas.eval-judgment-relation,think.ideas.eval-judgment-impl,think.ideas.quoted-eval-impl conf:medium]
+  connects-to -> `monadc.context.language.constructs.annotation` (:: type
+  annotation chain extended with ::: judgment) ·
+  `monadc.context.dep` (NbE reduction of propositions at compile time) ·
+  `monadc.context.codegen-ops` (constant folding of quoted exprs) ·
+  `monadc.context.language.philosophy` (principled extensibility:
+  quoted forms are optional hints, never mandatory) ·
+  `monadc.context.philosophy` (principle 6: roots find cracks — the
+  evaluation judgment is a crack where compile-time meets runtime, and
+  quotable forms are the root seeking that crack)

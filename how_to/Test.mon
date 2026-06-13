@@ -14,7 +14,6 @@ layout Color
 
 define red Color 255 0 0
 define red Color.fromRGB 255 0 0
-
 red.eql red
 
 

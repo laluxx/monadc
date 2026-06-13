@@ -1,0 +1,1726 @@
+#+TITLE: Type System — types.h / types.c
+#+AUTHOR: codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:types:type-system:
+#+PROPERTY: CONTEXT_VERSION 2
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.types.file-metadata
+:CUSTOM_ID: types-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: types.h,types.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.types.file src:types.h,types.c conf:high]
+This file documents the MonadC type representation: the =TypeKind= enum (40
+values), the =Type= union-with-tag struct, supporting structs
+(=FnParam=, =LayoutField=, =RefinementEntry=, =TypeAlias=), all
+constructor/operation functions, refinement types, type aliases, annotation
+parsing, and layout offset computation. This is the central type description
+used by every compiler phase: reader, infer, codegen, and dep.
+
+[INF id:inf.context.types.file-connect from:obs.context.types.file conf:high]
+connects-to ->
+  `monadc.context.language` (surface syntax for type annotations) ·
+  `monadc.context.infer` (HM inference walks Type structs) ·
+  `monadc.context.codegen-ops` (codegen lowers Type to LLVM/bytecode) ·
+  `monadc.context.dep` (dependency tracking uses type aliases) ·
+  `monadc.context.reader` (reader produces AST nodes parsed into types) ·
+  `monadc.context.codegen` (layout computation feeds struct codegen) ·
+  `monadc.context.pmatch` (pattern match compilation uses Type info)
+
+* Summary Table: TypeKind Enum (40 values)
+:PROPERTIES:
+:ID: monadc.context.types.summary-table
+:CUSTOM_ID: types-summary-table
+:CONTEXT_KIND: reference
+:CONTEXT_DESCRIPTION: Complete listing of all 40 TypeKind enum values grouped by category
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: types.h:8-49
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.types.summary-table date:2026-06-13 by:codex]
+There are 40 TypeKind values, not 45 as earlier design notes speculated.
+The four missing slots were never materialised: TYPE_VARIADIC (enum-only,
+no constructors), and three others that remain available for future
+collection-type specialisation. The enum is deliberately sparse so that new
+kinds can be added without renumbering downstream switch statements.
+
+[OBS id:obs.types.kind-table src:types.h:8-49 conf:high]
+| Category       | Count | Values |
+|----------------+-------+--------|
+| Ground         |    13 | TYPE_INT, FLOAT, CHAR, STRING, SYMBOL, BOOL, HEX, BIN, OCT, KEYWORD, RATIO, NIL, PATH |
+| Numeric        |    13 | F32, F80, I8, U8, I16, U16, I32, U32, I64, U64, I128, U128, INT_ARBITRARY |
+| Compound       |     9 | LIST, ARR, FN, LAYOUT, SET, MAP, PTR, OPTIONAL, COLL |
+| Meta           |     5 | UNKNOWN, VAR, ARROW, VARIADIC, APP |
+|----------------+-------+--------|
+| Total          |    40 | |
+
+[INF id:inf.types.kind-table-connect from:obs.types.kind-table conf:high]
+connects-to ->
+  `monadc.context.language.ground-types` (surface syntax mapping) ·
+  `monadc.context.infer.unification` (kind-based unification rules) ·
+  `monadc.context.codegen-ops.type-lowering` (per-kind LLVM lowering)
+
+* TypeKind Enum — Individual Nodes
+:PROPERTIES:
+:ID: monadc.context.types.typekind-enum
+:CUSTOM_ID: typekind-enum
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: All 40 TypeKind values with per-value property drawers and OBS records
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: types.h:8-49
+:CONFIDENCE: high
+:END:
+
+** Ground Types (13)
+
+*** TYPE_INT
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_INT
+:CUSTOM_ID: kind-TYPE_INT
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Integer type — the general machine-word Int used for arithmetic
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:9,types.c:421
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_INT src:types.h:9 conf:high]
+Machine-word integer. Default type for integer literals (unless they carry a
+width annotation — see =infer_literal_type=). Codegen lowers to the native
+target word size (i64 on 64-bit).
+
+*** TYPE_FLOAT
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_FLOAT
+:CUSTOM_ID: kind-TYPE_FLOAT
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Floating-point type — IEEE 754 double-precision Float
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:10,types.c:422
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_FLOAT src:types.h:10 conf:high]
+IEEE 754 double-precision float. Returned by =infer_literal_type= for literals
+containing '.' or 'e'/'E'. Distinguished from =TYPE_F32=.
+
+*** TYPE_CHAR
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_CHAR
+:CUSTOM_ID: kind-TYPE_CHAR
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Character type — ASCII/Unicode codepoint Char
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:11,types.c:423
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_CHAR src:types.h:11 conf:high]
+Single character. Parsed from =#\= reader syntax. Stored as a 32-bit codepoint
+in the runtime.
+
+*** TYPE_STRING
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_STRING
+:CUSTOM_ID: kind-TYPE_STRING
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: String type — immutable UTF-8 string
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:12,types.c:424
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_STRING src:types.h:12 conf:high]
+Immutable UTF-8 string. Distinguished from =TYPE_ARR TYPE_CHAR= for
+convenience. Codegen may lower to a fat pointer {char*, size}.
+
+*** TYPE_SYMBOL
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_SYMBOL
+:CUSTOM_ID: kind-TYPE_SYMBOL
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Symbol type — interned name Symbol
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:13,types.c:425
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_SYMBOL src:types.h:13 conf:high]
+Interned symbol. Distinguishable from keyword by the reader: =foo= is a
+symbol, =:foo= is a keyword.
+
+*** TYPE_BOOL
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_BOOL
+:CUSTOM_ID: kind-TYPE_BOOL
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Boolean type — true/false values
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:14,types.c:426
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_BOOL src:types.h:14 conf:high]
+Boolean type. Codegen lowers to i1 or i8 depending on the target. Not a
+numeric type (no arithmetic operations).
+
+*** TYPE_HEX
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_HEX
+:CUSTOM_ID: kind-TYPE_HEX
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Hexadecimal literal type — 0x... notation
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:15,types.c:427
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_HEX src:types.h:15 conf:high]
+Tag for hex literals (=0x...=). Returns =true= from =infer_literal_type= when
+the literal starts with =0x= or =0X=. The actual storage width is not
+distinguished at the type level; codegen may infer bit-width from the literal
+value.
+
+*** TYPE_BIN
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_BIN
+:CUSTOM_ID: kind-TYPE_BIN
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Binary literal type — 0b... notation
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:16,types.c:428
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_BIN src:types.h:16 conf:high]
+Tag for binary literals (=0b...= / =0B...=). Same runtime representation as
+TYPE_INT but carries source-level radix for error messages.
+
+*** TYPE_OCT
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_OCT
+:CUSTOM_ID: kind-TYPE_OCT
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Octal literal type — 0o... notation
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:17,types.c:429
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_OCT src:types.h:17 conf:high]
+Tag for octal literals (=0o...= / =0O...=).
+
+*** TYPE_KEYWORD
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_KEYWORD
+:CUSTOM_ID: kind-TYPE_KEYWORD
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Keyword type — :foo notation
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:11,types.c:430
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_KEYWORD src:types.h:19 conf:high]
+Keyword type. Keywords (=:foo=) are self-evaluating symbolic constants.
+Distinct from symbols at the type level.
+
+*** TYPE_RATIO
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_RATIO
+:CUSTOM_ID: kind-TYPE_RATIO
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Ratio type — exact rational number n/d
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:20,types.c:431
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_RATIO src:types.h:20 conf:high]
+Exact rational number. =infer_literal_type= detects ratios by the presence of
+'/' with digits on both sides (e.g. =3/4=). Must be checked before hex (which
+also contains '/'-like patterns in some edge cases). Codegen may lower to a
+pair of ints {numerator, denominator}.
+
+*** TYPE_NIL
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_NIL
+:CUSTOM_ID: kind-TYPE_NIL
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Nil type — the unit/void type
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:46,types.c:465
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_NIL src:types.h:46 conf:high]
+The empty type / unit type. Represents =nil= in the language. Can be used as
+a return type (like void) or as a list terminator. Codegen lowers to void or
+a zero-sized value.
+
+*** TYPE_PATH
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_PATH
+:CUSTOM_ID: kind-TYPE_PATH
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Path type — filesystem path literal
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:48,types.c:447
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_PATH src:types.h:48 conf:high]
+Filesystem path literal type. The reader recognises =#"..."= or =os-path=
+syntax. Distinct from =TYPE_STRING= to allow path-specific operations
+(join, basename, etc.) at the type level.
+
+** Numeric Subtypes (13)
+
+*** TYPE_F32
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_F32
+:CUSTOM_ID: kind-TYPE_F32
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: IEEE 754 single-precision (32-bit) float
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:26,types.c:435
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_F32 src:types.h:26 conf:high]
+32-bit IEEE float. For FFI and numeric code that explicitly needs single
+precision. Codegen lowers to LLVM =float=.
+
+*** TYPE_F80
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_F80
+:CUSTOM_ID: kind-TYPE_F80
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: x87 extended-precision (80-bit) float
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:44,types.c:446
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_F80 src:types.h:44 conf:high]
+x87 80-bit extended precision. Primarily for FFI with C code that uses =long double=.
+Codegen lowers to LLVM =x86_fp80=.
+
+*** TYPE_I8
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_I8
+:CUSTOM_ID: kind-TYPE_I8
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Signed 8-bit integer
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:27,types.c:436
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_I8 src:types.h:27 conf:high]
+Signed 8-bit integer. Codegen lowers to LLVM =i8=.
+
+*** TYPE_U8
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_U8
+:CUSTOM_ID: kind-TYPE_U8
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Unsigned 8-bit integer
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:28,types.c:437
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_U8 src:types.h:28 conf:high]
+Unsigned 8-bit integer. Codegen lowers to LLVM =i8= (with nuw flags).
+
+*** TYPE_I16
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_I16
+:CUSTOM_ID: kind-TYPE_I16
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Signed 16-bit integer
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:29,types.c:438
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_I16 src:types.h:29 conf:high]
+Signed 16-bit integer. Codegen lowers to LLVM =i16=.
+
+*** TYPE_U16
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_U16
+:CUSTOM_ID: kind-TYPE_U16
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Unsigned 16-bit integer
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:30,types.c:439
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_U16 src:types.h:30 conf:high]
+Unsigned 16-bit integer. Codegen lowers to LLVM =i16=.
+
+*** TYPE_I32
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_I32
+:CUSTOM_ID: kind-TYPE_I32
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Signed 32-bit integer
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:31,types.c:440
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_I32 src:types.h:31 conf:high]
+Signed 32-bit integer. Codegen lowers to LLVM =i32=.
+
+*** TYPE_U32
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_U32
+:CUSTOM_ID: kind-TYPE_U32
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Unsigned 32-bit integer
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:32,types.c:441
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_U32 src:types.h:32 conf:high]
+Unsigned 32-bit integer. Codegen lowers to LLVM =i32=.
+
+*** TYPE_I64
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_I64
+:CUSTOM_ID: kind-TYPE_I64
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Signed 64-bit integer
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:33,types.c:442
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_I64 src:types.h:33 conf:high]
+Signed 64-bit integer. Codegen lowers to LLVM =i64=.
+
+*** TYPE_U64
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_U64
+:CUSTOM_ID: kind-TYPE_U64
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Unsigned 64-bit integer
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:34,types.c:443
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_U64 src:types.h:34 conf:high]
+Unsigned 64-bit integer. Codegen lowers to LLVM =i64=.
+
+*** TYPE_I128
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_I128
+:CUSTOM_ID: kind-TYPE_I128
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Signed 128-bit integer
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:35,types.c:444
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_I128 src:types.h:35 conf:high]
+Signed 128-bit integer. Codegen may lower to a pair of i64 values or LLVM
+=i128= depending on target support.
+
+*** TYPE_U128
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_U128
+:CUSTOM_ID: kind-TYPE_U128
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Unsigned 128-bit integer
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:36,types.c:445
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_U128 src:types.h:36 conf:high]
+Unsigned 128-bit integer.
+
+*** TYPE_INT_ARBITRARY
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_INT_ARBITRARY
+:CUSTOM_ID: kind-TYPE_INT_ARBITRARY
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Arbitrary-width integer — I<n> / U<n> for n=1..64 or 128
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:43,types.c:458-463
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_INT_ARBITRARY src:types.h:43 conf:high]
+Arbitrary-width integer, specified as =I<n>= (signed) or =U<n>= (unsigned)
+where n is 1–64 or 128. Stores =numeric_width= and =numeric_signed= fields.
+Parsed via =parse_int_type= in =type_from_name=.
+
+[DOC id:doc.types.int-arbitrary-rationale date:2026-06-13 by:codex]
+INT_ARBITRARY exists because the language wants to support bit-exact integer
+types (e.g. =U4= for nibbles, =I1= for signed booleans) without needing 128
+separate enum values. The 1–64 plus 128 constraint matches common hardware
+widths. Width validation occurs in =parse_int_type=.
+
+** Compound Types (9)
+
+*** TYPE_LIST
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_LIST
+:CUSTOM_ID: kind-TYPE_LIST
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Heterogeneous list — (T1 T2 ...) or ()
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:18,types.c:480-491
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_LIST src:types.h:18 conf:high]
+Heterogeneous / homogeneous list type. Stores =list_types= array and
+=list_count=. A list with 0 elements represents the empty list type ().
+A list with 1 element (=list_count= = 1) is sugar for a singly-typed list.
+Used for tuple types, parameterised types, and S-expression type annotations.
+
+*** TYPE_ARR
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_ARR
+:CUSTOM_ID: kind-TYPE_ARR
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Array type — fixed-size, fat pointer, or heap-growable
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:21,types.c:493-507
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_ARR src:types.h:21 conf:high]
+Array type with three variants selected by boolean flags:
+
+  - =arr_is_fat=false, arr_is_heap=false, arr_size>=0= → fixed-size array
+    ={T data[sz]}=
+  - =arr_is_fat=true= → runtime fat pointer ={T* data, i64 size}=
+  - =arr_is_heap=true= → heap-growable ={T* data, i64 size, i64 cap}=
+
+Uses =arr_element_type= for the element type. Default =arr_size=-1 for
+variants where size is unknown at compile time.
+
+*** TYPE_FN
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_FN
+:CUSTOM_ID: kind-TYPE_FN
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Function type — full parameter descriptors
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:22,types.c:541-547
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_FN src:types.h:22 conf:high]
+Concrete function type with full parameter metadata. Stores =params= array
+of =FnParam=, =param_count=, and =return_type=. Supports optional parameters
+and variadic rest params ('. _'). Distinguished from =TYPE_ARROW= which is
+the HM-internal function type.
+
+[DOC id:doc.types.TYPE_FN-vs-ARROW date:2026-06-13 by:codex]
+TYPE_FN and TYPE_ARROW serve different purposes: TYPE_FN carries full
+parameter metadata (names, optional, rest) for concrete function declarations,
+while TYPE_ARROW is a simple param→ret pair used during HM type inference.
+Codegen treats them uniformly for closures, but inference uses only TYPE_ARROW.
+
+*** TYPE_LAYOUT
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_LAYOUT
+:CUSTOM_ID: kind-TYPE_LAYOUT
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Struct/record layout type — typed struct definition
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:23,types.c:509-539
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_LAYOUT src:types.h:23 conf:high]
+C-struct or record type. Stores =layout_name=, =layout_fields= array,
+=layout_field_count=, =layout_total_size=, =layout_packed= flag,
+=layout_align= constraint, =layout_is_scalar= flag (for opaque typedefs like
+=VkInstance=), and =layout_is_inline= flag (for nested non-pointer fields).
+
+Two constructors:
+  - =type_layout= — full definition with field list and sizes
+  - =type_layout_ref= — forward reference (name only, fields populated later)
+
+Codegen uses =layout_compute_offsets= to compute field offsets.
+
+*** TYPE_SET
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_SET
+:CUSTOM_ID: kind-TYPE_SET
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Set type — unordered collection of unique elements
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:24,types.c:432
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_SET src:types.h:24 conf:high]
+Unordered collection with uniqueness constraint. Currently a ground type
+(no element-type parameter). May be subsumed by TYPE_COLL in the future.
+
+*** TYPE_MAP
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_MAP
+:CUSTOM_ID: kind-TYPE_MAP
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Map type — key→value mapping
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:25,types.c:433
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_MAP src:types.h:25 conf:high]
+Key→value mapping type. Currently a ground type (no key/value type parameters).
+May gain parameterisation or be subsumed by TYPE_COLL.
+
+*** TYPE_PTR
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_PTR
+:CUSTOM_ID: kind-TYPE_PTR
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Pointer type — Pointer :: T
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:42,types.c:522-526
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_PTR src:types.h:42 conf:high]
+Typed pointer to another type. Uses =element_type= (aliased as =list_elem=)
+for the pointee type. Created via =type_ptr=. Surface syntax: =Pointer :: T=
+or =T -> ...= sugar.
+
+*** TYPE_OPTIONAL
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_OPTIONAL
+:CUSTOM_ID: kind-TYPE_OPTIONAL
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Optional type — T? or Maybe T
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:45,types.c:474-478
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_OPTIONAL src:types.h:45 conf:high]
+Optional / nullable type. Stores inner type via =element_type=. Surface
+syntax: =T?= or =Maybe T=. Codegen lowers to a tagged union or nullable
+pointer depending on the inner type.
+
+*** TYPE_COLL
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_COLL
+:CUSTOM_ID: kind-TYPE_COLL
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Abstract collection — [T] representing List | Set | Arr
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:41,types.c:434
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_COLL src:types.h:41 conf:high]
+Abstract collection type, representing "some collection of T" without
+committing to List vs Set vs Arr. Uses =element_type= for the element type.
+Surface syntax: =[T]=. Codegen may specialise to a concrete collection at
+monomorphisation time.
+
+** Meta Types (5)
+
+*** TYPE_UNKNOWN
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_UNKNOWN
+:CUSTOM_ID: kind-TYPE_UNKNOWN
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Unknown / error type — fallback for unresolved types
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:37,types.c:420
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_UNKNOWN src:types.h:37 conf:high]
+Placeholder for unknown or erroneous types. Returned by =type_from_name= when
+a type name cannot be resolved. Renders as "?" in =type_to_string=. Should not
+leak past inference — it indicates an error recovery path.
+
+*** TYPE_VAR
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_VAR
+:CUSTOM_ID: kind-TYPE_VAR
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: HM type variable — 'a, 'b, ... 
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:38,types.c:549-553
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_VAR src:types.h:38 conf:high]
+Hindley-Milner type variable. Stores =var_id= as a unique integer. Variables
+with ids 2000–2025 map to single-letter names ='a= through ='z=. Used during
+HM type inference for unification. Created fresh by the inference engine.
+
+*** TYPE_ARROW
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_ARROW
+:CUSTOM_ID: kind-TYPE_ARROW
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: HM arrow type — param -> ret
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:39,types.c:555-560
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_ARROW src:types.h:39 conf:high]
+HM function arrow type. Stores =arrow_param= and =arrow_ret= as child Type
+pointers. Constructed by =type_arrow= and parsed from =Fn :: (T1 -> T2 -> R)=
+by =type_parse_fn_arrow=. Renders as "T1 -> T2 -> R" in =type_to_string=.
+
+*** TYPE_VARIADIC
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_VARIADIC
+:CUSTOM_ID: kind-TYPE_VARIADIC
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Variadic marker — variadic rest param type
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:40
+:CONFIDENCE: medium
+:END:
+
+[OBS id:obs.types.kind.TYPE_VARIADIC src:types.h:40 conf:high]
+Enum value declared but no constructor function exists. Used conceptually as
+the type of variadic rest parameters (. _). Not yet materialised as a runtime
+type — variadic behaviour is currently encoded via =FnParam.rest= flag in
+TYPE_FN.
+
+[THINK id:think.types.TYPE_VARIADIC status:open date:2026-06-13 by:codex]
+TYPE_VARIADIC is defined in the enum but never constructed. Should it become a
+first-class type (wrapping TYPE_LIST) for the type system to reason about
+variadic arguments? Currently =FnParam.rest= is sufficient, but if the
+language gains higher-order variadic functions, TYPE_VARIADIC would need proper
+constructor and operation support.
+
+*** TYPE_APP
+:PROPERTIES:
+:ID: monadc.context.types.kind.TYPE_APP
+:CUSTOM_ID: kind-TYPE_APP
+:CONTEXT_KIND: typekind
+:CONTEXT_DESCRIPTION: Type application — M a (e.g. Maybe Float)
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:47,types.c:467-472
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.kind.TYPE_APP src:types.h:47 conf:high]
+Type constructor application. Stores =app_constructor= (string like "Maybe",
+"Either", "Result") and =app_arg= (the applied type). Surface syntax: "Maybe
+Float", "Result Int String". Codegen treats ADT fields as opaque pointers
+when the concrete type is unknown.
+
+[INF id:inf.types.kind.TYPE_APP-connect from:obs.types.kind.TYPE_APP conf:high]
+connects-to ->
+  `monadc.context.codegen-ops.adt-lowering` (how TYPE_APP is monomorphised)
+
+* Supporting Structs
+:PROPERTIES:
+:ID: monadc.context.types.supporting-structs
+:CUSTOM_ID: types-supporting-structs
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: FnParam, LayoutField, RefinementEntry, TypeAlias
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: types.h:54-141
+:CONFIDENCE: high
+:END:
+
+** FnParam
+:PROPERTIES:
+:ID: monadc.context.types.struct.FnParam
+:CUSTOM_ID: struct-FnParam
+:CONTEXT_KIND: datatype
+:CONTEXT_DESCRIPTION: Single function parameter descriptor
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:54-59
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.struct.FnParam src:types.h:54-59 conf:high]
+
+| Field    | Type        | Description                                             |
+|----------+-------------+---------------------------------------------------------|
+| =name=   | =char *=    | Parameter name (may be NULL for builtins)               |
+| =type=   | =Type *=    | Parameter type (NULL = polymorphic '_')                 |
+| =optional| =bool=      | True for =#:optional= keyword-supplied parameters       |
+| =rest=   | =bool=      | True for variadic rest '. _'                            |
+
+Used by =TYPE_FN= and =type_fn_builtin=. Not deep-copied in =type_clone= for
+TYPE_LAYOUT (layout_fields is shared), but =type_fn= parameters are newly
+allocated arrays.
+
+** LayoutField
+:PROPERTIES:
+:ID: monadc.context.types.struct.LayoutField
+:CUSTOM_ID: struct-LayoutField
+:CONTEXT_KIND: datatype
+:CONTEXT_DESCRIPTION: One field inside a TYPE_LAYOUT struct
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:62-67
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.struct.LayoutField src:types.h:62-67 conf:high]
+
+| Field    | Type        | Description                               |
+|----------+-------------+-------------------------------------------|
+| =name=   | =char *=    | Field name                                |
+| =type=   | =Type *=    | Resolved type of the field                |
+| =offset= | =int=       | Byte offset within the struct             |
+| =size=   | =int=       | Byte size of this field                   |
+
+Offsets are computed by =layout_compute_offsets=. Fields with =size<=0 are
+filled via the =elem_size_fn= callback. Default fallback size is 8 bytes.
+
+** RefinementEntry
+:PROPERTIES:
+:ID: monadc.context.types.struct.RefinementEntry
+:CUSTOM_ID: struct-RefinementEntry
+:CONTEXT_KIND: datatype
+:CONTEXT_DESCRIPTION: Refinement type registry entry
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:123-131
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.struct.RefinementEntry src:types.h:123-131 conf:high]
+
+| Field         | Type                 | Description                                       |
+|---------------+----------------------+---------------------------------------------------|
+| =name=        | =char *=             | Refinement type name (e.g. "Even", "Pos")        |
+| =pred_name=   | =char *=             | Display name for the predicate (e.g. "even?")    |
+| =base_type=   | =char *=             | Underlying base type (e.g. "Int")                |
+| =predicate_ast=| =AST *=             | Owned clone of predicate AST for static eval     |
+| =var=         | =char *=             | Bound variable name in predicate (e.g. "x")      |
+| =next=        | =RefinementEntry *=  | Linked list next pointer                         |
+
+Global registry head is =g_refinements= (declared extern in types.h:132).
+Registered via =refinement_register=.
+
+** TypeAlias
+:PROPERTIES:
+:ID: monadc.context.types.struct.TypeAlias
+:CUSTOM_ID: struct-TypeAlias
+:CONTEXT_KIND: datatype
+:CONTEXT_DESCRIPTION: Type alias registry entry
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:135-139
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.struct.TypeAlias src:types.h:135-139 conf:high]
+
+| Field        | Type             | Description                               |
+|--------------+------------------+-------------------------------------------|
+| =alias_name= | =char *=         | Alias name (e.g. "Code")                 |
+| =target_name=| =char *=         | Target type name (e.g. "List")           |
+| =next=       | =TypeAlias *=    | Linked list next pointer                  |
+
+Global registry head is =g_aliases= (declared extern in types.h:141).
+Supports chained aliases: aliases are resolved transitively up to depth 32
+by =type_from_name=.
+
+* Type Union Struct
+:PROPERTIES:
+:ID: monadc.context.types.type-struct
+:CUSTOM_ID: types-type-struct
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The Type struct — union-with-tag design
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: types.h:71-116
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.types.union-with-tag date:2026-06-13 by:codex]
+The Type struct uses a union-with-tag pattern rather than a C union or
+separate structs per kind. This means all fields coexist in one struct,
+simplifying allocation (single =calloc=) and freeing (one =free=), but
+requiring discipline to read only the fields relevant to =kind=. The
+alternative (nested =union=) would save memory but complicate the
+constructor/accessor pattern. The ~14-pointer size (~112 bytes on 64-bit)
+is acceptable for the typical working set.
+
+[OBS id:obs.types.struct.Type src:types.h:71-116 conf:high]
+
+| Field                 | Type           | Kinds Using It                          |
+|-----------------------+----------------+-----------------------------------------|
+| =kind=                | =TypeKind=     | all                                     |
+|-----------------------+----------------+-----------------------------------------|
+| =var_id=              | =int=          | VAR                                     |
+|-----------------------+----------------+-----------------------------------------|
+| =arrow_param=         | =Type *=       | ARROW                                   |
+| =arrow_ret=           | =Type *=       | ARROW                                   |
+|-----------------------+----------------+-----------------------------------------|
+| =params=              | =FnParam *=    | FN                                      |
+| =param_count=         | =int=          | FN                                      |
+| =return_type=         | =Type *=       | FN                                      |
+|-----------------------+----------------+-----------------------------------------|
+| =list_types=          | =Type **=      | LIST                                    |
+| =list_count=          | =int=          | LIST                                    |
+|-----------------------+----------------+-----------------------------------------|
+| =element_type=        | =Type *=       | PTR, OPTIONAL, COLL                     |
+|-----------------------+----------------+-----------------------------------------|
+| =arr_element_type=    | =Type *=       | ARR                                     |
+| =arr_size=            | =int64_t=      | ARR                                     |
+| =arr_is_fat=          | =bool=         | ARR                                     |
+| =arr_is_heap=         | =bool=         | ARR                                     |
+|-----------------------+----------------+-----------------------------------------|
+| =layout_name=         | =char *=       | LAYOUT                                  |
+| =layout_fields=       | =LayoutField *=| LAYOUT                                  |
+| =layout_field_count=  | =int=          | LAYOUT                                  |
+| =layout_total_size=   | =int=          | LAYOUT                                  |
+| =layout_packed=       | =bool=         | LAYOUT                                  |
+| =layout_align=        | =int=          | LAYOUT                                  |
+| =layout_is_scalar=    | =bool=         | LAYOUT (opaque typedefs)                |
+| =layout_is_inline=    | =bool=         | LAYOUT (nested non-pointer fields)      |
+|-----------------------+----------------+-----------------------------------------|
+| =numeric_width=       | =int=          | INT_ARBITRARY                           |
+| =numeric_signed=      | =bool=         | INT_ARBITRARY                           |
+|-----------------------+----------------+-----------------------------------------|
+| =app_constructor=     | =char *=       | APP                                     |
+| =app_arg=             | =Type *=       | APP                                     |
+
+The =list_elem= macro at line 118 aliases =element_type= for convenience:
+=#define list_elem element_type=.
+
+[THINK id:think.types.field-overlap date:2026-06-13 by:codex status:open]
+The =element_type= field is shared by PTR, OPTIONAL, and COLL. The
+=arr_element_type= field is separate for ARR. This means ARR cannot use the
+generic =element_type= slot. Could =arr_element_type= be unified with
+=element_type=?= The current design keeps them separate because ARR has
+additional metadata (size, is_fat, is_heap) that makes it semantically
+distinct from the "single element" pattern.
+
+* Ground Type Constructors
+:PROPERTIES:
+:ID: monadc.context.types.ground-constructors
+:CUSTOM_ID: types-ground-constructors
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: All nullary ground type constructor functions
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:146-173,types.c:420-447
+:CONFIDENCE: high
+:END:
+
+All ground type constructors follow the pattern:
+
+=static Type *make_type(TypeKind kind)= — allocates a zero-initialised Type,
+sets =kind=, sets =arr_size= to -1 (default).
+
+[OBS id:obs.types.ground-constructors src:types.h:146-173 conf:high]
+
+| Constructor             | Kind              | Source         |
+|-------------------------+-------------------+----------------|
+| =type_unknown()=        | TYPE_UNKNOWN      | types.c:420    |
+| =type_int()=            | TYPE_INT          | types.c:421    |
+| =type_float()=          | TYPE_FLOAT        | types.c:422    |
+| =type_char()=           | TYPE_CHAR         | types.c:423    |
+| =type_string()=         | TYPE_STRING       | types.c:424    |
+| =type_symbol()=         | TYPE_SYMBOL       | types.c:425    |
+| =type_bool()=           | TYPE_BOOL         | types.c:426    |
+| =type_hex()=            | TYPE_HEX          | types.c:427    |
+| =type_bin()=            | TYPE_BIN          | types.c:428    |
+| =type_oct()=            | TYPE_OCT          | types.c:429    |
+| =type_keyword()=        | TYPE_KEYWORD      | types.c:430    |
+| =type_ratio()=          | TYPE_RATIO        | types.c:431    |
+| =type_set()=            | TYPE_SET          | types.c:432    |
+| =type_map()=            | TYPE_MAP          | types.c:433    |
+| =type_coll()=           | TYPE_COLL         | types.c:434    |
+| =type_f32()=            | TYPE_F32          | types.c:435    |
+| =type_i8()=             | TYPE_I8           | types.c:436    |
+| =type_u8()=             | TYPE_U8           | types.c:437    |
+| =type_i16()=            | TYPE_I16          | types.c:438    |
+| =type_u16()=            | TYPE_U16          | types.c:439    |
+| =type_i32()=            | TYPE_I32          | types.c:440    |
+| =type_u32()=            | TYPE_U32          | types.c:441    |
+| =type_i64()=            | TYPE_I64          | types.c:442    |
+| =type_u64()=            | TYPE_U64          | types.c:443    |
+| =type_i128()=           | TYPE_I128         | types.c:444    |
+| =type_u128()=           | TYPE_U128         | types.c:445    |
+| =type_f80()=            | TYPE_F80          | types.c:446    |
+| =type_path()=           | TYPE_PATH         | types.c:447    |
+| =type_nil()=            | TYPE_NIL          | types.c:465    |
+| =type_int_arbitrary(w,s)=| TYPE_INT_ARBITRARY| types.c:458-463|
+
+All nullary constructors are thin wrappers around =make_type= except
+=type_int_arbitrary= which sets =numeric_width= and =numeric_signed=.
+
+* Compound Type Constructors
+:PROPERTIES:
+:ID: monadc.context.types.compound-constructors
+:CUSTOM_ID: types-compound-constructors
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: All compound type constructor functions with child types
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:178-191,types.c:449-539
+:CONFIDENCE: high
+:END:
+
+** type_list
+:PROPERTIES:
+:ID: monadc.context.types.ctor.type_list
+:CUSTOM_ID: ctor-type_list
+:SOURCE: types.h:178,types.c:480-491
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.ctor.type_list src:types.c:480-491 conf:high]
+=Type *type_list(Type **types, int count)=
+Creates a TYPE_LIST with cloned element types. If =types= is NULL, allocates
+an empty list. Each element is cloned via =type_clone= (NULL → =type_unknown=).
+The =list_types= array is owned by the returned Type.
+
+** type_arr, type_arr_fat, type_arr_heap
+:PROPERTIES:
+:ID: monadc.context.types.ctor.type_arr
+:CUSTOM_ID: ctor-type_arr
+:SOURCE: types.h:179-181,types.c:493-507,449-456
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.ctor.type_arr src:types.c:493-507 conf:high]
+
+  - =type_arr(elem, size)= — fixed-size array (arr_is_fat=false). =arr_size=
+    is set to the given size.
+  - =type_arr_fat(elem)= — fat pointer (arr_is_fat=true). =arr_size=-1.
+  - =type_arr_heap(elem)= — heap-growable (arr_is_heap=true). =arr_size=-1.
+
+All three share TYPE_ARR kind; the boolean flags disambiguate.
+
+** type_fn, type_fn_builtin
+:PROPERTIES:
+:ID: monadc.context.types.ctor.type_fn
+:CUSTOM_ID: ctor-type_fn
+:SOURCE: types.h:183-184,types.c:541-547,590-617
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.ctor.type_fn src:types.c:541-547 conf:high]
+=Type *type_fn(FnParam *params, int param_count, Type *return_type)=
+Creates a TYPE_FN. Takes ownership of the =params= array and =return_type=.
+
+=Type *type_fn_builtin(int min_args, int opt_args, bool variadic)=
+Convenience constructor for built-in functions. Builds an =FnParam= array
+with =min_args= required params, =opt_args= optional params, and optionally
+one variadic rest param. All params have NULL name and NULL type
+(polymorphic '_').
+
+** type_layout, type_layout_ref
+:PROPERTIES:
+:ID: monadc.context.types.ctor.type_layout
+:CUSTOM_ID: ctor-type_layout
+:SOURCE: types.h:185-187,types.c:509-539
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.ctor.type_layout src:types.c:509-539 conf:high]
+
+  - =type_layout(name, fields, count, total_size, packed, align)= — full
+    struct definition. =layout_name= is strdup'd. Takes ownership of the
+    =fields= array.
+  - =type_layout_ref(name)= — forward reference. Sets =layout_fields= to
+    NULL and all size/offset fields to 0. Used when a layout type is
+    referenced before its definition (e.g. in recursive structs or FFI).
+
+** type_ptr
+:PROPERTIES:
+:ID: monadc.context.types.ctor.type_ptr
+:CUSTOM_ID: ctor-type_ptr
+:SOURCE: types.h:188,types.c:522-526
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.ctor.type_ptr src:types.c:522-526 conf:high]
+=Type *type_ptr(Type *pointee)=
+Creates TYPE_PTR storing pointee in =element_type= field. Surface syntax:
+=Pointer :: T= or =T -> ...= via =parse_type_annotation=.
+
+** type_optional
+:PROPERTIES:
+:ID: monadc.context.types.ctor.type_optional
+:CUSTOM_ID: ctor-type_optional
+:SOURCE: types.h:189,types.c:474-478
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.ctor.type_optional src:types.c:474-478 conf:high]
+=Type *type_optional(Type *inner)=
+Creates TYPE_OPTIONAL storing inner type in =element_type=. Surface syntax:
+=T?= or =Maybe T=.
+
+** type_nil
+:PROPERTIES:
+:ID: monadc.context.types.ctor.type_nil
+:CUSTOM_ID: ctor-type_nil
+:SOURCE: types.h:190,types.c:465
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.ctor.type_nil src:types.c:465 conf:high]
+=Type *type_nil(void)=
+Creates TYPE_NIL. Ground type for the nil/unit value.
+
+** type_app
+:PROPERTIES:
+:ID: monadc.context.types.ctor.type_app
+:CUSTOM_ID: ctor-type_app
+:SOURCE: types.h:191,types.c:467-472
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.ctor.type_app src:types.c:467-472 conf:high]
+=Type *type_app(const char *constructor, Type *arg)=
+Creates TYPE_APP. Constructor name is strdup'd. Takes ownership of arg.
+
+* HM Constructors
+:PROPERTIES:
+:ID: monadc.context.types.hm-constructors
+:CUSTOM_ID: types-hm-constructors
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Hindley-Milner type constructors — type_var, type_arrow
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:196-197,types.c:549-560
+:CONFIDENCE: high
+:END:
+
+** type_var
+:PROPERTIES:
+:ID: monadc.context.types.ctor.type_var
+:CUSTOM_ID: ctor-type_var
+:SOURCE: types.h:196,types.c:549-553
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.ctor.type_var src:types.c:549-553 conf:high]
+=Type *type_var(int id)=
+Creates TYPE_VAR with =var_id= set to the given integer. The inference engine
+assigns fresh IDs. Variables with ids 2000–2025 map to single-letter names
+('a'–'z') in =type_to_string=.
+
+** type_arrow
+:PROPERTIES:
+:ID: monadc.context.types.ctor.type_arrow
+:CUSTOM_ID: ctor-type_arrow
+:SOURCE: types.h:197,types.c:555-560
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.ctor.type_arrow src:types.c:555-560 conf:high]
+=Type *type_arrow(Type *param, Type *ret)=
+Creates TYPE_ARROW. The param→ret pair is used by HM inference during
+unification and constraint solving. Parsed from surface =Fn :: (A -> B -> C)=
+by =type_parse_fn_arrow= which chains multiple arrows.
+
+* Type Operations
+:PROPERTIES:
+:ID: monadc.context.types.operations
+:CUSTOM_ID: types-operations
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: type_clone, type_free, type_to_string, types_equal, type_parse_fn_arrow
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:200-207,types.c:562-892
+:CONFIDENCE: high
+:END:
+
+** type_clone
+:PROPERTIES:
+:ID: monadc.context.types.op.type_clone
+:CUSTOM_ID: op-type_clone
+:SOURCE: types.h:204,types.c:652-723
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.op.type_clone src:types.c:652-723 conf:high]
+=Type *type_clone(Type *t)=
+Deep-clones a Type struct. Key behaviours:
+
+  - Ground types return fresh =make_type= instances (no shared children).
+  - TYPE_LIST clones each element via recursive =type_clone=.
+  - TYPE_ARR, TYPE_PTR, TYPE_OPTIONAL, TYPE_ARROW, TYPE_APP all recursively
+    clone children.
+  - TYPE_LAYOUT uses a shallow copy for =layout_fields= (shared, not
+    deep-copied — fields belong to a layout registry). Other fields are strdup'd.
+  - TYPE_VAR returns a fresh =type_var= with the same ID.
+  - TYPE_INT_ARBITRARY preserves width and signedness.
+
+** type_free
+:PROPERTIES:
+:ID: monadc.context.types.op.type_free
+:CUSTOM_ID: op-type_free
+:SOURCE: types.h:205,types.c:725-763
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.op.type_free src:types.c:725-763 conf:high]
+=void type_free(Type *t)=
+Frees a Type struct and its owned children. Important details:
+
+  - TYPE_FN frees param names, param types, the params array, and return_type.
+  - TYPE_LIST frees each list_type element and the array.
+  - TYPE_PTR / OPTIONAL / COLL free element_type.
+  - TYPE_ARR free arr_element_type.
+  - TYPE_LAYOUT free layout_name but NOT layout_fields (shared with registry).
+  - TYPE_ARROW frees param and ret.
+  - TYPE_APP frees constructor string and app_arg.
+  - TYPE_VAR has no extra allocations (var_id is inline).
+  - Always frees the top-level Type struct at the end.
+
+** type_to_string
+:PROPERTIES:
+:ID: monadc.context.types.op.type_to_string
+:CUSTOM_ID: op-type_to_string
+:SOURCE: types.h:206,types.c:766-892
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.op.type_to_string src:types.c:766-892 conf:high]
+=const char *type_to_string(Type *t)=
+Returns a string representation. Uses a 32-slot rotating buffer (512 bytes
+each) for thread safety — each call mutates the current slot and advances.
+Caller must not free. Key outputs:
+
+  - Ground: "Int", "Float", "Char", "String", "Symbol", "Bool", "Hex", "Bin",
+    "Oct", "Keyword", "Ratio", "Set", "Map", "F32", "I8", "U8", ..., "Path"
+  - TYPE_UNKNOWN: "?"
+  - TYPE_NIL: "Nil"
+  - TYPE_VAR: single letter "a", "b", ... or letter from id%26
+  - TYPE_ARROW: "T1 -> T2 -> R"
+  - TYPE_LIST: "(T1 T2 ...)" or "()
+  - TYPE_COLL: "[T]"
+  - TYPE_ARR: "Arr :: T :: N", "Arr :: T", "Heap :: T", or "Arr"
+  - TYPE_PTR: "Pointer :: T"
+  - TYPE_OPTIONAL: "T?"
+  - TYPE_APP: "Maybe Float" (constructor + arg)
+  - TYPE_INT_ARBITRARY: "I3" or "U12"
+  - TYPE_FN: "Fn (_ _ #:optional _ . _)" — prints param pattern
+  - TYPE_LAYOUT: layout_name or "<layout>"
+
+** types_equal
+:PROPERTIES:
+:ID: monadc.context.types.op.types_equal
+:CUSTOM_ID: op-types_equal
+:SOURCE: types.h:207,types.c:562-588
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.op.types_equal src:types.c:562-588 conf:high]
+=bool types_equal(Type *a, Type *b)=
+Structural equality comparison:
+
+  - Null handling: NULL == NULL → true, one NULL → false.
+  - Kind mismatch → false.
+  - TYPE_VAR: compare var_id.
+  - TYPE_ARROW: recursive equal on param and ret.
+  - TYPE_LIST: compare count then each element.
+  - TYPE_OPTIONAL / TYPE_PTR / TYPE_COLL: compare element_type.
+  - TYPE_ARR: compare arr_size and arr_element_type.
+  - All other kinds (ground types): kind equality is sufficient.
+
+[THINK id:think.types.types_equal-grounds status:open date:2026-06-13 by:codex]
+Ground type equality returns =true= for same-kind matches, ignoring any
+extraneous fields that might have been set. This is correct for well-formed
+types, but could hide bugs where a ground type inadvertently has child fields
+set. Consider adding an assertion or validation check.
+
+** type_parse_fn_arrow
+:PROPERTIES:
+:ID: monadc.context.types.op.type_parse_fn_arrow
+:CUSTOM_ID: op-type_parse_fn_arrow
+:SOURCE: types.h:200,types.c:622-650
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.op.type_parse_fn_arrow src:types.c:622-650 conf:high]
+=Type *type_parse_fn_arrow(const char *name)=
+Parses "Fn :: (A -> B -> R)" into a right-associative TYPE_ARROW chain.
+Splits on " -> ", resolves each part via =type_from_name=, and chains them
+as =arrow(A, arrow(B, R))=. Returns NULL if the prefix is not "Fn :: ".
+Caller owns the returned type.
+
+* Refinement Type System
+:PROPERTIES:
+:ID: monadc.context.types.refinement
+:CUSTOM_ID: types-refinement
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Refinement type registration, predicate evaluation, and cleanup
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:216-225,types.c:43-224
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.types.refinement-system date:2026-06-13 by:codex]
+Refinement types are a lightweight static contract system. A refinement type
+(e.g. "Even", "Pos") wraps a base type (e.g. "Int") with a predicate AST
+that is evaluated statically at compile time when possible. The =refinement_check_literal=
+function walks alias chains and evaluates the predicate AST against a literal
+value. Predicates support arithmetic ops (+, -, *, mod), comparison ops
+(=, !=, >, >=, <, <=), logical ops (and, or, not), and recursive refinement
+lookups via naming conventions (e.g. "Even?" look up refinement "Even").
+
+** refinement_register
+:PROPERTIES:
+:ID: monadc.context.types.refinement.refinement_register
+:CUSTOM_ID: ref-refinement_register
+:SOURCE: types.h:218-219,types.c:45-56
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.refinement.refinement_register src:types.c:45-56 conf:high]
+=void refinement_register(name, pred_name, base_type, pred_ast, var)=
+Allocates a =RefinementEntry=, strdup's all string fields, clones =pred_ast=,
+and prepends to =g_refinements= linked list.
+
+** refinement_pred_name
+:PROPERTIES:
+:ID: monadc.context.types.refinement.refinement_pred_name
+:CUSTOM_ID: ref-refinement_pred_name
+:SOURCE: types.h:222,types.c:58-62
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.refinement.refinement_pred_name src:types.c:58-62 conf:high]
+=const char *refinement_pred_name(const char *type_name)=
+Linear search of =g_refinements= list. Returns the =pred_name= if found,
+NULL otherwise.
+
+** refinement_check_literal
+:PROPERTIES:
+:ID: monadc.context.types.refinement.refinement_check_literal
+:CUSTOM_ID: ref-refinement_check_literal
+:SOURCE: types.h:223,types.c:196-224
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.refinement.refinement_check_literal src:types.c:196-224 conf:high]
+=int refinement_check_literal(type_name, val, out_pred_src)=
+Evaluates a refinement predicate against a numeric literal value. Walks the
+alias chain (up to 32 steps) resolving through =TypeAlias= entries until it
+finds a =RefinementEntry= with a predicate AST, then invokes
+=static_eval_pred=. Returns 1 (true), 0 (false), or -1 (cannot evaluate).
+
+=static_eval_pred= recursively evaluates the predicate AST:
+
+  - (op lhs rhs) — arithmetic ops return the computed value; comparison ops
+    return 0/1; logical and/or short-circuit via recursive evaluation.
+  - (not expr) — negates.
+  - (Name? arg) — strips trailing '?', looks up registered refinement,
+    recurses.
+  - Bare variable → truthiness of val.
+  - Bare number → truthiness of number.
+  - Returns -1 for anything it cannot evaluate.
+
+** refinement_free_all
+:PROPERTIES:
+:ID: monadc.context.types.refinement.refinement_free_all
+:CUSTOM_ID: ref-refinement_free_all
+:SOURCE: types.h:225,types.c:64-75
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.refinement.refinement_free_all src:types.c:64-75 conf:high]
+=void refinement_free_all(void)=
+Frees the entire =g_refinements= linked list: entry names, pred_name, base_type,
+var, predicate_ast, and the entry structs. Sets =g_refinements= to NULL.
+
+* Type Aliases
+:PROPERTIES:
+:ID: monadc.context.types.type-aliases
+:CUSTOM_ID: types-type-aliases
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Type alias registration, resolution, and cleanup
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:135-141,types.c:11-39
+:CONFIDENCE: high
+:END:
+
+** type_alias_register
+:PROPERTIES:
+:ID: monadc.context.types.alias.type_alias_register
+:CUSTOM_ID: alias-type_alias_register
+:SOURCE: types.h:226,types.c:13-27
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.alias.type_alias_register src:types.c:13-27 conf:high]
+=void type_alias_register(alias_name, target_name)=
+Registers a type alias. If =alias_name= already exists, replaces its
+=target_name= (freeing the old one). Otherwise prepends a new =TypeAlias=
+entry to =g_aliases=. Both strings are strdup'd.
+
+** type_alias_free_all
+:PROPERTIES:
+:ID: monadc.context.types.alias.type_alias_free_all
+:CUSTOM_ID: alias-type_alias_free_all
+:SOURCE: types.h:227,types.c:29-39
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.alias.type_alias_free_all src:types.c:29-39 conf:high]
+=void type_alias_free_all(void)=
+Frees the entire =g_aliases= linked list. Sets head to NULL.
+
+* Annotation Parsing
+:PROPERTIES:
+:ID: monadc.context.types.annotation-parsing
+:CUSTOM_ID: types-annotation-parsing
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: parse_type_annotation — annotation AST to Type
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:232-233,types.c:947-1061
+:CONFIDENCE: high
+:END:
+
+** parse_type_annotation
+:PROPERTIES:
+:ID: monadc.context.types.annotation.parse_type_annotation
+:CUSTOM_ID: ann-parse_type_annotation
+:SOURCE: types.h:233,types.c:974-1061
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.annotation.parse_type_annotation src:types.c:974-1061 conf:high]
+=Type *parse_type_annotation(struct AST *ast)=
+Parses type annotations from AST nodes. Handles the surface syntax:
+
+  - =[name :: TypeName]= — finds the =::= or =->= operator and parses the
+    right-hand side as a type.
+  - =[name -> T]= — sugar for =[name :: Pointer :: T]=.
+  - =Arr :: ElemType :: Size= or =Arr :: Size :: ElemType= (both orderings
+    supported: Arr :: U8 :: 256 or Arr :: 256 :: U8).
+  - =Pointer :: T= — creates TYPE_PTR.
+  - Delegates to =parse_type_node= for nested AST:
+    - AST_ARRAY → TYPE_COLL with element type.
+    - AST_LIST → TYPE_LIST with element types.
+    - AST_SYMBOL → =type_from_name(symbol)=.
+
+Helper =parse_type_node= recursively converts AST nodes to Type structs.
+
+* Layout Offset Computation
+:PROPERTIES:
+:ID: monadc.context.types.layout-compute-offsets
+:CUSTOM_ID: types-layout-compute-offsets
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: layout_compute_offsets — struct field offset calculation
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:238-239,types.c:1063-1087
+:CONFIDENCE: high
+:END:
+
+** layout_compute_offsets
+:PROPERTIES:
+:ID: monadc.context.types.layout.layout_compute_offsets
+:CUSTOM_ID: layout-layout_compute_offsets
+:SOURCE: types.h:238,types.c:1066-1087
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.layout.layout_compute_offsets src:types.c:1066-1087 conf:high]
+=int layout_compute_offsets(fields, count, packed, elem_size_fn)=
+Computes byte offsets and sizes for =LayoutField= arrays. Algorithm:
+
+  1. If =fields[i].size= is already set (codegen path), use it directly.
+  2. Else if =elem_size_fn= is provided, invoke it with =fields[i].name=.
+  3. If still <=0, fallback size = 8 (default pointer-sized).
+  4. If not packed and size > 1, align offset to min(size, 8) boundary.
+  5. Set =fields[i].offset= and =fields[i].size=.
+  6. Increment offset by size.
+  7. Return total struct size.
+
+* Utility Functions
+:PROPERTIES:
+:ID: monadc.context.types.utilities
+:CUSTOM_ID: types-utilities
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: infer_literal_type, type_from_name
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:210-213,types.c:229-409,894-945
+:CONFIDENCE: high
+:END:
+
+** infer_literal_type
+:PROPERTIES:
+:ID: monadc.context.types.util.infer_literal_type
+:CUSTOM_ID: util-infer_literal_type
+:SOURCE: types.h:212,types.c:894-945
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.util.infer_literal_type src:types.c:894-945 conf:high]
+=Type *infer_literal_type(double value, const char *literal_str)=
+Infers the type of a literal value. Decision order:
+
+  1. No literal_str: if value is integer → TYPE_INT, else TYPE_FLOAT.
+  2. Contains '/' with digits on both sides → TYPE_RATIO (checked before
+     hex to avoid false matches).
+  3. Starts with "0x"/"0X" → TYPE_HEX.
+  4. Starts with "0b"/"0B" → TYPE_BIN.
+  5. Starts with "0o"/"0O" → TYPE_OCT.
+  6. Contains '.' or 'e'/'E' → TYPE_FLOAT.
+  7. Otherwise → TYPE_INT.
+
+[THINK id:think.types.infer_literal_type-ratio-hex-order status:open date:2026-06-13 by:codex]
+The ratio check must come before hex because "0x/2" would otherwise match the
+hex prefix. The current ordering is correct but fragile — a more robust
+approach would pre-scan for the radix prefix before the slash check.
+
+** type_from_name
+:PROPERTIES:
+:ID: monadc.context.types.util.type_from_name
+:CUSTOM_ID: util-type_from_name
+:SOURCE: types.h:213,types.c:229-409
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.util.type_from_name src:types.c:229-409 conf:high]
+=Type *type_from_name(const char *name)=
+Resolves a type name string to a Type. Resolution order:
+
+  1. Leading '*': remove prefix, resolve inner, wrap in =type_ptr=.
+  2. Single lowercase letter ('a'-'z'): create TYPE_VAR with id 2000+offset.
+  3. Parenthesised "(T1 T2 ...)": parse as TYPE_LIST with element types.
+  4. Bracketed "[T]": parse as TYPE_COLL with element type.
+  5. Trailing '?': strip, resolve inner, wrap in =type_optional=.
+  6. "Fn :: (A -> B -> ...)": delegate to =type_parse_fn_arrow=.
+  7. "Pointer :: T": resolve inner, wrap in =type_ptr=. Unknown → =type_layout_ref=.
+  8. "Arr :: Elem :: N", "Arr :: Elem", "Arr :: N :: Elem": parse as TYPE_ARR.
+  9. Named builtins: match against "Int", "Float", ..., "Heap" (36 names).
+  10. =parse_int_type=: try I<n> or U<n> arbitrary-width.
+  11. Alias chain: resolve through =g_aliases= up to 32 steps, recursively
+      calling =type_from_name= on each target.
+  12. Two-word "Constructor Arg": split on space, create TYPE_APP.
+  13. Returns NULL if unresolvable.
+
+* Open Questions and Design Decisions
+:PROPERTIES:
+:ID: monadc.context.types.open-questions
+:CUSTOM_ID: types-open-questions
+:CONTEXT_KIND: discussion
+:CONTEXT_DESCRIPTION: Open design questions and key decisions
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: discussion
+:CONTEXT_STATUS: active
+:CONFIDENCE: medium
+:END:
+
+[THINK id:think.types.TYPE_COLL-vs-concrete status:open date:2026-06-13 by:codex]
+TYPE_COLL represents an abstract collection "[T]" but SET and MAP are separate
+ground types. Should SET and MAP be unified under TYPE_COLL with a subtype
+field? Or should TYPE_COLL gain a collection_kind enum to distinguish List vs
+Set vs Map? Currently =type_from_name= for "[T]" always creates TYPE_COLL, so
+there is no way to say "Set of Int" in annotation syntax. This could be
+addressed by adding =collection_kind= to Type or by expanding the annotation
+syntax to =#{} T= for sets.
+
+[THINK id:think.types.TYPE_VARIADIC-first-class status:open date:2026-06-13 by:codex]
+TYPE_VARIADIC is defined in the enum but never constructed. The variadic
+behaviour is encoded in FnParam.rest. If the language gains higher-order
+variadic functions (e.g. map with variadic args), TYPE_VARIADIC would need
+a proper constructor and operations. Consider whether it should wrap a
+TYPE_LIST or be a standalone type.
+
+[THINK id:think.types.arr_is_fat-vs-heap-exclusive status:open date:2026-06-13 by:codex]
+TYPE_ARR has two boolean flags: arr_is_fat and arr_is_heap. Can both be true?
+In =type_arr_heap=, arr_is_fat is explicitly set to false. But the type
+system doesn't enforce mutual exclusion at any other point. Could a heap array
+also be a fat pointer? The runtime representation would be different — fat is
+{data, size}, heap is {data, size, cap}. If both were true, which layout wins?
+
+[DOC id:doc.types.no-nested-union date:2026-06-13 by:codex]
+The Type struct deliberately avoids a C union for its variant fields. A union
+would save ~80 bytes per struct but would require every field access to check
+kind and would complicate =calloc=-based zero-initialisation. The current
+design wastes memory (~112 bytes per Type) but eliminates an entire class of
+union-related bugs. The memory overhead is acceptable because the number of
+live Type structs is bounded by the AST size.
+
+[DOC id:doc.types.arr_size-minus-one-default date:2026-06-13 by:codex]
+=make_type= always sets =arr_size=-1 by default, even for non-array kinds.
+This means ground types technically have =arr_size=-1, which is harmless
+because =types_equal= and =type_to_string= switch on =kind=. But it's a
+potential footgun if new code checks =arr_size= without checking =kind= first.
+A safer design would zero-initialise and set =arr_size= only in array
+constructors.
+
+[DOC id:doc.types.layout_fields-sharing date:2026-06-13 by:codex]
+TYPE_LAYOUT's =layout_fields= array is shared between the registry and Type
+structs created via =type_layout=. =type_clone= does not deep-copy
+layout_fields, and =type_free= does not free them. This is intentional: the
+fields array is owned by the layout registry (or the struct definition
+storage). Any code that creates a TYPE_LAYOUT outside the registry must manage
+the fields array lifetime separately.
+
+[DOC id:doc.types.string-format-thread-safety date:2026-06-13 by:codex]
+=type_to_string= uses a 32-slot rotating buffer to avoid the classic
+single-static-buffer thread-safety problem. With 32 slots, up to 32 nested or
+concurrent calls are safe before reuse. This is sufficient for typical
+recursive =type_to_string= calls (max depth rarely exceeds 8). However, it is
+not safe for truly concurrent calls from multiple threads without external
+synchronisation.
+
+* Design Decision: 40 (Not 45) TypeKinds
+:PROPERTIES:
+:ID: monadc.context.types.decision.40-kinds
+:CUSTOM_ID: dec-40-kinds
+:CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: Rationale for the current 40-value TypeKind enum
+:CONTEXT_VERSION: 1
+:SOURCE: types.h:8-49
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.types.40-kinds date:2026-06-13 by:codex]
+The TypeKind enum contains 40 values, not 45. Earlier design documents
+anticipated 45 but five slots were never needed:
+
+  1. TYPE_VARIADIC exists in the enum but has no constructor — variadic
+     behaviour is encoded in FnParam.rest.
+  2. Four unnamed slots were speculated for future collection-type
+     specialisations but never materialised.
+
+The enum is sparsely ordered to allow insertion of new kinds between
+existing groups without renumbering. New numeric types go between the
+existing numeric range; new compound types go after COLL.
+
+The 40 kinds break into:
+  - 13 ground types (general literals and primitives)
+  - 13 numeric subtypes (explicit-width ints, floats)
+  - 9 compound types (collections, functions, pointers)
+  - 5 meta types (HM variables, arrows, unknown, application)
+
+* Cross-References
+:PROPERTIES:
+:ID: monadc.context.types.cross-references
+:CUSTOM_ID: types-cross-references
+:CONTEXT_KIND: reference
+:CONTEXT_DESCRIPTION: Cross-file connections for types.h/types.c
+:CONTEXT_VERSION: 1
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.types.cross-refs from:obs.context.types.file conf:high]
+connects-to ->
+  `monadc.context.language` — surface syntax for type annotations, ground type
+  names, and the :: annotation operator ·
+  `monadc.context.infer` — HM inference uses TYPE_VAR, TYPE_ARROW, and
+  =types_equal= for unification ·
+  `monadc.context.codegen-ops` — codegen lowers each TypeKind to LLVM or
+  bytecode representation ·
+  `monadc.context.dep` — dependency tracking resolves type aliases for
+  module-level types ·
+  `monadc.context.reader` — reader produces AST nodes consumed by
+  =parse_type_annotation= and =type_from_name= ·
+  `monadc.context.codegen` — =layout_compute_offsets= feeds struct layout into
+  LLVM codegen ·
+  `monadc.context.pmatch` — pattern match compilation uses Type structs to
+  check exhaustiveness ·
+  `monadc.context.ffi` — TYPE_LAYOUT, TYPE_PTR, TYPE_F80 bridge to C FFI ·
+  `monadc.context.macro` — macro expansion may produce type annotations parsed
+  by =parse_type_annotation= ·
+  `monadc.context.repl` — REPL uses =type_to_string= for type display ·
+  `monadc.context.env` — environment stores type aliases and refinement
+  registrations
+
+* File Statistics
+:PROPERTIES:
+:ID: monadc.context.types.file-stats
+:CUSTOM_ID: types-file-stats
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.types.file-stats src:types.h,types.c conf:high]
+
+| Metric              | types.h | types.c |
+|---------------------+---------+---------|
+| Lines               |     241 |    1087 |
+| TypeKind values     |      40 |      40 |
+| Constructors        |      29 |      29 |
+| Operations          |       5 |       5 |
+| Refinement fns      |       4 |       4 |
+| Alias fns           |       2 |       2 |
+| Utility fns         |       2 |       2 |
+| Supporting structs  |       4 |       4 |
+| Global registries   |       2 |       2 |
+| Static helpers      |       0 |       3 |
+| Annotation parsing  |       0 |       2 |

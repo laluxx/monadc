@@ -1,0 +1,392 @@
+#+TITLE: C FFI Context — ffi.h
+#+AUTHOR: codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:ffi:c:interop:
+#+PROPERTY: CONTEXT_VERSION 2
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.ffi
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.ffi.file-metadata
+:CUSTOM_ID: ffi-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: ffi.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.ffi.file src:ffi.h conf:high]
+  This file records the architecture of the C FFI subsystem (=ffi.h= /=ffi.c=).
+  It covers: =FFIParam=, =FFIFunction=, =FFIConstant=, =FFIStructField=,
+  =FFIStruct=, =FFIContext=, the full parsing/injection/resolution/mapping
+  API, and the persistent cache layer.
+
+[INF id:inf.context.ffi.meta from:obs.context.ffi.file conf:high]
+  connects-to -> `monadc.context.codegen-ops` (ffi_inject_into_env populates
+  the env with external symbols) ·
+  `monadc.context.language.cffi-runtime` (the (include ...) surface form is
+  parsed by the reader and lowered via ffi_parse_header)
+
+* FFIParam
+:PROPERTIES:
+:ID: monadc.context.ffi.param
+:CUSTOM_ID: ffi-param
+:CONTEXT_KIND: struct
+:CONTEXT_DESCRIPTION: A single parameter in a C function signature
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: ffi.h:12
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.ffi.param-struct src:ffi.h:12 conf:high]
+  Fields: =name= (char *, may be NULL for anonymous params), =type= (=Type
+  *=).  Used by =FFIFunction.params=.
+
+* FFIFunction
+:PROPERTIES:
+:ID: monadc.context.ffi.function
+:CUSTOM_ID: ffi-function
+:CONTEXT_KIND: struct
+:CONTEXT_DESCRIPTION: Parsed C function declaration
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: ffi.h:19
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.ffi.function-struct src:ffi.h:19 conf:high]
+  Fields: =name=, =params= (=FFIParam *=), =param_count=, =variadic=
+  (=bool=, true for C varargs), =return_type= (=Type *=), =doc= (char *,
+  extracted from preceding comments).  Injected as =ENV_FUNC= entries by
+  =ffi_inject_into_env=.
+
+* FFIConstant
+:PROPERTIES:
+:ID: monadc.context.ffi.constant
+:CUSTOM_ID: ffi-constant
+:CONTEXT_KIND: struct
+:CONTEXT_DESCRIPTION: Parsed C constant (macro or enum value)
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: ffi.h:30
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.ffi.constant-struct src:ffi.h:30 conf:high]
+  Fields: =name=, =value= (=long long=), =is_float=, =float_value=,
+  =is_string=, =str_value=, =is_struct_literal=.  Supports integer, float,
+  string, and compound literal constants.  Injected as =ENV_VAR= entries.
+
+* FFIStructField / FFIStruct
+:PROPERTIES:
+:ID: monadc.context.ffi.struct
+:CUSTOM_ID: ffi-struct
+:CONTEXT_KIND: structs
+:CONTEXT_DESCRIPTION: Parsed C struct/typedef descriptors
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: ffi.h:42-57
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.ffi.field-struct src:ffi.h:42 conf:high]
+  =FFIStructField=: fields =name= (char *), =type= (=Type *=).
+
+[OBS id:obs.context.ffi.struct-struct src:ffi.h:49 conf:high]
+  =FFIStruct=: fields =name=, =alias_of= (non-NULL for typedef aliases),
+  =fields= (=FFIStructField *=), =field_count=, =size_bytes=, =packed=
+  (=bool=), =is_scalar_typedef= (=bool= for uint64_t/pointer typedefs).
+  Injected as layout type registrations via =env_insert_layout=.
+
+* FFIContext
+:PROPERTIES:
+:ID: monadc.context.ffi.context
+:CUSTOM_ID: ffi-context
+:CONTEXT_KIND: struct
+:CONTEXT_DESCRIPTION: Accumulator for everything parsed from (include ...) forms
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: ffi.h:64
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.ffi.context-struct src:ffi.h:64 conf:high]
+  =FFIContext= holds growable arrays of =FFIFunction= (=function_count= /
+  =function_cap=), =FFIConstant= (=constant_count= / =constant_cap=),
+  =FFIStruct= (=struct_count= / =struct_cap=).  Also tracks already-included
+  headers (=included= / =included_count= / =included_cap=) to prevent
+  re-parsing, =strip_prefixes= for the =:unprefix= option, and per-module
+  injection watermarks (=injected_into=, =wm_functions=, =wm_structs=,
+  =wm_constants=) to support incremental injection across compilation units.
+
+* ffi_context_create / ffi_context_free
+:PROPERTIES:
+:ID: monadc.context.ffi.create-free
+:CUSTOM_ID: ffi-create-free
+:CONTEXT_KIND: functions
+:CONTEXT_DESCRIPTION: FFI context lifecycle
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: ffi.h:95-96
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.ffi.func-context-create src:ffi.h:95 conf:high]
+  =ffi_context_create()= — Allocates and returns a zero-initialised
+  =FFIContext= with empty arrays.
+
+[OBS id:obs.context.ffi.func-context-free src:ffi.h:96 conf:high]
+  =ffi_context_free(ctx)= — Frees all parsed functions, constants, structs,
+  tracked headers, strip prefixes, watermarks, and the =FFIContext= itself.
+
+* ffi_parse_header
+:PROPERTIES:
+:ID: monadc.context.ffi.parse-header
+:CUSTOM_ID: ffi-parse-header
+:CONTEXT_KIND: function
+:CONTEXT_DESCRIPTION: C header parser — populates FFIContext
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: ffi.h:102
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.ffi.func-parse-header src:ffi.h:102 conf:high]
+  =ffi_parse_header(ctx, header_path, system_include)= — Parses a C header
+  at the given absolute path.  =system_include= distinguishes <=header.h>=
+  from ="header.h"= semantics.  Returns true on success.  Populates the
+  =FFIContext= with extracted functions, constants, and structs.
+
+[THINK id:think.context.ffi.parse-header date:2026-06-13 by:codex]
+  Implementation uses libclang (or an embedded C preprocessor) to walk the
+  AST and extract function declarations, macro definitions, enum values,
+  and struct definitions.  The =system_include= flag influences include-path
+  resolution and may affect which declarations are visible.  Deduplication
+  against the =included= array prevents re-parsing the same header.
+
+* ffi_inject_into_env
+:PROPERTIES:
+:ID: monadc.context.ffi.inject-env
+:CUSTOM_ID: ffi-inject-env
+:CONTEXT_KIND: function
+:CONTEXT_DESCRIPTION: Inject all parsed FFI symbols into codegen env
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: ffi.h:109
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.ffi.func-inject-env src:ffi.h:109 conf:high]
+  =ffi_inject_into_env(ffi, cg)= — Injects all symbols from =FFIContext=
+  into the =CodegenContext= env:
+  - Functions → =ENV_FUNC= entries with ExternalLinkage =LLVMValueRef=.
+  - Constants → =ENV_VAR= entries with constant =LLVMValueRef=.
+  - Structs → =env_insert_layout= registrations.
+  Respects =strip_prefixes= and updates injection watermarks.
+
+[INF id:inf.context.ffi.inject-connect from:obs.context.ffi.func-inject-env conf:high]
+  connects-to -> `monadc.context.codegen-ops.external-symbol-lookup`
+  (codegen reads FFI-injected =ENV_FUNC= entries) ·
+  `monadc.context.env.layout` (struct injection uses layout API) ·
+  `monadc.context.env.insert-func` (function injection uses env_insert_func)
+
+* ffi_resolve_header
+:PROPERTIES:
+:ID: monadc.context.ffi.resolve-header
+:CUSTOM_ID: ffi-resolve-header
+:CONTEXT_KIND: function
+:CONTEXT_DESCRIPTION: Resolve an #include path to an absolute filesystem path
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: ffi.h:115
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.ffi.func-resolve-header src:ffi.h:115 conf:high]
+  =ffi_resolve_header(name, system)= — Takes a header token (e.g. ="stdio.h"=)
+  and =system= flag (=true= for <= >=).  Returns a malloc'd absolute path or
+  NULL if not found.  Searches standard system include paths for =system=
+  headers, and project-local paths for =system=false=.
+
+* ffi_map_c_type
+:PROPERTIES:
+:ID: monadc.context.ffi.map-type
+:CUSTOM_ID: ffi-map-type
+:CONTEXT_KIND: function
+:CONTEXT_DESCRIPTION: Map a C type spelling to a Monad Type*
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: ffi.h:119
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.ffi.func-map-type src:ffi.h:119 conf:high]
+  =ffi_map_c_type(c_type_spelling)= — Converts a C type name (e.g. ="int"=,
+  ="const char *"=, ="size_t"=) to the corresponding Monad =Type *=.
+  Returns =type_unknown()= for unrecognised types.
+
+[THINK id:think.context.ffi.map-type-precision date:2026-06-13 by:codex]
+  The type mapping is a best-effort approximation.  C types like =unsigned
+  long long= and =_Bool= have no direct Monad equivalent and are mapped to
+  the nearest supported width (=i64=, =i1=).  =const= and =volatile=
+  qualifiers are stripped.  Pointer types map to Monad pointer types.
+
+* ffi_dump
+:PROPERTIES:
+:ID: monadc.context.ffi.dump
+:CUSTOM_ID: ffi-dump
+:CONTEXT_KIND: function
+:CONTEXT_DESCRIPTION: Debug pretty-print of FFI context
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: ffi.h:122
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.ffi.func-dump src:ffi.h:122 conf:high]
+  =ffi_dump(ctx)= — Prints all parsed functions, constants, and structs to
+  stdout for debugging.
+
+* ffi_cache_save / ffi_cache_load
+:PROPERTIES:
+:ID: monadc.context.ffi.cache
+:CUSTOM_ID: ffi-cache
+:CONTEXT_KIND: functions
+:CONTEXT_DESCRIPTION: Persistent FFI parse cache
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: ffi.h:125-126
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.ffi.func-cache-save src:ffi.h:125 conf:high]
+  =ffi_cache_save(ctx, header_path)= — Serialises the =FFIContext= for a
+  given header to a cache file on disk.  Returns true on success.
+
+[OBS id:obs.context.ffi.func-cache-load src:ffi.h:126 conf:high]
+  =ffi_cache_load(ctx, header_path)= — Deserialises cached FFI data for a
+  header and merges it into =ctx=.  Returns true on success.
+
+[THINK id:think.context.ffi.cache-invalidation date:2026-06-13 by:codex]
+  Cache validity is determined by comparing the header file's mtime against
+  the cache file's mtime.  If the header is newer the cache is invalidated
+  and =ffi_parse_header= is re-run.  The cache format is a binary dump of
+  the serialised =FFIFunction=/=FFIConstant=/=FFIStruct= arrays.
+
+[INF id:inf.context.ffi.codegen-connect from:obs.context.ffi.func-inject-env conf:high]
+  connects-to -> `monadc.context.language.cffi-runtime` (the reader expands
+  =(include ...)= into =ffi_parse_header= + =ffi_inject_into_env= calls) ·
+  `monadc.context.codegen-ops.external-symbol-lookup` (codegen generates
+  CallInst with ExternalLinkage for FFI functions) ·
+  `monadc.context.env.insert-func` (FFI functions are injected via
+  =env_insert_func= with =is_ffi=true=)

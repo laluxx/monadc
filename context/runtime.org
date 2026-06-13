@@ -1,0 +1,1080 @@
+#+TITLE: Runtime Library Reference
+#+AUTHOR: codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:runtime:codegen:type-system:
+#+PROPERTY: CONTEXT_VERSION 2
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.runtime.file-metadata
+:CUSTOM_ID: runtime-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.runtime.file src:runtime.h conf:high]
+  This file documents every type, function, and macro in the MonadC runtime
+  library (=runtime.h=, =runtime.c=). The runtime is the bridge between the
+  compiler's LLVM codegen and the language semantics: it implements the
+  concrete value representation, collection data structures (list/set/map),
+  numeric towers (int/ratio/bignum), thunk-forcing evaluation, closure
+  application, and printing. Every function declared in =runtime.h= has a
+  corresponding =get_rt_*= LLVM declaration function in =codegen.c= that makes
+  it callable from generated code.
+
+* RuntimeValueType Enum
+:PROPERTIES:
+:ID: monadc.context.runtime.value-types
+:CUSTOM_ID: runtime-value-types
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The RuntimeValueType enum (14 variants) tags every runtime value with its concrete representation kind. This is the lowest-level type discrimination mechanism — every RuntimeValue carries one of these tags.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h:18-34
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.runtime.value-type-enum src:runtime.h:18-34 conf:high]
+  =RuntimeValueType= is a 14-variant enum that tags each =RuntimeValue= with
+  its concrete type. The enum is used in =switch= dispatch throughout the
+  runtime (equality, hashing, printing, collection operations) and is emitted
+  as an =i8= in LLVM IR via =get_rt_value_type()=. The tag is always at
+  offset 0 of the =RuntimeValue= struct, matching C's first-member guarantee
+  so that LLVM GEP with index 0 yields the type tag.
+
+[OBS id:obs.runtime.type-rt-int src:runtime.h:19 conf:high]
+  =RT_INT= — 64-bit signed integer. The default numeric representation.
+  Constructed via =rt_value_int()=, unboxed via =rt_unbox_int()=.
+
+[OBS id:obs.runtime.type-rt-float src:runtime.h:19 conf:high]
+  =RT_FLOAT= — 64-bit IEEE 754 double-precision float.
+  Constructed via =rt_value_float()=, unboxed via =rt_unbox_float()=.
+
+[OBS id:obs.runtime.type-rt-char src:runtime.h:20 conf:high]
+  =RT_CHAR= — Single character stored as C =char=.
+  Constructed via =rt_value_char()=, unboxed via =rt_unbox_char()=.
+
+[OBS id:obs.runtime.type-rt-string src:runtime.h:20 conf:high]
+  =RT_STRING= — Heap-allocated C string (=char *=). Owned by the runtime value;
+  freed when =rt_value_free()= is called.
+  Constructed via =rt_value_string()= (which strdups), unboxed via =rt_unbox_string()=.
+
+[OBS id:obs.runtime.type-rt-symbol src:runtime.h:21 conf:high]
+  =RT_SYMBOL= — Interned symbol. Constructed via =rt_value_symbol()=.
+  Symbols are heap-allocated and compared by pointer identity after interning.
+
+[OBS id:obs.runtime.type-rt-keyword src:runtime.h:21 conf:high]
+  =RT_KEYWORD= — Keyword value (self-evaluating symbolic constant, colon-prefixed
+  in source). Constructed via =rt_value_keyword()=. Keywords are also interned and
+  compared by pointer identity.
+
+[OBS id:obs.runtime.type-rt-list src:runtime.h:22 conf:high]
+  =RT_LIST= — Linked list wrapping a =ConsCell*= via the =RuntimeList= struct.
+  Lists are the primary sequential collection in the language, supporting both
+  strict and lazy (thunk-backed) cons cells.
+  Constructed via =rt_value_list()=, unboxed via =rt_unbox_list()=.
+
+[OBS id:obs.runtime.type-rt-ratio src:runtime.h:22 conf:high]
+  =RT_RATIO= — Exact rational number stored as numerator/denominator pair of
+  =int64_t=. Supports arithmetic via =rt_ratio_add/sub/mul/div()=.
+  Constructed via =rt_value_ratio()=.
+
+[OBS id:obs.runtime.type-rt-array src:runtime.h:23 conf:high]
+  =RT_ARRAY= — Heap-allocated contiguous array of =RuntimeValue*= pointers.
+  Indexed by =rt_array_get/set()= with bounds checking.
+  Constructed via =rt_value_array()=.
+
+[OBS id:obs.runtime.type-rt-nil src:runtime.h:23 conf:high]
+  =RT_NIL= — The empty value, representing logical nothingness. Used as the
+  terminator of proper lists and as the absence-of-value sentinel.
+  Constructed via =rt_value_nil()=, tested via =rt_value_is_nil()=.
+
+[OBS id:obs.runtime.type-rt-thunk src:runtime.h:24 conf:high]
+  =RT_THUNK= — Lazy evaluation wrapper. A thunk carries a function pointer
+  (=ThunkFn=) and an environment; the first access via =rt_force()= evaluates
+  and caches the result.
+  Constructed via =rt_value_thunk()=.
+
+[OBS id:obs.runtime.type-rt-bignum src:runtime.h:24 conf:high]
+  =RT_BIGNUM= — Arbitrary-precision integer backed by GMP's =mpz_t=.
+  Used when integer operations overflow =int64_t=.
+  Constructed via =rt_value_bignum_from_str/i64()=, arithmetic via =rt_bignum_*()=.
+
+[OBS id:obs.runtime.type-rt-set src:runtime.h:25 conf:high]
+  =RT_SET= — Unordered collection of unique =RuntimeValue*= entries, implemented
+  as an open-addressing hash set.
+  Constructed via =rt_value_set()=, unboxed via =rt_unbox_set()=.
+
+[OBS id:obs.runtime.type-rt-map src:runtime.h:25 conf:high]
+  =RT_MAP= — Key-value dictionary mapping =RuntimeValue*= keys to
+  =RuntimeValue*= values, implemented as an open-addressing hash map.
+  Constructed via =rt_value_map()=, unboxed via =rt_unbox_map()=.
+
+[OBS id:obs.runtime.type-rt-closure src:runtime.h:26 conf:high]
+  =RT_CLOSURE= — First-class function value carrying a compiled function pointer,
+  captured environment, arity, and optional debug name.
+  Constructed via =rt_value_closure()= / =rt_value_closure_named()=.
+
+* RuntimeValue Struct
+:PROPERTIES:
+:ID: monadc.context.runtime.runtime-value-struct
+:CUSTOM_ID: runtime-value-struct
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The central tagged union of the runtime system: a type tag + anonymous union of 14 representation variants. Every value flowing through the runtime is a pointer to this struct.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h:66-92
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.runtime.runtime-value-struct src:runtime.h:66-92 conf:high]
+  =RuntimeValue= is a tagged union of 14 variants. The =type= field is an
+  =enum RuntimeValueType= (stored as =int=). The =data= union packs all
+  representation types: scalars inline (=int64_t=, =double=, =char=),
+  pointers to heap allocations (=char*=, =mpz_t=, collection structs), and
+  nested structs for ratio and array. The struct is the universal currency
+  of the runtime — every function accepts and returns =RuntimeValue*=.
+
+[THINK id:think.runtime.runtime-value-layout conf:high]
+  The tagged union layout is the simplest possible representation for a
+  dynamically-typed runtime. LLVM codegen accesses the type tag at offset 0
+  (matching C struct first-member rule) and uses =getelementptr= with the
+  appropriate LLVM type (derived from =get_rt_value_type()=) to read/write
+  the data union. The LLVM type for =RuntimeValue= is constructed in
+  =codegen.c= as a packed struct matching the C layout exactly.
+
+* RuntimeClosure
+:PROPERTIES:
+:ID: monadc.context.runtime.runtime-closure
+:CUSTOM_ID: runtime-closure
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: First-class function closure: compiled function pointer + heap-allocated environment array + arity + optional debug name.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h:58-64
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.runtime.runtime-closure src:runtime.h:58-64 conf:high]
+  =RuntimeClosure= is the first-class function representation. It carries a
+  compiled function pointer (=fn_ptr=, produced by LLVM codegen), a heap array
+  of captured =RuntimeValue*= pointers (=env=), the number of captured
+  variables (=env_size=), the number of declared parameters (=arity=), and an
+  optional debug name. Closures are constructed by =rt_value_closure()= /
+  =rt_value_closure_named()= and applied via =rt_closure_calln()=.
+
+[OBS id:obs.runtime.fn-rt-value-closure src:runtime.h:97 conf:high]
+  =rt_value_closure(void *fn_ptr, void **env, int env_size, int arity)= —
+  Creates a =RuntimeValue= wrapping a =RuntimeClosure= with =RT_CLOSURE= type
+  tag. The =fn_ptr= must point to an LLVM-compiled function matching the
+  calling convention expected by =rt_closure_calln()=.
+
+[OBS id:obs.runtime.fn-rt-value-closure-named src:runtime.h:98 conf:high]
+  =rt_value_closure_named(..., const char *name)= — Like =rt_value_closure()=
+  but associates a debug name with the closure for printing and debugging.
+
+[OBS id:obs.runtime.fn-rt-closure-calln src:runtime.h:99 conf:high]
+  =rt_closure_calln(RuntimeValue *closure, int n, RuntimeValue **args)= —
+  Applies a closure to =n= arguments. The runtime dispatches through the
+  compiled =fn_ptr= with the closure's environment and the argument array.
+  Arity mismatches trigger =__monad_runtime_error()=.
+
+[OBS id:obs.runtime.fn-rt-closure-get-env src:runtime.h:100 conf:high]
+  =rt_closure_get_env(RuntimeValue *closure)= — Returns the environment array
+  pointer from a closure, used by codegen to access captured variables.
+
+* RuntimeThunk
+:PROPERTIES:
+:ID: monadc.context.runtime.runtime-thunk
+:CUSTOM_ID: runtime-thunk
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Lazy evaluation thunk: a function pointer + environment pair that is forced on first access, caching its result.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h:49-54
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.runtime.runtime-thunk src:runtime.h:49-54 conf:high]
+  =RuntimeThunk= implements lazy evaluation. The =fn= field is a =ThunkFn=
+  (=RuntimeValue *(*)(void *)=) that computes the value. The =env= pointer
+  carries the closure environment. On first call to =rt_force()=, the thunk
+  evaluates =fn(env)=, stores the result in =value=, and sets =forced= to 1.
+  Subsequent calls return the cached =value=.
+
+[OBS id:obs.runtime.fn-rt-thunk-of-value src:runtime.h:171 conf:high]
+  =rt_thunk_of_value(RuntimeValue *val)= — Wraps an already-computed value
+  in a trivial thunk (an "eager thunk") whose =fn= immediately returns =val=.
+  Used when a lazy position needs a value that is already known.
+
+[OBS id:obs.runtime.fn-rt-thunk-create src:runtime.h:172 conf:high]
+  =rt_thunk_create(ThunkFn fn, void *env)= — Allocates a new thunk with the
+  given computation and environment. The thunk starts unforced; the first
+  =rt_force()= triggers evaluation.
+
+[OBS id:obs.runtime.fn-rt-force src:runtime.h:173 conf:high]
+  =rt_force(RuntimeThunk *thunk)= — Forces evaluation of a thunk: if
+  =thunk->forced= is 0, calls =thunk->fn(thunk->env)=, caches the result in
+  =thunk->value=, sets =thunk->forced= to 1, and returns the value. If
+  already forced, returns the cached =thunk->value= directly. This is the
+  core of the lazy evaluation machinery.
+
+* ConsCell
+:PROPERTIES:
+:ID: monadc.context.runtime.cons-cell
+:CUSTOM_ID: cons-cell
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Arena-allocated cons cell with inlined head and tail thunks. The atomic building block of linked lists.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h:116-126
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.runtime.cons-cell src:runtime.h:116-126 conf:high]
+  =ConsCell= is the fundamental building block of linked lists. Each cell
+  inlines head and tail thunks directly (fn/env/val/forced quadruples)
+  rather than storing pointers to separate thunk objects. A NULL =tail_val=
+  with =tail_forced=1 signals the end of a list. Cells are arena-allocated
+  from =g_eval_arena=, making them extremely fast to allocate and freeing
+  them automatically at arena reset.
+
+[THINK id:think.runtime.cons-cell-inlined-thunks conf:high]
+  Inlining thunks into the cons cell (rather than storing pointers to
+  separate =RuntimeThunk= structs) is an optimization that reduces pointer
+  chasing and allocation overhead. A cons cell with both head and tail forced
+  occupies ~64 bytes (8 ThunkFn* + 8 void* + 8 RuntimeValue* + 4 int for
+  each of head and tail). This layout matches Baker's lazy-cons semantics
+  where every field is potentially lazy.
+
+* RuntimeList
+:PROPERTIES:
+:ID: monadc.context.runtime.runtime-list
+:CUSTOM_ID: runtime-list
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Thin wrapper around ConsCell* — the linked list representation. NULL cell is the empty list.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h:133-135
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.runtime.runtime-list src:runtime.h:133-135 conf:high]
+  =RuntimeList= wraps a =ConsCell*= pointer. A NULL pointer represents the
+  empty list (=nil=). All list operations (car/cdr/cons/length/nth/map/fold)
+  operate through this thin wrapper. The =RT_LIST= =RuntimeValueType= tag
+  discriminates list values from other types.
+
+* RuntimeSet
+:PROPERTIES:
+:ID: monadc.context.runtime.runtime-set
+:CUSTOM_ID: runtime-set
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Open-addressing hash set with linear probing. Fixed-size power-of-2 buckets with tombstone-based deletion.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h:144-149
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.runtime.runtime-set-struct src:runtime.h:144-149 conf:high]
+  =RuntimeSet= is an open-addressing hash set with linear probing. Buckets
+  hold =RuntimeValue*= pointers. Capacity is always a power of two. The
+  load factor threshold is 0.7; when crossed, the set rehashes into a larger
+  bucket array. Tombstones mark deleted slots to preserve probe chains.
+  Hashing uses =rt_hash_value()= (a static function, xorshift-based with
+  type discrimination).
+
+[OBS id:obs.runtime.runtime-map-struct src:runtime.h:161-166 conf:high]
+  =RuntimeMap= is an open-addressing hash map with linear probing. Each entry
+  is a =RuntimeMapEntry= (key/value pair of =RuntimeValue*= pointers). Same
+  power-of-two sizing, 0.7 load factor, and tombstone strategy as
+  =RuntimeSet=. Keys are hashed via the same =rt_hash_value()= function.
+
+[OBS id:obs.runtime.fn-rt-hash-value src:runtime.h:211 conf:high]
+  =rt_hash_value(RuntimeValue *v)= — Static hash function used by both set
+  and map. Combines the =RuntimeValueType= tag with the value content via
+  xorshift64. Integers hash by value, strings by content, collections by
+  element hashes, etc.
+
+* Value Construction
+:PROPERTIES:
+:ID: monadc.context.runtime.value-construction
+:CUSTOM_ID: runtime-value-construction
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Factory functions for constructing RuntimeValue instances. Hot-path types (int, float, char, list, nil, thunk) use arena allocation; long-lived types (string, symbol, keyword, ratio, array, set, map) use heap allocation.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h:263-275
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.runtime.value-construction src:runtime.h:263-275 conf:high]
+  Value construction functions allocate a =RuntimeValue=, set the type tag,
+  and initialize the data union. Arena-allocated types (int, float, char,
+  list, nil, thunk) are allocated from =g_eval_arena= and are implicitly
+  freed at arena reset. Heap-allocated types (string, symbol, keyword, ratio,
+  array, set, map) use =malloc()= and must be explicitly freed via
+  =rt_value_free()=. The comment in the header marks this distinction.
+
+[OBS id:obs.runtime.fn-rt-value-int src:runtime.h:263 conf:high]
+  =rt_value_int(int64_t val)= — Arena-allocates a =RuntimeValue= with
+  =RT_INT= tag and =data.int_val= set to =val=.
+
+[OBS id:obs.runtime.fn-rt-value-float src:runtime.h:264 conf:high]
+  =rt_value_float(double val)= — Arena-allocates a =RuntimeValue= with
+  =RT_FLOAT= tag and =data.float_val= set to =val=.
+
+[OBS id:obs.runtime.fn-rt-value-char src:runtime.h:265 conf:high]
+  =rt_value_char(char val)= — Arena-allocates a =RuntimeValue= with
+  =RT_CHAR= tag and =data.char_val= set to =val=.
+
+[OBS id:obs.runtime.fn-rt-value-string src:runtime.h:266 conf:high]
+  =rt_value_string(const char *val)= — Heap-allocates a =RuntimeValue= with
+  =RT_STRING= tag. The input string is duplicated via =strdup()= and owned by
+  the returned value. Must be freed via =rt_value_free()=.
+
+[OBS id:obs.runtime.fn-rt-value-symbol src:runtime.h:267 conf:high]
+  =rt_value_symbol(const char *val)= — Heap-allocates a =RuntimeValue= with
+  =RT_SYMBOL= tag. Symbols are interned: the same string always produces the
+  same pointer. Ownership follows the interning table.
+
+[OBS id:obs.runtime.fn-rt-value-keyword src:runtime.h:268 conf:high]
+  =rt_value_keyword(const char *val)= — Heap-allocates a =RuntimeValue= with
+  =RT_KEYWORD= tag. Like symbols, keywords are interned.
+
+[OBS id:obs.runtime.fn-rt-value-list src:runtime.h:269 conf:high]
+  =rt_value_list(RuntimeList *val)= — Arena-allocates a =RuntimeValue= with
+  =RT_LIST= tag wrapping the given =RuntimeList= pointer.
+
+[OBS id:obs.runtime.fn-rt-value-nil src:runtime.h:270 conf:high]
+  =rt_value_nil(void)= — Arena-allocates a =RuntimeValue= with =RT_NIL= tag.
+  Often returns a singleton to minimize allocation overhead.
+
+[OBS id:obs.runtime.fn-rt-value-thunk src:runtime.h:271 conf:high]
+  =rt_value_thunk(RuntimeThunk *thunk)= — Arena-allocates a =RuntimeValue=
+  with =RT_THUNK= tag wrapping the given =RuntimeThunk= pointer.
+
+[OBS id:obs.runtime.fn-rt-value-ratio src:runtime.h:272 conf:high]
+  =rt_value_ratio(int64_t numerator, int64_t denominator)= — Heap-allocates
+  a =RuntimeValue= with =RT_RATIO= tag. The ratio is stored in reduced form
+  (gcd applied). Must be freed via =rt_value_free()=.
+
+[OBS id:obs.runtime.fn-rt-value-array src:runtime.h:273 conf:high]
+  =rt_value_array(size_t length)= — Heap-allocates a =RuntimeValue= with
+  =RT_ARRAY= tag and an internal element array of =length= NULL pointers.
+  Individual elements are set via =rt_array_set()=. Must be freed.
+
+[OBS id:obs.runtime.fn-rt-value-set src:runtime.h:274 conf:high]
+  =rt_value_set(RuntimeSet *s)= — Heap-allocates a =RuntimeValue= with
+  =RT_SET= tag wrapping the given =RuntimeSet= pointer. Must be freed.
+
+[OBS id:obs.runtime.fn-rt-value-map src:runtime.h:275 conf:high]
+  =rt_value_map(RuntimeMap *m)= — Heap-allocates a =RuntimeValue= with
+  =RT_MAP= tag wrapping the given =RuntimeMap= pointer. Must be freed.
+
+* Unboxing
+:PROPERTIES:
+:ID: monadc.context.runtime.unboxing
+:CUSTOM_ID: runtime-unboxing
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Extraction functions that pull primitive values and collection pointers out of a RuntimeValue, asserting the correct type tag.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h:280-287
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.runtime.unboxing src:runtime.h:280-287 conf:high]
+  Unboxing functions extract the inner value from a =RuntimeValue=, asserting
+  the correct type via =__monad_assert_fail()= on mismatch. Every unboxing
+  function corresponds to a value constructor and is mirrored by a =get_rt_*=
+  LLVM declaration for codegen use.
+
+[OBS id:obs.runtime.fn-rt-unbox-int src:runtime.h:280 conf:high]
+  =rt_unbox_int(RuntimeValue *v)= — Returns =v->data.int_val=, asserts
+  =v->type == RT_INT=.
+
+[OBS id:obs.runtime.fn-rt-unbox-float src:runtime.h:281 conf:high]
+  =rt_unbox_float(RuntimeValue *v)= — Returns =v->data.float_val=, asserts
+  =v->type == RT_FLOAT=.
+
+[OBS id:obs.runtime.fn-rt-unbox-char src:runtime.h:282 conf:high]
+  =rt_unbox_char(RuntimeValue *v)= — Returns =v->data.char_val=, asserts
+  =v->type == RT_CHAR=.
+
+[OBS id:obs.runtime.fn-rt-unbox-string src:runtime.h:283 conf:high]
+  =rt_unbox_string(RuntimeValue *v)= — Returns =v->data.string_val=, asserts
+  =v->type == RT_STRING=.
+
+[OBS id:obs.runtime.fn-rt-unbox-list src:runtime.h:284 conf:high]
+  =rt_unbox_list(RuntimeValue *v)= — Returns =v->data.list_val=, asserts
+  =v->type == RT_LIST=.
+
+[OBS id:obs.runtime.fn-rt-unbox-set src:runtime.h:285 conf:high]
+  =rt_unbox_set(RuntimeValue *v)= — Returns =v->data.set_val=, asserts
+  =v->type == RT_SET=.
+
+[OBS id:obs.runtime.fn-rt-unbox-map src:runtime.h:286 conf:high]
+  =rt_unbox_map(RuntimeValue *v)= — Returns =v->data.map_val=, asserts
+  =v->type == RT_MAP=.
+
+[OBS id:obs.runtime.fn-rt-value-is-nil src:runtime.h:287 conf:high]
+  =rt_value_is_nil(RuntimeValue *v)= — Returns 1 if =v->type == RT_NIL=,
+  0 otherwise. Used for list termination checks and conditional dispatch.
+
+* Array Operations
+:PROPERTIES:
+:ID: monadc.context.runtime.array-ops
+:CUSTOM_ID: runtime-array-ops
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Mutable array operations: get, set, and query length. Arrays are heap-allocated contiguous RuntimeValue* sequences.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h:292-294
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.runtime.array-ops src:runtime.h:292-294 conf:high]
+  Array operations provide indexed access to =RT_ARRAY= values. Arrays are
+  heap-allocated contiguous sequences of =RuntimeValue*= pointers with a
+  fixed length set at construction time. Access is bounds-checked.
+
+[OBS id:obs.runtime.fn-rt-array-set src:runtime.h:292 conf:high]
+  =rt_array_set(RuntimeValue *array, size_t index, RuntimeValue *value)= —
+  Sets element at =index= in the array. Asserts =v->type == RT_ARRAY= and
+  =index < length=.
+
+[OBS id:obs.runtime.fn-rt-array-get src:runtime.h:293 conf:high]
+  =rt_array_get(RuntimeValue *array, size_t index)= — Returns the element at
+  =index=. Asserts type and bounds.
+
+[OBS id:obs.runtime.fn-rt-array-length src:runtime.h:294 conf:high]
+  =rt_array_length(RuntimeValue *array)= — Returns the =length= field from
+  the array's internal data. Asserts =RT_ARRAY= type.
+
+* List Operations
+:PROPERTIES:
+:ID: monadc.context.runtime.list-ops
+:CUSTOM_ID: runtime-list-ops
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Full complement of list functions: constructors, accessors, transforms, range generators, and higher-order functions (map/foldl/foldr/filter/zipwith).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h:178-205
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.runtime.list-fn-constructors src:runtime.h:178-195 conf:high]
+  List constructors: =rt_list_new()= (allocates empty wrapper),
+  =rt_list_empty()= (returns singleton empty list), =rt_list_lazy_cons()=
+  (constructs a cell with lazy head/tail thunks), =rt_list_cons()= (strict
+  cons with forced values), =rt_list_append()= (mutates tail of first list
+  to point to value), =rt_list_append_lists()= (concatenates two lists),
+  =rt_list_copy()= (deep copy), =rt_make_list()= (n copies of fill value).
+
+[OBS id:obs.runtime.list-fn-accessors src:runtime.h:186-188 conf:high]
+  List accessors: =rt_list_car()= (first element, forces head thunk),
+  =rt_list_cdr()= (rest of list, forces tail thunk), =rt_list_nth()=
+  (zero-indexed element access, forces thunks along the spine),
+  =rt_list_length()= (forces entire spine to count), =rt_is_pair()=
+  (type+structure predicate), =rt_list_is_empty_list()= (nil check).
+
+[OBS id:obs.runtime.list-fn-range src:runtime.h:195-199 conf:high]
+  Range generators produce lazy infinite or bounded lists:
+  =rt_list_range(lo, hi)= produces =[lo, lo+1, ..., hi-1]= (empty if lo>=hi);
+  =rt_list_from(lo)= produces the infinite lazy list =[lo, lo+1, ...)=;
+  =rt_list_from_step(lo, step)= produces =[lo, lo+step, lo+2*step, ...)=;
+  =rt_list_take(list, n)= returns the first =n= elements;
+  =rt_list_drop(list, n)= skips the first =n= elements.
+
+[OBS id:obs.runtime.list-fn-hof src:runtime.h:201-205 conf:high]
+  Higher-order functions on lists:
+  =rt_list_map(list, env, fn)= returns a new list by applying =fn(env, ...)=
+  to each element;
+  =rt_list_foldl(list, init, env, fn)= left fold;
+  =rt_list_foldr(list, init, env, fn)= right fold;
+  =rt_list_filter(list, env, pred)= returns elements where pred returns truthy;
+  =rt_list_zipwith(a, b, env, fn)= element-wise pairing through =fn=.
+
+[OBS id:obs.runtime.fn-rt-list-lazy-cons src:runtime.h:183 conf:high]
+  =rt_list_lazy_cons(RuntimeThunk *head, RuntimeThunk *tail)= — The core
+  lazy constructor. Wraps head and tail thunks into a new =ConsCell= with
+  =head_forced=0 and =tail_forced=0. The cell is arena-allocated.
+
+[OBS id:obs.runtime.fn-rt-list-cons src:runtime.h:184 conf:high]
+  =rt_list_cons(RuntimeValue *head, RuntimeList *tail)= — Strict cons:
+  creates a =ConsCell= with head and tail both pre-forced (=head_forced=1,
+  =tail_forced=1). The head/tail thunk fn are set to trivial functions that
+  immediately return the stored values.
+
+[OBS id:obs.runtime.fn-rt-list-car src:runtime.h:185 conf:high]
+  =rt_list_car(RuntimeList *list)= — Forces and returns the head of the
+  first cons cell. Asserts the list is non-empty via =__monad_assert_fail()=.
+
+[OBS id:obs.runtime.fn-rt-list-cdr src:runtime.h:186 conf:high]
+  =rt_list_cdr(RuntimeList *list)= — Forces and returns the tail of the
+  first cons cell as a =RuntimeList=.
+
+[OBS id:obs.runtime.fn-rt-list-nth src:runtime.h:187 conf:high]
+  =rt_list_nth(RuntimeList *list, int64_t index)= — Indexes into the list,
+  forcing thunks along the spine until the =index=-th element is reached.
+  Returns =RT_NIL= if index is out of bounds.
+
+[OBS id:obs.runtime.fn-rt-list-append src:runtime.h:190 conf:high]
+  =rt_list_append(RuntimeList *list, RuntimeValue *value)= — Mutates the
+  tail of the last cons cell in =list= to point to a new cons cell containing
+  =value=. This is a destructive append that traverses to the end of the
+  list each call.
+
+[OBS id:obs.runtime.fn-rt-make-list src:runtime.h:193 conf:high]
+  =rt_make_list(int64_t n, RuntimeValue *fill_val)= — Creates a list of =n=
+  elements, each a copy-reference to =fill_val=.
+
+* Set Operations
+:PROPERTIES:
+:ID: monadc.context.runtime.set-ops
+:CUSTOM_ID: runtime-set-ops
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Hash set operations: construction, insertion (conj), removal (disj), mutable variants, query (contains/get/count), conversion (seq/from-list/from-array), comparison, and HOFs (foldl/map/filter).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h:213-230
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.runtime.set-fn-constructors src:runtime.h:213-216 conf:high]
+  Set constructors: =rt_set_new()= (empty set), =rt_set_of(vals, n)= (set
+  from C array), =rt_set_from_list(list)= (from =RuntimeList=), =rt_set_from_array(array_rv)=
+  (from =RT_ARRAY= value).
+
+[OBS id:obs.runtime.set-fn-mutation src:runtime.h:217-220 conf:high]
+  Set mutation: =rt_set_conj(s, val)= (functional add, returns new set),
+  =rt_set_disj(s, val)= (functional remove), =rt_set_conj_mut(s, val)=
+  (destructive add, reuses =s=), =rt_set_disj_mut(s, val)= (destructive
+  remove). The mutable variants follow Baker's linear update convention:
+  if =s= has only one reference, mutation is safe; otherwise, copy-on-write.
+
+[OBS id:obs.runtime.set-fn-query src:runtime.h:221-225 conf:high]
+  Set query: =rt_set_contains(s, val)= (membership test),
+  =rt_set_get(s, key)= (return =key= if found, NULL otherwise),
+  =rt_set_count(s)= (number of live entries), =rt_set_seq(s)= (iterate
+  as =RuntimeList=), =rt_set_equal(a, b)= (elementwise comparison),
+  =rt_set_free(s)= (release buckets).
+
+[OBS id:obs.runtime.set-fn-hof src:runtime.h:228-230 conf:high]
+  Set HOFs: =rt_set_foldl(s, init, env, fn)= (left fold over entries),
+  =rt_set_map(s, env, fn)= (map to list), =rt_set_filter(s, env, pred)=
+  (filter to new set).
+
+* Map Operations
+:PROPERTIES:
+:ID: monadc.context.runtime.map-ops
+:CUSTOM_ID: runtime-map-ops
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Hash map operations: construction, assoc/dissoc, mutable variants, query (get/contains/find/count), key/value extraction, merge, comparison, and memory management.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h:235-249
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.runtime.map-fn-constructors src:runtime.h:235 conf:high]
+  =rt_map_new()= — Creates an empty map.
+
+[OBS id:obs.runtime.map-fn-assoc-dissoc src:runtime.h:236-239 conf:high]
+  =rt_map_assoc(m, key, val)= (functional insertion, returns new map),
+  =rt_map_assoc_mut(m, key, val)= (destructive insertion),
+  =rt_map_dissoc(m, key)= (functional removal),
+  =rt_map_dissoc_mut(m, key)= (destructive removal).
+
+[OBS id:obs.runtime.map-fn-query src:runtime.h:240-248 conf:high]
+  Map query: =rt_map_get(m, key, default_val)= (lookup with fallback),
+  =rt_map_contains(m, key)= (membership), =rt_map_find(m, key)=
+  (lookup returning key-value pair or NULL), =rt_map_count(m)= (entry count),
+  =rt_map_keys(m)= (list of all keys), =rt_map_vals(m)= (list of all values),
+  =rt_map_merge(a, b)= (merge, b overwrites a), =rt_map_merge_with(a, b, fn)=
+  (merge with collision function), =rt_map_equal(a, b)= (entrywise comparison),
+  =rt_map_free(m)= (release entries and buckets).
+
+* Equality
+:PROPERTIES:
+:ID: monadc.context.runtime.equality
+:CUSTOM_ID: runtime-equality
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Deep structural equality predicate: =rt_equal_p()= recursively compares two RuntimeValues for equality by type and content.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h:255
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.runtime.fn-rt-equal-p src:runtime.h:255 conf:high]
+  =rt_equal_p(RuntimeValue *a, RuntimeValue *b)= — Deep structural equality.
+  Compares type tags first, then performs type-specific comparison: integer
+  equality for =RT_INT=, =mpz_cmp= for =RT_BIGNUM=, =strcmp= for strings,
+  structural for lists/sets/maps, etc. Returns 1 if equal, 0 otherwise.
+  Used by set/map hash operations and by the language's =eq?= predicate.
+
+* Ratio Arithmetic
+:PROPERTIES:
+:ID: monadc.context.runtime.ratio
+:CUSTOM_ID: runtime-ratio
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Exact rational arithmetic: construction from int, four arithmetic operations, conversion to int/float, and internal reduction by gcd.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h:299-305
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.runtime.ratio-ops src:runtime.h:299-305 conf:high]
+  Ratio operations implement exact rational arithmetic. Ratios are always
+  stored in reduced form (gcd applied to numerator/denominator).
+  =rt_ratio_from_int(n)= returns =n/1=. =rt_ratio_add/sub/mul/div()= perform
+  the corresponding arithmetic. =rt_ratio_to_int()= truncates toward zero;
+  =rt_ratio_to_float()= performs floating-point division.
+
+* Bignum Arithmetic
+:PROPERTIES:
+:ID: monadc.context.runtime.bignum
+:CUSTOM_ID: runtime-bignum
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Arbitrary-precision integer arithmetic backed by GMP (GNU Multiple Precision Arithmetic Library): construction, promotion, predicates, and four operations.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h:310-317
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.runtime.bignum-ops src:runtime.h:310-317 conf:high]
+  Bignum operations wrap GMP =mpz_t= for arbitrary-precision arithmetic.
+  =rt_value_bignum_from_str(s)= parses a decimal string.
+  =rt_value_bignum_from_i64(n)= converts int64 to bignum.
+  =rt_promote_to_bignum(v)= converts an =RT_INT= to =RT_BIGNUM= (e.g., on
+  overflow). =rt_value_is_bignum(v)= checks the tag.
+  =rt_bignum_add/sub/mul/div()= perform arithmetic via =mpz_add/sub/mul/tdiv_q=.
+
+* Printing
+:PROPERTIES:
+:ID: monadc.context.runtime.printing
+:CUSTOM_ID: runtime-printing
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Value printing functions: display, display-with-newline, list-specific printers, and 128-bit integer printers.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h:322-327
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.runtime.printing-fns src:runtime.h:322-327 conf:high]
+  Printing functions render runtime values for display. =rt_print_value()=
+  dispatches on type tag: integers printed as decimals, chars with escaping,
+  strings with quotes, symbols/keywords as-is, lists as parenthesized
+  sequences, sets as #{...}, maps as {...}, etc. =rt_print_value_newline()=
+  appends a newline. =rt_print_list()= and =rt_print_list_unbounded()=
+  handle list display with bounded vs. infinite output. =__print_i128()= and
+  =__print_u128()= are helpers for 128-bit integer display in generated code.
+
+* Memory Management
+:PROPERTIES:
+:ID: monadc.context.runtime.memory
+:CUSTOM_ID: runtime-memory
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Explicit deallocation functions for runtime values, lists, thunks, and sets. Arena allocation for hot-path values; heap allocation and explicit free for long-lived values.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h:331-334
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.runtime.memory-fns src:runtime.h:331-334 conf:high]
+  Memory management functions: =rt_value_free()= frees a heap-allocated
+  =RuntimeValue= (string/symbol/keyword/ratio/array/set/map — not arena),
+  =rt_list_free()= frees a cons-cell chain, =rt_thunk_free()= frees a thunk,
+  =rt_set_free()= frees a set's bucket array. The arena (=g_eval_arena=)
+  handles bulk deallocation of hot-path types (int/float/char/list/nil/thunk).
+
+* AST Conversion & Collection Polymorphic Ops
+:PROPERTIES:
+:ID: monadc.context.runtime.ast-conversion
+:CUSTOM_ID: runtime-ast-conversion
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Conversion from AST nodes to runtime values, string utilities, and polymorphic collection operations (wrap/empty/concat/lazy-cons/drop/count/is-empty) that dispatch on collection type.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h:349-359
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.runtime.fn-rt-ast-to-runtime-value src:runtime.h:349 conf:high]
+  =rt_ast_to_runtime_value(AST *ast)= — Converts a parsed AST (from the
+  reader) into a =RuntimeValue= tree. Used by the macro expansion system and
+  by the eval/REPL path. Recursively translates =AST_INT= to =RT_INT=,
+  =AST_STRING= to =RT_STRING=, =AST_LIST= to =RT_LIST=, etc.
+
+[OBS id:obs.runtime.fn-rt-string-take src:runtime.h:350 conf:high]
+  =rt_string_take(const char *s, int64_t n)= — Returns a heap-allocated
+  substring of the first =n= characters of =s= (or the full string if =n=
+  exceeds length).
+
+[OBS id:obs.runtime.fn-rt-string-concat src:runtime.h:351 conf:high]
+  =rt_string_concat(const char *a, const char *b)= — Returns a heap-allocated
+  concatenation of =a= and =b=.
+
+[OBS id:obs.runtime.fn-rt-arr-concat src:runtime.h:352 conf:high]
+  =rt_arr_concat(void *d1, int64_t l1, void *d2, int64_t l2, int64_t elem_size)= —
+  Generic array concatenation: returns a heap-allocated copy of =d1= followed
+  by =d2=, with elements of size =elem_size=. Used for raw memory concatenation.
+
+[OBS id:obs.runtime.coll-polymorphic-ops src:runtime.h:353-359 conf:high]
+  Polymorphic collection operations dispatch on collection type (=RT_LIST=,
+  =RT_SET=, =RT_MAP=, =RT_ARRAY=):
+  =rt_coll_wrap(coll, item)= adds =item= to =coll= (cons for list, conj for set,
+  assoc for map);
+  =rt_coll_empty(coll)= returns the empty version of =coll='s type;
+  =rt_coll_concat(a, b)= concatenates two collections;
+  =rt_coll_lazy_cons(head, tail_thunk)= wraps a lazy tail into a list (only
+  meaningful for lists);
+  =rt_coll_drop(coll, n)= drops first =n= elements;
+  =rt_coll_count(coll)= returns element count;
+  =rt_coll_is_empty(coll)= returns 1 if collection is empty.
+
+* LLVM Runtime Declarations
+:PROPERTIES:
+:ID: monadc.context.runtime.llvm-declarations
+:CUSTOM_ID: runtime-llvm-declarations
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The ~65 get_rt_* functions in runtime.h that declare LLVM function references for each runtime function. These are the bridge between LLVM codegen and the C runtime library.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h:364-514
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.runtime.llvm-declarations src:runtime.h:364-514 conf:high]
+  The =get_rt_*= functions each return an =LLVMValueRef= for a corresponding
+  runtime function. They call =LLVMGetNamedFunction()= (or declare the
+  function if not yet declared) with the correct LLVM function type matching
+  the C signature. These are used by =codegen.c= when emitting calls to
+  runtime functions from generated code. =declare_runtime_functions()=
+  bulk-declares all of them at startup. =get_rt_value_type()= returns the
+  LLVM struct type for =RuntimeValue=, and =get_rt_list_type()= returns the
+  LLVM type for =RuntimeList=.
+
+[THINK id:think.runtime.llvm-declarations-organization conf:high]
+  The runtime.h LLVM declarations are organized into subsections matching
+  the C function groups: Closure (4 fns), Thunks (3), List (~25), Set (~12),
+  Map (~12), Equality (1), Unboxing (7), Value Construction (11), Array (3),
+  Ratio (7), Print (2), String/Collection (9), AST (1), plus the two print
+  helpers (i128/u128) and the error function. This is approximately 65+ getters
+  total. Each maps one-to-one to a C runtime function exposed to LLVM IR.
+
+* Error Handling
+:PROPERTIES:
+:ID: monadc.context.runtime.error-handling
+:CUSTOM_ID: runtime-error-handling
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Runtime assertion failures, runtime error reporting, and the layout pointer registry.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h:340-343
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.runtime.fn-assert-fail src:runtime.h:342 conf:high]
+  =__monad_assert_fail(const char *label)= — Called on runtime assertion
+  failure (type mismatch, null dereference, bounds violation). Prints the
+  label and aborts.
+
+[OBS id:obs.runtime.fn-runtime-error src:runtime.h:343 conf:high]
+  =__monad_runtime_error(const char *file, long line, long col, const char *msg)= —
+  Called from generated code on runtime errors (arity mismatch, invalid
+  operation). Emits source location and message, then aborts.
+
+[OBS id:obs.runtime.layout-pointer-registry src:runtime.h:337-338 conf:high]
+  =__layout_ptr_set(const char *name, void *ptr)= and =__layout_ptr_get(const char *name)= —
+  A string-keyed registry of pointer values used by codegen to share layout
+  information (e.g., struct field offsets) between compilation units.
+
+[OBS id:obs.runtime.hof-callback-types src:runtime.h:106-108 conf:high]
+  HOF callback types: =RT_UnaryFn= is =RuntimeValue *(*)(void *env, int n, RuntimeValue **args)=,
+  =RT_BinaryFn= is the same signature (variadic through args array), and =RT_PredFn=
+  is =int (*)(RuntimeValue *)=. The env+args+variadic convention allows HOFs
+  to carry closure state while accepting arbitrary argument counts.
+
+* Cross-Links
+:PROPERTIES:
+:ID: monadc.context.runtime.cross-links
+:CUSTOM_ID: runtime-cross-links
+:CONTEXT_KIND: inference
+:CONTEXT_DESCRIPTION: Connections from the runtime library to language primitives, codegen dispatch, and philosophical principles.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: runtime.h, codegen.c, language.org, philosophy.org
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.runtime.connects-to-primitives from:obs.context.runtime.file,obs.runtime.value-type-enum,obs.runtime.runtime-value-struct,obs.runtime.runtime-set-struct,obs.runtime.runtime-map-struct conf:high]
+  connects-to -> `monadc.context.language.primitive-ground-types` (RT_INT/RT_FLOAT/RT_CHAR
+  are the runtime incarnation of ground-type values) ·
+  `monadc.context.language.primitive-set` (RT_SET/RuntimeSet implement the
+  language's set semantics in the runtime) ·
+  `monadc.context.language.primitive-map` (RT_MAP/RuntimeMap implement the
+  language's map/dictionary semantics) ·
+  `monadc.context.language.primitive-list` (RT_LIST/RuntimeList/ConsCell
+  implement the language's linked list and lazy sequence semantics) ·
+  `monadc.context.language.primitive-function` (RT_CLOSURE/RuntimeClosure
+  implements first-class function values, the runtime side of the dual
+  representation) ·
+  `monadc.context.language.primitive-array` (RT_ARRAY is the runtime
+  representation of heap-allocated arrays) ·
+  `monadc.context.language.primitive-ratio` (RT_RATIO implements exact
+  rational numbers) ·
+  `monadc.context.language.primitive-bignum` (RT_BIGNUM implements
+  arbitrary-precision integers) ·
+  `monadc.context.language.primitive-type-dispatch` (the type tag switch in
+  every runtime function mirrors the type dispatch logic in codegen)
+
+[INF id:inf.runtime.connects-to-codegen from:obs.runtime.llvm-declarations,obs.runtime.value-construction,obs.runtime.unboxing conf:high]
+  connects-to -> `monadc.context.codegen.rt-call-convention` (every
+  =get_rt_*= function defines the LLVM calling convention bridge) ·
+  `monadc.context.codegen.rt-type-emission` (get_rt_value_type / get_rt_list_type
+  emit the LLVM struct types that codegen must match) ·
+  `monadc.context.codegen.hof-dispatch` (the HOF callback types RT_UnaryFn
+  and RT_BinaryFn define the calling convention for higher-order function
+  calls from generated code) ·
+  `monadc.context.codegen.arena-allocation` (g_eval_arena is shared between
+  runtime and codegen for hot-path allocation)
+
+[INF id:inf.runtime.connects-to-philosophy from:obs.runtime.cons-cell,obs.runtime.runtime-thunk,obs.runtime.list-fn-range,think.runtime.cons-cell-inlined-thunks conf:high]
+  connects-to -> `monadc.context.philosophy.zero-to-metal` (the lazy range
+  generators =rt_list_from= / =rt_list_from_step= implement infinite sequences
+  that compile to efficient C loops) ·
+  `monadc.context.philosophy.no-tradeoff-principle` (the runtime supports both
+  strict arrays and lazy lists in the same value representation, honoring the
+  no-trade-off commitment) ·
+  `monadc.context.references.cons-lazy` (the inlined head/tail thunks in
+  ConsCell implement Baker's lazy-cons semantics) ·
+  `monadc.context.references.linear-lisp` (the conj!/disj!/assoc!/dissoc!
+  mutable variants follow Baker's linear update convention from Linear Lisp)
+
+[INF id:inf.runtime.connects-to-set-semantics from:obs.runtime.set-fn-mutation,obs.runtime.runtime-set-struct,obs.runtime.fn-rt-hash-value conf:high]
+  connects-to -> `monadc.context.language.primitive-set` (rt_set_conj/disj and
+  their mutable variants rt_set_conj_mut/rt_set_disj_mut implement the
+  language's set insertion and removal) ·
+  `monadc.context.language.primitive-set-eq` (rt_set_equal provides
+  set-equality semantics matching the language's =set= type) ·
+  `monadc.context.philosophy.sets-are-the-model` (the set data structure is the
+  runtime incarnation of the language's set-theoretic foundation)
+
+[INF id:inf.runtime.connects-to-map-semantics from:obs.runtime.map-fn-assoc-dissoc,obs.runtime.map-fn-query,obs.runtime.runtime-map-struct conf:high]
+  connects-to -> `monadc.context.language.primitive-map` (rt_map_assoc/dissoc
+  and their mutable variants implement the language's map update operations) ·
+  `monadc.context.language.primitive-map-get` (rt_map_get with default value
+  implements the language's map lookup semantics) ·
+  `monadc.context.language.primitive-map-merge` (rt_map_merge_with provides
+  the collision-resolution semantics for map merging)
+
+[INF id:inf.runtime.connects-to-category from:obs.context.runtime.file,think.runtime.runtime-value-layout,obs.runtime.llvm-declarations conf:high]
+  connects-to -> `monadc.context.language.primitive-connections` (systemic:
+  every language primitive has a runtime-side implementation in this file) ·
+   `monadc.context.philosophy.shared-principles` under =dec.philosophy.context-as-category=
+   (this file is an object in the context category; each OBS node is a sub-object;
+   the INF records are morphisms to language.org and philosophy.org objects) ·
+   `monadc.context.language.primitive-connections` (every language primitive maps
+   to a runtime implementation; this file grows with the runtime; every new
+   runtime function should be documented here with its OBS record)
+
+[THINK id:think.runtime.coverage-status conf:high]
+  The runtime library covers the full set of value types required by the
+  language specification. Every =RuntimeValueType= variant maps to a language
+  construct or primitive type. The arena/heap allocation split is a performance
+  architecture: hot-path values (int, float, char, list spines, nil, thunks)
+  avoid malloc/free overhead through arena bump-allocation, while long-lived
+  or variable-size values (strings, symbols, keywords, ratios, arrays, sets,
+  maps) use explicit heap allocation with reference counting or explicit free.
+  The LLVM declaration layer (~65 get_rt_* functions) ensures every runtime
+  function is accessible from generated code through a consistent pattern.

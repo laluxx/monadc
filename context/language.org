@@ -14,7 +14,7 @@
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -379,7 +379,7 @@
   generated top-level asm fixtures were replaced because they did not exercise
   the supported backend path.
 
-[OBS id:obs.language.inline-asm-pointer-gap src:tests/codegen/asm/asm-hello-world.mon conf:medium]
+[OBS id:obs.language.inline-asm-pointer-gap src:tests/codegen/asm/asm-syscall-write-string.mon conf:medium]
   Superseded by =obs.language.inline-asm-pointer-sugar-codegen=. The original
   gap was that the syscall example wanted =*U8= for buffers but codegen rejected
   pointer-sugar parameter types.
@@ -1998,7 +1998,7 @@
   syntax type, indicating it is a compile-time macro rather than a
   runtime function.
 
-[OBS id:obs.language.macros-extensibility conf:high]
+[OBS id:obs.language.macros-extensibility src:macro.c conf:high]
   The macro system is designed as the extensible layer of what would
   otherwise be compiler built-ins. Pattern matching syntax, type class
   desugaring, data declarations, and instance deriving are all expressible
@@ -2351,5 +2351,539 @@
   function syntaxes, the two set mutability modes, the ground→fixed-width ladder) ·
   `monadc.context.references.propositions-as-types` (the core insight that
   types-are-sets, functions-are-relations) ·
-  `monadc.context.references.linear-lisp` (the immutable-default/mutable-escape-hatch
-  pattern follows Baker's linear logic)
+   `monadc.context.references.linear-lisp` (the immutable-default/mutable-escape-hatch
+   pattern follows Baker's linear logic)
+
+** Structural Constructs
+:PROPERTIES:
+:ID: monadc.context.language.constructs.structural
+:CUSTOM_ID: structural-constructs
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The structural construct forms (Data, Class, Instance, Tests, Range, Address-Of) that define new types, type classes, test suites, range expressions, and pointer operations. These carry complex AST payloads and participate in multiple compiler phases.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: reader.h:50-61,reader.c,codegen.c,typeclass.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.language.construct.data src:reader.h:59-61,reader.h:251-260 conf:high]
+  `AST_DATA` represents algebraic data type declarations `(data Color Red | Green | Blue)`.
+  The AST payload carries the type name, type parameters (e.g. `["a"]` for `Maybe a`),
+  constructor definitions (each with name and field type strings), and an optional
+  deriving list for auto-generated instances (`["show", "eq"]`). The reader
+  parses these into `AST_DATA` nodes. Inference assigns a fresh type variable
+  for recursive references. Codegen emits constructor tag dispatch and field
+  access via the layout system. The `typeclass.c` module generates deriving
+  implementations for `Eq`, `Show`, `Enum`, and other derivable classes.
+
+[OBS id:obs.language.construct.class src:reader.h:60,reader.h:262-276 conf:high]
+  `AST_CLASS` represents type class declarations `(class Eq a where (= a -> a -> Bool))`.
+  The AST payload carries the class name, type variable, associated type names,
+  method signatures (name + type string pairs), and optional default method
+  implementations. The reader stores method bodies as `AST` subtrees
+  (reader.h:273-274). The type class system (`typeclass.c`) resolves method
+  dispatch through instance declarations at compile time.
+
+[OBS id:obs.language.construct.instance src:reader.h:61,reader.h:278-289 conf:high]
+  `AST_INSTANCE` represents type class instance declarations
+  `(instance Eq TrafficLight where ...)`. The AST payload carries the class
+  name, type name, associated type value names, and method implementations as
+  lambda AST subtrees (reader.h:286-288). Instance resolution is fully static:
+  the compiler resolves method calls to concrete implementations at compile
+  time with no runtime dispatch overhead. Derived instances (from `data`
+  deriving clauses) are generated automatically by `typeclass.c`.
+
+[OBS id:obs.language.construct.tests src:reader.h:52,reader.h:208-211 conf:high]
+  `AST_TESTS` represents test blocks `(tests (assert-eq ...) ...)`. The AST
+  payload carries an array of assertion AST nodes. Tests are parsed but not
+  compiled to the main program — they are extracted by the test runner in a
+  separate pass. Each assertion within a tests block is an `(assert-eq expected actual)`
+  form with its own codegen path (codegen.c:6431-6602). Test blocks use a
+  distinct `AST_TESTS` tag so the compiler can skip them during normal
+  compilation and extract them for test execution.
+
+[OBS id:obs.language.construct.range src:reader.h:54,reader.h:213-219 conf:high]
+  `AST_RANGE` represents range expressions `(0..10)` or `[0..10]` or `[1,3..40]` or `(0..)`.
+  The AST payload carries optional `start`, `step`, `end` sub-expressions and an
+  `is_array` flag distinguishing parenthesized (lazy list) from bracketed (array)
+  ranges (reader.h:214-219). When `end` is NULL, the range is infinite
+  (lazy/streaming). Ranges desugar to lazy thunk-based sequences at runtime,
+  using the thunk system for deferred element computation.
+
+[OBS id:obs.language.construct.address-of src:reader.h:53,reader.h:330 conf:high]
+  `AST_ADDRESS_OF` represents address-of expressions `&expr`. The reader produces
+  this node when it encounters `&` prefix syntax (also desugared from `&x` sugar).
+  The AST payload is a single child operand AST. Codegen emits an LLVM `alloca`
+  for the operand's value and returns the pointer. Type inference assigns
+  `TYPE_PTR` with the operand's type as element. The address-of construct is
+  the primary escape hatch for FFI and inline assembly where raw pointer access
+  is needed.
+
+[INF id:inf.language.construct.structural-connect from:obs.language.construct.data,obs.language.construct.class,obs.language.construct.instance,obs.language.construct.tests,obs.language.construct.range,obs.language.construct.address-of conf:high]
+  connects-to -> `monadc.context.language.primitive-type-constructors` (TYPE_PTR
+  is the type of address-of expressions) ·
+  `monadc.context.language.primitive-dependent-types` (data declarations are the
+  user-facing induction definition mechanism) ·
+  `monadc.context.language.pattern-matching` (data constructors are matched in
+  pmatch clauses) ·
+  `monadc.context.language.codegen-diagnostics` (test assertions produce
+  diagnostic errors on failure) ·
+  `monadc.context.language.inline-asm` (address-of is used to pass buffer
+  pointers to inline assembly) ·
+  `monadc.context.language.codegen-dispatch` (the `find`/`assoc`/`dissoc` dispatch
+  handles class method resolution) ·
+   `monadc.context.reader.sugar.address-of` (`&x` sugar desugars to `(address-of x)`)
+
+** Binding Constructs
+:PROPERTIES:
+:ID: monadc.context.language.constructs.binding
+:CUSTOM_ID: binding-constructs
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The binding construct forms (define, let, let*, letrec, set!) that introduce and mutate variable bindings. Define creates top-level scope bindings, let creates lexical scope, set! mutates existing bindings.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:4106-4640,reader.c,reader.h:66-71,infer.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.language.construct.define src:codegen.c:4106-4640,codegen.c:4106-4107 conf:high]
+  `(define name value)` binds a value to a name in the current scope. It accepts
+  two forms: `(define name value)` for simple variable binding and
+  `(define (name params ...) body)` for function definition shorthand which
+  desugars to `(define name (lambda (params ...) body))`. Typed definitions
+  use bracket syntax: `(define [name :: Type] value)`. When value is `AST_LAMBDA`,
+  codegen performs HM inference to determine the function type scheme
+  (codegen.c:4143-4144), collects free variables for closure construction, and
+  selects between typed ABI and closure ABI based on capture analysis
+  (codegen.c:4174). Wisp-style multi-line define with `->` arrow syntax has a
+  known gap in lambda binding creation (obs.language.gap-wisp-define).
+
+[OBS id:obs.language.construct.let src:reader.c conf:high]
+  `(let ([x val] [y val2]) body)` creates lexical bindings evaluated in parallel.
+  The reader desugars `let` to lambda application: `(let [x val] body)` becomes
+  `((lambda (x) body) val)` (obs.reader.sugar.let-desugar). Multiple bindings
+  produce nested applications. `let*` desugars to sequential `let` forms (each
+  binding is in scope for subsequent bindings). `letrec` uses the Y combinator
+  for recursive bindings. These forms have no strcmp dispatch handler in codegen
+  (obs.language.gap-control-forms) — they are fully desugared at the reader
+  level before codegen sees them.
+
+[OBS id:obs.language.construct.set! src:codegen.c:2351,codegen.c:7471 conf:high]
+  `(set! name value)` mutates an existing binding. Codegen detects mutation via
+  strcmp on `"set!"` (codegen.c:2351) and emits a store instruction to the
+  variable's allocated storage. The compiler tracks which bindings are mutated
+  to avoid unnecessary boxing. `set!` impurifies the containing function for the
+  purposes of the purity tracking system. Assignment arrow sugar `x <- expr`
+  desugars to `(set! x expr)` (obs.reader.sugar.assign-arrow).
+
+[INF id:inf.language.construct.binding-connect from:obs.language.construct.define,obs.language.construct.let,obs.language.construct.set! conf:high]
+  connects-to -> `monadc.context.language.primitive-function` (define with lambda
+  creates function bindings; let desugars to lambda application) ·
+  `monadc.context.language.codegen-gaps` (let/let*/letrec have no strcmp dispatch;
+  wisp define has a known bug) ·
+  `monadc.context.reader.sugar.let-desugar` (reader-level let desugaring) ·
+  `monadc.context.reader.sugar.assign-arrow` (assignment arrow desugars to set!) ·
+  `monadc.context.language.codegen-dispatch` (define and set! are strcmp-dispatched
+  in codegen_expr)
+
+** Control Flow Constructs
+:PROPERTIES:
+:ID: monadc.context.language.constructs.control-flow
+:CUSTOM_ID: control-flow-constructs
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The control flow construct forms (if, unless, when, cond, do, begin) that sequence and branch execution. If/unless/when have strcmp dispatch; cond and do are reader-desugared.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:7561-7956,reader.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.language.construct.if src:codegen.c:7572-7806 conf:high]
+  `(if test then-expr else-expr)` compiles to an LLVM `icmp` condition, two
+  basic blocks (then/else), and a PHI node merging the results. Codegen handles
+  both typed values and statement-form (no-value) if. When both branches produce
+  the same pointer-like type (e.g. both `String`), the PHI node preserves the
+  exact type so downstream operations like `show` dispatch correctly
+  (obs.language.if-string-branch-type-preserved). `unless` is the negated-test
+  variant `(unless test body)` (codegen.c:7919-7956); `when` is the no-else
+  variant `(when test body1 body2 ...)` (codegen.c:7879-7918).
+
+[OBS id:obs.language.construct.cond src:reader.c,obs.reader.sugar.cond-to-if conf:high]
+  `(cond [test1 body1] [test2 body2] [else body])` desugars to nested `if`
+  expressions at the reader level. Each `[test body]` pair becomes `(if test body ...)`.
+  The `[else body]` clause becomes the final branch with no test. Cond has no
+  strcmp dispatch handler in codegen (obs.language.gap-control-forms); it relies
+  entirely on reader-level desugaring.
+
+[OBS id:obs.language.construct.begin src:codegen.c:7561 conf:high]
+  `(begin expr1 expr2 ...)` sequences multiple expressions, returning the value
+  of the last expression. Codegen evaluates each expression in order via
+  `codegen_expr`, discarding intermediate results and returning the final value.
+  `do` is an alias for `begin` (codegen.c:7830). Both have strcmp dispatch
+  handlers. `begin` is the primary sequencing form used in function bodies and
+  conditional branches.
+
+[INF id:inf.language.construct.control-connect from:obs.language.construct.if,obs.language.construct.cond,obs.language.construct.begin conf:high]
+  connects-to -> `monadc.context.language.primitive-function` (if branches are
+  compiled as closures or PHI nodes depending on capture context) ·
+  `monadc.context.language.codegen-gaps` (cond has no strcmp dispatch — relies
+  on reader desugaring) ·
+  `monadc.context.language.codegen-diagnostics` (if/unless while have arity
+  diagnostics) ·
+  `monadc.context.reader.sugar.cond-to-if` (reader-level cond desugaring)
+
+** Quotation Constructs
+:PROPERTIES:
+:ID: monadc.context.language.constructs.quotation
+:CUSTOM_ID: quotation-constructs
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The quotation construct forms (quote, quasiquote, unquote, splice) that treat code as data. Quote prevents evaluation of its argument; quasiquote allows selective unquoting within a quoted template.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:5624-5759,reader.c,reader.h:384-387
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.language.construct.quote src:codegen.c:5701-5759 conf:high]
+  `(quote expr)` or `'expr` prevents evaluation of its argument, returning the
+  AST as a data value. Codegen compiles quoted expressions by recursively
+  walking the AST and constructing runtime list/symbol/number/string values at
+  compile time. Quoted list indexing `('(1 2 3) i)` is handled with compile-time
+  bounds checking (codegen.c:4042-4075). Nested `quote` inside the codegen
+  reflection path (`code name`) preserves AST-to-runtime-value construction
+  (obs.language.code-reflection-aot-values).
+
+[OBS id:obs.language.construct.quasiquote src:codegen.c:5624-5699,codegen.c:5645-5646 conf:high]
+  `(quasiquote expr)` or `\`expr` (backtick syntax) allows selective unquoting
+  within a quoted template. Sub-expressions wrapped in `(unquote expr)` or `,expr`
+  are evaluated and their results spliced into the template. Codegen detects
+  unquoted sub-expressions by pattern-matching on `(unquote ...)` AST shapes
+  within the quasiquoted tree (codegen.c:5645-5646). Unicode corner bracket
+  syntax (⌜expr⌟ for quasiquote, ⌞expr⌟ for unquote) provides an alternative
+  surface form (obs.reader.sugar.quasiquote-corner).
+
+[OBS id:obs.language.construct.unquote-splice src:codegen.c:5645-5646,reader.h:384-387 conf:high]
+  `(unquote-splice expr)` or `,@expr` splices the elements of a list into the
+  enclosing quasiquote template. Unlike `unquote` which inserts a single value,
+  `unquote-splice` concatenates the list's elements. The reader recognizes both
+  `,@` syntax and the explicit `(unquote-splice expr)` form. The corner bracket
+  tokens `⌞⌟` are reserved for future unquote-splice syntax.
+
+[INF id:inf.language.construct.quotation-connect from:obs.language.construct.quote,obs.language.construct.quasiquote,obs.language.construct.unquote-splice conf:high]
+  connects-to -> `monadc.context.language.primitive-macros` (quote/quasiquote
+  are the primary mechanism for macro code generation) ·
+  `monadc.context.language.codegen-gaps` (quote has arity diagnostics) ·
+  `monadc.context.reader.sugar.quasiquote-corner` (corner bracket sugar for
+  quasiquote/unquote) ·
+  `monadc.context.references.cons-should-not-evaluate` (quote preserves the
+  cons-should-not-evaluate principle at the language level)
+
+** Iteration Constructs
+:PROPERTIES:
+:ID: monadc.context.language.constructs.iteration
+:CUSTOM_ID: iteration-constructs
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The iteration construct forms (for, while) that provide looping. For comprehensions support collection iteration with optional :collect; while provides C-style conditional looping.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:7957-8188,reader.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.language.construct.for src:codegen.c:8004-8188,reader.c conf:high]
+  `(for [binding iterable] body)` iterates over a collection. The binding can
+  be a simple symbol or a destructured list (e.g., `[[x y] [[1 2] [3 4]]]`)
+  (obs.reader.for-bindings). The `:collect` keyword in body position gathers
+  results into an output collection (obs.reader.for-collect). Codegen compiles
+  `for` loops by lowering to while-loop IR with an iterator variable, bounds
+  check, and element extraction via the collection-as-function indexing path.
+  Wisp `for i -> heap` over heap arrays exercises the same `count` and
+  array-indexing path used by general collection iteration
+  (obs.language.heap-array-for-codegen-fixture).
+
+[OBS id:obs.language.construct.while src:codegen.c:7957-8002 conf:high]
+  `(while test body1 body2 ...)` provides C-style conditional looping. Codegen
+  emits a loop header basic block that evaluates the condition, a loop body
+  block, and an exit block. The body expressions are evaluated in sequence
+  (via begin semantics), and the loop returns `nil`. While loops are the
+  lowest-level iteration primitive — `for` comprehensions desugar to `while`
+  internally.
+
+[INF id:inf.language.construct.iteration-connect from:obs.language.construct.for,obs.language.construct.while conf:high]
+  connects-to -> `monadc.context.language.primitive-array` (for over arrays uses
+  array-as-function indexing) ·
+  `monadc.context.language.primitive-list` (for over lists uses list-as-function
+  indexing) ·
+  `monadc.context.language.codegen-diagnostics` (for has diagnostic coverage
+  for malformed non-array bindings) ·
+  `monadc.context.reader.for-syntax` (reader-level for comprehension syntax
+  with destructuring and :collect)
+
+** Module Constructs
+:PROPERTIES:
+:ID: monadc.context.language.constructs.module
+:CUSTOM_ID: module-constructs
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The module system constructs (module, import, export) that organize code into namespaced compilation units. Module declarations are processed in Phase 1 before any codegen work.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c:855-904,module.c,module_export.c,reader.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.language.construct.module src:main.c:855-904,reader.c conf:high]
+  `(module Name (export ...) (import ...) ...)` declares a compilation module
+  with a name, export list, and body. Module declarations are processed in
+  Phase 1 of the compilation pipeline (obs.language.pipeline-phase1) before
+  any codegen work. If no explicit `module` form is found, the module name is
+  inferred from the file path. The module name affects symbol mangling and
+  export visibility. Modules are the unit of compilation, dependency tracking,
+  and namespace management.
+
+[OBS id:obs.language.construct.import src:module.c,reader.c conf:high]
+  `(import ModuleName)` imports bindings from another module into the current
+  scope. The import system resolves dependencies recursively: if an imported
+  module has not been compiled, the compiler falls back to path-to-name
+  resolution and compiles it recursively (obs.language.pipeline-phase2).
+  Imports support renaming: `(import ModuleName :rename (old new))`. Core
+  prelude imports (`Coll`, `Test`) are not yet automatically available
+  (obs.language.gap-core-prelude).
+
+[OBS id:obs.language.construct.export src:module_export.c,reader.c conf:high]
+  `(export name1 name2 ...)` declares which bindings a module exposes to
+  importers. The export list is collected during module declaration parsing
+  and used by Phase 9 (registry entry + symbol renaming) to determine which
+  LLVM symbols retain external linkage. Exports are the visibility boundary:
+  unexported bindings are renamed to module-internal names and may be
+  optimized away by LLVM.
+
+[INF id:inf.language.construct.module-connect from:obs.language.construct.module,obs.language.construct.import,obs.language.construct.export conf:high]
+  connects-to -> `monadc.context.language.compilation-pipeline` (module Phase 1
+  processes module declarations; Phase 2 resolves imports; Phase 4 declares
+  externals; Phase 9 renames symbols) ·
+  `monadc.context.build` (module dependencies drive the build system) ·
+  `monadc.context.source-map` (every source file is a module in the source map)
+
+** Miscellaneous Dispatch Constructs
+:PROPERTIES:
+:ID: monadc.context.language.constructs.misc
+:CUSTOM_ID: misc-dispatch-constructs
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The remaining strcmp-dispatched construct forms (with, pipe, include, error, undefined, assert-eq, show, expand, doc, code) that provide utility and metaprogramming operations.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:5763-6604,reader.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.language.construct.with src:codegen.c:7841-7878 conf:high]
+  `(with binding expr)` creates a scoped resource context. The binding is
+  evaluated and bound for the scope of the body; cleanup occurs when the
+  body exits. Currently has no strcmp dispatch handler — it is desugared at
+  the reader level.
+
+[OBS id:obs.language.construct.pipe src:reader.c,obs.reader.sugar.pipe conf:high]
+  `(x |> f)` pipes the result of `x` as the argument to `f`. The pipe sugar
+  is handled by the wisp transformer, not the reader desugarer: `x |> f`
+  desugars to `(f x)`. Pipe chains `x |> f |> g` compose to `(g (f x))`.
+  This is a reader-level syntactic transformation with no separate codegen path.
+
+[OBS id:obs.language.construct.include src:codegen.c:5519-5592 conf:high]
+  `(include "header.h")` or `(include <stdio.h>)` includes a C header for FFI
+  access. The codegen path declares extern functions and types from the parsed
+  header. The C FFI system (`ffi.c`) uses libclang to parse headers. Angle-bracket
+  includes are still baseline coverage (obs.language.cffi-angle-gap). Include
+  is the primary mechanism for C interop.
+
+[OBS id:obs.language.construct.error-undefined src:codegen.c:6604-6774 conf:high]
+  `(error "message")` halts execution with a runtime error. Codegen emits a
+  call to `rt_error` which prints the message and calls `exit(1)`. `(undefined)`
+  is a placeholder for unimplemented branches — codegen emits an LLVM
+  `unreachable` instruction or a call to `rt_undefined` depending on context
+  (codegen.c:6685-6774). Both are used as diagnostic and development aids.
+
+[OBS id:obs.language.construct.assert-eq src:codegen.c:6431-6602 conf:high]
+  `(assert-eq expected actual)` is the test assertion primitive. Codegen
+  evaluates both arguments and calls `rt_equal_p` to compare them. If the
+  comparison fails, it prints a diagnostic with `show` of both values and
+  reports the failure location. This is the primary assertion form used in
+  codegen test fixtures (`rt_codegen_*.mon`).
+
+[OBS id:obs.language.construct.show src:codegen.c:5876-6364 conf:high]
+  `(show value)` converts any value to its string representation. Codegen
+  dispatches on the runtime type tag to call the appropriate print function.
+  The show path supports all ground types, collections (list/set/map/array),
+  ADTs (via the layout constructor printer), and closures. Layout-typed values
+  are printed as canonical data syntax `(Ctor field0 field1 ...)`
+  (obs.language.adt-show-codegen-canonical).
+
+[INF id:inf.language.construct.misc-connect from:obs.language.construct.with,obs.language.construct.pipe,obs.language.construct.include,obs.language.construct.error-undefined,obs.language.construct.assert-eq,obs.language.construct.show conf:high]
+  connects-to -> `monadc.context.language.cffi-runtime` (include drives the C
+  FFI system) ·
+  `monadc.context.language.codegen-diagnostics` (assert-eq and error are
+  diagnostic primitives) ·
+  `monadc.context.language.pattern-matching` (undefined is the fallback for
+  non-exhaustive patterns) ·
+  `monadc.context.language.codegen-dispatch` (all these forms are strcmp
+  dispatch entries in codegen_expr) ·
+  `monadc.context.reader.sugar.pipe` (pipe sugar is a wisp-level transformation)
+
+* Language Constructs
+:PROPERTIES:
+:ID: monadc.context.language.constructs
+:CUSTOM_ID: language-constructs
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Root section for all language-level construct forms: literal atoms, binding forms, control flow, iteration, quotation, and type/class declarations. Each construct documented with its AST representation, parsing, inference, and codegen behavior.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: reader.h,reader.c,infer.c,codegen.c
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.language.constructs-intro conf:high]
+  Language constructs are the surface forms a programmer writes. Unlike types
+  (which classify values) or primitives (which define semantic domains),
+  constructs define the grammar of expression. Every construct has a reader
+  representation (ASTType or AST_LIST head symbol), an inference path
+  (type-checking rule), and a codegen path (LLVM IR lowering). The set of
+  constructs is larger than the set of types — many surface forms (define, if,
+  for, quote) are syntactic conventions desugared or compiled to operations on
+  the type primitives documented above. This section documents each construct
+  family with its AST shape, semantics, and compiler pipeline behavior.
+
+** Literal Atom Constructs
+:PROPERTIES:
+:ID: monadc.context.language.constructs.literal-atoms
+:CUSTOM_ID: literal-atom-constructs
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The six literal atom construct forms (Number, Symbol, String, Char, Keyword, Ratio) that produce leaf AST nodes with no children. Each carries its value directly in the AST union and corresponds to a ground type.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: reader.h:40-47,reader.c,codegen.c:3383-3397
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.language.construct.number src:reader.h:40,codegen.c:3383-3384 conf:high]
+  `AST_NUMBER` represents numeric literals. The reader parses integer and float
+  tokens into a `double number` payload (reader.h:146) and preserves the original
+  literal string in `ast->literal_str` for hex/bin/oct radix. The raw uint64
+  value for literals exceeding double precision is stored in `ast->raw_int`.
+  Codegen emits a boxed `rt_make_int` or `rt_make_float` call depending on
+  whether the value has a fractional part. Type inference assigns `TYPE_INT`
+  for integer literals and `TYPE_FLOAT` for floating-point literals. The
+  predicate `Number?` accepts both.
+
+[OBS id:obs.language.construct.symbol src:reader.h:41,reader.c conf:high]
+  `AST_SYMBOL` represents symbol identifiers. The reader interns the symbol
+  name as a string in `ast->symbol` (reader.h:147). Symbols are the primary
+  mechanism for variable references and dispatch head detection — when a
+  symbol appears as the first element of an `AST_LIST`, codegen dispatches
+  on its name via strcmp. Symbols appearing in function position are resolved
+  to environment bindings; standalone symbol expressions are compiled as
+  variable references. The type `TYPE_SYMBOL` is a ground type; symbol names
+  are interned in the global symbol table.
+
+[OBS id:obs.language.construct.string src:reader.h:42,codegen.c:3999-4012 conf:high]
+  `AST_STRING` represents string literals. The reader stores the string content
+  (without surrounding quotes) in `ast->string` (reader.h:148). Codegen emits
+  an LLVM `GlobalStringPtr` for the string data. String indexing `("str" i)`
+  is handled inline in the codegen dispatch (codegen.c:3999-4012) by loading
+  the i-th character as a `TYPE_CHAR`. Type inference assigns `TYPE_STRING`.
+
+[OBS id:obs.language.construct.char src:reader.h:43,reader.c conf:high]
+  `AST_CHAR` represents character literals. The reader parses `'a'`, `#\a`,
+  and Unicode escape syntax into an 8-bit `char character` payload
+  (reader.h:149). Wisp expansion handles escape sequences (`'\t'` → tab)
+  before the reader sees them, with a known limitation that `'\n'` fails
+  because Wisp expands `\\n` to a real newline splitting the literal across
+  lines. Type inference assigns `TYPE_CHAR`.
+
+[OBS id:obs.language.construct.keyword src:reader.h:46,reader.c conf:high]
+  `AST_KEYWORD` represents keyword literals. The reader parses `:keyword` tokens
+  into `ast->keyword` (reader.h:150), storing the name without the leading `:`.
+  Keywords are self-evaluating — they evaluate to themselves. They are used as
+  named parameters, map keys, and record field labels. Type inference assigns
+  `TYPE_KEYWORD`.
+
+[OBS id:obs.language.construct.ratio src:reader.h:47,codegen.c:4078-4099 conf:high]
+  `AST_RATIO` represents ratio literals. The reader parses `1/3`, `22/7`, etc.
+  into `numerator` and `denominator` (reader.h:153-156). Codegen handles ratio
+  in function position specially: `(1/4 x)` compiles to `(x * 1) / 4` for
+  integer arguments (codegen.c:4078-4099). Type inference assigns `TYPE_RATIO`.
+  The runtime representation is a `RuntimeValue` with tag `RT_RATIO` storing
+  the reduced numerator/denominator.
+
+[INF id:inf.language.construct.literal-atoms-connect from:obs.language.construct.number,obs.language.construct.symbol,obs.language.construct.string,obs.language.construct.char,obs.language.construct.keyword,obs.language.construct.ratio conf:high]
+  connects-to -> `monadc.context.language.primitive-ground-types` (each literal
+  atom corresponds to a ground type: Int, Float, Symbol, String, Char, Keyword,
+  Ratio) · `monadc.context.language.primitive-list` (the reader produces
+  AST_LIST from parenthesized forms; symbols are its head dispatch) ·
+  `monadc.context.language.primitive-function` (ratio-as-function is the same
+  semantic coercion as array/set/map-as-function) ·
+  `monadc.context.language.codegen-dispatch` (symbol heads drive the strcmp
+  dispatch table) ·
+  `monadc.context.reader.char-escapes` (Wisp char escape handling affects
+  AST_CHAR parsing)

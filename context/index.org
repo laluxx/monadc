@@ -14,7 +14,7 @@
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -192,7 +192,7 @@ Every context file should include these file-level Org keywords when applicable:
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -257,8 +257,9 @@ LLM-oriented statements use bracketed records with fixed keys:
 [OBS id:<id> src:<file:line> conf:<high|medium|low>] <direct observation>
 [INF id:<id> from:<obs-id[,obs-id...]> conf:<high|medium|low>] <inference>
 [DEC id:<id> date:<YYYY-MM-DD> by:<human|codex>] <decision>
-[TODO id:<id> owner:<human|codex|unknown> status:open] <task>
+[TODO id:<id> owner:<human|codex|unknown> status:open>] <task>
 [THINK id:<id> conf:<high|medium|low>] <speculative reasoning, exploration note, chain-of-thought>
+[IDEA id:<id> author:<human|llm|human+llm> date:<YYYY-MM-DD>] <design idea, language proposal, feature concept>
 #+END_EXAMPLE
 
 Rules:
@@ -269,6 +270,7 @@ Rules:
 - =DEC= records repository-local choices that future work should preserve.
 - =TODO= records pending work only when it is specific and actionable.
 - =THINK= records speculative reasoning, exploration notes, or chain-of-thought that is neither a certain observation nor a formal inference nor a binding decision. THINK records are visually distinguished in the dashboard (purple) and filtered out from decisions and formal inferences.
+- =IDEA= records a concrete design idea or language feature proposal that is not yet decided or committed. Ideas have an author (the proponent) and a natural lifecycle: IDEA → THINK (analysis) → DEC (accept/reject) or IDEA → TODO (commit to implement) → DONE. Unlike THINK (open speculation), an IDEA is a specific, well-formed proposal. Unlike TODO, it carries no implementation commitment. Multiple IDEA records may compete for the same design space; they are resolved by DEC records.
 - IDs are immutable once published.
 - Prefer one claim per record.
 - Do not silently rewrite history; append a superseding record when facts change.
@@ -278,7 +280,7 @@ Rules:
 :ID: monadc.context.files
 :CUSTOM_ID: current-topic-files
 :CONTEXT_KIND: index
-:CONTEXT_DESCRIPTION: Navigation index of all context topic files: reader, language, build, tests, workflow, guidelines, todo, visualizer, opinions, philosophy, wisp, source-map, style, navigation, references, commit-format.
+:CONTEXT_DESCRIPTION: Navigation index of all context topic files: reader, language, build, tests, workflow, guidelines, todo, visualizer, opinions, philosophy, wisp, source-map, style, navigation, references, commit-format, dep, infer, runtime, codegen-ops, arena, asm, buildsystem, cli, codegen, env, features, ffi, macro, main, module, pmatch, repl, typeclass, typst-emit, ideas, types, module-export, makefile, main-mon, core-libs, how-to, tests-arch, etc-assets, todo-markers, scripts.
 :CONTEXT_VERSION: 2
 :CONTEXT_CREATED: 2026-06-11
 :CONTEXT_UPDATED: 2026-06-13
@@ -302,8 +304,39 @@ Rules:
 - [[file:source-map.org][Source file map — every file's purpose and connections]]
 - [[file:style.org][MonadC code-style taxonomy]]
 - [[file:navigation.org][ID prefix→file routing table for quick LLM navigation]]
-- [[file:references.org][Research references — papers informing the compiler design]]
+- [[file:references.org][Research references — 7 PDF papers as first-class DOC objects with implementation traces]]
+- [[file:source-map.org::* Research PDFs][PDF library index (etc/pdfs/) — each paper linked to source decisions]]
 - [[file:commit-format.org][Commit message format and conventions]]
+- [[file:dep.org][Dependent type checker — ITT kernel with NbE]]
+- [[file:infer.org][HM type inference engine — constraint gen, unification, zonking]]
+- [[file:runtime.org][Runtime library — values, collections, printing, bignum]]
+- [[file:codegen-ops.org][Codegen operation dispatch — 83+ strcmp handlers, 94 builtins]]
+- [[file:arena.org][Arena bump allocator — init, alloc, strings, stats]]
+- [[file:asm.org][Inline assembly — register allocator, asm insts, codegen]]
+- [[file:buildsystem.org][Package build system — artifacts, deps, compilation, linking]]
+- [[file:cli.org][CLI argument parser — CommandMode enum, CompilerFlags, all subcommands]]
+- [[file:codegen.org][Codegen context — CodegenContext, MonoCache, type→LLVM, builtins]]
+- [[file:env.org][Symbol table — EnvEntry, Env scopes, insert, lookup, HM integration]]
+- [[file:features.org][Platform features — detect_features, has_feature, #+LINUX conditionals]]
+- [[file:ffi.org][C FFI — header parsing, type mapping, cache, env injection]]
+- [[file:macro.org][Macro system — expansion, hygiene, variadic splicing, fixpoint]]
+- [[file:main.org][Compilation pipeline — 12-phase orchestrator, compile_one, registry]]
+- [[file:module.org][Module system — module/import decls, ExportManifest, resolution]]
+- [[file:pmatch.org][Pattern match compiler — parse, desugar, pattern kinds]]
+- [[file:repl.org][Interactive REPL — JIT eval, readline, completion, error recovery]]
+- [[file:typeclass.org][Type class system — TCClass, TCInstance, dictionary dispatch]]
+- [[file:typst-emit.org][Typst document backend — expression/types/patterns emission, PDF output]]
+- [[file:ideas.org][Design ideas and proposals — fixed-address buffers, quoted eval, evaluation judgments]]
+- [[file:types.org][Type system — 40 TypeKind enum, Type union struct, constructors, refinements, aliases]]
+- [[file:module-export.org][Module export manifests — .mexp format, mangling, read/write]]
+- [[file:makefile.org][Build system (Makefile) — targets, flags, libraries, discovery]]
+- [[file:main-mon.org][Main.mon — standard library, demo, all language features exercised]]
+- [[file:core-libs.org][core/ standard library modules — 11 .mon files: prelude, List, Set, Math, Random, json, text]]
+- [[file:how-to.org][how_to/ example programs — ADTs, macros, iterators, speedruns, terminal]]
+- [[file:tests-arch.org][Test suite architecture — 923 files, codegen tests, fuzzing, ASM tests]]
+- [[file:etc-assets.org][etc/ assets — logo, screenshots, font, docs.html]]
+- [[file:todo-markers.org][Source-level TODO/FIXME/HACK tracker — 60+ technical debt entries]]
+- [[file:scripts.org][Python helper scripts — test runners, ASM generators, fuzz runner, visualizer]]
 
 * Current Task Notes
 :PROPERTIES:

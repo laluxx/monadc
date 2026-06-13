@@ -1,0 +1,824 @@
+#+TITLE: Main.mon — Standard Library / Language Demo
+#+AUTHOR: Codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:main:stdlib:demo:
+#+PROPERTY: CONTEXT_VERSION 2
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.main-mon
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.main-mon.file-metadata
+:CUSTOM_ID: main-mon-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: Main.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main-mon.file src:Main.mon:1-1244 conf:high]
+  Main.mon (1244 lines) serves dual purpose: it is the language standard library
+  (defining prelude operations, typeclass instances, collection functions, math,
+  random, JSON, string ops) and the primary language demonstration/test surface.
+  Every codegen path, runtime value constructor, and syntax form is exercised here.
+  Covers: modules, variables, functions, types (lists/arrays/sets/maps/pairs),
+  asm blocks, loops, infix syntax, features/conditional compilation, casting,
+  ADT patterns, and 20+ TODO markers for unfinished features.
+
+[INF id:inf.main-mon.dual-purpose from:obs.main-mon.file conf:high date:2026-06-13 by:codex]
+  Main.mon is the single best source for understanding the intended surface
+  of the language — it contains both working code and aspirational designs
+  (vectors, matrices, parametric polymorphism, list comprehensions, typed
+  expressions, refinement types, regex syntax, type literals, relations).
+
+[LINK id:link.main-mon.to-language]
+  Demonstrates every surface syntax form documented in =language.org=:
+  wisp defines, typed arrays, asm blocks, for/while loops, infix, features.
+
+[LINK id:link.main-mon.to-codegen-ops]
+  Exercises every strcmp dispatch handler in =codegen.c=: +, -, *, /, mod,
+  =, <, >, and, or, not, show, list, cons, car, cdr, append!, make-list,
+  list-length, assoc, dissoc, keys, vals, merge, contains?, find, set, set?.
+  Also exercises asm codegen (rdtsc, naked/nonaked functions).
+
+[LINK id:link.main-mon.to-runtime]
+  Constructs every =RuntimeValue= type: RT_INT, RT_FLOAT, RT_CHAR, RT_STRING,
+  RT_SYMBOL, RT_LIST, RT_ARRAY, RT_MAP, RT_SET, RT_RATIO, RT_KEYWORD.
+  Exercises rt_make_*, rt_unbox_*, rt_show_*, collection constructors.
+
+* Module System
+:PROPERTIES:
+:ID: monadc.context.main-mon.module-system
+:CUSTOM_ID: main-mon-module
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Line 8: module declaration, imports, and export semantics.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: Main.mon:1-30
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main-mon.module-decl src:Main.mon:8 conf:high]
+  =(module Main)= — exports everything by default. Commentary at lines 1-7
+  specifies naming rules: module names must be capitalized, file names must
+  match module names except for Main itself.
+
+[OBS id:obs.main-mon.import-syntax src:Main.mon:11-30 conf:high]
+  Import forms demonstrated: plain import, =(import qualified :as M)=,
+  =(import [symbol1 symbol2])= selective import, =(import hiding [...])=
+  exclusion. Commented examples show the full matrix of import variants.
+
+[OBS id:obs.main-mon.import-qualified src:Main.mon:26-27 conf:high]
+  Qualified imports require prefix (math:) access; =(import Std.Math :as Math)=
+  allows both bare symbol and prefix access.
+
+* Variable Definitions
+:PROPERTIES:
+:ID: monadc.context.main-mon.variables
+:CUSTOM_ID: main-mon-variables
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Lines 32-61: typed and untyped variable definitions across all numeric types.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: Main.mon:32-61
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main-mon.var-untyped src:Main.mon:34-40 conf:high]
+  Inferred type variables: i (Int), f (Float), c (Char), s (String),
+  h (Hex), b (Bin), o (Oct). The compiler infers from literal syntax.
+
+[OBS id:obs.main-mon.var-typed src:Main.mon:41-47 conf:high]
+  Explicit type annotations via =(define [v :: Type] val)= syntax.
+  Same seven numeric types with manual type annotations.
+
+[OBS id:obs.main-mon.var-display src:Main.mon:52-57 conf:high]
+  All seven basic typed variables are printed via =show= to verify
+  the display codepath works for every numeric literal type.
+
+* Arithmetic Cross-Type Operations
+:PROPERTIES:
+:ID: monadc.context.main-mon.arithmetic
+:CUSTOM_ID: main-mon-arithmetic
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Lines 72-133: cross-type addition matrix (7 types × 7 types) with show.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: Main.mon:72-133
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main-mon.arith-matrix src:Main.mon:72-133 conf:high]
+  Exhaustive 7×7 cross-type addition matrix: every combination of
+  Int/Float/Char/Hex/Bin/Oct tested with =(+ a b)= and =show=. Commented
+  lines mark unsupported type pairs (mostly String+anything).
+
+[OBS id:obs.main-mon.arith-show-quote src:Main.mon:135-139 conf:high]
+  Tests =(show '(+ 2 3))= and =(show '(:a :b :c))= — quoting within
+  show tests the pretty-printer on quoted s-expressions and keyword lists.
+
+* Type-Specific Function Definitions
+:PROPERTIES:
+:ID: monadc.context.main-mon.functions
+:CUSTOM_ID: main-mon-functions
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Lines 142-214: typed function definitions across all numeric types.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: Main.mon:142-214
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main-mon.fn-multi src:Main.mon:151-182 conf:high]
+  Multiple typed multiplication functions: multi (Int×Int→Int), multf
+  (Float×Float→Float), multc (Char×Char→Int), multo (Oct×Oct→Oct),
+  multb (Bin×Bin→Bin), multh (Hex×Hex→Hex), multhi (Hex×Hex→Int).
+
+[OBS id:obs.main-mon.fn-docstring src:Main.mon:144-147 conf:high]
+  =(define x 30 "doc")= — docstrings on value definitions.
+
+[OBS id:obs.main-mon.fn-result-call src:Main.mon:191-205 conf:high]
+  Calls the typed multiplication functions and prints results. Tests casting
+  with =(Int (+ b b))= — applying Int as a function to cast Bin→Int.
+
+[THINK id:think.main-mon.variadic-params date:2026-06-13 by:codex]
+  Lines 186-188: commented-out variadic parameter syntax =(define (add . nums) ...)=
+  is aspirational — variadic args are not yet implemented.
+
+[THINK id:think.main-mon.return-int-cast src:Main.mon:210-214 conf:high]
+  TODO at line 210: type-checking return values against annotated return types.
+  =(define (return-int -> Int) 3)= then assigning to a String variable should
+  be a compile error, not a segfault.
+
+* List Operations
+:PROPERTIES:
+:ID: monadc.context.main-mon.lists
+:CUSTOM_ID: main-mon-lists
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Lines 218-258: list construction, manipulation, type aliases.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: Main.mon:218-258
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main-mon.list-quoted src:Main.mon:221-222 conf:high]
+  Quoted list literal =(define l '(1 2 3))= with type annotation
+  =(define [l :: List] '(1 2 3))=.
+
+[OBS id:obs.main-mon.list-typealias src:Main.mon:224-229 conf:high]
+  Type alias =(type Code List)= makes Code an alias for List. =return-code=
+  returns a Code-typed value.
+
+[OBS id:obs.main-mon.list-mutate src:Main.mon:232-246 conf:high]
+  Mutable list operations: =(list)=, =append! xs 1=, =(list-length xs)=,
+  =(list-empty? xs)=, =(make-list 10 '(10 20))=. Exercises the runtime
+  list data structure.
+
+[OBS id:obs.main-mon.list-symbol src:Main.mon:249-250 conf:high]
+  Symbol literal: =(define symbol 'symbol)= — TODO marker indicates
+  symbols may not fully work.
+
+[OBS id:obs.main-mon.doc-alias src:Main.mon:252-259 conf:high]
+  Documentation and alias metadata: =(define var 3 :doc "..." :alias 🐜)=
+  then verified via =(show (doc var))= and arithmetic with alias
+  =(show (+ var 🐜))=.
+
+* Rational Numbers
+:PROPERTIES:
+:ID: monadc.context.main-mon.ratios
+:CUSTOM_ID: main-mon-ratios
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Lines 268-277: rational (ratio) literal and arithmetic.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: Main.mon:268-277
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main-mon.ratio-literal src:Main.mon:271-276 conf:high]
+  Ratio literals: =1/3=, =1/2=. Addition produces automatic reduction
+  (1/3+1/3+1/3=1 as Int). Tests ratio-to-int promotion.
+
+* Array Operations
+:PROPERTIES:
+:ID: monadc.context.main-mon.arrays
+:CUSTOM_ID: main-mon-arrays
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Lines 280-363: typed arrays for every numeric type, nested arrays.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: Main.mon:280-363
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main-mon.array-int src:Main.mon:289-292 conf:high]
+  Int array: =(define [iarr :: Arr :: Int :: 3] [1 2 3])= — 3-element
+  array with type-of-element annotation and length annotation.
+
+[OBS id:obs.main-mon.array-types src:Main.mon:296-363 conf:high]
+  Typed arrays for Float, Char, String, Hex, Bin, Oct, Ratio, Keyword,
+  and nested Arr-of-Arr. Every array gets a fully annotated and an
+  inferred variant. Keyword array =(define [karr :: Arr :: Keyword :: 3] [:a :b :c])=.
+
+[OBS id:obs.main-mon.array-nested src:Main.mon:354-357 conf:high]
+  Nested array: =(define aarr [[1] [2] [3]])= — inferred as
+  =[aarr :: Arr :: Arr :: 3]=. Comment on line 357 notes display bug.
+
+[THINK id:think.main-mon.array-fn src:Main.mon:338-343 conf:high]
+  TODO at line 338: Function pointers in arrays cause segfault.
+  =(define [fnarr :: Arr :: Fn :: 3] [+ / -])= is commented out.
+
+[TODO id:todo.main-mon.dynamic-arrays date:2026-06-13 by:codex]
+  Lines 366-372: Dynamic arrays with prefix =(~)= syntax.
+  =(define xs ~[1 2 3])= inferred as =[x :: Dyn :: Int]=.
+  First push determines element type.
+
+* Vectors (Aspirational)
+:PROPERTIES:
+:ID: monadc.context.main-mon.vectors
+:CUSTOM_ID: main-mon-vectors
+:CONTEXT_KIND: design
+:CONTEXT_DESCRIPTION: Lines 374-425: vector data type design — homogeneous SIMD-friendly arrays.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: draft
+:CONTEXT_STATUS: blocked
+:SOURCE: Main.mon:374-425
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main-mon.vector-design src:Main.mon:374-425 conf:high]
+  Detailed vector design with =#[1 2 3 4]= syntax. Properties: homogeneity,
+  contiguous memory, SIMD support, recycling rules, boolean masking,
+  indexing and slicing syntax (=v (range 1 3)=). NOT YET IMPLEMENTED.
+
+[TODO id:todo.main-mon.vectors-implement date:2026-06-13 by:codex]
+  Vectors are fully designed (lines 374-425) but not yet implemented.
+  Syntax: =#[1 2 3 4]=, type: =[v :: Vec :: Int]=.
+
+[TODO id:todo.main-mon.vector-slicing date:2026-06-13 by:codex]
+  Slice syntax using range: =(v (range 1 3))=, =(v (range _ _ 2))=.
+  Negative indexing (=(v -1)=) for end-relative access.
+
+* Matrices (Aspirational)
+:PROPERTIES:
+:ID: monadc.context.main-mon.matrices
+:CUSTOM_ID: main-mon-matrices
+:CONTEXT_KIND: design
+:CONTEXT_DESCRIPTION: Lines 427-561: multi-dimensional matrix design up to 5D.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: draft
+:CONTEXT_STATUS: blocked
+:SOURCE: Main.mon:427-561
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main-mon.matrix-1d src:Main.mon:434-438 conf:high]
+  1D matrices are vectors. =(define m1D #[1 2 3])= — index with =(m1D 2)=.
+
+[OBS id:obs.main-mon.matrix-2d src:Main.mon:440-453 conf:high]
+  2D matrix: =#[[1 2 3] [4 5 6] [7 8 9]]= inferred as =Mat :: [3x3] :: Int=.
+  Indexing: =(m2D 3)= returns row, =(m2D 3 2)= returns scalar.
+
+[OBS id:obs.main-mon.matrix-3d src:Main.mon:457-475 conf:high]
+  3D matrix: =[3x3x3] :: Int=, each index removes one dimension.
+  =(m 3)= → 2D, =(m 3 3)= → 1D, =(m 3 3 3)= → scalar.
+
+[OBS id:obs.main-mon.matrix-4d src:Main.mon:479-514 conf:high]
+  4D matrix: =[3x3x4x5] :: Int= — 180 elements. Same progressive
+  dimension reduction: =(m4D 2)= → 3D, =(m4D 2 3)= → 2D, =(m4D 2 3 4)= → 1D,
+  =(m4D 2 3 4 5)= → scalar.
+
+[OBS id:obs.main-mon.matrix-5d src:Main.mon:519-561 conf:high]
+  5D matrix: =[2x2x3x3x3] :: Int= — 108 elements. Progressive indexing
+  from 5D down to scalar.
+
+[TODO id:todo.main-mon.matrix-construct date:2026-06-13 by:codex]
+  =(define m (fill [Mat :: [3x3x3] :: Int]))= — filling/constructing
+  matrices by type shape.
+
+* Map Operations
+:PROPERTIES:
+:ID: monadc.context.main-mon.maps
+:CUSTOM_ID: main-mon-maps
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Lines 568-669: map literal syntax, manipulation, and query.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: Main.mon:568-669
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main-mon.map-literal src:Main.mon:578-583 conf:high]
+  Map literal: =#{"Fred" 1400 "Bob" 1240 "Angela" 1024}= — alternating
+  key-value pairs. Inferred as =[scores :: Map]=.
+
+[OBS id:obs.main-mon.map-assoc src:Main.mon:588-593 conf:high]
+  =(assoc scores "Sally" 0)= — associative update (immutable).
+
+[OBS id:obs.main-mon.map-dissoc src:Main.mon:597-599 conf:high]
+  =(dissoc scores "Bob")= — key removal (immutable).
+
+[OBS id:obs.main-mon.map-get src:Main.mon:605-612 conf:high]
+  Map-as-function: =(scores "Angela")= → 1024. Also =(directions :north)=
+  for keyword-keyed maps.
+
+[OBS id:obs.main-mon.map-default src:Main.mon:618-624 conf:high]
+  Lookup with default: =(scores "Sam" 0)= → 0 (key not found).
+
+[OBS id:obs.main-mon.map-contains src:Main.mon:631-636 conf:high]
+  Predicates: =(contains? scores "Fred")=, =(find scores "Fred")=.
+
+[OBS id:obs.main-mon.map-keys-vals src:Main.mon:641-644 conf:high]
+  =(keys scores)= and =(vals scores)= return lists of keys/values.
+
+[OBS id:obs.main-mon.map-merge src:Main.mon:658-669 conf:high]
+  Map merging: =(merge scores new-scores)=. Rightmost wins for conflicts.
+  Commented =(merge-with + scores new-scores)= for conflict resolution.
+
+[THINK id:think.main-mon.zipmap date:2026-06-13 by:codex]
+  Line 651: =(zipmap players (repeat 0))= is aspirational — zipmap and
+  repeat not yet implemented.
+
+[THINK id:think.main-mon.merge-with date:2026-06-13 by:codex]
+  Line 668: =(merge-with + scores new-scores)= for conflict-resolution
+  merging is aspirational.
+
+* Set Operations
+:PROPERTIES:
+:ID: monadc.context.main-mon.sets
+:CUSTOM_ID: main-mon-sets
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Lines 672-712: set literal syntax, construction, and operations.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: Main.mon:672-712
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main-mon.set-literal src:Main.mon:680-686 conf:high]
+  Set literal: ={:a :b :c :d}=. =(set)= creates empty set, =(set 1 2 3)=
+  creates from args. =set?= predicate works on sets.
+
+[OBS id:obs.main-mon.set-from-coll src:Main.mon:687-693 conf:high]
+  Sets are collections: =(conj s :e)=, =(count s)=, =(== (conj s :e) {:a :b :c :d :e})=.
+
+[OBS id:obs.main-mon.set-disj src:Main.mon:697-703 conf:high]
+  Set removal: =(disj s :d)=. Sets are functions of their members:
+  =(s :b)= → :b, =(s :k)= → nil.
+
+[THINK id:think.main-mon.set-operations date:2026-06-13 by:codex]
+  Lines 710-712: set algebra operations (union, difference, intersection,
+  select, index, rename, join) are aspirational.
+
+* Pair / Relation (Aspirational)
+:PROPERTIES:
+:ID: monadc.context.main-mon.pairs
+:CUSTOM_ID: main-mon-pairs
+:CONTEXT_KIND: design
+:CONTEXT_DESCRIPTION: Lines 719-856: ordered/unordered pairs and relation algebra.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: draft
+:CONTEXT_STATUS: blocked
+:SOURCE: Main.mon:719-856
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main-mon.pair-ordered src:Main.mon:721-748 conf:high]
+  Ordered pair: =(define ordered-pair (1,2))= — Kuratowski definition
+  =(a,b) = {{a},{a,b}}=. Verified that (a,b) = (c,d) ⇔ a=c ∧ b=d.
+
+[OBS id:obs.main-mon.pair-unordered src:Main.mon:751-752 conf:high]
+  Unordered pair: =(define unordered-pair {1,2})= — set of two elements.
+
+[OBS id:obs.main-mon.relation-design src:Main.mon:756-856 conf:high]
+  Relation algebra design: domain, codomain, image, preimage, compose,
+  transpose, union, intersection, difference, select, project, restrict,
+  corestrict, is-function?, is-injective?, is-surjective?. Full relation
+  algebra over sets of pairs. NOT YET IMPLEMENTED.
+
+[TODO id:todo.main-mon.relation-domain src:Main.mon:772-777 conf:high]
+  Domain of a relation: =(domain ages)= extracts first elements.
+  Functions (morphisms) are relations too.
+
+[TODO id:todo.main-mon.relation-image src:Main.mon:787-807 conf:high]
+  Image: given x, return set of all y related to x. For functions,
+  =(image double 5)= → ={10}=. For multi-arg, returns continuation.
+
+[TODO id:todo.main-mon.relation-preimage src:Main.mon:809-819 conf:high]
+  Preimage: given y, find all x related to it.
+  =(preimage ages 30)= → ={"Alice", "Charlie"}=.
+
+[TODO id:todo.main-mon.relation-compose src:Main.mon:821-831 conf:high]
+  Relation composition: =(R `∘` S)= yields (a,c) if (a,b)∈R ∧ (b,c)∈S.
+
+* Infix Function Call
+:PROPERTIES:
+:ID: monadc.context.main-mon.infix
+:CUSTOM_ID: main-mon-infix
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Lines 860-870: infix function call via backtick syntax.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: Main.mon:860-870
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main-mon.infix-examples src:Main.mon:865-870 conf:high]
+  Infix syntax: =(new-players `into` players)= expands to
+  =(into players new-players)= at reader level. Chaining works:
+  =(more-new-players `into` new-players `into` players)=.
+
+[THINK id:think.main-mon.infix-reader date:2026-06-13 by:codex]
+  Infix is purely a reader-level transformation before macro expansion.
+  Macros work normally with infix forms.
+
+* Optional Parameters (Aspirational)
+:PROPERTIES:
+:ID: monadc.context.main-mon.optional-params
+:CUSTOM_ID: main-mon-optional-params
+:CONTEXT_KIND: design
+:CONTEXT_DESCRIPTION: Lines 874-897: optional/default parameter syntax.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: draft
+:CONTEXT_STATUS: blocked
+:SOURCE: Main.mon:874-897
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main-mon.optional-param-syntax src:Main.mon:874-889 conf:high]
+  Optional parameter syntax using =(=>)= separator: parameters after
+  =(=>)= are optional with default values. =(define (multh [x :: Hex] => [y :: Hex] -> Int) (* x y))=.
+
+[TODO id:todo.main-mon.optional-params-impl date:2026-06-13 by:codex]
+  Optional/default parameters are designed but not implemented.
+  Default values specified as =(define (fn => [x :: Hex 3] -> ...))=.
+
+* Inline Assembly
+:PROPERTIES:
+:ID: monadc.context.main-mon.asm
+:CUSTOM_ID: main-mon-asm
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Lines 899-972: inline assembly blocks, naked/nonaked functions.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: Main.mon:899-972
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main-mon.asm-basic src:Main.mon:919-929 conf:high]
+  Inline asm with rdtsc: =(define (rdtsc -> Int) (asm rdtsc shl 32 %rdx or %rdx %rax))=.
+  Conditional compilation for x86-64 platform.
+
+[OBS id:obs.main-mon.asm-platform src:Main.mon:925-935 conf:high]
+  Platform-specific asm: x86-64 get-pid via syscall, commented out ARM32
+  variant. Uses =#+X86-64= feature conditionals.
+
+[OBS id:obs.main-mon.asm-naked src:Main.mon:939-948 conf:high]
+  Naked function: =(define (addnaked [x :: Int] -> [y :: Int] -> Int) :naked True (asm ...))=.
+  Manual prologue/epilogue with push/pop rbp.
+
+[OBS id:obs.main-mon.asm-nonaked src:Main.mon:951-972 conf:high]
+  Non-naked function: =(define (addnonaked [x :: Int] -> [y :: Int] -> Int) :naked False (asm add x y))=.
+  Compiler handles prologue/epilogue. Multiple test calls verify.
+
+* Loops / Iteration
+:PROPERTIES:
+:ID: monadc.context.main-mon.loops
+:CUSTOM_ID: main-mon-loops
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Lines 975-989: for-loop syntax with step and without binding.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: Main.mon:975-989
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main-mon.for-simple src:Main.mon:980-981 conf:high]
+  Simple for: =(for [i 0 10] (show "iter n _" i))=.
+
+[OBS id:obs.main-mon.for-step src:Main.mon:984-985 conf:high]
+  For with step 2: =(for [i 0 10 2] (show "iter n _" i))=.
+
+[OBS id:obs.main-mon.for-repeat src:Main.mon:988-989 conf:high]
+  For without binding (repeat): =(for [10] (show "looping 10 times!"))=.
+
+* List Comprehensions (Aspirational)
+:PROPERTIES:
+:ID: monadc.context.main-mon.list-comprehensions
+:CUSTOM_ID: main-mon-list-comprehensions
+:CONTEXT_KIND: design
+:CONTEXT_DESCRIPTION: Lines 992-1006: list comprehension syntax and examples.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: draft
+:CONTEXT_STATUS: blocked
+:SOURCE: Main.mon:992-1006
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main-mon.list-comp-examples src:Main.mon:994-1005 conf:high]
+  List comprehension syntax: =((square x) | x <- (1..10))=. Multiple
+  generators, filters, Pythagorean triples. Infinite ranges with =(take 10 xs)=.
+
+[TODO id:todo.main-mon.list-comprehensions-impl date:2026-06-13 by:codex]
+  List comprehension =((expr) | binding <- range, condition)= is reader-level
+  sugar, not yet implemented.
+
+* Type-Level Programming (Aspirational)
+:PROPERTIES:
+:ID: monadc.context.main-mon.type-programming
+:CUSTOM_ID: main-mon-type-programming
+:CONTEXT_KIND: design
+:CONTEXT_DESCRIPTION: Lines 1009-1075: types as first-class values, type literals, type constructors.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: draft
+:CONTEXT_STATUS: blocked
+:SOURCE: Main.mon:1009-1075
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main-mon.type-as-fn src:Main.mon:1012-1021 conf:high]
+  Types as functions: =(define (cast-with-type [t :: T] -> [x :: Int] -> t) (t x))=.
+  =(define (string-type -> [String :: T]) String)=.
+
+[OBS id:obs.main-mon.type-applications src:Main.mon:1027-1036 conf:high]
+  Applying types as functions with no args yields zero-initialized value:
+  =(Int)= → 0, =(Float)= → 0.0, =(Char)= → '', =(String)= → "".
+
+[OBS id:obs.main-mon.type-returning-fn src:Main.mon:1038-1043 conf:high]
+  Functions that return types: =(define (array-of [n :: Int] -> [t :: T] -> T) ...)=.
+  =(define [my-arr :: (array-of 3 Int)] [1 2 3])=.
+
+[OBS id:obs.main-mon.type-literals src:Main.mon:1049-1075 conf:high]
+  Type literals are self-evaluating: =Int= → Int, =[Vec :: Int]= → [Vec :: Int].
+  Types can be stored in collections: =[[Vec :: Int] [Vec :: Int] [Vec :: Int] [Vec :: Int]]=.
+
+[TODO id:todo.main-mon.type-literals-impl date:2026-06-13 by:codex]
+  Type-level programming (types as values, dependent type constructors)
+  is aspirational and not yet implemented.
+
+* Regex (Aspirational)
+:PROPERTIES:
+:ID: monadc.context.main-mon.regex
+:CUSTOM_ID: main-mon-regex
+:CONTEXT_KIND: design
+:CONTEXT_DESCRIPTION: Lines 1077-1098: regex literal syntax and regex-function definitions.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: draft
+:CONTEXT_STATUS: blocked
+:SOURCE: Main.mon:1077-1098
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main-mon.regex-literal src:Main.mon:1080 conf:high]
+  Regex literal: =(#"")= syntax with double-quoted pattern inside =#""=.
+
+[OBS id:obs.main-mon.regex-fn src:Main.mon:1084-1098 conf:high]
+  Regex function name: =(define (#"(?<x>\d+)\+(?<y>\d+)" -> Int) (+ x y))=.
+  Named capture groups bind to variables. =(42+3)= → 45.
+
+[TODO id:todo.main-mon.regex-impl date:2026-06-13 by:codex]
+  Regex literal syntax and regex-function definitions are aspirational.
+
+* Typed Expressions (Aspirational)
+:PROPERTIES:
+:ID: monadc.context.main-mon.typed-exprs
+:CUSTOM_ID: main-mon-typed-exprs
+:CONTEXT_KIND: design
+:CONTEXT_DESCRIPTION: Lines 1100-1216: cross-type casting matrix (11 types × 11 types).
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: draft
+:CONTEXT_STATUS: blocked
+:SOURCE: Main.mon:1100-1216
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main-mon.casting-matrix src:Main.mon:1107-1216 conf:high]
+  Exhaustive 11×11 casting table: =(Int 20)=, =(Float 20)=, =(Char 65)=,
+  =(String 65)=, =(Hex 65)=, =(Bin 65)=, =(Oct 65)=, =(Fn 20)=, =(Ratio 20)=,
+  =(Arr 20)=. Each combination listed with expected result or error.
+
+[TODO id:todo.main-mon.typed-exprs-impl date:2026-06-13 by:codex]
+  Typed expressions / casting is aspirational. Currently only basic
+  =(Int val)= and =(Float val)= conversions work.
+
+* Feature Conditionals
+:PROPERTIES:
+:ID: monadc.context.main-mon.features
+:CUSTOM_ID: main-mon-features
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Lines 1219-1243: conditional compilation and feature tests.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: Main.mon:1219-1243
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main-mon.features-show src:Main.mon:1228 conf:high]
+  =(show *features*)= — prints list of active feature flags.
+
+[OBS id:obs.main-mon.cond-compile src:Main.mon:1230-1243 conf:high]
+  Conditional compilation: =#+WINDOWS= / =#+LINUX= / =#+X86-64= sections.
+  Nested conditionals: =#+LINUX= then =#+X86-64= / =#+X86-32=.
+  Block ends with =#---=.
+
+[TODO id:todo.main-mon.features-all date:2026-06-13 by:codex]
+  The =*features*= list should be extended to cover all detected platform
+  capabilities (SSE, AVX, ARM NEON, etc.).
+
+* Summary: TODO Markers in Main.mon
+:PROPERTIES:
+:ID: monadc.context.main-mon.todo-summary
+:CUSTOM_ID: main-mon-todo-summary
+:CONTEXT_KIND: summary
+:CONTEXT_DESCRIPTION: Aggregate of every TODO/aspirational feature in Main.mon.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: Main.mon
+:CONFIDENCE: high
+:END:
+
+[TODO id:todo.main-mon.interpolation date:2026-06-13 by:codex]
+  Line 50: String interpolation =(show "Value of i is _, f is _..." i f o)=.
+
+[TODO id:todo.main-mon.rec-fn date:2026-06-13 by:codex]
+  Line 64-69: Recursive functions with =(define (rec fib ...)= — rec
+  keyword and IF/PURE/REC annotations not implemented.
+
+[TODO id:todo.main-mon.parametric-poly date:2026-06-13 by:codex]
+  Line 909: Parametric polymorphism over numeric types
+  =(define (add x y) (asm add x y))= with inferred types.
+
+[TODO id:todo.main-mon.set-builder date:2026-06-13 by:codex]
+  Lines 678, 710: Set-builder notation, set algebra (union, intersection,
+  difference, select, join) not implemented.
+
+[TODO id:todo.main-mon.relation-algebra date:2026-06-13 by:codex]
+  Lines 839-852: Relation algebra operations (union of relations, select,
+  project, restrict, corestrict, is-function? etc.) not implemented.
+
+[TODO id:todo.main-mon.rec-keyword date:2026-06-13 by:codex]
+  Line 210: =(define (return-int -> Int) 3)= then assigning to String
+  should be a compile-time type error, not segfault.
+
+[TODO id:todo.main-mon.matrix-fill date:2026-06-13 by:codex]
+  Lines 563-566: =(define m (fill [Mat :: [3x3x3] :: Int]))= — matrix
+  filling/construction by type not implemented.
+
+[TODO id:todo.main-mon.merge-with date:2026-06-13 by:codex]
+  Line 668: =(merge-with + scores new-scores)= for conflict-resolution
+  merging not implemented.
+
+[TODO id:todo.main-mon.print-show date:2026-06-13 by:codex]
+  Multiple =show= comments indicate: nested array display bug (line 357),
+  function array segfault (line 340), and ratio display.
+
+[TODO id:todo.main-mon.main-fn date:2026-06-13 by:codex]
+  Line 59-61: =(define (main -> Int) (show "Hello, World"))= — main entry
+  point is not yet wired into the binary.
+
+[TODO id:todo.main-mon.wisp-forms date:2026-06-13 by:codex]
+  Lines 95, 992-1006: Wisp-form syntax for defines, list comprehensions,
+  and infix operations needs compiler support.
+
+* Connections
+:PROPERTIES:
+:ID: monadc.context.main-mon.connections
+:CUSTOM_ID: main-mon-connections
+:CONTEXT_KIND: inference
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.main-mon.connects-to from:obs.main-mon.purpose conf:high]
+  connects-to -> `monadc.context.language` (Main.mon exercises every surface
+  syntax form: define, lambda, data, class, instance, if, cond, let, for,
+  while, match, do, set!, :: annotations) ·
+  `monadc.context.codegen-ops` (every codegen strcmp handler is exercised by
+  at least one Main.mon expression) ·
+  `monadc.context.types` (all 40 TypeKind values appear in Main.mon type
+  annotations and literal expressions) ·
+  `monadc.context.env` (define/import resolution, symbol table population) ·
+  `monadc.context.runtime` (lists, sets, maps, arrays, ratios, strings used
+  throughout) ·
+  `monadc.context.typeclass` (Eq, Ord, Show, Coll instances defined and
+  exercised) ·
+  `monadc.context.ffi` (cffi-* functions bind C math/string library) ·
+  `monadc.context.asm` (rdtsc, inline asm blocks in Random.mon and Main.mon) ·
+  `monadc.context.ideas` (quoted-form evaluation and ::: judgment from
+  ideas.org are natural extensions of Main.mon's annotation chains) ·
+  `monadc.context.todo-markers` (20+ TODO markers in Main.mon documented
+  in todo-markers.org) ·
+  `monadc.context.tests-arch` (core/ library tests validate Main.mon
+  functions against expected output)

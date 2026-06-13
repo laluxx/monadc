@@ -1,0 +1,924 @@
+#+TITLE: Test Suite Architecture
+#+AUTHOR: Codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:tests:architecture:verification:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.tests-arch
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.tests-arch.file-metadata
+:CUSTOM_ID: tests-arch-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/tests-arch.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.file src:tests/,tests/codegen/,tests/fuzzing/ conf:high]
+  Complete map of the MonadC test suite architecture covering ~923 test
+  assets across codegen runtime fixtures, inline ASM tests, TSV-driven
+  parser corpora, and property-based fuzzing. Every test category and
+  infrastructure piece is an OBS node.
+
+* Suite Overview
+:PROPERTIES:
+:ID: monadc.context.tests-arch.overview
+:CUSTOM_ID: tests-arch-overview
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The full test suite comprises ~923 test assets across four major categories: codegen runtime fixtures, TSV-driven parser corpora, fuzzing property laws, and integration harnesses.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.overview.sizes src:tests/ conf:high]
+  | Category               | Count   | Description                              |
+  |------------------------+---------+------------------------------------------|
+  | codegen/*.mon          | ~363    | Runtime compile-and-execute fixtures     |
+  | codegen/asm/*.mon      | 60      | Inline ASM named behavior tests          |
+  | reader-atoms.tsv       | ~650    | Parser atom conformance rows             |
+  | reader-sugars.tsv      | ~128    | Reader sugar transform rows              |
+  | reader-interactions.tsv| ~30     | Cross-feature interaction rows           |
+  | reader-supersets.tsv   | ~15     | Atom superset tests                      |
+  | reader-refinements.tsv | ~10     | Refinement type parser rows              |
+  | fuzzing properties     | 41      | Algebraic property .fuzz files           |
+  | top-level harnesses    | 5       | run.py, run_core.py, test_*.py, fixtures |
+  | TOTAL (~)              | ~1305   | Combined test atoms including TSV rows   |
+
+[OBS id:obs.tests-arch.overview.runner-metadata src:tests/run.py conf:high]
+  The test runner reports consolidated counts: each .mon fixture is one
+  registered test, each TSV row is one registered test, fuzzing laws
+  are generated. Observed suite size evolves continuously (1058 reg,
+  1007 pass, 51 fail at last count).
+
+* Codegen Runtime Fixtures
+:PROPERTIES:
+:ID: monadc.context.tests-arch.codegen
+:CUSTOM_ID: tests-arch-codegen
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: ~363 runtime compile-and-execute .mon fixtures under tests/codegen/, each with optional .stdout/.json/.desugar golden files. Naming: rt_<category>_<atom>.mon.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.codegen.naming src:tests/codegen/ conf:high]
+  Naming convention: =rt_<category>_<atom>.mon= with sibling
+  =rt_<category>_<atom>.stdout= for golden output. Some fixtures use
+  wisp_ prefix for Wisp-syntax tests (e.g. =wisp_define.mon=) or
+  descriptive prefixes for non-rt categories (=arithmetic_add.mon=,
+  =boolean_and.mon=, =comparison_eq.mon=, =cond_expression.mon=,
+  =lambda_call.mon=, =pattern_match.mon=, =string_concat.mon=).
+
+** Arithmetic
+:PROPERTIES:
+:ID: monadc.context.tests-arch.codegen.arithmetic
+:CUSTOM_ID: tests-arch-arithmetic
+:CONTEXT_KIND: test-section
+:CONTEXT_DESCRIPTION: Integer/float/mixed arithmetic: + - * / % mod. Variadic, chained, nested, edge cases.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/rt_arith_*.mon,tests/codegen/arithmetic_*.mon,tests/codegen/rt_percent_*.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.codegen.arithmetic-files src:tests/codegen/ conf:high]
+  Fixtures: =rt_arith_all.mon=, =rt_arith_chained.mon=,
+  =rt_arith_comp.mon=, =rt_arith_mixed.mon=, =rt_arith_nested.mon=,
+  =arithmetic_add.mon=, =arithmetic_div.mon=, =arithmetic_mixed.mon=,
+  =arithmetic_mod.mon=, =arithmetic_mul.mon=, =arithmetic_negate.mon=,
+  =arithmetic_sub.mon=, =nested_arithmetic.mon=,
+  =rt_implicit_mul.mon=, =rt_infix_mod.mon=,
+  =rt_percent_arithmetic_complex.mon=, =rt_percent_literals.mon=,
+  =rt_multi_arg_add.mon=, =rt_multi_arg_mul.mon=,
+  =rt_multi_arg_ops.mon=.
+
+** Bitwise
+:PROPERTIES:
+:ID: monadc.context.tests-arch.codegen.bitwise
+:CUSTOM_ID: tests-arch-bitwise
+:CONTEXT_KIND: test-section
+:CONTEXT_DESCRIPTION: Bitwise operations: & ~ bit-xor << >> >>>, unicode aliases.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/rt_bitwise_*.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.codegen.bitwise-files src:tests/codegen/ conf:high]
+  Fixtures: =rt_bitwise_all.mon=, =rt_bitwise_comp.mon=,
+  =rt_bitwise_ops.mon=, =rt_bitwise_xor_not_rshift.mon=,
+  =rt_shift_right.mon=.
+
+** Comparison
+:PROPERTIES:
+:ID: monadc.context.tests-arch.codegen.comparison
+:CUSTOM_ID: tests-arch-comparison
+:CONTEXT_KIND: test-section
+:CONTEXT_DESCRIPTION: Comparison operators: = != < > <= >=. Int, float, mixed, chained, variadic, partial application.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/rt_cmp_*.mon,tests/codegen/comparison_*.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.codegen.comparison-files src:tests/codegen/ conf:high]
+  Fixtures: =rt_cmp_all.mon=, =rt_cmp_chained.mon=, =rt_cmp_comp.mon=,
+  =rt_cmp_mixed_types.mon=, =rt_comparison_edges.mon=,
+  =comparison_eq.mon=, =comparison_ge.mon=, =comparison_gt.mon=,
+  =comparison_le.mon=, =comparison_lt.mon=, =comparison_ne.mon=,
+  =comparison_ops.mon=, =rt_equal_all.mon=, =rt_equal_nested.mon=.
+
+** Control Flow
+:PROPERTIES:
+:ID: monadc.context.tests-arch.codegen.control
+:CUSTOM_ID: tests-arch-control
+:CONTEXT_KIND: test-section
+:CONTEXT_DESCRIPTION: Control flow: if, begin, unless, while, when, do, with, for, cond.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/rt_*.mon,tests/codegen/cond_*.mon,tests/codegen/if_*.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.codegen.control-files src:tests/codegen/ conf:high]
+  Fixtures: =rt_begin_*.mon= (value, sequence, define-inline, side-effect,
+  variants), =rt_cond_branches.mon=, =rt_cond_else.mon=,
+  =rt_cond_sign.mon=, =rt_control_all.mon=, =rt_control_comp.mon=,
+  =rt_do_variants.mon=, =rt_for_*.mon= (accumulate, backward, collect,
+  destructured, loop, nested, while-guard), =rt_if_*.mon= (branches,
+  else-chains, equal-branch), =rt_unless_*.mon=, =rt_when_effect.mon=,
+  =rt_while_*.mon=, =rt_with_variants.mon=, =cond_expression.mon=,
+  =cond_nested.mon=, =cond_test.mon=.
+
+** Data Types & Type Predicates
+:PROPERTIES:
+:ID: monadc.context.tests-arch.codegen.data-types
+:CUSTOM_ID: tests-arch-data-types
+:CONTEXT_KIND: test-section
+:CONTEXT_DESCRIPTION: Type predicates, type conversions, radix literals, ratios, type casts, refinement types.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/rt_type_*.mon,tests/codegen/rt_radix_*.mon,tests/codegen/rt_ratio_*.mon,tests/codegen/rt_data_*.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.codegen.data-files src:tests/codegen/ conf:high]
+  Fixtures: =rt_type_predicates.mon=, =rt_type_predicates_extended.mon=,
+  =rt_type_preds_all.mon=, =rt_type_preds_comp.mon=,
+  =rt_type_conv_comp.mon=, =rt_type_conversion.mon=,
+  =rt_type_conversions.mon=, =rt_type_casts.mon=,
+  =rt_type_alias.mon=, =rt_type_alias_value.mon=,
+  =rt_char_constructor_aliases.mon=, =rt_char_conversion.mon=,
+  =rt_char_keyword_symbol_predicates.mon=,
+  =rt_numeric_width_conversions.mon=, =rt_radix_binary_literal.mon=,
+  =rt_radix_display.mon=, =rt_radix_hex_literal.mon=,
+  =rt_radix_literals.mon=, =rt_ratio_arithmetic.mon=,
+  =rt_ratio_comp.mon=, =rt_ratio_func.mon=, =rt_ratio_show.mon=,
+  =rt_refinement_type.mon=, =rt_data_bounded_enum.mon=,
+  =rt_data_constructors.mon=, =rt_data_deriving_gadt.mon=,
+  =rt_data_record_constructor.mon=, =rt_data_single_constructor.mon=.
+
+** Pattern Matching
+:PROPERTIES:
+:ID: monadc.context.tests-arch.codegen.pattern-matching
+:CUSTOM_ID: tests-arch-pattern-matching
+:CONTEXT_KIND: test-section
+:CONTEXT_DESCRIPTION: Pattern matching: variable, wildcard, literal, list, constructor, guard clauses, nested patterns.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/rt_match_*.mon,tests/codegen/pattern_match.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.codegen.pattern-files src:tests/codegen/ conf:high]
+  Fixtures: =rt_match_int_var_wildcard.mon=,
+  =rt_match_string_literal.mon=, =rt_match_float_literal.mon=,
+  =rt_match_empty_list.mon=, =rt_match_list_literal.mon=,
+  =rt_match_list_tail.mon=, =rt_match_guard_clause.mon=,
+  =rt_match_constructor_pattern.mon=, =rt_match_bare_constructor.mon=,
+  =rt_match_nested_patterns.mon=, =pattern_match.mon=.
+
+** Functions & Closures
+:PROPERTIES:
+:ID: monadc.context.tests-arch.codegen.functions
+:CUSTOM_ID: tests-arch-functions
+:CONTEXT_KIND: test-section
+:CONTEXT_DESCRIPTION: Function definition, lambda, closure capture, partial application, HOF arguments, mutual recursion.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/rt_closure_*.mon,tests/codegen/rt_lambda_*.mon,tests/codegen/rt_define_*.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.codegen.fn-files src:tests/codegen/ conf:high]
+  Fixtures: =rt_closure_capture.mon=, =rt_closure_hof_argument.mon=,
+  =rt_closure_partial_application.mon=, =rt_lambda_*.mon=
+  (docstring, literal-curry, literal-sugar, pattern-clauses,
+  rest-param, typed-apply, untyped),
+  =rt_define_*.mon= (compose, predicate, two-arg, typed-fn),
+  =rt_mutual_recursion_forward.mon=, =rt_nested_lambda.mon=,
+  =rt_functional_until.mon=, =rt_lambda_typed.mon=,
+  =rt_filter_lambda.mon=, =rt_map_lambda_list.mon=,
+  =function_call.mon=, =lambda_call.mon=, =lambda_multi_arg.mon=,
+  =nested_call.mon=.
+
+** Collections (List, Set, Map, Array)
+:PROPERTIES:
+:ID: monadc.context.tests-arch.codegen.collections
+:CUSTOM_ID: tests-arch-collections
+:CONTEXT_KIND: test-section
+:CONTEXT_DESCRIPTION: List (cons, car, cdr, ++, make-list, count), Set (conj/disj/conj!/disj!, contains?, set-as-function), Map (assoc, dissoc, merge, find, keys, vals), Array (inline, fat, sized, heap).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.codegen.list-files src:tests/codegen/ conf:high]
+  Fixtures: =rt_cons_list.mon=, =rt_car_cdr_nested.mon=,
+  =rt_concat_append.mon=, =rt_list_append_ops.mon=,
+  =rt_list_comp.mon=, =rt_list_empty.mon=,
+  =rt_list_mutate_append_bang.mon=, =rt_make_list.mon=,
+  =rt_make_list_all.mon=, =rt_nested_list.mon=,
+  =rt_quoted_list_ops.mon=, =rt_quote_list_length.mon=,
+  =rt_head_tail.mon=, =list_ops.mon=, =list_ops_car_cdr.mon=.
+
+[OBS id:obs.tests-arch.codegen.set-files src:tests/codegen/ conf:high]
+  Fixtures: =rt_set_all.mon=, =rt_set_comp.mon=,
+  =rt_set_conj_functional.mon=, =rt_set_disj_functional.mon=,
+  =rt_set_empty_ops.mon=, =rt_set_full.mon=,
+  =rt_set_functional.mon=, =rt_set_literal_count.mon=,
+  =rt_set_map_predicates.mon=, =rt_set_mutate.mon=,
+  =rt_set_mutate_conj_bang.mon=, =rt_set_mutate_disj_bang.mon=,
+  =rt_set_swap.mon=, =rt_collection_access.mon=,
+  =rt_collection_workflow.mon=, =rt_nested_collections.mon=.
+
+[OBS id:obs.tests-arch.codegen.map-files src:tests/codegen/ conf:high]
+  Fixtures: =rt_map_assoc_dissoc.mon=, =rt_map_filter_pipe.mon=,
+  =rt_map_full.mon=, =rt_map_key_variants.mon=,
+  =rt_map_merge_lookup.mon=, =rt_map_queries.mon=.
+
+[OBS id:obs.tests-arch.codegen.array-files src:tests/codegen/ conf:high]
+  Fixtures: =rt_array_full.mon=, =rt_array_index_count.mon=,
+  =rt_array_predicates.mon=, =rt_range_arrays.mon=,
+  =rt_heap_array_runtime.mon=, =rt_heap_array_for.mon=,
+  =rt_size_array_value.mon=.
+
+** Wisp Syntax
+:PROPERTIES:
+:ID: monadc.context.tests-arch.codegen.wisp
+:CUSTOM_ID: tests-arch-wisp
+:CONTEXT_KIND: test-section
+:CONTEXT_DESCRIPTION: Wisp indentation-sensitive syntax: define, if, branch, show, arithmetic, comparison, lists, pipe, quote, typed values, path values, bang-sugar, qmark-sugar.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/rt_wisp_*.mon,tests/codegen/wisp_*.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.codegen.wisp-files src:tests/codegen/ conf:high]
+  Fixtures: =rt_wisp_*.mon= (bang-sugar, basic, comparison, define-*,
+  if, infix, inline-if, lists, logic, maps-percentages, multiline-if,
+  mutation, path-value, pipe, qmark-sugar, quote, return-string,
+  sexpr-mix, typed-value), =wisp_*.mon= (arithmetic, comparison,
+  define, if-true, if-false, multi-define, pattern-second-arg,
+  show-string, simple-values).
+
+** C FFI
+:PROPERTIES:
+:ID: monadc.context.tests-arch.codegen.ffi
+:CUSTOM_ID: tests-arch-ffi
+:CONTEXT_KIND: test-section
+:CONTEXT_DESCRIPTION: C Foreign Function Interface: math (sqrt, fabs, ceil, floor, hypot), ctype (isdigit, tolower, toupper), stdlib (atoi), string (strlen, strcmp, strchr, strncmp), limits (int-max, char-bit).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/rt_cffi_*.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.codegen.ffi-files src:tests/codegen/ conf:high]
+  Fixtures (18): =rt_cffi_ctype_isdigit.mon=, =rt_cffi_ctype_tolower.mon=,
+  =rt_cffi_ctype_toupper.mon=, =rt_cffi_limits_char_bit.mon=,
+  =rt_cffi_limits_int_max.mon=, =rt_cffi_math_ceil.mon=,
+  =rt_cffi_math_fabs.mon=, =rt_cffi_math_floor.mon=,
+  =rt_cffi_math_hypot.mon=, =rt_cffi_math_sqrt.mon=,
+  =rt_cffi_stdlib_atoi.mon=, =rt_cffi_string_strchr_strlen.mon=,
+  =rt_cffi_string_strcmp.mon=, =rt_cffi_string_strlen.mon=,
+  =rt_cffi_string_strncmp.mon=, =rt_include_header.mon=,
+  =rt_import_options.mon=.
+
+** Type Classes & Modules
+:PROPERTIES:
+:ID: monadc.context.tests-arch.codegen.type-classes
+:CUSTOM_ID: tests-arch-tc
+:CONTEXT_KIND: test-section
+:CONTEXT_DESCRIPTION: Type class declarations, instances, method dispatch, module exports, layout types, record declarations.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/rt_class_*.mon,tests/codegen/rt_layout_*.mon,tests/codegen/rt_module_*.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.codegen.tc-files src:tests/codegen/ conf:high]
+  Fixtures: =rt_class_assoc_default.mon=, =rt_class_instance_decl.mon=,
+  =rt_instance_method_body.mon=, =rt_layout_*.mon= (color-methods,
+  field-mutation, fields, keyword-constructor, methods, nested-fields,
+  pointer-field, swap-components), =rt_record_decl.mon=,
+  =rt_module_export.mon=.
+
+** Quasiquotes
+:PROPERTIES:
+:ID: monadc.context.tests-arch.codegen.quasiquote
+:CUSTOM_ID: tests-arch-quasiquote
+:CONTEXT_KIND: test-section
+:CONTEXT_DESCRIPTION: Quasiquote with unquote, quoted list operations, code reflection, quote display.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/rt_quasiquote_*.mon,tests/codegen/rt_quote_*.mon,tests/codegen/rt_code_reflection.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.codegen.qq-files src:tests/codegen/ conf:high]
+  Fixtures: =rt_quasiquote_eval.mon=, =rt_quote_comp.mon=,
+  =rt_quote_list_length.mon=, =rt_quoted_list_ops.mon=,
+  =rt_code_reflection.mon=.
+
+** Mutation
+:PROPERTIES:
+:ID: monadc.context.tests-arch.codegen.mutation
+:CUSTOM_ID: tests-arch-mutation
+:CONTEXT_KIND: test-section
+:CONTEXT_DESCRIPTION: Variable mutation via set!, define mutation, field mutation via set!, while with mutable counter.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/rt_set_bang.mon,tests/codegen/rt_var_mutation.mon,tests/codegen/rt_while_mutable_counter.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.codegen.mutation-files src:tests/codegen/ conf:high]
+  Fixtures: =rt_var_mutation.mon=, =rt_var_mut_comp.mon=,
+  =rt_set_bang.mon=, =rt_set_bang_field.mon=,
+  =rt_while_mutable_counter.mon=, =rt_assign_arrow_sugar.mon=.
+
+** Errors & Diagnostics
+:PROPERTIES:
+:ID: monadc.context.tests-arch.codegen.errors
+:CUSTOM_ID: tests-arch-errors
+:CONTEXT_KIND: test-section
+:CONTEXT_DESCRIPTION: Compiler error diagnostics: arity errors, type errors, unbound variables, empty list/array, malformed forms.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/rt_codegen_err_*.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.codegen.err-files src:tests/codegen/ conf:high]
+  Fixtures (35+): =rt_codegen_err_address_builtin.mon=,
+  =rt_codegen_err_address_unbound.mon=,
+  =rt_codegen_err_append_arity.mon=,
+  =rt_codegen_err_arithmetic_*.mon= (no-args, string),
+  =rt_codegen_err_array_call_arity.mon=,
+  =rt_codegen_err_array_size_mismatch.mon=,
+  =rt_codegen_err_bitnot_arity.mon=,
+  =rt_codegen_err_callable_number.mon=,
+  =rt_codegen_err_cast_arity.mon=, =rt_codegen_err_code_*.mon=,
+  =rt_codegen_err_count_unsupported.mon=,
+  =rt_codegen_err_doc_*.mon=, =rt_codegen_err_empty_*.mon=,
+  =rt_codegen_err_for_*.mon=, =rt_codegen_err_head_arity.mon=,
+  =rt_codegen_err_if_arity.mon=, =rt_codegen_err_layout_*.mon=,
+  =rt_codegen_err_mod_arity.mon=, =rt_codegen_err_not_arity.mon=,
+  =rt_codegen_err_null_coalesce_arity.mon=,
+  =rt_codegen_err_pair_arity.mon=,
+  =rt_codegen_err_quasiquote_arity.mon=,
+  =rt_codegen_err_quote_*.mon=, =rt_codegen_err_refinement_*.mon=,
+  =rt_codegen_err_set_*.mon=, =rt_codegen_err_tail_arity.mon=,
+  =rt_codegen_err_unbound_variable.mon=,
+  =rt_codegen_err_undefined_top_level.mon=,
+  =rt_codegen_err_unknown_function.mon=,
+  =rt_codegen_err_unless_arity.mon=,
+  =rt_codegen_err_variable_not_function.mon=,
+  =rt_codegen_err_while_arity.mon=, =rt_error_abort.mon=.
+
+** String
+:PROPERTIES:
+:ID: monadc.context.tests-arch.codegen.string
+:CUSTOM_ID: tests-arch-string
+:CONTEXT_KIND: test-section
+:CONTEXT_DESCRIPTION: String operations: make-string, count, starts-with?, ends-with?, contains?, string-indexing, equality, concat, adjacent strings, prefix/suffix.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.codegen.str-files src:tests/codegen/ conf:high]
+  Fixtures: =rt_make_string.mon=, =rt_count_string.mon=,
+  =rt_count_equal.mon=, =rt_str_comp.mon=, =rt_str_empty_edge.mon=,
+  =rt_str_indexing.mon=, =rt_str_predicates.mon=,
+  =rt_string_adjacent.mon=, =rt_string_concat.mon=,
+  =rt_string_equality_true.mon=, =rt_string_equality_false.mon=,
+  =rt_string_helpers.mon=, =rt_string_prefix_suffix.mon=,
+  =rt_adjacent_strings.mon=.
+
+** Other / Integration
+:PROPERTIES:
+:ID: monadc.context.tests-arch.codegen.other
+:CUSTOM_ID: tests-arch-other
+:CONTEXT_KIND: test-section
+:CONTEXT_DESCRIPTION: Address-of, inflection sugar, pipe forward, postfix call/index, type-class instance body, lambda docstring, tests block, feature conditionals.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.codegen.other-files src:tests/codegen/ conf:high]
+  Fixtures: =rt_address_of.mon=, =rt_infix_sugar.mon=,
+  =rt_pipe_forward.mon=, =rt_postfix_call_sugar.mon=,
+  =rt_postfix_index_sugar.mon=, =rt_tests_block.mon=,
+  =rt_feature_conditionals.mon=, =rt_lambda_docstring.mon=,
+  =rt_lambda_typed.mon=, =rt_basic_values_display.mon=,
+  =rt_keyword_symbol_display.mon=, =rt_hm_polymorphic_identity.mon=,
+  =rt_hm_polymorphic_const.mon=, =rt_null_coalesce.mon=,
+  =rt_null_quest.mon=, =rt_pair_p.mon=, =rt_primitive_edge.mon=,
+  =rt_superscript_sugar.mon=, =rt_periodic_decimals.mon=.
+
+* Inline ASM Tests
+:PROPERTIES:
+:ID: monadc.context.tests-arch.asm
+:CUSTOM_ID: tests-arch-asm
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: 60 generated inline assembly behavior-named .mon + .stdout pairs under tests/codegen/asm/, generated by create_asm_tests.py.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/asm/,create_asm_tests.py
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.asm.generator src:create_asm_tests.py,create_asm_tests_extra.py conf:high]
+  Generated by =create_asm_tests.py= (and =create_asm_tests_extra.py=).
+  The generator deletes stale generated =asm-*.mon= and =asm-*.stdout=
+  files before writing current fixtures. Each fixture covers one asm
+  behavior: mnemonic splitting, parameter placeholder substitution,
+  immediate escaping, suffix inference, AT&T operand reordering,
+  multi-parameter constraints, Float/Char return, no-op placement,
+  syscall-shaped String operands.
+
+[OBS id:obs.tests-arch.asm.topics src:tests/codegen/asm/ conf:high]
+  Covers: int add/sub/mul/imul (immediate, two-param, three-param, neg,
+  inc/dec, large-immediate), and/or/xor/not/shift/rol/ror, cmov
+  (max/min), idiv quotient, byte-width zero-extend, sse-float (add,
+  mul, movsd, empty-identity, explicit-movsd), char return (immediate,
+  from-param), nop (before-add, after-add, dec, nop-nop-inc),
+  six-param (forward-sum, reverse-sum), three-placeholder-sum,
+  xchg two-params, mov (immediate-return, param-to-rax, then-add),
+  syscall (write-string, write-u8-pointer, write-string-bang),
+  wisp-asm-add. All 60 verified passing through =tests/run.py=.
+
+* TSV Reader Corpora
+:PROPERTIES:
+:ID: monadc.context.tests-arch.tsv-corpora
+:CUSTOM_ID: tests-arch-tsv
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Table-driven parser test corpora: reader-atoms.tsv (~650 entries), reader-sugars.tsv (~128 entries), reader-interactions.tsv, reader-supersets.tsv, reader-refinements.tsv. Each row expands into a registered test.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/reader-*.tsv
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.tsv.atoms src:tests/reader-atoms.tsv conf:high]
+  =tests/reader-atoms.tsv=: ~650 rows, one per parser atom. Columns:
+  =name=, =context= (ID link), =purpose= (one sentence), =source=
+  (Monad source text). Covers: numeric literals, string/char, path,
+  keywords, symbols, arrays, heap arrays, sets, maps, ranges, wisp,
+  comments, quoted/quasiquoted, lambda/let/let*/letrec/case/match/cond,
+  do/begin, with/set!, pipe/dot, for comprehensions, data/type/
+  class/instance/module/import, buffer types, refinement types,
+  address-of, feature conditionals, quantifiers, annotations, import
+  renaming, layout forms. Golden JSON table at
+  =tests/reader-atoms.golden.jsonl= for AST shape verification.
+
+[OBS id:obs.tests-arch.tsv.sugars src:tests/reader-sugars.tsv conf:high]
+  =tests/reader-sugars.tsv=: ~128 rows covering reader sugar transforms.
+  Categories: implicit multiplication (number adjacent to variable),
+  percentage sugar (33% → 33/100), periodic decimal (0.(3) → 3/9),
+  superscript sugar (x² → (^ x 2)), postfix index (arr[0] → (arr 0)),
+  postfix call (obj.method → (method obj)), dot/pipe/arrow transforms,
+  infix operator placement. Columns: =name=, =context=, =purpose=,
+  =source=, =expected= (desugared output). Some rows are expected
+  compile failures (=expected: fail:compile=).
+
+[OBS id:obs.tests-arch.tsv.interactions src:tests/reader-interactions.tsv conf:high]
+  =tests/reader-interactions.tsv=: cross-feature interaction rows.
+  Tests parser combinations across subsets: e.g. typed arrays,
+  refinement-constrained collections, Wisp + C FFI headers.
+
+[OBS id:obs.tests-arch.tsv.supersets src:tests/reader-supersets.tsv conf:high]
+  =tests/reader-supersets.tsv=: atom superset tests — validates that
+  the parser recognizes superset language features (forms that extend
+  beyond the core atom set).
+
+[OBS id:obs.tests-arch.tsv.refinements src:tests/reader-refinements.tsv conf:high]
+  =tests/reader-refinements.tsv=: refinement type parser coverage,
+  including =where= clauses and predicate constraints.
+
+* Fuzzing
+:PROPERTIES:
+:ID: monadc.context.tests-arch.fuzzing
+:CUSTOM_ID: tests-arch-fuzzing
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Property-based fuzzing via tests/fuzzing/fuzz_codegen.py + 41 .fuzz algebraic property files. QuickCheck-style law checking across the full compiler pipeline.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/fuzzing/
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.fuzzing.harness src:tests/fuzzing/fuzz_codegen.py conf:high]
+  =fuzz_codegen.py= discovers property assets from
+  =tests/fuzzing/properties/*.fuzz=, generates typed Int/Bool programs
+  with typed helper definitions, compiles with =./monad=, runs the
+  executable, checks stdout against generated algebraic laws. Type-
+  directed generation: programs carry explicit type signatures checked
+  by =dep.c=/=infer.c= before codegen. Run via =make fuzzing=.
+
+[OBS id:obs.tests-arch.fuzzing.property-categories src:tests/fuzzing/properties/ conf:high]
+  41 .fuzz property files across 5 algebraic law categories:
+  - **Commutativity**: int_add_commutative, int_mul_commutative,
+    min_commutative, max_commutative
+  - **Associativity**: int_add_associative
+  - **Identity**: int_add_identity_zero (a+0=a), int_mul_identity_one
+    (a*1=a), int_mul_zero_absorbing (a*0=0), bool_identity_roundtrip,
+    int_identity_roundtrip
+  - **Distributivity**: int_mul_distributive (a*(b+c)=a*b+a*c),
+    min_max_absorption, max_min_absorption
+  - **Absorption**: min_lower_bound_left, min_lower_bound_right,
+    max_upper_bound_left, max_upper_bound_right, max_idempotent,
+    min_idempotent
+
+[OBS id:obs.tests-arch.fuzzing.arithmetic src:tests/fuzzing/properties/ conf:high]
+  Arithmetic property files: arithmetic_add_sub_cancel_left,
+  arithmetic_double_subtract, int_add_associative, int_add_commutative,
+  int_add_identity_zero, int_mul_commutative, int_mul_distributive,
+  int_mul_identity_one, int_mul_zero_absorbing, int_sub_add_inverse,
+  int_sub_self_zero.
+
+[OBS id:obs.tests-arch.fuzzing.comparison src:tests/fuzzing/properties/ conf:high]
+  Comparison property files: comparison_duality_lt (a<b ↔ b>a),
+  comparison_duality_lte (a≤b ↔ b≥a), comparison_gt_self_false,
+  comparison_lt_self_false, comparison_reflexive_lte,
+  comparison_strict_reflexive_pair, equality_reflexive_int,
+  equality_shifted_by_one_false.
+
+[OBS id:obs.tests-arch.fuzzing.control src:tests/fuzzing/properties/ conf:high]
+  Control flow property files: if_comparison_branch,
+  if_negated_order_else_branch, if_same_branch,
+  do_returns_last, do_nested_returns_last,
+  with_binding_substitution, with_body_can_call_typed_function,
+  with_nested_shadowing, with_shadowing_last_binding,
+  with_two_bindings_visible.
+
+[OBS id:obs.tests-arch.fuzzing.minmax src:tests/fuzzing/properties/ conf:high]
+  Min/Max property files: max_commutative, max_idempotent,
+  max_min_absorption, max_upper_bound_left, max_upper_bound_right,
+  min_commutative, min_idempotent, min_lower_bound_left,
+  min_lower_bound_right, min_max_absorption.
+
+[OBS id:obs.tests-arch.fuzzing.format src:tests/fuzzing/properties/ conf:high]
+  Each .fuzz file contains fields: =name=, =section=, =args=
+  (e.g. =a:Int b:Int=), =type= (e.g. =Bool=), =expect= (=True= or
+  =False=), =description=, and =law= (template with ={name}=
+  placeholders). Verified: =make fuzzing= passed 96 deterministic
+  seeds / 960 generated laws.
+
+* Top-Level Harnesses & Fixtures
+:PROPERTIES:
+:ID: monadc.context.tests-arch.top-level
+:CUSTOM_ID: tests-arch-top-level
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Top-level script harnesses and standalone fixtures in tests/ root.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.harness.run-py src:tests/run.py conf:high]
+  =tests/run.py= is the primary test runner (1027 lines). Discovers
+  tests recursively: .mon fixtures under =tests/codegen/= (including
+  =asm/= subdirectory), TSV rows from =reader-*.tsv= files, and any
+  fixture in =tests/= root. Groups output into named sections with
+  =SECTION_ORDER= dict, per-section =SectionStats=, and framed
+  separator layout. Generates =.last-first-failure.org= on failure.
+  Executes via =./monad <file>= with AST JSON, desugar, and stdout
+  golden checks.
+
+[OBS id:obs.tests-arch.harness.run-core-py src:tests/run_core.py conf:high]
+  =tests/run_core.py= runs core/prelude module tests sequentially via
+  =./monad test <file>=. Forces =MONAD_CORE= to =core/= tree, provides
+  temporary writable =HOME= per module. Combined module summary.
+
+[OBS id:obs.tests-arch.harness.test-run-py src:tests/test_run.py conf:high]
+  =tests/test_run.py=: unit tests for the test runner itself — verifies
+  metadata parsing, section ordering, artifact cleanup.
+
+[OBS id:obs.tests-arch.harness.test-viz-py src:tests/test_context_visualizer.py conf:high]
+  =tests/test_context_visualizer.py=: tests for the context graph
+  visualizer (context-visualizer.py).
+
+[OBS id:obs.tests-arch.harness.standalone-fixtures src:tests/ conf:high]
+  Standalone fixtures: =path_heap_literals.mon= (with .stdout, .json,
+  .desugar, .org sidecars), =quote-quasiquote-unquote.mon= (with
+  .stdout), =empty-file.mon= (edge case).
+
+* Runner Discovery & Execution
+:PROPERTIES:
+:ID: monadc.context.tests-arch.discovery
+:CUSTOM_ID: tests-arch-discovery
+:CONTEXT_KIND: observation
+:CONTEXT_DESCRIPTION: How run.py discovers, registers, and executes tests.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/run.py
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests-arch.discovery.codegen src:tests/run.py conf:high]
+  Codegen fixture discovery: walks =tests/codegen/= recursively.
+  Each =.mon= file registers as a test. Fixture metadata parsed from
+  =;; TEST-*= comments. Requires =TEST-ID=, =TEST-CONTEXT=,
+  =TEST-PURPOSE=, =TEST-ATOM=, =TEST-EXPECT=. Sibling =.stdout=,
+  =.json=, =.desugar= files become golden expectations.
+
+[OBS id:obs.tests-arch.discovery.tsv src:tests/run.py conf:high]
+  TSV corpus discovery: each row in =reader-*.tsv= registers as a
+  test. Required fields per row: =name=, =context=, =purpose=, =source=.
+  Sugars TSV adds =expected= field. Optional =fail:compile= in field 5
+  marks expected-failure rows. =golden.jsonl= pairs provide AST shape
+  verification.
+
+[OBS id:obs.tests-arch.discovery.execution src:tests/run.py conf:high]
+  Execution order per fixture: (1) emit =--emit-json= AST, compare
+  against =.json= golden if present (after stripping =line=/=col=);
+  (2) emit desugar, compare against =.desugar= golden; (3) compile
+  via =./monad=, run executable, compare stdout against =.stdout=
+  golden. Expected-failure fixtures (=fail:compile=) check that
+  compilation fails with expected diagnostic.
+
+[OBS id:obs.tests-arch.discovery.sectioning src:tests/run.py conf:high]
+  Tests are grouped into named sections via =SECTION_ORDER= dict:
+  interaction, superset, cffi, refinement, wisp, layout, map, ratio,
+  diagnostic, codegen, language, sugar. Each section has a color-coded
+  header, per-test progress rows, closing stats (passed/total, %,
+  elapsed). Final summary table across all sections.
+
+* Cross-References
+:PROPERTIES:
+:ID: monadc.context.tests-arch.cross-refs
+:CUSTOM_ID: tests-arch-cross-refs
+:CONTEXT_KIND: index
+:CONTEXT_DESCRIPTION: Cross-references to tests.org for metadata format and runner policy, codegen-ops.org for dispatch coverage, runtime.org for runtime behavior.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: tests/
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.tests-arch.tests-org from:obs.tests-arch.file,obs.tests-arch.overview conf:high]
+  connects-to -> `monadc.context.tests.file-metadata` (the test metadata
+  format, llm orientation, philosophy, and runner policy are in tests.org) ·
+  `monadc.context.tests.codegen-directory` (codegen test discovery and
+  metadata rules) ·
+  `monadc.context.tests.metadata-format` (TEST-ID, TEST-CONTEXT,
+  TEST-PURPOSE, TEST-ATOM, TEST-EXPECT specification)
+
+[INF id:inf.tests-arch.codegen-ops from:obs.tests-arch.codegen,obs.tests-arch.codegen.arithmetic,obs.tests-arch.codegen.bitwise,obs.tests-arch.codegen.comparison,obs.tests-arch.codegen.control,obs.tests-arch.codegen.collections,obs.tests-arch.codegen.functions conf:high]
+  connects-to -> `monadc.context.codegen-ops.architecture` (the
+  three-layer dispatch architecture) ·
+  `monadc.context.codegen-ops.arithmetic` (every arithmetic strcmp
+  handler has at least one test) ·
+  `monadc.context.codegen-ops.bitwise` ·
+  `monadc.context.codegen-ops.comparison` ·
+  `monadc.context.codegen-ops.control` ·
+  `monadc.context.codegen-ops.list` ·
+  `monadc.context.codegen-ops.collection` ·
+  `monadc.context.codegen-ops.gaps` (known missing dispatch coverage)
+
+[INF id:inf.tests-arch.runtime from:obs.tests-arch.codegen.functions,obs.tests-arch.codegen.collections,obs.tests-arch.codegen.string conf:high]
+  connects-to -> `monadc.context.runtime.value-system` (RuntimeValue tags,
+  arena allocation, boxed/unboxed representation) ·
+  `monadc.context.runtime.list-representation` (ConsCell, lazy thunks,
+  rt_list_car/cdr) ·
+  `monadc.context.runtime.collection-ops` (set/map hash table operations)
+
+[INF id:inf.tests-arch.fuzzing-dispatch from:obs.tests-arch.fuzzing,obs.tests-arch.fuzzing.harness,obs.tests-arch.fuzzing.property-categories,obs.tests-arch.fuzzing.arithmetic,obs.tests-arch.fuzzing.comparison,obs.tests-arch.fuzzing.control,obs.tests-arch.fuzzing.minmax conf:high]
+  connects-to -> `monadc.context.tests.fuzzing-codegen` (the fuzzing
+  system: harness architecture, property file format, type-directed
+  generation, algebraic law categories) ·
+  `monadc.context.tests.corpus-size` (fuzzing as part of the growing
+  corpus)
+
+[INF id:inf.tests-arch.asm from:obs.tests-arch.asm,obs.tests-arch.asm.topics,obs.tests-arch.asm.generator conf:high]
+  connects-to -> `monadc.context.asm` (asm.c/asm.h architecture:
+  mnemonic splitting, suffix inference, AT&T reordering) ·
+  `monadc.context.tests.inline-asm-coverage` ·
+  `monadc.context.tests.asm-corpus-rewritten` ·
+  `monadc.context.tests.asm-corpus-behavior-names`

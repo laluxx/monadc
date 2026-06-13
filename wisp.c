@@ -1176,6 +1176,8 @@ static void wisp_syntax_error(int line, int column, const char *message, const c
     exit(1);
 }
 
+static int g_for_iter_depth = 0;
+
 /* Tokenise one line into the stream */
 static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
                            int indent, int lineno) {
@@ -1334,6 +1336,138 @@ static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
             }
             char *tok = strndup(start, end - start);
 
+            /* Desugar (for c <- expr body...) and (for c -> expr body...) s-expr forms.
+             * These are the parenthesized equivalents of the bare wisp for-sugar.
+             * Pattern: (for IDENT (<-|->) EXPR BODY...)
+             * We detect this by scanning the interior of the grouped token.    */
+            if (open == '(' && strncmp(tok + 1, "for ", 4) == 0) {
+                /* Parse the interior: skip 'for', read bind name, check for arrow */
+                const char *fp = tok + 1 + 4; /* skip '(for ' */
+                while (*fp == ' ' || *fp == '\t') fp++;
+                /* Read binding name — must be a plain symbol (no bracket) */
+                if (*fp && *fp != '[' && *fp != '(' && *fp != ')') {
+                    const char *name_start = fp;
+                    while (*fp && *fp != ' ' && *fp != '\t' && *fp != ')') fp++;
+                    size_t name_len = fp - name_start;
+                    while (*fp == ' ' || *fp == '\t') fp++;
+                    bool is_forward  = (fp[0] == '-' && fp[1] == '>');
+                    bool is_backward = (fp[0] == '<' && fp[1] == '-');
+                    if ((is_forward || is_backward) && name_len > 0) {
+                        char *bind_name = strndup(name_start, name_len);
+                        fp += 2; /* skip <- or -> */
+                        while (*fp == ' ' || *fp == '\t') fp++;
+
+                        /* Read the iterable expression — balanced token */
+                        const char *iter_start = fp;
+                        const char *iter_end;
+                        if (*fp == '(' || *fp == '[' || *fp == '{' ||
+                            *fp == '"') {
+                            /* Balanced: scan to matching close or end of string */
+                            if (*fp == '"') {
+                                fp++;
+                                while (*fp && !(*fp == '"' && *(fp-1) != '\\')) fp++;
+                                if (*fp == '"') fp++;
+                            } else {
+                                char ic = *fp;
+                                char cc = ic == '(' ? ')' : ic == '[' ? ']' : '}';
+                                int id = 0;
+                                while (*fp) {
+                                    if (*fp == ic) id++;
+                                    else if (*fp == cc) { id--; fp++; if (!id) break; continue; }
+                                    fp++;
+                                }
+                            }
+                            iter_end = fp;
+                        } else {
+                            /* Plain token: read until space or ) */
+                            while (*fp && *fp != ' ' && *fp != '\t' && *fp != ')') fp++;
+                            iter_end = fp;
+                        }
+                        char *iter_expr = strndup(iter_start, iter_end - iter_start);
+                        while (*fp == ' ' || *fp == '\t') fp++;
+
+                        /* Everything remaining until the final ')' is the body */
+                        /* Find the matching close paren for the whole (for ...) */
+                        size_t tok_len = strlen(tok);
+                        /* strip trailing ')' */
+                        const char *body_start = fp;
+                        /* Find end of body: tok ends with ')', body is between fp and tok+tok_len-1 */
+                        const char *body_end = tok + tok_len - 1;
+                        /* Trim trailing whitespace before final ')' */
+                        while (body_end > body_start &&
+                               (*(body_end-1) == ' ' || *(body_end-1) == '\t'))
+                            body_end--;
+                        char *body_src = strndup(body_start, body_end - body_start);
+
+                        /* Now generate the same desugared form as the bare wisp path */
+                        g_for_iter_depth++;
+                        int iter_depth = g_for_iter_depth;
+                        char iter_var[32];
+                        if (iter_depth == 1)
+                            snprintf(iter_var, sizeof(iter_var), "iter");
+                        else
+                            snprintf(iter_var, sizeof(iter_var), "iter%d", iter_depth);
+
+                        /* Expand body through the full wisp pipeline */
+                        SB body_expanded_sb; sb_init(&body_expanded_sb);
+                        if (body_src[0] != '\0') {
+                            WTokenStream _bts = build_token_stream(body_src, t);
+                            bool _bfirst = true;
+                            while (_bts.pos < _bts.count) {
+                                if (!_bfirst) sb_putc(&body_expanded_sb, ' ');
+                                _bfirst = false;
+                                wisp_parse_expr(t, &_bts, &body_expanded_sb, -1, 1, 0);
+                            }
+                            wts_free(&_bts);
+                        }
+                        g_for_iter_depth--;
+                        char *body_expanded = sb_take(&body_expanded_sb);
+
+                        SB ds; sb_init(&ds);
+                        if (is_forward) {
+                            sb_puts(&ds, "(for [");
+                            sb_puts(&ds, iter_var);
+                            sb_puts(&ds, " 0 (count ");
+                            sb_puts(&ds, iter_expr);
+                            sb_puts(&ds, ")] (define ");
+                            sb_puts(&ds, bind_name);
+                            sb_puts(&ds, " (");
+                            sb_puts(&ds, iter_expr);
+                            sb_puts(&ds, " ");
+                            sb_puts(&ds, iter_var);
+                            sb_puts(&ds, "))");
+                        } else {
+                            sb_puts(&ds, "(for [");
+                            sb_puts(&ds, iter_var);
+                            sb_puts(&ds, " (- (count ");
+                            sb_puts(&ds, iter_expr);
+                            sb_puts(&ds, ") 1) -1 -1] (define ");
+                            sb_puts(&ds, bind_name);
+                            sb_puts(&ds, " (");
+                            sb_puts(&ds, iter_expr);
+                            sb_puts(&ds, " ");
+                            sb_puts(&ds, iter_var);
+                            sb_puts(&ds, "))");
+                        }
+                        if (body_expanded[0] != '\0') {
+                            sb_putc(&ds, ' ');
+                            sb_puts(&ds, body_expanded);
+                        }
+                        sb_putc(&ds, ')');
+                        free(body_expanded);
+
+                        char *desugared_for = sb_take(&ds);
+                        wts_push(s, desugared_for, indent, lineno);
+                        free(desugared_for);
+                        free(iter_expr);
+                        free(bind_name);
+                        free(body_src);
+                        free(tok);
+                        continue;
+                    }
+                }
+            }
+
             /* Desugar size-based array literals before any further processing */
             {
                 char *desugared = desugar_size_array(tok);
@@ -1450,7 +1584,6 @@ static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
 // Build token stream from source.
 // Multi-line grouped expressions (starting with '(' '[' '{') are
 // accumulated across lines and emitted as a single token.
-static int g_for_iter_depth = 0;
 
 static WTokenStream build_token_stream(const char *source, ArityTable *at) {
     WTokenStream s = {0};

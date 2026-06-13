@@ -1,0 +1,233 @@
+#+TITLE: Inline Assembly — asm.h
+#+AUTHOR: Codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:asm:inline-assembly:
+#+PROPERTY: CONTEXT_VERSION 2
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.asm.file-metadata
+:CUSTOM_ID: asm-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: asm.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.asm.file src:asm.h conf:high]
+  This file records the full inline assembly API surface: register allocation,
+  instruction representation, preprocessing, and LLVM codegen entry point for
+  inline asm in MonadC.
+
+[INF id:inf.context.asm-relation-to-language from:obs.context.asm.file,obs.language.inline-asm conf:high]
+  This file is the header-level structural reference for asm.h. The
+  language.org inline-asm section documents the user-facing semantics, parser
+  integration, and known gaps; this file documents every type and function
+  exported by the header. The two files are complementary — read language.org
+  first for context, then this file for the exact API.
+
+* RegisterAllocator (SysV AMD64 ABI)
+:PROPERTIES:
+:ID: monadc.context.asm.register-allocator
+:CUSTOM_ID: asm-register-allocator
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: RegisterAllocator — maps function parameters to SysV AMD64 ABI registers (%rdi, %rsi, %rdx, %rcx, %r8, %r9 for ints; %xmm0-%xmm7 for floats).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: asm.h:10-15
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.asm.register-allocator-struct src:asm.h:10-15 conf:high]
+  RegisterAllocator stores two fixed arrays of register name strings: int_regs[6]
+  for general-purpose registers (%rdi, %rsi, %rdx, %rcx, %r8, %r9) and
+  float_regs[8] for SSE registers (%xmm0-%xmm7), plus integer counters for each.
+
+[OBS id:obs.asm.reg-alloc-init src:asm.h:18 conf:high]
+  reg_alloc_init zeroes the allocator and fills in the SysV ABI register names.
+
+[OBS id:obs.asm.reg-alloc-get src:asm.h:21 conf:high]
+  reg_alloc_get returns the register name for a parameter at a given index and
+  type. Integer-typed parameters consume from int_regs, float-typed from float_regs.
+  Returns NULL if all registers of that class are exhausted.
+
+[THINK id:think.asm.register-allocator-naked conf:high]
+  The RegisterAllocator is used primarily for naked functions where the asm body
+  directly names hardware registers. Non-naked functions use LLVM constraint
+  strings ("r", "=r", ",0") instead, leaving register allocation to LLVM's
+  register allocator. This split reflects the two asm modes: bare-metal control
+  (naked) vs portable constraint-based inline asm (non-naked).
+
+* AsmInstruction
+:PROPERTIES:
+:ID: monadc.context.asm.asm-instruction
+:CUSTOM_ID: asm-instruction
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: AsmInstruction — a preprocessed assembly instruction with a mnemonic and operand array.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: asm.h:24-28
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.asm.asm-instruction-struct src:asm.h:24-28 conf:high]
+  AsmInstruction represents one assembly instruction after preprocessing: a
+  mnemonic string (e.g. "add", "mov") and a dynamic array of operand strings.
+  Operands may be register names, numeric immediates (preserved as strings), or
+  raw text for string operands like syscall.
+
+* AsmContext
+:PROPERTIES:
+:ID: monadc.context.asm.asm-context
+:CUSTOM_ID: asm-context
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: AsmContext — preprocessing context carrying function parameters, register allocator, and the naked flag.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: asm.h:31-36
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.asm.asm-context-struct src:asm.h:31-36 conf:high]
+  AsmContext bundles the function's EnvParam array, parameter count, an optional
+  RegisterAllocator, and a boolean naked flag that controls whether the asm body
+  is emitted with or without function prologue/epilogue.
+
+* Preprocessing
+:PROPERTIES:
+:ID: monadc.context.asm.preprocessing
+:CUSTOM_ID: asm-preprocessing
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: AST_ASM preprocessing — splitting flat token streams into instructions, mapping parameter symbols to registers/placeholders, escaping immediates.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: asm.h:38-44
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.asm.preprocess-asm src:asm.h:41 conf:high]
+  preprocess_asm takes an AST_ASM node and an AsmContext, then:
+  1. Splits the flat token stream into individual instructions by mnemonic
+  2. Replaces parameter-name symbols with registers (naked) or LLVM placeholders
+  3. Escapes numeric immediates as raw text
+  4. Preserves string operands (e.g. syscall) as-is
+  Returns a malloc'd array of AsmInstruction with count in out_count.
+
+[OBS id:obs.asm.free-asm-instructions src:asm.h:44 conf:high]
+  free_asm_instructions frees every operand and mnemonic string in the instruction
+  array, then frees the array itself.
+
+* Codegen Entry Point
+:PROPERTIES:
+:ID: monadc.context.asm.codegen
+:CUSTOM_ID: asm-codegen
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: codegen_inline_asm — LLVM IR generation for preprocessed inline assembly instructions.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: asm.h:46-53
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.asm.codegen-inline-asm src:asm.h:46-53 conf:high]
+  codegen_inline_asm lowers preprocessed AsmInstruction arrays into LLVM IR via
+  LLVMGetInlineAsm. For non-naked functions it generates constraint strings:
+  return value gets "=r" (int-like) or "=x" (float), first input is tied to
+  output with ",0", remaining inputs use ",r". For naked functions, instructions
+  are emitted directly without LLVM constraint wiring and the caller must handle
+  prologue/epilogue.
+
+[OBS id:obs.asm.codegen-size-suffix src:asm.h:46-53 conf:high]
+  Bare integer mnemonics in non-naked mode infer size suffixes (b, w, l, q) from
+  LLVM operand widths. Two-operand arithmetic/logical instructions with
+  placeholder destinations are reordered for AT&T syntax.
+
+* Connections
+:PROPERTIES:
+:ID: monadc.context.asm.connections
+:CUSTOM_ID: asm-connections
+:CONTEXT_KIND: link
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/asm.org
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.asm.connects-to-language from:obs.asm.preprocess-asm,obs.asm.codegen-inline-asm conf:high]
+  connects-to -> `monadc.context.language.inline-asm` (the language.org inline-asm
+  section documents user-facing semantics, parser integration at reader.c:3889,
+  and the full asm test suite in tests/codegen/asm) ·
+  `monadc.context.language.gap-asm-naked` (naked asm does not propagate results
+  through LLVM constraints) ·
+  `monadc.context.language.asm-nonaked-i64-fixed` (non-naked asm size-suffix
+  inference is proven working)
+
+[INF id:inf.asm.connects-to-codegen-ops from:obs.asm.codegen-inline-asm conf:high]
+  connects-to -> `monadc.context.codegen-ops` (codegen_inline_asm is called from
+  the codegen expression dispatch for AST_ASM nodes; the constraint wiring and
+  LLVMGetInlineAsm call fit into the general codegen IR emission pipeline)

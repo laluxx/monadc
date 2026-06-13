@@ -1,0 +1,261 @@
+#+TITLE: Python Helper Scripts
+#+AUTHOR: Codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:scripts:python:tooling:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.scripts.file-metadata
+:CUSTOM_ID: scripts-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/scripts.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.scripts.file src:context/scripts.org conf:high]
+  This file documents the Python helper scripts that support the MonadC
+  compiler: test runners, test generators, and the context visualizer.
+
+* Test Runner — tests/run.py
+:PROPERTIES:
+:ID: monadc.context.scripts.run-py
+:CUSTOM_ID: scripts-run-py
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: tests/run.py
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.scripts.run-py.purpose src:tests/run.py conf:high]
+  Main test runner. Discovers all rt_*.mon files in tests/codegen/, compiles
+  each with monad --emit-json, compares JSON output to expected .stdout.
+  Reports PASS/FAIL per test. Also runs fuzzing properties.
+
+* Test Runner — tests/run_core.py
+:PROPERTIES:
+:ID: monadc.context.scripts.run-core-py
+:CUSTOM_ID: scripts-run-core-py
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: tests/run_core.py
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.scripts.run-core-py.purpose src:tests/run_core.py conf:high]
+  Core library test runner. Compiles and runs core/ library tests. Validates
+  that the standard library functions produce correct results.
+
+* Test — tests/test_run.py
+:PROPERTIES:
+:ID: monadc.context.scripts.test-run-py
+:CUSTOM_ID: scripts-test-run-py
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: tests/test_run.py
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.scripts.test-run-py.purpose src:tests/test_run.py conf:high]
+  Test for the test runner itself. Ensures run.py infrastructure works
+  correctly.
+
+* Test — tests/test_context_visualizer.py
+:PROPERTIES:
+:ID: monadc.context.scripts.test-visualizer-py
+:CUSTOM_ID: scripts-test-visualizer-py
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: tests/test_context_visualizer.py
+:CONFIDENCE: medium
+:END:
+
+[OBS id:obs.scripts.test-visualizer-py.purpose src:tests/test_context_visualizer.py conf:medium]
+  Tests for the context visualizer. Validates that the graph generation
+  produces correct output. Separate from run.py — tests the visualization
+  infrastructure itself.
+
+* ASM Test Generator — create_asm_tests.py
+:PROPERTIES:
+:ID: monadc.context.scripts.create-asm-tests
+:CUSTOM_ID: scripts-create-asm-tests
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: create_asm_tests.py
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.scripts.create-asm-tests.purpose src:create_asm_tests.py conf:high]
+  Generates inline assembly test cases for all 60 asm/ tests. Creates pairs
+  of .mon (source) + .stdout (expected output) files covering: mov, add, sub,
+  mul, div, push, pop, call, ret, syscall, xadd, cmpxchg, bswap, rdtsc,
+  cpuid, SSE/AVX instructions, and calling convention tests.
+
+* ASM Test Generator — create_asm_tests_extra.py
+:PROPERTIES:
+:ID: monadc.context.scripts.create-asm-tests-extra
+:CUSTOM_ID: scripts-create-asm-tests-extra
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: create_asm_tests_extra.py
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.scripts.create-asm-tests-extra.purpose src:create_asm_tests_extra.py conf:high]
+  Supplementary ASM test generator. Creates additional edge case tests for
+  inline assembly: memory addressing modes, register constraints, immediate
+  values, and instruction encoding variants not covered by the main generator.
+
+* Fuzz Test Runner — tests/fuzzing/fuzz_codegen.py
+:PROPERTIES:
+:ID: monadc.context.scripts.fuzz-codegen-py
+:CUSTOM_ID: scripts-fuzz-codegen-py
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: tests/fuzzing/fuzz_codegen.py
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.scripts.fuzz-codegen-py.purpose src:tests/fuzzing/fuzz_codegen.py conf:high]
+  Property-based fuzzing test runner. Reads algebraic property files (.fuzz),
+  generates random inputs from the property schema, compiles and runs MonadC
+  programs that test each property, and reports failures. Covers commutativity,
+  associativity, identity, distributivity, absorption, boolean identity,
+  comparison duality, equality, max/min properties, and do/with binding
+  semantics. 41 property files across 400+ properties.
+
+* Context Visualizer — context-visualizer.py
+:PROPERTIES:
+:ID: monadc.context.scripts.visualizer-py
+:CUSTOM_ID: scripts-visualizer-py
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context-visualizer.py
+:CONFIDENCE: medium
+:END:
+
+[OBS id:obs.scripts.visualizer-py.purpose src:context-visualizer.py conf:medium]
+  Context graph visualizer. Parses all context/*.org files, extracts property
+  drawers and bracketed records (OBS/INF/DEC/THINK), and generates a category
+  theory graph visualization as HTML/svg. Nodes are context entries, edges
+  are INF connects-to relationships. Renders as a directed graph with color-
+  coded node types (OBS=blue, INF=purple, DEC=amber, THINK=teal). Supports
+  fuzzy-search filtering and category toggling.
+
+[OBS id:obs.scripts.visualizer-py.arch src:context-visualizer.py conf:medium]
+  Architecture: argparse CLI → org_parser (regex-based drawer/record extractor)
+  → graph builder (node+edge collection) → category_renderer (SVG layout with
+  circular tree placement) → HTML output with embedded CSS + JS for
+  interactivity (search, filter, category toggle).
+
+* Connections
+:PROPERTIES:
+:ID: monadc.context.scripts.connections
+:CUSTOM_ID: scripts-connections
+:CONTEXT_KIND: inference
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.scripts.connects-to from:obs.scripts.run-py.purpose,obs.scripts.run-core-py.purpose,obs.scripts.test-run-py.purpose,obs.scripts.create-asm-tests.purpose,obs.scripts.fuzz-codegen-py.purpose,obs.scripts.visualizer-py.purpose conf:high]
+  connects-to -> `monadc.context.tests-arch` (test runners exercise test suite) ·
+  `monadc.context.asm` (ASM generators test inline assembly) ·
+  `monadc.context.codegen-ops` (fuzz tests exercise codegen dispatch) ·
+  `monadc.context.context` (visualizer consumes context files) ·
+  `monadc.context.codegen` (fuzz properties test codegen correctness)

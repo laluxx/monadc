@@ -1,0 +1,308 @@
+#+TITLE: Arena Allocator — arena.h
+#+AUTHOR: Codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:arena:allocator:memory:
+#+PROPERTY: CONTEXT_VERSION 2
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.arena.file-metadata
+:CUSTOM_ID: arena-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: arena.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.arena.file src:arena.h conf:high]
+  This file records the full arena allocator API: a fast bump-pointer allocator
+  organised as a singly-linked list of fixed-size blocks. Allocation is O(1);
+  freeing the entire arena is O(blocks). Supports scratch (reset/reuse) and
+  permanent (free once) usage patterns plus checkpoint/restore for stack-like
+  rollback.
+
+* Constants
+:PROPERTIES:
+:ID: monadc.context.arena.constants
+:CUSTOM_ID: arena-constants
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: ARENA_DEFAULT_BLOCK (4 MiB) and ARENA_ALIGN (8 bytes) constants.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: arena.h:36-41
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.arena.default-block-size src:arena.h:36-38 conf:high]
+  ARENA_DEFAULT_BLOCK is 4,194,304 bytes (4 MiB). Can be overridden before
+  including arena.h by defining the macro.
+
+[OBS id:obs.arena.alignment src:arena.h:41 conf:high]
+  ARENA_ALIGN is 8 bytes, matching max scalar alignment on the target
+  architecture. All allocations are rounded up to this alignment.
+
+* ArenaBlock
+:PROPERTIES:
+:ID: monadc.context.arena.arena-block
+:CUSTOM_ID: arena-block
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: ArenaBlock — a singly-linked list node representing one contiguous block of memory in the arena.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: arena.h:43-48
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.arena.arena-block-struct src:arena.h:43-48 conf:high]
+  ArenaBlock contains a pointer to the base of usable memory, the number of bytes
+  consumed (used), the total usable size, and a pointer to the next (older) block.
+  The oldest block has next == NULL. New blocks are prepended to the list.
+
+* Arena
+:PROPERTIES:
+:ID: monadc.context.arena.arena-struct
+:CUSTOM_ID: arena-struct
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Arena — the top-level allocator state: active block, default block size, and diagnostic counters.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: arena.h:50-55
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.arena.arena-struct src:arena.h:50-55 conf:high]
+  Arena holds a pointer to the current (newest, active) block, the default block
+  size for new allocations, and running total_allocated/total_used counters for
+  diagnostics.
+
+* ArenaCheckpoint
+:PROPERTIES:
+:ID: monadc.context.arena.arena-checkpoint-type
+:CUSTOM_ID: arena-checkpoint-type
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: ArenaCheckpoint — a saved position for stack-like rollback of arena state.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: arena.h:58-61
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.arena.checkpoint-struct src:arena.h:58-61 conf:high]
+  ArenaCheckpoint stores a pointer to the block and the used offset at the time
+  of the checkpoint. Used with arena_checkpoint/arena_restore to implement
+  stack-like rollback of temporary allocations.
+
+* Lifecycle Functions
+:PROPERTIES:
+:ID: monadc.context.arena.lifecycle
+:CUSTOM_ID: arena-lifecycle
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Arena lifecycle: init, free, reset.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: arena.h:66-74
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.arena.arena-init src:arena.h:66 conf:high]
+  arena_init initialises an Arena struct. If block_size is 0, ARENA_DEFAULT_BLOCK
+  (4 MiB) is used. No OS memory is allocated until the first arena_alloc call.
+
+[OBS id:obs.arena.arena-free src:arena.h:70 conf:high]
+  arena_free frees ALL memory owned by the arena by walking the block linked list
+  and calling free on each block. The Arena struct itself is not freed — callers
+  may reuse it with arena_init after freeing.
+
+[OBS id:obs.arena.arena-reset src:arena.h:74 conf:high]
+  arena_reset rewinds all blocks to empty (used = 0) but keeps OS memory mapped.
+  This is the fast path for scratch arena reuse: zero mallocs in the common case.
+
+* Allocation Functions
+:PROPERTIES:
+:ID: monadc.context.arena.allocation
+:CUSTOM_ID: arena-allocation
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Core allocation primitives: raw alloc, zeroed calloc, memdup, strdup, strndup, and printf-style sprintf.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: arena.h:80-96
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.arena.arena-alloc src:arena.h:80 conf:high]
+  arena_alloc bumps the pointer by `size` bytes (rounded up to ARENA_ALIGN).
+  If the current block cannot satisfy the request, a new block is allocated and
+  prepended to the list. Never returns NULL — calls abort() on OOM (same contract
+  as xmalloc).
+
+[OBS id:obs.arena.arena-calloc src:arena.h:83 conf:high]
+  arena_calloc allocates `size` bytes and zeroes them via memset.
+
+[OBS id:obs.arena.arena-memdup src:arena.h:86 conf:high]
+  arena_memdup allocates a copy of `src` of `size` bytes.
+
+[OBS id:obs.arena.arena-strdup src:arena.h:89 conf:high]
+  arena_strdup duplicates a NUL-terminated string into the arena. Uses strlen +
+  memcpy internally.
+
+[OBS id:obs.arena.arena-strndup src:arena.h:92 conf:high]
+  arena_strndup duplicates at most `n` bytes of a string. Always NUL-terminates
+  the result, so the allocated buffer is at most n+1 bytes.
+
+[OBS id:obs.arena.arena-sprintf src:arena.h:95-96 conf:high]
+  arena_sprintf formats a string using printf-style varargs into arena memory.
+  Returns a pointer to the NUL-terminated result. The underlying buffer is
+  allocated with arena_alloc after determining the required length via vsnprintf.
+
+* Checkpoint / Restore
+:PROPERTIES:
+:ID: monadc.context.arena.checkpoint-restore
+:CUSTOM_ID: arena-checkpoint-restore
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Checkpoint/restore for stack-like rollback of temporary allocations.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: arena.h:101-106
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.arena.arena-checkpoint src:arena.h:101 conf:high]
+  arena_checkpoint saves the current block pointer and used offset into an
+  ArenaCheckpoint struct.
+
+[OBS id:obs.arena.arena-restore src:arena.h:106 conf:high]
+  arena_restore rewinds the arena to a previously saved checkpoint: restores
+  the active block and its used offset, then frees any blocks that were allocated
+  after the checkpoint. Only safe when no blocks were freed between save and
+  restore (which is always true for this bump-pointer allocator — free is
+  whole-arena only).
+
+* Diagnostics
+:PROPERTIES:
+:ID: monadc.context.arena.diagnostics
+:CUSTOM_ID: arena-diagnostics
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Diagnostic output for arena memory usage.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: arena.h:111
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.arena.arena-print-stats src:arena.h:111 conf:high]
+  arena_print_stats prints a one-line summary of arena state to stderr: the label,
+  total allocated bytes, total used bytes, and the number of blocks. Useful for
+  debugging memory usage patterns.
+
+* Connections
+:PROPERTIES:
+:ID: monadc.context.arena.connections
+:CUSTOM_ID: arena-connections
+:CONTEXT_KIND: link
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/arena.org
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.arena.connects-to-runtime from:obs.arena.arena-alloc,obs.arena.arena-free conf:high]
+  connects-to -> `monadc.context.runtime` (the runtime uses arena allocation for
+  value construction, string operations, and collection internals — runtime.c
+  allocates through arena for scratch temporaries during REPL and codegen)
+
+[INF id:inf.arena.connects-to-reader from:obs.arena.arena-strdup,obs.arena.arena-strndup conf:high]
+  connects-to -> `monadc.context.reader` (the AST parser uses arena allocation
+  for token strings, symbol names, and AST node storage — reader.c allocates
+  through a permanent arena for the AST and a scratch arena for parser
+  temporaries)
+
+[INF id:inf.arena.connects-to-source-map from:obs.arena.arena-alloc conf:high]
+  connects-to -> `monadc.context.source-map` (source location data is arena-
+  allocated during parsing; the source map entries live in arena memory for the
+  lifetime of the compilation unit)

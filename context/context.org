@@ -14,7 +14,7 @@
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC DOC TODO THINK
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -203,7 +203,8 @@
 :END:
 
 - [[file:source-map.org][Every source file's purpose and connections]]
-- [[file:references.org][Research papers informing the compiler]]
+- [[file:references.org][Research papers informing the compiler — DOC records with OBS implementation traces]]
+- [[file:source-map.org::* Research PDFs][PDF reference library (etc/pdfs/) — 7 papers as first-class DOC objects]]
 - [[file:style.org][Code style taxonomy]]
 - [[file:navigation.org][ID prefix → file routing table]]
 
@@ -227,4 +228,76 @@
 :END:
 
 - [[file:todo.org][Project TODO list]]
+- [[file:todo-markers.org][Source-level TODO/FIXME/HACK tracker — 60+ technical debt items]]
 - [[file:visualizer.org][Context graph visualizer: category-theory foundation, implementation, test metadata]]
+
+** Source Code & Type System
+:PROPERTIES:
+:ID: monadc.context.portal.types
+:CUSTOM_ID: portal-types
+:CONTEXT_KIND: link
+:CONTEXT_DESCRIPTION: Core type system, type constructors, refinements, aliases, and layout computation.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/context.org
+:CONFIDENCE: high
+:END:
+
+- [[file:types.org][Type system — 40 TypeKind, Type union struct, constructors, refinements, aliases]]
+- [[file:makefile.org][Build system (Makefile) — debug/asan/release, library discovery]]
+- [[file:scripts.org][Python helper scripts — test runners, ASM generators, fuzz runner, visualizer]]
+
+** Standard Library & Examples
+:PROPERTIES:
+:ID: monadc.context.portal.libs
+:CUSTOM_ID: portal-libs
+:CONTEXT_KIND: link
+:CONTEXT_DESCRIPTION: The Main.mon demo/standard library, core/ library modules, and how_to/ example programs.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/context.org
+:CONFIDENCE: high
+:END:
+
+- [[file:main-mon.org][Main.mon — standard library, language demo, all features exercised]]
+- [[file:core-libs.org][core/ library — prelude, List, Set, Math, Random, json, text]]
+- [[file:how-to.org][how_to/ examples — ADTs, macros, iterators, speedruns, terminal editor]]
+- [[file:tests-arch.org][Test suite architecture — 923 files, codegen tests, fuzzing, ASM tests]]
+- [[file:module-export.org][Module export manifests — .mexp format, mangling]]
+
+** Assets & Tools
+:PROPERTIES:
+:ID: monadc.context.portal.assets
+:CUSTOM_ID: portal-assets
+:CONTEXT_KIND: link
+:CONTEXT_DESCRIPTION: Project assets: logos, screenshots, fonts, and the research PDF library.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/context.org
+:CONFIDENCE: high
+:END:
+
+- [[file:etc-assets.org][etc/ assets — logo, screenshots, font, docs.html]]
+- [[file:references.org][Research PDF library — 7 papers with DOC records and OBS implementation traces]]
+- [[file:source-map.org::* Research PDFs][PDF reference index (etc/pdfs/) — each paper's source connections]]

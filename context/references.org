@@ -14,7 +14,7 @@
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -85,7 +85,7 @@
   set-theoretic model generalizes Curry-Howard: a type is not just a
   proposition but a set, and a value is not just a proof but an element.
 
-[OBS id:obs.references.propositions-as-types-refinements src:refinement.c,dep.c:2700-2782 conf:high]
+[OBS id:obs.references.propositions-as-types-refinements src:types.c,dep.c:2700-2782 conf:high]
   Refinement types are propositions-as-types at the subtyping level. A
   refinement type =Even = Int where even?(x)= defines a subset of Int by a
   predicate. The predicate IS the proof: a value =x= belongs to =Even= iff

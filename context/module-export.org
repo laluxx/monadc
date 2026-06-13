@@ -1,0 +1,367 @@
+#+TITLE: Module Export Manifests (module_export.h)
+#+AUTHOR: Codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:module:export:manifest:mexp:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.module-export
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+#+TAGS: export(e) manifest(m) mexp(x) mangle(n) typekind(k)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.module-export.file-metadata
+:CUSTOM_ID: module-export-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: module_export.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.module-export.file src:module_export.h conf:high]
+  This file documents the full API of module_export.h — the export manifest
+  subsystem that records every exported symbol (variables and functions) with
+  type information in a plain-text .mexp sidecar file. The manifest bridges
+  compilation units: module A writes Foo.mexp, module B reads it to emit
+  correct extern declarations for imported symbols without re-parsing the
+  original source.
+
+* TypeKind Integer Constants
+:PROPERTIES:
+:ID: monadc.context.module-export.type-kind-constants
+:CUSTOM_ID: module-export-type-kind-constants
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The 13 MEXP_TYPE_* #define constants (0–12) that mirror the TypeKind enum from types.h. Duplicated here so module_export.h has zero dependency on the rest of the compiler.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: module_export.h:10-22
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.module-export.mexp-type-int src:module_export.h:10 conf:high]
+  =MEXP_TYPE_INT 0= — Integer type. Corresponds to TypeKind INT in types.h.
+
+[OBS id:obs.module-export.mexp-type-float src:module_export.h:11 conf:high]
+  =MEXP_TYPE_FLOAT 1= — Floating-point number type.
+
+[OBS id:obs.module-export.mexp-type-char src:module_export.h:12 conf:high]
+  =MEXP_TYPE_CHAR 2= — Character type.
+
+[OBS id:obs.module-export.mexp-type-string src:module_export.h:13 conf:high]
+  =MEXP_TYPE_STRING 3= — String type.
+
+[OBS id:obs.module-export.mexp-type-bool src:module_export.h:14 conf:high]
+  =MEXP_TYPE_BOOL 4= — Boolean type.
+
+[OBS id:obs.module-export.mexp-type-hex src:module_export.h:15 conf:high]
+  =MEXP_TYPE_HEX 5= — Hexadecimal literal type.
+
+[OBS id:obs.module-export.mexp-type-bin src:module_export.h:16 conf:high]
+  =MEXP_TYPE_BIN 6= — Binary literal type.
+
+[OBS id:obs.module-export.mexp-type-oct src:module_export.h:17 conf:high]
+  =MEXP_TYPE_OCT 7= — Octal literal type.
+
+[OBS id:obs.module-export.mexp-type-list src:module_export.h:18 conf:high]
+  =MEXP_TYPE_LIST 8= — List type.
+
+[OBS id:obs.module-export.mexp-type-ratio src:module_export.h:19 conf:high]
+  =MEXP_TYPE_RATIO 9= — Ratio (fraction) type.
+
+[OBS id:obs.module-export.mexp-type-arr src:module_export.h:20 conf:high]
+  =MEXP_TYPE_ARR 10= — Array type.
+
+[OBS id:obs.module-export.mexp-type-keyword src:module_export.h:21 conf:high]
+  =MEXP_TYPE_KEYWORD 11= — Keyword type.
+
+[OBS id:obs.module-export.mexp-type-fn src:module_export.h:22 conf:high]
+  =MEXP_TYPE_FN 12= — Function type.
+
+* ExportEntryKind Enum
+:PROPERTIES:
+:ID: monadc.context.module-export.export-entry-kind
+:CUSTOM_ID: module-export-entry-kind
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: ExportEntryKind enum distinguishing variable entries (EXPORT_ENTRY_VAR) from function entries (EXPORT_ENTRY_FUNC) in the export manifest.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: module_export.h:38-41
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.module-export.export-entry-kind-enum src:module_export.h:38-41 conf:high]
+  ExportEntryKind has two values:
+  - =EXPORT_ENTRY_VAR= (0): top-level variable/value binding
+  - =EXPORT_ENTRY_FUNC= (1): top-level function
+
+* ExportParamDesc Struct
+:PROPERTIES:
+:ID: monadc.context.module-export.export-param-desc
+:CUSTOM_ID: module-export-param-desc
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: ExportParamDesc — records a single function parameter's name and TypeKind integer for the manifest.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: module_export.h:43-46
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.module-export.export-param-desc-struct src:module_export.h:43-46 conf:high]
+  typedef struct ExportParamDesc {
+      char *name;       // parameter name
+      int   type_kind;  // TypeKind integer
+  } ExportParamDesc;
+
+* ExportEntry Struct
+:PROPERTIES:
+:ID: monadc.context.module-export.export-entry
+:CUSTOM_ID: module-export-entry
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: ExportEntry — one exported symbol in the manifest, with kind, names, type info, and optional array/function extras.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: module_export.h:48-59
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.module-export.export-entry-struct src:module_export.h:48-59 conf:high]
+  typedef struct ExportEntry {
+      ExportEntryKind kind;           // VAR or FUNC
+      char *mangled_name;             // e.g. "Math__phi"
+      char *local_name;               // e.g. "phi"
+      int   type_kind;                // for VAR: variable type; for FUNC: return type
+      int   arr_size;                 // array element count (VAR only)
+      int   arr_elem_kind;            // array element TypeKind (VAR only)
+      ExportParamDesc *params;        // function parameter descriptions (FUNC only)
+      int              param_count;   // number of parameters (FUNC only)
+  } ExportEntry;
+
+* ExportManifest Struct
+:PROPERTIES:
+:ID: monadc.context.module-export.export-manifest
+:CUSTOM_ID: module-export-manifest
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: ExportManifest — the top-level container holding the module name and a dynamic array of ExportEntry records.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: module_export.h:61-66
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.module-export.export-manifest-struct src:module_export.h:61-66 conf:high]
+  typedef struct ExportManifest {
+      char *module_name;
+      ExportEntry *entries;
+      size_t entry_count;
+      size_t entry_capacity;
+  } ExportManifest;
+
+* MEXP File Format
+:PROPERTIES:
+:ID: monadc.context.module-export.mexp-format
+:CUSTOM_ID: module-export-mexp-format
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The .mexp plain-text record format: one line per exported symbol, with VAR and FUNC record layouts.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: module_export.h:31-36
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.module-export.mexp-format src:module_export.h:31-36 conf:high]
+  VAR   <mangled_name>  <type_kind>   [<arr_size> <arr_elem_kind>]
+  FUNC  <mangled_name>  <ret_kind>    <param_count>  [<param_name> <param_kind>]*
+
+  Records are one per line. type_kind is the integer value of the MEXP_TYPE_*
+  constant (mirroring TypeKind). Array extras appear only for array-typed VARs.
+
+* Functions
+:PROPERTIES:
+:ID: monadc.context.module-export.functions
+:CUSTOM_ID: module-export-functions
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The complete API surface of module_export.h: manifest lifecycle, add/read/write operations, and name mangling.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: module_export.h:68-84
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.module-export.manifest-create src:module_export.h:68 conf:high]
+  =ExportManifest *manifest_create(const char *module_name)=
+  Allocates and returns a new ExportManifest for the given module name.
+  Initialises entry_count = 0 and entry_capacity = 0 (lazy allocation).
+
+[OBS id:obs.module-export.manifest-free src:module_export.h:69 conf:high]
+  =void manifest_free(ExportManifest *m)=
+  Frees all entries (including owned strings and params arrays) and the
+  manifest struct itself.
+
+[OBS id:obs.module-export.manifest-add-var src:module_export.h:70-72 conf:high]
+  =void manifest_add_var(ExportManifest *m, const char *local_name, const char *mangled_name, int type_kind, int arr_size, int arr_elem_kind)=
+  Appends a VAR entry with the given local name, mangled name, type kind,
+  and optional array parameters. Pass arr_size = 0 for non-array types.
+
+[OBS id:obs.module-export.manifest-add-func src:module_export.h:73-75 conf:high]
+  =void manifest_add_func(ExportManifest *m, const char *local_name, const char *mangled_name, int ret_kind, ExportParamDesc *params, int param_count)=
+  Appends a FUNC entry with return type kind and parameter descriptions.
+  The params array is copied (deep copy of names).
+
+[OBS id:obs.module-export.manifest-write src:module_export.h:78 conf:high]
+  =bool manifest_write(ExportManifest *m, const char *path)=
+  Serialises the manifest to a .mexp file at the given path. Format is
+  plain text, one entry per line as described in the MEXP Format section.
+  Returns true on success, false on write failure.
+
+[OBS id:obs.module-export.manifest-read src:module_export.h:81 conf:high]
+  =ExportManifest *manifest_read(const char *path)=
+  Parses a .mexp file back into an ExportManifest struct. Allocates and
+  populates entries, params, and strings. Returns NULL on parse failure
+  or I/O error.
+
+[OBS id:obs.module-export.manifest-mangle src:module_export.h:84 conf:high]
+  =char *manifest_mangle(const char *module_name, const char *local_name)=
+  Mangles a symbol name using double-underscore convention:
+  =manifest_mangle("Math", "phi")= returns ="Math__phi"=.
+  The caller owns the returned malloc'd string.
+
+* Name Mangling Convention
+:PROPERTIES:
+:ID: monadc.context.module-export.mangling-convention
+:CUSTOM_ID: module-export-mangling
+:CONTEXT_KIND: observation
+:CONTEXT_DESCRIPTION: Double-underscore name mangling: module_name __ local_name. Ensures linker symbols are globally unique across modules.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: module_export.h:36,84
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.module-export.mangling-convention src:module_export.h:36,84 conf:high]
+  Mangled names follow the pattern =Module__symbol= (double underscore).
+  The mangling in module_export.h (manifest_mangle) mirrors the LLVM symbol
+  renaming in main.c Phase 9. Both must use the same convention so that
+  extern declarations in the importing module reference the correct linker
+  symbols.
+
+[INF id:inf.module-export.mangling-flow from:obs.module-export.mangling-convention conf:high]
+  The double-underscore convention is used for both the .mexp file records
+  and the LLVM symbol names. When module B imports from module A, it reads
+  A's .mexp file and emits =extern= declarations using the mangled names,
+  which must match the symbols A's .o exports.
+
+* Connections
+:PROPERTIES:
+:ID: monadc.context.module-export.connections
+:CUSTOM_ID: module-export-connections
+:CONTEXT_KIND: inference
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.module-export.connects-to from:obs.module-export.mexp-format,obs.module-export.manifest-write,obs.module-export.manifest-read conf:high]
+  connects-to ->
+  `monadc.context.module.export-manifest` (the concept node in module.org
+  that references this detailed file) ·
+  `monadc.context.main.phase-9-registry` (Phase 9 builds the export list
+  and writes the .mexp via manifest_write) ·
+  `monadc.context.main.phase-4-externals` (Phase 4 reads .mexp files from
+  compiled dependencies via manifest_read to declare externals) ·
+  `monadc.context.buildsystem.build-exec` (the build system triggers
+  compilation and ensures .mexp files are produced alongside .o files) ·
+  `monadc.context.codegen-ops.object-file-emission` (mangled names from
+  manifest_mangle become linker symbols)
+
+[INF id:inf.module-export.mexp-role from:obs.module-export.mexp-format,obs.module-export.mangling-convention conf:high]
+  The .mexp file is the serialisation bridge between compilation units.
+  Unlike header files or module interfaces, .mexp is a machine-generated
+  sidecar that contains exactly the symbol surface needed for cross-module
+  extern declarations — no parsing required. This enables incremental
+  compilation: only recompiled modules need their .mexp regenerated.

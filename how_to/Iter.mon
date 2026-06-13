@@ -19,8 +19,8 @@
 ;;    show "index: _  char: _" iter c
 
 
-for c <- "sdrawkcab"
-   show "index: _  char: _" iter c
+;; for c <- "sdrawkcab"
+;;    show "index: _  char: _" iter c
 
 
 ;; This example is completely useless,

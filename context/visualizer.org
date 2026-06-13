@@ -14,7 +14,7 @@
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO DOC THINK
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -183,6 +183,20 @@ pointer anchor instead of applying immediate linear zoom jumps.
   objects plus directly connected objects so searches behave like documentation
   lookup without losing graph context.
 
+[DEC id:dec.visualizer.compact-expandable-org-inspector date:2026-06-13 by:human]
+  The bottom inspector should stay compact by default. Scrolling on it expands
+  the panel up to a bounded reading view, and only then reveals the rich
+  rendered Org body below the selected object's structured metadata.
+  Compact mode must size to its important metadata instead of clipping rows.
+  Expanded Org rendering should live on the main panel surface with large cyan
+  headings and readable text, not inside a nested glass/card panel.
+
+[OBS id:obs.visualizer.term-search-scroll-completions src:context/visualizer/app.js conf:high]
+  Search completion navigation must keep the active row scrolled into view.
+  Node and method completion scoring is term-based over raw Org/search tokens,
+  category aliases, and bounded typo distance rather than unconstrained
+  character-subsequence matching.
+
 * Test Metadata Connection
 :PROPERTIES:
 :ID: monadc.context.visualizer.test-metadata-connection
@@ -245,3 +259,32 @@ pointer anchor instead of applying immediate linear zoom jumps.
   =context/visualizer/app.js= must end with the =escapeHtml= function closing
   brace only. A stray trailing character after the final brace is a JavaScript
   syntax/runtime asset bug, not acceptable generated noise.
+
+* Connections
+:PROPERTIES:
+:ID: monadc.context.visualizer.connections
+:CUSTOM_ID: visualizer-connections
+:CONTEXT_KIND: inference
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.visualizer.connects-to from:obs.visualizer.purpose conf:high]
+  connects-to -> `monadc.context.scripts` (context-visualizer.py is the Python
+  script that generates the visualizer HTML/JS; documented in scripts.org) ·
+  `monadc.context.index` (the visualizer consumes index.org format spec for
+  node property extraction) ·
+  `monadc.context.context` (the portal is the entry point; the visualizer
+  renders the graph of all context objects) ·
+  `monadc.context.philosophy` (category theory screenshots in etc/screenshots/
+  visualize the same graph structures) ·
+  `monadc.context.etc-assets` (category theory screenshots linked to the
+  visualizer's category-theory foundation)

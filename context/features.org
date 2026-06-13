@@ -1,0 +1,171 @@
+#+TITLE: Conditional Compilation — Feature Detection
+#+AUTHOR: Codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:features:conditional:platform:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.features
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+#+TAGS: feature(f) platform(p) reader(r) codegen(g)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.features.file-metadata
+:CUSTOM_ID: features-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: features.h, features.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.features.file src:features.h,features.c conf:high]
+  This file records context about =features.h= and =features.c=.
+
+* API Surface — features.h
+:PROPERTIES:
+:ID: monadc.context.features.api
+:CUSTOM_ID: features-api
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The two-function public API for platform feature detection: detect_features creates the *features* list, has_feature provides boolean lookup.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: features.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.features.detect_features src:features.h:7,features.c:15 conf:high]
+  =detect_features()= → =AST *= — Scans preprocessor defines for OS, architecture,
+  endianness, binary format, CPU instruction sets, and build type. Returns an
+  =AST_LIST= of keyword nodes (e.g. =:LINUX=, =:X86-64=, =:ELF=, =:SSE2=,
+  =:DEBUG=). Also populates an internal static =detected_features= array used by
+  =has_feature=. Called during environment initialization.
+
+[OBS id:obs.features.has_feature src:features.h:11,features.c:245 conf:high]
+  =has_feature(feature_name)= → =int= — Linear search of the internal
+  =detected_features= array. Strips a leading ='=':'= character if present.
+  Returns 1 if the feature is detected, 0 otherwise. Called by the reader during
+  conditional compilation block parsing.
+
+[OBS id:obs.features.internal-static src:features.c:7-13 conf:high]
+  =detected_features= and =feature_count= are file-static globals. =detect_features=
+  frees and rebuilds them on each call. =has_feature= reads them without
+  modification.
+
+* Feature Detection Categories
+:PROPERTIES:
+:ID: monadc.context.features.categories
+:CUSTOM_ID: feature-categories
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The six categories of platform features detected by detect_features: OS, architecture, endianness, binary format, CPU features, build type.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: features.c:33-238
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.features.os-detection src:features.c:33-92 conf:high]
+  Operating system detection: =WINDOWS=, =WIN64=, =WIN32=, =LINUX=, =UNIX=,
+  =MACOS=, =DARWIN=, =BSD=, =FREEBSD=, =OPENBSD=, =NETBSD=, =DRAGONFLY=,
+  =SOLARIS=, =CYGWIN=, =MINGW=. Multiple features can be active (e.g. =LINUX=
+  + =UNIX=).
+
+[OBS id:obs.features.arch-detection src:features.c:96-167 conf:high]
+  Architecture detection: =X86-64=, =X86-32=, =ARM=, =ARM64=, =ARM32=, =PPC64=,
+  =PPC=, =POWERPC=, =RISCV=, =RISCV64=, =RISCV32=, =MIPS=, =MIPS64=, =MIPS32=,
+  =SPARC=, =SPARC64=, =SPARC32=, =ALPHA=. Word size features: =64BIT=, =32BIT=.
+
+[OBS id:obs.features.endianness src:features.c:171-181 conf:high]
+  Endianness detection via =__BYTE_ORDER__=, =__LITTLE_ENDIAN__=,
+  =__BIG_ENDIAN__=: =LITTLE-ENDIAN= or =BIG-ENDIAN=.
+
+[OBS id:obs.features.binary-format src:features.c:184-196 conf:high]
+  Binary format detection: =PE= (Windows), =ELF= (Linux/BSD), =MACH-O= (macOS).
+
+[OBS id:obs.features.cpu-features src:features.c:200-226 conf:high]
+  CPU instruction set features: =SSE=, =SSE2=, =SSE3=, =AVX=, =AVX2=, =FMA=,
+  =NEON=.
+
+[OBS id:obs.features.build-type src:features.c:230-238 conf:high]
+  Build type detection: =RELEASE= (when =NDEBUG= defined), =DEBUG= (otherwise),
+  =THREAD-SAFE= (when =_REENTRANT= defined).
+
+* Reader Conditional Compilation
+:PROPERTIES:
+:ID: monadc.context.features.reader-conditional
+:CUSTOM_ID: reader-conditional
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The reader's #+ feature directive parsing for conditional compilation blocks using TOK_FEATURE_BEGIN / TOK_FEATURE_END tokens.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: reader.c:1279-1293,6639-6710
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.features.reader-lexer src:reader.c:1279-1293 conf:high]
+  The reader lexer recognizes =#+= as =TOK_FEATURE_BEGIN= and =#---= as
+  =TOK_FEATURE_END=. Feature names follow =#+= (e.g. =#+LINUX=, =#+X86-64=).
+
+[OBS id:obs.features.reader-parser src:reader.c:6645-6687 conf:high]
+  =parse_feature_blocks= reads feature conditionals. Uses =has_feature= to check
+  each feature name. Content inside a disabled feature block is skipped; content
+  inside an enabled block is parsed normally. Nested =#+= opens sibling blocks at
+  the same level. =is_feature_active= delegates to =has_feature=.
+
+[OBS id:obs.features.reader-integration src:reader.c:6709-6710 conf:high]
+  =parse_all= checks for =TOK_FEATURE_BEGIN= at the top level and calls
+  =parse_feature_blocks= to handle conditional compilation before normal parsing.
+
+#+CAPTION: Feature Conditional Syntax
+| Syntax                       | Token             | Effect                  |
+|------------------------------+-------------------++-------------------------|
+| =#+LINUX=                      | =TOK_FEATURE_BEGIN= | Open feature block      |
+| =#+X86-64=                     | =TOK_FEATURE_BEGIN= | Open feature block      |
+| =#---=                         | =TOK_FEATURE_END=   | Close feature block     |
+
+[INF id:inf.features.reader-flow from:obs.features.detect_features,obs.features.reader-lexer,obs.features.reader-parser conf:high]
+  connects-to -> `monadc.context.reader.feature-conditionals` (the reader's
+  conditional compilation handles =#+LINUX= / =#+X86-64= blocks to skip or
+  include platform-specific code at parse time) ·
+  `monadc.context.source-map.features` (source map entry for features.c/h)
+
+[INF id:inf.features.env from:obs.features.detect_features conf:high]
+  =detect_features= is called during environment initialization (Phase 4 in
+  =compile_one=) to populate =*features*= in the environment with keyword values.

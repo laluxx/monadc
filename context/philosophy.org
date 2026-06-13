@@ -14,7 +14,7 @@
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -237,7 +237,32 @@
   dual type system through the TERM_EMBED bridge to the naked function support
   — exists to make this claim true.
 
-[INF id:inf.philosophy.principles-connect-to-primitives from:dec.philosophy.smallest-atom,dec.philosophy.no-tradeoff-principle,dec.philosophy.zero-to-metal,dec.philosophy.sets-are-the-model,obs.language.set-grounded-in-model,obs.language.array-ladder,obs.language.set-as-function-why,obs.language.map-bug-significance,obs.language.dep-why-shadow-pass conf:high]
+** Principle 6: Principled extensibility — roots find cracks, philosophy keeps the foundation whole
+[THINK id:think.philosophy.principled-extensibility conf:high]
+  A healthy language is like a root system in bedrock. Every new idea — every
+  construct, type, annotation, sugar — is a root finding a crack and growing
+  into it. The cracks are the extensibility points: the places where the
+  existing design didn't anticipate the next use case. `define buffer :: [16k] -> 0xFFFFFF`
+  slots into the annotation chain because the `::` syntax was designed for
+  extension. The IDEA record type slots into the context system because the
+  record format was designed for extension. These are roots finding cracks.
+
+  The danger is that without a unifying principle, roots diverge and split the
+  foundation. A hundred ad-hoc features, each reasonable alone, pull the design
+  in incompatible directions until the architecture fractures.
+
+  The philosophy file is the project's external hippocampus — it records not
+  just what decisions were made, but *why* they fit together. Every new idea
+  documented in `context/ideas.org` should trace back to a philosophical
+  principle. If it can't, that's a signal either that the idea is wrong for
+  the language, or that the philosophy needs to grow to accommodate it. Both
+  are valid outcomes — the key is that the connection is explicit.
+
+  This principle is the meta-norm of the context system itself: the context
+  exists to make the root system visible so a human or LLM can see which way
+  the roots are growing before the foundation cracks.
+
+[INF id:inf.philosophy.principles-connect-to-primitives from:dec.philosophy.smallest-atom,dec.philosophy.no-tradeoff-principle,dec.philosophy.zero-to-metal,dec.philosophy.sets-are-the-model,think.philosophy.principled-extensibility,obs.language.set-grounded-in-model,obs.language.array-ladder,obs.language.set-as-function-why,obs.language.map-bug-significance,obs.language.dep-why-shadow-pass conf:high]
   connects-to -> `monadc.context.language.primitive-philosophy` (the primitives section records design intent grounded in these principles) ·
   `monadc.context.language.primitive-array` (the three array forms are the zero-to-metal ladder made concrete) ·
   `monadc.context.language.primitive-set` (TYPE_SET is the runtime incarnation of types-are-sets) ·

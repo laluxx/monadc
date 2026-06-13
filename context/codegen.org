@@ -1,0 +1,610 @@
+#+TITLE: Codegen Context (codegen.h)
+#+AUTHOR: Codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:codegen:llvm:ir:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.codegen
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.codegen.file-metadata
+:CUSTOM_ID: codegen-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: codegen.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen.file src:codegen.h conf:high]
+  This file records the codegen context API in =codegen.h=. The codegen
+  subsystem translates the typed AST into LLVM IR, manages the LLVM module,
+  builder, environment, monomorphization cache, format strings, and FFI
+  integration. It is the bridge between the HM/dependent type system and
+  executable machine code.
+
+* CodegenContext Struct
+:PROPERTIES:
+:ID: monadc.context.codegen.context-struct
+:CUSTOM_ID: codegen-context-struct
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: CodegenContext is the central mutable state container for LLVM IR generation. Carries the module, builder, env, module system context, format strings, monomorphization cache, error recovery, and FFI context.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.h:43-73
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen.ctx.module src:codegen.h:44 conf:high]
+  =CodegenContext.module= — =LLVMModuleRef= owning the current compilation
+  unit's IR. All functions, globals, and types are defined here.
+
+[OBS id:obs.codegen.ctx.builder src:codegen.h:45 conf:high]
+  =CodegenContext.builder= — =LLVMBuilderRef= for instruction insertion at
+  the current position. Positioned by =LLVMPositionBuilderAtEnd=.
+
+[OBS id:obs.codegen.ctx.context src:codegen.h:46 conf:high]
+  =CodegenContext.context= — =LLVMContextRef= owning LLVM type and constant
+  uniquing tables. Shared across all builtins and module code.
+
+[OBS id:obs.codegen.ctx.env src:codegen.h:47 conf:high]
+  =CodegenContext.env= — =Env *= pointer to the symbol environment. Maps
+  names to =EnvEntry= (vars, funcs, layouts, builtins, typeclasses). The
+  environment is a hash table with lexical scope chains.
+
+[OBS id:obs.codegen.ctx.module-ctx src:codegen.h:48 conf:high]
+  =CodegenContext.module_ctx= — =ModuleContext *= pointer to the module
+  system context. Tracks imports, exports, module declarations. Set by
+  =main.c= after module resolution.
+
+[OBS id:obs.codegen.ctx.is-top-level src:codegen.h:49 conf:high]
+  =CodegenContext.is_top_level= — Boolean flag. True when generating top-level
+  (global init) code. False when inside a function body.
+
+[OBS id:obs.codegen.ctx.init-fn src:codegen.h:50 conf:high]
+  =CodegenContext.init_fn= — =LLVMValueRef= for the =__module_init_<name>=
+  or =main= function. Top-level side-effects (variable stores, feature list
+  construction) are emitted here. For the main module this is =main=; for
+  library modules it is a void =__init_<name>= function.
+
+[OBS id:obs.codegen.ctx.top-level-fn src:codegen.h:51 conf:high]
+  =CodegenContext.top_level_fn= — The original top-level init function,
+  never overwritten. Preserved so =codegen_expr= can always reference the
+  entry point.
+
+[OBS id:obs.codegen.ctx.fmt-str src:codegen.h:53 conf:high]
+  =CodegenContext.fmt_str= — Cached LLVM global string ="%s\\n"= for printf
+  format. Lazily declared by =get_fmt_str=.
+
+[OBS id:obs.codegen.ctx.fmt-char src:codegen.h:54 conf:high]
+  =CodegenContext.fmt_char= — Cached LLVM global string ="%c\\n"= for printf
+  format. Lazily declared by =get_fmt_char=.
+
+[OBS id:obs.codegen.ctx.fmt-int src:codegen.h:55 conf:high]
+  =CodegenContext.fmt_int= — Cached LLVM global string ="%lld\\n"= for printf
+  format. Lazily declared by =get_fmt_int=.
+
+[OBS id:obs.codegen.ctx.fmt-float src:codegen.h:56 conf:high]
+  =CodegenContext.fmt_float= — Cached LLVM global string ="%f\\n"= for printf
+  format. Lazily declared by =get_fmt_float=.
+
+[OBS id:obs.codegen.ctx.fmt-hex src:codegen.h:57 conf:high]
+  =CodegenContext.fmt_hex= — Cached LLVM global string ="0x%llx\\n"= for
+  hex output. Lazily declared.
+
+[OBS id:obs.codegen.ctx.fmt-bin src:codegen.h:58 conf:high]
+  =CodegenContext.fmt_bin= — Cached LLVM global string for binary output
+  via =print_binary=. Lazily declared.
+
+[OBS id:obs.codegen.ctx.fmt-oct src:codegen.h:59 conf:high]
+  =CodegenContext.fmt_oct= — Cached LLVM global string for octal output.
+  Lazily declared.
+
+[OBS id:obs.codegen.ctx.test-mode src:codegen.h:60 conf:high]
+  =CodegenContext.test_mode= — Boolean flag. When true, test blocks emit
+  assertion code instead of being ignored. Set from =CompilerFlags.test_mode=.
+
+[OBS id:obs.codegen.ctx.current-fn-name src:codegen.h:61 conf:high]
+  =CodegenContext.current_function_name= — =const char *=, NULL at top level,
+  set when inside a =define= function body. Used for debug output and
+  monomorphization key.
+
+[OBS id:obs.codegen.ctx.coalesce-depth src:codegen.h:62 conf:high]
+  =CodegenContext.in_coalesce_depth= — Integer tracking nesting depth of
+  null-coalescing (=??=) operations. Used for proper PHI node construction.
+
+[OBS id:obs.codegen.ctx.mono-cache src:codegen.h:65 conf:high]
+  =CodegenContext.mono_cache= — =MonoCache= struct for monomorphization.
+  Maps =(fn_name, concrete_type_args)= to specialized =LLVMValueRef=. Avoids
+  re-specialising the same polymorphic function for identical type arguments.
+
+[OBS id:obs.codegen.ctx.tc-registry src:codegen.h:66 conf:high]
+  =CodegenContext.tc_registry= — =struct TypeClassRegistry *= pointer to
+  the typeclass dispatch registry. Used for runtime method resolution.
+
+[OBS id:obs.codegen.ctx.error-jmp src:codegen.h:69 conf:high]
+  =CodegenContext.error_jmp= — =jmp_buf= for error recovery. Set by
+  =setjmp(error_jmp)=, longjmp'd to by =CODEGEN_ERROR= macro. Enables
+  non-local exit from deep codegen recursion on type errors.
+
+[OBS id:obs.codegen.ctx.error-jmp-set src:codegen.h:70 conf:high]
+  =CodegenContext.error_jmp_set= — Boolean guard. True while a recovery point
+  is active via =setjmp=. Prevents double-setjmp and stale longjmp targets.
+
+[OBS id:obs.codegen.ctx.ffi src:codegen.h:71 conf:high]
+  =CodegenContext.ffi= — =struct FFIContext *= pointer to the FFI (foreign
+  function interface) context. NULL until the first =(include ...)= directive
+  is processed. Manages parsed C header declarations.
+
+[OBS id:obs.codegen.ctx.error-msg src:codegen.h:72 conf:high]
+  =CodegenContext.error_msg[512]= — Fixed-size buffer for the last codegen
+  error message. Written by =CODEGEN_ERROR= before the longjmp, read by
+  callers for diagnostic display.
+
+* Monomorphization Cache (MonoKey, MonoCacheEntry, MonoCache)
+:PROPERTIES:
+:ID: monadc.context.codegen.mono-cache
+:CUSTOM_ID: codegen-mono-cache
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Monomorphization cache maps (function_name, concrete_arg_types) to specialized LLVM functions. Avoids duplicate specialization of polymorphic functions.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.h:24-40
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen.mono.key src:codegen.h:24-28 conf:high]
+  =MonoKey= — Cache key: =fn_name= (original function name),
+  =type_args[]= (concrete types for each type variable),
+  =type_arg_count= (number of type arguments).
+
+[OBS id:obs.codegen.mono.entry src:codegen.h:30-34 conf:high]
+  =MonoCacheEntry= — Cache value: =key= (the MonoKey), =fn= (specialized
+  =LLVMValueRef=), =specialized_name= (e.g. ="id_Int"=, ="id_String"=).
+
+[OBS id:obs.codegen.mono.cache src:codegen.h:36-40 conf:high]
+  =MonoCache= — Dynamic array of =MonoCacheEntry= with =entries=, =count=,
+  =capacity=. Linear search (small cache, typically < 100 entries).
+
+* CodegenResult
+:PROPERTIES:
+:ID: monadc.context.codegen.result
+:CUSTOM_ID: codegen-result
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: CodegenResult pairs an LLVM value with its MonadC Type. Returned by codegen_expr and consumed by callers for PHI construction and type dispatch.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.h:75-78
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen.result.value src:codegen.h:76 conf:high]
+  =CodegenResult.value= — =LLVMValueRef= of the computed expression.
+
+[OBS id:obs.codegen.result.type src:codegen.h:77 conf:high]
+  =CodegenResult.type= — =Type *= of the computed expression. Carried
+  alongside the LLVM value for type-directed dispatch in e.g. =if= PHI
+  node construction, boxed vs scalar decisions.
+
+* Lifecycle Functions
+:PROPERTIES:
+:ID: monadc.context.codegen.lifecycle
+:CUSTOM_ID: codegen-lifecycle
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: codegen_init creates the LLVM module/builder/context/env; codegen_dispose frees all owned resources.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.h:80-81
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen.fn.init src:codegen.h:80 conf:high]
+  =codegen_init(CodegenContext *ctx, const char *module_name)= — Initialises
+  a =CodegenContext=: creates LLVM context, module with given name, builder,
+  environment, initialises the monomorphization cache and format string
+  pointers to NULL. Sets =error_jmp_set=false=, =ffi=NULL=.
+
+[OBS id:obs.codegen.fn.dispose src:codegen.h:81 conf:high]
+  =codegen_dispose(CodegenContext *ctx)= — Disposes all owned resources:
+  frees the monomorphization cache, LLVM module/builder/context, and
+  environment. Does NOT free the FFI context (owned globally by =main.c=).
+
+* Format String Getters
+:PROPERTIES:
+:ID: monadc.context.codegen.format-strings
+:CUSTOM_ID: codegen-format-strings
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Lazy format string getters: get_fmt_str/char/int/float/hex/oct/bin and _no_newline variants. Each checks the cached field first and creates a new LLVM global string if not yet cached.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.h:84-93
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen.fn.get-fmt-str src:codegen.h:84 conf:high]
+  =get_fmt_str(CodegenContext *ctx)= — Returns "%s\\n" global string. Cached.
+
+[OBS id:obs.codegen.fn.get-fmt-char src:codegen.h:85 conf:high]
+  =get_fmt_char(CodegenContext *ctx)= — Returns "%c\\n" global string. Cached.
+
+[OBS id:obs.codegen.fn.get-fmt-int src:codegen.h:86 conf:high]
+  =get_fmt_int(CodegenContext *ctx)= — Returns "%lld\\n" global string. Cached.
+
+[OBS id:obs.codegen.fn.get-fmt-float src:codegen.h:87 conf:high]
+  =get_fmt_float(CodegenContext *ctx)= — Returns "%f\\n" global string. Cached.
+
+[OBS id:obs.codegen.fn.get-fmt-hex src:codegen.h:88 conf:high]
+  =get_fmt_hex(CodegenContext *ctx)= — Returns "0x%llx\\n" global string. Cached.
+
+[OBS id:obs.codegen.fn.get-fmt-oct src:codegen.h:89 conf:high]
+  =get_fmt_oct(CodegenContext *ctx)= — Returns octal format global string. Cached.
+
+[OBS id:obs.codegen.fn.get-fmt-str-nn src:codegen.h:90 conf:high]
+  =get_fmt_str_no_newline(CodegenContext *ctx)= — Returns "%s" (no newline). Cached.
+
+[OBS id:obs.codegen.fn.get-fmt-char-nn src:codegen.h:91 conf:high]
+  =get_fmt_char_no_newline(CodegenContext *ctx)= — Returns "%c" (no newline). Cached.
+
+[OBS id:obs.codegen.fn.get-fmt-int-nn src:codegen.h:92 conf:high]
+  =get_fmt_int_no_newline(CodegenContext *ctx)= — Returns "%lld" (no newline). Cached.
+
+[OBS id:obs.codegen.fn.get-fmt-float-nn src:codegen.h:93 conf:high]
+  =get_fmt_float_no_newline(CodegenContext *ctx)= — Returns "%f" (no newline). Cached.
+
+* Runtime Function Declarations
+:PROPERTIES:
+:ID: monadc.context.codegen.runtime-decls
+:CUSTOM_ID: codegen-runtime-decls
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Lazy declarations of runtime C functions: printf and print_binary. These are declared in the LLVM module on first use.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.h:96-97
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen.fn.get-printf src:codegen.h:96 conf:high]
+  =get_or_declare_printf(CodegenContext *ctx)= — Declares the C =printf=
+  function in the LLVM module (=i32 (i8*, ...)= varargs) if not already
+  declared. Returns the =LLVMValueRef=.
+
+[OBS id:obs.codegen.fn.get-print-binary src:codegen.h:97 conf:high]
+  =get_or_declare_print_binary(CodegenContext *ctx)= — Declares the runtime
+  =print_binary= helper function in the LLVM module. Used for binary format
+  output.
+
+* Type Conversion Utilities
+:PROPERTIES:
+:ID: monadc.context.codegen.type-conv
+:CUSTOM_ID: codegen-type-conv
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Type-to-LLVM conversion and type predicate utilities: type_to_llvm, type_is_numeric/integer/float.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.h:99-102
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen.fn.type-to-llvm src:codegen.h:99 conf:high]
+  =type_to_llvm(CodegenContext *ctx, Type *t)= — Converts a MonadC =Type=
+  to the corresponding =LLVMTypeRef=. Handles all primitive types (Int →
+  i64, Float → double, Bool → i1, Char → i8, etc.), pointer types,
+  array types (fat and sized), layout struct types, and function types.
+
+[OBS id:obs.codegen.fn.type-is-numeric src:codegen.h:100 conf:high]
+  =type_is_numeric(Type *t)= — Returns true if =t= is Int, Float, Char,
+  Ratio, or any fixed-width numeric type (I8, U8, I16, U16, I32, U32, I64,
+  U64, I128, U128).
+
+[OBS id:obs.codegen.fn.type-is-integer src:codegen.h:101 conf:high]
+  =type_is_integer(Type *t)= — Returns true if =t= is Int or any fixed-width
+  integer type (I8, U8, I16, U16, I32, U32, I64, U64, I128, U128).
+
+[OBS id:obs.codegen.fn.type-is-float src:codegen.h:102 conf:high]
+  =type_is_float(Type *t)= — Returns true if =t= is Float or F32/F80.
+
+* Core Codegen Functions
+:PROPERTIES:
+:ID: monadc.context.codegen.core
+:CUSTOM_ID: codegen-core
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Core codegen functions: codegen_print_ast, clone_params, codegen_expr, register_builtins, codegen_declare_external_var/func, codegen_layout, mangle_unicode_name.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.h:104-125
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen.fn.print-ast src:codegen.h:104 conf:high]
+  =codegen_print_ast(CodegenContext *ctx, AST *ast)= — Prints an AST tree
+  to stderr for debugging. Used during development to inspect the AST shape
+  before codegen.
+
+[OBS id:obs.codegen.fn.clone-params src:codegen.h:105 conf:high]
+  =clone_params(EnvParam *src, int count)= — Deep-clones an array of
+  =EnvParam= (name + type pairs). Returns a newly allocated array. Used
+  when registering function declarations in the env.
+
+[OBS id:obs.codegen.fn.expr src:codegen.h:106 conf:high]
+  =codegen_expr(CodegenContext *ctx, AST *ast)= — The main codegen dispatch
+  function. Returns a =CodegenResult= containing the LLVM value and its
+  MonadC type. Implements the three-layer dispatch architecture: AST type
+  switch (layer 1), strcmp on head symbol (layer 2), env lookup fallback
+  (layer 3). Handles all AST node types, all built-in operators, variable
+  resolution, function calls, control flow, type conversions, and collection
+  operations.
+
+[OBS id:obs.codegen.fn.register-builtins src:codegen.h:107 conf:high]
+  =register_builtins(CodegenContext *ctx)= — Inserts ~94 built-in function
+  and variable entries into the environment via =env_insert_builtin=. Also
+  registers arities for wisp. Covers: arithmetic, comparison, bitwise, logic,
+  type predicates, type conversions, collection operations, list operations,
+  string operations, control flow, binding, quotation, and module operations.
+
+[OBS id:obs.codegen.fn.declare-external-var src:codegen.h:111-113 conf:high]
+  =codegen_declare_external_var(CodegenContext *ctx, const char *mangled_name, Type *type)=
+  — Declares an external variable in the LLVM module and inserts it into
+  the environment. Creates an =LLVMAddGlobal= with =ExternalLinkage=.
+
+[OBS id:obs.codegen.fn.declare-external-func src:codegen.h:115-118 conf:high]
+  =codegen_declare_external_func(CodegenContext *ctx, const char *mangled_name, EnvParam *params, int param_count, Type *return_type)=
+  — Declares an external function in the LLVM module and inserts it into
+  the environment. Creates an =LLVMAddFunction= with =ExternalLinkage=.
+
+[OBS id:obs.codegen.fn.layout src:codegen.h:122 conf:high]
+  =codegen_layout(CodegenContext *ctx, AST *ast)= — Builds and registers an
+  LLVM struct type from an =AST_LAYOUT= node. Resolves field types, computes
+  offsets via LLVM's struct layout, calls =layout_register= to store the
+  struct type in the env.
+
+[OBS id:obs.codegen.fn.mangle-unicode src:codegen.h:124 conf:high]
+  =mangle_unicode_name(const char *name)= — Converts Unicode characters in
+  a symbol name to ASCII-safe representations for LLVM symbol names. Used
+  for identifiers containing Greek letters, subscripts, superscripts, etc.
+
+* Fat Array Helpers
+:PROPERTIES:
+:ID: monadc.context.codegen.fat-array
+:CUSTOM_ID: codegen-fat-array
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: arr_fat_data and arr_fat_size extract the data pointer and element count from a fat array pointer struct.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.h:129-130
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen.fn.arr-fat-data src:codegen.h:129 conf:high]
+  =arr_fat_data(CodegenContext *ctx, LLVMValueRef fat_ptr, Type *elem_type)=
+  — Extracts the data pointer (=elem_type *=) from a fat array pointer struct.
+  GEP index 0 on the {ptr, i64} struct.
+
+[OBS id:obs.codegen.fn.arr-fat-size src:codegen.h:130 conf:high]
+  =arr_fat_size(CodegenContext *ctx, LLVMValueRef fat_ptr)= — Extracts the
+  element count (i64) from a fat array pointer struct. GEP index 1 on the
+  {ptr, i64} struct.
+
+* Monomorphization API
+:PROPERTIES:
+:ID: monadc.context.codegen.mono-api
+:CUSTOM_ID: codegen-mono-api
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: mono_cache_lookup/insert/free for the monomorphization cache.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.h:133-138
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen.fn.mono-lookup src:codegen.h:133-134 conf:high]
+  =mono_cache_lookup(MonoCache *cache, const char *fn_name, Type **type_args, int type_arg_count)=
+  — Looks up a specialized function in the monomorphization cache. Returns
+  the =LLVMValueRef= if found, or NULL if no specialization exists.
+
+[OBS id:obs.codegen.fn.mono-insert src:codegen.h:135-137 conf:high]
+  =mono_cache_insert(MonoCache *cache, const char *fn_name, Type **type_args, int type_arg_count, LLVMValueRef fn, const char *specialized_name)=
+  — Inserts a new monomorphization entry into the cache.
+
+[OBS id:obs.codegen.fn.mono-free src:codegen.h:138 conf:high]
+  =mono_cache_free(MonoCache *cache)= — Frees all entries in the cache:
+  frees key fn_name strings, type_args arrays, specialized_name strings,
+  and zeroes count. Does NOT free the =MonoCache= struct itself.
+
+* ADT Constructor Tag Utility
+:PROPERTIES:
+:ID: monadc.context.codegen.adt-tag
+:CUSTOM_ID: codegen-adt-tag
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: adt_constructor_tag computes the numeric tag for an ADT constructor name.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.h:16
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen.fn.adt-ctor-tag src:codegen.h:16 conf:high]
+  =adt_constructor_tag(const char *name)= — Computes a stable integer tag
+  from a constructor name string. The tag is derived from the =__adt_tag_=
+  prefix convention. Used by =(match ...)= to dispatch on ADT constructor.
+
+* Cross-References
+:PROPERTIES:
+:ID: monadc.context.codegen.cross-refs
+:CUSTOM_ID: codegen-cross-refs
+:CONTEXT_KIND: index
+:CONTEXT_DESCRIPTION: Cross-references to codegen-ops.org, runtime.org, dep.org, infer.org, env.org, ffi.org, typeclass.org, main.org.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.h,codegen.c
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.codegen.codegen-ops from:obs.codegen.fn.expr,obs.codegen.fn.register-builtins conf:high]
+  connects-to -> =monadc.context.codegen-ops.dispatch-architecture= (the
+  three-layer dispatch in =codegen_expr= is documented in codegen-ops.org) ·
+  =monadc.context.codegen-ops.ops-arithmetic= (strcmp dispatch for + - * / %) ·
+  =monadc.context.codegen-ops.ops-bitwise= (strcmp dispatch for & ~ bit-xor) ·
+  =monadc.context.codegen-ops.ops-comparison= (strcmp dispatch for = != < >) ·
+  =monadc.context.codegen-ops.ops-logic= (strcmp dispatch for and or not) ·
+  =monadc.context.codegen-ops.ops-type-preds= (17 type predicates) ·
+  =monadc.context.codegen-ops.ops-type-convs= (type conversion dispatch) ·
+  =monadc.context.codegen-ops.ops-collection= (set/map/collection ops) ·
+  =monadc.context.codegen-ops.ops-list= (cons/car/cdr/++/list/count) ·
+  =monadc.context.codegen-ops.ops-string= (string operations) ·
+  =monadc.context.codegen-ops.ops-control= (if/begin/unless/while/when/do/with/for) ·
+  =monadc.context.codegen-ops.ops-binding= (define/set!/def) ·
+  =monadc.context.codegen-ops.ops-quotation= (quote/quasiquote/expand) ·
+  =monadc.context.codegen-ops.ops-misc= (show/??/equal/assert-eq/error)
+
+[INF id:inf.codegen.runtime from:obs.codegen.fn.get-printf,obs.codegen.fn.get-print-binary,obs.codegen.fn.arr-fat-data,obs.codegen.fn.arr-fat-size conf:high]
+  connects-to -> =monadc.context.runtime.rt_printf= (printf declaration) ·
+  =monadc.context.runtime.rt_arr_fat= (fat array struct layout and helpers) ·
+  =monadc.context.runtime.rt_make_int= (boxed integer constructor) ·
+  =monadc.context.runtime.rt_make_float= (boxed float constructor) ·
+  =monadc.context.runtime.rt_to_string= (runtime value-to-string) ·
+  =monadc.context.runtime.rt_equal_p= (runtime deep equality)
+
+[INF id:inf.codegen.dep from:obs.codegen.ctx.env conf:high]
+  connects-to -> =monadc.context.dep.dep-ctx= (=DepCtx *= stored in
+  =ctx.env->dep_ctx= for the dependent type bridge) ·
+  =monadc.context.dep.dep-register-builtins= (=dep_register_builtins=
+  seeds the dep checker's environment) ·
+  =monadc.context.dep.dep-toplevel= (dep_toplevel annotates AST nodes
+  with inferred_type before codegen)
+
+[INF id:inf.codegen.infer from:obs.codegen.ctx.env,obs.codegen.fn.expr conf:high]
+  connects-to -> =monadc.context.infer.inference-context= (InferCtx used
+  by codegen to drive type inference inside define bodies) ·
+  =monadc.context.infer.type-scheme= (TypeScheme/TypeSubst used for
+  monomorphization via mono_cache) ·
+  =monadc.context.infer.generalization-instantiation= (infer_instantiate
+  used at call sites to open polymorphic schemes)
+
+[INF id:inf.codegen.env from:obs.codegen.ctx.env conf:high]
+  connects-to -> =monadc.context.env.env-struct= (=Env= hash table) ·
+  =monadc.context.env.env-insert-builtin= (=register_builtins= uses this) ·
+  =monadc.context.env.env-lookup= (variable and function resolution) ·
+  =monadc.context.env.env-insert-func= (function declaration registration)
+
+[INF id:inf.codegen.ffi from:obs.codegen.ctx.ffi,obs.codegen.fn.declare-external-func conf:high]
+  connects-to -> =monadc.context.ffi.ffi-context= (FFIContext management) ·
+  =monadc.context.ffi.ffi-parse-header= (header parsing for external declarations) ·
+  =monadc.context.ffi.ffi-inject-into-env= (injecting C declarations into env)
+
+[INF id:inf.codegen.typeclass from:obs.codegen.ctx.tc-registry conf:high]
+  connects-to -> =monadc.context.typeclass.tc-registry= (TypeClassRegistry) ·
+  =monadc.context.typeclass.tc-method-dispatch= (tc_is_method hook in
+  comparison dispatch at codegen.c:8907)
+
+[INF id:inf.codegen.main from:obs.codegen.ctx.module-ctx conf:high]
+  connects-to -> =monadc.context.main.twelve-phase-pipeline= (codegen is
+  Phase 6) · =monadc.context.main.compile-one= (main.c creates the
+  =CodegenContext= and calls =codegen_expr= for each top-level expression)

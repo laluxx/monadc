@@ -14,7 +14,7 @@
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -596,3 +596,62 @@
 [OBS id:obs.source-map.core-libs.purpose src:core/ conf:high]
   Standard library (Monad source): prelude (Coll, Test), List, Set, Math,
   Random, text (Ascii, String), json, Assert, TODO. NOT automatically imported.
+
+* Research PDFs
+:PROPERTIES:
+:ID: monadc.context.source-map.pdfs
+:CUSTOM_ID: source-pdfs
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: etc/pdfs/
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.pdfs.purpose src:etc/pdfs/ conf:high]
+  The =etc/pdfs/= directory holds the research reference library — 7 PDF papers
+  that directly inform MonadC's compiler architecture, type system design, and
+  runtime model. Each PDF is a first-class DOC object in the context category
+  with traceable connections to specific source files and architectural
+  decisions.
+
+[DOC id:doc.source-map.pdfs.propositions-as-types src:etc/pdfs/propositions-as-types.pdf conf:high]
+  Wadler 2015 — Curry-Howard correspondence. Foundation for set-theoretic model:
+  types are sets, functions are relations, proofs are programs. Mapped to:
+  dep.c NbE kernel, refinement type predicates, TYPE_SET as both collection and
+  proposition. Connect: monadc.context.references.propositions-as-types.
+
+[DOC id:doc.source-map.pdfs.bidir-checking src:etc/pdfs/an-algorithm-for-type-checking-dependent-types.pdf conf:high]
+  Coquand 1996 — Bidirectional type checking. The infer/check judgment split in
+  dep.c. Mapped to: dep_ctx_infer, dep_ctx_check, dep_ctx_conv, shadow pass
+  architecture (Phase 6.5). Connect:
+  monadc.context.references.typechecking-dependent-types.
+
+[DOC id:doc.source-map.pdfs.linear-lisp src:etc/pdfs/BakerLinearLisp.pdf conf:high]
+  Baker 1992 — Linear type discipline for in-place mutation. Mapped to:
+  conj!/disj! mutable set ops, typed ABI for uncaptured lambdas, immutable-default
+  collection design. Connect: monadc.context.references.linear-lisp.
+
+[DOC id:doc.source-map.pdfs.cons-lazy src:etc/pdfs/cons-should-not-evaluate-its-arguments.pdf conf:high]
+  Normal-order cons — lazy list semantics. Mapped to: ConsCell thunk design,
+  infinite range syntax (0..), lazy list vs strict array distinction.
+  Connect: monadc.context.references.cons-lazy.
+
+[DOC id:doc.source-map.pdfs.cons-lazy-alloc src:etc/pdfs/cons-lazy-alloc.pdf conf:high]
+  Memory-efficient thunk allocation. Mapped to: arena-based ConsCell allocation,
+  bump allocator (arena.c), inline thunk fields in ConsCell, no per-cell GC.
+  Connect: monadc.context.references.cons-lazy-alloc.
+
+[DOC id:doc.source-map.pdfs.layered-modal src:etc/pdfs/layered-modal-type-theory.pdf conf:high]
+  Layered modal type theory — multiple judgmental layers with modal lift/lower.
+  Mapped to: HM (ground layer) + ITT (modal layer), TERM_EMBED as modal operator,
+  shadow pass architecture. Connect: monadc.context.references.layered-modal.
+
+[DOC id:doc.source-map.pdfs.types-2020 src:etc/pdfs/BookOfAbstractsTYPES2020.pdf conf:medium]
+  TYPES 2020 proceedings — type theory research consensus. Mapped to: NbE
+  architecture (Value domain, closures, neutral terms), fuel-limited conversion,
+  stub unification. Connect: monadc.context.references.types-2020.

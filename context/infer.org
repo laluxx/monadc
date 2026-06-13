@@ -1,0 +1,1442 @@
+#+TITLE: HM Type Inference Engine
+#+AUTHOR: codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:infer:hm:type-system:
+#+PROPERTY: CONTEXT_VERSION 2
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.infer.file-metadata
+:CUSTOM_ID: infer-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: infer.h,infer.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.infer.file src:infer.h,infer.c conf:high]
+  This file records the architecture of the Hindley-Milner type inference engine
+  in MonadC (=infer.h= / =infer.c=). It covers: substitution (union-find for type
+  variables), constraint generation, unification (Robinson's algorithm with
+  occurs check), expression inference, generalisation/instantiation (let-polymorphism),
+  zonking, builtins registration, and the top-level pipeline. The HM engine is
+  the fast path of the dual type system (see =monadc.context.language.type-system-surface=).
+
+[INF id:inf.context.infer.file-connect from:obs.context.infer.file conf:high]
+  connects-to -> `monadc.context.language.type-system-surface` (the dual type
+  system entry point — HM is the fast path) ·
+  `monadc.context.language.primitive-function` (HM arrow is one half of the
+  dual function representation) ·
+  `monadc.context.infer.type-scheme` (TypeScheme is the core abstraction for
+  let-polymorphism) ·
+  `monadc.context.infer.substitution` (Substitution implements union-find for
+  type variable resolution) ·
+  `monadc.context.infer.unification` (Robinson's algorithm drives type inference) ·
+  `monadc.context.infer.expression-inference` (infer_expr walks the AST) ·
+  `monadc.context.infer.generalization-instantiation` (let-polymorphism via
+  scheme g/ i) ·
+  `monadc.context.infer.zonking` (subst_apply over the AST) ·
+  `monadc.context.infer.builtins-bootstrap` (register_builtins seeds the env) ·
+  `monadc.context.infer.top-level-pipeline` (the main driver)
+
+* Type Scheme (TypeScheme)
+:PROPERTIES:
+:ID: monadc.context.infer.type-scheme
+:CUSTOM_ID: type-scheme
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: TypeScheme represents a polymorphic type ∀a b ... T. Core abstraction for let-polymorphism: generalise closes over free type vars, instantiate opens them with fresh vars at each call site. Codegen uses TypeSubst to drive monomorphization.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: infer.h:30-60,infer.c:787-891
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.infer.scheme-struct src:infer.h:42-46 conf:high]
+  `TypeScheme` carries `quantified[]` (array of universally-quantified type
+  variable IDs), `quantified_count`, and `type` (the body `Type*` containing
+  `TYPE_VAR` nodes whose IDs appear in `quantified[]`). Example: the identity
+  function's scheme is `∀0. Arrow(Var(0), Var(0))`.
+
+[OBS id:obs.infer.type-subst-struct src:infer.h:52-55 conf:high]
+  `TypeSubst` maps quantified scheme var IDs to concrete types at a call site.
+  Used by codegen to drive monomorphization: caller records which concrete types
+  each quantified var resolved to, then generates a specialised copy.
+
+[OBS id:obs.infer.scheme-mono src:infer.c:896-901 conf:high]
+  `scheme_mono(Type *t)` creates a trivial TypeScheme with no quantifiers —
+  the monomorphic case. Used internally for lambda parameters and temporary
+  pre-binds.
+
+[OBS id:obs.infer.scheme-clone src:infer.c:904-911 conf:high]
+  `scheme_clone(TypeScheme *s)` creates a shallow copy of a scheme. The
+  quantified list is deep-copied (malloc + memcpy) but the body Type is shared
+  (not deep-copied). Schemes live as long as the InferCtx that created them.
+
+[OBS id:obs.infer.scheme-free src:infer.c:913-917 conf:high]
+  `scheme_free(TypeScheme *s)` frees the quantified array and the scheme struct
+  itself, but does NOT free the body Type — types are owned by the substitution.
+
+[OBS id:obs.infer.instantiate-with-subst src:infer.c:848-891 conf:high]
+  `infer_instantiate_with_subst(InferCtx *ctx, TypeScheme *scheme, TypeSubst *ts)`
+  works like `infer_instantiate` but also returns the mapping from quantified
+  var IDs to fresh var IDs via the `TypeSubst` out-parameter. This mapping is
+  consumed by codegen monomorphization after unification resolves the fresh vars
+  to concrete types. The caller must free `ts->from` and `ts->to` (but not the
+  `Type*` pointers).
+
+[INF id:inf.infer.scheme-connect from:obs.infer.scheme-struct,obs.infer.type-subst-struct,obs.infer.instantiate-with-subst conf:high]
+  connects-to -> `monadc.context.infer.generalization-instantiation`
+  (scheme g/ i is the defining algorithm of HM let-polymorphism) ·
+  `monadc.context.language.codegen-dispatch` (TypeSubst drives
+  monomorphization in codegen) ·
+  `monadc.context.language.primitive-function` (schemes represent polymorphic
+  function types — the core of HM inference)
+
+* Inference Environment (InferEnv)
+:PROPERTIES:
+:ID: monadc.context.infer.infer-env
+:CUSTOM_ID: infer-env
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: InferEnv is a hash-table-based scope chain mapping names to TypeSchemes. Separate from the codegen Env — purely for type-level bookkeeping, discarded after inference. Supports lexical scoping via parent links and create_child.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: infer.h:70-86,infer.c:16-89
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.infer.env-struct src:infer.h:70-80 conf:high]
+  `InferEnv` is a singly-linked scope chain implemented as a fixed-size hash
+  table (64 buckets, djb2 hash). Each entry is an `InferEnvEntry` with `name`,
+  `scheme`, and `next` pointer. The `parent` field forms the lexical scope
+  chain: a child env created by `infer_env_create_child` inherits all bindings
+  from its parent.
+
+[OBS id:obs.infer.env-create src:infer.c:24-30 conf:high]
+  `infer_env_create(void)` allocates a fresh environment with 64 empty hash
+  buckets and no parent.
+
+[OBS id:obs.infer.env-create-child src:infer.c:32-35 conf:high]
+  `infer_env_create_child(InferEnv *parent)` creates a new scope with the given
+  parent. Used for let-bindings, lambda parameters, and define scopes.
+
+[OBS id:obs.infer.env-free src:infer.c:38-52 conf:high]
+  `infer_env_free(InferEnv *env)` walks all buckets, frees entry names and
+  entries. Does NOT free schemes — schemes are owned by the InferCtx.
+
+[OBS id:obs.infer.env-insert src:infer.c:54-68 conf:high]
+  `infer_env_insert(InferEnv *env, const char *name, TypeScheme *scheme)` inserts
+  or overwrites a binding. Overwrites the scheme in-place for existing names
+  (old scheme freed by caller or ctx). Otherwise prepends a new entry to the
+  hash bucket chain.
+
+[OBS id:obs.infer.env-lookup src:infer.c:71-89 conf:high]
+  `infer_env_lookup(InferCtx *ctx, const char *name)` searches the local HM
+  scope chain (walking parent links). Falls back to the TT Global Environment
+  (dctx) — the "Idris Bridge" — but this path is DISABLED due to use-after-free
+  segfaults from stale dctx pointers passed by codegen. The dependent elaborator
+  now pre-seeds `ast->inferred_type` on all nodes, making the bridge unnecessary.
+
+[OBS id:obs.infer.env-remove src:infer.c:980-996 conf:high]
+  `infer_env_remove(InferEnv *env, const char *name)` removes a binding from
+  the environment. Used before generalisation in define handling to prevent old
+  type vars from corrupting `infer_free_vars_env`.
+
+[INF id:inf.infer.env-connect from:obs.infer.env-struct,obs.infer.env-lookup,obs.infer.env-remove conf:high]
+  connects-to -> `monadc.context.infer.expression-inference` (infer_expr uses
+  env lookup for symbol resolution) ·
+  `monadc.context.infer.generalization-instantiation` (free_vars_env determines
+  which vars to quantify) ·
+  `monadc.context.language.primitive-function` (the scope chain mirrors lexical
+  scoping for function parameters)
+
+* Substitution (Union-Find)
+:PROPERTIES:
+:ID: monadc.context.infer.substitution
+:CUSTOM_ID: substitution
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Substitution implements a union-find (disjoint-set) data structure for type variable resolution. Dense flat array indexed by var ID. subst_find with path compression, subst_union for alias merging, subst_bind for concrete type assignment, subst_apply for recursive substitution walk.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: infer.h:89-113,infer.c:92-230
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.infer.subst-struct src:infer.h:99-104 conf:high]
+  `Substitution` contains `union_find[]` (parent pointers — each var is its own
+  root initially), `bound[]` (concrete Type* at root nodes — NULL means free),
+  `capacity` (INFER_MAX_VARS = 4096), and `next_id` (next fresh var ID).
+  The invariant: `bound[id]` is non-NULL only when `union_find[id] == id`
+  (i.e., at root nodes). Non-root nodes have NULL bound.
+
+[OBS id:obs.infer.subst-create src:infer.c:94-103 conf:high]
+  `subst_create(void)` allocates union_find and bound arrays for INFER_MAX_VARS,
+  initialises each var as its own root, sets next_id to 0.
+
+[OBS id:obs.infer.subst-free src:infer.c:105-110 conf:high]
+  `subst_free(Substitution *s)` frees union_find, bound, and the struct itself.
+  Does NOT free bound types — types are owned by the type arena.
+
+[OBS id:obs.infer.subst-fresh src:infer.c:112-121 conf:high]
+  `subst_fresh(Substitution *s)` allocates a new type variable ID, initialises
+  it as its own root with NULL bound. Panics with exit(1) if the capacity
+  (INFER_MAX_VARS = 4096) is exceeded.
+
+[OBS id:obs.infer.subst-find src:infer.c:123-130 conf:high]
+  `subst_find(Substitution *s, int id)` performs path-compressed find with
+  path halving: `union_find[id] = union_find[union_find[id]]` on each iteration.
+  Returns the root ID. This is the core operation of union-find — all lookups
+  go through find to resolve aliases.
+
+[OBS id:obs.infer.subst-bind src:infer.c:132-139 conf:high]
+  `subst_bind(Substitution *s, int id, Type *t)` binds a variable root to a
+  concrete Type. Has a critical guard: never overwrites an existing concrete
+  binding — doing so would create substitution cycles where subst_apply_depth
+  chases var → type → var → type forever.
+
+[OBS id:obs.infer.subst-union src:infer.c:141-156 conf:high]
+  `subst_union(Substitution *s, int a, int b)` merges two variable roots. If
+  both roots have concrete bindings, returns true without merging — the caller
+  (infer_unify_one_internal) handles structural unification instead. Otherwise
+  merges rb into ra and carries rb's binding to ra if ra has none.
+
+[OBS id:obs.infer.subst-apply-shallow src:infer.c:158-166 conf:high]
+  `subst_apply_shallow(Substitution *s, Type *t)` performs one-level
+  dereference: if t is a TYPE_VAR whose root has a concrete binding, returns
+  the bound type. Also performs path compression directly on the AST node
+  (mutating `t->var_id` to the root) for asymptotic performance improvement.
+
+[OBS id:obs.infer.subst-apply-depth src:infer.c:168-226 conf:high]
+  `subst_apply_depth(Substitution *s, Type *t, int depth)` recursively walks
+  a type, replacing all resolved TYPE_VAR nodes with their concrete bindings.
+  Has a cycle guard at depth 64. Handles TYPE_LIST, TYPE_OPTIONAL, TYPE_PTR,
+  TYPE_COLL, TYPE_ARR, and TYPE_ARROW by recursing into sub-types. Returns a
+  new Type if any sub-type changed, or the original if unchanged. This is the
+  core substitution application — it resolves the entire type graph.
+
+[OBS id:obs.infer.subst-apply src:infer.c:228-230 conf:high]
+  `subst_apply(Substitution *s, Type *t)` is a thin wrapper calling
+  `subst_apply_depth(s, t, 0)`.
+
+[INF id:inf.infer.subst-connect from:obs.infer.subst-apply,obs.infer.subst-bind,obs.infer.subst-union conf:high]
+  connects-to -> `monadc.context.infer.unification` (unification mutates the
+  substitution via bind and union) ·
+  `monadc.context.infer.occurs-check` (infer_occurs walks the substitution
+  while checking for cycles) ·
+  `monadc.context.infer.zonking` (infer_zonk_ast uses subst_apply on every
+  AST node) ·
+  `monadc.context.infer.constraint-generation` (constraint generation defers
+  unification — substitution is solved in the second pass) ·
+  `monadc.context.language.type-system-surface` (the union-find structure is
+  the engine of Hindley-Milner inference)
+
+* Type Constraint (TypeConstraint)
+:PROPERTIES:
+:ID: monadc.context.infer.type-constraint
+:CUSTOM_ID: type-constraint
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: TypeConstraint records a pending unification T1 ~ T2 with source location. Constraints are generated during the expression walk and solved in a second pass by infer_unify_all. Keeps error reporting localised to source positions.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: infer.h:118-127,infer.c:299-308
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.infer.constraint-struct src:infer.h:122-127 conf:high]
+  `TypeConstraint` stores `lhs` (Type*), `rhs` (Type*), `line`, and `col` —
+  the two types to be unified and the source location for error messages.
+  Constraints are stored as a flat dynamic array in InferCtx.
+
+[OBS id:obs.infer.constrain-append src:infer.c:301-308 conf:high]
+  `infer_constrain(InferCtx *ctx, Type *a, Type *b, int line, int col)` appends
+  a new constraint to the ctx constraint buffer. Doubles capacity when full
+  (starts at 256). This is the sole mutation point of the constraint list —
+  all inference code calls this to defer unification.
+
+[THINK id:think.infer.constraint-defer-why conf:high]
+  Why defer unification instead of solving eagerly? Deferred constraints enable
+  W-by-W (walk-by-walk) inference for let-generalisation: constraint generation
+  runs over the full definition body, then unification solves all constraints
+  before generalisation. This is the correct architecture for constraint-based
+  HM (see Heeren et al, 2002). Eager unification would force a left-to-right
+  bias that can produce unnecessary monomorphic bindings.
+
+[INF id:inf.infer.constraint-connect from:obs.infer.constraint-struct,obs.infer.constrain-append conf:high]
+  connects-to -> `monadc.context.infer.expression-inference` (infer_expr
+  generates constraints for every application) ·
+  `monadc.context.infer.unification` (infer_unify_all consumes the constraint
+  list) ·
+  `monadc.context.infer.occurs-check` (occurs check runs during unification,
+  triggered by constraints)
+
+* Inference Context (InferCtx)
+:PROPERTIES:
+:ID: monadc.context.infer.inference-context
+:CUSTOM_ID: inference-context
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: InferCtx is the mutable state container for one inference run. Created per top-level definition or REPL expression. Carries the substitution, constraint buffer, environment, dependent context bridge, filename for errors, error state, and hole tracking for '?' expressions.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: infer.h:130-153,infer.c:235-253
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.infer.ctx-struct src:infer.h:136-150 conf:high]
+  `InferCtx` carries: `subst` (Substitution*), `constraints` (dynamic array),
+  `constraint_count`/`constraint_cap`, `env` (InferEnv* — local HM scope),
+  `dctx` (DepCtx* — TT bridge to the dependent type checker's master scope),
+  `filename` (for diagnostics), `had_error`/`error_msg[512]` (error state),
+  `has_holes`/`hole_count`/`hole_positions[INFER_MAX_HOLES=256]` (tracking `?`
+  expression holes for type inference debugging).
+
+[OBS id:obs.infer.ctx-create src:infer.c:235-246 conf:high]
+  `infer_ctx_create(InferEnv *env, DepCtx *dctx, const char *filename)` creates
+  an InferCtx with a fresh substitution (capacity INFER_MAX_VARS), constraint
+  buffer starting at 256, the given env/dctx/filename, and had_error = false.
+
+[OBS id:obs.infer.ctx-free src:infer.c:248-253 conf:high]
+  `infer_ctx_free(InferCtx *ctx)` frees the substitution, constraint buffer,
+  and the context struct. Does NOT free the env (owned by caller) or dctx.
+
+[THINK id:think.infer.ctx-one-per-definition conf:high]
+  Why one InferCtx per top-level definition? Each definition may have its own
+  substitution with fresh type variable IDs. The env persists across definitions
+  (storing generalised schemes), but the substitution is ephemeral — it is
+  solved and discarded within one inference run. This prevents ID collision
+  between independent definitions and keeps the union-find structure small.
+
+[INF id:inf.infer.ctx-connect from:obs.infer.ctx-struct,obs.infer.ctx-create conf:high]
+  connects-to -> `monadc.context.infer.top-level-pipeline` (infer_toplevel
+  uses a single InferCtx) ·
+  `monadc.context.infer.infer-env` (the env in the ctx is the HM scope chain) ·
+  `monadc.context.infer.substitution` (the subst in the ctx is the union-find
+  engine) ·
+  `monadc.context.infer.type-constraint` (constraints live in the ctx) ·
+  `monadc.context.language.primitive-dependent-types` (dctx bridges HM to
+  the dependent type checker) ·
+  `monadc.context.infer.hole-tracking` (hole positions are tracked in the ctx)
+
+* Fresh Type Variables
+:PROPERTIES:
+:ID: monadc.context.infer.fresh-variables
+:CUSTOM_ID: fresh-variables
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Fresh type variables are allocated from the substitution's dense ID space. Each call to infer_fresh returns a new TYPE_VAR with a unique integer ID. infer_fresh_named reserves the interface for debug-name annotations.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: infer.h:156-159,infer.c:258-266
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.infer.fresh src:infer.c:258-261 conf:high]
+  `infer_fresh(InferCtx *ctx)` calls `subst_fresh(ctx->subst)` to get a new ID
+  and returns `type_var(id)`. Fresh vars are always TYPE_VAR with no initial
+  binding.
+
+[OBS id:obs.infer.fresh-named src:infer.c:263-266 conf:high]
+  `infer_fresh_named(InferCtx *ctx, const char *hint)` is identical to
+  `infer_fresh` — the hint parameter is reserved for debug builds but
+  currently ignored.
+
+[INF id:inf.infer.fresh-connect from:obs.infer.fresh conf:high]
+  connects-to -> `monadc.context.infer.substitution` (subst_fresh is the
+  underlying allocator) ·
+  `monadc.context.infer.expression-inference` (infer_expr calls infer_fresh
+  for every type node that needs an inferred type) ·
+  `monadc.context.infer.occurs-check` (occurs check walks TYPE_VAR nodes
+  created by infer_fresh)
+
+* Constraint Generation
+:PROPERTIES:
+:ID: monadc.context.infer.constraint-generation
+:CUSTOM_ID: constraint-generation
+:CONTEXT_KIND: process
+:CONTEXT_DESCRIPTION: Constraint generation is the first phase of HM inference. infer_expr walks each AST node and calls infer_constrain to record T1 ~ T2 pairs. No solving occurs during generation — all unification is deferred to infer_unify_all.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: infer.h:162-164,infer.c:998-1607
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.infer.constraint-gen-pattern src:infer.c:301-308 conf:high]
+  Constraint generation follows a uniform pattern: for each sub-expression,
+  call `infer_expr` recursively (which returns the inferred Type), then call
+  `infer_constrain(ctx, inferred, expected, line, col)` to record the
+  constraint. The expected type may be a fresh variable (if the type is not
+  yet known) or a concrete type (from annotations).
+
+[OBS id:obs.infer.constraint-gen-define src:infer.c:1208-1273 conf:high]
+  For `define` forms: generates a fresh self-type for recursive references,
+  infers the body, constrains self ~ body, then solves all pending constraints
+  BEFORE generalising. This W-by-W pattern is critical for recursive definitions:
+  generalising before solving would quantify type vars that should resolve to
+  concrete types, producing unsound polymorphic schemes.
+
+[OBS id:obs.infer.constraint-gen-application src:infer.c:1492-1537 conf:high]
+  For function application (fn arg1 arg2 ...): infers the function type `fn_t`,
+  creates a fresh return type `ret_t`, builds an expected arrow type from the
+  argument types and return, and constrains `fn_t ~ expected`. This is the
+  standard HM application rule: if `f : A → B` and argument types match, the
+  return type is resolved through unification of the function's arrow with
+  the expected arrow constructed from argument/return types.
+
+[OBS id:obs.infer.constraint-gen-if-nil-optional src:infer.c:1331-1344 conf:high]
+  Special case: `if` branches with one Optional/Nil branch and one concrete
+  branch get smart Optional promotion — the concrete branch is wrapped in
+  `type_optional()` before constraining. This makes `(if cond nil x)` infer
+  as `Optional(T)` rather than failing to unify Nil with T.
+
+[OBS id:obs.infer.constraint-gen-collection-as-function src:infer.c:416-470,1470-1488 conf:high]
+  Collection types (TYPE_SET, TYPE_MAP, TYPE_COLL, TYPE_ARR, TYPE_LIST) used as
+  functions skip arrow unification — the codegen handles collection indexing
+  directly. In unification, `Coll ~ (Int → elem)` is decomposed into
+  `Int ~ Int` + `elem ~ elem`. In expression inference, if the function head
+  resolves to a collection type, arguments are inferred for side effects and
+  a fresh return type is generated.
+
+[INF id:inf.infer.constraint-gen-connect from:obs.infer.constraint-gen-pattern,obs.infer.constraint-gen-define,obs.infer.constraint-gen-application conf:high]
+  connects-to -> `monadc.context.infer.expression-inference` (constraint
+  generation is the output of infer_expr) ·
+  `monadc.context.infer.unification` (constraints are the input to unification) ·
+  `monadc.context.infer.generalization-instantiation` (W-by-W solve-then-generalise
+  in define) ·
+  `monadc.context.language.primitive-function` (application constraint is the
+  standard HM arrow rule)
+
+* Occurs Check
+:PROPERTIES:
+:ID: monadc.context.infer.occurs-check
+:CUSTOM_ID: occurs-check
+:CONTEXT_KIND: process
+:CONTEXT_DESCRIPTION: The occurs check prevents infinite types by ensuring a type variable does not appear in its own binding type. Standard HM occurs check: search the target type for the var_id, fail if found. Guards all variable-to-type bindings in unification.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: infer.h:167-169,infer.c:271-296
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.infer.occurs-function src:infer.c:271-296 conf:high]
+  `infer_occurs(Substitution *s, int var_id, Type *t)` returns true if `var_id`
+  appears in `t` after substitution. Uses `subst_apply_shallow` for each sub-type
+  before checking. Recurses through TYPE_LIST, TYPE_OPTIONAL, TYPE_PTR,
+  TYPE_COLL, TYPE_ARR, and TYPE_ARROW. For TYPE_VAR, checks if the find of the
+  visited var equals the find of the target var_id.
+
+[OBS id:obs.infer.occurs-guard-bind src:infer.c:369-375,397-403 conf:high]
+  The occurs check guards both left-VS-right and right-VS-left bindings in
+  `infer_unify_one_internal`. If occurs check fails, the error message is
+  `"type error: infinite type (occurs check failed)"` with source location.
+  This prevents the substitution from creating cycles where `subst_apply_depth`
+  would chase var → type → var → type forever.
+
+[THINK id:think.infer.occurs-why-necessary conf:high]
+  The occurs check is necessary because without it, binding `'a ~ 'a → Int`
+  creates a type `'a = 'a → Int = ('a → Int) → Int = ...` — an infinite type
+  that the substitution walker cannot terminate. Robinson's unification
+  algorithm requires the occurs check as the fourth case (after reflexivity,
+  variable binding, and structural decomposition).
+
+[INF id:inf.infer.occurs-connect from:obs.infer.occurs-function,obs.infer.occurs-guard-bind conf:high]
+  connects-to -> `monadc.context.infer.unification` (occurs check is called
+  before every var-to-type binding) ·
+  `monadc.context.infer.substitution` (subst_apply_depth's cycle guard at
+  depth 64 is a safety net for when occurs check fails)
+
+* Unification (Robinson's Algorithm)
+:PROPERTIES:
+:ID: monadc.context.infer.unification
+:CUSTOM_ID: unification
+:CONTEXT_KIND: process
+:CONTEXT_DESCRIPTION: Robinson's unification algorithm over collected constraints. unify_one applies structural decomposition: var-var, var-type, ground-ground (kind matching with coercion lattice), and structural (arrow, list, coll). unify_all iterates the constraint list until reaching a fixed point.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: infer.h:172-179,infer.c:338-703
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.infer.unify-one-internal src:infer.c:338-703 conf:high]
+  `infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, int col)`
+  is the core unification algorithm. It:
+  1. Applies shallow substitution to both sides
+  2. Handles NULL and TYPE_UNKNOWN (always succeeds)
+  3. Var-Var: merges roots via subst_union; if both are bound, unifies bindings
+  4. Var-Type: binds the var root to the type (with occurs check and nil→Optional guard)
+  5. Type-Var: symmetric to var-type
+  6. Ground-Ground: kind matching with a coercion lattice:
+     - TYPE_FN compatible with TYPE_ARROW
+     - TYPE_FN ~ TYPE_FN always ok
+     - Collection-as-function: `Coll ~ (Int → elem)` coercion
+     - Int/IntArbitrary/Ratio w idening
+     - Int→Float, Int→Char implicit coercions
+     - TYPE_COLL compatible with List, Arr, String, Set
+     - TYPE_APP ~ TYPE_LAYOUT compatibility
+     - Single-element TYPE_LIST as parenthesized scalar
+  7. Structural decomposition for TYPE_ARROW, TYPE_LIST, TYPE_ARR
+
+[OBS id:obs.infer.unify-all src:infer.c:696-703 conf:high]
+  `infer_unify_all(InferCtx *ctx)` iterates all constraints in the buffer and
+  calls `infer_unify_one` on each. Returns false and sets `ctx->had_error` +
+  `ctx->error_msg` on the first type error. The constraint buffer is NOT cleared
+  (the caller resets `constraint_count` to 0 as needed — see define handling).
+
+[OBS id:obs.infer.unify-one src:infer.c:315-335 conf:high]
+  `infer_unify_one(InferCtx *ctx, Type *a, Type *b, int line, int col)` is a
+  tracing wrapper around `infer_unify_one_internal`. When `g_trace_enabled`,
+  prints the unification attempt, indents for nested calls, and prints OK/FAIL.
+  This is the public API; all external callers go through this wrapper.
+
+[OBS id:obs.infer.unify-coercion-lattice src:infer.c:414-549 conf:high]
+  The implicit coercion lattice in unification:
+  - Int ↔ Float (widening)
+  - Int ↔ Char (chars are small integers)
+  - IntArbitrary ↔ Int (widen to i64)
+  - F80 ↔ Float (extended precision)
+  - Ratio ↔ Int, Ratio ↔ Float (rational is numeric)
+  - TYPE_FN ↔ TYPE_ARROW (unannotated Fn compatible with any arrow)
+  - TYPE_COLL ↔ List, Arr, String, Set (collection hierarchy)
+  - TYPE_APP ↔ TYPE_LAYOUT (type constructor applications)
+  - Nil binding → Optional(fresh) via the Nil guard
+
+[OBS id:obs.infer.unify-nil-guard src:infer.c:376-386,404-411 conf:high]
+  Critical design: never bind a free variable directly to TYPE_NIL — Nil is not
+  a concrete element type. Binding `'x ~ Nil` would poison any later constraint
+  `'x ~ element_type` because Nil wins the race and element_type never gets
+  resolved. Instead, Nil binding produces `Optional(fresh)` so subsequent
+  constraints resolve the inner element type correctly.
+
+[THINK id:think.infer.unify-collection-as-function conf:high]
+  The collection-as-function coercion (infer.c:426-470) is the type system
+  acknowledging the set-theoretic model: if types are sets, then a collection
+  IS a function from its index type to its element type. When unifying
+  `TYPE_LIST ~ TYPE_ARROW`, the algorithm decomposes into
+  `Int ~ arrow_param` and `elem ~ arrow_ret`. Safety guards prevent this
+  coercion when the arrow param is already a complex type (arrow, collection,
+  string, bool, float) that can never be an index type — this prevents
+  cascading unification explosions from polymorphic operators like `=` and `>=`.
+
+[INF id:inf.infer.unify-connect from:obs.infer.unify-one-internal,obs.infer.unify-all,obs.infer.unify-coercion-lattice conf:high]
+  connects-to -> `monadc.context.infer.constraint-generation` (constraints are
+  the input) ·
+  `monadc.context.infer.occurs-check` (guards var-to-type bindings) ·
+  `monadc.context.infer.substitution` (unification mutates the substitution) ·
+  `monadc.context.infer.top-level-pipeline` (unify_all is phase 2) ·
+  `monadc.context.language.primitive-function` (arrow decomposition) ·
+  `monadc.context.language.primitive-list` (list structural decomposition) ·
+  `monadc.context.language.primitive-array` (arr structural decomposition) ·
+  `monadc.context.language.primitive-set` (set-as-function coercion) ·
+  `monadc.context.language.primitive-ground-types` (coercion lattice for
+  Int/Float/Char/Ratio) ·
+  `monadc.context.philosophy.sets-are-the-model` (collection-as-function
+  coercion is the semantic model surfacing)
+
+* Expression Inference (infer_expr)
+:PROPERTIES:
+:ID: monadc.context.infer.expression-inference
+:CUSTOM_ID: expression-inference
+:CONTEXT_KIND: process
+:CONTEXT_DESCRIPTION: infer_expr walks the AST and returns the inferred Type for each node. Generates constraints for applications, annotations, and sub-expressions. Sets ast->inferred_type on every node. Bridges dep-checker annotations (ast->inferred_type pre-seeded by Phase 6.5).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: infer.h:182-191,infer.c:998-1607
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.infer.expr-number src:infer.c:1005-1021 conf:high]
+  `AST_NUMBER`: checks if literal is float (presence of `.`, `e`, `E` in
+  `literal_str`, or fractional `double` value). Respects dep-checker's
+  pre-seeded `inferred_type` — if dep already decided this is Float even
+  for integer-looking literals (e.g. 2.0 desugared to 2), trusts dep.
+  Returns `type_float()` or `type_int()`.
+
+[OBS id:obs.infer.expr-string-path-char-keyword-ratio src:infer.c:1024-1042 conf:high]
+  `AST_STRING` → `type_string()`, `AST_PATH` → `type_path()`,
+  `AST_CHAR` → `type_char()`, `AST_KEYWORD` → `type_keyword()`,
+  `AST_RATIO` → `type_ratio()`. All ground type constructors.
+
+[OBS id:obs.infer.expr-symbol src:infer.c:1044-1078 conf:high]
+  `AST_SYMBOL`: special-cases `True`, `False` (→ Bool), `nil` (→ Nil),
+  `?` (→ fresh var + hole tracking). Unbound variables get a fresh var
+  with a warning stored in `ctx->error_msg` — the unification phase will
+  produce a precise "unbound variable" diagnostic. Bound variables are
+  resolved through `infer_env_lookup` + `infer_instantiate`.
+
+[OBS id:obs.infer.expr-set-map-array src:infer.c:1081-1114 conf:high]
+  `AST_SET`: creates fresh elem var, constrains all elements to it,
+  returns `type_set()`. `AST_MAP`: creates fresh key+val vars, constrains
+  all keys/values, returns `type_map()`. `AST_ARRAY`: creates fresh elem
+  var, constrains all elements, returns `type_arr` or `type_arr_heap`
+  depending on `ast->array.is_heap`.
+
+[OBS id:obs.infer.expr-lambda src:infer.c:1116-1197 conf:high]
+  `AST_LAMBDA`: creates a child scope, infers parameter types (respecting
+  rest params, type annotations, and the rule that bare unannotated params
+  get fresh TYPE_VAR — not TYPE_COLL, which poisoned polymorphic functions),
+  infers body expressions, constrains return type against annotation if
+  present, builds arrow chain from param types to return type.
+
+[OBS id:obs.infer.expr-define src:infer.c:1208-1273 conf:high]
+  `define` form handling: creates a child scope, generates a fresh self-type
+  for recursive references, infers the body, constrains self ~ body, solves
+  ALL pending constraints via `infer_unify_all`, REMOVES stale scheme from
+  outer env, generalises with `infer_generalise`, inserts the generalised
+  scheme into the outer env. Resets `constraint_count` to 0 after solving
+  so each define starts fresh — this is the W-by-W pattern from Heeren et al.
+
+[OBS id:obs.infer.expr-lambda-inline src:infer.c:1276-1317 conf:high]
+  Inline `(lambda (params) body)` or `(λ (params) body)`: creates a child
+  scope, infers param types as fresh vars, infers body, builds arrow chain.
+  Supports up to 32 parameters.
+
+[OBS id:obs.infer.expr-if src:infer.c:1321-1349 conf:high]
+  `if` form: constrains condition to Bool, infers then/else branches,
+  applies smart Optional promotion (if one branch is Optional/Nil and the
+  other is concrete, wraps the concrete branch in Optional), constrains
+  then ~ else. The result type is the then branch type.
+
+[OBS id:obs.infer.expr-arithmetic src:infer.c:1379-1394 conf:high]
+  N-ary arithmetic `(+ a b c ...)`: treats all arguments as the same numeric
+  type via a fresh type variable. The codegen handles variadic lowering;
+  HM just constrains all operands to unify.
+
+[OBS id:obs.infer.expr-application src:infer.c:1411-1537 conf:high]
+  Application (`(f a b c ...)`): handles variadic functions (walk arrow
+  chain to find rest param — if last param is TYPE_LIST and more args
+  than fixed params, constrains excess args to list element type).
+  Handles collection-as-function skip (head resolves to Set/Map/Arr/Str/Coll
+  — skip arrow unification, return fresh type). Otherwise builds an
+  expected arrow from argument types and the fresh return type, constrains
+  function type ~ expected arrow.
+
+[OBS id:obs.infer.expr-dep-bridge src:infer.c:1546-1604 conf:high]
+  After inferring the type for each AST node, if the AST already has a
+  non-unknown `inferred_type` from the dependent type checker (Phase 6.5),
+  HM bridges it: constrains the HM-inferred type against the dep-annotated
+  type. Complex guards prevent bridging of arrow/fn types, multi-element
+  tuples, universe-level leakage, and cases where HM already inferred a
+  concrete arrow type that would conflict with a scalar dep hint.
+
+[INF id:inf.infer.expr-connect from:obs.infer.expr-number,obs.infer.expr-symbol,obs.infer.expr-lambda,obs.infer.expr-define,obs.infer.expr-application,obs.infer.expr-dep-bridge conf:high]
+  connects-to -> `monadc.context.infer.constraint-generation` (infer_expr is
+  the constraint generator) ·
+  `monadc.context.infer.generalization-instantiation` (define calls
+  infer_generalise after solving) ·
+  `monadc.context.infer.fresh-variables` (infer_expr creates fresh vars) ·
+  `monadc.context.infer.infer-env` (env lookup for symbol resolution) ·
+  `monadc.context.infer.unification` (define calls infer_unify_all inline) ·
+  `monadc.context.infer.occurs-check` (unification during define may trigger
+  occurs check) ·
+  `monadc.context.language.primitive-dependent-types` (dep bridge connects
+  HM to the dependent type checker's annotation pass) ·
+  `monadc.context.language.type-system-surface` (infer_expr is the HM
+  inference walk) ·
+  `monadc.context.language.primitive-function` (lambda inference is the core
+  of function type inference)
+
+* Generalization and Instantiation
+:PROPERTIES:
+:ID: monadc.context.infer.generalization-instantiation
+:CUSTOM_ID: generalization-instantiation
+:CONTEXT_KIND: process
+:CONTEXT_DESCRIPTION: Generalization closes a type into a TypeScheme by universally quantifying free type variables not present in the environment. Instantiation opens a scheme at a call site by replacing quantified vars with fresh type variables. Together they implement HM let-polymorphism.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: infer.h:194-211,infer.c:787-891
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.infer.generalise src:infer.c:787-813 conf:high]
+  `infer_generalise(InferCtx *ctx, Type *t, InferEnv *outer_env)`:
+  1. Applies substitution fully to t (resolves all known bindings)
+  2. Collects free type variables in t via `infer_free_vars_type`
+  3. Collects free type variables in the outer environment via `infer_free_vars_env`
+  4. Quantifies all vars that are free in t but NOT free in the environment
+  This is the standard HM generalisation rule: a let-bound expression's type
+  is polymorphic over all type variables that were not introduced by lambda
+  parameters in the enclosing scope.
+
+[OBS id:obs.infer.instantiate src:infer.c:815-846 conf:high]
+  `infer_instantiate(InferCtx *ctx, TypeScheme *scheme)`:
+  1. If quantified_count == 0, applies substitution to the scheme type (monomorphic)
+  2. Otherwise, allocates fresh type variable IDs for each quantified var
+  3. Temporarily binds quantified vars to the fresh vars in the substitution
+  4. Applies substitution to get the instantiated type
+  5. Clears the temporary bindings
+  This is the standard HM instantiation: each use of a polymorphic name gets
+  fresh type variables that may unify independently at different call sites.
+
+[OBS id:obs.infer.free-vars-type src:infer.c:714-747 conf:high]
+  `infer_free_vars_type(Substitution *s, Type *t, int *out, int *count, int cap)`:
+  collects free (unresolved) TYPE_VAR IDs in a type. Applies shallow substitution
+  first so bound vars are not reported. Handles TYPE_VAR (add if not already in
+  array), and recurses into TYPE_LIST, TYPE_OPTIONAL, TYPE_PTR, TYPE_COLL,
+  TYPE_ARR, TYPE_ARROW.
+
+[OBS id:obs.infer.free-vars-env src:infer.c:749-783 conf:high]
+  `infer_free_vars_env(InferCtx *ctx, InferEnv *env, int *out, int *count, int cap)`:
+  collects free type vars in the outer environment's non-generalised schemes.
+  Only walks the single env level passed (not the parent chain) — parent envs
+  contain schemes from previous InferCtx runs whose type var IDs belong to
+  foreign substitutions and cannot be safely dereferenced with the current
+  ctx->subst. Skips fully generalised schemes (quantified_count > 0).
+
+[THINK id:think.infer.gen-inst-why-define-pattern conf:high]
+  The define handling follows the W-by-W (walk-by-walk) pattern: generate
+  constraints → solve → generalise. This is essential for recursive definitions:
+  if generalisation ran before solving, free type vars that should resolve to
+  concrete types (like the return type of a recursive call) would get universally
+  quantified, producing unsound polymorphic schemes and infinite-type occurs-check
+  failures at call sites. See Heeren, "Generalizing Hindley-Milner Type Inference
+  Algorithms", 2002.
+
+[INF id:inf.infer.gen-inst-connect from:obs.infer.generalise,obs.infer.instantiate,obs.infer.free-vars-type,obs.infer.free-vars-env conf:high]
+  connects-to -> `monadc.context.infer.expression-inference` (define calls
+  generalise; symbol resolution calls instantiate) ·
+  `monadc.context.infer.type-scheme` (generalise produces TypeScheme;
+  instantiate consumes it) ·
+  `monadc.context.infer.infer-env` (schemes are stored and looked up in the env) ·
+  `monadc.context.language.codegen-dispatch` (monomorphization uses the
+  instantiation mapping from quantified vars to concrete types)
+
+* Free Variables
+:PROPERTIES:
+:ID: monadc.context.infer.free-variables
+:CUSTOM_ID: free-variables
+:CONTEXT_KIND: process
+:CONTEXT_DESCRIPTION: Free variable collection finds all unresolved TYPE_VAR IDs in a type or environment. Used by generalisation to determine which variables to universally quantify. Only walks non-quantified schemes in the current env level — parent schemes belong to foreign substitutions.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: infer.h:214-220,infer.c:708-783
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.infer.free-vars-env-why-no-parent conf:high]
+  Why does `infer_free_vars_env` only walk the single env level? Because parent
+  environments contain schemes from previous InferCtx runs. Those schemes' type
+  variable IDs were allocated by older Substitution instances — they belong to
+  foreign substitutions and cannot be safely dereferenced with the current
+  ctx->subst. This is safe because built-in schemes are fully generalised
+  (quantified_count > 0, so they are skipped), previously defined schemes are
+  fully generalised (same reason), and only the current definition's child scope
+  has monomorphic pre-bind schemes that matter for generalisation.
+
+[INF id:inf.infer.free-vars-connect from:obs.infer.free-vars-type,obs.infer.free-vars-env conf:high]
+  connects-to -> `monadc.context.infer.generalization-instantiation`
+  (free_vars is the core prerequisite for generalisation) ·
+  `monadc.context.infer.infer-env` (free_vars_env walks the env's hash buckets)
+
+* Zonking
+:PROPERTIES:
+:ID: monadc.context.infer.zonking
+:CUSTOM_ID: zonking
+:CONTEXT_KIND: process
+:CONTEXT_DESCRIPTION: Zonking walks the AST after unification and replaces every inferred_type with its fully-substituted form. After this pass, no TYPE_VAR nodes remain in any inferred_type (unless genuinely polymorphic in a let-binding, which codegen handles via monomorphization).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: infer.h:223-228,infer.c:928-975
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.infer.zonk-function src:infer.c:928-975 conf:high]
+  `infer_zonk_ast(InferCtx *ctx, AST *ast)`:
+  1. Applies `subst_apply` to `ast->inferred_type` (if set)
+  2. For AST_SYMBOL nodes without inferred_type, looks up env for the symbol's
+     scheme, instantiates, and sets inferred_type
+  3. Recursively zonks children: AST_LIST, AST_ARRAY, AST_SET, AST_MAP
+  4. For AST_LAMBDA, creates a temporary child scope with unknown-typed params
+     to allow symbol resolution during recursive zonk, then discards the scope
+  After zonking, all inferred types are fully resolved and the AST carries
+  the concrete types for codegen to consume.
+
+[THINK id:think.infer.zonk-why-late conf:high]
+  Why is zonking a separate pass after unification? Because unification produces
+  the substitution, and applying it eagerly during expression walk would (a)
+  resolve types before all constraints are gathered and (b) mutate AST nodes that
+  may be shared (e.g., function bodies that appear in multiple call contexts).
+  Zonking as a post-pass is the standard approach: generate constraints → solve
+  → apply substitution to the output types. The AST's inferred_type is the
+  output channel from inference to codegen.
+
+[INF id:inf.infer.zonk-connect from:obs.infer.zonk-function conf:high]
+  connects-to -> `monadc.context.infer.substitution` (subst_apply drives zonking) ·
+  `monadc.context.infer.top-level-pipeline` (zonking is phase 3 of the
+  top-level pipeline) ·
+  `monadc.context.infer.expression-inference` (zonking resolves types produced
+  by infer_expr) ·
+  `monadc.context.language.codegen-dispatch` (codegen consumes
+  ast->inferred_type after zonking)
+
+* Builtins Bootstrap
+:PROPERTIES:
+:ID: monadc.context.infer.builtins-bootstrap
+:CUSTOM_ID: builtins-bootstrap
+:CONTEXT_KIND: process
+:CONTEXT_DESCRIPTION: infer_register_builtins populates the InferEnv with type schemes for all built-in functions and operators. Uses infer_generalise to create properly quantified polymorphic schemes for each builtin. Must be called before any user code is inferred.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: infer.h:231-236,infer.c:1611-1779
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.infer.builtins-set-conj-disj src:infer.c:1614-1625 conf:high]
+  Set operations: `set :: ∀a. a → Set`, `conj/conj!/disj/disj! :: ∀a. Set → a → Set`.
+  The same scheme is registered for both mutable and immutable variants.
+
+[OBS id:obs.infer.builtins-contains-count src:infer.c:1627-1642 conf:high]
+  `contains? :: ∀a b. Coll(a) → b → Bool` — uses TYPE_COLL with element type
+  so coercion rules fire correctly for String, Set, Map. `count :: Coll → Int`.
+
+[OBS id:obs.infer.builtins-type-predicates src:infer.c:1644-1650 conf:high]
+  Type predicates `set?/map?/collection? :: ∀a. a → Bool` — all share the
+  same scheme registered under all three names.
+
+[OBS id:obs.infer.builtins-foldl-map-filter src:infer.c:1652-1680 conf:high]
+  Higher-order functions:
+  `foldl :: ∀a b. (a → b → a) → a → Coll → a`
+  `map :: ∀a b. (a → b) → List a → List b`
+  `filter :: ∀a. (a → Bool) → List a → List a`
+
+[OBS id:obs.infer.builtins-cons-append-head-tail src:infer.c:1682-1712 conf:high]
+  List operations:
+  `. (cons) :: ∀a. a → [a] → [a]` (dot is the cons operator)
+  `++ :: ∀a. Coll(a) → Coll(a) → Coll(a)` (generic collection append)
+  `head :: ∀a. List a → a`, `tail :: ∀a. List a → List a`
+
+[OBS id:obs.infer.builtins-arithmetic src:infer.c:1718-1727 conf:high]
+  Arithmetic: `+/-/* :: ∀a. a → a → a`, `/ :: ∀a. a → a → a`. Registered as
+  binary; the n-ary case is handled directly in `infer_expr`.
+
+[OBS id:obs.infer.builtins-comparison src:infer.c:1730-1739 conf:high]
+  Comparison: `=/!=/</>/<=/>= :: ∀a. a → a → Bool`. All six share the same
+  polymorphic scheme.
+
+[OBS id:obs.infer.builtins-map-ops src:infer.c:1747-1771 conf:high]
+  Map operations: `assoc/assoc! :: ∀k v. Map → k → v → Map`,
+  `dissoc/dissoc! :: ∀k. Map → k → Map`,
+  `merge :: Map → Map → Map`,
+  `keys :: Map → List k`, `vals :: Map → List v`.
+
+[OBS id:obs.infer.builtins-adt src:infer.c:1774-1778 conf:high]
+  ADT internal: `__adt_tag :: ∀a. a → Int` — typed by codegen_data at runtime,
+  registered as opaque so HM doesn't reject ADT tag operations.
+
+[THINK id:think.infer.builtins-seed-order conf:high]
+  The order of builtin registration does not matter because each scheme is
+  independently generalised against the current (empty) environment. All builtins
+  become fully polymorphic (all free vars quantified). The env is seeded before
+  any user code is inferred, so all user symbols can reference these schemes.
+  Builtins that share the same type pattern (like all six comparison operators
+  under `cmp_sc`) reuse the same scheme to save memory.
+
+[INF id:inf.infer.builtins-connect from:obs.infer.builtins-set-conj-disj,obs.infer.builtins-contains-count,obs.infer.builtins-cons-append-head-tail,obs.infer.builtins-arithmetic,obs.infer.builtins-comparison,obs.infer.builtins-map-ops conf:high]
+  connects-to -> `monadc.context.infer.generalization-instantiation`
+  (builtins are created via infer_generalise) ·
+  `monadc.context.infer.expression-inference` (builtins are looked up during
+  symbol inference) ·
+  `monadc.context.infer.infer-env` (builtins are inserted into the env) ·
+  `monadc.context.language.primitive-set` (conj/disj schemes) ·
+  `monadc.context.language.primitive-map` (assoc/dissoc/merge/keys/vals schemes) ·
+  `monadc.context.language.primitive-function` (HOF schemes) ·
+  `monadc.context.language.codegen-dispatch` (builtins that also have strcmp
+  handlers are callable) ·
+  `monadc.context.language.codegen-gaps` (builtins-only functions without
+  strcmp dispatch are NOT callable from paren-mode — a documented gap)
+
+* Top-Level Pipeline
+:PROPERTIES:
+:ID: monadc.context.infer.top-level-pipeline
+:CUSTOM_ID: top-level-pipeline
+:CONTEXT_KIND: process
+:CONTEXT_DESCRIPTION: infer_toplevel is the main entry point called by the REPL and compiler. Runs the full pipeline: constraint generation (infer_expr), constraint solving (infer_unify_all), zonking (infer_zonk_ast), and post-zonk call validation (infer_validate_calls). Returns the fully-solved type or NULL on error.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: infer.h:239-250,infer.c:1882-1903
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.infer.toplevel src:infer.c:1882-1903 conf:high]
+  `infer_toplevel(InferCtx *ctx, AST *ast)`:
+  Phase 1: `infer_expr(ctx, ast)` — constraint generation. Returns the inferred
+    type of the expression.
+  Phase 2: `infer_unify_all(ctx)` — constraint solving. Returns false on error.
+  Phase 3: Disable dctx bridge (prevents use-after-free in post-unification phases).
+  Phase 4: `infer_zonk_ast(ctx, ast)` — apply substitution to all AST nodes.
+  Phase 5: `infer_validate_calls(ctx, ast)` — post-zonk call site validation
+    with concrete types.
+  Phase 6: Re-enable dctx bridge.
+  Returns: fully-solved type via `subst_apply(ctx->subst, t)`.
+
+[OBS id:obs.infer.validate-calls src:infer.c:1784-1865 conf:high]
+  `infer_validate_calls(InferCtx *ctx, AST *ast)` walks the AST post-zonk and
+  checks every call site. For each argument, it compares the concrete inferred
+  type against the function's declared parameter type. Applies implicit
+  Int→Float coercion at this stage (mutating `arg->inferred_type`). Flags
+  function-argument-to-non-function-parameter mismatches as errors via READER_ERROR.
+  Recurses into AST_LIST children, AST_ARRAY elements, and AST_LAMBDA bodies
+  (using a temporary child scope for param type resolution).
+
+[THINK id:think.infer.toplevel-phase-order conf:high]
+  The phase order is critical: constraint generation must complete before
+  solving (obviously), but the safety of disabling the dctx bridge after
+  solving is a pragmatic choice. The dependent type checker uses a different
+  memory management discipline (VAL arena with GC). Keeping the dctx pointer
+  alive through codegen phases could lead to UAF if codegen triggers TT
+  operations. Disabling the bridge after HM inference is complete isolates
+  the two systems.
+
+[INF id:inf.infer.toplevel-connect from:obs.infer.toplevel,obs.infer.validate-calls conf:high]
+  connects-to -> `monadc.context.infer.expression-inference` (phase 1) ·
+  `monadc.context.infer.unification` (phase 2) ·
+  `monadc.context.infer.zonking` (phase 4) ·
+  `monadc.context.language.primitive-dependent-types` (dctx bridge is
+  disabled after solving to prevent UAF) ·
+  `monadc.context.language.codegen-diagnostics` (validate_calls emits
+  diagnostics for call site mismatches) ·
+  `monadc.context.infer.builtins-bootstrap` (register_builtins must be
+  called before infer_toplevel)
+
+* Hole Tracking (? Expressions)
+:PROPERTIES:
+:ID: monadc.context.infer.hole-tracking
+:CUSTOM_ID: hole-tracking
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Expression holes (the `?` symbol in source code) create fresh type variables that are solved by unification. After the inference pipeline completes, infer_report_holes prints the solved type of each hole. Useful for interactive development and debugging.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: infer.h:20-27,infer.c:1048-1058,infer.c:1867-1880
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.infer.holes-struct src:infer.h:23-27 conf:high]
+  `InferHole` records `line`, `col`, and `var_id` — the source position and
+  the fresh type variable ID assigned to the `?` expression. The context stores
+  up to `INFER_MAX_HOLES` (256) holes in `hole_positions[]`.
+
+[OBS id:obs.infer.holes-gen src:infer.c:1048-1058 conf:high]
+  When `infer_expr` encounters the symbol `?`, it creates a fresh type variable
+  via `infer_fresh`, records the hole position (line, col, var_id), sets
+  `ctx->has_holes = true`, and increments `ctx->hole_count`. The hole's type
+  variable participates in normal unification — by the end of inference, its
+  solved type reflects the constraints imposed by the surrounding context.
+
+[OBS id:obs.infer.holes-report src:infer.c:1867-1880 conf:high]
+  `infer_report_holes(InferCtx *ctx)` prints the solved type of each hole.
+  For each hole, it applies `subst_apply` to `type_var(h->var_id)` and prints
+  the resulting type. Output format: `filename:line:col: hole has type: T`.
+  No output if no holes were found.
+
+[INF id:inf.infer.holes-connect from:obs.infer.holes-struct,obs.infer.holes-gen,obs.infer.holes-report conf:high]
+  connects-to -> `monadc.context.infer.expression-inference` (hole creation
+  in infer_expr) ·
+  `monadc.context.infer.substitution` (hole types are resolved through
+  unification and subst_apply) ·
+  `monadc.context.infer.top-level-pipeline` (infer_report_holes is called
+  after the pipeline completes)
+
+* Pretty Printing (Debug)
+:PROPERTIES:
+:ID: monadc.context.infer.pretty-printing
+:CUSTOM_ID: pretty-printing
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Debug pretty-printing functions for types, schemes, and constraints. infer_print_type renders types with applied substitution, using Unicode arrows (→) and Greek quantifiers (∀). infer_print_constraints dumps all pending unification pairs.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: infer.h:253-258,infer.c:1908-1966
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.infer.print-type src:infer.c:1908-1941 conf:high]
+  `infer_print_type(Type *t, Substitution *s)` renders a type to stderr. If a
+  substitution is provided, applies it first. TYPE_VAR renders as `'a`, `'b`,
+  etc. (appending numeric suffix for IDs ≥ 26). TYPE_ARROW renders as
+  `(param → ret)`. TYPE_LIST renders as `(t1 t2 ...)`. TYPE_OPTIONAL renders
+  as `T?`. Other types use `type_to_string(t)`.
+
+[OBS id:obs.infer.print-scheme src:infer.c:1943-1954 conf:high]
+  `infer_print_scheme(TypeScheme *sc)` renders a scheme as `∀'a 'b ... . T`.
+  Quantified vars are rendered as `'a`, `'b`, etc. The body type is printed
+  via `infer_print_type(sc->type, NULL)`.
+
+[OBS id:obs.infer.print-constraints src:infer.c:1956-1966 conf:high]
+  `infer_print_constraints(InferCtx *ctx)` prints all pending constraints in
+  the format `[infer] N constraints:` followed by each `T1 ~ T2` on its own
+  line, with substitution applied for readability.
+
+[INF id:inf.infer.print-connect from:obs.infer.print-type,obs.infer.print-scheme,obs.infer.print-constraints conf:high]
+  connects-to -> `monadc.context.infer.unification` (print_constraints is used
+  for debugging unification) ·
+  `monadc.context.infer.top-level-pipeline` (print functions are available
+  for debug instrumentation in the pipeline)
+
+* Nil→Optional Guard (Design Decision)
+:PROPERTIES:
+:ID: monadc.context.infer.nil-optional-guard
+:CUSTOM_ID: nil-optional-guard
+:CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: The Nil→Optional guard prevents binding free type variables to TYPE_NIL directly. Instead, Nil produces Optional(fresh) so subsequent constraints can still resolve the inner element type. This is a pragmatic solution to the Nil-is-not-a-type problem.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: infer.c:376-386,404-411
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.infer.nil-guard-in-unify src:infer.c:376-386,404-411 conf:high]
+  In `infer_unify_one_internal`, binding a free var `'x ~ Nil` is intercepted.
+  Instead of binding `'x` to `TYPE_NIL`, the algorithm creates a fresh inner
+  type variable and binds `'x` to `Optional(inner)`. This is triggered for both
+  left-VS-right (`a->kind == TYPE_VAR`, `b->kind == TYPE_NIL`) and right-VS-left
+  cases.
+
+[THINK id:think.infer.nil-guard-why conf:high]
+  Why is the Nil guard necessary? TYPE_NIL is the type of the value `nil` —
+  it is a singleton type. But `nil` appears in two roles: as the empty list
+  terminator (where its type should be `List('a)` not `Nil`) and as the absent
+  value (where its type should be `Optional('a)` not `Nil`). Directly binding
+  `'x ~ Nil` makes `'x` forever `Nil`, which means any later constraint
+  `'x ~ String` would fail. The guard ensures Nil usage creates an Optional
+  wrapper, preserving the ability to resolve the inner type from context.
+
+[INF id:inf.infer.nil-guard-connect from:obs.infer.nil-guard-in-unify conf:high]
+  connects-to -> `monadc.context.infer.unification` (the guard lives in
+  unify_one_internal) ·
+  `monadc.context.infer.expression-inference` (if branches with Nil receive
+  smart Optional promotion) ·
+  `monadc.context.language.primitive-ground-types` (TYPE_NIL is a ground type) ·
+  `monadc.context.language.type-composition` (nil as list terminator vs absent
+  value)
+
+* DepCtx Bridge (HM↔ITT)
+:PROPERTIES:
+:ID: monadc.context.infer.depctx-bridge
+:CUSTOM_ID: depctx-bridge
+:CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: The dctx field in InferCtx bridges HM inference to the dependent type checker's global scope. Currently DISABLED for symbol lookup due to use-after-free segfaults. The dependent elaborator now pre-seeds ast->inferred_type, making this bridge unnecessary.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: infer.c:71-89,infer.c:1546-1604,infer.c:1890-1900
+:CONFIDENCE: medium
+:END:
+
+[OBS id:obs.infer.dctx-lookup-disabled src:infer.c:82-88 conf:high]
+  The TT Global Environment fallback in `infer_env_lookup` is disabled. The
+  comment documents: "The LLVM Codegen phase occasionally passes a stale/freed
+  dctx pointer, leading to severe Use-After-Free segfaults. The Dependent
+  Elaborator now pre-seeds ast->inferred_type on all nodes, giving HM inference
+  the exact mathematical types without needing global environment lookups."
+
+[OBS id:obs.infer.dctx-pre-seed-bridge src:infer.c:1546-1604 conf:high]
+  The alternative bridge is the dep pre-seed path in `infer_expr`: if the
+  dependent type checker (Phase 6.5 shadow pass) has already annotated
+  `ast->inferred_type` on an AST node, HM constrains its inferred type against
+  this annotation. Complex guards prevent bridging of arrow/fn types,
+  multi-element tuples, universe-level leakage, and HM arrow ↔ dep scalar
+  conflicts.
+
+[OBS id:obs.infer.dctx-toplevel-disable src:infer.c:1890-1892 conf:high]
+  After unification in `infer_toplevel`, the dctx bridge is explicitly disabled
+  (`ctx->dctx = NULL`) for post-unification phases to prevent UAF, then
+  re-enabled after zonking and validation complete.
+
+[THINK id:think.infer.dctx-why-bridge-necessary conf:high]
+  The bridge between HM inference and the dependent type checker is necessary
+  because the two systems share the same AST. Phase 6.5 (the ITT shadow pass)
+  runs before HM inference and can annotate any AST node with a ground type.
+  HM then uses this annotation as a hint during inference. The bidirectional
+  flow — ITT provides type hints to HM via `ast->inferred_type`, HM provides
+  fast inference for ground types — is the dual type system architecture in
+  action. The disabled dctx lookup path is a historical artifact from when HM
+  needed to see TT definitions; the pre-seed approach is cleaner because it
+  avoids cross-system dependency on TT memory management.
+
+[INF id:inf.infer.dctx-connect from:obs.infer.dctx-lookup-disabled,obs.infer.dctx-pre-seed-bridge,obs.infer.dctx-toplevel-disable conf:high]
+  connects-to -> `monadc.context.infer.expression-inference` (pre-seed bridge
+  in infer_expr) ·
+  `monadc.context.infer.top-level-pipeline` (dctx disable around post-unify
+  phases) ·
+  `monadc.context.language.primitive-dependent-types` (the ITT shadow pass
+  seeds ast->inferred_type) ·
+  `monadc.context.language.type-system-surface` (the dual type system entry
+  point) ·
+  `monadc.context.philosophy.purity-is-practical` (the shadow pass design is
+  this principle in action)
+
+* Collection-as-Function Coercion
+:PROPERTIES:
+:ID: monadc.context.infer.collection-as-function
+:CUSTOM_ID: collection-as-function
+:CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: Collections (TYPE_SET, TYPE_MAP, TYPE_ARR, TYPE_LIST, TYPE_COLL, TYPE_STRING) used as function heads skip arrow unification. In unification, Coll ~ (Int → elem) decomposes to Int ~ Int + elem ~ elem. Safety guards prevent cascading unification explosions from polymorphic operators.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: infer.c:416-470,infer.c:1470-1488
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.infer.coll-as-fn-in-unify src:infer.c:416-470 conf:high]
+  When unifying a collection type against TYPE_ARROW, the algorithm decomposes
+  the arrow's parameter to Int (the index type) and the arrow's return to the
+  element type. Safety guard: only applies when the arrow param resolves to a
+  simple index-like type (Int, Char, or unbound fresh var). Complex types
+  (arrow, collection, string, bool, float) that can never be index types skip
+  the coercion — this prevents `=` from binding `String ~ (Int → ?)` which
+  would cause cascading unification failures.
+
+[OBS id:obs.infer.coll-as-fn-in-expr src:infer.c:1470-1488 conf:high]
+  In `infer_expr`, when the function head symbol resolves to a collection type
+  in the env, the application skips arrow unification entirely. Arguments are
+  inferred for side-effects only. String indexing returns Char; other collection
+  indexing returns a fresh type. Codegen handles the actual indexing via
+  `rt_coll_index` or the collection-specific path.
+
+[THINK id:think.infer.coll-as-fn-semantics conf:high]
+  Collection-as-function is the type system expressing the set-theoretic model.
+  In the semantics, a set IS its characteristic function, an array IS a function
+  from Int to element, a map IS a function from key to value. The HM type system
+  cannot express dependent function types (Π), so it approximates collection
+  application as "the collection acts like an Int-indexed function on the left
+  arrow." The safety guards exist because this approximation interacts badly
+  with parametric polymorphism — `=` has type `∀a. a → a → Bool`, and without
+  guards, `(= my-set 1)` would try to unify `Set` with `(Int → Bool)`, failing
+  or producing strange cascade errors.
+
+[INF id:inf.infer.coll-as-fn-connect from:obs.infer.coll-as-fn-in-unify,obs.infer.coll-as-fn-in-expr conf:high]
+  connects-to -> `monadc.context.infer.unification` (the coercion lives in
+  unify_one_internal) ·
+  `monadc.context.infer.expression-inference` (the skip path lives in
+  infer_expr) ·
+  `monadc.context.language.primitive-set` (set-as-function is the canonical
+  example) ·
+  `monadc.context.language.primitive-array` (array-as-function uses the
+  same coercion) ·
+  `monadc.context.language.primitive-map` (map-as-function uses the same
+  coercion) ·
+  `monadc.context.language.primitive-function` (the coercion approximates
+  dependent function types) ·
+  `monadc.context.philosophy.sets-are-the-model` (collections ARE functions
+  in the semantic model) ·
+  `monadc.context.language.primitive-dependent-types` (the coercion is HM's
+  approximation of Π types for collections)
+
+* Implicit Coercion Lattice
+:PROPERTIES:
+:ID: monadc.context.infer.implicit-coercions
+:CUSTOM_ID: implicit-coercions
+:CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: The implicit coercion lattice in unification: Int↔Float, Int↔Char, IntArbitrary↔Int, F80↔Float, Ratio↔Int/Float. These are pragmatic relaxations of strict kind-matching that reduce annotation burden for numeric code. Each coercion is a deliberate design choice with known soundness implications.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: infer.c:475-505
+:CONFIDENCE: medium
+:END:
+
+[OBS id:obs.infer.coercion-int-float src:infer.c:487-490 conf:high]
+  Int ↔ Float: implicit numeric widening. Int and Float unify silently,
+  allowing `(+ 1 2.5)` without explicit cast.
+
+[OBS id:obs.infer.coercion-int-char src:infer.c:501-505 conf:high]
+  Int ↔ Char, IntArbitrary ↔ Char: characters are treated as small integers.
+  Allows `(+ 1 #\A)` without explicit cast.
+
+[OBS id:obs.infer.coercion-arbitrary-int src:infer.c:477-478 conf:high]
+  IntArbitrary ↔ Int: widens arbitrary-width ints to standard `Int`. Matches
+  when `(I32)` or `(U8)` appears alongside `Int`.
+
+[OBS id:obs.infer.coercion-f80-float src:infer.c:484-485 conf:high]
+  F80 (extended precision) ↔ Float: extended and double precision floats are
+  compatible for inference purposes.
+
+[OBS id:obs.infer.coercion-ratio-numeric src:infer.c:492-499 conf:high]
+  Ratio ↔ Int, Ratio ↔ Float, Ratio ↔ IntArbitrary: ratios are numeric types
+  compatible with all numeric ground types.
+
+[THINK id:think.infer.coercion-tradeoff conf:high]
+  The implicit coercion lattice is a deliberate trade-off between soundness and
+  usability. Strict kind-matching would require explicit `Int` casts everywhere
+  — a burden that Haskell's `fromIntegral` exists to work around. The lattice
+  makes the common case (numeric literals and operations) work without
+  annotations. The cost is that some type errors become less precise: `(+ "hi" 1)`
+  could produce a confusing error about string-vs-int rather than a crisp
+  "cannot add string and int" message. The post-zonk validation pass
+  (infer_validate_calls) compensates by checking concrete types at call sites.
+
+[INF id:inf.infer.coercion-connect from:obs.infer.coercion-int-float,obs.infer.coercion-int-char,obs.infer.coercion-arbitrary-int,obs.infer.coercion-f80-float,obs.infer.coercion-ratio-numeric conf:high]
+  connects-to -> `monadc.context.infer.unification` (coercions are encoded in
+  unify_one_internal) ·
+  `monadc.context.infer.top-level-pipeline` (validate_calls applies Int→Float
+  coercion at concrete call sites) ·
+  `monadc.context.language.primitive-ground-types` (the coercion lattice
+  connects all numeric ground types) ·
+  `monadc.context.language.primitive-fixed-width` (IntArbitrary is part of
+  the fixed-width type family) ·
+  `monadc.context.philosophy.zero-to-metal` (the continuous numeric type
+  hierarchy is the ladder from Int to I1)
+
+* Implicit Optional Promotion for if Branches
+:PROPERTIES:
+:ID: monadc.context.infer.optional-promotion
+:CUSTOM_ID: optional-promotion
+:CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: In if expressions, when one branch is Optional/Nil and the other is concrete, the concrete branch is automatically wrapped in Optional. This makes (if cond nil x) and (if cond some-val nil) infer as Optional(T) without requiring explicit type annotations.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: infer.c:1331-1344
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.infer.if-optional-promotion src:infer.c:1331-1344 conf:high]
+  In `infer_expr` for the `if` form: checks if then_branch is Optional/Nil and
+  else_branch is concrete (or vice versa). If so, wraps the concrete branch in
+  `type_optional(...)` before constraining then ~ else. This is applied AFTER
+  inference but BEFORE constraining, so the Optional wrapping is part of the
+  constraint that drives unification.
+
+[THINK id:think.infer.if-optional-why conf:high]
+  Why does Optional promotion live in infer_expr rather than in unification?
+  Because Nil binding in unification already produces Optional(fresh) via the
+  Nil guard. But the if-branch case is different: both branches are independently
+  inferred, then constrained against each other. If one is `Nil` and the other
+  is `String`, unification alone would get `Nil ~ String` which the Nil guard
+  only handles when one side is a free variable. The if-branch promotion wraps
+  the concrete branch proactively so the subsequent unification succeeds.
+
+[INF id:inf.infer.if-optional-connect from:obs.infer.if-optional-promotion conf:high]
+  connects-to -> `monadc.context.infer.expression-inference` (lives in
+  infer_expr's if handling) ·
+  `monadc.context.infer.nil-optional-guard` (both address the Nil-is-not-a-type
+  problem) ·
+  `monadc.context.language.primitive-ground-types` (TYPE_NIL and TYPE_OPTIONAL
+  interactions)
+
+* Inference Architecture Cross-References
+:PROPERTIES:
+:ID: monadc.context.infer.cross-references
+:CUSTOM_ID: cross-references
+:CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: Summary of all cross-references from the HM inference engine to other compiler subsystems and philosophical principles.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: infer.h,infer.c
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.infer.cross-refs from:obs.context.infer.file conf:high]
+  connects-to -> `monadc.context.language.type-system-surface` (the dual type
+  system surface — HM fast path + ITT full checker) ·
+  `monadc.context.language.primitive-function` (TYPE_ARROW is HM's function
+  type; TypeScheme enables polymorphic functions; monomorphization instantiates
+  concrete copies) ·
+  `monadc.context.language.primitive-array` (TYPE_ARR structural unification;
+  collection-as-function coercion; arr_size for sized arrays) ·
+  `monadc.context.language.primitive-set` (TYPE_SET unification; set-as-function
+  coercion; conj/disj scheme) ·
+  `monadc.context.language.primitive-map` (TYPE_MAP unification; map-as-function
+  coercion; assoc/dissoc scheme) ·
+  `monadc.context.language.primitive-dependent-types` (dctx bridge; pre-seed
+  annotation; shadow pass Phase 6.5; TERM_EMBED ground type bridge) ·
+  `monadc.context.language.primitive-ground-types` (all ground types participate
+  in the coercion lattice) ·
+  `monadc.context.language.primitive-fixed-width` (IntArbitrary participates
+  in the coercion lattice with Int and Float) ·
+  `monadc.context.language.codegen-dispatch` (TypeSubst drives monomorphization;
+  codegen consumes ast->inferred_type after zonking) ·
+  `monadc.context.language.codegen-gaps` (builtins-only functions without
+  strcmp handler are unreachable from paren-mode) ·
+  `monadc.context.philosophy.sets-are-the-model` (collection-as-function
+  coercion is the semantic model surfacing in the type system) ·
+  `monadc.context.philosophy.zero-to-metal` (the numeric coercion lattice is
+  the abstraction ladder for numbers) ·
+  `monadc.context.philosophy.purity-is-practical` (the shadow pass design —
+  HM fast path, ITT refinement path — is purity-is-practical in the compiler
+  architecture) ·
+  `monadc.context.philosophy.no-tradeoff-principle` (the dual type system avoids
+  the trade-off between fast inference and full dependent types) ·
+  `monadc.context.references.typechecking-dependent-types` (Coquand's bidir
+  algorithm informs the Phase 6.5 shadow pass design) ·
+  `monadc.context.references.propositions-as-types` (the set-theoretic model
+  that grounds collection-as-function coercion) ·
+  `monadc.context.references.layered-modal` (the HM/ITT dual is a layered
+  modal architecture)

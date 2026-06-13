@@ -1,0 +1,409 @@
+#+TITLE: Module System — module.h + module_export.h
+#+AUTHOR: Codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:module:export:
+#+PROPERTY: CONTEXT_VERSION 2
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.module.file-metadata
+:CUSTOM_ID: module-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: module.h,module_export.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.module.file src:module.h,module_export.h conf:high]
+  This file records the full API surface of the module system: declaration types,
+  import/export modes, symbol resolution, the registry, and the export manifest
+  format (mexp) for cross-module compilation.
+
+* Export Mode & Export List
+:PROPERTIES:
+:ID: monadc.context.module.export-mode
+:CUSTOM_ID: module-export-mode
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: ExportMode enum (EXPORT_ALL, EXPORT_NONE, EXPORT_SELECTED) and the ExportList container that holds symbol names when EXPORT_SELECTED is used.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: module.h:25-35
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.module.export-mode-enum src:module.h:25-29 conf:high]
+  ExportMode controls what a module exposes to importers: EXPORT_ALL (everything
+  public), EXPORT_NONE (sealed module), EXPORT_SELECTED (explicit allow-list).
+
+[OBS id:obs.module.export-list-struct src:module.h:31-35 conf:high]
+  ExportList holds a dynamic array of symbol strings with count and capacity.
+  Only populated when ExportMode is EXPORT_SELECTED.
+
+* ModuleDecl
+:PROPERTIES:
+:ID: monadc.context.module.module-decl
+:CUSTOM_ID: module-decl
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: ModuleDecl — the declaration of a module's name, export mode, and export list.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: module.h:37-41
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.module.module-decl-struct src:module.h:37-41 conf:high]
+  ModuleDecl bundles the module name (must be capitalized per rule #1),
+  an ExportMode, and an optional ExportList for selected exports.
+
+[OBS id:obs.module.module-decl-create src:module.h:80 conf:high]
+  module_decl_create allocates and initialises a ModuleDecl with a name and mode.
+
+[OBS id:obs.module.module-decl-free src:module.h:81 conf:high]
+  module_decl_free frees the name and export symbol strings, then frees the struct.
+
+[OBS id:obs.module.module-decl-add-export src:module.h:82 conf:high]
+  module_decl_add_export appends a symbol to the ExportList, growing capacity as needed.
+
+[OBS id:obs.module.module-decl-is-exported src:module.h:83 conf:high]
+  module_decl_is_exported checks whether a symbol is visible: EXPORT_ALL returns true,
+  EXPORT_NONE returns false, EXPORT_SELECTED does an O(n) strcmp scan.
+
+[OBS id:obs.module.module-name-is-valid src:module.h:84 conf:high]
+  module_name_is_valid validates that the name starts with an uppercase ASCII letter
+  and contains only alphanumeric characters or dots (for qualified names like "Std.Math").
+
+* Import Mode & ImportDecl
+:PROPERTIES:
+:ID: monadc.context.module.import-decl
+:CUSTOM_ID: module-import-decl
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: ImportMode enum (IMPORT_QUALIFIED, IMPORT_UNQUALIFIED, IMPORT_SELECTIVE, IMPORT_HIDING) and ImportDecl struct.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: module.h:43-56
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.module.import-mode-enum src:module.h:43-48 conf:high]
+  ImportMode: IMPORT_QUALIFIED forces prefix use (Math:sqrt),
+  IMPORT_UNQUALIFIED allows bare or prefixed use, IMPORT_SELECTIVE imports
+  only an explicit symbol list, IMPORT_HIDING imports everything except a list.
+
+[OBS id:obs.module.import-decl-struct src:module.h:50-56 conf:high]
+  ImportDecl stores the full module name, an optional alias, the import mode,
+  and a symbol list used by IMPORT_SELECTIVE and IMPORT_HIDING.
+
+[OBS id:obs.module.import-decl-create src:module.h:87 conf:high]
+  import_decl_create allocates an ImportDecl given module name, alias (may be NULL),
+  and ImportMode.
+
+[OBS id:obs.module.import-decl-free src:module.h:88 conf:high]
+  import_decl_free frees the strings and symbol list, then the struct.
+
+[OBS id:obs.module.import-decl-add-symbol src:module.h:89 conf:high]
+  import_decl_add_symbol appends a symbol to the import's symbol list.
+
+[OBS id:obs.module.import-decl-includes-symbol src:module.h:90 conf:high]
+  import_decl_includes_symbol returns true if the symbol is accessible under this
+  import: for IMPORT_SELECTIVE the symbol must be in the list; for IMPORT_HIDING
+  it must NOT be in the list; for QUALIFIED/UNQUALIFIED any symbol is accessible.
+
+* ModuleContext
+:PROPERTIES:
+:ID: monadc.context.module.module-context
+:CUSTOM_ID: module-context
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: ModuleContext — per-compilation-unit state tracking the active module declaration, import list, and current source file.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: module.h:59-65
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.module.module-context-struct src:module.h:59-65 conf:high]
+  ModuleContext holds a pointer to the current ModuleDecl, a dynamic array of
+  ImportDecl pointers, and the current file path.
+
+[OBS id:obs.module.module-context-create src:module.h:75 conf:high]
+  module_context_create allocates an empty ModuleContext.
+
+[OBS id:obs.module.module-context-free src:module.h:76 conf:high]
+  module_context_free frees all imports and the context struct.
+
+[OBS id:obs.module.module-context-set-file src:module.h:77 conf:high]
+  module_context_set_file records the source file path being compiled (strdup'd).
+
+[OBS id:obs.module.module-context-set-decl src:module.h:93 conf:high]
+  module_context_set_decl attaches a ModuleDecl to the context.
+
+[OBS id:obs.module.module-context-add-import src:module.h:94 conf:high]
+  module_context_add_import appends an ImportDecl to the context's import array.
+
+[OBS id:obs.module.module-context-find-import src:module.h:95 conf:high]
+  module_context_find_import returns the ImportDecl whose alias matches the given
+  prefix, or NULL if not found.
+
+* Symbol Resolution
+:PROPERTIES:
+:ID: monadc.context.module.symbol-resolution
+:CUSTOM_ID: module-symbol-resolution
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Symbol resolution — resolving bare symbols to fully qualified names through the module context's imports.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: module.h:98-100
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.module.module-resolve-symbol src:module.h:100 conf:high]
+  module_resolve_symbol searches the module's own exports and all imports to
+  find which qualified name a bare symbol refers to. Returns a malloc'd string
+  like "Math:sqrt" or NULL if the symbol is not accessible.
+
+[DEC id:dec.module.symbol-resolution-ambiguity date:2026-06-13 by:codex]
+  When the same bare symbol is exported by two different imports, resolution is
+  ambiguous. The current implementation returns the first match in import order;
+  future work should emit a diagnostic.
+
+* ModuleRegistry
+:PROPERTIES:
+:ID: monadc.context.module.module-registry
+:CUSTOM_ID: module-registry
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: ModuleRegistry — a flat registry of all compiled modules, keyed by name.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: module.h:68-72,103-106
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.module.module-registry-struct src:module.h:68-72 conf:high]
+  ModuleRegistry holds a dynamic array of ModuleDecl pointers.
+
+[OBS id:obs.module.module-registry-create src:module.h:103 conf:high]
+  module_registry_create allocates an empty registry.
+
+[OBS id:obs.module.module-registry-free src:module.h:104 conf:high]
+  module_registry_free frees all stored ModuleDecl pointers then the registry.
+
+[OBS id:obs.module.module-registry-add src:module.h:105 conf:high]
+  module_registry_add inserts a ModuleDecl into the registry (takes ownership).
+
+[OBS id:obs.module.module-registry-find src:module.h:106 conf:high]
+  module_registry_find does an O(n) strcmp scan for a module by name. Returns
+  the ModuleDecl or NULL.
+
+* Module File Path Resolution
+:PROPERTIES:
+:ID: monadc.context.module.path-resolution
+:CUSTOM_ID: module-path-resolution
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: module.h:109-110
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.module.module-name-to-path src:module.h:110 conf:high]
+  module_name_to_path converts "Std.Math" to "Std/Math.monad" by replacing dots
+  with path separators and appending the .monad extension.
+
+* Parse Module/Import from AST
+:PROPERTIES:
+:ID: monadc.context.module.parse-ast
+:CUSTOM_ID: module-parse-ast
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: AST-based module and import declaration parsers that extract module/import info from already-parsed S-expressions.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: module.h:113-114
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.module.parse-module-decl src:module.h:113 conf:high]
+  parse_module_decl walks an AST list node and builds a ModuleDecl from
+  (module Name [exports ...]) syntax.
+
+[OBS id:obs.module.parse-import-decl src:module.h:114 conf:high]
+  parse_import_decl walks an AST list node and builds an ImportDecl from
+  (import qualified/hiding ...) syntax.
+
+* Export Manifest (module_export.h)
+:PROPERTIES:
+:ID: monadc.context.module.export-manifest
+:CUSTOM_ID: module-export-manifest
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Export manifest (.mexp) format — a plain-text record of every exported symbol with type info, used by importers to emit extern declarations without re-parsing the original source.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: module_export.h:38-86
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.module.export-entry-kind-enum src:module_export.h:38-41 conf:high]
+  ExportEntryKind distinguishes VAR entries (top-level values) from FUNC entries
+  (top-level functions) in the export manifest.
+
+[OBS id:obs.module.export-param-desc-struct src:module_export.h:43-46 conf:high]
+  ExportParamDesc records a function parameter's name and TypeKind integer for
+  the manifest.
+
+[OBS id:obs.module.export-entry-struct src:module_export.h:48-59 conf:high]
+  ExportEntry stores one exported symbol: kind, mangled name, local name, type
+  kind, plus optional array extras (arr_size, arr_elem_kind) and function extras
+  (params array, param_count).
+
+[OBS id:obs.module.export-manifest-struct src:module_export.h:61-66 conf:high]
+  ExportManifest holds the module name and a dynamic array of ExportEntry records.
+
+[OBS id:obs.module.manifest-create src:module_export.h:68 conf:high]
+  manifest_create allocates an ExportManifest for the given module name.
+
+[OBS id:obs.module.manifest-free src:module_export.h:69 conf:high]
+  manifest_free frees all entries and the manifest struct.
+
+[OBS id:obs.module.manifest-add-var src:module_export.h:70-72 conf:high]
+  manifest_add_var appends a VAR entry with local name, mangled name, type kind,
+  and optional array size/element-kind.
+
+[OBS id:obs.module.manifest-add-func src:module_export.h:73-75 conf:high]
+  manifest_add_func appends a FUNC entry with return kind and parameter descriptions.
+
+[OBS id:obs.module.manifest-write src:module_export.h:78 conf:high]
+  manifest_write serialises the manifest to "<module_name>.mexp" in plain text,
+  one entry per line.
+
+[OBS id:obs.module.manifest-read src:module_export.h:81 conf:high]
+  manifest_read parses a .mexp file back into an ExportManifest struct.
+
+[OBS id:obs.module.manifest-mangle src:module_export.h:84 conf:high]
+  manifest_mangle concatenates module_name and local_name with "__" separator.
+  E.g. "Math" + "phi" → "Math__phi". This mangled name is used for linker symbols.
+
+[OBS id:obs.module.type-kind-constants src:module_export.h:10-22 conf:high]
+  The MEXP_TYPE_* constants mirror the TypeKind enum from types.h. They are
+  duplicated here so module_export.h has zero dependency on the rest of the
+  compiler. The manifest stores types as plain integers.
+
+[INF id:inf.module.mexp-format from:obs.module.export-manifest-struct,obs.module.manifest-write,obs.module.manifest-read conf:high]
+  The mexp format bridges compilation units: module A writes Foo.mexp, module B
+  reads it to emit correct extern declarations for imported symbols. This avoids
+  re-parsing the original source and allows incremental compilation.
+
+* Connections
+:PROPERTIES:
+:ID: monadc.context.module.connections
+:CUSTOM_ID: module-connections
+:CONTEXT_KIND: link
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/module.org
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.module.connects-to-language from:obs.module.parse-module-decl,obs.module.parse-import-decl conf:high]
+  connects-to -> `monadc.context.language.syntax-corpus` (module/import syntax is
+  exercised by the parser conformance corpus) ·
+  `monadc.context.language.codegen-dispatch` (codegen uses module context for name
+  resolution and mangling) ·
+  `monadc.context.codegen-ops.main` (the main compilation pipeline drives module
+  parsing and manifest I/O)
+
+[INF id:inf.module.connects-to-codegen-ops from:obs.module.module-resolve-symbol,obs.module.manifest-mangle conf:high]
+  connects-to -> `monadc.context.codegen-ops.symbol-resolution` (module_resolve_symbol
+  feeds into codegen name lookup) ·
+  `monadc.context.codegen-ops.object-file-emission` (mangled names become linker
+  symbols in the emitted .o; manifests are sidecar outputs)

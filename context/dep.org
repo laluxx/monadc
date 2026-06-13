@@ -1,0 +1,1362 @@
+#+TITLE: Dependent Type Checker — dep.h Reference
+#+AUTHOR: codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:dep:types:nbe:checker:
+#+PROPERTY: CONTEXT_VERSION 2
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.dep.file-metadata
+:CUSTOM_ID: dep-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/dep.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.dep.file src:context/dep.org,dep.h conf:high]
+  This file records the complete reference for the dependent type checker kernel
+  in dep.h — the Intensional Type Theory (ITT) implementation with Π-types,
+  Σ-types, universe hierarchy, NbE, bidirectional checking, metavariable
+  elaboration, and the interop bridge to the ground-type system.
+
+[THINK id:think.context.dep.architectural-role conf:high]
+  The dependent type checker runs as Phase 6.5 — a shadow pass between feature
+  setup and LLVM codegen. It does not emit code. It validates dependent
+  annotations, elaborates surface syntax to core terms, and back-propagates
+  ground types to the AST for the HM inferencer and LLVM codegen to consume.
+  This design ensures the fast HM path is the default and the full ITT path is
+  opt-in per expression.
+
+* Universe Levels
+:PROPERTIES:
+:ID: monadc.context.dep.universe-levels
+:CUSTOM_ID: dep-universe-levels
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Level expressions track universe polymorphism. Concrete levels 0,1,2… correspond to Type₀, Type₁, Type₂… with a hard ceiling of DEP_LEVEL_MAX=64.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:39-85
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.level-kind-enum src:dep.h:61-66 conf:high]
+  LevelKind enum: LEVEL_CONST (concrete integer), LEVEL_VAR (universe-polymorphic
+  variable), LEVEL_MAX (join of two levels), LEVEL_SUCC (successor offset).
+  The predicative rule: Γ ⊢ Type u : Type (u+1); Π-formation uses max(u,v).
+
+[OBS id:obs.dep.level-struct src:dep.h:68-74 conf:high]
+  Level struct: kind discriminator; value (int for CONST/SUCC offset); var_id
+  (unique ID for VAR); left and right pointers for composite expressions.
+  Levels form a DAG of shared sub-expressions.
+
+[OBS id:obs.dep.level-const src:dep.h:76 conf:high]
+  level_const(int n) — construct a concrete universe level 0, 1, 2, …
+
+[OBS id:obs.dep.level-var src:dep.h:77 conf:high]
+  level_var(int id) — construct a level variable for universe-polymorphic definitions.
+
+[OBS id:obs.dep.level-max src:dep.h:78 conf:high]
+  level_max(Level *u, Level *v) — construct max(u, v), the join of two level expressions.
+
+[OBS id:obs.dep.level-succ src:dep.h:79 conf:high]
+  level_succ(Level *u) — construct u + 1, a successor offset on a level expression.
+
+[OBS id:obs.dep.level-clone src:dep.h:80 conf:high]
+  level_clone(Level *u) — deep copy of a level expression DAG.
+
+[OBS id:obs.dep.level-free src:dep.h:81 conf:high]
+  level_free(Level *u) — free a level expression tree.
+
+[OBS id:obs.dep.level-eval src:dep.h:82 conf:high]
+  level_eval(Level *u) — reduce a level expression to a concrete integer, or -1 if
+  it contains unresolved variables. Performs constant folding for MAX/SUCC.
+
+[OBS id:obs.dep.level-leq src:dep.h:83 conf:high]
+  level_leq(Level *u, Level *v) — check u ≤ v after evaluation. Used for universe
+  cumulativity checks (Type u ⊆ Type v when u ≤ v).
+
+[OBS id:obs.dep.levels-equal src:dep.h:84 conf:high]
+  levels_equal(Level *u, Level *v) — syntactic equality of level expressions.
+
+[OBS id:obs.dep.level-to-string src:dep.h:85 conf:high]
+  level_to_string(Level *u) — render a level expression as a human-readable string
+  (for error messages and debugging).
+
+* TermKind Enum
+:PROPERTIES:
+:ID: monadc.context.dep.termkind-enum
+:CUSTOM_ID: dep-termkind-enum
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: TermKind enum with 27 variants covering variables, universes, Π/Σ types, equality, inductive types, control flow, metavariables, interop, and annotations.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:112-157
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.termkind-var-types src:dep.h:113-115 conf:high]
+  TERM_BVAR — bound variable via De Bruijn index (locally nameless representation).
+  TERM_FVAR — free variable / global name (human-readable identifiers).
+
+[OBS id:obs.dep.termkind-universe src:dep.h:117-119 conf:high]
+  TERM_TYPE — Type u, the universe at level u (universe types are terms).
+  TERM_KIND — Kind, the sort of Type (used internally, not exposed in surface syntax).
+
+[OBS id:obs.dep.termkind-function src:dep.h:121-124 conf:high]
+  TERM_PI — Π(x:A). B, dependent function type.
+  TERM_LAM — λ(x:A). t, lambda abstraction.
+  TERM_APP — f a₁ a₂ …, multi-argument application in flat spine form.
+
+[OBS id:obs.dep.termkind-sigma src:dep.h:126-130 conf:high]
+  TERM_SIGMA — Σ(x:A). B, dependent pair type.
+  TERM_PAIR — ⟨t, s⟩, pair introduction.
+  TERM_FST — fst p, first projection.
+  TERM_SND — snd p, second projection.
+
+[OBS id:obs.dep.termkind-equality src:dep.h:132-135 conf:high]
+  TERM_EQ — t ≡ s : A, propositional equality type (identity type).
+  TERM_REFL — refl : t ≡ t, reflexivity introduction.
+  TERM_SUBST — subst (h : a ≡ b) P pa, transport along equality (J eliminator).
+
+[OBS id:obs.dep.termkind-nat src:dep.h:137-142 conf:high]
+  TERM_NAT — Nat type (primitive builtin, avoids bootstrapping W-types for naturals).
+  TERM_ZERO — zero : Nat.
+  TERM_SUCC_T — succ n : Nat (successor).
+  TERM_NUM_LIT — n : Nat (fast path for numeric literals).
+  TERM_NAT_ELIM — Nat-elim P pz ps n, primitive recursion on Nat.
+
+[OBS id:obs.dep.termkind-control src:dep.h:144-146 conf:high]
+  TERM_LET — let x : A = t in body, let-binding.
+  TERM_IF — if cond then t else e, conditional.
+
+[OBS id:obs.dep.termkind-metas src:dep.h:148-150 conf:high]
+  TERM_META — ?₁, ?₂, …, holes to be solved by elaboration/unification.
+  TERM_HOLE — _, anonymous hole that the elaborator must fill immediately.
+
+[OBS id:obs.dep.termkind-embed src:dep.h:152-153 conf:high]
+  TERM_EMBED — wraps a Type* from types.h as an atomic term/type. This is the
+  interop bridge that allows the existing ground-type system to coexist with
+  the dependent type checker.
+
+[OBS id:obs.dep.termkind-ann src:dep.h:155-156 conf:high]
+  TERM_ANN — (t : A), type ascription / annotation.
+
+* Implicitness Enum
+:PROPERTIES:
+:ID: monadc.context.dep.implicitness-enum
+:CUSTOM_ID: dep-implicitness-enum
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Implicitness tag for Π-binders controlling automatic argument filling during elaboration.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:162-166
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.implicit-explicit src:dep.h:163 conf:high]
+  IMPLICIT_EXPLICIT (0) — (x : A), the programmer must supply the argument.
+
+[OBS id:obs.dep.implicit-implicit src:dep.h:164 conf:high]
+  IMPLICIT_IMPLICIT (1) — {x : A}, the elaborator fills the argument via unification.
+
+[OBS id:obs.dep.implicit-instance src:dep.h:165 conf:high]
+  IMPLICIT_INSTANCE (2) — ⦃x : A⦄, resolved by instance search (typeclass-style).
+
+* Term Struct
+:PROPERTIES:
+:ID: monadc.context.dep.term-struct
+:CUSTOM_ID: dep-term-struct
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The unified Term representation for both programs and types — the defining property of dependent type theory. Uses a tagged union with 21 variant-specific field groups.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:168-240
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.term-struct-overview src:dep.h:168-240 conf:high]
+  Term struct uses a common discriminator (kind: TermKind) with disjoint field
+  groups for each variant. All pointer fields are owned (free on term_free).
+  Source location (line, col) and source_ast pointer support error reporting
+  and back-propagation of ground types to the HM inferencer.
+
+[OBS id:obs.dep.term-struct-bvar src:dep.h:172 conf:high]
+  bvar_index: int — De Bruijn index for TERM_BVAR (0 = innermost binder).
+
+[OBS id:obs.dep.term-struct-fvar src:dep.h:175 conf:high]
+  fvar_name: char* — global/free variable name for TERM_FVAR.
+
+[OBS id:obs.dep.term-struct-type src:dep.h:178 conf:high]
+  type_level: Level* — universe level for TERM_TYPE.
+
+[OBS id:obs.dep.term-struct-binder src:dep.h:181-186 conf:high]
+  Fields for TERM_PI / TERM_LAM / TERM_SIGMA / TERM_LET: binder_name (source
+  name), binder_dom (domain type A), binder_body (body B), let_type/let_val
+  (LET-specific), implicit (PI-specific).
+
+[OBS id:obs.dep.term-struct-app src:dep.h:189-191 conf:high]
+  Fields for TERM_APP: app_fn (function term), app_args (argument spine array),
+  app_argc (argument count). Flat spine form avoids left-nested chains.
+
+[OBS id:obs.dep.term-struct-pair src:dep.h:194-196 conf:high]
+  Fields for TERM_PAIR / TERM_FST / TERM_SND: pair_fst, pair_snd, pair_type
+  (type annotation for PAIR).
+
+[OBS id:obs.dep.term-struct-eq src:dep.h:199-201 conf:high]
+  Fields for TERM_EQ: eq_lhs, eq_rhs, eq_type (the type A in t ≡ s : A).
+
+[OBS id:obs.dep.term-struct-refl src:dep.h:204 conf:high]
+  Field for TERM_REFL: refl_val (the term t in refl {A} t).
+
+[OBS id:obs.dep.term-struct-subst src:dep.h:207-209 conf:high]
+  Fields for TERM_SUBST: subst_proof (h : a ≡ b), subst_motive (P : A → Type),
+  subst_base (pa : P a).
+
+[OBS id:obs.dep.term-struct-succ-lit src:dep.h:212-213 conf:high]
+  Fields for TERM_SUCC_T / TERM_NUM_LIT: succ_pred (predecessor term),
+  num_lit (unsigned long long, primitive integer value).
+
+[OBS id:obs.dep.term-struct-if src:dep.h:216-218 conf:high]
+  Fields for TERM_IF: if_cond, if_then, if_else.
+
+[OBS id:obs.dep.term-struct-natelim src:dep.h:221-224 conf:high]
+  Fields for TERM_NAT_ELIM: nelim_motive (P : Nat → Type), nelim_zero (pz : P 0),
+  nelim_succ (ps : Π(n:Nat). P n → P (succ n)), nelim_arg (n : Nat).
+
+[OBS id:obs.dep.term-struct-meta src:dep.h:227 conf:high]
+  Field for TERM_META: meta_id (int, index into MetaCtx).
+
+[OBS id:obs.dep.term-struct-embed src:dep.h:230 conf:high]
+  Field for TERM_EMBED: embed_type (Type* from types.h, the ground-type interop bridge).
+
+[OBS id:obs.dep.term-struct-ann src:dep.h:233-234 conf:high]
+  Fields for TERM_ANN: ann_term (annotated term), ann_type (type annotation).
+
+[OBS id:obs.dep.term-struct-location src:dep.h:237-239 conf:high]
+  Source location (line, col) and source_ast (AST pointer for back-propagating
+  inferred types to the HM pipeline).
+
+* Term Constructors
+:PROPERTIES:
+:ID: monadc.context.dep.term-constructors
+:CUSTOM_ID: dep-term-constructors
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: 26 Term constructor functions — one per variant, each allocating and initialising a Term with the given fields.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:245-271
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.term-bvar src:dep.h:245 conf:high]
+  term_bvar(int index) — construct a bound variable reference (TERM_BVAR).
+
+[OBS id:obs.dep.term-fvar src:dep.h:246 conf:high]
+  term_fvar(const char *name) — construct a free variable reference by name (TERM_FVAR).
+
+[OBS id:obs.dep.term-type src:dep.h:247 conf:high]
+  term_type(Level *level) — construct Type u (TERM_TYPE), the universe at the given level.
+
+[OBS id:obs.dep.term-type-n src:dep.h:248 conf:high]
+  term_type_n(int n) — convenience constructor for Type n (allocates a LEVEL_CONST internally).
+
+[OBS id:obs.dep.term-kind src:dep.h:249 conf:high]
+  term_kind(void) — construct Kind (TERM_KIND), the sort of Type.
+
+[OBS id:obs.dep.term-pi src:dep.h:250 conf:high]
+  term_pi(const char *name, Term *dom, Term *body, Implicitness impl) — construct
+  Π(x:A). B (TERM_PI). Takes ownership of dom and body.
+
+[OBS id:obs.dep.term-lam src:dep.h:251 conf:high]
+  term_lam(const char *name, Term *dom, Term *body) — construct λ(x:A). t (TERM_LAM).
+
+[OBS id:obs.dep.term-app src:dep.h:252 conf:high]
+  term_app(Term *fn, Term **args, int argc) — construct application (TERM_APP)
+  with a flat argument spine. Takes ownership of fn, args array, and all args.
+
+[OBS id:obs.dep.term-app1 src:dep.h:253 conf:high]
+  term_app1(Term *fn, Term *arg) — convenience for single-argument application.
+
+[OBS id:obs.dep.term-sigma src:dep.h:254 conf:high]
+  term_sigma(const char *name, Term *dom, Term *body) — construct Σ(x:A). B (TERM_SIGMA).
+
+[OBS id:obs.dep.term-pair src:dep.h:255 conf:high]
+  term_pair(Term *fst, Term *snd, Term *type) — construct ⟨t, s⟩ (TERM_PAIR)
+  with optional type annotation (may be NULL).
+
+[OBS id:obs.dep.term-fst src:dep.h:256 conf:high]
+  term_fst(Term *pair) — construct fst p (TERM_FST), first projection.
+
+[OBS id:obs.dep.term-snd src:dep.h:257 conf:high]
+  term_snd(Term *pair) — construct snd p (TERM_SND), second projection.
+
+[OBS id:obs.dep.term-eq src:dep.h:258 conf:high]
+  term_eq(Term *lhs, Term *rhs, Term *type) — construct t ≡ s : A (TERM_EQ),
+  propositional equality type.
+
+[OBS id:obs.dep.term-refl src:dep.h:259 conf:high]
+  term_refl(Term *val) — construct refl t (TERM_REFL), reflexivity.
+
+[OBS id:obs.dep.term-subst src:dep.h:260 conf:high]
+  term_subst(Term *proof, Term *motive, Term *base) — construct subst h P pa
+  (TERM_SUBST), transport along equality.
+
+[OBS id:obs.dep.term-nat src:dep.h:261 conf:high]
+  term_nat(void) — construct the Nat type (TERM_NAT).
+
+[OBS id:obs.dep.term-zero src:dep.h:262 conf:high]
+  term_zero(void) — construct zero : Nat (TERM_ZERO).
+
+[OBS id:obs.dep.term-succ src:dep.h:263 conf:high]
+  term_succ(Term *pred) — construct succ n : Nat (TERM_SUCC_T).
+
+[OBS id:obs.dep.term-num-lit src:dep.h:264 conf:high]
+  term_num_lit(unsigned long long n) — construct a numeric literal (TERM_NUM_LIT).
+
+[OBS id:obs.dep.term-nat-elim src:dep.h:265 conf:high]
+  term_nat_elim(Term *motive, Term *pz, Term *ps, Term *n) — construct
+  Nat-elim P pz ps n, the primitive recursor for Nat.
+
+[OBS id:obs.dep.term-if src:dep.h:266 conf:high]
+  term_if(Term *cond, Term *t, Term *e) — construct if cond then t else e (TERM_IF).
+
+[OBS id:obs.dep.term-let src:dep.h:267 conf:high]
+  term_let(const char *name, Term *type, Term *val, Term *body) — construct
+  let x : A = t in body (TERM_LET).
+
+[OBS id:obs.dep.term-meta src:dep.h:268 conf:high]
+  term_meta(int id) — construct a metavariable ?id (TERM_META), a hole awaiting
+  solution by elaboration.
+
+[OBS id:obs.dep.term-hole src:dep.h:269 conf:high]
+  term_hole(void) — construct an anonymous hole _ (TERM_HOLE), which the elaborator
+  must fill immediately with a fresh metavariable.
+
+[OBS id:obs.dep.term-embed src:dep.h:270 conf:high]
+  term_embed(Type *ground_type) — wrap a types.h Type* as a TERM_EMBED, bridging
+  the ground-type system into the dependent type checker.
+
+[OBS id:obs.dep.term-ann src:dep.h:271 conf:high]
+  term_ann(Term *t, Term *ty) — construct (t : A) (TERM_ANN), a type ascription.
+
+* Term Operations
+:PROPERTIES:
+:ID: monadc.context.dep.term-operations
+:CUSTOM_ID: dep-term-operations
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Operations on Term trees: cloning, freeing, string rendering, and syntactic (α-)equality.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: active
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:276-279
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.term-clone src:dep.h:276 conf:high]
+  term_clone(Term *t) — deep copy of a Term tree. All sub-terms are recursively
+  cloned. The caller owns the returned term.
+
+[OBS id:obs.dep.term-free src:dep.h:277 conf:high]
+  term_free(Term *t) — deep free of a Term tree. Frees all owned string and
+  sub-term pointers.
+
+[OBS id:obs.dep.term-to-string src:dep.h:278 conf:high]
+  term_to_string(Term *t) — render a Term as a human-readable string.
+  Returns a malloc'd string (caller frees).
+
+[OBS id:obs.dep.terms-syntactically-equal src:dep.h:279 conf:high]
+  terms_syntactically_equal(Term *a, Term *b) — check α-equivalence without
+  reduction. De Bruijn indices handle bound variable renaming for free.
+
+* Substitution
+:PROPERTIES:
+:ID: monadc.context.dep.substitution
+:CUSTOM_ID: dep-substitution
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Structural substitution operations on Term trees — β-reduction step, shifting under binders, and δ-unfolding of global definitions.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: active
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:282-301
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.subst-bvar src:dep.h:299 conf:high]
+  dep_subst_bvar(Term *body, Term *s) — replace De Bruijn index 0 in body
+  with s, shifting free indices in s and decrementing indices > 0 in body.
+  This is the standard β-reduction step: (λx.body)[x↦s] ≡ dep_subst_bvar(body,s).
+
+[OBS id:obs.dep.shift src:dep.h:300 conf:high]
+  dep_shift(Term *t, int delta, int cutoff) — adjust all free De Bruijn indices
+  in t by delta, skipping indices < cutoff (which refer to binders inside t).
+  Required when moving a term under a new binder.
+
+[OBS id:obs.dep.subst-fvar src:dep.h:301 conf:high]
+  dep_subst_fvar(Term *t, const char *name, Term *replacement) — replace all
+  occurrences of the free variable `name` with replacement. Used for δ-reduction
+  (unfolding global definitions).
+
+* ValKind Enum
+:PROPERTIES:
+:ID: monadc.context.dep.valkind-enum
+:CUSTOM_ID: dep-valkind-enum
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: ValKind enum with 16 variants — the semantic value domain used by NbE. Each variant corresponds to a TermKind but with closures instead of substitutable bodies.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:326-342
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.valkind-universe src:dep.h:327 conf:high]
+  VAL_UNIVERSE — Type u in the value domain. Carries a Level*.
+
+[OBS id:obs.dep.valkind-pi src:dep.h:328 conf:high]
+  VAL_PI — Π(x:A).B in the value domain. Domain is a Value*, codomain is a Closure.
+
+[OBS id:obs.dep.valkind-sigma src:dep.h:329 conf:high]
+  VAL_SIGMA — Σ(x:A).B in the value domain. Domain is a Value*, second component is a Closure.
+
+[OBS id:obs.dep.valkind-lam src:dep.h:330 conf:high]
+  VAL_LAM — λ(x:A).t in the value domain. Domain is a Value*, body is a Closure
+  waiting for an argument.
+
+[OBS id:obs.dep.valkind-pair src:dep.h:331 conf:high]
+  VAL_PAIR — ⟨v₁, v₂⟩, a pair of evaluated values.
+
+[OBS id:obs.dep.valkind-nat src:dep.h:332 conf:high]
+  VAL_NAT — Nat type as a value.
+
+[OBS id:obs.dep.valkind-zero src:dep.h:333 conf:high]
+  VAL_ZERO — zero : Nat as a value.
+
+[OBS id:obs.dep.valkind-succ src:dep.h:334 conf:high]
+  VAL_SUCC — succ v in the value domain.
+
+[OBS id:obs.dep.valkind-num-lit src:dep.h:335 conf:high]
+  VAL_NUM_LIT — primitive integer value (fast path for numeric computations).
+
+[OBS id:obs.dep.valkind-eq src:dep.h:336 conf:high]
+  VAL_EQ — a ≡ b : A as a value (all sides evaluated).
+
+[OBS id:obs.dep.valkind-refl src:dep.h:337 conf:high]
+  VAL_REFL — refl v as a value.
+
+[OBS id:obs.dep.valkind-if src:dep.h:338 conf:high]
+  VAL_IF — stuck if expression (condition not yet reducible).
+
+[OBS id:obs.dep.valkind-neutral src:dep.h:339 conf:high]
+  VAL_NEUTRAL — stuck term: a free variable or global applied to an argument spine.
+  Preserved so values can be quoted back to terms for conversion checking and
+  error messages.
+
+[OBS id:obs.dep.valkind-embed src:dep.h:340 conf:high]
+  VAL_EMBED — ground Type* from types.h wrapped as a semantic value.
+
+[OBS id:obs.dep.valkind-meta src:dep.h:341 conf:high]
+  VAL_META — unsolved metavariable ?n applied to a spine. Replaced by its
+  solution when the meta is solved.
+
+* Spine Struct
+:PROPERTIES:
+:ID: monadc.context.dep.spine-struct
+:CUSTOM_ID: dep-spine-struct
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: A Spine is a (possibly empty) list of Value arguments applied to a neutral or meta. Spine form eliminates left-nested applications.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:346-350
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.spine-struct-overview src:dep.h:346-350 conf:high]
+  Spine struct: args (Value** array), count (length), cap (capacity). A neutral
+  with spine neutral(f)[a₁, a₂, …] represents f applied to a₁, then a₂, etc.
+  Spine allocation is dynamic with amortised O(1) push.
+
+* Value Struct
+:PROPERTIES:
+:ID: monadc.context.dep.value-struct
+:CUSTOM_ID: dep-value-struct
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The semantic Value domain struct with a tagged union covering all 16 ValKind variants. Values are the canonical forms used by NbE for definitional equality.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:352-393
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.value-struct-universe src:dep.h:356 conf:high]
+  Value level field for VAL_UNIVERSE: Level*.
+
+[OBS id:obs.dep.value-struct-binder src:dep.h:359-362 conf:high]
+  Value fields for VAL_PI / VAL_SIGMA / VAL_LAM: binder_name (char*), domain
+  (Value*), closure (Closure body), implicit (Implicitness, VAL_PI only).
+
+[OBS id:obs.dep.value-struct-pair src:dep.h:365-366 conf:high]
+  Value fields for VAL_PAIR: fst (Value*), snd (Value*).
+
+[OBS id:obs.dep.value-struct-succ-lit src:dep.h:369-370 conf:high]
+  Value fields for VAL_SUCC / VAL_NUM_LIT: pred (Value*), num_lit (unsigned long long).
+
+[OBS id:obs.dep.value-struct-eq src:dep.h:373-375 conf:high]
+  Value fields for VAL_EQ: eq_lhs, eq_rhs, eq_type_val (all Value*).
+
+[OBS id:obs.dep.value-struct-refl src:dep.h:378 conf:high]
+  Value field for VAL_REFL: refl_val (Value*).
+
+[OBS id:obs.dep.value-struct-if src:dep.h:381-383 conf:high]
+  Value fields for VAL_IF: if_cond_val, if_then_val, if_else_val (all Value*).
+
+[OBS id:obs.dep.value-struct-neutral src:dep.h:386-392 conf:high]
+  Value fields for VAL_NEUTRAL / VAL_META: neutral_name (char*, free var name),
+  neutral_level (int, binding level, -1 for globals), meta_id (int, meta ID),
+  spine (Spine, accumulated arguments), embed_type (Type*, for VAL_EMBED).
+
+* Value Constructors and Operations
+:PROPERTIES:
+:ID: monadc.context.dep.value-constructors
+:CUSTOM_ID: dep-value-constructors
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: 16 Value constructors plus free/clone/push helpers for the semantic value domain.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: active
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:395-415
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.val-universe src:dep.h:395 conf:high]
+  val_universe(Level *level) — construct a VAL_UNIVERSE value.
+
+[OBS id:obs.dep.val-universe-n src:dep.h:396 conf:high]
+  val_universe_n(int n) — convenience: construct Type n as a value.
+
+[OBS id:obs.dep.val-pi src:dep.h:397 conf:high]
+  val_pi(const char *name, Value *dom, Closure body, Implicitness impl) —
+  construct a VAL_PI value with domain and closure codomain.
+
+[OBS id:obs.dep.val-sigma src:dep.h:398 conf:high]
+  val_sigma(const char *name, Value *dom, Closure body) — construct a VAL_SIGMA value.
+
+[OBS id:obs.dep.val-lam src:dep.h:399 conf:high]
+  val_lam(const char *name, Value *dom, Closure body) — construct a VAL_LAM value.
+
+[OBS id:obs.dep.val-pair src:dep.h:400 conf:high]
+  val_pair(Value *fst, Value *snd) — construct a VAL_PAIR value.
+
+[OBS id:obs.dep.val-nat src:dep.h:401 conf:high]
+  val_nat(void) — construct the Nat type as a value.
+
+[OBS id:obs.dep.val-zero src:dep.h:402 conf:high]
+  val_zero(void) — construct zero as a value.
+
+[OBS id:obs.dep.val-succ src:dep.h:403 conf:high]
+  val_succ(Value *pred) — construct succ v as a value.
+
+[OBS id:obs.dep.val-num-lit src:dep.h:404 conf:high]
+  val_num_lit(unsigned long long n) — construct a numeric literal value.
+
+[OBS id:obs.dep.val-eq src:dep.h:405 conf:high]
+  val_eq(Value *lhs, Value *rhs, Value *type) — construct a propositional
+  equality value a ≡ b : A.
+
+[OBS id:obs.dep.val-refl src:dep.h:406 conf:high]
+  val_refl(Value *v) — construct a reflexivity value.
+
+[OBS id:obs.dep.val-if src:dep.h:407 conf:high]
+  val_if(Value *c, Value *t, Value *e) — construct a stuck if value.
+
+[OBS id:obs.dep.val-neutral src:dep.h:408 conf:high]
+  val_neutral(const char *name, int level, Spine spine) — construct a stuck
+  neutral value (free variable applied to arguments). Level is the binding
+  depth; -1 for global names.
+
+[OBS id:obs.dep.val-meta src:dep.h:409 conf:high]
+  val_meta(int id, Spine spine) — construct a metavariable value with spine.
+
+[OBS id:obs.dep.val-embed src:dep.h:410 conf:high]
+  val_embed(Type *t) — construct a VAL_EMBED wrapping a ground Type*.
+
+[OBS id:obs.dep.val-free src:dep.h:411 conf:high]
+  val_free(Value *v) — deep free of a Value tree, including closure environments
+  and spines.
+
+[OBS id:obs.dep.val-spine-push src:dep.h:412 conf:high]
+  val_spine_push(Spine *sp, Value *arg) — append an argument to a spine.
+  Grows the capacity exponentially (amortised O(1)).
+
+[OBS id:obs.dep.val-spine-empty src:dep.h:413 conf:high]
+  val_spine_empty(void) — construct an empty Spine (count=0, cap=0).
+
+[OBS id:obs.dep.val-spine-clone src:dep.h:414 conf:high]
+  val_spine_clone(Spine sp) — deep copy of a Spine and all its argument Values.
+
+[OBS id:obs.dep.val-spine-free src:dep.h:415 conf:high]
+  val_spine_free(Spine sp) — free a Spine and all its argument Values.
+
+* EvalEnv — Semantic Runtime Environment
+:PROPERTIES:
+:ID: monadc.context.dep.evalenv
+:CUSTOM_ID: dep-evalenv
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The NbE semantic environment mapping De Bruijn levels to Values. Uses levels (outside-in) not indices (inside-out) so values never need shifting on environment extension.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: active
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:418-451
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.evalenv-struct src:dep.h:431-439 conf:high]
+  EvalEnv: a linked list stack (EvalEnvEntry chain) plus a level counter.
+  env->level is the count of binders entered so far. Values are stored
+  innermost-first, keyed by De Bruijn index via env_lookup.
+
+[OBS id:obs.dep.eval-env-empty src:dep.h:441 conf:high]
+  eval_env_empty(void) — create an empty evaluation environment (level=0, head=NULL).
+
+[OBS id:obs.dep.eval-env-extend src:dep.h:442 conf:high]
+  eval_env_extend(EvalEnv *e, Value *v) — push a value onto the environment,
+  incrementing level. Returns a new EvalEnv (caller owns).
+
+[OBS id:obs.dep.eval-env-lookup src:dep.h:443 conf:high]
+  eval_env_lookup(EvalEnv *e, int index) — lookup a bound value by De Bruijn
+  index. Traverses the entry stack; index 0 = innermost (most recent) binding.
+
+[OBS id:obs.dep.eval-env-free src:dep.h:444 conf:high]
+  eval_env_free(EvalEnv *e) — free the environment chain. Does NOT free the
+  values themselves (values are owned by their originating closures).
+
+[OBS id:obs.dep.eval-env-discard-top src:dep.h:445 conf:high]
+  eval_env_discard_top(EvalEnv *e) — pop and free only the top environment entry.
+  The value is not freed (ownership remains with the caller).
+
+[OBS id:obs.dep.eval-env-clone src:dep.h:446 conf:high]
+  eval_env_clone(EvalEnv *e) — clone the entire environment chain. Values are
+  not cloned (shallow copy; values remain shared).
+
+[OBS id:obs.dep.dep-closure-apply src:dep.h:451 conf:high]
+  dep_closure_apply(Closure c, Value *arg) — instantiate a closure with an
+  argument. Extends c.env with arg at the next level, then evaluates c.body in
+  the extended environment.
+
+* NbE Kernel — Evaluation and Quotation
+:PROPERTIES:
+:ID: monadc.context.dep.nbe-kernel
+:CUSTOM_ID: dep-nbe-kernel
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The Normalisation by Evaluation (NbE) kernel: eval (term→value), quote (value→term), whnf, normalise, and force. This is the semantic engine of the dependent type checker.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: active
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:454-476
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.dep-eval src:dep.h:473 conf:high]
+  dep_eval(Term *t, EvalEnv *env, MetaCtx *mctx) — evaluate a closed term in
+  an environment to a Value. The "meaning" function of NbE. Terminates for
+  strongly-normalising terms. Forces solved metas during evaluation.
+
+[OBS id:obs.dep.dep-quote src:dep.h:474 conf:high]
+  dep_quote(Value *v, int depth, MetaCtx *mctx) — reify a value back into a
+  De Bruijn term at the given binding depth. Fresh variables are introduced for
+  neutral applications. The result is in β-normal η-long form.
+
+[OBS id:obs.dep.dep-normalise src:dep.h:475 conf:high]
+  dep_normalise(Term *t, EvalEnv *env, MetaCtx *mctx) — full normalisation:
+  eval followed by quote. Used for error messages and display.
+
+[OBS id:obs.dep.dep-force src:dep.h:476 conf:high]
+  dep_force(Value *v, MetaCtx *mctx) — force resolved metavariables at the top
+  level of a value. If v is a VAL_META whose meta is now solved, return the
+  solution value; otherwise return v unchanged.
+
+* MetaCtx — Metavariable Context
+:PROPERTIES:
+:ID: monadc.context.dep.metactx
+:CUSTOM_ID: dep-metactx
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Metavariables (?₀, ?₁, …) generated during elaboration for holes and implicit arguments. Each has a type, state (UNSOLVED/SOLVED), and solution term. Must be fully solved after elaboration.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: active
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:479-518
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.meta-state-enum src:dep.h:491-494 conf:high]
+  MetaState enum: META_UNSOLVED and META_SOLVED. A meta transitions from
+  UNSOLVED to SOLVED when dep_conv (unification) assigns it a solution.
+
+[OBS id:obs.dep.meta-entry-struct src:dep.h:496-503 conf:high]
+  MetaEntry struct: id (int), state (MetaState), type (Value*, expected type),
+  solution (Term*, closed term with no free De Bruijn indices), depth (binding
+  depth at creation, for occurs check), hint (char*, debug name, may be NULL).
+
+[OBS id:obs.dep.meta-ctx-struct src:dep.h:505-509 conf:high]
+  MetaCtx struct: entries array (MetaEntry), count, cap. Dynamic array indexed
+  by meta_id.
+
+[OBS id:obs.dep.meta-ctx-create src:dep.h:511 conf:high]
+  meta_ctx_create(void) — allocate and return an empty MetaCtx.
+
+[OBS id:obs.dep.meta-ctx-free src:dep.h:512 conf:high]
+  meta_ctx_free(MetaCtx *mctx) — free all MetaCtx entries and the context itself.
+
+[OBS id:obs.dep.meta-fresh src:dep.h:513 conf:high]
+  meta_fresh(MetaCtx *mctx, Value *type, int depth, const char *hint) — create
+  a fresh unsolved metavariable with the given type. Returns its ID (index into
+  entries). Hint is a debug name.
+
+[OBS id:obs.dep.meta-solve src:dep.h:514 conf:high]
+  meta_solve(MetaCtx *mctx, int id, Term *solution) — attempt to solve a meta
+  with the given closed term. Runs the occurs check; returns false if id occurs
+  in solution (preventing infinite types).
+
+[OBS id:obs.dep.meta-lookup src:dep.h:515 conf:high]
+  meta_lookup(MetaCtx *mctx, int id) — return a pointer to the MetaEntry for
+  the given ID, or NULL if out of range.
+
+[OBS id:obs.dep.term-occurs-meta src:dep.h:516 conf:high]
+  term_occurs_meta(int id, Term *t) — check whether a given meta ID appears in
+  the Term tree. Stops at metavariables; does not explore solutions.
+
+[OBS id:obs.dep.meta-occurs src:dep.h:517 conf:high]
+  meta_occurs(MetaCtx *mctx, int id, Value *v) — occurs check for values.
+  Returns true if the meta ID appears in the Value (after forcing solved metas).
+  Used by meta_solve to prevent infinite loops during unification.
+
+[OBS id:obs.dep.meta-all-solved src:dep.h:518 conf:high]
+  meta_all_solved(MetaCtx *mctx) — check whether every metavariable has been
+  solved. Called after elaboration as a post-condition verification.
+
+* ConvCtx — Definitional Equality
+:PROPERTIES:
+:ID: monadc.context.dep.convctx
+:CUSTOM_ID: dep-convctx
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Definitional equality via NbE: two terms are equal when they evaluate to the same value. Uses fuel (DEP_CONV_FUEL=100000) as a termination safeguard.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: active
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:521-562
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.conv-ctx-struct src:dep.h:546-552 conf:high]
+  ConvCtx struct: dctx (DepCtx*), depth (current binding depth for fresh var
+  generation), fuel (remaining reduction steps, initialised to DEP_CONV_FUEL),
+  had_error (bool), error_msg (char[512]).
+
+[OBS id:obs.dep.conv-ctx-make src:dep.h:554 conf:high]
+  conv_ctx_make(DepCtx *dctx, int depth) — initialise a ConvCtx with the given
+  typing context and binding depth. Fuel starts at DEP_CONV_FUEL.
+
+[OBS id:obs.dep.dep-conv src:dep.h:559 conf:high]
+  dep_conv(ConvCtx *cctx, Value *v1, Value *v2, Value *ty) — check that v1 and
+  v2 are definitionally equal at type ty. May solve metavariables as a
+  side-effect. Returns true on success; writes error message into cctx on failure.
+  Algorithm: force solved metas, then structural comparison with η-expansion for
+  functions and pairs, then unification for unsolved metas.
+
+[OBS id:obs.dep.dep-conv-terms src:dep.h:562 conf:high]
+  dep_conv_terms(DepCtx *dctx, Term *t1, Term *t2, int depth) — convenience
+  wrapper that evaluates t1 and t2 to values first, then calls dep_conv.
+
+* DepCtx — Typing Context
+:PROPERTIES:
+:ID: monadc.context.dep.depctx
+:CUSTOM_ID: dep-depctx
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The typing context Γ in Γ ⊢ t : T. Tracks local binders as a telescope stack, global definitions via DepEnv, the metavariable table, and the semantic NbE environment.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: active
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:565-611
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.dep-ctx-entry-struct src:dep.h:578-583 conf:high]
+  DepCtxEntry struct: name (char*, source-level name for errors), type (Value*,
+  the type of this variable), val (Value*, optional definition for δ-reduction),
+  next (link). Linked list, innermost entry first.
+
+[OBS id:obs.dep.dep-ctx-struct src:dep.h:585-594 conf:high]
+  DepCtx struct: locals (DepCtxEntry*, telescope), depth (int, local binder
+  count), globals (DepEnv*), mctx (MetaCtx*), env (EvalEnv*, semantic env for
+  NbE), filename (const char*, for errors), had_error (bool), error_msg (char[512]).
+
+[OBS id:obs.dep.dep-ctx-create src:dep.h:596 conf:high]
+  dep_ctx_create(const char *filename) — allocate an empty typing context with
+  an empty DepEnv, empty MetaCtx, and empty EvalEnv.
+
+[OBS id:obs.dep.dep-ctx-child src:dep.h:597 conf:high]
+  dep_ctx_child(DepCtx *parent) — create a child scope that shares the parent's
+  globals, MetaCtx, and the current environment state. Used for nested binding
+  scopes.
+
+[OBS id:obs.dep.dep-ctx-free src:dep.h:598 conf:high]
+  dep_ctx_free(DepCtx *ctx) — free the typing context, including all local
+  entries and the environment. Does NOT free globals or MetaCtx (shareable).
+
+[OBS id:obs.dep.dep-ctx-push src:dep.h:606 conf:high]
+  dep_ctx_push(DepCtx *ctx, const char *name, Value *type) — push a local
+  binding (x : A) into the context. Adds a DepCtxEntry to locals, extends
+  ctx->env with a fresh neutral for x, increments ctx->depth.
+
+[OBS id:obs.dep.dep-ctx-push-def src:dep.h:607 conf:high]
+  dep_ctx_push_def(DepCtx *ctx, const char *name, Value *type, Value *val) —
+  push a local definition (x := t : A). Like dep_ctx_push but also stores
+  the value for δ-reduction.
+
+[OBS id:obs.dep.dep-ctx-pop src:dep.h:608 conf:high]
+  dep_ctx_pop(DepCtx *ctx) — pop the innermost local binding and decrement
+  depth. Frees the DepCtxEntry but not the values.
+
+[OBS id:obs.dep.dep-ctx-lookup-local src:dep.h:610 conf:high]
+  dep_ctx_lookup_local(DepCtx *ctx, const char *name) — search the local
+  telescope for a binding by name. Returns the DepCtxEntry or NULL.
+
+[OBS id:obs.dep.dep-ctx-type-at-level src:dep.h:611 conf:high]
+  dep_ctx_type_at_level(DepCtx *ctx, int level) — retrieve the type of the
+  variable bound at the given De Bruijn level. Used during quotation to
+  reconstruct types of neutral variables.
+
+* DepEnv — Global Environment
+:PROPERTIES:
+:ID: monadc.context.dep.depenv
+:CUSTOM_ID: dep-depenv
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Hash table mapping names to global definitions with type, term, value, and opacity flag. Supports δ-reduction via unfolding of defined names.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: active
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:614-648
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.dep-env-entry-struct src:dep.h:626-633 conf:high]
+  DepEnvEntry struct: name (char*), type (Value*), def_term (Term*, core term
+  for δ-reduction, may be NULL), def_val (Value*, evaluated value, may be NULL),
+  opaque (bool, if true never δ-unfold), next (link for chaining).
+
+[OBS id:obs.dep.dep-env-struct src:dep.h:635-639 conf:high]
+  DepEnv struct: buckets (DepEnvEntry**, 128 buckets), size (size_t), parent
+  (DepEnv*, for nested module scopes). Same hash-table layout as InferEnv.
+
+[OBS id:obs.dep.dep-env-create src:dep.h:641 conf:high]
+  dep_env_create(void) — allocate an empty global environment with DEP_ENV_BUCKETS.
+
+[OBS id:obs.dep.dep-env-create-child src:dep.h:642 conf:high]
+  dep_env_create_child(DepEnv *parent) — create a child DepEnv that falls back
+  to parent for unresolved lookups. Used for module scoping.
+
+[OBS id:obs.dep.dep-env-free src:dep.h:643 conf:high]
+  dep_env_free(DepEnv *env) — free the DepEnv, all entries, and all owned values/terms.
+
+[OBS id:obs.dep.dep-env-declare src:dep.h:644 conf:high]
+  dep_env_declare(DepEnv *env, const char *name, Value *type) — declare a
+  global name with a type but no definition (forward reference / axiom).
+
+[OBS id:obs.dep.dep-env-define src:dep.h:645-647 conf:high]
+  dep_env_define(DepEnv *env, const char *name, Value *type, Term *def_term,
+  Value *def_val, bool opaque) — define a global with type and optional
+  definition. When opaque=false, def_term enables δ-reduction (unfolding).
+
+[OBS id:obs.dep.dep-env-lookup src:dep.h:648 conf:high]
+  dep_env_lookup(DepEnv *env, const char *name) — find a global definition by
+  name. Searches the hash bucket chain; falls through to parent if not found.
+
+* Bidirectional Type Checker
+:PROPERTIES:
+:ID: monadc.context.dep.bidirectional-checker
+:CUSTOM_ID: dep-bidirectional-checker
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Bidirectional type checking with two modes: INFER (Γ ⊢ t ⇒ A, type is computed) and CHECK (Γ ⊢ t ⇐ A, type is known). Follows Löh/McBride/Swierstra (2010).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: active
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:651-681
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.dep-infer src:dep.h:675 conf:high]
+  dep_infer(DepCtx *ctx, Term *t) — inference mode: Γ ⊢ t ⇒ A. Computes the
+  type A from term t. Used for variables, annotations, applications, and type
+  constants. Returns NULL on error (ctx->had_error set).
+
+[OBS id:obs.dep.dep-check src:dep.h:676 conf:high]
+  dep_check(DepCtx *ctx, Term *t, Value *expected_type) — check mode: Γ ⊢ t ⇐ A.
+  Verifies t against a known expected type. Used for lambda bodies, pairs, and
+  refl. Returns true on success, false on error.
+
+[OBS id:obs.dep.dep-infer-level src:dep.h:681 conf:high]
+  dep_infer_level(DepCtx *ctx, Term *ty) — infer the universe level of a type
+  expression A where A is already known to be a type. Returns the level as an
+  int, or -1 on error.
+
+* Elaboration — Surface AST to Core Term
+:PROPERTIES:
+:ID: monadc.context.dep.elaboration
+:CUSTOM_ID: dep-elaboration
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Translates surface-syntax AST (from reader.h) into well-typed core Terms. Inserts implicit arguments, generates fresh metavariables for holes, resolves overloaded names, translates pattern matching to eliminators.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: active
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:684-702
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.dep-elab-term src:dep.h:700 conf:high]
+  dep_elab_term(DepCtx *ctx, AST *ast, Value *expected_type) — main elaboration
+  entry point. Translates an AST into a well-typed core Term, checking against
+  expected_type (or inferring if expected_type is NULL).
+
+[OBS id:obs.dep.dep-elab-type src:dep.h:701 conf:high]
+  dep_elab_type(DepCtx *ctx, AST *ast) — elaborate an AST as a type expression.
+  Must produce something of type Type u for some u. Used for type annotations
+  and binder domains.
+
+[OBS id:obs.dep.dep-elab-and-infer src:dep.h:702 conf:high]
+  dep_elab_and_infer(DepCtx *ctx, AST *ast) — elaborate an AST then immediately
+  infer its type. Convenience combining dep_elab_term (with NULL expected type)
+  and dep_infer.
+
+* Interop Bridge — Ground-Type System Integration
+:PROPERTIES:
+:ID: monadc.context.dep.interop-bridge
+:CUSTOM_ID: dep-interop-bridge
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The bridge between the dependent type checker (ITT) and the existing ground-type system (types.h). TERM_EMBED/VAL_EMBED wrap ground types as first-class terms and values.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: active
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:705-727
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.term-of-ast src:dep.h:718 conf:high]
+  dep_term_of_ast(DepCtx *ctx, AST *ast) — syntactic translation of an AST into
+  a pre-elaboration Term. Does NOT type-check — call dep_elab_term afterwards.
+
+[OBS id:obs.dep.term-of-type-ast src:dep.h:719 conf:high]
+  dep_term_of_type_ast(DepCtx *ctx, AST *ast) — translate a type annotation AST
+  specifically. Recognises Π-notation, Σ-notation, equality types, and universe
+  expressions in the surface syntax.
+
+[OBS id:obs.dep.term-of-ground src:dep.h:720 conf:high]
+  dep_term_of_ground(Type *ground_type) — wrap a types.h Type* as a TERM_EMBED.
+  Allows existing ground-typed code to be used as terms/types in the dependent
+  checker without rewriting.
+
+[OBS id:obs.dep.ground-of-value src:dep.h:726 conf:high]
+  dep_ground_of_value(Value *v, MetaCtx *mctx) — attempt to extract a ground
+  Type* from a normalised Value. Returns NULL if the value is not a ground type.
+  Used by codegen to bridge back to the existing backend.
+
+[OBS id:obs.dep.ground-of-value-env src:dep.h:727 conf:high]
+  dep_ground_of_value_env(Value *v, MetaCtx *mctx, DepEnv *globals) — like
+  dep_ground_of_value but also resolves global names through DepEnv to find
+  their ground-type equivalents. Used for back-propagation to ast->inferred_type.
+
+* Top-Level Pipeline
+:PROPERTIES:
+:ID: monadc.context.dep.toplevel-pipeline
+:CUSTOM_ID: dep-toplevel-pipeline
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The main entry point for the dependent type checker pipeline: surface→pre-term→elaborate→type-check→verify→normalise.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: active
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:730-744
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.dep-toplevel src:dep.h:744 conf:high]
+  dep_toplevel(DepCtx *ctx, AST *ast, Term **out_type) — main entry called by
+  the compiler/REPL. Pipeline: (1) dep_term_of_ast, (2) dep_elab_term, (3)
+  dep_infer/dep_check, (4) meta_all_solved verification, (5) dep_normalise
+  of result type. Returns fully-checked core Term or NULL. Puts result type
+  in *out_type if non-NULL.
+
+* Builtins — Bootstrap
+:PROPERTIES:
+:ID: monadc.context.dep.builtins
+:CUSTOM_ID: dep-builtins
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Populates the global DepEnv with the types and definitions of all built-in constants. Must be called once after dep_ctx_create before any elaboration.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: active
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:748-764
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.dep-register-builtins src:dep.h:764 conf:high]
+  dep_register_builtins(DepCtx *ctx) — populate DepEnv with builtins: Nat : Type 0,
+  zero : Nat, succ : Nat → Nat, Nat-elim with dependent motive, Bool via Nat encoding,
+  fst/snd for Σ-types, refl/subst/sym/trans/cong for equality, and TERM_EMBED for
+  all types.h ground types as Type 0 constants.
+
+* Error Reporting
+:PROPERTIES:
+:ID: monadc.context.dep.error-reporting
+:CUSTOM_ID: dep-error-reporting
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Error state tracking on DepCtx and helper functions for setting, printing, and reporting unsolved holes.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: active
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:767-779
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.dep-error-struct src:dep.h:769-775 conf:high]
+  DepError struct: message (char[1024]), line, col, expected (Term*, may be
+  NULL), got (Term*, may be NULL). Holds one type error for reporting.
+
+[OBS id:obs.dep.dep-error-set src:dep.h:777 conf:high]
+  dep_error_set(DepCtx *ctx, int line, int col, const char *fmt, ...) — format
+  and store an error message into ctx->error_msg, setting ctx->had_error=true.
+
+[OBS id:obs.dep.dep-error-print src:dep.h:778 conf:high]
+  dep_error_print(DepCtx *ctx) — print the current error message to stderr with
+  source location information.
+
+[OBS id:obs.dep.dep-report-holes src:dep.h:779 conf:high]
+  dep_report_holes(DepCtx *ctx) — print all unsolved metavariables to stderr
+  during error reporting, showing their types and hints.
+
+* Pretty Printing
+:PROPERTIES:
+:ID: monadc.context.dep.pretty-printing
+:CUSTOM_ID: dep-pretty-printing
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Pretty printing functions for terms, values, typing contexts, and metavariable contexts. Used by error messages and the REPL.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: active
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:784-787
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.dep-print-term src:dep.h:784 conf:high]
+  dep_print_term(Term *t) — print a Term to stdout in human-readable form.
+
+[OBS id:obs.dep.dep-print-value src:dep.h:785 conf:high]
+  dep_print_value(Value *v, MetaCtx *mctx) — print a Value to stdout in
+  human-readable form. Resolves solved metavariables.
+
+[OBS id:obs.dep.dep-print-ctx src:dep.h:786 conf:high]
+  dep_print_ctx(DepCtx *ctx) — print the current typing context (local binders)
+  to stdout.
+
+[OBS id:obs.dep.dep-print-meta-ctx src:dep.h:787 conf:high]
+  dep_print_meta_ctx(MetaCtx *mctx) — print all metavariables with their state
+  (solved/unsolved) and types to stdout.
+
+* Forward Declarations
+:PROPERTIES:
+:ID: monadc.context.dep.forward-declarations
+:CUSTOM_ID: dep-forward-declarations
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Forward type declarations (opaque typedefs) for the core types used throughout dep.h: Term, DepCtx, DepEnv, MetaCtx, Spine, Value, Closure, DepError.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:29-36
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.forward-decls src:dep.h:29-36 conf:high]
+  Forward declarations: Term, DepCtx, DepEnv, MetaCtx, Spine, Value, Closure,
+  DepError. These allow circular references between struct definitions (e.g.,
+  Closure references EvalEnv, Value references Closure and Spine).
+
+* Closure Struct
+:PROPERTIES:
+:ID: monadc.context.dep.closure
+:CUSTOM_ID: dep-closure
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: A Closure captures an unevaluated Term body together with the EvalEnv at creation time. When a lambda is applied, the closure is instantiated with the argument producing a value.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:321-324
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.dep.closure-struct src:dep.h:321-324 conf:high]
+  Closure struct: env (EvalEnv* at closure creation time), body (Term*,
+  unevaluated body, a De Bruijn term). Used by VAL_PI, VAL_SIGMA, and VAL_LAM
+  to represent binders lazily. Instantiated via dep_closure_apply.
+
+* Cross-Linking and Connections
+:PROPERTIES:
+:ID: monadc.context.dep.cross-links
+:CUSTOM_ID: dep-cross-links
+:CONTEXT_KIND: inference
+:CONTEXT_DESCRIPTION: Cross-references from the dependent type checker to other parts of the compiler and the philosophical principles that motivate its design.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: dep.h
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.dep.connects-to-language-dep from:obs.context.dep.file,obs.language.dep-nbe-kernel,obs.language.dep-shadow-pass,obs.language.dep-soundness-holes conf:high]
+  connects-to -> `monadc.context.language.primitive-dependent-types` (the full
+  dependent types section in language.org documents the NbE kernel, shadow pass
+  architecture, and known soundness holes) ·
+  `monadc.context.language.primitive-function` (TERM_PI is the dependent version
+  of TYPE_ARROW; the interop bridge converts between them) ·
+  `monadc.context.language.primitive-pair` (TERM_SIGMA is the dependent version
+  of TYPE_PAIR; TERM_FST/TERM_SND operate on both) ·
+  `monadc.context.language.primitive-set` (TYPE_SET embeds as TERM_EMBED through
+  the interop bridge)
+
+[INF id:inf.dep.connects-to-philosophy from:obs.context.dep.file,obs.philosophy.llm-dual-type-system,obs.philosophy.llm-nbe-architecture conf:high]
+  connects-to -> `monadc.context.philosophy.human-witness` (the no-trade-off
+  principle between HM and ITT is materialised by the TERM_EMBED bridge) ·
+  `monadc.context.philosophy.llm-witness` (the dual type system and NbE kernel
+  observations in philosophy.org document the architectural significance) ·
+  `monadc.context.philosophy.sets-are-the-model` (types-are-sets is the semantic
+  model: universes are sets of sets, Π-types are indexed products, Σ-types are
+  indexed sums) ·
+  `monadc.context.philosophy.purity-is-practical` (the shadow-pass design —
+  pure ITT checking without codegen side effects — is purity-is-practical
+  applied to the compiler's own architecture)
+
+[INF id:inf.dep.connects-to-references from:obs.dep.nbe-kernel src:dep.h:304-320 conf:high]
+  connects-to -> `monadc.context.references.types-2020` (the NbE model follows
+  Abel 2013, simplified to avoid levitation) ·
+  `monadc.context.references.typechecking-dependent-types` (the bidir algorithm
+  follows Löh/McBride/Swierstra 2010) ·
+  `monadc.context.references.the-little-typer` (the Pi/Sigma/equality/Nat-elim
+  constructs follow the Pie language exposition)
+
+[INF id:inf.dep.connects-to-tests from:obs.dep.dep-infer,obs.dep.dep-check src:dep.h:675-676 conf:high]
+  connects-to -> `monadc.context.tests.dependent-types` (test fixtures exercising
+  dependent type checking, elaboration, and definitional equality) ·
+  `monadc.context.tests.shadow-pass` (tests verifying the back-propagation of
+  ground types to the HM pipeline)
+
+[THINK id:think.dep.soundness-holes conf:medium]
+  The NbE kernel has known soundness holes documented in TODO.org: (1) dep_conv
+  allows implicit Int≡Float and Int≡Char coercions, (2) pattern unification is
+  a stub with no Miller condition check, (3) the occurs check runs in the wrong
+  environment, (4) VAL_PI→TYPE_ARROW conversion drops quantifiers, (5) universe
+  levels use equality not ≤. These are deliberate stubs that test the thesis
+  that a clean NbE architecture can be incrementally filled in without rewrites.
+
+[THINK id:think.dep.locally-nameless conf:high]
+  The locally nameless representation (De Bruijn indices for bound variables,
+  free variable names for globals) eliminates α-equivalence bugs entirely while
+  keeping error messages readable. This is the standard approach in
+  production-quality dependently typed implementations (Coq, Agda, Idris).
+
+[THINK id:think.dep.why-spine-form conf:high]
+  TERM_APP uses a flat spine form (function + array of arguments) instead of
+  nested left-associative applications. This speeds up WHNF reduction (no need
+  to traverse a chain to find the head) and simplifies the evaluator's handling
+  of neutrals (a single spine push vs. nested app eliminations).

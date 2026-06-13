@@ -1,5 +1,5 @@
 #+TITLE: Last First Failing Test
-#+DATE: 2026-06-13T05:17:53
+#+DATE: 2026-06-13T21:28:33
 
 [OBS id:obs.tests.last-first-failure src:tests/run.py conf:high]
   This generated record captures the first failing test from the latest
@@ -7,37 +7,24 @@
   debugging pass can start from the earliest observed failure.
 
 * Failure
-- Test: =codegen.rt-wisp-define-typed-value-sugar=
+- Test: =codegen.rt-wisp-return-string=
 - Status: =FAIL=
-- Duration: =[  12.51 ] ms=
-- Reason: =--emit-json failed=
-- Fixture: =tests/codegen/rt_wisp_define_typed_value_sugar.mon=
+- Duration: =[ 137.52 ] ms=
+- Reason: =stdout did not end with tests/codegen/rt_wisp_return_string.stdout=
+- Fixture: =tests/codegen/rt_wisp_return_string.mon=
 
 ** Metadata
-- =TEST-ATOM=: define name :: Type value desugars to the Lisp-layer [name :: Type] binding form.
-- =TEST-CONTEXT=: monadc.context.wisp.define-typed-value-sugar
+- =TEST-ATOM=: define return-string -> String "ciao" defines a function returning "ciao".
+- =TEST-CONTEXT=: monadc.context.language.runtime-codegen-corpus
 - =TEST-EXPECT=: compile, run
-- =TEST-ID=: tests.codegen.rt-wisp-define-typed-value-sugar
-- =TEST-PURPOSE=: Wisp value definitions accept bracketed and unbracketed type annotations.
+- =TEST-ID=: tests.codegen.rt-wisp-return-string
+- =TEST-PURPOSE=: Wisp return-typed function compiles and displays.
 
 ** Context Links
-- =monadc.context.wisp.define-typed-value-sugar=
+- =monadc.context.language.runtime-codegen-corpus=
 
 ** Output
 #+BEGIN_EXAMPLE
-
-=== wisp expanded (<repo>/tests/codegen/rt_wisp_define_typed_value_sugar.mon) ===
-(#line 6 1) (module Main)
-(#line 7 1) (define [a :: Int] 1)
-(#line 8 1) (define [b : Int] 2)
-(#line 9 1) (define [c :: Int] 3)
-(#line 10 1) (show a)
-(#line 11 1) (show b)
-(#line 12 1) (show c)
-=== end ===
-
-<repo>/tests/codegen/rt_wisp_define_typed_value_sugar.mon:8:24: error: Expected ']' to close typed variable binding
-    8 | define [b : Int] 2
-      |                        ^
-[compile] <repo>/tests/codegen/rt_wisp_define_typed_value_sugar.mon
+the
+9.387247270983684e-323
 #+END_EXAMPLE

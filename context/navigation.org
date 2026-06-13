@@ -14,7 +14,7 @@
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -47,7 +47,37 @@ file in =context/*.org=:
 | =source-map=                          | [[file:source-map.org][context/source-map.org]] | Source file map         |
 | =style=                               | [[file:style.org][context/style.org]]      | MonadC code styles      |
 | =commit=                              | [[file:commit-format.org][context/commit-format.org]] | Commit message format and conventions |
+| =dep=                                 | [[file:dep.org][context/dep.org]]          | Dependent type checker (ITT/NbE kernel)   |
+| =infer=                               | [[file:infer.org][context/infer.org]]        | HM type inference engine                  |
+| =runtime=                             | [[file:runtime.org][context/runtime.org]]      | Runtime library (values, collections)     |
+| =codegen-ops=                         | [[file:codegen-ops.org][context/codegen-ops.org]]  | Codegen operation dispatch (83+ handlers) |
+| =ideas=                               | [[file:ideas.org][context/ideas.org]]        | Design ideas, feature proposals           |
+| =arena=                               | [[file:arena.org][context/arena.org]]        | Arena bump allocator                      |
+| =asm=                                 | [[file:asm.org][context/asm.org]]          | Inline assembly, register allocator       |
+| =buildsystem=                         | [[file:buildsystem.org][context/buildsystem.org]]  | Package build system                      |
+| =cli=                                 | [[file:cli.org][context/cli.org]]          | CLI argument parser                       |
+| =codegen=                             | [[file:codegen.org][context/codegen.org]]      | Codegen context struct, MonoCache         |
+| =env=                                 | [[file:env.org][context/env.org]]          | Symbol table, scopes, HM integration      |
+| =features=                            | [[file:features.org][context/features.org]]    | Platform feature detection                |
+| =ffi=                                 | [[file:ffi.org][context/ffi.org]]          | C FFI, header parsing, type mapping       |
+| =macro=                               | [[file:macro.org][context/macro.org]]        | Macro system, hygiene, fixpoint expansion |
+| =main=                                | [[file:main.org][context/main.org]]          | Compilation pipeline orchestrator         |
+| =module=                              | [[file:module.org][context/module.org]]       | Module system, exports, imports           |
+| =pmatch=                              | [[file:pmatch.org][context/pmatch.org]]       | Pattern match compiler                    |
+| =repl=                                | [[file:repl.org][context/repl.org]]          | Interactive REPL                          |
+| =typeclass=                           | [[file:typeclass.org][context/typeclass.org]]   | Type class system, dictionary dispatch    |
+| =typst-emit=                          | [[file:typst-emit.org][context/typst-emit.org]]  | Typst document emission                   |
 | =references=                          | [[file:references.org][context/references.org]]   | Research papers informing compiler design |
+| =module-export=                       | [[file:module-export.org][context/module-export.org]] | Module export manifests (.mexp)          |
+| =makefile=                            | [[file:makefile.org][context/makefile.org]]     | Build system (Makefile)                  |
+| =main-mon=                            | [[file:main-mon.org][context/main-mon.org]]     | Main.mon standard library / demo         |
+| =core-libs=                           | [[file:core-libs.org][context/core-libs.org]]   | core/ standard library modules            |
+| =how-to=                              | [[file:how-to.org][context/how-to.org]]       | how_to/ example programs                  |
+| =tests-arch=                          | [[file:tests-arch.org][context/tests-arch.org]]  | Test suite architecture (923 files)       |
+| =etc-assets=                          | [[file:etc-assets.org][context/etc-assets.org]]  | etc/ assets (logo, screenshots, font)     |
+| =todo-markers=                        | [[file:todo-markers.org][context/todo-markers.org]] | Source-level TODO/FIXME/HACK tracker      |
+| =scripts=                             | [[file:scripts.org][context/scripts.org]]      | Python helper scripts                     |
+| =types=                               | [[file:types.org][context/types.org]]         | Type system — 40 TypeKind enum            |
 
 * How to Use
 

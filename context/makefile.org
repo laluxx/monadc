@@ -1,0 +1,301 @@
+#+TITLE: Build System (Makefile)
+#+AUTHOR: Codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:makefile:build:target:lld:llvm:link:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_PRIORITY 60
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.makefile
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+#+TAGS: make(m) build(b) target(t) debug(d) asan(a) release(r) link(l) llvm(l)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.makefile.file-metadata
+:CUSTOM_ID: makefile-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: Makefile
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.makefile.file src:Makefile conf:high]
+  Single Makefile at project root (112 lines). Drives compilation of the
+  monadc compiler, the runtime static library (libmonad.a), and ancillary
+  targets (test, install, uninstall, clean). Uses GCC, llvm-config for
+  LLVM-C flags, and pkg-config for libclang.
+
+* Build Targets
+:PROPERTIES:
+:ID: monadc.context.makefile.build-targets
+:CUSTOM_ID: makefile-build-targets
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The four build targets: all/debug, asan, release, and the ancillary clean/install/uninstall.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: Makefile:29-37
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.makefile.target-all src:Makefile:29-30 conf:high]
+  =make all= (default target). Builds with DEBUG_CFLAGS: =-g -DDEBUG=.
+  Links against libmonad.a and all LLVM libraries. Produces the =monad=
+  binary and =libmonad.a=.
+
+[OBS id:obs.makefile.target-asan src:Makefile:32-34 conf:high]
+  =make asan=. Builds with ASAN_CFLAGS: =-g -fsanitize=address
+  -fno-omit-frame-pointer -DDEBUG=. Adds =-fsanitize=address= to LDFLAGS.
+  Links binary with AddressSanitizer runtime.
+
+[OBS id:obs.makefile.target-release src:Makefile:36-37 conf:high]
+  =make release=. Builds with RELEASE_CFLAGS: =-DNDEBUG -O2=. Optimised
+  binary, no debug symbols, no assertion checks.
+
+[OBS id:obs.makefile.target-clean src:Makefile:55-56 conf:high]
+  =make clean=. Removes all .o files (compiler and runtime), libmonad.a,
+  and the monad binary.
+
+[OBS id:obs.makefile.target-install src:Makefile:59-71 conf:high]
+  =make install=. Installs the monad binary to PREFIX/bin, libmonad.a to
+  PREFIX/lib, runtime.h to PREFIX/include/monad/, and core .mon modules
+  to PREFIX/lib/monad/core/. Default PREFIX is /usr/local.
+
+[OBS id:obs.makefile.target-uninstall src:Makefile:73-77 conf:high]
+  =make uninstall=. Removes monad binary from BINDIR, libmonad.a from
+  LIBDIR, the include directory (INCDIR), and the core module directory.
+
+[OBS id:obs.makefile.target-test src:Makefile:79-83 conf:high]
+  =make test=. Builds with =all= then runs =python3 tests/run.py=.
+
+[OBS id:obs.makefile.target-core src:Makefile:86-87 conf:high]
+  =make core=. Builds and runs =python3 tests/run_core.py=.
+
+* Three Build Modes: Trade-offs
+:PROPERTIES:
+:ID: monadc.context.makefile.build-modes
+:CUSTOM_ID: makefile-build-modes
+:CONTEXT_KIND: observation
+:CONTEXT_DESCRIPTION: The three build modes (all/debug, asan, release) and their trade-offs in terms of debuggability, safety, and performance.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: Makefile:12-14,29-37
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.makefile.mode-debug src:Makefile:12,29-30 conf:high]
+  Debug mode (=make all=): =-g -O0 -DDEBUG=. Best debugging experience
+  (DWARF symbols, no optimiser reordering). Slowest runtime. Default mode.
+
+[OBS id:obs.makefile.mode-asan src:Makefile:13,32-34 conf:high]
+  ASAN mode (=make asan=): =-g -fsanitize=address -fno-omit-frame-pointer
+  -DDEBUG=. Catches buffer overflows, use-after-free, and memory leaks
+  at runtime. Adds ~2x overhead; use during development and before release.
+
+[OBS id:obs.makefile.mode-release src:Makefile:14,36-37 conf:high]
+  Release mode (=make release=): =-DNDEBUG -O2=. Maximum performance,
+  no assertions, no debug symbols. Use for production builds and benchmarks.
+
+* Compiler Flags
+:PROPERTIES:
+:ID: monadc.context.makefile.compiler-flags
+:CUSTOM_ID: makefile-compiler-flags
+:CONTEXT_KIND: observation
+:CONTEXT_DESCRIPTION: Base CFLAGS and LDFLAGS inherited by all build modes, plus mode-specific flags appended via target-specific variable assignment.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: Makefile:3-4,12-14
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.makefile.base-cflags src:Makefile:3 conf:high]
+  Base CFLAGS: =-Wall -Wextra -std=c99 $(shell llvm-config --cflags)=.
+  Strict warnings, C99 standard, LLVM include paths via llvm-config.
+
+[OBS id:obs.makefile.base-ldflags src:Makefile:4 conf:high]
+  Base LDFLAGS: =-lm -lreadline -lgmp $(shell llvm-config --ldflags --libs core) -lclang=.
+  Links: math (-lm), readline (-lreadline), GMP (-lgmp), LLVM core, and
+  libclang for FFI header parsing.
+
+[OBS id:obs.makefile.ffi-cflags src:Makefile:26 conf:high]
+  FFI_CFLAGS: =$(shell pkg-config --cflags libclang 2>/dev/null || echo "-I/usr/lib/llvm/include")=.
+  Used only when compiling ffi.o. Falls back to a hardcoded path if
+  pkg-config is unavailable.
+
+* LLVM Configuration Discovery
+:PROPERTIES:
+:ID: monadc.context.makefile.llvm-discovery
+:CUSTOM_ID: makefile-llvm-discovery
+:CONTEXT_KIND: observation
+:CONTEXT_DESCRIPTION: LLVM flags are discovered at build time via llvm-config, which emits the correct -I, -L, and -l flags for the installed LLVM version.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: Makefile:3-4
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.makefile.llvm-config-cflags src:Makefile:3 conf:high]
+  =$(shell llvm-config --cflags)= — emits LLVM include paths for the
+  C compiler (e.g. =-I/usr/lib/llvm-19/include -fno-rtti=).
+
+[OBS id:obs.makefile.llvm-config-ldflags src:Makefile:4 conf:high]
+  =$(shell llvm-config --ldflags --libs core)= — emits linker flags for
+  all LLVM core libraries (e.g. =-L/usr/lib/llvm-19/lib -lLLVM-19=).
+
+* Object File List & Static Library
+:PROPERTIES:
+:ID: monadc.context.makefile.objects
+:CUSTOM_ID: makefile-objects
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: How .c files become .o files, the filter pattern separating runtime from compiler sources, and the static library build.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: Makefile:20-27,39-53
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.makefile.runtime-objs src:Makefile:20-22 conf:high]
+  RUNTIME_SRC = runtime.c arena.c ⇒ RUNTIME_OBJ = runtime.o arena.o.
+  These are compiled with -fPIC and archived into libmonad.a. They are
+  excluded from the compiler binary's direct object list to prevent
+  parallel make race conditions.
+
+[OBS id:obs.makefile.compiler-objs src:Makefile:25,27 conf:high]
+  SRCS = $(filter-out $(RUNTIME_SRC), $(wildcard *.c)) — all .c files
+  EXCEPT runtime.c and arena.c. Pattern filters out runtime sources.
+  OBJS = $(SRCS:.c=.o) — the corresponding object files.
+
+[OBS id:obs.makefile.libmonad src:Makefile:39-43 conf:high]
+  libmonad.a: static archive built from runtime objects only.
+  Compiled with -fPIC. Linked statically into the monad binary so no .so
+  dependency at runtime. Used also by compiled MonadC programs that link
+  against the runtime.
+
+[OBS id:obs.makefile.monad-binary src:Makefile:46-47 conf:high]
+  =$(TARGET): $(OBJS) $(RUNTIME_LIB)= — the monad binary links all compiler
+  objects + libmonad.a + LDFLAGS. Uses -rdynamic so runtime symbols are
+  available for FFI dlopen.
+
+[OBS id:obs.makefile.ffi-o-rule src:Makefile:49-50 conf:high]
+  Special compilation rule for ffi.o: uses FFI_CFLAGS (from pkg-config).
+  All other .o files use the generic =%.o: %.c= pattern rule.
+
+[OBS id:obs.makefile.generic-compile src:Makefile:52-53 conf:high]
+  Generic pattern rule: =%.o: %.c= — compiles any .c to .o with CFLAGS.
+  This matches all compiler sources not covered by a more specific rule.
+
+* Parallel Build
+:PROPERTIES:
+:ID: monadc.context.makefile.parallel
+:CUSTOM_ID: makefile-parallel
+:CONTEXT_KIND: observation
+:CONTEXT_DESCRIPTION: Parallel build via -j$(nproc) with explicit filter-out to prevent race conditions between runtime and compiler objects.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codec
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: Makefile:16-17,25
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.makefile.nprocs src:Makefile:16-17 conf:high]
+  =NPROCS=$(shell nproc)= then =MAKEFLAGS += -j$(NPROCS)=. Enables
+  parallel compilation across all available CPU cores.
+
+[OBS id:obs.makefile.filter-race src:Makefile:25 conf:high]
+  =$(filter-out $(RUNTIME_SRC), $(wildcard *.c))= ensures runtime.c and
+  arena.c are NOT in the compiler SRCS list. This prevents make -j from
+  compiling the same .c file concurrently via two different rules (one for
+  libmonad.a with -fPIC and one for the binary without). The filter-out
+  makes each runtime source appear in only one prerequisite chain.
+
+* Connections
+:PROPERTIES:
+:ID: monadc.context.makefile.connections
+:CUSTOM_ID: makefile-connections
+:CONTEXT_KIND: inference
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.makefile.connects-to from:obs.makefile.target-all,obs.makefile.monad-binary conf:high]
+  connects-to ->
+  `monadc.context.main.entry-point` (the monad binary produced by the
+  Makefile is the same binary whose main() orchestrates the pipeline) ·
+  `monadc.context.buildsystem.highlevel` (the build system's
+  build_link_executable uses a separate gcc invocation with similar
+  linking flags; both must agree on =llvm-config= discovery) ·
+  `monadc.context.cli.cmd-compile` (CMD_COMPILE triggers main.c's
+  compilation pipeline, which is the primary purpose of the built binary) ·
+  `monadc.context.runtime` (libmonad.a contains runtime.c and arena.c,
+  which implement the runtime support surfaced to compiled MonadC programs)

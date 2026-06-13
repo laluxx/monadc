@@ -1,0 +1,1100 @@
+#+TITLE: Codegen Operation Dispatch Catalogue
+#+AUTHOR: Codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:codegen:dispatch:
+#+PROPERTY: CONTEXT_VERSION 2
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.codegen-ops
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.file-metadata
+:CUSTOM_ID: codegen-ops-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.file src:codegen.c conf:high]
+  Complete catalogue of strcmp dispatch handlers in =codegen_expr=,
+  =register_builtins= environment entries, and the three-layer dispatch
+  architecture. Every operation callable from paren-mode must have a
+  strcmp handler. Operations that are =register_builtins=-only are
+  reachable only via the env lookup fallback (wisp-mode symbol
+  resolution), not from paren-mode.
+
+* Three-Layer Dispatch Architecture
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.architecture
+:CUSTOM_ID: dispatch-architecture
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The three layers of codegen dispatch: AST type switch (line 3380+), strcmp dispatch on head symbol (line 3889+), and env lookup / register_builtins fallback (line 12960+).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.arch.layer1 src:codegen.c:3382-3988 conf:high]
+  *Layer 1 — AST type switch* (=codegen_expr=). The top-level switch on
+  =ast->type= handles leaf AST nodes directly:
+  - =AST_SYMBOL= (line 3382): nil literal, True/False booleans,
+    =__adt_tag_CtorName=, dot-chain field lookup, variable resolution,
+    ADT constructor values, function value wrapping.
+  - =AST_NUMBER= (line 3380): numeric literal → boxed =rt_make_int= or
+    =rt_make_float=.
+  - =AST_ARRAY= (line 3380): array literal with optional fat-pointer
+    runtime sizing; the =lo .. hi= range also dispatches here.
+  - =AST_LIST= (line 3990): empty list error, inline string indexing
+    (=("str" i)=), inline array indexing (=[1 2 3] i=), quoted list
+    indexing (='(a b c) i=), ratio-as-function (=(1/4 x)=), then
+    falls through to strcmp dispatch on the head symbol.
+  - =AST_LAYOUT= (line 13027), =AST_DATA= (line 13034),
+    =AST_CLASS= (line 13041), =AST_INSTANCE= (line 13067),
+    =AST_LAMBDA= (line 13074), =AST_TESTS= (line 12996).
+
+[OBS id:obs.codegen-ops.arch.layer2 src:codegen.c:4101-12677 conf:high]
+  *Layer 2 — strcmp dispatch* (inside =ast->type == AST_LIST= when
+  =head->type == AST_SYMBOL=). Each known operation symbol is compared
+  via =strcmp= in a long chain of =if= statements spanning
+  codegen.c:4101-12677. These are callable from paren-mode. If no
+  strcmp matches, falls through to layer 3.
+
+[OBS id:obs.codegen-ops.arch.layer3 src:codegen.c:9790-11976,12677 conf:high]
+  *Layer 3 — env lookup and generic call* (inside =AST_LIST= when no
+  strcmp matched). The head symbol is resolved via
+  =resolve_symbol_with_modules= (line 3429). If found:
+  - =ENV_VAR= with =TYPE_SET= → set-as-function dispatch (line 9880).
+  - =ENV_VAR= with =TYPE_LIST= and 2 args → list-as-function index
+    dispatch (line 9909).
+  - =ENV_VAR= with =TYPE_MAP= → map-as-function dispatch (line 9931).
+  - =ENV_VAR= with =TYPE_COLL/=TYPE_LIST= → collection indexing via
+    dynamic tag dispatch (line 9970).
+  - =ENV_VAR= with =TYPE_ARR= and 2 args → array indexing (line 9700).
+  - =ENV_FUNC= → typed or closure-ABI call dispatch (line 11800+).
+  - Type cast when name matches known type (line 11978-11980):
+    Int, Float, Char, String, Hex, Oct, Bin, F32, I8, U8, I16,
+    U16, I32, U32, I64, U64, I128, U128.
+  - Dot-chain head resolution (line 12533-12619).
+  - =(dot base field)= layout field access (line 12623).
+  - If nothing matches: =CODEGEN_ERROR "unknown function: …"=
+    (line 12675).
+
+[OBS id:obs.codegen-ops.arch.builtins src:codegen.c:13143-13302 conf:high]
+  *=register_builtins* (codegen.c:13143-13302) inserts 94 entries into
+  the environment via =env_insert_builtin=. All strcmp-dispatch
+  operations are also registered here. However, some entries are
+  *register_builtins-only* — they have no strcmp handler and are
+  unreachable from paren-mode. They work only when invoked through
+  wisp-mode symbol resolution or when the reader maps the symbol to a
+  defined function.
+
+* Arithmetic
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.arithmetic
+:CUSTOM_ID: ops-arithmetic
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Arithmetic dispatchers: + - * / % mod. All support int, float, mixed, variadic, and nested forms. Partial application works for + - * / with 1 arg.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:9292-9650
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.arith.mod src:codegen.c:9292-9320 conf:high]
+  =(% a b)= / =(mod a b)= — Modulo operator. 2 required args. Float
+  variant uses =LLVMBuildFRem=, integer variant uses
+  =LLVMBuildSRem=. Bool → Int width cast. Char → Int90 cast.
+  Error on TYPE_LAYOUT or TYPE_STRING.
+
+[OBS id:obs.codegen-ops.arith.add-sub-mul-div src:codegen.c:9323-9650 conf:high]
+  =(+ a b ...)= / =(- a b ...)= / =(* a b ...)= / =(/ a b ...)=
+  — Arithmetic operators. Variadic: 1+ args. Partial application with
+  single arg (=(+ 5)=) creates a closure via trampoline.
+  Char coerced to Int. Ratio arithmetic promoted: if any operand is
+  TYPE_RATIO, all operands promote via =rt_ratio_from_int= and
+  computation uses =rt_ratio_add/sub/mul/div=. Float promotion on
+  mixed int/float operands. Pointer arithmetic for TYPE_PTR + int.
+  No auto-boxing for binary ops — values are used raw (typed ABI).
+
+* Bitwise
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.bitwise
+:CUSTOM_ID: ops-bitwise
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Bitwise dispatchers: & ~ bit-xor (⊕) << >> >>>. bit-or (∨) also handled. All operate on 64-bit integers.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:7497-7540
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.bitwise.and-or-xor src:codegen.c:7497-7514 conf:high]
+  =(& a b ...)= / =(bit-or a b ...)= / =(bit-xor a b ...)=
+  — Variadic bitwise operators (2+ args). =&= doubles as address-of
+  prefix (=(& x)= returns memory address). Unicode aliases:
+  =∨= for =bit-or=, =⊕= for =bit-xor=. Pointer args auto-cast to i64
+  via =PtrToInt=. Struct args produce zero. 2+ args required.
+
+[OBS id:obs.codegen-ops.bitwise.not src:codegen.c:7518-7530 conf:high]
+  =(~ x)= — Bitwise NOT. 1 arg. Wraps via =LLVMBuildNot= after
+  zero-extending to i64 if needed.
+
+[OBS id:obs.codegen-ops.bitwise.shift src:codegen.c:7532-7540 conf:high]
+  =(<< x n)= / =(>> x n)= / =(>>> x n)= — Bit shift operators.
+  2 args. =<<= left shift, =>>= arithmetic right shift
+  (sign-preserving), =>>>= logical right shift (zero-fill). Widens
+  to i64 unless already i64. Shift amount zero-extended.
+
+* Comparison
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.comparison
+:CUSTOM_ID: ops-comparison
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Comparison dispatchers: = != < > <= >=. Support int, float, mixed, variadic, and partial application.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:8761-9270
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.compare.int-float src:codegen.c:8761-9270 conf:high]
+  =(= a b ...)= / =(!= a b ...)= / =(< a b ...)= / =(<= a b ...)=
+  / =(> a b ...)= / =(>= a b ...)= — Comparison operators. 2+ args,
+  partial application with 1 arg (=(< 5)=) creates partial comparison
+  closure. Variadic: all compared pairwise (a < b < c). Mixed int/float
+  automatically promoted. 2-arg form also participates in typeclass
+  dispatch via =tc_is_method= hook (line 8907). =/= and =!= use
+  =rt_equal_p= for boxing-aware deep equality on any type. Ordering
+  ops unbox to i64 or use LLVM =icmp/fcmp= on raw values.
+
+* Logic
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.logic
+:CUSTOM_ID: ops-logic
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Logic dispatchers: and or not. Short-circuit evaluation works.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:7543-7558,7807-7828
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.logic.and-or src:codegen.c:7543-7558 conf:high]
+  =(and a b ...)= / =(or a b ...)= — Short-circuit logical operators.
+  Variadic (2+ args). Coerces non-bool values: float via FCmp,
+  pointer types (Set/Map/List/Unknown) via null check, all others
+  via integer zero comparison. Pure LLVM =i1= accumulation — no
+  actual short-circuit branch structure (each arg evaluated
+  unconditionally).
+
+[OBS id:obs.codegen-ops.logic.not src:codegen.c:7807-7828 conf:high]
+  =(not x)= — Logical NOT. 1 arg. Coerces: BOOL via =LLVMBuildNot=,
+  float via =FCmp OEQ= with 0.0, integer via =ICmp EQ= with 0.
+
+* Type Predicates
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.type-preds
+:CUSTOM_ID: ops-type-preds
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Seventeen type predicate dispatchers: Int? Float? Number? Char? String? Bool? Symbol? Keyword? List? Ratio? Set? Map? Fn? Hex? Bin? Oct? Arr?. All work at compile-time when type is known, falling back to runtime tag check.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:5558-5621,5594-5620,7401,8279,8295,8370
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.preds.main-loop src:codegen.c:5559-5591 conf:high]
+  Type predicates dispatch via a static table loop (line 5559-5560):
+  | Predicate | Tag          |     Tag2 |
+  |-----------+--------------+----------|
+  | Int?      | RT_INT       |       -1 |
+  | Float?    | RT_FLOAT     |       -1 |
+  | Number?   | RT_INT       | RT_FLOAT |
+  | Char?     | RT_CHAR      |       -1 |
+  | String?   | RT_STRING    |       -1 |
+  | Bool?     | -3 (special) |       -1 |
+  | Symbol?   | RT_SYMBOL    |       -1 |
+  | Keyword?  | RT_KEYWORD   |       -1 |
+  | List?     | RT_LIST      |       -1 |
+  | Ratio?    | RT_RATIO     |       -1 |
+  | Set?      | RT_SET       |       -1 |
+  | Map?      | RT_MAP       |       -1 |
+  | Fn?       | RT_CLOSURE   |       -1 |
+  | Hex?      | RT_INT       |       -1 |
+  | Bin?      | RT_INT       |       -1 |
+  | Oct?      | RT_INT       |       -1 |
+  | Arr?      | -2 (special) |       -1 |
+  When the compile-time type is known (=arg.type->kind != TYPE_UNKNOWN=),
+  the predicate evaluates at compile time (constant =i1=). Otherwise,
+  it unboxes to a RuntimeValue pointer, reads the runtime tag, and
+  compares. =Number?= accepts both =RT_INT= and =RT_FLOAT= tags.
+
+[OBS id:obs.codegen-ops.preds.nil src:codegen.c:5594-5621 conf:high]
+  =(nil? x)= — Tests for null pointer. Returns False at compile time
+  for scalar types (Int, Float, Bool, Char). Runtime check via
+  =LLVMICmp EQ= with null for pointer-like values.
+
+[OBS id:obs.codegen-ops.preds.empty src:codegen.c:7401-7406 conf:high]
+  =(empty? x)= / =(list-empty? x)= — Tests if a list is empty (null
+  or zero-length). Delegates to =rt_list_is_empty= runtime.
+
+[OBS id:obs.codegen-ops.preds.pair src:codegen.c:6937-6956 conf:high]
+  =(pair? x)= — Tests if a list is a dotted pair (tail is an atom).
+  Delegates to =rt_is_pair= runtime function. Boxes value before
+  passing.
+
+[OBS id:obs.codegen-ops.preds.set src:codegen.c:8279-8293 conf:high]
+  =(Set? x)= — Tests if value is a Set. Compile-time via
+  =arg.type->kind == TYPE_SET=.
+
+[OBS id:obs.codegen-ops.preds.collection src:codegen.c:8295-8312 conf:high]
+  =(collection? x)= — Tests if value is a List, Set, Arr, or Coll.
+  Compile-time via type kind check.
+
+[OBS id:obs.codegen-ops.preds.map src:codegen.c:8370-8382 conf:high]
+  =(Map? x)= — Tests if value is a Map. Compile-time via
+  =arg.type->kind == TYPE_MAP=.
+
+* Type Conversions
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.type-convs
+:CUSTOM_ID: ops-type-convs
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Type conversion dispatchers: Int, Float, Char, String, Hex, Oct, Bin. Also F32, I8, U8, I16, U16, I32, U32, I64, U64, I128, U128. Handled via generic cast_target loop.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:11978-12080
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.conv.cast-loop src:codegen.c:11979-11981 conf:high]
+  Type conversion uses a static table loop (line 11980):
+  Int, Float, Char, String, Hex, Bin, Oct, F32, I8, U8, I16, U16,
+  I32, U32, I64, U64, I128, U128. Each takes 1 required argument.
+  =String= cast is special-cased: string identity, char→string,
+  then calls =rt_to_string= on the boxed value. Numeric casts emit
+  LLVM trunc/zext/sext/fptosi/sitofp instructions. Type conversions
+  are short-circuit: if the argument already has the target type, the
+  value passes through unchanged. Errors for non-numeric source types.
+
+* Collection
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.collection
+:CUSTOM_ID: ops-collection
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Collection operation dispatchers: assoc assoc! dissoc dissoc! merge contains? conj disj conj! disj! set find keys vals.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:8191-8450,8267-8340
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.coll.set src:codegen.c:8191-8265 conf:high]
+  =(set ...)= — Create a set from arguments or convert a collection.
+  Variadic: 0+ args. Zero args creates empty set. One arg converts
+  a List or Arr to Set, or wraps a single value in a Set. Multiple
+  args creates a Set containing all values. Wraps result via
+  =rt_value_set=.
+
+[OBS id:obs.codegen-ops.coll.conj-disj src:codegen.c:8267-8277 conf:high]
+  =(conj set val)= / =(disj set val)= — Add/remove element from set
+  (immutable). Delegates to =codegen_set_op= with =rt_set_conj= /
+  =rt_set_disj=.
+
+[OBS id:obs.codegen-ops.coll.conj-bang-disj-bang src:codegen.c:8273-8277 conf:high]
+  =(conj! set val)= / =(disj! set val)= — Add/remove element from set
+  (mutable in place). Delegates to =codegen_set_op= with
+  =rt_set_conj_mut= / =rt_set_disj_mut=.
+
+[OBS id:obs.codegen-ops.coll.assoc-dissoc src:codegen.c:8315-8318 conf:high]
+  =(assoc map key val)= / =(assoc! map key val)= — Add/update key-value
+  pair in map (immutable/mutable). =(dissoc map key)= / =(dissoc! map key)=
+  — Remove key from map. All delegate to =codegen_map_op=.
+
+[OBS id:obs.codegen-ops.coll.merge src:codegen.c:8335-8368 conf:high]
+  =(merge a b)= — Merge two maps. Rightmost wins on conflict. Unboxes
+  both, calls =rt_map_merge=, wraps result via =rt_value_map=.
+
+[OBS id:obs.codegen-ops.coll.find src:codegen.c:8322-8340 conf:high]
+  =(find map key)= — Return =(key val)= pair for key in map, or nil.
+  Unboxes map, calls =rt_map_find=.
+
+[OBS id:obs.codegen-ops.coll.keys-vals src:codegen.c:8319-8320 conf:high]
+  =(keys map)= / =(vals map)= — Return list of all keys / values in
+  map. Delegate to =codegen_map_op=.
+
+[OBS id:obs.codegen-ops.coll.contains src:codegen.c:8384-8447 conf:high]
+  =(contains? coll val)= — Test if a collection contains a value.
+  String variant uses =strstr=. Map variant unboxes, calls
+  =rt_map_contains=. Set variant unboxes, calls =rt_set_contains=.
+
+* List
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.list
+:CUSTOM_ID: ops-list
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: List operation dispatchers: car cdr cons . ++ list list-copy make-list count empty? nil? pair? head tail append!. Also internal rt_coll_* helpers.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:6794-7356,7401-7455,8687-8758
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.list.empty src:codegen.c:6794-6801 conf:high]
+  =(list)= — Create empty list. Calls =get_rt_list_new= (formerly
+  =get_rt_list_empty=). Only zero-arg works correctly; multi-arg
+  =(list 1 2 3)= is broken (see gap).
+
+[OBS id:obs.codegen-ops.list.cons src:codegen.c:6803-6936 conf:high]
+  =(cons val list)= / =(. val list)= — Cons element onto a list.
+  Creates a lazy cons cell by building a thunk for the tail. Collects
+  free variables from the tail expression, heap-allocates env array,
+  generates thunk function, calls =rt_coll_lazy_cons=.
+
+[OBS id:obs.codegen-ops.list.car src:codegen.c:7097-7104 conf:high]
+  =(car list)= — Get first element of list. Unboxes via
+  =rt_unbox_list=, calls =rt_list_car=, returns unknown type.
+
+[OBS id:obs.codegen-ops.list.cdr src:codegen.c:7106-7113 conf:high]
+  =(cdr list)= — Get rest of list. Unboxes via =rt_unbox_list=, calls
+  =rt_list_cdr=, wraps result via =rt_value_list=.
+
+[OBS id:obs.codegen-ops.list.head src:codegen.c:6959-7019 conf:high]
+  =(head coll)= — Get first element of any collection. Per-type
+  optimized: sized array via GEP index 0, string via index 0 char
+  load, set via iteration, list via =rt_list_car=, map via
+  =rt_map_get= with single key.
+
+[OBS id:obs.codegen-ops.list.tail src:codegen.c:7020-7095 conf:high]
+  =(tail coll)= — Get all but first element. Per-type: runtime-sized
+  array allocates new fat struct, fixed array GEP+1, string GEP+1,
+  known list via =rt_list_cdr=, unknown/coll via unbox+cdr. Segfaults
+  on lists (see gap).
+
+[OBS id:obs.codegen-ops.list.concat src:codegen.c:7142-7356 conf:high]
+  =(++ a b)= — Concatenate two collections. String: calls
+  =rt_string_concat=. Array: fat pointer concatenation via
+  =rt_arr_concat=. Coll/List: lazy cons with thunk capture: collects
+  free variables from RHS AST, allocates env, generates thunk
+  function, calls =rt_coll_lazy_cons=.
+
+[OBS id:obs.codegen-ops.list.make-list src:codegen.c:7424-7445 conf:high]
+  =(make-list n)= / =(make-list n val)= — Create a list of length n
+  filled with val (or nil). Calls =rt_make_list=.
+
+[OBS id:obs.codegen-ops.list.copy src:codegen.c:7409-7414 conf:high]
+  =(list-copy list)= — Deep copy a list. Calls =rt_list_copy=.
+
+[OBS id:obs.codegen-ops.list.count src:codegen.c:8687-8758 conf:high]
+  =(count coll)= — Number of elements in collection. Dispatch chain:
+  Arr via size field, String via =strlen=, Map via =rt_map_count=,
+  Set via =rt_set_count=, Coll/List/Unknown via =rt_coll_count=.
+
+[OBS id:obs.codegen-ops.list.append-bang src:codegen.c:7416-7421 conf:high]
+  =(append! list val)= — Destructively append a value to a list in
+  place. Boxes value, calls =rt_list_append=.
+
+* String
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.string
+:CUSTOM_ID: ops-string
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: String operation dispatchers: make-string count starts-with? ends-with? contains? string-indexing.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:6776-6790,8449-8515,8687-8721,3999-4012
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.str.make-string src:codegen.c:6776-6790 conf:high]
+  =(make-string n char)= — Create a string of length n filled with
+  char. Allocates via =calloc=, fills via =memset=.
+
+[OBS id:obs.codegen-ops.str.starts-ends-with src:codegen.c:8449-8515 conf:high]
+  =(starts-with? str prefix)= / =(ends-with? str suffix)= — Prefix/
+  suffix test for strings. Uses =strlen= and =strncmp= for String
+  type. Coerces Char suffix to single-char C string. Also handles
+  Arr and List types via element-wise comparison.
+
+[OBS id:obs.codegen-ops.str.contains src:codegen.c:8384-8447 conf:high]
+  =(contains? str substr)= — Substring test. String variant uses
+  =strstr=. Also works for Map, Set via =rt_map_contains= /
+  =rt_set_contains=.
+
+[OBS id:obs.codegen-ops.str.string-indexing src:codegen.c:3999-4012 conf:high]
+  =("hello" i)= — Inline string indexing. Handled as special case in
+  the AST_LIST section before strcmp dispatch. Loads the i-th char
+  as TYPE_CHAR via GEP on a GlobalStringPtr.
+
+* Control
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.control
+:CUSTOM_ID: ops-control
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Control flow dispatchers: if begin unless while when do with for.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:7561-8002,7830-7877,8004-8189
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.ctrl.if src:codegen.c:7572-7825 conf:high]
+  =(if cond then else)= — Conditional. 2 or 3 args (else optional).
+  Coerces condition: float via FCmp ONE, boxed via unbox to i64 then
+  ICmp, pointer via null check. Creates then/else/merge BBs. PHI node
+  unifies branch types: if both branches are pointer-like or both are
+  scalar, emits appropriate PHI; otherwise boxed result.
+
+[OBS id:obs.codegen-ops.ctrl.begin src:codegen.c:7561-7570 conf:high]
+  =(begin expr...)= — Sequence. Evaluates all exprs, returns last.
+  Zero args returns 0. No child env — all mutations visible to
+  subsequent forms.
+
+[OBS id:obs.codegen-ops.ctrl.unless src:codegen.c:7919-7955 conf:high]
+  =(unless cond body...)= — Execute body if condition is False.
+  Negates condition via FCmp/ICmp EQ with 0, then branches.
+
+[OBS id:obs.codegen-ops.ctrl.while src:codegen.c:7957-8002 conf:high]
+  =(while cond body...)= — Loop while condition is true. Creates
+  cond/body/exit BBs. Condition evaluated each iteration. Child
+  env for body.
+
+[OBS id:obs.codegen-ops.ctrl.when src:codegen.c:7879-7917 conf:high]
+  =(when cond body...)= — Execute body when condition is true.
+  Creates then/exit BBs. Child env for body.
+
+[OBS id:obs.codegen-ops.ctrl.do src:codegen.c:7830-7839 conf:high]
+  =(do expr...)= — Evaluate all exprs, return last. Like =begin= but
+  always requires at least 1 expr. NOTE: this =do= exists as a strcmp
+  handler; the =do= in "let/do/with" context is distinct.
+
+[OBS id:obs.codegen-ops.ctrl.with src:codegen.c:7841-7877 conf:high]
+  =(with [name val ...] body...)= — Bind variables and execute body.
+  Creates child env. Bindings are an even-length array. Evaluates
+  each value expression, stores in alloca, inserts into child env.
+
+[OBS id:obs.codegen-ops.ctrl.for src:codegen.c:8004-8189 conf:high]
+  =(for [var start end step?] body...)= — Numeric loop. 4 binding
+  forms: simple count (=(for n body)=), named var with count
+  (=(for [n] body)=), range (=(for [i 0 10] body)=), range with step
+  (=(for [i 0 10 2] body)=). =for x in collection= is not yet
+  implemented (compile error). Creates cond/body/inc/after BBs with
+  i64 induction variable. Child env bound to loop var.
+
+* Binding
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.binding
+:CUSTOM_ID: ops-binding
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Binding dispatchers: define set! def (alias for define).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:4106-5520,7471-7495
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.bind.define src:codegen.c:4106-5517 conf:high]
+  =(define name val)= / =(def name val)= — Define a variable or
+  function. Name can be symbol or type-annotated list
+  (=(define (x :: Int) 5)=). When value is =AST_LAMBDA=, performs
+  HM type inference, collects free variables for closure support,
+  optionally converts to closure ABI (env+i32+args ptr) or typed
+  ABI. Polymorphic functions emit stubs with runtime dispatch.
+  Top-level defines allocate LLVM globals; inner defines use alloca.
+  Module system integration: =print_defined= marks symbols as
+  privates or exports.
+
+[OBS id:obs.codegen-ops.bind.set src:codegen.c:7471-7495 conf:high]
+  =(set! name val)= — Mutate an existing variable. Resolves via
+  =codegen_lvalue=, emits type cast if needed, stores the value.
+
+* Quotation
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.quotation
+:CUSTOM_ID: ops-quotation
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Quotation dispatchers: quote quasiquote expand (compile-time AST reflection).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:5624-5873,5701-5760
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.quote.quote src:codegen.c:5701-5760 conf:high]
+  =(quote x)= — Quote expression without evaluation. Lists create
+  runtime lists via =rt_list_new= + =rt_list_append= per element,
+  wrapped via =rt_value_list=. Symbols return symbols via
+  =rt_value_symbol=. Keywords return keyword string pointers. Other
+  types (numbers, strings, chars) evaluate normally (identity).
+
+[OBS id:obs.codegen-ops.quote.quasiquote src:codegen.c:5624-5699 conf:high]
+  =(quasiquote x)= — Quasiquote with =unquote= holes. Builds a runtime
+  list, evaluating =(unquote e)= holes via =codegen_expr= (boxing
+  int/float results), treating everything else as literal via
+  =ast_to_runtime_value=. =unquote-splice= is /not/ handled in
+  codegen dispatch — processed during reader expansion.
+
+[OBS id:obs.codegen-ops.quote.expand src:codegen.c:5853-5874 conf:high]
+  =(expand '(expr))= — Compile-time AST reflection. Calls
+  =rt_ast_to_runtime_value= at codegen time (before AST is freed),
+  embeds the resulting RuntimeValue pointer as an i64 constant in
+  the IR. Intended for macro and reflection use.
+
+* Function (Gap)
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.function
+:CUSTOM_ID: ops-function
+:CONTEXT_KIND: observation
+:CONTEXT_DESCRIPTION: Function construction has no strcmp dispatchers: fn lambda -> → λ defn are register_builtins-only. Closures are broken.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.fn.strcmp-gap src:codegen.c conf:high]
+  None of =fn=, =lambda=, =defn=, =->=, =→=, =λ= have strcmp
+  dispatch handlers. They are only registered in =register_builtins=
+  (codegen.c:13238, 13233). When invoked from paren-mode, they fall
+  through to env lookup, which resolves them as =ENV_FUNC= entries
+  with =func_ref=NULL=, producing "compiler bug: function '…' has no
+  LLVM reference". =AST_LAMBDA= is handled at layer 1 (line 13074)
+  but *only* when it appears as the /value/ position of a =define=
+  form. Standalone =(lambda (x) (+ x 1))= or =(fn (x) x)= in
+  paren-mode fails.
+
+[OBS id:obs.codegen-ops.fn.closure-abi src:codegen.c:4174-4192 conf:high]
+  Closure ABI exists in the define+lambda path but is only triggered
+  for inner functions with captures. The ABI is =(ptr env, i32 n,
+  ptr args[])= → ptr. Top-level polymorphic functions use typed ABI
+  with stubs.
+
+* Module
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.module
+:CUSTOM_ID: ops-module
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Module system dispatchers: include (FFI header). import, module, export are register_builtins-only.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:5519-5555
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.module.include src:codegen.c:5519-5555 conf:high]
+  =(include "header.h" system [":unprefix"]...)= — Include a C header
+  via FFI. Parses header, injects declarations into env. Third arg
+  =system= selects system vs local include path. Additional string
+  args are prefix strip patterns. Delegates to =ffi_parse_header= +
+  =ffi_inject_into_env=.
+
+[OBS id:obs.codegen-ops.module.import-export conf:high]
+  =(import ...)=, =(module ...)=, =(export ...)= — No strcmp
+  dispatchers. Registered as builtins only (codegen.c:13235-13236).
+  Module system operates at the =codegen_data= / =codegen_layout=
+  level for data/layout declarations, but import/export/module
+  forms from paren-mode fall through to env lookup.
+
+* Misc
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.misc
+:CUSTOM_ID: ops-misc
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Miscellaneous dispatchers: show ?? equal? assert-eq error undefined doc code show-value color-to-string expand __adt_tag dot.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:5763-5874,6366-6429,6431-6603,6604-6683,6685-6774,7359-7370,11901-11904,12623-12673
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.misc.show src:codegen.c:5876-6363 conf:high]
+  =(show val)= / =(show "fmt _ _ a b")= — Print value to stdout.
+  Variadic format-string mode: underscores in a string literal are
+  replaced by subsequent arguments. Single-argument mode uses
+  =printf= with %s for strings, %lld for ints, %f for floats,
+  calls =rt_to_string= for complex types (lists, maps, etc.).
+  Full format string parsing with chunk printing.
+
+[OBS id:obs.codegen-ops.misc.null-coalesce src:codegen.c:5763-5850 conf:high]
+  =(?? expr default)= — Null-coalescing operator. If expr is nil,
+  evaluates and returns default; otherwise returns expr. Creates
+  then/else/merge BBs. Scalar types (Int, Float, Bool, Char) are
+  never nil and return directly. Boxed values check via
+  =rt_value_is_nil= with optional unbox-to-scalar PHI unification.
+
+[OBS id:obs.codegen-ops.misc.equal src:codegen.c:7448-7469 conf:high]
+  =(equal? a b)= — Deep equality test. Boxes both sides, calls
+  =rt_equal_p=, truncates i32 result to i1.
+
+[OBS id:obs.codegen-ops.misc.assert-eq src:codegen.c:6431-6602 conf:high]
+  =(assert-eq expected actual)= — Test assertion. Evaluates both
+  sides, compares via =rt_equal_p=, emits runtime error message with
+  location if not equal. Used in test blocks.
+
+[OBS id:obs.codegen-ops.misc.error src:codegen.c:6604-6683 conf:high]
+  =(error "msg")= — Abort with a runtime error message. Prints
+  location + message via =printf=, calls =abort+= =exit(1)=, then
+  =LLVMBuildUnreachable=.
+
+[OBS id:obs.codegen-ops.misc.undefined src:codegen.c:6685-6774 conf:high]
+  =(undefined)= — Placeholder for undefined function bodies. Emits
+  runtime error: "called undefined" with location. Valid only inside
+  function bodies (not top-level).
+
+[OBS id:obs.codegen-ops.misc.doc src:codegen.c:6366-6392 conf:high]
+  =(doc sym)= — Return documentation string for a defined symbol.
+  Looks up env entry, returns its docstring or "(no documentation)".
+
+[OBS id:obs.codegen-ops.misc.code src:codegen.c:6395-6429 conf:high]
+  =(code sym)= — Return the source AST of a defined function. Looks
+  up env entry, retrieves stored AST, serializes via
+  =codegen_emit_ast_as_value=. Used for code reflection.
+
+[OBS id:obs.codegen-ops.misc.show-value src:codegen.c:7359-7370 conf:high]
+  =(show-value v)= — Print any RuntimeValue* with newline. Calls
+  =rt_print_value_newline=.
+
+[OBS id:obs.codegen-ops.misc.color-to-string src:codegen.c:11901-11904 conf:high]
+  =(color-to-string val)= — Convert a value to its colored string
+  representation. Handled in the env-function-call path. Debug marker.
+
+[OBS id:obs.codegen-ops.misc.adt-tag src:codegen.c:7372-7399 conf:high]
+  =(__adt_tag x)= — Return the ADT constructor tag of a value. Reads
+  the first i32 field of the heap-allocated ADT struct as tag.
+
+[OBS id:obs.codegen-ops.misc.dot src:codegen.c:12623-12673 conf:high]
+  =(dot base-expr field)= — Postfix dot access on a call result.
+  Resolves layout type from base expression, finds field index,
+  emits GEP + load. Searches all layouts if base type is unknown.
+
+* Collection-as-Function (Coercion)
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.coll-as-fn
+:CUSTOM_ID: ops-coll-as-fn
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Collection-as-function coercion: sets, maps, lists, and generic collections used as callable values.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:9880-10049
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.coll-as-fn.set src:codegen.c:9880-9907 conf:high]
+  =(s key)= where =s :: Set= — Set used as function. Loads set var,
+  unboxes via =rt_unbox_set=, boxes the key arg, calls =rt_set_get=.
+  Requires exactly 1 argument.
+
+[OBS id:obs.codegen-ops.coll-as-fn.map src:codegen.c:9931-9968 conf:high]
+  =(m key)= / =(m key default)= where =m :: Map= — Map used as
+  function. Unboxes via =rt_unbox_map=, boxes key (and optional
+  default), calls =rt_map_get=. 1 or 2 args.
+
+[OBS id:obs.codegen-ops.coll-as-fn.list src:codegen.c:9909-9929 conf:high]
+  =(xs i)= where =xs :: List= and 2 args — List used as function.
+  Loads list, evaluates index arg, calls =rt_list_length= for bounds
+  check, =rt_list_nth= for element access.
+
+[OBS id:obs.codegen-ops.coll-as-fn.coll src:codegen.c:9970-10049 conf:high]
+  =(c i)= where =c :: Coll= — Generic collection indexing. Checks
+  runtime tag: String path uses =strlen= + GEP + =rt_value_char=,
+  List path uses =rt_list_nth=. PHI node joins results.
+
+* Array
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.array
+:CUSTOM_ID: ops-array
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Array indexing dispatchers: inline array indexing ([1 2 3] 0), env var array indexing, dot-chain array indexing.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:4015-4039,9700-9878,12533-12572
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.array.inline src:codegen.c:4015-4039 conf:high]
+  =([1 2 3] i)= — Inline array indexing. Handled as special case in
+  AST_LIST (layer 1). Emits fat-pointer data extract + GEP + load.
+  Bounds check via =emit_bounds_check=.
+
+[OBS id:obs.codegen-ops.array.env src:codegen.c:9700-9878 conf:high]
+  =(arr i)= where arr is an env entry with TYPE_ARR — Array indexing
+  via env lookup (layer 3). Handles sized arrays (compile-time
+  constant size) and fat arrays (runtime-sized). Bounds check for
+  fat arrays.
+
+[OBS id:obs.codegen-ops.array.dot src:codegen.c:12533-12572 conf:high]
+  =(obj.field i)= — Dot-chain array indexing. Extracts the field
+  value, recognizes TYPE_ARR, emits fat or sized GEP as appropriate.
+
+* Address-Of
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.address-of
+:CUSTOM_ID: ops-address-of
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Address-of operator: (& x) returns the memory address of x. Uses the same dispatch as bitwise AND with single argument.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:7497
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.addr-of src:codegen.c:7497 conf:high]
+  =(& x)= — Address of x. The =&= symbol is registered as variadic
+  bitwise AND with 2+ args. When called with 1 arg, the reader or
+  a higher-level pass should handle the address-of semantics. NOTE:
+  The strcmp handler for =&= (line 7497) requires =REQUIRE_MIN_ARGS(2)=
+  for bitwise AND, so 1-arg =(& x)= address-of is NOT handled by the
+  strcmp dispatch — it must reach codegen through a different path
+  (the reader produces =AST_ADDRESS_OF= for prefix =&=).
+
+* Range
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.range
+:CUSTOM_ID: ops-range
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Range syntax: (lo ..) infinite lazy list, (lo .. hi) finite range, (lo, next .. hi) stepped range. Handled inline in AST_ARRAY/AST_LIST.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:3920-3988
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.range.infinite src:codegen.c:3924-3944 conf:high]
+  =(lo ..)= / =(lo, next ..)= — Infinite lazy list range. Uses
+  =rt_list_from= (single start) or =rt_list_from_step= (with step).
+  Start/step values converted to i64 if float.
+
+[OBS id:obs.codegen-ops.range.finite src:codegen.c:3945-3987 conf:high]
+  =(lo .. hi)= / =(lo, next .. hi)= — Finite range. Without step:
+  calls =rt_list_range=. With step: computes count, builds infinite
+  list via =rt_list_from_step=, takes finite prefix via
+  =rt_list_take=.
+
+* Known Codegen Gaps
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.gaps
+:CUSTOM_ID: codegen-gaps
+:CONTEXT_KIND: observation
+:CONTEXT_DESCRIPTION: Known codegen dispatch gaps: closures missing strcmp, register_builtins-only unreachable symbols, missing control forms, map/set runtime construction, list variadic, tail segfault, superscript desugar, inline assembly propagation.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c,language.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.gaps.closures src:codegen.c conf:high]
+  *Closures are broken*: =fn=, =lambda=, =defn= have no strcmp
+  dispatch handler. No closure allocation exists in the strcmp path.
+  =AST_LAMBDA= only works as the value in =(define name (lambda ...))=.
+  This blocks higher-order functions: =map=, =filter=, =apply=,
+  =partial=.
+
+[OBS id:obs.codegen-ops.gaps.registered-only src:codegen.c:13143-13302 conf:high]
+  *Registered-only (no strcmp)*: These are =register_builtins=-only
+  — reachable only from wisp-mode or when the reader maps symbol to
+  defined function, not from paren-mode:
+  - =concat=, =substring=, =reverse=, =nth=, =length=, =reduce=
+  - =fn=, =lambda=, =->=, =→=, =λ=, =defn=
+  - =cond=, =let=, =let*=, =letrec=
+  - =import=, =module=, =export=
+  - =match=, =pipe=
+
+[OBS id:obs.codegen-ops.gaps.control-forms src:codegen.c conf:high]
+  *Missing control forms*: =cond=, =let=, =let*=, =letrec= have no
+  strcmp handler. =when=, =unless=, =do=, =with= DO have strcmp
+  handlers. =cond= is treated as an ordinary variable reference.
+
+[OBS id:obs.codegen-ops.gaps.map-runtime src:codegen.c conf:high]
+  *Map/Set runtime construction*: Literals like ={:a 1}= and
+  ={1 2 3}= produce garbage values without explicit =:: Map= /
+  =:: Set= type annotation. Functional (=assoc=, =dissoc=, =merge=)
+  always receive garbage inputs. Only =assoc! = / =find= with typed
+  variables work.
+
+[OBS id:obs.codegen-ops.gaps.list-variadic src:codegen.c:6794-6801 conf:high]
+  *=(list 1 2 3)= broken*: Multi-argument =(list ...)= produces a list
+  where =(car (list 1 2 3))= returns nil. Only zero-arg =(list)=
+  works. =(make-list n val)= works correctly.
+
+[OBS id:obs.codegen-ops.gaps.tail-segfault src:codegen.c conf:high]
+  *=tail= on lists segfaults*: Runtime list implementation bug in
+  =rt_list_cdr= or the unboxing chain. =tail= on arrays and strings
+  works.
+
+[OBS id:obs.codegen-ops.gaps.superscript src:codegen.c conf:high]
+  *Superscript sugar broken*: =x²= desugars to =(^ x 2)=, but =^=
+  has no strcmp dispatch handler despite being a registered builtin.
+  Upper-case superscript forms similarly broken.
+
+[OBS id:obs.codegen-ops.gaps.inline-asm src:codegen.c:13074-13101 conf:high]
+  *Inline asm naked propagation*: Naked inline assembly functions
+  compiled via =(define ... (asm ...)) return the first parameter
+  only, not the computed sum. The raw asm output has no LLVM
+  constraint wiring.
+
+[OBS id:obs.codegen-ops.gaps.and-or-not-uc src:codegen.c:7543,7807 conf:high]
+  *AND OR NOT XOR uppercase*: No strcmp handlers. Only lowercase
+  =and=, =or=, =not= have dispatchers. NOT, XOR listed as expected
+  aliases but have no implementation.
+
+* Cross-References
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.cross-refs
+:CUSTOM_ID: cross-references
+:CONTEXT_KIND: index
+:CONTEXT_DESCRIPTION: Cross-references to language.org primitives, wisp-sugar-effects, and philosophy.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c,language.org
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.codegen-ops.lang-primitives from:obs.codegen-ops.arch.layer2,obs.codegen-ops.arch.layer3,obs.codegen-ops.preds.main-loop conf:high]
+  connects-to -> `monadc.context.language.primitive-ground-types` (type
+  predicates correspond to ground types: Int, Float, Bool, Char,
+  String, Symbol, Keyword, Ratio) ·
+  `monadc.context.language.primitive-list` (cons/car/cdr/++ are the
+  fundamental list operations) ·
+  `monadc.context.language.primitive-function` (closure ABI at
+  codegen.c:4174 is the function runtime representation) ·
+  `monadc.context.language.primitive-set` (Set-as-function coercion
+  at codegen.c:9880) ·
+  `monadc.context.language.primitive-map` (Map-as-function coercion
+  at codegen.c:9931) ·
+  `monadc.context.language.codegen-dispatch` (the strcmp dispatch
+  table is the primary dispatch mechanism for paren-mode) ·
+  `monadc.context.language.codegen-gaps` (all known gaps are
+  documented at language.org:259-398 and expanded here)
+
+[INF id:inf.codegen-ops.wisp-effects from:obs.codegen-ops.arch.layer2,obs.codegen-ops.gaps.registered-only conf:high]
+  connects-to -> `monadc.context.wisp.symbol-resolution` (wisp-mode
+  symbols resolve through env lookup = register_builtins, bypassing
+  the strcmp dispatch; this is why =concat=, =substring=, =reverse=,
+  =nth=, =length=, =reduce= work in wisp but not paren-mode) ·
+  `monadc.context.wisp.bang-sugar` (conj!/disj!/assoc!/dissoc!/
+  append! all have strcmp handlers and also work through wisp !-sugar)
+
+[INF id:inf.codegen-ops.philosophy from:obs.codegen-ops.arch.layer1,obs.codegen-ops.gaps.closures conf:high]
+  connects-to -> `monadc.context.philosophy.purity-is-practical`
+  (the set-theoretic semantics require that every collection operation
+  be a pure function; mutable variants conj!/disj! are second-class) ·
+  `monadc.context.philosophy.zero-to-metal` (the dispatch architecture
+  connects typed ABI at layer 3 for efficient metal-level calls while
+  preserving the polymorphic closure ABI at layer 2 for higher-order
+  code; broken closures are a critical gap in the abstraction ladder)
+
+[INF id:inf.codegen-ops.construction from:obs.codegen-ops.arch.builtins,obs.codegen-ops.bind.define conf:high]
+  connects-to -> `monadc.context.language.constructs.literal-atoms`
+  (AST_SYMBOL, AST_NUMBER, AST_STRING, AST_CHAR, AST_KEYWORD,
+  AST_RATIO — each has a dedicated codegen path at layer 1) ·
+  `monadc.context.language.constructs.define-function` (define+lambda
+  produces either typed or closure ABI functions at codegen.c:4106)
+
+* Counts Summary
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.counts
+:CUSTOM_ID: counts-summary
+:CONTEXT_KIND: observation
+:CONTEXT_DESCRIPTION: Summary counts of strcmp dispatch handlers and register_builtins entries.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.codegen-ops.counts.strcmp src:codegen.c:4106-12677 conf:high]
+  ~83 strcmp dispatch symbols across ~8300 lines (codegen.c:4106-12677).
+
+[OBS id:obs.codegen-ops.counts.builtins src:codegen.c:13143-13302 conf:high]
+  94 =env_insert_builtin= calls in =register_builtins=.
+
+[OBS id:obs.codegen-ops.counts.gap src:codegen.c conf:high]
+  ~15 operations are =register_builtins=-only with no strcmp handler,
+  unreachable from paren-mode.

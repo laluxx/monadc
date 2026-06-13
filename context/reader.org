@@ -14,7 +14,7 @@
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -564,3 +564,38 @@ Expected Wisp shape:
   =[name : Type]=. Internally the single-colon spelling is normalized to the
   canonical =::= marker in the bracket list, so downstream type annotation
   parsing does not need a second representation.
+
+* Connections
+:PROPERTIES:
+:ID: monadc.context.reader.connections
+:CUSTOM_ID: reader-connections
+:CONTEXT_KIND: inference
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.reader.connects-to from:obs.reader.purpose conf:high]
+  connects-to -> `monadc.context.language` (reader produces AST consumed by
+  codegen; ASTType values correspond to language constructs) ·
+  `monadc.context.wisp` (wisp_parse_all expands Wisp to S-exprs, then reader
+  parses to AST; wisp_register_arity feeds arity table) ·
+  `monadc.context.types` (parse_type_annotation in types.c consumes reader AST
+  to produce Type structs) ·
+  `monadc.context.codegen-ops` (codegen_expr dispatches on ASTType values
+  produced by reader) ·
+  `monadc.context.macro` (macro-expanded AST feeds back into codegen) ·
+  `monadc.context.features` (detect_features runs early in parse pipeline,
+  before wisp_parse_all) ·
+  `monadc.context.source-map` (ParserContext tracks source locations for
+  error reporting) ·
+  `monadc.context.tests-arch` (reader-atoms.tsv, reader-sugars.tsv corpora
+  test reader edge cases) ·
+  `monadc.context.tests` (reader tests exercise every ASTType path)

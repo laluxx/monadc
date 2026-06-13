@@ -4,10 +4,21 @@
 ;; TEST-ATOM: Vec3 layout with ->array method returns [x y z].
 ;; TEST-EXPECT: compile, run
 
-(module Main)
-(layout Vec3 [x :: Float] [y :: Float] [z :: Float] where
-  (->array :: Self -> Array)
-  s -> [s.x s.y s.z])
+module Main
 
-(define v (Vec3 1.0 2.0 3.0))
-(show v->array)
+layout Color
+  [r :: U8]
+  [g :: U8]
+  [b :: U8]
+  where
+    method fromRGB :: U8 -> U8 -> U8 -> Color
+      r g b -> (Color r g b)
+
+    method eql :: Self -> Color -> Bool
+      s o -> and s.r = o.r
+                 s.g = o.g
+                 s.b = o.b
+
+define red (Color 255 0 0)
+define red (Color.fromRGB 255 0 0)
+show (red.eql red)

@@ -46,6 +46,31 @@ class ContextVisualizerTests(unittest.TestCase):
         self.assertIn("tests.refinement.refine_int_positive", nodes)
         self.assertIn("tests.interaction.interaction_module_cffi_refinement", nodes)
 
+    def test_context_graph_exposes_documentation_search_contract(self):
+        visualizer = load_visualizer()
+
+        graph = visualizer.parse_context_graph()
+        nodes = {node["id"]: node for node in graph["nodes"]}
+        doc = nodes["doc.references.propositions-as-types"]
+
+        self.assertEqual(doc["kind"], "documentation")
+        self.assertEqual(doc["record_type"], "DOC")
+        self.assertIn("Curry-Howard", doc["content"])
+        self.assertIn("etc/pdfs/propositions-as-types.pdf", doc["source"])
+        self.assertGreater(graph["stats"]["documentation"], 0)
+
+    def test_context_graph_preserves_raw_org_for_rich_rendering(self):
+        visualizer = load_visualizer()
+
+        graph = visualizer.parse_context_graph()
+        nodes = {node["id"]: node for node in graph["nodes"]}
+        build_file = nodes["file:context/build.org"]
+        build_heading = nodes["monadc.context.build.file-metadata"]
+
+        self.assertIn("#+TITLE: Build and Installation Context", build_file["raw_content"])
+        self.assertIn(":PROPERTIES:", build_heading["raw_content"])
+        self.assertIn("[OBS id:obs.context.build.file", build_heading["raw_content"])
+
     def test_done_todo_rewrite_adds_org_closed_timestamp(self):
         visualizer = load_visualizer()
         lines = ["* TODO Polish visualizer", "body"]

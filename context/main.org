@@ -1,0 +1,713 @@
+#+TITLE: Compilation Pipeline Orchestrator (main.c)
+#+AUTHOR: Codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:main:pipeline:orchestrator:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.main.file-metadata
+:CUSTOM_ID: main-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/main.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.main.file src:context/main.org conf:high]
+  This file documents the compilation pipeline orchestrator (main.c, 1432 lines)
+  — the entry point and phase coordinator that ties all compiler subsystems
+  together. This is the top-level morphism in the compilation category:
+  source text → compiled binary.
+
+[OBS id:obs.context.main.scope src:main.c conf:high]
+  main.c pulls together: reader.h, cli.h, types.h, env.h, repl.h, features.h,
+  runtime.h, codegen.h, module.h, buildsystem.h, ffi.h, wisp.h, dep.h,
+  typst_emit.h, and LLVM-C headers. It is the nexus through which every
+  subsystem communicates.
+
+* Structs: Compiled Module Registry
+:PROPERTIES:
+:ID: monadc.context.main.compiled-module-registry
+:CUSTOM_ID: compiled-module-registry
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c:31
+:CONFIDENCE: high
+:END:
+
+** CompiledExport
+:PROPERTIES:
+:ID: monadc.context.main.compiled-export
+:CUSTOM_ID: compiled-export
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c:33
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main.compiled-export struct src:main.c:33-42 conf:high]
+  typedef struct CompiledExport {
+      char         *local_name;     // user-visible name
+      char         *mangled_name;   // LLVM-mangled name
+      EnvEntryKind  kind;           // ENV_VAR or ENV_FUNC
+      Type         *type;           // VAR: variable type; FUNC: unused (use return_type)
+      Type         *return_type;    // FUNC only
+      EnvParam     *params;         // FUNC only, owned
+      int           param_count;
+      LLVMValueRef  func_ref;       // FUNC only — null when skip_emit
+  } CompiledExport;
+
+** CompiledLayout
+:PROPERTIES:
+:ID: monadc.context.main.compiled-layout
+:CUSTOM_ID: compiled-layout
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c:44
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main.compiled-layout struct src:main.c:44-47 conf:high]
+  typedef struct CompiledLayout {
+      char *name;
+      Type *type;
+  } CompiledLayout;
+  Lightweight tuple tracking layouts (ADTs/structs) exported by a compiled module.
+
+** CompiledModule
+:PROPERTIES:
+:ID: monadc.context.main.compiled-module
+:CUSTOM_ID: compiled-module
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c:49
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main.compiled-module struct src:main.c:49-60 conf:high]
+  typedef struct CompiledModule {
+      char           *module_name;
+      char           *obj_path;
+      bool            was_skipped;    // .o was up-to-date, no LLVMValueRef
+      CompiledExport *exports;
+      size_t          export_count, export_cap;
+      CompiledLayout *layouts;
+      size_t          layout_count, layout_cap;
+      struct CompiledModule *next;    // singly-linked global list
+  } CompiledModule;
+
+[OBS id:obs.main.registry-global src:main.c:62 conf:high]
+  static CompiledModule *g_compiled = NULL;
+  The global linked list of all compiled modules, keyed by module name and
+  obj_path. Used for dependency resolution during multi-module compilation.
+
+* Pipeline Entry: main()
+:PROPERTIES:
+:ID: monadc.context.main.entry-point
+:CUSTOM_ID: main-entry-point
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: main.c:1416
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main.main-function src:main.c:1416-1431 conf:high]
+  int main(int argc, char **argv):
+      CompilerFlags flags = parse_flags(argc, argv);
+      switch (flags.mode):
+          CMD_REPL    → repl_run()
+          CMD_NEW     → cmd_new(package_name)
+          CMD_BUILD   → cmd_build()
+          CMD_RUN     → cmd_run()
+          CMD_CLEAN   → cmd_clean()
+          CMD_INSTALL → cmd_install()
+          CMD_TEST    → cmd_test(input_file)
+          CMD_COMPILE → compile(&flags)
+
+  All CLI commands except CMD_COMPILE delegate to cli.h functions.
+  CMD_COMPILE calls compile() which calls compile_one().
+
+[OBS id:obs.main.cli-dispatch src:main.c:1418-1429 conf:high]
+  Each CommandMode maps to a function that either:
+  - Delegates to a buildsystem action (CMD_NEW, CMD_BUILD, CMD_RUN, CMD_CLEAN, CMD_INSTALL)
+  - Runs the REPL (CMD_REPL)
+  - Runs tests (CMD_TEST)
+  - Invokes the full compilation pipeline (CMD_COMPILE)
+
+* Pipeline: compile() Wrapper
+:PROPERTIES:
+:ID: monadc.context.main.compile-wrapper
+:CUSTOM_ID: compile-wrapper
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c (around line 430)
+:CONFIDENCE: medium
+:END:
+
+[OBS id:obs.main.compile-wrapper src:main.c conf:high]
+  compile() wraps compile_one() for the main module. It:
+  - Initializes LLVM (LLVMInitializeAllTargetInfos, AllTargets, AllTargetMCs,
+    AllAsmPrinters, AllAsmParsers)
+  - Creates a fresh registry
+  - Calls compile_one(source_path, flags, is_main_module=true)
+  - Links the final executable using g_ffi_link_libs
+
+[INF id:inf.main.compile-wrapper from:obs.main.compile-wrapper,obs.main.main-function conf:high]
+  connects-to -> monadc.context.main.phase-11-emit (object emission is a
+  sub-step of compile_one; linking the final executable happens after
+  compile_one returns, in compile())
+
+* Pipeline: compile_one() — 12 Phase Orchestrator
+:PROPERTIES:
+:ID: monadc.context.main.compile-one
+:CUSTOM_ID: compile-one
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c:462
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main.compile-one-signature src:main.c:462-464 conf:high]
+  static CompiledModule *compile_one(const char *source_path,
+                                      CompilerFlags *flags,
+                                      bool is_main_module);
+
+[OBS id:obs.main.phase-timing src:main.c:466-473 conf:high]
+  Phases are timed with clock_gettime(CLOCK_MONOTONIC). Any phase taking
+  >50ms is printed as "[phase] name: X.X ms". Uses PHASE_START/PHASE_END
+  macros wrapping each phase section.
+
+** Phase 0: FFI Pre-pass (Arity Registration)
+:PROPERTIES:
+:ID: monadc.context.main.phase-0-ffi-prepass
+:CUSTOM_ID: phase-0-ffi-prepass
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c:543
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main.phase-0 src:main.c:543 conf:high]
+  Phase 0: Before Wisp expansion — scan source for (include ...) directives,
+  create a temporary FFIContext, parse each C header, and register all found
+  function arities with wisp_register_arity(). This ensures Wisp knows the
+  arity of C functions during s-expression parsing (so it can distinguish
+  (func a b) from (func (a b))).
+
+** Phase 1: Module + Import Declarations
+:PROPERTIES:
+:ID: monadc.context.main.phase-1-module-decls
+:CUSTOM_ID: phase-1-module-decls
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c:855
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main.phase-1 src:main.c:855-884 conf:high]
+  Phase 1: Scan top-level expressions for (module ...) and (import ...) forms.
+  - Create ModuleContext, parse_module_decl() and parse_import_decl()
+  - Populate exports and imports from the AST before any codegen
+
+** Phase 2: Verify Dependencies Compiled
+:PROPERTIES:
+:ID: monadc.context.main.phase-2-deps
+:CUSTOM_ID: phase-2-deps
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c:906
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main.phase-2 src:main.c:906 conf:high]
+  Phase 2: For each import, check if the dependency is already compiled.
+  If not, recursively call compile_one on the dependency source. Uses
+  registry to track which modules are being compiled to avoid cycles.
+
+** Phase 3: LLVM Setup
+:PROPERTIES:
+:ID: monadc.context.main.phase-3-llvm-setup
+:CUSTOM_ID: phase-3-llvm-setup
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c:925
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main.phase-3 src:main.c:925 conf:high]
+  Phase 3: Initialize LLVM module, builder, target machine, and data layout.
+  Creates the CodegenContext via codegen_init(). Sets target triple and
+  relocation model from CompilerFlags.
+
+** Phase 4: Declare Externals from Compiled Dependencies
+:PROPERTIES:
+:ID: monadc.context.main.phase-4-externals
+:CUSTOM_ID: phase-4-externals
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c:949
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main.phase-4 src:main.c:949 conf:high]
+  Phase 4: For each compiled dependency in the registry, declare its exported
+  functions/variables as externals in the current LLVM module. Uses
+  codegen_declare_external_var/func with the mangled name.
+
+** Phase 5: Create Init/Main Function and Position Builder
+:PROPERTIES:
+:ID: monadc.context.main.phase-5-init-fn
+:CUSTOM_ID: phase-5-init-fn
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c:964
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main.phase-5 src:main.c:964 conf:high]
+  Phase 5: Create the top-level init function (LLVM function) and position
+  the IR builder at its entry block. All subsequent codegen emits into this
+  function body.
+
+** Phase 6: *features* Global
+:PROPERTIES:
+:ID: monadc.context.main.phase-6-features
+:CUSTOM_ID: phase-6-features
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c:987
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main.phase-6 src:main.c:987 conf:high]
+  Phase 6: Detect platform features and create the *features* runtime list.
+  Calls detect_features() which returns an AST node, then codegen emits a
+  global list constant available at runtime via (current-features).
+
+** Phase 6.5: Dependent Type Checking (Shadow Pass)
+:PROPERTIES:
+:ID: monadc.context.main.phase-6.5-dep
+:CUSTOM_ID: phase-6.5-dep
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c:1025
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main.phase-6.5 src:main.c:1025 conf:high]
+  Phase 6.5: Run the dependent type checker (dep.h) as a shadow pass over all
+  top-level expressions. Uses DepCtx from dep_infer_program(). This pass
+  validates dependent type annotations and performs NbE-based type checking
+  without interfering with HM inference results. Type errors here are
+  reported but do not prevent codegen.
+
+** Phase 7: Codegen Top-Level Expressions
+:PROPERTIES:
+:ID: monadc.context.main.phase-7-codegen
+:CUSTOM_ID: phase-7-codegen
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c:1065
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main.phase-7 src:main.c:1065 conf:high]
+  Phase 7: Iterate over all top-level expressions and call codegen_expr() on
+  each. This is where the bulk of code generation happens — every define,
+  function, expression, type class instance, etc. is lowered to LLVM IR.
+  Tracks current function name for error reporting.
+
+** Phase 8: Terminate Function
+:PROPERTIES:
+:ID: monadc.context.main.phase-8-terminate
+:CUSTOM_ID: phase-8-terminate
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c:1110
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main.phase-8 src:main.c:1110 conf:high]
+  Phase 8: Terminate the init function by inserting a return instruction.
+  Stores the LLVM function reference for use in the module registry entry.
+
+** Phase 9: Build Registry Entry + Rename Symbols
+:PROPERTIES:
+:ID: monadc.context.main.phase-9-registry
+:CUSTOM_ID: phase-9-registry
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c:1122
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main.phase-9 src:main.c:1122 conf:high]
+  Phase 9: Build the CompiledModule registry entry:
+  - Scan all LLVM globals/functions in the module
+  - Build mangled names using module_name::local_name convention
+  - Rename LLVM symbols to mangled names (LLVMSetValueName)
+  - Collect exports and layouts into the CompiledModule struct
+  - Register in the global g_compiled linked list
+
+** Phase 10: Verify + Optional IR/ASM Output
+:PROPERTIES:
+:ID: monadc.context.main.phase-10-verify
+:CUSTOM_ID: phase-10-verify
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c:1243
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main.phase-10 src:main.c:1243 conf:high]
+  Phase 10: Run LLVM module verification (LLVMVerifyModule). If flags request
+  --emit-ir or --emit-asm, dump the LLVM IR or assembly to stdout or to file.
+
+** Phase 11: Emit Object File
+:PROPERTIES:
+:ID: monadc.context.main.phase-11-emit
+:CUSTOM_ID: phase-11-emit
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c:1276
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main.phase-11 src:main.c:1276 conf:high]
+  Phase 11: Emit .o object file using LLVMTargetMachineEmitToFile.
+  Skipped if is_main_module=false and the .o is already up to date (incremental
+  compilation). Uses obj_path derived from source_path by get_obj_path().
+
+* Utility Functions
+:PROPERTIES:
+:ID: monadc.context.main.utilities
+:CUSTOM_ID: main-utilities
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main.ffi-libs-add src:main.c:68-100 conf:high]
+  static void ffi_libs_add(FFIContext *ffi)
+  Accumulates link libraries from parsed FFI headers into g_ffi_link_libs
+  buffer. Used at final link step.
+
+[OBS id:obs.main.base-no-ext src:main.c conf:high]
+  static char *base_no_ext(const char *path)
+  Strips directory prefix and file extension from a path (e.g., "src/foo.mon"
+  → "foo").
+
+[OBS id:obs.main.get-obj-path src:main.c conf:high]
+  static char *get_obj_path(const char *source_path)
+  Replaces .mon/.wisp extension with .o. Used as the object file output path.
+
+[OBS id:obs.main.file-mtime src:main.c conf:high]
+  static time_t file_mtime(const char *path)
+  Returns modification time of a file, or 0 if it doesn't exist. Used for
+  incremental compilation decisions.
+
+[OBS id:obs.main.path-to-module-name src:main.c conf:high]
+  static char *path_to_module_name(const char *source_path)
+  Converts a source path to a module name: strips the directory prefix and
+  extension, replaces path separators with :: for qualified module names.
+
+[OBS id:obs.main.registry-find src:main.c conf:high]
+  static CompiledModule *registry_find(const char *module_name)
+  Searches g_compiled linked list by module_name. Returns the existing
+  CompiledModule if found.
+
+[OBS id:obs.main.registry-find-by-obj src:main.c conf:high]
+  static CompiledModule *registry_find_by_obj(const char *obj_path)
+  Searches g_compiled linked list by obj_path. Used to prevent duplicate
+  compilation of the same .o.
+
+[OBS id:obs.main.registry-new src:main.c conf:high]
+  static CompiledModule *registry_new(const char *module_name,
+                                       const char *obj_path, bool placeholder)
+  Creates a new CompiledModule, optionally as a placeholder (was_skipped=true).
+  Registers it by prepending to g_compiled. Used for early reservation to
+  prevent recursive re-compilation.
+
+* Deferred Compilation
+:PROPERTIES:
+:ID: monadc.context.main.deferred-compilation
+:CUSTOM_ID: deferred-compilation
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c:522
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main.deferred-objects src:main.c:522-531 conf:high]
+  When compiling non-main modules, main.c tracks deferred object emission:
+  the final linked list of .o paths is accumulated across all recursive
+  compile_one calls. Linking happens once in compile() after all modules
+  have been processed.
+
+* Name Mangling
+:PROPERTIES:
+:ID: monadc.context.main.name-mangling
+:CUSTOM_ID: name-mangling
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: main.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.main.mangling-convention src:main.c conf:high]
+  Exported symbols are mangled as module_name::local_name (double-colon
+  separator). This matches the MonadC import resolution scheme. LLVM symbol
+  renaming happens in Phase 9 via LLVMSetValueName. Non-exported symbols
+  retain their unqualified names.
+
+[THINK id:think.main.deferred-object-linking conf:high]
+  The deferred object linking architecture means compile_one returns before
+  the final binary is linked. The compile() wrapper collects all .o paths
+  from the registry and invokes the system linker (cc) with g_ffi_link_libs.
+  This works because objects are standalone ELF relocatables — linking is
+  purely additive (no LTO).
+
+* Connections
+:PROPERTIES:
+:ID: monadc.context.main.connections
+:CUSTOM_ID: main-connections
+:CONTEXT_KIND: inference
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.main.connects-to from:obs.main.main-function,obs.main.compile-one-signature,obs.main.phase-0,obs.main.phase-1,obs.main.phase-2,obs.main.phase-3,obs.main.phase-4,obs.main.phase-5,obs.main.phase-6,obs.main.phase-6.5,obs.main.phase-7,obs.main.phase-8,obs.main.phase-9,obs.main.phase-10,obs.main.phase-11 conf:high]
+  connects-to ->
+  `monadc.context.cli` (main() dispatches CommandMode) ·
+  `monadc.context.repl` (CMD_REPL → repl_run()) ·
+  `monadc.context.buildsystem` (CMD_BUILD/RUN/CLEAN/INSTALL/NEW/TEST) ·
+  `monadc.context.module` (Phase 1: module/import decls, Phase 2: dep resolution) ·
+  `monadc.context.codegen` (Phase 3-11: CodegenContext lifecycle) ·
+  `monadc.context.codegen-ops` (Phase 7: codegen_expr dispatch) ·
+  `monadc.context.ffi` (Phase 0: FFI pre-pass arity registration) ·
+  `monadc.context.dep` (Phase 6.5: dependent type shadow pass) ·
+  `monadc.context.features` (Phase 6: *features* global) ·
+  `monadc.context.env` (symbol table integration in codegen) ·
+  `monadc.context.infer` (HM inference, invoked from codegen) ·
+  `monadc.context.runtime` (runtime types used in codegen init) ·
+  `monadc.context.typst-emit` (--emit-typst flag triggers surface-ast emit) ·
+  `monadc.context.wisp` (wisp_parse_all, arity registration) ·
+  `monadc.context.reader` (parse_all, feature detection, AST types) ·
+  `monadc.context.typeclass` (type class dictionary codegen during Phase 7)

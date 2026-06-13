@@ -1,0 +1,335 @@
+#+TITLE: Package Build System
+#+AUTHOR: Codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:build:package:artifact:dependency:link:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.buildsystem
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+#+TAGS: build(b) artifact(a) dependency(d) link(l) compile(c) package(p)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.buildsystem.file-metadata
+:CUSTOM_ID: buildsystem-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: buildsystem.h, buildsystem.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.buildsystem.file src:buildsystem.h,buildsystem.c conf:high]
+  This file records context about =buildsystem.h= and =buildsystem.c=.
+
+* Data Structures
+:PROPERTIES:
+:ID: monadc.context.buildsystem.structs
+:CUSTOM_ID: buildsystem-structs
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: ModuleArtifact tracks a single compiled module with source/object paths, timestamps, and recompilation status. BuildContext holds the collection of artifacts and global build configuration flags.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: buildsystem.h:20-40,buildsystem.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.buildsystem.struct.module-artifact src:buildsystem.h:20-29,buildsystem.c:82-110 conf:high]
+  =ModuleArtifact= — Tracks one compiled module. Fields: =module_name=
+  ("Std.Math"), =source_path= ("Std/Math.monad"), =object_path= ("Std.Math.o"),
+  =source_mtime= / =object_mtime= (last modification times), =needs_recompile=
+  (bool flag), =decl= (=ModuleDecl= pointer, NULL until compiled), =env= (=Env=*
+  opaque pointer for compiled module environment).
+
+[OBS id:obs.buildsystem.struct.build-context src:buildsystem.h:32-40,buildsystem.c:19-27 conf:high]
+  =BuildContext= — Tracks the full build. Fields: =artifacts= (dynamic array of
+  =ModuleArtifact= pointers), =artifact_count=, =artifact_capacity=, =build_dir=
+  (output directory for .o files, default "."), =verbose= (print build details),
+  =force_rebuild= (skip timestamp check, rebuild everything).
+
+* Build Context Lifecycle
+:PROPERTIES:
+:ID: monadc.context.buildsystem.context-lifecycle
+:CUSTOM_ID: buildsystem-context-lifecycle
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: BuildContext creation, teardown, and configuration setters: create, free, set_build_dir, set_verbose, set_force_rebuild.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: buildsystem.c:19-51
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.buildsystem.context.create src:buildsystem.c:19-27 conf:high]
+  =build_context_create()= → =BuildContext *= — Allocates context with
+  =artifact_capacity=8=, =build_dir="."=, =verbose=false=, =force_rebuild=false=.
+
+[OBS id:obs.buildsystem.context.free src:buildsystem.c:29-38 conf:high]
+  =build_context_free(ctx)= — Frees all artifacts via =build_artifact_free=,
+  then frees the artifacts array, =build_dir=, and the context struct.
+
+[OBS id:obs.buildsystem.context.set-build-dir src:buildsystem.c:40-43 conf:high]
+  =build_context_set_build_dir(ctx, dir)= — Frees old =build_dir= and strdups
+  the new path.
+
+[OBS id:obs.buildsystem.context.set-verbose src:buildsystem.c:45-47 conf:high]
+  =build_context_set_verbose(ctx, verbose)= — Sets =ctx->verbose=.
+
+[OBS id:obs.buildsystem.context.set-force-rebuild src:buildsystem.c:49-51 conf:high]
+  =build_context_set_force_rebuild(ctx, force)= — Sets =ctx->force_rebuild=.
+
+* Module Artifact Lifecycle
+:PROPERTIES:
+:ID: monadc.context.buildsystem.artifact-lifecycle
+:CUSTOM_ID: buildsystem-artifact-lifecycle
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: ModuleArtifact creation, teardown, timestamp update, and recompilation check.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: buildsystem.c:82-131
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.buildsystem.artifact.create src:buildsystem.c:82-101 conf:high]
+  =build_artifact_create(module_name, source_path)= → =ModuleArtifact *= —
+  Allocates artifact, copies =module_name= and =source_path=, derives =object_path=
+  as ="module.name.o"=, initializes mtimes to 0 and =needs_recompile=true=, then
+  calls =build_artifact_update_times=.
+
+[OBS id:obs.buildsystem.artifact.free src:buildsystem.c:103-110 conf:high]
+  =build_artifact_free(artifact)= — Frees =module_name=, =source_path=,
+  =object_path=, and the artifact. Does NOT free =decl= or =env= (managed
+  elsewhere).
+
+[OBS id:obs.buildsystem.artifact.update-times src:buildsystem.c:112-115 conf:high]
+  =build_artifact_update_times(artifact)= — Queries =stat()= for source and
+  object file modification times via =build_get_file_mtime=. Updates
+  =source_mtime= and =object_mtime=.
+
+[OBS id:obs.buildsystem.artifact.needs-rebuild src:buildsystem.c:117-131 conf:high]
+  =build_artifact_needs_rebuild(artifact)= → =bool= — Updates times, then
+  returns true if =object_mtime==0= (no object file) or
+  =source_mtime > object_mtime= (source is newer). False if object exists and
+  is up-to-date.
+
+* Build Context Operations
+:PROPERTIES:
+:ID: monadc.context.buildsystem.context-ops
+:CUSTOM_ID: buildsystem-context-ops
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Adding artifacts to the build context, finding artifacts by module name, finding by source path.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: buildsystem.c:53-78
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.buildsystem.context.add-artifact src:buildsystem.c:53-60 conf:high]
+  =build_context_add_artifact(ctx, artifact)= — Appends to the artifacts array,
+  growing the dynamic array (doubling capacity) if needed.
+
+[OBS id:obs.buildsystem.context.find-artifact src:buildsystem.c:62-69 conf:high]
+  =build_context_find_artifact(ctx, module_name)= → =ModuleArtifact *= — Linear
+  search by =module_name= string. Returns NULL if not found.
+
+[OBS id:obs.buildsystem.context.find-by-source src:buildsystem.c:71-78 conf:high]
+  =build_context_find_by_source(ctx, source_path)= → =ModuleArtifact *= — Linear
+  search by =source_path= string. Returns NULL if not found.
+
+* Dependency Resolution
+:PROPERTIES:
+:ID: monadc.context.buildsystem.dep-resolution
+:CUSTOM_ID: buildsystem-dep-resolution
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Extracting imports from source files and resolving build order. Currently simple pass-through (no topological sort); proper cycle detection is a TODO.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: buildsystem.c:181-266
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.buildsystem.dep.extract-imports src:buildsystem.c:181-240 conf:high]
+  =extract_imports(source_path, out_count)= (file-static) — Reads a source file,
+  parses it via =parser_set_context= and =parse_all=, scans for =AST_LIST= forms
+  with head symbol ="import"=, calls =parse_import_decl= for each, collects into
+  =ImportDecl *= array. Stops at first non-module/import declaration.
+
+[OBS id:obs.buildsystem.dep.resolve src:buildsystem.c:242-258 conf:high]
+  =build_resolve_dependencies(mod_ctx, out_count)= → =char **= — Currently a
+  simple pass-through that returns =mod_ctx->imports= module names in order.
+  TODO: implement proper topological sort with cycle detection.
+
+[OBS id:obs.buildsystem.dep.free-list src:buildsystem.c:260-266 conf:high]
+  =build_free_dependency_list(deps, count)= — Frees each string in the array
+  and the array itself.
+
+* Build Execution
+:PROPERTIES:
+:ID: monadc.context.buildsystem.build-exec
+:CUSTOM_ID: buildsystem-build-execution
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Recursive compilation (compile_module_recursive), single-module compilation (build_compile_module), compilation with dependencies (build_compile_with_deps), and linking (build_link_executable).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: buildsystem.c:274-396
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.buildsystem.build.recursive src:buildsystem.c:275-343 conf:high]
+  =compile_module_recursive(build_ctx, module_name, source_path, depth)= (static)
+  — Core recursive compilation: checks if module is already compiled and up-to-date
+  (==force_rebuild= || =needs_rebuild=). Creates artifact if needed. Extracts
+  imports via =extract_imports=, recurses into each dependency, then compiles the
+  current module. Currently prints a placeholder message rather than calling the
+  actual compiler.
+
+[OBS id:obs.buildsystem.build.compile-module src:buildsystem.c conf:high]
+  =build_compile_module(build_ctx, module_name, source_path)= → =ModuleArtifact *=
+  — Compiles a single module. Declared in header but implementation references
+  the =compile_module_recursive= path.
+
+[OBS id:obs.buildsystem.build.compile-with-deps src:buildsystem.c:345-361 conf:high]
+  =build_compile_with_deps(build_ctx, source_path)= → =ModuleArtifact *= —
+  Extracts module name from source_path (last path component before extension),
+  calls =compile_module_recursive= starting at depth 0, returns the main artifact
+  or NULL on failure.
+
+[OBS id:obs.buildsystem.build.link src:buildsystem.c:363-396 conf:high]
+  =build_link_executable(build_ctx, output_name, artifacts, artifact_count)= →
+  =bool= — Builds a =gcc= command string concatenating all =object_path= values
+  with ="runtime.o -o output_name `llvm-config --ldflags --libs core` -lm -no-pie"=.
+  Executes via =system()=. Returns true on zero exit code.
+
+* Utility Functions
+:PROPERTIES:
+:ID: monadc.context.buildsystem.utils
+:CUSTOM_ID: buildsystem-utilities
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: File mtime query, file existence check, and module name to source/object path conversion helpers.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: buildsystem.c:135-176
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.buildsystem.utils.file-mtime src:buildsystem.c:135-141 conf:high]
+  =build_get_file_mtime(path)= → =time_t= — Calls =stat()= on path, returns
+  =st_mtime= or 0 if the file does not exist.
+
+[OBS id:obs.buildsystem.utils.file-exists src:buildsystem.c:143-145 conf:high]
+  =build_file_exists(path)= → =bool= — Wraps =access(path, F_OK)=.
+
+[OBS id:obs.buildsystem.utils.module-to-source src:buildsystem.c:147-168 conf:high]
+  =build_module_name_to_source_path(module_name)= → =char *= — Converts
+  "Std.Math" to "Std/Math.mon" (first try) or "Std/Math.monad" (fallback).
+  Replaces dots with slashes. Caller must free the returned string.
+
+[OBS id:obs.buildsystem.utils.module-to-object src:buildsystem.c:170-176 conf:high]
+  =build_module_name_to_object_path(module_name, build_dir)= → =char *= —
+  Converts to ="build_dir/module.name.o"=. Caller must free the returned string.
+
+* High-Level Build
+:PROPERTIES:
+:ID: monadc.context.buildsystem.highlevel
+:CUSTOM_ID: buildsystem-highlevel
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The top-level build_project function that creates a BuildContext, compiles with dependencies, links, and returns success/failure.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: buildsystem.c:398-422
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.buildsystem.highlevel.project src:buildsystem.c:398-422 conf:high]
+  =build_project(source_path, output_name, verbose, force_rebuild)= → =bool= —
+  Creates a =BuildContext=, sets verbose/force_rebuild, compiles the source with
+  all dependencies via =build_compile_with_deps=, links all artifacts via
+  =build_link_executable=, then frees the context. Returns true on success.
+
+#+CAPTION: Build System Architecture Flow
+| Step | Function                       | Description                           |
+|------+--------------------------------+---------------------------------------|
+| 1    | =build_project=                  | Entry point: creates BuildContext      |
+| 2    | =build_compile_with_deps=        | Resolves source path, starts recursion |
+| 3    | =compile_module_recursive=       | Extracts imports, recurses, compiles   |
+| 4    | =build_link_executable=          | Links all .o files with runtime lib    |
+
+[INF id:inf.buildsystem.cli-connects from:obs.buildsystem.highlevel.project conf:high]
+  connects-to -> `monadc.context.cli.cmd-build` (=cmd_build= from cli.c invokes
+  the build system's =build_project= to compile the current package) ·
+  `monadc.context.cli.cmd-run` (=cmd_run= builds then executes the resulting
+  binary) ·
+  `monadc.context.cli.cmd-clean` (=cmd_clean= removes built artifacts)
+
+[INF id:inf.buildsystem.module-connects from:obs.buildsystem.dep.extract-imports,obs.buildsystem.struct.module-artifact conf:high]
+  connects-to -> `monadc.context.module.context` (=ModuleContext=, =ModuleDecl=,
+  =ImportDecl= are the module system types that the build system's import
+  extraction and dependency resolution operate on) ·
+  `monadc.context.module.registry` (=ModuleRegistry= stores compiled module
+  declarations that the build system reads via =build_resolve_dependencies=)
+
+[INF id:inf.buildsystem.main-connects from:obs.buildsystem.build.recursive conf:high]
+  connects-to -> `monadc.context.main.pipeline` (=compile_module_to_object=
+  declared extern in buildsystem.c:272, defined in main.c, is the actual
+  compilation entry point called by =compile_module_recursive=)

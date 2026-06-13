@@ -1,0 +1,645 @@
+#+TITLE: core/ — Standard Library Modules
+#+AUTHOR: Codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:core:stdlib:
+#+PROPERTY: CONTEXT_VERSION 2
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.core-libs
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.core-libs.file-metadata
+:CUSTOM_ID: core-libs-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: core/
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.core-libs.file src:core/ conf:high]
+  The =core/= directory contains 11 library modules implementing the standard
+  library for the Monad language: Coll (typeclass hierarchy + collection
+  operations), Test (test framework), List (list utilities), Set (set algebra),
+  Math (mathematical functions), Random (PRNG + hardware RNG), json (JSON
+  parser), Ascii (ASCII constants), String (string manipulation), Assert
+  (assertion stubs), and TODO.mon (pending implementations). Every module
+  uses the Monad surface syntax documented in =language.org= and exercises
+  codegen paths catalogued in =codegen-ops.org=.
+
+[LINK id:link.core-libs.to-language]
+  All modules use the Monad language surface: module declarations, definitions,
+  lambda, cond/if, pattern matching (Coll.mon), data declarations (json.mon),
+  layout structs (not used in core but present in how_to/).
+
+[LINK id:link.core-libs.to-codegen-ops]
+  Exercises: + - * / mod, = < >, and or not, list/cons/car/cdr, count,
+  show, set/map constructors, lambda application, for loops, recursion.
+
+* Coll.mon — Collection Typeclass and Utilities
+:PROPERTIES:
+:ID: monadc.context.core-libs.coll
+:CUSTOM_ID: core-libs-coll
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: core/prelude/Coll.mon — 192 lines. Coll typeclass with sequence operations, Functor/Applicative/Monad instances.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: core/prelude/Coll.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.coll.export-list src:Coll.mon:16-19 conf:high]
+  Module Coll exports: take, drop, takeWhile, dropWhile, map, all?, foldl, foldr.
+
+[OBS id:obs.coll.define-syntax src:Coll.mon:23-105 conf:high]
+  Uses alternative define syntax =(define fn :: Type ...)= with pattern
+  matching clauses: =_ [] -> []=, =n [x|xs] | n > 0 -> ...=. This is
+  the pure-functional subset of Monad (no =(define (name args))=).
+
+[OBS id:obs.coll.take-drop src:Coll.mon:23-34 conf:high]
+  =(take n list)= and =(drop n list)= — basic sequence prefix/suffix.
+  Pattern matches on list cons =[x|xs]=.
+
+[OBS id:obs.coll.map-filter src:Coll.mon:51-53,100-106 conf:high]
+  =(map f list)= — applies f to each element. =(filter p list)= —
+  keeps elements satisfying predicate.
+
+[OBS id:obs.coll.foldl-foldr src:Coll.mon:69-76 conf:high]
+  =(foldl f acc list)= — left-associative fold. =(foldr f acc list)= —
+  right-associative fold. These are the core reduction primitives.
+
+[OBS id:obs.coll.takeWhile-dropWhile src:Coll.mon:37-47 conf:high]
+  =(takeWhile p list)= — take prefix while predicate holds.
+  =(dropWhile p list)= — drop prefix while predicate holds.
+
+[OBS id:obs.coll.zip-zipwith src:Coll.mon:79-88 conf:high]
+  =(zip a b)= — pair-wise combining into list of pairs.
+  =(zipwith f a b)= — pair-wise combining via function f.
+
+[OBS id:obs.coll.append-filter src:Coll.mon:91-93,100-106 conf:high]
+  =(append list val)= — append element to list (copies structure).
+  =(filter p list)= — select matching elements.
+
+[OBS id:obs.coll.both src:Coll.mon:108-109 conf:high]
+  =(both f g)= — predicate conjunction, returns =(lambda (x) (and (f x) (g x)))=.
+  TODO: should be variadic and use Applicative.
+
+[OBS id:obs.coll.any-all src:Coll.mon:56-66 conf:high]
+  =(any? p list)= — True if any element satisfies p. =(all? p list)= —
+  True if all elements satisfy p.
+
+[OBS id:obs.coll.tests src:Coll.mon:112-192 conf:high]
+  78 test assertions covering filter, append, take, drop, takeWhile,
+  dropWhile, map, all?, foldl, foldr, zip, zipwith, dot product pipeline.
+  Tests cover Array, List, and String as Coll instances.
+
+[THINK id:think.coll.append-bang date:2026-06-13 by:codex]
+  Line 95-97: =(append! xs val)= is commented out — mutation form not
+  yet working. Requires pointer dereferencing and wisp fix.
+
+[THINK id:think.coll.any-not-tested date:2026-06-13 by:codex]
+  Line 56: =(any?)= has a "TODO Test this" comment — it's defined but
+  not included in the test block.
+
+* Test.mon — Test Framework (Work in Progress)
+:PROPERTIES:
+:ID: monadc.context.core-libs.test
+:CUSTOM_ID: core-libs-test
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: core/prelude/Test.mon — 67 lines. Filter, qsort, and test framework experiments.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: experimental
+:CONTEXT_STATUS: active
+:SOURCE: core/prelude/Test.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.test.contents src:Test.mon conf:high]
+  Contains alternative define-style filter, qsort implementation, and
+  commented-out experiments with foldl, sum, gcd, abs.
+
+[OBS id:obs.test.qsort src:Test.mon:31-38 conf:high]
+  Quicksort example: =(define (qsort [a] -> [a]) [h|t] -> ...)=.
+  Demonstrates wisp-form recursion with filter-based partitioning.
+
+[THINK id:think.test.wisp-fix date:2026-06-13 by:codex]
+  Line 21-27: Wisp form for qsort is commented out — requires wisp
+  parentheses fix.
+
+[THINK id:think.test.foldl-commented date:2026-06-13 by:codex]
+  Lines 41-67: Various experiments (foldl, sum, gcd, gcd2) are commented
+  out with TODO markers.
+
+* List.mon — List Utilities
+:PROPERTIES:
+:ID: monadc.context.core-libs.list
+:CUSTOM_ID: core-libs-list
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: core/List.mon — 321 lines. List accessor combinators and higher-order list functions.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: core/List.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.list.exports src:List.mon:15-22 conf:high]
+  Module List exports: caar, cadr, cdar, cddr, caaar, caadr, cadar,
+  caddr, cdaar, cdadr, cddar, cdddr, list-tabulate, iota, list-index,
+  list-reverse, list-tail, list?, apply.
+
+[OBS id:obs.list.car-cdr-combinators src:List.mon:26-37 conf:high]
+  Car/cdr accessor combinators following Guile Scheme conventions:
+  caar, cadr, cdar, cddr, caaar, caadr, cadar, caddr, cdaar, cdadr,
+  cddar, cdddr. Each is (car (car xs)), (car (cdr xs)), etc.
+
+[OBS id:obs.list.apply src:List.mon:40-42 conf:high]
+  =(apply f list)= — calls f with elements of list as arguments, folded
+  left-associatively: =(foldl f (car xs) (cdr xs))=.
+
+[OBS id:obs.list.tail-reverse src:List.mon:45-62 conf:high]
+  =(list-tail xs k)= — sublist starting at index k (mutable loop).
+  =(list-reverse xs)= — new list in reverse order (mutable loop with for).
+
+[OBS id:obs.list.index-iota src:List.mon:64-82 conf:high]
+  =(list-index xs val)= — first index of val or -1. =(iota count)= —
+  produce list [0, count) — idiomatic range builder.
+
+[OBS id:obs.list.tests-commented src:List.mon:85-321 conf:high]
+  237 lines of commented-out test assertions covering count, list-empty?,
+  iota, list-tail, list-reverse, list-index, ranges (finite/stepped/infinite),
+  take, drop, map, filter, foldl, foldr, zip, zipwith, combined pipelines.
+  Tests use helper functions double, square, add, mul, sub, positive?,
+  even?, odd?.
+
+[THINK id:think.list.tests-disabled date:2026-06-13 by:codex]
+  All tests in List.mon are wrapped in =(tests ...)= which is commented
+  out. The (tests ...) form itself (or equals assertion framework) may
+  not yet be operational.
+
+* Set.mon — Set Algebra
+:PROPERTIES:
+:ID: monadc.context.core-libs.set
+:CUSTOM_ID: core-libs-set
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: core/Set.mon — 146 lines. Mathematical set operations with pure functions.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: core/Set.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.set.exports src:Set.mon:17-28 conf:high]
+  Module Set exports: singleton, singleton?, union, intersection,
+  difference, symmetric-difference, subset?, proper-subset?, superset?,
+  proper-superset?, disjoint?.
+
+[OBS id:obs.set.singleton src:Set.mon:32-38 conf:high]
+  =(singleton x)= — create set with one element. =(singleton? s)= —
+  test if set has exactly one element.
+
+[OBS id:obs.set.union-intersection src:Set.mon:43-53 conf:high]
+  =(union a b)= — foldl conj over b starting from a.
+  =(intersection a b)= — foldl filtering by contains?.
+  Both use =:alias= for Unicode operator symbols (∪, ∩).
+
+[OBS id:obs.set.difference-symmetric src:Set.mon:57-66 conf:high]
+  =(difference a b)= — foldl disj over b starting from a (set removal).
+  =(symmetric-difference a b)= — (union - intersection), alias △.
+
+[OBS id:obs.set.relations src:Set.mon:71-95 conf:high]
+  Predicate relations: subset?, proper-subset?, superset?, proper-superset?,
+  disjoint?. All have Unicode alias symbols (⊆, ⊂, ⊇, ⊃, ⟂).
+
+[OBS id:obs.set.tests src:Set.mon:98-146 conf:high]
+  48 test assertions covering all exported functions. Uses =(assert-eq)=
+  form within a =(tests)= block.
+
+* Math.mon — Mathematical Functions
+:PROPERTIES:
+:ID: monadc.context.core-libs.math
+:CUSTOM_ID: core-libs-math
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: core/Math.mon — 403 lines. Full math library: constants, sequences, arithmetic, number theory, rounding, summation.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: core/Math.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.math.exports src:Math.mon:15-28 conf:high]
+  Module Math exports: double, square, cube, abs, sign, inc, dec,
+  zero?, positive?, negative?, even?, odd?, divisible?, gcd, lcm,
+  factorial, fib, prime?, prime-check?, clamp, min2, max2, pow, sqrt,
+  naturals, positives, evens, odds, sum, product, sum-range,
+  product-range, pi, e, tau, phi, floor, ceiling, round, truncate,
+  deg->rad, sin, mod-f, ls (not implemented), exp, pow.
+
+[OBS id:obs.math.constants src:Math.mon:34-38 conf:high]
+  Mathematical constants: pi (π), tau (τ), pi/2 (π/2), e (ℯ), phi (ϕ).
+  Each has =:alias= Unicode symbol.
+
+[OBS id:obs.math.sequences src:Math.mon:44-46 conf:high]
+  Infinite lazy sequences: naturals (0..), positives (1..), evens (0,2..),
+  odds (1,3..). Uses Monad's lazy range syntax.
+
+[OBS id:obs.math.basic-arith src:Math.mon:50-68 conf:high]
+  Arithmetic helpers: inc, dec, double, square, cube — simple wrappers.
+
+[OBS id:obs.math.abs-sign src:Math.mon:70-96,165-170 conf:high]
+  Abs for Float, sign for Int (returns -1/0/1 via cond).
+
+[OBS id:obs.math.floor-ceiling src:Math.mon:74-96 conf:high]
+  Floor, ceiling, round, truncate for Float→Int conversion.
+  Floor uses =(Int x)= cast with adjustment for negatives.
+
+[OBS id:obs.math.pow-exp src:Math.mon:98-128 conf:high]
+  Pow (recursive exponentiation), exp (Taylor series e^x), ln (natural
+  log via Newton's method). All pure Monad implementations, no C deps.
+
+[OBS id:obs.math.sqrt-sin src:Math.mon:130-163 conf:high]
+  Sqrt via Newton-Raphson, sin via Taylor series (reduced via mod-f tau),
+  deg->rad conversion.
+
+[OBS id:obs.math.predicates src:Math.mon:173-196 conf:high]
+  Numeric predicates: zero?, positive?, negative?, even?, odd?, divisible?.
+
+[OBS id:obs.math.number-theory src:Math.mon:199-240 conf:high]
+  Number theory: gcd2 (Euclidean, binary), gcd (variadic), lcm,
+  factorial (iterative), fib (iterative, O(n)), prime? (trial division
+  up to sqrt). All pure Monad with no C dependencies.
+
+[OBS id:obs.math.clamp-minmax src:Math.mon:244-257 conf:high]
+  Clamp, min, max — numeric utility functions.
+
+[OBS id:obs.math.summation src:Math.mon:262-280 conf:high]
+  Sum (foldl + 0), product (foldl * 1), sum-range (O(1) Gauss formula),
+  product-range (iterative). Sum and product have Unicode alias (∑, ∏).
+
+[OBS id:obs.math.tests src:Math.mon:282-403 conf:high]
+  121 test assertions covering inc, dec, double, square, cube, abs,
+  sign, zero?, positive?, negative?, even?, odd?, divisible?, gcd, lcm,
+  factorial, fib, prime?, clamp, min, max, pow, sqrt, sum, product,
+  sum-range, product-range, lazy sequences, and pipeline compositions.
+
+[THINK id:think.math.mod-f src:Math.mon:141 conf:high]
+  Line 141: =(mod-f x y)= for float modulo is marked as a workaround —
+  author wants to eliminate it and use =(mod)= directly.
+
+[THINK id:think.math.ls-stub src:Math.mon:27 conf:high]
+  The export list includes 'ls' but no definition exists — it's a stub.
+
+* Random.mon — Random Number Generation
+:PROPERTIES:
+:ID: monadc.context.core-libs.random
+:CUSTOM_ID: core-libs-random
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: core/Random.mon — 168 lines. Hardware RNG + Xorshift64 PRNG with full API.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: core/Random.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.random.exports src:Random.mon:22-33 conf:high]
+  Module Random exports: supported?, seed!, next!, gen32, gen64, random,
+  random-int, random-float (commented), random-bool?, random-list, shuffle.
+
+[OBS id:obs.random.hardware src:Random.mon:38-57 conf:high]
+  Hardware RNG via RDRAND (x86-64). =(supported?)= uses CPUID to detect
+  RDRAND. =(rdrand)= returns 64-bit true random. =(rdtsc)= used as
+  fallback seed source. Platform-guarded with =#+X86-64=.
+
+[OBS id:obs.random.xorshift src:Random.mon:61-67 conf:high]
+  Xorshift64 PRNG: =x ^ (x << 13) ^ (x >>> 7) ^ (x << 17)=. Full-period
+  64-bit generator.
+
+[OBS id:obs.random.state src:Random.mon:71-72 conf:high]
+  Mutable module state seeded at load time from RDRAND or rdtsc.
+  =(seed! s)= for reproducible sequences.
+
+[OBS id:obs.random.api src:Random.mon:77-141 conf:high]
+  API: next! (advance state), gen64 (64-bit, hardware if available),
+  gen32 (32-bit via masking), random (Float in [0,1)), random-int (in
+  [min,max]), random-bool? (50/50), random-list (N values from generator),
+  shuffle (Fisher-Yates in-place array shuffle).
+
+[OBS id:obs.random.tests-commented src:Random.mon:143-168 conf:high]
+  Commented-out tests covering type checks, range checks, shuffle,
+  seeded reproducibility, and random-list.
+
+[THINK id:think.random.duplicate-fn date:2026-06-13 by:codex]
+  =(random-int)= is defined twice (lines 104-107 and 113-116) with
+  identical implementations — this is a copy-paste artifact.
+
+* json.mon — JSON Parser/Printer (Work in Progress)
+:PROPERTIES:
+:ID: monadc.context.core-libs.json
+:CUSTOM_ID: core-libs-json
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: core/json.mon — 106 lines. Data-driven JSON parser with ADT representation.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: experimental
+:CONTEXT_STATUS: active
+:SOURCE: core/json.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.json.exports src:json.mon:9 conf:high]
+  Module Json — empty export list (exports everything by default).
+
+[OBS id:obs.json.data-type src:json.mon:11-17 conf:high]
+  Algebraic data type for JSON: JNull, JBool Bool, JNum Float, JStr String,
+  JArr [Json], JObj [(String Json)]. Uses Monad's =(data)= declaration.
+
+[OBS id:obs.json.ws src:json.mon:20-25 conf:high]
+  Whitespace consumer: recursion over string chars, consuming ' ', \t, \n.
+
+[OBS id:obs.json.parse-val src:json.mon:34-41 conf:high]
+  Parse dispatcher: "null"/"true"/"false" → literals, '"' → string,
+  '[' → array, '{' → object, else → number.
+
+[OBS id:obs.json.parse-str src:json.mon:44-48 conf:high]
+  String parser: minimal implementation consuming chars until '"'.
+
+[OBS id:obs.json.parse-num src:json.mon:55-70 conf:high]
+  Number parser: commented out. Would use spanNum to read digits,
+  optional '.' fraction, and construct JNum with readFloat.
+
+[OBS id:obs.json.parse-arr src:json.mon:73-84 conf:high]
+  Array parser: commented out. Recursive descent with parseVal,
+  comma-separated, terminated by ']'.
+
+[OBS id:obs.json.parse-obj src:json.mon:87-106 conf:high]
+  Object parser: commented out. Recursive descent with parseKV
+  (string key, ':' separator, value), comma-separated, terminated by '}'.
+
+[INF id:inf.json.status from:obs.json.data-type,obs.json.ws,obs.json.parse-val,obs.json.parse-str,obs.json.parse-num,obs.json.parse-arr,obs.json.parse-obj conf:high date:2026-06-13 by:codex]
+  The JSON parser has a working data type, whitespace consumer, and
+  basic parseVal dispatcher. The number, array, and object parsers are
+  designed but commented out — likely awaiting pattern matching or
+  monadic parser combinators.
+
+* Ascii.mon — ASCII Character Constants
+:PROPERTIES:
+:ID: monadc.context.core-libs.ascii
+:CUSTOM_ID: core-libs-ascii
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: core/text/Ascii.mon — 118 lines. RFC 20 ASCII character class constants and char predicates.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: core/text/Ascii.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.ascii.exports src:Ascii.mon:16-25 conf:high]
+  Module Ascii exports: nul, bel, bs, tab, lf, cr, esc, space, del,
+  lowercase, uppercase, letters, digits, hexdigits, octdigits, punctuation,
+  whitespace, printable, char-downcase, case-delta, char-upcase,
+  char-lower?, char-upper?, char-alphabetic?, char-numeric?,
+  char-whitespace?, char-alphanumeric?.
+
+[OBS id:obs.ascii.string-consts src:Ascii.mon:27-35 conf:high]
+  String constant definitions for character classes: lowercase, uppercase,
+  letters, digits, hexdigits, octdigits, punctuation, whitespace, printable.
+
+[OBS id:obs.ascii.int-consts src:Ascii.mon:37-45 conf:high]
+  Integer constant definitions for control characters: nul (0), bel (7),
+  bs (8), tab (9), lf (10), cr (13), esc (27), space (32), del (127).
+
+[OBS id:obs.ascii.case-conv src:Ascii.mon:47-60 conf:high]
+  Case conversion: char-upcase, char-downcase using case-delta (32).
+  Predicates: char-lower?, char-upper?, char-alphabetic?, char-numeric?,
+  char-alphanumeric?, char-whitespace?.
+
+[OBS id:obs.ascii.tests-commented src:Ascii.mon:91-117 conf:high]
+  Commented-out tests verifying all constants and predicates.
+
+* String.mon — String Manipulation Library
+:PROPERTIES:
+:ID: monadc.context.core-libs.string
+:CUSTOM_ID: core-libs-string
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: core/text/String.mon — 196 lines. String queries, construction, trimming, padding, case conversion.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: core/text/String.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.string.exports src:String.mon:15-20 conf:high]
+  Module String exports: string-empty?, string-contains?, string-prefix?,
+  string-suffix?, string-copy, string-append, substring, string-trim,
+  string-trim-right, string-trim-both, string-pad-left, string-pad-right,
+  upcase, downcase, capitalize.
+
+[OBS id:obs.string.queries src:String.mon:26-68 conf:high]
+  String queries: string-empty? (count check), string-prefix? (prefix
+  match via for loop), string-suffix? (suffix match via offset for loop),
+  string-contains? (nested for loop sliding window).
+
+[OBS id:obs.string.copy-append src:String.mon:72-98 conf:high]
+  String construction: string-copy (for-loop byte copy), string-append
+  (allocate new string, copy both), substring (allocate and copy range).
+
+[OBS id:obs.string.trim-pad src:String.mon:102-148 conf:high]
+  Trimming: string-trim (skip leading whitespace), string-trim-right
+  (trailing whitespace via reverse scan), string-trim-both (compose).
+  Padding: string-pad-left, string-pad-right (fill with given char).
+
+[OBS id:obs.string.case-conv src:String.mon:152-174 conf:high]
+  Case conversion: upcase, downcase, capitalize — all iterate char-by-char
+  using Ascii.char-upcase/char-downcase.
+
+[OBS id:obs.string.tests src:String.mon:176-196 conf:high]
+  20 test assertions using unparenthesized =(tests)= block (without parens
+  around the =tests= symbol). Covers empty?, prefix?, suffix?, contains?,
+  copy, append, substring, trim variants, pad variants, and case conversion.
+
+[THINK id:think.string.append-overload date:2026-06-13 by:codex]
+  Line 80: TODO comment — string-append should accept both String and
+  Char as the second argument (not just String).
+
+* Assert.mon — Assertion Stubs
+:PROPERTIES:
+:ID: monadc.context.core-libs.assert
+:CUSTOM_ID: core-libs-assert
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: core/Assert.mon — 18 lines. Minimal assertion wrapper stub.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stub
+:CONTEXT_STATUS: active
+:SOURCE: core/Assert.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.assert.exports src:Assert.mon:13-14 conf:high]
+  Module Assert exports: assert?.
+
+[OBS id:obs.assert.impl src:Assert.mon:16-17 conf:high]
+  =(assert? expr label)= wraps =(assert-eq expr True label)=.
+
+[INF id:inf.assert-stub from:obs.assert.exports,obs.assert.impl conf:high date:2026-06-13 by:codex]
+  Assert.mon is a bare stub with TODO file-level commentary (lines 1, 5, 9).
+  The =(assert?)= function delegates to =(assert-eq)= which must be
+  defined elsewhere (likely in the runtime or builtins).
+
+* TODO.mon — Pending Implementations
+:PROPERTIES:
+:ID: monadc.context.core-libs.todo
+:CUSTOM_ID: core-libs-todo
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: core/TODO.mon — 311 lines. Pending implementations for Math, List, String, and Function modules.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: draft
+:CONTEXT_STATUS: active
+:SOURCE: core/TODO.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.todo.math src:TODO.mon:1-83 conf:high]
+  Pending math implementations: tan, asin, acos, atan, atan2, log2, log10,
+  sinh, cosh, tanh — all with Taylor series or Newton's method implementations.
+
+[OBS id:obs.todo.list src:TODO.mon:87-241 conf:high]
+  Pending list operations: head, tail, last, init, length, reverse, concat,
+  concat-map, any?, all?, maximum, minimum, elem?, replicate, iterate,
+  split-at, span, break, lookup, nub, insert-sorted, sort, insert-sorted-by,
+  sort-by, group-by, partition, unzip.
+
+[OBS id:obs.todo.string src:TODO.mon:244-298 conf:high]
+  Pending string operations: words (split on whitespace), unwords, lines
+  (split on newlines), unlines. These operate on raw string indexing.
+
+[OBS id:obs.todo.fn src:TODO.mon:300-311 conf:high]
+  Pending function utilities: id (λx.x), const (λx.λy.x), flip, compose.
+
+[INF id:inf.todo-organization from:obs.todo.math,obs.todo.list,obs.todo.string,obs.todo.fn conf:high date:2026-06-13 by:codex]
+  The TODO.mon file serves as a staging area: implementations are written
+  and tested here before being promoted to their proper module files.
+  All code here is functional Monad code, not just documentation.
+
+* Summary of core/ Module Dependencies
+:PROPERTIES:
+:ID: monadc.context.core-libs.deps
+:CUSTOM_ID: core-libs-deps
+:CONTEXT_KIND: summary
+:CONTEXT_DESCRIPTION: Module dependency graph across core/.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: core/
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.core-deps src:core/ conf:high]
+  Dependency graph:
+  - Coll.mon: standalone (no imports)
+  - Test.mon: standalone (reimplements filter independently)
+  - List.mon: imports Coll
+  - Set.mon: standalone (uses built-in set, conj, disj, contains?, count)
+  - Math.mon: imports Coll
+  - Random.mon: standalone (uses asm blocks for RDRAND, rdtsc)
+  - json.mon: standalone (uses data declarations, string ops)
+  - Ascii.mon: standalone (constants + char predicates)
+  - String.mon: imports Ascii
+  - Assert.mon: standalone (stub)
+  - TODO.mon: standalone (no module declaration — all code is top-level)
+
+* Connections
+:PROPERTIES:
+:ID: monadc.context.core-libs.connections
+:CUSTOM_ID: core-libs-connections
+:CONTEXT_KIND: inference
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.core-libs.connects-to from:obs.core-libs.purpose conf:high]
+  connects-to -> `monadc.context.language.primitive-set` (Set.mon wraps
+  built-in set, conj, disj, contains?, count) ·
+  `monadc.context.language.primitive-list` (List.mon builds on cons, car,
+  cdr) ·
+  `monadc.context.language.primitive-map` (Map.mon assoc/dissoc operations) ·
+  `monadc.context.typeclass` (Coll typeclass in prelude/Coll.mon defines
+  the collection abstraction that List, Set, Map implement) ·
+  `monadc.context.runtime` (core functions compile down to runtime calls:
+  rt_set_conj, rt_list_car, rt_map_assoc, etc.) ·
+  `monadc.context.tests-arch` (core library tests in tests/run_core.py
+  validate core/ functions) ·
+  `monadc.context.main-mon` (Main.mon is the larger demo/standard-library
+  file; core/ is the smaller, module-structured subset) ·
+  `monadc.context.codegen-ops` (every core function exercises a codegen
+  dispatch handler)

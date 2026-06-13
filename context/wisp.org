@@ -14,7 +14,7 @@
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -283,10 +283,179 @@
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.wisp.sugar-tests src:tests/sugar/ conf:high]
+[OBS id:obs.wisp.sugar-tests src:tests/reader-sugars.tsv conf:high]
   Wisp desugaring is tested by =tests/sugar/= (192 TSV entries covering all
   sugar types). Full compile/run tests are in =tests/wisp/=.
 
 [OBS id:obs.wisp.reader-atoms-overlap src:tests/reader-atoms.tsv conf:high]
   Many =reader-atoms.tsv= entries also exercise wisp paths since the test
   runner feeds source through the full wisp→reader pipeline.
+
+* API Functions
+:PROPERTIES:
+:ID: monadc.context.wisp.api-functions
+:CUSTOM_ID: wisp-api-functions
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The full public API surface of wisp.h: wisp_parse_all, wisp_register_arity, wisp_register_arities_from_env, wisp_clear_arities, wisp_get_arity.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: wisp.h:34-38, wisp.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.wisp.wisp-parse-all src:wisp.c:4696-4785 conf:high]
+  =ASTList wisp_parse_all(const char *source, const char *filename)=
+  Main entry point for the Wisp syntax expander. Called from main.c Phase 1
+  before the reader. Algorithm:
+  1. Strip comments preserving line/column positions.
+  2. Run 2D fraction desugaring (desugar_fractions).
+  3. Heuristic scan: if source contains no wisp-style lines (non-paren
+     leading tokens), short-circuit directly to parse_all.
+  4. Build a local ArityTable seeded from the global FFI arity registry.
+  5. Run arity_prescan to register user-defined layout, data, class,
+     and define arities from the source.
+  6. Build flat WTokenStream via build_token_stream.
+  7. Parse all top-level expressions into an S-expression string.
+  8. Install param-kind hook and known-function hook for the reader.
+  9. Call parse_all + macro_expand_all on the transformed output.
+  10. Persist all discovered arities back to the global g_ffi_arities
+      so that modules imported later inherit them.
+
+[OBS id:obs.wisp.wisp-register-arity src:wisp.c:84-90 conf:high]
+  =void wisp_register_arity(const char *name, int arity)=
+  Registers a single function name with its arity in the global FFI arity
+  table (g_ffi_arities). Called from the FFI pre-pass (main.c Phase 0) for
+  every C function parsed from =include= headers. Lazily initialises the
+  static table on first call.
+
+[OBS id:obs.wisp.wisp-register-arities-from-env src:wisp.c:4468-4487 conf:high]
+  =void wisp_register_arities_from_env(Env *env)=
+  Walks the entire env hash table and registers =ENV_BUILTIN= and
+  =ENV_FUNC= entries into the global arity table. Uses =arity_max= as the
+  registered arity (-1 = variadic, 0 = fixed with arity_min, otherwise
+  use arity_max). Also copies per-parameter ParamKind info for infix
+  detection. Called from main.c Phase 0 (with a temporary env) and again
+  from Phase 3 (after the real env is populated).
+
+[OBS id:obs.wisp.wisp-clear-arities src:wisp.c:97-102 conf:high]
+  =void wisp_clear_arities(void)=
+  Frees all entries in the global FFI arity table and resets the init flag.
+  Used between compilation units to prevent arity leakage across modules.
+
+[OBS id:obs.wisp.wisp-get-arity src:wisp.c:92-95 conf:high]
+  =int wisp_get_arity(const char *name)=
+  Looks up a function name in the global FFI arity table. Returns -2 if
+  unknown, -99 if the table was never initialised. Called by main.c and
+  the reader to query arity for infix detection and layout inference.
+
+* Arity Table Internal Structure
+:PROPERTIES:
+:ID: monadc.context.wisp.arity-table-internal
+:CUSTOM_ID: wisp-arity-table-internal
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The internal implementation of the arity table: ArityEntry linked list nodes, ArityTable hash map with 128 buckets, djb2 hash function, and the supporting arity_set/arity_get/arity_free helpers.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: wisp.c:11-77
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.wisp.arity-entry-struct src:wisp.c:11-17 conf:high]
+  ArityEntry stores a function name, its arity, an array of ParamKind
+  values (PARAM_VALUE or PARAM_FUNC) for each parameter, and an array of
+  per-parameter function arities (used when a param is itself a function).
+  Entries are stored in a singly-linked list (next pointer) within a hash
+  bucket.
+
+[OBS id:obs.wisp.arity-table-struct src:wisp.c:21-23 conf:high]
+  ArityTable is a fixed-size hash map with 128 buckets (ARITY_BUCKETS).
+  Each bucket is a linked list of ArityEntry nodes. The hash function is
+  djb2: =h = 5381; while (*s) h = ((h << 5) + h) + *s++; return h % 128=.
+
+[OBS id:obs.wisp.arity-set src:wisp.c:31-42 conf:high]
+  =arity_set(table, name, arity)= — Looks up an existing entry by name
+  and updates its arity, or allocates a new ArityEntry with default
+  param_kinds (PARAM_VALUE) and param_fn_arities (-1) and inserts at
+  the head of the bucket. Does NOT check for duplicates.
+
+[OBS id:obs.wisp.arity-set-with-kinds src:wisp.c:44-55 conf:high]
+  =arity_set_with_kinds(table, name, arity, kinds)= — Same as arity_set
+  but also copies the ParamKind array into the entry. Used when the
+  caller has detailed per-parameter type info (from type signatures).
+
+[OBS id:obs.wisp.arity-get src:wisp.c:57-62 conf:high]
+  =arity_get(table, name)= — Returns the arity for a name, or -2 if
+  unknown. -1 means variadic (match, etc.). Non-negative means fixed
+  arity.
+
+[OBS id:obs.wisp.arity-get-entry src:wisp.c:64-69 conf:high]
+  =arity_get_entry(table, name)= — Returns the full ArityEntry pointer
+  for a name, or NULL. Used by the infix promotion logic to check
+  ParamaKind to distinguish function-typed params from value params.
+
+[OBS id:obs.wisp.arity-free src:wisp.c:71-77 conf:high]
+  =arity_free(table)= — Frees all ArityEntry nodes and their names,
+  zeroes all buckets. Called by wisp_clear_arities and at the end of
+  wisp_parse_all to clean up the local arity table.
+
+[OBS id:obs.wisp.arity-prescan src:wisp.c:107-767 conf:high]
+  =arity_prescan(table, source)= — Pre-scans the source text (before
+  tokenisation) to register arities from user-defined constructs:
+  bare =layout=, =data=, =type=, =class=, =define/=def= forms, and
+  their s-expression counterparts. Detects bracketed parameters,
+  arrow-separated type signatures, constructor fields, class method
+  signatures, and function arrow counts. This pass runs inside
+  wisp_parse_all after seeding from the global FFI table.
+
+[INF id:inf.wisp.arity-internals from:obs.wisp.arity-entry-struct,obs.wisp.arity-table-struct,obs.wisp.arity-set,obs.wisp.arity-get,obs.wisp.arity-prescan conf:high]
+  The arity table uses open hashing (separate chaining) with 128 buckets
+  and djb2 hash. There are two instances: the global =g_ffi_arities=
+  (persistent across modules) and a local table in wisp_parse_all
+  (seeded from the global + builtins + prescan). At the end of
+  wisp_parse_all, any newly discovered arities are merged back into the
+  global table to benefit subsequent module compilation.
+
+* Connections
+:PROPERTIES:
+:ID: monadc.context.wisp.connections
+:CUSTOM_ID: wisp-connections
+:CONTEXT_KIND: inference
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.wisp.connects-to from:obs.wisp.purpose conf:high]
+  connects-to -> `monadc.context.reader` (wisp_parse_all produces S-exprs
+  consumed by reader; wisp_register_arity feeds the reader's arity table) ·
+  `monadc.context.language` (Wisp expands to canonical S-expr forms that
+  correspond to language constructs: define, lambda, if, cond, let, etc.) ·
+  `monadc.context.ffi` (Phase 0 in main.c uses FFI pre-pass to register C
+  function arities with wisp_register_arity before wisp_parse_all runs) ·
+  `monadc.context.macro` (macros are Wisp-form defines with substitution;
+  macro output is re-parsed through Wisp) ·
+  `monadc.context.main` (Phase 0 of compile_one registers FFI arities into
+  Wisp's global arity table before parsing) ·
+  `monadc.context.tests-arch` (wisp tests exercise Wisp expansion paths;
+  arity-dependent parsing is tested extensively in Wisp codegen tests)

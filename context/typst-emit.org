@@ -1,0 +1,392 @@
+#+TITLE: Typst Document Emission Backend
+#+AUTHOR: Codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:typst:emit:backend:typesetting:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.typst-emit
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.typst-emit.file-metadata
+:CUSTOM_ID: typst-emit-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: typst_emit.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.typst-emit.file src:typst_emit.h conf:high]
+  This file records the Typst document emission backend API in =typst_emit.h=.
+  Converts a parsed (and optionally type-inferred) AST into Typst source using
+  math mode notation together with the =curryst= (proof trees, inference rules)
+  and =ctheorems= (theorem/definition/lemma) packages. Typst math notation:
+  =lambda= for abstraction, =tack.r= (⊢) for turnstile, =equiv= (≡) for
+  definitional equality, =arrow.r= (→) for function types, =forall= / =exists=
+  for quantifiers, =in= / =subset.eq= for set membership, =triangle.r.small=
+  (≜) for definition equality.
+
+* Emit Options (TypstEmitOpts)
+:PROPERTIES:
+:ID: monadc.context.typst-emit.opts
+:CUSTOM_ID: typst-emit-opts
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: TypstEmitOpts controls all emission behaviour: document mode, type display style, sequent style, labelling, equation numbering, title/author/paper metadata.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: typst_emit.h:29-61
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.typst-emit.opts.mode src:typst_emit.h:34 conf:high]
+  =TypstEmitOpts.mode= — Document mode: =TYPST_DOC_FULL= (0) emits a complete
+  Typst document with preamble; =TYPST_DOC_FRAGMENT= (1) emits only math /
+  content blocks with no preamble.
+
+[OBS id:obs.typst-emit.opts.prefer-inferred src:typst_emit.h:39 conf:high]
+  =TypstEmitOpts.prefer_inferred_types= — When true, use the HM inference
+  result (=inferred_type=) if present, falling back to syntactic annotations.
+  When false, use only what the user wrote syntactically.
+
+[OBS id:obs.typst-emit.opts.sequent-style src:typst_emit.h:43 conf:high]
+  =TypstEmitOpts.sequent_style= — Render typing judgements in sequent style
+  =Γ ⊢ e : τ=. When false, types appear inline as =e : τ=.
+
+[OBS id:obs.typst-emit.opts.emit-labels src:typst_emit.h:47 conf:high]
+  =TypstEmitOpts.emit_labels= — Emit Typst labels =<def-name>= for every named
+  definition, enabling cross-references with =@def-name=.
+
+[OBS id:obs.typst-emit.opts.number-equations src:typst_emit.h:51 conf:high]
+  =TypstEmitOpts.number_equations= — Place each top-level form in its own
+  numbered equation block instead of a running math block.
+
+[OBS id:obs.typst-emit.opts.title src:typst_emit.h:54 conf:high]
+  =TypstEmitOpts.title= — Override document title (=TYPST_DOC_FULL= only).
+
+[OBS id:obs.typst-emit.opts.author src:typst_emit.h:55 conf:high]
+  =TypstEmitOpts.author= — Override document author (=TYPST_DOC_FULL= only).
+
+[OBS id:obs.typst-emit.opts.paper src:typst_emit.h:59 conf:high]
+  =TypstEmitOpts.paper= — Paper size string passed to =set page(...)=, e.g.
+  ="a4"=, ="us-letter"=. NULL defaults to ="a4"=.
+
+[OBS id:obs.typst-emit.opts.docs src:typst_emit.h:26-61 conf:high]
+  Zero-initialise the struct for sensible defaults (=TYPST_DOC_FRAGMENT=, no
+  inferred types, inline style, no labels, no numbering, no title/author, A4).
+
+* Document Mode Constants
+:PROPERTIES:
+:ID: monadc.context.typst-emit.constants
+:CUSTOM_ID: typst-emit-constants
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: TYPST_DOC_FULL and TYPST_DOC_FRAGMENT select between full document and fragment emission.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: typst_emit.h:63-64
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.typst-emit.constants.full src:typst_emit.h:63 conf:high]
+  =TYPST_DOC_FULL= (0) — Emit a complete Typst document with preamble (package
+  imports, page setup, title block). Used when generating standalone .typ files.
+
+[OBS id:obs.typst-emit.constants.fragment src:typst_emit.h:64 conf:high]
+  =TYPST_DOC_FRAGMENT= (1) — Emit only math / content blocks, no preamble.
+  Used for embedding Typst output into an existing document.
+
+* Precedence Levels
+:PROPERTIES:
+:ID: monadc.context.typst-emit.precedence
+:CUSTOM_ID: typst-emit-precedence
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Ten precedence levels from TYPST_PREC_TOP (0) to TYPST_PREC_ATOM (10). Higher value = tighter binding. The emitter inserts lr("(" … ")") when the outer context has higher precedence than the current expression.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: typst_emit.h:72-82
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.typst-emit.prec.top src:typst_emit.h:72 conf:high]
+  =TYPST_PREC_TOP= (0) — Used when calling from outside; never parenthesised.
+
+[OBS id:obs.typst-emit.prec.comma src:typst_emit.h:73 conf:high]
+  =TYPST_PREC_COMMA= (1) — Comma separator, lowest binding.
+
+[OBS id:obs.typst-emit.prec.arrow src:typst_emit.h:74 conf:high]
+  =TYPST_PREC_ARROW= (2) — Function type arrow =a -> b=.
+
+[OBS id:obs.typst-emit.prec.or src:typst_emit.h:75 conf:high]
+  =TYPST_PREC_OR= (3) — Logical or =∨=.
+
+[OBS id:obs.typst-emit.prec.and src:typst_emit.h:76 conf:high]
+  =TYPST_PREC_AND= (4) — Logical and =∧=.
+
+[OBS id:obs.typst-emit.prec.cmp src:typst_emit.h:77 conf:high]
+  =TYPST_PREC_CMP= (5) — Comparison operators: = = ≠ < ≤ > ≥ ≡=.
+
+[OBS id:obs.typst-emit.prec.add src:typst_emit.h:78 conf:high]
+  =TYPST_PREC_ADD= (6) — Addition: =+ −=.
+
+[OBS id:obs.typst-emit.prec.mul src:typst_emit.h:79 conf:high]
+  =TYPST_PREC_MUL= (7) — Multiplication: =* / mod=.
+
+[OBS id:obs.typst-emit.prec.unary src:typst_emit.h:80 conf:high]
+  =TYPST_PREC_UNARY= (8) — Unary operators: =¬ −=.
+
+[OBS id:obs.typst-emit.prec.app src:typst_emit.h:81 conf:high]
+  =TYPST_PREC_APP= (9) — Function application (juxtaposition).
+
+[OBS id:obs.typst-emit.prec.atom src:typst_emit.h:82 conf:high]
+  =TYPST_PREC_ATOM= (10) — Literals, parenthesised sub-expressions.
+
+* Core Emission Functions
+:PROPERTIES:
+:ID: monadc.context.typst-emit.core-functions
+:CUSTOM_ID: typst-emit-core-functions
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: All core emission functions: typst_emit_expr, typst_emit_type, typst_emit_pattern, typst_emit_toplevel, typst_emit_judgement, typst_emit_equality, typst_emit_refinement_type, typst_emit_data_rules, typst_emit_class_decl, typst_emit_instance_decl.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: typst_emit.h:89-124
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.typst-emit.fn.expr src:typst_emit.h:89 conf:high]
+  =typst_emit_expr(AST *ast, SB *out, int prec, const TypstEmitOpts *opts)=
+  — Emit a single expression into =out=. The =prec= parameter is the precedence
+  of the surrounding context (use =TYPST_PREC_TOP= from outside). The emitter
+  inserts =lr("(" … ")")= as needed.
+
+[OBS id:obs.typst-emit.fn.type src:typst_emit.h:92 conf:high]
+  =typst_emit_type(AST *ast, SB *out, const TypstEmitOpts *opts)=
+  — Emit a type expression. The AST node is known to represent a type.
+
+[OBS id:obs.typst-emit.fn.pattern src:typst_emit.h:95 conf:high]
+  =typst_emit_pattern(ASTPattern *pat, SB *out, const TypstEmitOpts *opts)=
+  — Emit a pattern (inside =pmatch= clauses).
+
+[OBS id:obs.typst-emit.fn.toplevel src:typst_emit.h:98 conf:high]
+  =typst_emit_toplevel(AST *ast, SB *out, const TypstEmitOpts *opts)=
+  — Emit a complete top-level definition (=def=, =defn=, =data=, =class=,
+  =instance=, etc.).
+
+[OBS id:obs.typst-emit.fn.judgement src:typst_emit.h:102-105 conf:high]
+  =typst_emit_judgement(const char **ctx_names, const char **ctx_types, int ctx_len, AST *expr, AST *type_ast, SB *out, const TypstEmitOpts *opts)=
+  — Emit a typing judgement: =Γ ⊢ expr : τ=. The =ctx_names= / =ctx_types=
+  are parallel arrays of length =ctx_len=.
+
+[OBS id:obs.typst-emit.fn.equality src:typst_emit.h:108-111 conf:high]
+  =typst_emit_equality(const char **ctx_names, const char **ctx_types, int ctx_len, AST *lhs, AST *rhs, AST *type_ast, SB *out, const TypstEmitOpts *opts)=
+  — Emit a βη-equality judgement: =Γ ⊢ lhs ≡ rhs : τ=.
+
+[OBS id:obs.typst-emit.fn.refinement src:typst_emit.h:114 conf:high]
+  =typst_emit_refinement_type(AST *ref, SB *out, const TypstEmitOpts *opts)=
+  — Emit a refinement type in set-builder notation: ={ x ∈ T | P(x) }=.
+
+[OBS id:obs.typst-emit.fn.data-rules src:typst_emit.h:117 conf:high]
+  =typst_emit_data_rules(AST *data, SB *out, const TypstEmitOpts *opts)=
+  — Emit a data declaration as Gentzen-style introduction rules using proof
+  tree notation from the =curryst= package.
+
+[OBS id:obs.typst-emit.fn.class-decl src:typst_emit.h:120 conf:high]
+  =typst_emit_class_decl(AST *cls, SB *out, const TypstEmitOpts *opts)=
+  — Emit a class declaration as a mathematical interface block.
+
+[OBS id:obs.typst-emit.fn.instance-decl src:typst_emit.h:123 conf:high]
+  =typst_emit_instance_decl(AST *inst, SB *out, const TypstEmitOpts *opts)=
+  — Emit an instance declaration.
+
+* Document-Level Functions
+:PROPERTIES:
+:ID: monadc.context.typst-emit.doc-functions
+:CUSTOM_ID: typst-emit-doc-functions
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Document-level emission: typst_emit_preamble, typst_emit_document, typst_emit_pdf. These produce complete Typst files and optionally invoke the typst compiler.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: typst_emit.h:128-141
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.typst-emit.fn.preamble src:typst_emit.h:129 conf:high]
+  =typst_emit_preamble(SB *out, const TypstEmitOpts *opts)= — Emit the
+  standard Typst preamble used by =TYPST_DOC_FULL= mode: =set page(...)=,
+  package imports (=curryst=, =ctheorems=), and title block.
+
+[OBS id:obs.typst-emit.fn.document src:typst_emit.h:132-133 conf:high]
+  =typst_emit_document(AST **exprs, size_t count, SB *out, const TypstEmitOpts *opts)=
+  — Emit a complete Typst document wrapping =count= top-level forms.
+
+[OBS id:obs.typst-emit.fn.pdf src:typst_emit.h:138-141 conf:high]
+  =typst_emit_pdf(AST **exprs, size_t count, const char *typ_path, char **pdf_path, const TypstEmitOpts *opts)=
+  — Write Typst source to =typ_path=, invoke =typst compile=, and store the
+  path to the produced PDF in =*pdf_path= (caller must free). Returns 0 on
+  success, non-zero on failure.
+
+* Symbol Mapping
+:PROPERTIES:
+:ID: monadc.context.typst-emit.symbol-mapping
+:CUSTOM_ID: typst-emit-symbol-mapping
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Symbol-to-Typst-math mapping: typst_symbol_map, typst_is_infix, typst_op_precedence. Maps operator and keyword symbols to their canonical Typst math representations.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: typst_emit.h:149-155
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.typst-emit.fn.symbol-map src:typst_emit.h:149 conf:high]
+  =typst_symbol_map(const char *sym)= — Maps operator and keyword symbols to
+  their canonical Typst math representations. Returns NULL if =sym= has no
+  special mapping.
+
+[OBS id:obs.typst-emit.fn.is-infix src:typst_emit.h:152 conf:high]
+  =typst_is_infix(const char *sym)= — Returns true if =sym= is a known infix
+  binary operator in the Typst rendering.
+
+[OBS id:obs.typst-emit.fn.op-precedence src:typst_emit.h:155 conf:high]
+  =typst_op_precedence(const char *sym)= — Returns the precedence of a known
+  operator symbol, or =TYPST_PREC_APP= if unknown.
+
+* Integration with main.c
+:PROPERTIES:
+:ID: monadc.context.typst-emit.main-integration
+:CUSTOM_ID: typst-emit-main-integration
+:CONTEXT_KIND: observation
+:CONTEXT_DESCRIPTION: How main.c invokes the Typst emitter: typst_emit_pdf is called with surface_exprs (parsed before wisp desugaring) when --emit-typst is passed.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: main.c:758-846
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.typst-emit.main-surface-exprs src:main.c:758-762 conf:high]
+  Surface AST for typst emission is parsed from the original source BEFORE
+  wisp desugaring, so the emitter sees the user's actual syntax: named params,
+  pattern clauses, clean types. Re-parsing is cheap (=parse_all= is a pure
+  read with no codegen side effects).
+
+[OBS id:obs.typst-emit.main-invocation src:main.c:811-846 conf:high]
+  When =flags->emit_typst= is set, =main.c= constructs a =TypstEmitOpts= with
+  =mode=TYPST_DOC_FULL=, =prefer_inferred_types=true=, =sequent_style=true=,
+  =emit_labels=true=, =number_equations=false=, =title= source path,
+  =author=""=, =paper="a4"=, then calls =typst_emit_pdf=.
+
+* Cross-References
+:PROPERTIES:
+:ID: monadc.context.typst-emit.cross-refs
+:CUSTOM_ID: typst-emit-cross-refs
+:CONTEXT_KIND: index
+:CONTEXT_DESCRIPTION: Cross-references to language.org, reader.org, cli.org, main.org.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: typst_emit.h,main.c
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.typst-emit.language from:obs.typst-emit.opts.prefer-inferred,obs.typst-emit.fn.judgement,obs.typst-emit.fn.equality conf:high]
+  connects-to -> =monadc.context.language.type-system-surface= (the inferred
+  types that =prefer_inferred_types= draws from are produced by HM inference)
+  · =monadc.context.language.primitive-dependent-types= (sequent-style
+  judgements render the dependent type calculus) ·
+  =monadc.context.language.constructs.data= (=typst_emit_data_rules= renders
+  data declarations as Gentzen-style rules) ·
+  =monadc.context.language.constructs.class= (=typst_emit_class_decl= renders
+  class declarations as interface blocks)
+
+[INF id:inf.typst-emit.reader from:obs.typst-emit.main-surface-exprs conf:high]
+  connects-to -> =monadc.context.reader.sugar= (surface AST is the post-sugar
+  reader output, pre-wisp — the emitter sees the desugared macro-free AST) ·
+  =monadc.context.reader.header= (=AST=, =SB=, =ASTPattern= types come from
+  =reader.h=)
+
+[INF id:inf.typst-emit.cli from:obs.typst-emit.main-integration conf:high]
+  connects-to -> =monadc.context.cli.flags= (=--emit-typst= flag triggers
+  the emitter) · =monadc.context.cli.output= (=--output= flag controls the
+  .typ and .pdf output filename)
+
+[INF id:inf.typst-emit.main from:obs.typst-emit.main-invocation,obs.typst-emit.main-surface-exprs conf:high]
+  connects-to -> =monadc.context.main.twelve-phase-pipeline= (Phase 1 =
+  reader → AST includes the surface AST re-parse) ·
+  =monadc.context.main.compile-one= (compile_one calls typst_emit_pdf
+  between Phase 1 and Phase 2)

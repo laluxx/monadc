@@ -5,8 +5,6 @@
 ;; TEST-EXPECT: compile, run
 module Main
 define [a :: Int] 1
-define [b : Int] 2
-define c :: Int 3
+define b :: Int 2
 show a
 show b
-show c

@@ -3534,7 +3534,13 @@ static AST *parse_list(Parser *p) {
             parse_fn_signature(p, &params, &count, &ret_type);
 
             // Parse optional metadata BEFORE body
-            DefineMetadata meta = parse_define_metadata(p);
+            // Skip metadata scan when zero params — the next expression
+            // is always the body, never a docstring, since there is nothing
+            // for a docstring to document before the body in a zero-param form.
+            DefineMetadata meta = {NULL, NULL, false, false, 0};
+            if (count > 0) {
+                meta = parse_define_metadata(p);
+            }
 
             // Body
             AST **body_exprs = NULL;
@@ -3815,6 +3821,40 @@ static AST *parse_list(Parser *p) {
             } else {
                 compiler_error(p->current.line, p->current.column,
                                "Expected variable name after define");
+            }
+
+            /* Inline type annotation sugar on value defines:
+             *   (define name :: Type value)
+             *   (define name :: Pointer :: T value)
+             *   (define name -> Type value)
+             * Consume and discard the annotation; [name :: T] is canonical.
+             * Algorithm: consume the separator (:: or ->) then consume
+             * symbol tokens as long as the NEXT token is also :: or ->.
+             * Stop when next token is not a type separator — it is the value. */
+            if (p->current.type == TOK_ARROW ||
+                (p->current.type == TOK_SYMBOL && p->current.value &&
+                 strcmp(p->current.value, "::") == 0)) {
+                p->current = lexer_next_token(p->lexer); /* consume '::' or '->' */
+                /* consume type component symbols greedily */
+                while (p->current.type == TOK_SYMBOL && p->current.value) {
+                    /* peek at the token after this symbol */
+                    Lexer saved_lex = *p->lexer;
+                    Token peek = lexer_next_token(p->lexer);
+                    bool peek_is_sep = (peek.type == TOK_ARROW) ||
+                                       (peek.type == TOK_SYMBOL && peek.value &&
+                                        strcmp(peek.value, "::") == 0);
+                    free(peek.value);
+                    *p->lexer = saved_lex;
+                    /* consume this type symbol */
+                    p->current = lexer_next_token(p->lexer);
+                    if (peek_is_sep) {
+                        /* consume the separator and continue */
+                        p->current = lexer_next_token(p->lexer);
+                    } else {
+                        /* next is the value expression — stop */
+                        break;
+                    }
+                }
             }
 
             // Parse the value FIRST — no pre-value metadata scan
@@ -5521,6 +5561,89 @@ static AST *parse_list(Parser *p) {
             compiler_error(p->current.line, p->current.column, "Expected ')'");
         int end_column = p->current.column + 1;
         p->current = lexer_next_token(p->lexer);
+
+        /* Keyword constructor desugaring: (Ctor :field1 v1 :field2 v2 ...)
+         * Reorder keyword arguments into positional order using the layout
+         * field registry.  Works for any registered layout type.
+         * (Point :y 3 :x 4) -> (Point 4 3)  given layout Point [x] [y]   */
+        if (list->list.count >= 3 &&
+            list->list.items[0]->type == AST_SYMBOL) {
+            const char *ctor_name = list->list.items[0]->symbol;
+            /* Check if arg[1] is a keyword — if so, this is keyword-style */
+            bool has_keywords = (list->list.items[1]->type == AST_KEYWORD);
+            if (has_keywords) {
+                /* Count fields for this layout */
+                int nfields = 0;
+                while (layout_get_field_name(ctor_name, nfields) != NULL)
+                    nfields++;
+                if (nfields > 0) {
+                    /* Build positional array, initialized to NULL */
+                    AST **positional = calloc(nfields, sizeof(AST *));
+                    /* Walk keyword/value pairs: items[1]=:k items[2]=v ... */
+                    size_t i = 1;
+                    while (i + 1 < list->list.count) {
+                        AST *kw  = list->list.items[i];
+                        AST *val = list->list.items[i + 1];
+                        if (kw->type != AST_KEYWORD) {
+                            compiler_error(kw->line, kw->column,
+                                "Expected keyword in keyword constructor call "
+                                "'%s' — use (:field value) pairs or positional args, "
+                                "not a mix", ctor_name);
+                        }
+                        /* Find field index */
+                        int found = -1;
+                        for (int fi = 0; fi < nfields; fi++) {
+                            if (strcmp(layout_get_field_name(ctor_name, fi),
+                                       kw->keyword) == 0) {
+                                found = fi;
+                                break;
+                            }
+                        }
+                        if (found < 0) {
+                            compiler_error(kw->line, kw->column,
+                                "Unknown field ':%s' in keyword constructor "
+                                "call for layout '%s'",
+                                kw->keyword, ctor_name);
+                        }
+                        if (positional[found] != NULL) {
+                            compiler_error(kw->line, kw->column,
+                                "Duplicate field ':%s' in keyword constructor "
+                                "call for layout '%s'",
+                                kw->keyword, ctor_name);
+                        }
+                        positional[found] = val;
+                        /* free the keyword AST node — no longer needed */
+                        ast_free(kw);
+                        list->list.items[i]     = NULL;
+                        list->list.items[i + 1] = NULL;
+                        i += 2;
+                    }
+                    /* Check all fields were supplied */
+                    for (int fi = 0; fi < nfields; fi++) {
+                        if (positional[fi] == NULL) {
+                            compiler_error(list->line, list->column,
+                                "Missing field ':%s' in keyword constructor "
+                                "call for layout '%s'",
+                                layout_get_field_name(ctor_name, fi), ctor_name);
+                        }
+                    }
+                    /* Rebuild list: head + positional values in order */
+                    AST *reordered = ast_new_list();
+                    reordered->line       = list->line;
+                    reordered->column     = list->column;
+                    reordered->end_column = end_column;
+                    ast_list_append(reordered, list->list.items[0]);
+                    list->list.items[0] = NULL;
+                    for (int fi = 0; fi < nfields; fi++)
+                        ast_list_append(reordered, positional[fi]);
+                    free(positional);
+                    /* free the old list shell (items already stolen/freed) */
+                    free(list->list.items);
+                    free(list);
+                    list = reordered;
+                }
+            }
+        }
 
         if (list->list.count == 1 && list->list.items[0]->type == AST_LIST &&
             list->list.items[0]->list.count > 0 &&

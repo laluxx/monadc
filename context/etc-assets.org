@@ -1,0 +1,471 @@
+#+TITLE: etc/ Assets Directory
+#+AUTHOR: Codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:assets:etc:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.etc-assets
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.etc-assets.file-metadata
+:CUSTOM_ID: etc-assets-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/etc-assets.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.etc-assets.file src:etc/ conf:high]
+  This file catalogues every asset in the =etc/= directory:
+  documentation page, logo, screenshots, fonts, and research PDFs.
+  Every asset is an OBS node with connections to philosophy.org,
+  references.org, and context.org.
+
+* etc/docs.html — Documentation Page
+:PROPERTIES:
+:ID: monadc.context.etc-assets.docs-html
+:CUSTOM_ID: assets-docs-html
+:CONTEXT_KIND: asset
+:CONTEXT_DESCRIPTION: The MonadC documentation webpage — HTML rendering of language reference and compiler guides.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: etc/docs.html
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.etc-assets.docs-html.file src:etc/docs.html conf:high]
+  Standalone HTML documentation page for the MonadC compiler.
+  Contains language reference material, type system overview, and
+  compiler usage guides. Rendered from Org sources or hand-authored.
+  Served as the primary documentation target for web-based access.
+
+[INF id:inf.etc-assets.docs-html from:obs.etc-assets.docs-html.file conf:high]
+  connects-to -> `monadc.context.philosophy.human-witness` (the docs
+  encode the human designer's intent for the language) ·
+  `monadc.context.language` (every primitive and construct documented
+  in language.org has its counterpart in docs.html)
+
+* etc/logo.png — Project Logo
+:PROPERTIES:
+:ID: monadc.context.etc-assets.logo
+:CUSTOM_ID: assets-logo
+:CONTEXT_KIND: asset
+:CONTEXT_DESCRIPTION: The MonadC project logo — visual identity for the compiler project.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: etc/logo.png
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.etc-assets.logo.file src:etc/logo.png conf:high]
+  PNG image file used as the project's visual logo. Referenced by
+  documentation pages, README, and presentation materials. Represents
+  the MonadC brand identity.
+
+[INF id:inf.etc-assets.logo from:obs.etc-assets.logo.file conf:high]
+  connects-to -> `monadc.context.philosophy.human-witness` (visual
+  identity reflects the language philosophy) ·
+  `monadc.context.etc-assets.docs-html` (referenced by documentation)
+
+* etc/MapleMono-NF-Regular.ttf — Display Font
+:PROPERTIES:
+:ID: monadc.context.etc-assets.font
+:CUSTOM_ID: assets-font
+:CONTEXT_KIND: asset
+:CONTEXT_DESCRIPTION: MapleMono Nerd Font — monospace display font used for code rendering in documentation and screenshots.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: etc/MapleMono-NF-Regular.ttf
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.etc-assets.font.file src:etc/MapleMono-NF-Regular.ttf conf:high]
+  MapleMono Nerd Font Regular — a monospace typeface with Nerd Font
+  glyph patches. Used for code display in etc/docs.html and in REPL
+  / terminal output. Selected for readability and wide Unicode coverage.
+
+[INF id:inf.etc-assets.font from:obs.etc-assets.font.file conf:high]
+  connects-to -> `monadc.context.etc-assets.docs-html` (font referenced
+  by documentation page) ·
+  `monadc.context.etc-assets.screenshots` (screenshots render code in
+  this font)
+
+* etc/screenshots/ — Context Category Theory Screenshots
+:PROPERTIES:
+:ID: monadc.context.etc-assets.screenshots
+:CUSTOM_ID: assets-screenshots
+:CONTEXT_KIND: asset-collection
+:CONTEXT_DESCRIPTION: Five PNG screenshots of the context graph visualizer, illustrating the category-theory foundation of the context system.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: etc/screenshots/
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.etc-assets.screenshots.dir src:etc/screenshots/ conf:high]
+  Directory containing 5 PNG screenshots:
+  - =about-poor-me.png=
+  - =conext-category2.png= (note: filename typo 'conext')
+  - =context-category.png=
+  - =context-category3.png=
+  - =context-category4.png=
+
+[OBS id:obs.etc-assets.screenshots.category1 src:etc/screenshots/context-category.png conf:high]
+  Screenshot of the context graph visualizer showing the category theory
+  morphism diagram. Nodes represent context topics; arrows represent
+  INF (connects-to) relationships. This is the canonical visualization
+  of the context category.
+
+[OBS id:obs.etc-assets.screenshots.category2 src:etc/screenshots/conext-category2.png conf:high]
+  Second view of the context category graph. Shows additional topic
+  nodes and their morphism connections. Note: filename has a typo
+  ('conext' instead of 'context') — intentional or a historical artifact.
+
+[OBS id:obs.etc-assets.screenshots.category3 src:etc/screenshots/context-category3.png conf:high]
+  Third screenshot of the context graph, zoomed view showing
+  detailed node contents and edge labels.
+
+[OBS id:obs.etc-assets.screenshots.category4 src:etc/screenshots/context-category4.png conf:high]
+  Fourth screenshot of the context graph, likely showing the full
+  expanded graph or an alternate layout.
+
+[OBS id:obs.etc-assets.screenshots.about-poor-me src:etc/screenshots/about-poor-me.png conf:high]
+  Screenshot labeled 'about-poor-me' — possibly a debug or
+  autobiographical visualizer output showing context metadata.
+
+[INF id:inf.etc-assets.screenshots from:obs.etc-assets.screenshots.dir,obs.etc-assets.screenshots.category1,obs.etc-assets.screenshots.category2,obs.etc-assets.screenshots.category3,obs.etc-assets.screenshots.category4,obs.etc-assets.screenshots.about-poor-me conf:high]
+  connects-to -> `monadc.context.philosophy.role` (the context category
+  visualizer makes philosophy visible as morphisms) ·
+  `monadc.context.visualizer` (the screenshots are output of the
+  context-visualizer.py tool) ·
+  `monadc.context.context.portal` (the portal file is the root node
+  in the category graph)
+
+* etc/pdfs/ — Research PDF Library
+:PROPERTIES:
+:ID: monadc.context.etc-assets.pdfs
+:CUSTOM_ID: assets-pdfs
+:CONTEXT_KIND: asset-collection
+:CONTEXT_DESCRIPTION: Seven research PDFs informing the compiler architecture. Each paper has a DOC record in references.org; this node links to those records.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: etc/pdfs/
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.etc-assets.pdfs.dir src:etc/pdfs/ conf:high]
+  Seven PDFs stored in =etc/pdfs/=. Each has a full DOC record in
+  references.org with thesis, OBS implementation traces, and INF
+  connections. This node links to those records rather than duplicating.
+
+** Propositions as Types (Wadler 2015)
+:PROPERTIES:
+:ID: monadc.context.etc-assets.pdfs.propositions-as-types
+:CUSTOM_ID: assets-pdf-wadler
+:CONTEXT_KIND: reference-link
+:CONTEXT_DESCRIPTION: Curry-Howard correspondence foundation — types as sets, proofs as programs.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: etc/pdfs/propositions-as-types.pdf
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.etc-assets.pdf.propositions-as-types src:etc/pdfs/propositions-as-types.pdf conf:high]
+  See [[file:references.org::* Propositions as Types][references.org DOC record]]. Wadler 2015 CACM paper.
+  Intellectual foundation for types-are-sets, refinement predicates,
+  and the NbE kernel's Curry-Howard embodiment.
+
+** An Algorithm for Type-Checking Dependent Types (Coquand 1996)
+:PROPERTIES:
+:ID: monadc.context.etc-assets.pdfs.typechecking-dependent
+:CUSTOM_ID: assets-pdf-coquand
+:CONTEXT_KIND: reference-link
+:CONTEXT_DESCRIPTION: Bidirectional type checking algorithm implemented in dep.c.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: etc/pdfs/an-algorithm-for-type-checking-dependent-types.pdf
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.etc-assets.pdf.typechecking-dependent src:etc/pdfs/an-algorithm-for-type-checking-dependent-types.pdf conf:high]
+  See [[file:references.org::* An Algorithm for Type-Checking Dependent Types][references.org DOC record]]. Coquand 1996 paper.
+  Infer/check judgment separation, dep.c bidir entry points, shadow
+  pass adaptation.
+
+** Linear Lisp (Baker 1992)
+:PROPERTIES:
+:ID: monadc.context.etc-assets.pdfs.linear-lisp
+:CUSTOM_ID: assets-pdf-baker
+:CONTEXT_KIND: reference-link
+:CONTEXT_DESCRIPTION: Linear type discipline for in-place mutation without copying.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: etc/pdfs/BakerLinearLisp.pdf
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.etc-assets.pdf.linear-lisp src:etc/pdfs/BakerLinearLisp.pdf conf:high]
+  See [[file:references.org::* Linear Lisp][references.org DOC record]]. Baker 1992 paper.
+  conj!/disj! mutable set operations, typed ABI for unboxed
+  parameters, immutable-default / mutable-escape-hatch.
+
+** Cons Should Not Evaluate Its Arguments
+:PROPERTIES:
+:ID: monadc.context.etc-assets.pdfs.cons-lazy
+:CUSTOM_ID: assets-pdf-cons-lazy
+:CONTEXT_KIND: reference-link
+:CONTEXT_DESCRIPTION: Normal-order cons — lazy lists, thunk-based representation.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: etc/pdfs/cons-should-not-evaluate-its-arguments.pdf
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.etc-assets.pdf.cons-lazy src:etc/pdfs/cons-should-not-evaluate-its-arguments.pdf conf:high]
+  See [[file:references.org::* Cons Should Not Evaluate Its Arguments][references.org DOC record]].
+  Normal-order cons, lazy vs strict distinction, ConsCell thunk
+  representation in runtime.h.
+
+** Efficient Lazy Cons Allocation
+:PROPERTIES:
+:ID: monadc.context.etc-assets.pdfs.cons-lazy-alloc
+:CUSTOM_ID: assets-pdf-cons-alloc
+:CONTEXT_KIND: reference-link
+:CONTEXT_DESCRIPTION: Memory-efficient thunk allocation — arena bump allocation for list cells.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: etc/pdfs/cons-lazy-alloc.pdf
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.etc-assets.pdf.cons-lazy-alloc src:etc/pdfs/cons-lazy-alloc.pdf conf:high]
+  See [[file:references.org::* Efficient Lazy Cons Allocation][references.org DOC record]].
+  Arena allocator (arena.c), inline thunk fields in ConsCell,
+  bump-vs-GC allocation strategy.
+
+** Layered Modal Type Theory
+:PROPERTIES:
+:ID: monadc.context.etc-assets.pdfs.layered-modal
+:CUSTOM_ID: assets-pdf-modal
+:CONTEXT_KIND: reference-link
+:CONTEXT_DESCRIPTION: Dual HM/ITT type system with TERM_EMBED modal operator bridge.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: etc/pdfs/layered-modal-type-theory.pdf
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.etc-assets.pdf.layered-modal src:etc/pdfs/layered-modal-type-theory.pdf conf:high]
+  See [[file:references.org::* Layered Modal Type Theory][references.org DOC record]].
+  Dual type system architecture, TERM_EMBED as modal operator,
+  shadow pass as layered computation.
+
+** TYPES 2020 — Book of Abstracts
+:PROPERTIES:
+:ID: monadc.context.etc-assets.pdfs.types-2020
+:CUSTOM_ID: assets-pdf-types2020
+:CONTEXT_KIND: reference-link
+:CONTEXT_DESCRIPTION: Broader research context for dependent type checker and NbE kernel.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: etc/pdfs/BookOfAbstractsTYPES2020.pdf
+:CONFIDENCE: medium
+:END:
+
+[DOC id:doc.etc-assets.pdf.types-2020 src:etc/pdfs/BookOfAbstractsTYPES2020.pdf conf:medium]
+  See [[file:references.org::* TYPES 2020 — Book of Abstracts][references.org DOC record]].
+  Proceedings providing research context for NbE, fuel-limited
+  conversion, and Value domain design.
+
+* Asset Directory Summary
+:PROPERTIES:
+:ID: monadc.context.etc-assets.summary
+:CUSTOM_ID: assets-summary
+:CONTEXT_KIND: index
+:CONTEXT_DESCRIPTION: Summary table of all assets in etc/.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: etc/
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.etc-assets.summary.table src:etc/ conf:high]
+  #+CAPTION: Complete etc/ Asset Inventory
+  | Asset                        | Type     | Size Est | Connects To                      |
+  |------------------------------+----------+----------+----------------------------------|
+  | docs.html                    | HTML doc | medium   | philosophy.org, language.org      |
+  | logo.png                     | PNG img  | small    | docs.html, philosophy.org         |
+  | MapleMono-NF-Regular.ttf     | TTF font | medium   | docs.html                         |
+  | screenshots/about-poor-me.png| PNG img  | small    | visualizer.org                    |
+  | screenshots/context-category.png| PNG  | medium   | context.org, philosophy.org       |
+  | screenshots/conext-category2.png| PNG  | medium   | context.org, visualizer.org       |
+  | screenshots/context-category3.png| PNG | medium   | context.org, visualizer.org       |
+  | screenshots/context-category4.png| PNG | medium   | context.org, visualizer.org       |
+  | pdfs/propositions-as-types.pdf| PDF      | medium   | references.org, philosophy.org    |
+  | pdfs/an-algorithm-for-*.pdf   | PDF      | medium   | references.org, dep.org           |
+  | pdfs/BakerLinearLisp.pdf      | PDF      | small    | references.org, codegen-ops.org   |
+  | pdfs/cons-should-not-*.pdf    | PDF      | small    | references.org, runtime.org       |
+  | pdfs/cons-lazy-alloc.pdf      | PDF      | small    | references.org, arena.org         |
+  | pdfs/layered-modal-type-theory.pdf| PDF  | medium | references.org, dep.org           |
+  | pdfs/BookOfAbstractsTYPES2020.pdf| PDF   | large    | references.org, dep.org           |
+
+* Cross-References
+:PROPERTIES:
+:ID: monadc.context.etc-assets.cross-refs
+:CUSTOM_ID: assets-cross-refs
+:CONTEXT_KIND: index
+:CONTEXT_DESCRIPTION: Cross-references to philosophy.org, references.org, context.org, visualizer.org.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: etc/
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.etc-assets.references from:obs.etc-assets.pdfs.dir,obs.etc-assets.pdfs.propositions-as-types,obs.etc-assets.pdfs.typechecking-dependent,obs.etc-assets.pdfs.linear-lisp,obs.etc-assets.pdfs.cons-lazy,obs.etc-assets.pdfs.cons-lazy-alloc,obs.etc-assets.pdfs.layered-modal,obs.etc-assets.pdfs.types-2020 conf:high]
+  connects-to -> `monadc.context.references.propositions-as-types` ·
+  `monadc.context.references.typechecking-dependent-types` ·
+  `monadc.context.references.linear-lisp` ·
+  `monadc.context.references.cons-lazy` ·
+  `monadc.context.references.cons-lazy-alloc` ·
+  `monadc.context.references.layered-modal` ·
+  `monadc.context.references.types-2020` ·
+  `monadc.context.source-map.pdf-library`
+
+[INF id:inf.etc-assets.philosophy from:obs.etc-assets.docs-html.file,obs.etc-assets.logo.file,obs.etc-assets.screenshots.dir conf:high]
+  connects-to -> `monadc.context.philosophy.human-witness` (assets
+  encode human design intent) ·
+  `monadc.context.philosophy.role` (screenshots visualize the category
+  theory philosophy)
+
+[INF id:inf.etc-assets.context from:obs.etc-assets.screenshots.category1,obs.etc-assets.screenshots.category2,obs.etc-assets.screenshots.category3,obs.etc-assets.screenshots.category4 conf:high]
+  connects-to -> `monadc.context.context.portal` (the portal is the
+  root node of the category graph) ·
+  `monadc.context.context.index` (the index maps the file topology)
+
+[INF id:inf.etc-assets.visualizer from:obs.etc-assets.screenshots.category1,obs.etc-assets.screenshots.category2,obs.etc-assets.screenshots.category3,obs.etc-assets.screenshots.category4,obs.etc-assets.screenshots.about-poor-me conf:high]
+  connects-to -> `monadc.context.visualizer` (the category theory
+  visualizer that produced these screenshots) ·
+  `monadc.context.tests.visualizer` (test metadata for the visualizer)

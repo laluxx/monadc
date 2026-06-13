@@ -29,6 +29,9 @@ const PALETTE = {
   inference:     "#d0bcff",
   decision:      "#ffb86b",
   documentation: "#b8f7d4",
+  think:         "#c07ef0",
+  idea:          "#f0a07e",
+  fix:           "#ff6b6b",
   todo:          "#ffd400",
   done:          "#49d28f",
   test:          "#49d28f",
@@ -242,7 +245,8 @@ function prepareGraph(payload) {
 
 function groupIndex(kind) {
   return { todo:0, documentation:1, test:2, decision:3, observation:4,
-           component:5, context:6, file:7, source:8, metadata:9 }[kind] ?? 6;
+           component:5, context:6, file:7, source:8, metadata:9,
+           think:3.5, idea:3.7, fix:3.3 }[kind] ?? 6;
 }
 
 // ─── Visibility ───────────────────────────────────────────────────────────────
@@ -275,7 +279,7 @@ function kindMatches(node) {
   if (activeKind === "all" ) return true;
   if (activeKind === "todo") return node.kind === "todo" && node.status !== "done";
   if (activeKind === "done") return node.kind === "todo" && node.status === "done";
-  if (activeKind === "context") return !["todo","test","decision","documentation"].includes(node.kind);
+  if (activeKind === "context") return !["todo","test","decision","documentation","think","idea","fix"].includes(node.kind);
   return node.kind === activeKind;
 }
 
@@ -1202,7 +1206,6 @@ function updateInspector(node) {
     ["ID",         node.id],
     ["Heading",    node.heading || node.label],
     ["Summary",    node.summary || "No summary recorded."],
-    ["Body",       renderOrgText(node.content || node.summary || ""), true],
     ["Record",     node.record_type || node.kind],
     ["Source",     node.source     || "not specified"],
     ["Confidence", node.confidence || "not specified"],
@@ -1214,6 +1217,7 @@ function updateInspector(node) {
   ].filter(([, v]) => v !== "").map(renderDetailRow).join("");
   bindOpenButtons(node);
   renderNeighbors(node);
+  writeOrgPane(node.content || node.summary || "");
 }
 
 function updateEdgeInspector(edge) {
@@ -1281,24 +1285,200 @@ function renderDetailRow([key, value, html = false]) {
   return `<dt>${escHtml(key)}</dt><dd>${html ? value : escHtml(String(value))}</dd>`;
 }
 
+/**
+ * Org-mode mini-renderer.
+ *
+ * Handles (in order of precedence):
+ *   #+TITLE / #+KEYWORD lines  → skipped / used as metadata
+ *   :PROPERTIES: … :END:       → skipped
+ *   #+BEGIN_SRC … #+END_SRC    → <pre><code> block
+ *   #+BEGIN_EXAMPLE … #+END   → <pre> block
+ *   #+BEGIN_QUOTE … #+END      → <blockquote>
+ *   * Heading (depth 1-3)      → <h2>–<h4>
+ *   - / + / 1. list items      → <ul>/<ol>
+ *   -----                      → <hr>
+ *   blank line                 → paragraph break
+ *   inline: =verb=, ~code~, *bold*, /italic/, _under_, [[link][label]]
+ */
 function renderOrgText(value) {
-  const text = String(value || "").trim();
-  if (!text) return `<span class="muted">No body recorded.</span>`;
-  // strip basic Org markup before rendering
-  const clean = text
-    .replace(/=([^=\n]+)=/g, "<code>$1</code>")          // =verbatim=
-    .replace(/~([^~\n]+)~/g, "<code>$1</code>")           // ~code~
-    .replace(/\*([^*\n]+)\*/g, "<strong>$1</strong>")     // *bold*
-    .replace(/\/([^/\n]+)\//g, "<em>$1</em>")             // /italic/
-    .replace(/\[\[([^\]]+)\]\[([^\]]+)\]\]/g, "<a>$2</a>")// [[link][desc]]
-    .replace(/\[\[([^\]]+)\]\]/g, "<a>$1</a>");            // [[link]]
-  return `<div class="doc-body">${escHtml(clean)
-    // restore tags we just inserted (they were escaped above — undo escape for allowed tags only)
-    .replace(/&lt;(code|strong|em|a)&gt;/g, "<$1>")
-    .replace(/&lt;\/(code|strong|em|a)&gt;/g, "</$1>")
-    .replace(/\n{2,}/g, "</p><p>")
-    .replace(/\n/g, "<br>")}</div>`;
+  const raw = String(value || "").trim();
+  if (!raw) return `<span class="muted">No body recorded.</span>`;
+
+  const lines  = raw.split("\n");
+  const chunks = [];   // array of HTML strings
+  let i = 0;
+  let inPara  = false;
+  let inUl    = false;
+  let inOl    = false;
+
+  function closePara() { if (inPara)  { chunks.push("</p>");  inPara  = false; } }
+  function closeUl()   { if (inUl)    { chunks.push("</ul>"); inUl    = false; } }
+  function closeOl()   { if (inOl)    { chunks.push("</ol>"); inOl    = false; } }
+  function closeLists(){ closeUl(); closeOl(); }
+  function closeAll()  { closePara(); closeLists(); }
+
+  // ── inline markup (applied to already-escaped text won't work cleanly,
+  //    so we escape *after* we detect block structure, inline last) ──
+  function inlineMarkup(text) {
+    return escHtml(text)
+      // links first (before other replacements eat brackets)
+      .replace(/\[\[([^\]]+)\]\[([^\]]+)\]\]/g, (_, _href, label) => `<a class="org-link">${escHtml(label)}</a>`)
+      .replace(/\[\[([^\]]+)\]\]/g,              (_, href)         => `<a class="org-link">${escHtml(href)}</a>`)
+      .replace(/=([^=\n]+?)=/g,   (_, t) => `<code>${escHtml(t)}</code>`)
+      .replace(/~([^~\n]+?)~/g,   (_, t) => `<code>${escHtml(t)}</code>`)
+      .replace(/\*([^*\n]+?)\*/g, (_, t) => `<strong>${escHtml(t)}</strong>`)
+      .replace(/\/([^/\n]+?)\//g, (_, t) => `<em>${escHtml(t)}</em>`)
+      .replace(/_([^_\n]+?)_/g,   (_, t) => `<span class="org-underline">${escHtml(t)}</span>`);
+  }
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // ── skip property drawers ──
+    if (/^:PROPERTIES:/i.test(line)) {
+      while (i < lines.length && !/^:END:/i.test(lines[i])) i++;
+      i++; continue;
+    }
+
+    // ── skip #+KEYWORD lines (metadata, not content) ──
+    if (/^#\+(?:TITLE|AUTHOR|DATE|OPTIONS|FILETAGS|STARTUP|PROPERTY):/i.test(line)) {
+      i++; continue;
+    }
+
+    // ── block structures ──
+    const srcMatch = /^#\+BEGIN_(SRC|EXAMPLE|QUOTE)\b(.*)?/i.exec(line);
+    if (srcMatch) {
+      const kind  = srcMatch[1].toUpperCase();
+      const lang  = (srcMatch[2] || "").trim();
+      const block = [];
+      i++;
+      while (i < lines.length && !/^#\+END_/i.test(lines[i])) { block.push(lines[i]); i++; }
+      i++;
+      closeAll();
+      const content = block.join("\n");
+      if (kind === "QUOTE") {
+        chunks.push(`<blockquote class="org-quote">${inlineMarkup(content)}</blockquote>`);
+      } else {
+        const langClass = lang ? ` class="lang-${escHtml(lang.split(" ")[0])}"` : "";
+        chunks.push(`<pre class="org-src"><code${langClass}>${escHtml(content)}</code></pre>`);
+      }
+      continue;
+    }
+
+    // ── headings ──
+    const headMatch = /^(\*{1,3})\s+(.+)/.exec(line);
+    if (headMatch) {
+      closeAll();
+      const depth = headMatch[1].length; // 1 2 3
+      const tag   = `h${depth + 1}`;     // h2 h3 h4
+      chunks.push(`<${tag} class="org-h org-h${depth}">${inlineMarkup(headMatch[2])}</${tag}>`);
+      i++; continue;
+    }
+
+    // ── horizontal rule ──
+    if (/^-{4,}$/.test(line.trim())) {
+      closeAll();
+      chunks.push("<hr class=\"org-hr\">");
+      i++; continue;
+    }
+
+    // ── unordered list ──
+    const ulMatch = /^[ \t]*[-+]\s+(.+)/.exec(line);
+    if (ulMatch) {
+      closePara();
+      closeOl();
+      if (!inUl) { chunks.push("<ul class=\"org-list\">"); inUl = true; }
+      chunks.push(`<li>${inlineMarkup(ulMatch[1])}</li>`);
+      i++; continue;
+    }
+
+    // ── ordered list ──
+    const olMatch = /^[ \t]*\d+[.)]\s+(.+)/.exec(line);
+    if (olMatch) {
+      closePara();
+      closeUl();
+      if (!inOl) { chunks.push("<ol class=\"org-list\">"); inOl = true; }
+      chunks.push(`<li>${inlineMarkup(olMatch[1])}</li>`);
+      i++; continue;
+    }
+
+    // ── blank line → paragraph break ──
+    if (line.trim() === "") {
+      closePara();
+      closeLists();
+      i++; continue;
+    }
+
+    // ── regular text → paragraph ──
+    closeLists();
+    if (!inPara) { chunks.push("<p>"); inPara = true; }
+    else chunks.push("<br>");
+    chunks.push(inlineMarkup(line));
+    i++;
+  }
+
+  closeAll();
+
+  return `<div class="doc-body">${chunks.join("")}</div>`;
 }
+
+// ── Org pane: scroll-to-expand ────────────────────────────────────────────────
+const ORG_MIN    = 0;
+const ORG_MAX    = 420;
+const ORG_SNAP   = 180;
+let   orgTarget  = 0;
+let   orgCurrent = 0;
+let   orgAnimId  = null;
+
+function writeOrgPane(content) {
+  const inner = document.getElementById("sheet-org-inner");
+  if (!inner) return;
+  inner.innerHTML = `<div class="doc-body org-body">${renderOrgText(content)}</div>`;
+  if (!content || content.trim() === "") {
+    setOrgHeight(0);
+    orgTarget  = 0;
+    orgCurrent = 0;
+  }
+}
+
+function setOrgHeight(h) {
+  inspectorEl.style.setProperty("--org-h", Math.round(h) + "px");
+}
+
+function animateOrg() {
+  const diff = orgTarget - orgCurrent;
+  if (Math.abs(diff) < 0.5) {
+    orgCurrent = orgTarget;
+    setOrgHeight(orgCurrent);
+    orgAnimId = null;
+    return;
+  }
+  orgCurrent += diff * 0.22;
+  setOrgHeight(orgCurrent);
+  orgAnimId = requestAnimationFrame(animateOrg);
+}
+
+function nudgeOrg(delta) {
+  orgTarget = Math.max(ORG_MIN, Math.min(ORG_MAX, orgTarget + delta));
+  if (orgAnimId === null) orgAnimId = requestAnimationFrame(animateOrg);
+}
+
+inspectorEl.addEventListener("wheel", (e) => {
+  const inner = document.getElementById("sheet-org-inner");
+  if (!inner) return;
+  const atTop    = inner.scrollTop === 0;
+  const atBottom = inner.scrollTop + inner.clientHeight >= inner.scrollHeight - 2;
+  const expanding = e.deltaY > 0 && orgCurrent < ORG_MAX;
+  const shrinking = e.deltaY < 0 && orgCurrent > ORG_MIN && atTop;
+  if (expanding || shrinking) {
+    e.preventDefault();
+    nudgeOrg(e.deltaY * 0.55);
+    return;
+  }
+  if (orgCurrent >= ORG_SNAP && !atTop && !atBottom) {
+    return;
+  }
+}, { passive: false });
 
 function openFileButton(target) {
   if (!target || !target.file || target.file === "external") return "No repository file.";
