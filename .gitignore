@@ -6,3 +6,5 @@ libmonad.a
 *.o
 **/*.ll
 tests/.test-results.json
+tests/codegen/rt_*
+tests/codegen/*.desugar

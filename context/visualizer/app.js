@@ -1,87 +1,110 @@
-const canvas = document.querySelector("#graph");
-const ctx = canvas.getContext("2d");
-const statsEl = document.querySelector("#project-strip");
-const searchEl = document.querySelector("#search");
-const candidateEl = document.querySelector("#candidate-list");
-const refreshEl = document.querySelector("#refresh");
-const todoFilterEl = document.querySelector("#todo-filter");
-const todoListEl = document.querySelector("#todo-list");
-const kindFilterEl = document.querySelector("#kind-filter");
-const methodSearchEl = document.querySelector("#method-search");
-const methodTabsEl = document.querySelector("#method-tabs");
-const methodListEl = document.querySelector("#method-list");
-const graphStatusEl = document.querySelector("#graph-status");
-const inspectorEl = document.querySelector("#inspector");
-const titleEl = document.querySelector("#detail-title");
-const overlineEl = document.querySelector("#detail-overline");
-const kindEl = document.querySelector("#detail-kind");
-const detailEl = document.querySelector("#detail-list");
-const neighborEl = document.querySelector("#neighbor-list");
+// ─── Element refs ────────────────────────────────────────────────────────────
+const canvas        = document.querySelector("#graph");
+const ctx           = canvas.getContext("2d");
+const statsEl       = document.querySelector("#project-strip");
+const searchEl      = document.querySelector("#search");
+const candidateEl   = document.querySelector("#candidate-list");
+const refreshEl     = document.querySelector("#refresh");
+const todoFilterEl  = document.querySelector("#todo-filter");
+const todoListEl    = document.querySelector("#todo-list");
+const kindFilterEl  = document.querySelector("#kind-filter");
+const methodSearchEl  = document.querySelector("#method-search");
+const methodTabsEl    = document.querySelector("#method-tabs");
+const methodListEl    = document.querySelector("#method-list");
+const graphStatusEl   = document.querySelector("#graph-status");
+const inspectorEl     = document.querySelector("#inspector");
+const titleEl         = document.querySelector("#detail-title");
+const overlineEl      = document.querySelector("#detail-overline");
+const kindEl          = document.querySelector("#detail-kind");
+const detailEl        = document.querySelector("#detail-list");
+const neighborEl      = document.querySelector("#neighbor-list");
 
-const palette = {
-  file: "#8ab4f8",
-  metadata: "#aab8b2",
-  context: "#eef5f1",
-  component: "#52d6ff",
-  observation: "#52d6ff",
-  inference: "#d0bcff",
-  decision: "#ffb86b",
+// ─── Palette ─────────────────────────────────────────────────────────────────
+const PALETTE = {
+  file:          "#8ab4f8",
+  metadata:      "#aab8b2",
+  context:       "#eef5f1",
+  component:     "#52d6ff",
+  observation:   "#52d6ff",
+  inference:     "#d0bcff",
+  decision:      "#ffb86b",
   documentation: "#b8f7d4",
-  todo: "#ffd400",
-  done: "#49d28f",
-  test: "#49d28f",
-  "test-meta": "#49d28f",
-  source: "#f4a261",
-  method: "#ffffff",
-  type: "#eef5f1",
-  dependency: "#52d6ff",
-  dependent: "#d0bcff",
+  todo:          "#ffd400",
+  done:          "#49d28f",
+  test:          "#49d28f",
+  "test-meta":   "#49d28f",
+  source:        "#f4a261",
+  method:        "#ffffff",
+  type:          "#eef5f1",
+  dependency:    "#52d6ff",
+  dependent:     "#d0bcff",
 };
 
-let graph = { nodes: [], edges: [], stats: {} };
-let nodeById = new Map();
-let selected = null;
+// ─── State ────────────────────────────────────────────────────────────────────
+let graph        = { nodes: [], edges: [], stats: {} };
+let nodeById     = new Map();
+let selected     = null;
 let selectedEdge = null;
-let cascade = { nodes: new Set(), edges: new Set(), upstream: new Set(), downstream: new Set() };
-let activeKind = "all";
-let candidates = [];
-let candidateIndex = 0;
+let cascade      = emptyCascade();
+let activeKind   = "all";
+let candidates   = [];
+let candidateIdx = 0;
 let activeMethodGroup = "core";
-let viewMode = "context";
-let methodTree = null;
+let viewMode     = "context";
+let methodTree   = null;
 let methodByName = new Map();
-let pointer = { x: 0, y: 0, worldX: 0, worldY: 0 };
-let dragging = false;
-let dragStart = null;
-let camera = { x: 0, y: 0, zoom: 0.82, tx: 0, ty: 0, targetZoom: 0.82, zoomAnchor: null };
-let lastFrame = performance.now();
-let pendingDoneAnimationId = "";
-let frameRequested = false;
-let renderCache = { graph: null, nodes: [], edges: [] };
-let doneAnimationUntil = 0;
-let perfProbe = null;
-let graphLoaded = false;
-let searchMatchedIds = new Set();
 
+// ─── Pointer / drag ───────────────────────────────────────────────────────────
+let pointer   = { x: 0, y: 0, worldX: 0, worldY: 0 };
+let dragging  = false;
+let dragStart = null;
+
+// ─── Camera ───────────────────────────────────────────────────────────────────
+let camera = { x: 0, y: 0, zoom: 0.82, tx: 0, ty: 0, targetZoom: 0.82, zoomAnchor: null };
+
+// ─── Render / perf bookkeeping ────────────────────────────────────────────────
+let lastFrame           = performance.now();
+let pendingDoneAnimId   = "";
+let frameRequested      = false;
+let doneAnimationUntil  = 0;
+let perfProbe           = null;
+let graphLoaded         = false;
+let searchMatchedIds    = new Set();
+
+// ─── Offscreen (static graph layer) ──────────────────────────────────────────
+/** We render edges + dimmed nodes onto an offscreen canvas whenever the graph
+ *  changes, then blit it each frame and only re-draw the dynamic layer on top.
+ *  This cuts per-frame work from O(nodes+edges) to O(highlight set). */
+let offscreen      = null;   // OffscreenCanvas | null
+let offscreenCtx   = null;
+let offscreenDirty = true;   // must re-bake after graph/camera/filter changes
+
+// ─── Render cache ─────────────────────────────────────────────────────────────
+let renderCache = { graph: null, nodes: [], edges: [] };
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
 loadGraph();
 scheduleFrame();
 window.__visualizerPerf = runPerfProbe;
 
+// ─── Event listeners ──────────────────────────────────────────────────────────
 refreshEl.addEventListener("click", loadGraph);
+
 todoFilterEl.addEventListener("change", () => {
   renderTodos();
   scheduleFrame();
 });
+
 methodSearchEl.addEventListener("input", () => {
   renderMethods();
   scheduleFrame();
 });
 
-methodTabsEl.addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-group]");
-  if (!button) return;
-  activeMethodGroup = button.dataset.group;
-  for (const item of methodTabsEl.querySelectorAll("button")) item.classList.toggle("active", item === button);
+methodTabsEl.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-group]");
+  if (!btn) return;
+  activeMethodGroup = btn.dataset.group;
+  methodTabsEl.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b === btn));
   renderMethods();
   scheduleFrame();
 });
@@ -93,151 +116,147 @@ searchEl.addEventListener("input", () => {
   scheduleFrame();
 });
 
-searchEl.addEventListener("keydown", (event) => {
-  if (event.key === "ArrowDown") {
-    event.preventDefault();
-    moveCandidate(1);
-  } else if (event.key === "ArrowUp") {
-    event.preventDefault();
-    moveCandidate(-1);
-  } else if (event.key === "Enter" && candidates[candidateIndex]) {
-    event.preventDefault();
-    selectNode(candidates[candidateIndex], true);
-  } else if (event.key === "Escape") {
-    candidateEl.classList.remove("open");
+searchEl.addEventListener("keydown", (e) => {
+  if      (e.key === "ArrowDown"  ) { e.preventDefault(); moveCandidate(1); }
+  else if (e.key === "ArrowUp"    ) { e.preventDefault(); moveCandidate(-1); }
+  else if (e.key === "Enter" && candidates[candidateIdx]) {
+    e.preventDefault();
+    selectNode(candidates[candidateIdx], true);
   }
+  else if (e.key === "Escape") { candidateEl.classList.remove("open"); }
 });
 
-searchEl.addEventListener("focus", () => updateCandidates());
+searchEl.addEventListener("focus", updateCandidates);
 
-kindFilterEl.addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-kind]");
-  if (!button) return;
-  activeKind = button.dataset.kind;
-  for (const item of kindFilterEl.querySelectorAll("button")) item.classList.toggle("active", item === button);
+kindFilterEl.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-kind]");
+  if (!btn) return;
+  activeKind = btn.dataset.kind;
+  kindFilterEl.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b === btn));
   applyVisibility();
   updateCandidates();
   scheduleFrame();
 });
 
-canvas.addEventListener("pointerdown", (event) => {
-  canvas.setPointerCapture(event.pointerId);
-  dragging = true;
+// ─── Canvas pointer events ────────────────────────────────────────────────────
+canvas.addEventListener("pointerdown", (e) => {
+  canvas.setPointerCapture(e.pointerId);
+  dragging  = true;
   canvas.classList.add("dragging");
-  dragStart = { x: event.clientX, y: event.clientY, cx: camera.tx, cy: camera.ty };
+  dragStart = { x: e.clientX, y: e.clientY, cx: camera.tx, cy: camera.ty };
   scheduleFrame();
 });
 
-canvas.addEventListener("pointermove", (event) => {
-  updatePointer(event);
+canvas.addEventListener("pointermove", (e) => {
+  updatePointer(e);
   if (!dragging || !dragStart) return;
-  const dx = (event.clientX - dragStart.x) / camera.zoom;
-  const dy = (event.clientY - dragStart.y) / camera.zoom;
+  const dx = (e.clientX - dragStart.x) / camera.zoom;
+  const dy = (e.clientY - dragStart.y) / camera.zoom;
   camera.tx = dragStart.cx - dx;
   camera.ty = dragStart.cy - dy;
-  camera.x = camera.tx;
-  camera.y = camera.ty;
+  camera.x  = camera.tx;
+  camera.y  = camera.ty;
   camera.zoomAnchor = null;
+  offscreenDirty = true;
   scheduleFrame();
 });
 
-canvas.addEventListener("pointerup", (event) => {
-  updatePointer(event);
-  canvas.releasePointerCapture(event.pointerId);
+canvas.addEventListener("pointerup", (e) => {
+  updatePointer(e);
+  canvas.releasePointerCapture(e.pointerId);
   canvas.classList.remove("dragging");
-  const moved = dragStart && Math.hypot(event.clientX - dragStart.x, event.clientY - dragStart.y) > 5;
-  dragging = false;
+  const moved = dragStart && Math.hypot(e.clientX - dragStart.x, e.clientY - dragStart.y) > 5;
+  dragging  = false;
   dragStart = null;
-  if (!moved) {
-    const hit = nearestNode(pointer.worldX, pointer.worldY);
-    if (hit) {
-      selectActiveNode(hit, true);
-      return;
-    }
-    const edge = nearestEdge(pointer.worldX, pointer.worldY);
-    if (edge) {
-      selectEdge(edge);
-      return;
-    }
-    deselectAll();
-  }
+  if (moved) return;
+  const hit = nearestNode(pointer.worldX, pointer.worldY);
+  if (hit) { selectActiveNode(hit, true); return; }
+  const edge = nearestEdge(pointer.worldX, pointer.worldY);
+  if (edge) { selectEdge(edge); return; }
+  deselectAll();
 });
 
-canvas.addEventListener("wheel", (event) => {
-  event.preventDefault();
-  updatePointer(event);
-  const factor = Math.exp(-event.deltaY * 0.0012);
+canvas.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  updatePointer(e);
+  const factor = Math.exp(-e.deltaY * 0.0012);
   camera.targetZoom = clamp(camera.targetZoom * factor, 0.28, 3.2);
   camera.zoomAnchor = {
-    screenX: pointer.x,
-    screenY: pointer.y,
-    worldX: pointer.worldX,
-    worldY: pointer.worldY,
+    screenX: pointer.x,   screenY: pointer.y,
+    worldX:  pointer.worldX, worldY: pointer.worldY,
   };
+  offscreenDirty = true;
   scheduleFrame();
 }, { passive: false });
 
+// ─── Data loading ─────────────────────────────────────────────────────────────
 async function loadGraph() {
   graphStatusEl.textContent = "syncing";
-  const response = await fetch("/api/context");
-  const payload = await response.json();
-  graph = prepareGraph(payload);
-  nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
-  methodByName = new Map((graph.methods || []).map((method) => [method.name, method]));
+  const res     = await fetch("/api/context");
+  const payload = await res.json();
+  graph       = prepareGraph(payload);
+  nodeById    = new Map(graph.nodes.map((n) => [n.id, n]));
+  methodByName = new Map((graph.methods || []).map((m) => [m.name, m]));
   applyVisibility();
   renderStats();
   renderTodos();
   renderMethods();
   updateCandidates();
-  selectNode(selected ? nodeById.get(selected.id) || graph.nodes[0] : graph.nodes.find((node) => node.kind === "todo") || graph.nodes[0], false);
+  const first = selected ? (nodeById.get(selected.id) || graph.nodes[0])
+                         : (graph.nodes.find((n) => n.kind === "todo") || graph.nodes[0]);
+  selectNode(first, false);
   graphStatusEl.textContent = `${graph.stats.objects} objects · ${graph.stats.openTodos} TODO`;
   graphLoaded = true;
   if (new URLSearchParams(window.location.search).has("perf")) runBrowserPerfReport();
 }
 
 function prepareGraph(payload) {
-  const nodes = payload.nodes.map((node, index) => {
-    const group = groupIndex(node.kind);
-    const angle = index * 2.399963 + group * 0.51;
-    const radius = 160 + group * 116 + (index % 17) * 4;
-    const donePulseStarted = pendingDoneAnimationId === node.id && node.status === "done" ? performance.now() : 0;
-    if (donePulseStarted) doneAnimationUntil = Math.max(doneAnimationUntil, donePulseStarted + 900);
+  const nodes = payload.nodes.map((node, i) => {
+    const group  = groupIndex(node.kind);
+    const angle  = i * 2.399963 + group * 0.51;
+    const radius = 160 + group * 116 + (i % 17) * 4;
+    const donePulseStarted =
+      pendingDoneAnimId === node.id && node.status === "done" ? performance.now() : 0;
+    if (donePulseStarted)
+      doneAnimationUntil = Math.max(doneAnimationUntil, donePulseStarted + 900);
     return {
       ...node,
-      search_blob: buildNodeSearchText(node),
-      x: Math.cos(angle) * radius,
-      y: Math.sin(angle) * radius,
-      vx: 0,
-      vy: 0,
-      fx: Math.cos(angle) * radius,
-      fy: Math.sin(angle) * radius,
+      x: Math.cos(angle) * radius,  y: Math.sin(angle) * radius,
+      vx: 0, vy: 0,
+      fx: Math.cos(angle) * radius, fy: Math.sin(angle) * radius,
       radius: node.kind === "todo" ? 15 : node.kind === "test" ? 8 : 10,
       visible: true,
-      pulse: (index * 0.79) % (Math.PI * 2),
+      pulse:   (i * 0.79) % (Math.PI * 2),
       donePulseStarted,
+      // pre-build search tokens here once
+      _searchTokens: buildSearchTokens(node),
     };
   });
-  pendingDoneAnimationId = "";
-  const edges = payload.edges.map((edge, index) => ({ ...edge, id: `${edge.source}->${edge.target}:${edge.kind}:${index}` }));
+  pendingDoneAnimId = "";
+  const edges = payload.edges.map((e, i) =>
+    ({ ...e, id: `${e.source}->${e.target}:${e.kind}:${i}` }));
   invalidateRenderCache();
+  offscreenDirty = true;
   return { ...payload, nodes, edges };
 }
 
 function groupIndex(kind) {
-  return { todo: 0, documentation: 1, test: 2, decision: 3, observation: 4, component: 5, context: 6, file: 7, source: 8, metadata: 9 }[kind] ?? 6;
+  return { todo:0, documentation:1, test:2, decision:3, observation:4,
+           component:5, context:6, file:7, source:8, metadata:9 }[kind] ?? 6;
 }
 
+// ─── Visibility ───────────────────────────────────────────────────────────────
 function applyVisibility() {
-  viewMode = "context";
-  methodTree = null;
+  viewMode     = "context";
+  methodTree   = null;
   selectedEdge = null;
-  cascade = emptyCascade();
+  cascade      = emptyCascade();
   const q = searchEl.value.trim();
-  const matching = new Set();
-  const connected = new Set();
+  const matching   = new Set();
+  const connected  = new Set();
   if (q) {
     for (const node of graph.nodes) {
-      if (kindMatches(node) && fuzzyScore(node, q) > -Infinity) matching.add(node.id);
+      if (kindMatches(node) && nodeSearchScore(node, q) > -Infinity) matching.add(node.id);
     }
     for (const edge of graph.edges) {
       if (matching.has(edge.source)) connected.add(edge.target);
@@ -246,86 +265,107 @@ function applyVisibility() {
   }
   searchMatchedIds = matching;
   for (const node of graph.nodes) {
-    const kindMatch = kindMatches(node);
-    const searchMatch = !q || matching.has(node.id) || connected.has(node.id);
-    node.visible = kindMatch && searchMatch;
+    node.visible = kindMatches(node) && (!q || matching.has(node.id) || connected.has(node.id));
   }
   invalidateRenderCache();
-}
-
-function updateCandidates() {
-  const q = searchEl.value.trim();
-  const base = graph.nodes.filter((node) => kindMatches(node));
-  candidates = (q ? base.map((node) => ({ node, score: fuzzyScore(node, q) })).filter((item) => item.score > -Infinity).sort((a, b) => b.score - a.score).map((item) => item.node) : base)
-    .slice(0, 12);
-  candidateIndex = Math.min(candidateIndex, Math.max(0, candidates.length - 1));
-  renderCandidates();
-  if (candidates[candidateIndex]) focusCandidate(candidates[candidateIndex]);
+  offscreenDirty = true;
 }
 
 function kindMatches(node) {
-  if (activeKind === "all") return true;
+  if (activeKind === "all" ) return true;
   if (activeKind === "todo") return node.kind === "todo" && node.status !== "done";
   if (activeKind === "done") return node.kind === "todo" && node.status === "done";
-  if (activeKind === "context") return !["todo", "test", "decision", "documentation"].includes(node.kind);
+  if (activeKind === "context") return !["todo","test","decision","documentation"].includes(node.kind);
   return node.kind === activeKind;
 }
 
-function renderCandidates() {
-  candidateEl.classList.toggle("open", searchEl.matches(":focus") && candidates.length > 0);
-  candidateEl.innerHTML = candidates.map((node, index) => `
-    <div class="candidate ${node.kind === "todo" ? "todo" : ""} ${node.kind === "documentation" ? "documentation" : ""} ${index === candidateIndex ? "active" : ""}" data-index="${index}">
-      <div class="candidate-kind">${escapeHtml(node.kind === "todo" ? "TODO" : node.kind)}</div>
-      <div>
-        <div class="candidate-title">${escapeHtml(node.label)}</div>
-        <div class="candidate-file">${escapeHtml(node.heading || node.file)} · ${escapeHtml(node.file)}</div>
-        <div class="candidate-snippet">${escapeHtml(truncate(node.summary || node.content || node.id, 140))}</div>
-      </div>
-    </div>
-  `).join("");
-  candidateEl.querySelectorAll(".candidate").forEach((item) => {
-    item.addEventListener("mouseenter", () => {
-      candidateIndex = Number(item.dataset.index);
-      focusCandidate(candidates[candidateIndex]);
-      renderCandidates();
-    });
-    item.addEventListener("click", () => selectNode(candidates[Number(item.dataset.index)], true));
-  });
+// ─── Search ───────────────────────────────────────────────────────────────────
+/**
+ * Build a structured token object once per node at load time.
+ * Tiers: identity (id, label, heading) > meta (kind, file, record_type) > body (summary, content).
+ */
+function buildSearchTokens(node) {
+  return {
+    id:      String(node.id      || "").toLowerCase(),
+    label:   String(node.label   || "").toLowerCase(),
+    heading: String(node.heading || "").toLowerCase(),
+    kind:    String(node.kind    || "").toLowerCase(),
+    file:    String(node.file    || "").toLowerCase(),
+    record:  String(node.record_type || "").toLowerCase(),
+    summary: String(node.summary || "").toLowerCase(),
+    content: String(node.content || "").toLowerCase(),
+  };
 }
 
-function moveCandidate(delta) {
-  if (!candidates.length) return;
-  candidateIndex = (candidateIndex + delta + candidates.length) % candidates.length;
-  focusCandidate(candidates[candidateIndex]);
-  renderCandidates();
-}
+/**
+ * Score a node against a query string.
+ * Returns -Infinity for no-match.
+ *
+ * Scoring tiers (additive):
+ *   exact match on identity field  +300
+ *   starts-with on identity field  +180
+ *   substring on identity field    +100
+ *   fuzzy on identity field        +60
+ *   substring on meta field        +40
+ *   substring on body field        +12
+ *   fuzzy on body field            +4
+ *   kind bonus for todo/doc        +24 / +18
+ */
+function nodeSearchScore(node, rawQuery) {
+  const q = rawQuery.toLowerCase().trim();
+  if (!q) return 0;
 
-function focusCandidate(node) {
-  if (!node) return;
-  viewMode = "context";
-  methodTree = null;
-  selectedEdge = null;
-  selected = node;
-  cascade = computeCascade([node.id]);
-  camera.tx = node.x;
-  camera.ty = node.y;
-  camera.targetZoom = 1.65;
-  updateInspector(node);
-}
-
-function fuzzyScore(node, query) {
-  const haystack = searchText(node);
-  const needle = query.toLowerCase();
-  let h = 0;
+  const t = node._searchTokens || buildSearchTokens(node);
   let score = node.kind === "todo" ? 24 : node.kind === "documentation" ? 18 : 0;
-  const label = String(node.label || "").toLowerCase();
-  const heading = String(node.heading || "").toLowerCase();
-  const id = String(node.id || "").toLowerCase();
-  if (label === needle || heading === needle || id === needle) score += 260;
-  if (label.includes(needle)) score += 120;
-  if (heading.includes(needle)) score += 110;
-  if (id.includes(needle)) score += 74;
-  for (let n = 0; n < needle.length; n += 1) {
+
+  // ── identity tier ──
+  const identity = [t.id, t.label, t.heading];
+  let identityHit = false;
+  for (const field of identity) {
+    if (!field) continue;
+    if (field === q)            { score += 300; identityHit = true; }
+    else if (field.startsWith(q)) { score += 180; identityHit = true; }
+    else if (field.includes(q)) { score += 100; identityHit = true; }
+    else {
+      const fs = fuzzyFieldScore(field, q);
+      if (fs > -Infinity) { score += 60 + fs; identityHit = true; }
+    }
+  }
+
+  // ── meta tier ──
+  const meta = [t.kind, t.file, t.record];
+  for (const field of meta) {
+    if (field && field.includes(q)) score += 40;
+  }
+
+  // ── body tier ──
+  const body = [t.summary, t.content];
+  let bodyHit = false;
+  for (const field of body) {
+    if (!field) continue;
+    if (field.includes(q)) { score += 12; bodyHit = true; }
+    else {
+      const fs = fuzzyFieldScore(field, q);
+      if (fs > -Infinity) { score += 4 + Math.max(0, fs * 0.3); bodyHit = true; }
+    }
+  }
+
+  // must match something
+  if (!identityHit && score <= 24 && !bodyHit) {
+    const allText = [t.id, t.label, t.heading, t.kind, t.file, t.record, t.summary, t.content]
+      .filter(Boolean).join(" ");
+    const fs = fuzzyFieldScore(allText, q);
+    if (fs === -Infinity) return -Infinity;
+    score += fs;
+  }
+
+  return score;
+}
+
+/** Character-by-character fuzzy score on a single string. */
+function fuzzyFieldScore(haystack, needle) {
+  let h = 0, score = 0;
+  for (let n = 0; n < needle.length; n++) {
     const found = haystack.indexOf(needle[n], h);
     if (found === -1) return -Infinity;
     score += found === h ? 8 : Math.max(1, 8 - (found - h));
@@ -335,61 +375,106 @@ function fuzzyScore(node, query) {
   return score;
 }
 
-function searchText(node) {
-  if (node.search_blob) return node.search_blob;
-  node.search_blob = buildNodeSearchText(node);
-  return node.search_blob;
+// ─── Candidates ───────────────────────────────────────────────────────────────
+function updateCandidates() {
+  const q    = searchEl.value.trim();
+  const base = graph.nodes.filter(kindMatches);
+  candidates = (q
+    ? base.map((n) => ({ n, s: nodeSearchScore(n, q) }))
+          .filter((x) => x.s > -Infinity)
+          .sort((a, b) => b.s - a.s)
+          .map((x) => x.n)
+    : base
+  ).slice(0, 12);
+  candidateIdx = clamp(candidateIdx, 0, Math.max(0, candidates.length - 1));
+  renderCandidates();
+  if (candidates[candidateIdx]) focusCandidate(candidates[candidateIdx]);
 }
 
-function buildNodeSearchText(node) {
-  return [
-    node.kind,
-    node.record_type,
-    node.label,
-    node.heading,
-    node.id,
-    node.file,
-    node.source,
-    node.summary,
-    node.content,
-  ].filter(Boolean).join(" ").toLowerCase();
+function renderCandidates() {
+  const open = searchEl.matches(":focus") && candidates.length > 0;
+  candidateEl.classList.toggle("open", open);
+  candidateEl.innerHTML = candidates.map((node, i) => `
+    <div class="candidate ${node.kind === "todo" ? "todo" : ""} ${node.kind === "documentation" ? "documentation" : ""} ${i === candidateIdx ? "active" : ""}" data-index="${i}">
+      <div class="candidate-kind">${escHtml(node.kind === "todo" ? "TODO" : node.kind)}</div>
+      <div>
+        <div class="candidate-title">${escHtml(node.label)}</div>
+        <div class="candidate-file">${escHtml(node.heading || node.file)} · ${escHtml(node.file)}</div>
+        <div class="candidate-snippet">${escHtml(trunc(node.summary || node.content || node.id, 140))}</div>
+      </div>
+    </div>`).join("");
+
+  candidateEl.querySelectorAll(".candidate").forEach((el) => {
+    el.addEventListener("mouseenter", () => {
+      candidateIdx = Number(el.dataset.index);
+      focusCandidate(candidates[candidateIdx]);
+      renderCandidates();
+    });
+    el.addEventListener("click", () => selectNode(candidates[Number(el.dataset.index)], true));
+  });
 }
 
+function moveCandidate(delta) {
+  if (!candidates.length) return;
+  candidateIdx = (candidateIdx + delta + candidates.length) % candidates.length;
+  focusCandidate(candidates[candidateIdx]);
+  renderCandidates();
+}
+
+function focusCandidate(node) {
+  if (!node) return;
+  viewMode     = "context";
+  methodTree   = null;
+  selectedEdge = null;
+  selected     = node;
+  cascade      = computeCascade([node.id]);
+  camera.tx    = node.x;
+  camera.ty    = node.y;
+  camera.targetZoom = 1.65;
+  offscreenDirty = true;
+  updateInspector(node);
+}
+
+// ─── Stats / lists ────────────────────────────────────────────────────────────
 function renderStats() {
+  const done = graph.nodes.filter((n) => n.kind === "todo" && n.status === "done").length;
   const cards = [
-    ["Objects", graph.stats.objects, ""],
+    ["Objects",   graph.stats.objects,   ""],
     ["Morphisms", graph.stats.morphisms, ""],
-    ["TODO", graph.stats.openTodos, "todo-card"],
-    ["DONE", graph.nodes.filter((node) => node.kind === "todo" && node.status === "done").length, "done-card"],
+    ["TODO",      graph.stats.openTodos, "todo-card"],
+    ["DONE",      done,                  "done-card"],
   ];
-  statsEl.innerHTML = cards.map(([label, value, cls]) => `<article class="project-card ${cls}"><strong>${value}</strong><span>${label}</span></article>`).join("");
+  statsEl.innerHTML = cards.map(([label, val, cls]) =>
+    `<article class="project-card ${cls}"><strong>${val}</strong><span>${label}</span></article>`
+  ).join("");
 }
 
 function renderTodos() {
   const filter = todoFilterEl.value;
+  const q = searchEl.value.trim();
   const todos = graph.nodes
-    .filter((node) => node.kind === "todo")
-    .filter((node) => filter === "all" || (filter === "done" ? node.status === "done" : node.status !== "done"))
+    .filter((n) => n.kind === "todo")
+    .filter((n) => filter === "all" || (filter === "done" ? n.status === "done" : n.status !== "done"))
+    .filter((n) => !q || nodeSearchScore(n, q) > -Infinity)
     .sort((a, b) => Number(a.status === "done") - Number(b.status === "done") || a.label.localeCompare(b.label));
 
   todoListEl.innerHTML = todos.map((todo) => `
-    <article class="todo-item ${todo.status === "done" ? "done" : ""}" data-id="${escapeAttr(todo.id)}">
-      <p class="todo-title">${escapeHtml(todo.summary || todo.label || "TODO")}</p>
-      <div class="todo-meta">${escapeHtml(todo.file)} · ${escapeHtml(todo.status || "open")}${todo.completed_at ? ` · ${escapeHtml(todo.completed_at)}` : ""}</div>
+    <article class="todo-item ${todo.status === "done" ? "done" : ""}" data-id="${escAttr(todo.id)}">
+      <p class="todo-title">${escHtml(todo.summary || todo.label || "TODO")}</p>
+      <div class="todo-meta">${escHtml(todo.file)} · ${escHtml(todo.status || "open")}${todo.completed_at ? ` · ${escHtml(todo.completed_at)}` : ""}</div>
       <div class="todo-actions">
-        <button data-status="open" class="state-open ${todo.status !== "done" && todo.status !== "blocked" ? "active" : ""}">Open</button>
-        <button data-status="done" class="state-done ${todo.status === "done" ? "active" : ""}">Done</button>
+        <button data-status="open"    class="state-open    ${todo.status !== "done" && todo.status !== "blocked" ? "active" : ""}">Open</button>
+        <button data-status="done"    class="state-done    ${todo.status === "done"    ? "active" : ""}">Done</button>
         <button data-status="blocked" class="state-blocked ${todo.status === "blocked" ? "active" : ""}">Blocked</button>
       </div>
-    </article>
-  `).join("");
+    </article>`).join("");
 
-  todoListEl.querySelectorAll(".todo-item").forEach((item) => {
-    item.addEventListener("click", (event) => {
-      const node = nodeById.get(item.dataset.id);
+  todoListEl.querySelectorAll(".todo-item").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      const node = nodeById.get(el.dataset.id);
       if (node) selectNode(node, true);
-      const button = event.target.closest("button[data-status]");
-      if (button) updateTodo(item.dataset.id, button.dataset.status);
+      const btn = e.target.closest("button[data-status]");
+      if (btn) updateTodo(el.dataset.id, btn.dataset.status);
     });
   });
 }
@@ -397,158 +482,131 @@ function renderTodos() {
 function renderMethods() {
   const q = methodSearchEl.value.trim();
   const methods = (graph.methods || [])
-    .filter((method) => method.group === activeMethodGroup)
-    .map((method) => ({ method, score: methodScore(method, q) }))
-    .filter((item) => item.score > -Infinity)
-    .sort((a, b) => b.score - a.score || a.method.name.localeCompare(b.method.name))
+    .filter((m) => m.group === activeMethodGroup)
+    .map((m) => ({ m, s: methodScore(m, q) }))
+    .filter((x) => x.s > -Infinity)
+    .sort((a, b) => b.s - a.s || a.m.name.localeCompare(b.m.name))
     .slice(0, 80)
-    .map((item) => item.method);
+    .map((x) => x.m);
 
-  methodListEl.innerHTML = methods.map((method, index) => `
-    <article class="method-item" data-index="${index}">
-      <strong>${escapeHtml(method.name)}</strong>
-      <div class="method-signature">${escapeHtml(method.signature || "value")}</div>
-      <div class="method-file">${escapeHtml(method.file)}:${method.line}</div>
-    </article>
-  `).join("");
+  methodListEl.innerHTML = methods.map((m, i) => `
+    <article class="method-item" data-index="${i}">
+      <strong>${escHtml(m.name)}</strong>
+      <div class="method-signature">${escHtml(m.signature || "value")}</div>
+      <div class="method-file">${escHtml(m.file)}:${m.line}</div>
+    </article>`).join("");
 
-  methodListEl.querySelectorAll(".method-item").forEach((item) => {
-    item.addEventListener("click", () => showMethod(methods[Number(item.dataset.index)]));
+  methodListEl.querySelectorAll(".method-item").forEach((el) => {
+    el.addEventListener("click", () => showMethod(methods[Number(el.dataset.index)]));
   });
 }
 
 function methodScore(method, query) {
   if (!query) return 1;
+  const q    = query.toLowerCase();
   const name = method.name.toLowerCase();
-  const signature = method.signature.toLowerCase();
+  const sig  = method.signature.toLowerCase();
   const file = method.file.toLowerCase();
-  const q = query.toLowerCase();
-  let score = 0;
-  if (name === q) score += 220;
-  if (name.includes(q)) score += 90;
-  if (signature.includes(q)) score += 82;
+  let score  = 0;
+  if (name === q)          score += 220;
+  if (name.includes(q))    score += 90;
+  if (sig.includes(q))     score += 82;
   const best = Math.max(
-    fuzzyTextScore(name, q) + 46,
-    fuzzyTextScore(signature, q) + 26,
-    fuzzyTextScore(file, q)
+    fuzzyFieldScore(name, q) + 46,
+    fuzzyFieldScore(sig,  q) + 26,
+    fuzzyFieldScore(file, q),
   );
   if (best === -Infinity && score === 0) return -Infinity;
   return score + Math.max(0, best);
 }
 
-function fuzzyTextScore(haystack, needle) {
-  let h = 0;
-  let score = 0;
-  for (let n = 0; n < needle.length; n += 1) {
-    const found = haystack.indexOf(needle[n], h);
-    if (found === -1) return -Infinity;
-    score += found === h ? 8 : Math.max(1, 8 - (found - h));
-    h = found + 1;
-  }
-  return score;
-}
-
+// ─── Method panel / tree ─────────────────────────────────────────────────────
 function showMethod(method) {
   if (!method) return;
   methodTree = buildMethodTree(method);
   invalidateRenderCache();
-  viewMode = "method";
-  selected = null;
+  offscreenDirty = true;
+  viewMode     = "method";
+  selected     = null;
   selectedEdge = methodTree.edges[0] || null;
-  cascade = selectedEdge ? computeCascade([selectedEdge.source, selectedEdge.target], selectedEdge.id) : emptyCascade();
-  camera.tx = 0;
-  camera.ty = 0;
-  camera.targetZoom = 1.05;
-  camera.zoomAnchor = null;
+  cascade = selectedEdge
+    ? computeCascade([selectedEdge.source, selectedEdge.target], selectedEdge.id)
+    : emptyCascade();
+  camera.tx = 0; camera.ty = 0; camera.targetZoom = 1.05; camera.zoomAnchor = null;
   inspectorEl.classList.remove("todo-selected");
   overlineEl.textContent = method.group === "prelude" ? "Prelude Method" : "Core Method";
-  titleEl.textContent = method.name;
-  kindEl.textContent = `${method.group} · ${method.form}`;
+  titleEl.textContent    = method.name;
+  kindEl.textContent     = `${method.group} · ${method.form}`;
   detailEl.innerHTML = [
     ["Signature", method.signature || "value"],
-    ["File", `${method.file}:${method.line}`],
-    ["Uses", method.uses.length ? method.uses.join(", ") : "No parsed core calls."],
-    ["Used by", method.used_by.length ? method.used_by.join(", ") : "No parsed callers."],
-    ["Open", openFileButton(method), true],
+    ["File",      `${method.file}:${method.line}`],
+    ["Uses",      method.uses.length    ? method.uses.join(", ")    : "No parsed core calls."],
+    ["Used by",   method.used_by.length ? method.used_by.join(", ") : "No parsed callers."],
+    ["Open",      openFileButton(method), true],
   ].map(renderDetailRow).join("");
   bindOpenButtons(method);
-  neighborEl.innerHTML = methodTree.edges.slice(1, 11).map((edge) =>
-    `<div class="neighbor" data-id="${escapeAttr(edge.id)}"><strong>${escapeHtml(edge.label)}</strong><span>${escapeHtml(edge.kind)} · ${escapeHtml(edge.method?.file || "")}</span></div>`
+  neighborEl.innerHTML = methodTree.edges.slice(1, 11).map((e) =>
+    `<div class="neighbor" data-id="${escAttr(e.id)}"><strong>${escHtml(e.label)}</strong><span>${escHtml(e.kind)} · ${escHtml(e.method?.file || "")}</span></div>`
   ).join("");
-  neighborEl.querySelectorAll(".neighbor").forEach((item) => {
-    item.addEventListener("click", () => {
-      const edge = methodTree.edges.find((candidate) => candidate.id === item.dataset.id);
-      if (edge) selectEdge(edge);
+  neighborEl.querySelectorAll(".neighbor").forEach((el) => {
+    el.addEventListener("click", () => {
+      const e = methodTree.edges.find((x) => x.id === el.dataset.id);
+      if (e) selectEdge(e);
     });
   });
 }
 
 function buildMethodTree(method) {
-  const nodes = [];
-  const edges = [];
+  const nodes = [], edges = [];
   addMethodArrow(method, "method", 0, 0, nodes, edges);
-  addMethodRing(method.uses || [], "dependency", -1, method, nodes, edges);
-  addMethodRing(method.used_by || [], "dependent", 1, method, nodes, edges);
+  addMethodRing(method.uses    || [], "dependency", -1, method, nodes, edges);
+  addMethodRing(method.used_by || [], "dependent",   1, method, nodes, edges);
   return { nodes, edges };
 }
 
 function addMethodRing(names, kind, side, root, nodes, edges) {
   const count = Math.max(1, names.length);
-  names.forEach((name, index) => {
-    const source = methodByName.get(name) || { id: `method:external:${name}`, name, signature: "", group: "external", file: "external" };
-    const spread = (index - (count - 1) / 2) * 72;
-    const x = side * 310;
-    const y = spread;
-    addMethodArrow(source, kind, x, y, nodes, edges);
+  names.forEach((name, i) => {
+    const src = methodByName.get(name)
+      || { id: `method:external:${name}`, name, signature: "", group: "external", file: "external" };
+    addMethodArrow(src, kind, side * 310, (i - (count - 1) / 2) * 72, nodes, edges);
   });
 }
 
 function addMethodArrow(method, kind, x, y, nodes, edges) {
-  const parts = signatureParts(method.signature || "");
+  const parts  = signatureParts(method.signature || "");
   const source = makeTypeNode(`${method.id}:source`, parts.source, method.file, x - 76, y, nodes.length);
   const target = makeTypeNode(`${method.id}:target`, parts.target, method.file, x + 76, y, nodes.length + 1);
   nodes.push(source, target);
   edges.push({
-    id: `${kind}:${method.id}`,
-    source: source.id,
-    target: target.id,
-    label: method.name,
-    kind: kind === "method" ? "function" : kind,
+    id:     `${kind}:${method.id}`,
+    source: source.id, target: target.id,
+    label:  method.name,
+    kind:   kind === "method" ? "function" : kind,
     method,
   });
 }
 
 function makeTypeNode(id, label, file, x, y, index) {
   return {
-    id,
-    label,
-    kind: "type",
-    file,
-    summary: "type object",
-    x,
-    y,
-    fx: x,
-    fy: y,
-    vx: 0,
-    vy: 0,
-    radius: 13,
-    visible: true,
+    id, label, kind: "type", file, summary: "type object",
+    x, y, fx: x, fy: y, vx: 0, vy: 0,
+    radius: 13, visible: true,
     pulse: index * 0.8,
+    _searchTokens: buildSearchTokens({ id, label, kind: "type", file, summary: "type object" }),
   };
 }
 
 function signatureParts(signature) {
-  const parts = String(signature || "value").split("->").map((part) => part.trim()).filter(Boolean);
+  const parts = String(signature || "value").split("->").map((p) => p.trim()).filter(Boolean);
   if (parts.length < 2) return { source: "Unit", target: parts[0] || "Value" };
-  return {
-    source: parts.slice(0, -1).join(" -> "),
-    target: parts[parts.length - 1],
-  };
+  return { source: parts.slice(0, -1).join(" -> "), target: parts[parts.length - 1] };
 }
 
+// ─── TODO write-back ──────────────────────────────────────────────────────────
 async function updateTodo(id, status) {
   graphStatusEl.textContent = "writing TODO";
-  pendingDoneAnimationId = status === "done" ? id : "";
+  pendingDoneAnimId = status === "done" ? id : "";
   await fetch("/api/todo", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -557,17 +615,20 @@ async function updateTodo(id, status) {
   await loadGraph();
 }
 
+// ─── Frame loop ───────────────────────────────────────────────────────────────
 function frame(now) {
   frameRequested = false;
-  const dt = Math.min(0.04, (now - lastFrame) / 1000);
-  lastFrame = now;
-  const frameStart = performance.now();
+  const dt    = Math.min(0.04, (now - lastFrame) / 1000);
+  lastFrame   = now;
+  const t0    = performance.now();
   resizeCanvas();
-  simulate(dt, now / 1000);
-  const cameraMoving = updateCamera(dt);
+  const moving = updateCamera(dt);
+  if (moving || offscreenDirty) {
+    offscreenDirty = true;   // camera moved → bake again
+  }
   draw(now / 1000);
-  if (perfProbe) recordPerfFrame(performance.now() - frameStart);
-  if (cameraMoving || dragging || now < doneAnimationUntil) scheduleFrame();
+  if (perfProbe) recordPerfFrame(performance.now() - t0);
+  if (moving || dragging || now < doneAnimationUntil) scheduleFrame();
 }
 
 function scheduleFrame() {
@@ -576,35 +637,30 @@ function scheduleFrame() {
   requestAnimationFrame(frame);
 }
 
+// ─── Perf probe ───────────────────────────────────────────────────────────────
 function runPerfProbe(frames = 180) {
   perfProbe = { frames: [], remaining: frames, resolve: null };
-  const promise = new Promise((resolve) => {
-    perfProbe.resolve = resolve;
-  });
+  const p = new Promise((r) => { perfProbe.resolve = r; });
   scheduleFrame();
-  return promise;
+  return p;
 }
 
-function recordPerfFrame(duration) {
-  perfProbe.frames.push(duration);
-  perfProbe.remaining -= 1;
-  if (perfProbe.remaining > 0) {
-    scheduleFrame();
-    return;
-  }
+function recordPerfFrame(dur) {
+  perfProbe.frames.push(dur);
+  if (--perfProbe.remaining > 0) { scheduleFrame(); return; }
   const sorted = [...perfProbe.frames].sort((a, b) => a - b);
   const result = {
     frames: sorted.length,
-    avg: sorted.reduce((sum, value) => sum + value, 0) / sorted.length,
-    p95: sorted[Math.floor(sorted.length * 0.95)],
-    max: sorted[sorted.length - 1],
+    avg:    sorted.reduce((s, v) => s + v, 0) / sorted.length,
+    p95:    sorted[Math.floor(sorted.length * 0.95)],
+    max:    sorted[sorted.length - 1],
   };
   perfProbe.resolve(result);
   perfProbe = null;
 }
 
 async function runBrowserPerfReport() {
-  await new Promise((resolve) => setTimeout(resolve, 120));
+  await new Promise((r) => setTimeout(r, 120));
   const result = await runPerfProbe(180);
   await fetch("/api/perf", {
     method: "POST",
@@ -619,190 +675,342 @@ async function runBrowserPerfReport() {
   });
 }
 
+// ─── Canvas resize ────────────────────────────────────────────────────────────
 function resizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
-  const width = Math.floor(window.innerWidth * dpr);
-  const height = Math.floor(window.innerHeight * dpr);
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width;
-    canvas.height = height;
+  const w   = Math.floor(window.innerWidth  * dpr);
+  const h   = Math.floor(window.innerHeight * dpr);
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width  = w;
+    canvas.height = h;
+    offscreenDirty = true;
+    // resize offscreen too
+    if (offscreen) { offscreen.width = w; offscreen.height = h; }
   }
 }
 
-function simulate(dt, time) {
-  return;
-}
-
+// ─── Camera ───────────────────────────────────────────────────────────────────
 function updateCamera(dt) {
-  const beforeX = camera.x;
-  const beforeY = camera.y;
-  const beforeZoom = camera.zoom;
-  const cameraEase = 1 - Math.exp(-dt * 26);
-  const zoomEase = 1 - Math.exp(-dt * 30);
-  camera.zoom += (camera.targetZoom - camera.zoom) * zoomEase;
+  const prev = { x: camera.x, y: camera.y, z: camera.zoom };
+  const ease = 1 - Math.exp(-dt * 26);
+  const zEase = 1 - Math.exp(-dt * 30);
+  camera.zoom += (camera.targetZoom - camera.zoom) * zEase;
   if (camera.zoomAnchor) {
-    camera.tx = camera.zoomAnchor.worldX - (camera.zoomAnchor.screenX - window.innerWidth / 2) / camera.targetZoom;
+    camera.tx = camera.zoomAnchor.worldX - (camera.zoomAnchor.screenX - window.innerWidth  / 2) / camera.targetZoom;
     camera.ty = camera.zoomAnchor.worldY - (camera.zoomAnchor.screenY - window.innerHeight / 2) / camera.targetZoom;
     if (Math.abs(camera.zoom - camera.targetZoom) < 0.002) camera.zoomAnchor = null;
   }
-  camera.x += (camera.tx - camera.x) * cameraEase;
-  camera.y += (camera.ty - camera.y) * cameraEase;
-  return Math.abs(camera.x - beforeX) > 0.01
-    || Math.abs(camera.y - beforeY) > 0.01
-    || Math.abs(camera.zoom - beforeZoom) > 0.0005
-    || Math.abs(camera.x - camera.tx) > 0.01
-    || Math.abs(camera.y - camera.ty) > 0.01
-    || Math.abs(camera.zoom - camera.targetZoom) > 0.0005;
+  camera.x += (camera.tx - camera.x) * ease;
+  camera.y += (camera.ty - camera.y) * ease;
+  return (
+    Math.abs(camera.x - prev.x) > 0.01 || Math.abs(camera.y - prev.y) > 0.01 ||
+    Math.abs(camera.zoom - prev.z) > 0.0005 ||
+    Math.abs(camera.x - camera.tx) > 0.01 || Math.abs(camera.y - camera.ty) > 0.01 ||
+    Math.abs(camera.zoom - camera.targetZoom) > 0.0005
+  );
 }
 
+// ─── Draw ─────────────────────────────────────────────────────────────────────
 function draw(time) {
-  const dpr = window.devicePixelRatio || 1;
-  const width = canvas.width / dpr;
-  const height = canvas.height / dpr;
+  const dpr    = window.devicePixelRatio || 1;
+  const W      = canvas.width  / dpr;
+  const H      = canvas.height / dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const bg = ctx.createRadialGradient(width / 2, height / 2, 20, width / 2, height / 2, Math.max(width, height));
+
+  // background
+  const bg = ctx.createRadialGradient(W/2, H/2, 20, W/2, H/2, Math.max(W, H));
   bg.addColorStop(0, "#162024");
   bg.addColorStop(1, "#0d1113");
   ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, width, height);
-  drawGrid(width, height);
+  ctx.fillRect(0, 0, W, H);
 
+  drawGrid(W, H);
+
+  // ── offscreen bake pass ──
+  // Only re-bake the static layer when graph or camera changes.
+  if (offscreenDirty) {
+    bakeOffscreen(W, H, dpr, time);
+    offscreenDirty = false;
+  }
+
+  // Blit the baked static layer
+  if (offscreen) ctx.drawImage(offscreen, 0, 0, W, H);
+
+  // ── dynamic layer: highlighted nodes only ──
   ctx.save();
-  ctx.translate(width / 2, height / 2);
+  ctx.translate(W / 2, H / 2);
   ctx.scale(camera.zoom, camera.zoom);
   ctx.translate(-camera.x, -camera.y);
-  const cache = getRenderCache();
-  const bounds = visibleWorldBounds(width, height, 80);
+
+  const cache  = getRenderCache();
+  const bounds = visibleWorldBounds(W, H, 80);
+  const hasSelection = selected || selectedEdge;
+
+  // Re-draw selected edges on top with full opacity
   for (const item of cache.edges) {
-    if (!segmentIntersectsBounds(item.source, item.target, bounds)) continue;
-    drawEdge(item.source, item.target, item.edge, time);
+    const edgeSel  = selectedEdge && selectedEdge.id === item.edge.id;
+    const connSel  = selected && (item.edge.source === selected.id || item.edge.target === selected.id);
+    const inCascade = cascade.edges.has(item.edge.id);
+    if (!edgeSel && !connSel && !inCascade) continue;
+    if (!segmentInBounds(item.source, item.target, bounds)) continue;
+    drawEdge(item.source, item.target, item.edge, time, true);
   }
+
+  // Re-draw highlighted nodes on top
   for (const node of cache.nodes) {
-    if (!pointNearBounds(node, bounds)) continue;
-    drawNode(node, time);
+    const isSel     = selected && selected.id === node.id;
+    const isHit     = searchMatchedIds.has(node.id);
+    const inCascade = cascade.nodes.has(node.id);
+    if (!isSel && !isHit && !inCascade && hasSelection) continue;
+    if (!pointInBounds(node, bounds)) continue;
+    drawNode(node, time, true);
   }
+
   ctx.restore();
 }
 
-function visibleWorldBounds(width, height, margin) {
-  const topLeft = screenToWorld(-margin, -margin);
-  const bottomRight = screenToWorld(width + margin, height + margin);
-  return { minX: topLeft.x, minY: topLeft.y, maxX: bottomRight.x, maxY: bottomRight.y };
-}
-
-function pointNearBounds(node, bounds) {
-  return node.x >= bounds.minX && node.x <= bounds.maxX && node.y >= bounds.minY && node.y <= bounds.maxY;
-}
-
-function segmentIntersectsBounds(a, b, bounds) {
-  return Math.max(a.x, b.x) >= bounds.minX
-    && Math.min(a.x, b.x) <= bounds.maxX
-    && Math.max(a.y, b.y) >= bounds.minY
-    && Math.min(a.y, b.y) <= bounds.maxY;
-}
-
-function activeGraph() {
-  return viewMode === "method" && methodTree ? methodTree : graph;
-}
-
-function findActiveNode(active, id) {
-  return active === graph ? nodeById.get(id) : active.nodes.find((node) => node.id === id);
-}
-
-function invalidateRenderCache() {
-  renderCache.graph = null;
-}
-
-function getRenderCache() {
-  const active = activeGraph();
-  if (renderCache.graph === active) return renderCache;
-  const nodes = active.nodes.filter((node) => node.visible);
-  const activeNodeById = active === graph ? nodeById : new Map(active.nodes.map((node) => [node.id, node]));
-  const edges = active.edges
-    .map((edge) => ({ edge, source: activeNodeById.get(edge.source), target: activeNodeById.get(edge.target) }))
-    .filter((item) => item.source && item.target && item.source.visible && item.target.visible);
-  renderCache = { graph: active, nodes, edges };
-  return renderCache;
-}
-
-function emptyCascade() {
-  return { nodes: new Set(), edges: new Set(), upstream: new Set(), downstream: new Set() };
-}
-
-function computeCascade(seedNodeIds, seedEdgeId = "") {
-  const active = activeGraph();
-  const outgoing = new Map();
-  const incoming = new Map();
-  for (const edge of active.edges) {
-    if (!outgoing.has(edge.source)) outgoing.set(edge.source, []);
-    if (!incoming.has(edge.target)) incoming.set(edge.target, []);
-    outgoing.get(edge.source).push(edge);
-    incoming.get(edge.target).push(edge);
-  }
-  const downstream = walkCascade(seedNodeIds, outgoing, "target");
-  const upstream = walkCascade(seedNodeIds, incoming, "source");
-  const nodes = new Set([...seedNodeIds, ...downstream.nodes, ...upstream.nodes]);
-  const edges = new Set([...downstream.edges, ...upstream.edges]);
-  if (seedEdgeId) edges.add(seedEdgeId);
-  return { nodes, edges, upstream: upstream.nodes, downstream: downstream.nodes };
-}
-
-function walkCascade(seedNodeIds, adjacency, nextKey) {
-  const nodes = new Set();
-  const edges = new Set();
-  const queue = [...seedNodeIds];
-  const seen = new Set(seedNodeIds);
-  while (queue.length && seen.size < 512) {
-    const id = queue.shift();
-    for (const edge of adjacency.get(id) || []) {
-      edges.add(edge.id);
-      const next = edge[nextKey];
-      if (seen.has(next)) continue;
-      seen.add(next);
-      nodes.add(next);
-      queue.push(next);
+/**
+ * Bake the full graph (all visible edges + all nodes at base opacity/dim)
+ * onto an offscreen canvas. Re-run only when the graph or camera changes.
+ */
+function bakeOffscreen(W, H, dpr, time) {
+  if (!offscreen || offscreen.width !== Math.floor(W * dpr) || offscreen.height !== Math.floor(H * dpr)) {
+    if (typeof OffscreenCanvas !== "undefined") {
+      offscreen    = new OffscreenCanvas(Math.floor(W * dpr), Math.floor(H * dpr));
+      offscreenCtx = offscreen.getContext("2d");
+    } else {
+      // fallback: second canvas element
+      offscreen = document.createElement("canvas");
+      offscreen.width  = Math.floor(W * dpr);
+      offscreen.height = Math.floor(H * dpr);
+      offscreenCtx = offscreen.getContext("2d");
     }
   }
-  return { nodes, edges };
+
+  const oc = offscreenCtx;
+  oc.clearRect(0, 0, offscreen.width, offscreen.height);
+  oc.setTransform(dpr, 0, 0, dpr, 0, 0);
+  oc.save();
+  oc.translate(W / 2, H / 2);
+  oc.scale(camera.zoom, camera.zoom);
+  oc.translate(-camera.x, -camera.y);
+
+  const cache  = getRenderCache();
+  const bounds = visibleWorldBounds(W, H, 80);
+  const hasSelection = selected || selectedEdge;
+
+  // All edges at dim/base opacity
+  for (const item of cache.edges) {
+    if (!segmentInBounds(item.source, item.target, bounds)) continue;
+    const edgeSel   = selectedEdge && selectedEdge.id === item.edge.id;
+    const connSel   = selected && (item.edge.source === selected.id || item.edge.target === selected.id);
+    const inCascade = cascade.edges.has(item.edge.id);
+    // skip bright edges — they'll be redrawn on the dynamic layer
+    if (edgeSel || connSel || inCascade) continue;
+    drawEdgeOn(oc, item.source, item.target, item.edge, time, false, hasSelection);
+  }
+
+  // All nodes at dim/base opacity (highlighted ones redrawn on dynamic layer)
+  for (const node of cache.nodes) {
+    if (!pointInBounds(node, bounds)) continue;
+    const isSel     = selected && selected.id === node.id;
+    const isHit     = searchMatchedIds.has(node.id);
+    const inCascade = cascade.nodes.has(node.id);
+    if (isSel || isHit || inCascade) continue;
+    drawNodeOn(oc, node, time, false, hasSelection);
+  }
+
+  oc.restore();
 }
 
-function drawGrid(width, height) {
+// ─── Isolation alpha ──────────────────────────────────────────────────────────
+/**
+ * When something is selected, non-cascade items are pushed to a very low
+ * alpha so the highlighted subgraph reads instantly. This is the core of the
+ * "hide the rest" behaviour.
+ */
+const ISO_DIM = 0.07;   // alpha for unrelated nodes when selection is active
+
+// ─── Edge drawing ─────────────────────────────────────────────────────────────
+function drawEdge(a, b, edge, time, highlight) {
+  drawEdgeOn(ctx, a, b, edge, time, highlight, !!(selected || selectedEdge));
+}
+
+function drawEdgeOn(c, a, b, edge, time, highlight, hasSelection) {
+  const edgeSel  = selectedEdge && selectedEdge.id === edge.id;
+  const connSel  = selected && (edge.source === selected.id || edge.target === selected.id);
+  const inCasc   = cascade.edges.has(edge.id);
+
+  let alpha;
+  if      (edgeSel)   alpha = 0.92;
+  else if (connSel)   alpha = 0.74;
+  else if (inCasc)    alpha = 0.48;
+  else                alpha = hasSelection ? ISO_DIM : 0.10;
+
+  const mx = (a.x + b.x) / 2;
+  const my = (a.y + b.y) / 2;
+  const cx = mx - (b.y - a.y) * 0.08;
+  const cy = my + (b.x - a.x) * 0.08;
+  const end = trimEndpoint(cx, cy, b.x, b.y, b.radius + 4);
+
+  c.beginPath();
+  c.moveTo(a.x, a.y);
+  c.quadraticCurveTo(cx, cy, end.x, end.y);
+  c.strokeStyle = edgeColor(edge, alpha);
+  c.lineWidth   = edgeSel ? 4 : connSel ? 2.6 : 1.1;
+  c.stroke();
+  drawArrowheadOn(c, cx, cy, end.x, end.y, c.strokeStyle, edgeSel || connSel ? 9 : 7);
+
+  if (edgeSel || edge.method || connSel) {
+    c.save();
+    c.fillStyle    = edge.kind === "function" ? "#ffffff" : "#eef5f1";
+    c.font         = `${edgeSel ? 800 : 650} 12px Inter, Roboto, sans-serif`;
+    c.textAlign    = "center";
+    c.textBaseline = "middle";
+    c.shadowBlur   = 16;
+    c.shadowColor  = "rgba(0,0,0,0.65)";
+    c.fillText(trunc(edge.label, 28), cx, cy - 10);
+    c.restore();
+  }
+}
+
+function edgeColor(edge, alpha) {
+  if (edge.kind === "verifies"  ) return `rgba(73,210,143,${alpha})`;
+  if (edge.kind === "evidence"  ) return `rgba(255,212,0,${alpha})`;
+  if (edge.kind === "function"  ) return `rgba(255,255,255,${Math.max(alpha, 0.72)})`;
+  if (edge.kind === "dependency") return `rgba(82,214,255,${Math.max(alpha, 0.46)})`;
+  if (edge.kind === "dependent" ) return `rgba(208,188,255,${Math.max(alpha, 0.46)})`;
+  if (edge.kind === "uses"      ) return `rgba(82,214,255,${Math.max(alpha, 0.46)})`;
+  if (edge.kind === "used-by"   ) return `rgba(208,188,255,${Math.max(alpha, 0.46)})`;
+  return `rgba(238,245,241,${alpha})`;
+}
+
+function trimEndpoint(fx, fy, tx, ty, amt) {
+  const dx = tx - fx, dy = ty - fy;
+  const d  = Math.max(1, Math.hypot(dx, dy));
+  return { x: tx - (dx / d) * amt, y: ty - (dy / d) * amt };
+}
+
+function drawArrowheadOn(c, fx, fy, tx, ty, color, size) {
+  const angle = Math.atan2(ty - fy, tx - fx);
+  c.save();
+  c.fillStyle = color;
+  c.beginPath();
+  c.moveTo(tx, ty);
+  c.lineTo(tx - Math.cos(angle - 0.48) * size, ty - Math.sin(angle - 0.48) * size);
+  c.lineTo(tx - Math.cos(angle + 0.48) * size, ty - Math.sin(angle + 0.48) * size);
+  c.closePath();
+  c.fill();
+  c.restore();
+}
+
+// ─── Node drawing ─────────────────────────────────────────────────────────────
+function drawNode(node, time, highlight) {
+  drawNodeOn(ctx, node, time, highlight, !!(selected || selectedEdge));
+}
+
+function drawNodeOn(c, node, time, highlight, hasSelection) {
+  const isSel     = selected && selected.id === node.id;
+  const isHit     = searchMatchedIds.has(node.id);
+  const inCascade = cascade.nodes.has(node.id);
+  const color     = nodeColor(node);
+  const r = node.radius + (isSel ? 7 : isHit ? 4 : 0);
+
+  let alpha;
+  if      (isSel)      alpha = 1;
+  else if (isHit)      alpha = 1;
+  else if (inCascade)  alpha = 0.94;
+  else if (!hasSelection) alpha = node.kind === "todo" ? 0.86 : 0.54;
+  else                 alpha = ISO_DIM;
+
+  c.save();
+  c.shadowBlur  = isSel ? 18 : 0;
+  if (isSel) c.shadowColor = color;
+  c.beginPath();
+  c.arc(node.x, node.y, Math.max(3, r), 0, Math.PI * 2);
+  c.fillStyle   = color;
+  c.globalAlpha = alpha;
+  c.fill();
+  c.globalAlpha = 1;
+  c.shadowBlur  = 0;
+  c.strokeStyle = isSel || isHit
+    ? "#ffffff"
+    : inCascade
+      ? "rgba(255,255,255,0.72)"
+      : node.kind === "todo"
+        ? "rgba(255,244,184,0.72)"
+        : "rgba(255,255,255,0.30)";
+  c.lineWidth = isSel ? 3.4 : isHit ? 2.8 : inCascade ? 2.1 : node.kind === "todo" ? 1.6 : 1;
+  c.globalAlpha = alpha;
+  c.stroke();
+  c.globalAlpha = 1;
+
+  if (isSel || node.kind === "todo") {
+    c.font      = `${node.kind === "todo" ? 700 : 500} 13px Inter, Roboto, sans-serif`;
+    c.fillStyle = node.kind === "todo" ? "#ffe66d" : "#eef5f1";
+    c.globalAlpha = alpha;
+    c.textAlign = "center";
+    c.fillText(trunc(node.label, 30), node.x, node.y - r - 12);
+    c.globalAlpha = 1;
+  }
+  c.restore();
+}
+
+function nodeColor(node) {
+  if (node.kind !== "todo" || node.status !== "done") return PALETTE[node.kind] || PALETTE.context;
+  if (!node.donePulseStarted) return PALETTE.done;
+  const t = clamp((performance.now() - node.donePulseStarted) / 850, 0, 1);
+  return lerpHex(PALETTE.todo, PALETTE.done, easeOutCubic(t));
+}
+
+function lerpHex(a, b, t) {
+  const av = hexToRgb(a), bv = hexToRgb(b);
+  return `rgb(${Math.round(av.r+(bv.r-av.r)*t)},${Math.round(av.g+(bv.g-av.g)*t)},${Math.round(av.b+(bv.b-av.b)*t)})`;
+}
+
+function hexToRgb(v) {
+  const h = v.replace("#","");
+  return { r:parseInt(h,16)>>16&255, g:parseInt(h,16)>>8&255, b:parseInt(h,16)&255 };
+}
+
+function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+
+// ─── Grid ─────────────────────────────────────────────────────────────────────
+function drawGrid(W, H) {
   ctx.save();
-  const topLeft = screenToWorld(0, 0);
-  const bottomRight = screenToWorld(width, height);
+  const tl = screenToWorld(0, 0);
+  const br = screenToWorld(W, H);
   const minorStep = niceGridStep(64 / camera.zoom);
   const majorStep = minorStep * 5;
-  drawGridLines(topLeft.x, bottomRight.x, topLeft.y, bottomRight.y, minorStep, width, height, "rgba(238,245,241,0.045)", 1);
-  drawGridLines(topLeft.x, bottomRight.x, topLeft.y, bottomRight.y, majorStep, width, height, "rgba(238,245,241,0.11)", 1.2);
-  drawAxis(width, height);
+  drawGridLines(tl.x, br.x, tl.y, br.y, minorStep, W, H, "rgba(238,245,241,0.045)", 1);
+  drawGridLines(tl.x, br.x, tl.y, br.y, majorStep, W, H, "rgba(238,245,241,0.11)",  1.2);
+  drawAxis(W, H);
   ctx.restore();
 }
 
-function drawGridLines(minX, maxX, minY, maxY, step, width, height, color, lineWidth) {
+function drawGridLines(minX, maxX, minY, maxY, step, W, H, color, lw) {
   ctx.strokeStyle = color;
-  ctx.lineWidth = lineWidth;
-  const startX = Math.floor(minX / step) * step;
-  const endX = Math.ceil(maxX / step) * step;
-  for (let x = startX; x <= endX; x += step) {
-    const sx = worldToScreenX(x, width);
-    crispLine(sx, 0, sx, height);
+  ctx.lineWidth   = lw;
+  const sx = Math.floor(minX / step) * step;
+  for (let x = sx; x <= maxX; x += step) {
+    const px = worldToScreenX(x, W);
+    crispLine(px, 0, px, H);
   }
-  const startY = Math.floor(minY / step) * step;
-  const endY = Math.ceil(maxY / step) * step;
-  for (let y = startY; y <= endY; y += step) {
-    const sy = worldToScreenY(y, height);
-    crispLine(0, sy, width, sy);
+  const sy = Math.floor(minY / step) * step;
+  for (let y = sy; y <= maxY; y += step) {
+    const py = worldToScreenY(y, H);
+    crispLine(0, py, W, py);
   }
 }
 
-function drawAxis(width, height) {
-  ctx.lineWidth = 1.4;
+function drawAxis(W, H) {
+  ctx.lineWidth   = 1.4;
   ctx.strokeStyle = "rgba(82,214,255,0.22)";
-  const x = worldToScreenX(0, width);
-  if (x >= 0 && x <= width) crispLine(x, 0, x, height);
+  const x = worldToScreenX(0, W);
+  if (x >= 0 && x <= W) crispLine(x, 0, x, H);
   ctx.strokeStyle = "rgba(73,210,143,0.22)";
-  const y = worldToScreenY(0, height);
-  if (y >= 0 && y <= height) crispLine(0, y, width, y);
+  const y = worldToScreenY(0, H);
+  if (y >= 0 && y <= H) crispLine(0, y, W, y);
 }
 
 function crispLine(x1, y1, x2, y2) {
@@ -812,209 +1020,86 @@ function crispLine(x1, y1, x2, y2) {
   ctx.stroke();
 }
 
-function niceGridStep(targetWorldSize) {
-  const power = Math.pow(10, Math.floor(Math.log10(targetWorldSize)));
-  const normalized = targetWorldSize / power;
-  const factor = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
-  return factor * power;
+function niceGridStep(target) {
+  const p = Math.pow(10, Math.floor(Math.log10(target)));
+  const n = target / p;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p;
 }
 
-function drawEdge(a, b, edge, time) {
-  const edgeSelected = selectedEdge && selectedEdge.id === edge.id;
-  const connectedToSelection = selected && (edge.source === selected.id || edge.target === selected.id);
-  const inCascade = cascade.edges.has(edge.id);
-  const alpha = edgeSelected ? 0.92 : connectedToSelection ? 0.74 : inCascade ? 0.48 : 0.10;
-  const mx = (a.x + b.x) / 2;
-  const my = (a.y + b.y) / 2;
-  const cx = mx - (b.y - a.y) * 0.08;
-  const cy = my + (b.x - a.x) * 0.08;
-  const end = trimEndpoint(cx, cy, b.x, b.y, b.radius + 4);
-  ctx.beginPath();
-  ctx.moveTo(a.x, a.y);
-  ctx.quadraticCurveTo(cx, cy, end.x, end.y);
-  ctx.strokeStyle = edgeColor(edge, alpha);
-  ctx.lineWidth = edgeSelected ? 4 : connectedToSelection ? 2.6 : 1.1;
-  ctx.stroke();
-  drawArrowhead(cx, cy, end.x, end.y, ctx.strokeStyle, edgeSelected || connectedToSelection ? 9 : 7);
-  if (edgeSelected || edge.method || connectedToSelection) {
-    ctx.save();
-    ctx.fillStyle = edge.kind === "function" ? "#ffffff" : "#eef5f1";
-    ctx.font = `${edgeSelected ? 800 : 650} 12px Inter, Roboto, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.shadowBlur = 16;
-    ctx.shadowColor = "rgba(0,0,0,0.65)";
-    ctx.fillText(truncate(edge.label, 28), cx, cy - 10);
-    ctx.restore();
-  }
-}
-
-function edgeColor(edge, alpha) {
-  if (edge.kind === "verifies") return `rgba(73,210,143,${alpha})`;
-  if (edge.kind === "evidence") return `rgba(255,212,0,${alpha})`;
-  if (edge.kind === "function") return `rgba(255,255,255,${Math.max(alpha, 0.72)})`;
-  if (edge.kind === "dependency") return `rgba(82,214,255,${Math.max(alpha, 0.46)})`;
-  if (edge.kind === "dependent") return `rgba(208,188,255,${Math.max(alpha, 0.46)})`;
-  if (edge.kind === "uses") return `rgba(82,214,255,${Math.max(alpha, 0.46)})`;
-  if (edge.kind === "used-by") return `rgba(208,188,255,${Math.max(alpha, 0.46)})`;
-  return `rgba(238,245,241,${alpha})`;
-}
-
-function trimEndpoint(fromX, fromY, toX, toY, amount) {
-  const dx = toX - fromX;
-  const dy = toY - fromY;
-  const dist = Math.max(1, Math.hypot(dx, dy));
-  return { x: toX - (dx / dist) * amount, y: toY - (dy / dist) * amount };
-}
-
-function drawArrowhead(fromX, fromY, toX, toY, color, size) {
-  const angle = Math.atan2(toY - fromY, toX - fromX);
-  ctx.save();
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(toX, toY);
-  ctx.lineTo(toX - Math.cos(angle - 0.48) * size, toY - Math.sin(angle - 0.48) * size);
-  ctx.lineTo(toX - Math.cos(angle + 0.48) * size, toY - Math.sin(angle + 0.48) * size);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-}
-
-function drawNode(node, time) {
-  const color = nodeColor(node);
-  const isSelected = selected && selected.id === node.id;
-  const isSearchHit = searchMatchedIds.has(node.id);
-  const inCascade = cascade.nodes.has(node.id);
-  const r = node.radius + (isSelected ? 7 : isSearchHit ? 4 : 0);
-  ctx.save();
-  ctx.shadowBlur = isSelected ? 18 : 0;
-  if (isSelected) ctx.shadowColor = color;
-  ctx.beginPath();
-  ctx.arc(node.x, node.y, Math.max(3, r), 0, Math.PI * 2);
-  ctx.fillStyle = color;
-  ctx.globalAlpha = isSelected || isSearchHit ? 1 : inCascade ? 0.94 : node.kind === "todo" ? 0.86 : 0.54;
-  ctx.fill();
-  ctx.globalAlpha = 1;
-  ctx.shadowBlur = 0;
-  ctx.strokeStyle = isSelected || isSearchHit ? "#ffffff" : inCascade ? "rgba(255,255,255,0.72)" : node.kind === "todo" ? "rgba(255,244,184,0.72)" : "rgba(255,255,255,0.30)";
-  ctx.lineWidth = isSelected ? 3.4 : isSearchHit ? 2.8 : inCascade ? 2.1 : node.kind === "todo" ? 1.6 : 1;
-  ctx.stroke();
-  if (isSelected || node.kind === "todo") {
-    ctx.font = `${node.kind === "todo" ? 700 : 500} 13px Inter, Roboto, sans-serif`;
-    ctx.fillStyle = node.kind === "todo" ? "#ffe66d" : "#eef5f1";
-    ctx.textAlign = "center";
-    ctx.fillText(truncate(node.label, 30), node.x, node.y - r - 12);
-  }
-  ctx.restore();
-}
-
-function nodeColor(node) {
-  if (node.kind !== "todo" || node.status !== "done") return palette[node.kind] || palette.context;
-  if (!node.donePulseStarted) return palette.done;
-  const t = clamp((performance.now() - node.donePulseStarted) / 850, 0, 1);
-  return lerpHex(palette.todo, palette.done, easeOutCubic(t));
-}
-
-function lerpHex(a, b, t) {
-  const av = hexToRgb(a);
-  const bv = hexToRgb(b);
-  return `rgb(${Math.round(av.r + (bv.r - av.r) * t)}, ${Math.round(av.g + (bv.g - av.g) * t)}, ${Math.round(av.b + (bv.b - av.b) * t)})`;
-}
-
-function hexToRgb(value) {
-  const hex = value.replace("#", "");
-  return {
-    r: parseInt(hex.slice(0, 2), 16),
-    g: parseInt(hex.slice(2, 4), 16),
-    b: parseInt(hex.slice(4, 6), 16),
-  };
-}
-
-function easeOutCubic(t) {
-  return 1 - Math.pow(1 - t, 3);
-}
-
-function updatePointer(event) {
-  pointer.x = event.clientX;
-  pointer.y = event.clientY;
-  const world = screenToWorld(pointer.x, pointer.y);
-  pointer.worldX = world.x;
-  pointer.worldY = world.y;
-}
-
+// ─── Coordinate transforms ────────────────────────────────────────────────────
 function screenToWorld(x, y) {
   return {
-    x: (x - window.innerWidth / 2) / camera.zoom + camera.x,
+    x: (x - window.innerWidth  / 2) / camera.zoom + camera.x,
     y: (y - window.innerHeight / 2) / camera.zoom + camera.y,
   };
 }
 
-function worldToScreenX(x, width = window.innerWidth) {
-  return (x - camera.x) * camera.zoom + width / 2;
+function worldToScreenX(x, W = window.innerWidth ) { return (x - camera.x) * camera.zoom + W / 2; }
+function worldToScreenY(y, H = window.innerHeight) { return (y - camera.y) * camera.zoom + H / 2; }
+
+function visibleWorldBounds(W, H, margin) {
+  const tl = screenToWorld(-margin, -margin);
+  const br = screenToWorld(W + margin, H + margin);
+  return { minX: tl.x, minY: tl.y, maxX: br.x, maxY: br.y };
 }
 
-function worldToScreenY(y, height = window.innerHeight) {
-  return (y - camera.y) * camera.zoom + height / 2;
+function pointInBounds(n, b)   { return n.x >= b.minX && n.x <= b.maxX && n.y >= b.minY && n.y <= b.maxY; }
+function segmentInBounds(a, b, r) {
+  return Math.max(a.x, b.x) >= r.minX && Math.min(a.x, b.x) <= r.maxX &&
+         Math.max(a.y, b.y) >= r.minY && Math.min(a.y, b.y) <= r.maxY;
 }
 
+// ─── Hit testing ──────────────────────────────────────────────────────────────
 function nearestNode(x, y) {
-  let best = null;
-  let bestDistance = Infinity;
+  let best = null, bestDist = Infinity;
   for (const node of getRenderCache().nodes) {
-    const distance = Math.hypot(node.x - x, node.y - y);
-    if (distance < node.radius + 16 && distance < bestDistance) {
-      best = node;
-      bestDistance = distance;
-    }
+    const d = Math.hypot(node.x - x, node.y - y);
+    if (d < node.radius + 16 && d < bestDist) { best = node; bestDist = d; }
   }
   return best;
 }
 
 function nearestEdge(x, y) {
-  let best = null;
-  let bestDistance = Infinity;
+  let best = null, bestDist = Infinity;
   for (const item of getRenderCache().edges) {
-    const distance = distanceToSegment(x, y, item.source.x, item.source.y, item.target.x, item.target.y);
-    if (distance < 16 / camera.zoom && distance < bestDistance) {
-      best = item.edge;
-      bestDistance = distance;
-    }
+    const d = distToSegment(x, y, item.source.x, item.source.y, item.target.x, item.target.y);
+    if (d < 16 / camera.zoom && d < bestDist) { best = item.edge; bestDist = d; }
   }
   return best;
 }
 
-function distanceToSegment(px, py, ax, ay, bx, by) {
-  const dx = bx - ax;
-  const dy = by - ay;
-  const length2 = dx * dx + dy * dy || 1;
-  const t = clamp(((px - ax) * dx + (py - ay) * dy) / length2, 0, 1);
-  const x = ax + dx * t;
-  const y = ay + dy * t;
-  return Math.hypot(px - x, py - y);
+function distToSegment(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay;
+  const len2 = dx*dx + dy*dy || 1;
+  const t  = clamp(((px-ax)*dx + (py-ay)*dy) / len2, 0, 1);
+  return Math.hypot(px - (ax + dx*t), py - (ay + dy*t));
 }
 
+// ─── Selection ────────────────────────────────────────────────────────────────
 function selectNode(node, animate = true) {
   if (!node) return;
-  viewMode = "context";
-  methodTree = null;
-  selected = node;
+  viewMode     = "context";
+  methodTree   = null;
+  selected     = node;
   selectedEdge = null;
-  cascade = computeCascade([node.id]);
-  camera.tx = node.x;
-  camera.ty = node.y;
+  cascade      = computeCascade([node.id]);
+  camera.tx    = node.x;
+  camera.ty    = node.y;
   camera.targetZoom = animate ? 1.72 : 0.9;
+  offscreenDirty = true;
   updateInspector(node);
   scheduleFrame();
 }
 
 function selectActiveNode(node, animate = true) {
   if (viewMode === "method") {
-    selected = node;
+    selected     = node;
     selectedEdge = null;
-    cascade = computeCascade([node.id]);
-    camera.tx = node.x;
-    camera.ty = node.y;
+    cascade      = computeCascade([node.id]);
+    camera.tx    = node.x;
+    camera.ty    = node.y;
     camera.targetZoom = animate ? 1.35 : 1.05;
+    offscreenDirty = true;
     scheduleFrame();
     return;
   }
@@ -1023,118 +1108,194 @@ function selectActiveNode(node, animate = true) {
 
 function selectEdge(edge) {
   if (!edge) return;
-  selectedEdge = edge;
-  selected = null;
-  cascade = computeCascade([edge.source, edge.target], edge.id);
+  selectedEdge   = edge;
+  selected       = null;
+  cascade        = computeCascade([edge.source, edge.target], edge.id);
+  offscreenDirty = true;
   updateEdgeInspector(edge);
   scheduleFrame();
 }
 
 function deselectAll() {
-  selected = null;
-  selectedEdge = null;
-  cascade = emptyCascade();
+  selected       = null;
+  selectedEdge   = null;
+  cascade        = emptyCascade();
+  offscreenDirty = true;
   overlineEl.textContent = "No Selection";
-  titleEl.textContent = "None";
-  kindEl.textContent = "No selection";
-  detailEl.innerHTML = "";
-  neighborEl.innerHTML = "";
+  titleEl.textContent    = "None";
+  kindEl.textContent     = "No selection";
+  detailEl.innerHTML     = "";
+  neighborEl.innerHTML   = "";
   scheduleFrame();
 }
 
+// ─── Cascade ─────────────────────────────────────────────────────────────────
+function emptyCascade() {
+  return { nodes: new Set(), edges: new Set(), upstream: new Set(), downstream: new Set() };
+}
+
+function computeCascade(seedIds, seedEdgeId = "") {
+  const active   = activeGraph();
+  const outgoing = new Map();
+  const incoming = new Map();
+  for (const e of active.edges) {
+    if (!outgoing.has(e.source)) outgoing.set(e.source, []);
+    if (!incoming.has(e.target)) incoming.set(e.target, []);
+    outgoing.get(e.source).push(e);
+    incoming.get(e.target).push(e);
+  }
+  const down  = walkCascade(seedIds, outgoing, "target");
+  const up    = walkCascade(seedIds, incoming, "source");
+  const nodes = new Set([...seedIds, ...down.nodes, ...up.nodes]);
+  const edges = new Set([...down.edges, ...up.edges]);
+  if (seedEdgeId) edges.add(seedEdgeId);
+  return { nodes, edges, upstream: up.nodes, downstream: down.nodes };
+}
+
+function walkCascade(seedIds, adj, nextKey) {
+  const nodes = new Set(), edges = new Set();
+  const queue = [...seedIds], seen = new Set(seedIds);
+  while (queue.length && seen.size < 512) {
+    const id = queue.shift();
+    for (const e of adj.get(id) || []) {
+      edges.add(e.id);
+      const next = e[nextKey];
+      if (seen.has(next)) continue;
+      seen.add(next); nodes.add(next); queue.push(next);
+    }
+  }
+  return { nodes, edges };
+}
+
+// ─── Render cache ─────────────────────────────────────────────────────────────
+function activeGraph() {
+  return viewMode === "method" && methodTree ? methodTree : graph;
+}
+
+function invalidateRenderCache() {
+  renderCache.graph = null;
+  offscreenDirty = true;
+}
+
+function getRenderCache() {
+  const active = activeGraph();
+  if (renderCache.graph === active) return renderCache;
+  const nodes = active.nodes.filter((n) => n.visible);
+  const byId  = active === graph ? nodeById : new Map(active.nodes.map((n) => [n.id, n]));
+  const edges = active.edges
+    .map((e) => ({ edge: e, source: byId.get(e.source), target: byId.get(e.target) }))
+    .filter((x) => x.source && x.target && x.source.visible && x.target.visible);
+  renderCache = { graph: active, nodes, edges };
+  return renderCache;
+}
+
+// ─── Inspector ────────────────────────────────────────────────────────────────
 function updateInspector(node) {
   inspectorEl.classList.toggle("todo-selected", node.kind === "todo");
-  inspectorEl.classList.toggle("doc-selected", node.kind === "documentation");
-  overlineEl.textContent = node.kind === "todo" ? "TODO" : node.kind === "documentation" ? "Documentation" : "Selected Object";
+  inspectorEl.classList.toggle("doc-selected",  node.kind === "documentation");
+  overlineEl.textContent = node.kind === "todo" ? "TODO"
+    : node.kind === "documentation" ? "Documentation"
+    : "Selected Object";
   titleEl.textContent = node.label;
-  kindEl.textContent = `${node.record_type || (node.kind === "todo" ? "TODO" : node.kind)} · ${node.file}`;
-  const rows = [
-    ["ID", node.id],
-    ["Heading", node.heading || node.label],
-    ["Summary", node.summary || "No summary recorded."],
-    ["Body", renderOrgText(node.content || node.summary || ""), true],
-    ["Record", node.record_type || node.kind],
-    ["Source", node.source || "not specified"],
+  kindEl.textContent  = `${node.record_type || (node.kind === "todo" ? "TODO" : node.kind)} · ${node.file}`;
+  detailEl.innerHTML  = [
+    ["ID",         node.id],
+    ["Heading",    node.heading || node.label],
+    ["Summary",    node.summary || "No summary recorded."],
+    ["Body",       renderOrgText(node.content || node.summary || ""), true],
+    ["Record",     node.record_type || node.kind],
+    ["Source",     node.source     || "not specified"],
     ["Confidence", node.confidence || "not specified"],
-    ["Status", node.status || "active"],
-    ["Outgoing", graph.edges.filter((edge) => edge.source === node.id).length],
-    ["Incoming", graph.edges.filter((edge) => edge.target === node.id).length],
-    ["Cascade", `${cascade.nodes.size} objects · ${cascade.edges.size} morphisms`],
-    ["Open", openFileButton(node), true],
-  ];
-  detailEl.innerHTML = rows.filter(([_key, value]) => value !== "").map(renderDetailRow).join("");
+    ["Status",     node.status     || "active"],
+    ["Outgoing",   graph.edges.filter((e) => e.source === node.id).length],
+    ["Incoming",   graph.edges.filter((e) => e.target === node.id).length],
+    ["Cascade",    `${cascade.nodes.size} objects · ${cascade.edges.size} morphisms`],
+    ["Open",       openFileButton(node), true],
+  ].filter(([, v]) => v !== "").map(renderDetailRow).join("");
   bindOpenButtons(node);
   renderNeighbors(node);
 }
 
 function updateEdgeInspector(edge) {
   const active = activeGraph();
-  const source = findActiveNode(active, edge.source);
-  const target = findActiveNode(active, edge.target);
+  const src    = findActiveNode(active, edge.source);
+  const tgt    = findActiveNode(active, edge.target);
   inspectorEl.classList.remove("todo-selected");
   overlineEl.textContent = edge.method ? "Function Morphism" : "Selected Morphism";
-  titleEl.textContent = edge.method ? edge.method.name : edge.label;
-  kindEl.textContent = `${edge.kind} · ${source?.label || edge.source} -> ${target?.label || edge.target}`;
+  titleEl.textContent    = edge.method ? edge.method.name : edge.label;
+  kindEl.textContent     = `${edge.kind} · ${src?.label || edge.source} -> ${tgt?.label || edge.target}`;
   detailEl.innerHTML = [
-    ["Arrow", edge.label],
-    ["Source", source ? `${source.label} · ${source.file}` : edge.source],
-    ["Target", target ? `${target.label} · ${target.file}` : edge.target],
+    ["Arrow",     edge.label],
+    ["Source",    src ? `${src.label} · ${src.file}` : edge.source],
+    ["Target",    tgt ? `${tgt.label} · ${tgt.file}` : edge.target],
     ["Signature", edge.method?.signature || "typed relation"],
-    ["Cascade", `${cascade.nodes.size} objects · ${cascade.edges.size} morphisms`],
-    ["Open", openFileButton(edge.method || source || target), true],
+    ["Cascade",   `${cascade.nodes.size} objects · ${cascade.edges.size} morphisms`],
+    ["Open",      openFileButton(edge.method || src || tgt), true],
   ].map(renderDetailRow).join("");
-  bindOpenButtons(edge.method || source || target);
-  neighborEl.innerHTML = [source, target].filter(Boolean).map((node) =>
-    `<div class="neighbor" data-id="${escapeAttr(node.id)}"><strong>${escapeHtml(node.label)}</strong><span>${escapeHtml(node.kind)} · ${escapeHtml(node.file)}</span></div>`
+  bindOpenButtons(edge.method || src || tgt);
+  neighborEl.innerHTML = [src, tgt].filter(Boolean).map((n) =>
+    `<div class="neighbor" data-id="${escAttr(n.id)}"><strong>${escHtml(n.label)}</strong><span>${escHtml(n.kind)} · ${escHtml(n.file)}</span></div>`
   ).join("");
-  neighborEl.querySelectorAll(".neighbor").forEach((item) => {
-    item.addEventListener("click", () => {
-      const node = findActiveNode(activeGraph(), item.dataset.id);
-      if (node) selectActiveNode(node, true);
+  neighborEl.querySelectorAll(".neighbor").forEach((el) => {
+    el.addEventListener("click", () => {
+      const n = findActiveNode(activeGraph(), el.dataset.id);
+      if (n) selectActiveNode(n, true);
     });
   });
 }
 
 function renderNeighbors(node) {
-  const cascadeNodes = [...cascade.nodes]
+  const cascNodes = [...cascade.nodes]
     .filter((id) => id !== node.id)
     .map((id) => findActiveNode(activeGraph(), id))
     .filter(Boolean)
     .slice(0, 8);
+
   const immediate = graph.edges
-    .filter((edge) => edge.source === node.id || edge.target === node.id)
-    .slice(0, Math.max(0, 10 - cascadeNodes.length))
-    .map((edge) => {
-      const otherId = edge.source === node.id ? edge.target : edge.source;
-      const other = nodeById.get(otherId);
+    .filter((e) => e.source === node.id || e.target === node.id)
+    .slice(0, Math.max(0, 10 - cascNodes.length))
+    .map((e) => {
+      const otherId = e.source === node.id ? e.target : e.source;
+      const other   = nodeById.get(otherId);
       if (!other) return "";
-      return `<div class="neighbor" data-id="${escapeAttr(other.id)}"><strong>${escapeHtml(truncate(other.label, 44))}</strong><span>${escapeHtml(edge.label)} · ${escapeHtml(other.kind === "todo" ? "TODO" : other.kind)}</span></div>`;
+      return `<div class="neighbor" data-id="${escAttr(other.id)}"><strong>${escHtml(trunc(other.label, 44))}</strong><span>${escHtml(e.label)} · ${escHtml(other.kind === "todo" ? "TODO" : other.kind)}</span></div>`;
     });
+
   neighborEl.innerHTML = [
-    ...cascadeNodes.map((other) => `<div class="neighbor" data-id="${escapeAttr(other.id)}"><strong>${escapeHtml(truncate(other.label, 44))}</strong><span>cascade · ${escapeHtml(other.kind === "todo" ? statusLabel(other) : other.kind)}</span></div>`),
+    ...cascNodes.map((other) =>
+      `<div class="neighbor" data-id="${escAttr(other.id)}"><strong>${escHtml(trunc(other.label, 44))}</strong><span>cascade · ${escHtml(other.kind === "todo" ? statusLabel(other) : other.kind)}</span></div>`),
     ...immediate,
   ].join("");
-  neighborEl.querySelectorAll(".neighbor").forEach((item) => {
-    item.addEventListener("click", () => selectNode(nodeById.get(item.dataset.id), true));
+
+  neighborEl.querySelectorAll(".neighbor").forEach((el) => {
+    el.addEventListener("click", () => selectNode(nodeById.get(el.dataset.id), true));
   });
 }
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
+function findActiveNode(active, id) {
+  return active === graph ? nodeById.get(id) : active.nodes.find((n) => n.id === id);
 }
 
-function truncate(value, max) {
-  return String(value).length > max ? `${String(value).slice(0, max - 3)}...` : String(value);
-}
-
+// ─── Detail helpers ───────────────────────────────────────────────────────────
 function renderDetailRow([key, value, html = false]) {
-  return `<dt>${escapeHtml(key)}</dt><dd>${html ? value : escapeHtml(String(value))}</dd>`;
+  return `<dt>${escHtml(key)}</dt><dd>${html ? value : escHtml(String(value))}</dd>`;
 }
 
 function renderOrgText(value) {
   const text = String(value || "").trim();
   if (!text) return `<span class="muted">No body recorded.</span>`;
-  return `<div class="doc-body">${escapeHtml(text)
+  // strip basic Org markup before rendering
+  const clean = text
+    .replace(/=([^=\n]+)=/g, "<code>$1</code>")          // =verbatim=
+    .replace(/~([^~\n]+)~/g, "<code>$1</code>")           // ~code~
+    .replace(/\*([^*\n]+)\*/g, "<strong>$1</strong>")     // *bold*
+    .replace(/\/([^/\n]+)\//g, "<em>$1</em>")             // /italic/
+    .replace(/\[\[([^\]]+)\]\[([^\]]+)\]\]/g, "<a>$2</a>")// [[link][desc]]
+    .replace(/\[\[([^\]]+)\]\]/g, "<a>$1</a>");            // [[link]]
+  return `<div class="doc-body">${escHtml(clean)
+    // restore tags we just inserted (they were escaped above — undo escape for allowed tags only)
+    .replace(/&lt;(code|strong|em|a)&gt;/g, "<$1>")
+    .replace(/&lt;\/(code|strong|em|a)&gt;/g, "</$1>")
     .replace(/\n{2,}/g, "</p><p>")
     .replace(/\n/g, "<br>")}</div>`;
 }
@@ -1142,51 +1303,47 @@ function renderOrgText(value) {
 function openFileButton(target) {
   if (!target || !target.file || target.file === "external") return "No repository file.";
   const line = Math.max(1, Number(target.line) || 1);
-  return `<button class="open-file-button" data-open-file="${escapeAttr(target.file)}" data-open-line="${line}">Open in editor</button>`;
+  return `<button class="open-file-button" data-open-file="${escAttr(target.file)}" data-open-line="${line}">Open in editor</button>`;
 }
 
 function bindOpenButtons() {
-  detailEl.querySelectorAll("button[data-open-file]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      button.disabled = true;
-      const original = button.textContent;
-      button.textContent = "Opening";
+  detailEl.querySelectorAll("button[data-open-file]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      const orig = btn.textContent;
+      btn.textContent = "Opening…";
       try {
-        const response = await fetch("/api/open", {
+        const res = await fetch("/api/open", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ file: button.dataset.openFile, line: Number(button.dataset.openLine) || 1 }),
+          body: JSON.stringify({ file: btn.dataset.openFile, line: Number(btn.dataset.openLine) || 1 }),
         });
-        if (!response.ok) throw new Error(await response.text());
-        button.textContent = "Opened";
-      } catch (_error) {
-        button.textContent = "Failed";
+        if (!res.ok) throw new Error(await res.text());
+        btn.textContent = "Opened ✓";
+      } catch {
+        btn.textContent = "Failed ✗";
       } finally {
-        setTimeout(() => {
-          button.disabled = false;
-          button.textContent = original;
-        }, 900);
+        setTimeout(() => { btn.disabled = false; btn.textContent = orig; }, 900);
       }
     });
   });
 }
 
-function statusLabel(node) {
-  if (node.status === "done") return "DONE";
-  if (node.status === "blocked") return "BLOCKED";
-  return "TODO";
+// ─── Pointer ──────────────────────────────────────────────────────────────────
+function updatePointer(e) {
+  pointer.x = e.clientX;
+  pointer.y = e.clientY;
+  const w   = screenToWorld(pointer.x, pointer.y);
+  pointer.worldX = w.x;
+  pointer.worldY = w.y;
 }
 
-function escapeAttr(value) {
-  return escapeHtml(value).replaceAll('"', "&quot;");
-}
+// ─── Utilities ────────────────────────────────────────────────────────────────
+function clamp(v, lo, hi)   { return Math.max(lo, Math.min(hi, v)); }
+function trunc(v, max)      { const s = String(v); return s.length > max ? s.slice(0, max-3)+"..." : s; }
+function statusLabel(node)  { return node.status === "done" ? "DONE" : node.status === "blocked" ? "BLOCKED" : "TODO"; }
 
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#039;",
-  })[char]);
+function escAttr(v) { return escHtml(v).replaceAll('"', "&quot;"); }
+function escHtml(v) {
+  return String(v).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"})[c]);
 }

@@ -16,7 +16,7 @@
 
 ```
 .
-├── *.c / *.h          — Compiler source (37 translation units)
+├── *.c / *.h          — Compiler source (22 C files + 21 headers)
 │   reader.c/h         │   Lexer, parser, AST, pattern-match desugar
 │   wisp.c/h           │   Wisp syntax → S-expression expander
 │   dep.c/h            │   Dependent type checker (ITT kernel, NbE, bidir)
@@ -51,7 +51,7 @@
 │   ├── json.mon       │
 │   └── TODO.mon       │
 │
-├── tests/             — Test suite (1465 tests)
+├── tests/             — Test suite (~1400+ test cases)
 │   ├── run.py         │   Formatted test runner
 │   ├── codegen/       │   200+ compile/run .mon + .stdout pairs (includes wisp tests)
 │   ├── language/      │   600+ language feature tests
@@ -81,7 +81,10 @@
 │   ├── visualizer.org │   Context visualizer docs
 │   ├── opinions.org   │   LLM critique
 │   ├── philosophy.org │   Language philosophy
-│   ├── references.org │   Research paper bibliography & cross-links
+│   source-map.org │   Every source file's purpose and connections
+│   ├── style.org       │   Code style taxonomy
+│   ├── navigation.org  │   ID prefix → file routing for quick LLM nav
+│   ├── references.org  │   Research paper bibliography & cross-links
 │   ├── wisp.org       │   Wisp expander context (architecture, arity, sugars)
 │   └── commit-format.org
 │
@@ -112,9 +115,9 @@ See `context/philosophy.org` for the full witnessed philosophy, and `context/opi
 
 -----
 
-## 3. Compiler Pipeline
+## 3. Compiler Pipeline (11 phases)
 
-The compiler runs 12 sequential phases, orchestrated by `main.c:compile_one()`:
+The compiler runs 11 sequential phases (plus a Phase 0 FFI pre-pass), orchestrated by `main.c:compile_one()`. Detailed OBS records for each phase are in `context/language.org::* Compilation Pipeline`.
 
 ```
 source.mon
@@ -228,7 +231,7 @@ The type system has two interlocking layers, implemented across 4 source files:
 
 | File | Responsibility |
 |------|---------------|
-| `types.c/h` | Type representation, kind system (26 type kinds), type operations (clone, free, unify, subst, to_llvm) |
+| `types.c/h` | Type representation, kind system (31 type kinds), type operations (clone, free, unify, subst, to_llvm) |
 | `infer.c/h` | Hindley-Milner inference: constraint gen → unification → generalization → instantiation → zonking |
 | `dep.c/h` | Dependent type checker: ITT kernel with NbE, bidir checking, metavariables, elaboration |
 | `typeclass.c/h` | Type class resolution and instance derivation |
@@ -331,6 +334,8 @@ The codegen module translates desugared AST into LLVM IR. It is the largest file
 | Other | 10 | `quote`, `define`, `set!`, `show`, `??`, `address-of`, array-index, etc. |
 
 ### 4.4 Runtime (`runtime.c/h`, `arena.c/h`)
+
+The Runtime Value System — `RuntimeValue` tagged unions, all 14 type tags, value construction/unboxing API, thunk/lazy evaluation, cons-cell lists, open-addressing hash sets/maps, and the closure ABI — is documented in detail in `context/language.org::* Runtime Value System`.
 
 | File | Purpose |
 |------|---------|
@@ -839,7 +844,7 @@ Example from `context/wisp.org`:
 | Language | `tests/language/*.mon`       | 600+ | Language feature tests            |
 | Runner   | `tests/run.py`               | —    | Formatted execution engine        |
 
-**Current status:** 1465 tests, 1417 pass, 48 fail (pre-existing architectural issues — all known, all documented in `context/tests.org`).
+**Current status:** ~1400+ tests across TSV-based parser coverage, codegen compile/run pairs, and language feature tests. Pass/fail counts fluctuate as coverage expands; see context/tests.org for the current state.
 
 **Wisp tests** are consolidated under `tests/codegen/` (formerly in `tests/wisp/`). Wisp sugar test fixtures for `?-sugar`, `!-sugar`, pipe, and inline/multiline `if`/`then`/`else` exercise both compilation and runtime output.
 
