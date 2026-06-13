@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.int-imul-immediate
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Immediate imul uses escaped LLVM inline-asm immediates.
+;; TEST-ATOM: imul x 7 returns x * 7.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-imul-imm :: Int -> Int
+  x -> (asm imul x 7)
+
+show (asm-imul-imm 6)

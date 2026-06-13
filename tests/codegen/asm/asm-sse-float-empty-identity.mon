@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.sse-float-empty-identity
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Empty Float asm still exercises =x,0 constraints.
+;; TEST-ATOM: An empty asm body returns the tied Float input.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-float-empty :: Float -> Float
+  x -> (asm )
+
+show (asm-float-empty 2.5)

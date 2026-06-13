@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.sse-float-mul
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: SSE scalar multiplication combines language Float arguments.
+;; TEST-ATOM: mulsd b a returns a * b through xmm tied output constraints.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-float-mul :: Float -> Float -> Float
+  a b -> (asm mulsd b a)
+
+show (asm-float-mul 2.5 4.0)

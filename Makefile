@@ -1,4 +1,5 @@
 CC      = gcc
+PYTHON  = python3
 CFLAGS  = -Wall -Wextra -std=c99 $(shell llvm-config --cflags)
 LDFLAGS = -lm -lreadline -lgmp $(shell llvm-config --ldflags --libs core) -lclang
 TARGET  = monad
@@ -79,13 +80,33 @@ ifneq ($(filter core,$(MAKECMDGOALS)),)
 test: all
 else
 test: all
-	python3 tests/run.py
+	$(PYTHON) tests/run.py
 endif
 
 core: test
-	python3 tests/run_core.py
+	$(PYTHON) tests/run_core.py
 
 test-core: all
-	python3 tests/run_core.py
+	$(PYTHON) tests/run_core.py
 
-.PHONY: all clean release install uninstall asan test core test-core
+generate-asm-tests:
+	$(PYTHON) create_asm_tests.py
+
+generate-asm-tests-extra:
+	$(PYTHON) create_asm_tests_extra.py
+
+test-runner:
+	$(PYTHON) tests/test_run.py
+
+test-context-visualizer:
+	$(PYTHON) tests/test_context_visualizer.py
+
+test-fuzzing: all
+	$(PYTHON) tests/fuzzing/fuzz_codegen.py
+
+fuzzing: test-fuzzing
+
+context-visualizer:
+	$(PYTHON) context-visualizer.py
+
+.PHONY: all clean release install uninstall asan test core test-core generate-asm-tests generate-asm-tests-extra test-runner test-context-visualizer test-fuzzing fuzzing context-visualizer

@@ -4,7 +4,7 @@
 #+CREATED: 2026-06-12
 #+LAST_MODIFIED: 2026-06-12
 #+LANGUAGE: en
-#+STARTUP: showeverything
+#+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
 #+CATEGORY: monadc-context
 #+FILETAGS: :monadc:compiler:context:source-map:architecture:
@@ -284,10 +284,20 @@
 :END:
 
 [OBS id:obs.source-map.asm.purpose src:asm.c,asm.h conf:high]
-  Inline =asm= blocks → LLVM IR. Register allocator, naked function support.
+  Inline =asm= blocks → LLVM IR. Register allocator, operand preprocessing,
+  naked function support, LLVM inline-asm string/constraint construction.
 
 [INF id:inf.source-map.asm-connects-to from:obs.source-map.asm.purpose conf:high]
-  connects-to → codegen.c/h (asm in generated IR) · runtime.c/h (address-of)
+  connects-to → reader.c/h (=AST_ASM= construction) · wisp.c/h (Wisp function
+  bodies expand to =(asm ...)=) · codegen.c/h (asm in generated IR) · types.c/h
+  (return and parameter type widths drive suffix/constraints) · runtime.c/h
+  (syscall/string pointer effects in tests)
+
+[OBS id:obs.source-map.asm-tests src:tests/codegen/asm,create_asm_tests.py conf:high]
+  =create_asm_tests.py= generates the 50-file asm subset. The subset is no
+  longer arbitrary CPU-instruction fluff; each fixture is a typed function-body
+  asm program that compiles, runs, and checks stdout while targeting a specific
+  =asm.c= branch or contract.
 
 * FFI & External Interop
 

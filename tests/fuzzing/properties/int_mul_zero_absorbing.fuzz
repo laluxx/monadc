@@ -1,0 +1,7 @@
+name: int_mul_zero_absorbing
+section: arithmetic
+args: a:Int
+type: Bool
+expect: True
+description: Multiplying by zero on either side must produce the same zero value.
+law: (= (fuzz-mul {a} 0) (fuzz-mul 0 {a}))

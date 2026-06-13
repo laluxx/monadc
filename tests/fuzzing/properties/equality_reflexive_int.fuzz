@@ -1,0 +1,7 @@
+name: equality_reflexive_int
+section: comparison
+args: a:Int
+type: Bool
+expect: True
+description: Equality must be reflexive for generated Int expressions.
+law: (fuzz-eq-int? {a} {a})

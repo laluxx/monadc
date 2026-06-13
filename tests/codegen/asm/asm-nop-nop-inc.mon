@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.nop-nop-inc
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Increment works after a no-op stream.
+;; TEST-ATOM: nop nop inc x returns x + 1.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-nop-inc :: Int -> Int
+  x -> (asm nop nop inc x)
+
+show (asm-nop-inc 41)

@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.int-imul-two-params
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Two-operand imul uses destination/source rewriting.
+;; TEST-ATOM: imul a b returns a * b.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-imul :: Int -> Int -> Int
+  a b -> (asm imul a b)
+
+show (asm-imul 6 7)

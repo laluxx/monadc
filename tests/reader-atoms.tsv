@@ -557,7 +557,7 @@ char_constructor	monadc.context.language.syntax-corpus	Char constructor function
 char_integer_conversion	monadc.context.language.syntax-corpus	Char to int conversion parses.	(int->char 65)
 # ── Additional Data Declarations ────────────────────────────────────────────
 data_multi_param	monadc.context.language.syntax-corpus	Data with two type params parses.	(data Either a b | Left a | Right b)
-data_record_constructor	monadc.context.language.syntax-corpus	Data with record-like constructor parses.	(data Person | Person {name String, age Int})
+layout_record_constructor	monadc.context.language.layout-records	Record-like named fields are layout declarations, not ADT brace fields.	(layout Person [name :: String] [age :: Int])
 data_mixed_constructors	monadc.context.language.syntax-corpus	Data with fielded and fieldless constructors parses.	(data Shape | Circle {radius Float} | Rectangle Float Float | Empty)
 # ── Instance Declarations ───────────────────────────────────────────────────
 # NOTE: Instance declarations with method bodies need specific syntax that varies by type class.

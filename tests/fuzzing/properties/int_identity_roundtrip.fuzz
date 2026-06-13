@@ -1,0 +1,7 @@
+name: int_identity_roundtrip
+section: function
+args: a:Int
+type: Bool
+expect: True
+description: A typed Int identity function must preserve generated Int expressions.
+law: (= (fuzz-id-int (fuzz-id-int {a})) {a})

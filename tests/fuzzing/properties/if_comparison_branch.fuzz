@@ -1,0 +1,7 @@
+name: if_comparison_branch
+section: control
+args: a:Int b:Int fallback:Int
+type: Bool
+expect: True
+description: A typed helper using if must match the equivalent direct if expression.
+law: (= (fuzz-choose-less {a} {b} {fallback}) (if (fuzz-lt? {a} {b}) {a} {fallback}))

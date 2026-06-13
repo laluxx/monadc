@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.int-xor-two-params
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Bitwise xor combines two integer operands.
+;; TEST-ATOM: xor a b returns a ^ b.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-xor :: Int -> Int -> Int
+  a b -> (asm xor a b)
+
+show (asm-xor 40 2)

@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.mov-immediate-return
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Immediate mov can seed a return value independent of input.
+;; TEST-ATOM: mov 42 %rax ret returns 42.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-const :: Int -> Int
+  x -> (asm mov 42 %rax ret)
+
+show (asm-const 0)

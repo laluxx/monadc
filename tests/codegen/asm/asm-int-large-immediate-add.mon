@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.int-large-immediate-add
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Size suffix inference handles 64-bit immediates.
+;; TEST-ATOM: add x 1000000000 returns x plus a large immediate.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-large-imm :: Int -> Int
+  x -> (asm add x 1000000000)
+
+show (asm-large-imm -999999958)

@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.int-shift-right-immediate
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Right shift with an immediate keeps AT&T source-first order.
+;; TEST-ATOM: shr 1 x returns x shifted right by one.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-shr1 :: Int -> Int
+  x -> (asm shr 1 x)
+
+show (asm-shr1 84)

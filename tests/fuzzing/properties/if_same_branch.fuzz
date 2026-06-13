@@ -1,0 +1,7 @@
+name: if_same_branch
+section: control
+args: cond:Bool value:Int
+type: Bool
+expect: True
+description: If both branches are the same typed Int expression, the condition cannot affect the result.
+law: (= (if {cond} {value} {value}) {value})

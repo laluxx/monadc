@@ -1,0 +1,7 @@
+name: min_max_absorption
+section: order
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Min absorbs max for generated Int expressions.
+law: (= (fuzz-min {a} (fuzz-max {a} {b})) {a})

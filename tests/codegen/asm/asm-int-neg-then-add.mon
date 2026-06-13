@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.int-neg-then-add
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Unary neg followed by add works on the same output.
+;; TEST-ATOM: neg x then add x y returns -x + y.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-neg-add :: Int -> Int -> Int
+  x y -> (asm neg x add x y)
+
+show (asm-neg-add 8 50)

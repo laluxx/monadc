@@ -4,7 +4,7 @@
 #+CREATED: 2026-06-11
 #+LAST_MODIFIED: 2026-06-11
 #+LANGUAGE: en
-#+STARTUP: showeverything
+#+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
 #+CATEGORY: monadc-context
 #+FILETAGS: :monadc:compiler:context:index:format:llm:
@@ -196,9 +196,9 @@ Every context file should include these file-level Org keywords when applicable:
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
 #+END_EXAMPLE
 
-[DEC id:dec.context.startup-showeverything date:2026-06-11 by:human]
-  Context files must use =#+STARTUP: showeverything= so headings are expanded
-  when opened in Org.
+[DEC id:dec.context.startup-hideblocks date:2026-06-12 by:codex]
+  Context files must use =#+STARTUP: hideblocks= so drawers collapse by default
+  for cleaner navigation and reduced visual noise.
 
 ** Visual Design Rules
 :PROPERTIES:
@@ -225,7 +225,7 @@ Every context file should include these file-level Org keywords when applicable:
 #+CAPTION: Visual Org Feature Budget
 | Feature                   | Required Use           | Purpose            |
 |---------------------------+------------------------+--------------------|
-| =#+STARTUP: showeverything= | every file             | open expanded      |
+| =#+STARTUP: hideblocks= | every file             | drawers collapsed   |
 | =#+FILETAGS=                | every file             | fast filtering     |
 | property drawers          | every durable heading  | metadata           |
 | Org tables                | maps and summaries     | visual scanning    |

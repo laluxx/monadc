@@ -1,0 +1,7 @@
+name: int_add_identity_zero
+section: arithmetic
+args: a:Int
+type: Bool
+expect: True
+description: Adding zero on either side must preserve an Int expression.
+law: (= (fuzz-add {a} 0) (fuzz-add 0 {a}))

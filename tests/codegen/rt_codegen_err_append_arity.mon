@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-append-arity
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen enforces ++ arity.
+;; TEST-ATOM: (++ [1]) must fail because ++ requires two operands.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(show (++ [1]))

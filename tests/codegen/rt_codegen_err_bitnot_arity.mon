@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-bitnot-arity
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen enforces bitwise-not arity.
+;; TEST-ATOM: (~ 1 2) must fail because ~ is unary.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(show (~ 1 2))

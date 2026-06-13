@@ -1,0 +1,7 @@
+name: int_add_associative
+section: arithmetic
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Addition grouping must not affect generated Int results.
+law: (= (fuzz-add (fuzz-add {a} {b}) {c}) (fuzz-add {a} (fuzz-add {b} {c})))

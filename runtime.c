@@ -34,7 +34,8 @@ void *__layout_ptr_get(const char *name) {
             return g_layout_ptrs[i];
     return NULL;
 }
-//  Global evaluation arena
+
+///  Global evaluation arena
 //
 //  All hot-path allocations (thunks, list cells, env structs, int/float/char
 //  RuntimeValues) come from here.  The REPL resets this after every expression
@@ -47,13 +48,15 @@ void *__layout_ptr_get(const char *name) {
 //  Reset by:
 //    repl_eval_line()     -> arena_reset(&g_eval_arena)  (all 4 call sites)
 //    repl_sigint_handler  -> arena_reset(&g_eval_arena)
+//
 Arena g_eval_arena;
 
-//  Step 2 — Integer interning cache
+///  Step 2 — Integer interning cache
 //
 //  For the extremely common case of small integers (0..INT_CACHE_MAX inclusive)
 //  we return a pointer into a static array that is initialised once.
 //  rt_value_int() for these values does zero allocations.
+//
 #define INT_CACHE_MIN 0
 #define INT_CACHE_MAX 65536
 #define INT_CACHE_SIZE (INT_CACHE_MAX - INT_CACHE_MIN + 1)
@@ -70,7 +73,7 @@ static void int_cache_init(void) {
     g_int_cache_ready = 1;
 }
 
-//  Step 3 — Fused ConsCell
+///  Step 3 — Fused ConsCell
 //
 //  Instead of:
 //    RuntimeList  (2 pointers)  ->  malloc
@@ -83,8 +86,9 @@ static void int_cache_init(void) {
 //  RuntimeList becomes a thin wrapper: just a ConsCell pointer.
 //
 //  NULL cell  =>  empty list.
-
+//
 // Forward declarations needed by ConsCell forcing helpers
+//
 static RuntimeValue *_force_head(ConsCell *c);
 static RuntimeValue *_force_tail(ConsCell *c);
 

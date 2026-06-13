@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-code-arity
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen enforces code reflection arity.
+;; TEST-ATOM: (code) must fail because code requires a symbol name.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(code)

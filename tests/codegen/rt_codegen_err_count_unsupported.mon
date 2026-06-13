@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-count-unsupported
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen rejects count on unsupported scalar types.
+;; TEST-ATOM: (count 1) must fail because Int is not a countable collection.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(show (count 1))

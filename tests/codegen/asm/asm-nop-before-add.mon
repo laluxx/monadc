@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.nop-before-add
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: A no-op instruction can precede a real mutation.
+;; TEST-ATOM: nop add a b returns a + b.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-nop-add :: Int -> Int -> Int
+  a b -> (asm nop add a b)
+
+show (asm-nop-add 20 22)

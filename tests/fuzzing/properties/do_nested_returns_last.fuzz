@@ -1,0 +1,7 @@
+name: do_nested_returns_last
+section: control
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Nested do forms must preserve the last expression across sequencing.
+law: (= (do {a} (do {b} {c})) {c})

@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-address-unbound
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen rejects address-of on unbound variables.
+;; TEST-ATOM: &missing must fail with unbound variable.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(show &missing)

@@ -1,0 +1,7 @@
+name: comparison_lt_self_false
+section: negative
+args: a:Int
+type: Bool
+expect: False
+description: Strict less-than of an Int expression against itself must be false.
+law: (fuzz-lt? {a} {a})

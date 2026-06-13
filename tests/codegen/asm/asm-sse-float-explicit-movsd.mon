@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.sse-float-explicit-movsd
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Float identity with explicit movsd covers SSE operand formatting.
+;; TEST-ATOM: movsd x %xmm0 ret returns the original float.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-float-mov :: Float -> Float
+  x -> (asm movsd x %xmm0 ret)
+
+show (asm-float-mov 3.25)

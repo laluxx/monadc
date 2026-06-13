@@ -1,0 +1,7 @@
+name: max_idempotent
+section: order
+args: a:Int
+type: Bool
+expect: True
+description: The typed max helper must be idempotent.
+law: (= (fuzz-max {a} {a}) {a})

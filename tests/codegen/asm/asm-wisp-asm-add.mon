@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.wisp-asm-add
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Integer addition remains valid in Wisp-style asm functions.
+;; TEST-ATOM: add a b returns a + b in a fixture replacing the old top-level for-loop asm snippet.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-for-loop :: Int -> Int -> Int
+  a b -> (asm add a b)
+
+show (asm-for-loop 19 23)

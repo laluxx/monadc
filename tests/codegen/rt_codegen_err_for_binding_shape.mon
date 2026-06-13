@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-for-binding-shape
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen rejects non-array/object for bindings.
+;; TEST-ATOM: (for {} (show 1)) must fail because for bindings must be a count or bracketed array form.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(for {} (show 1))

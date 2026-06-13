@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-unknown-function
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen reports an unknown function in call head position.
+;; TEST-ATOM: (missing 1) must fail with unknown function.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(missing 1)

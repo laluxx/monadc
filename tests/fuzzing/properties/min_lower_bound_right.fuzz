@@ -1,0 +1,7 @@
+name: min_lower_bound_right
+section: order
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The typed min helper must be less than or equal to its right argument.
+law: (fuzz-lte? (fuzz-min {a} {b}) {b})

@@ -1,0 +1,7 @@
+name: comparison_duality_lt
+section: comparison
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Less-than must agree with reversed greater-than.
+law: (= (fuzz-lt? {a} {b}) (fuzz-gt? {b} {a}))

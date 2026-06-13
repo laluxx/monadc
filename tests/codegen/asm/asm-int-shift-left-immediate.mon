@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.int-shift-left-immediate
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Left shift with an immediate keeps AT&T source-first order.
+;; TEST-ATOM: shl 1 x returns x shifted left by one.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-shl1 :: Int -> Int
+  x -> (asm shl 1 x)
+
+show (asm-shl1 21)

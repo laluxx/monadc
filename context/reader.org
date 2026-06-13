@@ -4,7 +4,7 @@
 #+CREATED: 2026-06-11
 #+LAST_MODIFIED: 2026-06-11
 #+LANGUAGE: en
-#+STARTUP: showeverything
+#+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
 #+CATEGORY: monadc-context
 #+FILETAGS: :monadc:compiler:context:reader:parser:ast:lexer:
@@ -215,6 +215,39 @@
   =tests/codegen/rt_path_literal_value.mon= records that a syntactically valid
   home-relative Unix path literal such as =~/xos/projects/c/monadc/context/= is
   a definable =Path= value.
+
+* Inline Assembly Reader Surface
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.inline-assembly
+:CUSTOM_ID: inline-assembly-reader-surface
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: reader.c,wisp.c,tests/codegen/asm
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.reader.inline-asm-ast src:reader.c:3889 conf:high]
+  Parenthesized =(asm ...)= is parsed as =AST_ASM= by collecting the remaining
+  tokens until the closing paren into one flat instruction list. The backend,
+  not the reader, decides which tokens are mnemonics and operands.
+
+[OBS id:obs.reader.inline-asm-wisp src:tests/codegen/asm conf:high]
+  Wisp function bodies such as =x -> (asm add x 5)= expand to the same
+  parenthesized =AST_ASM= form. The asm corpus therefore uses Wisp syntax for
+  user-facing examples while still testing the exact reader/codegen path.
+
+[DEC id:dec.reader.inline-asm-no-top-level-inline date:2026-06-13 by:human]
+  Top-level =(inline asm "...")= fixtures are not valid coverage for the current
+  language. Inline asm belongs in typed function bodies; top-level =asm= remains
+  an expected compile failure in =rt_asm_top_level.mon=.
 
 #+BEGIN_EXAMPLE
 Input:

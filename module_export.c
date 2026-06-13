@@ -119,6 +119,7 @@ bool manifest_write(ExportManifest *m, const char *path) {
 // Helper: get next whitespace-delimited token from *p, NUL-terminate it in
 // buf (max buf_size), advance *p past it and any trailing spaces.
 // Returns true if a token was found.
+//
 static bool next_token(char **p, char *buf, int buf_size) {
     // skip leading whitespace
     while (**p == ' ' || **p == '\t') (*p)++;

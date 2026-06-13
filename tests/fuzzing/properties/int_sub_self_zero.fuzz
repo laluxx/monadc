@@ -1,0 +1,7 @@
+name: int_sub_self_zero
+section: arithmetic
+args: a:Int
+type: Bool
+expect: True
+description: Subtracting an Int expression from itself must produce zero.
+law: (= (fuzz-sub {a} {a}) 0)

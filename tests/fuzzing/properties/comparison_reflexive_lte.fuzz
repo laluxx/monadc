@@ -1,0 +1,7 @@
+name: comparison_reflexive_lte
+section: comparison
+args: a:Int
+type: Bool
+expect: True
+description: Less-or-equal and greater-or-equal must be reflexive for generated Int expressions.
+law: (= (fuzz-lte? {a} {a}) (fuzz-gte? {a} {a}))

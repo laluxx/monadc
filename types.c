@@ -231,6 +231,15 @@ Type *type_from_name(const char *name) {
 
     size_t len = strlen(name);
 
+    if (len > 1 && name[0] == '*') {
+        const char *inner_name = name + 1;
+        Type *inner_type = type_from_name(inner_name);
+        if (!inner_type) {
+            inner_type = type_layout_ref(inner_name);
+        }
+        return type_ptr(inner_type);
+    }
+
     if (len == 1 && name[0] >= 'a' && name[0] <= 'z') {
         return type_var(2000 + (name[0] - 'a'));
     }

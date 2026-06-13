@@ -4,7 +4,7 @@
 #+CREATED: 2026-06-12
 #+LAST_MODIFIED: 2026-06-12
 #+LANGUAGE: en
-#+STARTUP: showeverything
+#+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
 #+CATEGORY: monadc-context
 #+FILETAGS: :monadc:compiler:context:style:syntax:

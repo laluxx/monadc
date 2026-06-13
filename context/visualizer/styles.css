@@ -161,6 +161,10 @@ select {
   color: var(--todo);
 }
 
+.candidate.documentation .candidate-kind {
+  color: #b8f7d4;
+}
+
 .candidate-kind {
   color: var(--cyan);
   font-size: 0.72rem;
@@ -176,6 +180,13 @@ select {
 .candidate-file {
   color: var(--muted);
   font-size: 0.78rem;
+}
+
+.candidate-snippet {
+  margin-top: 3px;
+  color: rgba(238, 245, 241, 0.74);
+  font-size: 0.76rem;
+  line-height: 1.35;
 }
 
 .icon-button {
@@ -535,6 +546,12 @@ select {
   color: var(--todo);
 }
 
+.info-sheet.doc-selected .sheet-main h1,
+.info-sheet.doc-selected #detail-overline,
+.info-sheet.doc-selected .kind-chip {
+  color: #b8f7d4;
+}
+
 .kind-chip {
   display: inline-flex;
   max-width: 100%;
@@ -564,6 +581,29 @@ dd {
   color: var(--muted);
   line-height: 1.42;
   word-break: break-word;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.doc-body {
+  max-height: 24vh;
+  overflow: auto;
+  border: 1px solid rgba(184, 247, 212, 0.18);
+  border-radius: 8px;
+  background: rgba(10, 14, 16, 0.25);
+  padding: 10px;
+  color: rgba(238, 245, 241, 0.88);
+  line-height: 1.5;
+}
+
+.doc-body p {
+  margin: 0 0 10px;
+}
+
+.doc-body p:last-child {
+  margin-bottom: 0;
 }
 
 .neighbor-list {

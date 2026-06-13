@@ -5,7 +5,7 @@
 #+LAST_MODIFIED: 2026-06-12
 #+FILETAGS: :monadc:compiler:context:todos:visualizer:performance:
 #+LANGUAGE: en
-#+STARTUP: showeverything
+#+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
 #+CATEGORY: monadc-context
 #+FILETAGS: :monadc:compiler:context:todos:

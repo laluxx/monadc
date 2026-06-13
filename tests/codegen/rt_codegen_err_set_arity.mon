@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-set-arity
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen enforces set! arity.
+;; TEST-ATOM: (set! x) must fail because set! requires target and value.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(set! x)

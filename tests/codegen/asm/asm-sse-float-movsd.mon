@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.sse-float-movsd
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Float return constraints use SSE registers.
+;; TEST-ATOM: movsd x %xmm0 preserves a Float argument.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-float-id :: Float -> Float
+  x -> (asm movsd x %xmm0 ret)
+
+show (asm-float-id 1.5)

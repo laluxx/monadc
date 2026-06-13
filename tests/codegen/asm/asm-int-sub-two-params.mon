@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.int-sub-two-params
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Subtraction keeps the first operand as the mutable result.
+;; TEST-ATOM: sub a b returns a - b.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-sub :: Int -> Int -> Int
+  a b -> (asm sub a b)
+
+show (asm-sub 50 8)

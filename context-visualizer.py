@@ -30,6 +30,10 @@ class Node:
     kind: str
     file: str
     summary: str
+    content: str = ""
+    heading: str = ""
+    record_type: str = ""
+    source: str = ""
     confidence: str = ""
     status: str = ""
     mutable: bool = False
@@ -67,6 +71,9 @@ def parse_context_graph() -> dict[str, object]:
         parse_test_fixture(path, nodes, edges)
     for corpus_path in [
         ROOT / "tests" / "language_corpus.tsv",
+        ROOT / "tests" / "reader-refinements.tsv",
+        ROOT / "tests" / "reader-interactions.tsv",
+        ROOT / "tests" / "reader-supersets.tsv",
         ROOT / "tests" / "reader-atoms.tsv",
         ROOT / "tests" / "reader-sugars.tsv",
     ]:
@@ -151,6 +158,8 @@ def strip_line_comments(value: str) -> str:
 
 
 def compact_signature(value: str) -> str:
+    value = re.sub(r"\s+", " ", value).strip()
+    value = re.sub(r"\[[^\]\s]+\s*(?:::|:)\s*([^\]]+)\]", r"\1", value)
     return re.sub(r"\s+", " ", value).strip()
 
 
@@ -158,22 +167,40 @@ def parse_org_file(path: Path, nodes: dict[str, Node], edges: list[Edge]) -> Non
     rel = path.relative_to(ROOT).as_posix()
     text = path.read_text(encoding="utf-8", errors="replace")
     file_id = f"file:{rel}"
-    nodes.setdefault(file_id, Node(file_id, path.stem, "file", rel, first_sentence(text)))
+    lines = text.splitlines()
+    nodes.setdefault(file_id, Node(file_id, path.stem, "file", rel, first_sentence(text), text[:2000]))
     current_heading = file_id
     pending_heading = ""
+    pending_heading_line = 1
     pending_todo = False
     drawer: dict[str, str] = {}
     in_drawer = False
 
-    for line_no, line in enumerate(text.splitlines(), 1):
+    for line_no, line in enumerate(lines, 1):
         heading = re.match(r"^(\*+)\s+(?:(TODO|ACTIVE|VERIFY|WAIT|DONE|BLOCKED|SUPERSEDED)\s+)?(.+)", line)
         if heading:
             pending_heading = heading.group(3).strip()
+            pending_heading_line = line_no
             pending_todo = heading.group(2) == "TODO"
             if heading.group(2) in {"TODO", "DONE", "BLOCKED", "WAIT", "VERIFY"}:
                 node_id = f"todo:{rel}:{line_no}"
                 status = heading.group(2).lower()
-                nodes[node_id] = Node(node_id, pending_heading, "todo", rel, "", status=status, mutable=True, line=line_no)
+                body = org_section_body(lines, pending_heading_line)
+                nodes[node_id] = Node(
+                    node_id,
+                    pending_heading,
+                    "todo",
+                    rel,
+                    first_sentence(body),
+                    body,
+                    pending_heading,
+                    "TODO",
+                    "",
+                    "",
+                    status=status,
+                    mutable=True,
+                    line=line_no,
+                )
                 edges.append(Edge(file_id, node_id, "contains", "contains"))
                 current_heading = node_id
             drawer = {}
@@ -191,12 +218,17 @@ def parse_org_file(path: Path, nodes: dict[str, Node], edges: list[Edge]) -> Non
             node_id = drawer.get("ID")
             if node_id:
                 kind = normalize_kind(drawer.get("CONTEXT_KIND", "todo" if pending_todo else "context"))
+                body = org_section_body(lines, pending_heading_line)
                 nodes[node_id] = Node(
                     node_id,
                     pending_heading or node_id,
                     kind,
                     rel,
+                    first_sentence(body),
+                    body,
+                    pending_heading,
                     "",
+                    drawer.get("SOURCE", ""),
                     drawer.get("CONFIDENCE", ""),
                     drawer.get("CONTEXT_STATUS", "open" if pending_todo else ""),
                     pending_todo,
@@ -211,17 +243,24 @@ def parse_org_file(path: Path, nodes: dict[str, Node], edges: list[Edge]) -> Non
                 drawer[prop.group(1)] = prop.group(2)
             continue
 
-        record = re.match(r"\[(OBS|INF|DEC|TODO)\s+([^\]]+)\]\s*(.*)", line)
+        record = re.match(r"\[(OBS|INF|DEC|TODO|DOC)\s+([^\]]+)\]\s*(.*)", line)
         if record:
             attrs = parse_attrs(record.group(2))
             rec_id = attrs.get("id", f"{rel}:{len(nodes)}")
-            kind = {"OBS": "observation", "INF": "inference", "DEC": "decision", "TODO": "todo"}[record.group(1)]
+            record_type = record.group(1)
+            kind = {"OBS": "observation", "INF": "inference", "DEC": "decision", "TODO": "todo", "DOC": "documentation"}[record_type]
+            body = record_body(lines, line_no)
+            summary = record.group(3).strip() or first_sentence(body)
             nodes[rec_id] = Node(
                 rec_id,
                 rec_id,
                 kind,
                 rel,
-                record.group(3).strip(),
+                summary,
+                body,
+                pending_heading,
+                record_type,
+                attrs.get("src", ""),
                 attrs.get("conf", ""),
                 attrs.get("status", ""),
                 kind == "todo",
@@ -272,9 +311,15 @@ def parse_language_corpus(path: Path, nodes: dict[str, Node], edges: list[Edge])
         if len(fields) < 3:
             continue
         name, context_id, purpose = fields[0], fields[1], fields[2]
-        prefix = "sugar" if path.name == "reader-sugars.tsv" else "language"
+        prefix = {
+            "reader-sugars.tsv": "sugar",
+            "reader-refinements.tsv": "refinement",
+            "reader-interactions.tsv": "interaction",
+            "reader-supersets.tsv": "superset",
+        }.get(path.name, "language")
         test_id = f"tests.{prefix}.{name}"
-        nodes[test_id] = Node(test_id, f"{prefix}.{name}", "test", rel, purpose)
+        source = fields[3] if len(fields) > 3 else ""
+        nodes[test_id] = Node(test_id, f"{prefix}.{name}", "test", rel, purpose, source)
         edges.append(Edge(test_id, context_id, "verifies", "verifies"))
 
 
@@ -287,6 +332,8 @@ def split_refs(value: str) -> list[str]:
 
 
 def normalize_kind(kind: str) -> str:
+    if "doc" in kind or "documentation" in kind:
+        return "documentation"
     if "decision" in kind:
         return "decision"
     if "test" in kind:
@@ -301,9 +348,38 @@ def normalize_kind(kind: str) -> str:
 def first_sentence(text: str) -> str:
     for line in text.splitlines():
         stripped = line.strip()
-        if stripped and not stripped.startswith("#+") and not stripped.startswith("*"):
-            return stripped[:160]
+        if stripped and not stripped.startswith("#+") and not stripped.startswith("*") and stripped != ":PROPERTIES:":
+            return strip_org_markup(stripped)[:220]
     return ""
+
+
+def org_section_body(lines: list[str], heading_line: int) -> str:
+    start = heading_line
+    while start < len(lines) and lines[start].strip() != ":END:":
+        start += 1
+    if start < len(lines):
+        start += 1
+    end = start
+    while end < len(lines) and not re.match(r"^\*+\s+", lines[end]):
+        end += 1
+    return strip_org_markup("\n".join(lines[start:end]).strip())
+
+
+def record_body(lines: list[str], record_line: int) -> str:
+    body: list[str] = []
+    for line in lines[record_line:]:
+        if re.match(r"^\[(OBS|INF|DEC|TODO|DOC)\s+", line) or re.match(r"^\*+\s+", line):
+            break
+        if line.strip() == ":PROPERTIES:":
+            break
+        body.append(line)
+    return strip_org_markup("\n".join(body).strip())
+
+
+def strip_org_markup(value: str) -> str:
+    value = re.sub(r"=([^=\n]+)=", r"\1", value)
+    value = re.sub(r"\[\[file:([^]\n]+?)(?:\][^]\n]*)?\]\]", r"\1", value)
+    return value
 
 
 class Handler(BaseHTTPRequestHandler):

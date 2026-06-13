@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.int-neg
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Unary neg supports signed integer returns.
+;; TEST-ATOM: neg x returns -x.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-neg :: Int -> Int
+  x -> (asm neg x)
+
+show (asm-neg -42)

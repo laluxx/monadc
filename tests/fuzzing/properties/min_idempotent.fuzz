@@ -1,0 +1,7 @@
+name: min_idempotent
+section: order
+args: a:Int
+type: Bool
+expect: True
+description: The typed min helper must be idempotent.
+law: (= (fuzz-min {a} {a}) {a})

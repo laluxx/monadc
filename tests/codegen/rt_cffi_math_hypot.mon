@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-cffi-math-hypot
+;; TEST-SECTION: cffi
+;; TEST-CONTEXT: monadc.context.language.cffi-runtime
+;; TEST-PURPOSE: Runtime C FFI calls a two-argument libm function and prints its result.
+;; TEST-ATOM: (hypot 3.0 4.0) prints 5.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(include "math.h")
+(show (hypot 3.0 4.0))

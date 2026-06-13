@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.int-or-immediate
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Immediate or uses escaped LLVM inline-asm immediates.
+;; TEST-ATOM: or x 2 returns x | 2.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-or-imm :: Int -> Int
+  x -> (asm or x 2)
+
+show (asm-or-imm 40)

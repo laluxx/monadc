@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.byte-width-zero-extend
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Writing eax in asm zero-extends to the Int return register.
+;; TEST-ATOM: mov immediate %eax ret exposes x86-64 zero-extension behavior for 32-bit writes.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-eax-zero-extend :: Int -> Int
+  x -> (asm mov 4294967295 %eax ret)
+
+show (asm-eax-zero-extend 0)

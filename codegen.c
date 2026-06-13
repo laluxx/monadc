@@ -7827,6 +7827,95 @@ if (ast->list.count >= 5) {
                 return result;
             }
 
+            if (strcmp(head->symbol, "do") == 0) {
+                if (ast->list.count < 2) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'do' requires at least one expression",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                CodegenResult last = {0};
+                for (size_t bi = 1; bi < ast->list.count; bi++)
+                    last = codegen_expr(ctx, ast->list.items[bi]);
+                return last;
+            }
+
+            if (strcmp(head->symbol, "with") == 0) {
+                if (ast->list.count < 3) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'with' requires bindings and a body",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                AST *binding = ast->list.items[1];
+                if (binding->type != AST_ARRAY || (binding->array.element_count % 2) != 0) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'with' bindings must be [name value ...]",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+
+                Env *saved_env = ctx->env;
+                ctx->env = env_create_child(saved_env);
+
+                for (size_t i = 0; i < binding->array.element_count; i += 2) {
+                    AST *name_ast = binding->array.elements[i];
+                    if (name_ast->type != AST_SYMBOL) {
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'with' binding name must be a symbol",
+                                      parser_get_filename(), name_ast->line, name_ast->column);
+                    }
+                    CodegenResult value_r = codegen_expr(ctx, binding->array.elements[i + 1]);
+                    LLVMTypeRef value_t = type_to_llvm(ctx, value_r.type);
+                    LLVMValueRef slot = LLVMBuildAlloca(ctx->builder, value_t, name_ast->symbol);
+                    LLVMBuildStore(ctx->builder, value_r.value, slot);
+                    env_insert(ctx->env, name_ast->symbol,
+                               value_r.type ? type_clone(value_r.type) : type_unknown(),
+                               slot);
+                }
+
+                CodegenResult last = {0};
+                for (size_t bi = 2; bi < ast->list.count; bi++)
+                    last = codegen_expr(ctx, ast->list.items[bi]);
+
+                env_free(ctx->env);
+                ctx->env = saved_env;
+                return last;
+            }
+
+            if (strcmp(head->symbol, "when") == 0) {
+                if (ast->list.count < 3) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'when' requires a condition and at least one body expression",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                LLVMValueRef func = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder));
+                CodegenResult cond_r = codegen_expr(ctx, ast->list.items[1]);
+                LLVMValueRef cond_val = cond_r.value;
+                if (type_is_float(cond_r.type)) {
+                    cond_val = LLVMBuildFCmp(ctx->builder, LLVMRealONE,
+                                             cond_val,
+                                             LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), 0.0),
+                                             "when_cond_f");
+                } else if (cond_r.type && cond_r.type->kind != TYPE_BOOL) {
+                    cond_val = LLVMBuildICmp(ctx->builder, LLVMIntNE,
+                                             cond_val,
+                                             LLVMConstInt(LLVMTypeOf(cond_val), 0, 0),
+                                             "when_cond_i");
+                }
+
+                LLVMBasicBlockRef then_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "when_then");
+                LLVMBasicBlockRef exit_bb = LLVMAppendBasicBlockInContext(ctx->context, func, "when_exit");
+                LLVMBuildCondBr(ctx->builder, cond_val, then_bb, exit_bb);
+
+                LLVMPositionBuilderAtEnd(ctx->builder, then_bb);
+                Env *saved_env = ctx->env;
+                ctx->env = env_create_child(saved_env);
+                for (size_t bi = 2; bi < ast->list.count; bi++)
+                    codegen_expr(ctx, ast->list.items[bi]);
+                env_free(ctx->env);
+                ctx->env = saved_env;
+                if (!LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)))
+                    LLVMBuildBr(ctx->builder, exit_bb);
+
+                LLVMPositionBuilderAtEnd(ctx->builder, exit_bb);
+                result.value = codegen_current_fn_zero_value(ctx);
+                result.type  = type_unknown();
+                return result;
+            }
+
             if (strcmp(head->symbol, "unless") == 0) {
                 if (ast->list.count < 3) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'unless' requires at least a condition and one body expression",

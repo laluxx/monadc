@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-cast-arity
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen enforces type cast arity.
+;; TEST-ATOM: (Int 1 2) must fail because casts take exactly one argument.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(show (Int 1 2))

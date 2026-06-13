@@ -1,0 +1,7 @@
+name: arithmetic_double_subtract
+section: arithmetic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Subtracting two equal generated expressions from a value must match subtracting zero.
+law: (= (fuzz-sub (fuzz-sub {a} {b}) (fuzz-sub {b} {b})) (fuzz-sub {a} {b}))

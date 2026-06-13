@@ -27,6 +27,25 @@ class ContextVisualizerTests(unittest.TestCase):
         self.assertIn("apply", methods["foldl"].used_by)
         self.assertTrue(methods["apply"].id.startswith("method:core:"))
 
+    def test_compact_signature_removes_parameter_names(self):
+        visualizer = load_visualizer()
+
+        self.assertEqual(visualizer.compact_signature("[x :: Int] -> Int"), "Int -> Int")
+        self.assertEqual(visualizer.compact_signature("[f : Fn] [x : Int] -> Int"), "Fn Int -> Int")
+
+    def test_context_graph_indexes_docs_headings_and_new_corpora(self):
+        visualizer = load_visualizer()
+
+        graph = visualizer.parse_context_graph()
+        nodes = {node["id"]: node for node in graph["nodes"]}
+
+        self.assertIn("monadc.context.reader.char-escapes", nodes)
+        self.assertEqual(nodes["monadc.context.reader.char-escapes"]["heading"], "Char Escape Parsing")
+        self.assertIn("Char literals", nodes["monadc.context.reader.char-escapes"]["content"])
+        self.assertIn("tests.codegen.rt-cffi-math-sqrt", nodes)
+        self.assertIn("tests.refinement.refine_int_positive", nodes)
+        self.assertIn("tests.interaction.interaction_module_cffi_refinement", nodes)
+
     def test_done_todo_rewrite_adds_org_closed_timestamp(self):
         visualizer = load_visualizer()
         lines = ["* TODO Polish visualizer", "body"]

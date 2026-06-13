@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.xchg-two-params
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: xchg mutates the tied output register.
+;; TEST-ATOM: xchg a b returns the second argument through the first tied result register.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-xchg :: Int -> Int -> Int
+  a b -> (asm xchg a b)
+
+show (asm-xchg 7 42)

@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-code-unbound
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen reports code reflection on an unbound symbol.
+;; TEST-ATOM: (code missing) must fail with unbound symbol.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(code missing)

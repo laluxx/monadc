@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.int-imul-then-sub-immediate
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Immediate subtract after multiplication preserves instruction order.
+;; TEST-ATOM: imul a b then sub a 6 returns a*b - 6.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-mul-sub :: Int -> Int -> Int
+  a b -> (asm imul a b sub a 6)
+
+show (asm-mul-sub 8 6)

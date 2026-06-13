@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.syscall-write-string
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Syscall-shaped asm writes through Linux write(2).
+;; TEST-ATOM: A String buffer argument lowers as an asm operand usable by syscall.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-sys-write :: Int -> String -> Int -> Int
+  fd buf len -> (asm mov 1 %rax mov fd %rdi mov buf %rsi mov len %rdx syscall ret)
+
+show (asm-sys-write 1 "ok" 2)

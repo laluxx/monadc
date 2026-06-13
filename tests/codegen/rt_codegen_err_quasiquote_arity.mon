@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-quasiquote-arity
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen enforces quasiquote arity.
+;; TEST-ATOM: (quasiquote 1 2) must fail because quasiquote takes exactly one argument.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(quasiquote 1 2)

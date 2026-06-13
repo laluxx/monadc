@@ -1,0 +1,11 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-layout-nested-nonlayout
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen rejects nested field access through non-layout fields.
+;; TEST-ATOM: p.x.y must fail when x is Int.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(layout Point [x :: Int])
+(define p (Point 1))
+(show p.x.y)

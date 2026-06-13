@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.idiv-quotient
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Signed division uses explicit rax/rdx setup around a placeholder divisor.
+;; TEST-ATOM: mov into rax, cqo, and idiv by a parameter returns the quotient.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-idiv :: Int -> Int -> Int
+  a b -> (asm mov a %rax cqo idiv b ret)
+
+show (asm-idiv 84 2)

@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-for-arity
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen enforces for arity.
+;; TEST-ATOM: (for) must fail because for requires a binding and a body.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(for)

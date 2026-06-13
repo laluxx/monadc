@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-cffi-math-ceil
+;; TEST-SECTION: cffi
+;; TEST-CONTEXT: monadc.context.language.cffi-runtime
+;; TEST-PURPOSE: Runtime C FFI calls a libm rounding function.
+;; TEST-ATOM: (ceil 3.1) prints 4.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(include "math.h")
+(show (ceil 3.1))

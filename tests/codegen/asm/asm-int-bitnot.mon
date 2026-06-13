@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.int-bitnot
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Bitwise not uses inferred q suffix on Int parameters.
+;; TEST-ATOM: not x returns bitwise complement.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-not :: Int -> Int
+  x -> (asm not x)
+
+show (asm-not -43)

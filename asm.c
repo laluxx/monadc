@@ -531,7 +531,14 @@ LLVMValueRef codegen_inline_asm(LLVMContextRef context,
     else                                 strcpy(constraints, "=r");
 
     if (param_count >= 1) strcat(constraints, ",0");
-    for (int i = 1; i < param_count; i++) strcat(constraints, ",r");
+    for (int i = 1; i < param_count; i++) {
+        LLVMTypeRef param_type = LLVMTypeOf(params[i]);
+        LLVMTypeKind param_kind = LLVMGetTypeKind(param_type);
+        if (param_kind == LLVMDoubleTypeKind || param_kind == LLVMFloatTypeKind)
+            strcat(constraints, ",x");
+        else
+            strcat(constraints, ",r");
+    }
 
     fprintf(stderr, "Constraints: %s\n", constraints);
     fprintf(stderr, "==================\n");

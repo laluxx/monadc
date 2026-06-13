@@ -4,7 +4,7 @@
 #+CREATED: 2026-06-12
 #+LAST_MODIFIED: 2026-06-12
 #+LANGUAGE: en
-#+STARTUP: showeverything
+#+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
 #+CATEGORY: monadc-context
 #+FILETAGS: :monadc:compiler:context:opinions:llm:meta:
@@ -71,6 +71,13 @@
   Human opinion: =codegen.c= has become too long and should be split into
   smaller modules. This should be queryable as a human-owned opinion in the
   context visualizer and tracked by an urgent TODO.
+
+[TODO id:todo.opinions.human.test-artifact-cleanup owner:human status:open src:user-request conf:high]
+  Human opinion: the testing system should automatically delete every artifact
+  it creates, including compile outputs, object files, executables, temporary
+  JSON/IR/assembly files, and any partial artifacts left by interrupted or
+  failing runs. This should be treated as test-runner work, not as manual
+  cleanup expected from users or agents.
 
 * What Works Well
 :PROPERTIES:

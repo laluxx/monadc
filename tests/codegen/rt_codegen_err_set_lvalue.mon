@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-set-lvalue
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen rejects mutation targets that are not lvalues.
+;; TEST-ATOM: (set! 1 2) must fail because a number literal is not assignable.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(set! 1 2)

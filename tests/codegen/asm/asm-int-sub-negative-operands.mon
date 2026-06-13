@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.int-sub-negative-operands
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Subtraction from negative values returns signed Int.
+;; TEST-ATOM: sub a b handles signed first operands.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-sub-negative :: Int -> Int -> Int
+  a b -> (asm sub a b)
+
+show (asm-sub-negative -40 -82)

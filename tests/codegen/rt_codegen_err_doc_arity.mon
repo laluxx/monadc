@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-doc-arity
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen enforces doc reflection arity.
+;; TEST-ATOM: (doc) must fail because doc requires one symbol argument.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(doc)

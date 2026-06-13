@@ -1,9 +1,11 @@
 ;; TEST-ID: tests.codegen.rt-data-record-constructor
-;; TEST-CONTEXT: monadc.context.language.reader-header-coverage
-;; TEST-PURPOSE: Runtime record-like ADT constructors are a codegen-backed coverage point.
-;; TEST-ATOM: (data Person | Person {name String, age Int}) should construct from name and age.
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus, monadc.context.language.layout-records
+;; TEST-PURPOSE: Runtime record-like values use layout declarations, not ADT brace fields.
+;; TEST-ATOM: (layout Person [name :: String] [age :: Int]) constructs and exposes named fields.
 ;; TEST-EXPECT: compile, run
 
 (module Main)
-(data Person | Person {name String, age Int})
+(layout Person [name :: String] [age :: Int])
 (define p (Person "ada" 37))
+(show p.name)
+(show p.age)

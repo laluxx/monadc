@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-arithmetic-no-args
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen rejects arithmetic forms without operands.
+;; TEST-ATOM: (+) must fail because arithmetic operators need at least one argument.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(show (+))

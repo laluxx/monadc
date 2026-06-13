@@ -12,6 +12,10 @@ layout Color
                  s.g = o.g
                  s.b = o.b
 
+define red Color 255 0 0
+define red Color.fromRGB 255 0 0
+
+red.eql red
 
 
 

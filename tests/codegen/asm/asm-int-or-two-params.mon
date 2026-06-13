@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.int-or-two-params
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Bitwise or combines two integer operands.
+;; TEST-ATOM: or a b returns a | b.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-or :: Int -> Int -> Int
+  a b -> (asm or a b)
+
+show (asm-or 40 2)

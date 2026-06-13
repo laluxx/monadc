@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.int-add-three-params
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Multiple asm instructions are split by mnemonic recognition.
+;; TEST-ATOM: add a b followed by add a c returns a + b + c.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-add3 :: Int -> Int -> Int -> Int
+  a b c -> (asm add a b add a c)
+
+show (asm-add3 20 10 12)

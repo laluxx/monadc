@@ -4,7 +4,7 @@
 #+CREATED: 2026-06-12
 #+LAST_MODIFIED: 2026-06-12
 #+LANGUAGE: en
-#+STARTUP: showeverything
+#+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
 #+CATEGORY: monadc-context
 #+FILETAGS: :monadc:compiler:context:philosophy:witness:human:llm:
@@ -186,7 +186,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
-:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
 :SOURCE: context/philosophy.org
@@ -233,3 +233,12 @@
   guarantees and hardware control. The entire compiler architecture — from the
   dual type system through the TERM_EMBED bridge to the naked function support
   — exists to make this claim true.
+
+[INF id:inf.philosophy.principles-connect-to-primitives from:dec.philosophy.smallest-atom,dec.philosophy.no-tradeoff-principle,dec.philosophy.zero-to-metal,dec.philosophy.sets-are-the-model,obs.language.set-grounded-in-model,obs.language.array-ladder,obs.language.set-as-function-why,obs.language.map-bug-significance,obs.language.dep-why-shadow-pass conf:high]
+  connects-to -> `monadc.context.language.primitive-philosophy` (the primitives section records design intent grounded in these principles) ·
+  `monadc.context.language.primitive-array` (the three array forms are the zero-to-metal ladder made concrete) ·
+  `monadc.context.language.primitive-set` (TYPE_SET is the runtime incarnation of types-are-sets) ·
+  `monadc.context.language.primitive-map` (the map bug is the sharpest collision between ideal and runtime) ·
+  `monadc.context.language.primitive-function` (the dual representation is the no-trade-off principle at the architecture level) ·
+  `monadc.context.language.primitive-dependent-types` (the shadow pass is purity-is-practical applied to the compiler's own architecture) ·
+  `monadc.context.language.primitive-connections` (cross-cutting theme: every primitive has an ideal/runtime bridge)

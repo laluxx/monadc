@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-null-coalesce-arity
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen enforces null-coalescing arity.
+;; TEST-ATOM: (?? 1) must fail because ?? requires fallback and alternative operands.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(show (?? 1))

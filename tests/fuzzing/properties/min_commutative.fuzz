@@ -1,0 +1,7 @@
+name: min_commutative
+section: order
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The typed min helper must be commutative.
+law: (= (fuzz-min {a} {b}) (fuzz-min {b} {a}))

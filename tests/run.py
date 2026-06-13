@@ -16,8 +16,9 @@ TEST_ROOT = ROOT / "tests"
 MONAD = ROOT / "monad"
 RESULTS_FILE = TEST_ROOT / ".test-results.json"
 FIRST_FAILURE_FILE = TEST_ROOT / ".last-first-failure.org"
-WIDTH = 78
+WIDTH = 118
 TRACKED_FILES: set[Path] | None = None
+JSON_GOLDEN_TABLES: dict[Path, dict[str, object]] = {}
 
 RESET      = "\033[0m"
 WHITE      = "\033[97m"
@@ -32,9 +33,33 @@ BLUE       = "\033[34m"
 MAGENTA    = "\033[35m"
 
 SECTION_STYLES = {
+    "interaction": (GREEN, "Feature Interactions"),
+    "superset": (YELLOW, "Atom Supersets"),
+    "cffi": (MAGENTA, "C FFI"),
+    "refinement": (BLUE, "Refinement Types"),
+    "wisp": (CYAN, "Wisp"),
+    "layout": (MAGENTA, "Layouts"),
+    "map": (CYAN, "Maps"),
+    "ratio": (BLUE, "Ratios and Percentages"),
+    "diagnostic": (YELLOW, "Compiler Diagnostics"),
     "codegen": (MAGENTA, "Runtime Codegen"),
     "language": (BLUE, "Reader Language Atoms"),
     "sugar": (CYAN, "Reader Sugar Forms"),
+}
+
+SECTION_ORDER = {
+    "interaction": 0,
+    "superset": 5,
+    "cffi": 10,
+    "refinement": 20,
+    "wisp": 30,
+    "layout": 40,
+    "map": 50,
+    "ratio": 60,
+    "diagnostic": 65,
+    "codegen": 70,
+    "language": 80,
+    "sugar": 90,
 }
 
 
@@ -58,17 +83,41 @@ class TestResult:
     output: str = ""
 
 
+@dataclass
+class SectionStats:
+    total: int = 0
+    passed: int = 0
+    failed: int = 0
+    elapsed_ns: int = 0
+
+    @property
+    def percent(self) -> float:
+        return 100.0 if self.total == 0 else (self.passed / self.total) * 100.0
+
+
+@dataclass
+class SectionWidths:
+    location: int = 0
+    progress: int = 0
+
+
 class Runner:
     def __init__(self, cases: list[TestCase]) -> None:
         self.results: list[TestResult] = []
         self.first_failure: tuple[TestCase, TestResult] | None = None
         self.total = len(cases)
-        self.progress_prefix_width = progress_prefix_width(cases)
+        self.section_widths = section_widths(cases, self.total)
         self.current_section: str | None = None
+        self.section_stats: dict[str, SectionStats] = {}
+        for case in cases:
+            section = section_key(case)
+            self.section_stats.setdefault(section, SectionStats()).total += 1
 
     def run(self, case: TestCase, suite_tmpdir: Path) -> None:
-        section = section_key(case.name)
+        section = section_key(case)
         if section != self.current_section:
+            if self.current_section is not None:
+                self.print_section_footer(self.current_section)
             self.current_section = section
             print_section_header(section)
 
@@ -93,11 +142,32 @@ class Runner:
         result = self.results[-1]
         if not result.passed and self.first_failure is None:
             self.first_failure = (case, result)
-        print_result(result, len(self.results), self.total, case, self.progress_prefix_width)
+        stats = self.section_stats.setdefault(section, SectionStats())
+        if result.passed:
+            stats.passed += 1
+        else:
+            stats.failed += 1
+        stats.elapsed_ns += elapsed_ns
+        widths = self.section_widths.get(section, SectionWidths())
+        print_result(
+            result,
+            len(self.results),
+            self.total,
+            case,
+            widths.progress,
+            widths.location,
+        )
 
     @property
     def failures(self) -> int:
         return sum(1 for result in self.results if not result.passed)
+
+    def print_section_footer(self, section: str) -> None:
+        stats = self.section_stats.get(section, SectionStats())
+        elapsed = format_duration(stats.elapsed_ns)
+        color, title = SECTION_STYLES.get(section, (YELLOW, section.title()))
+        summary = f"{title}: {stats.passed}/{stats.total} passed ({stats.percent:5.1f}%) | {stats.failed} failed | {strip_ansi(elapsed)}"
+        print_section_line(summary, color, bold=True)
 
 
 def discover_tests() -> list[TestCase]:
@@ -118,16 +188,22 @@ def discover_tests() -> list[TestCase]:
                 origin_col=1,
             )
         )
-    for corpus_name in ("reader-atoms.tsv", "reader-sugars.tsv"):
+    for corpus_name in ("reader-refinements.tsv", "reader-interactions.tsv", "reader-supersets.tsv", "reader-atoms.tsv", "reader-sugars.tsv"):
         corpus = TEST_ROOT / corpus_name
         if corpus.exists():
             prefix = path_to_prefix(corpus_name)
             cases.extend(read_corpus(corpus, prefix))
-    return cases
+    return sorted(cases, key=lambda case: (section_sort_key(section_key(case)), case.name))
 
 
 def path_to_prefix(name: str) -> str:
-    table = {"reader-atoms.tsv": "language", "reader-sugars.tsv": "sugar"}
+    table = {
+        "reader-atoms.tsv": "language",
+        "reader-sugars.tsv": "sugar",
+        "reader-refinements.tsv": "refinement",
+        "reader-interactions.tsv": "interaction",
+        "reader-supersets.tsv": "superset",
+    }
     return table.get(name, "language")
 
 
@@ -149,6 +225,10 @@ def read_corpus(path: Path, prefix: str = "language") -> list[TestCase]:
             "TEST-PURPOSE": purpose,
             "TEST-EXPECT": "parse-json",
         }
+        json_table = path.with_name(f"{path.stem}.golden.jsonl")
+        if json_table.exists():
+            meta["TEST-EXPECT-JSON-TABLE"] = json_table.resolve().relative_to(ROOT).as_posix()
+            meta["TEST-EXPECT-JSON-KEY"] = name
         if expected:
             if expected.startswith("fail:"):
                 meta["TEST-EXPECT"] = expected
@@ -156,6 +236,8 @@ def read_corpus(path: Path, prefix: str = "language") -> list[TestCase]:
                     meta["TEST-EXPECT-DIAGNOSTIC"] = expected_diagnostic
             else:
                 meta["TEST-EXPECT-DESUGAR"] = expected
+        if len(fields) >= 7 and fields[6].strip():
+            meta["TEST-SUPERSET"] = fields[6].strip()
         cases.append(
             TestCase(
                 name=f"{prefix}.{name}",
@@ -244,6 +326,10 @@ def run_case(case: TestCase, tmpdir: Path) -> tuple[bool, str, str]:
         actual = extract_desugared_ast(emit_stdout)
         if actual != expected_desugar:
             return False, f"desugared AST mismatch: expected {expected_desugar!r}, got {actual!r}", emit_stdout
+
+    json_table_mismatch = compare_corpus_json_golden(case, emitted)
+    if json_table_mismatch:
+        return False, json_table_mismatch, emit_stdout
 
     should_compile = "compile" in expect or "run" in expect or bool(stdout_path and stdout_path.exists())
     if not should_compile:
@@ -351,6 +437,59 @@ def compare_json_golden(path: Path, emitted: object) -> str | None:
     return f"AST JSON did not match {path.relative_to(ROOT)}\n{diff}"
 
 
+def compare_corpus_json_golden(case: TestCase, emitted: object) -> str | None:
+    table_name = case.metadata.get("TEST-EXPECT-JSON-TABLE")
+    if not table_name:
+        return None
+    table_path = (ROOT / table_name).resolve()
+    table = load_json_golden_table(table_path)
+    key = case.metadata.get("TEST-EXPECT-JSON-KEY", case.name.rsplit(".", 1)[-1])
+    if key not in table:
+        return None
+
+    expected_norm = normalize_ast_json(table[key])
+    emitted_norm = normalize_ast_json(emitted)
+    if expected_norm == emitted_norm:
+        return None
+
+    expected_text = json.dumps(expected_norm, indent=2, sort_keys=True).splitlines()
+    emitted_text = json.dumps(emitted_norm, indent=2, sort_keys=True).splitlines()
+    diff = unified_diff_text(
+        expected_text,
+        emitted_text,
+        f"{display_path(table_path)}:{key}",
+        "actual AST JSON",
+    )
+    return f"AST JSON did not match {display_path(table_path)} entry {key}\n{diff}"
+
+
+def load_json_golden_table(path: Path) -> dict[str, object]:
+    path = path.resolve()
+    if path not in JSON_GOLDEN_TABLES:
+        rows: dict[str, object] = {}
+        for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if not line or line.startswith("#"):
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError as error:
+                raise ValueError(f"{path}:{line_number}: invalid JSONL golden row: {error}") from error
+            name = row.get("name") if isinstance(row, dict) else None
+            ast = row.get("json") if isinstance(row, dict) else None
+            if not isinstance(name, str):
+                raise ValueError(f"{path}:{line_number}: golden row needs string field 'name'")
+            rows[name] = ast
+        JSON_GOLDEN_TABLES[path] = rows
+    return JSON_GOLDEN_TABLES[path]
+
+
+def display_path(path: Path) -> str:
+    try:
+        return path.relative_to(ROOT).as_posix()
+    except ValueError:
+        return str(path)
+
+
 def normalize_ast_json(value: object) -> object:
     if isinstance(value, dict):
         return {
@@ -432,7 +571,7 @@ def artifact_snapshot(fixture: Path) -> set[Path]:
 
 def cleanup_fixture_artifacts(fixture: Path, before: set[Path]) -> None:
     for path in artifact_candidates(fixture):
-        if path.exists() and path not in tracked_files():
+        if path.exists() and path not in before and path not in tracked_files():
             if path.is_dir():
                 shutil.rmtree(path)
             else:
@@ -482,8 +621,53 @@ def safe_name(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", name)
 
 
-def section_key(name: str) -> str:
+def section_key(case: TestCase | str) -> str:
+    if isinstance(case, str):
+        name = case
+        metadata: dict[str, str] = {}
+        fixture_name = ""
+    else:
+        name = case.name
+        metadata = case.metadata
+        fixture_name = case.fixture.name if case.fixture else ""
+
+    explicit = metadata.get("TEST-SECTION", "").strip().lower()
+    if explicit:
+        return explicit
+    if name.startswith("interaction.") or "interaction" in name or "interaction" in fixture_name:
+        return "interaction"
+    if name.startswith("superset."):
+        return "superset"
+    if name.startswith("cffi."):
+        return "cffi"
+    if name.startswith("refinement."):
+        return "refinement"
+    if name.startswith("wisp.") or ".wisp" in name or fixture_name.startswith("wisp_") or "rt_wisp" in fixture_name:
+        return "wisp"
+    if "layout" in name or "layout" in fixture_name:
+        return "layout"
+    if ".rt-map" in name or "map" in fixture_name or "-map-" in name:
+        return "map"
+    if "percent" in name or "ratio" in name or "periodic" in name:
+        return "ratio"
+
+    context = metadata.get("TEST-CONTEXT", "")
+    if "interaction" in context:
+        return "interaction"
+    if "superset" in context:
+        return "superset"
+    if "cffi" in context or "ffi" in context:
+        return "cffi"
+    if "refinement" in context:
+        return "refinement"
+    if "wisp" in context:
+        return "wisp"
+
     return name.split(".", 1)[0] if "." in name else "misc"
+
+
+def section_sort_key(section: str) -> tuple[int, str]:
+    return (SECTION_ORDER.get(section, 1000), section)
 
 
 def print_box(title: str) -> None:
@@ -493,24 +677,39 @@ def print_box(title: str) -> None:
 
 
 def print_rule(title: str) -> None:
-    print("═" * (WIDTH + 2))
-    print(title.center(WIDTH + 2))
-    print("═" * (WIDTH + 2))
+    print_section_line(title, WHITE, bold=True)
 
 
 def print_section_header(section: str) -> None:
     color, title = SECTION_STYLES.get(section, (YELLOW, section.title()))
     print()
-    print(f"{color}{BOLD}┌─ {title} ({section}) {'─' * max(1, WIDTH - len(title) - len(section) - 8)}┐{RESET}")
+    heading = f"{title} ({section})"
+    print_section_line(heading, color, bold=True)
 
 
-def print_result(result: TestResult, index: int, total: int, case: TestCase, prefix_width: int) -> None:
+def print_section_line(title: str, color: str, *, bold: bool = False) -> None:
+    text = f" {title} "
+    width = WIDTH + 2
+    left = max(6, (width - len(text)) // 3)
+    right = max(1, width - left - len(text))
+    weight = BOLD if bold else ""
+    print(f"{color}{weight}{'─' * left}{text}{'─' * right}{RESET}")
+
+
+def print_result(
+    result: TestResult,
+    index: int,
+    total: int,
+    case: TestCase,
+    prefix_width: int,
+    loc_width: int,
+) -> None:
     status = f"{BOLD_GREEN}PASS{RESET}" if result.passed else f"{BOLD_RED}FAIL{RESET}"
     timing = format_duration(result.elapsed_ns)
     loc_path, loc_line, loc_col, severity = compilation_location(case, result)
     counter = f"{index:04d}/{total:04d}"
-    prefix = progress_prefix(loc_path, loc_line, loc_col, severity, counter, result.name, colored=True)
-    plain_prefix = progress_prefix(loc_path, loc_line, loc_col, severity, counter, result.name, colored=False)
+    prefix = progress_prefix(loc_path, loc_line, loc_col, severity, counter, result.name, colored=True, loc_width=loc_width)
+    plain_prefix = progress_prefix(loc_path, loc_line, loc_col, severity, counter, result.name, colored=False, loc_width=loc_width)
     pad = " " * max(2, prefix_width - len(plain_prefix) + 2)
     print(f"{prefix}{pad}{status} {timing}")
     if not result.passed:
@@ -529,13 +728,26 @@ def progress_prefix(
     name: str,
     *,
     colored: bool,
+    loc_width: int,
 ) -> str:
+    location = f"{loc_path}:{loc_line}:{loc_col}: {severity}:"
+    location = location.ljust(loc_width)
     counter_text = f"{WHITE}{counter}{RESET}" if colored else counter
-    return f"{loc_path}:{loc_line}:{loc_col}: {severity}: [{counter_text}] {name}"
+    return f"{location} [{counter_text}] {name}"
 
 
-def progress_prefix_width(cases: list[TestCase]) -> int:
-    total = len(cases)
+def location_prefix_width(cases: list[TestCase]) -> int:
+    width = 0
+    for case in cases:
+        origin = case.origin or case.fixture or TEST_ROOT
+        loc_path = str(origin.resolve())
+        for severity in ("note", "error"):
+            width = max(width, len(f"{loc_path}:{case.origin_line}:{case.origin_col}: {severity}:"))
+    return width
+
+
+def progress_prefix_width(cases: list[TestCase], loc_width: int, total: int | None = None) -> int:
+    total = total or len(cases)
     width = 0
     for index, case in enumerate(cases, 1):
         origin = case.origin or case.fixture or TEST_ROOT
@@ -544,9 +756,24 @@ def progress_prefix_width(cases: list[TestCase]) -> int:
         for severity in ("note", "error"):
             width = max(
                 width,
-                len(progress_prefix(loc_path, case.origin_line, case.origin_col, severity, counter, case.name, colored=False)),
+                len(progress_prefix(loc_path, case.origin_line, case.origin_col, severity, counter, case.name, colored=False, loc_width=loc_width)),
             )
     return width
+
+
+def section_widths(cases: list[TestCase], total: int) -> dict[str, SectionWidths]:
+    grouped: dict[str, list[TestCase]] = {}
+    for case in cases:
+        grouped.setdefault(section_key(case), []).append(case)
+
+    widths: dict[str, SectionWidths] = {}
+    for section, section_cases in grouped.items():
+        loc_width = location_prefix_width(section_cases)
+        widths[section] = SectionWidths(
+            location=loc_width,
+            progress=progress_prefix_width(section_cases, loc_width, total),
+        )
+    return widths
 
 
 def compilation_location(case: TestCase, result: TestResult) -> tuple[str, int, int, str]:
@@ -689,6 +916,17 @@ def normalize_record_output(output: str) -> str:
 def cleanup_suite_artifacts() -> None:
     if RESULTS_FILE.exists() and RESULTS_FILE.resolve() not in tracked_files():
         RESULTS_FILE.unlink()
+    pycache = TEST_ROOT / "__pycache__"
+    if pycache.exists() and pycache.is_dir():
+        for child in pycache.iterdir():
+            if child.resolve() in tracked_files():
+                continue
+            if child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+        if not any(pycache.iterdir()) and pycache.resolve() not in tracked_files():
+            pycache.rmdir()
     for fixture in TEST_ROOT.rglob("*.mon"):
         cleanup_fixture_artifacts(fixture, set())
 
@@ -721,6 +959,22 @@ def print_changes(regressions: list[str], fixes: list[str]) -> None:
             print(f"    {BOLD_GREEN}✓{RESET} {name}")
 
 
+def print_section_summary(runner: Runner) -> None:
+    print_rule("SECTION SUMMARY")
+    print()
+    header = f"{'Section':<28} {'Passed':>8} {'Failed':>8} {'Pass %':>8} {'Time':>14}"
+    print(f"  {BOLD}{header}{RESET}")
+    print(f"  {GRAY}{'-' * len(header)}{RESET}")
+    for section in sorted(runner.section_stats, key=section_sort_key):
+        stats = runner.section_stats.get(section, SectionStats())
+        _color, title = SECTION_STYLES.get(section, (YELLOW, section.title()))
+        print(
+            f"  {title:<28} {stats.passed:>8}/{stats.total:<4} {stats.failed:>8} "
+            f"{stats.percent:>7.1f}% {strip_ansi(format_duration(stats.elapsed_ns)):>14}"
+        )
+    print()
+
+
 def main() -> int:
     previous = load_previous_results(RESULTS_FILE)
     tests = discover_tests()
@@ -737,6 +991,8 @@ def main() -> int:
         suite_tmpdir = Path(tmp)
         for case in tests:
             runner.run(case, suite_tmpdir)
+    if runner.current_section is not None:
+        runner.print_section_footer(runner.current_section)
     suite_elapsed_ns = time.perf_counter_ns() - suite_start
 
     save_results(RESULTS_FILE, runner.results)
@@ -744,6 +1000,8 @@ def main() -> int:
 
     passed = len(runner.results) - runner.failures
 
+    print()
+    print_section_summary(runner)
     print()
     print_rule("TEST SUMMARY")
     print()

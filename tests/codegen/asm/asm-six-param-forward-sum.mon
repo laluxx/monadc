@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.six-param-forward-sum
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Five input operands remain addressable through LLVM placeholders.
+;; TEST-ATOM: a plus b/c/d/e/f returns the sum of six Int parameters.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-six :: Int -> Int -> Int -> Int -> Int -> Int -> Int
+  a b c d e f -> (asm add a b add a c add a d add a e add a f)
+
+show (asm-six 1 2 3 4 5 6)

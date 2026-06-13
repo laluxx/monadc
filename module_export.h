@@ -21,8 +21,7 @@
 #define MEXP_TYPE_KEYWORD 11
 #define MEXP_TYPE_FN     12
 
-// ----------------------------------------------------------------------------
-// Module Export Manifest
+/// Module Export Manifest
 //
 // When module Foo.mon is compiled to Foo.o, we also write Foo.mexp (module
 // export manifest).  The manifest is a plain-text file that records every
@@ -35,8 +34,7 @@
 //
 // type_kind is the integer value of TypeKind.
 // Mangled name for top-level symbol `phi` in module `Math` is `Math__phi`.
-// ----------------------------------------------------------------------------
-
+//
 typedef enum {
     EXPORT_ENTRY_VAR,
     EXPORT_ENTRY_FUNC,

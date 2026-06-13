@@ -1,0 +1,7 @@
+name: max_commutative
+section: order
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The typed max helper must be commutative.
+law: (= (fuzz-max {a} {b}) (fuzz-max {b} {a}))

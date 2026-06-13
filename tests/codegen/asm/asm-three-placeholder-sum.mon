@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.three-placeholder-sum
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Three parameter placeholders are split correctly.
+;; TEST-ATOM: a + b + c with three params returns 42.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-three-placeholders :: Int -> Int -> Int -> Int
+  a b c -> (asm add a b add a c)
+
+show (asm-three-placeholders 10 20 12)

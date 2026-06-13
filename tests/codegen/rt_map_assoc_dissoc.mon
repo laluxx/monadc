@@ -1,0 +1,15 @@
+;; TEST-ID: tests.codegen.rt-map-literal-complex
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Map literals support repeated query operations.
+;; TEST-ATOM: count, contains?, find, keys, and vals observe a three-entry keyword map through current runtime display semantics.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(define palette #{:red 1 :green 2 :blue 3})
+(show (Map? palette))
+(show (count palette))
+(show (contains? palette :green))
+(show (contains? palette :cyan))
+(show (find palette :blue))
+(show (keys palette))
+(show (vals palette))

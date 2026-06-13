@@ -1,0 +1,7 @@
+name: int_mul_commutative
+section: arithmetic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Multiplication must be commutative for generated Int expressions.
+law: (= (fuzz-mul {a} {b}) (fuzz-mul {b} {a}))

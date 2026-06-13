@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-layout-lowercase-name
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen rejects lowercase layout names.
+;; TEST-ATOM: (layout point ...) must fail because layout names are type constructors.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(layout point [x :: Int])

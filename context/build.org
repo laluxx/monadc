@@ -4,7 +4,7 @@
 #+CREATED: 2026-06-11
 #+LAST_MODIFIED: 2026-06-11
 #+LANGUAGE: en
-#+STARTUP: showeverything
+#+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
 #+CATEGORY: monadc-context
 #+FILETAGS: :monadc:compiler:context:build:install:
@@ -134,7 +134,23 @@ may fail if no password is provided.
   working code for core library definitions.
 
 #+CAPTION: Make Test Targets
-| Target            | Command                    | What It Tests                        |
-|-------------------+----------------------------+--------------------------------------|
-| =test=              | =python3 tests/run.py=       | Codegen + reader (atoms, sugar, lang) |
-| =test core=         | =python3 tests/run_core.py=  | Core module per-module tests         |
+| Target    | Command                   | What It Tests                         |
+|-----------+---------------------------+---------------------------------------|
+| =test=      | =python3 tests/run.py=      | Codegen + reader (atoms, sugar, lang) |
+| =test core= | =python3 tests/run_core.py= | Core module per-module tests          |
+
+[DEC id:dec.build.make-fronts-python-tools date:2026-06-13 by:human+codex]
+  Dynamic helper scripts in the repository should have Makefile front doors.
+  Current script targets include =make generate-asm-tests= for
+  =create_asm_tests.py=, =make test-runner= for =tests/test_run.py=,
+  =make test-context-visualizer= for =tests/test_context_visualizer.py=, and
+  =make fuzzing= / =make test-fuzzing= for =tests/fuzzing/fuzz_codegen.py=.
+
+#+CAPTION: Helper Script Make Targets
+| Target                    | Command                                | Purpose                         |
+|---------------------------+----------------------------------------+---------------------------------|
+| =generate-asm-tests=        | =python3 create_asm_tests.py=            | Regenerate asm codegen subset   |
+| =generate-asm-tests-extra=  | =python3 create_asm_tests_extra.py=      | Compatibility asm generator     |
+| =test-runner=               | =python3 tests/test_run.py=              | Unit tests for test runner      |
+| =test-context-visualizer=   | =python3 tests/test_context_visualizer.py= | Unit tests for visualizer     |
+| =test-fuzzing= / =fuzzing=  | =python3 tests/fuzzing/fuzz_codegen.py=  | Deterministic codegen fuzzing   |

@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-cffi-stdlib-atoi
+;; TEST-SECTION: cffi
+;; TEST-CONTEXT: monadc.context.language.cffi-runtime
+;; TEST-PURPOSE: Runtime C FFI passes a Monad string to a C string parser.
+;; TEST-ATOM: (atoi "42") prints 42.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(include "stdlib.h")
+(show (atoi "42"))

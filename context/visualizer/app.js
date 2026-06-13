@@ -26,6 +26,7 @@ const palette = {
   observation: "#52d6ff",
   inference: "#d0bcff",
   decision: "#ffb86b",
+  documentation: "#b8f7d4",
   todo: "#ffd400",
   done: "#49d28f",
   test: "#49d28f",
@@ -60,6 +61,7 @@ let renderCache = { graph: null, nodes: [], edges: [] };
 let doneAnimationUntil = 0;
 let perfProbe = null;
 let graphLoaded = false;
+let searchMatchedIds = new Set();
 
 loadGraph();
 scheduleFrame();
@@ -202,6 +204,7 @@ function prepareGraph(payload) {
     if (donePulseStarted) doneAnimationUntil = Math.max(doneAnimationUntil, donePulseStarted + 900);
     return {
       ...node,
+      search_blob: buildNodeSearchText(node),
       x: Math.cos(angle) * radius,
       y: Math.sin(angle) * radius,
       vx: 0,
@@ -221,7 +224,7 @@ function prepareGraph(payload) {
 }
 
 function groupIndex(kind) {
-  return { todo: 0, test: 1, decision: 2, observation: 3, component: 4, context: 5, file: 6, source: 7, metadata: 8 }[kind] ?? 5;
+  return { todo: 0, documentation: 1, test: 2, decision: 3, observation: 4, component: 5, context: 6, file: 7, source: 8, metadata: 9 }[kind] ?? 6;
 }
 
 function applyVisibility() {
@@ -230,9 +233,21 @@ function applyVisibility() {
   selectedEdge = null;
   cascade = emptyCascade();
   const q = searchEl.value.trim();
+  const matching = new Set();
+  const connected = new Set();
+  if (q) {
+    for (const node of graph.nodes) {
+      if (kindMatches(node) && fuzzyScore(node, q) > -Infinity) matching.add(node.id);
+    }
+    for (const edge of graph.edges) {
+      if (matching.has(edge.source)) connected.add(edge.target);
+      if (matching.has(edge.target)) connected.add(edge.source);
+    }
+  }
+  searchMatchedIds = matching;
   for (const node of graph.nodes) {
     const kindMatch = kindMatches(node);
-    const searchMatch = !q || fuzzyScore(node, q) > -Infinity;
+    const searchMatch = !q || matching.has(node.id) || connected.has(node.id);
     node.visible = kindMatch && searchMatch;
   }
   invalidateRenderCache();
@@ -252,18 +267,19 @@ function kindMatches(node) {
   if (activeKind === "all") return true;
   if (activeKind === "todo") return node.kind === "todo" && node.status !== "done";
   if (activeKind === "done") return node.kind === "todo" && node.status === "done";
-  if (activeKind === "context") return !["todo", "test", "decision"].includes(node.kind);
+  if (activeKind === "context") return !["todo", "test", "decision", "documentation"].includes(node.kind);
   return node.kind === activeKind;
 }
 
 function renderCandidates() {
   candidateEl.classList.toggle("open", searchEl.matches(":focus") && candidates.length > 0);
   candidateEl.innerHTML = candidates.map((node, index) => `
-    <div class="candidate ${node.kind === "todo" ? "todo" : ""} ${index === candidateIndex ? "active" : ""}" data-index="${index}">
+    <div class="candidate ${node.kind === "todo" ? "todo" : ""} ${node.kind === "documentation" ? "documentation" : ""} ${index === candidateIndex ? "active" : ""}" data-index="${index}">
       <div class="candidate-kind">${escapeHtml(node.kind === "todo" ? "TODO" : node.kind)}</div>
       <div>
         <div class="candidate-title">${escapeHtml(node.label)}</div>
-        <div class="candidate-file">${escapeHtml(node.file)}</div>
+        <div class="candidate-file">${escapeHtml(node.heading || node.file)} · ${escapeHtml(node.file)}</div>
+        <div class="candidate-snippet">${escapeHtml(truncate(node.summary || node.content || node.id, 140))}</div>
       </div>
     </div>
   `).join("");
@@ -298,10 +314,17 @@ function focusCandidate(node) {
 }
 
 function fuzzyScore(node, query) {
-  const haystack = `${node.kind} ${node.label} ${node.id} ${node.file} ${node.summary}`.toLowerCase();
+  const haystack = searchText(node);
   const needle = query.toLowerCase();
   let h = 0;
-  let score = node.kind === "todo" ? 24 : 0;
+  let score = node.kind === "todo" ? 24 : node.kind === "documentation" ? 18 : 0;
+  const label = String(node.label || "").toLowerCase();
+  const heading = String(node.heading || "").toLowerCase();
+  const id = String(node.id || "").toLowerCase();
+  if (label === needle || heading === needle || id === needle) score += 260;
+  if (label.includes(needle)) score += 120;
+  if (heading.includes(needle)) score += 110;
+  if (id.includes(needle)) score += 74;
   for (let n = 0; n < needle.length; n += 1) {
     const found = haystack.indexOf(needle[n], h);
     if (found === -1) return -Infinity;
@@ -310,6 +333,26 @@ function fuzzyScore(node, query) {
   }
   if (haystack.includes(needle)) score += 32;
   return score;
+}
+
+function searchText(node) {
+  if (node.search_blob) return node.search_blob;
+  node.search_blob = buildNodeSearchText(node);
+  return node.search_blob;
+}
+
+function buildNodeSearchText(node) {
+  return [
+    node.kind,
+    node.record_type,
+    node.label,
+    node.heading,
+    node.id,
+    node.file,
+    node.source,
+    node.summary,
+    node.content,
+  ].filter(Boolean).join(" ").toLowerCase();
 }
 
 function renderStats() {
@@ -840,20 +883,21 @@ function drawArrowhead(fromX, fromY, toX, toY, color, size) {
 function drawNode(node, time) {
   const color = nodeColor(node);
   const isSelected = selected && selected.id === node.id;
+  const isSearchHit = searchMatchedIds.has(node.id);
   const inCascade = cascade.nodes.has(node.id);
-  const r = node.radius + (isSelected ? 7 : 0);
+  const r = node.radius + (isSelected ? 7 : isSearchHit ? 4 : 0);
   ctx.save();
   ctx.shadowBlur = isSelected ? 18 : 0;
   if (isSelected) ctx.shadowColor = color;
   ctx.beginPath();
   ctx.arc(node.x, node.y, Math.max(3, r), 0, Math.PI * 2);
   ctx.fillStyle = color;
-  ctx.globalAlpha = isSelected ? 1 : inCascade ? 0.94 : node.kind === "todo" ? 0.86 : 0.54;
+  ctx.globalAlpha = isSelected || isSearchHit ? 1 : inCascade ? 0.94 : node.kind === "todo" ? 0.86 : 0.54;
   ctx.fill();
   ctx.globalAlpha = 1;
   ctx.shadowBlur = 0;
-  ctx.strokeStyle = isSelected ? "#ffffff" : inCascade ? "rgba(255,255,255,0.72)" : node.kind === "todo" ? "rgba(255,244,184,0.72)" : "rgba(255,255,255,0.30)";
-  ctx.lineWidth = isSelected ? 3.4 : inCascade ? 2.1 : node.kind === "todo" ? 1.6 : 1;
+  ctx.strokeStyle = isSelected || isSearchHit ? "#ffffff" : inCascade ? "rgba(255,255,255,0.72)" : node.kind === "todo" ? "rgba(255,244,184,0.72)" : "rgba(255,255,255,0.30)";
+  ctx.lineWidth = isSelected ? 3.4 : isSearchHit ? 2.8 : inCascade ? 2.1 : node.kind === "todo" ? 1.6 : 1;
   ctx.stroke();
   if (isSelected || node.kind === "todo") {
     ctx.font = `${node.kind === "todo" ? 700 : 500} 13px Inter, Roboto, sans-serif`;
@@ -1000,19 +1044,25 @@ function deselectAll() {
 
 function updateInspector(node) {
   inspectorEl.classList.toggle("todo-selected", node.kind === "todo");
-  overlineEl.textContent = node.kind === "todo" ? "TODO" : "Selected Object";
+  inspectorEl.classList.toggle("doc-selected", node.kind === "documentation");
+  overlineEl.textContent = node.kind === "todo" ? "TODO" : node.kind === "documentation" ? "Documentation" : "Selected Object";
   titleEl.textContent = node.label;
-  kindEl.textContent = `${node.kind === "todo" ? "TODO" : node.kind} · ${node.file}`;
-  detailEl.innerHTML = [
+  kindEl.textContent = `${node.record_type || (node.kind === "todo" ? "TODO" : node.kind)} · ${node.file}`;
+  const rows = [
     ["ID", node.id],
+    ["Heading", node.heading || node.label],
     ["Summary", node.summary || "No summary recorded."],
+    ["Body", renderOrgText(node.content || node.summary || ""), true],
+    ["Record", node.record_type || node.kind],
+    ["Source", node.source || "not specified"],
     ["Confidence", node.confidence || "not specified"],
     ["Status", node.status || "active"],
     ["Outgoing", graph.edges.filter((edge) => edge.source === node.id).length],
     ["Incoming", graph.edges.filter((edge) => edge.target === node.id).length],
     ["Cascade", `${cascade.nodes.size} objects · ${cascade.edges.size} morphisms`],
     ["Open", openFileButton(node), true],
-  ].map(renderDetailRow).join("");
+  ];
+  detailEl.innerHTML = rows.filter(([_key, value]) => value !== "").map(renderDetailRow).join("");
   bindOpenButtons(node);
   renderNeighbors(node);
 }
@@ -1079,6 +1129,14 @@ function truncate(value, max) {
 
 function renderDetailRow([key, value, html = false]) {
   return `<dt>${escapeHtml(key)}</dt><dd>${html ? value : escapeHtml(String(value))}</dd>`;
+}
+
+function renderOrgText(value) {
+  const text = String(value || "").trim();
+  if (!text) return `<span class="muted">No body recorded.</span>`;
+  return `<div class="doc-body">${escapeHtml(text)
+    .replace(/\n{2,}/g, "</p><p>")
+    .replace(/\n/g, "<br>")}</div>`;
 }
 
 function openFileButton(target) {

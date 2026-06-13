@@ -4,7 +4,7 @@
 #+CREATED: 2026-06-11
 #+LAST_MODIFIED: 2026-06-12
 #+LANGUAGE: en
-#+STARTUP: showeverything
+#+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
 #+CATEGORY: monadc-context
 #+FILETAGS: :monadc:compiler:context:tests:verification:llm:
@@ -230,6 +230,56 @@ assertions directly instead of requiring hand-written shell checks per fixture.
   that file exactly. This supports stable golden-output checks even when compiler
   logs are noisy.
 
+[DEC id:dec.tests.sectioned-report date:2026-06-12 by:human]
+  The test runner should present first-class sections for meaningful subsets,
+  including C FFI and refinement types, not only broad source formats. Each
+  section should have a visible separator, a closing section line, and pass/fail
+  percentage reporting. The final summary should include a per-section table.
+
+[DEC id:dec.tests.straight-section-rules date:2026-06-12 by:human]
+  Section separators should be simple long straight horizontal rules with
+  color-coded headings, not box-corner frames. Per-test progress rows should
+  align the counter column, for example =[1273/1277]=, independently from the
+  variable-width source location prefix.
+
+[DEC id:dec.tests.generated-artifact-cleanup date:2026-06-12 by:human]
+  The test runner owns cleanup of generated artifacts. This includes per-fixture
+  object/executable/IR/JSON outputs, temporary materialized fixtures, generated
+  runner cache directories such as =tests/__pycache__=, and partial outputs left
+  by failed tests.
+
+[OBS id:obs.tests.sectioned-runner-stats src:tests/run.py conf:high]
+  =tests/run.py= keeps per-section totals in =SectionStats= and sorts sections
+  with an explicit =SECTION_ORDER=. The runner prints an opening straight rule,
+  an aligned progress row for every test, a closing straight-rule section
+  footer with passed/total, failure count, percentage, and elapsed time, then a
+  final section summary table.
+
+[DEC id:dec.tests.interaction-corpus date:2026-06-12 by:human]
+  Complex cross-feature coverage belongs in the =interaction= section. New
+  parser combinations should usually extend =tests/reader-interactions.tsv=
+  before being promoted into runtime/codegen fixtures, unless the behavior under
+  test specifically requires execution.
+
+[DEC id:dec.tests.cffi-runtime-not-parser-fluff date:2026-06-12 by:human]
+  C FFI tests must be real runtime/codegen contracts. Parser-only C FFI rows
+  that merely show a symbol can be read are not valuable coverage. Passing C FFI
+  subset tests should live under =tests/codegen/rt_cffi_*.mon=, compile, link,
+  run, and assert stdout from actual C-backed calls or constants.
+
+[DEC id:dec.tests.reader-atom-json-golden-table date:2026-06-12 by:human]
+  =tests/reader-atoms.tsv= has a JSONL golden table at
+  =tests/reader-atoms.golden.jsonl=. Each row maps a unique atom name to the
+  normalized AST JSON emitted by =--emit-json=, with volatile =line=/=col=
+  fields removed. The test runner compares emitted AST JSON against this table
+  when an entry exists, so parser AST shape changes become visible instead of
+  silently passing as long as parsing succeeds.
+
+[OBS id:obs.tests.reader-atom-golden-scope src:tests/reader-atoms.golden.jsonl conf:high]
+  The current reader atom golden table intentionally excludes duplicate atom
+  names and rows that fail to emit JSON today. This avoids ambiguous keys while
+  locking every uniquely named stable atom in the corpus.
+
 [DEC id:dec.tests.expected-failures date:2026-06-12 by:human]
   Supposed-to-fail tests are first-class regression fixtures. Use
   =TEST-EXPECT: fail:compile= for a fixture that should be rejected by the
@@ -374,9 +424,9 @@ assertions directly instead of requiring hand-written shell checks per fixture.
    - =rt_asm_function_naked.mon=: (asm ...) with :naked True compiles and runs
      but returns first param only (current output: 60, expected: 130). Documents
      that the add instruction result is not propagated through LLVM inline asm.
-   - =rt_asm_function_nonaked.mon=: (asm add x y) with :naked False fails due to
-     size-suffix inference (32-bit 'l' suffix for Int/i64 params). Documents
-     asm.c:reg_size_suffix fix needed: Int (i64) should infer 'q' suffix, not 'l'.
+   - =rt_asm_function_nonaked.mon=: (asm add x y) with :naked False originally
+     documented the old size-suffix bug; it now passes and proves =q= suffix
+     inference for =Int=/i64 params.
 
 [OBS id:obs.tests.asm-nonaked-2026-06-12 src:tests/codegen/rt_asm_function_nonaked.mon conf:high]
    =rt_asm_function_nonaked.mon= now passes. The fixture proves that non-naked
@@ -387,6 +437,93 @@ assertions directly instead of requiring hand-written shell checks per fixture.
    =rt_asm_top_level.mon= is an expected compile failure. Top-level =asm= may
    parse and type-check as an opaque hole during bootstrap, but codegen rejects
    it because inline asm is only valid as a function body.
+
+[OBS id:obs.tests.asm-corpus-rewritten-2026-06-13 src:tests/codegen/asm,create_asm_tests.py conf:high]
+   The generated =tests/codegen/asm= subset has been rewritten from top-level
+   =(inline asm "...")= snippets into targeted function-body Wisp fixtures.
+   The corpus now covers =asm.c=/=asm.h= behavior: mnemonic splitting,
+   parameter placeholder substitution, immediate escaping, suffix inference,
+   AT&T operand reordering, multi-parameter constraints, Float/Char return
+   types, no-op placement, and syscall-shaped String operands.
+
+[OBS id:obs.tests.asm-corpus-behavior-names-2026-06-13 src:tests/codegen/asm,create_asm_tests.py conf:high]
+   The asm corpus is generated as 60 behavior-named fixtures such as
+   =asm-int-add-two-params.mon=, =asm-sse-float-add.mon=,
+   =asm-cmov-max.mon=, and =asm-syscall-write-string.mon=. The generator deletes
+   stale generated =asm-*.mon= and =asm-*.stdout= files before writing the current
+   set so the directory does not retain misleading historical filenames.
+   Verification: the asm subset passed =60/60= through =tests/run.py=.
+
+[OBS id:obs.tests.fuzzing-codegen-2026-06-13 src:tests/fuzzing/fuzz_codegen.py,Makefile conf:high]
+   =tests/fuzzing/fuzz_codegen.py= is the first deterministic type-directed
+   fuzzing harness. It discovers real property assets from
+   =tests/fuzzing/properties/*.fuzz=, generates typed Int/Bool programs with
+   typed helper definitions, compiles them with =monad=, runs the executable,
+   and checks stdout against generated algebraic laws. The current
+   QuickCheck-style law set covers addition/multiplication commutativity,
+   addition associativity, distributivity, arithmetic identities and inverses,
+   typed identity functions, equality/comparison reflexivity and duality,
+   negative properties that expect =False=, typed =min=/=max= helpers, Bool
+   identity, and the stable codegen forms =if=, =do=, and =with=.
+   Bool-returning helper definitions are generated with predicate names ending
+   in =?= because the compiler enforces that naming rule. Richer direct Boolean
+   literal generation found a current =False= codegen gap, so it should be
+   re-enabled only with a focused regression fix. The runner intentionally
+   prints output like =tests/run.py=: runner-width dividers, aligned
+   =path:line:column:= prefixes, seed compile/run rows, one row per generated
+   law, microsecond generation timing, expected/actual values, source property
+   locations, and failure replay files under =tests/fuzzing/last=. Full
+   generated expressions are available with =--show-expr=. On failure the
+   runner performs a first shrink pass by trying a one-law counterexample and
+   then the smallest failing prefix. Current integration is type-directed and
+   compiler-pipeline-backed: generated programs carry explicit type signatures
+   and are checked by =dep.c=/=infer.c= before codegen. A future deeper layer
+   should introspect exported type information from the compiler itself instead
+   of maintaining the generator type universe only in Python and =*.fuzz=
+   files. Verification: =make fuzzing= passed 96 deterministic seeds / 960
+   generated laws across 41 property files and emitted 1299 output lines.
+
+[DOC id:doc.tests.fuzzing-system-2026-06-13 src:tests/fuzzing/fuzz_codegen.py,tests/fuzzing/properties,Makefile conf:high]
+   Purpose: =tests/fuzzing= is the property-based test layer for compiler
+   behavior that is too broad to cover with hand-written runtime fixtures
+   alone. It is meant to find interactions between the reader, dependent
+   checker (=dep.c=), HM inference (=infer.c=), codegen, and runtime printing by
+   generating many small typed programs and checking algebraic laws.
+
+   Entry point: run it through Make, not by memorizing script paths:
+   =make fuzzing= or =make test-fuzzing=. The Makefile target maps to
+   =python3 tests/fuzzing/fuzz_codegen.py= and exists because repository helper
+   scripts should have Makefile front doors.
+
+   Property files: each law lives in =tests/fuzzing/properties/*.fuzz= with
+   fields =name=, =section=, =args=, =type=, =expect=, =description=, and =law=.
+   The =args= field declares the generator types, for example =a:Int b:Int= or
+   =cond:Bool=. The =law= field is a template where ={name}= placeholders are
+   replaced by generated expressions of the declared type. Positive laws use
+   =expect: True=. Negative properties are first-class and use =expect: False=,
+   for example strict self-comparison =(fuzz-lt? a a)=.
+
+   Type-system integration: the fuzzer is type-directed at generation time and
+   type-checked by the compiler at execution time. It emits typed helper
+   definitions such as =fuzz-add :: Int -> Int -> Int=, predicate helpers such
+   as =fuzz-lt? :: Int -> Int -> Bool=, and generated =show= forms. The compiler
+   must parse, desugar, run =dep.c=/=infer.c=, lower through codegen, link, run,
+   and print the expected value for every generated law. This is stronger than
+   parser fuzzing but not yet full compiler-introspective fuzzing; the next
+   level is to export compiler type/environment metadata and let the fuzzer
+   derive generators from that.
+
+   Output contract: the fuzz runner follows =tests/run.py= presentation rules.
+   Rows start with =path:line:column:= for Emacs compilation-mode, use aligned
+   prefixes and the shared divider width, show PASS/FAIL plus duration, and
+   keep generated expressions hidden by default. Use =--show-expr= for full law
+   bodies, =--list-properties= for property documentation, and =--keep= to keep
+   generated programs even when they pass.
+
+   Failure handling: failing generated programs are copied to
+   =tests/fuzzing/last=. The runner also attempts a small source-level shrink:
+   isolate a one-law counterexample when possible, otherwise report the
+   smallest failing prefix of the generated law list.
 
 [DEC id:dec.tests.wisp-bang-sugar date:2026-06-12 by:codex]
    The Wisp desugaring transforms (fn! var args) to (var fn! args) when var is
@@ -452,6 +589,14 @@ assertions directly instead of requiring hand-written shell checks per fixture.
    =core/text/String.mon= dependency failure through old =::= parameter
    annotation in =core/text/Ascii.mon=, and dependent failures in
    =core/Math.mon= through =Coll=.
+
+[TODO id:todo.tests.auto-prelude-import date:2026-06-13 owner:human status:open]
+   The desired language rule is that prelude definitions are automatically
+   available without explicit imports. Do not enable automatic =Coll= import
+   until importing =core/prelude/Coll.mon= is green: an explicit probe
+   =(import Coll)= currently fails while compiling =takeWhile= in =Coll.mon=.
+   Turning auto-prelude on before that precondition would make ordinary programs
+   fail during dependency compilation.
 
 [OBS id:obs.tests.math-gcd-variadic-is-intended-2026-06-12 src:core/Math.mon conf:high]
    =core/Math.mon= intentionally defines =gcd= as a variadic Wisp pattern

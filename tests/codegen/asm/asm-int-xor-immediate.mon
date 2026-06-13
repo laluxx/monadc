@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.int-xor-immediate
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Immediate xor uses escaped LLVM inline-asm immediates.
+;; TEST-ATOM: xor x 8 returns x ^ 8.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-xor-imm :: Int -> Int
+  x -> (asm xor x 8)
+
+show (asm-xor-imm 34)

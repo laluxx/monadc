@@ -1,0 +1,7 @@
+name: equality_shifted_by_one_false
+section: negative
+args: a:Int
+type: Bool
+expect: False
+description: An Int expression must not equal itself plus one.
+law: (fuzz-eq-int? {a} (fuzz-add {a} 1))

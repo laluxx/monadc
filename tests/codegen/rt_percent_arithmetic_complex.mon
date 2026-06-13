@@ -1,0 +1,11 @@
+;; TEST-ID: tests.codegen.rt-percent-arithmetic-complex
+;; TEST-CONTEXT: monadc.context.reader.sugar.percent, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Percentage literals participate in arithmetic and comparison as ratios.
+;; TEST-ATOM: Percent literals add, multiply, print normalized ratios, and apply as fraction functions.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(show (+ 25% 75%))
+(show (* 12.5% 8))
+(show 0.5%)
+(show (1.5% 200))

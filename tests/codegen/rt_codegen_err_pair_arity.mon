@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-pair-arity
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen enforces pair? arity.
+;; TEST-ATOM: (pair?) must fail because pair? requires one argument.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(show (pair?))

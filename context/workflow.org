@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-12
 #+LAST_MODIFIED: 2026-06-12
-#+STARTUP: showeverything
+#+STARTUP: hideblocks
 #+FILETAGS: :monadc:compiler:context:workflow:redirect:
 
 [OBS id:obs.workflow.redirected src:context/guidelines.org conf:high]

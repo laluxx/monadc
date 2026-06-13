@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-cffi-ctype-toupper
+;; TEST-SECTION: cffi
+;; TEST-CONTEXT: monadc.context.language.cffi-runtime
+;; TEST-PURPOSE: Runtime C FFI calls a ctype conversion function.
+;; TEST-ATOM: (toupper 97) prints ASCII code 65.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(include "ctype.h")
+(show (toupper 97))

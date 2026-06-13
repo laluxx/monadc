@@ -1,0 +1,7 @@
+name: int_mul_distributive
+section: arithmetic
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Multiplication must distribute over addition.
+law: (= (fuzz-mul {a} (fuzz-add {b} {c})) (fuzz-add (fuzz-mul {a} {b}) (fuzz-mul {a} {c})))

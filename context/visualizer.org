@@ -4,7 +4,7 @@
 #+CREATED: 2026-06-11
 #+LAST_MODIFIED: 2026-06-11
 #+LANGUAGE: en
-#+STARTUP: showeverything
+#+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
 #+CATEGORY: monadc-context
 #+FILETAGS: :monadc:compiler:context:visualizer:category-theory:
@@ -14,7 +14,7 @@
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
+#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO DOC THINK
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -167,6 +167,19 @@ pointer anchor instead of applying immediate linear zoom jumps.
   Graph navigation should feel immediate: dragging moves the camera directly,
   finder navigation uses arrow keys, and the background grid is a world-space
   multi-scale grid with stable major/minor steps and origin axes.
+
+[DEC id:dec.visualizer.doc-record-signature date:2026-06-12 by:human]
+  =DOC= is a first-class context record signature, parallel to =OBS=, =DEC=,
+  and =TODO=. Documentation records should be searchable as documentation,
+  rendered with richer body text in the inspector, and linked into the graph via
+  the same source/evidence and heading containment relations as other records.
+
+[DOC id:doc.visualizer.search-documentation src:context-visualizer.py,context/visualizer/app.js conf:high]
+  The context visualizer search index includes Org headings, property drawer
+  IDs, record IDs, record signatures, file names, source references, summaries,
+  and record/section bodies. When a query is active, the graph renders matching
+  objects plus directly connected objects so searches behave like documentation
+  lookup without losing graph context.
 
 * Test Metadata Connection
 :PROPERTIES:

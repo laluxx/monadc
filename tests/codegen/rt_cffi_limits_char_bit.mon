@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-cffi-limits-char-bit
+;; TEST-SECTION: cffi
+;; TEST-CONTEXT: monadc.context.language.cffi-runtime
+;; TEST-PURPOSE: Runtime C FFI exposes CHAR_BIT from limits.h.
+;; TEST-ATOM: CHAR_BIT is greater than zero.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(include "limits.h")
+(show (> CHAR_BIT 0))

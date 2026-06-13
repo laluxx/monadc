@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-not-arity
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen enforces not arity.
+;; TEST-ATOM: (not True False) must fail because not is unary.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(show (not True False))

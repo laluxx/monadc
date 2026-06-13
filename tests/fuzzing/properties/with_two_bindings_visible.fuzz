@@ -1,0 +1,7 @@
+name: with_two_bindings_visible
+section: binding
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Multiple with bindings must both be visible in the body.
+law: (= (with [x {a} y {b}] (fuzz-add x y)) (fuzz-add {a} {b}))

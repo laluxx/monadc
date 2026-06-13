@@ -1,0 +1,7 @@
+name: max_upper_bound_right
+section: order
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The typed max helper must be greater than or equal to its right argument.
+law: (fuzz-gte? (fuzz-max {a} {b}) {b})

@@ -1,0 +1,7 @@
+name: int_mul_identity_one
+section: arithmetic
+args: a:Int
+type: Bool
+expect: True
+description: Multiplying by one on either side must preserve an Int expression.
+law: (= (fuzz-mul {a} 1) (fuzz-mul 1 {a}))

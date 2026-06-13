@@ -1,0 +1,7 @@
+name: arithmetic_add_sub_cancel_left
+section: arithmetic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Subtracting the left addend from a sum must recover the right addend.
+law: (= (fuzz-sub (fuzz-add {a} {b}) {a}) {b})

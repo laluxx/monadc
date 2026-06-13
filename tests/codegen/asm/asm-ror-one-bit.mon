@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.ror-one-bit
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Rotate-right accepts an immediate count and tied Int output.
+;; TEST-ATOM: ror 1 x halves 84 by rotating within a 64-bit register.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-ror1 :: Int -> Int
+  x -> (asm ror 1 x)
+
+show (asm-ror1 84)

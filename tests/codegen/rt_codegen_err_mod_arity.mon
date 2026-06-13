@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-mod-arity
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen enforces mod arity.
+;; TEST-ATOM: (mod 4) must fail because mod requires dividend and divisor.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(show (mod 4))

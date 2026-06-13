@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.char-return-immediate
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Immediate mov can return Char values.
+;; TEST-ATOM: mov 65 %al ret returns character A.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-char-const :: Int -> Char
+  x -> (asm mov 65 %al ret)
+
+show (asm-char-const 0)

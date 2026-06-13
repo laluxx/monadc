@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-unbound-variable
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen reports an unbound variable used as a value.
+;; TEST-ATOM: (show missing) must fail with an unbound variable diagnostic.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(show missing)

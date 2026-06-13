@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.int-and-two-params
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Bitwise and combines two integer operands.
+;; TEST-ATOM: and a b returns a & b.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-and :: Int -> Int -> Int
+  a b -> (asm and a b)
+
+show (asm-and 47 42)

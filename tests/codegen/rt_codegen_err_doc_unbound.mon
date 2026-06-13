@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-doc-unbound
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen reports doc reflection on an unbound symbol.
+;; TEST-ATOM: (doc missing) must fail with a doc-specific unbound variable diagnostic.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(doc missing)

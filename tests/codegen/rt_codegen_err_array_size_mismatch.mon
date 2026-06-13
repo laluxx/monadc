@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-array-size-mismatch
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen rejects array literals that violate explicit sized array annotations.
+;; TEST-ATOM: Arr :: 2 :: Int with three values must fail.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(define [xs :: Arr :: 2 :: Int] [1 2 3])

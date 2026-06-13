@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.mov-param-to-rax
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Parameter placeholder identity through mov.
+;; TEST-ATOM: mov from the first parameter into the return register preserves the value.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-id :: Int -> Int
+  x -> (asm mov x %rax ret)
+
+show (asm-id 42)

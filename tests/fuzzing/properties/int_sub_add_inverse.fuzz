@@ -1,0 +1,7 @@
+name: int_sub_add_inverse
+section: arithmetic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Adding then subtracting the same generated Int expression must recover the original.
+law: (= (fuzz-sub (fuzz-add {a} {b}) {b}) {a})

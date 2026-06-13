@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.int-dec
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Unary dec mutates the tied output register.
+;; TEST-ATOM: dec x returns x - 1.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-dec :: Int -> Int
+  x -> (asm dec x)
+
+show (asm-dec 43)

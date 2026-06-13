@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-address-builtin
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen rejects address-of on builtins.
+;; TEST-ATOM: &show must fail because builtins are not lvalues.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(show &show)

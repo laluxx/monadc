@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-cffi-math-floor
+;; TEST-SECTION: cffi
+;; TEST-CONTEXT: monadc.context.language.cffi-runtime
+;; TEST-PURPOSE: Runtime C FFI preserves a double-returning unary function.
+;; TEST-ATOM: (floor 3.9) prints 3.
+;; TEST-EXPECT: compile, run
+
+(module Main)
+(include "math.h")
+(show (floor 3.9))

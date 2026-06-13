@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-if-arity
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen enforces if arity.
+;; TEST-ATOM: (if True) must fail because if requires a condition and branch body.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(if True)

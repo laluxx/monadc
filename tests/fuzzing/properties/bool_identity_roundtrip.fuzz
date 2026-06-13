@@ -1,0 +1,7 @@
+name: bool_identity_roundtrip
+section: bool
+args: cond:Bool
+type: Bool
+expect: True
+description: A typed Bool predicate helper must preserve generated Bool expressions.
+law: (= (fuzz-bool-id? (fuzz-bool-id? {cond})) {cond})

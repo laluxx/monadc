@@ -1,0 +1,7 @@
+name: comparison_strict_reflexive_pair
+section: comparison
+args: a:Int
+type: Bool
+expect: True
+description: Strict less-than and greater-than must agree on equal generated Int expressions.
+law: (= (fuzz-lt? {a} {a}) (fuzz-gt? {a} {a}))

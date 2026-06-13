@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-head-arity
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen enforces head arity.
+;; TEST-ATOM: (head) must fail because head requires one collection argument.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(show (head))

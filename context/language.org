@@ -4,7 +4,7 @@
 #+CREATED: 2026-06-11
 #+LAST_MODIFIED: 2026-06-12
 #+LANGUAGE: en
-#+STARTUP: showeverything
+#+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
 #+CATEGORY: monadc-context
 #+FILETAGS: :monadc:compiler:context:language:tests:syntax:
@@ -259,13 +259,13 @@
 :ID: monadc.context.language.codegen-gaps
 :CUSTOM_ID: codegen-gaps
 :CONTEXT_KIND: observation
-:CONTEXT_VERSION: 1
+:CONTEXT_VERSION: 2
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: codex
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
-:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
 :SOURCE: tests/codegen
@@ -306,11 +306,11 @@
   =add y %rax= returns the first parameter only, not the sum. The raw asm
   output has no LLVM constraint wiring.
 
-[OBS id:obs.language.gap-asm-nonaked src:asm.c:346 conf:high]
-  Inline assembly with =:naked False= fails because =reg_size_suffix= infers
-  32-bit 'l' suffix for Int parameters (which are i64), producing invalid
-  instructions like =addl= with 64-bit registers. Fix: check LLVM type width
-  or Int type kind to emit 'q'.
+[OBS id:obs.language.gap-asm-nonaked src:asm.c:346 conf:high status:superseded superseded-by:obs.language.asm-nonaked-i64-fixed]
+  SUPERSEDED: Non-naked inline assembly used to fail because size suffix
+  inference chose 32-bit =l= for =Int= parameters. The current implementation
+  infers suffixes from LLVM operand widths and is covered by
+  =tests/codegen/asm= and =rt_asm_function_nonaked.mon=.
 
 [OBS id:obs.language.asm-nonaked-i64-fixed src:asm.c conf:high]
   Non-naked inline asm now infers bare integer instruction suffixes from LLVM
@@ -318,6 +318,74 @@
   two-operand arithmetic swaps LLVM placeholders so =(asm add x y)= lowers to
   =addq $2, $1= under constraints =r,0,r=. Verified by
   =rt_asm_function_nonaked.mon= printing =30= for =(add 10 20)=.
+
+* Inline Assembly
+:PROPERTIES:
+:ID: monadc.context.language.inline-asm
+:CUSTOM_ID: inline-assembly
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: asm.c,asm.h,reader.c,codegen.c,tests/codegen/asm
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.language.inline-asm-function-body-only date:2026-06-13 by:human]
+  Meaningful inline assembly tests must use real function bodies, not top-level
+  =(inline asm "...")= snippets. The supported user-facing shape is a typed
+  function whose body is =(asm ...)=, for example:
+  =define sys-write :: Int -> String -> Int -> Int= followed by
+  =fd buf len -> (asm mov 1 %rax mov fd %rdi mov buf %rsi mov len %rdx syscall ret)=.
+
+[OBS id:obs.language.inline-asm-parser src:reader.c:3889 conf:high]
+  The reader recognizes =(asm mnemonic operand ...)= inside an S-expression and
+  creates =AST_ASM=. Wisp-style definitions expand to that same form, so
+  indentation syntax and parenthesized syntax share the backend.
+
+[OBS id:obs.language.inline-asm-preprocess src:asm.c,asm.h conf:high]
+  =asm.h= exposes =AsmInstruction=, =AsmContext=, =RegisterAllocator=, and
+  =preprocess_asm=. =asm.c= splits a flat =AST_ASM= token stream into
+  instructions by mnemonic recognition, maps parameter symbols to LLVM
+  placeholders in non-naked functions, maps parameter symbols to SysV ABI
+  registers in naked functions, escapes numeric immediates, and preserves string
+  operands as raw text.
+
+[OBS id:obs.language.inline-asm-codegen src:asm.c,codegen.c conf:high]
+  Non-naked asm lowers through =LLVMGetInlineAsm= with return constraints
+  =r= for integer-like values and =x= for floats. The first parameter is tied to
+  the output with =,0=, later parameters use =,r=. Bare integer mnemonics infer
+  size suffixes from LLVM integer widths or register names. Two-operand
+  arithmetic/logical instructions with placeholder destinations are reordered
+  for AT&T syntax.
+
+[OBS id:obs.language.inline-asm-tests src:tests/codegen/asm conf:high]
+  =tests/codegen/asm= contains 60 Wisp-style function-body asm fixtures. They
+  cover syscall-shaped String operands, Int placeholder arithmetic, immediate
+  escaping, multi-instruction splitting, unary inc/dec/neg/not, shifts and
+  rotates with immediate counts, six-argument placeholder constraints, Char and
+  Float return types, SSE scalar add/multiply, conditional moves, signed
+  division, xchg, no-op placement, and syscall-shaped operands. The old
+  generated top-level asm fixtures were replaced because they did not exercise
+  the supported backend path.
+
+[OBS id:obs.language.inline-asm-pointer-gap src:tests/codegen/asm/asm-hello-world.mon conf:medium]
+  Superseded by =obs.language.inline-asm-pointer-sugar-codegen=. The original
+  gap was that the syscall example wanted =*U8= for buffers but codegen rejected
+  pointer-sugar parameter types.
+
+[OBS id:obs.language.inline-asm-pointer-sugar-codegen src:types.c,tests/codegen/asm/asm-sys-write-u8-pointer.mon conf:high]
+  =type_from_name= accepts star-prefixed pointer sugar such as =*U8= and
+  converts it to =Pointer :: U8=. Inline asm function definitions using the
+  user-facing syscall shape now compile. String literals still type-check as
+  =String=, so direct String-to-=*U8= call coercion remains a separate FFI bridge
+  concern.
 
 [OBS id:obs.language.gap-superscript src:tests/codegen conf:high]
   Superscript sugar (=x²=) desugars to =(^ x 2)=, but =^= has no strcmp
@@ -333,11 +401,17 @@
   lambda bindings. The workaround is to use s-expression form.
 
 [OBS id:obs.language.gap-core-prelude src:core/ conf:high]
-  Core prelude (=Coll.mon=, =Test.mon=) is NOT automatically imported. Users
-  must add explicit =import= declarations. Additionally, core modules have
+  Core prelude (=Coll.mon=, =Test.mon=) is NOT automatically imported yet. The
+  desired language rule is automatic availability without explicit imports, but
+  an explicit =import Coll= currently fails while compiling =takeWhile= in
+  =core/prelude/Coll.mon=. Additionally, core modules have
   compilation failures: variadic =gcd= in =Math.mon=, =takeWhile= inference in
   =Coll.mon=, Wisp =tests= block parsing in =Set.mon=, old =::= annotation
   syntax in =Ascii.mon=.
+
+[INF id:inf.language.codegen-gaps-connect from:obs.language.gap-map-runtime,obs.language.gap-closures conf:high]
+  connects-to -> `monadc.context.language.primitive-map` (the map runtime bug is the most philosophically significant gap, analyzed in the map primitive entry) ·
+  `monadc.context.language.primitive-function` (the closure dispatch gap is historically contingent, not principled — documented in the function primitive entry)
 
 * Pattern Matching
 :PROPERTIES:
@@ -379,13 +453,13 @@
 :ID: monadc.context.language.type-system-surface
 :CUSTOM_ID: type-system-surface
 :CONTEXT_KIND: component
-:CONTEXT_VERSION: 1
+:CONTEXT_VERSION: 2
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-11
-:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
 :SOURCE: infer.h,dep.h,infer.c,dep.c
@@ -413,6 +487,169 @@
   correctly at multiple concrete types via monomorphization. Partial application
   of a typed binary function returns a callable closure.
 
+[INF id:inf.language.type-system-surface-connect from:obs.language.hm-surface,obs.language.dep-surface,obs.language.hm-polymorphism conf:high]
+  connects-to -> `monadc.context.language.primitive-function` (the HM/ITT dual representation is the central architectural axis) ·
+  `monadc.context.language.primitive-dependent-types` (the NbE kernel handles Pi/Sigma/equality types exercised by the dep surface) ·
+  `monadc.context.language.primitive-connections` (the cross-cutting pattern connecting all primitives)
+
+* C FFI Runtime
+:PROPERTIES:
+:ID: monadc.context.language.cffi-runtime
+:CUSTOM_ID: c-ffi-runtime
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: ffi.c,codegen.c,tests/codegen/rt_cffi_*.mon
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.language.cffi-runtime-subset-tests date:2026-06-12 by:human]
+  C FFI coverage is a first-class runtime/codegen test subset, not a parser
+  fluff subset. Passing C FFI tests belong in =tests/codegen/rt_cffi_*.mon= and
+  must compile, link, run, and assert stdout from actual C-backed calls or C
+  header constants.
+
+[OBS id:obs.language.cffi-angle-gap src:tests/reader-atoms.tsv conf:high]
+  Quoted include forms such as =(include "math.h")= parse today. Angle include
+  forms such as =(include <stdio.h>)= are still represented by baseline coverage
+  elsewhere and currently behave differently, so the C FFI subset uses quoted
+  headers for passing runtime contracts.
+
+[OBS id:obs.language.cffi-runtime-working-calls src:tests/codegen/rt_cffi_*.mon conf:high]
+  Runtime C FFI coverage currently proves calls through =math.h= (=sqrt=,
+  =floor=, =ceil=, =fabs=, =hypot=), =stdlib.h= (=atoi=), =string.h=
+  (=strlen=, =strcmp=, =strncmp=, =strchr= composed with =strlen=), =ctype.h=
+  (=toupper=, =tolower=, =isdigit=), and =limits.h= constants (=INT_MAX=,
+  =CHAR_BIT=).
+
+[OBS id:obs.language.cffi-runtime-gaps src:ffi.c,codegen.c conf:medium]
+  Some C FFI surfaces parse or link but are not yet trustworthy runtime
+  contracts. For example, =pow= and =sin 0.0= have returned garbage in runtime
+  probes, and =float.h= cache loading did not inject =FLT_RADIX= in a passing
+  way. These should become explicit expected-failure or bug-fix fixtures when
+  the C FFI implementation work starts, not green parser-only rows.
+
+* Codegen Diagnostics
+:PROPERTIES:
+:ID: monadc.context.language.codegen-diagnostics
+:CUSTOM_ID: codegen-diagnostics
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c,tests/codegen/rt_codegen_err_*.mon
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.language.codegen-diagnostics-are-relations date:2026-06-12 by:human]
+  Compiler diagnostics are semantic relations between invalid source forms and
+  explicit compiler errors. Each stable =codegen.c= error path should have a
+  focused expected-failure fixture with a diagnostic golden so the failure is
+  reproducible and searchable in context.
+
+[OBS id:obs.language.codegen-diagnostic-fixtures src:tests/codegen/rt_codegen_err_*.mon conf:high]
+  The =diagnostic= test section covers one compiler error per fixture for
+  unbound variables, unknown functions, quote/quasiquote arity, doc/code
+  reflection misuse, sized-array mismatches, layout declaration/access errors,
+  address-of errors, mutation lvalue/arity errors, cast arity, refinement naming
+  and base-type errors, empty list forms, and non-callable number heads.
+
+[OBS id:obs.language.codegen-diagnostic-arity-coverage src:tests/codegen/rt_codegen_err_*_arity.mon,tests/codegen/rt_codegen_err_quote_index_oob.mon conf:high]
+  The diagnostic subset now also covers focused codegen guard branches for
+  runtime collection operations (=head=, =tail=, =pair?=, =++=, =count=),
+  control forms (=if=, =unless=, =while=, =for=), arithmetic/bitwise arity,
+  array-as-function arity, scalar variables in call position, top-level
+  =undefined=, empty-array inference, quoted-list literal bounds checks, and
+  malformed non-array =for= bindings. Fixtures stay intentionally small so one
+  expected compiler error maps to one =codegen.c= branch.
+
+* Refinement Type Syntax
+:PROPERTIES:
+:ID: monadc.context.language.refinement-types
+:CUSTOM_ID: refinement-type-syntax
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: reader.c,tests/reader-refinements.tsv,tests/codegen/rt_refinement_type.mon
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.language.refinement-subset-tests date:2026-06-12 by:human]
+  Refinement type syntax is a first-class test subset. The parser corpus in
+  =tests/reader-refinements.tsv= covers predicate shapes, aliases, doc metadata,
+  primitive and collection base types, ratio/percentage/radix predicates, and
+  nested boolean/arithmetic predicates separately from runtime codegen fixtures.
+
+* Feature Interaction Syntax
+:PROPERTIES:
+:ID: monadc.context.language.feature-interactions
+:CUSTOM_ID: feature-interaction-syntax
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: reader.c,wisp.c,tests/reader-interactions.tsv
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.language.interaction-subset-tests date:2026-06-12 by:human]
+  Cross-feature syntax coverage is a first-class test subset. The parser corpus
+  in =tests/reader-interactions.tsv= combines C FFI, refinements, Wisp, layouts,
+  maps, ratios/percentages, arrays, data declarations, classes, lambdas, control
+  forms, quoting, feature conditionals, imports, and type aliases so features
+  stay parseable when used together instead of only as isolated atoms.
+
+* Atom Superset Syntax
+:PROPERTIES:
+:ID: monadc.context.language.atom-supersets
+:CUSTOM_ID: atom-superset-syntax
+:CONTEXT_KIND: component
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: tests/reader-supersets.tsv,tests/run.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.language.atom-superset-tests date:2026-06-12 by:human]
+  Atom superset parser tests combine two or more smaller reader atoms into one
+  explicit contract. Rows in =tests/reader-supersets.tsv= carry
+  =TEST-SUPERSET= metadata listing the atom/features they intentionally combine,
+  so the corpus is a traceable composition table rather than a pile of unrelated
+  examples.
+
 [DEC id:dec.language.dep-bare-fn-annotation date:2026-06-12 by:human]
   In dependent type annotations, bare =Fn= is an existential callable
   placeholder, not a definitional-equality rule that makes every =TERM_PI=
@@ -438,13 +675,13 @@
 :ID: monadc.context.language.wisp-sugar-effects
 :CUSTOM_ID: wisp-sugar-effects
 :CONTEXT_KIND: observation
-:CONTEXT_VERSION: 1
+:CONTEXT_VERSION: 2
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: codex
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
-:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
 :SOURCE: wisp.c
@@ -467,6 +704,10 @@
   Predicate functions returning =Bool= must end with =?= per the compiler's
   naming convention. Functions without =?= suffix that return Bool may not be
   recognized as predicates by some compiler passes.
+
+[INF id:inf.language.wisp-sugar-connect from:obs.language.wisp-bang-sugar-effect,obs.language.wisp-qmark-sugar-effect,obs.language.predicate-naming conf:high]
+  connects-to -> `monadc.context.language.primitive-set` (!-sugar affects =conj!=/=disj!= operations on sets; ?-sugar affects =contains?= for set variables) ·
+  `monadc.context.language.primitive-function` (?-sugar functions must end with =?=; predicate naming convention is enforced by codegen)
 
 * Reader-Header-Driven Coverage
 :PROPERTIES:
@@ -685,3 +926,563 @@
   the same reader shape as =(define (name [p : T] ... -> R) ...)=. The
   parenthesized function header must be kept as one grouped token, not wrapped
   into =((name ...))=.
+
+* Primitive Type Philosophy
+:PROPERTIES:
+:ID: monadc.context.language.primitive-philosophy
+:CUSTOM_ID: primitive-type-philosophy
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: types.h,types.c,reader.c,reader.h,infer.c,codegen.c,runtime.c,runtime.h,dep.c,dep.h
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.language.primitives-intro conf:high]
+  This section records the design intent behind every primitive type in MonadC.
+  Each entry is an opinion — grounded in source observations, traced through
+  philosophy, and connected to every other primitive. The central claim is that
+  all primitives are manifestations of one idea: types are sets, functions are
+  relations, and the compiler's job is to make both the mathematical abstraction
+  and the hardware concrete accessible from the same expression.
+
+** Array (TYPE_ARR)
+:PROPERTIES:
+:ID: monadc.context.language.primitive-array
+:CUSTOM_ID: primitive-array
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: types.c:449-499,types.c:844-863,codegen.c:671-689,codegen.c:789-880,reader.c:5576,reader.c:6056-6082,infer.c:1104-1114,runtime.c:2177-2203
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.language.array-three-forms src:types.c:449-499 conf:high]
+  Arrays exist in three forms sharing one `TYPE_ARR`. `type_arr(elem, size)` is a
+  compile-time-known stack array lowered to LLVM `[N x T]`. `type_arr_fat(elem)`
+  is a runtime-sized fat pointer `{i8* data, i64 size}`. `type_arr_heap(elem)`
+  is a heap-growable array with the same fat-pointer LLVM representation but
+  `arr_is_heap=true` distinguishing it for mutation semantics. All three collapse
+  to `arr.fat*` at the LLVM level when passed around.
+
+[INF id:inf.language.array-ladder from:obs.language.array-three-forms,dec.philosophy.zero-to-metal conf:high]
+  The three array forms are the zero-to-metal ladder made concrete. `[1 2 3]`
+  starts as a stack array with compile-time-known size. Size sugar `[16kb I32]`
+  annotates the size at the type level. `~[1 2 3]` signals heap allocation.
+  From type-level set (a function `Int → elem` whose domain is known) to raw
+  memory buffer, the ladder is: `type_arr → type_arr_fat → Pointer :: U8`.
+
+[THINK id:think.language.array-why-three conf:high]
+  Why three forms instead of one? Because the philosophy refuses the trade-off
+  between mathematical safety and hardware control. A single uniform array
+  representation would either lose the size information needed for bounds
+  checking (safe but slow) or require the programmer to manage memory manually
+  (fast but unsafe). Three forms let the programmer choose: `[1 2 3]` when the
+  size is known and the compiler should check it; `~[1 2 3]` when the data
+  outlives the stack frame; `[16kb I32]` when the layout must match a C struct.
+  The cost is complexity — three constructors, three LLVM paths, three sets of
+  rules about what can be done with each. The payoff is that no programmer is
+  forced into a representation that fights their use case.
+
+[OBS id:obs.language.array-type-to-llvm src:codegen.c:671-689 conf:high]
+  `type_to_llvm` for `TYPE_ARR` branches on `type_arr_runtime_sized`. When true
+  (fat, heap, or unknown-size), the LLVM type is a pointer to `arr.fat` struct
+  `{i8*, i64}`. When false (known positive size), the LLVM type is `[N x T]`
+  — a proper fixed-size array. But in practice, even stack arrays are immediately
+  wrapped into `arr.fat*` via `arr_make_fat` at codegen time
+  (codegen.c:3763-3789). The `[N x T]` path exists but is almost immediately
+  heap-allocated.
+
+[INF id:inf.language.array-fat-wrapping from:obs.language.array-type-to-llvm,obs.language.array-three-forms conf:high]
+  The gap between the type representation and the codegen choice is significant.
+  At the type level, `type_arr` preserves `arr_size`. At the codegen level,
+  every array is heap-allocated into a fat pointer. The type says "I know this
+  size" but the generated code treats it as runtime-sized. This means
+  compile-time size information is used for type checking (bounds in indexing,
+  unification) but NOT for stack allocation. The philosophical ideal of
+  "zero-cost abstraction" collides with the practical reality that LLVM needs
+  stack allocation decisions made at the function level, and arrays returned
+  from functions must be heap-allocated.
+
+[THINK id:think.language.array-as-function conf:high]
+  Array indexing `(arr i)` is syntactic sugar for function application. In the
+  semantic model, an array IS a function from `Int` to `elem`. The count
+  operation is domain cardinality. The array predicate `Arr?` is a
+  compile-time check of whether a type is `TYPE_ARR`. This is consistent with
+  the set-theoretic model: an array is a finite function, represented
+  extensionally as a block of memory. The three forms are three ways to specify
+  the domain: known size (stack), unknown size (fat), mutable size (heap).
+  Every other primitive follows the same pattern — there is always a
+  type-level ideal and a runtime pragmatism, bridged by the codegen.
+
+[INF id:inf.language.array-connects-to-everything from:obs.language.array-three-forms,obs.language.heap-array-runtime-codegen-fixture,obs.language.path-literal-codegen-values conf:high]
+  connects-to -> `monadc.context.language.primitive-set` (TYPE_SET also uses
+  compile-time pred + runtime hash) · `monadc.context.language.primitive-map`
+  (TYPE_MAP also has type-level/runtime split) ·
+  `monadc.context.language.primitive-function` (array-as-function is the same
+  morphism as map-as-function and set-as-function) ·
+  `monadc.context.language.primitive-dependent-types` (the TERM_EMBED bridge
+  is the same pattern as arr_make_fat) ·
+  `monadc.context.language.codegen-dispatch` (array operations are strcmp
+  dispatches in codegen.c like everything else)
+
+** Set (TYPE_SET)
+:PROPERTIES:
+:ID: monadc.context.language.primitive-set
+:CUSTOM_ID: primitive-set
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: types.c:432,runtime.c:1144-1486,codegen.c:690-691,codegen.c:3791-3843,infer.c:1081-1089,reader.c:5873-5912
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.language.set-no-param src:types.c:432,codegen.c:690-691 conf:high]
+  `TYPE_SET` is a bare ground type with no element type parameter. `type_set()`
+  returns a tag with no children. The LLVM type is `i8*` (opaque pointer).
+  `Set?` is a compile-time type predicate checking `type->kind == TYPE_SET`.
+  This means the compiler cannot distinguish `Set[Int]` from `Set[String]` at
+  the codegen level — all sets are the same type.
+
+[THINK id:think.language.set-why-untyped conf:high]
+  Why does `TYPE_SET` carry no element type? The philosophical answer: because
+  in the set-theoretic model, a set is just a collection of values, and values
+  are all uniformly represented at runtime. The statement `(conj {1 2 3} "hi")`
+  is type-correct because `conj` has scheme `∀a. Set → a → Set` — the element
+  type variable `a` is instantiated but NOT stored in the result type. The
+  runtime hash set stores `RuntimeValue*` pointers and uses `rt_equal_p` for
+  equality. Type parameters would add a checked-boxing overhead that contradicts
+  the "no overhead" principle without providing runtime safety that the hash
+  table's dynamic equality doesn't already have.
+
+[INF id:inf.language.set-grounded-in-model from:obs.language.set-no-param,dec.philosophy.sets-are-the-model,dec.philosophy.purity-is-practical conf:high]
+  Sets are not merely a collection type — they are the runtime incarnation of
+  the type system's semantic model. When the philosophy says "types are sets",
+  it means that `TYPE_INT` and `TYPE_SET` are fundamentally the same kind of
+  object: both are collections of values. `Int` is the infinite set of all
+  integers; `{1 2 3}` is the finite set of three integers. The compiler should
+  treat them as the same category of thing. This is why `Set?` is a compile-time
+  type predicate — it's checking whether a type expression denotes a set at the
+  type level. The same mechanism that checks `Int?` also checks `Set?`. The
+  type system doesn't distinguish between "atomic types" and "collection types"
+  at the fundamental level — both are just sets.
+
+[OBS id:obs.language.set-two-mutability-modes src:runtime.c:1371-1383,codegen.c:2392-2415 conf:high]
+  Set operations come in immutable and mutable pairs. `conj`/`disj` copy the
+  set before modifying. `conj!`/`disj!` mutate in place. Both paths go through
+  the same runtime codegen helper `codegen_set_op` which unboxes, calls the
+  runtime function, and re-wraps. The distinction is purely a runtime choice
+  — the type scheme for `conj` and `conj!` is identical: `∀a. Set → a → Set`.
+
+[INF id:inf.language.set-functional-mutability-why from:obs.language.set-two-mutability-modes,dec.philosophy.purity-is-practical conf:high]
+  The immutable/mutable distinction for sets is the "purity is practical"
+  principle in microcosm. Functional `conj` returns a new set — mathematically
+  pure, referentially transparent, safe to use in any context. Mutable `conj!`
+  modifies in place — faster but requires the programmer to track aliasing.
+  Both exist because the refusal to choose between mathematical purity and
+  hardware control applies at every level, not just the grand architectural
+  choices. The default is `conj` (pure). The escape hatch is `conj!` (mutable).
+  The type system treats them identically — the distinction is a commitment
+  about aliasing that the programmer makes, not a distinction the compiler
+  enforces.
+
+[OBS id:obs.language.set-as-function src:codegen.c:9880-9907,infer.c:1474-1477 conf:high]
+  A variable of `TYPE_SET` can be used as a function: `(s 1)` returns the
+  element if present, `nil` otherwise. This is implemented by a special codegen
+  path for `ENV_VAR` with `TYPE_SET` — it skips arrow unification and calls
+  `rt_set_get`. The inference side skips `TYPE_ARROW` unification when the
+  function position has `TYPE_SET`.
+
+[INF id:inf.language.set-as-function-why from:obs.language.set-as-function,dec.philosophy.sets-are-the-model conf:high]
+  Set-as-function is the most direct line from philosophy to implementation. If
+  types are sets and functions are relations, then a set IS a function from its
+  elements to Bool. When you write `(s 1)`, you are applying the characteristic
+  function of the set `s` to the argument `1`. This is not sugar — it is the
+  semantic model surfacing through the syntax. The same mechanism makes arrays
+  functions `(arr i)`, maps functions `(m key)`, and lists functions `(lst i)`.
+  The collection-as-function coercion in `infer_unify_one` (infer.c:426-470) is
+  the type system acknowledging that collections ARE functions in the
+  semantic model.
+
+[INF id:inf.language.set-connects-to from:obs.language.set-no-param,obs.language.set-two-mutability-modes,obs.language.set-as-function conf:high]
+  connects-to -> `monadc.context.language.primitive-array` (same
+  collection-as-function coercion, same ground type representation) ·
+  `monadc.context.language.primitive-map` (TYPE_MAP shares TYPE_SET's ground
+  type design and collection-as-function semantics) ·
+  `monadc.context.language.primitive-function` (set-as-function is the
+  characteristic function of the set) ·
+  `monadc.context.language.wisp-sugar-effects` (!-sugar and ?-sugar affect set
+  operation calls) ·
+  `monadc.context.philosophy.sets-are-the-model` (the philosophical foundation
+  that makes sets first-class)
+
+** Map (TYPE_MAP)
+:PROPERTIES:
+:ID: monadc.context.language.primitive-map
+:CUSTOM_ID: primitive-map
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: types.c:433,infer.c:1091-1102,codegen.c:3818-3843,codegen.c:2417-2454,runtime.c:864-1139,reader.c:5914-5951
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.language.map-ground-type src:types.c:433 conf:high]
+  `TYPE_MAP` is a bare ground type with no key or value type parameters.
+  `type_map()` returns `make_type(TYPE_MAP)`. The LLVM type is `i8*`.
+  `Map?` is a compile-time type predicate. This mirrors `TYPE_SET` exactly.
+
+[OBS id:obs.language.map-hash-brace-syntax src:reader.c:5914-5951,reader.c:1350-1353 conf:high]
+  Maps use `#{k v ...}` syntax — the lexer recognizes `#{` as the two-character
+  token `TOK_HASH_LBRACE` distinct from the set's `TOK_LBRACE`. The parser
+  collects alternating key-value pairs into `AST_MAP.keys[]` and
+  `AST_MAP.vals[]`. An empty map `#{}` is valid and parsed as an `AST_MAP` with
+  zero pairs.
+
+[OBS id:obs.language.map-inference-no-params src:infer.c:1091-1102 conf:high]
+  `infer_expr` for `AST_MAP` creates fresh type variables `key_t` and `val_t`,
+  constrains all keys to `key_t` and all values to `val_t`, but returns bare
+  `type_map()` with no type parameters. The inferred key/value types are
+  unified at the call site but erased from the result. The HM type schemes
+  for map operations (`assoc : Map -> k -> v -> Map`, `keys : Map -> List k`)
+  reintroduce polymorphism at each call site through instantiation.
+
+[THINK id:think.language.map-why-hash-brace conf:high]
+  Why `#{:a 1}` instead of `{:a 1}`? The surface distinction exists because
+  the set-theoretic model says maps ARE sets (of pairs), but the surface
+  syntax must distinguish a map literal `{:a 1 :b 2}` from a set literal
+  `{:a :b 1 2}` when both use the same brace delimiters. The `#{}` prefix is
+  an explicit surface marker: "this brace block is a map, not a set." In the
+  semantic model, `#{:a 1}` is `{(:a . 1)}` — a set of pairs. The surface
+  syntax acknowledges that while maps and sets are the same category-theory
+  object, programmers need a visual distinction for the common case.
+
+[THINK id:think.language.map-bug-significance conf:high]
+  The map garbage bug (untyped `{:a 1}` produces garbage at runtime) is the
+  most philosophically significant bug in the compiler. It reveals the exact
+  point where the type system's idealization (maps are uniform, everything is
+  `TYPE_MAP`) collides with the runtime's requirements (boxed values need type
+  information to unbox correctly). The fix is not complex — add `case TYPE_MAP:`
+  to `codegen_box` — but the bug exists precisely because the designers assumed
+  the bridge would hold. The type system says "maps are ground types, no
+  parameters needed." The runtime says "I need to know the representation of
+  the values I'm storing." Neither is wrong; the bridge between them was
+  incomplete. This bug is a concrete demonstration that the ladder between
+  abstraction and implementation has rungs missing — and finding them is the
+  core engineering work of the project.
+
+[OBS id:obs.language.map-runtime-representation src:runtime.c:864-1139 conf:high]
+  The runtime map is an open-addressing hash table (`RuntimeMap`) with linear
+  probing, tombstones, power-of-2 capacity starting at 8, and a load factor of
+  0.7. Keys and values are stored as `RuntimeValue*` pointers. The hash
+  function is FNV-1a for strings, Knuth multiplicative for integers,
+  XOR-aggregate for collections. Structural equality uses `rt_equal_p`.
+
+[INF id:inf.language.map-as-relation from:obs.language.map-ground-type,obs.language.map-as-function,dec.philosophy.sets-are-the-model conf:high]
+  In the set-theoretic model, a map IS a set of pairs `(key . value)`. The
+  `#{}` syntax constructs this set. `(m key)` applies the characteristic
+  relation. `keys` and `vals` are projections onto the first and second
+  components. `assoc` is `(conj m (pair key val))`. This is why maps share so
+  much infrastructure with sets: the same codegen pattern (ground type → box →
+  runtime hash table → unbox), the same type representation (`TYPE_MAP` is to
+  `TYPE_SET` as `{k,v}` is to `{v}`), and the same collection-as-function
+  coercion. The surface syntax distinguishes them for readability; the
+  semantic model unifies them.
+
+[INF id:inf.language.map-connects-to from:obs.language.map-ground-type,obs.language.map-runtime-representation,obs.language.map-inference-no-params,obs.semantic-model.map-as-relation conf:high]
+  connects-to -> `monadc.context.language.primitive-set` (shared ground type
+  design, shared runtime hash table architecture) ·
+  `monadc.context.language.primitive-array` (same collection-as-function path) ·
+  `monadc.context.language.primitive-function` (maps as extensional functions) ·
+  `monadc.context.language.codegen-gaps` (the map runtime bug is a documented
+  gap) ·
+  `monadc.context.language.primitive-dependent-types` (refinement types use
+  `Map` as a base type for predicate domains)
+
+** Function (TYPE_ARROW / TYPE_FN / TERM_PI)
+:PROPERTIES:
+:ID: monadc.context.language.primitive-function
+:CUSTOM_ID: primitive-function
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: types.c:541-555,types.h:22-39,reader.c:3244-3258,reader.c:2662,infer.c:1116-1197,codegen.c:4106-4640,codegen.c:705-707,dep.c:179-309,dep.c:1226-1245,dep.c:2248-2291
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.language.function-dual-representation src:types.h:22-39,dep.h:122-123 conf:high]
+  Functions have two type-level representations. `TYPE_ARROW` (types.h:39) is
+  the HM inference arrow: a simple `param → return` chain. `TYPE_FN` (types.h:22)
+  is the function descriptor with named parameters, optional args, rest args.
+  `TERM_PI` (dep.h:122) is the dependent Π-type `Π(x:A).B` where the parameter
+  appears in the return type. `TERM_EMBED` (dep.h:153) bridges between these:
+  a `Type*` from the HM world lives as a `TERM_EMBED` term in the ITT world.
+
+[OBS id:obs.language.function-closure-abi-dual src:codegen.c:4172-4189,codegen.c:4727-4789 conf:high]
+  Closure codegen has two ABIs. The typed ABI passes all parameters as
+  unboxed LLVM values — fast but requires the parameter count and types to be
+  known at compile time. The closure ABI passes `(env*, i64 n, RuntimeValue** args)`
+  — the environment pointer, argument count, and a boxed argument array. The
+  choice is made by `use_closure_abi = is_inner || captured_count > 0`
+  (codegen.c:4174). Simple top-level lambdas with no captures use the typed
+  ABI. Nested lambdas that capture variables use the closure ABI.
+
+[THINK id:think.language.function-why-dual conf:high]
+  The dual function representation is THE architectural axis of the compiler,
+  not a detail. Three dualities stack: HM arrow vs ITT Pi (expressiveness),
+  TYPE_FN descriptor vs TYPE_ARROW chain (parameter tracking vs inference),
+  typed ABI vs closure ABI (speed vs generality). Each duality serves the same
+  purpose: let the common case be fast and simple while the complex case
+  remains expressible. The bridges between them — `TERM_EMBED`,
+  `wrap_func_as_closure`, `dep_ground_of_value_env` — are where the real
+  engineering judgment lives. The design question "is this an HM function or
+  an ITT function?" is not a question about the programmer's intent — it is
+  a question about how much the compiler needs to know about the function to
+  compile it efficiently. HM functions can be monomorphized and inlined. ITT
+  functions need NbE, universe checking, and definitional equality. The
+  programmer writes the same syntax either way; the compiler chooses the path.
+
+[OBS id:obs.language.function-syntax-unification src:reader.c:3244-3258,reader.c:6388-6429 conf:high]
+  All surface syntax forms for functions are unified by the reader. `(lambda (x) body)`,
+  `(define (f x) body)`, `λx.body` (TOK_LAMBDA_LIT), and Wisp `x -> body`
+  all produce the same `AST_LAMBDA` node. The parser does not distinguish
+  between surface forms — the distinction is purely syntactic.
+
+[INF id:inf.language.function-abstraction-ladder from:obs.language.function-syntax-unification,dec.philosophy.zero-to-metal conf:high]
+  The five ways to write a function are the abstraction ladder for callables.
+  `λx.x` is pure lambda calculus — minimal syntax, maximal abstraction.
+  `(lambda (x) x)` is Lisp. `(define (f x) x)` is named Lisp. `x -> x` in Wisp
+  is equation-style. `(x -> x)` with typed params `[x : Int] -> Int` is
+  C-adjacent signature syntax. All compile to the same LLVM IR. The ladder is
+  continuous: a programmer can start with `λx.body` in a quick experiment and
+  graduate to typed signatures without changing the semantics.
+
+[THINK id:think.language.function-dispatch-gap-significance conf:high]
+  The gap where `fn`, `lambda`, `defn` have no strcmp dispatch handlers
+  (obs.language.gap-closures) is historically contingent, not philosophically
+  necessary. These are handled at the parser level — `(lambda ...)` is parsed
+  as `AST_LAMBDA` before codegen sees it. The missing dispatch means the
+  standalone symbol `lambda` cannot be used as a higher-order function value
+  (it is not callable from paren-mode). This is a bug in the completeness of
+  the dispatch table, not a design choice about what functions are. The
+  strcmp dispatch table registers 83+ symbols that CAN appear as call heads;
+  `lambda` is missing only because the parser intercepts it. The distinction
+  between "parser-level syntax" and "codegen-level callable" is an accidental
+  complexity, not a principled one.
+
+[INF id:inf.language.function-connects-to from:obs.language.function-dual-representation,obs.language.function-closure-abi-dual,obs.language.function-syntax-unification conf:high]
+  connects-to -> `monadc.context.language.primitive-dependent-types` (TERM_PI
+  is the dependent generalization of TYPE_ARROW) · `monadc.context.language.primitive-array`
+  (array-as-function reuses the same application machinery) ·
+  `monadc.context.language.primitive-set` (set-as-function reuses the same
+  application machinery) · `monadc.context.language.primitive-map`
+  (map-as-function reuses the same application machinery) ·
+  `monadc.context.language.codegen-dispatch` (the dispatch architecture
+  determines what counts as a callable) ·
+  `monadc.context.language.codegen-gaps` (closures are the biggest gap in the
+  dispatch table) ·
+  `monadc.context.wisp.sugar-transforms` (Wisp !-sugar and ?-sugar affect
+  how function calls are parsed) ·
+  `monadc.context.philosophy.zero-to-metal` (the abstraction ladder for
+  callables)
+
+** Dependent Types (TERM_PI / TERM_SIGMA / NbE Kernel)
+:PROPERTIES:
+:ID: monadc.context.language.primitive-dependent-types
+:CUSTOM_ID: primitive-dependent-types
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: dep.h:112-157,dep.h:304-393,dep.c:884-1506,dep.c:2048-2687,dep.c:2690-2782,dep.c:2784-3151,main.c:1025-1063
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.language.dep-nbe-kernel src:dep.h:304-393,dep.c:884-1506 conf:high]
+  The dependent type checker uses Normalization by Evaluation. `dep_eval`
+  (dep.c:1180-1386) evaluates terms to a semantic Value domain. `dep_quote`
+  (dep.c:1397-1501) reifies values back to terms. `dep_normalise` (dep.c:1503)
+  composes them for full normalisation. Values include `VAL_PI`, `VAL_LAM`,
+  `VAL_SIGMA`, `VAL_UNIVERSE`, `VAL_NEUTRAL`, `VAL_EMBED`, `VAL_META`.
+  Closures (dep.h:321-324) capture environment + unevaluated body for lazy
+  evaluation under binders. The fuel limit is `DEP_CONV_FUEL = 100000`
+  (dep.h:544).
+
+[OBS id:obs.language.dep-shadow-pass src:main.c:1025-1063,context/language.org:481-479 conf:high]
+  The dependent type checker runs as Phase 6.5 — a "shadow pass" between
+  features setup and LLVM codegen. It does not emit code. It checks types,
+  elaborates surface syntax to core terms, and back-propagates ground types
+  to `ast->inferred_type` via `dep_ground_of_value_env` (dep.c:2700-2782).
+  The HM inferencer and LLVM codegen then use these annotated types.
+
+[THINK id:think.language.dep-why-nbe conf:high]
+  Why NbE instead of syntactic evaluation? Because NbE is the architecture
+  that scales. A syntactic evaluator (reduce terms by rewriting) breaks down
+  when you add η-equality, proof irrelevance, or cumulativity — each new
+  feature requires new rewrite rules, and the rules interact in unpredictable
+  ways. NbE with a semantic Value domain handles these uniformly: η-equality
+  becomes η-expansion in `dep_quote`, cumulativity becomes subsumption in
+  `dep_conv`, proof irrelevance becomes value-level erasure. The semantic
+  domain is the canonical form: two terms are equal when they evaluate to the
+  same value. The NbE kernel in MonadC (dep.h:304-393) is not just good
+  enough — it is the right foundation for a language that aspires to full
+  dependent types. It will scale to inductive families, higher inductive
+  types, and cubical type theory without architectural rewrites.
+
+[THINK id:think.language.dep-why-shadow-pass conf:high]
+  Why a shadow pass instead of integrating dependent types into the main
+  inference pipeline? The pragmatic answer: HM inference is O(n) in the size
+  of the program, monomorphization is O(n * k) where k is the number of
+  instantiation points, and NbE is O(fuel) with a hard cap of 100k. If every
+  function went through the full ITT checker, the compiler would be unusably
+  slow for ground-type code. The shadow pass design means: HM infers everything
+  fast, the ITT pass validates dependent annotations and populates ground types
+  on AST nodes, and the codegen never needs to know whether a type came from
+  HM or ITT. This is the "purity is practical" principle applied to the
+  compiler's own architecture — the fast path is the default, the sophisticated
+  path is opt-in per expression.
+
+[OBS id:obs.language.dep-soundness-holes src:TODO.org:248-377,dep.c:1604-1623 conf:high]
+  The NbE kernel has known soundness holes. `dep_conv` allows implicit
+  Int≡Float and Int≡Char coercions (TODO.org:257). Pattern unification is a
+  stub (dep.c:1604-1623) with no Miller condition check. The occurs check runs
+  in the wrong environment (TODO.org:266). The ground type bridge converts
+  `VAL_PI` to `TYPE_ARROW` by dropping quantifiers, erasing dependent
+  connections (dep.c:2726-2734). Universe levels use equality not ≤
+  (TODO.org:346). These are documented in TODO.org as deliberate stubs.
+
+[THINK id:think.language.dep-holes-significance conf:high]
+  The soundness holes are not negligence — they are the project's thesis being
+  tested. The claim is that an NbE kernel with a clean architecture can be
+  incrementally filled in without rewrites. The stub pattern unification, the
+  missing cumulativity, the Int/Char coercions — these are all places where
+  the implementation says "this is where the next layer of correctness goes."
+  The compiler produces working code today because the HM pipeline handles the
+  common case and the ITT checker validates what it can. A program that uses
+  dependent types badly (Int where Char is expected) gets caught by the HM
+  type checker before the ITT pass even runs. The holes in `dep_conv` are
+  only reachable if HM already passed — meaning they are refinements, not
+  safety nets.
+
+[INF id:inf.language.dep-nbe-predictable-future from:obs.language.dep-nbe-kernel,obs.language.dep-soundness-holes,obs.philosophy.llm-nbe-architecture conf:high]
+  The NbE kernel is architecturally future-proof in the way the philosophy
+  predicts. The same infrastructure that checks `(Pi [x : Nat] Vec Bool x)`
+  today will scale to inductive families, higher universes, and cubical
+  extensions without rewriting the Value domain or the conversion checker.
+  The stubs in pattern unification and cumulativity will be filled by adding
+  cases to `dep_conv_vals_internal`, not by changing the evaluation model.
+  Whether this claim holds is the project's open empirical question, but the
+  evidence so far supports it: the NbE kernel was designed for full dependent
+  types and has required no architectural changes since its creation.
+
+[INF id:inf.language.dep-connects-to from:obs.language.dep-nbe-kernel,obs.language.dep-shadow-pass,obs.language.dep-soundness-holes,obs.philosophy.llm-nbe-architecture conf:high]
+  connects-to -> `monadc.context.language.primitive-function` (TERM_PI is the
+  dependent generalization of TYPE_ARROW, TERM_LAM is the dependent
+  generalization of AST_LAMBDA) ·
+  `monadc.context.language.primitive-array` (dependent types can express sized
+  arrays — `Vec Bool n` — which the current TYPE_ARR with arr_size approximates) ·
+  `monadc.context.language.primitive-set` (the set-theoretic model that grounds
+  TYPE_SET is the same set theory the dependent type checker uses for its
+  semantic model) ·
+  `monadc.context.language.primitive-map` (refinement types over Map are
+  elaborated through the dep checker) ·
+  `monadc.context.language.type-system-surface` (the surface syntax for Pi,
+  Sigma, equality types is exercised through the reader corpus) ·
+  `monadc.context.language.codegen-gaps` (the dep bridge's soundness holes
+  are tracked as gaps) ·
+  `monadc.context.philosophy.purity-is-practical` (the shadow pass design is
+  this principle in action) ·
+  `monadc.context.philosophy.llm-witness` (the NbE architecture is witnessed
+  by LLM as architecturally significant)
+
+* Primitive Cross-Cutting Connections
+:PROPERTIES:
+:ID: monadc.context.language.primitive-connections
+:CUSTOM_ID: primitive-cross-cutting
+:CONTEXT_KIND: decision
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: types.h,infer.c,codegen.c,dep.c
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.language.primitives-unified-theme conf:high]
+  Five primitives. One pattern repeated at every level: the type system has an
+  ideal representation (set, relation, function, dependent product), and the
+  runtime has a pragmatic representation (hash table, fat pointer, closure env,
+  embedded ground term). The bridge between them is always a translation layer
+  — `arr_make_fat` for arrays, `rt_value_set` for sets, `term_embed` for
+  dependent types, `wrap_func_as_closure` for functions. The bridges are where
+  the compiler's engineering judgment resides. They are always slightly
+  incomplete (map garbage bug, closure dispatch gap, dep_conv soundness holes),
+  and completing them is the ongoing work of the project.
+
+[THINK id:think.language.primitives-set-theoretic-core conf:high]
+  The set-theoretic model is the unifying principle. Arrays are functions
+  `Int → elem`. Sets are their own characteristic functions. Maps are sets of
+  pairs which are relations which are functions. Lambda is the introduction
+  form for the Pi type which is the dependent function space. Even the runtime
+  representations follow the set-theoretic model: hash sets store values, hash
+  maps store pairs, fat arrays store a function table `{data, size}`. The
+  category theory is not decorative — it is the explicit semantic model that
+  the compiler is built to realize. Every primitive, every operation, every
+  codegen path traces back to the claim that types are sets and functions are
+  relations.
+
+[INF id:inf.language.primitives-connect-to-philosophy from:think.language.primitives-unified-theme,think.language.primitives-set-theoretic-core conf:high]
+  connects-to -> `monadc.context.philosophy.sets-are-the-model` (the semantic
+  foundation for all primitive types) ·
+  `monadc.context.philosophy.no-tradeoff-principle` (every primitive has
+  multiple representations on the ladder from abstraction to hardware) ·
+  `monadc.context.philosophy.purity-is-practical` (the shadow pass, the
+  immutable-default collection operations, the typed-ABI-first closure design) ·
+  `monadc.context.philosophy.zero-to-metal` (the three array forms, the five
+  function syntaxes, the two set mutability modes)

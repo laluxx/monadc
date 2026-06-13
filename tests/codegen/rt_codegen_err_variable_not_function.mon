@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-variable-not-function
+;; TEST-SECTION: diagnostic
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen rejects scalar variables in function-call position.
+;; TEST-ATOM: (x 2) must fail when x is an Int variable.
+;; TEST-EXPECT: fail:compile
+
+(module Main)
+(define x 1)
+(show (x 2))

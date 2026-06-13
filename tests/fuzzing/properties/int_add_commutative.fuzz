@@ -1,0 +1,7 @@
+name: int_add_commutative
+section: arithmetic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Addition must be commutative for generated Int expressions.
+law: (= (fuzz-add {a} {b}) (fuzz-add {b} {a}))

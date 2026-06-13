@@ -1,0 +1,13 @@
+;; TEST-ID: tests.codegen.asm.six-param-reverse-sum
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Six integer parameters cover every SysV register allocator slot.
+;; TEST-ATOM: The first six Int parameters remain callable and addable.
+;; TEST-EXPECT: compile, run
+
+module AsmTest
+
+define asm-six-reverse :: Int -> Int -> Int -> Int -> Int -> Int -> Int
+  a b c d e f -> (asm add a f add a e add a d add a c add a b)
+
+show (asm-six-reverse 1 6 5 4 3 23)

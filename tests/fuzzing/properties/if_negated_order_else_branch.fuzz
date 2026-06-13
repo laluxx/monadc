@@ -1,0 +1,7 @@
+name: if_negated_order_else_branch
+section: control
+args: a:Int b:Int fallback:Int
+type: Bool
+expect: True
+description: Choosing on reversed strict order must agree with the equivalent direct conditional expression.
+law: (= (if (fuzz-gt? {a} {b}) {a} {fallback}) (if (fuzz-lt? {b} {a}) {a} {fallback}))
