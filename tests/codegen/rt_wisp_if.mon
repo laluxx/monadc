@@ -1,4 +1,4 @@
-;; TEST-ID: tests.wisp.rt-wisp-if
+;; TEST-ID: tests.codegen.rt-wisp-if
 ;; TEST-CONTEXT: monadc.context.wisp.if-form
 ;; TEST-PURPOSE: Wisp if form works
 ;; TEST-ATOM: show if True 42 0 → 42

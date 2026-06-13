@@ -52,6 +52,7 @@
 :ID: monadc.context.wisp.architecture
 :CUSTOM_ID: wisp-architecture
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The Wisp syntax expander architecture: a two-pass process (tokenization then layout expansion) that converts indentation-based Wisp into standard S-expressions before the reader sees them.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -83,6 +84,7 @@
 :ID: monadc.context.wisp.arity-table
 :CUSTOM_ID: wisp-arity-table
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The arity table maps function names to parameter counts, enabling the layout expander to parenthesize indented arguments correctly. Populated from three sources: builtins, FFI C headers, and layout constructors.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -122,6 +124,7 @@
 :ID: monadc.context.wisp.sugar-transforms
 :CUSTOM_ID: wisp-sugar-transforms
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Wisp sugar transforms that rewrite common patterns at the expansion level: ?-sugar (method-call), !-sugar (mutation-call), @-sugar (indexing), infix detection, and pipe sugar (|>). These transforms fire during layout expansion, before the reader parses the result.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -200,6 +203,7 @@
 :ID: monadc.context.wisp.limitations
 :CUSTOM_ID: wisp-limitations
 :CONTEXT_KIND: observation
+:CONTEXT_DESCRIPTION: Known limitations of the Wisp expander: char escape sequences that produce whitespace, ?-sugar and !-sugar interference with untyped variables, and parenthesized define header edge cases.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -265,6 +269,7 @@
 :ID: monadc.context.wisp.coverage
 :CUSTOM_ID: wisp-coverage
 :CONTEXT_KIND: observation
+:CONTEXT_DESCRIPTION: Test coverage for Wisp: desugar tests in tests/reader-sugars.tsv (192 entries covering all sugar types), compile/run tests in tests/codegen/ (wisp_* and rt_wisp_* fixtures), and reader-atoms.tsv entries that also exercise wisp paths.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human

@@ -51,9 +51,9 @@
 │   ├── json.mon       │
 │   └── TODO.mon       │
 │
-├── tests/             — Test suite (1048 tests)
+├── tests/             — Test suite (1465 tests)
 │   ├── run.py         │   Formatted test runner
-│   ├── codegen/       │   200+ compile/run .mon + .stdout pairs
+│   ├── codegen/       │   200+ compile/run .mon + .stdout pairs (includes wisp tests)
 │   ├── language/      │   600+ language feature tests
 │   └── sugar/         │   100+ sugar desugar tests
 │
@@ -81,9 +81,12 @@
 │   ├── visualizer.org │   Context visualizer docs
 │   ├── opinions.org   │   LLM critique
 │   ├── philosophy.org │   Language philosophy
+│   ├── references.org │   Research paper bibliography & cross-links
+│   ├── wisp.org       │   Wisp expander context (architecture, arity, sugars)
 │   └── commit-format.org
 │
-├── etc/               — Assets (logo, screenshots)
+├── etc/               — Assets (logo, screenshots, research PDFs)
+│   └── pdfs/          │   Research papers informing the design
 ├── Makefile           — Build (gcc + LLVM)
 ├── monad              — Compiled compiler binary
 └── libmonad.a         — Static runtime library
@@ -92,6 +95,8 @@
 -----
 
 ## 2. Philosophy
+
+> **Note on naming:** The codebase uses "Monad" (without the C suffix) for the language name throughout source files, type constructors, and documentation. The repository is named `monadc` (compiler) but the language itself is "Monad." This README follows the codebase convention.
 
 Monad is built on a conviction: the choice between high-level mathematical safety and low-level hardware control is a false dichotomy. A language should give you dependent types AND inline assembly, refinement types AND naked functions, lazy infinite lists AND C-compatible arrays — without binding generators, FFI wrappers, or runtime overhead.
 
@@ -448,8 +453,44 @@ See `how_to/Syntax.mon` for comprehensive examples.
 - **Signature clause sugar:** `define square :: Int -> Int` followed by `x -> x * x` binds `x` as the parameter and expands to a normal named-parameter function. Pattern clauses with `_`, literals, `[]`, `[x|xs]`, or guards remain pattern clauses.
 - **Parenthesized Wisp define headers:** `define (f [x : Int] -> Int)` is accepted without wrapping the whole form in parentheses, so Wisp can reuse Lisp-style function headers directly.
 - **Path values:** valid Unix path tokens such as `~/xos/projects/c/monadc/context/` are first-class `Path` values in Wisp and Lisp forms.
-- **`?`-sugar:** `(contains? var arg)` transforms to `(var contains? arg)` when `var` is an identifier (method-call sugar). Workaround: use a literal/non-identifier first arg.
-- **`!`-sugar:** `(conj! var arg)` → `(var conj! arg)`. Workaround: use `(conj! {values} arg)`.
+- **`?`-sugar (method-call):** `(contains? var arg)` transforms to `(var contains? arg)` when `var` is an untyped identifier. Workaround: annotate the variable `(define [s :: Set] ...)` or use a literal first arg.
+- **`!`-sugar (mutation):** `(conj! var arg)` → `(var conj! arg)`. Same constraints and workaround as `?`-sugar.
+- **Pipe sugar:** `x |> f |> g` chains as `(g (f x))`. Wisp uses the arity table for grouping.
+- **Inline if/then/else:** `if expr then stuff else stuff` (Form 3) and multiline `if expr then stuff else stuff` (Form 2) both work.
+
+### Wisp Form Reference
+
+Wisp and s-expr are interchangeable — every construct works in both forms. The table below documents Wisp-specific layout behavior and forms that require adaptation:
+
+| Construct | Wisp Form | Works | Notes |
+|-----------|-----------|-------|-------|
+| `define` value | `define x 42` | ✅ | |
+| `define` typed | `define x :: Int 42` | ✅ | Sugar for `(define [x :: Int] 42)` |
+| `define` function | `define square :: Int -> Int \n  x -> x * x` | ✅ | Simple clause binds `x` as param |
+| `define` parenthesized | `define (f [x : Int] -> Int) \n  _ [] -> 0` | ✅ | Lisp-style header in bare Wisp |
+| `show` | `show 42` | ✅ | |
+| arithmetic | `3 + 4` | ✅ | Infix detection |
+| comparison | `5 > 3` | ✅ | Infix detection |
+| logic | `True and False` | ✅ | Infix detection |
+| `if` inline | `if True 42 0` | ✅ | No `then` keyword needed |
+| `if` then/else | `if True then 42 else 0` | ✅ | Both inline and multiline |
+| `cond` | `cond [(> 5 3) body]` | ❌ | `cond` lacks strcmp dispatch |
+| `match` | `match x with [...]` | ❌ | Parser expects `|` clause markers |
+| `let`/`let*` | `let [x 42] body` | ❌ | No strcmp dispatch; body nesting breaks |
+| `lambda` | `define f lambda (x) -> body` | ❌ | Wisp layout doesn't nest lambda params correctly |
+| `while` | `while (< x 3) body` | ✅ | |
+| `for` | `for [i 0] while (< i n) next ...` | ❌ | `next` keyword not recognized by wisp |
+| `begin` | `begin \n  1 \n  2` | ❌ | `begin` not recognized as form at line level |
+| `pipe` | `x |> f |> g` | ✅ | |
+| `?-sugar` | `contains? s 5` | ✅ | Requires typed variable or literal set as first arg |
+| `!-sugar` | `conj! s 5` | ✅ | Same constraint as `?-sugar` |
+| `@-sugar` | `arr@0` | ❌ | `@` not a valid identifier character |
+| `set!` | `set! x 5` | ✅ | |
+| quote | `'hello` | ✅ | |
+| s-expr mix | `(show (+ 1 2))` in wisp | ✅ | Any s-expr works inside wisp code |
+| comment | `; this is a comment` | ✅ | |
+| `match` via fn | `define f \n  [1] -> "one" \n  [_] -> "other"` | ✅ | Pattern clauses in `define` body work |
+| nested indentation | `if (> x 0) \n  "pos" \n  "neg"` | ✅ | Wisp infers nesting from indentation |
 
 -----
 
@@ -749,6 +790,27 @@ python3 context-visualizer.py
 
 Features: animated force graph, fuzzy search (`C-n`/`C-p`), Hoogle method browser, TODO dashboard, editor integration, morphism arrows.
 
+The visualizer supports category-based filtering — different views into the graph's
+subcategories. Three key views are captured below:
+
+<p align="center">
+  <img src="./etc/screenshots/context-category.png" alt="Category: Language Explorer — decision subset with Hoogle method browser" width="95%"/>
+  <br/>
+  <em>Language Explorer — the decision subset of the context category, filtering to type-system and language-primitive decision nodes. Each node is a design decision with its source anchors, cross-links, and philosophical grounding. The left panel shows the Hoogle-like method browser: every core and prelude function is queryable by name or type signature, with directed call/caller trees projected onto the graph. This replaces traditional API docs with a live, navigable knowledge graph.</em>
+</p>
+
+<p align="center">
+  <img src="./etc/screenshots/context-category3.png" alt="Category: Full context graph — all categories and connections" width="95%"/>
+  <br/>
+  <em>Full Category — the entire context graph with all categories unfiltered. Every object (context heading, test fixture, TODO, source anchor) and every morphism (verifies, supports, evidenced-by, contains) is visible. The force-directed layout clusters related nodes: decisions form one region, tests form another, observations orbit their sources, and cross-cutting edges span between them. This is the live map of the project's memory.</em>
+</p>
+
+<p align="center">
+  <img src="./etc/screenshots/context-category4.png" alt="Category: Tests subset — test nodes connected to context" width="95%"/>
+  <br/>
+  <em>Tests Subset — the test nodes of the category filtered to show the test–context connection graph. Each test fixture (from codegen `.mon` files, reader-atoms.tsv, reader-sugars.tsv, or language-corpus.tsv) is an object, and the `verifies` morphism connects each test to the context nodes that explain what it tests and why it matters. Yellow nodes mark TODOs; green nodes mark passing tests; red nodes mark known failures documented in the context. This is the functor from the context category into the category of executable verification.</em>
+</p>
+
 ### 10.3 Test Metadata
 
 Every test fixture carries metadata linking it to context nodes:
@@ -765,37 +827,55 @@ Every test fixture carries metadata linking it to context nodes:
 
 See `context/index.org` for the full schema specification.
 
-| File | Purpose |
-|------|---------|
-| `context.org` | Root entry point, includes full index |
-| `index.org` | Schema, format specification, node index |
-| `reader.org` | Reader/parser context (AST, tokens, Wisp) |
-| `language.org` | Language formalization and type system |
-| `build.org` | Build/install commands and verification |
-| `tests.org` | Test metadata, philosophy, context links |
-| `workflow.org` | Standing user preferences and workflow |
-| `rules.org` | Standing repository rules |
-| `todo.org` | Project TODO notes with confidence levels |
-| `visualizer.org` | Visualizer implementation docs |
-| `opinions.org` | LLM critique and suggestions for context |
-| `philosophy.org` | Language and project philosophy (witnessed) |
-| `commit-format.org` | Commit message format conventions |
+| File                | Purpose                                     |
+|---------------------|---------------------------------------------|
+| `context.org`       | Root entry point, includes full index       |
+| `index.org`         | Schema, format specification, node index    |
+| `reader.org`        | Reader/parser context (AST, tokens, Wisp)   |
+| `language.org`      | Language formalization and type system      |
+| `build.org`         | Build/install commands and verification     |
+| `tests.org`         | Test metadata, philosophy, context links    |
+| `workflow.org`      | Standing user preferences and workflow      |
+| `rules.org`         | Standing repository rules                   |
+| `todo.org`          | Project TODO notes with confidence levels   |
+| `visualizer.org`    | Visualizer implementation docs              |
+| `opinions.org`      | LLM critique and suggestions for context    |
+| `philosophy.org`    | Language and project philosophy (witnessed) |
+| `wisp.org`          | Wisp expander architecture, arity, sugars   |
+| `references.org`    | Research paper bibliography & cross-links   |
+| `commit-format.org` | Commit message format conventions           |
 
-**Current corpus:** 1258 nodes, 1351 edges — 962 test nodes, all connected through verified morphisms.
+### 10.5 Context Node Documentation
+
+Every context section (node) carries a `CONTEXT_DESCRIPTION` property in its Org drawer explaining what that node IS — a human-readable summary of the concept, its role in the compiler, and why it exists. This description is rendered by the visualizer when a node is selected, replacing traditional API docs with a live navigable knowledge graph.
+
+Example from `context/wisp.org`:
+
+```org
+:CUSTOM_ID: wisp-architecture
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The Wisp syntax expander architecture: a two-pass process
+  (tokenization then layout expansion) that converts indentation-based Wisp into
+  standard S-expressions before the reader sees them.
+```
+
+**Current corpus:** ~1400 nodes, ~1500 edges — all connected through verified morphisms.
 
 -----
 
 ## 11. Test Infrastructure
 
-| Layer | Artifact | Size | Role |
-|-------|----------|------|------|
-| Atoms | `tests/reader-atoms.tsv` | 772 | Parser conformance atoms |
-| Sugar | `tests/reader-sugars.tsv` | 192 | Sugar desugar tests |
-| Codegen | `tests/codegen/*.mon` | 200+ | Compile/run fixtures |
-| Language | `tests/language/*.mon` | 600+ | Language feature tests |
-| Runner | `tests/run.py` | — | Formatted execution engine |
+| Layer    | Artifact                     | Size | Role                              |
+|----------|------------------------------|------|-----------------------------------|
+| Atoms    | `tests/reader-atoms.tsv`     | 772  | Parser conformance atoms          |
+| Sugar    | `tests/reader-sugars.tsv`    | 192  | Sugar desugar tests               |
+| Codegen  | `tests/codegen/*.mon`        | 200+ | Compile/run fixtures (incl. wisp) |
+| Language | `tests/language/*.mon`       | 600+ | Language feature tests            |
+| Runner   | `tests/run.py`               | —    | Formatted execution engine        |
 
-**Current status:** 1048 tests, 980 pass, 68 fail (pre-existing architectural issues).
+**Current status:** 1465 tests, 1417 pass, 48 fail (pre-existing architectural issues — all known, all documented in `context/tests.org`).
+
+**Wisp tests** are consolidated under `tests/codegen/` (formerly in `tests/wisp/`). Wisp sugar test fixtures for `?-sugar`, `!-sugar`, pipe, and inline/multiline `if`/`then`/`else` exercise both compilation and runtime output.
 
 Run the suite:
 
@@ -850,6 +930,13 @@ These are documented architectural gaps — not bugs in the test suite:
 | Higher-order | `map`/`filter`/`apply`/`partial` | Require closures |
 | Cond | `cond` form not recognized | Parser treats as ordinary variable |
 | Let | `let`/`let*`/`letrec` not dispatched | No strcmp handler |
+| Wisp cond | `cond` in wisp compiles but produces no output | No strcmp dispatch for `cond` |
+| Wisp let | `let`/`let*` in wisp — body nesting breaks | Wisp expansion doesn't preserve body scoping |
+| Wisp lambda | `lambda`/`fn` at wisp line level — param binding fails | Wisp layout can't nest lambda params |
+| Wisp for | `for` keyword not recognized by wisp expander | Missing from wisp keyword list |
+| Wisp begin | `begin` at wisp line level not callable | Treated as ordinary identifier |
+| Wisp @-sugar | `@`-sugar (indexing shorthand) not implemented | Reader rejects `@` in identifiers |
+| Garbage (wide) | Map, Set, List, String, Symbol, Keyword, Layout all leak through closures | `wrap_func_as_closure` passes ALL raw pointer types through without boxing |
 
 -----
 

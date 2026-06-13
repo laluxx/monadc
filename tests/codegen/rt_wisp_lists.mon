@@ -1,4 +1,4 @@
-;; TEST-ID: tests.wisp.rt-wisp-lists
+;; TEST-ID: tests.codegen.rt-wisp-lists
 ;; TEST-CONTEXT: monadc.context.wisp.lists
 ;; TEST-PURPOSE: Wisp list operations work
 ;; TEST-ATOM: car/cdr/nil?/empty? on quoted lists

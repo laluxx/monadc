@@ -1,4 +1,4 @@
-;; TEST-ID: tests.wisp.rt-wisp-path-value
+;; TEST-ID: tests.codegen.rt-wisp-path-value
 ;; TEST-CONTEXT: monadc.context.wisp.define-value, monadc.context.language.path-literal-values
 ;; TEST-PURPOSE: Wisp defines syntactically valid Unix path literals as first-class Path values.
 ;; TEST-ATOM: define path ~/... infers Path and show prints the path text.

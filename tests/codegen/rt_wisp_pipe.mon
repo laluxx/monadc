@@ -1,0 +1,9 @@
+;; TEST-ID: tests.codegen.rt-wisp-pipe
+;; TEST-CONTEXT: monadc.context.wisp.sugar-transforms
+;; TEST-PURPOSE: Wisp pipe |> chains function application.
+;; TEST-ATOM: (5 |> double |> add1) = 11
+;; TEST-EXPECT: compile, run
+module Main
+define double x -> x * 2
+define add1 x -> x + 1
+show 5 |> double |> add1

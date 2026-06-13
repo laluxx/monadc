@@ -8,7 +8,7 @@
 #+OPTIONS: toc:2 num:t
 #+CATEGORY: monadc-context
 #+FILETAGS: :monadc:compiler:context:philosophy:witness:human:llm:
-#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_VERSION 2
 #+PROPERTY: CONTEXT_SCOPE repository-local
 #+PROPERTY: CONTEXT_AUDIENCE human llm codex
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
@@ -60,6 +60,7 @@
 :ID: monadc.context.philosophy.human-witness
 :CUSTOM_ID: human-witness
 :CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: The five core philosophical principles decided by the human author: no trade-off between safety and control, purity is practical, syntax is instrument, zero-to-metal abstraction ladder, and sets are the model.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -117,6 +118,7 @@
 :ID: monadc.context.philosophy.llm-witness
 :CUSTOM_ID: llm-witness
 :CONTEXT_KIND: observation
+:CONTEXT_DESCRIPTION: Observations gathered by the LLM during extended interaction: the dual representation pattern, the NbE kernel's architectural significance, the codegen dispatch gap, the context category-theory foundation, and the two-language pitfall.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: llm
@@ -180,6 +182,7 @@
 :ID: monadc.context.philosophy.shared-principles
 :CUSTOM_ID: shared-principles
 :CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: Cross-links from each philosophical principle to the research papers that inform it (6 papers from references.org), grounding the design in established type theory and programming language research.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human+llm
@@ -241,4 +244,10 @@
   `monadc.context.language.primitive-map` (the map bug is the sharpest collision between ideal and runtime) ·
   `monadc.context.language.primitive-function` (the dual representation is the no-trade-off principle at the architecture level) ·
   `monadc.context.language.primitive-dependent-types` (the shadow pass is purity-is-practical applied to the compiler's own architecture) ·
-  `monadc.context.language.primitive-connections` (cross-cutting theme: every primitive has an ideal/runtime bridge)
+  `monadc.context.language.primitive-connections` (cross-cutting theme: every primitive has an ideal/runtime bridge) ·
+  `monadc.context.references.propositions-as-types` (sets-are-the-model is Curry-Howard materialized) ·
+  `monadc.context.references.typechecking-dependent-types` (the dual type system implements Coquand's bidir algorithm) ·
+  `monadc.context.references.linear-lisp` (the conj!/disj! mutable variants implement Baker's linear update) ·
+  `monadc.context.references.layered-modal` (the HM/ITT dual is a layered modal architecture) ·
+  `monadc.context.references.cons-lazy` (lazy lists vs strict arrays follow Baker's lazy-cons semantics) ·
+  `monadc.context.references.types-2020` (the NbE kernel reflects the type-theory research mainstream)

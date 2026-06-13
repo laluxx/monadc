@@ -1,4 +1,4 @@
-;; TEST-ID: tests.wisp.rt-wisp-define-typed-value-sugar
+;; TEST-ID: tests.codegen.rt-wisp-define-typed-value-sugar
 ;; TEST-CONTEXT: monadc.context.wisp.define-typed-value-sugar
 ;; TEST-PURPOSE: Wisp value definitions accept bracketed and unbracketed type annotations.
 ;; TEST-ATOM: define name :: Type value desugars to the Lisp-layer [name :: Type] binding form.

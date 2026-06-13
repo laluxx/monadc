@@ -1,4 +1,4 @@
-;; TEST-ID: tests.wisp.rt-wisp-mutation
+;; TEST-ID: tests.codegen.rt-wisp-mutation
 ;; TEST-CONTEXT: monadc.context.wisp.mutation
 ;; TEST-PURPOSE: Wisp set! mutation works
 ;; TEST-ATOM: set! x 5 changes x from 0 to 5

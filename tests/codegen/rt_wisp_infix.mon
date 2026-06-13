@@ -1,4 +1,4 @@
-;; TEST-ID: tests.wisp.rt-wisp-infix
+;; TEST-ID: tests.codegen.rt-wisp-infix
 ;; TEST-CONTEXT: monadc.context.wisp.infix-operators
 ;; TEST-PURPOSE: Wisp infix operators compile and run
 ;; TEST-ATOM: 3 + 4 → 7, 10 - 3 → 7, 2 * 5 → 10

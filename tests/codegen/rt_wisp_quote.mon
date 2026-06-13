@@ -1,4 +1,4 @@
-;; TEST-ID: tests.wisp.rt-wisp-quote
+;; TEST-ID: tests.codegen.rt-wisp-quote
 ;; TEST-CONTEXT: monadc.context.wisp.quote
 ;; TEST-PURPOSE: Wisp quote syntax works
 ;; TEST-ATOM: define sym 'hello creates a symbol

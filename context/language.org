@@ -8,13 +8,13 @@
 #+OPTIONS: toc:2 num:t
 #+CATEGORY: monadc-context
 #+FILETAGS: :monadc:compiler:context:language:tests:syntax:
-#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_VERSION 2
 #+PROPERTY: CONTEXT_SCOPE repository-local
 #+PROPERTY: CONTEXT_AUDIENCE human llm codex
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -46,6 +46,7 @@
 :ID: monadc.context.language.syntax-corpus
 :CUSTOM_ID: syntax-corpus
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The parser conformance corpus (tests/reader-atoms.tsv): a table-driven test suite where each row is one small language atom that must parse and serialize through --emit-json. Covers all reader grammar productions from numeric literals through dependent type surface forms.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: codex
@@ -167,6 +168,7 @@
 :ID: monadc.context.language.codegen-dispatch
 :CUSTOM_ID: codegen-dispatch
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The three-layer codegen dispatch architecture: AST type switch, strcmp handler dispatch (83+ symbols), and register_builtins (94 entries). Only strcmp handlers are callable from paren-mode; register_builtins-only symbols are unreachable.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: codex
@@ -259,6 +261,7 @@
 :ID: monadc.context.language.codegen-gaps
 :CUSTOM_ID: codegen-gaps
 :CONTEXT_KIND: observation
+:CONTEXT_DESCRIPTION: Known codegen dispatch and runtime gaps: closures without strcmp handlers, register_builtins-only unreachable symbols (concat/substring/reverse/nth/length/reduce), missing control forms (cond/when/let/let*/letrec), map/set runtime construction for untyped contexts, list variadic construction, tail segfault, and inline assembly pointer sugar.
 :CONTEXT_VERSION: 2
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: codex
@@ -324,6 +327,7 @@
 :ID: monadc.context.language.inline-asm
 :CUSTOM_ID: inline-assembly
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Inline assembly (asm.c): preprocessor splitting mnemonics into instructions, LLVM placeholder operand mapping, size-suffix inference from operand widths, and naked function support (no prologue/epilogue). Supported from within typed function bodies as =(asm ...)=.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -418,6 +422,7 @@
 :ID: monadc.context.language.pattern-matching
 :CUSTOM_ID: pattern-matching
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Pattern-match compilation (pmatch.c): integer/float/string/wildcard/variable/list/constructor/guard pattern support with coverage checking and exhaustive fallback. Pattern clauses can use optional leading `|` separator.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: codex
@@ -453,6 +458,7 @@
 :ID: monadc.context.language.type-system-surface
 :CUSTOM_ID: type-system-surface
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: The dual type system surface: Hindley-Milner inference (infer.c) with constraint gen/unification/generalization/monomorphization, and the ITT dependent type checker (dep.c) with bidirectional checking, NbE definitional equality, metavariables, and the TERM_EMBED bridge for HM interop.
 :CONTEXT_VERSION: 2
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -497,6 +503,7 @@
 :ID: monadc.context.language.cffi-runtime
 :CUSTOM_ID: c-ffi-runtime
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: C FFI runtime (ffi.c): libclang header parsing that enables direct C include directives without binding generators. Supports include <stdio.h> syntax, type mapping from C to Monad types, and automatic arity registration for the wisp expander.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -541,6 +548,7 @@
 :ID: monadc.context.language.codegen-diagnostics
 :CUSTOM_ID: codegen-diagnostics
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Compiler diagnostics as semantic relations between invalid source forms and explicit errors. Each stable codegen.c error path should have a focused expected-failure fixture so failures are reproducible and searchable.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -581,6 +589,7 @@
 :ID: monadc.context.language.refinement-types
 :CUSTOM_ID: refinement-type-syntax
 :CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Refinement type syntax: compile-time-checked subtypes that attach predicates (expressed as set membership expressions) to ground types. Each refinement generates a predicate function and a materialized Set value.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -958,6 +967,7 @@
 :ID: monadc.context.language.primitive-array
 :CUSTOM_ID: primitive-array
 :CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: The Array (TYPE_ARR) primitive: three representations (stack-sized, fat-pointer, heap-growable) sharing one type tag, with array-as-function semantics consistent with the set-theoretic model.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human+llm
@@ -1038,13 +1048,18 @@
   `monadc.context.language.primitive-dependent-types` (the TERM_EMBED bridge
   is the same pattern as arr_make_fat) ·
   `monadc.context.language.codegen-dispatch` (array operations are strcmp
-  dispatches in codegen.c like everything else)
+  dispatches in codegen.c like everything else) ·
+  `monadc.context.references.cons-should-not-evaluate` (the lazy-vs-strict
+  duality is the design choice that arrays accept fixed-size) ·
+  `monadc.context.references.cons-lazy` (fat arrays are lazy-cons cells with
+  a size field instead of a tail)
 
 ** Set (TYPE_SET)
 :PROPERTIES:
 :ID: monadc.context.language.primitive-set
 :CUSTOM_ID: primitive-set
 :CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: The Set (TYPE_SET) primitive: a bare ground type with no element parameter, immutable and mutable operations (conj/conj!), set-as-function semantics, and the runtime incarnation of the "types are sets" philosophy.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human+llm
@@ -1135,13 +1150,18 @@
   `monadc.context.language.wisp-sugar-effects` (!-sugar and ?-sugar affect set
   operation calls) ·
   `monadc.context.philosophy.sets-are-the-model` (the philosophical foundation
-  that makes sets first-class)
+  that makes sets first-class) ·
+  `monadc.context.references.propositions-as-types` (the set-as-function
+  property is the Curry-Howard insight) ·
+  `monadc.context.references.linear-lisp` (the two mutability modes follow
+  Baker's linear versus shared discipline)
 
 ** Map (TYPE_MAP)
 :PROPERTIES:
 :ID: monadc.context.language.primitive-map
 :CUSTOM_ID: primitive-map
 :CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: The Map (TYPE_MAP) primitive: a bare ground type sharing the set-theoretic model (maps are sets of pairs), hash-brace syntax, open-addressing hash table runtime, and the most philosophically significant bug (garbage from untyped map construction).
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human+llm
@@ -1190,14 +1210,23 @@
   most philosophically significant bug in the compiler. It reveals the exact
   point where the type system's idealization (maps are uniform, everything is
   `TYPE_MAP`) collides with the runtime's requirements (boxed values need type
-  information to unbox correctly). The fix is not complex — add `case TYPE_MAP:`
-  to `codegen_box` — but the bug exists precisely because the designers assumed
-  the bridge would hold. The type system says "maps are ground types, no
-  parameters needed." The runtime says "I need to know the representation of
+  information to unbox correctly). The type system says "maps are ground types,
+  no parameters needed." The runtime says "I need to know the representation of
   the values I'm storing." Neither is wrong; the bridge between them was
-  incomplete. This bug is a concrete demonstration that the ladder between
-  abstraction and implementation has rungs missing — and finding them is the
-  core engineering work of the project.
+  incomplete. The fix has two layers. Adding `case TYPE_MAP:` and `case TYPE_SET:`
+  to `codegen_box` (codegen.c:1522) fixes the array-element-boxing path at
+  line 1573 and the curry trampoline at line 10582. But the deeper fix is in
+  `wrap_func_as_closure` (codegen.c:2554-2583) which has its own inline boxing
+  logic that DOES NOT use `codegen_box` — its final `else` branch at line 2582
+  passes through ALL raw pointer return types (Map, Set, List, String, Symbol,
+  Keyword, Layout) as if they were already `RuntimeValue*`, when they are raw
+  C pointers. This is the primary path for wrapping typed functions as closures
+  (used by HOFs, storing functions in data structures, etc.), so the bug is
+  wider than maps alone. The fix for `wrap_func_as_closure` requires routing
+  its boxing through `codegen_box` or duplicating the type dispatch for each
+  pointer-return type. This bug is a concrete demonstration that the bridge
+  between abstraction and implementation has rungs missing — and finding them
+  is the core engineering work of the project.
 
 [OBS id:obs.language.map-runtime-representation src:runtime.c:864-1139 conf:high]
   The runtime map is an open-addressing hash table (`RuntimeMap`) with linear
@@ -1232,6 +1261,7 @@
 :ID: monadc.context.language.primitive-function
 :CUSTOM_ID: primitive-function
 :CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: The Function (TYPE_ARROW/TYPE_FN/TERM_PI) primitive: dual representation (HM arrow vs ITT Pi, typed ABI vs closure ABI), five surface syntax forms unified into AST_LAMBDA, and the architectural axis of the entire compiler.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human+llm
@@ -1319,13 +1349,18 @@
   `monadc.context.wisp.sugar-transforms` (Wisp !-sugar and ?-sugar affect
   how function calls are parsed) ·
   `monadc.context.philosophy.zero-to-metal` (the abstraction ladder for
-  callables)
+  callables) ·
+  `monadc.context.references.layered-modal` (the typed-ABI/closure-ABI dual
+  reflects the layered modal architecture) ·
+  `monadc.context.references.linear-lisp` (the typed ABI for uncaptured lambdas
+  follows Baker's linear discipline)
 
 ** Dependent Types (TERM_PI / TERM_SIGMA / NbE Kernel)
 :PROPERTIES:
 :ID: monadc.context.language.primitive-dependent-types
 :CUSTOM_ID: primitive-dependent-types
 :CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: The Dependent Types (TERM_PI/TERM_SIGMA/NbE Kernel) primitive: bidirectional ITT checker with NbE definitional equality, Locally Nameless representation, shadow-pass architecture (Phase 6.5), and known soundness holes (stub pattern unification, Int coercions) that test the clean-architecture thesis.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human+llm
@@ -1434,13 +1469,20 @@
   `monadc.context.philosophy.purity-is-practical` (the shadow pass design is
   this principle in action) ·
   `monadc.context.philosophy.llm-witness` (the NbE architecture is witnessed
-  by LLM as architecturally significant)
+  by LLM as architecturally significant) ·
+  `monadc.context.references.typechecking-dependent-types` (the bidir checking
+  algorithm is Coquand 1996) ·
+  `monadc.context.references.propositions-as-types` (the core insight that types
+  are propositions, programs are proofs) ·
+  `monadc.context.references.layered-modal` (the dual HM/ITT type system is a
+  layered modal architecture)
 
 * Primitive Cross-Cutting Connections
 :PROPERTIES:
 :ID: monadc.context.language.primitive-connections
 :CUSTOM_ID: primitive-cross-cutting
 :CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: Cross-cutting connections between all primitive types: the unified pattern of ideal representation + pragmatic runtime, the set-theoretic model as unifying principle, and the bridge layers (arr_make_fat, rt_value_set, term_embed, wrap_func_as_closure) where engineering judgment resides.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human+llm
@@ -1485,4 +1527,8 @@
   `monadc.context.philosophy.purity-is-practical` (the shadow pass, the
   immutable-default collection operations, the typed-ABI-first closure design) ·
   `monadc.context.philosophy.zero-to-metal` (the three array forms, the five
-  function syntaxes, the two set mutability modes)
+  function syntaxes, the two set mutability modes) ·
+  `monadc.context.references.propositions-as-types` (the core insight that
+  types-are-sets, functions-are-relations) ·
+  `monadc.context.references.linear-lisp` (the immutable-default/mutable-escape-hatch
+  pattern follows Baker's linear logic)

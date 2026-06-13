@@ -50,6 +50,7 @@ and the repository context corpus.
 :ID: monadc.context.tests.llm-orientation
 :CUSTOM_ID: llm-orientation
 :CONTEXT_KIND: format
+:CONTEXT_DESCRIPTION: Test metadata format: every test fixture carries TEST-ID, TEST-CONTEXT, TEST-PURPOSE, TEST-ATOM, and TEST-EXPECT headers linking it to the context graph.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -118,6 +119,7 @@ context record.
 :ID: monadc.context.tests.metadata-format
 :CUSTOM_ID: test-metadata-format
 :CONTEXT_KIND: format
+:CONTEXT_DESCRIPTION: Test metadata header specification (TEST-ID, TEST-CONTEXT, TEST-PURPOSE, TEST-ATOM, TEST-EXPECT, TEST-KNOWN-FAILURE, TEST-SKIP) as embedded in .mon fixture files.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -844,23 +846,23 @@ assertions directly instead of requiring hand-written shell checks per fixture.
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
-:SOURCE: tests/wisp/
+:SOURCE: tests/codegen/
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.tests.wisp-path-value src:tests/wisp/rt_wisp_path_value.mon conf:high]
-  =tests.wisp.rt-wisp-path-value= witnesses that a valid Unix path token in a
+[OBS id:obs.tests.wisp-path-value src:tests/codegen/rt_wisp_path_value.mon conf:high]
+  =tests.codegen.rt-wisp-path-value= witnesses that a valid Unix path token in a
   Wisp =define= is a definable =Path= value and prints through =show=.
 
-[OBS id:obs.tests.wisp-typed-value-sugar src:tests/wisp/rt_wisp_define_typed_value_sugar.mon conf:high]
-  =tests.wisp.rt-wisp-define-typed-value-sugar= witnesses all supported Wisp
+[OBS id:obs.tests.wisp-typed-value-sugar src:tests/codegen/rt_wisp_define_typed_value_sugar.mon conf:high]
+  =tests.codegen.rt-wisp-define-typed-value-sugar= witnesses all supported Wisp
   typed value binding spellings, including the unbracketed sugar
   =define c :: Int 3=.
 
-[OBS id:obs.tests.wisp-signature-clause src:tests/wisp/rt_wisp_define_signature_clause.mon conf:high]
-  =tests.wisp.rt-wisp-define-signature-clause= prevents regression of
+[OBS id:obs.tests.wisp-signature-clause src:tests/codegen/rt_wisp_define_signature_clause.mon conf:high]
+  =tests.codegen.rt-wisp-define-signature-clause= prevents regression of
   =define square :: Int -> Int= followed by a simple =x -> body= clause.
 
-[OBS id:obs.tests.wisp-parenthesized-signature src:tests/wisp/rt_wisp_define_parenthesized_signature.mon conf:high]
-  =tests.wisp.rt-wisp-define-parenthesized-signature= prevents regression of
+[OBS id:obs.tests.wisp-parenthesized-signature src:tests/codegen/rt_wisp_define_parenthesized_signature.mon conf:high]
+  =tests.codegen.rt-wisp-define-parenthesized-signature= prevents regression of
   bare Wisp =define (name [p : T] -> R)= headers with indented pattern clauses.

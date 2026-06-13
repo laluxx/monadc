@@ -1,4 +1,4 @@
-;; TEST-ID: tests.wisp.rt-wisp-define-value
+;; TEST-ID: tests.codegen.rt-wisp-define-value
 ;; TEST-CONTEXT: monadc.context.wisp.define-value
 ;; TEST-PURPOSE: Wisp define with values works
 ;; TEST-ATOM: define x 42 creates binding

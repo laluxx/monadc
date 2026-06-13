@@ -1,4 +1,4 @@
-;; TEST-ID: tests.wisp.rt-wisp-define-signature-clause
+;; TEST-ID: tests.codegen.rt-wisp-define-signature-clause
 ;; TEST-CONTEXT: monadc.context.wisp.define-signature-clause
 ;; TEST-PURPOSE: Wisp function signatures can take their parameter names from a simple arrow clause.
 ;; TEST-ATOM: define square :: Int -> Int followed by x -> x * x binds x as the parameter.

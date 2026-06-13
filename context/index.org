@@ -2,19 +2,19 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-11
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-11
+#+LAST_MODIFIED: 2026-06-13
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
 #+CATEGORY: monadc-context
 #+FILETAGS: :monadc:compiler:context:index:format:llm:
-#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_VERSION 2
 #+PROPERTY: CONTEXT_SCOPE repository-local
 #+PROPERTY: CONTEXT_AUDIENCE human llm codex
 #+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
 #+PROPERTY: CONTEXT_DIALECT org-mode
 #+PROPERTY: CONTEXT_ID_PREFIX monadc.context
-#+PROPERTY: CONTEXT_RECORD_TYPES OBS INF DEC TODO THINK
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
@@ -251,6 +251,7 @@ Every context file should include these file-level Org keywords when applicable:
 LLM-oriented statements use bracketed records with fixed keys:
 
 #+BEGIN_EXAMPLE
+[DOC id:<id> src:<file:line> conf:<high|medium|low>] <documentation, bibliographic reference>
 [OBS id:<id> src:<file:line> conf:<high|medium|low>] <direct observation>
 [INF id:<id> from:<obs-id[,obs-id...]> conf:<high|medium|low>] <inference>
 [DEC id:<id> date:<YYYY-MM-DD> by:<human|codex>] <decision>
@@ -260,6 +261,7 @@ LLM-oriented statements use bracketed records with fixed keys:
 
 Rules:
 
+- =DOC= records documentation, bibliographic references, and papers. They are rendered with richer body text in the dashboard inspector and linked into the graph via source/evidence relations.
 - =OBS= is reserved for facts read from files or command output.
 - =INF= must name the observation IDs it depends on.
 - =DEC= records repository-local choices that future work should preserve.
@@ -296,6 +298,7 @@ Rules:
 - [[file:source-map.org][Source file map — every file's purpose and connections]]
 - [[file:style.org][MonadC code-style taxonomy]]
 - [[file:navigation.org][ID prefix→file routing table for quick LLM navigation]]
+- [[file:references.org][Research references — papers informing the compiler design]]
 
 * Current Task Notes
 :PROPERTIES:

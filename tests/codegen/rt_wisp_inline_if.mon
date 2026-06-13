@@ -1,0 +1,8 @@
+;; TEST-ID: tests.codegen.rt-wisp-inline-if
+;; TEST-CONTEXT: monadc.context.wisp.sugar-transforms
+;; TEST-PURPOSE: Wisp inline if/then/else (Form 3) with values, not show.
+;; TEST-ATOM: show if True 42 0 → 42, show if False 1 99 → 99
+;; TEST-EXPECT: compile, run
+module Main
+show if True 42 0
+show if False 1 99

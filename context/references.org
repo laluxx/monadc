@@ -1,0 +1,330 @@
+#+TITLE: Research References
+#+AUTHOR: codex
+#+DATE: 2026-06-13
+#+CREATED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-13
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:references:research:type-theory:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.references.file-metadata
+:CUSTOM_ID: references-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_OPEN_POLICY: showeverything
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/references.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.references.file src:etc/pdfs/ conf:high]
+  This file records the research papers that inform the MonadC compiler design.
+  Every paper lives as a PDF in =etc/pdfs/= with a =DOC= record covering its
+  thesis and a set of =INF= records connecting it to specific compiler
+  features. The papers are not decorative — each one maps to a concrete
+  architectural choice visible in the source.
+
+* Propositions as Types
+:PROPERTIES:
+:ID: monadc.context.references.propositions-as-types
+:CUSTOM_ID: ref-propositions-as-types
+:CONTEXT_KIND: reference
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: etc/pdfs/propositions-as-types.pdf
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.references.propositions-as-types src:etc/pdfs/propositions-as-types.pdf conf:high]
+  Wadler, Philip. "Propositions as Types." Communications of the ACM 58, no. 12
+  (2015): 75–84. The expository paper establishing the Curry-Howard
+  correspondence — the direct mapping between logical propositions and types,
+  proofs and programs, and proof simplification and program evaluation. This
+  is the intellectual foundation for viewing types as sets and functions as
+  relations in MonadC. The =types-are-sets= principle, the refinement type
+  predicate generation, and the ITT kernel's conversion checker all derive
+  from the Curry-Howard insight.
+
+[INF id:inf.references.propositions-as-types-connects from:doc.references.propositions-as-types,obs.language.set-grounded-in-model conf:high]
+  connects-to -> `monadc.context.philosophy.sets-are-the-model` (the set-theoretic
+  model is Curry-Howard applied to collections) ·
+  `monadc.context.language.primitive-dependent-types` (the ITT kernel is a direct
+  implementation of propositions-as-types for dependent functions and pairs) ·
+  `monadc.context.language.primitive-set` (Set? as a type predicate is the
+  logical proposition "is this a set?" materialized at compile time) ·
+  `monadc.context.language.refinement-types` (refinement types are subset
+  propositions — the predicate IS the proof)
+
+* An Algorithm for Type-Checking Dependent Types
+:PROPERTIES:
+:ID: monadc.context.references.typechecking-dependent-types
+:CUSTOM_ID: ref-typechecking-dependent
+:CONTEXT_KIND: reference
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: etc/pdfs/an-algorithm-for-type-checking-dependent-types.pdf
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.references.typechecking-dependent-types src:etc/pdfs/an-algorithm-for-type-checking-dependent-types.pdf conf:high]
+  Coquand, Thierry. "An Algorithm for Type-Checking Dependent Types." Science of
+  Computer Programming 26, no. 1–3 (1996): 167–177. The foundational paper on
+  bidirectional type checking for dependent type theory. Introduces the
+  infer/check judgment separation (=Γ ⊢ t ⇒ A= / =Γ ⊢ t ⇐ A=) that MonadC's
+  dep.c implements. The NbE kernel's separation of =dep_eval= from =dep_quote=
+  and the bidir entry points (=infer=, =check=, =conv=, =normalise=) follow the
+  architecture established here.
+
+[INF id:inf.references.typechecking-dependent-connects from:doc.references.typechecking-dependent-types,obs.language.dep-nbe-kernel,obs.language.dep-shadow-pass conf:high]
+  connects-to -> `monadc.context.language.primitive-dependent-types` (the NbE
+  kernel's bidir checking is a direct implementation of Coquand's algorithm) ·
+  `monadc.context.language.type-system-surface` (the dep surface exercises the
+  infer/check judgment separation) ·
+  `monadc.context.philosophy.purity-is-practical` (bidir checking makes dependent
+  types practical by separating inference from checking)
+
+* Linear Lisp
+:PROPERTIES:
+:ID: monadc.context.references.linear-lisp
+:CUSTOM_ID: ref-linear-lisp
+:CONTEXT_KIND: reference
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: etc/pdfs/BakerLinearLisp.pdf
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.references.linear-lisp src:etc/pdfs/BakerLinearLisp.pdf conf:high]
+  Baker, Henry G. "Linear Lisp." ACM SIGPLAN Lisp Pointers 5, no. 2 (1992): 15–32.
+  Introduces a linear type discipline for Lisp where values are used exactly
+  once, enabling in-place update without copying. The =conj!= / =disj!= mutable
+  set operations and the broader immutable-default / mutable-escape-hatch pattern
+  in MonadC's collection design reflect Baker's insight that destructive update
+  is safe when the programmer controls aliasing. The type-erased ground types
+  (=TYPE_SET= with no element parameter) are consistent with Baker's argument
+  that linearity is a property of the operational semantics, not the
+  representation.
+
+[INF id:inf.references.linear-lisp-connects from:doc.references.linear-lisp,obs.language.set-two-mutability-modes,obs.language.set-functional-mutability-why conf:high]
+  connects-to -> `monadc.context.language.primitive-set` (the conj!/disj! mutable
+  variants implement Baker's linear update pattern) ·
+  `monadc.context.language.primitive-function` (the typed ABI / closure ABI dual
+  reflects the same linear/non-linear distinction at the calling convention level) ·
+  `monadc.context.philosophy.no-tradeoff-principle` (mutable operations exist
+  because the language refuses to force a choice between purity and performance)
+
+* Cons Should Not Evaluate Its Arguments
+:PROPERTIES:
+:ID: monadc.context.references.cons-lazy
+:CUSTOM_ID: ref-cons-lazy
+:CONTEXT_KIND: reference
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: etc/pdfs/cons-should-not-evaluate-its-arguments.pdf
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.references.cons-lazy src:etc/pdfs/cons-should-not-evaluate-its-arguments.pdf conf:high]
+  Normal-order evaluation for pairs — =cons= should not evaluate its arguments
+  until they are accessed by =car= or =cdr=. This is the semantic foundation
+  for lazy lists (the =(0..)= infinite range syntax) and the thunk-based list
+  representation in runtime.c. The design choice that ='(1 2 3)= is lazy and
+  =[1 2 3]= is strict follows directly: lists are computational (evaluated on
+  demand), arrays are extensional (materialized in memory).
+
+[INF id:inf.references.cons-lazy-connects from:doc.references.cons-lazy,obs.language.array-as-function,obs.language.set-as-function conf:high]
+  connects-to -> `monadc.context.language.primitive-array` (strict arrays are the
+  counterpart to lazy lists — the choice between laziness and strictness is
+  part of the zero-to-metal ladder) ·
+  `monadc.context.philosophy.zero-to-metal` (the programmer chooses lazy or
+  strict per data structure, not per language)
+
+* Efficient Lazy Cons Allocation
+:PROPERTIES:
+:ID: monadc.context.references.cons-lazy-alloc
+:CUSTOM_ID: ref-cons-lazy-alloc
+:CONTEXT_KIND: reference
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: etc/pdfs/cons-lazy-alloc.pdf
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.references.cons-lazy-alloc src:etc/pdfs/cons-lazy-alloc.pdf conf:high]
+  Memory-efficient techniques for lazy cons cell allocation — allocating thunks
+  and forcing them into cons cells only when both =car= and =cdr= have been
+  evaluated. This paper informs the runtime's list representation strategy,
+  where the arena allocator (arena.c) provides the bump-allocation substrate
+  for list construction without per-cell GC overhead.
+
+[INF id:inf.references.cons-lazy-alloc-connects from:doc.references.cons-lazy-alloc conf:high]
+  connects-to -> `monadc.context.language.primitive-function` (lazy evaluation
+  and closures share the same thunk infrastructure) ·
+  `monadc.context.philosophy.sets-are-the-model` (a lazy list is a function
+  from Nat to element — the thunk is the function closure)
+
+* Layered Modal Type Theory
+:PROPERTIES:
+:ID: monadc.context.references.layered-modal
+:CUSTOM_ID: ref-layered-modal
+:CONTEXT_KIND: reference
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: etc/pdfs/layered-modal-type-theory.pdf
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.references.layered-modal src:etc/pdfs/layered-modal-type-theory.pdf conf:high]
+  Modal type theory with multiple layers/levels, where each layer has its own
+  judgmental structure and the modal operator controls which layer a term lives
+  in. This provides a theoretical framework for understanding MonadC's dual
+  type system: HM is the ground layer (fast, automatic, decidable), ITT is the
+  modal layer (expressive, checked, fuel-limited), and =TERM_EMBED= is the
+  modal operator that embeds ground terms into the dependent context. The
+  shadow pass design (Phase 6.5) is a pragmatic realization of this layered
+  architecture — the compiler runs the modal checker after the ground checker,
+  and the two communicate through a well-defined bridge.
+
+[INF id:inf.references.layered-modal-connects from:doc.references.layered-modal,obs.language.function-dual-representation,obs.language.dep-shadow-pass conf:high]
+  connects-to -> `monadc.context.language.primitive-function` (the HM/ITT dual
+  representation maps to the layered modal framework) ·
+  `monadc.context.language.primitive-dependent-types` (TERM_EMBED is the modal
+  operator, the shadow pass is the layered checking strategy) ·
+  `monadc.context.philosophy.no-tradeoff-principle` (layers let the language
+  offer both fast ground inference and full dependent types without compromise)
+
+* TYPES 2020 — Book of Abstracts
+:PROPERTIES:
+:ID: monadc.context.references.types-2020
+:CUSTOM_ID: ref-types-2020
+:CONTEXT_KIND: reference
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: etc/pdfs/BookOfAbstractsTYPES2020.pdf
+:CONFIDENCE: medium
+:END:
+
+[DOC id:doc.references.types-2020 src:etc/pdfs/BookOfAbstractsTYPES2020.pdf conf:medium]
+  TYPES 2020 — Annual Conference of the European Association for Computer Science
+  Logic, Online (previously in Torino, Italy). Book of abstracts covering
+  current research in type theory, dependent types, homotopy type theory, and
+  proof assistants. Provides broader research context for the dependent type
+  checker architecture. The NbE kernel's design (semantic Value domain, stuck
+  neutral terms, fuel-limited conversion) reflects the research consensus
+  captured in these proceedings.
+
+[INF id:inf.references.types-2020-connects from:doc.references.types-2020,obs.language.dep-nbe-kernel,obs.language.dep-soundness-holes conf:high]
+  connects-to -> `monadc.context.language.primitive-dependent-types` (the NbE
+  kernel reflects the type-theory research mainstream) ·
+  `monadc.context.philosophy.purity-is-practical` (the pragmatic choice of HM +
+  shadow-pass ITT over a single full-dependent checker is informed by the
+  complexity documented in these proceedings)
+
+* Research References Overview
+:PROPERTIES:
+:ID: monadc.context.references.overview
+:CUSTOM_ID: references-overview
+:CONTEXT_KIND: index
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/references.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Research Paper Index
+| Paper | File | Connects To |
+|-------+------+-------------|
+| Propositions as Types (Wadler 2015) | `etc/pdfs/propositions-as-types.pdf` | sets-are-the-model, dependent types, refinement types |
+| Algorithm for Type-Checking Dependent Types (Coquand 1996) | `etc/pdfs/an-algorithm-for-type-checking-dependent-types.pdf` | NbE kernel, shadow pass, bidir checking |
+| Linear Lisp (Baker 1992) | `etc/pdfs/BakerLinearLisp.pdf` | conj!/disj! mutability, no-trade-off principle |
+| Cons Should Not Evaluate Its Arguments | `etc/pdfs/cons-should-not-evaluate-its-arguments.pdf` | lazy lists, strict arrays, zero-to-metal |
+| Efficient Lazy Cons Allocation | `etc/pdfs/cons-lazy-alloc.pdf` | thunks, closures, arena allocator |
+| Layered Modal Type Theory | `etc/pdfs/layered-modal-type-theory.pdf` | dual type system, TERM_EMBED, shadow pass |
+| TYPES 2020 Book of Abstracts | `etc/pdfs/BookOfAbstractsTYPES2020.pdf` | dependent types, NbE, conversion checking |
+
+[INF id:inf.references.cross-cutting from:doc.references.propositions-as-types,doc.references.typechecking-dependent-types,doc.references.linear-lisp,doc.references.cons-lazy,doc.references.cons-lazy-alloc,doc.references.layered-modal,doc.references.types-2020 conf:high]
+  connects-to -> `monadc.context.philosophy.shared-principles` (every paper
+  maps to one or more Shared Principles) ·
+  `monadc.context.language.primitive-philosophy` (the primitive type entries
+  cite these papers implicitly) ·
+  `monadc.context.language.primitive-connections` (the cross-cutting theme of
+  ideal/runtime bridges is visible across the papers)

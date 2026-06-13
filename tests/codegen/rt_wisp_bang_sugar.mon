@@ -1,0 +1,10 @@
+;; TEST-ID: tests.codegen.rt-wisp-bang-sugar
+;; TEST-CONTEXT: monadc.context.wisp.sugar-transforms
+;; TEST-PURPOSE: Wisp !-sugar rewrites (conj! s v) → (s conj! v) for typed variables.
+;; TEST-ATOM: (conj! s 99) adds 99 to set s, observable via contains?
+;; TEST-EXPECT: compile, run
+module Main
+define [s :: Set] {1 2 3}
+show contains? s 99
+conj! s 99
+show contains? s 99
