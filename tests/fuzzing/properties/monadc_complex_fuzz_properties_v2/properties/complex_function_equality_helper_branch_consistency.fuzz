@@ -1,0 +1,7 @@
+name: complex_function_equality_helper_branch_consistency
+section: function-order
+args: a:Int b:Int yes:Int no:Int
+type: Bool
+expect: True
+description: The typed equality helper used as an if condition must agree with direct equality.
+law: (= (if (fuzz-eq-int? {a} {b}) {yes} {no}) (if (= {a} {b}) {yes} {no}))

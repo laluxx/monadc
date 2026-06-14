@@ -1,0 +1,7 @@
+name: arith_mod_constant_named_mod
+section: arithmetic-dispatch
+args: 
+type: Bool
+expect: True
+description: Named mod dispatch must compute the same integer remainder as percent modulo.
+law: (= (mod 23 5) 3)

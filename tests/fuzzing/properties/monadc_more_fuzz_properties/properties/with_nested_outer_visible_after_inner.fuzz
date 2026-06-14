@@ -1,0 +1,7 @@
+name: with_nested_outer_visible_after_inner
+section: binding
+args: outer:Int inner:Int offset:Int
+type: Bool
+expect: True
+description: After an inner shadowing binding ends, the outer binding must remain visible in the surrounding body.
+law: (= (with [x {outer}] (fuzz-add (with [x {inner}] x) x)) (fuzz-add {inner} {outer}))

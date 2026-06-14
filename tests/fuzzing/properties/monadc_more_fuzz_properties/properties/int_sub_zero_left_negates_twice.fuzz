@@ -1,0 +1,7 @@
+name: int_sub_zero_left_negates_twice
+section: arithmetic
+args: a:Int
+type: Bool
+expect: True
+description: The zero-left subtraction form must match explicit negative-one multiplication.
+law: (= (fuzz-sub 0 (fuzz-sub 0 {a})) (fuzz-mul -1 (fuzz-mul -1 {a})))

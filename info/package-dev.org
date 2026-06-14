@@ -4,35 +4,116 @@
 
 [[file:index.org][<- Back to Index]]
 
-* Package layout
+* Package Layout
 
-Convention (not enforced):
+The scaffold created by =monad new <name>= produces this layout:
 
 #+BEGIN_SRC
-my-pkg/
-  my-pkg.mon        # main entry, exports API
-  my-pkg-extra.mon  # optional submodules
-  tests/
-    test-foo.mon
+<name>/
+  src/
+    Main.mon          # entry point, must have (module Main)
+  package.yaml        # build manifest (YAML)
   README.md
+  .gitignore
 #+END_SRC
 
-* Module Path Resolution
+* The Build Manifest: =package.yaml=
 
-See [[file:modules.org][Module System]] for path resolution rules.
+The build system reads =package.yaml= from the project root (searching
+up to 5 parent directories). Format produced by =monad new=:
+
+#+BEGIN_SRC yaml
+name:                my-pkg
+version:             0.1.0.0
+github:              "user/my-pkg"
+license:             MIT
+author:              "Your Name"
+maintainer:          "you@example.com"
+copyright:           "2026 Your Name"
+
+extra-source-files:
+
+description:         A Monad package
+
+dependencies:
+- core >= 0.1 && < 1.0
+
+monad-options:
+- -Wall
+- -Wextra
+
+executables:
+  my-pkg:
+    main: Main.mon
+    source-dirs: src
+#+END_SRC
+
+Fields parsed by =resolve_build_info= ([[file:../cli.c::415]]):
+
+| Field                    | Required | Used For                          |
+|--------------------------+----------+-----------------------------------|
+| =name=                   | Yes      | Package name (printed during build) |
+| =executables=            | Yes      | Defines binary name and entrypoint  |
+| ~  <exe>.main~            | No       | Entry file (=Main.mon= default)   |
+| ~  <exe>.source-dirs~    | No       | Source directory (=src= default)  |
+| =extra-source-files=     | No       | Reserved (currently unused)       |
+| =dependencies=           | No       | Reserved (currently unused)       |
+| =monad-options=          | No       | Extra flags passed to the compiler|
+
+The author and maintainer fields are populated from =git config
+--global user.name= and =user.email= when scaffolding.
+
+* Building
+
+Inside a project directory with =package.yaml=:
+
+| Command          | Behavior                                      |
+|------------------+-----------------------------------------------|
+| =monad build=    | Compile sources, link binary to =build/<exe>= |
+| =monad run=      | Build then execute the binary                 |
+| =monad clean=    | Remove =build/=, =*.o=, =*.ll=, =*.s=         |
+| =monad install=  | Build (if needed), copy binary to =~/.local/bin= |
+
+The build pipeline (=cmd_build= → =resolve_build_info= → =do_build=):
+1. Locate =package.yaml= (walk up to 5 parent dirs)
+2. Parse YAML to find the first executable entry
+3. Locate =Main.mon= in =source-dirs= (or via recursive search for
+   a file with =(module Main)=)
+4. Invoke the compiler (=monad <main_file> -o build/<exe>=)
+5. Link runtime (handled internally by =compile_one= in =main.c=)
+
+* Module Resolution
+
+Module resolution follows these steps ([[file:../cli.c::358]]):
+
+1. Look for the exact file path under =source-dirs=
+2. Recursively search =source-dirs= for any =.mon= file containing
+   =(module <Name>)=
+
+Only =.mon= files are recognized. Module names must match their
+file names (e.g., module =Foo= must be in =Foo.mon=).
+
+* Testing
+
+| Command             | Behavior                                       |
+|---------------------+------------------------------------------------|
+| =monad test <file>= | Compile with =--test-run=, execute, delete test binary |
+| =monad --test <file>= | Compile with embedded tests, keep binary      |
+
+The test runner compiles the file, runs the produced test binary, and
+reports failure only on signals (SIGABRT from failed assertions).
+Normal exit with any code counts as a pass.
 
 * Versioning
 
-No built-in package manager or versioning. Package management is
-manual =git= + =monad build=.
-
-* Publishing
-
-No package registry exists. Distribute source via git or tarball.
-Future: planned package manager.
+No built-in package manager or version enforcement. Version strings
+in =package.yaml= are advisory. Package distribution is manual via
+git or tarball.
 
 * Context Links
 
-- [[file:modules.org][Module System]]
-- [[file:build.org][Build System]]
-- [[file:../context/buildsystem.org][context/buildsystem.org]]
+- [[file:build.org][Build System]] — Makefile targets, install layout
+- [[file:modules.org][Module System]] — module declarations, imports, resolution
+- [[file:cli.org][CLI Reference]] — all subcommands and flags
+- [[file:../cli.c][cli.c]] — implementation of all commands above
+- [[file:../context/buildsystem.org][context/buildsystem.org]] — build system internals

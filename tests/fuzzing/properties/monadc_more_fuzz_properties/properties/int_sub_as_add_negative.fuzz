@@ -1,0 +1,7 @@
+name: int_sub_as_add_negative
+section: arithmetic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Subtraction must agree with adding the negated right operand.
+law: (= (fuzz-sub {a} {b}) (fuzz-add {a} (fuzz-mul -1 {b})))

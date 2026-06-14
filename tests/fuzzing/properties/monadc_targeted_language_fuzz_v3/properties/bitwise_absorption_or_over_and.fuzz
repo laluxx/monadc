@@ -1,0 +1,7 @@
+name: bitwise_absorption_or_over_and
+section: bitwise
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Bitwise absorption: (a and b) or a must recover a.
+law: (= (bit-or (& {a} {b}) {a}) {a})

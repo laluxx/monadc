@@ -1,0 +1,7 @@
+name: complex_combo_nested_do_if_comparison_roundtrip
+section: combo
+args: setup:Int cond:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Do sequencing inside a Bool identity and if condition should preserve comparison branch behavior.
+law: (= (if (fuzz-bool-id? (do {setup} {cond})) (fuzz-lt? {a} {b}) (fuzz-gte? {a} {b})) (if {cond} (fuzz-lt? {a} {b}) (fuzz-gte? {a} {b})))

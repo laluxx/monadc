@@ -1,0 +1,7 @@
+name: logic_not_involution_bool
+section: logic
+args: p:Bool
+type: Bool
+expect: True
+description: Double logical negation must preserve a generated Bool expression.
+law: (= (not (not {p})) {p})

@@ -1,0 +1,7 @@
+name: complex_lattice_min_selected_by_gte_guard
+section: lattice-selection
+args: a:Int b:Int
+type: Bool
+expect: True
+description: When a >= b, min must select b; otherwise it must select a.
+law: (= (fuzz-min {a} {b}) (if (fuzz-gte? {a} {b}) {b} {a}))

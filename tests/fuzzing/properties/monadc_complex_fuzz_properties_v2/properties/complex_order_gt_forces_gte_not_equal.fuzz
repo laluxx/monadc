@@ -1,0 +1,7 @@
+name: complex_order_gt_forces_gte_not_equal
+section: order-logic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Strict greater-than must imply non-equality while preserving greater-or-equal.
+law: (if (fuzz-gt? {a} {b}) (if (fuzz-gte? {a} {b}) (!= {a} {b}) False) True)

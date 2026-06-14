@@ -1,0 +1,7 @@
+name: logic_or_identity_false
+section: logic
+args: p:Bool
+type: Bool
+expect: True
+description: False must be the identity element for Bool or.
+law: (= (or False {p}) {p})

@@ -1,0 +1,7 @@
+name: int_add_four_way_regrouping
+section: arithmetic
+args: a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Addition of four generated values must be stable under regrouping and re-pairing.
+law: (= (fuzz-add (fuzz-add {a} {b}) (fuzz-add {c} {d})) (fuzz-add (fuzz-add {a} {c}) (fuzz-add {b} {d})))

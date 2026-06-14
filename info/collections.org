@@ -4,22 +4,38 @@
 
 [[file:index.org][<- Back to Index]] · [[file:core.org][Core Library]] · [[file:patterns.org][Pattern Matching]]
 
-Monad provides four collection types with literal syntax: lists,
-arrays, sets, and maps. Strings also behave as character sequences.
+Monad provides four collection types with literal syntax: lists, arrays, sets,
+and maps. Strings also behave as character sequences (see [[file:strings.org]]).
+Each collection supports collection-as-function semantics: =(coll i)= indexes
+into or looks up from the collection.
 
 * Lists
 
-Quoted S-expression lists:
+Quoted S-expression lists are linked cons cells at runtime:
 
 #+BEGIN_SRC monad
 '(1 2 3)                ;; quote shorthand
 (quote (1 2 3))         ;; explicit quote
 #+END_SRC
 
-Lists are linked cons cells. Builtins: =car=, =cdr=, =cons=, =nil=,
-=++=, =count=, =list=, =empty?=, =pair?=, =nil?=, =reduce=.
+** Operations
 
-Pattern matching with =[x|xs]= cons-pattern:
+| Function  | Example               | Result        |
+|-----------+-----------------------+---------------|
+| cons      | =(cons 1 '(2 3))=      | (1 2 3)       |
+| car       | =(car '(1 2 3))=       | 1             |
+| cdr       | =(cdr '(1 2 3))=       | (2 3)         |
+| nil       | =nil=                  | ()            |
+| ++        | =(++ '(1 2) '(3 4))=   | (1 2 3 4)     |
+| count     | =(count '(1 2 3))=     | 3             |
+| empty?    | =(empty? '(1))=        | False         |
+| nil?      | =(nil? nil)=           | True          |
+| pair?     | =(pair? '(1 2))=       | True          |
+| list      | =(list)=               | ()            |
+| make-list | =(make-list 3 'x)=     | (x x x)       |
+| reduce    | =(reduce + 0 '(1 2 3))=| 6             |
+
+** Pattern matching with =[x|xs]= cons-pattern
 
 #+BEGIN_SRC monad
 (define take :: Int -> [a] -> [a]
@@ -33,11 +49,35 @@ Pattern matching with =[x|xs]= cons-pattern:
   f [x|xs] -> ((f x) ++ (map f xs)))
 #+END_SRC
 
-The =++= operator builds lists (prepends element to rest).
+The =++= operator prepends an element to a list (or appends two lists).
+
+** List-as-function indexing
+
+Lists can be used as functions: =(lst i)= returns the i-th element or =nil= if
+out of bounds. [[file:../codegen.c::9880]]
+
+** Known gap: variadic list construction
+
+=(list 1 2 3)= with multiple arguments is broken — =(car (list 1 2 3))= returns
+=nil=. Only the zero-arg form =(list)= and =(make-list n val)= work correctly
+([[file:../context/language.org::codegen-gaps][context/language.org]]).
+
+** Known gap: =tail= on lists
+
+=tail= on lists segfaults due to a runtime list implementation bug
+([[file:../context/language.org::codegen-gaps][context/language.org]]).
 
 * Arrays
 
-Fixed-size stack arrays with bracket syntax:
+Three array forms sharing the =TYPE_ARR= type tag:
+
+| Syntax       | Representation             | Allocation | Use case                |
+|--------------+----------------------------+------------+-------------------------|
+| =[1 2 3]=     | Fixed-size stack array     | Stack      | Known-size, short-lived |
+| =~[1 2 3]=   | Heap-growable (arr_is_heap)| Heap       | Long-lived out-of-frame |
+| =[16kb I32]= | Fat pointer (arr_is_fat)   | Stack/heap | C-interop sized buffer  |
+
+** Stack arrays (bracket syntax)
 
 #+BEGIN_SRC monad
 [1 2 3]                 ;; Int array, 3 elements
@@ -45,20 +85,14 @@ Fixed-size stack arrays with bracket syntax:
 [(1 "a") (2 "b")]       ;; Array of pairs
 #+END_SRC
 
-Types: =Arr :: Int= (fat pointer, stack), heap variant via =~[...]=.
-Builtins: =head=, =tail=, =count=, =++=, =Arr?=.
-
-Indexing:
+** Heap arrays (tilde prefix)
 
 #+BEGIN_SRC monad
-xs[1]                     ;; postfix bracket — desugars to (xs 1)
-([10 20 30] 1)            ;; function-call syntax — returns 20
+~[1 2 3]                ;; heap-allocated, runtime-sized
+~[]                     ;; empty heap array
 #+END_SRC
 
-Both forms reach the same codegen path: =(arr i)= → element at index i
-with bounds checking.
-
-Sized buffer syntax:
+** Sized buffer syntax
 
 #+BEGIN_SRC monad
 [16kb]                  ;; [16384 U8] — 16 KiB buffer
@@ -67,30 +101,57 @@ Sized buffer syntax:
 
 Accepted suffixes: =kb=, =mb=, =gb=, =tb=.
 
+** Array operations
+
+| Function | Example                         | Result           |
+|----------+---------------------------------+------------------|
+| count    | =(count [1 2 3])=               | 3                |
+| head     | =(head [1 2 3])=                | 1                |
+| tail     | =(tail [1 2 3])=                | [2 3]            |
+| ++       | =(++ [1 2] [3 4])=              | [1 2 3 4]        |
+| Arr?     | =(Arr? [1 2 3])=                | True             |
+
+** Array-as-function indexing
+
+#+BEGIN_SRC monad
+([10 20 30] 1)            ;; function-call syntax — returns 20
+xs[1]                     ;; postfix bracket — desugars to (xs 1)
+#+END_SRC
+
+Both forms reach the same codegen path ([[file:../codegen.c::9732]]): =(arr i)=
+returns element at index =i= with bounds checking.
+
+** LLVM representation
+
+At the type level, three variants are distinguished by boolean flags
+(=arr_is_fat=, =arr_is_heap=, =arr_size=). At the codegen level, all three
+are lowered to the fat-pointer struct ={i8*, i64}= and heap-allocated
+([[file:../context/language.org::primitive-array][context/language.org]]).
+
 * Ranges
 
-There are two range syntaxes with different evaluation strategies:
+Two range syntaxes with different evaluation strategies:
 
-**Bracket syntax** — eager stack array (runtime-evaluated, finite):
+** Bracket syntax — eager array (runtime-evaluated, finite):
 
 #+BEGIN_SRC monad
 [0..10]                   ;; [0 1 2 3 4 5 6 7 8 9 10] inclusive
-[0,2..10]                 ;; [0 2 4 6 8 10]              with step
+[0,2..10]                 ;; [0 2 4 6 8 10] with step
 #+END_SRC
 
 Parser rejects =[0..]= (infinite arrays not possible).
 
-**Paren syntax** — lazy lists (cons cells, runtime-generated):
+** Paren syntax — lazy lists (cons cells, runtime-generated via thunks):
 
 #+BEGIN_SRC monad
-(0..10)                   ;; lazy list 0 through 10
-(0..)                     ;; infinite lazy list from 0
-(0,2..10)                 ;; lazy list with step
-(0,2..)                   ;; infinite lazy list with step
+(0..10)                   ;; Lazy list 0 through 10
+(0..)                     ;; Infinite lazy list from 0
+(0,2..10)                 ;; Lazy list with step
+(0,2..)                   ;; Infinite lazy list with step
 #+END_SRC
 
-Lazy ranges call runtime functions (=list_from=, =list_from_step=) and
-can be infinite. They produce linked lists, not arrays.
+Lazy ranges call runtime functions (=list_from=, =list_from_step=) and can be
+infinite. They produce linked cons cells via the thunk system, not arrays.
 
 * Sets
 
@@ -100,16 +161,43 @@ Hash sets with brace syntax:
 {1 2 3}                 ;; set of Ints
 {"a" "b"}               ;; set of Strings
 {}                      ;; empty set
+(set 1 2 3)             ;; set function
 #+END_SRC
 
-The same ={}= syntax is also used for refinement types
-(={ x ∈ Int | x > 0 }=) — the parser disambiguates by looking for
-=∈= after the first symbol.
+The ={}= syntax is shared with refinement types — the parser peeks ahead for
+=∈= after the first symbol: refinement if found, set literal otherwise
+([[file:../reader.c::5998]]).
 
-Builtins: =set=, =conj=, =disj=, =conj!=, =disj!=, =contains?=,
-=count=, =Set?=.
+** Operations
 
-Elements are boxed at runtime (hash-consed).
+| Function   | Example                    | Result          |
+|------------+----------------------------+-----------------|
+| conj       | =(conj {1 2} 3)=           | {1 2 3}         |
+| disj       | =(disj {1 2 3} 2)=         | {1 3}           |
+| conj!      | =(conj! s 3)=              | mutates s       |
+| disj!      | =(disj! s 2)=              | mutates s       |
+| contains?  | =(contains? {1 2} 1)=      | True            |
+| count      | =(count {1 2 3})=          | 3               |
+| Set?       | =(Set? {1 2})=             | True            |
+| collection?| =(collection? {1 2})=      | True            |
+
+** Set-as-function
+
+A set variable can be used as a function: =(s 1)= returns the element if
+present, =nil= otherwise ([[file:../codegen.c::9880]]). Inference skips
+=TYPE_ARROW= unification when the function position has =TYPE_SET=.
+
+** Known gap: untyped set construction
+
+Literal sets like ={1 2 3}= require an explicit =:: Set= type annotation to
+avoid producing garbage at runtime. Without the annotation, elements are not
+properly boxed ([[file:../context/language.org::codegen-gaps][context/language.org]]).
+
+** Mutable vs immutable
+
+=conj=/=disj= copy the set before modifying (pure). =conj!=/=disj!= mutate
+in place. Both share the same type scheme: =∀a. Set → a → Set=. The choice is
+purely about aliasing, not enforced by the compiler.
 
 * Maps
 
@@ -120,40 +208,57 @@ Hash maps with =#{}= syntax:
 #{}                     ;; empty map
 #+END_SRC
 
-Key-value pairs, requires even number of forms.
+Key-value pairs must appear in alternating order (even number of forms).
 
-Builtins: =assoc=, =assoc!=, =dissoc=, =dissoc!=, =find=, =keys=,
-=vals=, =merge=, =contains?=, =count=, =Map?=.
+** Operations
 
-Map-as-function lookup: =(m :key)= returns value or nil.
+| Function   | Example                          | Result              |
+|------------+----------------------------------+---------------------|
+| assoc      | =(assoc #{:a 1} :b 2)=           | #{:a 1 :b 2}        |
+| assoc!     | =(assoc! m :b 2)=                | mutates m           |
+| dissoc     | =(dissoc #{:a 1 :b 2} :a)=       | #{:b 2}             |
+| dissoc!    | =(dissoc! m :a)=                 | mutates m           |
+| find       | =(find #{:a 1} :a)=              | (:a 1)              |
+| keys       | =(keys #{:a 1 :b 2})=            | (:a :b)             |
+| vals       | =(vals #{:a 1 :b 2})=            | (1 2)               |
+| merge      | =(merge #{:a 1} #{:b 2})=        | #{:a 1 :b 2}        |
+| contains?  | =(contains? #{:a 1} :a)=        | True                |
+| count      | =(count #{:a 1 :b 2})=           | 2                   |
+| Map?       | =(Map? #{:a 1})=                 | True                |
+| collection?| =(collection? #{:a 1})=         | True                |
 
-Keys and values are boxed at runtime.
+** Map-as-function
 
-* Strings
-
-Strings are UTF-8, immutable, indexable:
+=(m :key)= returns the value or =nil=:
 
 #+BEGIN_SRC monad
-"hello"                 ;; String literal
-("hello" 0)             ;; 'h' — indexing with function-call syntax
+(directions :north)                 ;; 0
+(directions :northwest -1)         ;; -1 (default on miss)
 #+END_SRC
 
-See [[file:strings.org][Strings and Characters]] for full documentation.
-Strings participate in =head=, =tail=, =count=, =++=, =take=, =drop=,
-=starts-with?=, =ends-with?=, =contains?=.
+** Known gap: untyped map construction
 
-* Performance Caveats
+Literal maps like =#{:a 1}= produce garbage at runtime without an explicit
+=:: Map= type annotation. This is the most significant runtime bug
+([[file:../context/language.org::codegen-gaps][context/language.org]]).
+Functional operations (=assoc=, =dissoc=, =merge=) receive garbage inputs
+in untyped contexts. Only =assoc!= and =find= with typed variables work
+correctly.
 
-- **Lists** — cons cells, O(n) access, O(1) prepend
-- **Arrays** — contiguous, O(1) index, stack-allocated (small) or heap (~[...])
-- **Sets** — hash table, O(1) average, elements boxed
-- **Maps** — hash table, O(1) average, keys/vals boxed
-- **Ranges `[...]`** — eager, O(n) memory (evaluated at runtime)
-- **Ranges `(...)`** — lazy, O(1) head, O(n) to force tail
+* Performance caveats
+
+- **Lists** — cons cells, O(1) prepend, O(n) access/index
+- **Arrays** — contiguous, O(1) index, stack-allocated or heap
+- **Sets** — open-addressing hash table, O(1) average, elements boxed
+- **Maps** — open-addressing hash table, O(1) average, keys/vals boxed
+- **Ranges =[...]=** — eager, O(n) memory (evaluated at runtime)
+- **Ranges =(...)=** — lazy, O(1) head, O(n) to force tail
 
 * Context Links
 
+- [[file:../context/language.org][context/language.org]] — Working dispatch for list/set/map/array ops
+- [[file:../context/language.org::codegen-gaps][context/language.org — Known gaps (variadic list, map/set runtime)]]
+- [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]]
 - [[file:patterns.org][Pattern Matching]] — list/array destructuring
 - [[file:strings.org][Strings and Characters]]
 - [[file:core.org][Core Library]] — collection builtins
-- [[file:../context/codegen.org][context/codegen.org]] — codegen for AST_ARRAY/AST_SET/AST_MAP/AST_RANGE

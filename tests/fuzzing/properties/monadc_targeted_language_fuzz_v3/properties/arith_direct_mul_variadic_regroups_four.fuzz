@@ -1,0 +1,7 @@
+name: arith_direct_mul_variadic_regroups_four
+section: arithmetic-dispatch
+args: a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Direct variadic * dispatch must regroup like nested multiplications.
+law: (= (* {a} {b} {c} {d}) (* (* {a} {b}) (* {c} {d})))

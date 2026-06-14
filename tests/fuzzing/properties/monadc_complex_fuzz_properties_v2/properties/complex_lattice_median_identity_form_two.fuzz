@@ -1,0 +1,7 @@
+name: complex_lattice_median_identity_form_two
+section: lattice
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: The median encoded as max of pairwise mins must equal min of pairwise maxes.
+law: (= (fuzz-max (fuzz-max (fuzz-min {a} {b}) (fuzz-min {a} {c})) (fuzz-min {b} {c})) (fuzz-min (fuzz-min (fuzz-max {a} {b}) (fuzz-max {a} {c})) (fuzz-max {b} {c})))

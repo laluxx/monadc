@@ -1,0 +1,7 @@
+name: complex_if_identity_true_false_is_condition
+section: control-if
+args: cond:Bool
+type: Bool
+expect: True
+description: An if over True and False must be observationally equal to its condition.
+law: (= (if {cond} True False) {cond})

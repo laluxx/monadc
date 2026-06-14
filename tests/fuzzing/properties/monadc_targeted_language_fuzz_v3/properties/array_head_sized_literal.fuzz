@@ -1,0 +1,7 @@
+name: array_head_sized_literal
+section: collections
+args: 
+type: Bool
+expect: True
+description: head must use the optimized fixed-array path.
+law: (= (head [10 20 30]) 10)

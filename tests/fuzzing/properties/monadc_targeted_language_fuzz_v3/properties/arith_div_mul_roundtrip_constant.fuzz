@@ -1,0 +1,7 @@
+name: arith_div_mul_roundtrip_constant
+section: arithmetic-dispatch
+args: a:Int
+type: Bool
+expect: True
+description: Division by a nonzero constant must roundtrip a prior multiplication by a multiple.
+law: (= (/ (* {a} 12) 3) (* {a} 4))

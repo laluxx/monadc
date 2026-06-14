@@ -1,0 +1,7 @@
+name: complex_lattice_max_result_is_one_operand
+section: lattice-selection
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The max of two generated Int expressions must be equal to one of the operands.
+law: (if (= (fuzz-max {a} {b}) {a}) True (= (fuzz-max {a} {b}) {b}))

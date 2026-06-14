@@ -1,0 +1,7 @@
+name: logic_or_absorbs_true
+section: logic
+args: p:Bool q:Bool
+type: Bool
+expect: True
+description: A True operand must force variadic or to True.
+law: (= (or {p} True {q}) True)

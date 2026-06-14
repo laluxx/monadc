@@ -1,0 +1,7 @@
+name: control_when_true_mutates
+section: control-binding
+args: 
+type: Bool
+expect: True
+description: when True must execute its body and expose the mutation afterward.
+law: (with [x 0] (begin (when True (set! x 7)) (= x 7)))

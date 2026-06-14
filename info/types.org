@@ -11,30 +11,55 @@ for advanced use.
 
 * Ground Types ([[file:../types.h::8]])
 
-| Type      | Description              | Example values              |
-|-----------+--------------------------+-----------------------------|
-| =Int=       | 63-bit signed integer    | =42=, =-7=, =0xFF=           |
-| =Float=     | 64-bit IEEE 754          | =3.14=, =1e10=               |
-| =Ratio=     | Exact rational           | =1/2=, =3/4=                 |
-| =Char=      | Unicode codepoint        | ='a'=, ='\n'=               |
-| =String=    | UTF-8 string             | ="hello"=                    |
-| =Bool=      | Boolean                  | =True=, =False=              |
-| =Symbol=    | Interned name            | ='x=, ='my-fn=               |
-| =Keyword=   | Colon-prefixed name      | =:key=, =:alias=             |
-| =Path=      | File path                | =/tmp/file=, =~/.config=     |
-| =Type=      | Kind of types            | =Int=, =Float=, =(Type 0)=  |
-| =Unit=      | Singleton type           | =()=                         |
-| =Nil=       | Empty                    | =nil=                        |
+| Type    | Description           | Example values       |
+|---------+-----------------------+----------------------|
+| =Int=     | 63-bit signed integer | =42=, =-7=, =0xFF=         |
+| =Float=   | 64-bit IEEE 754       | =3.14=, =1e10=           |
+| =Ratio=   | Exact rational        | =1/2=, =3/4=             |
+| =Char=    | Unicode codepoint     | ='a'=, ='\n'=            |
+| =String=  | UTF-8 string          | ="hello"=              |
+| =Bool=    | Boolean               | =True=, =False=          |
+| =Symbol=  | Interned name         | ='x=, ='my-fn=           |
+| =Keyword= | Colon-prefixed name   | =:key=, =:alias=         |
+| =Path=    | File path             | =/tmp/file=, =~/.config= |
+| =Type=    | Kind of types         | =Int=, =Float=, =(Type 0)= |
+| =Unit=    | Singleton type        | =()=                   |
+| =Nil=     | Empty                 | =nil=                  |
+
+* Numeric Fixed-Width Types
+
+The compiler provides fixed-width numeric types for C interop and
+bit-level control:
+
+| Type | Description               |       Width |
+|------+---------------------------+-------------|
+| =I8=   | Signed 8-bit integer      |      8 bits |
+| =U8=   | Unsigned 8-bit            |      8 bits |
+| =I16=  | Signed 16-bit             |          16 |
+| =U16=  | Unsigned 16-bit           |          16 |
+| =I32=  | Signed 32-bit             |          32 |
+| =U32=  | Unsigned 32-bit           |          32 |
+| =I64=  | Signed 64-bit             |          64 |
+| =U64=  | Unsigned 64-bit           |          64 |
+| =I128= | Signed 128-bit            |         128 |
+| =U128= | Unsigned 128-bit          |         128 |
+| =F32=  | IEEE 754 single-precision |          32 |
+| =F80=  | x86 extended precision    |          80 |
+| =Int=  | Architecture word         | 64 (x86-64) |
+
+Note: =Int= is the default inferred type for integer literals and maps
+to the machine word size (i64 on x86-64). Use explicit fixed-width
+types for FFI calls or memory layout control.
 
 * Compound Types
 
-| Type syntax      | Description                     | Constructor                          |
-|------------------+---------------------------------+--------------------------------------|
-| =A -> B=          | Function                        | =(lambda [x] x)=                     |
-| =List :: A=       | Linked list                     | =nil=, ='(1 2 3)=, =list=            |
-| =Arr :: A=        | Stack array                     | =[1 2 3]= ([[file:../reader.c::5821]]) |
-| =Set :: A=        | Hash set                        | ={1 2 3}= ([[file:../reader.c::5998]]) |
-| =Map :: K :: V=   | Hash map                        | =#{:a 1}= ([[file:../reader.c::6039]]) |
+| Type syntax   | Description | Constructor                      |
+|---------------+-------------+----------------------------------|
+| =A -> B=        | Function    | =(lambda [x] x)=                   |
+| =List :: A=     | Linked list | =nil=, ='(1 2 3)=, =list=              |
+| =Arr :: A=      | Stack array | =[1 2 3]= ([[file:../reader.c::5821]]) |
+| =Set :: A=      | Hash set    | ={1 2 3}= ([[file:../reader.c::5998]]) |
+| =Map :: K :: V= | Hash map    | =#{:a 1}= ([[file:../reader.c::6039]]) |
 
 See [[file:collections.org][Collections]] for literal syntax.
 
@@ -75,13 +100,51 @@ See [[file:../context/infer.org][context/infer.org]] for full details.
 The =dep= pass ([[file:../dep.c]]) implements dependent type checking
 with Normalization by Evaluation (NbE).
 
-| Term       | Syntax         | Meanin |
-|------------+----------------+--------|
+| Term       | Syntax         | Meaning                  |
+|------------+----------------+--------------------------|
 | Universe   | =(Type n)=       | Type universe at level n |
 | Pi type    | =((x : A) -> B)= | Dependent function space |
 | Sigma type | =((x : A) × B)=  | Dependent pair type      |
-| Equality   | ==(Eq a x y)=    | Propositional equality   |
+| Equality   | =(Eq a x y)=     | Propositional equality   |
 | Nat        | =Nat=            | Natural numbers          |
+
+** HM / ITT Bridge
+
+The two type systems coexist through a =TERM_EMBED= bridge. Ground
+types inferred by HM are embedded as terms in the ITT kernel when
+dependent code references them. This allows mixed programs where a
+function has an HM-polymorphic outer signature and a dependent inner
+contract:
+
+#+BEGIN_SRC monad
+(define [vec-append :: Vec a n -> Vec a m -> Vec a (+ n m)]
+  ...)
+#+END_SRC
+
+The HM path handles the polymorphic =a= and the outer scheme; the ITT
+path handles the arithmetic over =n= and =m= in the return type. The
+bridge is:
+1. HM inference runs first, producing a typed term with embedded
+   =TERM_EMBED= nodes where the user wrote dependent annotations.
+2. The dep checker descends into those nodes and runs
+   bidirectional NbE.
+3. If both pass, the term is fully checked. If the dep checker
+   encounters HM-only types, it uses =TERM_EMBED= as an opaque
+   placeholder and checks definitional equality at the HM level.
+
+** NbE Kernel
+
+The dependent checker uses Normalization by Evaluation with:
+- A semantic =Value= domain supporting closures, environments, and
+  stuck neutral terms.
+- Bidirectional =infer/=check= entry points.
+- Metavariables (holes) for partial type inference in dependent
+  contexts.
+- Definitional equality via NbE: two terms are equal if they
+  normalize to the same semantic value.
+
+This foundation will scale to inductive families, higher universes,
+and cubical extensions without architectural rewrites.
 
 * Refinement Types
 
@@ -107,9 +170,9 @@ See [[file:data.org][Data Types]].
 * Type Classes
 
 #+BEGIN_SRC monad
-(class Eq a (== (a a -> Bool)))
+(class Eq a (= (a a -> Bool)))
 (instance Eq Int
-  (define (== a b -> Bool) (builtin-== a b)))
+  (define (= a b -> Bool) (builtin-= a b)))
 #+END_SRC
 
 * Layout Types
@@ -126,44 +189,63 @@ See [[file:layouts.org][Layout Types]].
 
 Registered builtins ([[file:../codegen.c::13144]]):
 
-| Predicate   | Tests for       |
-|-------------+-----------------|
-| =Int?=        | Int type        |
-| =Float?=      | Float type      |
-| =Char?=       | Char type       |
-| =String?=     | String type     |
-| =Bool?=       | Bool type       |
-| =Symbol?=     | Symbol type     |
-| =Keyword?=    | Keyword type    |
-| =List?=       | List type       |
-| =Set?=        | Set type        |
-| =Map?=        | Map type        |
-| =Arr?=        | Arr type        |
-| =Fn?=         | Function type   |
-| =nil?=        | Nil value       |
+| Predicate   | Tests for        |
+|-------------+------------------|
+| =Int?=        | Int type         |
+| =Float?=      | Float type       |
+| =Number?=     | Any numeric type |
+| =Char?=       | Char type        |
+| =String?=     | String type      |
+| =Bool?=       | Bool type        |
+| =Symbol?=     | Symbol type      |
+| =Keyword?=    | Keyword type     |
+| =List?=       | List type        |
+| =Ratio?=      | Ratio type       |
+| =Set?=        | Set type         |
+| =Map?=        | Map type         |
+| =Fn?=         | Function type    |
+| =Arr?=        | Array type       |
+| =Hex?=        | Hex literal type |
+| =Bin?=        | Bin literal type |
+| =Oct?=        | Oct literal type |
+| =nil?=        | Nil value        |
 | =empty?=      | Empty collection |
-| =collection?= | Collection-like |
+| =pair?=       | Pair (cons cell) |
+| =collection?= | Collection-like  |
 
 * Type Conversions
 
-| Syntax     | Description                  |
-|------------+------------------------------|
-| =(Int x)=    | Convert to 63-bit int        |
-| =(Float x)=  | Convert to 64-bit float      |
-| =(Char x)=   | Integer to character         |
-| =(String x)= | To string                    |
-| =(Hex x)=    | Format as hex                |
-| =(Oct x)=    | Format as octal              |
-| =(Bin x)=    | Format as binary             |
-| =(I8 x)=     | Signed 8-bit                 |
-| =(U8 x)=     | Unsigned 8-bit               |
-| =(I16 x)=   | Signed 16-bit                |
-| =(U16 x)=   | Unsigned 16-bit              |
-| =(I32 x)=   | Signed 32-bit                |
-| =(U32 x)=   | Unsigned 32-bit              |
-| =(I64 x)=   | Signed 64-bit                |
-| =(U64 x)=   | Unsigned 64-bit              |
-| =(F32 x)=   | 32-bit float                 |
+| Syntax     | Description             |
+|------------+-------------------------|
+| =(Int x)=    | Convert to 63-bit int   |
+| =(Float x)=  | Convert to 64-bit float |
+| =(Char x)=   | Integer to character    |
+| =(String x)= | To string               |
+| =(Hex x)=    | Format as hex           |
+| =(Oct x)=    | Format as octal         |
+| =(Bin x)=    | Format as binary        |
+| =(I8 x)=     | Signed 8-bit            |
+| =(U8 x)=     | Unsigned 8-bit          |
+| =(I16 x)=    | Signed 16-bit           |
+| =(U16 x)=    | Unsigned 16-bit         |
+| =(I32 x)=    | Signed 32-bit           |
+| =(U32 x)=    | Unsigned 32-bit         |
+| =(I64 x)=    | Signed 64-bit           |
+| =(U64 x)=    | Unsigned 64-bit         |
+| =(F32 x)=    | 32-bit float            |
+
+* TypeKind Enum Reference
+
+The =TypeKind= enum ([[file:../types.h::8]]) defines 40 type categories:
+
+| Category | Count | Types                                                                            |
+|----------+-------+----------------------------------------------------------------------------------|
+| Ground   |    13 | INT, FLOAT, CHAR, STRING, SYMBOL, BOOL, HEX, BIN, OCT, KEYWORD, RATIO, NIL, PATH |
+| Numeric  |    13 | F32, F80, I8, U8, I16, U16, I32, U32, I64, U64, I128, U128, INT_ARBITRARY        |
+| Compound |     9 | LIST, ARR, FN, LAYOUT, SET, MAP, PTR, OPTIONAL, COLL                             |
+| Meta     |     5 | UNKNOWN, VAR, ARROW, VARIADIC, APP                                               |
+
+See [[file:../context/types.org][context/types.org]] for full per-kind documentation.
 
 * Context Links
 

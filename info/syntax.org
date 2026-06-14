@@ -75,6 +75,14 @@ define square :: Int -> Int
 
 See [[file:wisp.org][Wisp Syntax]] for the full reference.
 
+* Implementation Status
+
+All forms documented in this section are recognized by the reader
+(parser) and type-checked by the compiler. Some forms are known codegen
+gaps — they parse and type-check correctly but do not yet lower to
+working LLVM IR. These are marked with "(codegen gap)". See
+[[file:../context/language.org][context/language.org]] for the full analysis.
+
 * Special Forms
 
 ** define
@@ -111,7 +119,7 @@ Metadata keywords:
 - =:alias sym= — alternative name for show/display
 - =:naked True= — for raw assembly functions (no prologue/epilogue)
 
-** lambda
+** lambda / fn (codegen gap)
 
 Create an anonymous function.
 
@@ -129,7 +137,9 @@ Create an anonymous function.
 (lambda [xs :: Int ...] (show xs))
 #+END_SRC
 
-No =fn= shorthand — use =lambda=.
+Note: =lambda=, =fn=, and =defn= are registered builtins but lack a
+codegen strcmp handler. Closures are recognized by the reader and
+type-checker but do not yet lower to working LLVM IR.
 
 ** if
 
@@ -140,7 +150,7 @@ No =fn= shorthand — use =lambda=.
 
 Both branches are expressions. The type must agree.
 
-** cond
+** cond (codegen gap)
 
 #+BEGIN_SRC monad
 (cond
@@ -150,6 +160,7 @@ Both branches are expressions. The type must agree.
 #+END_SRC
 
 Clauses are evaluated in order. The first true predicate wins.
+Parses and type-checks but has no codegen strcmp handler yet.
 
 ** unless
 
@@ -178,7 +189,7 @@ Repeatedly executes body while condition is true.
 
 Loops can iterate over collections or numeric ranges. See [[file:control.org][Control Flow]].
 
-** let / let* / letrec
+** let / let* / letrec (codegen gaps)
 
 #+BEGIN_SRC monad
 (let [x 1
@@ -238,7 +249,7 @@ Quasiquote uses corner brackets:
 No backtick quasiquote — use corner brackets =⌜= / =⌝= (=⌞= / =⌟= for
 unquote).
 
-** with
+** with (codegen gap)
 
 #+BEGIN_SRC monad
 (with [x 1 y 2]
@@ -319,12 +330,12 @@ Paths are first-class values of type =Path=.
 
 | Operator | Example          | Description    |
 |----------+------------------+----------------|
-| ====       | =(= x 5)=        | Equal          |
-| =!=       | =(!= x 5)=       | Not equal      |
-| =<=       | =(<= x 5)=       | Less-or-equal  |
-| =<==       | =(< x 5)=        | Less than      |
-| =>==       | =(>= x 5)=       | Greater-or-equal |
-| =>=       | =(> x 5)=        | Greater than   |
+| ~=~       | ~(= x 5)~        | Equal          |
+| ~!=~      | ~(!= x 5)~       | Not equal      |
+| ~<=~      | ~(<= x 5)~       | Less-or-equal  |
+| ~<~       | ~(< x 5)~        | Less than      |
+| ~>=~      | ~(>= x 5)~       | Greater-or-equal |
+| ~>~       | ~(> x 5)~        | Greater than   |
 
 ** Logic
 
@@ -339,7 +350,7 @@ Paths are first-class values of type =Path=.
 | Operator | Example            | Description |
 |----------+--------------------+-------------|
 | =&=        | =(bit-and x 0xFF)= | AND         |
-| =~=        | =(bit-not x)=      | NOT         |
+| =~=        | =(~ x)=             | Bitwise NOT |
 | =bit-xor=  | =(bit-xor a b)=    | XOR         |
 | =<<=       | =(<< x 2)=         | Left shift  |
 | =>>=       | =(>> x 2)=         | Right shift |
@@ -415,9 +426,9 @@ type PosInt { x ∈ Int | x > 0 }
 
 #+BEGIN_SRC monad
 (class Eq a
-  (== (a a -> Bool)))
+  (= (a a -> Bool)))
 (instance Eq Int
-  (define (== a b -> Bool) (builtin-== a b)))
+  (define (= a b -> Bool) (builtin-= a b)))
 
 (class Show a
   (show (a -> String)))
@@ -444,6 +455,10 @@ type PosInt { x ∈ Int | x > 0 }
 
 #---  ;; End feature block
 #+END_SRC
+
+Note: Feature conditionals are parsed by the reader but have no
+codegen effect yet. The condition is never checked during compilation
+and all branches are currently compiled unconditionally.
 
 * Context Links
 

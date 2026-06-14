@@ -1,0 +1,7 @@
+name: comparison_lt_implies_lte
+section: comparison
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Strict less-than must imply less-or-equal.
+law: (if (fuzz-lt? {a} {b}) (fuzz-lte? {a} {b}) True)

@@ -1,0 +1,7 @@
+name: if_distributes_over_sub_left
+section: control
+args: cond:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Subtracting a common right operand from an if result must match subtraction inside both branches.
+law: (= (fuzz-sub (if {cond} {a} {b}) {c}) (if {cond} (fuzz-sub {a} {c}) (fuzz-sub {b} {c})))

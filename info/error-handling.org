@@ -4,27 +4,86 @@
 
 [[file:index.org][<- Back to Index]] · [[file:core.org][Core Library]] · [[file:errors.org][CLI Errors]]
 
-* Error (type)
+MonadC provides several mechanisms for handling and signalling errors, from
+compiler diagnostics to runtime error values.
 
-=(data Error String)= — simple error type carrying a message.
+* Compiler Error Diagnostics
 
-* error (builtin)
+Compiler diagnostics are treated as semantic relations between invalid source
+forms and explicit compiler errors
+([[file:../context/language.org::codegen-diagnostics][context/language.org]]).
+Each stable codegen error path should have a focused expected-failure fixture.
 
-=(error "message")= — halts the program at runtime. Use for
-unrecoverable errors.
+** Diagnostic fixture pattern
+
+The =tests/codegen/rt_codegen_err_*.mon= files are the diagnostic fixture
+pattern. Each fixture covers one compiler error per file:
+
+- Unbound variables
+- Unknown functions
+- Quote/quasiquote arity errors
+- Doc/code reflection misuse
+- Sized-array mismatches
+- Layout declaration/access errors
+- Address-of errors
+- Mutation lvalue/arity errors
+- Cast arity
+- Refinement naming and base-type errors
+- Empty list forms
+- Non-callable number heads
+
+Extended diagnostic coverage also includes codegen guard branches for:
+- Runtime collection operations (=head=, =tail=, =pair?=, =++=, =count=)
+- Control forms (=if=, =unless=, =while=, =for=)
+- Arithmetic/bitwise arity checking
+- Array-as-function arity
+- Scalar variables in call position
+- Top-level =undefined=
+- Empty-array inference
+- Quoted-list literal bounds checks
+- Malformed non-array =for= bindings
+
+[[file:../tests/codegen/rt_codegen_err_*.mon][tests/codegen/rt_codegen_err_*.mon]]
+
+** Parser error prefix
+
+The parser uses =Error:= prefix for user-facing messages and =[internal]= for
+internal compiler errors. See [[file:errors.org][CLI Errors]] for the full
+list of error codes.
+
+* Runtime Error Handling
+
+** Error (type)
+
+=(data Error String)= — a simple error type carrying a message string.
+
+** error (builtin)
+
+=(error "message")= — halts the program at runtime. Use for unrecoverable
+errors. Codegen emits a call to =rt_error= which prints the message and calls
+=exit(1)= ([[file:../codegen.c::6604]]).
+
+** undefined
+
+=(undefined)= — placeholder for unimplemented branches. Codegen emits an LLVM
+=unreachable= instruction or a call to =rt_undefined= depending on context
+([[file:../codegen.c::6685]]). Non-exhaustive pattern matches emit =(undefined)=
+as their fallback.
 
 * ?? (null-coalescing)
 
-=(?? expr default)= returns =expr= if not =nil=, =default= otherwise.
+=(?? expr default)= ([[file:../codegen.c::5763]]) returns =expr= if not =nil=,
+=default= otherwise.
 
 #+BEGIN_SRC monad
 (?? (lookup key dict) "default")
 (?? (safe-div a b) 0)
+(?? (scores "Sam") 0)           ;; map lookup with default
 #+END_SRC
 
-Implementation: evaluates =lhs=, checks nil via =rt_value_is_nil=,
-branches to =rhs= or returns =lhs= unwrapped. Scalar types (Int, Float,
-Bool, Char) are never nil and skip the check entirely.
+Implementation: evaluates =lhs=, checks nil via =rt_value_is_nil=, branches to
+=rhs= or returns =lhs= unwrapped. Scalar types (Int, Float, Bool, Char) are
+never nil and skip the check entirely.
 
 * Pattern: Option type with match
 
@@ -34,12 +93,22 @@ Bool, Char) are never nil and skip the check entirely.
     (Some (/ a b))))
 #+END_SRC
 
-* TODO: Nil Bubble Tracing
+The =(Option a)= type is =(data Option a None (Some a))= and provides a safe
+return type for operations that can fail. Pattern match on =None= vs =Some x=
+handles both cases.
 
-Design in progress: propagate =nil= with an origin trace so =(?? ...)=
-can report where the nil came from.
+* Debug vs Release nil behaviour
 
-On nil caught by =??= in debug mode:
+- **Debug (fat pointer):** raw pointer + static string table baked into the
+  binary. =nil= carries a source-location tag, enabling trace output without
+  heap allocation.
+- **Release (thin pointer):** =??= is a single null check; the string table is
+  stripped entirely. No trace, no overhead.
+
+** Nil Bubble Tracing (design in progress)
+
+In debug mode, a nil value propagating through chained calls carries an origin
+trace. When caught by =??=, the trace can report where the nil came from:
 
 #+BEGIN_SRC text
 ?? caught nil:
@@ -49,20 +118,19 @@ On nil caught by =??= in debug mode:
         └─ handled: result ?? "default" (File.mon:67)
 #+END_SRC
 
-** Debug vs Release
+The trace is recorded via source-location tags in the fat pointer metadata.
 
-- **Debug (fat pointer):** raw pointer + static string table baked into
-  the binary. =nil= carries a source-location tag, enabling trace
-  output without heap allocation.
-- **Release (thin pointer):** =??= is a single null check; the string
-  table is stripped entirely. No trace, no overhead.
+* assert-eq (test assertion)
 
-* Parser Errors
-
-The parser uses =Error:= prefix for user-facing messages and
-=[internal]= for internal compiler errors. See [[file:errors.org][Errors]].
+=(assert-eq expected actual)= — the primary test assertion primitive. Codegen
+evaluates both arguments and calls =rt_equal_p= to compare them. If comparison
+fails, it prints a diagnostic with =show= of both values and reports the
+failure location ([[file:../codegen.c::6431]]). Used extensively in codegen
+test fixtures.
 
 * Context Links
 
-- [[file:errors.org][CLI Errors]]
-- [[file:../context/errors.org][context/errors.org]] — error handling internals
+- [[file:../context/language.org::codegen-diagnostics][context/language.org — Codegen Diagnostics]]
+- [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]]
+- [[file:errors.org][CLI Errors]] — error codes and diagnostics
+- [[file:../tests/codegen/rt_codegen_err_*.mon][tests/codegen/rt_codegen_err_*.mon]] — diagnostic fixtures

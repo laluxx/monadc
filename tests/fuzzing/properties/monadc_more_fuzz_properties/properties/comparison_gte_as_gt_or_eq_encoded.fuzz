@@ -1,0 +1,7 @@
+name: comparison_gte_as_gt_or_eq_encoded
+section: comparison
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Greater-or-equal must agree with the encoded greater-than-or-equality definition.
+law: (= (fuzz-gte? {a} {b}) (if (fuzz-gt? {a} {b}) True (fuzz-eq-int? {a} {b})))

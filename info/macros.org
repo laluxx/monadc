@@ -5,19 +5,24 @@
 [[file:index.org][<- Back to Index]] · [[file:macro-patterns.org][Macro Patterns]]
 
 Monad supports compile-time metaprogramming via macros ([[file:../macro.c]]).
-Unlike Lisp, there is no special =macro= form — macros are just
-functions that return =Syntax= ([[file:../macro.c::765]]).
+There is no separate =macro= keyword — macros are ordinary =define= forms
+whose lambda declares =-> Syntax= as the return type
+([[file:../context/macro.org::macro-syntax-convention]]).
 
 * How Macros Work
 
-1. The reader ([[file:../reader.c]]) parses source into S-expressions (AST)
-2. The macro expander walks the AST looking for calls to functions
-   whose return type is =Syntax=
-3. When found, it calls the function with the unevaluated arguments
-4. The function returns a new S-expression to compile in place of the
-   call
-5. Expansion continues on the result (macros can expand to macros;
-   [[file:../macro.c::798]] =macro_expand_all= loops to fixpoint)
+1. The reader ([[file:../reader.c]]) parses source into S-expressions (AST).
+2. The macro expander =macro_expand_all= ([[file:../macro.c::78]]) scans every
+   top-level define whose lambda return type is ="Syntax"=, registers them as
+   macros, and removes the define forms from the output (macros are compile-time
+   only and do not emit LLVM IR).
+3. The expander walks the remaining AST outermost-first, looking for calls to
+   registered macros.
+4. When found, it calls the macro function with the unevaluated argument nodes
+   and substitutes the returned =Syntax= tree in place of the call.
+5. The walk repeats to a fixpoint (capped at 1024 rounds;
+   [[file:../macro.c::32]]), so macros that expand into other macro calls are
+   fully resolved. If the cap is reached, expansion is aborted.
 
 * Defining Macros
 
@@ -36,12 +41,31 @@ Variadic macros use =. name= for the rest argument:
   (if condition (begin . body)))
 #+END_SRC
 
+The =Syntax= return type is what distinguishes macros from functions. The
+type-checker uses =macro_is_registered= ([[file:../macro.c::86]]) to skip
+macro define forms during codegen.
+
+* #() Quasi-Output Syntax
+
+If the macro body contains =#(...)= the expander strips the marker and only the
+inner subtree becomes the macro output. If no =#(...)= appears, the entire body
+is the output template ([[file:../context/macro.org::marco-quasi-output]]):
+
+#+BEGIN_SRC monad
+(define (assert condition message -> Syntax)
+  (if debug-mode
+    #(when (not condition) (error message))
+    #(begin)))
+#+END_SRC
+
+Currently, code outside =#()= is not evaluated at compile time — both branches
+of the conditional survive into the output. Full compile-time evaluation of the
+non-=#()= portion is future work ([[file:../context/macro.org::think.context.macro.quasi-output-eval]]).
+
 * How Syntax Works
 
-=Syntax= is the type of unevaluated S-expressions. A macro receives
-its arguments as =Syntax= values and must construct a valid
-S-expression to return.
-
+=Syntax= is the type of unevaluated S-expressions. A macro receives its
+arguments as =Syntax= values and must construct a valid S-expression to return.
 Construction uses plain function calls — no quasiquotation needed:
 
 #+BEGIN_SRC monad
@@ -50,6 +74,10 @@ Construction uses plain function calls — no quasiquotation needed:
 
 (double-it 5)  ;; expands to (* 2 5)
 #+END_SRC
+
+=Syntax= is a first-class type in the surface type system but does not exist at
+runtime — macro defines are consumed during expansion and no LLVM IR is emitted
+for them.
 
 * Pattern Matching on Arguments
 
@@ -64,35 +92,52 @@ Use =match= to destructure the argument list:
 
 * Expansion Phase
 
-Macro expansion happens after reader parsing but before type
-inference. Macros work on the raw AST, not on typed representations.
+Macro expansion happens after reader parsing but before type inference. Macros
+work on the raw AST, not on typed representations. The expander is
+outermost-first: it expands the outer list first, then recurses into the result.
+A macro that produces another macro call is expanded in a subsequent fixpoint
+round ([[file:../context/macro.org::think.context.macro.expansion-order]]).
 
 * Hygiene
 
-Macros are unhygienic. Variable bindings in the expansion can capture
-bindings at the call site:
+Macro-generated names are hygienically renamed to prevent unintentional capture
+([[file:../context/macro.org::macro-hygiene]]). Names introduced inside a macro
+body (lambda parameters, =let= bindings, inner =define=s) that are NOT pattern
+variables are renamed to the pattern: =macroname__varname__N=, where N is a
+global monotonic counter reset between compilation units by =macro_clear()=
+([[file:../macro.c::94]]).
+
+Pattern variables (the formal parameters of the macro lambda) and free
+references to outer definitions pass through unchanged. The double-underscore
+separator =__= is reserved by the compiler and cannot appear in user-written
+identifiers.
+
+* Variadic Splicing
+
+A rest parameter (=. name=) captures zero or more trailing arguments. In the
+template, if the rest name appears as a list element the captured nodes are
+spliced (inserted flat into the enclosing list). In non-list position a
+single-element rest wraps in =(begin ...)=
+([[file:../context/macro.org::macro-variadic-splicing]]):
 
 #+BEGIN_SRC monad
-(define (swap x y -> Syntax)
-  (let [tmp x]
-    (set! x y)
-    (set! y tmp)))
-
-;; If caller has a 'tmp' binding, it gets captured!
+(define (my-and . args -> Syntax)
+  [x|rest] -> (if x (my-and . rest) False))
+;; rest spliced into the 'if' tail produces N-ary chaining
 #+END_SRC
-
-To avoid capture, use =gensym=-style unique names if and when the
-macro system provides them. For simple macros, avoid introducing
-bindings that might collide.
 
 * Important Notes
 
-- Macros run at compile time
-- Macros can see other macros defined earlier
-- Recursive macros must avoid infinite expansion
-- =Syntax= return type is what distinguishes macros from functions
-- The macro system is compile-time only — =Syntax= does not exist at
-  runtime
+- Macros run at compile time.
+- Macros can see other macros defined earlier.
+- Recursive macros must avoid infinite expansion (fixpoint cap at 1024 rounds).
+- =Syntax= return type distinguishes macros from functions; codegen skips
+  macro defines entirely via =macro_is_registered=.
+- The macro system is compile-time only — =Syntax= does not exist at runtime.
+- =macro_clear()= frees all registered macros and resets the hygiene counter
+  between compilation units.
+- No ellipsis =...= patterns (Scheme-style) — variadic behaviour is via a
+  single rest parameter ([[file:../context/macro.org::think.context.macro.pattern-variables]]).
 
 * Context Links
 

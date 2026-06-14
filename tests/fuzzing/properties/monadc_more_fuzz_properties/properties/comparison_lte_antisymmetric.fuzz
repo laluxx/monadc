@@ -1,0 +1,7 @@
+name: comparison_lte_antisymmetric
+section: comparison
+args: a:Int b:Int
+type: Bool
+expect: True
+description: If two values are less-or-equal in both directions, they must be equal.
+law: (if (fuzz-lte? {a} {b}) (if (fuzz-lte? {b} {a}) (fuzz-eq-int? {a} {b}) True) True)

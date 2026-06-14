@@ -1,0 +1,7 @@
+name: complex_if_mul_common_right_factor
+section: control-if-arithmetic
+args: cond:Bool common:Int a:Int b:Int
+type: Bool
+expect: True
+description: Multiplying a common right operand across an if expression must choose branchwise products.
+law: (= (fuzz-mul (if {cond} {a} {b}) {common}) (if {cond} (fuzz-mul {a} {common}) (fuzz-mul {b} {common})))

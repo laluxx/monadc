@@ -1,0 +1,7 @@
+name: if_true_returns_then_int
+section: control
+args: then_value:Int else_value:Int
+type: Bool
+expect: True
+description: An if expression with literal True must return the then branch.
+law: (= (if True {then_value} {else_value}) {then_value})

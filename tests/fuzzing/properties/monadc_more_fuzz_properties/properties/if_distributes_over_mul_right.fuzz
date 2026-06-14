@@ -1,0 +1,7 @@
+name: if_distributes_over_mul_right
+section: control
+args: cond:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Multiplying an if result by a common right operand must match multiplication inside both branches.
+law: (= (fuzz-mul (if {cond} {a} {b}) {c}) (if {cond} (fuzz-mul {a} {c}) (fuzz-mul {b} {c})))

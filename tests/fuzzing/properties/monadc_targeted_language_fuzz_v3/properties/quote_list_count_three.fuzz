@@ -1,0 +1,7 @@
+name: quote_list_count_three
+section: quote-null-path
+args: 
+type: Bool
+expect: True
+description: quoted list construction must preserve list length.
+law: (= (count (quote (a b c))) 3)

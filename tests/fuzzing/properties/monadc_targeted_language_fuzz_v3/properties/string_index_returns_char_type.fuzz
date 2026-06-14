@@ -1,0 +1,7 @@
+name: string_index_returns_char_type
+section: collections
+args: 
+type: Bool
+expect: True
+description: Inline string indexing must return a Char value.
+law: (Char? ("abc" 1))

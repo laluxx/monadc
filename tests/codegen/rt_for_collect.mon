@@ -4,5 +4,10 @@
 ;; TEST-ATOM: (for [x [1 2 3]] :collect (* x 2)) returns (2 4 6).
 ;; TEST-EXPECT: compile, run
 
-(module Main)
-(show (for [x [1 2 3]] :collect (* x 2)))
+module Main
+(show (for [x '(1 2 3)] :collect (* x 2)))
+
+;; WISP
+
+show for x -> ⌜1 2 3⌝
+ :collect x * 2

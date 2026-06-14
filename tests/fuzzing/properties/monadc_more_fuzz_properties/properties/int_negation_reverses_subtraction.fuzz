@@ -1,0 +1,7 @@
+name: int_negation_reverses_subtraction
+section: arithmetic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Negating a subtraction must reverse the operands.
+law: (= (fuzz-mul -1 (fuzz-sub {a} {b})) (fuzz-sub {b} {a}))

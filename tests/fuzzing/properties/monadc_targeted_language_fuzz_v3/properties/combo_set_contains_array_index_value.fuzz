@@ -1,0 +1,7 @@
+name: combo_set_contains_array_index_value
+section: feature-interactions
+args: a:Int b:Int
+type: Bool
+expect: True
+description: set construction must accept inline array-index expressions as elements.
+law: (contains? (set ([{a} {b}] 0) ([{a} {b}] 1)) {b})

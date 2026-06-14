@@ -1,0 +1,7 @@
+name: complex_with_int_binding_used_in_both_if_branches
+section: binding-if
+args: cond:Bool value:Int offset:Int
+type: Bool
+expect: True
+description: A with-bound Int used in both branches must remain the same value regardless of condition.
+law: (= (with [x {value}] (if {cond} (fuzz-add x {offset}) (fuzz-add x {offset}))) (fuzz-add {value} {offset}))

@@ -1,0 +1,7 @@
+name: do_nested_mixed_returns_last_bool
+section: control
+args: a:Int b:Int cond:Bool
+type: Bool
+expect: True
+description: Nested mixed-type do sequencing must return the final Bool expression.
+law: (= (do {a} (do {b} {cond})) {cond})

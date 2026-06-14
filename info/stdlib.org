@@ -4,38 +4,118 @@
 
 [[file:index.org][<- Back to Index]] · [[file:core.org][Core Library]]
 
-The standard library is under active development. Much of =core/= is
-WIP — module declarations and exports exist but implementations are
-commented out.
+The Monad standard library is currently composed of two layers:
 
-* =core/Math.mon=
+1. *Builtins* — functions dispatched directly in =codegen.c= (always
+   available, no import needed). See [[file:core.org][Core Library]].
 
-Exports: =pi=, =e=, =tau=, =square=, =sqrt=
+2. *Core modules* — source files under =core/= that contain reusable
+   definitions compiled as needed.
 
-Status: All implementations commented out. Only module declaration and
-export list are active.
+* Core Modules
 
-* =old-core/List.mon=
+The =core/= directory contains per-module library sources:
 
-25 function definitions including =map=, =filter=, =foldl=, =foldr=.
-Imports nonexistent =Coll= module — currently unimportable. =map= also
-lacks codegen dispatch (has type signature in =infer.c= but cannot be
-called at runtime).
+| Module | File                      | Working Status                                 |
+|--------+---------------------------+------------------------------------------------|
+| Math   | =core/Math.mon= (400 lines) | Partially working. Exports 30+ functions/constants including =gcd=, =lcm=, =factorial=, =fib=, =prime?=, =clamp=, =sin=, =sqrt=, =pow=, =floor=, =ceiling=, =round=, constants =pi=, =e=, =tau=, =phi=, infinite sequences =naturals=, =positives=, =evens=, =odds=. Known issue: variadic =gcd= fails. |
+| Coll   | =core/prelude/Coll.mon= (100 lines) | Partially working. Exports =take=, =drop=, =takeWhile=, =dropWhile=, =map=, =all?=, =foldl=, =foldr=. Known issue: =takeWhile= inference fails during compilation. |
 
-* Built-in Functions (Verified)
+** Usage examples
 
-See [[file:core.org][Core Library]] for the complete list of builtins
-dispatched in =codegen.c=. These are always available without import.
+#+BEGIN_SRC monad
+(import Math)
 
-* Planned Modules
+(show (gcd 12 8))       ; 4
+(show (even? 42))       ; True
+(show (factorial 5))    ; 120
+(show pi)               ; 3.14159...
+(show (clamp 0 100 150)); 100
+#+END_SRC
 
-- =core/String= — string operations (partial builtins exist in codegen)
-- =core/IO= — file I/O (not yet implemented)
-- =core/List= — list operations (WIP)
+#+BEGIN_SRC monad
+(import Coll)
+
+(show (take 3 '(1 2 3 4 5)))       ; (1 2 3)
+(show (drop 2 '(1 2 3 4 5)))       ; (3 4 5)
+(show (all? even? '(2 4 6)))       ; True
+(show (foldl + 0 '(1 2 3 4)))      ; 10
+#+END_SRC
+
+Note: Core prelude modules are not yet automatically imported at
+startup. Explicit =import= statements are required. Known compilation
+issues exist (context/language.org:417-424): =import Coll= currently
+fails while compiling =takeWhile= in =Coll.mon=; variadic =gcd= in
+=Math.mon= fails.
+
+* Main.mon
+
+The file =Main.mon= (1244 lines) serves as both the compiler's primary
+test surface and a de facto standard library reference. It demonstrates
+real usage of every language feature:
+
+- **Variables and types**: =define= with inferred and annotated types
+  (=Int=, =Float=, =Char=, =String=, =Hex=, =Bin=, =Oct=).
+- **Arithmetic**: mixed-type operations across all numeric types.
+- **Functions**: typed function definitions with multi-param arrows,
+  documentation strings, aliases.
+- **Lists**: =list=, =make-list=, =append!=, =list-length=, =list-empty?=,
+  =car=, =cons=, =++=.
+- **Arrays**: fixed-size arrays (=Arr :: T :: N=), heap arrays (=~[]=),
+  typed and inferred element types.
+- **Layouts**: =layout Point= with construction and access, =where=
+  clause methods.
+- **Inline assembly**: naked (=:naked True=) and non-naked (=:naked
+  False=) asm functions with SysV register usage.
+- **Maps and sets**: =set=, =conj=, =disj=, =contains?=, map construction
+  with =#{"key" val}= notation, =assoc=, =dissoc=, =keys=, =vals=,
+  =merge=, =find=, =get= with default, map-as-function.
+- **Control flow**: =for= loops with and without step, =if= expressions,
+  =quote=, =show=.
+- **Conditional compilation**: =#+LINUX=, =#+X86-64= feature flags.
+- **Type aliases**: =type Code List=.
+- **Ratios**: =1/3=, rational arithmetic.
+- **Casting**: type-as-function casting across all builtin types.
+- **Infix sugar**: =`into`= backtick infix notation.
+
+Relevant sections from Main.mon:
+
+| Lines | Content                                     |
+|-------+---------------------------------------------|
+| 1-31  | Module declaration, imports, documentation  |
+| 32-98 | Variable definitions and arithmetic          |
+| 142-200 | Multi-typed function definitions           |
+| 220-250 | List operations (=append!=, =car=, =cons=)  |
+| 270-276 | Rational arithmetic (=1/3=, =+ frac=)        |
+| 278-363 | Array creation and show (=Arr :: T :: N=)    |
+| 574-671 | Map operations (=assoc=, =dissoc=, =merge=)  |
+| 672-706 | Set operations (=conj=, =disj=, =contains?=) |
+| 899-972 | Inline asm (naked/nonaked =addnaked=)        |
+| 976-990 | =for= loop examples                          |
+| 1103-1215 | Type casting reference                      |
+| 1219-1244 | Conditional compilation                      |
+
+* old-core/ (Aspirational / Pre-Rewrite)
+
+The =old-core/= directory contains aspirational library modules from a
+previous compiler era. They are NOT currently importable:
+
+| File               | Contents                             |
+|--------------------+--------------------------------------|
+| =old-core/List.mon=   | List functions (aspirational)        |
+| =old-core/Set.mon=    | Set functions (wisp =tests= block parsing issue) |
+| =old-core/text/=      | Ascii, String modules (old =::= syntax)          |
+| =old-core/Math.mon=   | Math functions (superseded by =core/Math.mon=)   |
+| =old-core/prelude/    | Coll, Test modules (old versions)                |
+| =old-core/json.mon=   | JSON parser/emitter                  |
+| =old-core/Random.mon= | Random number generation             |
+| =old-core/Assert.mon= | Assertion utilities                  |
+
+These files use older syntax and are not compiled by the current
+compiler. They serve as design references for future library work.
 
 * Context Links
 
-- [[file:core.org][Core Library]]
-- [[file:../core/Math.mon][core/Math.mon]]
-- [[file:../old-core/List.mon][old-core/List.mon]]
-- [[file:../codegen.c][codegen.c]] — strcmp dispatch table for builtins
+- [[file:core.org][Core Library]] — built-in functions (always available)
+- [[file:../Main.mon][Main.mon]] — standard library / test surface (1244 lines)
+- [[file:../context/language.org][context/language.org]] — codegen dispatch, core prelude gaps

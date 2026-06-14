@@ -1,12 +1,12 @@
 #+TITLE: C FFI (Foreign Function Interface)
 #+STARTUP: showeverything
-#+OPTIONS: toc:nil
+#+OPTIONS: toc:2 num:t
 
-[[file:index.org][<- Back to Index]]
+[[file:index.org][<- Back to Index]] · [[file:layouts.org][Layout Types]] · [[file:from-c.org][Coming from C/Rust]]
 
-Monad calls C functions directly — no binding generators. The
-=include= directive ([[file:../ffi.c]]) parses C headers via libclang and
-registers typed wrappers in the environment.
+Monad calls C functions directly — no binding generators. The =include=
+directive ([[file:../ffi.c]]) parses C headers via libclang and registers typed
+wrappers in the environment ([[file:../context/ffi.org]]).
 
 * Include Syntax
 
@@ -14,18 +14,94 @@ registers typed wrappers in the environment.
 |---------------------------+------------------------|
 | =(include "math.h")=        | Local / relative path  |
 | =(include "GLFW/glfw3.h")=  | System headers (use string path) |
+| =(include <stdio.h>)=       | System header (angle brackets) |
+
+The =system= flag (true for <= >=, false for =" "=) influences include-path
+resolution and may affect which declarations are visible. Deduplication against
+an internal =included= array prevents re-parsing the same header.
+
+* Architecture
+
+The FFI subsystem ([[file:../ffi.h]]) parses C headers via libclang and stores
+the extracted declarations in an =FFIContext= accumulator
+([[file:../context/ffi.org::ffi-context]]).
+
+** FFIParam ([[file:../ffi.h::12]])
+
+A single parameter in a C function signature: =name= (may be NULL for anonymous
+params) and =type= (=Type *=).
+
+** FFIFunction ([[file:../ffi.h::19]])
+
+A parsed C function declaration: =name=, =params= (=FFIParam *=),
+=param_count=, =variadic= (=bool=, true for C varargs), =return_type= (=Type *=),
+and =doc= (char *, extracted from preceding comments). Injected as =ENV_FUNC=
+entries by =ffi_inject_into_env= with ExternalLinkage =LLVMValueRef=.
+
+** FFIConstant ([[file:../ffi.h::30]])
+
+A parsed C constant (macro or enum value): =name=, =value= (=long long=),
+=is_float=, =float_value=, =is_string=, =str_value=, =is_struct_literal=.
+Supports integer, float, string, and compound literal constants. Injected as
+=ENV_VAR= entries with constant =LLVMValueRef=.
+
+** FFIStructField / FFIStruct ([[file:../ffi.h::42]])
+
+C struct/typedef descriptors:
+- =FFIStructField=: =name= (=char *=), =type= (=Type *=).
+- =FFIStruct=: =name=, =alias_of= (non-NULL for typedef aliases), =fields=
+  (=FFIStructField *=), =field_count=, =size_bytes=, =packed= (=bool=),
+  =is_scalar_typedef= (=bool= for =uint64_t=/pointer typedefs). Injected as
+  layout type registrations via =env_insert_layout=.
+
+** FFIContext ([[file:../ffi.h::64]])
+
+Accumulator for everything parsed from =(include ...)= forms: growable arrays
+of =FFIFunction=, =FFIConstant=, =FFIStruct=. Also tracks already-included
+headers, =strip_prefixes= for the =:unprefix= option, and per-module injection
+watermarks to support incremental injection across compilation units.
 
 * Type Mapping
 
-| C type | Monad type     |
-|--------+----------------|
-| =int=    | =Int=             |
-| =double= | =Float=           |
-| =float=  | =Float=           |
-| =char=   | =Char=            |
-| =char*=  | =String=          |
-| =T *=    | =Pointer :: T=    |
-| =void=   | =Unit=            |
+| C type        | Monad type     |
+|---------------+----------------|
+| =int=           | =Int=             |
+| =double=        | =Float=           |
+| =float=         | =Float=           |
+| =char=          | =Char=            |
+| =char*=         | =String=          |
+| =T *=           | =Pointer :: T=    |
+| =void=          | =Unit=            |
+| =unsigned long long= | =Int= (i64, best-fit) |
+| =_Bool=         | =Bool=            |
+
+=ffi_map_c_type= ([[file:../ffi.h::119]]) handles conversion
+([[file:../context/ffi.org::ffi-map-type]]). =const= and =volatile= qualifiers
+are stripped. Pointer types map to Monad pointer types. Returns
+=type_unknown()= for unrecognised types
+([[file:../context/ffi.org::think.context.ffi.map-type-precision]]).
+
+* Header Resolution
+
+=ffi_resolve_header= ([[file:../ffi.h::115]]) takes a header token (e.g.
+="stdio.h"=) and a =system= flag. Returns a malloc'd absolute path or NULL if
+not found. Searches standard system include paths for =system= headers, and
+project-local paths for =system=false=.
+
+* Cache Layer
+
+Parsing C headers via libclang is expensive. The FFI subsystem provides a
+persistent cache layer ([[file:../context/ffi.org::ffi-cache]]):
+
+- =ffi_cache_save(ctx, header_path)=: serialises the =FFIContext= for a given
+  header to a cache file on disk.
+- =ffi_cache_load(ctx, header_path)=: deserialises cached FFI data and merges
+  it into =ctx=.
+
+Cache validity is determined by comparing the header file's mtime against the
+cache file's mtime. If the header is newer the cache is invalidated and
+=ffi_parse_header= is re-run. The cache format is a binary dump of the
+serialised =FFIFunction=/=FFIConstant=/=FFIStruct= arrays.
 
 * Real Examples
 
@@ -45,13 +121,39 @@ Prefix a variable with =&= to get a C pointer (address-of operator):
 
 Heap array syntax =~[...]= is not implemented.
 
-* Limitations
+* Known Limitations and Gaps
 
-C structs → use [[file:layouts.org][layout types]]. Complex macros may fail
-to parse. Some math functions (=pow=, =sin=) may have runtime issues.
+- C struct layout is handled through [[file:layouts.org][layout types]], not
+  automatic FFI struct mapping.
+- Complex macros (function-like macros, conditional definitions) may fail to
+  parse.
+- Math functions returning =double= (=pow=, =sin=, =cos=) produce garbage
+  values at runtime — suspected codegen issue with float-returning FFI
+  functions (parses and invokes correctly at the LLVM level, but the return
+  value is corrupted).
+- =unsigned long long=, =_Bool=, and other C types with no direct Monad
+  equivalent are mapped to the nearest supported width (=i64=, =i1=).
+- No automatic struct member access — FFI structs are registered as layout
+  types but must be accessed manually via pointer arithmetic.
+
+* API Reference ([[file:../ffi.h]])
+
+| Function                | Purpose                                       |
+|-------------------------+-----------------------------------------------|
+| =ffi_context_create=      | Allocate a zero-initialised FFIContext        |
+| =ffi_context_free=        | Free all parsed data and the context          |
+| =ffi_parse_header=        | Parse a C header via libclang                |
+| =ffi_inject_into_env=     | Inject all symbols into codegen env           |
+| =ffi_resolve_header=      | Resolve #include path to absolute path        |
+| =ffi_map_c_type=          | Convert C type spelling to Monad Type*        |
+| =ffi_dump=                | Debug pretty-print of FFI context             |
+| =ffi_cache_save=          | Save parsed FFI data to disk cache            |
+| =ffi_cache_load=          | Load parsed FFI data from disk cache          |
 
 * Context Links
 
-- [[file:../context/ffi.org][context/ffi.org]] — FFI implementation
+- [[file:../context/ffi.org][context/ffi.org]] — FFI implementation details
 - [[file:layouts.org][Layout Types]] — C-compatible memory layouts
-- [[file:from-c.org][Coming from C/Rust]]
+- [[file:from-c.org][Coming from C/Rust]] — interop guide
+- [[file:../ffi.h][ffi.h]] — FFI API header
+- [[file:../ffi.c][ffi.c]] — FFI implementation

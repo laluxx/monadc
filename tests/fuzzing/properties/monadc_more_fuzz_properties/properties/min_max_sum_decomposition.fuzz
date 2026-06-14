@@ -1,0 +1,7 @@
+name: min_max_sum_decomposition
+section: order
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The sum of min and max must equal the sum of the original operands.
+law: (= (fuzz-add (fuzz-min {a} {b}) (fuzz-max {a} {b})) (fuzz-add {a} {b}))

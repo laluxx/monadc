@@ -1,0 +1,7 @@
+name: comparison_trichotomy_encoded
+section: comparison
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Exactly one of less-than, greater-than, or equality must explain a pair of Int expressions.
+law: (if (fuzz-lt? {a} {b}) (if (fuzz-gt? {a} {b}) False True) (if (fuzz-gt? {a} {b}) (if (fuzz-lt? {a} {b}) False True) (fuzz-eq-int? {a} {b})))

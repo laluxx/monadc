@@ -1,0 +1,7 @@
+name: complex_do_true_expected_after_false_setup
+section: control-do
+args: setup:Int
+type: Bool
+expect: True
+description: A do form that ends in True must print True even after a False middle expression.
+law: (do {setup} False True)

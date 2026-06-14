@@ -1,0 +1,7 @@
+name: complex_if_sub_common_right_factor
+section: control-if-arithmetic
+args: cond:Bool common:Int a:Int b:Int
+type: Bool
+expect: True
+description: Subtracting a common right operand distributes over an if expression.
+law: (= (fuzz-sub (if {cond} {a} {b}) {common}) (if {cond} (fuzz-sub {a} {common}) (fuzz-sub {b} {common})))

@@ -1,0 +1,7 @@
+name: arith_div_constant_exact
+section: arithmetic-dispatch
+args: 
+type: Bool
+expect: True
+description: Integer division dispatch must compute exact integer quotients.
+law: (= (/ 84 7) 12)

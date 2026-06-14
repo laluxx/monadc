@@ -1,0 +1,7 @@
+name: bitwise_and_idempotent
+section: bitwise
+args: a:Int
+type: Bool
+expect: True
+description: Bitwise and must be idempotent.
+law: (= (& {a} {a}) {a})

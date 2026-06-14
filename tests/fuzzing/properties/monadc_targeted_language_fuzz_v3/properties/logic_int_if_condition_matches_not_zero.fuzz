@@ -1,0 +1,7 @@
+name: logic_int_if_condition_matches_not_zero
+section: logic-coercion
+args: a:Int
+type: Bool
+expect: True
+description: if must use the same Int-to-Bool coercion as explicit nonzero comparison.
+law: (= (if {a} 7 9) (if (!= {a} 0) 7 9))

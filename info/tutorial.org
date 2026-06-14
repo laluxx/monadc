@@ -4,57 +4,399 @@
 
 [[file:index.org][<- Back to Index]] · [[file:intro.org][Intro]] · [[file:syntax.org][Syntax]]
 
+This tutorial walks through Monad from zero to working programs. All
+examples use real, tested syntax from the compiler's own codebase.
+
 * Hello World
 
+A Monad program is a module with top-level expressions:
+
 #+BEGIN_SRC monad
-(define (main -> Int)
-  (show "hello world")
-  0)
+(module Main)
+(show "hello world")
 #+END_SRC
 
 Compile and run:
 
 #+BEGIN_SRC sh
-monad hello.mon -o hello
-./hello
+./monad hello.mon -o hello && ./hello
+#+END_SRC
+
+The =(module Main)= declaration marks the entry module. Top-level
+forms are executed in order. The =(show)= function prints any value
+to stdout.
+
+Same program in Wisp syntax:
+
+#+BEGIN_SRC monad
+module Main
+show "hello world"
+#+END_SRC
+
+* Variables and Bindings
+
+Use =define= to bind a name to a value. Types are inferred:
+
+#+BEGIN_SRC monad
+define i 20          ; Inferred Int
+define f 40.0        ; Inferred Float
+define s "string"    ; Inferred String
+define c 'A'         ; Inferred Char
+define h 0xFF        ; Inferred Hex
+define b 0b1010      ; Inferred Bin
+define o 0o755       ; Inferred Oct
+#+END_SRC
+
+Type annotations are optional — place =:: Type= after the name in
+brackets:
+
+#+BEGIN_SRC monad
+define [i :: Int]   20
+define [f :: Float] 40.0
+#+END_SRC
+
+Variables are immutable by default. Use =set!= to reassign:
+
+#+BEGIN_SRC monad
+(define [x :: Int] 1)
+(set! x (+ x 1))   ; x is now 2
+#+END_SRC
+
+* Arithmetic and Operators
+
+Standard arithmetic works with infix-like prefix syntax:
+
+#+BEGIN_SRC monad
+(show (+ 1 2 3))     ; 6 — variadic
+(show (- 10 3))      ; 7
+(show (* 4 5))       ; 20
+(show (/ 10 3))      ; 3 — integer division
+(show (% 10 3))      ; 1 — modulo
+#+END_SRC
+
+Integer and float types can mix — the compiler promotes:
+
+#+BEGIN_SRC monad
+(show (+ 1 2.5))     ; 3.5
+(show (* 2 3.0))     ; 6.0
+#+END_SRC
+
+Bitwise operations:
+
+#+BEGIN_SRC monad
+(show (& 0xFF 0x0F))     ; 15 — bitwise AND
+(show (| 0xF0 0x0F))     ; 255 — bitwise OR
+(show (bit-xor 0xFF 0x0F)) ; 240 — bitwise XOR
+(show (<< 1 4))          ; 16 — shift left
+(show (>> 16 2))         ; 4 — shift right
+(show (>>> -16 2))       ; — arithmetic shift right
+#+END_SRC
+
+Comparisons return =Bool=:
+
+#+BEGIN_SRC monad
+(show (= 1 1))       ; True
+(show (!= 1 2))      ; True
+(show (< 1 2))       ; True
+(show (>= 3 2))      ; True
+#+END_SRC
+
+Logic uses short-circuit evaluation:
+
+#+BEGIN_SRC monad
+(show (and True False))   ; False
+(show (or True False))    ; True
+(show (not False))        ; True
 #+END_SRC
 
 * Functions
 
+Define functions with =define=:
+
 #+BEGIN_SRC monad
-(define square (x -> Int)
+(define (square [x :: Int] -> Int)
   (* x x))
 
-(define (add a b -> Int)
+(define (add [a :: Int] [b :: Int] -> Int)
   (+ a b))
 #+END_SRC
 
-Types inferred automatically — annotation optional.
-
-* Data Types
+Return type annotation is optional — the compiler infers it:
 
 #+BEGIN_SRC monad
-(data Option a None (Some a))
-
-(define (head list -> (Option a))
-  (match list with
-    []     -> None
-    [x|xs] -> (Some x)))
+(define (square x)
+  (* x x))
 #+END_SRC
 
-* Using the REPL
+Anonymous functions (lambdas):
+
+#+BEGIN_SRC monad
+(define double (lambda [x :: Int] (* x 2)))
+(show (double 5))    ; 10
+#+END_SRC
+
+* Conditionals
+
+Use =if= for simple branches:
+
+#+BEGIN_SRC monad
+(define (max [a :: Int] [b :: Int] -> Int)
+  (if (> a b) a b))
+#+END_SRC
+
+Use =unless= as a statement form:
+
+#+BEGIN_SRC monad
+(unless False (show "executed"))   ; prints "executed"
+#+END_SRC
+
+Use =while= for loops:
+
+#+BEGIN_SRC monad
+(define [x :: Int] 0)
+(while (< x 3)
+  (show x)
+  (set! x (+ x 1)))
+#+END_SRC
+
+=for= comprehensions work over arrays, lists, sets, and strings:
+
+#+BEGIN_SRC monad
+(for i -> [1 2 3 4 5]
+  (show i))
+#+END_SRC
+
+* Collections
+
+Lists are linked — immutable and recursive:
+
+#+BEGIN_SRC monad
+(define my-list '(1 2 3))
+(show (car my-list))        ; 1
+(show (cdr my-list))        ; (2 3)
+(show (cons 0 my-list))     ; (0 1 2 3)
+(show (++ my-list '(4 5)))  ; (1 2 3 4 5)
+(show (count my-list))      ; 3
+#+END_SRC
+
+Arrays come in three forms:
+
+#+BEGIN_SRC monad
+(define stack-arr [1 2 3])           ; Stack array, known size at compile time
+(define heap-arr ~[1 2 3])           ; Heap-allocated, runtime-sized
+#+END_SRC
+
+Array indexing uses function-call syntax:
+
+#+BEGIN_SRC monad
+(define arr [10 20 30])
+(show (arr 0))    ; 10
+(show (arr 1))    ; 20
+#+END_SRC
+
+Sets:
+
+#+BEGIN_SRC monad
+(define [s :: Set] {1 2 3})
+(show (contains? s 1))     ; True
+(show (conj s 4))          ; {1 2 3 4} — new set
+#+END_SRC
+
+Maps:
+
+#+BEGIN_SRC monad
+(define [m :: Map] {:a 1 :b 2})
+(show (m :a))              ; 1
+#+END_SRC
+
+* Strings and Characters
+
+String operations:
+
+#+BEGIN_SRC monad
+(define s "hello world")
+(show (count s))                ; 11
+(show (starts-with? s "hello")) ; True
+(show (ends-with? s "world"))   ; True
+(show (contains? s "lo wo"))    ; True
+(show (s 1))                    ; "e" — string indexing
+#+END_SRC
+
+Characters are literal with single quotes:
+
+#+BEGIN_SRC monad
+(define c 'A')
+(show (Char c))    ; 65 — convert to Int
+#+END_SRC
+
+* Layout Types (C-Compatible Structs)
+
+Layouts define memory layouts that match C structs:
+
+#+BEGIN_SRC monad
+(layout Vec3
+  [x :: Float]
+  [y :: Float]
+  [z :: Float]
+  where
+    method ->array :: Self -> Array
+      s -> [s.x s.y s.z])
+
+(define v Vec3 1.0 2.0 3.0)
+(show v->array)
+#+END_SRC
+
+Layouts can include methods, type parameters, and inline/pointer/array
+fields with packed or aligned options.
+
+* Refinement Types
+
+Types can be constrained with predicates:
+
+#+BEGIN_SRC monad
+(type Natural { x ∈ Int | x >= 0 })
+(type Positive { x ∈ Int | x > 0 })
+(type Even { x ∈ Int | x % 2 = 0 })
+#+END_SRC
+
+Each refinement generates a predicate function (e.g., =Positive?=)
+that checks membership at runtime, and the type checker applies the
+constraint statically when possible:
+
+#+BEGIN_SRC monad
+(define (safe-divide [n :: Int] [d :: Positive] -> Int)
+  (/ n d))
+#+END_SRC
+
+* C FFI
+
+Call C functions directly — no bindings needed:
+
+#+BEGIN_SRC monad
+(include "math.h")
+(show (sqrt 9.0))     ; 3.0
+(show (floor 3.7))    ; 3.0
+(show (ceil 3.2))     ; 4.0
+
+(include "stdlib.h")
+(show (atoi "42"))    ; 42
+
+(include "string.h")
+(show (strlen "hello"))  ; 5
+#+END_SRC
+
+The FFI uses libclang to parse headers automatically and maps C types
+to Monad types.
+
+* Modules and Imports
+
+Modules help organize code:
+
+#+BEGIN_SRC monad
+(module Main)  ; Exports everything by default
+(import Math)
+(import qualified Std.List :as L)
+#+END_SRC
+
+Import options:
+
+| Form                          | Behavior                            |
+|-------------------------------+-------------------------------------|
+| =(import Math)=                 | Brings all symbols into scope       |
+| =(import Math [sqrt log])=      | Imports only listed symbols         |
+| =(import Math hiding [sqrt])=   | Imports everything except listed    |
+| =(import qualified Math :as M)= | Access via =M:sqrt= (prefix required) |
+
+* Inline Assembly
+
+Assembly goes inside function bodies with =(asm ...)=:
+
+#+BEGIN_SRC monad
+(include "asm.h")
+
+(define (sys-write [fd :: Int] [buf :: String] [len :: Int] -> Int)
+  (asm
+    mov 1 %rax
+    mov fd %rdi
+    mov buf %rsi
+    mov len %rdx
+    syscall
+    ret))
+#+END_SRC
+
+Naked functions (no prologue/epilogue) use =:naked True=.
+
+* Testing
+
+Tests are embedded directly in source files:
+
+#+BEGIN_SRC monad
+(tests
+  (assert-eq (+ 1 2) 3 "addition works")
+  (assert-eq (square 5) 25 "square works"))
+#+END_SRC
+
+Run with the test subcommand:
 
 #+BEGIN_SRC sh
-monad repl
+./monad test myfile.mon
+#+END_SRC
+
+* REPL
+
+Launch the interactive REPL for experimentation:
+
+#+BEGIN_SRC sh
+./monad -i
+#+END_SRC
+
+#+BEGIN_SRC monad
 > (+ 1 2)
 3
-> (define greeting "hi")
-> greeting
-"hi"
+> (define greeting "hello")
+> (++ greeting " world")
+"hello world"
+> (show greeting)
+hello
 #+END_SRC
+
+The REPL uses LLVM JIT compilation via ExecutionEngine — each
+expression is compiled and executed immediately.
+
+* Complete Example
+
+A program that computes Fibonacci numbers:
+
+#+BEGIN_SRC monad
+(module Main)
+(import Math)  ; for sqrt, floor
+
+(define (fib [n :: Int] -> Int)
+  (if (<= n 2)
+    1
+    (+ (fib (- n 1)) (fib (- n 2)))))
+
+(module Main)
+(import Math)
+
+(define (fib [n :: Int] -> Int)
+  (if (<= n 2)
+    1
+    (+ (fib (- n 1)) (fib (- n 2)))))
+
+(show (fib 10))   ; 55
+#+END_SRC
+
+* Next Steps
+
+- [[file:syntax.org][Syntax Reference]] — full grammar and special forms
+- [[file:types.org][Type System]] — Hindley-Milner inference, dependent types
+- [[file:../how_to/][how_to/]] — example programs covering ADTs, macros, FFI, Vulkan
+- [[file:../Main.mon][Main.mon]] — the standard library and compiler test surface (1244 lines)
+- [[file:macro-patterns.org][Macro Patterns]] — common code transformation recipes
 
 * Context Links
 
-- [[file:syntax.org][Syntax Reference]]
-- [[file:../how_to/][how_to/]] — example scripts
-- [[file:../tests/codegen/][tests/codegen/]] — codegen test files
+- [[file:../context/language.org][context/language.org]] — language formalization
+- [[file:../context/philosophy.org][context/philosophy.org]] — design philosophy
+- [[file:../context/build.org][context/build.org]] — build and test targets

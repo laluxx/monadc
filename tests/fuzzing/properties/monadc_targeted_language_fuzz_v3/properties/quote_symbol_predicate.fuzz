@@ -1,0 +1,7 @@
+name: quote_symbol_predicate
+section: quote-null-path
+args: 
+type: Bool
+expect: True
+description: quote of a symbol must produce a Symbol runtime value.
+law: (Symbol? (quote alpha))

@@ -3,10 +3,26 @@
 #+STARTUP: showeverything
 #+OPTIONS: toc:3 num:t
 
-[[file:index.org][<- Back to Index]] · [[file:from-c.org][From C/Rust]] · [[file:from-haskell.org][From Haskell]]
+[[file:index.org][<- Back to Index]] · [[file:from-c.org][From C]] · [[file:from-haskell.org][From Haskell]]
 
 Monad uses S-expressions and code-as-data — Lisp programmers will feel
-at home, but the type system changes how you write code.
+at home, but the type system and compilation model change how you write code.
+
+* Compilation: LLVM Native Code, Not Interpreted
+
+| Lisp / Scheme          | Monad                            |
++------------------------+----------------------------------+
+| Interpreted or JIT-compiled | Ahead-of-time native via LLVM               |
+| =compile-file= = load         | =monad file.mon= — single step                |
+| Incremental development     | Compiler pipeline (parse → infer → codegen) |
+
+Monad compiles to native machine code through LLVM — not interpreted, not
+JIT'd. The compilation pipeline ([[file:../context/language.org]]):
+1. Reader (S-expression or Wisp → AST)
+2. Macro expansion (fixpoint, up to 1024 rounds)
+3. HM type inference + monomorphization
+4. ITT dependent type checking (shadow pass)
+5. LLVM codegen → native executable
 
 * Lisp is the AST
 
@@ -23,13 +39,42 @@ always drop into raw S-expressions. Wisp (indentation syntax) is a
 pre-expansion pass ([[file:../wisp.c]]) that generates the same AST.
 
 You never lose the ability to write raw Lisp. Mix wisp and s-exprs
-freely in the same file.
+freely in the same file — both syntaxes are first-class
+([[file:../context/philosophy.org::92][context/philosophy.org — syntax is instrument]]):
 
 #+BEGIN_SRC monad
 ;; Wisp
 if (> x 0)
   (print "pos")     ;; raw s-expr where clarity matters
   print "neg"       ;; back to wisp
+#+END_SRC
+
+* Type System: HM Inference + Dependent Types
+
+| Lisp/Scheme              | Monad                                 |
++--------------------------+---------------------------------------+
+| Dynamic typing               | Hindley-Milner static inference        |
+| (or gradual in Typed Racket) | + dependent types (ITT via NbE)        |
+| Type annotations optional    | Type annotations optional (HM infers)  |
+| No compile-time checking     | Compile-time static checking           |
+| Runtime type dispatch        | Monomorphization — no runtime dispatch |
+
+Monad uses a dual type system ([[file:../context/language.org::501]]):
+- **Hindley-Milner** — fast type inference for ground types, unification,
+  constraint generation, generalization ([[file:../context/language.org::489]])
+- **Intuitionistic Type Theory** — dependent types with Pi/Sigma types,
+  Normalization by Evaluation kernel, bidirectional checking
+  ([[file:../context/language.org::686]])
+
+The HM path handles the common case at O(n) speed; the ITT path validates
+dependent annotations as a shadow pass ([[file:../context/language.org::1398]]).
+
+Refinement types provide subset predicates on ground types
+([[file:../context/language.org::597]]):
+
+#+BEGIN_SRC monad
+(type Pos { x ∈ Int | (> x 0) })
+(type Even { x ∈ Int | (= (mod x 2) 0) })
 #+END_SRC
 
 * Monomorphization, Not Objects
@@ -49,10 +94,8 @@ Monad:
 
 Monomorphization means =(id 42)= and =(id "hi")= generate separate
 specialized functions (=id_Int=, =id_String=) with zero boxing
-overhead. No type tags, no dispatch at runtime. This is the key
-performance difference from Lisp.
-
-** How it works
+overhead. No type tags, no dispatch at runtime
+([[file:../context/codegen.org]]).
 
 The =mono_cache= ([[file:../codegen.c::109]]) caches specialized versions by
 function name + concrete type args. When codegen encounters a
@@ -67,7 +110,58 @@ cached, and emits a direct call.
 | =(id "hi")= — boxed | =(id "hi")= — String, no boxing |
 | Dynamic dispatch  | Static specialization         |
 
-* Summary of Differences
+* Arena Allocation, Not GC
+
+| Lisp / Scheme          | Monad                            |
++------------------------+----------------------------------+
+| Garbage collector      | Arena allocation (bump-pointer)   |
+| =malloc/=GC allocation | No manual free — arena reset      |
+| Boxed cons cells       | Cons cells in arena (boxed) but no GC pauses |
+
+Monad does not have a garbage collector. Values are allocated in
+compiler-managed arena regions — bump-pointer allocation, deterministic
+lifetime, no GC pauses ([[file:../context/philosophy.org::99]]).
+
+* Macros: Functions Returning Syntax
+
+| Common Lisp             | Monad ([[file:../context/macro.org]])                     |
++-------------------------+---------------------------------------------------+
+| =(defmacro swap! (a b)  | =(define (swap! a b -> Syntax)                     |
+|   `(let ((tmp ,a))     |   #(let [tmp a] (set! a b) (set! b tmp)))=        |
+|      (setf ,a ,b)      |                                                   |
+|      (setf ,b tmp)))=  |                                                   |
+
+Monad macros are =define= forms whose return type is =Syntax=
+([[file:../context/macro.org::56]]). Key differences from =defmacro=:
+
+- Macros are **compile-time functions**: they are ordinary =define= forms
+  whose lambda declares =-> Syntax= as the return type
+  ([[file:../context/macro.org::75]])
+- **=#(...)= quasi-output syntax** delimits the template output region:
+  code outside =#()= runs at compile time (when implemented), code inside
+  =#()= is the generated output ([[file:../context/macro.org::88]])
+- **Hygiene**: names introduced inside the macro body (not pattern variables)
+  are renamed to =macroname__varname__N= to prevent capture
+  ([[file:../context/macro.org::123]])
+- **Fixpoint expansion** (up to 1024 rounds): macros that expand into other
+  macro calls are fully resolved ([[file:../context/macro.org::187]])
+- **Variadic splicing**: rest parameters splice captured nodes flat in
+  list position ([[file:../context/macro.org::156]])
+
+* Wisp Syntax as Alternative
+
+Monad offers two syntaxes ([[file:../context/philosophy.org::92]]):
+
+| S-expression       | Wisp (indentation)           |
++--------------------+------------------------------+
+| =(define (f x) (if (> x 0) x (- x)))= | =define f x<br>  if > x 0<br>    x<br>    - x= |
+| =(let [x 1] (+ x 1))=    | =let [x 1]<br>  + x 1=          |
+| =(set! x val)=           | =set! x val=                  |
+
+Both syntaxes share the same AST. Mix freely in the same file
+([[file:wisp.org]]).
+
+* Key Differences
 
 ** Same (identical syntax)
 
@@ -92,31 +186,44 @@ cached, and emits a direct call.
 
 ** New (no Lisp equivalent)
 
-- Static types with HM inference
+- Static types with HM inference + dependent types
 - Algebraic data types (=(data Maybe a = Nothing | Just a)=)
 - Refinement types (=(type Pos { x ∈ Int | (> x 0) })=)
-- Layout types (C-compatible structs)
-- Inline assembly (=(asm ...)=)
-- C FFI via =(include "header.h")=
+- Layout types (C-compatible structs, [[file:layouts.org]])
+- Inline assembly (=(asm ...)=, [[file:asm.org]])
+- C FFI via =(include "header.h")= ([[file:ffi.org]])
+- Wisp indentation syntax ([[file:wisp.org]])
+- Type classes (=(class ...)= / =(instance ...)=)
+- Monomorphization of polymorphic functions
+- Arena-based memory management
 
 ** Not yet implemented
 
-| Feature                | Status                                                              |                              |
-|------------------------+---------------------------------------------------------------------+------------------------------|
-| =map= / =mapcar=           | Has type sig in [[file:../infer.c]], no codegen dispatch (not callable) |                              |
-| =                      | >= pipe                                                             | Reader parses, codegen fails |
-| =fn= shorthand           | No dispatch                                                         |                              |
-| Tail-call optimization | Planned                                                             |                              |
-| Closure allocation     | Partially implemented                                               |                              |
+| Feature                  | Status ([[file:../context/language.org::287]])                     |
++--------------------------+-----------------------------------------------------+
+| =map= / =mapcar=           | Type sig in infer.c, no codegen dispatch (see gap: closures) |
+| =|> pipe                  | Reader parses, codegen fails                        |
+| =fn= shorthand            | No codegen dispatch                                 |
+| =cond=, =when=, =do=      | No strcmp handler — treated as ordinary variable    |
+| Tail-call optimization    | Planned                                             |
+| Closure allocation        | Partially implemented (closure ABI exists, =fn=/=lambda= strcmp dispatch missing) |
+| =let=, =let*=, =letrec=   | =register_builtins=-only, no strcmp dispatch        |
+| Wisp multi-line =define= with =->= arrow | Does not create correct lambda bindings (use s-expr form) |
 
 * Context Links
 
-- [[file:syntax.org][Syntax Reference]] — reader/parser rules
-- [[file:macros.org][Macros]] — code-as-data macros
-- [[file:wisp.org][Wisp Syntax]] — indentation sugar
-- [[file:types.org][Types]] — static type system
-- [[file:data.org][Data Types]] — algebraic data types
-- [[file:asm.org][Inline Assembly]] — x86-64 asm
-- [[file:ffi.org][C FFI]] — C interop
-- [[file:../context/codegen.org][context/codegen.org]] — monomorphization cache details
-- [[file:../context/reader.org][context/reader.org]] — S-expression reader
+- [[file:../context/philosophy.org]] — design philosophy
+- [[file:../context/language.org]] — language formalization, dispatch, gaps
+- [[file:../context/types.org]] — type representation
+- [[file:../context/macro.org]] — macro system architecture
+- [[file:../context/codegen.org]] — monomorphization and codegen
+- [[file:../context/ffi.org]] — C FFI internals
+- [[file:../context/asm.org]] — inline assembly internals
+- [[file:syntax.org]] — Syntax Reference — reader/parser rules
+- [[file:macros.org]] — Macros — code-as-data macros
+- [[file:wisp.org]] — Wisp Syntax — indentation sugar
+- [[file:types.org]] — Types — static type system
+- [[file:data.org]] — Data Types — algebraic data types
+- [[file:layouts.org]] — Layout Types — C-compatible structs
+- [[file:asm.org]] — Inline Assembly — x86-64 asm
+- [[file:ffi.org]] — C FFI — C interop

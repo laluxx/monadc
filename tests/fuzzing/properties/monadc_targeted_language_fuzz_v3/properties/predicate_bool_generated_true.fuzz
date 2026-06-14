@@ -1,0 +1,7 @@
+name: predicate_bool_generated_true
+section: predicates-conversions
+args: p:Bool
+type: Bool
+expect: True
+description: Bool? must accept generated Bool expressions.
+law: (Bool? {p})

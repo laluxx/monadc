@@ -1,0 +1,7 @@
+name: complex_combo_order_implication_with_computed_bounds
+section: combo
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: If c is below both values then it must be below their min, with bindings and helper comparisons involved.
+law: (with [lo (fuzz-min {a} {b})] (if (fuzz-lte? {c} {a}) (if (fuzz-lte? {c} {b}) (fuzz-lte? {c} lo) True) True))

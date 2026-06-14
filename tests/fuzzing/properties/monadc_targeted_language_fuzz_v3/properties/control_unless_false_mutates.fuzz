@@ -1,0 +1,7 @@
+name: control_unless_false_mutates
+section: control-binding
+args: 
+type: Bool
+expect: True
+description: unless False must execute its body and expose the mutation afterward.
+law: (with [x 0] (begin (unless False (set! x 7)) (= x 7)))

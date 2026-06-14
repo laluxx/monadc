@@ -1,0 +1,7 @@
+name: array_with_generated_values_index
+section: collections
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Array-as-function env lookup must preserve generated first element identity.
+law: (with [arr [{a} {b} {c}]] (= (arr 0) {a}))

@@ -1,4 +1,4 @@
-;; TEST-ID: tests.codegen.two-defines-use
+k;; TEST-ID: tests.codegen.two-defines-use
 ;; TEST-CONTEXT: monadc.context.language.syntax-corpus
 ;; TEST-PURPOSE: Two defines compute a combined expression.
 ;; TEST-ATOM: (define ...) twice then (+ x y) evaluates correctly.

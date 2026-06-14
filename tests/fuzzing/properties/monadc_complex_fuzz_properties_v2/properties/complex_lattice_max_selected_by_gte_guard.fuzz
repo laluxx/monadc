@@ -1,0 +1,7 @@
+name: complex_lattice_max_selected_by_gte_guard
+section: lattice-selection
+args: a:Int b:Int
+type: Bool
+expect: True
+description: When a >= b, max must select a; otherwise it must select b.
+law: (= (fuzz-max {a} {b}) (if (fuzz-gte? {a} {b}) {a} {b}))

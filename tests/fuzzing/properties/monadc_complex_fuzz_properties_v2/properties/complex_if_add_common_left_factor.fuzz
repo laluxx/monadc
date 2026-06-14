@@ -1,0 +1,7 @@
+name: complex_if_add_common_left_factor
+section: control-if-arithmetic
+args: cond:Bool common:Int a:Int b:Int
+type: Bool
+expect: True
+description: A common left addend can be lifted across an if expression.
+law: (= (fuzz-add {common} (if {cond} {a} {b})) (if {cond} (fuzz-add {common} {a}) (fuzz-add {common} {b})))

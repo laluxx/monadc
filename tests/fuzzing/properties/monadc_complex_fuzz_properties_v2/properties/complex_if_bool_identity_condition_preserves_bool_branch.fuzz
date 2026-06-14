@@ -1,0 +1,7 @@
+name: complex_if_bool_identity_condition_preserves_bool_branch
+section: control-if
+args: cond:Bool p:Bool q:Bool
+type: Bool
+expect: True
+description: Using the typed Bool identity as an if condition must not change the selected Bool branch.
+law: (= (if (fuzz-bool-id? {cond}) {p} {q}) (if {cond} {p} {q}))

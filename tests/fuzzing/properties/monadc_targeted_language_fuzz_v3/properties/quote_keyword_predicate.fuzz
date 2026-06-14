@@ -1,0 +1,7 @@
+name: quote_keyword_predicate
+section: quote-null-path
+args: 
+type: Bool
+expect: True
+description: quote of a keyword must produce a Keyword runtime value.
+law: (Keyword? (quote :alpha))

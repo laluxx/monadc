@@ -1,0 +1,7 @@
+name: arith_direct_mul_distributes_over_variadic_add
+section: arithmetic-dispatch
+args: a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Direct * must distribute over a variadic + expression.
+law: (= (* {a} (+ {b} {c} {d})) (+ (* {a} {b}) (* {a} {c}) (* {a} {d})))

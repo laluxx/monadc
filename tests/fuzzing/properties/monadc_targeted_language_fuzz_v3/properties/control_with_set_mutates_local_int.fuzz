@@ -1,0 +1,7 @@
+name: control_with_set_mutates_local_int
+section: control-binding
+args: a:Int b:Int
+type: Bool
+expect: True
+description: set! must mutate a with-bound local Int slot.
+law: (with [x {a}] (begin (set! x {b}) (= x {b})))

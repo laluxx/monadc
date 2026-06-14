@@ -1,0 +1,1844 @@
+[
+  {
+    "args": "p:Bool q:Bool",
+    "context_refs": [
+      "obs.codegen-ops.logic.and-or",
+      "obs.codegen-ops.logic.not"
+    ],
+    "description": "and over Bool values must match the equivalent if expression.",
+    "expect": "True",
+    "law": "(= (and {p} {q}) (if {p} {q} False))",
+    "name": "logic_and_matches_if_bool",
+    "section": "logic",
+    "type": "Bool"
+  },
+  {
+    "args": "p:Bool q:Bool",
+    "context_refs": [
+      "obs.codegen-ops.logic.and-or",
+      "obs.codegen-ops.logic.not"
+    ],
+    "description": "or over Bool values must match the equivalent if expression.",
+    "expect": "True",
+    "law": "(= (or {p} {q}) (if {p} True {q}))",
+    "name": "logic_or_matches_if_bool",
+    "section": "logic",
+    "type": "Bool"
+  },
+  {
+    "args": "p:Bool",
+    "context_refs": [
+      "obs.codegen-ops.logic.and-or",
+      "obs.codegen-ops.logic.not"
+    ],
+    "description": "Double logical negation must preserve a generated Bool expression.",
+    "expect": "True",
+    "law": "(= (not (not {p})) {p})",
+    "name": "logic_not_involution_bool",
+    "section": "logic",
+    "type": "Bool"
+  },
+  {
+    "args": "p:Bool q:Bool",
+    "context_refs": [
+      "obs.codegen-ops.logic.and-or",
+      "obs.codegen-ops.logic.not"
+    ],
+    "description": "De Morgan over and/or/not must hold for generated Bool expressions.",
+    "expect": "True",
+    "law": "(= (not (and {p} {q})) (or (not {p}) (not {q})))",
+    "name": "logic_demorgan_and_bool",
+    "section": "logic",
+    "type": "Bool"
+  },
+  {
+    "args": "p:Bool q:Bool",
+    "context_refs": [
+      "obs.codegen-ops.logic.and-or",
+      "obs.codegen-ops.logic.not"
+    ],
+    "description": "De Morgan over or/and/not must hold for generated Bool expressions.",
+    "expect": "True",
+    "law": "(= (not (or {p} {q})) (and (not {p}) (not {q})))",
+    "name": "logic_demorgan_or_bool",
+    "section": "logic",
+    "type": "Bool"
+  },
+  {
+    "args": "p:Bool q:Bool r:Bool",
+    "context_refs": [
+      "obs.codegen-ops.logic.and-or",
+      "obs.codegen-ops.logic.not"
+    ],
+    "description": "Variadic and must behave like nested binary and.",
+    "expect": "True",
+    "law": "(= (and {p} {q} {r}) (and (and {p} {q}) {r}))",
+    "name": "logic_and_variadic_associates",
+    "section": "logic",
+    "type": "Bool"
+  },
+  {
+    "args": "p:Bool q:Bool r:Bool",
+    "context_refs": [
+      "obs.codegen-ops.logic.and-or",
+      "obs.codegen-ops.logic.not"
+    ],
+    "description": "Variadic or must behave like nested binary or.",
+    "expect": "True",
+    "law": "(= (or {p} {q} {r}) (or (or {p} {q}) {r}))",
+    "name": "logic_or_variadic_associates",
+    "section": "logic",
+    "type": "Bool"
+  },
+  {
+    "args": "p:Bool q:Bool",
+    "context_refs": [
+      "obs.codegen-ops.logic.and-or",
+      "obs.codegen-ops.logic.not"
+    ],
+    "description": "A False operand must force variadic and to False.",
+    "expect": "True",
+    "law": "(= (and {p} False {q}) False)",
+    "name": "logic_and_absorbs_false",
+    "section": "logic",
+    "type": "Bool"
+  },
+  {
+    "args": "p:Bool q:Bool",
+    "context_refs": [
+      "obs.codegen-ops.logic.and-or",
+      "obs.codegen-ops.logic.not"
+    ],
+    "description": "A True operand must force variadic or to True.",
+    "expect": "True",
+    "law": "(= (or {p} True {q}) True)",
+    "name": "logic_or_absorbs_true",
+    "section": "logic",
+    "type": "Bool"
+  },
+  {
+    "args": "p:Bool",
+    "context_refs": [
+      "obs.codegen-ops.logic.and-or",
+      "obs.codegen-ops.logic.not"
+    ],
+    "description": "True must be the identity element for Bool and.",
+    "expect": "True",
+    "law": "(= (and True {p}) {p})",
+    "name": "logic_and_identity_true",
+    "section": "logic",
+    "type": "Bool"
+  },
+  {
+    "args": "p:Bool",
+    "context_refs": [
+      "obs.codegen-ops.logic.and-or",
+      "obs.codegen-ops.logic.not"
+    ],
+    "description": "False must be the identity element for Bool or.",
+    "expect": "True",
+    "law": "(= (or False {p}) {p})",
+    "name": "logic_or_identity_false",
+    "section": "logic",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.logic.and-or",
+      "obs.codegen-ops.logic.not",
+      "obs.codegen-ops.ctrl.if"
+    ],
+    "description": "Logical not must coerce generated Int expressions by zero-ness.",
+    "expect": "True",
+    "law": "(= (not {a}) (= {a} 0))",
+    "name": "logic_int_not_is_zero_test",
+    "section": "logic-coercion",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.logic.and-or",
+      "obs.codegen-ops.logic.not",
+      "obs.codegen-ops.ctrl.if"
+    ],
+    "description": "Logical and must coerce an Int operand and preserve True identity.",
+    "expect": "True",
+    "law": "(= (and {a} True) (!= {a} 0))",
+    "name": "logic_int_and_true_is_nonzero",
+    "section": "logic-coercion",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.logic.and-or",
+      "obs.codegen-ops.logic.not",
+      "obs.codegen-ops.ctrl.if"
+    ],
+    "description": "Logical or must coerce an Int operand and preserve False identity.",
+    "expect": "True",
+    "law": "(= (or {a} False) (!= {a} 0))",
+    "name": "logic_int_or_false_is_nonzero",
+    "section": "logic-coercion",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.logic.and-or",
+      "obs.codegen-ops.logic.not",
+      "obs.codegen-ops.ctrl.if"
+    ],
+    "description": "Integer zero must coerce to False in and.",
+    "expect": "True",
+    "law": "(= (and {a} 0) False)",
+    "name": "logic_int_and_zero_forces_false",
+    "section": "logic-coercion",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.logic.and-or",
+      "obs.codegen-ops.logic.not",
+      "obs.codegen-ops.ctrl.if"
+    ],
+    "description": "Integer one must coerce to True in or.",
+    "expect": "True",
+    "law": "(= (or {a} 1) True)",
+    "name": "logic_int_or_one_forces_true",
+    "section": "logic-coercion",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.logic.and-or",
+      "obs.codegen-ops.logic.not",
+      "obs.codegen-ops.ctrl.if"
+    ],
+    "description": "if must use the same Int-to-Bool coercion as explicit nonzero comparison.",
+    "expect": "True",
+    "law": "(= (if {a} 7 9) (if (!= {a} 0) 7 9))",
+    "name": "logic_int_if_condition_matches_not_zero",
+    "section": "logic-coercion",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int c:Int d:Int",
+    "context_refs": [
+      "obs.codegen-ops.arith.add-sub-mul-div",
+      "obs.codegen-ops.arith.mod"
+    ],
+    "description": "Direct variadic + dispatch must regroup like nested additions.",
+    "expect": "True",
+    "law": "(= (+ {a} {b} {c} {d}) (+ (+ {a} {b}) (+ {c} {d})))",
+    "name": "arith_direct_add_variadic_regroups_four",
+    "section": "arithmetic-dispatch",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int c:Int",
+    "context_refs": [
+      "obs.codegen-ops.arith.add-sub-mul-div",
+      "obs.codegen-ops.arith.mod"
+    ],
+    "description": "Direct variadic - dispatch must behave as a left fold.",
+    "expect": "True",
+    "law": "(= (- {a} {b} {c}) (- (- {a} {b}) {c}))",
+    "name": "arith_direct_sub_variadic_left_fold",
+    "section": "arithmetic-dispatch",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int c:Int d:Int",
+    "context_refs": [
+      "obs.codegen-ops.arith.add-sub-mul-div",
+      "obs.codegen-ops.arith.mod"
+    ],
+    "description": "Direct variadic * dispatch must regroup like nested multiplications.",
+    "expect": "True",
+    "law": "(= (* {a} {b} {c} {d}) (* (* {a} {b}) (* {c} {d})))",
+    "name": "arith_direct_mul_variadic_regroups_four",
+    "section": "arithmetic-dispatch",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int c:Int",
+    "context_refs": [
+      "obs.codegen-ops.arith.add-sub-mul-div",
+      "obs.codegen-ops.arith.mod"
+    ],
+    "description": "Variadic + and - must compose correctly across three operands.",
+    "expect": "True",
+    "law": "(= (- (+ {a} {b} {c}) {b} {c}) {a})",
+    "name": "arith_direct_add_sub_inverse_variadic",
+    "section": "arithmetic-dispatch",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int c:Int d:Int",
+    "context_refs": [
+      "obs.codegen-ops.arith.add-sub-mul-div",
+      "obs.codegen-ops.arith.mod"
+    ],
+    "description": "Direct * must distribute over a variadic + expression.",
+    "expect": "True",
+    "law": "(= (* {a} (+ {b} {c} {d})) (+ (* {a} {b}) (* {a} {c}) (* {a} {d})))",
+    "name": "arith_direct_mul_distributes_over_variadic_add",
+    "section": "arithmetic-dispatch",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int c:Int",
+    "context_refs": [
+      "obs.codegen-ops.arith.add-sub-mul-div",
+      "obs.codegen-ops.arith.mod"
+    ],
+    "description": "Stable helper calls and direct arithmetic dispatch must agree when nested.",
+    "expect": "True",
+    "law": "(= (+ (fuzz-add {a} {b}) {c}) (fuzz-add {a} (+ {b} {c})))",
+    "name": "arith_direct_nested_helper_and_builtin_agree",
+    "section": "arithmetic-dispatch",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.arith.add-sub-mul-div",
+      "obs.codegen-ops.arith.mod"
+    ],
+    "description": "Percent modulo dispatch must compute integer remainder for constants.",
+    "expect": "True",
+    "law": "(= (% 23 5) 3)",
+    "name": "arith_mod_constant_percent",
+    "section": "arithmetic-dispatch",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.arith.add-sub-mul-div",
+      "obs.codegen-ops.arith.mod"
+    ],
+    "description": "Named mod dispatch must compute the same integer remainder as percent modulo.",
+    "expect": "True",
+    "law": "(= (mod 23 5) 3)",
+    "name": "arith_mod_constant_named_mod",
+    "section": "arithmetic-dispatch",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.arith.add-sub-mul-div",
+      "obs.codegen-ops.arith.mod"
+    ],
+    "description": "Integer division dispatch must compute exact integer quotients.",
+    "expect": "True",
+    "law": "(= (/ 84 7) 12)",
+    "name": "arith_div_constant_exact",
+    "section": "arithmetic-dispatch",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.arith.add-sub-mul-div",
+      "obs.codegen-ops.arith.mod"
+    ],
+    "description": "Division by a nonzero constant must roundtrip a prior multiplication by a multiple.",
+    "expect": "True",
+    "law": "(= (/ (* {a} 12) 3) (* {a} 4))",
+    "name": "arith_div_mul_roundtrip_constant",
+    "section": "arithmetic-dispatch",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.arith.add-sub-mul-div",
+      "obs.codegen-ops.arith.mod"
+    ],
+    "description": "Modulo should remain stable when a generated expression cancels to zero.",
+    "expect": "True",
+    "law": "(= (% (+ (* (- {a} {a}) 5) 3) 5) 3)",
+    "name": "arith_mod_after_equal_subtraction",
+    "section": "arithmetic-dispatch",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.bitwise.and-or-xor",
+      "obs.codegen-ops.bitwise.not",
+      "obs.codegen-ops.bitwise.shift"
+    ],
+    "description": "Bitwise and with zero must clear every bit.",
+    "expect": "True",
+    "law": "(= (& {a} 0) 0)",
+    "name": "bitwise_and_zero_absorbs",
+    "section": "bitwise",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.bitwise.and-or-xor",
+      "obs.codegen-ops.bitwise.not",
+      "obs.codegen-ops.bitwise.shift"
+    ],
+    "description": "Bitwise or with zero must preserve the operand.",
+    "expect": "True",
+    "law": "(= (bit-or {a} 0) {a})",
+    "name": "bitwise_or_zero_identity",
+    "section": "bitwise",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.bitwise.and-or-xor",
+      "obs.codegen-ops.bitwise.not",
+      "obs.codegen-ops.bitwise.shift"
+    ],
+    "description": "Bitwise xor with zero must preserve the operand.",
+    "expect": "True",
+    "law": "(= (bit-xor {a} 0) {a})",
+    "name": "bitwise_xor_zero_identity",
+    "section": "bitwise",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.bitwise.and-or-xor",
+      "obs.codegen-ops.bitwise.not",
+      "obs.codegen-ops.bitwise.shift"
+    ],
+    "description": "Bitwise xor of a value with itself must be zero.",
+    "expect": "True",
+    "law": "(= (bit-xor {a} {a}) 0)",
+    "name": "bitwise_xor_self_zero",
+    "section": "bitwise",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.bitwise.and-or-xor",
+      "obs.codegen-ops.bitwise.not",
+      "obs.codegen-ops.bitwise.shift"
+    ],
+    "description": "Bitwise and must be idempotent.",
+    "expect": "True",
+    "law": "(= (& {a} {a}) {a})",
+    "name": "bitwise_and_idempotent",
+    "section": "bitwise",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.bitwise.and-or-xor",
+      "obs.codegen-ops.bitwise.not",
+      "obs.codegen-ops.bitwise.shift"
+    ],
+    "description": "Bitwise or must be idempotent.",
+    "expect": "True",
+    "law": "(= (bit-or {a} {a}) {a})",
+    "name": "bitwise_or_idempotent",
+    "section": "bitwise",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.bitwise.and-or-xor",
+      "obs.codegen-ops.bitwise.not",
+      "obs.codegen-ops.bitwise.shift"
+    ],
+    "description": "Double bitwise not must preserve the operand.",
+    "expect": "True",
+    "law": "(= (~ (~ {a})) {a})",
+    "name": "bitwise_not_involution",
+    "section": "bitwise",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.bitwise.and-or-xor",
+      "obs.codegen-ops.bitwise.not",
+      "obs.codegen-ops.bitwise.shift"
+    ],
+    "description": "Left shift by zero must preserve the operand.",
+    "expect": "True",
+    "law": "(= (<< {a} 0) {a})",
+    "name": "bitwise_shift_left_zero_identity",
+    "section": "bitwise",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.bitwise.and-or-xor",
+      "obs.codegen-ops.bitwise.not",
+      "obs.codegen-ops.bitwise.shift"
+    ],
+    "description": "Arithmetic right shift by zero must preserve the operand.",
+    "expect": "True",
+    "law": "(= (>> {a} 0) {a})",
+    "name": "bitwise_shift_right_zero_identity",
+    "section": "bitwise",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.bitwise.and-or-xor",
+      "obs.codegen-ops.bitwise.not",
+      "obs.codegen-ops.bitwise.shift"
+    ],
+    "description": "Logical right shift by zero must preserve the operand.",
+    "expect": "True",
+    "law": "(= (>>> {a} 0) {a})",
+    "name": "bitwise_unsigned_shift_right_zero_identity",
+    "section": "bitwise",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int",
+    "context_refs": [
+      "obs.codegen-ops.bitwise.and-or-xor",
+      "obs.codegen-ops.bitwise.not",
+      "obs.codegen-ops.bitwise.shift"
+    ],
+    "description": "Bitwise absorption: (a or b) and a must recover a.",
+    "expect": "True",
+    "law": "(= (& (bit-or {a} {b}) {a}) {a})",
+    "name": "bitwise_absorption_and_over_or",
+    "section": "bitwise",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int",
+    "context_refs": [
+      "obs.codegen-ops.bitwise.and-or-xor",
+      "obs.codegen-ops.bitwise.not",
+      "obs.codegen-ops.bitwise.shift"
+    ],
+    "description": "Bitwise absorption: (a and b) or a must recover a.",
+    "expect": "True",
+    "law": "(= (bit-or (& {a} {b}) {a}) {a})",
+    "name": "bitwise_absorption_or_over_and",
+    "section": "bitwise",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int",
+    "context_refs": [
+      "obs.codegen-ops.bitwise.and-or-xor",
+      "obs.codegen-ops.bitwise.not",
+      "obs.codegen-ops.bitwise.shift"
+    ],
+    "description": "Bitwise xor must be commutative.",
+    "expect": "True",
+    "law": "(= (bit-xor {a} {b}) (bit-xor {b} {a}))",
+    "name": "bitwise_xor_commutative",
+    "section": "bitwise",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int",
+    "context_refs": [
+      "obs.codegen-ops.bitwise.and-or-xor",
+      "obs.codegen-ops.bitwise.not",
+      "obs.codegen-ops.bitwise.shift"
+    ],
+    "description": "Bitwise and must be commutative.",
+    "expect": "True",
+    "law": "(= (& {a} {b}) (& {b} {a}))",
+    "name": "bitwise_and_commutative",
+    "section": "bitwise",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int",
+    "context_refs": [
+      "obs.codegen-ops.bitwise.and-or-xor",
+      "obs.codegen-ops.bitwise.not",
+      "obs.codegen-ops.bitwise.shift"
+    ],
+    "description": "Bitwise or must be commutative.",
+    "expect": "True",
+    "law": "(= (bit-or {a} {b}) (bit-or {b} {a}))",
+    "name": "bitwise_or_commutative",
+    "section": "bitwise",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.compare.int-float"
+    ],
+    "description": "Variadic equality must accept three equal generated Int expressions.",
+    "expect": "True",
+    "law": "(= {a} {a} {a})",
+    "name": "compare_variadic_equal_three",
+    "section": "comparison-variadic",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.compare.int-float"
+    ],
+    "description": "Variadic not-equal must accept a generated successor chain.",
+    "expect": "True",
+    "law": "(!= {a} (+ {a} 1) (+ {a} 2))",
+    "name": "compare_variadic_not_equal_successor_chain",
+    "section": "comparison-variadic",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.compare.int-float"
+    ],
+    "description": "Variadic less-than must compare every adjacent pair in order.",
+    "expect": "True",
+    "law": "(< {a} (+ {a} 1) (+ {a} 2))",
+    "name": "compare_variadic_lt_successor_chain",
+    "section": "comparison-variadic",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.compare.int-float"
+    ],
+    "description": "Variadic <= must allow equality before a larger successor.",
+    "expect": "True",
+    "law": "(<= {a} {a} (+ {a} 1))",
+    "name": "compare_variadic_lte_with_duplicate_then_successor",
+    "section": "comparison-variadic",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.compare.int-float"
+    ],
+    "description": "Variadic greater-than must compare every adjacent pair in descending order.",
+    "expect": "True",
+    "law": "(> (+ {a} 2) (+ {a} 1) {a})",
+    "name": "compare_variadic_gt_predecessor_chain",
+    "section": "comparison-variadic",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.compare.int-float"
+    ],
+    "description": "Variadic >= must allow equality before a smaller predecessor.",
+    "expect": "True",
+    "law": "(>= {a} {a} (- {a} 1))",
+    "name": "compare_variadic_gte_with_duplicate_then_predecessor",
+    "section": "comparison-variadic",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.compare.int-float"
+    ],
+    "description": "Strict variadic < must reject an equal adjacent pair.",
+    "expect": "False",
+    "law": "(< {a} {a} (+ {a} 1))",
+    "name": "compare_variadic_lt_false_on_duplicate",
+    "section": "comparison-variadic",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.compare.int-float"
+    ],
+    "description": "Strict variadic > must reject an equal adjacent pair.",
+    "expect": "False",
+    "law": "(> {a} {a} (- {a} 1))",
+    "name": "compare_variadic_gt_false_on_duplicate",
+    "section": "comparison-variadic",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int",
+    "context_refs": [
+      "obs.codegen-ops.compare.int-float"
+    ],
+    "description": "Direct <= dispatch and stable helper must agree.",
+    "expect": "True",
+    "law": "(= (<= {a} {b}) (fuzz-lte? {a} {b}))",
+    "name": "compare_mixed_helper_and_direct_lte",
+    "section": "comparison-variadic",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int",
+    "context_refs": [
+      "obs.codegen-ops.compare.int-float"
+    ],
+    "description": "Direct >= dispatch and stable helper must agree.",
+    "expect": "True",
+    "law": "(= (>= {a} {b}) (fuzz-gte? {a} {b}))",
+    "name": "compare_mixed_helper_and_direct_gte",
+    "section": "comparison-variadic",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.begin"
+    ],
+    "description": "begin must evaluate a sequence and return the final Int expression.",
+    "expect": "True",
+    "law": "(= (begin {a} {b}) {b})",
+    "name": "control_begin_returns_last_int",
+    "section": "control-binding",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int p:Bool",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.begin"
+    ],
+    "description": "begin must return a final Bool after evaluating an Int setup expression.",
+    "expect": "True",
+    "law": "(= (begin {a} {p}) {p})",
+    "name": "control_begin_returns_last_bool",
+    "section": "control-binding",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int c:Int",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.do",
+      "obs.codegen-ops.ctrl.begin"
+    ],
+    "description": "do and begin should agree on the last expression for pure Int sequences.",
+    "expect": "True",
+    "law": "(= (do {a} {b} {c}) (begin {a} {b} {c}))",
+    "name": "control_do_and_begin_agree_on_last",
+    "section": "control-binding",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.with",
+      "obs.codegen-ops.bind.set"
+    ],
+    "description": "set! must mutate a with-bound local Int slot.",
+    "expect": "True",
+    "law": "(with [x {a}] (begin (set! x {b}) (= x {b})))",
+    "name": "control_with_set_mutates_local_int",
+    "section": "control-binding",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int c:Int",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.with",
+      "obs.codegen-ops.bind.set"
+    ],
+    "description": "Multiple set! operations must leave the last stored value visible.",
+    "expect": "True",
+    "law": "(with [x {a}] (begin (set! x {b}) (set! x {c}) (= x {c})))",
+    "name": "control_with_set_twice_last_write_wins",
+    "section": "control-binding",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.when",
+      "obs.codegen-ops.bind.set"
+    ],
+    "description": "when True must execute its body and expose the mutation afterward.",
+    "expect": "True",
+    "law": "(with [x 0] (begin (when True (set! x 7)) (= x 7)))",
+    "name": "control_when_true_mutates",
+    "section": "control-binding",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.when",
+      "obs.codegen-ops.bind.set"
+    ],
+    "description": "when False must skip its body.",
+    "expect": "True",
+    "law": "(with [x 0] (begin (when False (set! x 7)) (= x 0)))",
+    "name": "control_when_false_skips",
+    "section": "control-binding",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.unless",
+      "obs.codegen-ops.bind.set"
+    ],
+    "description": "unless False must execute its body and expose the mutation afterward.",
+    "expect": "True",
+    "law": "(with [x 0] (begin (unless False (set! x 7)) (= x 7)))",
+    "name": "control_unless_false_mutates",
+    "section": "control-binding",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.unless",
+      "obs.codegen-ops.bind.set"
+    ],
+    "description": "unless True must skip its body.",
+    "expect": "True",
+    "law": "(with [x 0] (begin (unless True (set! x 7)) (= x 0)))",
+    "name": "control_unless_true_skips",
+    "section": "control-binding",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.while",
+      "obs.codegen-ops.bind.set"
+    ],
+    "description": "while must re-evaluate its condition and mutate the loop variable until exit.",
+    "expect": "True",
+    "law": "(with [x 0] (begin (while (< x 5) (set! x (+ x 1))) (= x 5)))",
+    "name": "control_while_counts_to_five",
+    "section": "control-binding",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.while",
+      "obs.codegen-ops.ctrl.begin",
+      "obs.codegen-ops.bind.set"
+    ],
+    "description": "while with nested begin must preserve sequential mutations inside the loop body.",
+    "expect": "True",
+    "law": "(with [i 0 sum 0] (begin (while (< i 5) (begin (set! sum (+ sum i)) (set! i (+ i 1)))) (= sum 10)))",
+    "name": "control_while_accumulates_known_sum",
+    "section": "control-binding",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.while",
+      "obs.codegen-ops.ctrl.with"
+    ],
+    "description": "while False must perform zero iterations and preserve a with-bound value.",
+    "expect": "True",
+    "law": "(with [x {a}] (begin (while False (set! x (+ x 1))) (= x {a})))",
+    "name": "control_while_zero_iterations_preserves_value",
+    "section": "control-binding",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.for",
+      "obs.codegen-ops.bind.set"
+    ],
+    "description": "simple count for-loop must execute the body exactly n times.",
+    "expect": "True",
+    "law": "(with [x 0] (begin (for 5 (set! x (+ x 1))) (= x 5)))",
+    "name": "control_for_simple_count_runs_body_count_times",
+    "section": "control-binding",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.for",
+      "obs.codegen-ops.bind.set"
+    ],
+    "description": "simple count for-loop with zero count must skip the body.",
+    "expect": "True",
+    "law": "(with [x 11] (begin (for 0 (set! x 99)) (= x 11)))",
+    "name": "control_for_zero_count_skips_body",
+    "section": "control-binding",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.for",
+      "obs.codegen-ops.bind.set"
+    ],
+    "description": "range for-loop must bind its induction variable and execute without corrupting unrelated locals.",
+    "expect": "True",
+    "law": "(with [x 3] (begin (for [i 0 5] (set! x x)) (= x 3)))",
+    "name": "control_for_range_form_compiles_without_value_change",
+    "section": "control-binding",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.for",
+      "obs.codegen-ops.bind.set"
+    ],
+    "description": "stepped for-loop form must compile and preserve unrelated locals.",
+    "expect": "True",
+    "law": "(with [x 3] (begin (for [i 0 6 2] (set! x x)) (= x 3)))",
+    "name": "control_for_step_form_compiles_without_value_change",
+    "section": "control-binding",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.array.inline"
+    ],
+    "description": "Inline array indexing should select the requested constant element.",
+    "expect": "True",
+    "law": "(= ([10 20 30] 1) 20)",
+    "name": "array_inline_index_constant",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int c:Int",
+    "context_refs": [
+      "obs.codegen-ops.array.inline"
+    ],
+    "description": "Inline array indexing should preserve generated middle element identity.",
+    "expect": "True",
+    "law": "(= ([{a} {b} {c}] 1) {b})",
+    "name": "array_inline_index_generated_middle",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.list.count",
+      "obs.codegen-ops.array.inline"
+    ],
+    "description": "count must use the sized-array path for fixed array literals.",
+    "expect": "True",
+    "law": "(= (count [10 20 30 40]) 4)",
+    "name": "array_count_sized_literal",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.list.head"
+    ],
+    "description": "head must use the optimized fixed-array path.",
+    "expect": "True",
+    "law": "(= (head [10 20 30]) 10)",
+    "name": "array_head_sized_literal",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.list.tail",
+      "obs.codegen-ops.list.count"
+    ],
+    "description": "tail on a fixed array must produce a collection with one fewer element.",
+    "expect": "True",
+    "law": "(= (count (tail [10 20 30])) 2)",
+    "name": "array_tail_sized_literal_count",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.array.env",
+      "obs.codegen-ops.ctrl.with"
+    ],
+    "description": "A with-bound Arr variable must be callable as an array indexer.",
+    "expect": "True",
+    "law": "(with [arr [4 5 6]] (= (arr 2) 6))",
+    "name": "array_with_bound_var_index",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int c:Int",
+    "context_refs": [
+      "obs.codegen-ops.array.env",
+      "obs.codegen-ops.ctrl.with"
+    ],
+    "description": "Array-as-function env lookup must preserve generated first element identity.",
+    "expect": "True",
+    "law": "(with [arr [{a} {b} {c}]] (= (arr 0) {a}))",
+    "name": "array_with_generated_values_index",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.language.runtime-sized-arrays",
+      "obs.codegen-ops.list.count"
+    ],
+    "description": "count must work on heap array literals using the runtime-sized array path.",
+    "expect": "True",
+    "law": "(= (count ~[1 2 3]) 3)",
+    "name": "heap_array_count_literal",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.language.runtime-sized-arrays",
+      "obs.codegen-ops.list.head"
+    ],
+    "description": "head must work on heap array literals.",
+    "expect": "True",
+    "law": "(= (head ~[1 2 3]) 1)",
+    "name": "heap_array_head_literal",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.language.runtime-sized-arrays",
+      "obs.codegen-ops.array.inline"
+    ],
+    "description": "Heap array literals must be callable as array indexers.",
+    "expect": "True",
+    "law": "(= (~[1 2 3] 2) 3)",
+    "name": "heap_array_inline_index_literal",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.language.runtime-sized-arrays",
+      "obs.codegen-ops.list.tail"
+    ],
+    "description": "tail must work on heap array literals and preserve the runtime-sized count.",
+    "expect": "True",
+    "law": "(= (count (tail ~[1 2 3])) 2)",
+    "name": "heap_array_tail_count_literal",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.str.string-indexing",
+      "obs.codegen-ops.list.count"
+    ],
+    "description": "count must dispatch to the string strlen path.",
+    "expect": "True",
+    "law": "(= (count \"hello\") 5)",
+    "name": "string_count_literal",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.str.starts-ends-with"
+    ],
+    "description": "starts-with? must recognize a constant prefix.",
+    "expect": "True",
+    "law": "(starts-with? \"monadc\" \"mon\")",
+    "name": "string_starts_with_literal",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.str.starts-ends-with"
+    ],
+    "description": "ends-with? must recognize a constant suffix.",
+    "expect": "True",
+    "law": "(ends-with? \"monadc\" \"adc\")",
+    "name": "string_ends_with_literal",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.str.contains"
+    ],
+    "description": "contains? must dispatch to string substring search.",
+    "expect": "True",
+    "law": "(contains? \"monadc\" \"nad\")",
+    "name": "string_contains_literal",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.str.string-indexing",
+      "obs.codegen-ops.type-preds"
+    ],
+    "description": "Inline string indexing must return a Char value.",
+    "expect": "True",
+    "law": "(Char? (\"abc\" 1))",
+    "name": "string_index_returns_char_type",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.str.make-string",
+      "obs.codegen-ops.list.count"
+    ],
+    "description": "make-string must allocate a string with the requested count.",
+    "expect": "True",
+    "law": "(= (count (make-string 4 (Char 120))) 4)",
+    "name": "string_make_string_count",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.list.empty",
+      "obs.codegen-ops.list.count"
+    ],
+    "description": "Zero-arg list construction must produce an empty list.",
+    "expect": "True",
+    "law": "(= (count (list)) 0)",
+    "name": "list_empty_count_zero",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.list.empty",
+      "obs.codegen-ops.preds.empty"
+    ],
+    "description": "empty? must recognize the zero-arg list as empty.",
+    "expect": "True",
+    "law": "(empty? (list))",
+    "name": "list_empty_predicate_true",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.list.cons",
+      "obs.codegen-ops.list.car"
+    ],
+    "description": "cons followed by car must recover the inserted generated value.",
+    "expect": "True",
+    "law": "(= (car (cons {a} (list))) {a})",
+    "name": "list_cons_car_roundtrip",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.list.cons",
+      "obs.codegen-ops.list.head"
+    ],
+    "description": "head on a one-element cons list must recover the generated value.",
+    "expect": "True",
+    "law": "(= (head (cons {a} (list))) {a})",
+    "name": "list_cons_head_roundtrip",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.list.cons",
+      "obs.codegen-ops.list.count"
+    ],
+    "description": "count on a one-element cons list must return one.",
+    "expect": "True",
+    "law": "(= (count (cons {a} (list))) 1)",
+    "name": "list_cons_count_one",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.list.cons",
+      "obs.codegen-ops.list.cdr",
+      "obs.codegen-ops.preds.empty"
+    ],
+    "description": "cdr of a single cons cell ending in an empty list must be empty.",
+    "expect": "True",
+    "law": "(empty? (cdr (cons {a} (list))))",
+    "name": "list_cdr_of_single_cons_empty",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.coll.set",
+      "obs.codegen-ops.preds.set"
+    ],
+    "description": "Zero-arg set construction must produce a Set value.",
+    "expect": "True",
+    "law": "(Set? (set))",
+    "name": "set_empty_is_set",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.coll.set",
+      "obs.codegen-ops.coll.conj-disj",
+      "obs.codegen-ops.coll.contains"
+    ],
+    "description": "conj on an empty set must make the inserted generated value visible to contains?.",
+    "expect": "True",
+    "law": "(contains? (conj (set) {a}) {a})",
+    "name": "set_conj_contains_generated",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.coll.conj-disj",
+      "obs.codegen-ops.coll.contains"
+    ],
+    "description": "disj must remove a previously inserted generated value.",
+    "expect": "True",
+    "law": "(not (contains? (disj (conj (set) {a}) {a}) {a}))",
+    "name": "set_disj_removes_generated",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int",
+    "context_refs": [
+      "obs.codegen-ops.coll.set",
+      "obs.codegen-ops.coll.contains"
+    ],
+    "description": "Variadic set construction must contain its left generated element.",
+    "expect": "True",
+    "law": "(contains? (set {a} {b}) {a})",
+    "name": "set_variadic_contains_left",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int",
+    "context_refs": [
+      "obs.codegen-ops.coll.set",
+      "obs.codegen-ops.coll.contains"
+    ],
+    "description": "Variadic set construction must contain its right generated element.",
+    "expect": "True",
+    "law": "(contains? (set {a} {b}) {b})",
+    "name": "set_variadic_contains_right",
+    "section": "collections",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.type-preds",
+      "obs.codegen-ops.type-convs"
+    ],
+    "description": "Int? must resolve generated Int expressions at compile time.",
+    "expect": "True",
+    "law": "(Int? {a})",
+    "name": "predicate_int_generated_true",
+    "section": "predicates-conversions",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.type-preds",
+      "obs.codegen-ops.type-convs"
+    ],
+    "description": "Number? must accept generated Int expressions.",
+    "expect": "True",
+    "law": "(Number? {a})",
+    "name": "predicate_number_generated_int_true",
+    "section": "predicates-conversions",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.type-preds",
+      "obs.codegen-ops.type-convs"
+    ],
+    "description": "Float? must reject generated Int expressions.",
+    "expect": "False",
+    "law": "(Float? {a})",
+    "name": "predicate_float_on_int_false",
+    "section": "predicates-conversions",
+    "type": "Bool"
+  },
+  {
+    "args": "p:Bool",
+    "context_refs": [
+      "obs.codegen-ops.type-preds",
+      "obs.codegen-ops.type-convs"
+    ],
+    "description": "Bool? must accept generated Bool expressions.",
+    "expect": "True",
+    "law": "(Bool? {p})",
+    "name": "predicate_bool_generated_true",
+    "section": "predicates-conversions",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.type-preds",
+      "obs.codegen-ops.type-convs"
+    ],
+    "description": "String? must accept string literals.",
+    "expect": "True",
+    "law": "(String? \"abc\")",
+    "name": "predicate_string_literal_true",
+    "section": "predicates-conversions",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.type-preds",
+      "obs.codegen-ops.type-convs"
+    ],
+    "description": "Char? must accept a Char conversion result.",
+    "expect": "True",
+    "law": "(Char? (Char 65))",
+    "name": "predicate_char_conversion_true",
+    "section": "predicates-conversions",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.type-preds",
+      "obs.codegen-ops.type-convs"
+    ],
+    "description": "Arr? must recognize fixed array literals.",
+    "expect": "True",
+    "law": "(Arr? [1 2 3])",
+    "name": "predicate_array_literal_true",
+    "section": "predicates-conversions",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.type-preds",
+      "obs.codegen-ops.type-convs"
+    ],
+    "description": "Arr? must recognize heap array literals.",
+    "expect": "True",
+    "law": "(Arr? ~[1 2 3])",
+    "name": "predicate_heap_array_literal_true",
+    "section": "predicates-conversions",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.type-preds",
+      "obs.codegen-ops.type-convs"
+    ],
+    "description": "collection? must accept fixed arrays.",
+    "expect": "True",
+    "law": "(collection? [1 2 3])",
+    "name": "predicate_collection_array_true",
+    "section": "predicates-conversions",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.type-preds",
+      "obs.codegen-ops.type-convs"
+    ],
+    "description": "collection? must accept sets created through the set dispatcher.",
+    "expect": "True",
+    "law": "(collection? (set 1 2 3))",
+    "name": "predicate_collection_set_true",
+    "section": "predicates-conversions",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.type-preds",
+      "obs.codegen-ops.type-convs"
+    ],
+    "description": "Map? must reject generated Int expressions.",
+    "expect": "False",
+    "law": "(Map? {a})",
+    "name": "predicate_map_on_int_false",
+    "section": "predicates-conversions",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.type-preds",
+      "obs.codegen-ops.type-convs"
+    ],
+    "description": "List? must accept zero-arg lists.",
+    "expect": "True",
+    "law": "(List? (list))",
+    "name": "predicate_list_on_empty_list_true",
+    "section": "predicates-conversions",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.type-preds",
+      "obs.codegen-ops.type-convs"
+    ],
+    "description": "nil? must reject scalar Int values at compile time.",
+    "expect": "False",
+    "law": "(nil? {a})",
+    "name": "predicate_nil_on_scalar_false",
+    "section": "predicates-conversions",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.type-preds",
+      "obs.codegen-ops.type-convs"
+    ],
+    "description": "Float-to-Int conversion must roundtrip an integral constant.",
+    "expect": "True",
+    "law": "(= (Int (Float 42)) 42)",
+    "name": "conversion_int_float_constant_roundtrip",
+    "section": "predicates-conversions",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.type-preds",
+      "obs.codegen-ops.type-convs"
+    ],
+    "description": "Char-to-Int conversion must expose the character code.",
+    "expect": "True",
+    "law": "(= (Int (Char 65)) 65)",
+    "name": "conversion_char_int_roundtrip_constant",
+    "section": "predicates-conversions",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.type-preds",
+      "obs.codegen-ops.type-convs"
+    ],
+    "description": "Int conversion of an Int must be identity.",
+    "expect": "True",
+    "law": "(= (Int 42) 42)",
+    "name": "conversion_int_identity_constant",
+    "section": "predicates-conversions",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.type-preds",
+      "obs.codegen-ops.type-convs"
+    ],
+    "description": "Float conversion of an Int constant must compare equal to the same Float literal.",
+    "expect": "True",
+    "law": "(= (Float 42) 42.0)",
+    "name": "conversion_float_mixed_equality_constant",
+    "section": "predicates-conversions",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.quote.quote",
+      "obs.codegen-ops.type-preds"
+    ],
+    "description": "quote of a symbol must produce a Symbol runtime value.",
+    "expect": "True",
+    "law": "(Symbol? (quote alpha))",
+    "name": "quote_symbol_predicate",
+    "section": "quote-null-path",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.quote.quote",
+      "obs.codegen-ops.type-preds"
+    ],
+    "description": "quote of a keyword must produce a Keyword runtime value.",
+    "expect": "True",
+    "law": "(Keyword? (quote :alpha))",
+    "name": "quote_keyword_predicate",
+    "section": "quote-null-path",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.quote.quote",
+      "obs.codegen-ops.list.count"
+    ],
+    "description": "quoted list construction must preserve list length.",
+    "expect": "True",
+    "law": "(= (count (quote (a b c))) 3)",
+    "name": "quote_list_count_three",
+    "section": "quote-null-path",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.quote.quote",
+      "obs.codegen-ops.list.head"
+    ],
+    "description": "head of a quoted symbol list must be a Symbol.",
+    "expect": "True",
+    "law": "(Symbol? (head (quote (alpha beta))))",
+    "name": "quote_list_head_is_symbol",
+    "section": "quote-null-path",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.quote.quasiquote",
+      "obs.codegen-ops.list.count"
+    ],
+    "description": "quasiquote with an unquote hole must preserve surrounding list shape.",
+    "expect": "True",
+    "law": "(= (count (quasiquote (alpha (unquote {a}) omega))) 3)",
+    "name": "quasiquote_unquote_count_three",
+    "section": "quote-null-path",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.quote.quasiquote",
+      "obs.codegen-ops.list.head"
+    ],
+    "description": "unquote in head position must evaluate the generated expression.",
+    "expect": "True",
+    "law": "(= (head (quasiquote ((unquote {a}) beta))) {a})",
+    "name": "quasiquote_unquote_head_generated",
+    "section": "quote-null-path",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int",
+    "context_refs": [
+      "obs.codegen-ops.misc.null-coalesce"
+    ],
+    "description": "null-coalescing over scalar Int values must return the non-nil left side.",
+    "expect": "True",
+    "law": "(= (?? {a} {b}) {a})",
+    "name": "null_coalesce_int_left_identity",
+    "section": "quote-null-path",
+    "type": "Bool"
+  },
+  {
+    "args": "p:Bool",
+    "context_refs": [
+      "obs.codegen-ops.misc.null-coalesce"
+    ],
+    "description": "False is a scalar Bool value, not nil, so ?? must return False.",
+    "expect": "True",
+    "law": "(= (?? False {p}) False)",
+    "name": "null_coalesce_bool_false_is_not_nil",
+    "section": "quote-null-path",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int c:Int",
+    "context_refs": [
+      "obs.codegen-ops.misc.null-coalesce"
+    ],
+    "description": "Nested null coalescing over scalar Int values must keep the original left value.",
+    "expect": "True",
+    "law": "(= (?? (?? {a} {b}) {c}) {a})",
+    "name": "null_coalesce_nested_scalar_left_identity",
+    "section": "quote-null-path",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "dec.language.path-literals-are-values"
+    ],
+    "description": "home-relative path literals are first-class Path values and show as path text.",
+    "expect": "~/monadc/context/",
+    "law": "~/monadc/context/",
+    "name": "path_literal_home_value",
+    "section": "quote-null-path",
+    "type": "Path"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "dec.language.path-literals-are-values"
+    ],
+    "description": "absolute path literals are first-class Path values and show as path text.",
+    "expect": "/tmp/monadc-fuzz-path",
+    "law": "/tmp/monadc-fuzz-path",
+    "name": "path_literal_absolute_tmp_value",
+    "section": "quote-null-path",
+    "type": "Path"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "dec.language.path-literals-are-values"
+    ],
+    "description": "dot-relative path literals are first-class Path values and show as path text.",
+    "expect": "./tests/fuzzing/properties/",
+    "law": "./tests/fuzzing/properties/",
+    "name": "path_literal_relative_dot_value",
+    "section": "quote-null-path",
+    "type": "Path"
+  },
+  {
+    "args": "p:Bool a:Int b:Int c:Int d:Int",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.if",
+      "obs.codegen-ops.array.inline"
+    ],
+    "description": "if PHI unification must handle array-index results from both branches.",
+    "expect": "True",
+    "law": "(= (if {p} ([{a} {b}] 1) ([{c} {d}] 0)) (if {p} {b} {c}))",
+    "name": "combo_if_array_index_branchwise_generated",
+    "section": "feature-interactions",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.with",
+      "obs.codegen-ops.array.env",
+      "obs.codegen-ops.bitwise.and-or-xor"
+    ],
+    "description": "with-bound array indexing must feed bitwise dispatch correctly.",
+    "expect": "True",
+    "law": "(with [xs [{a} {b}]] (= (bit-xor (xs 0) (xs 0)) 0))",
+    "name": "combo_with_array_then_bitwise",
+    "section": "feature-interactions",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.while",
+      "obs.codegen-ops.list.count",
+      "obs.codegen-ops.array.env"
+    ],
+    "description": "while conditions must support count of a with-bound array.",
+    "expect": "True",
+    "law": "(with [x 0 xs [1 2 3]] (begin (while (< x (count xs)) (set! x (+ x 1))) (= x 3)))",
+    "name": "combo_while_and_array_count_condition",
+    "section": "feature-interactions",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.for",
+      "obs.codegen-ops.coll.conj-disj",
+      "obs.codegen-ops.coll.contains"
+    ],
+    "description": "for loops must support repeated mutation of a set value via conj.",
+    "expect": "True",
+    "law": "(with [s (set)] (begin (for 3 (set! s (conj s 7))) (contains? s 7)))",
+    "name": "combo_for_and_set_contains_after_loop",
+    "section": "feature-interactions",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.when",
+      "obs.codegen-ops.list.count",
+      "obs.codegen-ops.str.string-indexing"
+    ],
+    "description": "when conditions must support string count and comparison dispatch.",
+    "expect": "True",
+    "law": "(with [x 0] (begin (when (= (count \"abc\") 3) (set! x 1)) (= x 1)))",
+    "name": "combo_when_with_string_condition_count",
+    "section": "feature-interactions",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.unless",
+      "obs.codegen-ops.str.contains"
+    ],
+    "description": "unless conditions must support string contains? dispatch.",
+    "expect": "True",
+    "law": "(with [x 0] (begin (unless (contains? \"abc\" \"z\") (set! x 1)) (= x 1)))",
+    "name": "combo_unless_with_string_contains_condition",
+    "section": "feature-interactions",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.do",
+      "obs.language.runtime-sized-arrays",
+      "obs.codegen-ops.list.head"
+    ],
+    "description": "do sequencing must preserve final head result from a heap array literal.",
+    "expect": "True",
+    "law": "(= (do {a} (head ~[8 9 10])) 8)",
+    "name": "combo_do_with_heap_array_head",
+    "section": "feature-interactions",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.begin",
+      "obs.codegen-ops.quote.quote",
+      "obs.codegen-ops.list.count"
+    ],
+    "description": "begin must return a quoted-list count after evaluating generated setup.",
+    "expect": "True",
+    "law": "(= (begin {a} (count (quote (x y z w)))) 4)",
+    "name": "combo_begin_with_quote_count",
+    "section": "feature-interactions",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.logic.and-or",
+      "obs.codegen-ops.type-preds"
+    ],
+    "description": "logic dispatch must combine compile-time type predicate results.",
+    "expect": "True",
+    "law": "(and (Int? {a}) (not (String? {a})) (Number? {a}))",
+    "name": "combo_logic_over_type_predicates",
+    "section": "feature-interactions",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int",
+    "context_refs": [
+      "obs.codegen-ops.ctrl.if",
+      "obs.codegen-ops.type-preds",
+      "obs.codegen-ops.array.inline"
+    ],
+    "description": "if must branch on an array type predicate and return an indexed generated value.",
+    "expect": "True",
+    "law": "(= (if (Arr? [{a} {b}]) ([{a} {b}] 1) 0) {b})",
+    "name": "combo_if_over_type_predicate_selects_array_index",
+    "section": "feature-interactions",
+    "type": "Bool"
+  },
+  {
+    "args": "p:Bool a:Int b:Int c:Int",
+    "context_refs": [
+      "obs.codegen-ops.misc.null-coalesce",
+      "obs.codegen-ops.ctrl.if"
+    ],
+    "description": "?? must preserve scalar if results across PHI unification.",
+    "expect": "True",
+    "law": "(= (?? (if {p} {a} {b}) {c}) (if {p} {a} {b}))",
+    "name": "combo_null_coalesce_after_if_scalar",
+    "section": "feature-interactions",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.bitwise.and-or-xor",
+      "obs.codegen-ops.compare.int-float"
+    ],
+    "description": "comparison chains must accept values produced by bitwise dispatch.",
+    "expect": "True",
+    "law": "(= (<= (& {a} {a}) {a} (bit-or {a} 0)) True)",
+    "name": "combo_bitwise_inside_comparison_chain",
+    "section": "feature-interactions",
+    "type": "Bool"
+  },
+  {
+    "args": "",
+    "context_refs": [
+      "obs.codegen-ops.array.inline",
+      "obs.codegen-ops.type-convs"
+    ],
+    "description": "array literals must accept values produced by type conversion dispatch.",
+    "expect": "True",
+    "law": "(= ([1 (Int (Float 2)) 3] 1) 2)",
+    "name": "combo_conversion_inside_array_index_compare",
+    "section": "feature-interactions",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int b:Int",
+    "context_refs": [
+      "obs.codegen-ops.coll.set",
+      "obs.codegen-ops.array.inline",
+      "obs.codegen-ops.coll.contains"
+    ],
+    "description": "set construction must accept inline array-index expressions as elements.",
+    "expect": "True",
+    "law": "(contains? (set ([{a} {b}] 0) ([{a} {b}] 1)) {b})",
+    "name": "combo_set_contains_array_index_value",
+    "section": "feature-interactions",
+    "type": "Bool"
+  },
+  {
+    "args": "a:Int",
+    "context_refs": [
+      "obs.codegen-ops.quote.quasiquote",
+      "obs.codegen-ops.logic.and-or",
+      "obs.codegen-ops.type-preds"
+    ],
+    "description": "quasiquote/unquote result should compose with logic and type predicates.",
+    "expect": "True",
+    "law": "(and (= (head (quasiquote ((unquote {a}) tail))) {a}) (Int? (head (quasiquote ((unquote {a}) tail)))))",
+    "name": "combo_quasiquote_generated_value_inside_logic",
+    "section": "feature-interactions",
+    "type": "Bool"
+  }
+]

@@ -1,0 +1,7 @@
+name: int_zero_sub_as_negation
+section: arithmetic
+args: a:Int
+type: Bool
+expect: True
+description: Subtracting an Int from zero must agree with multiplication by negative one.
+law: (= (fuzz-sub 0 {a}) (fuzz-mul -1 {a}))

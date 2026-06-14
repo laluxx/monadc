@@ -1,0 +1,7 @@
+name: comparison_add_preserves_lte
+section: comparison
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Adding the same generated offset must preserve less-or-equal ordering.
+law: (if (fuzz-lte? {a} {b}) (fuzz-lte? (fuzz-add {a} {c}) (fuzz-add {b} {c})) True)

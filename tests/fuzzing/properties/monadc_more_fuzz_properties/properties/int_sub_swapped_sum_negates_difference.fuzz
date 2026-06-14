@@ -1,0 +1,7 @@
+name: int_sub_swapped_sum_negates_difference
+section: arithmetic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The difference of swapped operands must equal the negated original difference.
+law: (= (fuzz-sub {b} {a}) (fuzz-mul -1 (fuzz-sub {a} {b})))

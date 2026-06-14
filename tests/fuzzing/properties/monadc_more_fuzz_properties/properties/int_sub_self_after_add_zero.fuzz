@@ -1,0 +1,7 @@
+name: int_sub_self_after_add_zero
+section: arithmetic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: A generated expression minus itself after the same addition must still cancel to zero.
+law: (= (fuzz-sub (fuzz-add {a} {b}) (fuzz-add {a} {b})) 0)

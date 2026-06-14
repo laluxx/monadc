@@ -1,0 +1,7 @@
+name: with_binding_in_comparison
+section: binding
+args: a:Int b:Int
+type: Bool
+expect: True
+description: With-bound Int values must be usable in comparison helpers.
+law: (= (with [x {a} y {b}] (fuzz-lt? x y)) (fuzz-lt? {a} {b}))

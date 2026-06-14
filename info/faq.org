@@ -5,4 +5,196 @@
 
 [[file:index.org][<- Back to Index]]
 
-We haven't added many questions yet, Add one.
+* General
+
+** What is Monad?
+
+A compiled, expression-oriented language with S-expression and Wisp
+syntaxes. It targets native code via LLVM, uses Hindley-Milner type
+inference with refinement types, and compiles through an AST
+representation built with arena allocation.
+
+** Is Monad production-ready?
+
+No. The compiler is in active development. The type system, standard
+library, and codegen are still being built. The compiler itself is
+written in ~30k lines of C and works for small to medium programs.
+
+Can you use it for real work? For small CLI tools, math-heavy scripts,
+and language experimentation, yes. For anything requiring closures,
+higher-order functions (=map=, =filter=, =fold=), variadic list
+construction, or control forms like =cond=/=let=, you will hit known
+codegen gaps. The standard library is sparse, there is no package
+manager, Windows/macOS support is partial, and debugging requires
+reading LLVM IR.
+
+** What are the design goals?
+
+- Practical systems programming with strong typing
+- Homoiconic syntax (S-expressions) for metaprogramming
+- C FFI without wrappers
+- Arena allocation (no GC pauses)
+- Gradual refinement types
+
+* Language
+
+** Why S-expressions?
+
+Homoiconicity: code is data, data is code. Macros operate directly on
+the AST without parsing. Wisp provides an indentation-based
+alternative that expands to S-expressions before the reader sees them.
+
+** Do I have to use parentheses?
+
+No. Use Wisp (indentation syntax) for most code, drop to S-expressions
+when you need explicit grouping or metadata.
+
+** What platforms are supported?
+
+x86-64 Linux (primary). Other architectures that LLVM targets may work
+with compiler flag changes. macOS CI runs are planned.
+
+** Is there a garbage collector?
+
+No. The compiler uses arena allocation (bump allocation + free-all at
+the end). No GC pauses, no finalizers.
+
+** Can I call C libraries?
+
+Yes. =(include "header.h")= parses C function declarations and makes
+them available directly. No wrapper code needed. See [[file:ffi.org][C FFI]].
+
+** Does Monad have a package manager?
+
+Not yet. Currently manual =git= + =monad build=.
+
+** Why does (list 1 2 3) not work?
+
+The variadic form of =list= has a codegen dispatch gap. =(car (list 1 2 3))=
+returns =nil= because the multiple-argument path is not lowered to the
+runtime cons-chain correctly. Only the zero-arg =(list)= and
+=(make-list n val)= work. This is tracked at
+[[file:../context/language.org::codegen-gaps][context/language.org — Known gaps]].
+
+** Why is there no cond/let?
+
+=cond=, =let=, =let*=, and =letrec= are registered as builtins (the
+type checker knows them) but have no =strcmp= dispatch handler in
+=codegen_expr=. When codegen sees =(cond ...)=, the symbol =cond= is
+treated as an ordinary variable reference rather than a special form.
+Adding a handler requires wiring the desugaring and LLVM IR emission
+for each form. See [[file:control.org][Control Flow — Known Gaps]].
+
+** When will closures work?
+
+Closures have a dual ABI (typed direct-call path for non-capturing
+lambdas, environment-pointer path for capturing lambdas) but the
+codegen =strcmp= dispatch for =fn=, =lambda=, and =defn= is missing.
+The parser produces =AST_LAMBDA= before codegen sees the symbol, so
+typed direct-call works, but paren-mode calls like =(lambda (x) x)=
+hit a missing handler. Once the strcmp dispatch is added, closure
+allocation, =map=, =filter=, =apply=, and higher-order patterns become
+possible. See [[file:functional-programming.org][Higher-Order Functions]].
+
+* Comparison
+
+** How does Monad differ from Common Lisp / Scheme?
+
+Monad is compiled to native code via LLVM, has a static type system
+(HM + refinements + dependent types), no garbage collector (arena
+allocation), and no TCO yet.
+
+** How does Monad differ from Haskell?
+
+Monad is strict (not lazy), has S-expression syntax (optional Wisp),
+no Monad typeclass, no built-in =map=/=filter=/=fold= (planned), and
+compiles via LLVM.
+
+** How does Monad differ from Rust?
+
+Monad has no borrow checker, uses arena allocation instead, has a
+homoiconic syntax, and a HM type system (not ownership-based).
+
+* Compiler
+
+** How do I build the compiler?
+
+#+BEGIN_SRC sh
+git clone <repo>
+cd monad
+make
+#+END_SRC
+
+Requires LLVM 19+ and a C11 compiler.
+
+** How do I run tests?
+
+#+BEGIN_SRC sh
+python3 tests/run.py
+#+END_SRC
+
+** How do I debug my Monad program?
+
+Three tools:
+
+- =--emit-json=: dumps the parsed AST as JSON. Useful for checking
+  that the reader produced the tree you expected.
+- =--emit-ir=: emits human-readable LLVM IR (.ll). Inspect what
+  codegen actually generated — look for missing function bodies,
+  alloca placement, and PHI node structure.
+- Test fixtures in =tests/codegen/=: each =*.mon= file has a
+  =TEST-ATOM= comment describing what it tests. Run a single fixture
+  with =python3 tests/run.py --filter rt_my_test=.
+
+See [[file:cli.org][CLI Reference]] for all emit flags.
+
+** Where can I report bugs?
+
+File issues at the project repository. Include a minimal reproduction
+and the output of =monad --version=.
+
+* Standard Library
+
+** What builtins are available?
+
+83+ =strcmp=-dispatched builtins in =codegen.c= covering arithmetic,
+comparison, bitwise, list, string, map, set operations. See
+[[file:core.org][Core Library]].
+
+** Where are =map=, =filter=, =fold=?
+
+Planned. =map= has an =infer.c= type signature but no codegen dispatch
+yet. Use manual recursion for now.
+
+** How do I use math functions?
+
+The Math module (=core/Math.mon=) provides =sqrt=, =sin=, =pow=,
+=factorial=, =fib=, =prime?=, constants (=pi=, =e=, =tau=), and
+infinite sequences (=naturals=, =evens=, =odds=). Import with
+=import Math=.
+
+** Is there a random number generator?
+
+Yes. The Random module (=old-core/Random.mon=) provides hardware RNG
+(RDRAND) and xorshift64 PRNG, with =random=, =random-int=,
+=random-bool?=, =shuffle=, and =seed!=.
+
+* Stack vs Heap Arrays
+
+** How do stack and heap arrays differ in practice?
+
+Stack arrays (= [1 2 3]=) are fixed-size, stack-allocated, and
+zero-overhead — best for short-lived data of known size. Heap arrays
+(=~[1 2 3]=) use a runtime growable buffer, survive across function
+returns, and support runtime sizing: =(let [n 1000] ~[n I32])=. Fat
+arrays (=[16kb I32]=) are typed sized buffers for C interop.
+
+Choose stack when the size is a compile-time constant and the array
+does not escape its scope. Choose heap for dynamic sizes, long-lived
+data, or when you need to append. See [[file:collections.org][Collections — Arrays]].
+
+* Context Links
+
+- [[file:index.org][Language Reference]]
+- [[file:intro.org][Introduction]]
+- [[file:../README.md][README]]

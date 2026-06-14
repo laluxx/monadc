@@ -1,0 +1,7 @@
+name: complex_do_triple_returns_final_bool
+section: control-do
+args: a:Int b:Int c:Bool
+type: Bool
+expect: True
+description: A three-expression do form with mixed types must return the final Bool expression.
+law: (= (do {a} {b} {c}) {c})

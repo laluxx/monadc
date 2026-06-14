@@ -1,0 +1,7 @@
+name: complex_function_predicate_helpers_branch_consistency
+section: function-order
+args: a:Int b:Int yes:Int no:Int
+type: Bool
+expect: True
+description: Comparison helper predicates used as if conditions must agree with direct operator branches.
+law: (= (if (fuzz-lt? {a} {b}) {yes} {no}) (if (< {a} {b}) {yes} {no}))

@@ -4,33 +4,118 @@
 
 [[file:index.org][<- Back to Index]] · [[file:build.org][Build System]]
 
-| Command               | Action                                 |
-|-----------------------+----------------------------------------|
-| =monad <file.mon>=      | Compile and run                        |
-| =monad new <name>=      | Create new package scaffold            |
-| =monad build=           | Build package from =package.yaml=        |
-| =monad run=             | Build and execute                      |
-| =monad test <file.mon>= | Compile with tests, run, delete binary |
-| =monad clean=           | Remove =build/=, =.o=, =.ll=, =.s=             |
-| =monad install=         | Build and copy to =~/.local/bin=         |
-| =monad -i=              | Start interactive REPL                 |
+The CLI argument parser maps command-line arguments to a =CompilerFlags=
+struct and dispatches to the appropriate command handler. Implementation:
+[[file:../cli.h][cli.h]] (type definitions) and [[file:../cli.c][cli.c]] (~730 lines, all =cmd_*= functions).
 
-| Flag           | Effect                                   |
-|----------------+------------------------------------------|
-| =--emit-ir=      | Write =.ll= (LLVM IR text)                 |
-| =--emit-bc=      | Write =.bc= (LLVM bitcode)                 |
-| =--emit-asm=     | Write =.s= (assembly text)                 |
-| =--emit-obj=     | Write =.o= (object file)                   |
-| =--emit-json=    | Write =.json= (AST dump)                   |
-| =--emit-typst=   | Write =.typ= + compiled PDF                |
-| =-o <file>=      | Output binary path                       |
-| =--test=         | Compile with embedded tests, keep binary |
-| =-Wall=, =-Wextra= | Accepted, currently no-ops               |
+For full implementation context, see [[file:../context/cli.org][context/cli.org]].
 
-Core path resolution order: local =./ModuleName.mon=, =$MONAD_CORE= environment variable, then =/usr/local/lib/monad/core/=.
+** CommandMode Enum
+
+The =CommandMode= enum (defined in =cli.h:5-14=) selects the compiler's
+operating mode:
+
+| Mode        | Invocation                  | Description                                     |
+|-------------+-----------------------------+-------------------------------------------------|
+| =CMD_COMPILE= | =monad <file.mon>=            | Compile a single source file (default with arg) |
+| =CMD_REPL=    | =monad= (no args) or =monad -i= | Launch interactive REPL                         |
+| =CMD_NEW=     | =monad new <name>=            | Scaffold a new project directory                |
+| =CMD_BUILD=   | =monad build=                 | Build project from =monad.json=                   |
+| =CMD_RUN=     | =monad run [-- args...]=      | Build and execute the project binary            |
+| =CMD_CLEAN=   | =monad clean=                 | Remove build artifacts                          |
+| =CMD_INSTALL= | =monad install=               | Build and copy binary to =~/.local/bin=           |
+| =CMD_TEST=    | =monad test [file]=           | Compile with tests, run, delete binary          |
+
+Command dispatch happens in =parse_flags= (cli.c:193) and is executed by =main=
+in [[file:../main.c][main.c]].
+
+** CompilerFlags Struct
+
+The =CompilerFlags= struct (cli.h:16-29) aggregates all parsed CLI options:
+
+| Field             | Type          | Set By                          | Purpose                       |
+|-------------------+---------------+---------------+-------------------------------|
+| =mode=              | CommandMode   | subcommand argument             | Operating mode                |
+| =emit_ir=           | bool          | =--emit-ir=                      | Emit LLVM IR (.ll)            |
+| =emit_bc=           | bool          | =--emit-bc=                      | Emit LLVM bitcode (.bc)       |
+| =emit_asm=          | bool          | =--emit-asm=                     | Emit assembly (.s)            |
+| =emit_obj=          | bool          | =--emit-obj= (default when compiling) | Emit object file (.o)  |
+| =emit_json=         | bool          | =--emit-json=                    | Emit JSON AST dump (.json)    |
+| =emit_typst=        | bool          | =--emit-typst=                   | Emit Typst output (.typ + PDF)|
+| =start_repl=        | bool          | =-i=                               | Enter REPL after compilation  |
+| =test_mode=         | bool          | =--test= or =--test-mode=         | Emit test blocks              |
+| =test_run=          | bool          | =monad test= subcommand           | Run tests, delete after       |
+| =output_name=       | char *        | =-o= or =--output=                | Output binary or file path    |
+| =input_file=        | char *        | positional argument              | Input source file             |
+| =package_name=      | char *        | =monad new <name>= positional     | Package name for scaffolding  |
+
+** Emit Flags
+
+Emit flags control what output the compiler produces. Multiple flags
+can be combined. When no flag is given, =emit_obj= is the default.
+
+| Flag         | Ext   | Description                   |
+|--------------+-------+-------------------------------|
+| =--emit-ir=    | =.ll=   | LLVM IR (human-readable text) |
+| =--emit-bc=    | =.bc=   | LLVM bitcode (binary)         |
+| =--emit-asm=   | =.s=    | Assembly text                 |
+| =--emit-obj=   | =.o=    | Object file (default)         |
+| =--emit-json=  | =.json= | AST dump in JSON              |
+| =--emit-typst= | =.typ=  | Typst source + compiled PDF   |
+
+Other flags:
+
+| Flag                  | Description                           |
+|-----------------------+---------------------------------------|
+| =-o <file>=             | Output binary path                    |
+| =--test= or =--test-mode= | Compile with embedded test blocks     |
+| =-i=                    | Enter REPL after compiling input file |
+| =-Wall=, =-Wextra=        | Accepted but currently no-ops         |
+
+For details on how emit flags control codegen, see
+[[file:../context/codegen-ops.org][context/codegen-ops.org]].
+
+** Build Info Resolution
+
+The =cmd_build=, =cmd_run=, =cmd_clean=, =cmd_install=, and =cmd_test= commands
+call =resolve_build_info= (cli.c:415), which reads =monad.json= from the
+current directory and parses:
+
+- Source file lists (via =yaml_list=)
+- Executable definitions (via =yaml_exe_field= and =yaml_first_exe=)
+- Dependencies and compiler options
+
+The returned =BuildInfo= struct is consumed by =do_build= (cli.c:505), which
+iterates over executables and compiles each source file via =compile_one=
+(in [[file:../main.c][main.c]]), then links the resulting objects with the Monad runtime.
+
+For the monad.json schema and the build system architecture, see
+[[file:../context/buildsystem.org][context/buildsystem.org]].
+
+** Project Scaffolding
+
+=CMD_NEW= (via =cmd_new= at cli.c:292) creates a new Monad project:
+
+- Creates directory structure: =src/=, =lib/=
+- Writes a =monad.json= manifest with metadata from =git config=
+  (author name via =git config user.name=)
+- Writes a default =src/main.monad= entry point
+- Uses static helpers: =make_dir=, =write_file=, =git_config=, =current_year=
+
+** Core Path Resolution
+
+Core module resolution order (for =import= statements):
+
+1. Local =./ModuleName.monad= (project source directory)
+2. =$MONAD_CORE= environment variable, if set
+3. =/usr/local/lib/monad/core/= (system installation path)
 
 ** Context Links
 
-- [[file:../context/cli.org][context/cli.org]] — implementation
-- [[file:../cli.c][cli.c]] — source
-- [[file:../main.c][main.c]] — entry point
+- [[file:../context/cli.org][context/cli.org]] — CLI implementation details
+- [[file:../cli.c][cli.c]] — source code
+- [[file:../cli.h][cli.h]] — type definitions (CommandMode, CompilerFlags)
+- [[file:../main.c][main.c]] — entry point, pipeline dispatch
+- [[file:../context/buildsystem.org][context/buildsystem.org]] — build info resolution, monad.json schema
+- [[file:../context/repl.org][context/repl.org]] — CMD_REPL handler
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — emit flags and codegen control

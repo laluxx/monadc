@@ -1,0 +1,7 @@
+name: complex_combo_false_unreachable_strict_cycle
+section: combo-negative
+args: a:Int b:Int c:Int
+type: Bool
+expect: False
+description: A strict increasing cycle cannot be true; this catches incorrect comparison lowering.
+law: (if (fuzz-lt? {a} {b}) (if (fuzz-lt? {b} {c}) (fuzz-lt? {c} {a}) False) False)

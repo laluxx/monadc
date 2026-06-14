@@ -1,0 +1,7 @@
+name: logic_int_or_one_forces_true
+section: logic-coercion
+args: a:Int
+type: Bool
+expect: True
+description: Integer one must coerce to True in or.
+law: (= (or {a} 1) True)

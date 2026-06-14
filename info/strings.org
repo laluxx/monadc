@@ -1,62 +1,143 @@
 #+TITLE: Strings and Characters
-#+CONTEXT: core.org, syntax.org
 #+STARTUP: showeverything
 #+OPTIONS: toc:2 num:t
 
 [[file:index.org][<- Back to Index]] · [[file:core.org][Core Library]]
 
-Strings are UTF-8 encoded and immutable. Characters are Unicode
-codepoints of type =Char=.
+Strings are UTF-8 encoded and immutable. Characters are Unicode codepoints of
+type =Char=. The LLVM representation of a string is a global constant pointer
+(=i8*=) with an associated length. The runtime tag is =RT_STRING= wrapping a C
+=char*= and length ([[file:../context/language.org::runtime-value-system][context/language.org]]).
 
 ** String Literals
 
 #+BEGIN_SRC monad
-"hello"  "line1\nline2"  "unicode: \u03C0"
+"hello"  "line1\nline2"  "unicode: \u03C0"  "multi-line
+string inside quotes"
 #+END_SRC
 
-Adjacent string literals are not concatenated — use one literal.
+Multi-line strings work: a newline character inside quoted text is part of the
+string. No line-continuation escape is needed.
+
+Adjacent string literals (=="hello""world"=) are a compile-time syntax error
+— Monad does not support implicit concatenation. Use one literal or an
+explicit =++= operation.
 
 ** Character Literals ([[file:../reader.c::1365]])
 
 #+BEGIN_SRC monad
 'a'                ;; Char 'A'
-'\n'               ;; Char newline
+'\n'               ;; Char newline (TOK_CHAR)
 '\x41'             ;; Hex escape (A)
-'\u03C0'           ;; Unicode (π)
+'\u03C0'           ;; Unicode code point (π)
 #+END_SRC
 
-Single quotes delimit character literals (=TOK_CHAR=). Supported
-escapes: =\n=, =\t=, =\r=, =\\=, =\'=, =\0=, =\xNN=, =\uNNNN=.
+Delimited by single quotes (=TOK_CHAR=). Supported escape sequences:
+=\n=, =\t=, =\r=, =\\=, =\'=, =\0=, =\xNN=, =\uNNNN=.
 
-Alternatively, the =(Char x)= conversion function ([[file:../codegen.c::13144]])
-creates a character from an integer codepoint: =(Char 65)= = 'a'.
+** Char type
+
+The =Char= type is a 32-bit Unicode codepoint at the type-and-semantic level.
+Codegen lowers =TYPE_CHAR= to =i8= for ASCII-compatible codepoints. The runtime
+tag =RT_CHAR= distinguishes it from other scalar types. Type predicate =Char?=
+checks the type kind.
+
+** Char conversions
+
+Type conversions dispatch through strcmp handlers ([[file:../codegen.c::13144]]):
+
+#+BEGIN_SRC monad
+(Char 65)           ;; 'A' — integer codepoint to Char
+(Int 'A')           ;; 65  — Char to integer codepoint
+(Hex 255)           ;; #xFF — integer to Hex literal
+(Bin 42)            ;; #b101010 — integer to binary literal
+(Oct 63)            ;; #o77 — integer to octal literal
+#+END_SRC
+
+All five conversion targets (Int, Float, Char, Hex, Oct, Bin) are verified by
+test fixtures (=tests/codegen/rt_arithmetic.mon= and type-conversion corpus).
+
+** String comparison
+
+Strings support = and != with full value comparison (not pointer identity):
+
+#+BEGIN_SRC monad
+(= "abc" "abc")     ;; True
+(!= "abc" "def")   ;; True
+(= "abc" "def")    ;; False
+#+END_SRC
+
+Test fixtures: =rt_string_equality_true.mon=, =rt_string_equality_false.mon=.
 
 ** Operations
 
-| Function     | Example                       | Returns         |
-|--------------+-------------------------------+-----------------|
-| show         | =(show 42)=                     | "42"            |
-| make-string  | =(make-string 5 'a')=           | "aaaaa"         |
-| count        | =(count "hello")=               | 5               |
-| starts-with? | =(starts-with? "hi" 'h')=      | True            |
-| ends-with?   | =(ends-with? "hi" 'i')=        | True            |
-| contains?    | =(contains? "hello" "ell")=     | True            |
+String operations have strcmp dispatch handlers and are callable from paren-mode
+([[file:../context/language.org::working-dispatch][context/language.org]]):
 
-** Indexing ([[file:../codegen.c::9732]])
+| Function     | Example                       | Returns               |
+|--------------+-------------------------------+-----------------------|
+| show         | =(show 42)=                   | "42"                  |
+| make-string  | =(make-string 5 'a')=         | "aaaaa"               |
+| count        | =(count "hello")=             | 5                     |
+| starts-with? | =(starts-with? "hi" 'h')=     | True                  |
+| ends-with?   | =(ends-with? "hi" 'i')=       | True                  |
+| contains?    | =(contains? "hello" "ell")=   | True                  |
+| ++           | =(++ "hello" " world")=       | "hello world"         |
+| head         | =(head "hello")=              | 'h'                   |
+| tail         | =(tail "hello")=              | "ello"                |
+| take         | =(take 3 "hello")=            | "hel"                 |
+| drop         | =(drop 2 "hello")=            | "llo"                 |
+
+Test fixtures: =rt_string_helpers.mon= (=count=), =rt_string_concat.mon= (=++=),
+=rt_string_prefix_suffix.mon= (=starts-with?=, =ends-with?=).
+
+The =count= function works uniformly on strings, lists, arrays, sets, and maps.
+
+** Substring
+
+=substring= is registered as a builtin (=env_insert_builtin= with arity 3) but
+has no codegen strcmp handler yet — it is in the same gap category as =concat=,
+=reverse=, and =nth= ([[file:core.org][Core Library — NOT callable]]). Use =take= and
+=drop= for substring-like operations in the meantime.
+
+** String Indexing ([[file:../codegen.c::9732]])
 
 #+BEGIN_SRC monad
 ("hello" 0)   ;; 'h'
 ("hello" 1)   ;; 'e'
 #+END_SRC
 
-Uses function-call syntax =("string" i)=. Returns a =Char= at index
-=i=. Also postfix bracket: =xs[0]= ([[file:../reader.c::6621]]).
+Uses function-call syntax =("string" i)=. Returns a =Char= at index =i=.
+Also postfix bracket: =xs[0]= ([[file:../reader.c::6621]]). Both forms compile to
+a character load from the string's internal buffer with bounds checking.
 
 ** String Interpolation
 
-Planned but not implemented.
+Planned but not implemented. Future syntax may embed values inside string
+literals using =_= placeholders or =${}= syntax.
+
+** Strings as collections
+
+Strings participate in the collection-as-function model. Operations like
+=head=, =tail=, =count=, =++=, =take=, =drop= work on strings uniformly.
+Iteration via =for= is supported:
+
+#+BEGIN_SRC monad
+(for [c "hello"]
+  (show c))               ;; prints 'h', 'e', 'l', 'l', 'o'
+#+END_SRC
+
+** Wisp char escape limitation
+
+In Wisp syntax, ='\n'= fails because the Wisp expander expands =\\n= to a real
+newline, splitting the literal across lines. Use S-expression syntax for
+character escape sequences involving backslash.
 
 * Context Links
 
-- [[file:../context/codegen.org][context/codegen.org]] — String codegen
-- [[file:../context/runtime.org][context/runtime.org]] — Runtime representation
+- [[file:../context/language.org::working-dispatch][context/language.org — Working string dispatch]]
+- [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]]
+- [[file:../context/types.org][context/types.org]] — TYPE_STRING, TYPE_CHAR
+- [[file:../codegen.c::9732][codegen.c]] — String indexing codegen
+- [[file:../context/codegen.org][context/codegen.org]] — String format globals
+- [[file:../context/tests-arch.org::codegen-rt-strings][context/tests-arch.org — String test architecture]]

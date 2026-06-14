@@ -4,6 +4,20 @@
 
 [[file:index.org][<- Back to Index]] · [[file:data.org][Data Types]] · [[file:syntax.org][Syntax]]
 
+Pattern matching is compiled by the pattern match compiler
+([[file:../pmatch.c]]) which desugars =pattern -> expr= clauses into
+equivalent =(cond ...)= chains that the generic codegen can lower. The
+desugaring pipeline ([[file:../context/pmatch.org::254]]):
+
+1. Reader produces =AST_PMATCH= node with =ASTPMatchClause= array
+2. =pmatch_rename_anon_params= rewrites anonymous parameter references
+3. Codegen calls =pmatch_desugar= which generates =(cond ...)=
+4. Codegen compiles the resulting cond chain via the normal dispatch
+
+Desugaring happens at codegen time (after inference), not during
+parsing, because the full type environment and ADT definitions are
+only available after inference ([[file:../context/pmatch.org::56]]).
+
 * match expression ([[file:../pmatch.c]])
 
 #+BEGIN_SRC monad
@@ -11,24 +25,37 @@
   pattern -> body ...)
 #+END_SRC
 
-Patterns tried in order. Optional leading ~|~ on each clause allowed
-([[file:../context/language.org::455]]).
+Patterns tried in order from top to bottom. The first matching clause
+fires.
 
 * Pattern kinds
 
-| Pattern     | Example          | Matches                   |
-|-------------+------------------+---------------------------|
-| Wildcard    | ~_~                | Any value, no binding     |
-| Variable    | ~n~                | Any value, bound as ~n~   |
-| Int literal | ~0~, ~-1~           | Exact integer             |
-| Float lit.  | ~1.5~              | Exact float               |
-| String lit. | ~"a"~              | Exact string               |
-| Char lit.   | ~'\n'~              | Exact character           |
-| Nil         | ~nil~              | Null / empty list         |
-| List        | ~[]~, ~[x|xs]~       | Empty / cons-cell         |
-| Constructor | ~(Just x)~         | ADT constructor + fields  |
+The =PatternKind= enum ([[file:../reader.h::90]]) defines the
+supported pattern forms:
 
-* Guards
+| Pattern        | Example   | Matches                          |                           |
+|----------------+-----------+----------------------------------+---------------------------|
+| Wildcard       | ~_~         | Any value, no binding            |                           |
+| Variable       | ~n~         | Any value, bound as ~n~            |                           |
+| Int literal    | ~0~, ~-1~     | Exact integer                    |                           |
+| Float literal  | ~1.5~       | Exact float                      |                           |
+| String literal | ~"a"~       | Exact string                     |                           |
+| Char literal   | ~'\n'~      | Exact character                  |                           |
+| Empty list     | ~[]~ or ~nil~ | Empty list / null                |                           |
+| List with tail | ~[x       | xs]~                             | Destructure head and tail |
+| List fixed     | ~[a b c]~   | Fixed-length list match          |                           |
+| Constructor    | ~(Just x)~  | ADT constructor + field bindings |                           |
+
+The =ASTPattern= struct ([[file:../reader.h::101]]) carries a =kind=
+discriminator, =var_name= (for =PAT_VAR=), =lit_value= (numeric/string
+literals), =elements/=element_count= and =tail= (for =PAT_LIST=), and
+=ctor_fields/=ctor_field_count= (for =PAT_CONSTRUCTOR=).
+
+Each clause is an =ASTPMatchClause= ([[file:../reader.h::114]]) with
+=patterns/=pattern_count= (one per function parameter), =body=, and
+=guard_conds/=guard_bodies/=guard_count= (for guarded alternatives).
+
+* Guard clauses
 
 #+BEGIN_SRC monad
 (match x with
@@ -37,9 +64,44 @@ Patterns tried in order. Optional leading ~|~ on each clause allowed
   _            -> "zero")
 #+END_SRC
 
-Use ~|~ (pipe) after pattern, then guard condition, then ~->~ body.
+Use ~|~ (pipe) after the pattern, then a guard condition, then ~->~
+and the body. Multiple guards per clause are separated by pipes.
+
+The guard condition is combined with the pattern condition as
+=(and pattern-condition guard-condition)= during desugaring
+([[file:../context/pmatch.org::175]]).
+
+* Leading pipe separator
+
+Match clauses may have an optional leading ~|~ before the pattern
+([[file:../context/language.org::455]]):
+
+#+BEGIN_SRC monad
+(match x with
+  | 0 -> "zero"
+  | _ -> "non-zero")
+#+END_SRC
+
+The parser consumes this as a clause separator rather than treating it
+as part of the pattern.
+
+* Tail patterns (head | tail)
+
+List patterns support destructuring with the ~|~ separator between
+head and tail elements:
+
+#+BEGIN_SRC monad
+(match xs with
+  [x|xs] -> (show x)    ;; binds head to x, tail to xs
+  []     -> "empty")
+#+END_SRC
+
+The tail element captures the rest of the list after the head
+elements.
 
 * Lambda with pattern clauses
+
+Multiple ~define~ clauses desugar to ~match~:
 
 #+BEGIN_SRC monad
 (define fact
@@ -47,8 +109,54 @@ Use ~|~ (pipe) after pattern, then guard condition, then ~->~ body.
   n -> (* n (fact (- n 1))))
 #+END_SRC
 
-Multiple ~define~ clauses desugar to ~match~. Use ~lambda~ (no ~fn~
-shorthand).
+This is equivalent to:
+
+#+BEGIN_SRC monad
+(define fact
+  (match n with
+    0 -> 1
+    n -> (* n (fact (- n 1)))))
+#+END_SRC
+
+Use ~lambda~ (no ~fn~ shorthand) for anonymous pattern functions.
+
+* Exhaustive Checking
+
+Constructor pattern matching requires a wildcard fallback clause.
+Without an explicit wildcard, the compiler emits an =(undefined)=
+fallback that codegen rejects outside function scope
+([[file:../context/language.org::460]]). This means:
+
+#+BEGIN_SRC monad
+(match x with
+  (Just v) -> (show v))
+  ;; WARNING: no fallback for Nothing
+  ;; compiles to (cond ((__adt_tag_ x 0) ...) (else (undefined)))
+#+END_SRC
+
+Always include ~_~ or ~default~ fallback clause for coverage.
+
+* Desugaring Internals
+
+The =build_pattern_conditions= function
+([[file:../context/pmatch.org::184]]) generates the following condition
+expressions per pattern kind:
+
+| Pattern        | Generated condition                            |
+|----------------+------------------------------------------------|
+| Wildcard       | always true                                    |
+| Variable       | always true (binds the name)                   |
+| Int literal    | =(= param value)=                                |
+| Float literal  | =(= param value)=                                |
+| String literal | =(string= param value)=                          |
+| Empty list     | =(empty? param)=                                 |
+| List           | length check + element destructuring via =nth=   |
+| Constructor    | tag check via =__adt_tag_= + field destructuring |
+
+Helper constructors ([[file:../context/pmatch.org::197]]) build the
+AST fragments for the desugared output: =make_eq_int=,
+=make_eq_float=, =make_list_length=, =make_count=,
+=make_coll_is_empty=, =make_index_access=, =make_and=, etc.
 
 * Context Links
 
@@ -56,3 +164,4 @@ shorthand).
 - [[file:../context/codegen.org][context/codegen.org]] — pattern codegen
 - [[file:../pmatch.c][pmatch.c]] — pattern parser and desugaring
 - [[file:../tests/codegen/][tests/codegen/]] — rt_match_* test files
+- [[file:data.org][Data Types]] — ADT definition syntax

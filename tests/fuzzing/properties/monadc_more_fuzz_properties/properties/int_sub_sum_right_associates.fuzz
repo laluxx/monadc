@@ -1,0 +1,7 @@
+name: int_sub_sum_right_associates
+section: arithmetic
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Subtracting a sum on the right must match repeated subtraction.
+law: (= (fuzz-sub {a} (fuzz-add {b} {c})) (fuzz-sub (fuzz-sub {a} {b}) {c}))

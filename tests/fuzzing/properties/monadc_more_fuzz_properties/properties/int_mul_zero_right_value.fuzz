@@ -1,0 +1,7 @@
+name: int_mul_zero_right_value
+section: arithmetic
+args: a:Int
+type: Bool
+expect: True
+description: Multiplying by zero on the right must produce zero.
+law: (= (fuzz-mul {a} 0) 0)

@@ -1,0 +1,7 @@
+name: complex_order_gt_not_symmetric
+section: order-negative
+args: a:Int b:Int
+type: Bool
+expect: False
+description: Both directions of strict greater-than cannot be true simultaneously.
+law: (if (fuzz-gt? {a} {b}) (fuzz-gt? {b} {a}) False)

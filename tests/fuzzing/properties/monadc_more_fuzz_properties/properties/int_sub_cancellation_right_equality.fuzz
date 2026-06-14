@@ -1,0 +1,7 @@
+name: int_sub_cancellation_right_equality
+section: arithmetic
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Subtracting the same right operand from two values must preserve equality of the left operands.
+law: (= (fuzz-eq-int? (fuzz-sub {a} {c}) (fuzz-sub {b} {c})) (fuzz-eq-int? {a} {b}))

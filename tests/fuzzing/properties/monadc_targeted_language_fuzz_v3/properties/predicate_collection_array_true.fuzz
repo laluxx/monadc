@@ -1,0 +1,7 @@
+name: predicate_collection_array_true
+section: predicates-conversions
+args: 
+type: Bool
+expect: True
+description: collection? must accept fixed arrays.
+law: (collection? [1 2 3])

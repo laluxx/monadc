@@ -1,0 +1,7 @@
+name: if_branch_result_can_be_bool
+section: control
+args: cond:Bool a:Int b:Int
+type: Bool
+expect: True
+description: A Bool-returning if expression must be unaffected by passing its condition through the typed Bool identity helper.
+law: (= (if {cond} (fuzz-lt? {a} {b}) (fuzz-gte? {a} {b})) (if (fuzz-bool-id? {cond}) (fuzz-lt? {a} {b}) (fuzz-gte? {a} {b})))

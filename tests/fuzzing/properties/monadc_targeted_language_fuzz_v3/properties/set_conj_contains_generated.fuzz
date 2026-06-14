@@ -1,0 +1,7 @@
+name: set_conj_contains_generated
+section: collections
+args: a:Int
+type: Bool
+expect: True
+description: conj on an empty set must make the inserted generated value visible to contains?.
+law: (contains? (conj (set) {a}) {a})

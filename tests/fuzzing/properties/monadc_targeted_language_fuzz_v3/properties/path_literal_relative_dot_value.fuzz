@@ -1,0 +1,7 @@
+name: path_literal_relative_dot_value
+section: quote-null-path
+args: 
+type: Path
+expect: ./tests/fuzzing/properties/
+description: dot-relative path literals are first-class Path values and show as path text.
+law: ./tests/fuzzing/properties/

@@ -1,0 +1,7 @@
+name: with_shadowing_bool_condition
+section: binding
+args: cond:Bool a:Int b:Int
+type: Bool
+expect: True
+description: A with-bound Bool condition must choose the same branch as the original Bool expression.
+law: (= (with [c {cond}] (if c {a} {b})) (if {cond} {a} {b}))

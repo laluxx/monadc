@@ -1,0 +1,7 @@
+name: complex_with_condition_binding_controls_int_if
+section: binding-if
+args: cond:Bool a:Int b:Int
+type: Bool
+expect: True
+description: A Bool bound in with must control the same Int branch as the original condition.
+law: (= (with [flag {cond}] (if flag {a} {b})) (if {cond} {a} {b}))

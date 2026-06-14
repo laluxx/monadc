@@ -1,0 +1,7 @@
+name: predicate_char_conversion_true
+section: predicates-conversions
+args: 
+type: Bool
+expect: True
+description: Char? must accept a Char conversion result.
+law: (Char? (Char 65))

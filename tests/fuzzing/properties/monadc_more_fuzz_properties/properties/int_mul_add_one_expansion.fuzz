@@ -1,0 +1,7 @@
+name: int_mul_add_one_expansion
+section: arithmetic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Multiplying by one plus a value must expand to the original value plus the product.
+law: (= (fuzz-mul {a} (fuzz-add {b} 1)) (fuzz-add (fuzz-mul {a} {b}) {a}))

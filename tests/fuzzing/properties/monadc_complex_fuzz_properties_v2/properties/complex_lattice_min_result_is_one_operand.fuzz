@@ -1,0 +1,7 @@
+name: complex_lattice_min_result_is_one_operand
+section: lattice-selection
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The min of two generated Int expressions must be equal to one of the operands.
+law: (if (= (fuzz-min {a} {b}) {a}) True (= (fuzz-min {a} {b}) {b}))

@@ -1,0 +1,7 @@
+name: with_do_inner_shadowing_result
+section: binding
+args: outer:Int inner:Int setup:Int
+type: Bool
+expect: True
+description: A do body inside with must return the inner shadowed binding when that is its final expression.
+law: (= (with [x {outer}] (do {setup} (with [x {inner}] x))) {inner})

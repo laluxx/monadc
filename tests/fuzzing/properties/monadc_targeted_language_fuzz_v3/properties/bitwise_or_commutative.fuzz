@@ -1,0 +1,7 @@
+name: bitwise_or_commutative
+section: bitwise
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Bitwise or must be commutative.
+law: (= (bit-or {a} {b}) (bit-or {b} {a}))

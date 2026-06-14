@@ -1,0 +1,7 @@
+name: complex_lattice_median_identity_form_one
+section: lattice
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Two canonical min/max median encodings must agree.
+law: (= (fuzz-max (fuzz-min {a} {b}) (fuzz-min (fuzz-max {a} {b}) {c})) (fuzz-min (fuzz-max {a} {b}) (fuzz-max (fuzz-min {a} {b}) {c})))

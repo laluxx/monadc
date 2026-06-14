@@ -1,0 +1,7 @@
+name: complex_arith_if_selected_zero_absorbs_multiplication
+section: arithmetic-if
+args: cond:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Multiplication by an if-selected zero should produce zero regardless of the other branch path.
+law: (= (fuzz-mul {a} (if {cond} 0 (fuzz-sub {b} {b}))) 0)

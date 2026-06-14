@@ -1,0 +1,7 @@
+name: complex_if_negated_condition_swaps_bool_branches
+section: control-if
+args: cond:Bool p:Bool q:Bool
+type: Bool
+expect: True
+description: Encoding logical negation with if must swap the Bool branches exactly.
+law: (= (if (if {cond} False True) {p} {q}) (if {cond} {q} {p}))

@@ -1,0 +1,7 @@
+name: int_mul_double_negative
+section: arithmetic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Multiplying two negated operands must recover the positive product.
+law: (= (fuzz-mul (fuzz-mul -1 {a}) (fuzz-mul -1 {b})) (fuzz-mul {a} {b}))

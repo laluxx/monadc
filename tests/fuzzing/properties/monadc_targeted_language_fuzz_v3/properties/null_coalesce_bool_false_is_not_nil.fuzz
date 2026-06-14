@@ -1,0 +1,7 @@
+name: null_coalesce_bool_false_is_not_nil
+section: quote-null-path
+args: p:Bool
+type: Bool
+expect: True
+description: False is a scalar Bool value, not nil, so ?? must return False.
+law: (= (?? False {p}) False)

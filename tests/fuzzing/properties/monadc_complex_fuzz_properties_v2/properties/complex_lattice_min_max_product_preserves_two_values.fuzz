@@ -1,0 +1,7 @@
+name: complex_lattice_min_max_product_preserves_two_values
+section: lattice-arithmetic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: For two values, min times max must equal the original product.
+law: (= (fuzz-mul (fuzz-min {a} {b}) (fuzz-max {a} {b})) (fuzz-mul {a} {b}))

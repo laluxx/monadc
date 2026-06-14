@@ -1,0 +1,7 @@
+name: function_add_helper_matches_builtin
+section: function
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The typed fuzz-add helper must agree with the builtin addition operator.
+law: (= (fuzz-add {a} {b}) (+ {a} {b}))

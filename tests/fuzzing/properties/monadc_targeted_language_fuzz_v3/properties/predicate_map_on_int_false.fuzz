@@ -1,0 +1,7 @@
+name: predicate_map_on_int_false
+section: predicates-conversions
+args: a:Int
+type: Bool
+expect: False
+description: Map? must reject generated Int expressions.
+law: (Map? {a})

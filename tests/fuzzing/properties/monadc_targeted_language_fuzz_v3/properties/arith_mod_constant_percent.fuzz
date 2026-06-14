@@ -1,0 +1,7 @@
+name: arith_mod_constant_percent
+section: arithmetic-dispatch
+args: 
+type: Bool
+expect: True
+description: Percent modulo dispatch must compute integer remainder for constants.
+law: (= (% 23 5) 3)

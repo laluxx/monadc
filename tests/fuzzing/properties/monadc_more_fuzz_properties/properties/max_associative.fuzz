@@ -1,0 +1,7 @@
+name: max_associative
+section: order
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: The typed max helper must be associative.
+law: (= (fuzz-max (fuzz-max {a} {b}) {c}) (fuzz-max {a} (fuzz-max {b} {c})))

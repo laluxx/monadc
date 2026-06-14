@@ -1,0 +1,7 @@
+name: list_cons_count_one
+section: collections
+args: a:Int
+type: Bool
+expect: True
+description: count on a one-element cons list must return one.
+law: (= (count (cons {a} (list))) 1)

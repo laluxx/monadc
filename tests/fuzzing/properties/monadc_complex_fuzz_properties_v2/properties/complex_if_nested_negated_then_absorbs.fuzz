@@ -1,0 +1,7 @@
+name: complex_if_nested_negated_then_absorbs
+section: control-if
+args: cond:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: A nested if guarded by the negated outer condition in the then branch must choose its else arm.
+law: (= (if {cond} (if (if {cond} False True) {a} {b}) {c}) (if {cond} {b} {c}))

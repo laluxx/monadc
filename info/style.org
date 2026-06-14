@@ -4,20 +4,27 @@
 
 [[file:index.org][<- Back to Index]]
 
+This file documents MonadC source-code style conventions. It is about
+how valid MonadC programs are written and read, not about compiler
+implementation style.
+
 * Naming
 
-- Types: =PascalCase= (must start with uppercase — enforced,
-  [[file:../reader.c]] constructor name check)
-- Values: =camelCase= or =kebab-case= (kebab preferred)
-- Mutations: prefer =! suffix: set!, reset!
-- Predicates: prefer =? suffix: zero?, empty?
+- **Types**: =PascalCase= (must start with uppercase — enforced by reader
+  constructor name check in [[file:../reader.c]])
+- **Values**: =camelCase= or =kebab-case= (kebab preferred)
+- **Predicates**: suffix with =?= (e.g. =zero?=, =empty?=, =contains?=,
+  =starts-with?=)
+- **Mutating operations**: suffix with =!= (e.g. =set!=, =reset!=,
+  =conj!=, =disj!=)
+- **Type variables**: lowercase single letter (e.g. =a=, =b=)
 
 * Formatting
 
 - Indent 2 spaces for body. No tabs.
-- Close parens at end of line (not own line).
+- Close parens at end of line (not on their own line).
 - One =define= per binding. No comma-separated definitions.
-- =match= clauses: pattern on same indent level, body indented +2:
+- =match= clauses: arrows aligned, body on same line:
 
 #+BEGIN_SRC monad
 (match x with
@@ -25,17 +32,110 @@
   None     -> (show "none"))
 #+END_SRC
 
-* Macros
+- =cond= clauses: condition on same indent level, body indented +2:
 
-- Document macro syntax in comment before =define=.
-- Use =define name -> Syntax=, not shorter forms.
+#+BEGIN_SRC monad
+(cond
+  ((> x 0) (show "positive"))
+  ((< x 0) (show "negative"))
+  (else    (show "zero")))
+#+END_SRC
+
+- Pipe operator (=|>) chains: each pipe on a new line at same indent:
+
+#+BEGIN_SRC monad
+(data |> process |> transform |> show)
+#+END_SRC
 
 * Comments
 
-- =;;= for line comments (single semicolons for block alignments)
-- Avoid trailing comments on code lines
+- =;;= (double semicolon) for line comments
+- =;| |;= for block comments
+- Trailing comments on code lines are discouraged — prefer the line above
+- Single semicolons may be used for block alignment within =let= or
+  =match= forms
+- Document macro syntax in a =;;= comment before =define-macro=
+
+* Hybrid C-Signature Lisp-Body Style
+
+Function signatures use C-like parameter declarations with =[param ::
+Type]= syntax while bodies remain Lisp-like S-expressions. This style is
+common in low-level graphics and runtime code where field types and
+mutation are prominent:
+
+#+BEGIN_SRC monad
+(define (push-vertex [x :: F32] [y :: F32]
+                     [u :: F32] [v :: F32]
+                     [c :: Color])
+  (unless (g-vertex-count >= MAX-VERTICES)
+    (define [vtx -> Vertex]
+      (g-vertices g-vertex-count))
+    (set! vtx.x x)
+    (set! vtx.y y)
+    (set! g-vertex-count (g-vertex-count + 1))))
+#+END_SRC
+
+* Pattern Clause Alignment
+
+When a function has multiple clauses with patterns and guards, the
+arrows (=->=) should be aligned vertically, and guard pipes (=|=)
+should align with the cons operator in the pattern when possible:
+
+#+BEGIN_SRC monad
+(define take :: Int -> [a] -> [a]
+  _ []            -> []
+  n [x|xs]
+      | n > 0     -> (x ++ (take (n - 1) xs))
+      | otherwise -> [])
+#+END_SRC
+
+The =->= arrows line up in one column. The guard =|= lines up with
+the =[x|xs]= pattern binding — specifically the cons-bar aligns with
+the guard pipe, making the relationship between the destructured
+binding and the predicate visually clear.
+
+Same rule applies to =match= clauses:
+
+#+BEGIN_SRC monad
+(match x with
+  (Just v)  -> (show v)
+  Nothing   -> (show "none"))
+#+END_SRC
+
+* Module Structure
+
+- Every file begins with =(module <Name>)= declaration.
+- Imports follow immediately after module declaration.
+- Type and data declarations come before function definitions.
+- Function definitions are grouped by subsystem, separated by blank lines.
+- =main= function (when present) is the last definition in the file.
+
+* Import Organization
+
+- One =import= per line. No comma-separated imports.
+- Standard library imports first, then project modules, then external
+  FFI bindings.
+- Each import group separated by a blank line.
+
+#+BEGIN_SRC monad
+module Main
+import Prelude
+import Coll
+
+import <math.h>  [sqrt]
+import <stdio.h> [printf]
+#+END_SRC
+
+* Context-First Workflow Rule
+
+Before making style-related changes, read [[file:../context/style.org][context/style.org]] for the
+complete style taxonomy, including the hybrid C-signature and Pure Wisp
+styles. After making changes, extend the context with new observations.
 
 * Context Links
 
-- [[file:syntax.org][Syntax Reference]]
-- [[file:../context/][context/]] — compiler internals
+- [[file:../context/style.org][context/style.org]] — Full style taxonomy with examples and rationale
+- [[file:../context/guidelines.org][context/guidelines.org]] — Project guidelines including context-first
+  workflow
+- [[file:syntax.org][Syntax Reference]] — Language syntax reference
+- [[file:../context/][context/]] — Compiler internals

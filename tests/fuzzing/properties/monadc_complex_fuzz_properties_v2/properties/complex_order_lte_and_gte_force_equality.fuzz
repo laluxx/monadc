@@ -1,0 +1,7 @@
+name: complex_order_lte_and_gte_force_equality
+section: order-logic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: If both less-or-equal and greater-or-equal hold, equality must hold.
+law: (if (fuzz-lte? {a} {b}) (if (fuzz-gte? {a} {b}) (= {a} {b}) True) True)

@@ -1,0 +1,7 @@
+name: complex_do_branchwise_bool_result
+section: control-do-if
+args: setup:Int cond:Bool p:Bool q:Bool
+type: Bool
+expect: True
+description: An if returning Bool through do-wrapped branches must match the direct Bool if.
+law: (= (if {cond} (do {setup} {p}) (do {setup} {q})) (if {cond} {p} {q}))

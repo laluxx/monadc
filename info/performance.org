@@ -10,16 +10,116 @@ programs.
 
 * Arena Allocation
 
-Primary allocator ([[file:../arena.c]]): bump-pointer arena with 4 MiB
-blocks. Free is batch-checkpoint-restore, not per-object. Good for
-compilers, bad for long-lived small allocations that aren't batch-freed.
+The primary allocator ([[file:../arena.c]], [[file:../arena.h]]) is a bump-pointer
+arena with 4 MiB (4,194,304 byte) blocks (=ARENA_DEFAULT_BLOCK= at
+arena.h:36). Allocations are O(1): the pointer is bumped by =size=
+bytes, rounded up to =ARENA_ALIGN= (8 bytes). When a block is full, a
+new block is allocated (doubling in size, growth factor ~2) and
+prepended to the singly-linked list.
 
-* Elements are Not Boxed
+Free is batch-only: =arena_free= walks the block chain and frees all
+OS memory. =arena_reset= rewinds all blocks (used = 0) but keeps
+memory mapped — zero mallocs in the common fast path.
+=ArenaCheckpoint= saves (block, offset); =arena_restore= rewinds to
+that point and frees any blocks allocated after it. This is a
+stack-based rollback (LIFO only).
 
-Elements are C11 struct types, POD layouts, LLVM-native
-representation. No boxing overhead for primitives.
+** Tradeoffs
 
-* Type Annotations Help
+- *Good for*: batch-freed workloads like compiler passes. AST nodes,
+  symbol tables, type objects — allocated in phases, freed all at
+  once. Bump allocation converts malloc overhead (lock, freelist
+  search, fragmentation) into a single pointer increment.
+- *Bad for*: long-lived small allocations that aren't batch-freed. If a
+  4 MiB block has 3.9 MiB unused, that memory cannot be reclaimed by
+  other processes until the compiler exits. For the REPL or language
+  server, checkpoint/restore provides the necessary control.
+- The compiler uses two arenas: permanent (AST, symbol table — lifetime
+  = whole compilation) and scratch (type variables, constraint sets —
+  checkpointed between phases).
+
+See [[file:../context/arena.org][context/arena.org]] for full details.
+
+* Monomorphization
+
+Polymorphic functions (=id x = x=, =const x y = x=) are
+monomorphized: each concrete instantiation generates separate
+optimized machine code. For example, =id 3= and =id "hello"= produce
+two distinct LLVM functions with =Int= and =String= type-specialized
+bodies.
+
+- *Payoff*: zero-cost polymorphism — no boxing, no vtable dispatch, no
+  runtime type tags. Each instantiation gets LLVM's full optimizer.
+- *Cost*: code size blowup. Each unique type combination at a call
+  site creates a new function body. The =MonoCache= in
+  =CodegenContext= (context/codegen.org:141) deduplicates: repeated
+  =(id 3)= calls reuse the same =id_Int= specialization.
+
+* Three Array Forms
+
+Arrays share one type tag (=TYPE_ARR=) but have three representations
+with different performance characteristics (types.c:493-507):
+
+| Form                      | Constructor         | LLVM Type            | Use Case                               |
+|---------------------------+---------------------+----------------------+----------------------------------------|
+| Stack (fixed-size)        | =type_arr(elem, sz)=| =[N x T]=            | Compile-time-known size, stack storage |
+| Fat pointer               | =type_arr_fat(elem)=| ={i8*, i64}=         | Runtime-sized, heap-backed             |
+| Heap-growable             | =type_arr_heap(elem)=| ={i8*, i64, i64}=    | Mutable, push/pop semantics            |
+
+Stack arrays are proper LLVM =[N x T]= arrays — contiguous, cache-friendly,
+zero-overhead. Fat pointer and heap-growable both collapse to
+=arr.fat*= at the LLVM level (=arr_make_fat= at codegen.c:3763-3789).
+In practice, even stack arrays are heap-allocated immediately because
+LLVM stack allocation decisions are function-level and returned arrays
+must be heap-backed.
+
+Surface syntax: =[1 2 3]= (stack), =~[1 2 3]= (heap), =[16kb I32]=
+(size-annotated). See [[file:types.org][Types]] and [[file:../context/types.org][context/types.org]].
+
+* Layout Types for Cache-Friendly Data
+
+Layout types ([[file:layouts.org]]) are C11-compatible struct types with
+no hidden padding (unless =:packed= is specified), no pointer chasing,
+and LLVM-native representation:
+
+- Fields are laid out at known byte offsets (=LayoutField.offset=).
+- No boxing or heap indirection — a layout value is a contiguous byte
+  block.
+- Access through dot notation (=(p.x)=) compiles to a fixed-offset
+  load from an LLVM struct pointer.
+
+This makes layout types ideal for:
+- C interop (identical ABI)
+- Cache-friendly hot paths (sequential memory access)
+- SIMD-friendly data (aligned, contiguous)
+
+See [[file:layouts.org]] and [[file:../how_to/Layouts.mon]].
+
+* Inline Assembly for Hot Paths
+
+Inline assembly ([[file:asm.org]], [[file:../context/asm.org]]) provides
+zero-overhead access to the CPU when the compiler's codegen is not
+optimal. Naked functions (=:naked True=) emit no prologue/epilogue:
+
+#+BEGIN_SRC monad
+(define (add-fast [x :: Int] -> [y :: Int] -> Int)
+  :naked True
+  (asm
+    mov x %rax
+    add y %rax
+    ret))
+#+END_SRC
+
+The register allocator maps parameters to SysV AMD64 ABI registers
+(%rdi-%r9 for ints, %xmm0-%xmm7 for floats). Non-naked asm uses LLVM
+inline asm constraints (=r= for ints, =x= for floats). Size suffixes
+(=q=, =l=) are inferred from operand widths.
+
+60 asm test fixtures in =tests/codegen/asm= cover syscall-shaped
+operands, multi-instruction splitting, shifts, SSE, conditional moves,
+and more. See [[file:../context/asm.org]].
+
+* Type Annotations Help Codegen
 
 Explicit type annotations improve codegen quality:
 
@@ -31,7 +131,9 @@ Explicit type annotations improve codegen quality:
 (define [x :: Int] (+ 1 2))
 #+END_SRC
 
-This is especially important for polymorphic code.
+This is especially important for polymorphic code, where the
+annotated instantiation triggers monomorphization earlier and avoids
+speculative type variable overhead.
 
 * Avoid Unnecessary Consing
 
@@ -44,29 +146,6 @@ over non-tail recursion.
 (define (range n)
   (if (= n 0) nil
     (cons n (range (- n 1)))))
-#+END_SRC
-
-* Inline Assembly for Hot Paths
-
-When you need maximum performance, use inline assembly:
-
-#+BEGIN_SRC monad
-(define [add-fast :: Int -> Int -> Int]
-  a b -> (asm mov a %rax
-              add b %rax))
-#+END_SRC
-
-See [[file:asm.org][Inline Assembly]].
-
-* Use Layout Types for C Interop
-
-[[file:layouts.org][Layout types]] match C struct layout exactly, avoiding conversion
-overhead:
-
-#+BEGIN_SRC monad
-(layout Point [x :: Float] [y :: Float])
-
-(define p (Point 3.0 4.0))
 #+END_SRC
 
 * What the Compiler Does NOT Optimize (Yet)
@@ -89,5 +168,5 @@ overhead:
 
 - [[file:layouts.org][Layout Types]] — zero-overhead C interop
 - [[file:asm.org][Inline Assembly]] — hot path optimization
-- [[file:../context/codegen.org][context/codegen.org]] — Codegen
-- [[file:../context/arena.org][context/arena.org]] — Arena allocator
+- [[file:../context/codegen.org][context/codegen.org]] — Codegen, monomorphization cache
+- [[file:../context/arena.org][context/arena.org]] — Arena allocator internals

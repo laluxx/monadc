@@ -1,0 +1,7 @@
+name: combo_while_and_array_count_condition
+section: feature-interactions
+args: 
+type: Bool
+expect: True
+description: while conditions must support count of a with-bound array.
+law: (with [x 0 xs [1 2 3]] (begin (while (< x (count xs)) (set! x (+ x 1))) (= x 3)))

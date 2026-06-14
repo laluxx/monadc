@@ -1,0 +1,7 @@
+name: complex_arith_if_selected_one_identity_multiplication
+section: arithmetic-if
+args: cond:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Multiplication by an if-selected one should preserve the other operand.
+law: (= (fuzz-mul {a} (if {cond} 1 (fuzz-add (fuzz-sub {b} {b}) 1))) {a})

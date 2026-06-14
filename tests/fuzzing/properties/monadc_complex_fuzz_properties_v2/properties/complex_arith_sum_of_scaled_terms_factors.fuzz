@@ -1,0 +1,7 @@
+name: complex_arith_sum_of_scaled_terms_factors
+section: arithmetic-normalization
+args: k:Int a:Int b:Int c:Int
+type: Bool
+expect: True
+description: A common multiplicative factor across three terms should factor out.
+law: (= (fuzz-add (fuzz-mul {k} {a}) (fuzz-add (fuzz-mul {k} {b}) (fuzz-mul {k} {c}))) (fuzz-mul {k} (fuzz-add {a} (fuzz-add {b} {c}))))

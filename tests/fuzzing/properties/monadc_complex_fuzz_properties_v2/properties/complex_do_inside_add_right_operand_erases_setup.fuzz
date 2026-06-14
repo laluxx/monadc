@@ -1,0 +1,7 @@
+name: complex_do_inside_add_right_operand_erases_setup
+section: control-do
+args: setup:Bool a:Int b:Int
+type: Bool
+expect: True
+description: A Bool setup expression sequenced before the right Int operand must not affect addition.
+law: (= (fuzz-add {a} (do {setup} {b})) (fuzz-add {a} {b}))

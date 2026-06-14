@@ -1,5 +1,0 @@
-(module HeapLiterals)
-(define heap [1 2 3])
-(show heap)
-(show (count heap))
-(for [iter 0 (count heap)] (define i (heap iter)) (show i))

@@ -1,0 +1,7 @@
+name: int_sub_negative_is_addition
+section: arithmetic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Subtracting a negated generated Int must agree with addition.
+law: (= (fuzz-sub {a} (fuzz-mul -1 {b})) (fuzz-add {a} {b}))

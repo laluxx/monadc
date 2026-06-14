@@ -1,0 +1,7 @@
+name: complex_order_totality_lt_eq_gt_nested
+section: order-logic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Exactly the trichotomy path must make one of less-than, equality, or greater-than true.
+law: (if (fuzz-lt? {a} {b}) True (if (= {a} {b}) True (fuzz-gt? {a} {b})))

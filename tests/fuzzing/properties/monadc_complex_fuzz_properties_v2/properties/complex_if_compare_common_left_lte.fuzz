@@ -1,0 +1,7 @@
+name: complex_if_compare_common_left_lte
+section: control-if-order
+args: cond:Bool common:Int a:Int b:Int
+type: Bool
+expect: True
+description: Less-or-equal from a common left operand to an if expression must choose branchwise comparisons.
+law: (= (fuzz-lte? {common} (if {cond} {a} {b})) (if {cond} (fuzz-lte? {common} {a}) (fuzz-lte? {common} {b})))

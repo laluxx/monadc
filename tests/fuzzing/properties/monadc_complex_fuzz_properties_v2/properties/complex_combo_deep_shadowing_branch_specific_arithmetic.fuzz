@@ -1,0 +1,7 @@
+name: complex_combo_deep_shadowing_branch_specific_arithmetic
+section: combo
+args: cond:Bool outer:Int inner:Int offset:Int
+type: Bool
+expect: True
+description: Deep shadowing inside condition-selected branches must remain branch-local while arithmetic uses the selected value.
+law: (= (with [x {outer}] (if {cond} (with [x {inner}] (fuzz-add x {offset})) (fuzz-sub x {offset}))) (if {cond} (fuzz-add {inner} {offset}) (fuzz-sub {outer} {offset})))

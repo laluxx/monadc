@@ -1,0 +1,7 @@
+name: heap_array_head_literal
+section: collections
+args: 
+type: Bool
+expect: True
+description: head must work on heap array literals.
+law: (= (head ~[1 2 3]) 1)

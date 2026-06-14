@@ -1,0 +1,7 @@
+name: complex_arith_subtract_then_add_nested_if_operand
+section: arithmetic-if
+args: cond:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Subtracting and then adding the same if-selected operand must recover the base.
+law: (= (fuzz-add (fuzz-sub {a} (if {cond} {b} {c})) (if {cond} {b} {c})) {a})

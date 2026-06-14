@@ -1,0 +1,7 @@
+name: complex_lattice_min_max_sum_preserves_two_values
+section: lattice-arithmetic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: For two values, min plus max must equal the original sum.
+law: (= (fuzz-add (fuzz-min {a} {b}) (fuzz-max {a} {b})) (fuzz-add {a} {b}))

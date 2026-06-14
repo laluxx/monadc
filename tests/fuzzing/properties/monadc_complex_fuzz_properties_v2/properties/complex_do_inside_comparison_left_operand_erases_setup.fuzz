@@ -1,0 +1,7 @@
+name: complex_do_inside_comparison_left_operand_erases_setup
+section: control-do
+args: setup:Int a:Int b:Int
+type: Bool
+expect: True
+description: Sequencing before the left comparison operand must not affect less-than.
+law: (= (fuzz-lt? (do {setup} {a}) {b}) (fuzz-lt? {a} {b}))

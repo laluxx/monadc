@@ -1,0 +1,7 @@
+name: do_first_does_not_change_comparison
+section: control
+args: setup:Int a:Int b:Int
+type: Bool
+expect: True
+description: The first expression in do must not alter the comparison returned by the final expression.
+law: (= (do {setup} (fuzz-lt? {a} {b})) (fuzz-lt? {a} {b}))

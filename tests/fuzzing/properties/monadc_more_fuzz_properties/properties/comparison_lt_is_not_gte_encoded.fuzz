@@ -1,0 +1,7 @@
+name: comparison_lt_is_not_gte_encoded
+section: comparison
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Less-than must be the encoded negation of greater-or-equal.
+law: (= (fuzz-lt? {a} {b}) (if (fuzz-gte? {a} {b}) False True))

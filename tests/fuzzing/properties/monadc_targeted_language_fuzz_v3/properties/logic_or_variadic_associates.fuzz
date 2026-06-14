@@ -1,0 +1,7 @@
+name: logic_or_variadic_associates
+section: logic
+args: p:Bool q:Bool r:Bool
+type: Bool
+expect: True
+description: Variadic or must behave like nested binary or.
+law: (= (or {p} {q} {r}) (or (or {p} {q}) {r}))

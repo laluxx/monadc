@@ -1,0 +1,7 @@
+name: heap_array_tail_count_literal
+section: collections
+args: 
+type: Bool
+expect: True
+description: tail must work on heap array literals and preserve the runtime-sized count.
+law: (= (count (tail ~[1 2 3])) 2)

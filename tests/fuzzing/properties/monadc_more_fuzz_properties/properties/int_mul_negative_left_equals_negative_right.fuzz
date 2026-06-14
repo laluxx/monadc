@@ -1,0 +1,7 @@
+name: int_mul_negative_left_equals_negative_right
+section: arithmetic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Negating either multiplicand must produce the same negated product.
+law: (= (fuzz-mul (fuzz-mul -1 {a}) {b}) (fuzz-mul {a} (fuzz-mul -1 {b})))

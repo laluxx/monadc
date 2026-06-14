@@ -1,0 +1,7 @@
+name: int_sub_zero_right_value
+section: arithmetic
+args: a:Int
+type: Bool
+expect: True
+description: Subtracting zero on the right must preserve the generated Int expression.
+law: (= (fuzz-sub {a} 0) {a})

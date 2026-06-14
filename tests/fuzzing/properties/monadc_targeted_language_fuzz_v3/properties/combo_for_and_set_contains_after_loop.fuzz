@@ -1,0 +1,7 @@
+name: combo_for_and_set_contains_after_loop
+section: feature-interactions
+args: 
+type: Bool
+expect: True
+description: for loops must support repeated mutation of a set value via conj.
+law: (with [s (set)] (begin (for 3 (set! s (conj s 7))) (contains? s 7)))

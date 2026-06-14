@@ -1,0 +1,7 @@
+name: complex_function_choose_less_matches_min_with_fallback_second
+section: function-order
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Choosing the lesser value with the right operand as fallback should match min.
+law: (= (fuzz-choose-less {a} {b} {b}) (fuzz-min {a} {b}))

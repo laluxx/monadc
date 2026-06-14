@@ -1,0 +1,7 @@
+name: do_true_literal_returns_true
+section: control
+args: setup:Int
+type: Bool
+expect: True
+description: A do expression ending in literal True must return True even after evaluating an Int first expression.
+law: (do {setup} True)

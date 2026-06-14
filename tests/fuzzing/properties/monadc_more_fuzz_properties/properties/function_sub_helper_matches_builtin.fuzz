@@ -1,0 +1,7 @@
+name: function_sub_helper_matches_builtin
+section: function
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The typed fuzz-sub helper must agree with the builtin subtraction operator.
+law: (= (fuzz-sub {a} {b}) (- {a} {b}))

@@ -1,5 +1,5 @@
 #+TITLE: Last First Failing Test
-#+DATE: 2026-06-14T05:02:36
+#+DATE: 2026-06-14T19:03:19
 
 [OBS id:obs.tests.last-first-failure src:tests/run.py conf:high]
   This generated record captures the first failing test from the latest
@@ -7,24 +7,139 @@
   debugging pass can start from the earliest observed failure.
 
 * Failure
-- Test: =codegen.rt-wisp-return-string=
+- Test: =interaction.interaction_layout_method_gap_documented=
 - Status: =FAIL=
-- Duration: =[ 185.31 ] ms=
-- Reason: =stdout did not end with tests/codegen/rt_wisp_return_string.stdout=
-- Fixture: =tests/codegen/rt_wisp_return_string.mon=
+- Duration: =[ 122.62 ] ms=
+- Reason: =expected fail:compile but compile succeeded=
+
+** Materialized Source
+#+BEGIN_SRC monad
+module Main
+layout Color
+  [r :: U8]
+  [g :: U8]
+  [b :: U8]
+  where
+    method fromRGB :: U8 -> U8 -> U8 -> Color
+      r g b -> (Color r g b)
+
+define red Color 255 0 0
+#+END_SRC
 
 ** Metadata
-- =TEST-ATOM=: define return-string -> String "ciao" defines a function returning "ciao".
-- =TEST-CONTEXT=: monadc.context.language.runtime-codegen-corpus
-- =TEST-EXPECT=: compile, run
-- =TEST-ID=: tests.codegen.rt-wisp-return-string
-- =TEST-PURPOSE=: Wisp return-typed function compiles and displays.
+- =TEST-CONTEXT=: monadc.context.language.feature-interactions
+- =TEST-EXPECT=: fail:compile
+- =TEST-EXPECT-DIAGNOSTIC=: Expected '[' for layout field
+- =TEST-ID=: tests.interaction.interaction_layout_method_gap_documented
+- =TEST-PURPOSE=: Layout with where methods remains represented as an expected parser gap.
 
 ** Context Links
-- =monadc.context.language.runtime-codegen-corpus=
+- =monadc.context.language.feature-interactions=
 
 ** Output
 #+BEGIN_EXAMPLE
-the
-9.387247270983684e-323
+
+=== wisp expanded (/tmp/monadc-tests-wqw7q0vr/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented.mon) ===
+(#line 1 1) (module Main)
+(#line 9 1) (layout Color (#line 3 1) [r :: U8] (#line 4 1) [g :: U8] (#line 5 1) [b :: U8] (#line 6 1) where (#line 7 1) method fromRGB :: U8 -> U8 -> U8 -> Color (#line 8 1) r g b -> (Color r g b))
+(#line 10 1) (define red (Color 255 0 0))
+=== end ===
+
+
+=== desugared AST (/tmp/monadc-tests-wqw7q0vr/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented.mon) ===
+[compile] /tmp/monadc-tests-wqw7q0vr/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented.mon
+(module Main)
+(layout Color [r :: U8] [g :: U8] [b :: U8])
+(define Color.fromRGB (lambda ([r :: U8] [g :: U8] [b :: U8] -> Color) (Color r g b)))
+(define red (Color 255 0 0))
+=== end desugared AST ===
+
+├─ Infer (λ(r : U8). λ(g : U8). λ(b : U8). (__ctor_Color r g b) : Π(r : U8). Π(g : U8). Π(b : U8). __type_Color)
+│   ├─ Check λ(r : U8). λ(g : U8). λ(b : U8). (__ctor_Color r g b) ⇐ Π(r : U8). Π(g : U8). Π(b : U8). __type_Color
+│   │   ├─ Conv  U8 ≡ U8
+│   │   └─ OK
+│   │   ├─ Check λ(g : U8). λ(b : U8). (__ctor_Color r g b) ⇐ Π(g : U8). Π(b : U8). __type_Color
+│   │   │   ├─ Conv  U8 ≡ U8
+│   │   │   └─ OK
+│   │   │   ├─ Check λ(b : U8). (__ctor_Color r g b) ⇐ Π(b : U8). __type_Color
+│   │   │   │   ├─ Conv  U8 ≡ U8
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check (__ctor_Color r g b) ⇐ __type_Color
+│   │   │   │   │   ├─ Infer (__ctor_Color r g b)
+│   │   │   │   │   │   ├─ Infer __ctor_Color
+│   │   │   │   │   │   └─ OK: __ctor_Color : Π(__ctor_p0 : U8). Π(__ctor_p1 : U8). Π(__ctor_p2 : U8). __type_Color
+│   │   │   │   │   │   ├─ Check r ⇐ U8
+│   │   │   │   │   │   │   ├─ Infer r
+│   │   │   │   │   │   │   └─ OK: r : U8
+│   │   │   │   │   │   │   ├─ Conv  U8 ≡ U8
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check g ⇐ U8
+│   │   │   │   │   │   │   ├─ Infer g
+│   │   │   │   │   │   │   └─ OK: g : U8
+│   │   │   │   │   │   │   ├─ Conv  U8 ≡ U8
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check b ⇐ U8
+│   │   │   │   │   │   │   ├─ Infer b
+│   │   │   │   │   │   │   └─ OK: b : U8
+│   │   │   │   │   │   │   ├─ Conv  U8 ≡ U8
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK: (__ctor_Color r g b) : __type_Color
+│   │   │   │   │   ├─ Conv  __type_Color ≡ __type_Color
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(r : U8). λ(g : U8). λ(b : U8). (__ctor_Color r g b) : Π(r : U8). Π(g : U8). Π(b : U8). __type_Color) : Π(r : U8). Π(g : U8). Π(b : U8). __type_Color
+├─ Infer (__ctor_Color 255 0 0)
+│   ├─ Infer __ctor_Color
+│   └─ OK: __ctor_Color : Π(__ctor_p0 : U8). Π(__ctor_p1 : U8). Π(__ctor_p2 : U8). __type_Color
+│   ├─ Check 255 ⇐ U8
+│   │   ├─ Infer 255
+│   │   └─ OK: 255 : Nat
+│   │   ├─ Conv  Nat ≡ U8
+│   │   └─ OK
+│   └─ OK
+│   ├─ Check 0 ⇐ U8
+│   │   ├─ Infer 0
+│   │   └─ OK: 0 : Nat
+│   │   ├─ Conv  Nat ≡ U8
+│   │   └─ OK
+│   └─ OK
+│   ├─ Check 0 ⇐ U8
+│   │   ├─ Infer 0
+│   │   └─ OK: 0 : Nat
+│   │   ├─ Conv  Nat ≡ U8
+│   │   └─ OK
+│   └─ OK
+└─ OK: (__ctor_Color 255 0 0) : __type_Color
+├─ Interop HM unifies with prior Dependent Type check: U8
+├─ Interop HM unifies with prior Dependent Type check: U8
+├─ Interop HM unifies with prior Dependent Type check: U8
+├─ Interop HM unifies with prior Dependent Type check: Color ?
+├─ HM Unify U8 ~ U8
+└─ OK
+├─ HM Unify U8 ~ U8
+└─ OK
+├─ HM Unify U8 ~ U8
+└─ OK
+├─ HM Unify 'b ~ (U8 → (U8 → (U8 → 'c)))
+└─ OK
+├─ HM Unify 'c ~ Color ?
+└─ OK
+├─ HM Unify 'm38 ~ (U8 → (U8 → (U8 → Color ?)))
+└─ OK
+  module: Main
+[dep] running bidirectional type checker...
+Layout Color :: 24 bytes (3 fields)
+DEFINED [Color.fromRGB :: U8 -> U8 -> U8 -> Color ?]
+DEFINED [red :: Color]
+  wrote object: /tmp/monadc-tests-wqw7q0vr/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented.o
+
+[link] clang -fuse-ld=mold /tmp/monadc-tests-wqw7q0vr/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented.o -o /tmp/monadc-tests-wqw7q0vr/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented /usr/local/lib/libmonad.a `llvm-config --ldflags --libs core` -lm -lgmp -no-pie
+[link] 103 ms
+[done] /tmp/monadc-tests-wqw7q0vr/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented
 #+END_EXAMPLE

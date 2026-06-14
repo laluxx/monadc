@@ -1,0 +1,7 @@
+name: complex_if_branchwise_sub_same_condition
+section: control-if-arithmetic
+args: cond:Bool a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Subtracting two if expressions with the same condition must choose the branchwise difference.
+law: (= (fuzz-sub (if {cond} {a} {b}) (if {cond} {c} {d})) (if {cond} (fuzz-sub {a} {c}) (fuzz-sub {b} {d})))

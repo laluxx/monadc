@@ -1,0 +1,7 @@
+name: function_bool_idempotent_on_comparison
+section: function
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The typed Bool identity helper must be idempotent on generated comparison results.
+law: (= (fuzz-bool-id? (fuzz-bool-id? (fuzz-lte? {a} {b}))) (fuzz-lte? {a} {b}))

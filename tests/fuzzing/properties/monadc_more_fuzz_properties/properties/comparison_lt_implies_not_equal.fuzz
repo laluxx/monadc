@@ -1,0 +1,7 @@
+name: comparison_lt_implies_not_equal
+section: comparison
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Strict less-than must imply integer inequality.
+law: (if (fuzz-lt? {a} {b}) (!= {a} {b}) True)

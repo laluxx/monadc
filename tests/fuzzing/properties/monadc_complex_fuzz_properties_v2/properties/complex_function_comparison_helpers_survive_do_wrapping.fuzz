@@ -1,0 +1,7 @@
+name: complex_function_comparison_helpers_survive_do_wrapping
+section: function-order-do
+args: setup:Int a:Int b:Int
+type: Bool
+expect: True
+description: Comparison helpers must ignore setup expressions wrapped through do around operands.
+law: (= (fuzz-lte? (do {setup} {a}) (do {setup} {b})) (fuzz-lte? {a} {b}))

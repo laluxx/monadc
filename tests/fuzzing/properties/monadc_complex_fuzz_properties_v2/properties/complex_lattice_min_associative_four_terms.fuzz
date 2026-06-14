@@ -1,0 +1,7 @@
+name: complex_lattice_min_associative_four_terms
+section: lattice
+args: a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Four-way regrouping of min should be associative.
+law: (= (fuzz-min (fuzz-min {a} {b}) (fuzz-min {c} {d})) (fuzz-min {a} (fuzz-min {b} (fuzz-min {c} {d}))))

@@ -1,0 +1,7 @@
+name: comparison_lt_transitive
+section: comparison
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Strict less-than must be transitive.
+law: (if (fuzz-lt? {a} {b}) (if (fuzz-lt? {b} {c}) (fuzz-lt? {a} {c}) True) True)

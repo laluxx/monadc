@@ -1,0 +1,7 @@
+name: comparison_neq_self_false
+section: negative
+args: a:Int
+type: Bool
+expect: False
+description: Integer inequality of an expression against itself must be false.
+law: (!= {a} {a})

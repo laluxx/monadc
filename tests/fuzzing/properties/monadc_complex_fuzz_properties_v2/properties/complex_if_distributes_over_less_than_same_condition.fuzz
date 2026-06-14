@@ -1,0 +1,7 @@
+name: complex_if_distributes_over_less_than_same_condition
+section: control-if
+args: cond:Bool a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Less-than between if expressions sharing a condition must be equivalent to branchwise less-than.
+law: (= (fuzz-lt? (if {cond} {a} {b}) (if {cond} {c} {d})) (if {cond} (fuzz-lt? {a} {c}) (fuzz-lt? {b} {d})))

@@ -1,0 +1,7 @@
+name: int_add_identity_left_value
+section: arithmetic
+args: a:Int
+type: Bool
+expect: True
+description: Adding zero on the left must preserve the generated Int expression exactly.
+law: (= (fuzz-add 0 {a}) {a})

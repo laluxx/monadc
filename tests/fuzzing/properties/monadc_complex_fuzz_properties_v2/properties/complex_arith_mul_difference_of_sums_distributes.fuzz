@@ -1,0 +1,7 @@
+name: complex_arith_mul_difference_of_sums_distributes
+section: arithmetic-normalization
+args: k:Int a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Multiplying a regrouped difference of sums should agree with distributing over pairwise differences.
+law: (= (fuzz-mul {k} (fuzz-sub (fuzz-add {a} {b}) (fuzz-add {c} {d}))) (fuzz-add (fuzz-mul {k} (fuzz-sub {a} {c})) (fuzz-mul {k} (fuzz-sub {b} {d}))))

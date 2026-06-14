@@ -6,17 +6,73 @@
 
 * Type Classes
 
+Monad provides a type class system with dictionary-passing
+implementation ([[file:../typeclass.c]], [[file:../typeclass.h]]). A class
+declaration defines method signatures; an instance provides concrete
+implementations for a specific type. The compiler compiles each
+instance into an LLVM global dictionary struct of function pointers
+named =__dict_ClassName_TypeName= ([[file:../typeclass.c::438]]).
+
+** Class Declaration
+
 #+BEGIN_SRC monad
 (class Eq a
   (== (a a -> Bool)))
+#+END_SRC
 
+Internally stored as a =TCClass= ([[file:../typeclass.h::27]]) with
+=name=, =type_var=, =methods= (name + type_str), and optional
+=default_names/=default_bodies= (AST lambda bodies for methods with
+default implementations). Associated type names are stored in
+=assoc_types= ([[file:../typeclass.h::30]]).
+
+** Instance Declaration
+
+#+BEGIN_SRC monad
 (instance Eq Int
   (define (== a b -> Bool)
     (builtin-== a b)))
 #+END_SRC
 
-Deriving: =(data Suit ... deriving Eq)= auto-generates ==.
-Multiple classes: =deriving [Eq Enum]=, =deriving [Bounded Enum Show]=.
+Registered via =tc_register_instance= ([[file:../typeclass.c::258]])
+which:
+1. Compiles each method body, substituting type variables with concrete
+   types and falling back to default implementations when no body is
+   given.
+2. Builds the LLVM dictionary global =__dict_ClassName_TypeName= as a
+   struct of function pointers (erased to =i8*= via BitCast for uniform
+   layout).
+3. Registers compiled methods in the environment as =ENV_FUNC= entries
+   for direct dispatch.
+
+** Dictionary Dispatch
+
+Each instance produces a named global =__dict_Eq_TrafficLight=
+([[file:../typeclass.c::64]]). Method calls are resolved at compile
+time via the strcmp dispatch layer in codegen
+([[file:../codegen.c::8905]]): codegen checks if the operator symbol
+is a known method via =tc_is_method=, determines the concrete type
+from arguments, and emits a direct call to the matching function
+pointer via =tc_get_method= ([[file:../typeclass.c::510]]).
+
+This is the standard dictionary-passing strategy used by GHC and Rust
+trait objects. Instance resolution happens at codegen time (not type-
+checking time), within a single compilation unit where all instances
+are known ([[file:../context/typeclass.org::312]]).
+
+** Deriving
+
+#+BEGIN_SRC monad
+(data Suit Hearts Diamonds Clubs Spades deriving Eq)
+(data T = A | B | C deriving [Eq Enum Show])
+#+END_SRC
+
+Codegen auto-generates =instance Eq T= (structural == comparing
+constructor tags and fields) and =instance Enum T= (=fromEnum= maps to
+constructor index, =toEnum= maps index to constructor). Deriving
+supports a single class or a list: =deriving [Eq Enum]=
+([[file:../codegen.c::13144]]). The class must be defined before use
+or a warning is emitted.
 
 ** Constraints with =~>=
 
@@ -26,8 +82,21 @@ Multiple classes: =deriving [Eq Enum]=, =deriving [Bounded Enum Show]=.
     | otherwise -> Nothing)
 #+END_SRC
 
-Universal quantifier =∀= (or =forall=) with multi-class constraints
-in brackets.
+Universal quantifier =∀= (or =forall=) with multi-class constraints in
+brackets. Type variables are implicitly universally quantified in
+surface syntax; explicit =∀= is required for constraint-bearing
+polymorphism.
+
+** Known Gaps ([[file:../context/typeclass.org::337]])
+
+- No superclass constraints (e.g. =(class Eq a => Ord a)=) — would
+  require a dependency graph of instance dictionaries
+- No higher-kinded types (WIP)
+- No type families (WIP)
+- Associated types are declared in the struct (=assoc_types=) but the
+  type-level computation during instance resolution is incomplete
+- Instance resolution is local (visible instances at point of use)
+  rather than global (all instances in scope)
 
 * Polymorphism
 
@@ -38,35 +107,130 @@ All lowercase type params are universally quantified:
 (define (fst x y -> a) x)
 #+END_SRC
 
-Polymorphism is Hindley-Milner (let-polymorphism). Type variables are
-implicitly quantified.
+Polymorphism is Hindley-Milner (let-polymorphism) with monomorphization
+during codegen. Type variables are implicitly quantified. Polymorphic
+identity and const instantiate correctly at multiple concrete types
+([[file:../context/language.org::501]]).
 
 * Dependent Types (ITT/NbE)
 
-Monad uses intensional type theory with normalisation by evaluation.
-Full dependent types allow:
+Monad uses Intensional Type Theory (ITT) with Normalization by
+Evaluation (NbE) as a shadow pass (Phase 6.5) between feature setup
+and LLVM codegen ([[file:../main.c::1025]]). It does not emit code —
+it validates dependent annotations, elaborates surface syntax to core
+terms, and back-propagates ground types to the AST for HM inference
+and LLVM codegen consumption ([[file:../context/dep.org::49]]).
+
+** Terminology
+
+| Term       | Core syntax  | Meaning                      |
+|------------+--------------+------------------------------|
+| Universe   | =(Type n)=     | Type universe at level n     |
+| Pi-type    | =Π(x:A). B=    | Dependent function space     |
+| Sigma-type | =Σ(x:A). B=    | Dependent pair type          |
+| Equality   | =t ≡ s : A=    | Propositional equality       |
+| Nat        | =Nat=          | Natural numbers              |
+| Refl       | =refl=         | Reflexivity proof            |
+| Subst      | =subst h P pa= | Transport along equality (J) |
+| Embed      | =TERM_EMBED=   | Ground Type* bridge to ITT   |
+
+** Universes ([[file:../dep.h::61]])
+
+The universe hierarchy =Type₀, Type₁, Type₂, …= is predicative:
+=Γ ⊢ Type u : Type (u+1)=. =Π=-formation uses =max(u,v)= for the
+result universe. Level expressions support constants, variables, max,
+and successor, with a hard ceiling of =DEP_LEVEL_MAX=64
+([[file:../dep.h::39]]).
+
+** Pi-types and Sigma-types
 
 #+BEGIN_SRC monad
-(define (Vec n a -> Type) ...)
+(define Vec :: Π (n : Nat) → Type → Type ...)
+(define Σ (x : A) × B ...)
 #+END_SRC
 
-Currently limited — not all dependent patterns are implementable in
-stable releases.
+=TERM_PI= ([[file:../dep.h::121]]) represents dependent function types.
+=TERM_SIGMA= ([[file:../dep.h::126]]) represents dependent pair types.
+=TERM_LAM= and =TERM_PAIR= are introduction forms; =TERM_FST= and
+=TERM_SND= are projection eliminators. Binders carry an =Implicitness=
+tag (explicit, implicit, or instance) for elaboration.
+
+** NbE Kernel ([[file:../dep.h::454]])
+
+Normalization by Evaluation is the semantic engine:
+
+- =dep_eval= ([[file:../dep.h::473]]) — evaluate a closed term to a
+  semantic =Value= in an environment
+- =dep_quote= ([[file:../dep.h::474]]) — reify a value back to a
+  =β=-normal =η=-long term
+- =dep_normalise= ([[file:../dep.h::475]]) — eval + quote for full
+  normalisation
+- =dep_conv= ([[file:../dep.h::559]]) — definitional equality: two
+  terms are equal when they evaluate to the same semantic value
+
+The =Value= domain ([[file:../dep.h::352]]) supports =VAL_PI=,
+=VAL_LAM=, =VAL_SIGMA=, =VAL_PAIR=, =VAL_UNIVERSE=, =VAL_NEUTRAL=
+(stuck free variables), =VAL_EMBED= (ground types), and =VAL_META=
+(unsolved metavariables). Closures ([[file:../dep.h::321]]) capture an
+environment + unevaluated body for lazy evaluation under binders.
+
+** Bidirectional Checking ([[file:../dep.h::1011]])
+
+Two modes follow Löh/McBride/Swierstra (2010):
+- =dep_infer= ([[file:../dep.h::675]]) — Γ ⊢ t ⇒ A, compute type from term
+- =dep_check= ([[file:../dep.h::676]]) — Γ ⊢ t ⇐ A, verify against
+  expected type
+
+Used for =Π= introduction (check mode for lambdas) and =Σ= elimination
+(infer mode for projections). Elaboration (=dep_elab_term=,
+[[file:../dep.h::700]]) translates surface AST into core =Term=s,
+inserting implicit arguments and generating metavariables for holes.
+
+** TERM_EMBED Bridge ([[file:../dep.h::1077]])
+
+The bridge between ITT and the ground-type HM system:
+- =term_embed(Type *ground_type)= wraps a types.h =Type*= as a
+  =TERM_EMBED= term ([[file:../dep.h::270]])
+- =dep_term_of_ground= ([[file:../dep.h::720]]) wraps existing
+  ground-typed code for the dependent checker
+- =dep_ground_of_value= ([[file:../dep.h::726]]) extracts ground types
+  back from normalised values for HM/codegen consumption
+- =dep_ground_of_value_env= ([[file:../dep.h::727]]) resolves global
+  names through =DepEnv= for back-propagation to =ast->inferred_type=
+
+** Elaboration Pipeline ([[file:../dep.h::1120]])
+
+1. =dep_term_of_ast= — syntactic AST to pre-elaboration Term
+2. =dep_elab_term= — elaborate with implicit/hole filling
+3. =dep_infer/dep_check= — bidirectional type checking
+4. =meta_all_solved= — verify all metavariables are solved
+5. =dep_normalise= — normalise result type for display
+
+** Known Soundness Holes ([[file:../context/dep.org::1344]])
+
+The NbE kernel has deliberate stubs documented in context:
+- =dep_conv= allows implicit Int≡Float and Int≡Char coercions
+- Pattern unification is a stub with no Miller condition check
+- The occurs check runs in the wrong environment
+- =VAL_PI=→=TYPE_ARROW= conversion drops quantifiers
+- Universe levels use equality, not cumulativity (≤)
+
+These are documented gaps that test the clean-architecture thesis — a
+well-factored NbE kernel can be incrementally filled in without
+architectural rewrites ([[file:../context/dep.org::1352]]).
 
 * Refinement Types
 
-=(type Pos { x ∈ Int | (> x 0) })= — subset types with predicates.
-See [[file:refinements.org][Refinements]] for full syntax.
-
-* Known Gaps
-
-- No GADTs (use refinement types instead)
-- No higher-kinded types (WIP)
-- No type families (WIP)
+=(type Pos { x ∈ Int | (> x 0) })= — subset types with predicates
+that are checked at compile time where possible (literal arguments)
+and deferred to runtime otherwise. See [[file:refinements.org][Refinements]] for full
+syntax and predicate generation.
 
 * Context Links
 
-- [[file:refinements.org][Refinement Types]]
-- [[file:types.org][Types]]
+- [[file:../context/typeclass.org][context/typeclass.org]] — type class implementation
+- [[file:../context/dep.org][context/dep.org]] — dependent type checker reference
+- [[file:../typeclass.c][typeclass.c]] — class/instance registration and dispatch
+- [[file:../dep.h][dep.h]] — ITT kernel API
 - [[file:../context/infer.org][context/infer.org]] — type inference
 - [[file:../context/types.org][context/types.org]] — type representation

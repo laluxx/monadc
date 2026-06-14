@@ -1,0 +1,7 @@
+name: arith_direct_nested_helper_and_builtin_agree
+section: arithmetic-dispatch
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Stable helper calls and direct arithmetic dispatch must agree when nested.
+law: (= (+ (fuzz-add {a} {b}) {c}) (fuzz-add {a} (+ {b} {c})))

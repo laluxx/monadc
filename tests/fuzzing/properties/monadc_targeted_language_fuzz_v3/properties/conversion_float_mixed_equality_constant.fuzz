@@ -1,0 +1,7 @@
+name: conversion_float_mixed_equality_constant
+section: predicates-conversions
+args: 
+type: Bool
+expect: True
+description: Float conversion of an Int constant must compare equal to the same Float literal.
+law: (= (Float 42) 42.0)

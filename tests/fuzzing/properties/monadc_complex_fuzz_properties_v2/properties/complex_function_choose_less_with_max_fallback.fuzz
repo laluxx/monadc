@@ -1,0 +1,7 @@
+name: complex_function_choose_less_with_max_fallback
+section: function-order
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Choosing a when it is less than b and otherwise max(a,b) must always produce min/max-selected value equal to min when ordered or max otherwise.
+law: (= (fuzz-choose-less {a} {b} (fuzz-max {a} {b})) (if (fuzz-lt? {a} {b}) {a} (fuzz-max {a} {b})))

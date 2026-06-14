@@ -1,0 +1,7 @@
+name: comparison_gte_transitive
+section: comparison
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Greater-or-equal must be transitive.
+law: (if (fuzz-gte? {a} {b}) (if (fuzz-gte? {b} {c}) (fuzz-gte? {a} {c}) True) True)

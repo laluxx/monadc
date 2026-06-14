@@ -1,0 +1,7 @@
+name: compare_variadic_not_equal_successor_chain
+section: comparison-variadic
+args: a:Int
+type: Bool
+expect: True
+description: Variadic not-equal must accept a generated successor chain.
+law: (!= {a} (+ {a} 1) (+ {a} 2))

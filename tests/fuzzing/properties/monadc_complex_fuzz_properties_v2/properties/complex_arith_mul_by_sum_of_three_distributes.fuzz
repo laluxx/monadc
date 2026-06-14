@@ -1,0 +1,7 @@
+name: complex_arith_mul_by_sum_of_three_distributes
+section: arithmetic-normalization
+args: k:Int a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Multiplication must distribute over a three-term sum.
+law: (= (fuzz-mul {k} (fuzz-add {a} (fuzz-add {b} {c}))) (fuzz-add (fuzz-mul {k} {a}) (fuzz-add (fuzz-mul {k} {b}) (fuzz-mul {k} {c}))))

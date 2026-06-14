@@ -1,0 +1,7 @@
+name: complex_with_bound_expression_used_in_nested_if
+section: binding-if
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: A computed with-bound expression used in a nested if must equal the expanded expression.
+law: (= (with [x (fuzz-add {a} {b})] (if (fuzz-lt? x {c}) x {c})) (if (fuzz-lt? (fuzz-add {a} {b}) {c}) (fuzz-add {a} {b}) {c}))

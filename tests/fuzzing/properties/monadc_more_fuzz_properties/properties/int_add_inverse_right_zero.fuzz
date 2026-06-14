@@ -1,0 +1,7 @@
+name: int_add_inverse_right_zero
+section: arithmetic
+args: a:Int
+type: Bool
+expect: True
+description: Adding an Int to its right-side additive inverse must produce zero.
+law: (= (fuzz-add {a} (fuzz-mul -1 {a})) 0)

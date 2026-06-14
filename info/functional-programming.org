@@ -4,6 +4,24 @@
 
 [[file:index.org][<- Back to Index]] · [[file:types.org][Types]] · [[file:patterns.org][Pattern Matching]]
 
+* Pure Functions
+
+Functions in MonadC are pure by default: given the same arguments, they return
+the same value and produce no side effects. Mutation via =set!= impurifies the
+containing function for the purposes of the purity tracking system.
+
+#+BEGIN_SRC monad
+(define (square [x :: Int] -> Int)
+  (* x x))
+
+(define (multf [x :: Float] -> [y :: Float] -> Float)
+  "Multiply X and Y as Floats"
+  (* x y))
+#+END_SRC
+
+Functions are defined with typed signatures using bracket syntax:
+=[param :: Type]= parameters and =-> ReturnType= return annotation.
+
 * Lambda
 
 #+BEGIN_SRC monad
@@ -11,47 +29,108 @@
 (define apply (lambda [f x] (f x)))
 #+END_SRC
 
-No =fn= shorthand — use =lambda= ([[file:../codegen.c]] lambda codegen).
+No =fn= shorthand — use =lambda= ([[file:../codegen.c]]). All surface syntax
+forms for functions (=(lambda [x] body)=, =(define (f x) body)=, Wisp
+=x -> body=) are unified by the reader into =AST_LAMBDA= nodes
+([[file:../reader.c::3244]]). The parser does not distinguish between surface
+forms — the distinction is purely syntactic.
 
 * Recursion
 
-Named =define= is the standard recursion form. For local recursion:
+Named =define= is the standard form for recursion. For local recursion:
 
 #+BEGIN_SRC monad
 (letrec [fact (lambda [n]
                 (if (<= n 1) 1
                   (* n (fact (- n 1)))))]
   (fact 5))
+
+;; Top-level recursive function:
+(define (fib [n :: Int] -> Int)
+  (if (<= n 2) 1
+    (+ (fib (- n 1)) (fib (- n 2)))))
 #+END_SRC
 
-* Higher-Order Functions
+=letrec= is reader-desugared (no strcmp dispatch handler) — see
+[[file:control.org][Control Flow]] for known gaps.
 
-Functions are first-class — pass them as arguments, return from
-functions, store in data structures.
+* Referential Transparency
 
-* No Pipe Operator
+Expressions can be replaced with their values without changing program behavior.
+Variables bound with =define= or =let= are immutable unless mutated with =set!=
+or =<-=.
 
-=1 |> show |> print= is not implemented. Use nested calls:
+* Hindley-Milner Polymorphism
+
+MonadC uses Hindley-Milner type inference with type variables (= 'a =, ='b=,
+etc.). Polymorphic functions like identity instantiate correctly at multiple
+concrete types via monomorphization:
 
 #+BEGIN_SRC monad
-(print (show 1))
+(define [id :: a -> a]
+  (lambda [x] x))
+
+(show (id 42))          ;; id_Int — specialized to Int
+(show (id "hello"))     ;; id_String — specialized to String
 #+END_SRC
 
-* Standard Library Status
+The compiler generates a separate LLVM function for each concrete type
+instantiation. Unannotated parameters are NOT boxed objects — each concrete
+call generates zero-overhead native code
+([[file:../context/language.org::hm-polymorphism][context/language.org]]).
 
-| Function | Status  |
-|----------+---------|
-| map      | Infer type only, no codegen dispatch (not callable) |
-| filter   | Planned |
-| foldl    | Planned |
-| foldr    | Planned |
-| compose  | Planned |
+The type system surface supports:
+- Polymorphic schemes: =∀a. a → a=
+- Type applications: =Maybe Float=, =Result Int String=
+- Constrained polymorphism via class constraints (aspirational)
 
-Standard library modules =old-core/List.mon= and =core/Math.mon= exist but
-are essentially WIP (implementations commented out).
+* Higher-Order Functions (Aspirational)
+
+Functions are first-class values at the semantic level. However, closures have
+a known codegen gap: =fn=, =lambda=, and =defn= have no strcmp dispatch handler
+([[file:../context/language.org::codegen-gaps][context/language.org]]). No
+closure allocation exists in the current codegen. This blocks:
+
+- =map=, =filter=, =foldl=, =foldr= (not implemented)
+- =apply=, =partial=, =compose= (not implemented)
+- Pipe operator (=|>=) (reader-level sugar only)
+- Storing functions in data structures (segfaults)
+
+The closure dispatch gap is historically contingent, not principled — the parser
+intercepts =(lambda ...)= and produces =AST_LAMBDA= before codegen sees it, but
+the symbol =lambda= itself is not callable from paren-mode. The typed ABI (for
+non-capturing lambdas) works: partial application of a typed binary function
+returns a callable closure
+([[file:../context/language.org::hm-polymorphism][context/language.org]]).
+
+** Closure ABI
+
+When closures are implemented, they will use a dual ABI:
+- **Typed ABI** (no captures): passes parameters as unboxed LLVM values — fast,
+  zero overhead.
+- **Closure ABI** (captures): passes =(env*, i64 n, RuntimeValue** args)= —
+  the environment pointer, argument count, and a boxed argument array.
+
+The choice is made at compile time: simple top-level lambdas with no captures
+use the typed ABI; nested lambdas that capture variables use the closure ABI
+([[file:../context/language.org::primitive-function][context/language.org]]).
+
+** Workaround for higher-order patterns
+
+Use manual recursion and nested calls for iteration. Define concrete typed
+functions instead of passing lambdas as arguments:
+
+#+BEGIN_SRC monad
+;; Instead of (map f xs), recurse explicitly:
+(define map-add1 :: [Int] -> [Int]
+  []     -> []
+  [x|xs] -> (++ (+ x 1) (map-add1 xs)))
+#+END_SRC
 
 * Context Links
 
-- [[file:patterns.org][Pattern Matching]]
-- [[file:stdlib.org][Standard Library]]
-- [[file:../tests/codegen/][tests/codegen/]] — codegen test files
+- [[file:../context/language.org::primitive-function][context/language.org — Function representation and closure gap]]
+- [[file:../context/language.org::hm-polymorphism][context/language.org — HM polymorphism]]
+- [[file:../context/language.org::codegen-gaps][context/language.org — Known codegen gaps]]
+- [[file:../Main.mon][Main.mon]] — Real usage examples
+- [[file:../context/types.org][context/types.org]] — TYPE_FN, TYPE_ARROW, TYPE_VAR

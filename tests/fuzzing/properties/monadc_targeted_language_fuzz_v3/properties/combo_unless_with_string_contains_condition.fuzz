@@ -1,0 +1,7 @@
+name: combo_unless_with_string_contains_condition
+section: feature-interactions
+args: 
+type: Bool
+expect: True
+description: unless conditions must support string contains? dispatch.
+law: (with [x 0] (begin (unless (contains? "abc" "z") (set! x 1)) (= x 1)))

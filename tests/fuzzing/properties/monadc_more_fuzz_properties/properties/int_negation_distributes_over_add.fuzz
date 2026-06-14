@@ -1,0 +1,7 @@
+name: int_negation_distributes_over_add
+section: arithmetic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Negation must distribute over addition for generated Int expressions.
+law: (= (fuzz-mul -1 (fuzz-add {a} {b})) (fuzz-add (fuzz-mul -1 {a}) (fuzz-mul -1 {b})))

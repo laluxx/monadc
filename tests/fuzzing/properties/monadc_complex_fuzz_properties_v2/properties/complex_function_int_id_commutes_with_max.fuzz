@@ -1,0 +1,7 @@
+name: complex_function_int_id_commutes_with_max
+section: function-order
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Int identity should commute with max helper application.
+law: (= (fuzz-id-int (fuzz-max {a} {b})) (fuzz-max (fuzz-id-int {a}) (fuzz-id-int {b})))

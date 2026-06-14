@@ -1,0 +1,7 @@
+name: min_bounded_by_left_and_right
+section: order
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The min helper result must be below both operands.
+law: (if (fuzz-lte? (fuzz-min {a} {b}) {a}) (fuzz-lte? (fuzz-min {a} {b}) {b}) False)

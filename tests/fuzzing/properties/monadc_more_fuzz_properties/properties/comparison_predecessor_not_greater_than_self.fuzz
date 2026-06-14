@@ -1,0 +1,7 @@
+name: comparison_predecessor_not_greater_than_self
+section: negative
+args: a:Int
+type: Bool
+expect: False
+description: A generated Int minus one must not be greater than the original Int.
+law: (fuzz-gt? (fuzz-sub {a} 1) {a})

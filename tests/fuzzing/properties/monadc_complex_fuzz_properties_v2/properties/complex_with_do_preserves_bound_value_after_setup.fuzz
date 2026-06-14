@@ -1,0 +1,7 @@
+name: complex_with_do_preserves_bound_value_after_setup
+section: binding-do
+args: value:Int setup:Bool
+type: Bool
+expect: True
+description: A bound Int returned after a setup expression inside do must preserve the bound value.
+law: (= (with [x {value}] (do {setup} x)) {value})

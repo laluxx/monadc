@@ -1,0 +1,7 @@
+name: if_bool_identity_branches_roundtrip
+section: control
+args: cond:Bool
+type: Bool
+expect: True
+description: Choosing between typed Bool identity branches must preserve the condition.
+law: (= (if {cond} (fuzz-bool-id? True) (fuzz-bool-id? False)) {cond})

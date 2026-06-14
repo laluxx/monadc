@@ -1,0 +1,1334 @@
+[
+  {
+    "name": "complex_if_bool_identity_condition_preserves_int_branch",
+    "section": "control-if",
+    "args": "cond:Bool a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Using the typed Bool identity as an if condition must not change the selected Int branch.",
+    "law": "(= (if (fuzz-bool-id? {cond}) {a} {b}) (if {cond} {a} {b}))"
+  },
+  {
+    "name": "complex_if_bool_identity_condition_preserves_bool_branch",
+    "section": "control-if",
+    "args": "cond:Bool p:Bool q:Bool",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Using the typed Bool identity as an if condition must not change the selected Bool branch.",
+    "law": "(= (if (fuzz-bool-id? {cond}) {p} {q}) (if {cond} {p} {q}))"
+  },
+  {
+    "name": "complex_if_identity_true_false_is_condition",
+    "section": "control-if",
+    "args": "cond:Bool",
+    "type": "Bool",
+    "expect": "True",
+    "description": "An if over True and False must be observationally equal to its condition.",
+    "law": "(= (if {cond} True False) {cond})"
+  },
+  {
+    "name": "complex_if_identity_false_true_is_negation_involution",
+    "section": "control-if",
+    "args": "cond:Bool",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Double-swapping Bool branches through encoded negation must recover the original condition.",
+    "law": "(= (if (if {cond} False True) False True) {cond})"
+  },
+  {
+    "name": "complex_if_negated_condition_swaps_int_branches",
+    "section": "control-if",
+    "args": "cond:Bool a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Encoding logical negation with if must swap the Int branches exactly.",
+    "law": "(= (if (if {cond} False True) {a} {b}) (if {cond} {b} {a}))"
+  },
+  {
+    "name": "complex_if_negated_condition_swaps_bool_branches",
+    "section": "control-if",
+    "args": "cond:Bool p:Bool q:Bool",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Encoding logical negation with if must swap the Bool branches exactly.",
+    "law": "(= (if (if {cond} False True) {p} {q}) (if {cond} {q} {p}))"
+  },
+  {
+    "name": "complex_if_nested_same_condition_then_absorbs",
+    "section": "control-if",
+    "args": "cond:Bool a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A nested if in the then branch with the same condition must absorb the dead alternative.",
+    "law": "(= (if {cond} (if {cond} {a} {b}) {c}) (if {cond} {a} {c}))"
+  },
+  {
+    "name": "complex_if_nested_same_condition_else_absorbs",
+    "section": "control-if",
+    "args": "cond:Bool a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A nested if in the else branch with the same condition must absorb the dead alternative.",
+    "law": "(= (if {cond} {a} (if {cond} {b} {c})) (if {cond} {a} {c}))"
+  },
+  {
+    "name": "complex_if_nested_negated_then_absorbs",
+    "section": "control-if",
+    "args": "cond:Bool a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A nested if guarded by the negated outer condition in the then branch must choose its else arm.",
+    "law": "(= (if {cond} (if (if {cond} False True) {a} {b}) {c}) (if {cond} {b} {c}))"
+  },
+  {
+    "name": "complex_if_nested_negated_else_absorbs",
+    "section": "control-if",
+    "args": "cond:Bool a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A nested if guarded by the negated outer condition in the else branch must choose its then arm.",
+    "law": "(= (if {cond} {a} (if (if {cond} False True) {b} {c})) (if {cond} {a} {b}))"
+  },
+  {
+    "name": "complex_if_distributes_over_equality_same_condition",
+    "section": "control-if",
+    "args": "cond:Bool a:Int b:Int c:Int d:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Equality between two if expressions with the same condition must equal choosing equality branchwise.",
+    "law": "(= (= (if {cond} {a} {b}) (if {cond} {c} {d})) (if {cond} (= {a} {c}) (= {b} {d})))"
+  },
+  {
+    "name": "complex_if_distributes_over_less_than_same_condition",
+    "section": "control-if",
+    "args": "cond:Bool a:Int b:Int c:Int d:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Less-than between if expressions sharing a condition must be equivalent to branchwise less-than.",
+    "law": "(= (fuzz-lt? (if {cond} {a} {b}) (if {cond} {c} {d})) (if {cond} (fuzz-lt? {a} {c}) (fuzz-lt? {b} {d})))"
+  },
+  {
+    "name": "complex_if_distributes_over_lte_same_condition",
+    "section": "control-if",
+    "args": "cond:Bool a:Int b:Int c:Int d:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Less-or-equal between if expressions sharing a condition must be equivalent to branchwise less-or-equal.",
+    "law": "(= (fuzz-lte? (if {cond} {a} {b}) (if {cond} {c} {d})) (if {cond} (fuzz-lte? {a} {c}) (fuzz-lte? {b} {d})))"
+  },
+  {
+    "name": "complex_if_distributes_over_greater_than_same_condition",
+    "section": "control-if",
+    "args": "cond:Bool a:Int b:Int c:Int d:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Greater-than between if expressions sharing a condition must be equivalent to branchwise greater-than.",
+    "law": "(= (fuzz-gt? (if {cond} {a} {b}) (if {cond} {c} {d})) (if {cond} (fuzz-gt? {a} {c}) (fuzz-gt? {b} {d})))"
+  },
+  {
+    "name": "complex_if_distributes_over_gte_same_condition",
+    "section": "control-if",
+    "args": "cond:Bool a:Int b:Int c:Int d:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Greater-or-equal between if expressions sharing a condition must be equivalent to branchwise greater-or-equal.",
+    "law": "(= (fuzz-gte? (if {cond} {a} {b}) (if {cond} {c} {d})) (if {cond} (fuzz-gte? {a} {c}) (fuzz-gte? {b} {d})))"
+  },
+  {
+    "name": "complex_if_branchwise_add_same_condition",
+    "section": "control-if-arithmetic",
+    "args": "cond:Bool a:Int b:Int c:Int d:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Adding two if expressions with the same condition must choose the branchwise sum.",
+    "law": "(= (fuzz-add (if {cond} {a} {b}) (if {cond} {c} {d})) (if {cond} (fuzz-add {a} {c}) (fuzz-add {b} {d})))"
+  },
+  {
+    "name": "complex_if_branchwise_sub_same_condition",
+    "section": "control-if-arithmetic",
+    "args": "cond:Bool a:Int b:Int c:Int d:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Subtracting two if expressions with the same condition must choose the branchwise difference.",
+    "law": "(= (fuzz-sub (if {cond} {a} {b}) (if {cond} {c} {d})) (if {cond} (fuzz-sub {a} {c}) (fuzz-sub {b} {d})))"
+  },
+  {
+    "name": "complex_if_branchwise_mul_same_condition",
+    "section": "control-if-arithmetic",
+    "args": "cond:Bool a:Int b:Int c:Int d:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Multiplying two if expressions with the same condition must choose the branchwise product.",
+    "law": "(= (fuzz-mul (if {cond} {a} {b}) (if {cond} {c} {d})) (if {cond} (fuzz-mul {a} {c}) (fuzz-mul {b} {d})))"
+  },
+  {
+    "name": "complex_if_add_common_left_factor",
+    "section": "control-if-arithmetic",
+    "args": "cond:Bool common:Int a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A common left addend can be lifted across an if expression.",
+    "law": "(= (fuzz-add {common} (if {cond} {a} {b})) (if {cond} (fuzz-add {common} {a}) (fuzz-add {common} {b})))"
+  },
+  {
+    "name": "complex_if_add_common_right_factor",
+    "section": "control-if-arithmetic",
+    "args": "cond:Bool common:Int a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A common right addend can be lifted across an if expression.",
+    "law": "(= (fuzz-add (if {cond} {a} {b}) {common}) (if {cond} (fuzz-add {a} {common}) (fuzz-add {b} {common})))"
+  },
+  {
+    "name": "complex_if_sub_common_right_factor",
+    "section": "control-if-arithmetic",
+    "args": "cond:Bool common:Int a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Subtracting a common right operand distributes over an if expression.",
+    "law": "(= (fuzz-sub (if {cond} {a} {b}) {common}) (if {cond} (fuzz-sub {a} {common}) (fuzz-sub {b} {common})))"
+  },
+  {
+    "name": "complex_if_sub_common_left_factor",
+    "section": "control-if-arithmetic",
+    "args": "cond:Bool common:Int a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Subtracting an if expression from a common left operand distributes branchwise.",
+    "law": "(= (fuzz-sub {common} (if {cond} {a} {b})) (if {cond} (fuzz-sub {common} {a}) (fuzz-sub {common} {b})))"
+  },
+  {
+    "name": "complex_if_mul_common_left_factor",
+    "section": "control-if-arithmetic",
+    "args": "cond:Bool common:Int a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Multiplying a common left operand across an if expression must choose branchwise products.",
+    "law": "(= (fuzz-mul {common} (if {cond} {a} {b})) (if {cond} (fuzz-mul {common} {a}) (fuzz-mul {common} {b})))"
+  },
+  {
+    "name": "complex_if_mul_common_right_factor",
+    "section": "control-if-arithmetic",
+    "args": "cond:Bool common:Int a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Multiplying a common right operand across an if expression must choose branchwise products.",
+    "law": "(= (fuzz-mul (if {cond} {a} {b}) {common}) (if {cond} (fuzz-mul {a} {common}) (fuzz-mul {b} {common})))"
+  },
+  {
+    "name": "complex_if_compare_common_left_lt",
+    "section": "control-if-order",
+    "args": "cond:Bool common:Int a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Less-than from a common left operand to an if expression must choose branchwise comparisons.",
+    "law": "(= (fuzz-lt? {common} (if {cond} {a} {b})) (if {cond} (fuzz-lt? {common} {a}) (fuzz-lt? {common} {b})))"
+  },
+  {
+    "name": "complex_if_compare_common_right_lt",
+    "section": "control-if-order",
+    "args": "cond:Bool common:Int a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Less-than from an if expression to a common right operand must choose branchwise comparisons.",
+    "law": "(= (fuzz-lt? (if {cond} {a} {b}) {common}) (if {cond} (fuzz-lt? {a} {common}) (fuzz-lt? {b} {common})))"
+  },
+  {
+    "name": "complex_if_compare_common_left_lte",
+    "section": "control-if-order",
+    "args": "cond:Bool common:Int a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Less-or-equal from a common left operand to an if expression must choose branchwise comparisons.",
+    "law": "(= (fuzz-lte? {common} (if {cond} {a} {b})) (if {cond} (fuzz-lte? {common} {a}) (fuzz-lte? {common} {b})))"
+  },
+  {
+    "name": "complex_if_compare_common_right_lte",
+    "section": "control-if-order",
+    "args": "cond:Bool common:Int a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Less-or-equal from an if expression to a common right operand must choose branchwise comparisons.",
+    "law": "(= (fuzz-lte? (if {cond} {a} {b}) {common}) (if {cond} (fuzz-lte? {a} {common}) (fuzz-lte? {b} {common})))"
+  },
+  {
+    "name": "complex_do_inside_add_left_operand_erases_setup",
+    "section": "control-do",
+    "args": "setup:Bool a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A Bool setup expression sequenced before an Int operand must not affect addition.",
+    "law": "(= (fuzz-add (do {setup} {a}) {b}) (fuzz-add {a} {b}))"
+  },
+  {
+    "name": "complex_do_inside_add_right_operand_erases_setup",
+    "section": "control-do",
+    "args": "setup:Bool a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A Bool setup expression sequenced before the right Int operand must not affect addition.",
+    "law": "(= (fuzz-add {a} (do {setup} {b})) (fuzz-add {a} {b}))"
+  },
+  {
+    "name": "complex_do_inside_sub_left_operand_erases_setup",
+    "section": "control-do",
+    "args": "setup:Bool a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A setup expression sequenced before the left subtraction operand must not affect subtraction.",
+    "law": "(= (fuzz-sub (do {setup} {a}) {b}) (fuzz-sub {a} {b}))"
+  },
+  {
+    "name": "complex_do_inside_sub_right_operand_erases_setup",
+    "section": "control-do",
+    "args": "setup:Bool a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A setup expression sequenced before the right subtraction operand must not affect subtraction.",
+    "law": "(= (fuzz-sub {a} (do {setup} {b})) (fuzz-sub {a} {b}))"
+  },
+  {
+    "name": "complex_do_inside_mul_left_operand_erases_setup",
+    "section": "control-do",
+    "args": "setup:Bool a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A setup expression sequenced before the left multiplication operand must not affect multiplication.",
+    "law": "(= (fuzz-mul (do {setup} {a}) {b}) (fuzz-mul {a} {b}))"
+  },
+  {
+    "name": "complex_do_inside_mul_right_operand_erases_setup",
+    "section": "control-do",
+    "args": "setup:Bool a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A setup expression sequenced before the right multiplication operand must not affect multiplication.",
+    "law": "(= (fuzz-mul {a} (do {setup} {b})) (fuzz-mul {a} {b}))"
+  },
+  {
+    "name": "complex_do_inside_comparison_left_operand_erases_setup",
+    "section": "control-do",
+    "args": "setup:Int a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Sequencing before the left comparison operand must not affect less-than.",
+    "law": "(= (fuzz-lt? (do {setup} {a}) {b}) (fuzz-lt? {a} {b}))"
+  },
+  {
+    "name": "complex_do_inside_comparison_right_operand_erases_setup",
+    "section": "control-do",
+    "args": "setup:Int a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Sequencing before the right comparison operand must not affect less-than.",
+    "law": "(= (fuzz-lt? {a} (do {setup} {b})) (fuzz-lt? {a} {b}))"
+  },
+  {
+    "name": "complex_do_inside_if_condition_erases_setup",
+    "section": "control-do-if",
+    "args": "setup:Int cond:Bool a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Sequencing an Int setup before an if condition must not change the selected branch.",
+    "law": "(= (if (do {setup} {cond}) {a} {b}) (if {cond} {a} {b}))"
+  },
+  {
+    "name": "complex_do_inside_if_then_branch_erases_setup",
+    "section": "control-do-if",
+    "args": "setup:Bool cond:Bool a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Sequencing before only the then branch must be equivalent to the original branch value.",
+    "law": "(= (if {cond} (do {setup} {a}) {b}) (if {cond} {a} {b}))"
+  },
+  {
+    "name": "complex_do_inside_if_else_branch_erases_setup",
+    "section": "control-do-if",
+    "args": "setup:Bool cond:Bool a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Sequencing before only the else branch must be equivalent to the original branch value.",
+    "law": "(= (if {cond} {a} (do {setup} {b})) (if {cond} {a} {b}))"
+  },
+  {
+    "name": "complex_do_nested_if_condition_last_value",
+    "section": "control-do-if",
+    "args": "setup1:Int setup2:Int cond:Bool a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Nested do forms in an if condition must expose only the final Bool.",
+    "law": "(= (if (do {setup1} (do {setup2} {cond})) {a} {b}) (if {cond} {a} {b}))"
+  },
+  {
+    "name": "complex_do_branchwise_bool_result",
+    "section": "control-do-if",
+    "args": "setup:Int cond:Bool p:Bool q:Bool",
+    "type": "Bool",
+    "expect": "True",
+    "description": "An if returning Bool through do-wrapped branches must match the direct Bool if.",
+    "law": "(= (if {cond} (do {setup} {p}) (do {setup} {q})) (if {cond} {p} {q}))"
+  },
+  {
+    "name": "complex_do_triple_returns_final_int",
+    "section": "control-do",
+    "args": "a:Int b:Bool c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A three-expression do form with mixed types must return the final Int expression.",
+    "law": "(= (do {a} {b} {c}) {c})"
+  },
+  {
+    "name": "complex_do_triple_returns_final_bool",
+    "section": "control-do",
+    "args": "a:Int b:Int c:Bool",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A three-expression do form with mixed types must return the final Bool expression.",
+    "law": "(= (do {a} {b} {c}) {c})"
+  },
+  {
+    "name": "complex_do_false_expected_after_true_setup",
+    "section": "control-do-negative",
+    "args": "setup:Int",
+    "type": "Bool",
+    "expect": "False",
+    "description": "A do form that ends in False must print False even after an arbitrary setup expression.",
+    "law": "(do {setup} True False)"
+  },
+  {
+    "name": "complex_do_true_expected_after_false_setup",
+    "section": "control-do",
+    "args": "setup:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A do form that ends in True must print True even after a False middle expression.",
+    "law": "(do {setup} False True)"
+  },
+  {
+    "name": "complex_with_condition_binding_controls_int_if",
+    "section": "binding-if",
+    "args": "cond:Bool a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A Bool bound in with must control the same Int branch as the original condition.",
+    "law": "(= (with [flag {cond}] (if flag {a} {b})) (if {cond} {a} {b}))"
+  },
+  {
+    "name": "complex_with_condition_binding_controls_bool_if",
+    "section": "binding-if",
+    "args": "cond:Bool p:Bool q:Bool",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A Bool bound in with must control the same Bool branch as the original condition.",
+    "law": "(= (with [flag {cond}] (if flag {p} {q})) (if {cond} {p} {q}))"
+  },
+  {
+    "name": "complex_with_int_binding_used_in_both_if_branches",
+    "section": "binding-if",
+    "args": "cond:Bool value:Int offset:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A with-bound Int used in both branches must remain the same value regardless of condition.",
+    "law": "(= (with [x {value}] (if {cond} (fuzz-add x {offset}) (fuzz-add x {offset}))) (fuzz-add {value} {offset}))"
+  },
+  {
+    "name": "complex_with_shadowed_condition_inside_then_branch",
+    "section": "binding-if",
+    "args": "cond:Bool a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A Bool condition shadowed inside the then branch must not affect outer branch selection.",
+    "law": "(= (with [flag {cond}] (if flag (with [flag False] {a}) {b})) (if {cond} {a} {b}))"
+  },
+  {
+    "name": "complex_with_shadowed_condition_inside_else_branch",
+    "section": "binding-if",
+    "args": "cond:Bool a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A Bool condition shadowed inside the else branch must not affect outer branch selection.",
+    "law": "(= (with [flag {cond}] (if flag {a} (with [flag True] {b}))) (if {cond} {a} {b}))"
+  },
+  {
+    "name": "complex_with_shadowed_int_inside_then_branch",
+    "section": "binding-if",
+    "args": "cond:Bool outer:Int inner:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "An Int binding shadowed only inside the then branch must affect only that branch.",
+    "law": "(= (with [x {outer}] (if {cond} (with [x {inner}] x) {b})) (if {cond} {inner} {b}))"
+  },
+  {
+    "name": "complex_with_shadowed_int_inside_else_branch",
+    "section": "binding-if",
+    "args": "cond:Bool outer:Int inner:Int a:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "An Int binding shadowed only inside the else branch must affect only that branch.",
+    "law": "(= (with [x {outer}] (if {cond} {a} (with [x {inner}] x))) (if {cond} {a} {inner}))"
+  },
+  {
+    "name": "complex_with_multiple_bindings_expression_dependencies",
+    "section": "binding",
+    "args": "a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Later with bindings may depend on earlier bindings and should preserve the expected expanded expression.",
+    "law": "(= (with [x {a} y (fuzz-add x {b}) z (fuzz-sub y {c})] z) (fuzz-sub (fuzz-add {a} {b}) {c}))"
+  },
+  {
+    "name": "complex_with_dependency_shadowing_order",
+    "section": "binding",
+    "args": "a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Shadowing after a dependent binding must not retroactively change the earlier dependent value.",
+    "law": "(= (with [x {a} y (fuzz-add x {b}) x {c}] (fuzz-sub y x)) (fuzz-sub (fuzz-add {a} {b}) {c}))"
+  },
+  {
+    "name": "complex_with_do_preserves_bound_value_after_setup",
+    "section": "binding-do",
+    "args": "value:Int setup:Bool",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A bound Int returned after a setup expression inside do must preserve the bound value.",
+    "law": "(= (with [x {value}] (do {setup} x)) {value})"
+  },
+  {
+    "name": "complex_with_do_shadowed_value_is_last",
+    "section": "binding-do",
+    "args": "outer:Int inner:Int setup:Bool",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A shadowed value inside a do body must return the innermost binding.",
+    "law": "(= (with [x {outer}] (do {setup} (with [x {inner}] x))) {inner})"
+  },
+  {
+    "name": "complex_with_do_outer_visible_after_inner_expression",
+    "section": "binding-do",
+    "args": "outer:Int inner:Int setup:Bool",
+    "type": "Bool",
+    "expect": "True",
+    "description": "An outer binding must remain visible after an inner shadowing expression has completed.",
+    "law": "(= (with [x {outer}] (do (with [x {inner}] x) (do {setup} x))) {outer})"
+  },
+  {
+    "name": "complex_with_if_bound_min_branch",
+    "section": "binding-order",
+    "args": "a:Int b:Int fallback:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Binding min and max must make the less-or-equal branch choose the min value.",
+    "law": "(= (with [lo (fuzz-min {a} {b}) hi (fuzz-max {a} {b})] (if (fuzz-lte? lo hi) lo {fallback})) (fuzz-min {a} {b}))"
+  },
+  {
+    "name": "complex_with_if_bound_max_branch",
+    "section": "binding-order",
+    "args": "a:Int b:Int fallback:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Binding min and max must make the greater-or-equal branch choose the max value.",
+    "law": "(= (with [lo (fuzz-min {a} {b}) hi (fuzz-max {a} {b})] (if (fuzz-gte? hi lo) hi {fallback})) (fuzz-max {a} {b}))"
+  },
+  {
+    "name": "complex_with_bound_min_max_sum_through_do",
+    "section": "binding-order",
+    "args": "a:Int b:Int setup:Bool",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Min/max decomposition of a pair must survive with binding and do sequencing.",
+    "law": "(= (with [lo (fuzz-min {a} {b}) hi (fuzz-max {a} {b})] (do {setup} (fuzz-add lo hi))) (fuzz-add {a} {b}))"
+  },
+  {
+    "name": "complex_with_bound_min_max_difference_abs_branch",
+    "section": "binding-order",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "The difference between max and min should match the branchwise non-negative difference.",
+    "law": "(= (with [lo (fuzz-min {a} {b}) hi (fuzz-max {a} {b})] (fuzz-sub hi lo)) (if (fuzz-lte? {a} {b}) (fuzz-sub {b} {a}) (fuzz-sub {a} {b})))"
+  },
+  {
+    "name": "complex_with_bound_condition_reused_in_arithmetic",
+    "section": "binding-if-arithmetic",
+    "args": "cond:Bool a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A bound condition reused around arithmetic must be equivalent to direct use of the original condition.",
+    "law": "(= (with [flag {cond}] (fuzz-add (if flag {a} {b}) (if flag {c} {a}))) (fuzz-add (if {cond} {a} {b}) (if {cond} {c} {a})))"
+  },
+  {
+    "name": "complex_with_bound_expression_used_in_nested_if",
+    "section": "binding-if",
+    "args": "a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A computed with-bound expression used in a nested if must equal the expanded expression.",
+    "law": "(= (with [x (fuzz-add {a} {b})] (if (fuzz-lt? x {c}) x {c})) (if (fuzz-lt? (fuzz-add {a} {b}) {c}) (fuzz-add {a} {b}) {c}))"
+  },
+  {
+    "name": "complex_order_lt_implies_not_gte_via_if",
+    "section": "order-logic",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Strict less-than must make the reversed greater-or-equal false only through the encoded branch.",
+    "law": "(if (fuzz-lt? {a} {b}) (= (fuzz-gte? {a} {b}) False) True)"
+  },
+  {
+    "name": "complex_order_gt_implies_not_lte_via_if",
+    "section": "order-logic",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Strict greater-than must make less-or-equal false through encoded implication.",
+    "law": "(if (fuzz-gt? {a} {b}) (= (fuzz-lte? {a} {b}) False) True)"
+  },
+  {
+    "name": "complex_order_lte_and_gte_force_equality",
+    "section": "order-logic",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "If both less-or-equal and greater-or-equal hold, equality must hold.",
+    "law": "(if (fuzz-lte? {a} {b}) (if (fuzz-gte? {a} {b}) (= {a} {b}) True) True)"
+  },
+  {
+    "name": "complex_order_equality_forces_two_sided_bounds",
+    "section": "order-logic",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Equality must imply both less-or-equal and greater-or-equal when encoded with nested if.",
+    "law": "(if (= {a} {b}) (if (fuzz-lte? {a} {b}) (fuzz-gte? {a} {b}) False) True)"
+  },
+  {
+    "name": "complex_order_lt_forces_lte_not_equal",
+    "section": "order-logic",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Strict less-than must imply non-equality while preserving less-or-equal.",
+    "law": "(if (fuzz-lt? {a} {b}) (if (fuzz-lte? {a} {b}) (!= {a} {b}) False) True)"
+  },
+  {
+    "name": "complex_order_gt_forces_gte_not_equal",
+    "section": "order-logic",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Strict greater-than must imply non-equality while preserving greater-or-equal.",
+    "law": "(if (fuzz-gt? {a} {b}) (if (fuzz-gte? {a} {b}) (!= {a} {b}) False) True)"
+  },
+  {
+    "name": "complex_order_lte_partition_lt_or_eq",
+    "section": "order-logic",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Less-or-equal must partition into strict less-than or equality.",
+    "law": "(if (fuzz-lte? {a} {b}) (if (fuzz-lt? {a} {b}) True (= {a} {b})) True)"
+  },
+  {
+    "name": "complex_order_gte_partition_gt_or_eq",
+    "section": "order-logic",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Greater-or-equal must partition into strict greater-than or equality.",
+    "law": "(if (fuzz-gte? {a} {b}) (if (fuzz-gt? {a} {b}) True (= {a} {b})) True)"
+  },
+  {
+    "name": "complex_order_totality_lte_or_gte_nested",
+    "section": "order-logic",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "At least one of less-or-equal or greater-or-equal must hold for generated Int expressions.",
+    "law": "(if (fuzz-lte? {a} {b}) True (fuzz-gte? {a} {b}))"
+  },
+  {
+    "name": "complex_order_totality_lt_eq_gt_nested",
+    "section": "order-logic",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Exactly the trichotomy path must make one of less-than, equality, or greater-than true.",
+    "law": "(if (fuzz-lt? {a} {b}) True (if (= {a} {b}) True (fuzz-gt? {a} {b})))"
+  },
+  {
+    "name": "complex_order_lt_transitive_nested_if",
+    "section": "order-logic",
+    "args": "a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Strict less-than transitivity should hold through nested if guards.",
+    "law": "(if (fuzz-lt? {a} {b}) (if (fuzz-lt? {b} {c}) (fuzz-lt? {a} {c}) True) True)"
+  },
+  {
+    "name": "complex_order_gt_transitive_nested_if",
+    "section": "order-logic",
+    "args": "a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Strict greater-than transitivity should hold through nested if guards.",
+    "law": "(if (fuzz-gt? {a} {b}) (if (fuzz-gt? {b} {c}) (fuzz-gt? {a} {c}) True) True)"
+  },
+  {
+    "name": "complex_order_lte_transitive_nested_if",
+    "section": "order-logic",
+    "args": "a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Less-or-equal transitivity should hold through nested if guards.",
+    "law": "(if (fuzz-lte? {a} {b}) (if (fuzz-lte? {b} {c}) (fuzz-lte? {a} {c}) True) True)"
+  },
+  {
+    "name": "complex_order_gte_transitive_nested_if",
+    "section": "order-logic",
+    "args": "a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Greater-or-equal transitivity should hold through nested if guards.",
+    "law": "(if (fuzz-gte? {a} {b}) (if (fuzz-gte? {b} {c}) (fuzz-gte? {a} {c}) True) True)"
+  },
+  {
+    "name": "complex_order_lt_not_symmetric",
+    "section": "order-negative",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "False",
+    "description": "Both directions of strict less-than cannot be true simultaneously.",
+    "law": "(if (fuzz-lt? {a} {b}) (fuzz-lt? {b} {a}) False)"
+  },
+  {
+    "name": "complex_order_gt_not_symmetric",
+    "section": "order-negative",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "False",
+    "description": "Both directions of strict greater-than cannot be true simultaneously.",
+    "law": "(if (fuzz-gt? {a} {b}) (fuzz-gt? {b} {a}) False)"
+  },
+  {
+    "name": "complex_order_self_lt_via_do_false",
+    "section": "order-negative",
+    "args": "setup:Int a:Int",
+    "type": "Bool",
+    "expect": "False",
+    "description": "Strict less-than of a value against itself must remain false after do sequencing.",
+    "law": "(do {setup} (fuzz-lt? {a} {a}))"
+  },
+  {
+    "name": "complex_order_self_gt_via_do_false",
+    "section": "order-negative",
+    "args": "setup:Int a:Int",
+    "type": "Bool",
+    "expect": "False",
+    "description": "Strict greater-than of a value against itself must remain false after do sequencing.",
+    "law": "(do {setup} (fuzz-gt? {a} {a}))"
+  },
+  {
+    "name": "complex_lattice_min_distributes_over_max_left",
+    "section": "lattice",
+    "args": "a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "In a total order, min distributes over max on the left.",
+    "law": "(= (fuzz-min {a} (fuzz-max {b} {c})) (fuzz-max (fuzz-min {a} {b}) (fuzz-min {a} {c})))"
+  },
+  {
+    "name": "complex_lattice_min_distributes_over_max_right",
+    "section": "lattice",
+    "args": "a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "In a total order, min distributes over max on the right.",
+    "law": "(= (fuzz-min (fuzz-max {a} {b}) {c}) (fuzz-max (fuzz-min {a} {c}) (fuzz-min {b} {c})))"
+  },
+  {
+    "name": "complex_lattice_max_distributes_over_min_left",
+    "section": "lattice",
+    "args": "a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "In a total order, max distributes over min on the left.",
+    "law": "(= (fuzz-max {a} (fuzz-min {b} {c})) (fuzz-min (fuzz-max {a} {b}) (fuzz-max {a} {c})))"
+  },
+  {
+    "name": "complex_lattice_max_distributes_over_min_right",
+    "section": "lattice",
+    "args": "a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "In a total order, max distributes over min on the right.",
+    "law": "(= (fuzz-max (fuzz-min {a} {b}) {c}) (fuzz-min (fuzz-max {a} {c}) (fuzz-max {b} {c})))"
+  },
+  {
+    "name": "complex_lattice_median_identity_form_one",
+    "section": "lattice",
+    "args": "a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Two canonical min/max median encodings must agree.",
+    "law": "(= (fuzz-max (fuzz-min {a} {b}) (fuzz-min (fuzz-max {a} {b}) {c})) (fuzz-min (fuzz-max {a} {b}) (fuzz-max (fuzz-min {a} {b}) {c})))"
+  },
+  {
+    "name": "complex_lattice_median_identity_form_two",
+    "section": "lattice",
+    "args": "a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "The median encoded as max of pairwise mins must equal min of pairwise maxes.",
+    "law": "(= (fuzz-max (fuzz-max (fuzz-min {a} {b}) (fuzz-min {a} {c})) (fuzz-min {b} {c})) (fuzz-min (fuzz-min (fuzz-max {a} {b}) (fuzz-max {a} {c})) (fuzz-max {b} {c})))"
+  },
+  {
+    "name": "complex_lattice_max_of_min_pair_is_left_when_lower_bound",
+    "section": "lattice",
+    "args": "a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "If a is less than or equal to both bounds, max of the two mins with a must recover a.",
+    "law": "(if (fuzz-lte? {a} {b}) (if (fuzz-lte? {a} {c}) (= (fuzz-max (fuzz-min {a} {b}) (fuzz-min {a} {c})) {a}) True) True)"
+  },
+  {
+    "name": "complex_lattice_min_of_max_pair_is_left_when_upper_bound",
+    "section": "lattice",
+    "args": "a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "If a is greater than or equal to both bounds, min of the two maxes with a must recover a.",
+    "law": "(if (fuzz-gte? {a} {b}) (if (fuzz-gte? {a} {c}) (= (fuzz-min (fuzz-max {a} {b}) (fuzz-max {a} {c})) {a}) True) True)"
+  },
+  {
+    "name": "complex_lattice_min_max_idempotent_deep",
+    "section": "lattice",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A deep alternation of min and max should collapse by absorption.",
+    "law": "(= (fuzz-min {a} (fuzz-max {a} (fuzz-min {a} {b}))) {a})"
+  },
+  {
+    "name": "complex_lattice_max_min_idempotent_deep",
+    "section": "lattice",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A deep alternation of max and min should collapse by absorption.",
+    "law": "(= (fuzz-max {a} (fuzz-min {a} (fuzz-max {a} {b}))) {a})"
+  },
+  {
+    "name": "complex_lattice_min_associative_four_terms",
+    "section": "lattice",
+    "args": "a:Int b:Int c:Int d:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Four-way regrouping of min should be associative.",
+    "law": "(= (fuzz-min (fuzz-min {a} {b}) (fuzz-min {c} {d})) (fuzz-min {a} (fuzz-min {b} (fuzz-min {c} {d}))))"
+  },
+  {
+    "name": "complex_lattice_max_associative_four_terms",
+    "section": "lattice",
+    "args": "a:Int b:Int c:Int d:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Four-way regrouping of max should be associative.",
+    "law": "(= (fuzz-max (fuzz-max {a} {b}) (fuzz-max {c} {d})) (fuzz-max {a} (fuzz-max {b} (fuzz-max {c} {d}))))"
+  },
+  {
+    "name": "complex_lattice_min_max_sum_preserves_two_values",
+    "section": "lattice-arithmetic",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "For two values, min plus max must equal the original sum.",
+    "law": "(= (fuzz-add (fuzz-min {a} {b}) (fuzz-max {a} {b})) (fuzz-add {a} {b}))"
+  },
+  {
+    "name": "complex_lattice_min_max_product_preserves_two_values",
+    "section": "lattice-arithmetic",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "For two values, min times max must equal the original product.",
+    "law": "(= (fuzz-mul (fuzz-min {a} {b}) (fuzz-max {a} {b})) (fuzz-mul {a} {b}))"
+  },
+  {
+    "name": "complex_lattice_min_selected_by_lte_guard",
+    "section": "lattice-selection",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "When a <= b, min must select a; otherwise it must select b.",
+    "law": "(= (fuzz-min {a} {b}) (if (fuzz-lte? {a} {b}) {a} {b}))"
+  },
+  {
+    "name": "complex_lattice_max_selected_by_lte_guard",
+    "section": "lattice-selection",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "When a <= b, max must select b; otherwise it must select a.",
+    "law": "(= (fuzz-max {a} {b}) (if (fuzz-lte? {a} {b}) {b} {a}))"
+  },
+  {
+    "name": "complex_lattice_min_selected_by_gte_guard",
+    "section": "lattice-selection",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "When a >= b, min must select b; otherwise it must select a.",
+    "law": "(= (fuzz-min {a} {b}) (if (fuzz-gte? {a} {b}) {b} {a}))"
+  },
+  {
+    "name": "complex_lattice_max_selected_by_gte_guard",
+    "section": "lattice-selection",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "When a >= b, max must select a; otherwise it must select b.",
+    "law": "(= (fuzz-max {a} {b}) (if (fuzz-gte? {a} {b}) {a} {b}))"
+  },
+  {
+    "name": "complex_lattice_min_result_is_one_operand",
+    "section": "lattice-selection",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "The min of two generated Int expressions must be equal to one of the operands.",
+    "law": "(if (= (fuzz-min {a} {b}) {a}) True (= (fuzz-min {a} {b}) {b}))"
+  },
+  {
+    "name": "complex_lattice_max_result_is_one_operand",
+    "section": "lattice-selection",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "The max of two generated Int expressions must be equal to one of the operands.",
+    "law": "(if (= (fuzz-max {a} {b}) {a}) True (= (fuzz-max {a} {b}) {b}))"
+  },
+  {
+    "name": "complex_lattice_min_between_bounds",
+    "section": "lattice-order",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "The minimum must be less than or equal to the maximum.",
+    "law": "(fuzz-lte? (fuzz-min {a} {b}) (fuzz-max {a} {b}))"
+  },
+  {
+    "name": "complex_lattice_no_value_below_min_and_above_max",
+    "section": "lattice-order",
+    "args": "a:Int b:Int x:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A value below both operands is below min; a value above both operands is above max.",
+    "law": "(if (fuzz-lte? {x} {a}) (if (fuzz-lte? {x} {b}) (fuzz-lte? {x} (fuzz-min {a} {b})) True) True)"
+  },
+  {
+    "name": "complex_lattice_value_above_both_above_max",
+    "section": "lattice-order",
+    "args": "a:Int b:Int x:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A value above both operands must be above their max.",
+    "law": "(if (fuzz-gte? {x} {a}) (if (fuzz-gte? {x} {b}) (fuzz-gte? {x} (fuzz-max {a} {b})) True) True)"
+  },
+  {
+    "name": "complex_lattice_clamp_lower_bound_when_ordered",
+    "section": "lattice-clamp",
+    "args": "x:Int lo:Int hi:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "When lo <= hi, clamping with max then min must never fall below lo.",
+    "law": "(if (fuzz-lte? {lo} {hi}) (fuzz-lte? {lo} (fuzz-min (fuzz-max {x} {lo}) {hi})) True)"
+  },
+  {
+    "name": "complex_lattice_clamp_upper_bound_when_ordered",
+    "section": "lattice-clamp",
+    "args": "x:Int lo:Int hi:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "When lo <= hi, clamping with max then min must never exceed hi.",
+    "law": "(if (fuzz-lte? {lo} {hi}) (fuzz-lte? (fuzz-min (fuzz-max {x} {lo}) {hi}) {hi}) True)"
+  },
+  {
+    "name": "complex_lattice_clamp_idempotent_when_ordered",
+    "section": "lattice-clamp",
+    "args": "x:Int lo:Int hi:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A clamped value should be idempotent under the same clamp when bounds are ordered.",
+    "law": "(if (fuzz-lte? {lo} {hi}) (= (fuzz-min (fuzz-max (fuzz-min (fuzz-max {x} {lo}) {hi}) {lo}) {hi}) (fuzz-min (fuzz-max {x} {lo}) {hi})) True)"
+  },
+  {
+    "name": "complex_lattice_clamp_passthrough_when_in_range",
+    "section": "lattice-clamp",
+    "args": "x:Int lo:Int hi:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "When x is between ordered bounds, clamp should return x.",
+    "law": "(if (fuzz-lte? {lo} {x}) (if (fuzz-lte? {x} {hi}) (= (fuzz-min (fuzz-max {x} {lo}) {hi}) {x}) True) True)"
+  },
+  {
+    "name": "complex_arith_nested_add_sub_cancels_middle",
+    "section": "arithmetic-normalization",
+    "args": "a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A deeply nested add/sub expression should cancel the middle addend.",
+    "law": "(= (fuzz-sub (fuzz-add (fuzz-add {a} {b}) {c}) (fuzz-add {b} {c})) {a})"
+  },
+  {
+    "name": "complex_arith_sub_of_two_offsets_cancels_base",
+    "section": "arithmetic-normalization",
+    "args": "base:Int left:Int right:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Subtracting two values sharing the same base should remove the base and leave the offset difference.",
+    "law": "(= (fuzz-sub (fuzz-add {base} {left}) (fuzz-add {base} {right})) (fuzz-sub {left} {right}))"
+  },
+  {
+    "name": "complex_arith_add_of_differences_regroups",
+    "section": "arithmetic-normalization",
+    "args": "a:Int b:Int c:Int d:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "The sum of two differences should regroup to subtract the sum of subtrahends.",
+    "law": "(= (fuzz-add (fuzz-sub {a} {b}) (fuzz-sub {c} {d})) (fuzz-sub (fuzz-add {a} {c}) (fuzz-add {b} {d})))"
+  },
+  {
+    "name": "complex_arith_difference_of_sums_regroups",
+    "section": "arithmetic-normalization",
+    "args": "a:Int b:Int c:Int d:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "The difference of two sums should regroup to sum the pairwise differences.",
+    "law": "(= (fuzz-sub (fuzz-add {a} {b}) (fuzz-add {c} {d})) (fuzz-add (fuzz-sub {a} {c}) (fuzz-sub {b} {d})))"
+  },
+  {
+    "name": "complex_arith_mul_difference_of_sums_distributes",
+    "section": "arithmetic-normalization",
+    "args": "k:Int a:Int b:Int c:Int d:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Multiplying a regrouped difference of sums should agree with distributing over pairwise differences.",
+    "law": "(= (fuzz-mul {k} (fuzz-sub (fuzz-add {a} {b}) (fuzz-add {c} {d}))) (fuzz-add (fuzz-mul {k} (fuzz-sub {a} {c})) (fuzz-mul {k} (fuzz-sub {b} {d}))))"
+  },
+  {
+    "name": "complex_arith_square_difference_factorization",
+    "section": "arithmetic-normalization",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "The difference of squares factorization should hold for generated Int expressions.",
+    "law": "(= (fuzz-sub (fuzz-mul {a} {a}) (fuzz-mul {b} {b})) (fuzz-mul (fuzz-sub {a} {b}) (fuzz-add {a} {b})))"
+  },
+  {
+    "name": "complex_arith_binomial_square_expansion",
+    "section": "arithmetic-normalization",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "The square of a sum must match the expanded binomial form.",
+    "law": "(= (fuzz-mul (fuzz-add {a} {b}) (fuzz-add {a} {b})) (fuzz-add (fuzz-add (fuzz-mul {a} {a}) (fuzz-mul (fuzz-mul 2 {a}) {b})) (fuzz-mul {b} {b})))"
+  },
+  {
+    "name": "complex_arith_binomial_difference_square_expansion",
+    "section": "arithmetic-normalization",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "The square of a difference must match the expanded binomial form.",
+    "law": "(= (fuzz-mul (fuzz-sub {a} {b}) (fuzz-sub {a} {b})) (fuzz-add (fuzz-sub (fuzz-mul {a} {a}) (fuzz-mul (fuzz-mul 2 {a}) {b})) (fuzz-mul {b} {b})))"
+  },
+  {
+    "name": "complex_arith_mul_by_sum_of_three_distributes",
+    "section": "arithmetic-normalization",
+    "args": "k:Int a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Multiplication must distribute over a three-term sum.",
+    "law": "(= (fuzz-mul {k} (fuzz-add {a} (fuzz-add {b} {c}))) (fuzz-add (fuzz-mul {k} {a}) (fuzz-add (fuzz-mul {k} {b}) (fuzz-mul {k} {c}))))"
+  },
+  {
+    "name": "complex_arith_sum_of_scaled_terms_factors",
+    "section": "arithmetic-normalization",
+    "args": "k:Int a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A common multiplicative factor across three terms should factor out.",
+    "law": "(= (fuzz-add (fuzz-mul {k} {a}) (fuzz-add (fuzz-mul {k} {b}) (fuzz-mul {k} {c}))) (fuzz-mul {k} (fuzz-add {a} (fuzz-add {b} {c}))))"
+  },
+  {
+    "name": "complex_arith_negated_sum_equals_sum_of_negations",
+    "section": "arithmetic-normalization",
+    "args": "a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Negating a three-term sum should equal summing the individual negations.",
+    "law": "(= (fuzz-sub 0 (fuzz-add {a} (fuzz-add {b} {c}))) (fuzz-add (fuzz-sub 0 {a}) (fuzz-add (fuzz-sub 0 {b}) (fuzz-sub 0 {c}))))"
+  },
+  {
+    "name": "complex_arith_subtracting_negated_sum_adds",
+    "section": "arithmetic-normalization",
+    "args": "a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Subtracting a negated sum should add the positive terms.",
+    "law": "(= (fuzz-sub {a} (fuzz-sub 0 (fuzz-add {b} {c}))) (fuzz-add {a} (fuzz-add {b} {c})))"
+  },
+  {
+    "name": "complex_arith_add_then_subtract_nested_if_operand",
+    "section": "arithmetic-if",
+    "args": "cond:Bool a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Adding and then subtracting the same if-selected operand must recover the base.",
+    "law": "(= (fuzz-sub (fuzz-add {a} (if {cond} {b} {c})) (if {cond} {b} {c})) {a})"
+  },
+  {
+    "name": "complex_arith_subtract_then_add_nested_if_operand",
+    "section": "arithmetic-if",
+    "args": "cond:Bool a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Subtracting and then adding the same if-selected operand must recover the base.",
+    "law": "(= (fuzz-add (fuzz-sub {a} (if {cond} {b} {c})) (if {cond} {b} {c})) {a})"
+  },
+  {
+    "name": "complex_arith_if_selected_zero_absorbs_multiplication",
+    "section": "arithmetic-if",
+    "args": "cond:Bool a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Multiplication by an if-selected zero should produce zero regardless of the other branch path.",
+    "law": "(= (fuzz-mul {a} (if {cond} 0 (fuzz-sub {b} {b}))) 0)"
+  },
+  {
+    "name": "complex_arith_if_selected_one_identity_multiplication",
+    "section": "arithmetic-if",
+    "args": "cond:Bool a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Multiplication by an if-selected one should preserve the other operand.",
+    "law": "(= (fuzz-mul {a} (if {cond} 1 (fuzz-add (fuzz-sub {b} {b}) 1))) {a})"
+  },
+  {
+    "name": "complex_arith_helper_add_sub_roundtrip_through_id",
+    "section": "arithmetic-function",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A value passed through identity after add/sub roundtrip should preserve the original expression.",
+    "law": "(= (fuzz-id-int (fuzz-sub (fuzz-add (fuzz-id-int {a}) {b}) {b})) {a})"
+  },
+  {
+    "name": "complex_arith_helper_mul_one_roundtrip_through_id",
+    "section": "arithmetic-function",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "A value multiplied by a computed one and passed through identity should preserve the original.",
+    "law": "(= (fuzz-id-int (fuzz-mul {a} (fuzz-add 1 (fuzz-sub {b} {b})))) {a})"
+  },
+  {
+    "name": "complex_arith_expected_false_successor_equals_self",
+    "section": "arithmetic-negative",
+    "args": "a:Int",
+    "type": "Bool",
+    "expect": "False",
+    "description": "A value plus one should not equal the value itself in generated ranges.",
+    "law": "(= (fuzz-add {a} 1) {a})"
+  },
+  {
+    "name": "complex_arith_expected_false_double_is_zero_unless_not_asserted",
+    "section": "arithmetic-negative",
+    "args": "a:Int",
+    "type": "Bool",
+    "expect": "False",
+    "description": "The expression a-a+1 equals zero should always be false.",
+    "law": "(= (fuzz-add (fuzz-sub {a} {a}) 1) 0)"
+  },
+  {
+    "name": "complex_function_choose_less_matches_min_with_fallback_second",
+    "section": "function-order",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Choosing the lesser value with the right operand as fallback should match min.",
+    "law": "(= (fuzz-choose-less {a} {b} {b}) (fuzz-min {a} {b}))"
+  },
+  {
+    "name": "complex_function_choose_less_matches_if_after_binding",
+    "section": "function-order-binding",
+    "args": "a:Int b:Int fallback:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "The choose-less helper must match its if definition even when operands are bound first.",
+    "law": "(= (with [x {a} y {b} z {fallback}] (fuzz-choose-less x y z)) (with [x {a} y {b} z {fallback}] (if (fuzz-lt? x y) x z)))"
+  },
+  {
+    "name": "complex_function_choose_less_with_max_fallback",
+    "section": "function-order",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Choosing a when it is less than b and otherwise max(a,b) must always produce min/max-selected value equal to min when ordered or max otherwise.",
+    "law": "(= (fuzz-choose-less {a} {b} (fuzz-max {a} {b})) (if (fuzz-lt? {a} {b}) {a} (fuzz-max {a} {b})))"
+  },
+  {
+    "name": "complex_function_min_max_helpers_are_order_duals",
+    "section": "function-order",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Min and max helpers should swap when argument order is swapped.",
+    "law": "(= (fuzz-add (fuzz-min {a} {b}) (fuzz-max {b} {a})) (fuzz-add (fuzz-min {b} {a}) (fuzz-max {a} {b})))"
+  },
+  {
+    "name": "complex_function_predicate_helpers_branch_consistency",
+    "section": "function-order",
+    "args": "a:Int b:Int yes:Int no:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Comparison helper predicates used as if conditions must agree with direct operator branches.",
+    "law": "(= (if (fuzz-lt? {a} {b}) {yes} {no}) (if (< {a} {b}) {yes} {no}))"
+  },
+  {
+    "name": "complex_function_equality_helper_branch_consistency",
+    "section": "function-order",
+    "args": "a:Int b:Int yes:Int no:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "The typed equality helper used as an if condition must agree with direct equality.",
+    "law": "(= (if (fuzz-eq-int? {a} {b}) {yes} {no}) (if (= {a} {b}) {yes} {no}))"
+  },
+  {
+    "name": "complex_function_bool_idempotent_through_nested_if",
+    "section": "function-bool",
+    "args": "cond:Bool p:Bool q:Bool",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Bool identity must commute through nested Bool if expressions.",
+    "law": "(= (fuzz-bool-id? (if {cond} (fuzz-bool-id? {p}) (fuzz-bool-id? {q}))) (if (fuzz-bool-id? {cond}) {p} {q}))"
+  },
+  {
+    "name": "complex_function_int_id_commutes_with_min",
+    "section": "function-order",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Int identity should commute with min helper application.",
+    "law": "(= (fuzz-id-int (fuzz-min {a} {b})) (fuzz-min (fuzz-id-int {a}) (fuzz-id-int {b})))"
+  },
+  {
+    "name": "complex_function_int_id_commutes_with_max",
+    "section": "function-order",
+    "args": "a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Int identity should commute with max helper application.",
+    "law": "(= (fuzz-id-int (fuzz-max {a} {b})) (fuzz-max (fuzz-id-int {a}) (fuzz-id-int {b})))"
+  },
+  {
+    "name": "complex_function_comparison_helpers_survive_do_wrapping",
+    "section": "function-order-do",
+    "args": "setup:Int a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Comparison helpers must ignore setup expressions wrapped through do around operands.",
+    "law": "(= (fuzz-lte? (do {setup} {a}) (do {setup} {b})) (fuzz-lte? {a} {b}))"
+  },
+  {
+    "name": "complex_combo_with_do_if_min_max_branch_sum",
+    "section": "combo",
+    "args": "cond:Bool a:Int b:Int setup:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Combining with, do, if, min, and max should preserve the selected branch sum.",
+    "law": "(= (with [lo (fuzz-min {a} {b}) hi (fuzz-max {a} {b})] (do {setup} (if {cond} (fuzz-add lo hi) (fuzz-sub hi lo)))) (if {cond} (fuzz-add {a} {b}) (fuzz-sub (fuzz-max {a} {b}) (fuzz-min {a} {b}))))"
+  },
+  {
+    "name": "complex_combo_nested_bindings_if_arithmetic_roundtrip",
+    "section": "combo",
+    "args": "cond:Bool a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Nested bindings and an if-selected offset should roundtrip through add/sub cancellation.",
+    "law": "(= (with [x {a} y (if {cond} {b} {c})] (fuzz-sub (fuzz-add x y) y)) {a})"
+  },
+  {
+    "name": "complex_combo_nested_do_if_comparison_roundtrip",
+    "section": "combo",
+    "args": "setup:Int cond:Bool a:Int b:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Do sequencing inside a Bool identity and if condition should preserve comparison branch behavior.",
+    "law": "(= (if (fuzz-bool-id? (do {setup} {cond})) (fuzz-lt? {a} {b}) (fuzz-gte? {a} {b})) (if {cond} (fuzz-lt? {a} {b}) (fuzz-gte? {a} {b})))"
+  },
+  {
+    "name": "complex_combo_ordered_clamp_sum_decomposition",
+    "section": "combo",
+    "args": "x:Int lo:Int hi:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "When bounds are ordered, clamped value should sit between bounds and remain idempotent under with-bound reuse.",
+    "law": "(if (fuzz-lte? {lo} {hi}) (with [c (fuzz-min (fuzz-max {x} {lo}) {hi})] (if (fuzz-lte? {lo} c) (fuzz-lte? c {hi}) False)) True)"
+  },
+  {
+    "name": "complex_combo_min_max_under_same_if_condition",
+    "section": "combo",
+    "args": "cond:Bool a:Int b:Int c:Int d:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Min and max of branchwise if operands should equal branchwise min/max under the same condition.",
+    "law": "(= (fuzz-add (fuzz-min (if {cond} {a} {b}) (if {cond} {c} {d})) (fuzz-max (if {cond} {a} {b}) (if {cond} {c} {d}))) (if {cond} (fuzz-add {a} {c}) (fuzz-add {b} {d})))"
+  },
+  {
+    "name": "complex_combo_deep_shadowing_branch_specific_arithmetic",
+    "section": "combo",
+    "args": "cond:Bool outer:Int inner:Int offset:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "Deep shadowing inside condition-selected branches must remain branch-local while arithmetic uses the selected value.",
+    "law": "(= (with [x {outer}] (if {cond} (with [x {inner}] (fuzz-add x {offset})) (fuzz-sub x {offset}))) (if {cond} (fuzz-add {inner} {offset}) (fuzz-sub {outer} {offset})))"
+  },
+  {
+    "name": "complex_combo_order_implication_with_computed_bounds",
+    "section": "combo",
+    "args": "a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "If c is below both values then it must be below their min, with bindings and helper comparisons involved.",
+    "law": "(with [lo (fuzz-min {a} {b})] (if (fuzz-lte? {c} {a}) (if (fuzz-lte? {c} {b}) (fuzz-lte? {c} lo) True) True))"
+  },
+  {
+    "name": "complex_combo_order_implication_with_computed_upper_bound",
+    "section": "combo",
+    "args": "a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "True",
+    "description": "If c is above both values then it must be above their max, with bindings and helper comparisons involved.",
+    "law": "(with [hi (fuzz-max {a} {b})] (if (fuzz-gte? {c} {a}) (if (fuzz-gte? {c} {b}) (fuzz-gte? {c} hi) True) True))"
+  },
+  {
+    "name": "complex_combo_false_unreachable_strict_cycle",
+    "section": "combo-negative",
+    "args": "a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "False",
+    "description": "A strict increasing cycle cannot be true; this catches incorrect comparison lowering.",
+    "law": "(if (fuzz-lt? {a} {b}) (if (fuzz-lt? {b} {c}) (fuzz-lt? {c} {a}) False) False)"
+  },
+  {
+    "name": "complex_combo_false_reverse_strict_cycle",
+    "section": "combo-negative",
+    "args": "a:Int b:Int c:Int",
+    "type": "Bool",
+    "expect": "False",
+    "description": "A strict decreasing cycle cannot be true; this catches reversed comparison lowering.",
+    "law": "(if (fuzz-gt? {a} {b}) (if (fuzz-gt? {b} {c}) (fuzz-gt? {c} {a}) False) False)"
+  }
+]

@@ -144,9 +144,12 @@ Dispatch architecture ([[file:../context/language.org::176]]):
   | =match=  | 1..N  | [[file:../pmatch.c]]          |
   | =set!=   | 2     | [[file:../codegen.c::7471]]     |
   | =??=     | 2     | [[file:../codegen.c::5763]]     |
+| =do=     | 1..N  | [[file:../codegen.c::7830]]     |
+| =when=   | 2..N  | [[file:../codegen.c::7879]]     |
+| =with=   | 2..N  | [[file:../codegen.c::7841]]     |
 
-  NOT callable (no strcmp handler, [[file:../context/language.org::298]]):
-  =cond=, =when=, =let=, =let*=, =letrec=, =do=, =with=.
+NOT callable (no strcmp handler, [[file:../context/language.org::298]]):
+=cond=, =let=, =let*=, =letrec=.
 
 * Other builtins
 
@@ -193,9 +196,8 @@ Dispatch architecture ([[file:../context/language.org::176]]):
 * NOT callable (summary)
 
   These are register_builtins-only or broken:
-  =map=, =fn=, =defn=, =concat=, =substring=, =reverse=, =nth=,
-  =length=, =reduce=, =cond=, =when=, =let=, =let*=, =letrec=, =do=,
-  =with=, =^= (superscript).
+=map=, =fn=, =defn=, =concat=, =substring=, =reverse=, =nth=,
+=length=, =reduce=, =cond=, =let=, =let*=, =letrec=, =^= (superscript).
 
 * Context Links
 

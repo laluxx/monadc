@@ -1,0 +1,7 @@
+name: complex_with_shadowed_condition_inside_then_branch
+section: binding-if
+args: cond:Bool a:Int b:Int
+type: Bool
+expect: True
+description: A Bool condition shadowed inside the then branch must not affect outer branch selection.
+law: (= (with [flag {cond}] (if flag (with [flag False] {a}) {b})) (if {cond} {a} {b}))

@@ -1,0 +1,7 @@
+name: complex_arith_nested_add_sub_cancels_middle
+section: arithmetic-normalization
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: A deeply nested add/sub expression should cancel the middle addend.
+law: (= (fuzz-sub (fuzz-add (fuzz-add {a} {b}) {c}) (fuzz-add {b} {c})) {a})

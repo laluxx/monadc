@@ -1,0 +1,7 @@
+name: combo_if_array_index_branchwise_generated
+section: feature-interactions
+args: p:Bool a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: if PHI unification must handle array-index results from both branches.
+law: (= (if {p} ([{a} {b}] 1) ([{c} {d}] 0)) (if {p} {b} {c}))

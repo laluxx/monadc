@@ -1,0 +1,7 @@
+name: int_mul_identity_right_value
+section: arithmetic
+args: a:Int
+type: Bool
+expect: True
+description: Multiplying by one on the right must preserve the generated Int expression exactly.
+law: (= (fuzz-mul {a} 1) {a})

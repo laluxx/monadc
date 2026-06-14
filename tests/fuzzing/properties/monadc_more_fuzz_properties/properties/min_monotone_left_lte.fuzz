@@ -1,0 +1,7 @@
+name: min_monotone_left_lte
+section: order
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Min must be monotone in its left operand under less-or-equal.
+law: (if (fuzz-lte? {a} {b}) (fuzz-lte? (fuzz-min {a} {c}) (fuzz-min {b} {c})) True)

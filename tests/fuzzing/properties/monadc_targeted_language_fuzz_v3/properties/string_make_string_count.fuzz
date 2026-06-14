@@ -1,0 +1,7 @@
+name: string_make_string_count
+section: collections
+args: 
+type: Bool
+expect: True
+description: make-string must allocate a string with the requested count.
+law: (= (count (make-string 4 (Char 120))) 4)

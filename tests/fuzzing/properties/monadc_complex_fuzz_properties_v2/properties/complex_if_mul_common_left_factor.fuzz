@@ -1,0 +1,7 @@
+name: complex_if_mul_common_left_factor
+section: control-if-arithmetic
+args: cond:Bool common:Int a:Int b:Int
+type: Bool
+expect: True
+description: Multiplying a common left operand across an if expression must choose branchwise products.
+law: (= (fuzz-mul {common} (if {cond} {a} {b})) (if {cond} (fuzz-mul {common} {a}) (fuzz-mul {common} {b})))

@@ -1,0 +1,7 @@
+name: heap_array_inline_index_literal
+section: collections
+args: 
+type: Bool
+expect: True
+description: Heap array literals must be callable as array indexers.
+law: (= (~[1 2 3] 2) 3)

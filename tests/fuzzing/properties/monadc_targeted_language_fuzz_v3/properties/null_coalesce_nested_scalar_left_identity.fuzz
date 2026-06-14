@@ -1,0 +1,7 @@
+name: null_coalesce_nested_scalar_left_identity
+section: quote-null-path
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Nested null coalescing over scalar Int values must keep the original left value.
+law: (= (?? (?? {a} {b}) {c}) {a})

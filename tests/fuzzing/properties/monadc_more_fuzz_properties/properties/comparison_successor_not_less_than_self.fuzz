@@ -1,0 +1,7 @@
+name: comparison_successor_not_less_than_self
+section: negative
+args: a:Int
+type: Bool
+expect: False
+description: A generated Int plus one must not be less than the original Int.
+law: (fuzz-lt? (fuzz-add {a} 1) {a})

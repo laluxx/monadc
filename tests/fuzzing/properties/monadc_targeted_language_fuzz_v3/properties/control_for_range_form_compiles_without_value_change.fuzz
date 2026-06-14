@@ -1,0 +1,7 @@
+name: control_for_range_form_compiles_without_value_change
+section: control-binding
+args: 
+type: Bool
+expect: True
+description: range for-loop must bind its induction variable and execute without corrupting unrelated locals.
+law: (with [x 3] (begin (for [i 0 5] (set! x x)) (= x 3)))

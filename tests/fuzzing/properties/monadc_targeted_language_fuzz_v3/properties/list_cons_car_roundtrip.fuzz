@@ -1,0 +1,7 @@
+name: list_cons_car_roundtrip
+section: collections
+args: a:Int
+type: Bool
+expect: True
+description: cons followed by car must recover the inserted generated value.
+law: (= (car (cons {a} (list))) {a})

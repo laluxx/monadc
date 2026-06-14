@@ -1,0 +1,7 @@
+name: logic_int_and_true_is_nonzero
+section: logic-coercion
+args: a:Int
+type: Bool
+expect: True
+description: Logical and must coerce an Int operand and preserve True identity.
+law: (= (and {a} True) (!= {a} 0))

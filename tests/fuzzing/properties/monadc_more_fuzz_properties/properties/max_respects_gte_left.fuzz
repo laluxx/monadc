@@ -1,0 +1,7 @@
+name: max_respects_gte_left
+section: order
+args: a:Int b:Int
+type: Bool
+expect: True
+description: If the left value is greater-or-equal, max must return the left value.
+law: (if (fuzz-gte? {a} {b}) (= (fuzz-max {a} {b}) {a}) True)

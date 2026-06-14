@@ -1,0 +1,7 @@
+name: complex_if_branchwise_add_same_condition
+section: control-if-arithmetic
+args: cond:Bool a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Adding two if expressions with the same condition must choose the branchwise sum.
+law: (= (fuzz-add (if {cond} {a} {b}) (if {cond} {c} {d})) (if {cond} (fuzz-add {a} {c}) (fuzz-add {b} {d})))

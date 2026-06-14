@@ -1,0 +1,7 @@
+name: with_binding_matches_min_definition
+section: binding
+args: a:Int b:Int
+type: Bool
+expect: True
+description: A with body using an if-based minimum must match the typed min helper.
+law: (= (with [x {a} y {b}] (if (fuzz-lt? x y) x y)) (fuzz-min {a} {b}))

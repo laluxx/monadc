@@ -1,0 +1,7 @@
+name: bitwise_and_commutative
+section: bitwise
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Bitwise and must be commutative.
+law: (= (& {a} {b}) (& {b} {a}))

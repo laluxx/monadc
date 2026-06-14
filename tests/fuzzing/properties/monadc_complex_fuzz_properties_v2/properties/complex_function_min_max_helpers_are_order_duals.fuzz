@@ -1,0 +1,7 @@
+name: complex_function_min_max_helpers_are_order_duals
+section: function-order
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Min and max helpers should swap when argument order is swapped.
+law: (= (fuzz-add (fuzz-min {a} {b}) (fuzz-max {b} {a})) (fuzz-add (fuzz-min {b} {a}) (fuzz-max {a} {b})))

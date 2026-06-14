@@ -1,0 +1,7 @@
+name: complex_with_bound_min_max_difference_abs_branch
+section: binding-order
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The difference between max and min should match the branchwise non-negative difference.
+law: (= (with [lo (fuzz-min {a} {b}) hi (fuzz-max {a} {b})] (fuzz-sub hi lo)) (if (fuzz-lte? {a} {b}) (fuzz-sub {b} {a}) (fuzz-sub {a} {b})))

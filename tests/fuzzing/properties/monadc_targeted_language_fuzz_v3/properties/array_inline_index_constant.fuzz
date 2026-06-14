@@ -1,0 +1,7 @@
+name: array_inline_index_constant
+section: collections
+args: 
+type: Bool
+expect: True
+description: Inline array indexing should select the requested constant element.
+law: (= ([10 20 30] 1) 20)

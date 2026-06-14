@@ -1,0 +1,7 @@
+name: set_disj_removes_generated
+section: collections
+args: a:Int
+type: Bool
+expect: True
+description: disj must remove a previously inserted generated value.
+law: (not (contains? (disj (conj (set) {a}) {a}) {a}))

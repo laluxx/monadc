@@ -1,0 +1,7 @@
+name: min_respects_lte_right
+section: order
+args: a:Int b:Int
+type: Bool
+expect: True
+description: If the right value is less-or-equal, min must return the right value.
+law: (if (fuzz-lte? {b} {a}) (= (fuzz-min {a} {b}) {b}) True)

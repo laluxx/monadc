@@ -5,25 +5,43 @@
 [[file:index.org][<- Back to Index]] · [[file:advanced-wisp.org][Advanced Wisp]] · [[file:syntax.org][S-expression Syntax]]
 
 Wisp is an indentation-aware surface syntax for Monad
-([[file:../wisp.c]]). It expands to standard S-expressions in a
-pre-pass before the reader — both produce identical ASTs and mix
-freely in the same file.
+([[file:../wisp.c]]). It expands to standard S-expressions in a pre-pass before
+the reader — both produce identical ASTs and mix freely in the same file
+([[file:../context/wisp.org::wisp-architecture]]).
 
 * How It Works
 
-The wisp expander ([[file:../wisp.c]]) runs as a pre-pass before the
-reader. Pipeline:
+The wisp expander ([[file:../wisp.c]]) runs as a two-pass pre-pass before the
+reader:
+
+1. Tokenization: split source into tokens (parens, brackets, symbols, strings,
+   numbers, etc.). Balanced brackets are preserved as single tokens.
+2. Layout expansion: use indentation and arity tables to insert parentheses
+   where needed, converting indentation-driven blocks into S-expression trees.
+
+Pipeline within =wisp_parse_all= ([[file:../wisp.c::4696]]):
 
 1. Import/builtin arities registered with =wisp_register_arity=
-2. Source stripped of comments ([[file:../wisp.c]])
-3. Non-wisp source (all lines start with =(=, =[=, ={=, =#{}") bypasses expander
-4. Arity pre-scan registers user-defined =data=/=type=/=layout=/=define= arities
-5. Token stream built line-by-line with indent tracking
-6. S-expressions emitted, passed to reader + macro expander
+   ([[file:../context/wisp.org::wisp-api-functions]]).
+2. Source stripped of comments preserving line/column positions.
+3. 2D fraction desugaring (=desugar_fractions=).
+4. Heuristic scan: if source contains no wisp-style lines (non-paren leading
+   tokens), short-circuit directly to =parse_all=.
+5. Build a local ArityTable seeded from the global FFI arity registry.
+6. Arity pre-scan registers user-defined =data=/=type=/=layout=/=define= arities
+   ([[file:../wisp.c::107]]).
+7. Token stream built line-by-line via =build_token_stream= with indent tracking.
+8. All top-level expressions parsed into S-expression strings.
+9. Param-kind hook and known-function hook installed for the reader.
+10. =parse_all= + =macro_expand_all= called on the transformed output.
 
-Arity table ([[file:../context/wisp.org]]) tracks how many arguments
-each function takes — this drives infix promotion and variadic
-consumption.
+The output is a flat list of standard S-expressions that feed directly into the
+reader. The reader has no awareness that the source was originally wisp.
+
+Arity registration order matters: FFI arities from =include= headers are
+registered in Phase 0 (FFI pre-pass) before Phase 1 (wisp expansion), so that
+imported C functions get correct layout inference
+([[file:../context/wisp.org::inf.wisp.ffi-arity-flow]]).
 
 * Basic Rules
 
@@ -37,8 +55,8 @@ Indentation determines grouping:
 
 No outer parens: =show 42= expands to =(show 42)=.
 
-Mix at any line: lines starting with =(=, =[=, ={=, =#{} pass through
-verbatim as S-expressions.
+Mix at any line: lines starting with =(=, =[=, ={=, =#{} pass through verbatim
+as S-expressions.
 
 * Function Calls
 
@@ -50,16 +68,43 @@ x < 10                     ;; (< x 10)
 
 Infix operators auto-convert via arity-driven Pratt parsing:
 
-| Precedence | Operators                         |
-|------------+-----------------------------------|
-| 1 (lowest) | =or=                               |
-| 2          | =and=                              |
-| 3          | ==== =!= =<= =<== =>== =>=          |
-| 4          | =+= =-=                             |
-| 5          | =*= =/=                             |
-| 6 (highest)| Everything else (calls, =^=, =%=) |
+|  Precedence | Operators                    |
+|-------------+------------------------------|
+|  1 (lowest) | =or=                           |
+|           2 | =and=                          |
+|           3 | ==== =!= =<= =<== =>== =>=               |
+|           4 | =+= =-=                          |
+|           5 | =*= =/=                          |
+| 6 (highest) | Everything else (calls, =^=, =%=) |
 
 Group with parens: =x * + 1 2= → =(* x (+ 1 2))=.
+
+* Arity Table
+
+The arity table maps function names to parameter counts, enabling the layout
+expander to parenthesize indented arguments correctly
+([[file:../context/wisp.org::wisp-arity-table]]). A known function with arity N
+consumes the next N indented forms as its arguments; unknown forms fall back to
+generic layout rules.
+
+The arity table is a fixed-size hash map with 128 buckets, using the djb2 hash
+function ([[file:../context/wisp.org::wisp-arity-table-internal]]). Two
+instances exist:
+
+- Global =g_ffi_arities=: persistent across modules, populated by FFI pre-pass
+  and env-builtin registration.
+- Local table in =wisp_parse_all=: seeded from the global table plus builtins
+  and the arity pre-scan. Newly discovered arities are merged back into the
+  global table at the end of =wisp_parse_all= to benefit subsequent modules.
+
+Arity sources ([[file:../context/wisp.org::obs.wisp.arity-sources]]):
+
+- Builtin functions: =wisp_register_arities_from_env= scans the env for
+  registered functions and inserts their param counts.
+- FFI C headers: libclang-parsed function signatures from =include= directives
+  register their arities during the Phase 0 pre-pass.
+- Layout constructors: struct field counts from =layout= declarations and FFI
+  structs registered as constructor arities.
 
 * Definitions
 
@@ -89,6 +134,14 @@ define twice f x -> f (f x) ;; higher-order
 define square :: Int -> Int
   x -> x * x                ;; (define (square [x :: Int] -> Int) (* x x))
 #+END_SRC
+
+The expander desugars simple indented arrow clauses (like =x -> x * x=) to a
+named-parameter function header and a direct body, binding =x= as the function
+parameter ([[file:../context/wisp.org::obs.wisp.define-signature-clause-fixed]]).
+Non-simple clauses containing =_=, literals, collection patterns like =[x|xs]=,
+or guards keep the pattern-clause path. In some cases, multi-line =define= with
+=->= arrows and guard conditions can produce incorrect lambda bindings because
+the simple-clause heuristic misclassifies the parameter.
 
 ** Parenthesized signature + clause
 
@@ -124,9 +177,9 @@ Guards:
 
 #+BEGIN_SRC wisp
 (define sign
-  n | > n 0 -> "pos"
-  n | < n 0 -> "neg"
-  _          -> "zero")
+  n | > 0 -> "pos"
+  n | < 0 -> "neg"
+  _       -> "zero")
 #+END_SRC
 
 Inline lambda sugar:
@@ -139,14 +192,14 @@ Inline lambda sugar:
 
 Both =::= and =:= work as annotation separators:
 
-| Form                              | Result                        |
-|-----------------------------------+-------------------------------|
-| =define x :: Int 42=               | =(define [x :: Int] 42)=       |
-| =define [x :: Int] 42=             | =(define [x :: Int] 42)=       |
+| Form                             | Result                                     |
+|----------------------------------+--------------------------------------------|
+| =define x :: Int 42=               | =(define [x :: Int] 42)=                     |
+| =define [x :: Int] 42=             | =(define [x :: Int] 42)=                     |
 | =define f :: Int -> String -> Ret= | registers arity 2, each arrow adds a param |
-| =*U8=                              | =[Pointer :: U8]=              |
-| =**U8=                             | =[Pointer :: Pointer :: U8]=    |
-| ==(a -> b)= inside signature       | marks param as function type   |
+| =*U8=                              | =[Pointer :: U8]=                            |
+| =**U8=                             | =[Pointer :: Pointer :: U8]=                 |
+| ==(a -> b)= inside signature       | marks param as function type               |
 
 * Type Annotations in Brackets
 
@@ -160,6 +213,8 @@ Both =::= and =:= work as annotation separators:
 #+BEGIN_SRC wisp
 5 |> double |> add1          ;; (add1 (double 5))
 #+END_SRC
+
+Pipe chains use the arity table to determine correct grouping.
 
 ** For loops
 
@@ -204,7 +259,9 @@ Multi-line bodies wrap in =(begin ...)=. Missing branches fill with
 (contains? s 2)               ;; when s is untyped → (s contains? 2)
 #+END_SRC
 
-Only fires when the first argument is a bare untyped symbol.
+Only fires when the first argument is a bare untyped symbol
+([[file:../context/wisp.org::obs.wisp.qmark-sugar]]). Literals and function
+calls as the first argument bypass the transform.
 
 ** !-sugar (mutation-call style)
 
@@ -212,9 +269,15 @@ Only fires when the first argument is a bare untyped symbol.
 (conj! s 99)                  ;; when s is untyped → (s conj! 99)
 #+END_SRC
 
-Applies to =conj!=, =disj!=, =append!=.
-
+Applies to =conj!=, =disj!=, =append!=, and any future !=-suffixed functions
+([[file:../context/wisp.org::obs.wisp.bang-sugar]]). Same heuristic as
+?-sugar: fires only when the first argument is a bare, untyped symbol.
 Type-annotate to suppress: =define [s :: Set] (conj! s 99)=.
+
+** @-sugar (indexing shorthand)
+
+Array/list indexing via =@= syntax
+([[file:../context/wisp.org::obs.wisp.at-sugar]]).
 
 ** Fraction sugar (2D)
 
@@ -226,8 +289,8 @@ Type-annotate to suppress: =define [s :: Set] (conj! s 99)=.
 
 * Data Types, Type Classes, and More
 
-=layout=, =data=, =type=, =class=, =instance=, =match= all work as
-wisp blocks, collected as single S-expression tokens:
+=layout=, =data=, =type=, =class=, =instance=, =match= all work as wisp
+blocks, collected as single S-expression tokens:
 
 #+BEGIN_SRC wisp
 layout Point
@@ -267,14 +330,26 @@ block comment
 
 * Known Limitations
 
-| Bug                                                   | Workaround                             |
-|-------------------------------------------------------+----------------------------------------|
-| Char literals with escapes ='\n'= split across lines  | Use S-expression for escaped chars     |
-| =:alias= / =:doc= metadata emitted as separate forms   | Use S-expression for metadata          |
-| Wisp =->= =define= + guards (=| condition=) not supported | Use S-expression for guarded defines   |
-| =..= path prefix breaks path literal (range operator) | Use absolute =/= or home =~/= paths     |
+| Bug                                                       | Workaround                                |
+|-----------------------------------------------------------+-------------------------------------------|
+| Char literals with escapes ='\n'= split across lines      | Use S-expression for escaped chars        |
+| =:alias= / =:doc= metadata emitted as separate forms       | Use S-expression for metadata             |
+| Wisp =->= =define= + guards (=| condition=) not supported | Use S-expression for guarded defines      |
+| =..= path prefix breaks path literal (range operator)     | Use absolute =/= or home =~/= paths        |
+| Multi-line =define= with =->= and guards can produce      | Use parenthesized Lisp-style define header|
+| incorrect lambda bindings (simple-clause heuristic        | or S-expression for complex clauses       |
+| misclassifies parameters)                                  |                                           |
+| ?-sugar/!-sugar fires on untyped vars causing unintended  | Type-annotate the variable                 |
+| method-call transforms                                     |                                           |
 
 See [[file:advanced-wisp.org][Advanced Wisp]] for details and more edge cases.
+
+* Test Coverage
+
+Wisp desugaring is tested by =tests/sugar/= (192 TSV entries covering all sugar
+types). Full compile/run tests are in =tests/wisp/=. Many =reader-atoms.tsv=
+entries also exercise wisp paths since the test runner feeds source through the
+full wisp→reader pipeline ([[file:../context/wisp.org::wisp-coverage]]).
 
 * Context Links
 

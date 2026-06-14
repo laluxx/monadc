@@ -1,0 +1,7 @@
+name: function_gt_helper_matches_builtin
+section: function
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The typed fuzz-gt? helper must agree with the builtin greater-than operator.
+law: (= (fuzz-gt? {a} {b}) (> {a} {b}))

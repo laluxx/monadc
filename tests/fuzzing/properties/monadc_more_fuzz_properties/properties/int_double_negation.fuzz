@@ -1,0 +1,7 @@
+name: int_double_negation
+section: arithmetic
+args: a:Int
+type: Bool
+expect: True
+description: Negating an Int twice through subtraction from zero must recover the original.
+law: (= (fuzz-sub 0 (fuzz-sub 0 {a})) {a})

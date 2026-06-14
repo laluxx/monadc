@@ -1,0 +1,7 @@
+name: complex_arith_helper_add_sub_roundtrip_through_id
+section: arithmetic-function
+args: a:Int b:Int
+type: Bool
+expect: True
+description: A value passed through identity after add/sub roundtrip should preserve the original expression.
+law: (= (fuzz-id-int (fuzz-sub (fuzz-add (fuzz-id-int {a}) {b}) {b})) {a})

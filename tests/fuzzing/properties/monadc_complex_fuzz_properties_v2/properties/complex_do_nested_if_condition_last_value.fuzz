@@ -1,0 +1,7 @@
+name: complex_do_nested_if_condition_last_value
+section: control-do-if
+args: setup1:Int setup2:Int cond:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Nested do forms in an if condition must expose only the final Bool.
+law: (= (if (do {setup1} (do {setup2} {cond})) {a} {b}) (if {cond} {a} {b}))

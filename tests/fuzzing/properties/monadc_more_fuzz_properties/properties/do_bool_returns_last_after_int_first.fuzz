@@ -1,0 +1,7 @@
+name: do_bool_returns_last_after_int_first
+section: control
+args: value:Int cond:Bool
+type: Bool
+expect: True
+description: A do expression with an Int first expression must return the final Bool expression.
+law: (= (do {value} {cond}) {cond})

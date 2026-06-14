@@ -1,0 +1,7 @@
+name: complex_function_choose_less_matches_if_after_binding
+section: function-order-binding
+args: a:Int b:Int fallback:Int
+type: Bool
+expect: True
+description: The choose-less helper must match its if definition even when operands are bound first.
+law: (= (with [x {a} y {b} z {fallback}] (fuzz-choose-less x y z)) (with [x {a} y {b} z {fallback}] (if (fuzz-lt? x y) x z)))

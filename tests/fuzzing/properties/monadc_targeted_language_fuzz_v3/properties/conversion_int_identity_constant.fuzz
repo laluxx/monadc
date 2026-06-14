@@ -1,0 +1,7 @@
+name: conversion_int_identity_constant
+section: predicates-conversions
+args: 
+type: Bool
+expect: True
+description: Int conversion of an Int must be identity.
+law: (= (Int 42) 42)

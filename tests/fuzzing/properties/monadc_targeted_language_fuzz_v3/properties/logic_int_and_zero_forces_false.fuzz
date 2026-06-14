@@ -1,0 +1,7 @@
+name: logic_int_and_zero_forces_false
+section: logic-coercion
+args: a:Int
+type: Bool
+expect: True
+description: Integer zero must coerce to False in and.
+law: (= (and {a} 0) False)

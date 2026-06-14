@@ -1,0 +1,7 @@
+name: heap_array_count_literal
+section: collections
+args: 
+type: Bool
+expect: True
+description: count must work on heap array literals using the runtime-sized array path.
+law: (= (count ~[1 2 3]) 3)

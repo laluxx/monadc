@@ -1,0 +1,7 @@
+name: complex_arith_expected_false_double_is_zero_unless_not_asserted
+section: arithmetic-negative
+args: a:Int
+type: Bool
+expect: False
+description: The expression a-a+1 equals zero should always be false.
+law: (= (fuzz-add (fuzz-sub {a} {a}) 1) 0)

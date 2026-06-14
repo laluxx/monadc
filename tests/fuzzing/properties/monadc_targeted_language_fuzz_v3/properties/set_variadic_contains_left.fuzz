@@ -1,0 +1,7 @@
+name: set_variadic_contains_left
+section: collections
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Variadic set construction must contain its left generated element.
+law: (contains? (set {a} {b}) {a})

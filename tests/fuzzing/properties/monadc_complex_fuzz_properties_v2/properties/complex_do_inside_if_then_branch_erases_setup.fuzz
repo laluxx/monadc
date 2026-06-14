@@ -1,0 +1,7 @@
+name: complex_do_inside_if_then_branch_erases_setup
+section: control-do-if
+args: setup:Bool cond:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Sequencing before only the then branch must be equivalent to the original branch value.
+law: (= (if {cond} (do {setup} {a}) {b}) (if {cond} {a} {b}))

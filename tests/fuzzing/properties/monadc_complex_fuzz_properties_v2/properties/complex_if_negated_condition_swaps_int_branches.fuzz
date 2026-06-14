@@ -1,0 +1,7 @@
+name: complex_if_negated_condition_swaps_int_branches
+section: control-if
+args: cond:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Encoding logical negation with if must swap the Int branches exactly.
+law: (= (if (if {cond} False True) {a} {b}) (if {cond} {b} {a}))

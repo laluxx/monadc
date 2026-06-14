@@ -1,0 +1,7 @@
+name: comparison_sub_preserves_lte_same_rhs
+section: comparison
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Subtracting the same right operand must preserve less-or-equal ordering.
+law: (if (fuzz-lte? {a} {b}) (fuzz-lte? (fuzz-sub {a} {c}) (fuzz-sub {b} {c})) True)

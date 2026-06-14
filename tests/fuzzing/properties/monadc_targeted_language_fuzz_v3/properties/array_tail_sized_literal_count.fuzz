@@ -1,0 +1,7 @@
+name: array_tail_sized_literal_count
+section: collections
+args: 
+type: Bool
+expect: True
+description: tail on a fixed array must produce a collection with one fewer element.
+law: (= (count (tail [10 20 30])) 2)

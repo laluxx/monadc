@@ -1,0 +1,7 @@
+name: logic_int_or_false_is_nonzero
+section: logic-coercion
+args: a:Int
+type: Bool
+expect: True
+description: Logical or must coerce an Int operand and preserve False identity.
+law: (= (or {a} False) (!= {a} 0))

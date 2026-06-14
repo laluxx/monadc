@@ -1,0 +1,7 @@
+name: control_with_set_twice_last_write_wins
+section: control-binding
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Multiple set! operations must leave the last stored value visible.
+law: (with [x {a}] (begin (set! x {b}) (set! x {c}) (= x {c})))

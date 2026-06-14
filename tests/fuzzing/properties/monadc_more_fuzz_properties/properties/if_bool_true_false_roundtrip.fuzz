@@ -1,0 +1,7 @@
+name: if_bool_true_false_roundtrip
+section: control
+args: cond:Bool
+type: Bool
+expect: True
+description: Choosing between True and False with a Bool condition must return that condition.
+law: (= (if {cond} True False) {cond})

@@ -1,0 +1,7 @@
+name: predicate_array_literal_true
+section: predicates-conversions
+args: 
+type: Bool
+expect: True
+description: Arr? must recognize fixed array literals.
+law: (Arr? [1 2 3])

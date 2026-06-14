@@ -1,0 +1,7 @@
+name: logic_and_absorbs_false
+section: logic
+args: p:Bool q:Bool
+type: Bool
+expect: True
+description: A False operand must force variadic and to False.
+law: (= (and {p} False {q}) False)

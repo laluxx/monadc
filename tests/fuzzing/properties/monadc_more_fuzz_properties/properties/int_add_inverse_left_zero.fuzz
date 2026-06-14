@@ -1,0 +1,7 @@
+name: int_add_inverse_left_zero
+section: arithmetic
+args: a:Int
+type: Bool
+expect: True
+description: Adding an Int to its left-side additive inverse must produce zero.
+law: (= (fuzz-add (fuzz-mul -1 {a}) {a}) 0)

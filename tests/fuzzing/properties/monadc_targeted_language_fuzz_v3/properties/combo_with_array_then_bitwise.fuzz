@@ -1,0 +1,7 @@
+name: combo_with_array_then_bitwise
+section: feature-interactions
+args: a:Int b:Int
+type: Bool
+expect: True
+description: with-bound array indexing must feed bitwise dispatch correctly.
+law: (with [xs [{a} {b}]] (= (bit-xor (xs 0) (xs 0)) 0))

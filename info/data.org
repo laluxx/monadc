@@ -4,29 +4,49 @@
 
 [[file:index.org][<- Back to Index]] · [[file:patterns.org][Pattern Matching]] · [[file:types.org][Types]]
 
-* data syntax ([[file:../reader.c::4782]])
+* Data Declaration Syntax
+
+Algebraic data types are declared with the =(data ...)= form. The type name
+must start with an uppercase letter (enforced — compiler error otherwise).
+Constructors follow the type name; each constructor name must also start with
+uppercase. Type parameters are bare symbols before constructors.
+
+** Parenthesized (S-expression) syntax
 
 #+BEGIN_SRC monad
-(data Bool False True)
-(data Option a None (Some a))
-(data Tree a Leaf (Node Tree a a Tree))
+(data Bool False True)                          ;; two nullary constructors
+(data Option a None (Some a))                   ;; polymorphic Option
+(data Tree a Leaf (Node Tree a a Tree))          ;; recursive tree
+(data Point Float Float)                        ;; single-constructor shorthand
 #+END_SRC
 
-Optional =~= separator and =|= for variants:
+The shorthand single-constructor form =(data Point Float Float)= expands to
+=(data Point (Point Float Float))= — a data type whose only constructor shares
+the type name.
+
+** Pipe-separated syntax (=|= variants, =~= separator)
 
 #+BEGIN_SRC monad
+(data Color ~ Red | Green | Blue)
 (data Maybe a = Nothing | Just a)
-(data T = A | B | C deriving [Bounded Enum Show])
+(data T = A | B | C)
 #+END_SRC
 
-Shorthand single-constructor: =(data Point Float Float)= expands to
-=(data Point (Point Float Float))=.
+The =~= or ==== separator separates type parameters from constructors; =|= separates
+alternative constructors. Both forms parse to the same =AST_DATA= node
+(reader.h:59-61, reader.h:251-260). The reader normalises pipe syntax to the
+internal representation before inference sees it.
 
-* Constructor naming
+* Constructor Naming
 
-Must start with uppercase letter (enforced — compiler error otherwise).
+Constructors must start with an uppercase letter. Binding names (variables,
+function parameters) must start with a lowercase letter. Constructor names are
+reserved — they cannot be used as variable names in patterns where it would
+cause ambiguity.
 
-* Deriving
+* Deriving (Aspirational)
+
+Deriving provides auto-generated instance implementations:
 
 #+BEGIN_SRC monad
 (data Color Red Green Blue deriving Eq)
@@ -34,40 +54,105 @@ Must start with uppercase letter (enforced — compiler error otherwise).
 (data T = A | B | C deriving [Bounded Enum Show])
 #+END_SRC
 
-Multiple classes in a list: =deriving [Eq Enum]=, =deriving [Bounded Enum Show]=.
-Implemented in codegen ([[file:../codegen.c::13144]]): auto-generates
-=instance Eq T= (structural =) and =instance Enum T= (=fromEnum= = tag,
-=toEnum= = tag→ctor). Classes must be defined first or a warning is
-printed.
+The =deriving= clause appears at the end of a data declaration. Multiple classes
+use a list: =deriving [Eq Enum]=.
 
-* Representation
+** Current state of deriving
 
-Tagged union on heap:
+Deriving is partially aspirational. The parser accepts =deriving= clauses and
+stores them in the =AST_DATA= payload (reader.h:251-260). The =typeclass.c=
+module can generate implementations for =Eq=, =Show=, and =Enum= for nullary
+constructors. Deriving for constructors with fields is WIP.
 
-| offset | content              |
-|--------+----------------------|
-| +0     | ~i32 tag~ (ctor index) |
-| +8     | ~i64~ payload slot 0   |
-| +16    | ~i64~ payload slot 1   |
-| ...    | up to max fields       |
+Implemented via =typeclass.c= ([[file:../typeclass.c]]):
+- =Eq= — structural equality comparing constructor tags and fields
+- =Show= — pretty-prints as =(Ctor field0 field1 ...)=
+- =Enum= — =fromEnum= returns constructor tag index, =toEnum= maps tag → ctor
+  (requires Bounded for boundary enforcement)
 
-Each constructor is a function that =malloc=s the struct and stores tag +
-fields. Nullary ctors also get a global singleton.
+A warning is printed if the deriving class is not defined before use. Classes
+must be defined (via =(class ...)=) or a warning is emitted.
 
-* Comparison with ~layout~
+* Show for ADTs
 
-| Aspect       | ~data~ (ADT)                 | ~layout~ (C interop)          |
-|--------------+------------------------------+-------------------------------|
-| Tag          | Automatic ~i32~ tag          | No tag (untagged)             |
-| Allocation   | Heap (~malloc~)                | Stack or heap (explicit)      |
-| Fields       | Named by position            | Named fields with offsets     |
-| C compat     | No                           | Yes (struct-compatible)       |
-| Use case     | Algebraic sum types          | C FFI, precise memory layout  |
+ADT values are displayed via the built-in =show= function. The printer routes
+layout-typed values through the ADT printer when the layout has registered
+constructors. The canonical output format is parenthesised constructor syntax:
+
+#+BEGIN_SRC monad
+(show (Point 3.0 4.0))      ;; prints "(Point 3.0 4.0)"
+(show Red)                   ;; prints "Red"
+(show (Node Leaf 1 Leaf))    ;; prints "(Node Leaf 1 Leaf)"
+#+END_SRC
+
+The ADT show path in codegen ([[file:../codegen.c::5876]]) checks whether the
+value's layout has registered constructors. If yes, it emits canonical data
+syntax; otherwise it falls through to the generic runtime value printer.
+
+* Pattern Matching on ADTs
+
+ADT constructors are matched in pattern clauses using
+=PatternKind::PAT_CONSTRUCTOR=:
+
+#+BEGIN_SRC monad
+(define (maybe->int [m :: (Option Int)] -> Int)
+  (match m with
+    (None)     -> 0
+    (Some x)   -> x))
+
+(define (tree-depth [t :: (Tree a)] -> Int)
+  (match t with
+    (Leaf)           -> 0
+    (Node l _ r)     -> (+ 1 (max (tree-depth l) (tree-depth r)))))
+#+END_SRC
+
+Pattern match compilation ([[file:../context/pmatch.org][context/pmatch.org]]) desugars constructor
+patterns to tag checks via =__adt_tag_= prefix convention
+([[file:../codegen.h::16]]). The =build_pattern_conditions= function at
+pmatch.c:699 emits tag-equality checks for =PAT_CONSTRUCTOR= patterns and
+generates field destructuring via =nth= / =index-access=. Desugaring is deferred
+to codegen time (pmatch.c:1050) so the full type environment and ADT definitions
+are available.
+
+Constructor coverage: if the final clause is not an explicit wildcard (=_=), the
+compiler emits an =(undefined)= fallback. Exhaustiveness-aware fallback removal
+is future work.
+
+* Memory Representation
+
+Each ADT is a tagged union on the heap:
+
+| Offset | Content                          |
+|--------+----------------------------------|
+| +0     | =i32= tag (constructor index)    |
+| +8     | =i64= payload slot 0             |
+| +16    | =i64= payload slot 1             |
+| ...    | Up to max fields                 |
+
+Each constructor compiles to a function that =malloc=s the struct, stores tag +
+fields. Nullary constructors also get a global singleton so they are never
+heap-allocated at call sites. The tag is computed by =adt_constructor_tag=
+(codegen.h:16) which derives a stable integer from the constructor name.
+
+* Comparison with =layout= types
+
+| Aspect     | =data= (ADT)                 | =layout= (C interop)            |
+|------------+------------------------------+---------------------------------|
+| Tag        | Automatic =i32= tag          | No tag (untagged)               |
+| Allocation | Heap (=malloc=)              | Stack or heap (explicit)        |
+| Fields     | Named by position            | Named fields with offsets       |
+| C compat   | No                           | Yes (struct-compatible)         |
+| Use case   | Algebraic sum types          | C FFI, precise memory layout    |
+
+The =layout= type ([[file:layouts.org]]) is the C-interop counterpart. ADTs
+use runtime tag dispatch; layouts use positional field access. Both can be
+printed via =show=, but only ADTs get the canonical =(Ctor field ...)= format.
 
 * Context Links
 
-- [[file:../context/types.org][context/types.org]] — type representation
-- [[file:../context/codegen.org][context/codegen.org]] — ADT codegen (tagged union)
-- [[file:../context/pmatch.org][context/pmatch.org]] — pattern match compilation
-- [[file:../codegen.c][codegen.c:1785]] — ~codegen_data~ implementation
-- [[file:../how_to/AlgebraicDataTypes.mon][how_to/AlgebraicDataTypes.mon]] — usage examples
+- [[file:../context/types.org][context/types.org]] — TypeKind enum, TYPE_APP for ADT applications
+- [[file:../context/pmatch.org][context/pmatch.org]] — Pattern match compilation, PAT_CONSTRUCTOR
+- [[file:../context/codegen.org][context/codegen.org]] — ADT constructor tags, layout/LLVM lowering
+- [[file:../context/language.org][context/language.org]] — Working dispatch, pattern matching section
+- [[file:../codegen.h::16][codegen.h:16]] — =adt_constructor_tag= utility
+- [[file:../how_to/AlgebraicDataTypes.mon][how_to/AlgebraicDataTypes.mon]] — Usage examples

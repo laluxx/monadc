@@ -4,32 +4,208 @@
 
 [[file:index.org][<- Back to Index]] · [[file:tutorial.org][Tutorial]] · [[file:syntax.org][Syntax]]
 
-Monad is a compiled functional language with S-expression and Wisp
-syntax. It targets x86-64 Linux via LLVM 19+.
+Monad is a compiled Lisp-family functional language with a dual-surface
+syntax (S-expressions and indentation-based Wisp). It targets x86-64
+Linux via LLVM 19+ and is written in C (~27,000+ lines). The compiler
+produces native binaries linked against a static runtime library
+(=libmonad.a=).
 
-- **Types**: Hindley-Milner inference + dependent types (ITT/NbE)
-- **Memory**: Arena allocation (bump-pointer, 4 MiB blocks, checkpoint/restore)
-- **FFI**: C interop via =(include "header.h")= — no bindings needed
-- **Macros**: Functions returning =Syntax= — no separate =macro= keyword
-- **Dual syntax**: S-expressions and Wisp indentation, freely mixable
+- *Type system*: Hindley-Milner inference (constraint-based, with
+  generalization, instantiation, and monomorphization) for ground types,
+  plus a full Intuitionistic Type Theory (ITT) dependent type checker
+  with Normalization by Evaluation (NbE), bidirectional checking, and
+  a =TERM_EMBED= bridge between the two systems.
 
-Quick start:
+- *Memory*: Arena allocation with bump-pointer semantics, 4 MiB blocks,
+  and checkpoint/restore. No general-purpose garbage collector — the
+  arena is reset at predictable boundaries.
+
+- *FFI*: C interop via =(include "header.h")= powered by libclang header
+  parsing. No binding generators, IDL files, or wrapper code needed.
+
+- *Macros*: Ordinary functions that return =Syntax= values and operate
+  at compile time. No separate =macro= keyword. Full hygiene with
+  rename-pair tracking, fixpoint expansion, and variadic splice.
+
+- *Dual syntax*: S-expressions (paren-mode) and Wisp (indentation-based)
+  are freely mixable within a single file and produce identical ASTs.
+
+- *Self-hosting-ready*: =Main.mon= (1244 lines) serves as the standard
+  library and primary compiler test surface. Core library modules exist
+  under =core/= covering lists, sets, math, text processing, and more.
+
+* Quick Start
 
 #+BEGIN_SRC monad
-(define (main -> Int)
-  (show "hello world")
-  0)
+(module Main)
+(show "hello world")
 #+END_SRC
 
-Key ideas:
+Compile and run:
 
-- **Types are sets** — =Int= = set of 63-bit ints, ={ x ∈ Int | x > 0 }= = subset
-- **Immutable by default** — =set!= / =<-= makes mutation explicit
-- **Code is data** — macros transform S-expressions at compile time
+#+BEGIN_SRC sh
+make && ./monad hello.mon -o hello && ./hello
+#+END_SRC
+
+Or with the Wisp syntax variant:
+
+#+BEGIN_SRC monad
+module Main
+show "hello from wisp"
+#+END_SRC
+
+* Compiler Pipeline
+
+The MonadC compiler transforms source to native code through these
+stages:
+
+1. *Reader* (reader.c) — Tokenizes and parses source text into an AST.
+   Recognizes both S-expression syntax and Wisp indentation, producing
+   identical AST nodes regardless of surface syntax. The reader is
+   tested against a conformance corpus (=tests/reader-atoms.tsv=)
+   covering every grammar production: numeric literals, strings, chars,
+   paths, keywords, symbols, arrays (stack/fat/heap), sets, maps,
+   ranges, lambdas, data declarations, type annotations, refinements,
+   layout types, and inline assembly forms.
+
+2. *Macro expansion* — Macro functions (ordinary =define= returning
+   =Syntax=) are expanded at compile time. Expansion is fixpoint —
+   the compiler re-expands until the term stabilizes. Hygiene is
+   maintained through rename-pair tracking that prevents unintended
+   variable capture.
+
+3. *Wisp expander* (wisp.c) — If the source uses Wisp syntax, the
+   expander desugars indentation into S-expressions. Wisp !-suffix
+   and ?-suffix sugar are applied at this stage.
+
+4. *Type inference / checking* — The dual type system runs:
+   - *HM inference* (=infer.c=, =infer.h=) handles ground types with
+     constraint generation, unification, generalization, and
+     monomorphization. Fast path for non-dependent code.
+   - *ITT dependent checker* (=dep.c=, =dep.h=) handles Pi-types,
+     Sigma-types, universe levels, equality/refl/subst, Nat and
+     Nat-elim, metavariables, and bidirectional infer/check entry
+     points — all normalized via NbE (Normalization by Evaluation).
+
+5. *Codegen* (=codegen.c=) — Lowers typed AST to LLVM IR. Dispatch
+   uses a three-layer architecture: AST type switch → strcmp dispatch
+   for 83+ known symbols → =register_builtins= for 94 env entries.
+   Polymorphic functions are monomorphized — each concrete type
+   instantiation generates separate machine code.
+
+6. *Linking* — The compiler invokes LLVM's optimization pipeline, emits
+   object code, and links against =libmonad.a= (the runtime) to produce
+   a native executable.
+
+* Key Ideas
+
+- *Types are sets* — =Int= is the set of 63-bit integers. A refinement
+  type like ={ x ∈ Int | x > 0 }= is a subset. Functions are relations.
+  The compiler materializes infinite sets as values you can inspect.
+
+- *Immutable by default* — Mutation is explicit: =set!= for variables,
+  =conj!/disj!== for collections, =<-= for array elements. The language
+  encourages pure functional style but provides controlled mutation.
+
+- *Code is data* — Macros are just functions that return =Syntax=
+  values. The quote operator (= '(...)=) and quasi-quote (= `(...)=)
+  construct syntax objects at runtime, and macro expansion transforms
+  them at compile time.
+
+- *No trade-off between safety and control* — The same language gives
+  you dependent types AND inline assembly, refinement types AND naked
+  functions, lazy infinite lists AND C-compatible arrays — all without
+  binding generators, FFI wrappers, or runtime overhead.
+
+- *Continuous abstraction ladder* — Start with =show "Hello!"=, add
+  type annotations, introduce polymorphic functions, prove invariants
+  with dependent types, drop to layout-based structs for performance,
+  and write inline assembly for hardware access — all in the same file
+  and the same function.
+
+* Tooling
+
+| Command           | Description                                     |
+|-------------------+-------------------------------------------------|
+| =monad file.mon=    | Compile a single file to an object              |
+| =monad build=       | Build the project in the current directory      |
+| =monad run=         | Build and run the project                       |
+| =monad -i=          | Launch interactive REPL (JIT-compiled via LLVM) |
+| =monad new <name>=  | Scaffold a new project                          |
+| =monad clean=       | Remove build artifacts                          |
+| =monad test [file]= | Run embedded test blocks                        |
+| =monad install=     | Build and copy binary to ~/.local/bin           |
+
+Emit flags (usable with any compilation):
+
+| Flag         | Output                 |
+|--------------+------------------------|
+| =--emit-ir=    | LLVM IR (.ll)          |
+| =--emit-bc=    | LLVM bitcode (.bc)     |
+| =--emit-asm=   | Assembly (.s)          |
+| =--emit-obj=   | Object file (.o)       |
+| =--emit-json=  | JSON AST dump          |
+| =--emit-typst= | Typst-formatted output |
+
+The build system is Makefile-based:
+
+| Command           | Description                                      |
+|-------------------+--------------------------------------------------|
+| =make clean=        | Clean build artifacts                            |
+| =make=              | Build the compiler (debug mode)                  |
+| =make release=      | Build with optimizations                         |
+| =make asan=         | Build with AddressSanitizer                      |
+| =make test=         | Build + run codegen/reader test suite            |
+| =make test core=    | Build + run core library per-module tests        |
+| =sudo make install= | Install to /usr/local (bin, lib, include, share) |
+
+* Philosophy
+
+Monad is built on five core principles:
+
+1. *No trade-off between safety and control* — You should not have to
+   choose between dependent types and inline assembly, between
+   mathematical guarantees and hardware control.
+
+2. *Purity is practical* — Mathematical purity enables compile-time
+   predicate checking, exhaustive pattern coverage verification, and
+   zero-cost type abstraction through monomorphization.
+
+3. *Syntax is instrument* — Two syntaxes (S-expressions and Wisp) for
+   two tasks: programmatic generation and macro processing with
+   S-expressions, readability in large codebases with Wisp. Both work
+   for every construct and mix freely.
+
+4. *Zero-to-metal abstraction ladder* — The ladder from =show "Hello!"=
+   to inline assembly must be continuous, with no language boundary,
+   binding layer, or runtime switch.
+
+5. *Sets are the model* — Types are sets. Functions are relations.
+   Refinement types are subsets. Universes are sets of sets. This is
+   not metaphor — it is the compiler's semantic model.
+
+* Project Status
+
+MonadC is under active development. The compiler core is functional:
+parsing, type inference, and codegen produce working binaries for a
+large subset of the language. Known limitations include:
+
+- Closures (=fn=, =lambda=, =defn=) lack a codegen strcmp handler —
+  higher-order functions like =map= and =filter= are blocked.
+- Several control forms (=cond=, =when=, =let=, =let*=, =letrec=) are
+  registered builtins but lack strcmp dispatch.
+- Map and set runtime construction is broken for untyped contexts
+  (needs explicit =:: Map= / =:: Set= annotation).
+- Core prelude modules are not yet automatically imported.
+
+See [[file:../context/language.org][context/language.org]] for the full codegen gap analysis.
 
 * Context Links
 
-- [[file:tutorial.org][Tutorial]] — step-by-step
-- [[file:syntax.org][Syntax Reference]] — language syntax
+- [[file:tutorial.org][Tutorial]] — step-by-step guide
+- [[file:syntax.org][Syntax Reference]] — language syntax and grammar
+- [[file:types.org][Type System]] — types, inference, refinement types
 - [[file:../context/philosophy.org][context/philosophy.org]] — design philosophy
 - [[file:../context/language.org][context/language.org]] — language formalization
+- [[file:../context/build.org][context/build.org]] — build and installation
+- [[file:../context/cli.org][context/cli.org]] — CLI argument parser

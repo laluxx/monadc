@@ -9,6 +9,13 @@ Monad macros are functions that return =Syntax= ([[file:../macro.c::765]]).
 They receive their arguments unevaluated and produce a new s-expression
 to compile.
 
+For the full macro system architecture — including reader integration,
+hygiene renaming, variadic splicing, and the expander implementation —
+see [[file:../context/macro.org][context/macro.org]].
+
+For the user-facing macro API, syntax, and quasi-output mechanics, see
+[[file:macros.org][Macros Reference]].
+
 * Basics
 
 #+BEGIN_SRC monad
@@ -50,11 +57,12 @@ them in =begin= inside an =if=.
 Usage:
 
 #+BEGIN_SRC monad
-(define (main -> Int)
-  (let [x 1]
-    (let [y 99]
-      (swap! x y)
-      x)))  ;; 99
+(module Main)
+(define [x :: Int] 1)
+(define [y :: Int] 99)
+(swap! x y)
+(show x)  ;; 99
+(show y)  ;; 1
 #+END_SRC
 
 * Variadic Recursion
@@ -69,6 +77,21 @@ Usage:
 Pattern-matches on the argument list: empty =True=, single =x=, or
 recurse.
 
+* Variadic Macro Semantics
+
+A rest parameter (=. name=) captures all remaining arguments as a list.
+When spliced back with =. name= inside the macro body (e.g., =(begin . body)=),
+the list is spliced into the output form. When used outside a list position
+(e.g., as an argument to a non-variadic form), =body= is passed as a single
+list value:
+
+#+BEGIN_SRC monad
+(define (example . args -> Syntax)
+  (list . args))    ;; splices: (list 1 2 3)
+(define (example . args -> Syntax)
+  (list args))     ;; wraps: (list (1 2 3))
+#+END_SRC
+
 * Assertion Macro
 
 #+BEGIN_SRC monad
@@ -76,6 +99,22 @@ recurse.
   (when condition
     (begin . body)))
 #+END_SRC
+
+* #() Quasi-Output Syntax
+
+Macro bodies can use =#(...)= to delimit the template output region.
+Code outside =#()= is intended for compile-time computation (future work);
+currently =#()= is stripped and only the inner subtree becomes output
+([[file:../context/macro.org::marco-quasi-output][context/macro.org]]).
+
+#+BEGIN_SRC monad
+(define (assert condition message -> Syntax)
+  (if condition
+    #(when (not condition) (error message))
+    #(begin)))
+#+END_SRC
+
+See [[file:macros.org][Macros Reference — #() Quasi-Output Syntax]] for details.
 
 * Hygiene
 
@@ -101,6 +140,14 @@ define when :: condition . body -> Syntax
   if condition (begin . body)
 #+END_SRC
 
+* Fixpoint Expansion
+
+Macro expansion runs to a fixpoint (capped at 1024 rounds). A macro that
+produces another macro call is expanded again in a subsequent round.
+This enables recursive macros but requires caution: an infinite expansion
+loop hits the cap and produces a compiler error
+([[file:../context/macro.org::macro-fixpoint][context/macro.org]]).
+
 * Key Points
 
 - Macros are just functions returning =Syntax=
@@ -108,6 +155,8 @@ define when :: condition . body -> Syntax
 - Variadic args use =. name=
 - Arguments are received unevaluated
 - Return value must be a valid s-expression
+- Rest params splice in list position, wrap in non-list position
+- Expansion is fixpoint (1024 round cap)
 
 * Context Links
 

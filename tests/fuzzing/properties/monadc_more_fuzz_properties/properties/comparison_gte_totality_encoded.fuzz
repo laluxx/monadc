@@ -1,0 +1,7 @@
+name: comparison_gte_totality_encoded
+section: comparison
+args: a:Int b:Int
+type: Bool
+expect: True
+description: For any two Int expressions, at least one greater-or-equal direction must hold.
+law: (if (fuzz-gte? {a} {b}) True (fuzz-gte? {b} {a}))

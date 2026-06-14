@@ -1,0 +1,7 @@
+name: combo_logic_over_type_predicates
+section: feature-interactions
+args: a:Int
+type: Bool
+expect: True
+description: logic dispatch must combine compile-time type predicate results.
+law: (and (Int? {a}) (not (String? {a})) (Number? {a}))

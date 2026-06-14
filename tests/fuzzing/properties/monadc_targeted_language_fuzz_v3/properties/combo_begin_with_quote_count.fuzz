@@ -1,0 +1,7 @@
+name: combo_begin_with_quote_count
+section: feature-interactions
+args: a:Int
+type: Bool
+expect: True
+description: begin must return a quoted-list count after evaluating generated setup.
+law: (= (begin {a} (count (quote (x y z w)))) 4)

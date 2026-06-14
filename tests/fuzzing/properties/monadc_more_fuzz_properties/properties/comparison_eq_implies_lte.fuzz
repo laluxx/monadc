@@ -1,0 +1,7 @@
+name: comparison_eq_implies_lte
+section: comparison
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Integer equality must imply less-or-equal in both directions.
+law: (if (fuzz-eq-int? {a} {b}) (fuzz-lte? {a} {b}) True)

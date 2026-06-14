@@ -1,0 +1,7 @@
+name: int_sub_add_sub_pairing
+section: arithmetic
+args: a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: A pair of subtractions added together must match subtracting the paired right operands from the paired left operands.
+law: (= (fuzz-add (fuzz-sub {a} {b}) (fuzz-sub {c} {d})) (fuzz-sub (fuzz-add {a} {c}) (fuzz-add {b} {d})))

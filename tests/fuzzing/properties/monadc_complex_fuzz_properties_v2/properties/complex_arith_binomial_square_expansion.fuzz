@@ -1,0 +1,7 @@
+name: complex_arith_binomial_square_expansion
+section: arithmetic-normalization
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The square of a sum must match the expanded binomial form.
+law: (= (fuzz-mul (fuzz-add {a} {b}) (fuzz-add {a} {b})) (fuzz-add (fuzz-add (fuzz-mul {a} {a}) (fuzz-mul (fuzz-mul 2 {a}) {b})) (fuzz-mul {b} {b})))

@@ -1,0 +1,7 @@
+name: string_contains_literal
+section: collections
+args: 
+type: Bool
+expect: True
+description: contains? must dispatch to string substring search.
+law: (contains? "monadc" "nad")

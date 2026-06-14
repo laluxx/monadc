@@ -1,0 +1,7 @@
+name: comparison_gte_self_true
+section: comparison
+args: a:Int
+type: Bool
+expect: True
+description: Greater-or-equal must be true for an Int expression compared to itself.
+law: (fuzz-gte? {a} {a})

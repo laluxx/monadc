@@ -1,0 +1,7 @@
+name: int_add_three_way_permutation
+section: arithmetic
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Addition of three generated values must be invariant under a nontrivial permutation.
+law: (= (fuzz-add (fuzz-add {a} {b}) {c}) (fuzz-add (fuzz-add {c} {a}) {b}))

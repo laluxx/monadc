@@ -1,0 +1,7 @@
+name: max_of_predecessor_is_original
+section: order
+args: a:Int
+type: Bool
+expect: True
+description: The max of an Int and its predecessor must be the original Int.
+law: (= (fuzz-max {a} (fuzz-sub {a} 1)) {a})

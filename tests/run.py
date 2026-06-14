@@ -676,6 +676,34 @@ def print_box(title: str) -> None:
     print(f"╚{'═' * WIDTH}╝")
 
 
+def print_result_box(passed: bool) -> None:
+    color = BOLD_GREEN if passed else BOLD_RED
+    label = "TESTS PASSED" if passed else "TESTS FAILED"
+    inner = WIDTH
+    print(f"{color}╔{'═' * inner}╗{RESET}")
+    print(f"{color}║{label.center(inner)}║{RESET}")
+    print(f"{color}╚{'═' * inner}╝{RESET}")
+
+
+def print_name_grid(names: list[str], marker: str, marker_color: str, columns: int = 3) -> None:
+    if not names:
+        return
+    rows = (len(names) + columns - 1) // columns
+    col_widths = [0] * columns
+    for index, name in enumerate(names):
+        col = index // rows
+        col_widths[col] = max(col_widths[col], len(name))
+    for row in range(rows):
+        cells = []
+        for col in range(columns):
+            index = col * rows + row
+            if index < len(names):
+                name = names[index]
+                padded = name.ljust(col_widths[col])
+                cells.append(f"{marker_color}{marker}{RESET} {padded}")
+        print(f"    {'  '.join(cells).rstrip()}")
+
+
 def print_rule(title: str) -> None:
     print_section_line(title, WHITE, bold=True)
 
@@ -822,7 +850,7 @@ def format_duration(elapsed_ns: int) -> str:
 
 
 def color_duration(value: float, unit: str) -> str:
-    return f"[{value:7.2f} ] {CYAN}{unit}{RESET}"
+    return f"[{value:7.2f} ] {CYAN}{unit:>2}{RESET}"
 
 
 def strip_ansi(value: str) -> str:
@@ -950,13 +978,11 @@ def print_changes(regressions: list[str], fixes: list[str]) -> None:
     YELLOW = "\033[33m"
     RESET = "\033[0m"
     if regressions:
-        print(f"  {BOLD_RED}REGRESSIONS (pass → fail):{RESET}")
-        for name in regressions:
-            print(f"    {BOLD_RED}✗{RESET} {name}")
+        print(f"  {BOLD_RED}REGRESSIONS (pass {chr(8594)} fail):{RESET}")
+        print_name_grid(regressions, "x", BOLD_RED)
     if fixes:
-        print(f"  {BOLD_GREEN}FIXES (fail → pass):{RESET}")
-        for name in fixes:
-            print(f"    {BOLD_GREEN}✓{RESET} {name}")
+        print(f"  {BOLD_GREEN}FIXES (fail {chr(8594)} pass):{RESET}")
+        print_name_grid(fixes, "+", BOLD_GREEN)
 
 
 def print_section_summary(runner: Runner) -> None:
@@ -972,7 +998,6 @@ def print_section_summary(runner: Runner) -> None:
             f"  {title:<28} {stats.passed:>8}/{stats.total:<4} {stats.failed:>8} "
             f"{stats.percent:>7.1f}% {strip_ansi(format_duration(stats.elapsed_ns)):>14}"
         )
-    print()
 
 
 def main() -> int:
@@ -1002,25 +1027,20 @@ def main() -> int:
 
     print()
     print_section_summary(runner)
-    print()
     print_rule("TEST SUMMARY")
     print()
     print(f"Total:  {len(runner.results):6d} tests".center(WIDTH + 2))
     print(f"Passed: {passed:6d} tests".center(WIDTH + 2))
     print(f"Failed: {runner.failures:6d} tests".center(WIDTH + 2))
     print(f"Time:   {format_duration(suite_elapsed_ns)}".center(WIDTH + 2))
-    print()
 
     regressions, fixes = compute_changes(previous, runner.results)
     print_changes(regressions, fixes)
     cleanup_suite_artifacts()
 
-    if runner.failures:
-        print_box(f"✗ {runner.failures} TEST(S) FAILED ✗")
-        return 1
-
-    print_box("✓ ALL TESTS PASSED ✓")
-    return 0
+    print()
+    print_result_box(runner.failures == 0)
+    return 1 if runner.failures else 0
 
 
 if __name__ == "__main__":

@@ -1,0 +1,7 @@
+name: complex_lattice_min_distributes_over_max_right
+section: lattice
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: In a total order, min distributes over max on the right.
+law: (= (fuzz-min (fuzz-max {a} {b}) {c}) (fuzz-max (fuzz-min {a} {c}) (fuzz-min {b} {c})))

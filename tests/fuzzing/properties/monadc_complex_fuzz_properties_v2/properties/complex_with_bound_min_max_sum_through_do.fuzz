@@ -1,0 +1,7 @@
+name: complex_with_bound_min_max_sum_through_do
+section: binding-order
+args: a:Int b:Int setup:Bool
+type: Bool
+expect: True
+description: Min/max decomposition of a pair must survive with binding and do sequencing.
+law: (= (with [lo (fuzz-min {a} {b}) hi (fuzz-max {a} {b})] (do {setup} (fuzz-add lo hi))) (fuzz-add {a} {b}))

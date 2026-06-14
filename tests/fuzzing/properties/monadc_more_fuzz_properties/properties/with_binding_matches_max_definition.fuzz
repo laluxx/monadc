@@ -1,0 +1,7 @@
+name: with_binding_matches_max_definition
+section: binding
+args: a:Int b:Int
+type: Bool
+expect: True
+description: A with body using an if-based maximum must match the typed max helper.
+law: (= (with [x {a} y {b}] (if (fuzz-gt? x y) x y)) (fuzz-max {a} {b}))

@@ -1,0 +1,7 @@
+name: complex_lattice_no_value_below_min_and_above_max
+section: lattice-order
+args: a:Int b:Int x:Int
+type: Bool
+expect: True
+description: A value below both operands is below min; a value above both operands is above max.
+law: (if (fuzz-lte? {x} {a}) (if (fuzz-lte? {x} {b}) (fuzz-lte? {x} (fuzz-min {a} {b})) True) True)

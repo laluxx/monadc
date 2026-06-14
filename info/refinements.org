@@ -3,12 +3,15 @@
 #+STARTUP: showeverything
 #+OPTIONS: toc:2 num:t
 
-[[file:index.org][<- Back to Index]] · [[file:types.org][Types]]
+[[file:index.org][<- Back to Index]] · [[file:types.org][Types]] · [[file:advanced-types.org][Advanced Types]]
 
 Refinement types annotate a base type with a predicate, forming the
-subset of values that satisfy it.
+subset of values that satisfy it. They are a lightweight static
+contract system — predicates are evaluated at compile time when the
+value is a literal, and deferred to runtime otherwise
+([[file:../context/types.org::1332]]).
 
-* Simple Alias
+* Simple Type Alias
 
 A =type= without braces is a transparent alias — no predicate, no
 predicate function generated:
@@ -27,19 +30,21 @@ predicate function generated:
 #+END_SRC
 
 Types MUST start with a capital letter. The alias inherits everything
-from the base type, including docstring.
+from the base type, including docstring. Aliases are resolved
+transitively through the =g_aliases= linked list up to 32 steps
+([[file:../context/types.org::1547]]).
 
 * Refinement With Predicate
 
 Set-builder notation with ∈ (U+2208, element of):
 
 #+BEGIN_SRC monad
-(type Positive { x ∈ Int | (> x 0) })
-(type NonNegative { x ∈ Int | (>= x 0) })
-(type Negative { x ∈ Int | (< x 0) })
-(type NonZero { x ∈ Int | (!= x 0) })
-(type Even { x ∈ Int | (= (% x 2) 0) })
-(type Odd { x ∈ Int | (= (% x 2) 1) })
+type Positive    { x ∈ Int | x > 0  }
+type NonNegative { x ∈ Int | x >= 0 }
+type Negative    { x ∈ Int | x < 0  }
+type NonZero     { x ∈ Int | x != 0 }
+type Even        { x ∈ Int | x % 2 = 0 }
+type Odd         { x ∈ Int | x % 2 = 1 }
 #+END_SRC
 
 Each refinement generates a predicate function: =Positive?=,
@@ -115,13 +120,68 @@ Arbitrary boolean expressions with =and=, =or=, =not=:
 (type NotFortyTwo { n ∈ Int | (not (= n 42)) })
 #+END_SRC
 
-Predicates can use arithmetic, comparison, type predicates:
+Predicates can use arithmetic, comparison, and type predicates:
 
 #+BEGIN_SRC monad
 (type SumBound { n ∈ Int | (< (+ n 1) 10) })
 (type MultipleOfThree { n ∈ Int | (= (% n 3) 0) })
 (type Numeric { x ∈ Number | (Number? x) })
 (type Collectionish { x ∈ Coll | (or (List? x) (Map? x)) })
+#+END_SRC
+
+* Compile-time Checking
+
+When a refinement type is used with a literal value, the compiler
+evaluates the predicate at compile time using =refinement_check_literal=
+([[file:../context/types.org::1375]]):
+
+1. Walks the alias chain (up to 32 steps) resolving through
+   =TypeAlias= entries
+2. Finds the =RefinementEntry= with a stored =predicate_ast=
+3. Invokes =static_eval_pred= to recursively evaluate the AST
+
+The static evaluator (=static_eval_pred=,
+[[file:../context/types.org::1382]]) handles:
+
+- Arithmetic: =+ -= *= %= (mod)
+- Comparison: ===, =!=, =>=, >=, =<=, =<=
+- Logical: =and= (short-circuit), =or= (short-circuit), =not=
+- Recursive refinement lookup: calls =Name?= by stripping trailing
+  =?= and looking up the registered refinement
+
+Returns 1 (true = passes predicate), 0 (false = fails predicate), or
+-1 (cannot evaluate at compile time → deferred to runtime).
+
+* Internal Representation
+
+Each refinement is stored as a =RefinementEntry=
+([[file:../context/types.org::860]]) in the global =g_refinements=
+linked list:
+
+| Field           | Description                                  |
+|-----------------+----------------------------------------------|
+| =name=          | Refinement type name (e.g. "Even")           |
+| =pred_name=     | Predicate function name (e.g. "even?")       |
+| =base_type=     | Underlying base type (e.g. "Int")            |
+| =predicate_ast= | Owned clone of predicate AST for static eval |
+| =var=           | Bound variable name in predicate (e.g. "x")  |
+
+Registered via =refinement_register= ([[file:../types.c::45]]).
+
+* Intersection Types (Aspirational)
+
+The "types are sets" philosophy implies that type intersection should
+be expressible:
+
+#+BEGIN_SRC monad
+;; TODO: aspirational — not yet implemented
+(type PositiveEven = Positive ∩ Even)
+#+END_SRC
+
+Currently, combined constraints must be written as a single predicate:
+
+#+BEGIN_SRC monad
+(type PositiveEven { n ∈ Int | (and (Positive? n) (Even? n)) })
 #+END_SRC
 
 * Notes
@@ -131,10 +191,12 @@ Predicates can use arithmetic, comparison, type predicates:
   depends on the compiler phase
 - Types MUST start with a capital letter
 - The =∈= symbol is U+2208, ∈
+- Constructors in =types.h=: =type_int()=, =type_float()=, etc.
+  ([[file:../context/types.org::976]])
 
 * Context Links
 
 - [[file:types.org][Types]] — type system overview
 - [[file:../how_to/RefinementType.mon][how_to/RefinementType.mon]] — refinement type experiments
 - [[file:../tests/reader-refinements.tsv][tests/reader-refinements.tsv]] — 106 parser tests
-- [[file:../context/types.org][context/types.org]] — type representation
+- [[file:../context/types.org][context/types.org]] — type representation and refinement internals

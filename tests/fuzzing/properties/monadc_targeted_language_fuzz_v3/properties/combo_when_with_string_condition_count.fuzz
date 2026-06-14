@@ -1,0 +1,7 @@
+name: combo_when_with_string_condition_count
+section: feature-interactions
+args: 
+type: Bool
+expect: True
+description: when conditions must support string count and comparison dispatch.
+law: (with [x 0] (begin (when (= (count "abc") 3) (set! x 1)) (= x 1)))

@@ -1,49 +1,201 @@
 #+TITLE: From Haskell
 #+CONTEXT: functional-programming.org, types.org
-#+STRARTUP: showeverything
+#+STARTUP: showeverything
 #+OPTIONS: toc:2 num:t
 
-[[file:index.org][<- Back to Index]] · [[file:types.org][Types]] · [[file:functional-programming.org][FP]]
+[[file:index.org][<- Back to Index]] · [[file:from-c.org][From C]] · [[file:from-lisp.org][From Lisp]] · [[file:types.org][Types]] · [[file:functional-programming.org][FP]]
 
 * Syntax Differences
 
+| Haskell                       | Monad                                |
+|-------------------------------+--------------------------------------|
+| =f x = x + 1=                 | =(define (f x) (+ x 1))=              |
+| =\x -> x + 1=                 | =(lambda (x) (+ x 1))=                |
+| =data Maybe a = Nothing | Just a=| =(data Maybe a Nothing (Just a))=       |
+| =case x of {Pat -> expr}=     | =(match x with ...)=                  |
+| =do x <- f; g x=              | =(begin (define x (f)) (g x))=        |
+| =type Int = ...=              | =(type Int ...)=                      |
+| =class Show a where ...=      | =(class Show a ... (show ...))=       |
+| =instance Show Int where ...= | =(instance Show Int (show ...))=      |
+| =deriving (Show, Eq)=         | =(data Suit ... deriving Eq Show)=    |
+
+* Evaluation: Strict, Not Lazy
+
+Monad is strict (call-by-value) — unlike Haskell's lazy evaluation. No
+implicit thunks. Create explicit delayed computation with =(lambda () ...)=
+and force with =(f)=.
+
+| Haskell          | Monad                        |
+|------------------+------------------------------|
+| =let x = 1:2:3= | =(define x (list 1 2 3)) — strict |
+| =head xs=        | =(car xs) — strict            |
+| =let xs = [1..]= | No built-in lazy ranges — use lambda |
+| =seq a b=        | Always strict — no seq needed |
+
+* Type System: Dual HM + ITT
+
+Haskell uses Hindley-Milner type inference with type classes. Monad uses a
+dual type system ([[file:../context/language.org::501][context/language.org — type system surface]]):
+
+1. **Hindley-Milner** — fast inference for ground types ([[file:../context/language.org::489]])
+2. **Intuitionistic Type Theory (ITT)** — dependent types via Normalization by
+   Evaluation (NbE) kernel ([[file:../context/language.org::686][context/language.org — NbE kernel]])
+
+The two paths are bridged by =TERM_EMBED= ([[file:../context/language.org::1290]]):
+HM functions can be embedded in ITT contexts and vice versa. The HM path
+handles the common case at O(n) speed; the ITT path validates dependent
+annotations as a shadow pass (Phase 6.5) without slowing ground-type code
+([[file:../context/language.org::1398][context/language.org — shadow pass]]).
+
+**Refinement Types**
+
+Monad supports refinement types — subset predicates on ground types
+([[file:../context/language.org::597][context/language.org — refinement types]]):
+
+#+BEGIN_SRC monad
+(type Pos { x ∈ Int | (> x 0) })
+(type Even { x ∈ Int | (= (mod x 2) 0) })
+#+END_SRC
+
+Refinements generate compile-time-checked predicate functions and materialized
+=Set= values. The predicate is evaluated statically when the argument is a
+literal ([[file:../context/types.org::1376][context/types.org — refinement_check_literal]]).
+
+**Universal Quantifier**
+
+Type quantifiers use =∀= / =all= syntax:
+
+#+BEGIN_SRC monad
+(define [id :: (∀ t. t -> t)]
+  x -> x)
+#+END_SRC
+
+Type class constraints use bracket syntax:
+
+#+BEGIN_SRC monad
+(∀ t. [Enum t, Bounded t] => Int -> (Maybe t))
+#+END_SRC
+
+* Type Classes (Dictionary Passing)
+
+Monad has type classes with =(class ...)= and =(instance ...)= declarations
+([[file:../context/typeclass.org]]). Instances compile to dictionary structs
+passed at call sites — monomorphization specializes concrete instances, so
+dispatch overhead is eliminated at monomorphization time.
+
+| Haskell                  | Monad                              |
+|--------------------------+------------------------------------|
+| =class Show a where ...= | =(class Show a ... (show [a -> Str]))= |
+| =instance Show Int where ...= | =(instance Show Int (show [x -> (Int x)]))= |
+| =deriving (Eq, Show)=    | =(data Color Red Green Blue deriving Eq Show)= |
+
+Deriving ([[file:../context/typeclass.org]]) auto-generates type class instances
+for algebraic data types and layout types.
+
+* Monomorphization, Not Boxed Polymorphism
+
+Haskell implements polymorphism through boxing: polymorphic functions operate
+on boxed values (pointer + info table). Monad monomorphizes ([[file:../context/codegen.org]]):
+
+| Haskell                   | Monad                      |
+|---------------------------+----------------------------|
+| =id :: a -> a= — boxed    | =(define (id x) x)= — monomorphized |
+| =id 42 — Int, boxed      | =(id 42)= — Int, no boxing |
+| =id "hi" — String, boxed | =(id "hi")= — String, no boxing |
+| Runtime type dispatch     | Static specialization       |
+
+The =mono_cache= ([[file:../context/codegen.org]]) caches specialized versions by
+function name + concrete type args. Each concrete instantiation generates
+separate, maximally-optimized machine code ([[file:../context/philosophy.org::162]]).
+
+* Memory Management: Arena Allocation, Not GC
+
 | Haskell             | Monad                          |
-|---------------------+--------------------------------|
-| =f x = x + 1=       | =(define (f x) (+ x 1))=        |
-| =\x -> x + 1=       | =(lambda (x) (+ x 1))=          |
-| =data Maybe a = ...=| =(data Maybe a Nothing (Just a))=|
-| =case x of ...=     | =(match x with ...)=            |
-| =do x <- f; g x=    | =(begin (define x (f)) (g x))=  |
-| =where=             | Wisp desugars to let; no s-expr where keyword |
-| =type Int = ...=    | =(type Alias ...)=              |
++---------------------+--------------------------------+
+| Garbage collector   | Arena allocation (bump-pointer) |
+| =IORef= mutation    | =(set! ...)= mutation           |
+| Lazy thunks         | Strict evaluation               |
+| =MVar=/=TVar=      | (concurrency planned)           |
 
-* Type System
+Monad does not have a garbage collector. Values are allocated in compiler-managed
+arena regions. The arena model replaces GC with deterministic bump-pointer
+allocation — allocation is fast, and entire regions are freed at once
+([[file:../context/philosophy.org::99]]).
 
-- Hindley-Milner (like Haskell) + dependent types (unlike Haskell)
-- Refinement types: ={ x ∈ Int | x > 0 }= (subset predicates)
-- Type classes with =(class ...)= and =(instance ...)=
-- Deriving: =(data Suit ... deriving Eq)= auto-generates instances
-- Universal quantifier: =∀ t. [Enum t, Bounded t] => Int -> (Maybe t)=
+* Types with Kinds
 
-* No Built-in Lazy Evaluation
+| Haskell kind | Monad equivalent                  |
++--------------+-----------------------------------+
+| =Type=       | =(Type 0)= — universe level 0     |
+| =Type -> Type| =(-> (Type 0) (Type 0))=           |
+| =Constraint= | Type class constraint contexts    |
 
-Monad is strict (call-by-value). No thunks unless you create them
-explicitly with =(lambda () ...)=.
+Monad uses a universe hierarchy ([[file:../context/types.org]]) rather than
+Haskell's =*=/=Constraint= split.
 
-* No Map/Filter/Fold Builtins
+* Inline Assembly
 
-=map=, =filter=, =foldl=, =foldr= are planned but not yet implemented
-(=map= has an infer type signature only ([[file:../infer.c]]), no codegen
-dispatch). Use manual recursion or =reduce= (which IS implemented,
-[[file:../codegen.c::13144]]).
+| Haskell                         | Monad ([[file:asm.org]])               |
++---------------------------------+---------------------------------------|
+| No standard inline asm          | =(asm add x y)<br>=(asm mov 1 %rax syscall ret)|
+| FFI via =foreign import ccall=  | =(asm ...)= inline in function bodies  |
 
-* No Monad Typeclass
+Inline assembly ([[file:../context/asm.org]]) is a first-class language feature,
+not a FFI escape hatch. Use inside typed function bodies for low-level control.
 
-Monad (the language) does not have a Monad typeclass. The "monad" in
-the name refers to monadic IO (planned, not yet implemented).
+* FFI: Include vs Foreign Import
+
+| Haskell                           | Monad ([[file:ffi.org]])              |
++-----------------------------------+---------------------------------------|
+| =foreign import ccall "sqrt" ...= | =(include "math.h")= then call =sqrt=   |
+| Binding generators (c2hs, etc.)   | No binding generators needed           |
+| Header parsing = hsc2hs           | libclang-based header parsing          |
+| Storable instances for structs    | Layout types with matching memory layout|
+
+Monad's FFI ([[file:../context/ffi.org]]) parses C headers via libclang and
+injects typed wrappers directly — no manual bindings.
+
+* Working Haskell-like Operations
+
+From the codegen dispatch table ([[file:../context/language.org::209]]):
+
+| Operation     | Haskell            | Monad               |
+|---------------+--------------------+---------------------|
+| Addition      | =+==                | =(+ a b)=           |
+| List cons     | =:=                 | =(cons a b)=        |
+| Head          | =head=              | =(car list)=        |
+| Tail          | =tail=              | =(cdr list)=        |
+| Null check    | =null=              | =(nil? x)=          |
+| Equality      | ====                | =(= a b)=           |
+| Show          | =show=              | =(show x)=          |
+| Composition   | =.=                 | =(pipe f g)= or =λ= |
+
+For an up-to-date list of working dispatch handlers, see
+[[file:../context/language.org::176][context/language.org — codegen dispatch]].
+
+* Known Gaps vs Haskell
+
+| Feature          | Status ([[file:../context/language.org::287][context/language.org — gaps]])           |
+|------------------+--------------------------------------------------|
+| =map=/=filter=     | Type signatures in infer.c, no strcmp codegen dispatch — use recursion or =reduce= |
+| =foldl=/=foldr=   | Not dispatchable — manual recursion               |
+| Monad typeclass  | Not implemented. "Monad" in the name refers to planned monadic IO |
+| Lazy evaluation  | Not built-in — create thunks with =(lambda () ...)= |
+| =where= clauses  | Wisp desugars to let — no s-expr =where= keyword  |
+| Tail-call optimization | Planned                                     |
+| Closures         | Partially implemented (closure ABI exists, =fn=/=lambda= strcmp dispatch missing) |
+| Pipe operator =|>= | Reader parses, codegen does not dispatch          |
 
 * Context Links
 
-- [[file:functional-programming.org][Functional Programming]]
-- [[file:types.org][Types]]
-- [[file:patterns.org][Pattern Matching]]
+- [[file:../context/language.org]] — language formalization, dispatch, gaps
+- [[file:../context/types.org]] — type system reference
+- [[file:../context/typeclass.org]] — type class system
+- [[file:../context/codegen.org]] — monomorphization and codegen
+- [[file:../context/philosophy.org]] — design philosophy
+- [[file:../context/ffi.org]] — C FFI internals
+- [[file:../context/asm.org]] — inline assembly internals
+- [[file:functional-programming.org]] — functional programming in Monad
+- [[file:types.org]] — type system reference
+- [[file:ffi.org]] — C FFI user guide
+- [[file:layouts.org]] — C-compatible layout types

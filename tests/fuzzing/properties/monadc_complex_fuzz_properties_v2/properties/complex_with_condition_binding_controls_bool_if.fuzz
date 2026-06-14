@@ -1,0 +1,7 @@
+name: complex_with_condition_binding_controls_bool_if
+section: binding-if
+args: cond:Bool p:Bool q:Bool
+type: Bool
+expect: True
+description: A Bool bound in with must control the same Bool branch as the original condition.
+law: (= (with [flag {cond}] (if flag {p} {q})) (if {cond} {p} {q}))

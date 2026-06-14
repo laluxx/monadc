@@ -1,0 +1,7 @@
+name: complex_order_lte_partition_lt_or_eq
+section: order-logic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Less-or-equal must partition into strict less-than or equality.
+law: (if (fuzz-lte? {a} {b}) (if (fuzz-lt? {a} {b}) True (= {a} {b})) True)

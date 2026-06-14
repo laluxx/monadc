@@ -1,0 +1,7 @@
+name: control_while_counts_to_five
+section: control-binding
+args: 
+type: Bool
+expect: True
+description: while must re-evaluate its condition and mutate the loop variable until exit.
+law: (with [x 0] (begin (while (< x 5) (set! x (+ x 1))) (= x 5)))

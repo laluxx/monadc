@@ -1,0 +1,7 @@
+name: complex_order_lt_forces_lte_not_equal
+section: order-logic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Strict less-than must imply non-equality while preserving less-or-equal.
+law: (if (fuzz-lt? {a} {b}) (if (fuzz-lte? {a} {b}) (!= {a} {b}) False) True)

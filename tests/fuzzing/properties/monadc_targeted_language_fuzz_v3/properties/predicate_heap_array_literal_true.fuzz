@@ -1,0 +1,7 @@
+name: predicate_heap_array_literal_true
+section: predicates-conversions
+args: 
+type: Bool
+expect: True
+description: Arr? must recognize heap array literals.
+law: (Arr? ~[1 2 3])

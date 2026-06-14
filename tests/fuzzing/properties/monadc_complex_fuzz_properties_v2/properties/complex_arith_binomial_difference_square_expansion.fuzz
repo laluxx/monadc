@@ -1,0 +1,7 @@
+name: complex_arith_binomial_difference_square_expansion
+section: arithmetic-normalization
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The square of a difference must match the expanded binomial form.
+law: (= (fuzz-mul (fuzz-sub {a} {b}) (fuzz-sub {a} {b})) (fuzz-add (fuzz-sub (fuzz-mul {a} {a}) (fuzz-mul (fuzz-mul 2 {a}) {b})) (fuzz-mul {b} {b})))

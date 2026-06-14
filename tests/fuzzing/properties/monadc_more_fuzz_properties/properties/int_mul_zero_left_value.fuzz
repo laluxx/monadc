@@ -1,0 +1,7 @@
+name: int_mul_zero_left_value
+section: arithmetic
+args: a:Int
+type: Bool
+expect: True
+description: Multiplying by zero on the left must produce zero.
+law: (= (fuzz-mul 0 {a}) 0)

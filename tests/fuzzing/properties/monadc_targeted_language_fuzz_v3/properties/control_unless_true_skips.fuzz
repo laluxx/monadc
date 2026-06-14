@@ -1,0 +1,7 @@
+name: control_unless_true_skips
+section: control-binding
+args: 
+type: Bool
+expect: True
+description: unless True must skip its body.
+law: (with [x 0] (begin (unless True (set! x 7)) (= x 0)))

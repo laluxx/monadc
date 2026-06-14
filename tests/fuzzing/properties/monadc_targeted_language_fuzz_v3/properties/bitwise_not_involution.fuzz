@@ -1,0 +1,7 @@
+name: bitwise_not_involution
+section: bitwise
+args: a:Int
+type: Bool
+expect: True
+description: Double bitwise not must preserve the operand.
+law: (= (~ (~ {a})) {a})

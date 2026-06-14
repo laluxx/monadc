@@ -6,8 +6,11 @@
 [[file:index.org][<- Back to Index]] · [[file:data.org][Data Types]] · [[file:ffi.org][C FFI]]
 
 Layout types provide C-compatible memory layouts for struct-like data.
+Internally they are represented as =TYPE_LAYOUT= (types.h:23) with fields
+stored in =LayoutField= structs (types.h:62-67): each field has a =name=,
+=type=, =offset= (computed), and =size=.
 
-** Declaration [[[file:../reader.c::5062]]]
+** Declaration
 
 #+BEGIN_SRC monad
 (layout Point [x :: Float] [y :: Float])
@@ -26,7 +29,8 @@ Layout types provide C-compatible memory layouts for struct-like data.
 ** Field Access
 
 Dot notation: =(p.x)= returns 3.0, =(p.y)= returns 4.0 (merged symbol
-access handled by =codegen_dot_chain=).
+access handled by =codegen_dot_chain= in codegen.c). Access compiles
+to a fixed-offset load from an LLVM struct pointer.
 
 ** Field Mutation
 
@@ -35,36 +39,108 @@ access handled by =codegen_dot_chain=).
 (<- p.x 5.0)       ;; sugar for set!
 #+END_SRC
 
-** Options
+** Field Options
 
-| Option   | Description                       |
-|----------+-----------------------------------|
-| :packed  | Remove padding between fields     |
-| :align N | Override field alignment to N     |
+Each field can carry options that modify its layout behavior:
+
+| Option   | Description                                   |
+|----------+-----------------------------------------------|
+| :packed  | Remove padding between fields (no alignment) |
+| :align N | Override field alignment to N bytes          |
 
 #+BEGIN_SRC monad
 (layout Packet [flags :: U8 :packed] [len :: Int :align 8])
 #+END_SRC
 
-=where= and =method= clauses inside =layout= are NOT implemented in
-the parser (compile error: "Expected '[' for layout field"). Use
-separate functions defined outside the =layout=.
+Additional field-level flags stored on the =LayoutField= (types.c):
 
-** Comparison
+- *Inline fields*: nested layouts stored directly (not as pointers) —
+  =layout_is_inline= flag on the parent.
+- *Pointer fields*: fields storing a pointer to another layout.
+- *Array fields*: fields that are fixed-size arrays of a layout type.
 
-| Aspect       | =data= (ADT)     | =layout=          |
-|--------------+----------------+-----------------|
-| Memory       | Heap-allocated | Stack or inline |
-| C compat     | No             | Yes             |
-| Polymorphism | Yes            | No              |
+** Nested Layouts
 
-** Limitations
+Layout types can be embedded as fields of other layouts. The inner
+layout is stored in the outer layout at the computed offset, not as
+a separate heap allocation. The =layout_is_inline= flag on the inner
+field marks this (types.h:602). For opaque C typedefs (like
+=VkInstance=), =layout_is_scalar=true= treats the layout as a
+single-word typedef with no accessible fields.
 
-- =where= and =method= inside =layout= not supported yet
-- No automatic constructor type classes (planned)
+** Layout Offset Computation
+
+Field offsets are computed by =layout_compute_offsets= (types.c) which
+processes the =LayoutField= array:
+
+1. Starting offset = 0 (adjusted for =layout_align=).
+2. For each field: align to field's natural alignment (or =:align N=
+   override), assign offset, advance by field size.
+3. If =layout_packed=, skip alignment — fields are tightly packed.
+4. Final =layout_total_size= is the last offset + size, rounded up to
+   the struct alignment.
+
+See [[file:../context/types.org][context/types.org]] for detailed field structures and offset rules.
+
+** Array-of-Layouts
+
+Create arrays of layout types using standard array syntax with the
+layout as the element type:
+
+#+BEGIN_SRC monad
+(layout Point [x :: Float] [y :: Float])
+
+;; Fixed-size array of 10 Points
+(define [points :: Arr :: Point :: 10] [])
+
+;; Heap array of Points
+(define [points :: Arr :: Point] ~[])
+#+END_SRC
+
+Each Point element is stored contiguously in the array, matching C
+struct array layout.
+
+** Methods (=where= clause)
+
+The =where= and =method= clauses inside =layout= define methods on the
+layout type. Methods receive =Self= as their first argument and are
+accessed with arrow syntax:
+
+#+BEGIN_SRC monad
+(layout Vec3
+  [x :: Float]
+  [y :: Float]
+  [z :: Float]
+  where
+    method ->array :: Self -> Array
+      s -> [s.x s.y s.z])
+
+(define v (Vec3 1.0 2.0 3.0))
+(show v->array)   ; [1.0 2.0 3.0]
+#+END_SRC
+
+Method dispatch is tested in =rt_layout_*.mon= fixtures. The
+=where= block can contain multiple =method= forms.
+
+** Comparison: =layout= vs =data=
+
+| Aspect       | =data= (ADT)          | =layout=             |
+|--------------+-----------------------+----------------------|
+| Memory       | Heap-allocated (cons) | Stack or inline      |
+| C compat     | No                    | Yes                  |
+| Polymorphism | Yes (type params)     | No                   |
+| Field access | Pattern matching      | Dot notation         |
+| Mutation     | Immutable             | =set!= / =<-=        |
+| Layout       | Linked list / tagged  | C struct, contiguous |
+
+Layout types trade polymorphism and immutability for C-compatible
+contiguous memory, predictable offsets, and zero-copy FFI.
 
 * Context Links
 
-- [[file:../context/codegen.org][context/codegen.org]] — Layout codegen
-- [[file:../context/ffi.org][context/ffi.org]] — C FFI interop
-- [[file:../how_to/Layouts.mon][how_to/Layouts.mon]] — layout examples (includes uses of where/method that currently error)
+- [[file:../context/types.org][context/types.org]] — layout type representation (=TYPE_LAYOUT=,
+  =LayoutField= struct, =layout_compute_offsets=)
+- [[file:../context/codegen.org][context/codegen.org]] — layout codegen, =codegen_dot_chain=, offset
+  computation in LLVM
+- [[file:../context/ffi.org][context/ffi.org]] — C FFI interop, struct ABI matching
+- [[file:../how_to/Layouts.mon][how_to/Layouts.mon]] — layout examples with methods

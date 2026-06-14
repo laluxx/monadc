@@ -1,0 +1,7 @@
+name: combo_quasiquote_generated_value_inside_logic
+section: feature-interactions
+args: a:Int
+type: Bool
+expect: True
+description: quasiquote/unquote result should compose with logic and type predicates.
+law: (and (= (head (quasiquote ((unquote {a}) tail))) {a}) (Int? (head (quasiquote ((unquote {a}) tail)))))

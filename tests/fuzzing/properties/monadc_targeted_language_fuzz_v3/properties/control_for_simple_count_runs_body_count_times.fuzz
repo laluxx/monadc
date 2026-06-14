@@ -1,0 +1,7 @@
+name: control_for_simple_count_runs_body_count_times
+section: control-binding
+args: 
+type: Bool
+expect: True
+description: simple count for-loop must execute the body exactly n times.
+law: (with [x 0] (begin (for 5 (set! x (+ x 1))) (= x 5)))

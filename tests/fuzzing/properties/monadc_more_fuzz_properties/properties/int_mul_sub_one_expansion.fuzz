@@ -1,0 +1,7 @@
+name: int_mul_sub_one_expansion
+section: arithmetic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Multiplying by one less than a value must expand to the product minus the original value.
+law: (= (fuzz-mul {a} (fuzz-sub {b} 1)) (fuzz-sub (fuzz-mul {a} {b}) {a}))

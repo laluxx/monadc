@@ -1,0 +1,7 @@
+name: path_literal_absolute_tmp_value
+section: quote-null-path
+args: 
+type: Path
+expect: /tmp/monadc-fuzz-path
+description: absolute path literals are first-class Path values and show as path text.
+law: /tmp/monadc-fuzz-path

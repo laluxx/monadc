@@ -1,0 +1,7 @@
+name: with_if_branch_shadowing
+section: binding
+args: cond:Bool outer:Int inner:Int
+type: Bool
+expect: True
+description: A branch-local with binding must shadow only inside the selected branch.
+law: (= (with [x {outer}] (if {cond} (with [x {inner}] x) x)) (if {cond} {inner} {outer}))

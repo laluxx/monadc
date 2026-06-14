@@ -1,0 +1,7 @@
+name: list_cdr_of_single_cons_empty
+section: collections
+args: a:Int
+type: Bool
+expect: True
+description: cdr of a single cons cell ending in an empty list must be empty.
+law: (empty? (cdr (cons {a} (list))))

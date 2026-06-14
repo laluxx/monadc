@@ -1,0 +1,7 @@
+name: min_not_strictly_below_self
+section: negative
+args: a:Int
+type: Bool
+expect: False
+description: The min of an Int with itself must not be strictly below that Int.
+law: (fuzz-lt? (fuzz-min {a} {a}) {a})

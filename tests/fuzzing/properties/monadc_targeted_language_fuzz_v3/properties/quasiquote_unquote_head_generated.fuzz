@@ -1,0 +1,7 @@
+name: quasiquote_unquote_head_generated
+section: quote-null-path
+args: a:Int
+type: Bool
+expect: True
+description: unquote in head position must evaluate the generated expression.
+law: (= (head (quasiquote ((unquote {a}) beta))) {a})

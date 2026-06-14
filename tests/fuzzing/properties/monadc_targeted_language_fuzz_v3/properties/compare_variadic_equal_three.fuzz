@@ -1,0 +1,7 @@
+name: compare_variadic_equal_three
+section: comparison-variadic
+args: a:Int
+type: Bool
+expect: True
+description: Variadic equality must accept three equal generated Int expressions.
+law: (= {a} {a} {a})

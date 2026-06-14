@@ -3086,7 +3086,7 @@ cleanup:
     return result;
 }
 
-static LLVMValueRef codegen_dot_chain(CodegenContext *ctx, const char *symbol, Type **out_type, AST *ast) {
+static LLVMValueRef codegen_dot_chain(CodegenContext *ctx, const char *symbol, Type **out_type, AST *ast, bool *out_is_method, LLVMValueRef *out_self) {
     const char *first_dot = strchr(symbol, '.');
     if (!first_dot || first_dot == symbol) return NULL; // Not a dot-chain
 
@@ -3095,6 +3095,9 @@ static LLVMValueRef codegen_dot_chain(CodegenContext *ctx, const char *symbol, T
     if (vlen >= sizeof(var_name)) vlen = sizeof(var_name) - 1;
     memcpy(var_name, symbol, vlen);
     var_name[vlen] = '\0';
+
+    if (out_is_method) *out_is_method = false;
+    if (out_self) *out_self = NULL;
 
     EnvEntry *base_entry = resolve_symbol_with_modules(ctx, var_name, ast);
     if (!base_entry) {
@@ -3135,6 +3138,7 @@ static LLVMValueRef codegen_dot_chain(CodegenContext *ctx, const char *symbol, T
     }
 
     LLVMValueRef current_ptr = LLVMBuildLoad2(ctx->builder, ptr_t, base_entry->value, var_name);
+    LLVMValueRef base_object_ptr = current_ptr;
 
     const char *p = first_dot + 1;
     while (*p) {
@@ -3164,6 +3168,16 @@ static LLVMValueRef codegen_dot_chain(CodegenContext *ctx, const char *symbol, T
         }
 
         if (field_idx < 0) {
+            char method_name[512];
+            snprintf(method_name, sizeof(method_name), "%s.%s",
+                     current_lay->layout_name, field_name);
+            EnvEntry *mentry = env_lookup(ctx->env, method_name);
+            if (mentry && mentry->func_ref) {
+                if (out_is_method) *out_is_method = true;
+                if (out_self) *out_self = base_object_ptr;
+                if (out_type) *out_type = mentry->type;
+                return mentry->func_ref;
+            }
             CODEGEN_ERROR(ctx, "%s:%d:%d: error: layout '%s' has no field '%s'",
                           parser_get_filename(), ast->line, ast->column,
                           current_lay->layout_name, field_name);
@@ -3285,7 +3299,7 @@ static LLVMValueRef codegen_lvalue(CodegenContext *ctx, AST *ast, Type **out_typ
 
      if (ast->type == AST_SYMBOL) {
         Type *dot_type = NULL;
-        LLVMValueRef dot_ptr = codegen_dot_chain(ctx, ast->symbol, &dot_type, ast);
+        LLVMValueRef dot_ptr = codegen_dot_chain(ctx, ast->symbol, &dot_type, ast, NULL, NULL);
         if (dot_ptr) {
             if (out_type) *out_type = dot_type;
             return dot_ptr;
@@ -3414,7 +3428,17 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
         // ── Dot-access: p.x.y.z ─────────────────────────────────────────────
         Type *dot_type = NULL;
-        LLVMValueRef dot_ptr = codegen_dot_chain(ctx, ast->symbol, &dot_type, ast);
+        bool dot_is_method_sym = false;
+        LLVMValueRef dot_self_sym = NULL;
+        LLVMValueRef dot_ptr = codegen_dot_chain(ctx, ast->symbol, &dot_type, ast, &dot_is_method_sym, &dot_self_sym);
+        if (dot_ptr && dot_is_method_sym) {
+            /* Symbol evaluates to a layout method — return the func_ref directly.
+             * The caller (a wrapping call expression) will handle dispatch.
+             * We store dot_self in a thread-local so the call site can prepend it. */
+            result.value = dot_ptr;
+            result.type  = dot_type ? type_clone(dot_type) : type_unknown();
+            return result;
+        }
         if (dot_ptr) {
             if (dot_type && dot_type->kind == TYPE_LAYOUT && dot_type->layout_field_count == 0 && dot_type->layout_name) {
                 Type *full = env_lookup_layout(ctx->env, dot_type->layout_name);
@@ -11378,7 +11402,7 @@ if (ast->list.count >= 5) {
                         EnvEntry *ae = env_lookup(ctx->env, arg_sym);
                         if (!ae && strchr(arg_sym, '.')) {
                             Type *dot_type = NULL;
-                            LLVMValueRef dot_ptr = codegen_dot_chain(ctx, arg_sym, &dot_type, ast->list.items[i + 1]);
+                            LLVMValueRef dot_ptr = codegen_dot_chain(ctx, arg_sym, &dot_type, ast->list.items[i + 1], NULL, NULL);
                             if (dot_ptr && dot_type) {
                                 LLVMTypeRef dot_llvm = type_to_llvm(ctx, dot_type);
                                 converted_arg = LLVMBuildLoad2(ctx->builder, dot_llvm, dot_ptr, arg_sym);
@@ -12533,8 +12557,116 @@ if (ast->list.count >= 5) {
             // Dot-access function call or array indexing: (p.x.y.func arg) or (font.chars i)
             {
                 Type *dot_type = NULL;
-                LLVMValueRef dot_ptr = codegen_dot_chain(ctx, head->symbol, &dot_type, head);
+                bool dot_is_method = false;
+                LLVMValueRef dot_self = NULL;
+                LLVMValueRef dot_ptr = codegen_dot_chain(ctx, head->symbol, &dot_type, head, &dot_is_method, &dot_self);
                 if (dot_ptr) {
+                    if (dot_is_method && dot_self) {
+                        LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                        LLVMTypeRef i32   = LLVMInt32TypeInContext(ctx->context);
+                        /* dot_ptr is func_ref of the method (e.g. Color.eql?).
+                         * dot_self is the base object heap pointer.
+                         * Reconstruct the canonical method name: LayoutName.method
+                         * by finding the layout name from the base variable type,
+                         * and the method segment from the last dot in head->symbol. */
+                        const char *last_dot = strrchr(head->symbol, '.');
+                        const char *method_seg = last_dot ? last_dot + 1 : head->symbol;
+                        /* Get layout name from base variable (first segment before dot) */
+                        char base_var[256];
+                        const char *first_dot_pos = strchr(head->symbol, '.');
+                        size_t blen = first_dot_pos ? (size_t)(first_dot_pos - head->symbol) : strlen(head->symbol);
+                        if (blen >= sizeof(base_var)) blen = sizeof(base_var) - 1;
+                        memcpy(base_var, head->symbol, blen);
+                        base_var[blen] = '\0';
+                        EnvEntry *base_e = env_lookup(ctx->env, base_var);
+                        const char *lay_name = (base_e && base_e->type && base_e->type->kind == TYPE_LAYOUT)
+                                             ? base_e->type->layout_name : NULL;
+                        char meth_full[512];
+                        if (lay_name)
+                            snprintf(meth_full, sizeof(meth_full), "%s.%s", lay_name, method_seg);
+                        else
+                            snprintf(meth_full, sizeof(meth_full), "%s", head->symbol);
+                        EnvEntry *meth_e = env_lookup(ctx->env, meth_full);
+                        if (meth_e && meth_e->kind == ENV_FUNC && meth_e->func_ref &&
+                            !meth_e->is_closure_abi) {
+                            /* Typed ABI method: prepend self, then explicit args */
+                            int n_explicit = (int)ast->list.count - 1;
+                            int n_total    = 1 + n_explicit;
+                            LLVMValueRef *call_args  = malloc(sizeof(LLVMValueRef) * (n_total ? n_total : 1));
+                            LLVMTypeRef  *call_types = malloc(sizeof(LLVMTypeRef)  * (n_total ? n_total : 1));
+                            /* arg 0 = self (already a raw heap pointer) */
+                            call_args[0]  = dot_self;
+                            call_types[0] = ptr_t;
+                            /* remaining args from call site */
+                            for (int i = 0; i < n_explicit; i++) {
+                                CodegenResult ar = codegen_expr(ctx, ast->list.items[i + 1]);
+                                Type *pt = (i + 1 < meth_e->param_count) ? meth_e->params[i + 1].type : NULL;
+                                LLVMValueRef cv = ar.value;
+                                LLVMTypeRef  et = pt ? type_to_llvm(ctx, pt) : LLVMTypeOf(cv);
+                                if (et == ptr_t && LLVMTypeOf(cv) != ptr_t)
+                                    cv = codegen_box(ctx, cv, ar.type);
+                                else if (pt && type_is_integer(pt) && LLVMTypeOf(cv) == ptr_t) {
+                                    LLVMTypeRef uft = LLVMFunctionType(LLVMInt64TypeInContext(ctx->context), &ptr_t, 1, 0);
+                                    cv = LLVMBuildCall2(ctx->builder, uft, get_rt_unbox_int(ctx), &cv, 1, "unbox_marg");
+                                }
+                                call_args[i + 1]  = cv;
+                                call_types[i + 1] = LLVMTypeOf(cv);
+                            }
+                            /* Coerce all args to the exact LLVM param types of the function */
+                            LLVMTypeRef fn_t   = LLVMGlobalGetValueType(meth_e->func_ref);
+                            unsigned    npar   = LLVMCountParamTypes(fn_t);
+                            if (npar > 0) {
+                                LLVMTypeRef *par_ts = malloc(sizeof(LLVMTypeRef) * npar);
+                                LLVMGetParamTypes(fn_t, par_ts);
+                                for (int i = 0; i < (int)npar && i < n_total; i++) {
+                                    call_args[i]  = emit_type_cast(ctx, call_args[i], par_ts[i]);
+                                    call_types[i] = par_ts[i];
+                                }
+                                free(par_ts);
+                            }
+                            Type *mret = meth_e->return_type;
+                            LLVMTypeRef ret_llvm = mret ? type_to_llvm(ctx, mret) : ptr_t;
+                            LLVMTypeRef call_ft  = LLVMFunctionType(ret_llvm, call_types, n_total, 0);
+                            result.value = LLVMBuildCall2(ctx->builder, call_ft,
+                                                          meth_e->func_ref, call_args, n_total, "meth_call");
+                            result.type  = mret ? type_clone(mret) : type_unknown();
+                            free(call_args);
+                            free(call_types);
+                            return result;
+                        }
+                        /* Closure ABI method fallback: box self, prepend to args array */
+                        int n_explicit = (int)ast->list.count - 1;
+                        int n_total    = 1 + n_explicit;
+                        LLVMTypeRef arr_t    = LLVMArrayType(ptr_t, n_total ? n_total : 1);
+                        LLVMValueRef arr_ptr = LLVMBuildAlloca(ctx->builder, arr_t, "meth_args");
+                        LLVMValueRef self_boxed = dot_self;
+                        if (LLVMTypeOf(self_boxed) != ptr_t)
+                            self_boxed = LLVMBuildBitCast(ctx->builder, self_boxed, ptr_t, "self_box");
+                        LLVMValueRef zero  = LLVMConstInt(i32, 0, 0);
+                        LLVMValueRef zero2 = LLVMConstInt(i32, 0, 0);
+                        LLVMValueRef idxs0[] = {zero, zero2};
+                        LLVMValueRef slot0   = LLVMBuildGEP2(ctx->builder, arr_t, arr_ptr, idxs0, 2, "slot0");
+                        LLVMBuildStore(ctx->builder, self_boxed, slot0);
+                        for (int i = 0; i < n_explicit; i++) {
+                            CodegenResult ar = codegen_expr(ctx, ast->list.items[i + 1]);
+                            LLVMValueRef  bv = codegen_box(ctx, ar.value, ar.type);
+                            LLVMValueRef  ix = LLVMConstInt(i32, i + 1, 0);
+                            LLVMValueRef  idxs[] = {LLVMConstInt(i32, 0, 0), ix};
+                            LLVMValueRef  slot   = LLVMBuildGEP2(ctx->builder, arr_t, arr_ptr, idxs, 2, "slot");
+                            LLVMBuildStore(ctx->builder, bv, slot);
+                        }
+                        LLVMValueRef args_ptr = LLVMBuildBitCast(ctx->builder, arr_ptr, ptr_t, "args_ptr");
+                        LLVMValueRef calln_fn = get_rt_closure_calln(ctx);
+                        LLVMTypeRef  calln_p[] = {ptr_t, i32, ptr_t};
+                        LLVMTypeRef  calln_ft  = LLVMFunctionType(ptr_t, calln_p, 3, 0);
+                        LLVMValueRef fn_as_ptr = dot_ptr;
+                        if (LLVMTypeOf(fn_as_ptr) != ptr_t)
+                            fn_as_ptr = LLVMBuildBitCast(ctx->builder, fn_as_ptr, ptr_t, "fn_ptr");
+                        LLVMValueRef calln_a[] = {fn_as_ptr, LLVMConstInt(i32, n_total, 0), args_ptr};
+                        result.value = LLVMBuildCall2(ctx->builder, calln_ft, calln_fn, calln_a, 3, "meth_clo_call");
+                        result.type  = type_unknown();
+                        return result;
+                    }
                     if (dot_type && dot_type->kind == TYPE_LAYOUT && dot_type->layout_field_count == 0 && dot_type->layout_name) {
                         Type *full = env_lookup_layout(ctx->env, dot_type->layout_name);
                         if (full) dot_type = full;

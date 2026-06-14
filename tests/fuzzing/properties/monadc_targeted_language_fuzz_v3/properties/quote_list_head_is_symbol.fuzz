@@ -1,0 +1,7 @@
+name: quote_list_head_is_symbol
+section: quote-null-path
+args: 
+type: Bool
+expect: True
+description: head of a quoted symbol list must be a Symbol.
+law: (Symbol? (head (quote (alpha beta))))

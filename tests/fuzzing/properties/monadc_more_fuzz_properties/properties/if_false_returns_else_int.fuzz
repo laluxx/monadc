@@ -1,0 +1,7 @@
+name: if_false_returns_else_int
+section: control
+args: then_value:Int else_value:Int
+type: Bool
+expect: True
+description: An if expression with literal False must return the else branch.
+law: (= (if False {then_value} {else_value}) {else_value})

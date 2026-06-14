@@ -1,0 +1,7 @@
+name: bitwise_xor_self_zero
+section: bitwise
+args: a:Int
+type: Bool
+expect: True
+description: Bitwise xor of a value with itself must be zero.
+law: (= (bit-xor {a} {a}) 0)

@@ -1,0 +1,7 @@
+name: int_add_cancellation_left_bool
+section: arithmetic
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Left-addition cancellation must preserve the truth value of equality.
+law: (= (fuzz-eq-int? (fuzz-add {a} {b}) (fuzz-add {a} {c})) (fuzz-eq-int? {b} {c}))

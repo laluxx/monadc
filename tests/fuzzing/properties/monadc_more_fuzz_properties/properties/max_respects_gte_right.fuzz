@@ -1,0 +1,7 @@
+name: max_respects_gte_right
+section: order
+args: a:Int b:Int
+type: Bool
+expect: True
+description: If the right value is greater-or-equal, max must return the right value.
+law: (if (fuzz-gte? {b} {a}) (= (fuzz-max {a} {b}) {b}) True)

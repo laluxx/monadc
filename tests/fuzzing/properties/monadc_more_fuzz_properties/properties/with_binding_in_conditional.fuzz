@@ -1,0 +1,7 @@
+name: with_binding_in_conditional
+section: binding
+args: a:Int b:Int fallback:Int
+type: Bool
+expect: True
+description: With-bound values must preserve conditional behavior in a body.
+law: (= (with [x {a} y {b}] (if (fuzz-lt? x y) x {fallback})) (if (fuzz-lt? {a} {b}) {a} {fallback}))

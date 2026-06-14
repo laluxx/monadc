@@ -1,0 +1,7 @@
+name: conversion_int_float_constant_roundtrip
+section: predicates-conversions
+args: 
+type: Bool
+expect: True
+description: Float-to-Int conversion must roundtrip an integral constant.
+law: (= (Int (Float 42)) 42)

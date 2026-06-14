@@ -1,0 +1,7 @@
+name: max_bounded_by_left_and_right
+section: order
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The max helper result must be above both operands.
+law: (if (fuzz-gte? (fuzz-max {a} {b}) {a}) (fuzz-gte? (fuzz-max {a} {b}) {b}) False)

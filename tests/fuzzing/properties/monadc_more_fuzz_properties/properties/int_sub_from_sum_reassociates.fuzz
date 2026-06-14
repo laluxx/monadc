@@ -1,0 +1,7 @@
+name: int_sub_from_sum_reassociates
+section: arithmetic
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Subtracting from a sum must be equivalent to subtracting from one addend before adding.
+law: (= (fuzz-sub (fuzz-add {a} {b}) {c}) (fuzz-add {a} (fuzz-sub {b} {c})))

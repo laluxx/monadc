@@ -1,0 +1,7 @@
+name: comparison_gt_implies_not_equal
+section: comparison
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Strict greater-than must imply integer inequality.
+law: (if (fuzz-gt? {a} {b}) (!= {a} {b}) True)

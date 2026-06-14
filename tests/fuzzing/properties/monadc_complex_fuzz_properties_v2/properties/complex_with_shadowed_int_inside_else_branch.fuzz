@@ -1,0 +1,7 @@
+name: complex_with_shadowed_int_inside_else_branch
+section: binding-if
+args: cond:Bool outer:Int inner:Int a:Int
+type: Bool
+expect: True
+description: An Int binding shadowed only inside the else branch must affect only that branch.
+law: (= (with [x {outer}] (if {cond} {a} (with [x {inner}] x))) (if {cond} {a} {inner}))

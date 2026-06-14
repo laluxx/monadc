@@ -4,55 +4,157 @@
 
 [[file:index.org][<- Back to Index]] · [[file:syntax.org][Syntax]] · [[file:core.org][Core Library]]
 
-* Declaration ([[file:../module.c::414]])
+Monad has a module system with named exports, selective and qualified imports,
+and export manifest (.mexp) files that bridge compilation units
+([[file:../context/module.org]]).
+
+* Module Declaration ([[file:../module.c::414]])
 
 #+BEGIN_SRC monad
 (module Name [exports...])
 (module Math [pi e tau square sqrt])
 #+END_SRC
 
-- File ~Name.mon~ must exist (guessed from path if missing, default: ~Main~)
-- Empty/~[]~ exports export nothing; omitted exports export everything
+- File ~Name.mon~ must exist (guessed from path if missing, default: ~Main~).
+- Empty/~[]~ exports set mode to =EXPORT_NONE= (sealed module, nothing visible).
+- Omitted exports set mode to =EXPORT_ALL= (all top-level bindings visible).
+- Explicit =[sym ...]= list sets mode to =EXPORT_SELECTED= (allow-list only).
 
-* Import syntax ([[file:../module.c::469]])
+Module name validation ([[file:../module.h::84]]): names must start with an
+uppercase ASCII letter and contain only alphanumeric characters or dots (for
+qualified names like ="Std.Math"=).
 
-| Form                                                   | Semantics                         |
-|--------------------------------------------------------+-----------------------------------|
-| =(import Mod)=                                           | Unqualified, all names            |
-| =(import "path/to/file.mon")=                            | File path import                  |
-| =(import Mod :as Alias)=                                 | Unqualified with alias prefix     |
-| =(import qualified Mod)=                                 | All names, qualified access only  |
-| =(import qualified Mod :as A)=                           | Qualified with alias prefix       |
-| =(import Mod [sym1 sym2])=                               | Selective: only listed names      |
-| =(import Mod hiding [sym1 sym2])=                        | Import all except listed          |
-| =(import qualified Mod [syms] :as A)=                    | Qualified + selective + alias     |
+* Import Syntax ([[file:../module.c::469]])
 
-- Module and alias names must start with uppercase (enforced, compiler error otherwise)
+| Form                                | Semantics                        |
+|-------------------------------------+----------------------------------|
+| =(import Mod)=                        | Unqualified, all names           |
+| =(import "path/to/file.mon")=         | File path import                 |
+| =(import Mod :as Alias)=              | Unqualified with alias prefix    |
+| =(import qualified Mod)=              | All names, qualified access only |
+| =(import qualified Mod :as A)=        | Qualified with alias prefix      |
+| =(import Mod [sym1 sym2])=            | Selective: only listed names     |
+| =(import Mod hiding [sym1 sym2])=     | Import all except listed         |
+| =(import qualified Mod [syms] :as A)= | Qualified + selective + alias    |
+
+Module and alias names must start with uppercase (enforced, compiler error
+otherwise). Import modes ([[file:../context/module.org::module-import-decl]]):
+
+- =IMPORT_UNQUALIFIED=: symbols accessible bare or with prefix.
+- =IMPORT_QUALIFIED=: symbols accessible only with prefix (e.g., =Math:sqrt=).
+- =IMPORT_SELECTIVE=: only the listed symbols are imported.
+- =IMPORT_HIDING=: everything except the listed symbols is imported.
 
 * Resolution
 
-1. Module registry (already-compiled modules by name)
-2. ~./ModuleName.mon~ (local file)
-3. ~$MONAD_CORE~ recursive search (dev override)
-4. ~/usr/local/lib/monad/core~ recursive search (installed stdlib)
+Module file resolution ([[file:../module.h::110]]):
 
-* Export control
+1. Module registry (already-compiled modules by name).
+2. ~./ModuleName.mon~ (local file, path derived via =module_name_to_path=,
+   which converts dots to path separators, e.g. ="Std.Math"= → ="Std/Math.mon"=).
+3. ~$MONAD_CORE~ recursive search (dev override).
+4. ~/usr/local/lib/monad/core~ recursive search (installed stdlib).
 
-| Mode             | Meaning                        |
-|------------------+--------------------------------|
-| ~EXPORT_ALL~       | No export list — expose all    |
-| ~EXPORT_SELECTED~  | Explicit ~[sym ...]~ list       |
-| ~EXPORT_NONE~      | Empty ~[]~ — export nothing     |
+* Symbol Resolution
 
-* Known limitations
+=module_resolve_symbol= ([[file:../module.h::100]]) searches the module's own
+exports and all imports to find which qualified name a bare symbol refers to.
+Returns a malloc'd string like ="Math:sqrt"= or NULL if the symbol is not
+accessible. When the same bare symbol is exported by two different imports,
+resolution is ambiguous — the current implementation returns the first match
+in import order (future work should emit a diagnostic)
+([[file:../context/module.org::dec.module.symbol-resolution-ambiguity]]).
 
-- No automatic prelude import (planned)
-- No re-export (~(import Mod [x])~ does not make ~x~ visible to importers)
-- Most ~core/~ implementations are commented out (WIP)
+* Export Control
+
+| Mode            | Meaning                     |
+|-----------------+-----------------------------|
+| ~EXPORT_ALL~      | No export list — expose all |
+| ~EXPORT_SELECTED~ | Explicit ~[sym ...]~ list     |
+| ~EXPORT_NONE~     | Empty ~[]~ — export nothing   |
+
+=ModuleDecl= ([[file:../module.h::37]]) bundles the module name, an =ExportMode=,
+and an optional =ExportList= for selected exports. =module_decl_is_exported=
+([[file:../module.h::83]]) checks visibility:
+- =EXPORT_ALL=: always visible.
+- =EXPORT_NONE=: never visible.
+- =EXPORT_SELECTED=: O(n) =strcmp= scan of the export list.
+
+* Module Context and Registry
+
+=ModuleContext= ([[file:../module.h::59]]) holds per-compilation-unit state:
+the current =ModuleDecl=, a dynamic array of =ImportDecl= pointers, and the
+current source file path. Functions: =module_context_create=, =module_context_free=,
+=module_context_set_file=, =module_context_set_decl=, =module_context_add_import=,
+=module_context_find_import=.
+
+=ModuleRegistry= ([[file:../module.h::68]]) is a flat registry of all compiled
+modules keyed by name: =module_registry_create=, =module_registry_free=,
+=module_registry_add=, =module_registry_find= (O(n) =strcmp= scan).
+
+* Export Manifest (.mexp)
+
+When a module is compiled, an export manifest is written as a sidecar =.mexp=
+file ([[file:../context/module-export.org]]). This plain-text record contains
+every exported symbol with type information, allowing importing modules to emit
+correct extern declarations without re-parsing the original source.
+
+MEXP format ([[file:../module_export.h::31]]):
+
+#+BEGIN_EXAMPLE
+VAR   <mangled_name>  <type_kind>   [<arr_size> <arr_elem_kind>]
+FUNC  <mangled_name>  <ret_kind>    <param_count>  [<param_name> <param_kind>]*
+#+END_EXAMPLE
+
+Records are one per line. =type_kind= is an integer value mirroring the
+=MEXP_TYPE_*= constants (0–12, duplicating the =TypeKind= enum from types.h so
+=module_export.h= has zero dependencies on the rest of the compiler).
+
+Key types ([[file:../context/module-export.org::module-export-type-kind-constants]]):
+
+| Constant           | Value | Description       |
+|--------------------+-------+-------------------|
+| MEXP_TYPE_INT      | 0     | Integer type      |
+| MEXP_TYPE_FLOAT    | 1     | Floating-point    |
+| MEXP_TYPE_CHAR     | 2     | Character         |
+| MEXP_TYPE_STRING   | 3     | String            |
+| MEXP_TYPE_BOOL     | 4     | Boolean           |
+| MEXP_TYPE_LIST     | 8     | List              |
+| MEXP_TYPE_ARR      | 10    | Array             |
+| MEXP_TYPE_FN       | 12    | Function          |
+
+API functions ([[file:../module_export.h::68]]):
+
+- =manifest_create= / =manifest_free=: lifecycle.
+- =manifest_add_var= / =manifest_add_func=: append entries.
+- =manifest_write=: serialises to =\<module_name\>.mexp=.
+- =manifest_read=: parses a .mexp file back into an =ExportManifest=.
+- =manifest_mangle=: concatenates =module_name= and =local_name= with ="__"=
+  separator (e.g. ="Math" + "phi"= → ="Math__phi"=). This mangled name is used
+  for linker symbols and must match the LLVM symbol renaming in main.c Phase 9.
+
+* Known Limitations
+
+- The .mexp manifest is parsed but not yet fully wired into the build
+  pipeline (written but not consumed during incremental builds).
+- No automatic prelude import (planned).
+- No re-export: =(import Mod [x])= does not make =x= visible to importers of the
+  current module; every consumer must directly import the defining module
+  ([[file:../context/module-export.org::think.module-export.no-re-export-mechanism]]).
+- Most ~old-core/~ implementations are commented out (WIP).
+- The .mexp manifest and the source-level =module= declaration are a dual source
+  of truth. The .mexp should be treated as a cache (always regenerated from
+  source, never hand-edited), but nothing enforces this
+  ([[file:../context/module-export.org::think.module-export.manifest-vs-module-decl]]).
+- No compiler-version stamp in the .mexp file; a mangling-scheme change across
+  compiler versions would produce stale external declarations
+  ([[file:../context/module-export.org::think.module-export.cache-invalidation-missing]]).
 
 * Context Links
 
 - [[file:../context/module.org][context/module.org]] — module system implementation
-- [[file:../context/module-export.org][context/module-export.org]] — export handling
+- [[file:../context/module-export.org][context/module-export.org]] — export manifest handling
 - [[file:../context/buildsystem.org][context/buildsystem.org]] — build system
 - [[file:../module.c][module.c]] — import/decl parser + module_name_to_path
+- [[file:../module.h][module.h]] — module API headers
+- [[file:../module_export.h][module_export.h]] — manifest API headers

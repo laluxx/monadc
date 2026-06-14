@@ -1,0 +1,7 @@
+name: complex_with_dependency_shadowing_order
+section: binding
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Shadowing after a dependent binding must not retroactively change the earlier dependent value.
+law: (= (with [x {a} y (fuzz-add x {b}) x {c}] (fuzz-sub y x)) (fuzz-sub (fuzz-add {a} {b}) {c}))

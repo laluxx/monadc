@@ -1,0 +1,7 @@
+name: control_begin_returns_last_int
+section: control-binding
+args: a:Int b:Int
+type: Bool
+expect: True
+description: begin must evaluate a sequence and return the final Int expression.
+law: (= (begin {a} {b}) {b})

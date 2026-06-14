@@ -1,0 +1,7 @@
+name: complex_combo_with_do_if_min_max_branch_sum
+section: combo
+args: cond:Bool a:Int b:Int setup:Int
+type: Bool
+expect: True
+description: Combining with, do, if, min, and max should preserve the selected branch sum.
+law: (= (with [lo (fuzz-min {a} {b}) hi (fuzz-max {a} {b})] (do {setup} (if {cond} (fuzz-add lo hi) (fuzz-sub hi lo)))) (if {cond} (fuzz-add {a} {b}) (fuzz-sub (fuzz-max {a} {b}) (fuzz-min {a} {b}))))

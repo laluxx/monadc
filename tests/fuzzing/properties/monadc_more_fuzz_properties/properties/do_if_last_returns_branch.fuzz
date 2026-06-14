@@ -1,0 +1,7 @@
+name: do_if_last_returns_branch
+section: control
+args: cond:Bool a:Int b:Int setup:Int
+type: Bool
+expect: True
+description: A do expression whose last expression is an if must return the selected if branch.
+law: (= (do {setup} (if {cond} {a} {b})) (if {cond} {a} {b}))

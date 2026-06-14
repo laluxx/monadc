@@ -1,0 +1,7 @@
+name: complex_arith_difference_of_sums_regroups
+section: arithmetic-normalization
+args: a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: The difference of two sums should regroup to sum the pairwise differences.
+law: (= (fuzz-sub (fuzz-add {a} {b}) (fuzz-add {c} {d})) (fuzz-add (fuzz-sub {a} {c}) (fuzz-sub {b} {d})))

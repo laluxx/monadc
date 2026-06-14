@@ -1,0 +1,7 @@
+name: comparison_negation_reverses_lt
+section: comparison
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Negating both operands must reverse strict less-than ordering.
+law: (if (fuzz-lt? {a} {b}) (fuzz-gt? (fuzz-mul -1 {a}) (fuzz-mul -1 {b})) True)

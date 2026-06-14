@@ -1,0 +1,7 @@
+name: comparison_lte_totality_encoded
+section: comparison
+args: a:Int b:Int
+type: Bool
+expect: True
+description: For any two Int expressions, at least one less-or-equal direction must hold.
+law: (if (fuzz-lte? {a} {b}) True (fuzz-lte? {b} {a}))

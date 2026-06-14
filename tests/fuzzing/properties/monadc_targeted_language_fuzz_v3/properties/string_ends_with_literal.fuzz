@@ -1,0 +1,7 @@
+name: string_ends_with_literal
+section: collections
+args: 
+type: Bool
+expect: True
+description: ends-with? must recognize a constant suffix.
+law: (ends-with? "monadc" "adc")

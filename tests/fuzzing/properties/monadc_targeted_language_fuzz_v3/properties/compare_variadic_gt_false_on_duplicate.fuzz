@@ -1,0 +1,7 @@
+name: compare_variadic_gt_false_on_duplicate
+section: comparison-variadic
+args: a:Int
+type: Bool
+expect: False
+description: Strict variadic > must reject an equal adjacent pair.
+law: (> {a} {a} (- {a} 1))

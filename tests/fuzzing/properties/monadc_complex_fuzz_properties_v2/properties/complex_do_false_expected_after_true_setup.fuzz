@@ -1,0 +1,7 @@
+name: complex_do_false_expected_after_true_setup
+section: control-do-negative
+args: setup:Int
+type: Bool
+expect: False
+description: A do form that ends in False must print False even after an arbitrary setup expression.
+law: (do {setup} True False)

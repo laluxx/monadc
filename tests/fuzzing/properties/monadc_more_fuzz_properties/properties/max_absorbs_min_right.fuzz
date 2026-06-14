@@ -1,0 +1,7 @@
+name: max_absorbs_min_right
+section: order
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Max of a value and the min of that value with another must recover the value.
+law: (= (fuzz-max {a} (fuzz-min {b} {a})) {a})

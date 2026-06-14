@@ -28,6 +28,10 @@ int g_scope_depth       = 0;
 int (*g_param_kind_is_func)(const char *func_name, int arg_index) = NULL;
 int (*g_is_known_function)(const char *name) = NULL;
 
+/* Pending defines emitted by layout where blocks */
+static AST **g_pending_defines      = NULL;
+static int   g_pending_define_count = 0;
+
 /// Layout Registry for Pattern Matching
 
 typedef struct {
@@ -3463,6 +3467,8 @@ static AST *parse_list(Parser *p) {
         return inner_body[0];
     }
 
+///// Define
+
     // Detect (def ...) inside functions — local binding
     bool _came_from_def = false;
     if (p->current.type == TOK_SYMBOL &&
@@ -5040,13 +5046,13 @@ static AST *parse_list(Parser *p) {
 
         if (p->current.type != TOK_RPAREN)
             compiler_error(p->current.line, p->current.column,
-                           "Expected ')' to close 'data' definition");
+                           "Expected ')' to close data '%s'", dat_name);
         int end_col = p->current.column + 1;
         p->current = lexer_next_token(p->lexer);
 
         ast_free(list);
         AST *node = ast_new_data(dat_name, type_params, type_param_count,
-                                 ctors, nctors, deriving, nderiving);
+                                  ctors, nctors, deriving, nderiving);
         free(dat_name);
         node->line       = dat_line;
         node->column     = dat_col;
@@ -5054,122 +5060,331 @@ static AST *parse_list(Parser *p) {
         return node;
     }
 
-    // (layout Name [field :: Type] ... :packed True/False :align N)
+    // (layout Name [field :: Type] ... :packed True :align 16)
+    // Supports a trailing 'where' block for method definitions.
     if (p->current.type == TOK_SYMBOL &&
         strcmp(p->current.value, "layout") == 0) {
 
         int lay_line = p->current.line, lay_col = p->current.column;
-        p->current = lexer_next_token(p->lexer); // consume 'layout'
+        p->current = lexer_next_token(p->lexer); /* consume 'layout' */
 
         if (p->current.type != TOK_SYMBOL)
             compiler_error(p->current.line, p->current.column,
-                           "Expected struct name after 'layout'");
+                           "Expected layout name after 'layout'");
         char *lay_name = my_strdup(p->current.value);
         p->current = lexer_next_token(p->lexer);
 
-        ASTLayoutField *fields   = NULL;
-        int             nfields  = 0;
-        bool            packed   = false;
-        int             align    = 0;
+        ASTLayoutField *fields = NULL;
+        int             nfields = 0;
+        int             nfields_cap = 0;
+        bool            packed  = false;
+        int             align   = 0;
 
         while (p->current.type != TOK_RPAREN &&
                p->current.type != TOK_EOF) {
 
-            // :packed True/False
+            /* :packed True/False */
             if (p->current.type == TOK_KEYWORD &&
                 strcmp(p->current.value, "packed") == 0) {
                 p->current = lexer_next_token(p->lexer);
-                if (p->current.type != TOK_SYMBOL ||
-                    (strcmp(p->current.value, "True")  != 0 &&
-                     strcmp(p->current.value, "False") != 0))
-                    compiler_error(p->current.line, p->current.column,
-                                   ":packed requires True or False");
-                packed = (strcmp(p->current.value, "True") == 0);
+                if (p->current.type == TOK_SYMBOL &&
+                    strcmp(p->current.value, "True") == 0)
+                    packed = true;
                 p->current = lexer_next_token(p->lexer);
                 continue;
             }
-
-            // :align N
+            /* :align N */
             if (p->current.type == TOK_KEYWORD &&
                 strcmp(p->current.value, "align") == 0) {
                 p->current = lexer_next_token(p->lexer);
-                if (p->current.type != TOK_NUMBER)
-                    compiler_error(p->current.line, p->current.column,
-                                   ":align requires a number");
-                align = (int)atof(p->current.value);
+                if (p->current.type == TOK_NUMBER && p->current.value)
+                    align = atoi(p->current.value);
                 p->current = lexer_next_token(p->lexer);
                 continue;
             }
 
-            // [field :: Type]  or  [field :: [ElemType Size]]
+            /* 'where' block: method declarations */
+            if (p->current.type == TOK_SYMBOL &&
+                strcmp(p->current.value, "where") == 0) {
+                p->current = lexer_next_token(p->lexer); /* consume 'where' */
+
+                while (p->current.type != TOK_RPAREN &&
+                       p->current.type != TOK_EOF) {
+
+                    if (p->current.type != TOK_SYMBOL ||
+                        strcmp(p->current.value, "method") != 0) {
+                        compiler_error(p->current.line, p->current.column,
+                                       "Expected 'method' in layout where block, got '%s'",
+                                       p->current.value ? p->current.value : "?");
+                    }
+                    p->current = lexer_next_token(p->lexer); /* consume 'method' */
+
+                    if (p->current.type != TOK_SYMBOL)
+                        compiler_error(p->current.line, p->current.column,
+                                       "Expected method name after 'method'");
+                    char *mname = my_strdup(p->current.value);
+                    int mline   = p->current.line;
+                    int mcol    = p->current.column;
+                    p->current  = lexer_next_token(p->lexer);
+
+                    if (!(p->current.type == TOK_SYMBOL &&
+                          strcmp(p->current.value, "::") == 0))
+                        compiler_error(p->current.line, p->current.column,
+                                       "Expected '::' after method name '%s'", mname);
+                    p->current = lexer_next_token(p->lexer); /* consume '::' */
+
+                    /* Collect signature tokens, replacing 'Self' with lay_name,
+                     * stopping when we detect the start of the body clause. */
+                    char sig_buf[512] = {0};
+                    while (p->current.type != TOK_EOF &&
+                           p->current.type != TOK_RPAREN &&
+                           !(p->current.type == TOK_SYMBOL &&
+                             strcmp(p->current.value, "method") == 0)) {
+
+                        const char *tv = NULL;
+                        if (p->current.type == TOK_SYMBOL && p->current.value) {
+                            if (strcmp(p->current.value, "Self") == 0)
+                                tv = lay_name;
+                            else
+                                tv = p->current.value;
+                        } else if (p->current.type == TOK_ARROW) {
+                            tv = "->";
+                        }
+
+                        /* Stop at body clause: lowercase sym followed by
+                         * another lowercase sym or '->' after a sig with '->' */
+                        if (p->current.type == TOK_SYMBOL && p->current.value &&
+                            p->current.value[0] >= 'a' && p->current.value[0] <= 'z' &&
+                            strstr(sig_buf, "->")) {
+                            Lexer peek_lex = *p->lexer;
+                            Token peek_tok = lexer_next_token(&peek_lex);
+                            bool next_is_param_or_arrow =
+                                (peek_tok.type == TOK_ARROW) ||
+                                (peek_tok.type == TOK_SYMBOL && peek_tok.value &&
+                                 peek_tok.value[0] >= 'a' && peek_tok.value[0] <= 'z');
+                            free(peek_tok.value);
+                            if (next_is_param_or_arrow)
+                                break;
+                        }
+
+                        if (tv) {
+                            if (sig_buf[0]) strncat(sig_buf, " ",
+                                sizeof(sig_buf) - strlen(sig_buf) - 1);
+                            strncat(sig_buf, tv,
+                                sizeof(sig_buf) - strlen(sig_buf) - 1);
+                        }
+                        p->current = lexer_next_token(p->lexer);
+                    }
+
+                    /* Count params: number of '->' in sig minus 1 (last is return) */
+                    int mparam_count = 0;
+                    {
+                        const char *s = sig_buf;
+                        while ((s = strstr(s, "->")) != NULL) {
+                            mparam_count++;
+                            s += 2;
+                        }
+                        if (mparam_count > 0) mparam_count--;
+                        if (mparam_count < 0) mparam_count = 0;
+                    }
+
+                    /* Parse body clause: param_name* -> expr */
+                    char *pnames[64];
+                    int actual_params = 0;
+                    while (p->current.type == TOK_SYMBOL &&
+                           p->current.value &&
+                           p->current.value[0] >= 'a' && p->current.value[0] <= 'z' &&
+                           actual_params < mparam_count + 8 &&
+                           actual_params < 64) {
+                        Lexer peek_lex = *p->lexer;
+                        Token peek_tok = lexer_next_token(&peek_lex);
+                        bool is_param = (peek_tok.type == TOK_ARROW) ||
+                                        (peek_tok.type == TOK_SYMBOL && peek_tok.value &&
+                                         peek_tok.value[0] >= 'a' && peek_tok.value[0] <= 'z');
+                        free(peek_tok.value);
+                        if (!is_param) break;
+                        pnames[actual_params++] = my_strdup(p->current.value);
+                        p->current = lexer_next_token(p->lexer);
+                    }
+
+                    if (p->current.type == TOK_ARROW)
+                        p->current = lexer_next_token(p->lexer);
+
+                    AST *body_expr = parse_expr(p);
+
+                    /* Split sig by '->' to get param types and return type */
+                    char *sig_copy = my_strdup(sig_buf);
+                    char *parts[32];
+                    int nparts = 0;
+                    char *tok_ptr = sig_copy;
+                    char *arrow_pos;
+                    while ((arrow_pos = strstr(tok_ptr, "->")) != NULL && nparts < 31) {
+                        *arrow_pos = '\0';
+                        char *s = tok_ptr;
+                        while (*s == ' ') s++;
+                        char *e = s + strlen(s);
+                        while (e > s && *(e-1) == ' ') e--;
+                        *e = '\0';
+                        parts[nparts++] = s;
+                        tok_ptr = arrow_pos + 2;
+                    }
+                    {
+                        char *s = tok_ptr;
+                        while (*s == ' ') s++;
+                        char *e = s + strlen(s);
+                        while (e > s && *(e-1) == ' ') e--;
+                        *e = '\0';
+                        parts[nparts++] = s;
+                    }
+
+                    ASTParam *mparams = malloc(sizeof(ASTParam) * (actual_params ? actual_params : 1));
+                    for (int i = 0; i < actual_params; i++) {
+                        mparams[i].name = my_strdup(pnames[i]);
+                        if (i < nparts - 1 && parts[i][0]) {
+                            char pt_buf[256];
+                            snprintf(pt_buf, sizeof(pt_buf), "%s", parts[i]);
+                            char *self_pos;
+                            while ((self_pos = strstr(pt_buf, "Self")) != NULL) {
+                                char tmp[256];
+                                size_t prefix_len = self_pos - pt_buf;
+                                snprintf(tmp, sizeof(tmp), "%.*s%s%s",
+                                         (int)prefix_len, pt_buf,
+                                         lay_name, self_pos + 4);
+                                strncpy(pt_buf, tmp, sizeof(pt_buf)-1);
+                            }
+                            mparams[i].type_name = my_strdup(pt_buf);
+                        } else {
+                            mparams[i].type_name = NULL;
+                        }
+                        mparams[i].is_rest = false;
+                        mparams[i].is_anon = false;
+                    }
+                    for (int i = 0; i < actual_params; i++) free(pnames[i]);
+                    free(sig_copy);
+
+                    char *ret_type = (nparts > 0 && parts[nparts-1][0])
+                                     ? my_strdup(parts[nparts-1]) : NULL;
+                    if (ret_type) {
+                        char rt_buf[256];
+                        strncpy(rt_buf, ret_type, sizeof(rt_buf)-1);
+                        char *self_pos;
+                        while ((self_pos = strstr(rt_buf, "Self")) != NULL) {
+                            char tmp[256];
+                            size_t prefix_len = self_pos - rt_buf;
+                            snprintf(tmp, sizeof(tmp), "%.*s%s%s",
+                                     (int)prefix_len, rt_buf, lay_name, self_pos + 4);
+                            strncpy(rt_buf, tmp, sizeof(rt_buf)-1);
+                        }
+                        free(ret_type);
+                        ret_type = my_strdup(rt_buf);
+                    }
+
+                    AST **body_exprs = malloc(sizeof(AST*));
+                    body_exprs[0] = body_expr;
+                    AST *method_lam = ast_new_lambda(mparams, actual_params,
+                                                     ret_type, NULL, NULL, false,
+                                                     body_expr, body_exprs, 1);
+                    method_lam->line   = mline;
+                    method_lam->column = mcol;
+                    free(ret_type);
+
+                    char full_name[512];
+                    snprintf(full_name, sizeof(full_name), "%s.%s", lay_name, mname);
+                    free(mname);
+
+                    AST *def = ast_new_list();
+                    ast_list_append(def, ast_new_symbol("define"));
+                    AST *fname_ast = ast_new_symbol(full_name);
+                    fname_ast->line   = mline;
+                    fname_ast->column = mcol;
+                    ast_list_append(def, fname_ast);
+                    ast_list_append(def, method_lam);
+                    def->line   = mline;
+                    def->column = mcol;
+
+                    g_pending_defines = realloc(g_pending_defines,
+                        sizeof(AST*) * (g_pending_define_count + 1));
+                    g_pending_defines[g_pending_define_count++] = def;
+                }
+                break; /* 'where' is always last in a layout block */
+            }
+
+            /* [field :: Type] or [field :: [ElemType Size]] */
             if (p->current.type != TOK_LBRACKET)
                 compiler_error(p->current.line, p->current.column,
                                "Expected '[' for layout field, got '%s'",
                                p->current.value ? p->current.value : "?");
-            p->current = lexer_next_token(p->lexer); // consume '['
+            p->current = lexer_next_token(p->lexer); /* consume '[' */
 
             if (p->current.type != TOK_SYMBOL)
                 compiler_error(p->current.line, p->current.column,
-                               "Expected field name");
+                               "Expected field name in layout");
             char *fname = my_strdup(p->current.value);
             p->current = lexer_next_token(p->lexer);
 
-            // expect :: or ->  (-> is sugar for Pointer ::)
-            bool field_is_ptr = false;
+            bool is_ptr = false;
             if (p->current.type == TOK_ARROW) {
-                field_is_ptr = true;
-            } else if (p->current.type != TOK_SYMBOL ||
-                       strcmp(p->current.value, "::") != 0) {
+                is_ptr = true;
+                p->current = lexer_next_token(p->lexer);
+            } else if (p->current.type == TOK_SYMBOL &&
+                       strcmp(p->current.value, "::") == 0) {
+                p->current = lexer_next_token(p->lexer);
+            } else {
                 compiler_error(p->current.line, p->current.column,
-                               "Expected '::' after field name '%s'", fname);
+                               "Expected '::' or '->' after layout field name '%s'", fname);
             }
-            p->current = lexer_next_token(p->lexer);
 
             ASTLayoutField field = {0};
-            field.name       = fname;
-            field.array_size = -1;
-            field.is_ptr     = field_is_ptr;
+            field.name   = fname;
+            field.is_ptr = is_ptr;
 
-            // Array sugar: [ElemType Size]
+            /* Check for array sugar: [field :: [ElemType Size]] */
             if (p->current.type == TOK_LBRACKET) {
-                p->current = lexer_next_token(p->lexer); // consume inner '['
+                p->current = lexer_next_token(p->lexer); /* consume '[' */
                 if (p->current.type != TOK_SYMBOL)
                     compiler_error(p->current.line, p->current.column,
                                    "Expected element type in array field");
-                field.is_array   = true;
                 field.array_elem = my_strdup(p->current.value);
                 p->current = lexer_next_token(p->lexer);
-
-                if (p->current.type == TOK_NUMBER) {
-                    field.array_size = (int)atof(p->current.value);
+                field.array_size = -1;
+                if (p->current.type == TOK_NUMBER && p->current.value) {
+                    field.array_size = atoi(p->current.value);
                     p->current = lexer_next_token(p->lexer);
                 }
                 if (p->current.type != TOK_RBRACKET)
                     compiler_error(p->current.line, p->current.column,
-                                   "Expected ']' to close array type");
-                p->current = lexer_next_token(p->lexer); // consume inner ']'
-            } else {
-                // Plain type name
-                if (p->current.type != TOK_SYMBOL)
-                    compiler_error(p->current.line, p->current.column,
-                                   "Expected type name for field '%s'", fname);
-                if (field_is_ptr) {
-                    char buf[512];
-                    snprintf(buf, sizeof(buf), "Pointer :: %s", p->current.value);
-                    field.type_name = my_strdup(buf);
-                } else {
-                    field.type_name = my_strdup(p->current.value);
-                }
+                                   "Expected ']' to close array field type");
                 p->current = lexer_next_token(p->lexer);
+                field.is_array = true;
+            } else {
+                /* Plain type: collect tokens until ']' */
+                char type_buf[512] = {0};
+                while (p->current.type != TOK_RBRACKET &&
+                       p->current.type != TOK_EOF) {
+                    const char *tv = p->current.value
+                        ? p->current.value
+                        : (p->current.type == TOK_ARROW ? "->" : NULL);
+                    if (tv) {
+                        if (type_buf[0]) strncat(type_buf, " ",
+                            sizeof(type_buf) - strlen(type_buf) - 1);
+                        strncat(type_buf, tv,
+                            sizeof(type_buf) - strlen(type_buf) - 1);
+                    }
+                    p->current = lexer_next_token(p->lexer);
+                }
+                field.type_name = my_strdup(type_buf);
+                field.is_array  = false;
             }
 
-            // consume outer ']'
             if (p->current.type != TOK_RBRACKET)
                 compiler_error(p->current.line, p->current.column,
-                               "Expected ']' to close field '%s'", fname);
+                               "Expected ']' to close layout field");
             p->current = lexer_next_token(p->lexer);
 
-            fields = realloc(fields, sizeof(ASTLayoutField) * (nfields + 1));
+            if (nfields >= nfields_cap) {
+                nfields_cap = nfields_cap == 0 ? 8 : nfields_cap * 2;
+                fields = realloc(fields, sizeof(ASTLayoutField) * nfields_cap);
+            }
             fields[nfields++] = field;
         }
 
@@ -5181,9 +5396,7 @@ static AST *parse_list(Parser *p) {
 
         ast_free(list);
         AST *node = ast_new_layout(lay_name, fields, nfields, packed, align);
-
         register_layout_fields(lay_name, fields, nfields);
-
         free(lay_name);
         node->line       = lay_line;
         node->column     = lay_col;
@@ -6641,6 +6854,8 @@ AST *parse_expr(Parser *p) {
         expr_result = call;
     }
 
+///// Function-call sugars
+
     /* Postfix call: expr(args...) -> (expr args...), only when adjacent (no space) */
     while (p->current.type == TOK_LPAREN &&
            p->current.column == expr_result->end_column &&
@@ -6841,6 +7056,19 @@ ASTList parse_all(const char *source) {
                 list.exprs = realloc(list.exprs, sizeof(AST *) * capacity);
             }
             list.exprs[list.count++] = expr;
+        }
+        /* Drain any pending defines emitted by layout where blocks */
+        while (g_pending_define_count > 0) {
+            AST *pending = g_pending_defines[--g_pending_define_count];
+            if (list.count >= capacity) {
+                capacity = capacity == 0 ? 4 : capacity * 2;
+                list.exprs = realloc(list.exprs, sizeof(AST *) * capacity);
+            }
+            list.exprs[list.count++] = pending;
+        }
+        if (g_pending_define_count == 0 && g_pending_defines) {
+            free(g_pending_defines);
+            g_pending_defines = NULL;
         }
     }
 

@@ -1,0 +1,7 @@
+name: compare_variadic_gt_predecessor_chain
+section: comparison-variadic
+args: a:Int
+type: Bool
+expect: True
+description: Variadic greater-than must compare every adjacent pair in descending order.
+law: (> (+ {a} 2) (+ {a} 1) {a})

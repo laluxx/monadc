@@ -1,0 +1,7 @@
+name: complex_order_gte_partition_gt_or_eq
+section: order-logic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Greater-or-equal must partition into strict greater-than or equality.
+law: (if (fuzz-gte? {a} {b}) (if (fuzz-gt? {a} {b}) True (= {a} {b})) True)

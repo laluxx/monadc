@@ -1,0 +1,7 @@
+name: complex_lattice_max_associative_four_terms
+section: lattice
+args: a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Four-way regrouping of max should be associative.
+law: (= (fuzz-max (fuzz-max {a} {b}) (fuzz-max {c} {d})) (fuzz-max {a} (fuzz-max {b} (fuzz-max {c} {d}))))

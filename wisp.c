@@ -3202,40 +3202,38 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                         lineno++;
                     }
 
-                    /* Trim leading whitespace: the continuation accumulator
-                     * prepends a space before each appended line, so when the
-                     * body is entirely on continuation lines (nothing inline
-                     * after =>) body_acc starts with a space.  That fools the
-                     * grouped-check into wrapping an already-grouped expression
-                     * like "(if ...)" inside an extra pair of parens, producing
-                     * "( (if ...))" which the reader parses as a zero-arg call
-                     * applied to the if result — a double (a double!) mistake. */
+                    /* Trim leading whitespace */
                     const char *body_acc_trim = body_acc;
                     while (*body_acc_trim == ' ' || *body_acc_trim == '\t')
                         body_acc_trim++;
 
+                    /* Always run the body through wisp_expand_expr_snippet so
+                     * infix operators like = inside method bodies are promoted.
+                     * e.g. "and s.r = o.r s.g = o.g" becomes
+                     *      "(and (= s.r o.r) (= s.g o.g))" correctly. */
                     char *body_expanded;
-                    bool body_already_grouped = (body_acc_trim[0] == '(' ||
-                                                 body_acc_trim[0] == '[' ||
-                                                 body_acc_trim[0] == '{');
-                    bool body_single_token = (strchr(body_acc_trim, ' ') == NULL);
                     if (body_acc_len == 0 || body_acc_trim[0] == '\0') {
                         body_expanded = strdup("(undefined)");
                         free(body_acc);
-                    } else if (!body_already_grouped && !body_single_token) {
-                        size_t bflen = strlen(body_acc_trim);
-                        body_expanded = malloc(bflen + 3);
-                        body_expanded[0] = '(';
-                        memcpy(body_expanded + 1, body_acc_trim, bflen);
-                        body_expanded[bflen + 1] = ')';
-                        body_expanded[bflen + 2] = '\0';
-                        free(body_acc);
                     } else {
-                        if (body_acc_trim != body_acc) {
-                            size_t tlen = strlen(body_acc_trim);
-                            memmove(body_acc, body_acc_trim, tlen + 1);
+                        /* Run through full wisp expansion to promote infix ops */
+                        body_expanded = wisp_expand_expr_snippet(at, body_acc_trim);
+                        free(body_acc);
+                        /* If still multi-token and not grouped, wrap in parens */
+                        bool already_grouped = (body_expanded[0] == '(' ||
+                                                body_expanded[0] == '[' ||
+                                                body_expanded[0] == '{');
+                        bool single_token = (strchr(body_expanded, ' ') == NULL);
+                        if (!already_grouped && !single_token) {
+                            size_t bflen = strlen(body_expanded);
+                            char *wrapped = malloc(bflen + 3);
+                            wrapped[0] = '(';
+                            memcpy(wrapped + 1, body_expanded, bflen);
+                            wrapped[bflen + 1] = ')';
+                            wrapped[bflen + 2] = '\0';
+                            free(body_expanded);
+                            body_expanded = wrapped;
                         }
-                        body_expanded = body_acc;
                     }
 
                     /* Build: (#line N 1) pat_str arrow body_expanded */
@@ -4159,7 +4157,11 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     free(fname);
                 }
 
-                /* Case 2: define name -> Ret  (zero-param, return type only) */
+                /* Case 2: define name -> Ret  (zero-param, return type only)
+                 * Collect the indented body and emit one complete s-expression:
+                 * (define name -> RetType body)
+                 * This is identical to the s-expression form the reader already
+                 * handles correctly, avoiding the lambda-with-->-as-param bug. */
                 if (after_name[0] == '-' && after_name[1] == '>') {
                     size_t name_len = name_end - after_define;
                     char *fname = strndup(after_define, name_len);
@@ -4170,15 +4172,42 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     while (*ret_end && *ret_end != ' ' && *ret_end != '\t' &&
                            *ret_end != ';') ret_end++;
                     size_t ret_len = ret_end - ret_start;
-                    /* Build "(fname -> RetType)" */
-                    size_t hlen = 1 + name_len + 4 + ret_len + 1 + 1;
-                    char *header = malloc(hlen);
-                    snprintf(header, hlen, "(%s -> %.*s)", fname,
-                             (int)ret_len, ret_start);
+                    char *ret_type = strndup(ret_start, ret_len);
+                    /* Collect the indented body line */
+                    char *body_tok = NULL;
+                    while (*p) {
+                        const char *bls = p;
+                        while (*p && *p != '\n') p++;
+                        if (*p == '\n') p++;
+                        char *blraw = strndup(bls, p - bls);
+                        const char *blt = blraw;
+                        while (*blt == ' ' || *blt == '\t') blt++;
+                        if (!*blt || *blt == ';') { free(blraw); lineno++; continue; }
+                        int bl_ind = measure_indent(blraw);
+                        if (bl_ind <= indent) { p = bls; free(blraw); break; }
+                        const char *blt_end = get_logical_line_end(blt);
+                        body_tok = wisp_expand_expr_snippet(at, strndup(blt, blt_end - blt));
+                        free(blraw);
+                        lineno++;
+                        break;
+                    }
+                    /* Emit (define name -> RetType body) as one grouped token */
+                    SB full; sb_init(&full);
+                    sb_puts(&full, "(define ");
+                    sb_puts(&full, fname);
+                    sb_puts(&full, " -> ");
+                    sb_puts(&full, ret_type);
+                    if (body_tok) {
+                        sb_putc(&full, ' ');
+                        sb_puts(&full, body_tok);
+                        free(body_tok);
+                    }
+                    sb_putc(&full, ')');
+                    char *complete = sb_take(&full);
+                    wts_push(&s, complete, indent, lineno);
+                    free(complete);
                     free(fname);
-                    wts_push(&s, "define", indent, lineno);
-                    wts_push(&s, header, indent, lineno);
-                    free(header);
+                    free(ret_type);
                     free(raw);
                     lineno++;
                     continue;

@@ -1,0 +1,7 @@
+name: control_do_and_begin_agree_on_last
+section: control-binding
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: do and begin should agree on the last expression for pure Int sequences.
+law: (= (do {a} {b} {c}) (begin {a} {b} {c}))

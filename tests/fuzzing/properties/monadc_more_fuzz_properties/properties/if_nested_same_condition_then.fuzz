@@ -1,0 +1,7 @@
+name: if_nested_same_condition_then
+section: control
+args: cond:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: A nested if in the then branch with the same condition must simplify to the outer branch choice.
+law: (= (if {cond} (if {cond} {a} {b}) {c}) (if {cond} {a} {c}))

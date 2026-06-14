@@ -1,0 +1,7 @@
+name: combo_if_over_type_predicate_selects_array_index
+section: feature-interactions
+args: a:Int b:Int
+type: Bool
+expect: True
+description: if must branch on an array type predicate and return an indexed generated value.
+law: (= (if (Arr? [{a} {b}]) ([{a} {b}] 1) 0) {b})

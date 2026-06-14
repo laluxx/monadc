@@ -1,0 +1,7 @@
+name: comparison_less_than_successor
+section: comparison
+args: a:Int
+type: Bool
+expect: True
+description: An Int expression must be less than itself plus one.
+law: (fuzz-lt? {a} (fuzz-add {a} 1))

@@ -1,0 +1,7 @@
+name: complex_if_nested_same_condition_else_absorbs
+section: control-if
+args: cond:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: A nested if in the else branch with the same condition must absorb the dead alternative.
+law: (= (if {cond} {a} (if {cond} {b} {c})) (if {cond} {a} {c}))

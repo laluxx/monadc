@@ -1,0 +1,7 @@
+name: max_matches_if_definition
+section: order
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The typed max helper must match its direct conditional definition.
+law: (= (fuzz-max {a} {b}) (if (fuzz-gt? {a} {b}) {a} {b}))

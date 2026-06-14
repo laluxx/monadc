@@ -1,0 +1,7 @@
+name: arith_mod_after_equal_subtraction
+section: arithmetic-dispatch
+args: a:Int
+type: Bool
+expect: True
+description: Modulo should remain stable when a generated expression cancels to zero.
+law: (= (% (+ (* (- {a} {a}) 5) 3) 5) 3)

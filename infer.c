@@ -1145,6 +1145,10 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                         tname = tname_buf;
                     }
                 }
+                /* Strip pointer/fn qualifiers — HM works on value types only;
+                 * pointer-vs-value distinction is handled in codegen.         */
+                if (strncmp(tname, "Pointer :: ", 11) == 0) tname += 11;
+                else if (strncmp(tname, "Fn :: ", 6) == 0) tname += 6;
                 pt = type_from_name(tname);
                 /* type_from_name only knows builtin scalars. For user-defined
                  * layout types like Vec3 it returns NULL. If the name starts

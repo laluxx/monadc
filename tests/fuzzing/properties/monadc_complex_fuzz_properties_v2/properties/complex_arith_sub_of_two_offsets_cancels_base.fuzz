@@ -1,0 +1,7 @@
+name: complex_arith_sub_of_two_offsets_cancels_base
+section: arithmetic-normalization
+args: base:Int left:Int right:Int
+type: Bool
+expect: True
+description: Subtracting two values sharing the same base should remove the base and leave the offset difference.
+law: (= (fuzz-sub (fuzz-add {base} {left}) (fuzz-add {base} {right})) (fuzz-sub {left} {right}))

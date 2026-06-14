@@ -1,0 +1,7 @@
+name: complex_arith_expected_false_successor_equals_self
+section: arithmetic-negative
+args: a:Int
+type: Bool
+expect: False
+description: A value plus one should not equal the value itself in generated ranges.
+law: (= (fuzz-add {a} 1) {a})

@@ -1,0 +1,7 @@
+name: complex_order_gt_implies_not_lte_via_if
+section: order-logic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Strict greater-than must make less-or-equal false through encoded implication.
+law: (if (fuzz-gt? {a} {b}) (= (fuzz-lte? {a} {b}) False) True)

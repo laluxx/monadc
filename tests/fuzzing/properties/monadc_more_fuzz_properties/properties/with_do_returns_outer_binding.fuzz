@@ -1,0 +1,7 @@
+name: with_do_returns_outer_binding
+section: binding
+args: value:Int setup:Int
+type: Bool
+expect: True
+description: A with-bound value must survive sequencing in a do body.
+law: (= (with [x {value}] (do {setup} x)) {value})

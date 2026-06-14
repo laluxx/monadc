@@ -1,0 +1,7 @@
+name: int_mul_factor_common_right
+section: arithmetic
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Common right factors in a sum of products must factor back out.
+law: (= (fuzz-add (fuzz-mul {a} {c}) (fuzz-mul {b} {c})) (fuzz-mul (fuzz-add {a} {b}) {c}))

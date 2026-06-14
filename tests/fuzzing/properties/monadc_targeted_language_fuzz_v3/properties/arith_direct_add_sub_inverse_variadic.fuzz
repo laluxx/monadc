@@ -1,0 +1,7 @@
+name: arith_direct_add_sub_inverse_variadic
+section: arithmetic-dispatch
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Variadic + and - must compose correctly across three operands.
+law: (= (- (+ {a} {b} {c}) {b} {c}) {a})

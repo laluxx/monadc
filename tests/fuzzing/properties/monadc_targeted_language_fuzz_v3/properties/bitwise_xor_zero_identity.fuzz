@@ -1,0 +1,7 @@
+name: bitwise_xor_zero_identity
+section: bitwise
+args: a:Int
+type: Bool
+expect: True
+description: Bitwise xor with zero must preserve the operand.
+law: (= (bit-xor {a} 0) {a})

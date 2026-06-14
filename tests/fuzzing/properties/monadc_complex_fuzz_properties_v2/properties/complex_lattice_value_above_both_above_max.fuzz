@@ -1,0 +1,7 @@
+name: complex_lattice_value_above_both_above_max
+section: lattice-order
+args: a:Int b:Int x:Int
+type: Bool
+expect: True
+description: A value above both operands must be above their max.
+law: (if (fuzz-gte? {x} {a}) (if (fuzz-gte? {x} {b}) (fuzz-gte? {x} (fuzz-max {a} {b})) True) True)

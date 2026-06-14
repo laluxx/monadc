@@ -1,0 +1,7 @@
+name: max_with_upper_operand_after_offset
+section: order
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: If b is above a, adding the same offset must make max choose the offset b side.
+law: (if (fuzz-lte? {a} {b}) (= (fuzz-max (fuzz-add {a} {c}) (fuzz-add {b} {c})) (fuzz-add {b} {c})) True)

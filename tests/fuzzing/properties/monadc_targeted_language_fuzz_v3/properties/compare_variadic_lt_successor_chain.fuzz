@@ -1,0 +1,7 @@
+name: compare_variadic_lt_successor_chain
+section: comparison-variadic
+args: a:Int
+type: Bool
+expect: True
+description: Variadic less-than must compare every adjacent pair in order.
+law: (< {a} (+ {a} 1) (+ {a} 2))

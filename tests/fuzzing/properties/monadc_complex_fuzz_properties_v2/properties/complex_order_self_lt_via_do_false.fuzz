@@ -1,0 +1,7 @@
+name: complex_order_self_lt_via_do_false
+section: order-negative
+args: setup:Int a:Int
+type: Bool
+expect: False
+description: Strict less-than of a value against itself must remain false after do sequencing.
+law: (do {setup} (fuzz-lt? {a} {a}))

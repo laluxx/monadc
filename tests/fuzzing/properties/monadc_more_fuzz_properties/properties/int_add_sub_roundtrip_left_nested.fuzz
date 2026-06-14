@@ -1,0 +1,7 @@
+name: int_add_sub_roundtrip_left_nested
+section: arithmetic
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Adding two values and subtracting one of them inside a larger expression must round-trip the other.
+law: (= (fuzz-sub (fuzz-add (fuzz-add {a} {b}) {c}) (fuzz-add {b} {c})) {a})

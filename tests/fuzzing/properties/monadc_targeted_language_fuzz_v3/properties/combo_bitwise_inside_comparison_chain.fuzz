@@ -1,0 +1,7 @@
+name: combo_bitwise_inside_comparison_chain
+section: feature-interactions
+args: a:Int
+type: Bool
+expect: True
+description: comparison chains must accept values produced by bitwise dispatch.
+law: (= (<= (& {a} {a}) {a} (bit-or {a} 0)) True)

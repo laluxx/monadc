@@ -45,7 +45,6 @@ Written in Org mode. Export to GNU Info via Emacs: ~C-c C-e i i~.
    - [[file:errors.org][Debugging]] — error messages and debugging
    - [[file:build.org][Build System]] — compilation, testing, packaging
    - [[file:package-dev.org][Package Development]] — module structure, distribution
-   - [[file:literate.org][Literate Programming]] — org-mode literate code
    - [[file:from-c.org][Coming from C/Rust]]
    - [[file:from-lisp.org][Coming from Lisp/Scheme]]
    - [[file:from-haskell.org][Coming from Haskell]]

@@ -1,0 +1,7 @@
+name: logic_and_variadic_associates
+section: logic
+args: p:Bool q:Bool r:Bool
+type: Bool
+expect: True
+description: Variadic and must behave like nested binary and.
+law: (= (and {p} {q} {r}) (and (and {p} {q}) {r}))

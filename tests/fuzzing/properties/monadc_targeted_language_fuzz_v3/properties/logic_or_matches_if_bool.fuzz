@@ -1,0 +1,7 @@
+name: logic_or_matches_if_bool
+section: logic
+args: p:Bool q:Bool
+type: Bool
+expect: True
+description: or over Bool values must match the equivalent if expression.
+law: (= (or {p} {q}) (if {p} True {q}))

@@ -4,28 +4,168 @@
 
 [[file:index.org][<- Back to Index]]
 
-| Start method       | Description                        |
-|--------------------+------------------------------------|
-| =monad= (no args)  | Default entry point                |
-| =monad -i=         | Explicit REPL flag                 |
+The REPL (Read-Eval-Print Loop) provides an interactive environment
+where users enter Monad expressions and see results immediately. Built
+on top of LLVM's MCJIT =ExecutionEngine= for in-process JIT compilation
+and GNU Readline for line editing and tab-completion. Implementation:
+[[file:../repl.h][repl.h]] and [[file:../repl.c][repl.c]] (~3000 lines).
 
-The REPL provides an interactive environment with the following features:
+For full implementation context, see [[file:../context/repl.org][context/repl.org]].
 
-- **Readline**: history navigation (up/down/Ctrl+R), inline editing, persistent history
-- **Auto-print**: every expression result is printed automatically after evaluation
-- **Multi-line editing**: the parser waits for balanced delimiters before evaluating
-- **Input syntax**: both S-expression and Wisp syntax are accepted
-- **Error recovery**: setjmp/longjmp escapes catch parse errors; SIGSEGV and SIGBUS signal handlers catch JIT runtime crashes and return to the prompt without exiting
-- **SIGINT**: Ctrl+C interrupts a running evaluation
+** Starting the REPL
 
-| Feature              | Mechanism                           |
-|----------------------+-------------------------------------|
-| Parse recovery       | =setjmp= / =longjmp= in =REPL_PARSE= macro |
-| Runtime crash        | =repl_signal_handler= for SIGSEGV/SIGBUS  |
-| Evaluation abort     | =repl_sigint_handler= for SIGINT          |
-| History / editing    | GNU Readline library                      |
+| Invocation                    | Description                        |
+|-------------------------------+------------------------------------|
+| =monad= (no arguments)        | Enter REPL                         |
+| =monad -i=                    | Explicit REPL flag                 |
+| =monad -i file.mon=           | Compile file then enter REPL       |
+| =monad file.mon=              | Compile and link (no REPL)         |
+
+The =CMD_REPL= command mode is selected by =parse_flags= (cli.c:197)
+when no arguments are given, or when the =-i= flag is present. See
+[[file:../context/cli.org][context/cli.org]].
+
+** REPL Lifecycle
+
+The top-level entry point is =repl_run= (repl.c), which orchestrates:
+
+1. =repl_init= — Initialises a =REPLContext=:
+   - Creates the LLVM execution engine (MCJIT)
+   - Initialises a codegen context (module/builder replaced per expr)
+   - Seeds the inference environment with builtins (=register_builtins=)
+   - Sets up the runtime symbol table and signal handlers
+   - Configures readline (history file, =rl_attempted_completion_function=)
+2. Interactive read-compile-eval-print loop with partial-input accumulation
+3. =repl_dispose= — On EOF or =(quit)=:
+   - Disposes the LLVM engine
+   - Frees the codegen context and inference environment
+   - Frees accumulated runtime symbol data
+
+** Input Loop
+
+=repl_run= (repl.c:~2885) reads input line by line:
+
+- When stdin is a terminal (=isatty(STDIN_FILENO)=), it uses readline for
+  line editing, history (up/down arrows, Ctrl+R), and tab completion.
+  Prompt is ="Monad λ "= (blue "Monad", green "λ") on success,
+  ="Monad λ "= with red λ on error.
+- When stdin is not a terminal (=piped input=), it uses =fgets= and
+  suppresses readline prompts (but still writes prompt to stdout for
+  compat).
+- Setting =MONAD_NO_PROMPT= suppresses the prompt entirely (useful when
+  an external tool drives the process).
+- Partial input is accumulated across lines until a complete expression
+  (balanced parentheses) is formed. Continuation lines show no prompt.
+- Each complete expression is passed to =repl_eval_line= and the result
+  is displayed. On failure, the prompt turns red but the session continues.
+
+** JIT Compilation Pipeline
+
+Each expression goes through this pipeline via =repl_eval_line=:
+
+1. **Parse**: input string parsed into an AST with =REPL_PARSE= macro
+   (setjmp/longjmp recovery for parse errors)
+2. **Infer**: =repl_infer= runs Hindley-Milner type inference on the AST
+3. **Codegen**: =codegen_expr= compiles the AST to LLVM IR in a fresh
+   module created by =fresh_module=
+4. **JIT**: the module is added to the MCJIT execution engine
+5. **Execute**: the wrapper function is looked up and called via
+   =LLVMRunFunction=
+6. **Print**: the result value is displayed
+
+Each expression gets a new LLVM module (discarded after execution).
+Function definitions persist in the inference environment's symbol table,
+but LLVM IR modules are ephemeral — previously defined functions are
+callable via the execution engine's symbol table.
+
+For details on the individual pipeline stages, see:
+- [[file:../context/reader.org][context/reader.org]] — parsing
+- [[file:../context/infer.org][context/infer.org]] — type inference
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — codegen
+
+** REPLContext
+
+The =REPLContext= struct (repl.h:11-16) holds all persistent REPL state:
+
+| Field       | Type                   | Purpose                                          |
+|-------------+------------------------+--------------------------------------------------|
+| =engine=      | LLVMExecutionEngineRef | Persistent JIT engine reused across expressions  |
+| =cg=          | CodegenContext         | Codegen state (module/builder replaced per expr)  |
+| =expr_count=  | unsigned int           | Monotonically increasing expression counter       |
+| =infer_env=   | InferEnv *             | Persistent HM type environment (definitions accumulate) |
+
+** Environment Persistence
+
+Definitions made in the REPL accumulate across inputs:
+
+- The =infer_env= field persists the Hindley-Milner type environment,
+  so type definitions and function signatures survive across expressions.
+- The LLVM execution engine accumulates JIT-compiled function bodies
+  — previously defined functions can be called from subsequent expressions.
+- The =expr_count= counter ensures unique wrapper function names for each
+  expression.
+
+When an =(import ...)= form is encountered in the REPL, =repl_compile_module=
+(in [[file:../main.c][main.c]]) calls =compile_one= on the requested module and injects its
+exported symbols into the codegen environment via =declare_externals=.
+Object file paths from compiled modules are returned by
+=repl_get_compiled_obj_paths= (main.c) for linker symbol resolution.
+
+** Readline Integration
+
+GNU Readline provides:
+
+- **History navigation**: up/down arrows, Ctrl+R reverse search, persistent
+  history across sessions
+- **Inline editing**: Emacs-style key bindings
+- **Tab completion**: =repl_completion= and =repl_completion_generator=
+  match against:
+  - Registered builtin names
+  - REPL meta-commands
+  - Symbols from the current inference environment
+
+** Signal Handling
+
+| Mechanism                  | Purpose                                    |
+|----------------------------+--------------------------------------------|
+| =setjmp= / =longjmp=         | Parse error recovery (via =READER_ERROR=)   |
+| =repl_sigint_handler=       | SIGINT (Ctrl+C) → set interrupt flag       |
+| =__monad_assert_fail=       | Runtime assertion failure → longjmp to REPL |
+| =__monad_runtime_error=     | Runtime error → print location, return to prompt |
+
+Error recovery in =repl_eval_line=: before each evaluation, a =jmp_buf=
+(=g_repl_escape=) is set. If the reader encounters a fatal error (via the
+=READER_ERROR= macro), it =longjmp=s back to the REPL prompt instead of
+calling =exit(1)=. Inference and codegen failures are handled gracefully
+by checking error flags and skipping the line.
+
+Runtime crashes in JIT-compiled code (assertion failures via
+=__monad_assert_fail=, runtime errors via =__monad_runtime_error=) also
+return control to the REPL prompt via =g_assert_jmp_ptr=.
+
+** Example Session
+
+#+BEGIN_SRC text
+$ monad
+Monad λ (+ 1 2)
+3
+Monad λ define square x -> * x x
+square
+Monad λ square 5
+25
+Monad λ (show "hello")
+hello
+Monad λ Ctrl+D
+#+END_SRC
 
 ** Context Links
 
-- [[file:../context/repl.org][context/repl.org]] — implementation
-- [[file:../repl.c][repl.c]] — source
+- [[file:../context/repl.org][context/repl.org]] — REPL implementation details
+- [[file:../repl.c][repl.c]] — source code
+- [[file:../repl.h][repl.h]] — REPLContext definition
+- [[file:../main.c][main.c]] — repl_compile_module, compile_one pipeline
+- [[file:../context/cli.org][context/cli.org]] — CMD_REPL flag dispatch
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — codegen_expr
+- [[file:../context/infer.org][context/infer.org]] — type inference
+- [[file:../context/reader.org][context/reader.org]] — parsing
+- [[file:../tests/run.py][tests/run.py]] — codegen test runner exercises full pipeline

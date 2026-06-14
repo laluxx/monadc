@@ -1,0 +1,7 @@
+name: combo_null_coalesce_after_if_scalar
+section: feature-interactions
+args: p:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: ?? must preserve scalar if results across PHI unification.
+law: (= (?? (if {p} {a} {b}) {c}) (if {p} {a} {b}))

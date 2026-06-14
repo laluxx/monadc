@@ -1,0 +1,7 @@
+name: comparison_lte_self_true
+section: comparison
+args: a:Int
+type: Bool
+expect: True
+description: Less-or-equal must be true for an Int expression compared to itself.
+law: (fuzz-lte? {a} {a})

@@ -1,0 +1,7 @@
+name: int_add_sub_commuted_difference
+section: arithmetic
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Adding a difference must be stable when the outer addition is commuted.
+law: (= (fuzz-add {a} (fuzz-sub {b} {c})) (fuzz-sub (fuzz-add {b} {a}) {c}))

@@ -1,0 +1,7 @@
+name: combo_conversion_inside_array_index_compare
+section: feature-interactions
+args: 
+type: Bool
+expect: True
+description: array literals must accept values produced by type conversion dispatch.
+law: (= ([1 (Int (Float 2)) 3] 1) 2)

@@ -1,0 +1,7 @@
+name: int_add_same_offset_preserves_equality
+section: arithmetic
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Equality after adding the same offset to both operands must match equality before the offset.
+law: (= (fuzz-eq-int? (fuzz-add {a} {c}) (fuzz-add {b} {c})) (fuzz-eq-int? {a} {b}))

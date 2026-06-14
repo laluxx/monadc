@@ -1,0 +1,7 @@
+name: compare_variadic_gte_with_duplicate_then_predecessor
+section: comparison-variadic
+args: a:Int
+type: Bool
+expect: True
+description: Variadic >= must allow equality before a smaller predecessor.
+law: (>= {a} {a} (- {a} 1))

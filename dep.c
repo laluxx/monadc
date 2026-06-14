@@ -1727,8 +1727,26 @@ static bool dep_conv_vals_internal(ConvCtx *cctx, Value *v1, Value *v2, Value *t
         // Allow Nat (literals < 64) to implicitly coerce to Int, Char, and Float signatures smoothly
         bool v1_nat = (v1->kind == VAL_NAT || v1->kind == VAL_SUCC || v1->kind == VAL_ZERO || v1->kind == VAL_NUM_LIT);
         bool v2_nat = (v2->kind == VAL_NAT || v2->kind == VAL_SUCC || v2->kind == VAL_ZERO || v2->kind == VAL_NUM_LIT);
-        bool v1_target = (v1->kind == VAL_EMBED && v1->embed_type && (v1->embed_type->kind == TYPE_INT || v1->embed_type->kind == TYPE_CHAR || v1->embed_type->kind == TYPE_FLOAT));
-        bool v2_target = (v2->kind == VAL_EMBED && v2->embed_type && (v2->embed_type->kind == TYPE_INT || v2->embed_type->kind == TYPE_CHAR || v2->embed_type->kind == TYPE_FLOAT));
+        #define IS_NUMERIC_EMBED(v) ((v)->kind == VAL_EMBED && (v)->embed_type && \
+            ((v)->embed_type->kind == TYPE_INT        || \
+             (v)->embed_type->kind == TYPE_INT_ARBITRARY || \
+             (v)->embed_type->kind == TYPE_CHAR       || \
+             (v)->embed_type->kind == TYPE_FLOAT      || \
+             (v)->embed_type->kind == TYPE_F80        || \
+             (v)->embed_type->kind == TYPE_I8         || \
+             (v)->embed_type->kind == TYPE_U8         || \
+             (v)->embed_type->kind == TYPE_I16        || \
+             (v)->embed_type->kind == TYPE_U16        || \
+             (v)->embed_type->kind == TYPE_I32        || \
+             (v)->embed_type->kind == TYPE_U32        || \
+             (v)->embed_type->kind == TYPE_I64        || \
+             (v)->embed_type->kind == TYPE_U64        || \
+             (v)->embed_type->kind == TYPE_I128       || \
+             (v)->embed_type->kind == TYPE_U128       || \
+             (v)->embed_type->kind == TYPE_F32))
+        bool v1_target = IS_NUMERIC_EMBED(v1);
+        bool v2_target = IS_NUMERIC_EMBED(v2);
+        #undef IS_NUMERIC_EMBED
 
         if ((v1_nat && v2_target) || (v1_target && v2_nat)) return true;
 

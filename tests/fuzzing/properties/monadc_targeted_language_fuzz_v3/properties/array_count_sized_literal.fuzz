@@ -1,0 +1,7 @@
+name: array_count_sized_literal
+section: collections
+args: 
+type: Bool
+expect: True
+description: count must use the sized-array path for fixed array literals.
+law: (= (count [10 20 30 40]) 4)

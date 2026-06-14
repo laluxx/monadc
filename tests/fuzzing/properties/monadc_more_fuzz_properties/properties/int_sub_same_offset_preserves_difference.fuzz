@@ -1,0 +1,7 @@
+name: int_sub_same_offset_preserves_difference
+section: arithmetic
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Adding the same offset to both sides of a subtraction must preserve the difference.
+law: (= (fuzz-sub (fuzz-add {a} {c}) (fuzz-add {b} {c})) (fuzz-sub {a} {b}))

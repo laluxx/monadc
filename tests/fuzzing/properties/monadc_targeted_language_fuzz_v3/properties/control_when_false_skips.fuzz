@@ -1,0 +1,7 @@
+name: control_when_false_skips
+section: control-binding
+args: 
+type: Bool
+expect: True
+description: when False must skip its body.
+law: (with [x 0] (begin (when False (set! x 7)) (= x 0)))

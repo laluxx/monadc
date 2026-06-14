@@ -1,0 +1,7 @@
+name: comparison_greater_than_predecessor
+section: comparison
+args: a:Int
+type: Bool
+expect: True
+description: An Int expression must be greater than itself minus one.
+law: (fuzz-gt? {a} (fuzz-sub {a} 1))

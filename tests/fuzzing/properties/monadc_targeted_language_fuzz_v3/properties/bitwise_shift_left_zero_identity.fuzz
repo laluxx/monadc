@@ -1,0 +1,7 @@
+name: bitwise_shift_left_zero_identity
+section: bitwise
+args: a:Int
+type: Bool
+expect: True
+description: Left shift by zero must preserve the operand.
+law: (= (<< {a} 0) {a})

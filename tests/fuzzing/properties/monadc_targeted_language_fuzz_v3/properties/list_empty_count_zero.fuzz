@@ -1,0 +1,7 @@
+name: list_empty_count_zero
+section: collections
+args: 
+type: Bool
+expect: True
+description: Zero-arg list construction must produce an empty list.
+law: (= (count (list)) 0)

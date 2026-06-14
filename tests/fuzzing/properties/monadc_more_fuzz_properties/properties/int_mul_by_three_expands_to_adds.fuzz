@@ -1,0 +1,7 @@
+name: int_mul_by_three_expands_to_adds
+section: arithmetic
+args: a:Int
+type: Bool
+expect: True
+description: Multiplication by three must agree with three repeated additions.
+law: (= (fuzz-mul 3 {a}) (fuzz-add {a} (fuzz-add {a} {a})))

@@ -1,0 +1,7 @@
+name: arith_direct_sub_variadic_left_fold
+section: arithmetic-dispatch
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Direct variadic - dispatch must behave as a left fold.
+law: (= (- {a} {b} {c}) (- (- {a} {b}) {c}))

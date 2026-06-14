@@ -1,0 +1,7 @@
+name: function_int_id_preserves_multiplication
+section: function
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The typed Int identity helper must preserve a multiplication expression and its operands.
+law: (= (fuzz-id-int (fuzz-mul {a} {b})) (fuzz-mul (fuzz-id-int {a}) (fuzz-id-int {b})))

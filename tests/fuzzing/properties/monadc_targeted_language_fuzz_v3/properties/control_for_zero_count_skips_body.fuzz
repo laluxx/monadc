@@ -1,0 +1,7 @@
+name: control_for_zero_count_skips_body
+section: control-binding
+args: 
+type: Bool
+expect: True
+description: simple count for-loop with zero count must skip the body.
+law: (with [x 11] (begin (for 0 (set! x 99)) (= x 11)))

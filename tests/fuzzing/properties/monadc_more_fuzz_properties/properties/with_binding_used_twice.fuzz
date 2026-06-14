@@ -1,0 +1,7 @@
+name: with_binding_used_twice
+section: binding
+args: value:Int
+type: Bool
+expect: True
+description: A with-bound Int used twice must behave like using the original expression twice.
+law: (= (with [x {value}] (fuzz-add x x)) (fuzz-add {value} {value}))

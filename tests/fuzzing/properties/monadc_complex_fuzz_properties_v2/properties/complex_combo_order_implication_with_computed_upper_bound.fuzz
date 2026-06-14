@@ -1,0 +1,7 @@
+name: complex_combo_order_implication_with_computed_upper_bound
+section: combo
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: If c is above both values then it must be above their max, with bindings and helper comparisons involved.
+law: (with [hi (fuzz-max {a} {b})] (if (fuzz-gte? {c} {a}) (if (fuzz-gte? {c} {b}) (fuzz-gte? {c} hi) True) True))

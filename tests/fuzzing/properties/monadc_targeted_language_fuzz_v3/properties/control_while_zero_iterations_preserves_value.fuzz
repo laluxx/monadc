@@ -1,0 +1,7 @@
+name: control_while_zero_iterations_preserves_value
+section: control-binding
+args: a:Int
+type: Bool
+expect: True
+description: while False must perform zero iterations and preserve a with-bound value.
+law: (with [x {a}] (begin (while False (set! x (+ x 1))) (= x {a})))

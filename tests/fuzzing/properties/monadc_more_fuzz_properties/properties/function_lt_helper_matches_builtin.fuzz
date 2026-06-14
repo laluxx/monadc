@@ -1,0 +1,7 @@
+name: function_lt_helper_matches_builtin
+section: function
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The typed fuzz-lt? helper must agree with the builtin less-than operator.
+law: (= (fuzz-lt? {a} {b}) (< {a} {b}))

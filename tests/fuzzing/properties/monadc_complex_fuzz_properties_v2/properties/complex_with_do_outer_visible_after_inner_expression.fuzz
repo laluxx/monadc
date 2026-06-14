@@ -1,0 +1,7 @@
+name: complex_with_do_outer_visible_after_inner_expression
+section: binding-do
+args: outer:Int inner:Int setup:Bool
+type: Bool
+expect: True
+description: An outer binding must remain visible after an inner shadowing expression has completed.
+law: (= (with [x {outer}] (do (with [x {inner}] x) (do {setup} x))) {outer})

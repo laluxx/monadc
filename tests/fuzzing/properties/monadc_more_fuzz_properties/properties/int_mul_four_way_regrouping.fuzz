@@ -1,0 +1,7 @@
+name: int_mul_four_way_regrouping
+section: arithmetic
+args: a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Multiplication of four generated values must be stable under regrouping.
+law: (= (fuzz-mul (fuzz-mul {a} {b}) (fuzz-mul {c} {d})) (fuzz-mul (fuzz-mul {a} {c}) (fuzz-mul {b} {d})))

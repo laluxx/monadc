@@ -1,0 +1,7 @@
+name: conversion_char_int_roundtrip_constant
+section: predicates-conversions
+args: 
+type: Bool
+expect: True
+description: Char-to-Int conversion must expose the character code.
+law: (= (Int (Char 65)) 65)

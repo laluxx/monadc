@@ -1,0 +1,7 @@
+name: complex_order_equality_forces_two_sided_bounds
+section: order-logic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Equality must imply both less-or-equal and greater-or-equal when encoded with nested if.
+law: (if (= {a} {b}) (if (fuzz-lte? {a} {b}) (fuzz-gte? {a} {b}) False) True)

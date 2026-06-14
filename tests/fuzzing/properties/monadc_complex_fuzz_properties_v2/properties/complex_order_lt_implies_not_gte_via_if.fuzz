@@ -1,0 +1,7 @@
+name: complex_order_lt_implies_not_gte_via_if
+section: order-logic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Strict less-than must make the reversed greater-or-equal false only through the encoded branch.
+law: (if (fuzz-lt? {a} {b}) (= (fuzz-gte? {a} {b}) False) True)

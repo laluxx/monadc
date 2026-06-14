@@ -1,0 +1,7 @@
+name: min_of_successor_is_original
+section: order
+args: a:Int
+type: Bool
+expect: True
+description: The min of an Int and its successor must be the original Int.
+law: (= (fuzz-min {a} (fuzz-add {a} 1)) {a})

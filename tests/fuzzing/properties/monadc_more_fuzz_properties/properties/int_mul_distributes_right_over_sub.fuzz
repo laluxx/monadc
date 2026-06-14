@@ -1,0 +1,7 @@
+name: int_mul_distributes_right_over_sub
+section: arithmetic
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: A right-side factor must distribute over subtraction.
+law: (= (fuzz-mul (fuzz-sub {a} {b}) {c}) (fuzz-sub (fuzz-mul {a} {c}) (fuzz-mul {b} {c})))

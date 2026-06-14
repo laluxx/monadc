@@ -1,0 +1,7 @@
+name: complex_combo_nested_bindings_if_arithmetic_roundtrip
+section: combo
+args: cond:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Nested bindings and an if-selected offset should roundtrip through add/sub cancellation.
+law: (= (with [x {a} y (if {cond} {b} {c})] (fuzz-sub (fuzz-add x y) y)) {a})

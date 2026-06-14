@@ -1,0 +1,7 @@
+name: if_distributes_over_add_right
+section: control
+args: cond:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Adding a common right operand outside an if must match adding it inside each branch.
+law: (= (fuzz-add (if {cond} {a} {b}) {c}) (if {cond} (fuzz-add {a} {c}) (fuzz-add {b} {c})))

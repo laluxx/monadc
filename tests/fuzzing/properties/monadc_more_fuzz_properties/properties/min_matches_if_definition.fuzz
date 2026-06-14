@@ -1,0 +1,7 @@
+name: min_matches_if_definition
+section: order
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The typed min helper must match its direct conditional definition.
+law: (= (fuzz-min {a} {b}) (if (fuzz-lt? {a} {b}) {a} {b}))

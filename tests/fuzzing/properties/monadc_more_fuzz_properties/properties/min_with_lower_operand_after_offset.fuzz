@@ -1,0 +1,7 @@
+name: min_with_lower_operand_after_offset
+section: order
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: If a is below b, adding the same offset must make min choose the offset a side.
+law: (if (fuzz-lte? {a} {b}) (= (fuzz-min (fuzz-add {a} {c}) (fuzz-add {b} {c})) (fuzz-add {a} {c})) True)

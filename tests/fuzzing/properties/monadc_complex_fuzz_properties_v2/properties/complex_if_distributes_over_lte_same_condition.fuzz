@@ -1,0 +1,7 @@
+name: complex_if_distributes_over_lte_same_condition
+section: control-if
+args: cond:Bool a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Less-or-equal between if expressions sharing a condition must be equivalent to branchwise less-or-equal.
+law: (= (fuzz-lte? (if {cond} {a} {b}) (if {cond} {c} {d})) (if {cond} (fuzz-lte? {a} {c}) (fuzz-lte? {b} {d})))

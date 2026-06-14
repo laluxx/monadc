@@ -1,0 +1,7 @@
+name: complex_with_if_bound_max_branch
+section: binding-order
+args: a:Int b:Int fallback:Int
+type: Bool
+expect: True
+description: Binding min and max must make the greater-or-equal branch choose the max value.
+law: (= (with [lo (fuzz-min {a} {b}) hi (fuzz-max {a} {b})] (if (fuzz-gte? hi lo) hi {fallback})) (fuzz-max {a} {b}))

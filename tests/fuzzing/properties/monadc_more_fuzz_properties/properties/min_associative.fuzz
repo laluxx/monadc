@@ -1,0 +1,7 @@
+name: min_associative
+section: order
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: The typed min helper must be associative.
+law: (= (fuzz-min (fuzz-min {a} {b}) {c}) (fuzz-min {a} (fuzz-min {b} {c})))

@@ -1,0 +1,7 @@
+name: complex_lattice_max_of_min_pair_is_left_when_lower_bound
+section: lattice
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: If a is less than or equal to both bounds, max of the two mins with a must recover a.
+law: (if (fuzz-lte? {a} {b}) (if (fuzz-lte? {a} {c}) (= (fuzz-max (fuzz-min {a} {b}) (fuzz-min {a} {c})) {a}) True) True)

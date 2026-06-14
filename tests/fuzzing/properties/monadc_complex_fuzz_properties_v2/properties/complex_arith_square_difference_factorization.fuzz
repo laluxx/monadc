@@ -1,0 +1,7 @@
+name: complex_arith_square_difference_factorization
+section: arithmetic-normalization
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The difference of squares factorization should hold for generated Int expressions.
+law: (= (fuzz-sub (fuzz-mul {a} {a}) (fuzz-mul {b} {b})) (fuzz-mul (fuzz-sub {a} {b}) (fuzz-add {a} {b})))

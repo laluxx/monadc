@@ -1,0 +1,7 @@
+name: complex_combo_ordered_clamp_sum_decomposition
+section: combo
+args: x:Int lo:Int hi:Int
+type: Bool
+expect: True
+description: When bounds are ordered, clamped value should sit between bounds and remain idempotent under with-bound reuse.
+law: (if (fuzz-lte? {lo} {hi}) (with [c (fuzz-min (fuzz-max {x} {lo}) {hi})] (if (fuzz-lte? {lo} c) (fuzz-lte? c {hi}) False)) True)

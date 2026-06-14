@@ -1,0 +1,7 @@
+name: predicate_collection_set_true
+section: predicates-conversions
+args: 
+type: Bool
+expect: True
+description: collection? must accept sets created through the set dispatcher.
+law: (collection? (set 1 2 3))

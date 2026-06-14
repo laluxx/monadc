@@ -1,0 +1,7 @@
+name: comparison_lte_transitive
+section: comparison
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Less-or-equal must be transitive.
+law: (if (fuzz-lte? {a} {b}) (if (fuzz-lte? {b} {c}) (fuzz-lte? {a} {c}) True) True)

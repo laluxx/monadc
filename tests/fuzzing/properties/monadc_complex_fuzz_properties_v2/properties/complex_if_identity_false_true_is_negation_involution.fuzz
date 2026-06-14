@@ -1,0 +1,7 @@
+name: complex_if_identity_false_true_is_negation_involution
+section: control-if
+args: cond:Bool
+type: Bool
+expect: True
+description: Double-swapping Bool branches through encoded negation must recover the original condition.
+law: (= (if (if {cond} False True) False True) {cond})

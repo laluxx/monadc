@@ -1,0 +1,7 @@
+name: int_mul_three_way_permutation
+section: arithmetic
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Multiplication of three generated values must be invariant under a nontrivial permutation.
+law: (= (fuzz-mul (fuzz-mul {a} {b}) {c}) (fuzz-mul (fuzz-mul {c} {a}) {b}))

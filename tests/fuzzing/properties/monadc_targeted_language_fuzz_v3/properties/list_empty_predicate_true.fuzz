@@ -1,0 +1,7 @@
+name: list_empty_predicate_true
+section: collections
+args: 
+type: Bool
+expect: True
+description: empty? must recognize the zero-arg list as empty.
+law: (empty? (list))

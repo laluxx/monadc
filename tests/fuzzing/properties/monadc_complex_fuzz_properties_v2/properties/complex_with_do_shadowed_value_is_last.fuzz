@@ -1,0 +1,7 @@
+name: complex_with_do_shadowed_value_is_last
+section: binding-do
+args: outer:Int inner:Int setup:Bool
+type: Bool
+expect: True
+description: A shadowed value inside a do body must return the innermost binding.
+law: (= (with [x {outer}] (do {setup} (with [x {inner}] x))) {inner})

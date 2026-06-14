@@ -1,0 +1,7 @@
+name: control_for_step_form_compiles_without_value_change
+section: control-binding
+args: 
+type: Bool
+expect: True
+description: stepped for-loop form must compile and preserve unrelated locals.
+law: (with [x 3] (begin (for [i 0 6 2] (set! x x)) (= x 3)))

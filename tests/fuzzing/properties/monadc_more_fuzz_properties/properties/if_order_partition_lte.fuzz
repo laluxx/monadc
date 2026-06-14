@@ -1,0 +1,7 @@
+name: if_order_partition_lte
+section: control
+args: a:Int b:Int
+type: Bool
+expect: True
+description: An if over less-or-equal must select a value that remains less-or-equal to the other branch boundary.
+law: (fuzz-lte? (if (fuzz-lte? {a} {b}) {a} {b}) (if (fuzz-lte? {a} {b}) {b} {a}))

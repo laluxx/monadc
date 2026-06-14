@@ -1,0 +1,7 @@
+name: int_sub_left_add_self_negative_rhs
+section: arithmetic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Subtracting a value plus an offset from the value must leave the negated offset.
+law: (= (fuzz-sub {a} (fuzz-add {a} {b})) (fuzz-mul -1 {b}))

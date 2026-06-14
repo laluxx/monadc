@@ -1,0 +1,7 @@
+name: compare_mixed_helper_and_direct_lte
+section: comparison-variadic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Direct <= dispatch and stable helper must agree.
+law: (= (<= {a} {b}) (fuzz-lte? {a} {b}))

@@ -1,0 +1,7 @@
+name: complex_if_sub_common_left_factor
+section: control-if-arithmetic
+args: cond:Bool common:Int a:Int b:Int
+type: Bool
+expect: True
+description: Subtracting an if expression from a common left operand distributes branchwise.
+law: (= (fuzz-sub {common} (if {cond} {a} {b})) (if {cond} (fuzz-sub {common} {a}) (fuzz-sub {common} {b})))

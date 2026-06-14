@@ -1,0 +1,7 @@
+name: int_mul_factor_common_left
+section: arithmetic
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Common left factors in a sum of products must factor back out.
+law: (= (fuzz-add (fuzz-mul {a} {b}) (fuzz-mul {a} {c})) (fuzz-mul {a} (fuzz-add {b} {c})))

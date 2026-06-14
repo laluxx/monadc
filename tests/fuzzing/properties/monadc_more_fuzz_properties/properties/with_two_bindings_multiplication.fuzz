@@ -1,0 +1,7 @@
+name: with_two_bindings_multiplication
+section: binding
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Two with-bound Int values must preserve multiplication semantics.
+law: (= (with [x {a} y {b}] (fuzz-mul x y)) (fuzz-mul {a} {b}))

@@ -1,0 +1,7 @@
+name: combo_do_with_heap_array_head
+section: feature-interactions
+args: a:Int
+type: Bool
+expect: True
+description: do sequencing must preserve final head result from a heap array literal.
+law: (= (do {a} (head ~[8 9 10])) 8)

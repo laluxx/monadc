@@ -1,0 +1,7 @@
+name: complex_with_multiple_bindings_expression_dependencies
+section: binding
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Later with bindings may depend on earlier bindings and should preserve the expected expanded expression.
+law: (= (with [x {a} y (fuzz-add x {b}) z (fuzz-sub y {c})] z) (fuzz-sub (fuzz-add {a} {b}) {c}))

@@ -1,0 +1,7 @@
+name: complex_lattice_max_min_idempotent_deep
+section: lattice
+args: a:Int b:Int
+type: Bool
+expect: True
+description: A deep alternation of max and min should collapse by absorption.
+law: (= (fuzz-max {a} (fuzz-min {a} (fuzz-max {a} {b}))) {a})

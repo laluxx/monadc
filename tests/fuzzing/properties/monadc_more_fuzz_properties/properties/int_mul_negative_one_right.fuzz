@@ -1,0 +1,7 @@
+name: int_mul_negative_one_right
+section: arithmetic
+args: a:Int
+type: Bool
+expect: True
+description: Multiplication by negative one on the right must match subtraction from zero.
+law: (= (fuzz-mul {a} -1) (fuzz-sub 0 {a}))

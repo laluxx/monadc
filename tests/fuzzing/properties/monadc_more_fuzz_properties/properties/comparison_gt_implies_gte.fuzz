@@ -1,0 +1,7 @@
+name: comparison_gt_implies_gte
+section: comparison
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Strict greater-than must imply greater-or-equal.
+law: (if (fuzz-gt? {a} {b}) (fuzz-gte? {a} {b}) True)

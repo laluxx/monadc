@@ -1,0 +1,7 @@
+name: predicate_number_generated_int_true
+section: predicates-conversions
+args: a:Int
+type: Bool
+expect: True
+description: Number? must accept generated Int expressions.
+law: (Number? {a})

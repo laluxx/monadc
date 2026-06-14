@@ -1,0 +1,7 @@
+name: string_count_literal
+section: collections
+args: 
+type: Bool
+expect: True
+description: count must dispatch to the string strlen path.
+law: (= (count "hello") 5)

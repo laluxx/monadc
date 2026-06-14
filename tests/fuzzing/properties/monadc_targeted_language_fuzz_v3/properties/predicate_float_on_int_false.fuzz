@@ -1,0 +1,7 @@
+name: predicate_float_on_int_false
+section: predicates-conversions
+args: a:Int
+type: Bool
+expect: False
+description: Float? must reject generated Int expressions.
+law: (Float? {a})

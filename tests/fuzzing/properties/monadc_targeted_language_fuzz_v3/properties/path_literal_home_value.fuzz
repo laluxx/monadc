@@ -1,0 +1,7 @@
+name: path_literal_home_value
+section: quote-null-path
+args: 
+type: Path
+expect: ~/monadc/context/
+description: home-relative path literals are first-class Path values and show as path text.
+law: ~/monadc/context/

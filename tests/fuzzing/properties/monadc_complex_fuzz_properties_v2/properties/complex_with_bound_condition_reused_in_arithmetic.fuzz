@@ -1,0 +1,7 @@
+name: complex_with_bound_condition_reused_in_arithmetic
+section: binding-if-arithmetic
+args: cond:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: A bound condition reused around arithmetic must be equivalent to direct use of the original condition.
+law: (= (with [flag {cond}] (fuzz-add (if flag {a} {b}) (if flag {c} {a}))) (fuzz-add (if {cond} {a} {b}) (if {cond} {c} {a})))

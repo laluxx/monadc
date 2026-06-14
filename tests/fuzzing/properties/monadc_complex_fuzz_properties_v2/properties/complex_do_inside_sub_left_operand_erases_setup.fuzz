@@ -1,0 +1,7 @@
+name: complex_do_inside_sub_left_operand_erases_setup
+section: control-do
+args: setup:Bool a:Int b:Int
+type: Bool
+expect: True
+description: A setup expression sequenced before the left subtraction operand must not affect subtraction.
+law: (= (fuzz-sub (do {setup} {a}) {b}) (fuzz-sub {a} {b}))

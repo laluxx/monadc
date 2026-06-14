@@ -1,0 +1,7 @@
+name: int_mul_subtract_self_zero
+section: arithmetic
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Subtracting identical generated products must produce zero.
+law: (= (fuzz-sub (fuzz-mul {a} {b}) (fuzz-mul {a} {b})) 0)
