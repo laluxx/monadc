@@ -1,0 +1,101 @@
+#+TITLE: Macros
+#+STARTUP: showeverything
+#+OPTIONS: toc:3 num:t
+
+[[file:index.org][<- Back to Index]] · [[file:macro-patterns.org][Macro Patterns]]
+
+Monad supports compile-time metaprogramming via macros ([[file:../macro.c]]).
+Unlike Lisp, there is no special =macro= form — macros are just
+functions that return =Syntax= ([[file:../macro.c::765]]).
+
+* How Macros Work
+
+1. The reader ([[file:../reader.c]]) parses source into S-expressions (AST)
+2. The macro expander walks the AST looking for calls to functions
+   whose return type is =Syntax=
+3. When found, it calls the function with the unevaluated arguments
+4. The function returns a new S-expression to compile in place of the
+   call
+5. Expansion continues on the result (macros can expand to macros;
+   [[file:../macro.c::798]] =macro_expand_all= loops to fixpoint)
+
+* Defining Macros
+
+Define a macro as a function returning =Syntax=:
+
+#+BEGIN_SRC monad
+;; A macro that discards its argument and returns 42
+(define (my-macro x -> Syntax)
+  42)
+#+END_SRC
+
+Variadic macros use =. name= for the rest argument:
+
+#+BEGIN_SRC monad
+(define when :: condition . body -> Syntax
+  (if condition (begin . body)))
+#+END_SRC
+
+* How Syntax Works
+
+=Syntax= is the type of unevaluated S-expressions. A macro receives
+its arguments as =Syntax= values and must construct a valid
+S-expression to return.
+
+Construction uses plain function calls — no quasiquotation needed:
+
+#+BEGIN_SRC monad
+(define (double-it x -> Syntax)
+  (list '* 2 x))
+
+(double-it 5)  ;; expands to (* 2 5)
+#+END_SRC
+
+* Pattern Matching on Arguments
+
+Use =match= to destructure the argument list:
+
+#+BEGIN_SRC monad
+(define (my-and . args -> Syntax)
+  []       -> True
+  [x]      -> x
+  [x|rest] -> (if x (my-and . rest) False))
+#+END_SRC
+
+* Expansion Phase
+
+Macro expansion happens after reader parsing but before type
+inference. Macros work on the raw AST, not on typed representations.
+
+* Hygiene
+
+Macros are unhygienic. Variable bindings in the expansion can capture
+bindings at the call site:
+
+#+BEGIN_SRC monad
+(define (swap x y -> Syntax)
+  (let [tmp x]
+    (set! x y)
+    (set! y tmp)))
+
+;; If caller has a 'tmp' binding, it gets captured!
+#+END_SRC
+
+To avoid capture, use =gensym=-style unique names if and when the
+macro system provides them. For simple macros, avoid introducing
+bindings that might collide.
+
+* Important Notes
+
+- Macros run at compile time
+- Macros can see other macros defined earlier
+- Recursive macros must avoid infinite expansion
+- =Syntax= return type is what distinguishes macros from functions
+- The macro system is compile-time only — =Syntax= does not exist at
+  runtime
+
+* Context Links
+
+- [[file:macro-patterns.org][Macro Patterns]] — common macro recipes
+- [[file:../context/macro.org][context/macro.org]] — Macro expander implementation
+- [[file:../context/reader.org][context/reader.org]] — Reader and AST representation

@@ -1,0 +1,41 @@
+#+TITLE: Style Guide
+#+STARTUP: showeverything
+#+OPTIONS: toc:nil num:t
+
+[[file:index.org][<- Back to Index]]
+
+* Naming
+
+- Types: =PascalCase= (must start with uppercase — enforced,
+  [[file:../reader.c]] constructor name check)
+- Values: =camelCase= or =kebab-case= (kebab preferred)
+- Mutations: prefer =! suffix: set!, reset!
+- Predicates: prefer =? suffix: zero?, empty?
+
+* Formatting
+
+- Indent 2 spaces for body. No tabs.
+- Close parens at end of line (not own line).
+- One =define= per binding. No comma-separated definitions.
+- =match= clauses: pattern on same indent level, body indented +2:
+
+#+BEGIN_SRC monad
+(match x with
+  (Some v) -> (show v)
+  None     -> (show "none"))
+#+END_SRC
+
+* Macros
+
+- Document macro syntax in comment before =define=.
+- Use =define name -> Syntax=, not shorter forms.
+
+* Comments
+
+- =;;= for line comments (single semicolons for block alignments)
+- Avoid trailing comments on code lines
+
+* Context Links
+
+- [[file:syntax.org][Syntax Reference]]
+- [[file:../context/][context/]] — compiler internals

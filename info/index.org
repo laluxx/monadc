@@ -1,0 +1,85 @@
+#+TITLE: Monad Language Reference
+#+AUTHOR: Laluxx
+#+DATE: 2026-06-14
+#+STARTUP: showeverything
+#+OPTIONS: toc:3 num:t
+#+FILETAGS: :monad:language:reference:info:
+#+LANGUAGE: en
+
+This is the Monad language reference. It covers the language from the
+user's perspective — syntax, types, standard library, tooling — NOT the
+compiler internals (those live in [[file:../context.org][context/]]).
+
+Written in Org mode. Export to GNU Info via Emacs: ~C-c C-e i i~.
+
+* Navigation
+
+   - [[file:intro.org][Introduction]] — philosophy, hello world, quick start
+   - [[file:tutorial.org][Tutorial]] — step-by-step from zero to working programs
+   - [[file:syntax.org][Syntax]] — S-expressions, Wisp, special forms, literals
+   - [[file:types.org][Types]] — type system, HM inference, refinement types
+   - [[file:advanced-types.org][Advanced Types]] — type classes, dependent types, universes
+   - [[file:data.org][Data Types]] — algebraic data types
+   - [[file:layouts.org][Layout Types]] — C-compatible memory layouts
+   - [[file:refinements.org][Refinement Types]] — subset types with predicates
+   - [[file:control.org][Control Flow]] — if, cond, match, let, while, for
+   - [[file:collections.org][Collections]] — arrays, sets, maps, ranges, lists, strings
+   - [[file:strings.org][Strings]] — string and character reference
+   - [[file:patterns.org][Pattern Matching]] — match expressions, destructuring
+   - [[file:functional-programming.org][Functional Programming]] — lambdas, recursion, HOFs
+   - [[file:error-handling.org][Error Handling]] — Error type, Option pattern
+   - [[file:core.org][Core Library]] — predefined functions and constants
+   - [[file:stdlib.org][Standard Library]] — Math, List (WIP)
+   - [[file:wisp.org][Wisp Syntax]] — indentation-aware surface language
+   - [[file:advanced-wisp.org][Advanced Wisp]] — Wisp patterns and known bugs
+   - [[file:modules.org][Module System]] — declarations, imports, resolution
+   - [[file:macros.org][Macros]] — compile-time code transformation
+   - [[file:macro-patterns.org][Macro Patterns]] — common macro recipes
+   - [[file:asm.org][Inline Assembly]] — x86-64 assembly in Monad
+   - [[file:ffi.org][C FFI]] — calling C libraries directly
+   - [[file:style.org][Style Guide]] — naming, formatting, organization
+   - [[file:performance.org][Performance]] — arena allocation, ADT layout
+   - [[file:testing.org][Testing]] — embedded tests and test runner
+   - [[file:repl.org][REPL]] — interactive read-eval-print loop
+   - [[file:cli.org][CLI Reference]] — command line options
+   - [[file:errors.org][Debugging]] — error messages and debugging
+   - [[file:build.org][Build System]] — compilation, testing, packaging
+   - [[file:package-dev.org][Package Development]] — module structure, distribution
+   - [[file:literate.org][Literate Programming]] — org-mode literate code
+   - [[file:from-c.org][Coming from C/Rust]]
+   - [[file:from-lisp.org][Coming from Lisp/Scheme]]
+   - [[file:from-haskell.org][Coming from Haskell]]
+   - [[file:contributing.org][Contributing]]
+   - [[file:faq.org][FAQ]]
+
+* Conventions
+
+Throughout this reference:
+
+- =(code)= marks Lisp-style S-expression syntax
+- ~indented~ blocks mark Wisp (whitespace-aware) syntax
+- =(...)=, =[...]=, ={...}= are literal syntax
+- =(italic text)= denotes metavariables
+- =(type::value)= shows inferred types
+
+Cross-references to the compiler context link to [[file:../context.org][context/]] files.
+
+* Quick Index
+
+| Form             | Page           |
+|------------------+----------------|
+| define           | [[file:syntax.org][Syntax]]         |
+| lambda           | [[file:syntax.org][Syntax]]         |
+| if  cond  match  | [[file:control.org][Control]]        |
+| let let*  letrec | [[file:control.org][Control]]        |
+| data             | [[file:data.org][Data Types]]     |
+| layout           | [[file:layouts.org][Layouts]]        |
+| type             | [[file:refinements.org][Refinements]]    |
+| class   instance | [[file:advanced-types.org][Advanced Types]] |
+| asm              | [[file:asm.org][Assembly]]       |
+| include          | [[file:ffi.org][C FFI]]          |
+| import  module   | [[file:modules.org][Modules]]        |
+| for              | [[file:control.org][Control]]        |
+| show             | [[file:core.org][Core Lib]]       |
+| match            | [[file:patterns.org][Patterns]]       |
+| Syntax           | [[file:macros.org][Macros]]         |

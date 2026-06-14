@@ -1,0 +1,58 @@
+#+TITLE: Module System
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+
+[[file:index.org][<- Back to Index]] · [[file:syntax.org][Syntax]] · [[file:core.org][Core Library]]
+
+* Declaration ([[file:../module.c::414]])
+
+#+BEGIN_SRC monad
+(module Name [exports...])
+(module Math [pi e tau square sqrt])
+#+END_SRC
+
+- File ~Name.mon~ must exist (guessed from path if missing, default: ~Main~)
+- Empty/~[]~ exports export nothing; omitted exports export everything
+
+* Import syntax ([[file:../module.c::469]])
+
+| Form                                                   | Semantics                         |
+|--------------------------------------------------------+-----------------------------------|
+| =(import Mod)=                                           | Unqualified, all names            |
+| =(import "path/to/file.mon")=                            | File path import                  |
+| =(import Mod :as Alias)=                                 | Unqualified with alias prefix     |
+| =(import qualified Mod)=                                 | All names, qualified access only  |
+| =(import qualified Mod :as A)=                           | Qualified with alias prefix       |
+| =(import Mod [sym1 sym2])=                               | Selective: only listed names      |
+| =(import Mod hiding [sym1 sym2])=                        | Import all except listed          |
+| =(import qualified Mod [syms] :as A)=                    | Qualified + selective + alias     |
+
+- Module and alias names must start with uppercase (enforced, compiler error otherwise)
+
+* Resolution
+
+1. Module registry (already-compiled modules by name)
+2. ~./ModuleName.mon~ (local file)
+3. ~$MONAD_CORE~ recursive search (dev override)
+4. ~/usr/local/lib/monad/core~ recursive search (installed stdlib)
+
+* Export control
+
+| Mode             | Meaning                        |
+|------------------+--------------------------------|
+| ~EXPORT_ALL~       | No export list — expose all    |
+| ~EXPORT_SELECTED~  | Explicit ~[sym ...]~ list       |
+| ~EXPORT_NONE~      | Empty ~[]~ — export nothing     |
+
+* Known limitations
+
+- No automatic prelude import (planned)
+- No re-export (~(import Mod [x])~ does not make ~x~ visible to importers)
+- Most ~core/~ implementations are commented out (WIP)
+
+* Context Links
+
+- [[file:../context/module.org][context/module.org]] — module system implementation
+- [[file:../context/module-export.org][context/module-export.org]] — export handling
+- [[file:../context/buildsystem.org][context/buildsystem.org]] — build system
+- [[file:../module.c][module.c]] — import/decl parser + module_name_to_path

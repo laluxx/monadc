@@ -1,0 +1,122 @@
+#+TITLE: Coming from Lisp / Scheme
+#+CONTEXT: intro.org, syntax.org, macros.org, wisp.org
+#+STARTUP: showeverything
+#+OPTIONS: toc:3 num:t
+
+[[file:index.org][<- Back to Index]] · [[file:from-c.org][From C/Rust]] · [[file:from-haskell.org][From Haskell]]
+
+Monad uses S-expressions and code-as-data — Lisp programmers will feel
+at home, but the type system changes how you write code.
+
+* Lisp is the AST
+
+S-expressions are not just syntax — they ARE the AST. What you write in
+parens IS the parse tree the compiler walks:
+
+#+BEGIN_SRC monad
+(if (> x 0) (print "pos") (print "neg"))
+#+END_SRC
+
+The reader directly produces AST nodes ([[file:../reader.h::40]]). No separate
+parse tree, no CST, no intermediate representation. This means you can
+always drop into raw S-expressions. Wisp (indentation syntax) is a
+pre-expansion pass ([[file:../wisp.c]]) that generates the same AST.
+
+You never lose the ability to write raw Lisp. Mix wisp and s-exprs
+freely in the same file.
+
+#+BEGIN_SRC monad
+;; Wisp
+if (> x 0)
+  (print "pos")     ;; raw s-expr where clarity matters
+  print "neg"       ;; back to wisp
+#+END_SRC
+
+* Monomorphization, Not Objects
+
+In Lisp, every parameter is a boxed object (pointer + type tag). In
+Monad:
+
+- If you annotate a parameter with a type, it uses that type directly.
+- If you DON'T annotate, the type is inferred and the function is
+  **monomorphized** for each concrete call site.
+
+#+BEGIN_SRC monad
+(define (id x) x)              ;; polymorphic — monomorphized per use
+(define [id-int :: Int -> Int] ;; monomorphic — Int directly
+  x -> x)
+#+END_SRC
+
+Monomorphization means =(id 42)= and =(id "hi")= generate separate
+specialized functions (=id_Int=, =id_String=) with zero boxing
+overhead. No type tags, no dispatch at runtime. This is the key
+performance difference from Lisp.
+
+** How it works
+
+The =mono_cache= ([[file:../codegen.c::109]]) caches specialized versions by
+function name + concrete type args. When codegen encounters a
+polymorphic call, it looks up the cache, substitutes concrete types via
+=mono_apply_subst= ([[file:../codegen.c::189]]), generates a new LLVM function if not
+cached, and emits a direct call.
+
+| Lisp              | Monad (monomorphized)         |
+|-------------------+-------------------------------|
+| =(defun id (x) x)=  | =(define (id x) x)=             |
+| =(id 42)= — boxed   | =(id 42)= — Int, no boxing      |
+| =(id "hi")= — boxed | =(id "hi")= — String, no boxing |
+| Dynamic dispatch  | Static specialization         |
+
+* Summary of Differences
+
+** Same (identical syntax)
+
+- =car=, =cdr=, =cons=
+- =quote=, =quasiquote=
+- =define=, =lambda=
+- =if=, =cond=, =and=, =or=, =not=
+- =let=, =let*=, =letrec=
+- Macros (code-as-data, =define ... -> Syntax=)
+
+** Same, different syntax
+
+| Common Lisp        | Monad                      |
+|--------------------+----------------------------|
+| =(defun f (x) body)= | =(define (f x) body)=        |
+| =(let ((x 1)) body)= | =(let [x 1] body)=           |
+| =(setq x val)=       | =(set! x val)=               |
+| ='()=                | =nil= or ='()=                 |
+| =(format t "~a" x)=  | =(show x)=                   |
+| =(defstruct ...)=    | =(layout ...)=               |
+| =(defmacro ...)=     | =(define ... -> Syntax ...)= |
+
+** New (no Lisp equivalent)
+
+- Static types with HM inference
+- Algebraic data types (=(data Maybe a = Nothing | Just a)=)
+- Refinement types (=(type Pos { x ∈ Int | (> x 0) })=)
+- Layout types (C-compatible structs)
+- Inline assembly (=(asm ...)=)
+- C FFI via =(include "header.h")=
+
+** Not yet implemented
+
+| Feature                | Status                                                              |                              |
+|------------------------+---------------------------------------------------------------------+------------------------------|
+| =map= / =mapcar=           | Has type sig in [[file:../infer.c]], no codegen dispatch (not callable) |                              |
+| =                      | >= pipe                                                             | Reader parses, codegen fails |
+| =fn= shorthand           | No dispatch                                                         |                              |
+| Tail-call optimization | Planned                                                             |                              |
+| Closure allocation     | Partially implemented                                               |                              |
+
+* Context Links
+
+- [[file:syntax.org][Syntax Reference]] — reader/parser rules
+- [[file:macros.org][Macros]] — code-as-data macros
+- [[file:wisp.org][Wisp Syntax]] — indentation sugar
+- [[file:types.org][Types]] — static type system
+- [[file:data.org][Data Types]] — algebraic data types
+- [[file:asm.org][Inline Assembly]] — x86-64 asm
+- [[file:ffi.org][C FFI]] — C interop
+- [[file:../context/codegen.org][context/codegen.org]] — monomorphization cache details
+- [[file:../context/reader.org][context/reader.org]] — S-expression reader

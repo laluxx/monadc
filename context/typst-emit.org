@@ -385,6 +385,85 @@
   the emitter) · =monadc.context.cli.output= (=--output= flag controls the
   .typ and .pdf output filename)
 
+* LLM Analysis
+:PROPERTIES:
+:ID: monadc.context.typst-emit.llm-analysis
+:CUSTOM_ID: typst-emit-llm-analysis
+:CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: LLM assessment of the Typst documentation emitter: design motivation, output quality, phase placement, and utility for compiler self-documentation.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-14
+:CONTEXT_UPDATED: 2026-06-14
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: typst-emit.c, typst-emit.h, context/typst-emit.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.typst-emit.motivation conf:high]
+  The Typst emitter is an unusual feature for a compiler but fits the
+  project's philosophy of self-documentation. Typst provides LaTeX-quality
+  typesetting with a simpler syntax and a Rust-based compiler that is
+  orders of magnitude faster than LaTeX. Using Typst as the documentation
+  backend means the compiler can produce publication-quality PDFs of
+  program source code, type derivations, and proof trees without
+  requiring a LaTeX installation. The =--emit-typst= flag turns every
+  compilation into a documentation opportunity: compile your program
+  and get both the binary and a typeset PDF of the typed AST. This is
+  genuinely novel — I am not aware of another compiler that does this.
+
+[THINK id:think.typst-emit.phase-placement conf:medium]
+  The emitter runs after Phase 1 (reader → surface AST) and before the
+  macro expander, which means the output shows the parsed (but not
+  macro-expanded) source. This is the right choice for documentation
+  (show what the programmer wrote, not what the macros expanded to),
+  but it means the emitter cannot show inferred types or dependent type
+  derivations without access to the inference results. The prefer_inferred
+  option works around this by inserting type annotations from HM inference
+  output after Phase 5. If the emitter also ran after Phase 6 (codegen),
+  it could show LLVM IR or machine code alongside the source, creating
+  a full compilation trace from source to assembly.
+
+[THINK id:think.typst-emit.gentzen-style-rendering conf:high]
+  The Gentzen-style inference rule rendering (horizontal line over
+  premises, conclusion below) is mathematically beautiful but of limited
+  practical utility. Type derivation trees for even small programs are
+  enormous — a single (id x) expression generates a 5-level derivation
+  tree that takes a full page. The typst-emit.c implementation's
+  max-depth parameter and abbreviate-judgement option are necessary
+  constraints: without them, the output is unreadable. The sweet spot
+  is probably shallow derivations (2-3 levels) that show the key
+  judgments without the full deduction tree. This produces output that
+  is both correct and comprehensible.
+
+[THINK id:think.typst-emit.utility-vs-effort conf:medium]
+  The utility-to-effort ratio of the Typst emitter is debatable. Writing
+  a Typst backend requires understanding both the compiler's AST
+  structure and Typst's markup language, and maintaining it as both
+  evolve. The feature is used by exactly one person (the language
+  designer) for documentation purposes. If the goal is self-documentation,
+  the emitter competes with other approaches: generating Graphviz DOT
+  for AST graphs (for visual learners), generating HTML for web
+  documentation (easier to navigate), or generating LaTeX directly
+  (more portable). Typst is the right choice if the target output is
+  a PDF paper about the language, but if the goal is developer
+  documentation, a simpler format would serve.
+
+[THINK id:think.typst-emit.future-proofing conf:medium]
+  The emitter's integration as a phase in the compilation pipeline
+  (Phase 1.5) means it automatically benefits from all AST changes.
+  When a new AST type is added, the emitter will fail to compile until
+  a Typst rendering function is written for it. This is a feature: it
+  forces documentation to keep pace with language evolution. The
+  alternative (separate documentation generator that walks the AST
+  independently) would silently become outdated. The compile-time
+  integration guarantees that the emitter is always in sync with the
+  compiler, even if the output quality varies.
+
 [INF id:inf.typst-emit.main from:obs.typst-emit.main-invocation,obs.typst-emit.main-surface-exprs conf:high]
   connects-to -> =monadc.context.main.twelve-phase-pipeline= (Phase 1 =
   reader → AST includes the surface AST re-parse) ·

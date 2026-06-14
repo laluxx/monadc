@@ -277,6 +277,89 @@ pointer anchor instead of applying immediate linear zoom jumps.
 :CONFIDENCE: high
 :END:
 
+* LLM Analysis
+:PROPERTIES:
+:ID: monadc.context.visualizer.llm-analysis
+:CUSTOM_ID: visualizer-llm-analysis
+:CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: LLM assessment of the context graph visualizer: category theory foundation, UI/UX design, scalability, and integration with the context corpus.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-14
+:CONTEXT_UPDATED: 2026-06-14
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: context/visualizer/, context-visualizer.py, context/visualizer.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.visualizer.category-theory-framing conf:high]
+  The category-theory framing (objects = nodes, morphisms = edges,
+  functors = transformations between graph views) is intellectually
+  satisfying but adds complexity to what is fundamentally a dependency
+  graph renderer. The mathematical formalism justifies the architecture
+  (composition of edges = transitive dependencies, terminal objects =
+  root nodes) but the user experience is the same as any DAG visualizer.
+  The cost is that the visualizer's code is harder to understand for
+  someone who doesn't know category theory. The benefit is that the
+  formalism provides precise language for describing graph operations:
+  pullback, pushout, natural transformation. If the visualizer ever
+  supports query operations ("show me all nodes that depend on X" =
+  morphism preimage), the categorical vocabulary will earn its keep.
+
+[THINK id:think.visualizer.scalability-concern conf:high]
+  The current visualizer renders the entire context graph on a single
+  HTML page. At 50 files with 500+ nodes and 1000+ edges, this is
+  already near the limit of what a browser can render smoothly. The
+  todo.org flags a performance issue with the visualizer. The fix is
+  not optimization (the graph is too large for any renderer to handle
+  at once) but feature addition: pagination, category filtering, and
+  incremental loading. The category-theory foundation provides natural
+  partitioning: show all nodes in a given subcategory (morphism subgraph),
+  with drill-down into individual node details. A search bar that
+  filters nodes by ID prefix or description text would also help.
+
+[THINK id:think.visualizer.python-generator-tradeoff conf:medium]
+  Generating the visualizer output through a Python script
+  (context-visualizer.py) is a pragmatic choice: Python's string
+  processing is more convenient than C's for generating HTML/JS. But
+  it introduces a language boundary: modifications to the context
+  format (new record types, changed property syntax) must be reflected
+  in both the C context parser and the Python visualizer parser. The
+  two parsers can diverge, silently producing different interpretations
+  of the same context file. A single parser (either in C with a
+  JSON-emitting endpoint, or a Python library used by both) would
+  prevent format drift. The Python approach wins on development speed;
+  a unified parser wins on correctness.
+
+[THINK id:think.visualizer.ux-quality conf:medium]
+  The visualizer's UI (search, filter, category toggle, SVG rendering)
+  is surprisingly polished for a compiler project's side tool. The
+  category toggle (showing/hiding categories) and search functionality
+  make the graph actually usable for navigation, not just a pretty
+  picture. The SVG rendering (rather than canvas) means the graph is
+  scalable and searchable (text in SVGs is selectable). These UX choices
+  indicate that the visualizer was designed for real use, not as a demo.
+  The only missing UX feature is click-through: clicking a node should
+  open the corresponding context file at the relevant heading. This
+  would complete the loop from visual navigation to document editing.
+
+[THINK id:think.visualizer.potential-as-ci-tool conf:high]
+  The visualizer has untapped potential as a CI check tool. In --validate
+  mode (proposed in opinions.org), it could check:
+  1. All context IDs referenced in TSV tests resolve to real nodes
+  2. All source anchors (src:file.c:123) point to existing lines
+  3. All INF from: fields reference existing record IDs
+  4. No duplicate IDs across the corpus
+  5. All context files have valid metadata headers
+  This would turn the visualizer from a passive renderer into an active
+  quality gate for the context system. A CI step that runs
+  context-visualizer.py --validate && context-visualizer.py --render
+  would catch context format errors before they accumulate.
+
 [INF id:inf.visualizer.connects-to from:obs.visualizer.purpose conf:high]
   connects-to -> `monadc.context.scripts` (context-visualizer.py is the Python
   script that generates the visualizer HTML/JS; documented in scripts.org) ·

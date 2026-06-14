@@ -394,6 +394,72 @@
 :CONFIDENCE: high
 :END:
 
+* LLM Analysis
+:PROPERTIES:
+:ID: monadc.context.module.llm-analysis
+:CUSTOM_ID: module-llm-analysis
+:CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: LLM assessment of the module system design: import resolution strategy, manifest format, name mangling, and cross-module dependency management.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-14
+:CONTEXT_UPDATED: 2026-06-14
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: module.c, module.h, context/module.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.module.manifest-cache-strategy conf:high]
+  The module manifest system (.mexp files as TOML-based export caches)
+  is the right approach for incremental compilation but introduces a
+  cache-invalidation problem. When module A imports B, A's compilation
+  reads B's .mexp to resolve exported symbols. If B changes, A's cached
+  .mexp is stale, but there is no explicit dependency tracking at the
+  manifest level. The build system (buildsystem.c) handles this by
+  recompiling dependent modules when their source is newer than their
+  .o file, but the .mexp file is separate from the .o — a source change
+  that only affects exports (adding a new public function) invalidates
+  the .mexp but not necessarily the .o (if the function body hasn't
+  changed). The current approach (regenerate .mexp whenever .o is
+  regenerated) is conservative and correct but misses optimization
+  opportunities.
+
+[THINK id:think.module.name-mangling-abi conf:high]
+  The name mangling scheme (package.module.symbol) is a straightforward
+  flat-mapping from Monad's hierarchical namespace to flat linker
+  symbols. This is the same approach used by Rust (module::symbol →
+  _ZN...symbol) and C++ (namespace::symbol → ?symbol...). The choice
+  not to use a standard mangling scheme (like Itanium or MSVC) means
+  Monad objects cannot be linked directly with C++ code at the symbol
+  level, but this is acceptable since the FFI already provides C-level
+  interop. The current mangling is sufficient for self-hosted compilation
+  and Monad-to-Monad linking.
+
+[THINK id:think.module.import-resolution-order conf:medium]
+  The import resolution strategy (first match in search path) is the
+  simplest possible approach and mirrors C's #include behavior. It
+  works well for small projects but will cause "import shadowing" bugs
+  as the project grows: a local module and a library module with the
+  same name will silently shadow one another based on search path order.
+  A visibility-based resolution rule (explicit imports, no transitive
+  re-exports without declaration) would prevent this, but adds
+  complexity. For now, the simple approach is appropriate — premature
+  module system complexity is worse than no module system.
+
+[THINK id:think.module.manifest-vs-source-duality conf:medium]
+  The fact that module exports are declared both in source (=module
+  export ...=) and in the .mexp manifest creates a dual source of truth.
+  If they diverge (hand-edited .mexp, corrupted file, version control
+  merge conflict), the compiler silently uses whichever it reads first.
+  The .mexp should be treated as a cache (always regenerated from source,
+  never hand-edited), but nothing enforces this. A =--regenerate-manifests=
+  flag or a .mexp freshness check (compare modification times against
+  source) would prevent stale-manifest bugs.
+
 [INF id:inf.module.connects-to-language from:obs.module.parse-module-decl,obs.module.parse-import-decl conf:high]
   connects-to -> `monadc.context.language.syntax-corpus` (module/import syntax is
   exercised by the parser conformance corpus) ·

@@ -1854,13 +1854,15 @@ Token lexer_next_token(Lexer *lex) {
         size_t start = lex->pos;
         advance(lex); // consume the first character
 
-        /* Single Unicode Prefix: If it's a multi-byte char, consume just this codepoint and yield */
+        /* If it's a multi-byte char, consume the remaining bytes of this
+           codepoint, then fall through to the main loop so ASCII
+           continuations (e.g., π/2) are part of the same symbol.  The main
+           loop stops at the next multi-byte char (e.g., ² after x), so
+           superscript handling is preserved. */
         if ((unsigned char)c > 127) {
             if (((unsigned char)c & 0xE0) == 0xC0) { advance(lex); }
             else if (((unsigned char)c & 0xF0) == 0xE0) { advance(lex); advance(lex); }
             else if (((unsigned char)c & 0xF8) == 0xF0) { advance(lex); advance(lex); advance(lex); }
-            tok.value = my_strndup(lex->source+start, lex->pos-start);
-            tok.type  = TOK_SYMBOL; return tok;
         }
 
         /* Continue consuming symbol characters.  For '.', only consume it

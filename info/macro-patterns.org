@@ -1,0 +1,116 @@
+#+TITLE: Macro Patterns
+#+CONTEXT: macros.org, syntax.org, wisp.org
+#+STARTUP: showeverything
+#+OPTIONS: toc:3 num:t
+
+[[file:index.org][<- Back to Index]] · [[file:macros.org][Macros Reference]]
+
+Monad macros are functions that return =Syntax= ([[file:../macro.c::765]]).
+They receive their arguments unevaluated and produce a new s-expression
+to compile.
+
+* Basics
+
+#+BEGIN_SRC monad
+;; A macro that always expands to 42
+(define (unitmacro -> Syntax)
+  42)
+
+;; Pass-through macro
+(define (identity-macro x -> Syntax)
+  x)
+#+END_SRC
+
+* Conditional Expansion
+
+#+BEGIN_SRC monad
+(define when :: condition . body -> Syntax
+  (if condition (begin . body)))
+#+END_SRC
+
+The =. body= captures all remaining arguments as a list. =when= wraps
+them in =begin= inside an =if=.
+
+* Negated Condition
+
+#+BEGIN_SRC monad
+(define (macro-unless condition . body -> Syntax)
+  (if condition (begin) (begin . body)))
+#+END_SRC
+
+* Mutation Helper
+
+#+BEGIN_SRC monad
+(define (swap! a b -> Syntax)
+  (let [tmp a]
+    (set! a b)
+    (set! b tmp)))
+#+END_SRC
+
+Usage:
+
+#+BEGIN_SRC monad
+(define (main -> Int)
+  (let [x 1]
+    (let [y 99]
+      (swap! x y)
+      x)))  ;; 99
+#+END_SRC
+
+* Variadic Recursion
+
+#+BEGIN_SRC monad
+(define (my-and . args -> Syntax)
+  []       -> True
+  [x]      -> x
+  [x|rest] -> (if x (my-and . rest) False))
+#+END_SRC
+
+Pattern-matches on the argument list: empty =True=, single =x=, or
+recurse.
+
+* Assertion Macro
+
+#+BEGIN_SRC monad
+(define (assert condition . body -> Syntax)
+  (when condition
+    (begin . body)))
+#+END_SRC
+
+* Hygiene
+
+Macros are unhygienic. Variables in the expansion can capture
+bindings at the call site:
+
+#+BEGIN_SRC monad
+(define (swap x y -> Syntax)
+  (let [tmp x]
+    (set! x y)
+    (set! y tmp)))
+#+END_SRC
+
+If the caller has a =tmp= binding, it gets captured. Use gensymmed
+names to avoid this in complex macros.
+
+* Wisp Form
+
+Macros can be defined with Wisp syntax too:
+
+#+BEGIN_SRC monad
+define when :: condition . body -> Syntax
+  if condition (begin . body)
+#+END_SRC
+
+* Key Points
+
+- Macros are just functions returning =Syntax=
+- No separate =macro= keyword, no quasiquotation
+- Variadic args use =. name=
+- Arguments are received unevaluated
+- Return value must be a valid s-expression
+
+* Context Links
+
+- [[file:macros.org][Macros Reference]] — full macro system API
+- [[file:wisp.org][Wisp Syntax]] — defining macros with Wisp
+- [[file:../context/macro.org][context/macro.org]] — macro expander implementation

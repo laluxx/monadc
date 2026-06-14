@@ -1,0 +1,49 @@
+#+TITLE: From Haskell
+#+CONTEXT: functional-programming.org, types.org
+#+STRARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+
+[[file:index.org][<- Back to Index]] · [[file:types.org][Types]] · [[file:functional-programming.org][FP]]
+
+* Syntax Differences
+
+| Haskell             | Monad                          |
+|---------------------+--------------------------------|
+| =f x = x + 1=       | =(define (f x) (+ x 1))=        |
+| =\x -> x + 1=       | =(lambda (x) (+ x 1))=          |
+| =data Maybe a = ...=| =(data Maybe a Nothing (Just a))=|
+| =case x of ...=     | =(match x with ...)=            |
+| =do x <- f; g x=    | =(begin (define x (f)) (g x))=  |
+| =where=             | Wisp desugars to let; no s-expr where keyword |
+| =type Int = ...=    | =(type Alias ...)=              |
+
+* Type System
+
+- Hindley-Milner (like Haskell) + dependent types (unlike Haskell)
+- Refinement types: ={ x ∈ Int | x > 0 }= (subset predicates)
+- Type classes with =(class ...)= and =(instance ...)=
+- Deriving: =(data Suit ... deriving Eq)= auto-generates instances
+- Universal quantifier: =∀ t. [Enum t, Bounded t] => Int -> (Maybe t)=
+
+* No Built-in Lazy Evaluation
+
+Monad is strict (call-by-value). No thunks unless you create them
+explicitly with =(lambda () ...)=.
+
+* No Map/Filter/Fold Builtins
+
+=map=, =filter=, =foldl=, =foldr= are planned but not yet implemented
+(=map= has an infer type signature only ([[file:../infer.c]]), no codegen
+dispatch). Use manual recursion or =reduce= (which IS implemented,
+[[file:../codegen.c::13144]]).
+
+* No Monad Typeclass
+
+Monad (the language) does not have a Monad typeclass. The "monad" in
+the name refers to monadic IO (planned, not yet implemented).
+
+* Context Links
+
+- [[file:functional-programming.org][Functional Programming]]
+- [[file:types.org][Types]]
+- [[file:patterns.org][Pattern Matching]]

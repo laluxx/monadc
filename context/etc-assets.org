@@ -465,6 +465,85 @@
   root node of the category graph) ·
   `monadc.context.context.index` (the index maps the file topology)
 
+* LLM Analysis
+:PROPERTIES:
+:ID: monadc.context.etc-assets.llm-analysis
+:CUSTOM_ID: etc-assets-llm-analysis
+:CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: LLM assessment of the project's assets: logo, screenshots, fonts, research PDFs, and generated HTML docs. Their role in project presentation and developer communication.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-14
+:CONTEXT_UPDATED: 2026-06-14
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: etc/, context/etc-assets.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.etc-assets.logo-and-branding conf:medium]
+  A compiler project with a custom logo, font, and docs.html generation
+  is unusual at this stage. Most hobby compilers have no branding at all
+  — the output is a command-line binary and maybe a man page. The
+  presence of these assets signals that the project is intended for a
+  wider audience eventually. The investment in branding is minimal
+  (a PNG, a TTF, a single HTML page) and the payoff is that the project
+  looks like a real open-source project, not a research prototype. The
+  risk is that brand expectations outpace substance — a pretty website
+  with a half-working compiler is worse than an ugly website with a
+  working compiler. MonadC appears to have the substance first.
+
+[THINK id:think.etc-assets.screenshots-for-context-visualizer conf:medium]
+  The category-theory screenshots in etc/screenshots/ serve a dual purpose:
+  they advertise the visualizer tool and they document the context graph
+  structure for offline reference. For a project where the context corpus
+  is central to the workflow, screenshots that show the graph layout are
+  more useful than architecture diagrams because they capture the actual
+  state of the knowledge graph. The naming convention (category-view-1.png,
+  etc.) suggests these were taken during development to document specific
+  visual states. They would be more useful with captions explaining what
+  each screenshot demonstrates (full graph? filtered view? category
+  drilldown?).
+
+[THINK id:think.etc-assets.pdf-library-maintenance conf:medium]
+  The etc/pdfs/ library requires active maintenance: papers must be
+  downloaded, checked for license compatibility, and kept in sync with
+  the code they inform. The tradeoff (repository bloat vs offline
+  availability) was discussed in references.org. The practical question
+  is whether the PDFs are actually read during development. If the
+  papers are reference material (consulted during design discussions),
+  having them in the repo is invaluable. If they are historical footnotes
+  (cited for academic credibility but never actually opened), they are
+  dead weight. The DOC records in source-map.org tracing each paper's
+  ideas to specific source files suggest the papers are genuinely engaged
+  with, which justifies their presence.
+
+[THINK id:think.etc-assets.docs-html self-hosted-docs conf:high]
+  The docs.html file is the project's attempt at a self-hosted
+  documentation site. A single HTML file is the simplest possible
+  distribution format: no server, no build step, no dependencies. It
+  can be opened in any browser, version-controlled in the repo, and
+  deployed to GitHub Pages with zero configuration. This is a deliberately
+  minimal approach that avoids the complexity of static site generators
+  (Jekyll, Hugo, MkDocs) while still providing browseable documentation.
+  The limitation is that a single HTML file cannot scale to a large
+  documentation set — navigation becomes unwieldy past ~50 sections.
+  For now, it's the right choice.
+
+[THINK id:think.etc-assets.assets-vs-context-overlap conf:medium]
+  There is some overlap between the assets documented here and the
+  source-map references: both list the PDFs, both describe the visualizer
+  screenshots. This redundancy is acceptable because the two files serve
+  different audiences: etc-assets.org is for the project's presentation
+  and distribution, source-map.org is for the engineering traceability
+  of research ideas. The PDF listing in source-map.org has DOC records
+  with implementation traces; the PDF listing here has file paths and
+  sizes. They complement each other. If they ever diverge (one lists a
+  PDF the other doesn't), a validation script could detect the mismatch.
+
 [INF id:inf.etc-assets.visualizer from:obs.etc-assets.screenshots.category1,obs.etc-assets.screenshots.category2,obs.etc-assets.screenshots.category3,obs.etc-assets.screenshots.category4,obs.etc-assets.screenshots.about-poor-me conf:high]
   connects-to -> `monadc.context.visualizer` (the category theory
   visualizer that produced these screenshots) ·

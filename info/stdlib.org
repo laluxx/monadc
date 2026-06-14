@@ -1,0 +1,41 @@
+#+TITLE: Standard Library
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+
+[[file:index.org][<- Back to Index]] · [[file:core.org][Core Library]]
+
+The standard library is under active development. Much of =core/= is
+WIP — module declarations and exports exist but implementations are
+commented out.
+
+* =core/Math.mon=
+
+Exports: =pi=, =e=, =tau=, =square=, =sqrt=
+
+Status: All implementations commented out. Only module declaration and
+export list are active.
+
+* =old-core/List.mon=
+
+25 function definitions including =map=, =filter=, =foldl=, =foldr=.
+Imports nonexistent =Coll= module — currently unimportable. =map= also
+lacks codegen dispatch (has type signature in =infer.c= but cannot be
+called at runtime).
+
+* Built-in Functions (Verified)
+
+See [[file:core.org][Core Library]] for the complete list of builtins
+dispatched in =codegen.c=. These are always available without import.
+
+* Planned Modules
+
+- =core/String= — string operations (partial builtins exist in codegen)
+- =core/IO= — file I/O (not yet implemented)
+- =core/List= — list operations (WIP)
+
+* Context Links
+
+- [[file:core.org][Core Library]]
+- [[file:../core/Math.mon][core/Math.mon]]
+- [[file:../old-core/List.mon][old-core/List.mon]]
+- [[file:../codegen.c][codegen.c]] — strcmp dispatch table for builtins

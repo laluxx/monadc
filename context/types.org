@@ -47,6 +47,12 @@ constructor/operation functions, refinement types, type aliases, annotation
 parsing, and layout offset computation. This is the central type description
 used by every compiler phase: reader, infer, codegen, and dep.
 
+[INF id:inf.types.info-ref from:obs.context.types.file conf:high]
+  User-facing type docs: [[file:../info/types.org][info/types.org]] (type system overview),
+  [[file:../info/data.org][info/data.org]] (algebraic data types),
+  [[file:../info/layouts.org][info/layouts.org]] (layout types),
+  [[file:../info/refinements.org][info/refinements.org]] (refinement types).
+
 [INF id:inf.context.types.file-connect from:obs.context.types.file conf:high]
 connects-to ->
   `monadc.context.language` (surface syntax for type annotations) ·
@@ -161,8 +167,8 @@ containing '.' or 'e'/'E'. Distinguished from =TYPE_F32=.
 :END:
 
 [OBS id:obs.types.kind.TYPE_CHAR src:types.h:11 conf:high]
-Single character. Parsed from =#\= reader syntax. Stored as a 32-bit codepoint
-in the runtime.
+Single character. Parsed from ='a'= reader syntax ([[file:../reader.c::1365]],
+TOK_CHAR). Stored as a 32-bit codepoint in the runtime.
 
 *** TYPE_STRING
 :PROPERTIES:

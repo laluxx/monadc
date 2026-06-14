@@ -208,6 +208,46 @@
 - [[file:style.org][Code style taxonomy]]
 - [[file:navigation.org][ID prefix → file routing table]]
 
+** LLM Analysis — Subsystem Assessments
+:PROPERTIES:
+:ID: monadc.context.portal.llm-analysis
+:CUSTOM_ID: portal-llm-analysis
+:CONTEXT_KIND: link
+:CONTEXT_DESCRIPTION: LLM-authored opinion and analysis sections for every major subsystem, providing honest assessment of design tradeoffs, scaling risks, and improvement strategies.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-14
+:CONTEXT_UPDATED: 2026-06-14
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: context/*.org (LLM Analysis sections)
+:CONFIDENCE: high
+:END:
+
+- [[file:codegen-ops.org::* LLM Analysis][codegen-ops: strcmp dispatch scaling, builtins gap, three-layer cost]]
+- [[file:codegen.org::* LLM Analysis][codegen: monomorphization, closure ABI, LLVM API, typeclass integration]]
+- [[file:reader.org::* LLM Analysis][reader: sugar vs parser boundary, error recovery, source location cost]]
+- [[file:wisp.org::* LLM Analysis][wisp: indentation vs determinism, arity table coupling, three-syntaxes commitment]]
+- [[file:module.org::* LLM Analysis][module: manifest caching, name mangling, import resolution order]]
+- [[file:tests.org::* LLM Analysis][tests: TSV format strength, corpus growth, continuous mode, false positive risk]]
+- [[file:tests-arch.org::* LLM Analysis][tests-arch: codegen test structure, fuzzing design, ASM auto-generation]]
+- [[file:arena.org::* LLM Analysis][arena: bump-pointer tradeoff, checkpoint/restore, scratch vs permanent]]
+- [[file:build.org::* LLM Analysis][build: Makefile simplicity, verification ladder, install layout]]
+- [[file:buildsystem.org::* LLM Analysis][buildsystem: recursive compilation, caching strategy, module artifacts]]
+- [[file:references.org::* LLM Analysis][references: paper fidelity gaps, missing papers, PDF library utility]]
+- [[file:typeclass.org::* LLM Analysis][typeclass: dict-passing, instance resolution, feature gaps, perf impact]]
+- [[file:typst-emit.org::* LLM Analysis][typst-emit: motivation, phase placement, Gentzen rendering, utility]]
+- [[file:visualizer.org::* LLM Analysis][visualizer: category framing, scalability, Python generator, CI potential]]
+- [[file:features.org::* LLM Analysis][features: conditional syntax, platform vs version, reader integration]]
+- [[file:scripts.org::* LLM Analysis][scripts: Python vs C, runner diversity, ASM generator, fuzzer maturity]]
+- [[file:etc-assets.org::* LLM Analysis][etc-assets: logo/branding, screenshots, PDF library, self-hosted docs]]
+- [[file:source-map.org::* LLM Analysis][source-map: redundancy, PDF traces, bootstrapping role, source anchors]]
+- [[file:makefile.org::* LLM Analysis][makefile: architecture simplicity, llvm-config, header deps, test integration]]
+- [[file:commit-format.org::* LLM Analysis][commit-format: section-order pipeline mirror, scope naming, rule overhead]]
+
 ** Tasks & Visualizer
 :PROPERTIES:
 :ID: monadc.context.portal.tasks

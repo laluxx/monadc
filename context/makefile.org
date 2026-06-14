@@ -288,6 +288,84 @@
 :CONFIDENCE: high
 :END:
 
+* LLM Analysis
+:PROPERTIES:
+:ID: monadc.context.makefile.llm-analysis
+:CUSTOM_ID: makefile-llm-analysis
+:CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: LLM assessment of the Makefile design: target structure, variable organization, build mode management, and comparison to alternative build systems for C projects.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-14
+:CONTEXT_UPDATED: 2026-06-14
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: Makefile, context/makefile.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.makefile.architecture-simplicity conf:high]
+  The Makefile is refreshingly simple for a project of this complexity.
+  No recursive make, no generated files, no autoconf. The entire build
+  is defined in variables at the top (CC, CFLAGS, LDFLAGS, SRCS, OBJS)
+  with a single pattern rule for compilation and a single link rule.
+  This simplicity is the result of deliberate restraint: the Makefile
+  does only what it needs to (compile sources, link binary, install,
+  clean) and nothing more. The three build modes (debug/asan/release)
+  are handled by selective variable assignment. The entire build system
+  is comprehensible in a single reading, which is the highest compliment
+  you can give a Makefile.
+
+[THINK id:think.makefile.llvm-config-dependency conf:medium]
+  The Makefile's dependency on llvm-config for LLVM discovery is the
+  most fragile part of the build. llvm-config output varies between LLVM
+  versions and installation methods (system package vs from-source vs
+  Homebrew). The Makefile captures flags at build time with =$(shell
+  llvm-config ...)=, which means a missing or wrong llvm-config produces
+  an inscrutable build error (missing symbols, wrong architecture).
+  Adding a configure-time check (Makefile target =configure= or a
+  config.sh that runs llvm-config and validates the output before the
+  main build) would turn the opaque failure into a clear error message.
+  The check could verify that llvm-config exists, returns a known LLVM
+  version (19+), and produces the expected flag formats.
+
+[THINK id:think.makefile.object-file-layout conf:medium]
+  The decision to place .o files alongside their sources (rather than
+  in a separate build/ directory) is a tradeoff between simplicity and
+  cleanliness. In-source builds are simpler (no build directory creation,
+  no path mapping) but clutter the source tree. For a small project this
+  is manageable; for a project with 40+ source files, the build artifacts
+  mixed with sources become noise. A separate build directory (build/debug/,
+  build/release/, build/asan/) would keep the source tree clean and
+  enable parallel debug/release builds. The cost is added Makefile
+  complexity: pattern rules with path substitution (%_dir rules or VPATH).
+
+[THINK id:think.makefile.header-dependency-tracking conf:medium]
+  The Makefile does not track header dependencies automatically. If a
+  .h file changes, =make= will not recompile the .c files that include
+  it unless the .o file is explicitly declared as depending on the .h.
+  This is a common Makefile pitfall that causes phantom build failures
+  after header changes. The fix is =gcc -MMD= which generates .d files
+  that Make can include. Adding =DEPFLAGS = -MMD -MP= to CFLAGS and
+  =-include $(wildcard $(OBJS:.o=.d))= to the Makefile would add
+  automatic header dependency tracking with about 3 lines of change.
+  Until this is done, developers must =make clean= after any header
+  change.
+
+[THINK id:think.makefile.test-integration conf:medium]
+  The test targets are well-integrated: =make test= runs the full suite,
+  =make test-continuous= runs it in watch mode. The =make install= target
+  correctly depends on =all= (the binary must be built before installing).
+  The one missing integration is a =make fmt= or =make lint= target that
+  runs code formatting and static analysis before testing. Adding
+  clang-format and cppcheck as optional test dependencies would catch
+  style issues and simple bugs before the human review stage. These
+  should be non-failing (warnings only, the build continues) to avoid
+  frustrating developers with formatting nits.
+
 [INF id:inf.makefile.connects-to from:obs.makefile.target-all,obs.makefile.monad-binary conf:high]
   connects-to ->
   `monadc.context.main.entry-point` (the monad binary produced by the

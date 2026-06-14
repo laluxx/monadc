@@ -1,0 +1,73 @@
+#+TITLE: Algebraic Data Types
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+
+[[file:index.org][<- Back to Index]] · [[file:patterns.org][Pattern Matching]] · [[file:types.org][Types]]
+
+* data syntax ([[file:../reader.c::4782]])
+
+#+BEGIN_SRC monad
+(data Bool False True)
+(data Option a None (Some a))
+(data Tree a Leaf (Node Tree a a Tree))
+#+END_SRC
+
+Optional =~= separator and =|= for variants:
+
+#+BEGIN_SRC monad
+(data Maybe a = Nothing | Just a)
+(data T = A | B | C deriving [Bounded Enum Show])
+#+END_SRC
+
+Shorthand single-constructor: =(data Point Float Float)= expands to
+=(data Point (Point Float Float))=.
+
+* Constructor naming
+
+Must start with uppercase letter (enforced — compiler error otherwise).
+
+* Deriving
+
+#+BEGIN_SRC monad
+(data Color Red Green Blue deriving Eq)
+(data Suit deriving [Eq Enum])
+(data T = A | B | C deriving [Bounded Enum Show])
+#+END_SRC
+
+Multiple classes in a list: =deriving [Eq Enum]=, =deriving [Bounded Enum Show]=.
+Implemented in codegen ([[file:../codegen.c::13144]]): auto-generates
+=instance Eq T= (structural =) and =instance Enum T= (=fromEnum= = tag,
+=toEnum= = tag→ctor). Classes must be defined first or a warning is
+printed.
+
+* Representation
+
+Tagged union on heap:
+
+| offset | content              |
+|--------+----------------------|
+| +0     | ~i32 tag~ (ctor index) |
+| +8     | ~i64~ payload slot 0   |
+| +16    | ~i64~ payload slot 1   |
+| ...    | up to max fields       |
+
+Each constructor is a function that =malloc=s the struct and stores tag +
+fields. Nullary ctors also get a global singleton.
+
+* Comparison with ~layout~
+
+| Aspect       | ~data~ (ADT)                 | ~layout~ (C interop)          |
+|--------------+------------------------------+-------------------------------|
+| Tag          | Automatic ~i32~ tag          | No tag (untagged)             |
+| Allocation   | Heap (~malloc~)                | Stack or heap (explicit)      |
+| Fields       | Named by position            | Named fields with offsets     |
+| C compat     | No                           | Yes (struct-compatible)       |
+| Use case     | Algebraic sum types          | C FFI, precise memory layout  |
+
+* Context Links
+
+- [[file:../context/types.org][context/types.org]] — type representation
+- [[file:../context/codegen.org][context/codegen.org]] — ADT codegen (tagged union)
+- [[file:../context/pmatch.org][context/pmatch.org]] — pattern match compilation
+- [[file:../codegen.c][codegen.c:1785]] — ~codegen_data~ implementation
+- [[file:../how_to/AlgebraicDataTypes.mon][how_to/AlgebraicDataTypes.mon]] — usage examples

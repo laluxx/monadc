@@ -1,0 +1,35 @@
+#+TITLE: Introduction
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+
+[[file:index.org][<- Back to Index]] · [[file:tutorial.org][Tutorial]] · [[file:syntax.org][Syntax]]
+
+Monad is a compiled functional language with S-expression and Wisp
+syntax. It targets x86-64 Linux via LLVM 19+.
+
+- **Types**: Hindley-Milner inference + dependent types (ITT/NbE)
+- **Memory**: Arena allocation (bump-pointer, 4 MiB blocks, checkpoint/restore)
+- **FFI**: C interop via =(include "header.h")= — no bindings needed
+- **Macros**: Functions returning =Syntax= — no separate =macro= keyword
+- **Dual syntax**: S-expressions and Wisp indentation, freely mixable
+
+Quick start:
+
+#+BEGIN_SRC monad
+(define (main -> Int)
+  (show "hello world")
+  0)
+#+END_SRC
+
+Key ideas:
+
+- **Types are sets** — =Int= = set of 63-bit ints, ={ x ∈ Int | x > 0 }= = subset
+- **Immutable by default** — =set!= / =<-= makes mutation explicit
+- **Code is data** — macros transform S-expressions at compile time
+
+* Context Links
+
+- [[file:tutorial.org][Tutorial]] — step-by-step
+- [[file:syntax.org][Syntax Reference]] — language syntax
+- [[file:../context/philosophy.org][context/philosophy.org]] — design philosophy
+- [[file:../context/language.org][context/language.org]] — language formalization

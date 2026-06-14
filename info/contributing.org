@@ -1,0 +1,42 @@
+#+TITLE: Contributing
+#+STARTUP: showeverything
+#+OPTIONS: toc:nil num:t
+
+[[file:index.org][<- Back to Index]]
+
+* Building from Source
+
+Requires LLVM 19+, C11 compiler, make:
+
+#+BEGIN_SRC sh
+git clone <repo>
+cd monadc
+make
+#+END_SRC
+
+* Running Tests
+
+#+BEGIN_SRC sh
+python3 tests/run.py
+#+END_SRC
+
+* Code Structure
+
+| Directory   | Contents                            |
+|-------------+-------------------------------------|
+| =./=          | C source (arena, reader, codegen...) |
+| =core/=       | Standard library (.mon files)        |
+| =tests/=      | Test fixtures and runner             |
+| =context/=    | Design docs (org-mode)               |
+| =info/=       | Language docs (org-mode)             |
+
+* Before Contributing
+
+- Read relevant context docs (=context/=) for the subsystem
+- Match code style (C11, arena allocator, no GC)
+- Add tests for new features
+
+* Context Links
+
+- [[file:../context/][context/]] — compiler internals
+- [[file:../README.md][README]] — project overview

@@ -1,0 +1,36 @@
+#+TITLE: Command Line Interface
+#+STARTUP: showeverything
+#+OPTIONS: toc:nil
+
+[[file:index.org][<- Back to Index]] · [[file:build.org][Build System]]
+
+| Command               | Action                                 |
+|-----------------------+----------------------------------------|
+| =monad <file.mon>=      | Compile and run                        |
+| =monad new <name>=      | Create new package scaffold            |
+| =monad build=           | Build package from =package.yaml=        |
+| =monad run=             | Build and execute                      |
+| =monad test <file.mon>= | Compile with tests, run, delete binary |
+| =monad clean=           | Remove =build/=, =.o=, =.ll=, =.s=             |
+| =monad install=         | Build and copy to =~/.local/bin=         |
+| =monad -i=              | Start interactive REPL                 |
+
+| Flag           | Effect                                   |
+|----------------+------------------------------------------|
+| =--emit-ir=      | Write =.ll= (LLVM IR text)                 |
+| =--emit-bc=      | Write =.bc= (LLVM bitcode)                 |
+| =--emit-asm=     | Write =.s= (assembly text)                 |
+| =--emit-obj=     | Write =.o= (object file)                   |
+| =--emit-json=    | Write =.json= (AST dump)                   |
+| =--emit-typst=   | Write =.typ= + compiled PDF                |
+| =-o <file>=      | Output binary path                       |
+| =--test=         | Compile with embedded tests, keep binary |
+| =-Wall=, =-Wextra= | Accepted, currently no-ops               |
+
+Core path resolution order: local =./ModuleName.mon=, =$MONAD_CORE= environment variable, then =/usr/local/lib/monad/core/=.
+
+** Context Links
+
+- [[file:../context/cli.org][context/cli.org]] — implementation
+- [[file:../cli.c][cli.c]] — source
+- [[file:../main.c][main.c]] — entry point

@@ -1,0 +1,61 @@
+#+TITLE: Inline Assembly
+#+STARTUP: showeverything
+#+OPTIONS: toc:nil
+
+[[file:index.org][<- Back to Index]]
+
+Monad provides inline x86-64 assembly blocks for low-level control
+([[file:../codegen.c]] asm codegen). Use =(asm mnemonic operand ...)=
+inside function bodies.
+
+* Basic Syntax
+
+=(asm mov 1 %rax add %rbx %rax ret)= — multiple insns in one block.
+
+* Operand Types
+
+| Syntax   | Description                              |
+|----------+------------------------------------------|
+| =%reg=     | Named register (=%rax=, =%rdi=, =%rbx=, ...) |
+| =$N=       | Immediate integer value                  |
+| =name=     | Monad function parameter (LLVM placeholder) |
+| ="str"=    | Raw string (not processed by mapper)     |
+
+* Function Example
+
+#+BEGIN_SRC monad
+(define [add-one :: Int -> Int]
+  x -> (asm inc x %rax
+            mov %rax x))
+#+END_SRC
+
+Monad variables become LLVM placeholders. Return value is taken from
+the output register/placeholder.
+
+* Naked Functions
+
+Use =:naked True= to suppress prologue/epilogue. A naked body must
+contain at least one =(asm ...)= block. Parameters map to SysV ABI
+registers (=%rdi=, =%rsi=, =%rdx=, =%rcx=, =%r8=, =%r9=):
+
+#+BEGIN_SRC monad
+(define [sys-write :: Int -> String -> Int -> Int]
+  :naked True
+  fd buf len -> (asm mov 1 %rax mov fd %rdi
+                      mov buf %rsi mov len %rdx
+                      syscall ret))
+#+END_SRC
+
+* Wisp Form
+
+#+BEGIN_SRC monad
+define [add-one :: Int -> Int]
+  x -> asm inc x %rax
+           mov %rax x
+#+END_SRC
+
+* Context Links
+
+- [[file:../context/asm.org][context/asm.org]] — Asm compiler implementation
+- [[file:../context/codegen.org][context/codegen.org]] — Assembly codegen
+- [[file:syntax.org][Syntax Reference]] — =(asm ...)= special form

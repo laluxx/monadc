@@ -583,5 +583,87 @@ and a Hoogle-style method browser. New context nodes introduced:
 | Bullets       | Never                                                     |
 | Footers       | Never — put everything in the body                        |
 
+* LLM Analysis
+:PROPERTIES:
+:ID: monadc.context.commit-format.llm-analysis
+:CUSTOM_ID: commit-format-llm-analysis
+:CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: LLM assessment of the commit message format: structural rules, maintainability, and effects on developer workflow and project history readability.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-14
+:CONTEXT_UPDATED: 2026-06-14
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: context/commit-format.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.commit-format.section-order-pipeline-mirror conf:high]
+  The section order (wisp → reader → types → infer → codegen → tests → context)
+  mirrors the compilation pipeline's phase ordering. This is an elegant
+  design choice: reading a commit message in section order is like reading
+  the changes in pipeline order, from source parsing to code generation.
+  A developer reviewing a commit can mentally trace the changes through
+  the pipeline, which makes the commit message both a changelog and a
+  pipeline trace. This is particularly valuable for a compiler where a
+  single feature change often touches multiple phases — the section order
+  tells you what changed at each stage without having to understand the
+  full commit diff.
+
+[THINK id:think.commit-format.72-char-enforcement conf:medium]
+  The 72-character line limit for both the summary line and body text
+  follows conventional Git best practices (the summary limit is 50-72,
+  the body limit is 72). This is useful for command-line Git tools that
+  display summaries in narrow terminals and for tools like =git log
+  --oneline= that truncate at 72. The enforcement cost is that developers
+  must manually wrap lines, which is tedious. In practice, most editors
+  have auto-wrap at 72, and the =git commit= message editor typically
+  shows a column ruler. The format spec explicitly states no automated
+  enforcement, which is pragmatic: the rules are guidelines for writing,
+  not hooks for CI.
+
+[THINK id:think.commit-format.imperative-voice-rule conf:medium]
+  The imperative voice requirement (commit-format.org §Subject) is the
+  standard Git convention ("Fix bug" not "Fixed bug" or "Fixes bug").
+  It keeps the subject line consistent with Git's own merge messages
+  and makes the commit message read as an instruction: "if applied, this
+  commit will [subject]." The rule is well-known in the Git community
+  and easy for new contributors to follow. The format spec's additional
+  rule about active present tense for invariants is more subtle: it
+  distinguishes between "what this commit changes" and "what the code
+  guarantees." A commit message that says "lexer: handle \\n escape in
+  char literals" describes the change; one that says "wisp: wisp
+  expands \\\\n to real newline" describes the invariant that the commit
+  establishes or documents.
+
+[THINK id:think.commit-format.scope-naming cons:medium]
+  The commit scope naming (wisp, reader, types, infer, codegen, tests,
+  context, build, docs, perf, chore, fix, feat, refactor) maps directly
+  to the context file set (wisp.org, reader.org, types.org, etc.). This
+  means the commit scope is also a reference to the context documentation
+  for that subsystem. A commit with scope =reader= tells the reviewer
+  "to understand these changes, read reader.org." This bidirectional
+  mapping between commit scopes and context files is a subtle but
+  powerful feature of the project's documentation integration: every
+  commit message implicitly links to the context file that explains the
+  subsystem.
+
+[THINK id:think.commit-format.rule-overhead conf:medium]
+  The commit format rules are detailed (16 sections covering everything
+  from summary line format to section ordering to bullet prohibition).
+  This level of detail creates a barrier to entry for casual contributors
+  who are not steeped in the project's workflow conventions. The rules
+  are optimized for the primary developers (you + LLM agents) who are
+  intimately familiar with the pipeline structure and context system.
+  For external contributors, the rules file itself is the onboarding
+  document: if you can follow these rules, you understand the project
+  well enough to contribute meaningfully. The detail is a feature, not
+  a bug — it encodes the project's mental model in the contribution
+  workflow.
+
 #+CAPTION: Type Cheat Sheet
 | =feat= | =fix= | =refactor= | =test= | =context= | =build= | =docs= | =perf= | =chore= |

@@ -1,0 +1,58 @@
+#+TITLE: Pattern Matching
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+
+[[file:index.org][<- Back to Index]] · [[file:data.org][Data Types]] · [[file:syntax.org][Syntax]]
+
+* match expression ([[file:../pmatch.c]])
+
+#+BEGIN_SRC monad
+(match value with
+  pattern -> body ...)
+#+END_SRC
+
+Patterns tried in order. Optional leading ~|~ on each clause allowed
+([[file:../context/language.org::455]]).
+
+* Pattern kinds
+
+| Pattern     | Example          | Matches                   |
+|-------------+------------------+---------------------------|
+| Wildcard    | ~_~                | Any value, no binding     |
+| Variable    | ~n~                | Any value, bound as ~n~   |
+| Int literal | ~0~, ~-1~           | Exact integer             |
+| Float lit.  | ~1.5~              | Exact float               |
+| String lit. | ~"a"~              | Exact string               |
+| Char lit.   | ~'\n'~              | Exact character           |
+| Nil         | ~nil~              | Null / empty list         |
+| List        | ~[]~, ~[x|xs]~       | Empty / cons-cell         |
+| Constructor | ~(Just x)~         | ADT constructor + fields  |
+
+* Guards
+
+#+BEGIN_SRC monad
+(match x with
+  n | (> n 0) -> "positive"
+  n | (< n 0) -> "negative"
+  _            -> "zero")
+#+END_SRC
+
+Use ~|~ (pipe) after pattern, then guard condition, then ~->~ body.
+
+* Lambda with pattern clauses
+
+#+BEGIN_SRC monad
+(define fact
+  0 -> 1
+  n -> (* n (fact (- n 1))))
+#+END_SRC
+
+Multiple ~define~ clauses desugar to ~match~. Use ~lambda~ (no ~fn~
+shorthand).
+
+* Context Links
+
+- [[file:../context/pmatch.org][context/pmatch.org]] — pattern match compilation
+- [[file:../context/codegen.org][context/codegen.org]] — pattern codegen
+- [[file:../pmatch.c][pmatch.c]] — pattern parser and desugaring
+- [[file:../tests/codegen/][tests/codegen/]] — rt_match_* test files

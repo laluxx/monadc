@@ -12,6 +12,8 @@
 
 ;;; Code:
 
+import Coll
+
 (module Math
   [double  square  cube  abs  sign
    inc     dec
@@ -27,23 +29,18 @@
    floor ceiling round truncate
    deg->rad sin mod-f ls exp pow])
 
-import Coll
-
 ;;; Constants
 
-(define [pi   :: Float] 3.141592653589793  :alias π)
-(define [tau  :: Float] 6.283185307179586  :alias τ)
-(define [pi/2 :: Float] 1.5707963267948966 :alias π/2)
-(define [e    :: Float] 2.718281828459045  :alias ℯ)
-(define [phi  :: Float] 1.6180339887498949 :alias ϕ)
+define [pi   :: Float] 3.141592653589793  :alias π
+define [tau  :: Float] 6.283185307179586  :alias τ
+define [pi/2 :: Float] 1.5707963267948966 :alias π/2
+define [e    :: Float] 2.718281828459045  :alias ℯ
+define [phi  :: Float] 1.6180339887498949 :alias ϕ
 
-;;; Infinite sequences
-
-
-(define [naturals  :: List] '(0..))
-(define [positives :: List] '(1..))
-(define [evens     :: List] '(0,2..))
-(define [odds      :: List] '(1,3..))
+define [naturals  :: List] '(0..)
+define [positives :: List] '(1..)
+define [evens     :: List] '(0,2..)
+define [odds      :: List] '(1,3..)
 
 ;;; Arithmetic helpers
 

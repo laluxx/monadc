@@ -582,6 +582,87 @@ Expected Wisp shape:
 :CONFIDENCE: high
 :END:
 
+* LLM Analysis
+:PROPERTIES:
+:ID: monadc.context.reader.llm-analysis
+:CUSTOM_ID: reader-llm-analysis
+:CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: LLM assessment of the reader/parser architecture: design tradeoffs in the sugar layer, wisp interaction boundary, error recovery, and parser performance.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-14
+:CONTEXT_UPDATED: 2026-06-14
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: reader.c, reader.h, context/reader.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.reader.sugar-vs-parser-boundary conf:high]
+  The reader's sugar-application design (reader_sugars_apply transforms
+  the AST after parsing, before macro expansion) is an unusual choice.
+  Most Lisp-family compilers apply syntactic sugar during reading (in
+  the reader macro) or after macro expansion. Applying it between parse
+  and macro-expand means sugar transforms see the parsed AST structure
+  but before any user-defined macros fire. This is both a strength and
+  a weakness: sugar can rely on the AST being well-formed (no unexpanded
+  macros), but sugar cannot interact with user-defined syntax. The
+  consequence is that user-defined macros cannot extend the sugar system
+  — if a user wants =(pair 1 2)→(cons 1 (cons 2 nil))=-style sugar,
+  they must write a macro, not a sugar rule. This is a deliberate
+  limitation that keeps the sugar system small and predictable but
+  limits extensibility.
+
+[THINK id:think.reader.error-recovery-strategy conf:medium]
+  The current reader uses fail-fast error handling: first parse error
+  terminates compilation. This is standard for compilers but frustrating
+  for an interactive language that also has a REPL. The parser recovers
+  from tokenizer errors (returns error token and continues) but not from
+  structural errors (unmatched parens, invalid syntax). Adding error
+  recovery to the parser — skipping to the next top-level form on
+  syntax error — would make the REPL and batch compilation much more
+  forgiving. This is particularly important for a language with macros
+  and wisp, where syntax errors can be hard to spot at the s-expression
+  level.
+
+[THINK id:think.reader.source-location-cost conf:high]
+  Every AST node carries source location info (file:line:col) stored as
+  a SourceLoc struct. This is essential for error messages and source
+  maps, but it adds ~16 bytes per node (two 32-bit ints plus file index).
+  For a 100K-node compilation (not unrealistic for a medium-sized
+  program), that's 1.6 MB of source location metadata that is only
+  needed for errors. An alternative: store source locations only for
+  top-level forms and compute child locations by offset, or use a
+  compression scheme (relative positions, delta encoding). The current
+  approach is simple and correct — the memory cost is acceptable for
+  a compiler running on modern hardware with a 4 MiB arena block size.
+
+[THINK id:think.reader.lexer-peek-ahead conf:high]
+  The lexer's extensive use of peek-ahead (peek_char, skip_whitespace,
+  peek for keyword detection) makes the tokenizer stateful and somewhat
+  fragile. Multi-character operators like -> and :: require the lexer
+  to read one char, check if the next char matches, and potentially
+  backtrack. This is inherent to tokenizing a language with compound
+  operators, but it means the lexer cannot be a simple state machine.
+  The current approach is pragmatic: a single linear pass with bounded
+  peek (1-2 chars) that never backtracks more than one token. This is
+  the right tradeoff for a compiler lexer (throughput matters more than
+  elegance) but makes the lexer code harder to reason about.
+
+[THINK id:think.reader.wisp-shared-ast conf:high]
+  The shared AST between wisp and s-expression parsing is one of the
+  best design decisions in the compiler. Wisp expands to the exact same
+  AST nodes as s-expression parsing, which means the entire downstream
+  pipeline (macro expand, infer, dep check, codegen) is completely
+  agnostic to the source syntax. This is what makes "mixed-mode files"
+  possible — a file can start in wisp and switch to s-expr for macro
+  definitions without any pipeline changes. The cost is that any AST
+  change must be validated against both parser paths, effectively
+  doubling the parser test surface.
+
 [INF id:inf.reader.connects-to from:obs.reader.purpose conf:high]
   connects-to -> `monadc.context.language` (reader produces AST consumed by
   codegen; ASTType values correspond to language constructs) ·

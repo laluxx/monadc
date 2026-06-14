@@ -1,0 +1,8 @@
+#+TITLE: Frequently Asked Questions
+#+CONTEXT: intro.org
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+
+[[file:index.org][<- Back to Index]]
+
+We haven't added many questions yet, Add one.

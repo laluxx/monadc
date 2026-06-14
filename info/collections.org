@@ -1,0 +1,159 @@
+#+TITLE: Collections
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+
+[[file:index.org][<- Back to Index]] · [[file:core.org][Core Library]] · [[file:patterns.org][Pattern Matching]]
+
+Monad provides four collection types with literal syntax: lists,
+arrays, sets, and maps. Strings also behave as character sequences.
+
+* Lists
+
+Quoted S-expression lists:
+
+#+BEGIN_SRC monad
+'(1 2 3)                ;; quote shorthand
+(quote (1 2 3))         ;; explicit quote
+#+END_SRC
+
+Lists are linked cons cells. Builtins: =car=, =cdr=, =cons=, =nil=,
+=++=, =count=, =list=, =empty?=, =pair?=, =nil?=, =reduce=.
+
+Pattern matching with =[x|xs]= cons-pattern:
+
+#+BEGIN_SRC monad
+(define take :: Int -> [a] -> [a]
+  _ []          -> []
+  n [x|xs]
+    | n > 0     -> (x ++ (take (n - 1) xs))
+    | otherwise -> [])
+
+(define map :: (a -> b) -> [a] -> [b]
+  _ []     -> []
+  f [x|xs] -> ((f x) ++ (map f xs)))
+#+END_SRC
+
+The =++= operator builds lists (prepends element to rest).
+
+* Arrays
+
+Fixed-size stack arrays with bracket syntax:
+
+#+BEGIN_SRC monad
+[1 2 3]                 ;; Int array, 3 elements
+["a" "b" "c"]           ;; String array
+[(1 "a") (2 "b")]       ;; Array of pairs
+#+END_SRC
+
+Types: =Arr :: Int= (fat pointer, stack), heap variant via =~[...]=.
+Builtins: =head=, =tail=, =count=, =++=, =Arr?=.
+
+Indexing:
+
+#+BEGIN_SRC monad
+xs[1]                     ;; postfix bracket — desugars to (xs 1)
+([10 20 30] 1)            ;; function-call syntax — returns 20
+#+END_SRC
+
+Both forms reach the same codegen path: =(arr i)= → element at index i
+with bounds checking.
+
+Sized buffer syntax:
+
+#+BEGIN_SRC monad
+[16kb]                  ;; [16384 U8] — 16 KiB buffer
+[16kb I32]              ;; [4096 I32] — 16 KiB of 32-bit ints
+#+END_SRC
+
+Accepted suffixes: =kb=, =mb=, =gb=, =tb=.
+
+* Ranges
+
+There are two range syntaxes with different evaluation strategies:
+
+**Bracket syntax** — eager stack array (runtime-evaluated, finite):
+
+#+BEGIN_SRC monad
+[0..10]                   ;; [0 1 2 3 4 5 6 7 8 9 10] inclusive
+[0,2..10]                 ;; [0 2 4 6 8 10]              with step
+#+END_SRC
+
+Parser rejects =[0..]= (infinite arrays not possible).
+
+**Paren syntax** — lazy lists (cons cells, runtime-generated):
+
+#+BEGIN_SRC monad
+(0..10)                   ;; lazy list 0 through 10
+(0..)                     ;; infinite lazy list from 0
+(0,2..10)                 ;; lazy list with step
+(0,2..)                   ;; infinite lazy list with step
+#+END_SRC
+
+Lazy ranges call runtime functions (=list_from=, =list_from_step=) and
+can be infinite. They produce linked lists, not arrays.
+
+* Sets
+
+Hash sets with brace syntax:
+
+#+BEGIN_SRC monad
+{1 2 3}                 ;; set of Ints
+{"a" "b"}               ;; set of Strings
+{}                      ;; empty set
+#+END_SRC
+
+The same ={}= syntax is also used for refinement types
+(={ x ∈ Int | x > 0 }=) — the parser disambiguates by looking for
+=∈= after the first symbol.
+
+Builtins: =set=, =conj=, =disj=, =conj!=, =disj!=, =contains?=,
+=count=, =Set?=.
+
+Elements are boxed at runtime (hash-consed).
+
+* Maps
+
+Hash maps with =#{}= syntax:
+
+#+BEGIN_SRC monad
+#{:a 1 :b 2}            ;; keyword → Int map
+#{}                     ;; empty map
+#+END_SRC
+
+Key-value pairs, requires even number of forms.
+
+Builtins: =assoc=, =assoc!=, =dissoc=, =dissoc!=, =find=, =keys=,
+=vals=, =merge=, =contains?=, =count=, =Map?=.
+
+Map-as-function lookup: =(m :key)= returns value or nil.
+
+Keys and values are boxed at runtime.
+
+* Strings
+
+Strings are UTF-8, immutable, indexable:
+
+#+BEGIN_SRC monad
+"hello"                 ;; String literal
+("hello" 0)             ;; 'h' — indexing with function-call syntax
+#+END_SRC
+
+See [[file:strings.org][Strings and Characters]] for full documentation.
+Strings participate in =head=, =tail=, =count=, =++=, =take=, =drop=,
+=starts-with?=, =ends-with?=, =contains?=.
+
+* Performance Caveats
+
+- **Lists** — cons cells, O(n) access, O(1) prepend
+- **Arrays** — contiguous, O(1) index, stack-allocated (small) or heap (~[...])
+- **Sets** — hash table, O(1) average, elements boxed
+- **Maps** — hash table, O(1) average, keys/vals boxed
+- **Ranges `[...]`** — eager, O(n) memory (evaluated at runtime)
+- **Ranges `(...)`** — lazy, O(1) head, O(n) to force tail
+
+* Context Links
+
+- [[file:patterns.org][Pattern Matching]] — list/array destructuring
+- [[file:strings.org][Strings and Characters]]
+- [[file:core.org][Core Library]] — collection builtins
+- [[file:../context/codegen.org][context/codegen.org]] — codegen for AST_ARRAY/AST_SET/AST_MAP/AST_RANGE

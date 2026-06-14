@@ -302,6 +302,90 @@
   through a permanent arena for the AST and a scratch arena for parser
   temporaries)
 
+* LLM Analysis
+:PROPERTIES:
+:ID: monadc.context.arena.llm-analysis
+:CUSTOM_ID: arena-llm-analysis
+:CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: LLM assessment of the arena allocator design: bump-pointer strategy, checkpoint/restore mechanism, block sizing, and tradeoffs vs general-purpose allocation.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-14
+:CONTEXT_UPDATED: 2026-06-14
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: arena.c, arena.h, context/arena.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.arena.bump-pointer-tradeoff conf:high]
+  The bump-pointer arena allocator is the right choice for a compiler
+  workload. Compiler data structures (AST nodes, symbol tables, type
+  objects) are allocated in phases, live for the duration of a
+  compilation unit, and are freed all at once. The bump allocator
+  converts malloc overhead (lock, freelist search, fragmentation) into
+  a single pointer increment per allocation. For a compiler processing
+  tens of thousands of AST nodes, this is a measurable performance win.
+  The tradeoff is memory waste: if a 4 MiB block has 3.9 MiB unused
+  at the end of compilation, that memory cannot be reclaimed by other
+  processes. In practice, the OS reclaims it when the compiler exits,
+  so it's only a concern for long-running processes (REPL, language
+  server), where checkpoint/restore provides the necessary control.
+
+[THINK id:think.arena.checkpoint-restore-pattern conf:high]
+  The checkpoint/restore mechanism (arena_checkpoint returns an index,
+  arena_restore pops back to it) is a stack-based rollback that enables
+  scratch allocation within a compilation phase without permanent memory
+  growth. This is particularly valuable for the macro expander and HM
+  inference, which allocate speculative type variables and backtrack.
+  The stack discipline (you can only restore to a previous checkpoint,
+  not an arbitrary point) is both a strength and a limitation: it
+  guarantees O(1) restore but forbids non-LIFO allocation patterns. In
+  practice, compiler algorithms are naturally stack-like (nested
+  inference contexts, recursive macro expansion), so the limitation
+  rarely bites.
+
+[THINK id:think.arena.4mb-block-sizing conf:medium]
+  The 4 MiB default block size with growth factor 2 is a reasonable
+  heuristic but untuned. 4 MiB is large enough that most compilations
+  fit in a single block (avoiding linked-list traversal for allocation),
+  but small enough that a 256-block chain handles a terabyte of
+  allocation before wrapping around the index counter. For a self-hosted
+  compiler compiling itself, the peak allocation is likely in the
+  10-50 MiB range, meaning 2-3 blocks. The growth factor of 2 means
+  the second block is 8 MiB, the third 16 MiB, etc. — exponential
+  growth is appropriate for compiler workloads where the next compilation
+  might be arbitrarily larger.
+
+[THINK id:think.arena.scratch-vs-permanent conf:high]
+  The scratch/permanent arena distinction is a classic technique from
+  compiler construction (see Wirth's Oberon compiler). The permanent
+  arena holds the AST and symbol table (lifetime = whole compilation),
+  while the scratch arena holds intermediate results (type variables,
+  constraint sets, macro expansion intermediates). The scratch arena
+  is checkpointed before each major phase and restored after, ensuring
+  that temporary allocations don't leak into the permanent arena. This
+  design is simple and correct but requires discipline: a developer
+  working on inference must know which arena to use for each allocation.
+  An arena-tagged pointer type (like Rust's arena references) would
+  make this safer but is not expressible in C without macros.
+
+[THINK id:think.arena.gc-interaction conf:medium]
+  The arena allocator is used both by the compiler (for its own data
+  structures) and by the runtime (for GC-managed heap objects via
+  runtime.c). This dual use is convenient (one allocator for everything)
+  but creates a subtle issue: compiler data allocated in the permanent
+  arena persists across GC collections, but GC-managed objects must
+  be movable (compacting GC) or at least traceable. If the runtime
+  ever implements a compacting GC (moving objects to defragment the
+  heap), arena-allocated objects cannot be moved. The current design
+  avoids this by using a non-moving mark-sweep GC for runtime objects
+  and arena allocation only for compiler-internal data, but the
+  distinction is not enforced by the type system.
+
 [INF id:inf.arena.connects-to-source-map from:obs.arena.arena-alloc conf:high]
   connects-to -> `monadc.context.source-map` (source location data is arena-
   allocated during parsing; the source map entries live in arena memory for the

@@ -1,0 +1,93 @@
+#+TITLE: Performance Guide
+#+CONTEXT: core.org, types.org, layouts.org, asm.org
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+
+[[file:index.org][<- Back to Index]]
+
+This guide covers performance considerations when writing Monad
+programs.
+
+* Arena Allocation
+
+Primary allocator ([[file:../arena.c]]): bump-pointer arena with 4 MiB
+blocks. Free is batch-checkpoint-restore, not per-object. Good for
+compilers, bad for long-lived small allocations that aren't batch-freed.
+
+* Elements are Not Boxed
+
+Elements are C11 struct types, POD layouts, LLVM-native
+representation. No boxing overhead for primitives.
+
+* Type Annotations Help
+
+Explicit type annotations improve codegen quality:
+
+#+BEGIN_SRC monad
+;; Without annotation — inference must work harder
+(define x (+ 1 2))
+
+;; With annotation — codegen knows immediately
+(define [x :: Int] (+ 1 2))
+#+END_SRC
+
+This is especially important for polymorphic code.
+
+* Avoid Unnecessary Consing
+
+Each =cons= call allocates (lists are linked cells). For tight loops,
+prefer mutation (=set!=, =<-=) over allocation, and tail recursion
+over non-tail recursion.
+
+#+BEGIN_SRC monad
+;; Allocation-heavy
+(define (range n)
+  (if (= n 0) nil
+    (cons n (range (- n 1)))))
+#+END_SRC
+
+* Inline Assembly for Hot Paths
+
+When you need maximum performance, use inline assembly:
+
+#+BEGIN_SRC monad
+(define [add-fast :: Int -> Int -> Int]
+  a b -> (asm mov a %rax
+              add b %rax))
+#+END_SRC
+
+See [[file:asm.org][Inline Assembly]].
+
+* Use Layout Types for C Interop
+
+[[file:layouts.org][Layout types]] match C struct layout exactly, avoiding conversion
+overhead:
+
+#+BEGIN_SRC monad
+(layout Point [x :: Float] [y :: Float])
+
+(define p (Point 3.0 4.0))
+#+END_SRC
+
+* What the Compiler Does NOT Optimize (Yet)
+
+- Tail-call elimination (not yet implemented)
+- Closure allocation (closures not yet optimized)
+- Inlining (not yet implemented)
+- List fusion
+- Automatic vectorization
+
+* Profiling Tips
+
+1. **Start simple** — write clear code first, optimize later
+2. **Use =show= to measure** — print timestamps around operations
+3. **Inspect LLVM IR** — use =--emit-ir= to see what codegen produces
+4. **Check assembly** — use =--emit-asm= for the final output
+5. **Profile at the system level** — use =perf=, =valgrind=, etc.
+
+* Context Links
+
+- [[file:layouts.org][Layout Types]] — zero-overhead C interop
+- [[file:asm.org][Inline Assembly]] — hot path optimization
+- [[file:../context/codegen.org][context/codegen.org]] — Codegen
+- [[file:../context/arena.org][context/arena.org]] — Arena allocator

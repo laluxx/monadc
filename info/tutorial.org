@@ -1,0 +1,60 @@
+#+TITLE: Tutorial
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+
+[[file:index.org][<- Back to Index]] · [[file:intro.org][Intro]] · [[file:syntax.org][Syntax]]
+
+* Hello World
+
+#+BEGIN_SRC monad
+(define (main -> Int)
+  (show "hello world")
+  0)
+#+END_SRC
+
+Compile and run:
+
+#+BEGIN_SRC sh
+monad hello.mon -o hello
+./hello
+#+END_SRC
+
+* Functions
+
+#+BEGIN_SRC monad
+(define square (x -> Int)
+  (* x x))
+
+(define (add a b -> Int)
+  (+ a b))
+#+END_SRC
+
+Types inferred automatically — annotation optional.
+
+* Data Types
+
+#+BEGIN_SRC monad
+(data Option a None (Some a))
+
+(define (head list -> (Option a))
+  (match list with
+    []     -> None
+    [x|xs] -> (Some x)))
+#+END_SRC
+
+* Using the REPL
+
+#+BEGIN_SRC sh
+monad repl
+> (+ 1 2)
+3
+> (define greeting "hi")
+> greeting
+"hi"
+#+END_SRC
+
+* Context Links
+
+- [[file:syntax.org][Syntax Reference]]
+- [[file:../how_to/][how_to/]] — example scripts
+- [[file:../tests/codegen/][tests/codegen/]] — codegen test files

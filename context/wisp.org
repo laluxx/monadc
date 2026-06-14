@@ -47,6 +47,10 @@
   Wisp and s-expr can be mixed freely within a single file. The expander is a
   pre-parse transform — it runs before the reader.
 
+[INF id:inf.wisp.info-ref from:obs.wisp.file conf:high]
+  User-facing Wisp documentation: [[file:../info/wisp.org][info/wisp.org]] covers indentation
+  rules, !-sugar, ?-sugar, metadata keywords, and mixing with S-expressions.
+
 * Architecture
 :PROPERTIES:
 :ID: monadc.context.wisp.architecture
@@ -445,6 +449,87 @@
 :CONTEXT_STATUS: active
 :CONFIDENCE: high
 :END:
+
+* LLM Analysis
+:PROPERTIES:
+:ID: monadc.context.wisp.llm-analysis
+:CUSTOM_ID: wisp-llm-analysis
+:CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: LLM assessment of the Wisp syntax expander: design tradeoffs, indentation sensitivity, arity table coupling, and edge-case surface.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-14
+:CONTEXT_UPDATED: 2026-06-14
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: wisp.c, context/wisp.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.wisp.indentation-vs-consistency conf:high]
+  Wisp's indentation-sensitive syntax is the most controversial design
+  choice in the language. It gives Monad a Python-like readability that
+  Lisp-family languages famously lack, but it introduces a whole class
+  of whitespace bugs that don't exist in s-expression syntax. A single
+  space difference can change the parse tree: =(f x y)= vs =(f x\n  y)=
+  are the same in s-exprs but different in wisp (the latter becomes
+  =(f x (y))). The arity table mitigates this (if f is known to take 2
+  args, both parse the same), but the table is always incomplete —
+  higher-order functions and macros have unknown arities. The fundamental
+  tension is: wisp trades parse determinism for visual clarity, and the
+  arity table is the bridge that tries to recover determinism.
+
+[THINK id:think.wisp.arity-table-coupling conf:high]
+  The coupling between wisp and the global arity table (g_ffi_arities)
+  is the most architecturally interesting part of the design. The arity
+  table is populated by:
+  1. Phase 0: C FFI function arities from parsed headers
+  2. Phase 3: env-builtin arities from register_builtins
+  3. Phase 4: user-defined arities from arity_prescan inside wisp_parse_all
+  4. Cross-module: arities discovered in one module persist to benefit
+     subsequent modules
+  This means the arity table is a shared mutable global that accumulates
+  state across compilation units. It's carefully managed (wisp_clear_arities
+  between units, local table seeded from global), but a bug in arity
+  persistence would produce non-deterministic parses depending on
+  compilation order. The fact that this hasn't surfaced as a bug suggests
+  the management is correct, but it's a fragile design.
+
+[THINK id:think.wisp.char-escape-newline-edge-case conf:medium]
+  The ='\n'= char literal bug (wisp expands \\n to a real newline,
+  splitting the char literal across two lines) is a deep edge case that
+  reveals a fundamental limitation of wisp's line-based tokenization.
+  Fixing it would require wisp to understand string/char escape sequences,
+  which means parsing string syntax inside the wisp expander — effectively
+  duplicating the reader's string parser. The pragmatic decision to
+  document it as a known limitation (use s-expression syntax for char
+  literals with escape sequences) is the right call. Not every edge case
+  needs a fix; some need a workaround.
+
+[THINK id:think.wisp.sugar-heuristic-first-arg conf:medium]
+  The ?-sugar and !-sugar heuristic (fire only when the first arg is a
+  bare, untyped symbol) is a compromise between usability and correctness.
+  =(conj! {1 2 3} 4)= works because {1 2 3} is a literal, not a symbol.
+  =(conj! s 3)= becomes =(s conj! 3) because s is a bare symbol. The
+  workaround (type-annotate s) is reasonable but creates a learning
+  curve: new users will be confused why (conj! my-set 3) doesn't work
+  but (conj! {1 2 3} 4) does. A more robust heuristic would check if
+  the symbol is bound to a set-typed variable in the env, but during
+  wisp expansion the env isn't fully populated yet.
+
+[THINK id:think.wisp.three-syntaxes-forever conf:high]
+  Monad commits to supporting three syntaxes forever: s-expr, wisp, and
+  mixed-mode. Each syntax doubles the parser test surface and every
+  language feature must work identically in all three. This is a
+  significant maintenance commitment. The payoff (widespread adoption
+  by Lisp-averse programmers) is hypothetical at this stage. If the
+  language gains traction, wisp will be a differentiator. If it remains
+  a niche language, maintaining three syntaxes is dead weight. The
+  design decision is correct per the philosophy (syntax-is-instrument),
+  but it's a bet, not a sure thing.
 
 [INF id:inf.wisp.connects-to from:obs.wisp.purpose conf:high]
   connects-to -> `monadc.context.reader` (wisp_parse_all produces S-exprs

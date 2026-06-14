@@ -916,6 +916,83 @@
   `monadc.context.tests.corpus-size` (fuzzing as part of the growing
   corpus)
 
+* LLM Analysis
+:PROPERTIES:
+:ID: monadc.context.tests-arch.llm-analysis
+:CUSTOM_ID: tests-arch-llm-analysis
+:CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: LLM assessment of the test architecture: codegen test structure, fuzzing design, ASM test auto-generation, and overall test coverage philosophy.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-14
+:CONTEXT_UPDATED: 2026-06-14
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: tests/, context/tests-arch.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.tests-arch.codegen-test-structure conf:high]
+  The codegen test structure (one .mon source per test + .stdout expected
+  output + .args for CLI flags) is the right granularity for compiler
+  testing. Each test exercises exactly one codegen path and produces
+  exactly one observable output. The naming convention (rt_<operation>
+  for runtime tests, just <operation> for compile-only tests) makes it
+  trivial to find tests for a given operation: =ls tests/codegen/rt_str*=
+  shows all string operation runtime tests. This flat structure scales
+  well to hundreds of tests; directories per category (rt_math/, rt_string/,
+  rt_set/) would be needed past ~500 tests for navigability.
+
+[THINK id:think.tests-arch.fuzzing-property-design conf:high]
+  The fuzzing system is unusually well-designed for a compiler in this
+  stage of development. Most compilers add fuzzing as an afterthought,
+  years after the first release. MonadC's fuzzing is integrated from
+  the start: property-based, type-directed generation, algebraic-law
+  verification. The property categories (arithmetic: a+b == b+a,
+  comparison: a < b XOR b < a) test the compiler's mathematical
+  correctness, catching regressions that unit tests would miss. The
+  risk is that the fuzzing corpus grows unbounded (each run generates
+  new expressions) without a mechanism to prune redundant tests. A
+  coverage-guided fuzzer (like AFL) that tracks which code paths are
+  exercised would be more efficient than random generation.
+
+[THINK id:think.tests-arch.asm-auto-generation conf:medium]
+  The ASM test auto-generation (create-asm-tests.py generating 60 test
+  pairs from mnemonic lists) is a textbook example of the right way to
+  test a combinatorial surface. Writing 60 inline assembly tests by
+  hand would be tedious and error-prone. Generating them from a
+  declarative specification (instruction + operands → expected behavior)
+  ensures coverage is systematic and test quality is uniform. The same
+  approach could be applied to other combinatorial surfaces: type
+  combinator tests (all pairs of TypeKind × TypeKind) and operation
+  dispatch tests (all strcmp handlers × argument shapes). A
+  combinatorial test generator is higher-leverage than any single test.
+
+[THINK id:think.tests-arch.coverage-philosophy conf:high]
+  The test architecture reveals an interesting coverage philosophy:
+  breadth over depth. 25 feature groups with 923 files means many
+  features are tested shallowly (one or two tests per operation) rather
+  than a few features tested exhaustively. This is the right choice for
+  a rapidly evolving compiler where features are still being added and
+  APIs are not stable. Exhaustive testing would be wasted effort when
+  the API changes next week. Surface-level coverage catches most
+  regressions and provides a safety net for refactoring. Deep testing
+  (property-based, fuzzing) can be added once APIs stabilize.
+
+[THINK id:think.tests-arch.parallel-execution-gap conf:medium]
+  The test runner's current sequential execution (run one test at a time,
+  compare output, move to next) is the simplest correct approach but
+  will be a bottleneck at 2000+ tests. Compilation is CPU-bound (LLVM
+  optimization passes, codegen), and modern machines have 8-16 cores.
+  A parallel test runner that compiles multiple test files concurrently
+  (using the build system's dependency graph to avoid conflicts) would
+  reduce test suite runtime from minutes to seconds. The challenge is
+  output comparison — parallel test output is interleaved. A buffered
+  approach (collect per-test output, display on completion) solves this.
+
 [INF id:inf.tests-arch.asm from:obs.tests-arch.asm,obs.tests-arch.asm.topics,obs.tests-arch.asm.generator conf:high]
   connects-to -> `monadc.context.asm` (asm.c/asm.h architecture:
   mnemonic splitting, suffix inference, AT&T reordering) ·

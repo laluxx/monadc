@@ -4,7 +4,7 @@
 #+CREATED: 2026-06-13
 #+LAST_MODIFIED: 2026-06-13
 #+LANGUAGE: en
-#+STARTUP: hideblocks
+#+STARTUP: hidedrawers
 #+OPTIONS: toc:2 num:t
 #+CATEGORY: monadc-context
 #+FILETAGS: :monadc:compiler:context:module:export:manifest:mexp:
@@ -358,6 +358,80 @@
   compilation and ensures .mexp files are produced alongside .o files) ·
   `monadc.context.codegen-ops.object-file-emission` (mangled names from
   manifest_mangle become linker symbols)
+
+* LLM Analysis
+:PROPERTIES:
+:ID: monadc.context.module-export.llm-analysis
+:CUSTOM_ID: module-export-llm-analysis
+:CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: LLM assessment of the module export manifest (.mexp) format, name mangling, and cross-module serialization strategy.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-14
+:CONTEXT_UPDATED: 2026-06-14
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: module-export.c, context/module-export.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.module-export.mexp-format-choice conf:high]
+  The decision to use TOML for .mexp manifest files is pragmatic and
+  correct. TOML is human-readable (unlike binary formats), easy to parse
+  (unlike YAML, which has edge-case ambiguities), and well-supported by
+  C libraries (toml.c is a single-file, MIT-licensed parser). The format
+  is simple enough that the manifest can be hand-edited for debugging,
+  and structured enough that the compiler can reliably parse it. JSON
+  would also work but lacks comments (useful for debugging). S-expressions
+  would be consistent with the language's syntax but harder to parse
+  without the full reader. TOML is the pragmatic middle ground.
+
+[THINK id:think.module-export.symbol-mangling-design conf:high]
+  The name mangling scheme (package.module.symbol → flat symbol) follows
+  the same approach as Java (package.Module.method) and Rust
+  (module::symbol). The use of a name-mangling buffer and a character-level
+  rewriter is straightforward and correct. The key design choice is
+  whether mangling is reversible (can you recover the original qualified
+  name from the mangled symbol?) — reversible mangling enables better
+  debug info and error messages. The current scheme (flat concatenation
+  with delimiters) is reversible by construction. This is the right
+  choice: it costs nothing and pays dividends when debugging.
+
+[THINK id:think.module-export.cache-invalidation-missing conf:medium]
+  The .mexp file serves as a cache of the module's public interface,
+  but there is no versioning mechanism. If the mangling scheme changes,
+  old .mexp files produced by a previous compiler version will produce
+  wrong external declarations. A compiler version stamp in the .mexp
+  header would detect this: if the compiler version changes, all cached
+  .mexp files are invalidated and regenerated. Without this, a
+  self-hosting compiler that changes its own mangling scheme will fail
+  to recompile itself from clean state (because old .mexp files conflict
+  with the new output). This will surface during bootstrap.
+
+[THINK id:think.module-export.manifest-vs-module-decl conf:medium]
+  The dual declaration of exports (=module export ...= in source and
+  .mexp on disk) creates a potential for divergence. The source-level
+  declaration is the authoritative definition; the .mexp is a cache.
+  If the .mexp is stale (e.g., from a partial build), the compiler
+  silently uses stale export information. A simple timestamp comparison
+  (.mexp vs .mon source) in the manifest reader would catch staleness
+  and trigger a rebuild. This is the same pattern used by the build
+  system for .o files and should be extended to .mexp files for
+  consistency.
+
+[THINK id:think.module-export.no-re-export-mechanism conf:medium]
+  The current module export system does not support re-exports (module
+  A imports symbol from B and re-exports it as if it were A's own).
+  This means every module that uses a symbol from B must directly import
+  B — there is no transitive dependency hiding. For small projects this
+  is fine. For large projects with deep dependency trees, the lack of
+  re-exports means changes to B force recompilation of every module
+  that depends on B, even if the dependency is indirect. Adding re-export
+  syntax (=module export { ... } from B=) would enable facade modules
+  that provide stable interfaces over volatile dependencies.
 
 [INF id:inf.module-export.mexp-role from:obs.module-export.mexp-format,obs.module-export.mangling-convention conf:high]
   The .mexp file is the serialisation bridge between compilation units.

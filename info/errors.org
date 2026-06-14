@@ -1,0 +1,36 @@
+#+TITLE: Error Messages and Debugging
+#+STARTUP: showeverything
+#+OPTIONS: toc:nil
+
+[[file:index.org][<- Back to Index]] · [[file:cli.org][CLI Reference]]
+
+| Error Layer      | Source file   | Phase                        |
+|------------------+---------------+------------------------------|
+| Reader           | =reader.c=    | S-expression parsing         |
+| Wisp             | =wisp.c=      | Indentation → S-expressions  |
+| Dep checker      | =dep.c=       | Bidirectional dependent type checking |
+| Codegen          | =codegen.c=   | LLVM IR generation           |
+| Runtime          | =repl.c=      | JIT execution (SIGSEGV/SIGBUS handlers) |
+
+In the REPL, three recovery mechanisms keep the session alive:
+
+| Mechanism          | Scope                        |
+|--------------------+------------------------------|
+| =setjmp=/=longjmp= | Parse errors in =REPL_PARSE= macro |
+| =g_repl_escape=    | Runtime errors / crashes     |
+| =repl_signal_handler= | SIGSEGV / SIGBUS from JIT code |
+
+** Debug Flags
+
+| Flag            | Output                 | Use case               |
+|-----------------+------------------------+------------------------|
+| =--emit-json=  | AST as JSON            | Inspect parsed form    |
+| =--emit-ir=    | LLVM IR text           | Inspect generated code |
+| =--emit-asm=   | Assembly text          | Inspect machine code   |
+
+Common error patterns include unbound variables, type mismatches, unbalanced delimiters, and unknown functions. Each error reports =file:line:column= with a source pointer.
+
+** Context Links
+
+- [[file:../context/codegen.org][context/codegen.org]] — diagnostics
+- [[file:../context/tests.org][context/tests.org]] — expected-failure fixtures

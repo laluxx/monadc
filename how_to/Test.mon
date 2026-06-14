@@ -17,7 +17,7 @@ define red Color.fromRGB 255 0 0
 red.eql red
 
 
-
+2x + 3x = 30
 
 
 

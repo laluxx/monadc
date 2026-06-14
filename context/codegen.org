@@ -172,7 +172,22 @@
   error message. Written by =CODEGEN_ERROR= before the longjmp, read by
   callers for diagnostic display.
 
-* Monomorphization Cache (MonoKey, MonoCacheEntry, MonoCache)
+* Monomorphization
+
+Monomorphization is the process of specializing polymorphic (generic)
+functions to concrete types. When codegen encounters a call like
+=(id 42)= where =id= has type =∀ a. a -> a=, it:
+
+1. Resolves concrete type =Int= for variable =a=
+2. Checks the monomorphization cache for =id_Int=
+3. If not cached, clones the function body substituting =Int= for =a=
+4. Emits a direct call to =id_Int= with zero boxing
+
+This means unannotated parameters are NOT boxed objects (unlike Lisp,
+Python, or Java). Each concrete instantiation generates a separate
+LLVM function with no type tags or dispatch overhead.
+
+** Monomorphization Cache (MonoKey, MonoCacheEntry, MonoCache)
 :PROPERTIES:
 :ID: monadc.context.codegen.mono-cache
 :CUSTOM_ID: codegen-mono-cache
@@ -603,6 +618,87 @@
   connects-to -> =monadc.context.typeclass.tc-registry= (TypeClassRegistry) ·
   =monadc.context.typeclass.tc-method-dispatch= (tc_is_method hook in
   comparison dispatch at codegen.c:8907)
+
+* LLM Analysis
+:PROPERTIES:
+:ID: monadc.context.codegen.llm-analysis
+:CUSTOM_ID: codegen-llm-analysis
+:CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: LLM assessment of the codegen architecture: monomorphization strategy, closure ABI design, LLVM API usage patterns, and performance characteristics.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-14
+:CONTEXT_UPDATED: 2026-06-14
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c, context/codegen.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.codegen.monomorphization-cache conf:high]
+  The monomorphization cache (mono_cache) is a textbook application of
+  memoization: cache keyed on (scheme_id × arg_types), each distinct
+  instantiation generates a fresh LLVM function. This matches C++ template
+  instantiation semantics and produces maximally optimized code per call
+  site. The risk is code bloat: =(map f xs)= where f is a closure and xs
+  is a list generates one instantiation, but =(map (+ 1) xs)= and
+  =(map (* 2) xs)= generate two — even though both produce Int→Int
+  functions. The cache doesn't recognize that two Schemes with equal
+  concrete types produce identical code. A structural comparison pass
+  (not just pointer equality on Scheme) would merge equivalent
+  instantiations and reduce binary size.
+
+[THINK id:think.codegen.closure-abi-tradeoff conf:high]
+  The dual ABI (typed vs closure) for function calls is the right design
+  for a language that promises zero-to-metal abstraction. Typed ABI
+  (call known function pointer directly) gives C-level performance for
+  non-capturing lambdas. Closure ABI (load env, load fn ptr, call) is
+  the fallback for capturing closures. The cost is that every call site
+  must determine which ABI to use at compile time, which requires
+  tracking capture information through the type system. If the inference
+  gets it wrong (marked typed but actually captures), you get a segfault.
+  The current implementation appears to err on the side of typed ABI and
+  fall back only when explicitly capturing, which is performance-optimal
+  but correctness-critical.
+
+[THINK id:think.codegen.llvm-api-usage conf:medium]
+  The codegen uses the LLVM C API directly (LLVMBuildAdd, etc.) rather
+  than emitting LLVM IR text. This is the right choice for a self-hosted
+  compiler — the C API provides type safety, avoids text-parsing overhead,
+  and integrates naturally with the C codebase. However, the LLVM C API
+  is verbose: a single add instruction in IR is LLVMBuildAdd(builder, lhs,
+  rhs, "name") in C API. This verbosity contributes significantly to
+  codegen.c's length (14K+ lines). A small wrapper layer that reduces
+  the boilerplate (e.g., op2("add", lhs, rhs) that infers the builder
+  from thread-local context) could cut codegen.c by 20-30%.
+
+[THINK id:think.codegen.typeclass-integration conf:high]
+  The typeclass integration via tc_is_method hook in the comparison
+  dispatch is elegant in its minimalism: one hook function that checks
+  "is this symbol a class method?" and if so, dispatches through the
+  instance dict instead of the normal strcmp path. This adds negligible
+  overhead to non-typeclass dispatch (one extra function call per strcmp
+  hit) and keeps the typeclass system loosely coupled from the main
+  codegen path. The risk is that as typeclass features grow (associated
+  types, superclass constraints, default implementations), the hook
+  interface will need expansion. Planning for an extensible hook
+  mechanism (a callback registry rather than a single tc_is_method
+  function) would future-proof this.
+
+[THINK id:think.codegen.codegen-c-size conf:high]
+  At 14K+ lines, codegen.c is already the largest file in the compiler
+  and it will grow. The human opinion (opinions.org) flags this as
+  needing a split. The natural boundaries are:
+  - codegen-expr.c: expression codegen (paren/lambda/if/let/define)
+  - codegen-type.c: type layout and LLVM type construction
+  - codegen-dispatch.c: the strcmp dispatch table and registration
+  - codegen-builtin.c: register_builtins and builtin helper functions
+  - codegen-ffi.c: FFI call generation
+  Each split reduces the cognitive load of opening a 14K-line file and
+  makes the module boundaries explicit in the build system.
 
 [INF id:inf.codegen.main from:obs.codegen.ctx.module-ctx conf:high]
   connects-to -> =monadc.context.main.twelve-phase-pipeline= (codegen is

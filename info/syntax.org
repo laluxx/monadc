@@ -1,0 +1,452 @@
+#+TITLE: Monad Syntax Reference
+#+STARTUP: showeverything
+#+OPTIONS: toc:3 num:t
+
+[[file:index.org][<- Back to Index]]
+
+Monad supports two surface syntaxes: S-expressions (parenthesized
+prefix, [[file:../reader.c]]) and Wisp (indentation-aware,
+[[file:../wisp.c]]). They can be mixed freely in the same file. Both
+desugar to the same AST.
+
+* S-expressions
+
+S-expressions are Lisp-style parenthesized prefix notation. Every form
+is either an atom or a list.
+
+** Atoms
+
+| Atom       | Example              | Description                      |
+|------------+----------------------+----------------------------------|
+| Integer    | =42=, =-7=, =1_000=        | 63-bit signed integer            |
+| Float      | =3.14=, =1e10=, =-0.5=     | 64-bit IEEE 754                  |
+| Hex        | =0xFF=                 | Hexadecimal integer              |
+| Binary     | =0b1010=               | Binary integer                   |
+| Octal      | =0o777=                | Octal integer                    |
+| Ratio      | =1/2=, =3/4=             | Exact rational (numerator/denom) |
+| Percentage | =50%=                  | =50%= desugars to =1/2=              |
+| String     | ="hello\nworld"=       | C-escaped string                 |
+| Char       | ='a'=, ='\n'=            | Single character (single quotes) |
+| Symbol     | =x=, =my-fn?=, =π=         | Identifier                       |
+| Keyword    | =:key=, =:alias=         | Keyword (prefix with colon)      |
+| Path       | =/tmp/file=, =~/.config= | File path literal                |
+| Boolean    | =True=, =False=          | Boolean literals                 |
+| Nil        | =nil=                  | Empty list / null                |
+
+** Lists
+
+=((lambda (x) (+ x 1)) 42)= — the first element is the function, rest
+are arguments.
+
+** Strings
+
+Strings use C-style escape sequences: =\n=, =\t=, =\"=, =\\=, =\0=,
+=\xNN=, =\uNNNN=.
+
+Adjacent string literals are NOT concatenated (unlike C).
+="hello" "world"= is an error. Use one literal or explicit operations.
+
+* Wisp Syntax
+
+Wisp is an indentation-aware surface syntax. It is NOT a different
+language — it expands to S-expressions before compilation.
+
+** Rules
+
+- Indentation determines grouping, like Python or Haskell
+- A line indented further than the previous line is a child of it
+- Lines at the same indent are siblings
+- =;;= starts a line comment
+- =;|= starts / ends a block comment
+
+** Examples
+
+#+BEGIN_SRC monad
+;; S-expression:
+(define (square x) (* x x))
+
+;; Same in Wisp:
+define square x -> x * x
+
+;; Wisp with typed params:
+define square :: Int -> Int
+  x -> x * x
+#+END_SRC
+
+See [[file:wisp.org][Wisp Syntax]] for the full reference.
+
+* Special Forms
+
+** define
+
+Bind a name to a value.
+
+#+BEGIN_SRC monad
+;; Simple value
+(define pi 3.14159)
+
+;; Typed value
+(define [x :: Int] 42)
+
+;; Function (S-expression)
+(define (add a b) (+ a b))
+
+;; Function with typed signature
+(define (add :: Int -> Int -> Int)
+  a b -> (+ a b))
+
+;; With metadata
+(define [pi :: Float] 3.14159
+  :doc "Archimedes' constant"
+  :alias π)
+
+;; Wisp form
+define [pi :: Float] 3.14159
+  :doc "Archimedes' constant"
+  :alias π
+#+END_SRC
+
+Metadata keywords:
+- =:doc "text"= — documentation string
+- =:alias sym= — alternative name for show/display
+- =:naked True= — for raw assembly functions (no prologue/epilogue)
+
+** lambda
+
+Create an anonymous function.
+
+#+BEGIN_SRC monad
+;; Identity
+(lambda [x] x)
+
+;; Typed
+(lambda [x :: Int] (+ x 1))
+
+;; Multiple params
+(lambda [a :: Int] [b :: Int] (+ a b))
+
+;; Rest params
+(lambda [xs :: Int ...] (show xs))
+#+END_SRC
+
+No =fn= shorthand — use =lambda=.
+
+** if
+
+#+BEGIN_SRC monad
+(if condition then-expr else-expr)
+(if (> x 0) "pos" "neg")
+#+END_SRC
+
+Both branches are expressions. The type must agree.
+
+** cond
+
+#+BEGIN_SRC monad
+(cond
+  [(> x 0) "positive"]
+  [(< x 0) "negative"]
+  [True    "zero"])
+#+END_SRC
+
+Clauses are evaluated in order. The first true predicate wins.
+
+** unless
+
+#+BEGIN_SRC monad
+(unless condition body)
+(unless (nil? xs) (show xs))
+#+END_SRC
+
+Executes body only when condition is false.
+
+** while
+
+#+BEGIN_SRC monad
+(while condition body)
+(while (< i 10) (show i) (set! i (+ i 1)))
+#+END_SRC
+
+Repeatedly executes body while condition is true.
+
+** for
+
+#+BEGIN_SRC monad
+(for x '(1 2 3) (show x))       ;; iterate over list
+(for i 0 10 2 (show i))         ;; numeric range with step
+#+END_SRC
+
+Loops can iterate over collections or numeric ranges. See [[file:control.org][Control Flow]].
+
+** let / let* / letrec
+
+#+BEGIN_SRC monad
+(let [x 1
+      y (+ x 2)]
+  (+ x y))
+;; Error: x is not in scope for y
+
+(let* [x 1
+       y (+ x 2)]
+  (+ x y))
+;; OK: y sees x
+
+(letrec [fact (lambda [n]
+               (if (= n 0) 1
+                 (* n (fact (- n 1)))))]
+  (fact 5))
+#+END_SRC
+
+=let= binds in parallel (no inter-dependency). =let*= binds
+sequentially. =letrec= supports recursive bindings.
+
+** set! / <-
+
+Mutation — rebinds a variable in the current scope.
+
+#+BEGIN_SRC monad
+(define x 10)
+(set! x 20)
+
+;; Sugar:
+(define y 5)
+(<- y 99)           ;; desugars to (set! y 99)
+
+;; Field mutation:
+(set! obj.field val)
+(<- obj.field val)  ;; same
+#+END_SRC
+
+The =<-= sugar form is valid S-expression syntax. Wisp also supports
+it as infix: =obj.x <- val=.
+
+** quote / quasiquote
+
+#+BEGIN_SRC monad
+(quote (1 2 3))    ;; => '(1 2 3)
+'(1 2 3)           ;; shorthand for quote
+#+END_SRC
+
+Quasiquote uses corner brackets:
+
+#+BEGIN_SRC monad
+⌜1 2 3⌝                       ;; quasiquote, expands to (quasiquote 1 2 3)
+⌜1 2 ⌞x⌟ 3⌝                  ;; unquote: ⌞expr⌟ = (unquote expr)
+⌜1 2 ⌞,@xs⌟ 3⌝               ;; unquote-splicing
+#+END_SRC
+
+No backtick quasiquote — use corner brackets =⌜= / =⌝= (=⌞= / =⌟= for
+unquote).
+
+** with
+
+#+BEGIN_SRC monad
+(with [x 1 y 2]
+  (+ x y))
+#+END_SRC
+
+Set multiple values in a scope. Similar to =let=.
+
+** asm
+
+Inline x86-64 assembly. See [[file:asm.org][Inline Assembly]].
+
+#+BEGIN_SRC monad
+(asm mnemonic operand ...)
+
+;; Example:
+(asm mov 1 %rax
+     mov 2 %rbx
+     add %rax %rbx
+     ret)
+#+END_SRC
+
+* Literals
+
+** Numbers ([[file:../reader.c::1246]])
+
+#+BEGIN_SRC monad
+42          ;; Int
+3.14        ;; Float
+0xFF        ;; Hex Int
+0b1010      ;; Binary Int
+0o777       ;; Octal Int
+1_000_000   ;; Underscore-separated
+1/2         ;; Ratio (rational)
+50%         ;; Percentage (= 50/100 = 1/2)
+#+END_SRC
+
+** Strings and Chars
+
+#+BEGIN_SRC monad
+"hello world"      ;; String
+"line1\nline2"     ;; With escapes
+'a'                ;; Char 'A'
+'\n'               ;; Char newline
+'\x41'             ;; Hex escape
+'\u03C0'           ;; Unicode (π)
+#+END_SRC
+
+Character literals use single quotes (=TOK_CHAR=, [[file:../reader.c::1365]]):
+='a'=, ='\n'=, ='\x41'=. String indexing: =("hello" 0)=
+([[file:../codegen.c::9732]]) returns the character at position 0.
+
+** Paths
+
+#+BEGIN_SRC monad
+/tmp/file              ;; Absolute path
+~/documents            ;; Home-relative
+./data/config          ;; Current directory
+../parent/file         ;; Parent directory
+#+END_SRC
+
+Paths are first-class values of type =Path=.
+
+* Operators
+
+** Arithmetic
+
+| Operator | Example     | Description |
+|----------+-------------+-------------|
+| =+=        | =(+ 1 2)=   | Addition    |
+| =-=        | =(- 5 2)=   | Subtraction |
+| =*=        | =(* 3 4)=   | Multiply    |
+| =/=        | =(/ 10 2)=  | Division    |
+| =%=        | =(% 10 3)=  | Modulo      |
+| =mod=      | =(mod 10 3)=| Modulo      |
+
+** Comparison
+
+| Operator | Example          | Description    |
+|----------+------------------+----------------|
+| ====       | =(= x 5)=        | Equal          |
+| =!=       | =(!= x 5)=       | Not equal      |
+| =<=       | =(<= x 5)=       | Less-or-equal  |
+| =<==       | =(< x 5)=        | Less than      |
+| =>==       | =(>= x 5)=       | Greater-or-equal |
+| =>=       | =(> x 5)=        | Greater than   |
+
+** Logic
+
+| Operator | Example          | Description          |
+|----------+------------------+----------------------|
+| =and=      | =(and a b)=      | Logical AND (short-circuit) |
+| =or=       | =(or a b)=       | Logical OR (short-circuit)  |
+| =not=      | =(not a)=        | Logical NOT                 |
+
+** Bitwise
+
+| Operator | Example            | Description |
+|----------+--------------------+-------------|
+| =&=        | =(bit-and x 0xFF)= | AND         |
+| =~=        | =(bit-not x)=      | NOT         |
+| =bit-xor=  | =(bit-xor a b)=    | XOR         |
+| =<<=       | =(<< x 2)=         | Left shift  |
+| =>>=       | =(>> x 2)=         | Right shift |
+| =>>>=      | =(>>> x 2)=        | Unsigned right shift |
+
+** Null-coalescing
+
+#+BEGIN_SRC monad
+(?? expr default)   ;; returns expr if not nil, otherwise default
+#+END_SRC
+
+* Comments
+
+#+BEGIN_SRC monad
+;; Line comment
+
+;|
+Block comment
+spanning multiple
+lines
+|;
+#+END_SRC
+
+* Declarations
+
+** module
+
+#+BEGIN_SRC monad
+(module Name [export1 export2 ...])
+(module Math [pi e sqrt sin])
+#+END_SRC
+
+Declares the current module and its exports.
+
+** import
+
+#+BEGIN_SRC monad
+(import ModuleName)
+(import "path/to/file.mon")
+(import List :as L)    ;; Qualified import
+(import List [map filter])  ;; Selective import
+#+END_SRC
+
+** type
+
+#+BEGIN_SRC monad
+;; Simple alias
+(type Name String)
+
+;; Refinement (use ∈, not ::)
+type PosInt { x ∈ Int | x > 0 }
+
+;; With alias and doc
+(type Celsius Float :doc "Degrees Celsius" :alias °C)
+#+END_SRC
+
+** data
+
+#+BEGIN_SRC monad
+(data Option a
+  None
+  (Some a))
+
+(data Tree a
+  Leaf
+  (Node Tree a a Tree))
+
+;; Optional = and | syntax is valid:
+(data Maybe a = Nothing | Just a)
+#+END_SRC
+
+** class / instance
+
+#+BEGIN_SRC monad
+(class Eq a
+  (== (a a -> Bool)))
+(instance Eq Int
+  (define (== a b -> Bool) (builtin-== a b)))
+
+(class Show a
+  (show (a -> String)))
+(instance Show Int
+  (show x -> (show-as-int x)))
+#+END_SRC
+
+** include (C FFI)
+
+#+BEGIN_SRC monad
+(include "math.h")
+(include "SDL3/SDL.h")     ;; C headers via string path
+;; Do NOT use <header.h> — lexer tokenization is unreliable
+#+END_SRC
+
+* Feature Conditionals
+
+#+BEGIN_SRC monad
+#+linux
+(define fd 0)
+
+#+darwin
+(define fd 0)
+
+#---  ;; End feature block
+#+END_SRC
+
+* Context Links
+
+- [[file:../context/reader.org][context/reader.org]] — Reader/parser internals
+- [[file:../context/wisp.org][context/wisp.org]] — Wisp expander internals
+- [[file:../context/language.org][context/language.org]] — Language formalization

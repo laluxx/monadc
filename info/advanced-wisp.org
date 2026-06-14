@@ -1,0 +1,45 @@
+#+TITLE: Advanced Wisp
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+
+[[file:index.org][<- Back to Index]] · [[file:wisp.org][Wisp Basics]]
+
+* Deep Nesting
+
+Parentheses override wisp indentation:
+
+#+BEGIN_SRC wisp
+case x
+  (Just v)
+    show "got"
+    show v
+  Nothing
+    show "nothing"
+#+END_SRC
+
+Each =case= clause's first line has the pattern in parens (overrides
+wisp grouping). The function call body then starts at the next level.
+
+* Mixing Wisp and S-exprs
+
+Any line can use S-expression syntax. The wisp expander only cares
+about lines that look like =prefix args ...=.
+
+* Known Bug: Metadata in Wisp
+
+Metadata keywords (=:alias=, =:doc=, =:deprecated=) in wisp-syntax
+=define= forms are emitted as separate top-level forms instead of
+being included inside the =define= s-expression. Use S-expression
+syntax for reliable metadata.
+
+* Platform Notes
+
+Wisp expander is a simple line-based preprocessor. It handles basic
+cases well but may have edge cases with complex nesting or mixed
+indentation. Test your wisp code before relying on it.
+
+* Context Links
+
+- [[file:wisp.org][Wisp Basics]]
+- [[file:../context/wisp.org][context/wisp.org]] — wisp expander implementation
+- [[file:../wisp.c][wisp.c]] — wisp.c source

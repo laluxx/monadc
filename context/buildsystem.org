@@ -329,6 +329,85 @@
   `monadc.context.module.registry` (=ModuleRegistry= stores compiled module
   declarations that the build system reads via =build_resolve_dependencies=)
 
+* LLM Analysis
+:PROPERTIES:
+:ID: monadc.context.buildsystem.llm-analysis
+:CUSTOM_ID: buildsystem-llm-analysis
+:CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: LLM assessment of the programmatic build system: dependency resolution, recursive compilation, caching strategy, and integration with the main pipeline.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-14
+:CONTEXT_UPDATED: 2026-06-14
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: buildsystem.c, buildsystem.h, context/buildsystem.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.buildsystem.recursive-compilation conf:high]
+  The recursive module compilation model (compile_module_recursive extracts
+  imports, recurses on dependencies, then compiles the current module)
+  is a straightforward topological sort of the module dependency graph.
+  This is correct for acyclic graphs and handles the common case (A
+  imports B imports C) naturally. The risk is circular imports: if A
+  imports B and B imports A, the recursion enters infinite regress. The
+  current code does not appear to have a visited-set check to detect
+  cycles, which means a circular import would stack-overflow rather than
+  produce a diagnostic error. Adding cycle detection to the import
+  resolution phase (before recursive compilation begins) would turn
+  a crash into a helpful error message.
+
+[THINK id:think.buildsystem.caching-strategy conf:high]
+  The build system uses file-modification-time-based caching: if the
+  .o file is newer than the .mon source, skip compilation. This is the
+  same strategy as make itself, and it has the same limitation: time
+  stamp resolution on some filesystems (FAT32, network drives) is
+  coarse (1-2 seconds), so rapid save-compile cycles may not invalidate
+  the cache. For a compiler's own build system, this is rarely an issue
+  (developers use ext4, btrfs, or apfs with sub-second resolution), but
+  it would affect cross-platform users. A content-hash-based cache
+  (MD5/SHA of source) would be more reliable but requires storing hashes
+  and is overengineered for the current use case.
+
+[THINK id:think.buildsystem.module-artifact-management conf:medium]
+  The module artifact structure (.o file + .mexp manifest + optional
+  .ll IR dump) is simple but has a silent staleness bug: if the compiler
+  version changes (new codegen, changed ABI), old .o and .mexp files are
+  stale but still considered up-to-date by timestamp comparison. A
+  compiler-version stamp in the .mexp file would detect this: when the
+  compiler binary's own hash changes, all cached artifacts are
+  invalidated. This is a classic problem in bootstrapping compilers
+  (see GCC's STAMP机制) and will become important as MonadC approaches
+  self-hosting.
+
+[THINK id:think.buildsystem.link-executable-strategy conf:medium]
+  The final linking step (build_link_executable) collects all .o files
+  and links them with libmonad.a and the system runtime. The choice to
+  invoke gcc (or the system C compiler) for linking rather than calling
+  LLVM's linker API directly is practical: gcc handles search paths,
+  runtime init, and platform-specific linker flags that would require
+  significant effort to replicate via LLVM. The dependency on an external
+  C compiler for the final link means the build system inherits that
+  tool's search path configuration, which is usually correct but can
+  fail in sandboxed environments. Documenting the linking dependency
+  explicitly would help troubleshoot "linked but segfaults" issues.
+
+[THINK id:think.buildsystem.project-vs-single-file conf:medium]
+  The build system supports two modes: single-file compilation
+  (=monadc build file.mon=) and project compilation (=monadc build= in
+  a project directory with a monad.json). This duality is necessary
+  (single files for quick experiments, projects for real software) but
+  the boundary between them is fuzzy. A single .mon file that imports
+  other files implicitly becomes a project, but the build system only
+  discovers this when it fails to resolve imports from the search path.
+  A clearer distinction (monadc init creates a project skeleton, monadc
+  build without arguments requires a project file) would prevent the
+  "why can't it find my module?" confusion.
+
 [INF id:inf.buildsystem.main-connects from:obs.buildsystem.build.recursive conf:high]
   connects-to -> `monadc.context.main.pipeline` (=compile_module_to_object=
   declared extern in buildsystem.c:272, defined in main.c, is the actual

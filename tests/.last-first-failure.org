@@ -1,5 +1,5 @@
 #+TITLE: Last First Failing Test
-#+DATE: 2026-06-13T21:28:33
+#+DATE: 2026-06-14T05:02:36
 
 [OBS id:obs.tests.last-first-failure src:tests/run.py conf:high]
   This generated record captures the first failing test from the latest
@@ -9,7 +9,7 @@
 * Failure
 - Test: =codegen.rt-wisp-return-string=
 - Status: =FAIL=
-- Duration: =[ 137.52 ] ms=
+- Duration: =[ 185.31 ] ms=
 - Reason: =stdout did not end with tests/codegen/rt_wisp_return_string.stdout=
 - Fixture: =tests/codegen/rt_wisp_return_string.mon=
 

@@ -1,0 +1,42 @@
+#+TITLE: From C/Rust
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+
+[[file:index.org][<- Back to Index]] · [[file:syntax.org][Syntax]] · [[file:ffi.org][C FFI]]
+
+* C Comparison
+
+| C concept              | Monad equivalent                 |
+|------------------------+----------------------------------|
+| =int x = 5;=            | =(define x 5)=                    |
+| =int add(int a, int b)= | =(define (add a b -> Int) (+ a b))|
+| =struct Point{int x;}=  | =(layout Point [x :: Int])=       |
+| =if (x) {a} else {b}=   | =(if x a b)=                      |
+| =while (x) {body}=      | =(while x body ...)=              |
+| =printf()=              | =(show expr)=                     |
+| =// comment=            | =;; comment=                      |
+| =int *ptr=              | =(Pointer ptr)= via include       |
+
+* Rust Comparison
+
+| Rust concept            | Monad equivalent                 |
+|-------------------------+----------------------------------|
+| =fn f(x: i32) -> i32=   | =(define (f x -> Int) ...)=       |
+| =enum Option<T>=        | =(data Option a None (Some a))=   |
+| =match x { ... }=       | =(match x with ...)=              |
+| =let mut x=             | =(define x 5 :mutable) (set! x 6)|
+| =vec![1,2,3]=           | =(list 1 2 3)= or ='(1 2 3)=     |
+| =String=                | String (immutable, UTF-8)        |
+| =x.unwrap()=            | =(?? x default)=                  |
+
+* Key Differences
+
+- No ownership/borrowing — arena-allocated GC not needed
+- No `;` statement terminators — everything is an expression
+- Macros are compile-time functions, not special syntax
+
+* Context Links
+
+- [[file:syntax.org][Syntax Reference]]
+- [[file:ffi.org][C FFI]]
+- [[file:types.org][Types]]

@@ -3686,6 +3686,56 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                  * Wisp value binding sugar. Lisp keeps the bracketed layer
                  * explicit as (define [name :: Type] value), but Wisp users
                  * may write the clearer unbracketed form. */
+
+                /* Case 0a: define [name :: Type] value :attr val ...
+                 * The name is a full bracketed annotation. after_name points
+                 * directly at the value (and any trailing :alias etc).
+                 * Collect the entire rest of the line as one token so the
+                 * reader sees: (define [name :: Type] value :alias sym)     */
+                if (*after_define == '[') {
+                    const char *rest = after_name;
+                    const char *rest_end = get_logical_line_end(rest);
+                    while (rest_end > rest && (*(rest_end-1) == ' ' || *(rest_end-1) == '\t')) rest_end--;
+                    if (rest < rest_end) {
+                        char *bracket = strndup(after_define, name_end - after_define);
+                        char *rest_src = strndup(rest, rest_end - rest);
+                        /* expand the value part through wisp but keep attrs raw */
+                        /* find where value ends and attrs begin */
+                        const char *attr_p = rest;
+                        /* skip the value token (may be grouped or plain) */
+                        while (*attr_p == ' ' || *attr_p == '\t') attr_p++;
+                        if (*attr_p == '(' || *attr_p == '[' || *attr_p == '{') {
+                            attr_p = skip_balanced_chars(attr_p);
+                        } else {
+                            while (*attr_p && *attr_p != ' ' && *attr_p != '\t' && *attr_p != ';') attr_p++;
+                        }
+                        /* attr_p now points past the value, at whitespace before :alias */
+                        size_t val_len = attr_p - rest;
+                        char *val_src = strndup(rest, val_len);
+                        char *val_tok = wisp_expand_expr_snippet(at, val_src);
+                        free(val_src);
+                        /* collect rest of line (attrs like :alias sym) */
+                        while (*attr_p == ' ' || *attr_p == '\t') attr_p++;
+                        SB full_val; sb_init(&full_val);
+                        sb_puts(&full_val, val_tok);
+                        free(val_tok);
+                        if (*attr_p && *attr_p != ';') {
+                            sb_putc(&full_val, ' ');
+                            for (const char *_c = attr_p; _c < rest_end; _c++)
+                                sb_putc(&full_val, *_c);
+                        }
+                        char *full_val_str = sb_take(&full_val);
+                        wts_push(&s, "define", indent, lineno);
+                        wts_push(&s, bracket,  indent, lineno);
+                        wts_push(&s, full_val_str, indent, lineno);
+                        free(bracket);
+                        free(full_val_str);
+                        free(rest_src);
+                        free(raw);
+                        lineno++;
+                        goto next_line;
+                    }
+                }
                 if (after_name[0] == ':' && after_name[1] == ':' &&
                     !wisp_find_top_level_arrow(after_name + 2)) {
                     size_t name_len = name_end - after_define;
@@ -3717,6 +3767,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                         char *value_src = strndup(value_start, (size_t)(value_end - value_start));
                         char *value_tok = wisp_expand_expr_snippet(at, value_src);
                         free(value_src);
+                        const char *attr_scan_src = value_end;
 
                         size_t type_len = (size_t)(type_end - type_start);
                         size_t blen = name_len + type_len + 8;
@@ -3725,11 +3776,40 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                                  (int)name_len, after_define,
                                  (int)type_len, type_start);
 
+                        /* Collect trailing :keyword value pairs on same line
+                         * e.g. :alias pi so they arrive inside the define   */
+                        const char *attr_scan = attr_scan_src;
+                        fprintf(stderr, "DEBUG ATTR: attr_scan_src='%s' first_char=%d\n", attr_scan_src, (unsigned char)attr_scan_src[0]);
+                        while (*attr_scan == ' ' || *attr_scan == '\t') attr_scan++;
+                        fprintf(stderr, "DEBUG ATTR: after skip spaces='%s' is_colon=%d next=%d\n", attr_scan, (*attr_scan == ':'), (unsigned char)attr_scan[1]);
+                        char *value_with_attrs = NULL;
+                        if (*attr_scan == ':' && *(attr_scan + 1) != ':') {
+                            SB attr_sb; sb_init(&attr_sb);
+                            sb_puts(&attr_sb, value_tok);
+                            free(value_tok);
+                            while (*attr_scan == ':' && *(attr_scan + 1) != ':') {
+                                const char *kw_s = attr_scan;
+                                while (*attr_scan && *attr_scan != ' ' && *attr_scan != '\t' && *attr_scan != ';') attr_scan++;
+                                sb_putc(&attr_sb, ' ');
+                                for (const char *_c = kw_s; _c < attr_scan; _c++) sb_putc(&attr_sb, *_c);
+                                while (*attr_scan == ' ' || *attr_scan == '\t') attr_scan++;
+                                if (*attr_scan && *attr_scan != ';' && *attr_scan != ':') {
+                                    const char *vs = attr_scan;
+                                    while (*attr_scan && *attr_scan != ' ' && *attr_scan != '\t' && *attr_scan != ';') attr_scan++;
+                                    sb_putc(&attr_sb, ' ');
+                                    for (const char *_c = vs; _c < attr_scan; _c++) sb_putc(&attr_sb, *_c);
+                                }
+                                while (*attr_scan == ' ' || *attr_scan == '\t') attr_scan++;
+                            }
+                            value_with_attrs = sb_take(&attr_sb);
+                        } else {
+                            value_with_attrs = value_tok;
+                        }
                         wts_push(&s, "define", indent, lineno);
                         wts_push(&s, bracket,  indent, lineno);
-                        wts_push(&s, value_tok, indent, lineno);
+                        wts_push(&s, value_with_attrs, indent, lineno);
                         free(bracket);
-                        free(value_tok);
+                        free(value_with_attrs);
                         free(raw);
                         lineno++;
                         continue;

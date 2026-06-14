@@ -1,0 +1,57 @@
+#+TITLE: C FFI (Foreign Function Interface)
+#+STARTUP: showeverything
+#+OPTIONS: toc:nil
+
+[[file:index.org][<- Back to Index]]
+
+Monad calls C functions directly — no binding generators. The
+=include= directive ([[file:../ffi.c]]) parses C headers via libclang and
+registers typed wrappers in the environment.
+
+* Include Syntax
+
+| Form                      | Use case               |
+|---------------------------+------------------------|
+| =(include "math.h")=        | Local / relative path  |
+| =(include "GLFW/glfw3.h")=  | System headers (use string path) |
+
+* Type Mapping
+
+| C type | Monad type     |
+|--------+----------------|
+| =int=    | =Int=             |
+| =double= | =Float=           |
+| =float=  | =Float=           |
+| =char=   | =Char=            |
+| =char*=  | =String=          |
+| =T *=    | =Pointer :: T=    |
+| =void=   | =Unit=            |
+
+* Real Examples
+
+=(include <GLFW/glfw3.h>)= then call =glfwInit=, =glfwCreateWindow=,
+=glfwSwapBuffers=, =glfwPollEvents= directly (how_to/GlfwSpeedrun.mon).
+
+=(include <raylib.h>)= then call =InitWindow=, =BeginDrawing=,
+=ClearBackground=, =DrawFPS= directly (how_to/RaylibSpeedrun.mon).
+
+=(include <SDL3/SDL.h>)= then call =SDL_Init=, =SDL_CreateWindow=,
+=SDL_SetRenderDrawColor= directly (how_to/SdlSpeedrun.mon).
+
+* Pointer Access
+
+Prefix a variable with =&= to get a C pointer (address-of operator):
+=send(&buf)=.
+
+Heap array syntax =~[...]= is not implemented.
+
+* Limitations
+
+C structs → use [[file:layouts.org][layout types]]. Complex macros may fail
+to parse. Some math functions (=pow=, =sin=) may have runtime issues.
+
+* Context Links
+
+- [[file:../context/ffi.org][context/ffi.org]] — FFI implementation
+- [[file:layouts.org][Layout Types]] — C-compatible memory layouts
+- [[file:from-c.org][Coming from C/Rust]]

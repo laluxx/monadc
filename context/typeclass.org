@@ -290,6 +290,91 @@
   typeclass-aware code paths) ·
   `monadc.context.source-map.typeclass` (source-file-level typeclass map)
 
+* LLM Analysis
+:PROPERTIES:
+:ID: monadc.context.typeclass.llm-analysis
+:CUSTOM_ID: typeclass-llm-analysis
+:CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: LLM assessment of the typeclass system: dictionary-passing implementation, instance resolution, dispatch integration with codegen, and comparison to Haskell/ML module systems.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-14
+:CONTEXT_UPDATED: 2026-06-14
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: typeclass.c, typeclass.h, codegen.c, context/typeclass.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.typeclass.dict-passing-approach conf:high]
+  The dictionary-passing implementation (instance dict struct with method
+  function pointers) is the standard implementation strategy for
+  typeclass dispatch, used by Haskell (GHC) and Rust (trait objects).
+  MonadC's approach of storing the dict alongside the instance in the
+  registry and emitting calls via GetElementPtr + BitCast follows the
+  same pattern. The key difference from GHC is that MonadC's instance
+  resolution happens at codegen time (strcmp dispatch checks tc_is_method),
+  not at type-checking time. This means a type error in instance
+  resolution produces a codegen error rather than a type error, which
+  is unusual but workable — the phase ordering means type errors should
+  be caught before codegen anyway.
+
+[THINK id:think.typeclass.instance-resolution-scope conf:high]
+  MonadC's instance resolution appears to be local (visible instances
+  at the point of use) rather than global (all instances in scope, like
+  Haskell's). This avoids the "orphan instance" problem that plagues
+  Haskell (instances defined in module A for types defined in module B,
+  where A and B don't know about each other). The cost is that the same
+  type may have different instance resolutions in different modules,
+  potentially producing different method implementations for the same
+  (type, class) pair — a form of incoherence. MonadC avoids this by
+  resolving instances at codegen time within a single compilation unit,
+  where all imports are resolved and all instances are known.
+
+[THINK id:think.typeclass.feature-gap conf:high]
+  The current typeclass system is minimal compared to Haskell's: no
+  associated types, no superclass constraints (class Eq a => Ord a),
+  no default method implementations, no instance deriving. Each of
+  these features adds significant complexity:
+  - Associated types require type-level computation during instance
+    resolution, pulling in the dependent type checker
+  - Superclass constraints require the solver to build a dependency
+    graph of instance dictionaries
+  - Default methods require method bodies that can be overridden
+  - Deriving requires code generation for standard instances (Eq, Ord,
+    Show) based on the type structure
+  The current minimal design is the right starting point — adding these
+  features later is easier than removing overengineering.
+
+[THINK id:think.typeclass.codegen-perf-characteristics conf:medium]
+  The dictionary-passing implementation has predictable performance:
+  each method call is an indirect function call through the dict (load
+  dict ptr, GEP to method slot, load fn ptr, call). This is ~3 loads
+  more than a direct call, which is negligible for most code but matters
+  in hot loops. GHC's specialization pragmas (SPECIALIZE) generate
+  direct-call variants for known concrete types. MonadC's monomorphization
+  cache should naturally produce specialized variants when the concrete
+  instance type is known at compile time, achieving the same effect
+  without explicit pragmas. This is worth verifying: if the cache
+  already specializes, the typeclass system gets zero-cost abstraction
+  for free.
+
+[THINK id:think.typeclass.strcmp-hook-implication conf:medium]
+  The tc_is_method hook in the strcmp dispatch means every comparison
+  operation (==, !=, <, >, <=, >=) first checks whether the symbol is
+  a class method, and only falls through to the numeric/string comparison
+  if it's not. This adds overhead to every comparison in the program,
+  even those that don't use typeclasses. For a hot loop with integer
+  comparisons, this is an unnecessary strcmp call per comparison. The
+  overhead is bounded (one extra strcmp per comparison operation) and
+  LLVM is likely to inline the check in optimized builds. But if
+  typeclass dispatch is rare (which it will be until the standard
+  library uses typeclasses heavily), the hook imposes a tax on every
+  comparison for a feature most code doesn't use.
+
 [INF id:inf.typeclass.env-connects from:obs.typeclass.instance-reg.fn,obs.typeclass.lookup.method-class conf:high]
   connects-to -> `monadc.context.codegen-ops.architecture` (strcmp dispatch at
   layer 2 checks =tc_is_method= to resolve class method calls to instance

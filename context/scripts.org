@@ -253,6 +253,84 @@
 :CONFIDENCE: high
 :END:
 
+* LLM Analysis
+:PROPERTIES:
+:ID: monadc.context.scripts.llm-analysis
+:CUSTOM_ID: scripts-llm-analysis
+:CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: LLM assessment of the Python helper scripts: test runners, ASM generators, fuzz system, visualizer. Language choice rationale, script quality, and maintenance burden.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-14
+:CONTEXT_UPDATED: 2026-06-14
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: tests/run.py, tests/run-core.py, tests/fuzz-codegen.py, tests/create-asm-tests.py, context/scripts.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.scripts.python-vs-c-utility conf:high]
+  The choice of Python for helper scripts is the right call for a
+  self-hosting compiler project. These scripts are utility code (test
+  runners, generators, visualizers) that are used during development
+  but not part of the compiled product. Python's lower development cost
+  (no compile cycle, dynamic typing, rich standard library for text
+  processing) outweighs the performance cost for these tasks. The key
+  design rule is that the compiler itself must be self-hosting (compiled
+  by its own output), but the development tooling can be in any language.
+  Python is the pragmatic choice: universally available, well-suited
+  for text processing and test orchestration, and the team (you) already
+  knows it.
+
+[THINK id:think.scripts.runner-architecture-diversity conf:medium]
+  The diversity of test runners (run.py for all tests with TSV parsing,
+  run-core.py for core library tests, run-all.sh for shell-based
+  continuous mode, fuzz-codegen.py for property-based fuzzing) indicates
+  organic growth rather than deliberate design. Each runner evolved to
+  serve a specific testing need, and they share minimal code. The
+  result is duplication: run.py has its own TSV parser, run-all.sh has
+  its own test discovery logic, and both independently handle output
+  comparison and failure reporting. Consolidating them into a single
+  test harness with pluggable test types (compile/run, fuzz, TSV-based)
+  would reduce maintenance burden and ensure consistent failure reporting.
+
+[THINK id:think.scripts.asm-generator-value conf:medium]
+  The ASM test generator (create-asm-tests.py) is a template for how
+  other combinatorial test surfaces should be handled. Its approach
+  (mnemonic list → instruction variants → expected output) could be
+  generalized to a test-generation framework. For example, generating
+  type combinator tests (all pairs of TypeKind operators) or dispatch
+  handler tests (all strcmp operations with argument shape variants)
+  would follow the same pattern: declarative input spec → code generator
+  → validated output. A reusable =generate_tests(spec, template)=
+  function in a shared Python module would encourage this pattern.
+
+[THINK id:think.scripts.fuzzer-maturity conf:high]
+  The fuzz-codegen.py system is surprisingly mature for a hobby compiler.
+  Property-based testing with algebraic laws (commutativity, associativity,
+  distributivity) catches a class of bugs that unit tests miss entirely.
+  The type-directed generation (generating expressions of specific types
+  rather than random ASTs) is what separates useful fuzzers from brute-force
+  random generators. The current property categories (arithmetic, comparison,
+  control, minmax) cover the most common algebraic laws, but expanding to
+  set/map/vector properties would test the collection operations that are
+  most likely to have subtle bugs. The fuzzer's value will only increase
+  as the codegen dispatch table grows.
+
+[THINK id:think.scripts.visualizer-py-as-parse-dependency conf:medium]
+  The context-visualizer.py script is the only consumer of a subset of
+  the context format (the record bracket notation), which means it's the
+  de facto reference parser for that subset. If the format changes, the
+  visualizer script must be updated in lockstep. This creates a dependency
+  where a format change is blocked by the availability of a Python
+  developer to update the visualizer. A formal grammar for the record
+  notation (even a simple PEG) would serve as a specification that both
+  the visualizer and any future parsers can reference. The grammar file
+  itself could live in context/format.org or context/grammar.org.
+
 [INF id:inf.scripts.connects-to from:obs.scripts.run-py.purpose,obs.scripts.run-core-py.purpose,obs.scripts.test-run-py.purpose,obs.scripts.create-asm-tests.purpose,obs.scripts.fuzz-codegen-py.purpose,obs.scripts.visualizer-py.purpose conf:high]
   connects-to -> `monadc.context.tests-arch` (test runners exercise test suite) ·
   `monadc.context.asm` (ASM generators test inline assembly) ·

@@ -1,0 +1,55 @@
+#+TITLE: Testing
+#+STARTUP: showeverything
+#+OPTIONS: toc:nil
+
+[[file:index.org][<- Back to Index]]
+
+Monad has a built-in test system. Tests are embedded in source files
+using =(tests ...)= blocks and run with the CLI.
+
+* Test Blocks
+
+Wrap assertions in =(tests ...)= ([[file:../reader.c::5280]]):
+
+#+BEGIN_SRC monad
+(tests
+  (assert-eq (square 2)  4   "square of 2")
+  (assert-eq (square 0)  0   "square of 0")
+  (assert-eq (square -3) 9   "square of -3"))
+#+END_SRC
+
+* assert-eq Syntax
+
+=(assert-eq actual expected label)= — compares =actual= to =expected=,
+prints =label= and PASS/FAIL.
+
+* Running Tests
+
+| Command                     | Description                    |
+|-----------------------------+--------------------------------|
+| =monad test file.mon=         | Compile + run embedded tests   |
+| =monad --test file.mon=       | Same (alternative flag)        |
+
+A file can have multiple =(tests ...)= blocks. Output example:
+
+#+BEGIN_SRC
+square of 2: PASS
+square of 0: PASS
+3 passed, 0 failed
+#+END_SRC
+
+* Test File Conventions
+
+Codegen test fixtures in =tests/codegen/= have a =TEST-ID= header
+comment. Expected stdout in =.stdout=, expected AST in =.json=.
+Run all:
+
+#+BEGIN_SRC sh
+python3 tests/run.py
+#+END_SRC
+
+* Context Links
+
+- [[file:../context/tests.org][context/tests.org]] — Test architecture
+- [[file:build.org][Build System]] — Build and test commands
+- [[file:../tests/run.py][tests/run.py]] — Test runner script

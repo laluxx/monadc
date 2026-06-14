@@ -1,0 +1,140 @@
+#+TITLE: Refinement Types
+#+CONTEXT: types.org, how_to/RefinementType.mon
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+
+[[file:index.org][<- Back to Index]] · [[file:types.org][Types]]
+
+Refinement types annotate a base type with a predicate, forming the
+subset of values that satisfy it.
+
+* Simple Alias
+
+A =type= without braces is a transparent alias — no predicate, no
+predicate function generated:
+
+#+BEGIN_SRC monad
+(type Code List)
+(type UserId Int)
+(type UserName String)
+(type Rows List)
+(type Dict Map)
+(type Bytes Arr)
+(type Count Int "integer count")
+(type Slug String :doc "url slug")
+(type Email String :doc "email text" :alias Contact)
+(type Bytes Arr :alias Buffer)
+#+END_SRC
+
+Types MUST start with a capital letter. The alias inherits everything
+from the base type, including docstring.
+
+* Refinement With Predicate
+
+Set-builder notation with ∈ (U+2208, element of):
+
+#+BEGIN_SRC monad
+(type Positive { x ∈ Int | (> x 0) })
+(type NonNegative { x ∈ Int | (>= x 0) })
+(type Negative { x ∈ Int | (< x 0) })
+(type NonZero { x ∈ Int | (!= x 0) })
+(type Even { x ∈ Int | (= (% x 2) 0) })
+(type Odd { x ∈ Int | (= (% x 2) 1) })
+#+END_SRC
+
+Each refinement generates a predicate function: =Positive?=,
+=NonNegative?=, =Even?=, etc.
+
+** Floats
+
+#+BEGIN_SRC monad
+(type PositiveFloat { x ∈ Float | (> x 0.0) })
+(type UnitFloat { x ∈ Float | (and (>= x 0.0) (<= x 1.0)) })
+(type NotNaN { x ∈ Float | (= x x) })
+#+END_SRC
+
+** Strings
+
+#+BEGIN_SRC monad
+(type NonEmptyString { s ∈ String | (> (count s) 0) })
+(type ShortString { s ∈ String | (< (count s) 10) })
+(type HttpUrl { s ∈ String | (starts-with? s "http") })
+(type MarkdownFile { s ∈ String | (ends-with? s ".md") })
+(type NoSpaces { s ∈ String | (not (contains? s " ")) })
+(type CleanName { s ∈ String | (and (> (count s) 0) (not (contains? s "/")) (not (contains? s "\\\\"))) })
+#+END_SRC
+
+** Collections
+
+#+BEGIN_SRC monad
+(type NonEmptyList { xs ∈ List | (> (count xs) 0) })
+(type SmallList { xs ∈ List | (< (count xs) 8) })
+(type NonEmptySet { s ∈ Set | (> (count s) 0) })
+(type SingletonSet { xs ∈ Set | (= (count xs) 1) })
+(type ConfigMap { m ∈ Map | (and (> (count m) 0) (contains? m :config)) })
+(type NonEmptyArr { xs ∈ Arr | (> (count xs) 0) })
+#+END_SRC
+
+** Ranges
+
+#+BEGIN_SRC monad
+(type ByteRange { n ∈ Int | (and (>= n 0) (< n 256)) })
+(type Port { n ∈ Int | (and (> n 0) (< n 65536)) })
+(type Year { y ∈ Int | (and (>= y 1970) (< y 3000)) })
+(type SafeIndex { n ∈ Int | (and (>= n 0) (< n 1024) (!= n 666)) })
+#+END_SRC
+
+* Metadata
+
+Metadata follows the type form, on the same line or indented with
+=:doc= and =:alias= keywords:
+
+#+BEGIN_SRC monad
+(type PositiveAlias { x ∈ Int | (> x 0) } :alias Natural)
+(type DocumentedPositive { x ∈ Int | (> x 0) } :doc "positive ints")
+(type NameText { s ∈ String | (> (count s) 0) } :doc "names" :alias Identifier)
+#+END_SRC
+
+* Predicate Functions
+
+Each refinement type =T= generates =T?= at compile time:
+
+#+BEGIN_SRC monad
+Positive?  ;; Int -> Bool
+Even?      ;; Int -> Bool
+NonEmptyString?  ;; String -> Bool
+#+END_SRC
+
+* Compound Predicates
+
+Arbitrary boolean expressions with =and=, =or=, =not=:
+
+#+BEGIN_SRC monad
+(type RangedScore { n ∈ Int | (and (>= n 0) (<= n 100) (!= n 13)) })
+(type ZeroOrOne { n ∈ Int | (or (= n 0) (= n 1)) })
+(type NotFortyTwo { n ∈ Int | (not (= n 42)) })
+#+END_SRC
+
+Predicates can use arithmetic, comparison, type predicates:
+
+#+BEGIN_SRC monad
+(type SumBound { n ∈ Int | (< (+ n 1) 10) })
+(type MultipleOfThree { n ∈ Int | (= (% n 3) 0) })
+(type Numeric { x ∈ Number | (Number? x) })
+(type Collectionish { x ∈ Coll | (or (List? x) (Map? x)) })
+#+END_SRC
+
+* Notes
+
+- All examples above are from [[file:../tests/reader-refinements.tsv][reader-refinements.tsv]] (parser tests)
+- Predicate functions exist at the syntax level; their compilation
+  depends on the compiler phase
+- Types MUST start with a capital letter
+- The =∈= symbol is U+2208, ∈
+
+* Context Links
+
+- [[file:types.org][Types]] — type system overview
+- [[file:../how_to/RefinementType.mon][how_to/RefinementType.mon]] — refinement type experiments
+- [[file:../tests/reader-refinements.tsv][tests/reader-refinements.tsv]] — 106 parser tests
+- [[file:../context/types.org][context/types.org]] — type representation

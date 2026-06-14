@@ -163,6 +163,16 @@
   C-style literal adjacency would mostly hide typos and produce confusing
   downstream type errors.
 
+[INF id:inf.language.info-pages from:monadc.context.language.file-metadata conf:high]
+  User-facing language reference pages live in [[file:../info/index.org][info/]]. They cover
+  the language from the user's perspective, while this file covers compiler
+  internals. See:
+  - [[file:../info/intro.org][info/intro.org]] — language intro and philosophy
+  - [[file:../info/syntax.org][info/syntax.org]] — full syntax reference
+  - [[file:../info/types.org][info/types.org]] — type system reference
+  - [[file:../info/core.org][info/core.org]] — built-in functions
+  - [[file:../info/tutorial.org][info/tutorial.org]] — step-by-step tutorial
+
 * Codegen Dispatch Architecture
 :PROPERTIES:
 :ID: monadc.context.language.codegen-dispatch

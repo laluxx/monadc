@@ -166,6 +166,80 @@
   include platform-specific code at parse time) ·
   `monadc.context.source-map.features` (source map entry for features.c/h)
 
+* LLM Analysis
+:PROPERTIES:
+:ID: monadc.context.features.llm-analysis
+:CUSTOM_ID: features-llm-analysis
+:CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: LLM assessment of the feature flag system: conditional compilation design, feature detection, runtime flags, and the tension between compile-time and runtime feature selection.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-14
+:CONTEXT_UPDATED: 2026-06-14
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: features.c, features.h, context/features.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.features.conditional-syntax conf:high]
+  The =#+LINUX= / =#+X86-64= / =#---= syntax for feature conditionals
+  is clean and minimal. It reuses the existing comment-like prefix (#+)
+  to introduce feature blocks, making it visually distinct from code
+  while being easy to parse. The =#---= terminator is less obvious —
+  it looks like a malformed comment rather than a deliberate end marker.
+  A more explicit terminator like =#+END= or =#+ENDFEATURE= would be
+  clearer, but the current syntax has the advantage of being short and
+  symmetric with the opening markers. The choice matters because
+  terminal-friendly feature conditionals must be easy to type.
+
+[THINK id:think.features.platform-vs-version-flags conf:high]
+  The feature system serves two distinct purposes that share the same
+  syntax: platform detection (is this Linux? x86-64?) and feature
+  versioning (is experimental-foo available?). Platform features are
+  static per compilation (determined at configure time by detect_features).
+  Version features can change as the compiler evolves. Treating them
+  identically means a version feature disabled in v0.4 might produce
+  a "feature not found" error in v0.3 that compiled fine — the error
+  message is about the present compiler, not the past source. A
+  deprecation mechanism for version features (=#+deprecated-feature= with
+  a warning rather than an error) would smooth transitions.
+
+[THINK id:think.features.detect-vs-inject conf:medium]
+  The current flow (detect_features writes to env, reader checks has_feature)
+  is simple but couples platform detection to the environment setup phase.
+  An alternative: feature detection as a separate pre-pass that generates
+  a feature bitmask, which the reader checks via a simple array lookup.
+  This would decouple feature detection from environment initialization
+  and allow the reader to run in a feature-feature mode without a full env.
+  The current coupling is fine for the CLI compiler but would be an issue
+  if the reader is extracted as a library.
+
+[THINK id:think.features.reader-integration-point conf:medium]
+  The feature block parsing happens inside the reader (parse_feature_blocks
+  at reader.c:6645), which means feature conditionals are handled at the
+  syntax level before macro expansion. This is the right place for
+  platform conditionals (you want to exclude platform-specific code
+  before any semantic analysis), but it means feature conditionals
+  cannot reference macro-defined features (the macro expander hasn't
+  run yet). If the user writes =#+MY_MACRO_FEATURE=, it will not be
+  recognized because MY_MACRO_FEATURE hasn't been defined yet. This is
+  a documented limitation of the current approach.
+
+[THINK id:think.features.test-utility conf:medium]
+  The feature system is valuable for testing: you can write test cases
+  that exercise platform-specific code paths by setting feature flags
+  in the test environment. The =tests/run.py= harness could support a
+  =--features= flag that injects feature keywords into the test
+  environment, enabling tests like "compile this Linux-specific code
+  on macOS by setting the LINUX feature flag." This would dramatically
+  increase test portability. Currently, platform-specific tests are
+  silently skipped on the wrong platform (the feature block excludes
+  them), which means the test suite covers less on non-Linux platforms.
+
 [INF id:inf.features.env from:obs.features.detect_features conf:high]
   =detect_features= is called during environment initialization (Phase 4 in
   =compile_one=) to populate =*features*= in the environment with keyword values.

@@ -44,6 +44,10 @@
 [OBS id:obs.context.build.file src:context/build.org conf:high]
 This file records build, verification, and installation context.
 
+[INF id:inf.build.info-ref from:obs.context.build.file conf:high]
+  User-facing build and CLI docs: [[file:../info/build.org][info/build.org]] and
+  [[file:../info/cli.org][info/cli.org]].
+
 #+CAPTION: Build Verification Ladder
 | Step    | Command           | Privilege | Required Before |
 |---------+-------------------+-----------+-----------------|
@@ -173,6 +177,84 @@ may fail if no password is provided.
 :CONTEXT_STATUS: active
 :CONFIDENCE: high
 :END:
+
+* LLM Analysis
+:PROPERTIES:
+:ID: monadc.context.build.llm-analysis
+:CUSTOM_ID: build-llm-analysis
+:CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: LLM assessment of the build system structure: Makefile design, debug/asan/release modes, install layout, and the verification ladder.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-14
+:CONTEXT_UPDATED: 2026-06-14
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: Makefile, context/build.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.build.makefile-simplicity conf:high]
+  The decision to use a plain Makefile (no CMake, no autotools, no Meson)
+  is the right call for a C project of this scale. Make is universally
+  available on POSIX systems, trivially understandable, and sufficient
+  for a single-binary project with a few runtime libraries. Adding a
+  meta-build system would add complexity (CMakeLists.txt is often longer
+  than the equivalent Makefile for simple projects) without proportional
+  benefit. The three build modes (debug/asan/release) are the minimum
+  viable set: fast iteration, memory safety checking, and optimized
+  builds. The asan mode is particularly valuable for a compiler that
+  uses arena allocation heavily — ASan catches the arena overruns that
+  Valgrind might miss.
+
+[THINK id:think.build.verification-ladder-insight conf:high]
+  The verification ladder (make → make test → sudo make install → verify
+  with target project) is a workflow insight that goes beyond build
+  mechanics. It encodes the deployment safety check that every compiler
+  project needs: the installed compiler must be able to compile a real
+  project before we call the deployment done. Most compiler projects
+  separate "build" from "test" from "install" without connecting them
+  as a sequential verification chain. The ladder formalizes the release
+  process as a sequence of increasingly strict checks, each one
+  depending on the previous passing. This prevents the common mistake
+  of installing a build that passes tests but fails in the field.
+
+[THINK id:think.build.install-layout-cleanliness conf:medium]
+  The install layout (bin/, lib/, include/, share/) follows the Filesystem
+  Hierarchy Standard (FHS) convention, which is the right choice for
+  system-wide installation. The monad binary goes in bin/, the runtime
+  library (libmonad.a) goes in lib/, headers go in include/, and support
+  files go in share/. This is predictable for system administrators and
+  matches the layout produced by most open-source C projects. The
+  absence of a pkg-config (.pc) file is a minor omission — downstream
+  projects that link against libmonad.a currently need to hardcode the
+  library path or duplicate the llvm-config logic.
+
+[THINK id:think.build.llvm-config-discovery conf:medium]
+  The LLVM discovery mechanism (llvm-config --cxxflags --ldflags --libs)
+  is the standard approach but fragile in practice. Different LLVM
+  installations (system packages, Homebrew, from-source builds, LLVM 17
+  vs 19) produce different flag combinations, and llvm-config output
+  varies between versions. The current Makefile's approach (capture all
+  flags at build time) works if llvm-config exists and returns sensible
+  values, but fails silently if llvm-config returns empty or wrong flags
+  (the compilation fails with obscure linker errors). A configure-time
+  check (=make configure= or a configure.sh script) that validates
+  llvm-config output before building would catch misconfigurations early.
+
+[THINK id:think.build.release-build-defaults conf:medium]
+  The fact that =make= (without target) defaults to debug mode is the
+  right choice for development but the wrong default for first-time
+  users who just cloned the repo. A first-time builder expects =make=
+  to produce an optimized binary. The convention of =make release= for
+  optimized builds is clear once you know it, but discoverable only by
+  reading the Makefile or documentation. Adding a =make= target that
+  prints "Usage: make [debug|release|asan|test|install]" with no args
+  would guide first-time users without changing the behavior for
+  experienced developers.
 
 [INF id:inf.build.connects-to from:obs.build.purpose conf:high]
   connects-to -> `monadc.context.makefile` (build targets documented in

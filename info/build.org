@@ -1,0 +1,41 @@
+#+TITLE: Build System
+#+STARTUP: showeverything
+#+OPTIONS: toc:nil
+
+[[file:index.org][<- Back to Index]] · [[file:cli.org][CLI Reference]]
+
+** Compilation Pipeline
+
+#+BEGIN_SRC
+source → wisp → reader → macro → infer → dep → codegen → emit
+#+END_SRC
+
+| Stage   | Source    | Description                              |
+|---------+-----------+------------------------------------------|
+| Wisp    | [[file:../wisp.c]]  | Indentation-based syntax → S-expressions |
+| Reader  | [[file:../reader.c]] | S-expressions → AST nodes                |
+| Macro   | [[file:../macro.c]]  | Macro calls → expanded AST               |
+| Infer   | [[file:../infer.c]]  | Constraint generation and unification    |
+| Dep     | [[file:../dep.c]]    | Bidirectional dependent type checking    |
+| Codegen | [[file:../codegen.c]] | AST → LLVM IR                            |
+| Emit    | LLVM TargetMachine   | LLVM IR → =.o=                           |
+
+** Object Files and Caching
+
+Library modules (non-main) check timestamps: if =.o= is newer than source, emission is skipped. Core module objects are cached under =~/.cache/monad/core/=. Package objects are written to =build/=.
+
+** Linking
+
+=clang= links all =.o= files with =/usr/local/lib/libmonad.a=, =llvm-config --ldflags --libs core=, =-lm=, and =-lgmp=. Uses mold or LLD linker when available (fallback: system =ld=).
+
+** Package Manifest
+
+| File              | Role                    |
+|-------------------+-------------------------|
+| =package.yaml=    | Project metadata, executable definition, source dirs, compiler options |
+
+** Context Links
+
+- [[file:../context/buildsystem.org][context/buildsystem.org]] — implementation
+- [[file:../buildsystem.c][buildsystem.c]] — source
+- [[file:../cli.c][cli.c]] — command dispatch

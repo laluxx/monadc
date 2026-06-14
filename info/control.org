@@ -1,0 +1,45 @@
+#+TITLE: Control Flow
+#+CONTEXT: syntax.org
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+
+[[file:index.org][<- Back to Index]] · [[file:syntax.org][Syntax]] · [[file:core.org][Core Lib]]
+
+Control forms are expressions (they return values). Codegen dispatch
+at [[file:../codegen.c::7471]].
+
+| Form   | Example                             | Codegen source        |
+|--------+-------------------------------------+-----------------------|
+| if     | =(if cond t f)=                       | [[file:../codegen.c::7572]] |
+| cond   | =(cond [t1 e1] ...)=                  | compiler macro        |
+| unless | =(unless cond body ...)=              | builtin               |
+| while  | =(while cond body ...)=               | [[file:../codegen.c::7957]] |
+| begin  | =(begin e1 e2 ...)=                   | [[file:../codegen.c::7561]] |
+| do     | =(do expr ...)=                       | alias for =begin=     |
+| with   | =(with [x 1 y 2] body)=              | compiler macro        |
+| for    | =(for x '(1 2 3) (show x))=          | [[file:../codegen.c::8004]] |
+| let    | =(let [x 1 y 2] (+ x y))=           | compiler macro        |
+| let*   | =(let* [x 1 y (+ x 1)] (+ x y))=    | compiler macro        |
+| letrec | =(letrec [f (lambda ...)] (f 0))=    | compiler macro        |
+
+** Mutation
+
+| Form | Example                  | Codegen source          |
+|------+--------------------------+-------------------------|
+| set! | =(set! x 42)=            | [[file:../codegen.c::7471]] |
+| <-   | =(<- x 42)=              | desugars to =set!=      |
+| set! | =(set! obj.field val)=  | [[file:../codegen.c::7471]] |
+| <-   | =(<- obj.field val)=    | desugars to =set!=      |
+
+The =<-= sugar (=x <- 42=) desugars to =(set! x 42)=
+([[file:../reader.c]]). Valid in both S-expression and Wisp syntax.
+
+** Null-coalescing
+
+=(?? expr default)= ([[file:../codegen.c::5763]]) returns =expr= if not
+=nil=, =default= otherwise.
+
+* Context Links
+
+- [[file:../context/codegen.org][context/codegen.org]] — Codegen for control forms
+- [[file:../context/infer.org][context/infer.org]] — Type inference for control

@@ -1070,6 +1070,87 @@
   `monadc.context.language.constructs.define-function` (define+lambda
   produces either typed or closure ABI functions at codegen.c:4106)
 
+* LLM Analysis
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.llm-analysis
+:CUSTOM_ID: codegen-ops-llm-analysis
+:CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: LLM assessment of the strcmp dispatch architecture, scaling risks, and improvement strategies for the 160+ operation codegen dispatch layer.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-14
+:CONTEXT_UPDATED: 2026-06-14
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c:4106-13302, context/codegen-ops.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.codegen-ops.strcmp-scaling conf:high]
+  The strcmp dispatch architecture in codegen.c is the single largest
+  maintenance liability in the compiler. At 83 strcmp handlers spanning
+  ~8300 lines, plus 94 register_builtins entries, the linear-scan-if-else
+  chain hits O(n) dispatch time on every expression. For a function
+  call like =(+ 1 2 3)=, codegen resolves + through a strcmp chain of
+  ~160 operations. This is already slow; at 300+ operations it becomes
+  untenable. The current architecture works because strcmp is fast on
+  short symbol names and the compiler processes one expression at a time,
+  but the maintenance cost (inserting a new handler means finding the
+  right alphabetical slot in the if-else chain) is the real problem.
+
+[THINK id:think.codegen-ops.strcmp-alternatives conf:high]
+  Three alternative dispatch strategies, ranked by implementation effort:
+  1. Hash-based dispatch (perfect hash or djb2 on the symbol name):
+     O(1) lookup, same portable C, minimal refactor of handler signatures.
+     A switch on hash values with collision checking in each case.
+     Estimated: 1-2 sessions to implement.
+  2. Trie dispatch: prefix-tree on symbol names, O(k) where k is name
+     length. More complex to set up but naturally groups related ops
+     (e.g., "set-*", "get-*", "vec-*"). The trie could also store arity
+     info. Estimated: 2-3 sessions.
+  3. Registration table: a flat array of {name, handler_fn} pairs built
+     at init time, sorted for binary search or hashed. Eliminates the
+     if-else chain entirely. Estimated: 1 session.
+
+[THINK id:think.codegen-ops.builtins-vs-strcmp-gap conf:high]
+  The gap between register_builtins (94 entries) and strcmp handlers (83)
+  with ~15 builtins unreachable from paren-mode is a code smell. Every
+  registered builtin should have a corresponding strcmp handler, or the
+  registration is dead code. The 15 orphan builtins likely correspond to
+  operations that can only be reached via macro expansion or the typeclass
+  dispatch hook (tc_is_method at codegen.c:8907), but this is not
+  documented anywhere. A lint pass asserting "every ENV_BUILTIN has a
+  strcmp handler" would catch rot early.
+
+[THINK id:think.codegen-ops.three-layer-cost conf:high]
+  The three-layer dispatch (layer 1: paren expr ASTType switch, layer 2:
+  strcmp on op symbol, layer 3: switch on arg count) is architecturally
+  clean but means a single operation like =(set-add s 3)= goes through:
+  AST_PAREN → strcmp("set-add", 160 ops) → switch(2 args). Each layer
+  is independently tested, but the composition is not — a correctness
+  bug at any layer produces silent output corruption (wrong codegen).
+  Property-based fuzzing (fuzz-codegen.py) that generates random
+  operation + arg combinations would catch layer-boundary bugs.
+
+[THINK id:think.codegen-ops.counts-interpretation conf:high]
+  The raw counts (83 strcmp, 94 builtins) suggest the codegen dispatch
+  table is larger than typical Lisp/Scheme compilers (which average
+  40-60 special forms). Monad's count is inflated by:
+  - First-class set/map/vector operations that other languages provide
+    via libraries, not the compiler
+  - Separate handlers for typed vs untyped variants of the same operation
+    (set-add vs set-add/typed)
+  - Inline assembly support adding ~10 operations
+  - Typeclass dispatch hooks adding ~5 more
+  This is a genuine cost of the "batteries-included compiler" philosophy:
+  operations that would be library calls in other compilers are strcmp
+  handlers in MonadC. The question is whether the boundary between
+  "compiler builtin" and "library function" could be drawn differently
+  to reduce the dispatch table size without losing performance.
+
 * Counts Summary
 :PROPERTIES:
 :ID: monadc.context.codegen-ops.counts

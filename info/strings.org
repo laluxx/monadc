@@ -1,0 +1,62 @@
+#+TITLE: Strings and Characters
+#+CONTEXT: core.org, syntax.org
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+
+[[file:index.org][<- Back to Index]] · [[file:core.org][Core Library]]
+
+Strings are UTF-8 encoded and immutable. Characters are Unicode
+codepoints of type =Char=.
+
+** String Literals
+
+#+BEGIN_SRC monad
+"hello"  "line1\nline2"  "unicode: \u03C0"
+#+END_SRC
+
+Adjacent string literals are not concatenated — use one literal.
+
+** Character Literals ([[file:../reader.c::1365]])
+
+#+BEGIN_SRC monad
+'a'                ;; Char 'A'
+'\n'               ;; Char newline
+'\x41'             ;; Hex escape (A)
+'\u03C0'           ;; Unicode (π)
+#+END_SRC
+
+Single quotes delimit character literals (=TOK_CHAR=). Supported
+escapes: =\n=, =\t=, =\r=, =\\=, =\'=, =\0=, =\xNN=, =\uNNNN=.
+
+Alternatively, the =(Char x)= conversion function ([[file:../codegen.c::13144]])
+creates a character from an integer codepoint: =(Char 65)= = 'a'.
+
+** Operations
+
+| Function     | Example                       | Returns         |
+|--------------+-------------------------------+-----------------|
+| show         | =(show 42)=                     | "42"            |
+| make-string  | =(make-string 5 'a')=           | "aaaaa"         |
+| count        | =(count "hello")=               | 5               |
+| starts-with? | =(starts-with? "hi" 'h')=      | True            |
+| ends-with?   | =(ends-with? "hi" 'i')=        | True            |
+| contains?    | =(contains? "hello" "ell")=     | True            |
+
+** Indexing ([[file:../codegen.c::9732]])
+
+#+BEGIN_SRC monad
+("hello" 0)   ;; 'h'
+("hello" 1)   ;; 'e'
+#+END_SRC
+
+Uses function-call syntax =("string" i)=. Returns a =Char= at index
+=i=. Also postfix bracket: =xs[0]= ([[file:../reader.c::6621]]).
+
+** String Interpolation
+
+Planned but not implemented.
+
+* Context Links
+
+- [[file:../context/codegen.org][context/codegen.org]] — String codegen
+- [[file:../context/runtime.org][context/runtime.org]] — Runtime representation

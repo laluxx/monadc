@@ -651,6 +651,85 @@
   Mapped to: HM (ground layer) + ITT (modal layer), TERM_EMBED as modal operator,
   shadow pass architecture. Connect: monadc.context.references.layered-modal.
 
+* LLM Analysis
+:PROPERTIES:
+:ID: monadc.context.source-map.llm-analysis
+:CUSTOM_ID: source-map-llm-analysis
+:CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: LLM assessment of the source map system: file-to-purpose mapping, PDF-to-implementation traces, and the role of source-map.org as the project's architecture index.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-14
+:CONTEXT_UPDATED: 2026-06-14
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: context/source-map.org
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.source-map.redundancy-with-per-file-docs conf:high]
+  As the context corpus has grown, source-map.org has shifted from a
+  vital navigation aid to a redundant index. When fewer than half the
+  source files had dedicated context files, source-map.org was essential
+  — it told you what existed and where to find it. Now that every .h
+  file has a dedicated context file (reader.org, types.org, infer.org,
+  etc.), source-map.org duplicates information. Its INF connections
+  (hand-written cross-references) are also duplicated by the per-file
+  INF sections added during the full-coverage documentation pass. The
+  value of source-map.org is now historical: it shows the architecture
+  as it was before the per-file docs existed. Consider demoting it to
+  an auto-generated file listing (ls *.h → .org) with brief annotations.
+
+[THINK id:think.source-map.pdf-traces-quality conf:high]
+  The PDF implementation traces (DOC records with "Mapped to" annotations)
+  are the most valuable part of this file. They encode the answer to "what
+  code exists because we read this paper?" — a question that is otherwise
+  impossible to answer without reading every source file with the paper
+  in mind. The trace quality is uneven: Coquand's type-checking paper
+  has detailed source links (dep_ctx_infer, dep_ctx_check, dep_ctx_conv),
+  while the Baker Linear Lisp trace is vague ("conj!/disj! mutable set
+  ops"). Completing the traces with specific function names and line
+  numbers for all 7 papers would maximize the value of these records.
+  Each trace is a time capsule: if the code diverges from the paper in
+  a future refactoring, the trace documents the original intent.
+
+[THINK id:think.source-map.maintenance-cost conf:medium]
+  Source-map.org has a maintenance cost: every time a new source file
+  is added or a PDF is introduced, the file must be updated. In practice,
+  this means source-map.org is always slightly out of date. The file
+  listing section (the DOC records for each .h file) could be
+  auto-generated from a directory listing. The PDF traces are harder
+  to auto-generate but are the most stable part of the file (papers
+  don't change). An auto-generated component (file listing from ls)
+  with a hand-maintained component (PDF traces) would reduce the
+  maintenance burden while preserving the high-value content.
+
+[THINK id:think.source-map.role-as-bootstrapping-tool conf:high]
+  Source-map.org serves an important bootstrapping role: for a new
+  contributor (or an LLM agent loading the context for the first time),
+  this file provides the quickest path from "what files exist?" to
+  "what does each file do?" The per-file context files (reader.org,
+  codegen.org, etc.) provide depth, but source-map.org provides breadth
+  — a single page that answers "what is this compiler made of?" This
+  role will persist as long as the project has new contributors. Once
+  the contributor base stabilizes and everyone knows the file layout,
+  the file's utility diminishes.
+
+[THINK id:think.source-map.source-location-tracking conf:high]
+  The source location annotations (src:dep.c, src:infer.h:129-156) are
+  the mechanism that makes the entire context-grounded knowledge system
+  work. Every OBS record in every context file points back to a source
+  location. Source-map.org is the map that explains what each location
+  means in the architectural context. Without this file, source anchors
+  point to locations without connecting them to the architecture. With
+  it, every source anchor becomes a link in a chain from "what the code
+  does" (OBS) to "why it exists" (philosophy.org, references.org). This
+  is the epistemological chain that makes the context system more than
+  just organized notes.
+
 [DOC id:doc.source-map.pdfs.types-2020 src:etc/pdfs/BookOfAbstractsTYPES2020.pdf conf:medium]
   TYPES 2020 proceedings — type theory research consensus. Mapped to: NbE
   architecture (Value domain, closures, neutral terms), fuel-limited conversion,

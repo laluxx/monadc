@@ -1,0 +1,38 @@
+#+TITLE: Package Development
+#+STARTUP: showeverything
+#+OPTIONS: toc:nil num:t
+
+[[file:index.org][<- Back to Index]]
+
+* Package layout
+
+Convention (not enforced):
+
+#+BEGIN_SRC
+my-pkg/
+  my-pkg.mon        # main entry, exports API
+  my-pkg-extra.mon  # optional submodules
+  tests/
+    test-foo.mon
+  README.md
+#+END_SRC
+
+* Module Path Resolution
+
+See [[file:modules.org][Module System]] for path resolution rules.
+
+* Versioning
+
+No built-in package manager or versioning. Package management is
+manual =git= + =monad build=.
+
+* Publishing
+
+No package registry exists. Distribute source via git or tarball.
+Future: planned package manager.
+
+* Context Links
+
+- [[file:modules.org][Module System]]
+- [[file:build.org][Build System]]
+- [[file:../context/buildsystem.org][context/buildsystem.org]]

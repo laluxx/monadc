@@ -1,0 +1,31 @@
+#+TITLE: Interactive REPL
+#+STARTUP: showeverything
+#+OPTIONS: toc:nil
+
+[[file:index.org][<- Back to Index]]
+
+| Start method       | Description                        |
+|--------------------+------------------------------------|
+| =monad= (no args)  | Default entry point                |
+| =monad -i=         | Explicit REPL flag                 |
+
+The REPL provides an interactive environment with the following features:
+
+- **Readline**: history navigation (up/down/Ctrl+R), inline editing, persistent history
+- **Auto-print**: every expression result is printed automatically after evaluation
+- **Multi-line editing**: the parser waits for balanced delimiters before evaluating
+- **Input syntax**: both S-expression and Wisp syntax are accepted
+- **Error recovery**: setjmp/longjmp escapes catch parse errors; SIGSEGV and SIGBUS signal handlers catch JIT runtime crashes and return to the prompt without exiting
+- **SIGINT**: Ctrl+C interrupts a running evaluation
+
+| Feature              | Mechanism                           |
+|----------------------+-------------------------------------|
+| Parse recovery       | =setjmp= / =longjmp= in =REPL_PARSE= macro |
+| Runtime crash        | =repl_signal_handler= for SIGSEGV/SIGBUS  |
+| Evaluation abort     | =repl_sigint_handler= for SIGINT          |
+| History / editing    | GNU Readline library                      |
+
+** Context Links
+
+- [[file:../context/repl.org][context/repl.org]] — implementation
+- [[file:../repl.c][repl.c]] — source

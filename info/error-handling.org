@@ -1,0 +1,68 @@
+#+TITLE: Error Handling
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+
+[[file:index.org][<- Back to Index]] · [[file:core.org][Core Library]] · [[file:errors.org][CLI Errors]]
+
+* Error (type)
+
+=(data Error String)= — simple error type carrying a message.
+
+* error (builtin)
+
+=(error "message")= — halts the program at runtime. Use for
+unrecoverable errors.
+
+* ?? (null-coalescing)
+
+=(?? expr default)= returns =expr= if not =nil=, =default= otherwise.
+
+#+BEGIN_SRC monad
+(?? (lookup key dict) "default")
+(?? (safe-div a b) 0)
+#+END_SRC
+
+Implementation: evaluates =lhs=, checks nil via =rt_value_is_nil=,
+branches to =rhs= or returns =lhs= unwrapped. Scalar types (Int, Float,
+Bool, Char) are never nil and skip the check entirely.
+
+* Pattern: Option type with match
+
+#+BEGIN_SRC monad
+(define (safe-div a b -> (Option Int))
+  (if (= b 0) None
+    (Some (/ a b))))
+#+END_SRC
+
+* TODO: Nil Bubble Tracing
+
+Design in progress: propagate =nil= with an origin trace so =(?? ...)=
+can report where the nil came from.
+
+On nil caught by =??= in debug mode:
+
+#+BEGIN_SRC text
+?? caught nil:
+  old-safe-last [] -> nil               (File.mon:12) <- origin
+  └─ safe-last [_|xs] (File.mon:8 )
+     └─ process-file filename           (File.mon:34)
+        └─ handled: result ?? "default" (File.mon:67)
+#+END_SRC
+
+** Debug vs Release
+
+- **Debug (fat pointer):** raw pointer + static string table baked into
+  the binary. =nil= carries a source-location tag, enabling trace
+  output without heap allocation.
+- **Release (thin pointer):** =??= is a single null check; the string
+  table is stripped entirely. No trace, no overhead.
+
+* Parser Errors
+
+The parser uses =Error:= prefix for user-facing messages and
+=[internal]= for internal compiler errors. See [[file:errors.org][Errors]].
+
+* Context Links
+
+- [[file:errors.org][CLI Errors]]
+- [[file:../context/errors.org][context/errors.org]] — error handling internals

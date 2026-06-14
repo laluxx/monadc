@@ -474,6 +474,91 @@
 | Layered Modal Type Theory | `etc/pdfs/layered-modal-type-theory.pdf` | dual type system, TERM_EMBED, shadow pass |
 | TYPES 2020 Book of Abstracts | `etc/pdfs/BookOfAbstractsTYPES2020.pdf` | dependent types, NbE, conversion checking |
 
+* LLM Analysis
+:PROPERTIES:
+:ID: monadc.context.references.llm-analysis
+:CUSTOM_ID: references-llm-analysis
+:CONTEXT_KIND: think
+:CONTEXT_DESCRIPTION: LLM assessment of the research-paper-driven design approach: which papers have been followed faithfully, which have been adapted, and where the codebase diverges from its stated references.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-14
+:CONTEXT_UPDATED: 2026-06-14
+:CONTEXT_STABILITY: volatile
+:CONTEXT_STATUS: active
+:SOURCE: context/references.org, etc/pdfs/
+:CONFIDENCE: high
+:END:
+
+[THINK id:think.references.fidelity-gap conf:high]
+  The 7 reference papers are cited as architectural foundations, but
+  the fidelity of implementation varies significantly. Coquand's
+  bidirectional type-checking algorithm is followed closely in dep.c
+  (the NbE kernel, Value domain, and conversion checking all match the
+  paper's structure). Baker's Linear Lisp is referenced for conj!/disj!
+  but the actual implementation uses a hash-set with linear update hints,
+  not Baker's full linear type system — a pragmatic adaptation. The
+  Layered Modal Type Theory paper is the most loosely followed: the
+  HM/ITT dual is described as a "layered modal architecture" but the
+  actual TERM_EMBED mechanism is simpler than the paper's modal
+  operators. This is not a criticism — papers describe ideals, compilers
+  implement a workable subset.
+
+[THINK id:think.references.cons-lazy-missing-thunk-opt conf:medium]
+  The Cons Should Not Evaluate Its Arguments paper by Baker proposes
+  lazy cons as the default, with strictness annotations for performance.
+  MonadC implements lazy lists (thunks in ConsCell) as an option but
+  defaults to strict evaluation for most operations. This is the
+  pragmatic choice (strict evaluation is faster, easier to reason about,
+  and matches C interop expectations), but it means the paper's key
+  insight — lazy-by-default enables compositional programming without
+  performance cliffs — is not fully realized. The infinite-range syntax
+  (0..) is the main place where lazy evaluation is visible to the
+  programmer.
+
+[THINK id:think.references.missing-papers conf:high]
+  The reference set is missing several papers that would inform current
+  design challenges:
+  1. TaPL (Types and Programming Languages, Pierce) — the standard
+     reference for HM inference and type system design. The infer.c
+     implementation follows TaPL's Algorithm W closely but doesn't
+     cite it.
+  2. Lisp in Small Pieces (Queinnec) — the standard reference for macro
+     systems and Lisp compiler architecture. The macro.c implementation
+     would benefit from Queinnec's analysis of hygiene and macro
+     expansion ordering.
+  3. A Syntactic Approach to Type Soundness (Wright & Felleisen) — the
+     standard proof technique for type soundness. If MonadC ever
+     formalizes its type safety proof, this is the framework.
+  These are well-known enough that citation is not strictly necessary
+  (the implementations follow standard practice), but adding them to
+  the reference list would strengthen the academic grounding.
+
+[THINK id:think.references.pdf-library-utility conf:medium]
+  The PDF library in etc/pdfs/ is a nice touch but the utility-to-effort
+  ratio is unclear. Having the PDFs version-controlled in the repo means
+  they are always available offline and the exact version is pinned.
+  But PDFs bloat the repository (7 PDFs at ~500 KB each = 3.5 MB) and
+  are not diffable — there is no way to tell if a paper was updated.
+  A compromise: link to the authoritative URLs with DOIs for downloading,
+  and keep the PDFs in a separate release artifact rather than the main
+  repo. The context corpus can describe the paper's thesis without
+  storing the full text.
+
+[THINK id:think.references.paper-to-code-trail conf:high]
+  The DOC records in this file serve as a paper-to-code trail: each
+  paper has OBS records showing which source files implement which
+  ideas. This is exactly what the context system was designed for.
+  The trail is most complete for Coquand (dep.c fully traced) and
+  least complete for Layered Modal (conceptual link only). Completing
+  the implementation traces for all 7 papers would turn references.org
+  into a living audit trail: given a paper, you can find every line of
+  code that exists because of it. This is a powerful feature for
+  onboarding new contributors and for academic write-ups.
+
 [INF id:inf.references.cross-cutting from:doc.references.propositions-as-types,doc.references.typechecking-dependent-types,doc.references.linear-lisp,doc.references.cons-lazy,doc.references.cons-lazy-alloc,doc.references.layered-modal,doc.references.types-2020 conf:high]
   connects-to -> `monadc.context.philosophy.shared-principles` (every paper
   maps to one or more Shared Principles) ·

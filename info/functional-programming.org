@@ -1,0 +1,57 @@
+#+TITLE: Functional Programming
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+
+[[file:index.org][<- Back to Index]] · [[file:types.org][Types]] · [[file:patterns.org][Pattern Matching]]
+
+* Lambda
+
+#+BEGIN_SRC monad
+(define increment (lambda [x] (+ x 1)))
+(define apply (lambda [f x] (f x)))
+#+END_SRC
+
+No =fn= shorthand — use =lambda= ([[file:../codegen.c]] lambda codegen).
+
+* Recursion
+
+Named =define= is the standard recursion form. For local recursion:
+
+#+BEGIN_SRC monad
+(letrec [fact (lambda [n]
+                (if (<= n 1) 1
+                  (* n (fact (- n 1)))))]
+  (fact 5))
+#+END_SRC
+
+* Higher-Order Functions
+
+Functions are first-class — pass them as arguments, return from
+functions, store in data structures.
+
+* No Pipe Operator
+
+=1 |> show |> print= is not implemented. Use nested calls:
+
+#+BEGIN_SRC monad
+(print (show 1))
+#+END_SRC
+
+* Standard Library Status
+
+| Function | Status  |
+|----------+---------|
+| map      | Infer type only, no codegen dispatch (not callable) |
+| filter   | Planned |
+| foldl    | Planned |
+| foldr    | Planned |
+| compose  | Planned |
+
+Standard library modules =old-core/List.mon= and =core/Math.mon= exist but
+are essentially WIP (implementations commented out).
+
+* Context Links
+
+- [[file:patterns.org][Pattern Matching]]
+- [[file:stdlib.org][Standard Library]]
+- [[file:../tests/codegen/][tests/codegen/]] — codegen test files

@@ -1,0 +1,285 @@
+#+TITLE: Wisp Syntax
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+
+[[file:index.org][<- Back to Index]] · [[file:advanced-wisp.org][Advanced Wisp]] · [[file:syntax.org][S-expression Syntax]]
+
+Wisp is an indentation-aware surface syntax for Monad
+([[file:../wisp.c]]). It expands to standard S-expressions in a
+pre-pass before the reader — both produce identical ASTs and mix
+freely in the same file.
+
+* How It Works
+
+The wisp expander ([[file:../wisp.c]]) runs as a pre-pass before the
+reader. Pipeline:
+
+1. Import/builtin arities registered with =wisp_register_arity=
+2. Source stripped of comments ([[file:../wisp.c]])
+3. Non-wisp source (all lines start with =(=, =[=, ={=, =#{}") bypasses expander
+4. Arity pre-scan registers user-defined =data=/=type=/=layout=/=define= arities
+5. Token stream built line-by-line with indent tracking
+6. S-expressions emitted, passed to reader + macro expander
+
+Arity table ([[file:../context/wisp.org]]) tracks how many arguments
+each function takes — this drives infix promotion and variadic
+consumption.
+
+* Basic Rules
+
+Indentation determines grouping:
+
+| Indent   | Meaning              |
+|----------+----------------------|
+| Same     | Sibling forms        |
+| Deeper   | Child form           |
+| Shallower| End of current form  |
+
+No outer parens: =show 42= expands to =(show 42)=.
+
+Mix at any line: lines starting with =(=, =[=, ={=, =#{} pass through
+verbatim as S-expressions.
+
+* Function Calls
+
+#+BEGIN_SRC wisp
+show 42                    ;; (show 42)
++ 1 2                      ;; (+ 1 2)
+x < 10                     ;; (< x 10)
+#+END_SRC
+
+Infix operators auto-convert via arity-driven Pratt parsing:
+
+| Precedence | Operators                         |
+|------------+-----------------------------------|
+| 1 (lowest) | =or=                               |
+| 2          | =and=                              |
+| 3          | ==== =!= =<= =<== =>== =>=          |
+| 4          | =+= =-=                             |
+| 5          | =*= =/=                             |
+| 6 (highest)| Everything else (calls, =^=, =%=) |
+
+Group with parens: =x * + 1 2= → =(* x (+ 1 2))=.
+
+* Definitions
+
+** Simple value
+
+#+BEGIN_SRC wisp
+define x 42                 ;; (define x 42)
+#+END_SRC
+
+** Typed value (two forms)
+
+#+BEGIN_SRC wisp
+define x :: Int 42          ;; wisp sugar: (define [x :: Int] 42)
+define [x :: Int] 42        ;; bracketed (passes through)
+#+END_SRC
+
+** Function with params (no type signature)
+
+#+BEGIN_SRC wisp
+define square x -> * x x    ;; (define (square x) (* x x))
+define twice f x -> f (f x) ;; higher-order
+#+END_SRC
+
+** Typed function (signature + clause)
+
+#+BEGIN_SRC wisp
+define square :: Int -> Int
+  x -> x * x                ;; (define (square [x :: Int] -> Int) (* x x))
+#+END_SRC
+
+** Parenthesized signature + clause
+
+#+BEGIN_SRC wisp
+define (f [n :: Int] [xs :: Arr] -> Int)
+  (f (dec n) xs)            ;; full lisp-style header, wisp body
+#+END_SRC
+
+** Zero-param function
+
+#+BEGIN_SRC wisp
+define greet -> String "hello"  ;; (define (greet -> String) "hello")
+#+END_SRC
+
+** Array declarations
+
+#+BEGIN_SRC wisp
+define buf :: [512]         ;; (define [buf :: Arr :: 512 :: U8] [])
+define buf :: [16kb I32]    ;; (define [buf :: Arr :: 4096 :: I32] [])
+#+END_SRC
+
+* Arrow Clauses
+
+=->= introduces the body. =→= (U+2192) and =↦= (U+21A6) also work.
+
+#+BEGIN_SRC wisp
+define fact
+  0 -> 1
+  n -> * n (fact (- n 1))
+#+END_SRC
+
+Guards:
+
+#+BEGIN_SRC wisp
+(define sign
+  n | > n 0 -> "pos"
+  n | < n 0 -> "neg"
+  _          -> "zero")
+#+END_SRC
+
+Inline lambda sugar:
+
+#+BEGIN_SRC wisp
+[x y] => + x y             ;; (lambda ([x] [y]) (+ x y))
+#+END_SRC
+
+* Type Annotations
+
+Both =::= and =:= work as annotation separators:
+
+| Form                              | Result                        |
+|-----------------------------------+-------------------------------|
+| =define x :: Int 42=               | =(define [x :: Int] 42)=       |
+| =define [x :: Int] 42=             | =(define [x :: Int] 42)=       |
+| =define f :: Int -> String -> Ret= | registers arity 2, each arrow adds a param |
+| =*U8=                              | =[Pointer :: U8]=              |
+| =**U8=                             | =[Pointer :: Pointer :: U8]=    |
+| ==(a -> b)= inside signature       | marks param as function type   |
+
+* Type Annotations in Brackets
+
+=define [x :: Int] 42= — typed value with bracket annotation.
+=define f [a :: Int] [b] -> ...= — typed function params.
+
+* Special Syntactic Sugar
+
+** Pipe
+
+#+BEGIN_SRC wisp
+5 |> double |> add1          ;; (add1 (double 5))
+#+END_SRC
+
+** For loops
+
+#+BEGIN_SRC wisp
+for c -> iterable            ;; forward: (for [i 0 (count iterable)] (define c (iterable i)) ...)
+  body
+for c <- iterable            ;; backward: (for [i (- (count iterable) 1) -1 -1] ...)
+  body
+#+END_SRC
+
+** Where clauses
+
+#+BEGIN_SRC wisp
+define f x -> body
+  where result = expr        ;; (let ([result expr]) body)
+#+END_SRC
+
+** if expressions (three forms)
+
+#+BEGIN_SRC wisp
+;; Form 1 — indented, else keyword
+if (> x 0)
+  "pos"
+else
+  "neg"
+
+;; Form 2 — then/else at same indent
+if (> x 0)
+then "pos"
+else "neg"
+
+;; Form 3 — fully inline
+if (> x 0) then "pos" else "neg"
+#+END_SRC
+
+Multi-line bodies wrap in =(begin ...)=. Missing branches fill with
+=(undefined)=.
+
+** ?-sugar (method-call style)
+
+#+BEGIN_SRC wisp
+(contains? s 2)               ;; when s is untyped → (s contains? 2)
+#+END_SRC
+
+Only fires when the first argument is a bare untyped symbol.
+
+** !-sugar (mutation-call style)
+
+#+BEGIN_SRC wisp
+(conj! s 99)                  ;; when s is untyped → (s conj! 99)
+#+END_SRC
+
+Applies to =conj!=, =disj!=, =append!=.
+
+Type-annotate to suppress: =define [s :: Set] (conj! s 99)=.
+
+** Fraction sugar (2D)
+
+#+BEGIN_SRC wisp
+ 1                            ;; ─ line between numerator and denominator
+───                           ;; becomes (/ 1 2)
+ 2
+#+END_SRC
+
+* Data Types, Type Classes, and More
+
+=layout=, =data=, =type=, =class=, =instance=, =match= all work as
+wisp blocks, collected as single S-expression tokens:
+
+#+BEGIN_SRC wisp
+layout Point
+  x :: Float
+  y :: Float
+
+data Option a
+  None
+  Some a
+
+type Positive { x ∈ Int | (> x 0) }
+
+match x with
+  (Just v) -> show v
+  Nothing  -> show "none"
+#+END_SRC
+
+* Mixing Wisp and S-expressions
+
+Any line can switch styles mid-stream:
+
+#+BEGIN_SRC wisp
+define add x y -> x + y
+(show (add 1 2))             ;; raw s-expr where it's clearer
+define double x -> * x 2     ;; back to wisp
+#+END_SRC
+
+Comments work in both:
+
+#+BEGIN_SRC wisp
+;; this is a line comment
+;|
+multi-line
+block comment
+|;
+#+END_SRC
+
+* Known Limitations
+
+| Bug                                                   | Workaround                             |
+|-------------------------------------------------------+----------------------------------------|
+| Char literals with escapes ='\n'= split across lines  | Use S-expression for escaped chars     |
+| =:alias= / =:doc= metadata emitted as separate forms   | Use S-expression for metadata          |
+| Wisp =->= =define= + guards (=| condition=) not supported | Use S-expression for guarded defines   |
+| =..= path prefix breaks path literal (range operator) | Use absolute =/= or home =~/= paths     |
+
+See [[file:advanced-wisp.org][Advanced Wisp]] for details and more edge cases.
+
+* Context Links
+
+- [[file:../context/wisp.org][context/wisp.org]] — wisp expander internals
+- [[file:../context/reader.org][context/reader.org]] — reader/parser internals
+- [[file:syntax.org][Syntax Reference]] — S-expression reference
+- [[file:advanced-wisp.org][Advanced Wisp]] — wisp patterns and known bugs
+- [[file:../tests/codegen/rt_wisp_*.mon][tests/codegen/rt_wisp_*.mon]] — wisp codegen test files

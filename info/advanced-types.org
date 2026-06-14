@@ -1,0 +1,72 @@
+#+TITLE: Advanced Types
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+
+[[file:index.org][<- Back to Index]] · [[file:types.org][Types]] · [[file:refinements.org][Refinements]]
+
+* Type Classes
+
+#+BEGIN_SRC monad
+(class Eq a
+  (== (a a -> Bool)))
+
+(instance Eq Int
+  (define (== a b -> Bool)
+    (builtin-== a b)))
+#+END_SRC
+
+Deriving: =(data Suit ... deriving Eq)= auto-generates ==.
+Multiple classes: =deriving [Eq Enum]=, =deriving [Bounded Enum Show]=.
+
+** Constraints with =~>=
+
+#+BEGIN_SRC monad
+(define toEnumSafe :: ∀ t. [Enum t, Bounded t] => Int -> (Option t)
+  n | >= 0 -> (Just (toEnum n))
+    | otherwise -> Nothing)
+#+END_SRC
+
+Universal quantifier =∀= (or =forall=) with multi-class constraints
+in brackets.
+
+* Polymorphism
+
+All lowercase type params are universally quantified:
+
+#+BEGIN_SRC monad
+(define (id x -> a) x)
+(define (fst x y -> a) x)
+#+END_SRC
+
+Polymorphism is Hindley-Milner (let-polymorphism). Type variables are
+implicitly quantified.
+
+* Dependent Types (ITT/NbE)
+
+Monad uses intensional type theory with normalisation by evaluation.
+Full dependent types allow:
+
+#+BEGIN_SRC monad
+(define (Vec n a -> Type) ...)
+#+END_SRC
+
+Currently limited — not all dependent patterns are implementable in
+stable releases.
+
+* Refinement Types
+
+=(type Pos { x ∈ Int | (> x 0) })= — subset types with predicates.
+See [[file:refinements.org][Refinements]] for full syntax.
+
+* Known Gaps
+
+- No GADTs (use refinement types instead)
+- No higher-kinded types (WIP)
+- No type families (WIP)
+
+* Context Links
+
+- [[file:refinements.org][Refinement Types]]
+- [[file:types.org][Types]]
+- [[file:../context/infer.org][context/infer.org]] — type inference
+- [[file:../context/types.org][context/types.org]] — type representation

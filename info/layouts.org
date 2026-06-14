@@ -1,0 +1,70 @@
+#+TITLE: Layout Types
+#+CONTEXT: types.org, ffi.org
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+
+[[file:index.org][<- Back to Index]] · [[file:data.org][Data Types]] · [[file:ffi.org][C FFI]]
+
+Layout types provide C-compatible memory layouts for struct-like data.
+
+** Declaration [[[file:../reader.c::5062]]]
+
+#+BEGIN_SRC monad
+(layout Point [x :: Float] [y :: Float])
+(layout Matrix3x3
+  [m11 :: Float] [m12 :: Float] [m13 :: Float]
+  [m21 :: Float] [m22 :: Float] [m23 :: Float]
+  [m31 :: Float] [m32 :: Float] [m33 :: Float])
+#+END_SRC
+
+** Construction
+
+#+BEGIN_SRC monad
+(define p (Point 3.0 4.0))
+#+END_SRC
+
+** Field Access
+
+Dot notation: =(p.x)= returns 3.0, =(p.y)= returns 4.0 (merged symbol
+access handled by =codegen_dot_chain=).
+
+** Field Mutation
+
+#+BEGIN_SRC monad
+(set! p.x 5.0)     ;; mutates field in-place
+(<- p.x 5.0)       ;; sugar for set!
+#+END_SRC
+
+** Options
+
+| Option   | Description                       |
+|----------+-----------------------------------|
+| :packed  | Remove padding between fields     |
+| :align N | Override field alignment to N     |
+
+#+BEGIN_SRC monad
+(layout Packet [flags :: U8 :packed] [len :: Int :align 8])
+#+END_SRC
+
+=where= and =method= clauses inside =layout= are NOT implemented in
+the parser (compile error: "Expected '[' for layout field"). Use
+separate functions defined outside the =layout=.
+
+** Comparison
+
+| Aspect       | =data= (ADT)     | =layout=          |
+|--------------+----------------+-----------------|
+| Memory       | Heap-allocated | Stack or inline |
+| C compat     | No             | Yes             |
+| Polymorphism | Yes            | No              |
+
+** Limitations
+
+- =where= and =method= inside =layout= not supported yet
+- No automatic constructor type classes (planned)
+
+* Context Links
+
+- [[file:../context/codegen.org][context/codegen.org]] — Layout codegen
+- [[file:../context/ffi.org][context/ffi.org]] — C FFI interop
+- [[file:../how_to/Layouts.mon][how_to/Layouts.mon]] — layout examples (includes uses of where/method that currently error)
