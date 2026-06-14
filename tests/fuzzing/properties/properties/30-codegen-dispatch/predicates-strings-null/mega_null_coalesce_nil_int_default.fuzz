@@ -1,0 +1,7 @@
+name: mega_null_coalesce_nil_int_default
+section: codegen-preds-strings-null
+args: a:Int
+type: Bool
+expect: True
+description: ?? must return default for nil left operand.
+law: (= (?? nil {a}) {a})

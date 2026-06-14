@@ -1,0 +1,7 @@
+name: mega_pred_set_constructed_true
+section: codegen-preds-strings-null
+args: 
+type: Bool
+expect: True
+description: Set? must recognize set dispatcher result.
+law: (Set? (set 1 2 3))

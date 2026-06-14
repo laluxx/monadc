@@ -1,0 +1,7 @@
+name: deep_codegen_cross_logic_after_string_pred_and_array_pred
+section: codegen-cross-feature
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Logic dispatch must compose compile-time type predicates for different types.
+law: (and (String? "abc") (Arr? [{a} {b}]))

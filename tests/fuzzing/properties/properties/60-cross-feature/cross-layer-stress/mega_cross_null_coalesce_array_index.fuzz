@@ -1,0 +1,7 @@
+name: mega_cross_null_coalesce_array_index
+section: codegen-cross-layer-stress
+args: a:Int b:Int
+type: Bool
+expect: True
+description: ?? on scalar array-index result must return index value, not default.
+law: (= (with [xs [{a} {b}]] (?? (xs 0) {b})) {a})

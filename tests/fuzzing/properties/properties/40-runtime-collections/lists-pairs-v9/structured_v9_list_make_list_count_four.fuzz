@@ -1,0 +1,7 @@
+name: structured_v9_list_make_list_count_four
+section: collections-list-v9
+args: a:Int
+type: Bool
+expect: True
+description: Stress list constructors, pair accessors, head/cdr chains, make-list, and list-copy.
+law: (= (count (make-list 4 {a})) 4)

@@ -1,0 +1,7 @@
+name: structured_v9_future_set_contains_oracle
+section: future-set-oracle-v9
+args: xs:SetInt x:Int
+type: Bool
+expect-python: x in xs
+description: Set contains? oracle over generated sets.
+law: (contains? {xs} {x})

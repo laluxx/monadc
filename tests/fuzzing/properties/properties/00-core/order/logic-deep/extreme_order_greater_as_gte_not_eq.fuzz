@@ -1,0 +1,7 @@
+name: extreme_order_greater_as_gte_not_eq
+section: order-logic-deep
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Guarded order implication must preserve direct comparison semantics.
+law: (= (> {a} {b}) (if (>= {a} {b}) (if (= {a} {b}) False True) False))

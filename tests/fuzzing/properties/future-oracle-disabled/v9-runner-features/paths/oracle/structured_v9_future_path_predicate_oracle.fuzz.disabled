@@ -1,0 +1,7 @@
+name: structured_v9_future_path_predicate_oracle
+section: future-path-oracle-v9
+args: p:Path
+type: Bool
+expect-python: True
+description: Path generator should produce first-class Path values.
+law: (Path? {p})

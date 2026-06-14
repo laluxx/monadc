@@ -1,0 +1,7 @@
+name: structured_v9_cross_begin_mutation_then_string_guard
+section: cross-compiler-v9
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Stress cross-feature lowering across control flow, env lookup, runtime collections, predicates, quote/null, and operator dispatch.
+law: (= (with [x {a}] (begin (when {p} (set! x {b})) (if (starts-with? "compiler" "comp") x {a}))) (if {p} {b} {a}))

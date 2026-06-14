@@ -1,0 +1,7 @@
+name: extreme_if_common_left_add
+section: control-if-dispatch
+args: cond:Bool common:Int a:Int b:Int
+type: Bool
+expect: True
+description: A common left operand can be moved through an if branch for +.
+law: (= (+ {common} (if {cond} {a} {b})) (if {cond} (+ {common} {a}) (+ {common} {b})))

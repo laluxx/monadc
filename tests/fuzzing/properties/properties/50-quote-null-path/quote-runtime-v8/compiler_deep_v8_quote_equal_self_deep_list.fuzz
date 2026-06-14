@@ -1,0 +1,7 @@
+name: compiler_deep_v8_quote_equal_self_deep_list
+section: quote-runtime-v8
+args: 
+type: Bool
+expect: True
+description: equal? should compare quoted nested literals structurally.
+law: (equal? (quote (a (b c) d)) (quote (a (b c) d)))

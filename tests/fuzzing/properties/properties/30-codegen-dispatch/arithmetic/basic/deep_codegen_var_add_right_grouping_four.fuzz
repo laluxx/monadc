@@ -1,0 +1,7 @@
+name: deep_codegen_var_add_right_grouping_four
+section: codegen-arithmetic-dispatch
+args: a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Variadic + must agree with explicit right grouping.
+law: (= (+ {a} {b} {c} {d}) (+ {a} (+ {b} (+ {c} {d}))))

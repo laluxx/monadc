@@ -1,0 +1,7 @@
+name: deep_codegen_runtime_set_conj_contains
+section: codegen-runtime-values
+args: a:Int b:Int
+type: Bool
+expect: True
+description: conj must add a generated element to set.
+law: (contains? (conj (set {a}) {b}) {b})

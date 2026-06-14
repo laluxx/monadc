@@ -1,0 +1,7 @@
+name: structured_v9_future_string_suffix_oracle
+section: future-string-oracle-v9
+args: s:String suffix:SuffixOf(s)
+type: Bool
+expect-python: s.endswith(suffix)
+description: Generated suffix should be recognized by ends-with?.
+law: (ends-with? {s} {suffix})

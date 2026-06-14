@@ -1,0 +1,7 @@
+name: structured_v9_list_list_inside_if_selects_head
+section: collections-list-v9
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Stress list constructors, pair accessors, head/cdr chains, make-list, and list-copy.
+law: (= (head (if {p} (cons {a} (list)) (cons {b} (list)))) (if {p} {a} {b}))

@@ -1,0 +1,7 @@
+name: deep_codegen_binding_with_dependency_order
+section: codegen-binding-mutation
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: with bindings must be evaluated in order and made visible to later bindings.
+law: (= (with [x {a} y (+ x {b}) z (+ y {c})] z) (+ (+ {a} {b}) {c}))

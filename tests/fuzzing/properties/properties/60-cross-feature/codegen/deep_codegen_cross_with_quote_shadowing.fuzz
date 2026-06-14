@@ -1,0 +1,7 @@
+name: deep_codegen_cross_with_quote_shadowing
+section: codegen-cross-feature
+args: a:Int
+type: Bool
+expect: True
+description: quote must not capture or evaluate with-bound symbols.
+law: (equal? (with [x {a}] (quote (x y))) (quote (x y)))

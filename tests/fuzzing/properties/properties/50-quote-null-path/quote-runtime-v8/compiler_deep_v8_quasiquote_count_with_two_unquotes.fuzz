@@ -1,0 +1,7 @@
+name: compiler_deep_v8_quasiquote_count_with_two_unquotes
+section: quote-runtime-v8
+args: a:Int b:Int
+type: Bool
+expect: True
+description: quasiquote list with unquotes should preserve list length.
+law: (= (count (quasiquote ((unquote {a}) mid (unquote {b}) end))) 4)

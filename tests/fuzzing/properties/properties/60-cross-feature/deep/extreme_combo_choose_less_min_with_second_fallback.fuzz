@@ -1,0 +1,7 @@
+name: extreme_combo_choose_less_min_with_second_fallback
+section: feature-interactions-deep
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Mixed helpers, direct dispatch, control flow, and bindings should compose without changing semantics.
+law: (= (fuzz-choose-less {a} {b} {b}) (fuzz-min {a} {b}))

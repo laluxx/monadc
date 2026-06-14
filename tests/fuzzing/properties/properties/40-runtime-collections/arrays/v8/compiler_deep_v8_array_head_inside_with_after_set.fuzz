@@ -1,0 +1,7 @@
+name: compiler_deep_v8_array_head_inside_with_after_set
+section: runtime-arrays-v8
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Array head in a mutable environment should be stable across unrelated mutation.
+law: (= (with [xs [{a} {b}] x {b}] (do (when {p} (set! x {a})) (head xs))) {a})

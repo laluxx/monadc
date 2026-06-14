@@ -1,0 +1,7 @@
+name: mega_negative_set_after_disj_missing
+section: codegen-negative-runtime
+args: a:Int
+type: Bool
+expect: False
+description: After disj singleton, generated element should not be present.
+law: (contains? (disj (set {a}) {a}) {a})

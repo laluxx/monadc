@@ -1,0 +1,7 @@
+name: structured_v9_env_binding_to_list_then_nested_head
+section: binding-env-v9
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Stress lexical environment lowering, shadowing, initializer order, and mutable variable lookup.
+law: (= (with [xs (cons {a} (cons {b} (list)))] (with [ys (cdr xs)] (head ys))) {b})

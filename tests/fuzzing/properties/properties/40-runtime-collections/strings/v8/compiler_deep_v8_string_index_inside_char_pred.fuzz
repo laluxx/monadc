@@ -1,0 +1,7 @@
+name: compiler_deep_v8_string_index_inside_char_pred
+section: runtime-strings-v8
+args: 
+type: Bool
+expect: True
+description: String indexing should produce a Char accepted by Char?.
+law: (Char? ("compiler" 3))

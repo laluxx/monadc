@@ -1,0 +1,7 @@
+name: mega_cast_string_identity
+section: codegen-preds-strings-null
+args: 
+type: Bool
+expect: True
+description: String cast must be identity for string input.
+law: (= (String "compiler") "compiler")

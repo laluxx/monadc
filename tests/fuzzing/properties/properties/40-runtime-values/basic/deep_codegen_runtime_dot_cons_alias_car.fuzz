@@ -1,0 +1,7 @@
+name: deep_codegen_runtime_dot_cons_alias_car
+section: codegen-runtime-values
+args: a:Int
+type: Bool
+expect: True
+description: dot cons alias must behave like cons.
+law: (= (car (. {a} (list))) {a})

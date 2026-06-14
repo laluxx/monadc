@@ -1,0 +1,7 @@
+name: mega_pred_collection_list_true
+section: codegen-preds-strings-null
+args: 
+type: Bool
+expect: True
+description: collection? must recognize lists.
+law: (collection? (list))

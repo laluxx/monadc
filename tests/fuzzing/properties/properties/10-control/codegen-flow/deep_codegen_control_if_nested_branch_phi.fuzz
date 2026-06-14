@@ -1,0 +1,7 @@
+name: deep_codegen_control_if_nested_branch_phi
+section: codegen-control-flow
+args: p:Bool q:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Nested if PHI generation must survive branch-in-branch structure.
+law: (= (if {p} (if {q} {a} {b}) {c}) (if {p} (if {q} {a} {b}) {c}))

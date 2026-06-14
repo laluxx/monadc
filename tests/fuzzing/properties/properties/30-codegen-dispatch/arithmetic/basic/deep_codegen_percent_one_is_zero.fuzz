@@ -1,0 +1,7 @@
+name: deep_codegen_percent_one_is_zero
+section: codegen-arithmetic-dispatch
+args: a:Int
+type: Bool
+expect: True
+description: Percent modulo by one must always be zero.
+law: (= (% {a} 1) 0)

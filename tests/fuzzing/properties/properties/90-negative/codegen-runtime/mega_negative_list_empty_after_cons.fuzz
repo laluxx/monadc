@@ -1,0 +1,7 @@
+name: mega_negative_list_empty_after_cons
+section: codegen-negative-runtime
+args: a:Int
+type: Bool
+expect: False
+description: Non-empty cons list should not be empty.
+law: (empty? (cons {a} (list)))

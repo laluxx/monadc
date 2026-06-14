@@ -1,0 +1,7 @@
+name: deep_codegen_string_string_ends_with_false
+section: codegen-string-char
+args: 
+type: Bool
+expect: False
+description: ends-with? string path must reject a non-suffix.
+law: (ends-with? "monadc" "mon")

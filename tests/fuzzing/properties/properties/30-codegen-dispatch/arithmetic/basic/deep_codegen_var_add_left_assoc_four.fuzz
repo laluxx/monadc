@@ -1,0 +1,7 @@
+name: deep_codegen_var_add_left_assoc_four
+section: codegen-arithmetic-dispatch
+args: a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Variadic + must lower as a left-associated chain over generated operands.
+law: (= (+ {a} {b} {c} {d}) (+ (+ (+ {a} {b}) {c}) {d}))

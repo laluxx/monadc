@@ -1,0 +1,816 @@
+#+TITLE: Last First Fuzz Failure
+#+DATE: 2026-06-15T01:24:52
+
+[OBS id:obs.fuzz.last-first-failure src:tests/fuzzing/fuzz_codegen.py conf:high]
+  This record captures the first failing fuzz property from the latest run.
+
+* Failure
+- Property: =compare_variadic_gt_false_on_duplicate=
+- Status: =FAIL=
+- Phase: =compile=
+- Reason: =compile failed=
+- Source: =tests/fuzzing/properties/properties/30-codegen-dispatch/comparison/variadic/compare_variadic_gt_false_on_duplicate.fuzz:7=
+- Replay: =tests/fuzzing/last/shrink_compare_variadic_gt_false_on_duplicate_compare_variadic_gt_false_on_duplicate_seed_000001.mon=
+- Expected: =False=
+- Actual: =∅=
+
+** Generated Expression
+#+BEGIN_SRC monad
+(> 1 1 (- 1 1))
+#+END_SRC
+
+** Bindings
+- =a=: =1= (Int)
+
+** Output
+#+BEGIN_EXAMPLE
+
+=== wisp expanded (/tmp/monadc-fuzz-shrink_compare_variadic_gt_false_on_duplicate_compare_variadic_gt_false_on_duplicate-1-hq3arkci/fuzz_1.mon) ===
+(#line 3 1) (module Main)
+(#line 5 1) (define (fuzz-id-int [x : Int] -> Int) x)
+(#line 8 1) (define (fuzz-add [x : Int] [y : Int] -> Int) (+ x y))
+(#line 11 1) (define (fuzz-sub [x : Int] [y : Int] -> Int) (- x y))
+(#line 14 1) (define (fuzz-mul [x : Int] [y : Int] -> Int) (* x y))
+(#line 17 1) (define (fuzz-lt? [x : Int] [y : Int] -> Bool) (< x y))
+(#line 20 1) (define (fuzz-lte? [x : Int] [y : Int] -> Bool) (<= x y))
+(#line 23 1) (define (fuzz-gt? [x : Int] [y : Int] -> Bool) (> x y))
+(#line 26 1) (define (fuzz-gte? [x : Int] [y : Int] -> Bool) (>= x y))
+(#line 29 1) (define (fuzz-eq-int? [x : Int] [y : Int] -> Bool) (= x y))
+(#line 32 1) (define (fuzz-choose-less [x : Int] [y : Int] [fallback : Int] -> Int) (if (< x y) x fallback))
+(#line 35 1) (define (fuzz-min [x : Int] [y : Int] -> Int) (if (< x y) x y))
+(#line 38 1) (define (fuzz-max [x : Int] [y : Int] -> Int) (if (> x y) x y))
+(#line 41 1) (define (fuzz-bool-id? [x : Bool] -> Bool) x)
+(#line 45 1) (show (> 1 1 (- 1 1)))
+=== end ===
+
+
+=== desugared AST (/tmp/monadc-fuzz-shrink_compare_variadic_gt_false_on_duplicate_compare_variadic_gt_false_on_duplicate-1-hq3arkci/fuzz_1.mon) ===
+[compile] /tmp/monadc-fuzz-shrink_compare_variadic_gt_false_on_duplicate_compare_variadic_gt_false_on_duplicate-1-hq3arkci/fuzz_1.mon
+(module Main)
+(define fuzz-id-int (lambda ([x :: Int] -> Int) x))
+(define fuzz-add (lambda ([x :: Int] [y :: Int] -> Int) (+ x y)))
+(define fuzz-sub (lambda ([x :: Int] [y :: Int] -> Int) (- x y)))
+(define fuzz-mul (lambda ([x :: Int] [y :: Int] -> Int) (* x y)))
+(define fuzz-lt? (lambda ([x :: Int] [y :: Int] -> Bool) (< x y)))
+(define fuzz-lte? (lambda ([x :: Int] [y :: Int] -> Bool) (<= x y)))
+(define fuzz-gt? (lambda ([x :: Int] [y :: Int] -> Bool) (> x y)))
+(define fuzz-gte? (lambda ([x :: Int] [y :: Int] -> Bool) (>= x y)))
+(define fuzz-eq-int? (lambda ([x :: Int] [y :: Int] -> Bool) (= x y)))
+(define fuzz-choose-less (lambda ([x :: Int] [y :: Int] [fallback :: Int] -> Int) (if (< x y) x fallback)))
+(define fuzz-min (lambda ([x :: Int] [y :: Int] -> Int) (if (< x y) x y)))
+(define fuzz-max (lambda ([x :: Int] [y :: Int] -> Int) (if (> x y) x y)))
+(define fuzz-bool-id? (lambda ([x :: Bool] -> Bool) x))
+(show (> 1 1 (- 1 1)))
+=== end desugared AST ===
+
+├─ Infer (λ(x : Int). x : Π(x : Int). Int)
+│   ├─ Check λ(x : Int). x ⇐ Π(x : Int). Int
+│   │   ├─ Conv  Int ≡ Int
+│   │   └─ OK
+│   │   ├─ Check x ⇐ Int
+│   │   │   ├─ Infer x
+│   │   │   └─ OK: x : Int
+│   │   │   ├─ Conv  Int ≡ Int
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(x : Int). x : Π(x : Int). Int) : Π(x : Int). Int
+├─ Infer (λ(x : Int). λ(y : Int). (+ x y) : Π(x : Int). Π(y : Int). Int)
+│   ├─ Check λ(x : Int). λ(y : Int). (+ x y) ⇐ Π(x : Int). Π(y : Int). Int
+│   │   ├─ Conv  Int ≡ Int
+│   │   └─ OK
+│   │   ├─ Check λ(y : Int). (+ x y) ⇐ Π(y : Int). Int
+│   │   │   ├─ Conv  Int ≡ Int
+│   │   │   └─ OK
+│   │   │   ├─ Check (+ x y) ⇐ Int
+│   │   │   │   ├─ Infer (+ x y)
+│   │   │   │   │   ├─ Infer +
+│   │   │   │   │   └─ OK: + : Π(A : Type 0). Π(_ : #0). Π(_ : #1). #2
+│   │   │   │   │   ├─ Check x ⇐ ?0
+│   │   │   │   │   │   ├─ Infer x
+│   │   │   │   │   │   └─ OK: x : Int
+│   │   │   │   │   │   ├─ Conv  Int ≡ ?0
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check y ⇐ Int
+│   │   │   │   │   │   ├─ Infer y
+│   │   │   │   │   │   └─ OK: y : Int
+│   │   │   │   │   │   ├─ Conv  Int ≡ Int
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK: (+ x y) : Int
+│   │   │   │   ├─ Conv  Int ≡ Int
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(x : Int). λ(y : Int). (+ x y) : Π(x : Int). Π(y : Int). Int) : Π(x : Int). Π(y : Int). Int
+├─ Infer (λ(x : Int). λ(y : Int). (- x y) : Π(x : Int). Π(y : Int). Int)
+│   ├─ Check λ(x : Int). λ(y : Int). (- x y) ⇐ Π(x : Int). Π(y : Int). Int
+│   │   ├─ Conv  Int ≡ Int
+│   │   └─ OK
+│   │   ├─ Check λ(y : Int). (- x y) ⇐ Π(y : Int). Int
+│   │   │   ├─ Conv  Int ≡ Int
+│   │   │   └─ OK
+│   │   │   ├─ Check (- x y) ⇐ Int
+│   │   │   │   ├─ Infer (- x y)
+│   │   │   │   │   ├─ Infer -
+│   │   │   │   │   └─ OK: - : Π(A : Type 0). Π(_ : #0). Π(_ : #1). #2
+│   │   │   │   │   ├─ Check x ⇐ ?1
+│   │   │   │   │   │   ├─ Infer x
+│   │   │   │   │   │   └─ OK: x : Int
+│   │   │   │   │   │   ├─ Conv  Int ≡ ?1
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check y ⇐ Int
+│   │   │   │   │   │   ├─ Infer y
+│   │   │   │   │   │   └─ OK: y : Int
+│   │   │   │   │   │   ├─ Conv  Int ≡ Int
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK: (- x y) : Int
+│   │   │   │   ├─ Conv  Int ≡ Int
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(x : Int). λ(y : Int). (- x y) : Π(x : Int). Π(y : Int). Int) : Π(x : Int). Π(y : Int). Int
+├─ Infer (λ(x : Int). λ(y : Int). (* x y) : Π(x : Int). Π(y : Int). Int)
+│   ├─ Check λ(x : Int). λ(y : Int). (* x y) ⇐ Π(x : Int). Π(y : Int). Int
+│   │   ├─ Conv  Int ≡ Int
+│   │   └─ OK
+│   │   ├─ Check λ(y : Int). (* x y) ⇐ Π(y : Int). Int
+│   │   │   ├─ Conv  Int ≡ Int
+│   │   │   └─ OK
+│   │   │   ├─ Check (* x y) ⇐ Int
+│   │   │   │   ├─ Infer (* x y)
+│   │   │   │   │   ├─ Infer *
+│   │   │   │   │   └─ OK: * : Π(A : Type 0). Π(_ : #0). Π(_ : #1). #2
+│   │   │   │   │   ├─ Check x ⇐ ?2
+│   │   │   │   │   │   ├─ Infer x
+│   │   │   │   │   │   └─ OK: x : Int
+│   │   │   │   │   │   ├─ Conv  Int ≡ ?2
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check y ⇐ Int
+│   │   │   │   │   │   ├─ Infer y
+│   │   │   │   │   │   └─ OK: y : Int
+│   │   │   │   │   │   ├─ Conv  Int ≡ Int
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK: (* x y) : Int
+│   │   │   │   ├─ Conv  Int ≡ Int
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(x : Int). λ(y : Int). (* x y) : Π(x : Int). Π(y : Int). Int) : Π(x : Int). Π(y : Int). Int
+├─ Infer (λ(x : Int). λ(y : Int). (< x y) : Π(x : Int). Π(y : Int). Bool)
+│   ├─ Check λ(x : Int). λ(y : Int). (< x y) ⇐ Π(x : Int). Π(y : Int). Bool
+│   │   ├─ Conv  Int ≡ Int
+│   │   └─ OK
+│   │   ├─ Check λ(y : Int). (< x y) ⇐ Π(y : Int). Bool
+│   │   │   ├─ Conv  Int ≡ Int
+│   │   │   └─ OK
+│   │   │   ├─ Check (< x y) ⇐ Bool
+│   │   │   │   ├─ Infer (< x y)
+│   │   │   │   │   ├─ Infer <
+│   │   │   │   │   └─ OK: < : Π(A : Type 0). Π(_ : #0). Π(_ : #1). Bool
+│   │   │   │   │   ├─ Check x ⇐ ?3
+│   │   │   │   │   │   ├─ Infer x
+│   │   │   │   │   │   └─ OK: x : Int
+│   │   │   │   │   │   ├─ Conv  Int ≡ ?3
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check y ⇐ Int
+│   │   │   │   │   │   ├─ Infer y
+│   │   │   │   │   │   └─ OK: y : Int
+│   │   │   │   │   │   ├─ Conv  Int ≡ Int
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK: (< x y) : Bool
+│   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(x : Int). λ(y : Int). (< x y) : Π(x : Int). Π(y : Int). Bool) : Π(x : Int). Π(y : Int). Bool
+├─ Infer (λ(x : Int). λ(y : Int). (<= x y) : Π(x : Int). Π(y : Int). Bool)
+│   ├─ Check λ(x : Int). λ(y : Int). (<= x y) ⇐ Π(x : Int). Π(y : Int). Bool
+│   │   ├─ Conv  Int ≡ Int
+│   │   └─ OK
+│   │   ├─ Check λ(y : Int). (<= x y) ⇐ Π(y : Int). Bool
+│   │   │   ├─ Conv  Int ≡ Int
+│   │   │   └─ OK
+│   │   │   ├─ Check (<= x y) ⇐ Bool
+│   │   │   │   ├─ Infer (<= x y)
+│   │   │   │   │   ├─ Infer <=
+│   │   │   │   │   └─ OK: <= : Π(A : Type 0). Π(_ : #0). Π(_ : #1). Bool
+│   │   │   │   │   ├─ Check x ⇐ ?4
+│   │   │   │   │   │   ├─ Infer x
+│   │   │   │   │   │   └─ OK: x : Int
+│   │   │   │   │   │   ├─ Conv  Int ≡ ?4
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check y ⇐ Int
+│   │   │   │   │   │   ├─ Infer y
+│   │   │   │   │   │   └─ OK: y : Int
+│   │   │   │   │   │   ├─ Conv  Int ≡ Int
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK: (<= x y) : Bool
+│   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(x : Int). λ(y : Int). (<= x y) : Π(x : Int). Π(y : Int). Bool) : Π(x : Int). Π(y : Int). Bool
+├─ Infer (λ(x : Int). λ(y : Int). (> x y) : Π(x : Int). Π(y : Int). Bool)
+│   ├─ Check λ(x : Int). λ(y : Int). (> x y) ⇐ Π(x : Int). Π(y : Int). Bool
+│   │   ├─ Conv  Int ≡ Int
+│   │   └─ OK
+│   │   ├─ Check λ(y : Int). (> x y) ⇐ Π(y : Int). Bool
+│   │   │   ├─ Conv  Int ≡ Int
+│   │   │   └─ OK
+│   │   │   ├─ Check (> x y) ⇐ Bool
+│   │   │   │   ├─ Infer (> x y)
+│   │   │   │   │   ├─ Infer >
+│   │   │   │   │   └─ OK: > : Π(A : Type 0). Π(_ : #0). Π(_ : #1). Bool
+│   │   │   │   │   ├─ Check x ⇐ ?5
+│   │   │   │   │   │   ├─ Infer x
+│   │   │   │   │   │   └─ OK: x : Int
+│   │   │   │   │   │   ├─ Conv  Int ≡ ?5
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check y ⇐ Int
+│   │   │   │   │   │   ├─ Infer y
+│   │   │   │   │   │   └─ OK: y : Int
+│   │   │   │   │   │   ├─ Conv  Int ≡ Int
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK: (> x y) : Bool
+│   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(x : Int). λ(y : Int). (> x y) : Π(x : Int). Π(y : Int). Bool) : Π(x : Int). Π(y : Int). Bool
+├─ Infer (λ(x : Int). λ(y : Int). (>= x y) : Π(x : Int). Π(y : Int). Bool)
+│   ├─ Check λ(x : Int). λ(y : Int). (>= x y) ⇐ Π(x : Int). Π(y : Int). Bool
+│   │   ├─ Conv  Int ≡ Int
+│   │   └─ OK
+│   │   ├─ Check λ(y : Int). (>= x y) ⇐ Π(y : Int). Bool
+│   │   │   ├─ Conv  Int ≡ Int
+│   │   │   └─ OK
+│   │   │   ├─ Check (>= x y) ⇐ Bool
+│   │   │   │   ├─ Infer (>= x y)
+│   │   │   │   │   ├─ Infer >=
+│   │   │   │   │   └─ OK: >= : Π(A : Type 0). Π(_ : #0). Π(_ : #1). Bool
+│   │   │   │   │   ├─ Check x ⇐ ?6
+│   │   │   │   │   │   ├─ Infer x
+│   │   │   │   │   │   └─ OK: x : Int
+│   │   │   │   │   │   ├─ Conv  Int ≡ ?6
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check y ⇐ Int
+│   │   │   │   │   │   ├─ Infer y
+│   │   │   │   │   │   └─ OK: y : Int
+│   │   │   │   │   │   ├─ Conv  Int ≡ Int
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK: (>= x y) : Bool
+│   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(x : Int). λ(y : Int). (>= x y) : Π(x : Int). Π(y : Int). Bool) : Π(x : Int). Π(y : Int). Bool
+├─ Infer (λ(x : Int). λ(y : Int). (= x y) : Π(x : Int). Π(y : Int). Bool)
+│   ├─ Check λ(x : Int). λ(y : Int). (= x y) ⇐ Π(x : Int). Π(y : Int). Bool
+│   │   ├─ Conv  Int ≡ Int
+│   │   └─ OK
+│   │   ├─ Check λ(y : Int). (= x y) ⇐ Π(y : Int). Bool
+│   │   │   ├─ Conv  Int ≡ Int
+│   │   │   └─ OK
+│   │   │   ├─ Check (= x y) ⇐ Bool
+│   │   │   │   ├─ Infer (= x y)
+│   │   │   │   │   ├─ Infer =
+│   │   │   │   │   └─ OK: = : Π(A : Type 0). Π(_ : #0). Π(_ : #1). Bool
+│   │   │   │   │   ├─ Check x ⇐ ?7
+│   │   │   │   │   │   ├─ Infer x
+│   │   │   │   │   │   └─ OK: x : Int
+│   │   │   │   │   │   ├─ Conv  Int ≡ ?7
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check y ⇐ Int
+│   │   │   │   │   │   ├─ Infer y
+│   │   │   │   │   │   └─ OK: y : Int
+│   │   │   │   │   │   ├─ Conv  Int ≡ Int
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK: (= x y) : Bool
+│   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(x : Int). λ(y : Int). (= x y) : Π(x : Int). Π(y : Int). Bool) : Π(x : Int). Π(y : Int). Bool
+├─ Infer (λ(x : Int). λ(y : Int). λ(fallback : Int). if (< x y) then x else fallback : Π(x : Int). Π(y : Int). Π(fallback : Int). Int)
+│   ├─ Check λ(x : Int). λ(y : Int). λ(fallback : Int). if (< x y) then x else fallback ⇐ Π(x : Int). Π(y : Int). Π(fallback : Int). Int
+│   │   ├─ Conv  Int ≡ Int
+│   │   └─ OK
+│   │   ├─ Check λ(y : Int). λ(fallback : Int). if (< x y) then x else fallback ⇐ Π(y : Int). Π(fallback : Int). Int
+│   │   │   ├─ Conv  Int ≡ Int
+│   │   │   └─ OK
+│   │   │   ├─ Check λ(fallback : Int). if (< x y) then x else fallback ⇐ Π(fallback : Int). Int
+│   │   │   │   ├─ Conv  Int ≡ Int
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check if (< x y) then x else fallback ⇐ Int
+│   │   │   │   │   ├─ Check (< x y) ⇐ Bool
+│   │   │   │   │   │   ├─ Infer (< x y)
+│   │   │   │   │   │   │   ├─ Infer <
+│   │   │   │   │   │   │   └─ OK: < : Π(A : Type 0). Π(_ : #0). Π(_ : #1). Bool
+│   │   │   │   │   │   │   ├─ Check x ⇐ ?8
+│   │   │   │   │   │   │   │   ├─ Infer x
+│   │   │   │   │   │   │   │   └─ OK: x : Int
+│   │   │   │   │   │   │   │   ├─ Conv  Int ≡ ?8
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check y ⇐ Int
+│   │   │   │   │   │   │   │   ├─ Infer y
+│   │   │   │   │   │   │   │   └─ OK: y : Int
+│   │   │   │   │   │   │   │   ├─ Conv  Int ≡ Int
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK: (< x y) : Bool
+│   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check x ⇐ Int
+│   │   │   │   │   │   ├─ Infer x
+│   │   │   │   │   │   └─ OK: x : Int
+│   │   │   │   │   │   ├─ Conv  Int ≡ Int
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check fallback ⇐ Int
+│   │   │   │   │   │   ├─ Infer fallback
+│   │   │   │   │   │   └─ OK: fallback : Int
+│   │   │   │   │   │   ├─ Conv  Int ≡ Int
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(x : Int). λ(y : Int). λ(fallback : Int). if (< x y) then x else fallback : Π(x : Int). Π(y : Int). Π(fallback : Int). Int) : Π(x : Int). Π(y : Int). Π(fallback : Int). Int
+├─ Infer (λ(x : Int). λ(y : Int). if (< x y) then x else y : Π(x : Int). Π(y : Int). Int)
+│   ├─ Check λ(x : Int). λ(y : Int). if (< x y) then x else y ⇐ Π(x : Int). Π(y : Int). Int
+│   │   ├─ Conv  Int ≡ Int
+│   │   └─ OK
+│   │   ├─ Check λ(y : Int). if (< x y) then x else y ⇐ Π(y : Int). Int
+│   │   │   ├─ Conv  Int ≡ Int
+│   │   │   └─ OK
+│   │   │   ├─ Check if (< x y) then x else y ⇐ Int
+│   │   │   │   ├─ Check (< x y) ⇐ Bool
+│   │   │   │   │   ├─ Infer (< x y)
+│   │   │   │   │   │   ├─ Infer <
+│   │   │   │   │   │   └─ OK: < : Π(A : Type 0). Π(_ : #0). Π(_ : #1). Bool
+│   │   │   │   │   │   ├─ Check x ⇐ ?9
+│   │   │   │   │   │   │   ├─ Infer x
+│   │   │   │   │   │   │   └─ OK: x : Int
+│   │   │   │   │   │   │   ├─ Conv  Int ≡ ?9
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check y ⇐ Int
+│   │   │   │   │   │   │   ├─ Infer y
+│   │   │   │   │   │   │   └─ OK: y : Int
+│   │   │   │   │   │   │   ├─ Conv  Int ≡ Int
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK: (< x y) : Bool
+│   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check x ⇐ Int
+│   │   │   │   │   ├─ Infer x
+│   │   │   │   │   └─ OK: x : Int
+│   │   │   │   │   ├─ Conv  Int ≡ Int
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check y ⇐ Int
+│   │   │   │   │   ├─ Infer y
+│   │   │   │   │   └─ OK: y : Int
+│   │   │   │   │   ├─ Conv  Int ≡ Int
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(x : Int). λ(y : Int). if (< x y) then x else y : Π(x : Int). Π(y : Int). Int) : Π(x : Int). Π(y : Int). Int
+├─ Infer (λ(x : Int). λ(y : Int). if (> x y) then x else y : Π(x : Int). Π(y : Int). Int)
+│   ├─ Check λ(x : Int). λ(y : Int). if (> x y) then x else y ⇐ Π(x : Int). Π(y : Int). Int
+│   │   ├─ Conv  Int ≡ Int
+│   │   └─ OK
+│   │   ├─ Check λ(y : Int). if (> x y) then x else y ⇐ Π(y : Int). Int
+│   │   │   ├─ Conv  Int ≡ Int
+│   │   │   └─ OK
+│   │   │   ├─ Check if (> x y) then x else y ⇐ Int
+│   │   │   │   ├─ Check (> x y) ⇐ Bool
+│   │   │   │   │   ├─ Infer (> x y)
+│   │   │   │   │   │   ├─ Infer >
+│   │   │   │   │   │   └─ OK: > : Π(A : Type 0). Π(_ : #0). Π(_ : #1). Bool
+│   │   │   │   │   │   ├─ Check x ⇐ ?10
+│   │   │   │   │   │   │   ├─ Infer x
+│   │   │   │   │   │   │   └─ OK: x : Int
+│   │   │   │   │   │   │   ├─ Conv  Int ≡ ?10
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check y ⇐ Int
+│   │   │   │   │   │   │   ├─ Infer y
+│   │   │   │   │   │   │   └─ OK: y : Int
+│   │   │   │   │   │   │   ├─ Conv  Int ≡ Int
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK: (> x y) : Bool
+│   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check x ⇐ Int
+│   │   │   │   │   ├─ Infer x
+│   │   │   │   │   └─ OK: x : Int
+│   │   │   │   │   ├─ Conv  Int ≡ Int
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check y ⇐ Int
+│   │   │   │   │   ├─ Infer y
+│   │   │   │   │   └─ OK: y : Int
+│   │   │   │   │   ├─ Conv  Int ≡ Int
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(x : Int). λ(y : Int). if (> x y) then x else y : Π(x : Int). Π(y : Int). Int) : Π(x : Int). Π(y : Int). Int
+├─ Infer (λ(x : Bool). x : Π(x : Bool). Bool)
+│   ├─ Check λ(x : Bool). x ⇐ Π(x : Bool). Bool
+│   │   ├─ Conv  Bool ≡ Bool
+│   │   └─ OK
+│   │   ├─ Check x ⇐ Bool
+│   │   │   ├─ Infer x
+│   │   │   └─ OK: x : Bool
+│   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(x : Bool). x : Π(x : Bool). Bool) : Π(x : Bool). Bool
+├─ Infer (show (> 1 1 (- 1 1)))
+│   ├─ Infer show
+│   └─ OK: show : Π(A : Type 0). Π(_ : #0). String
+│   ├─ Check (> 1 1 (- 1 1)) ⇐ ?11
+│   │   ├─ Infer (> 1 1 (- 1 1))
+│   │   │   ├─ Infer >
+│   │   │   └─ OK: > : Π(A : Type 0). Π(_ : #0). Π(_ : #1). Bool
+│   │   │   ├─ Check 1 ⇐ ?12
+│   │   │   │   ├─ Infer 1
+│   │   │   │   └─ OK: 1 : Nat
+│   │   │   │   ├─ Conv  Nat ≡ ?12
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   │   ├─ Check 1 ⇐ Nat
+│   │   │   │   ├─ Infer 1
+│   │   │   │   └─ OK: 1 : Nat
+│   │   │   │   ├─ Conv  Nat ≡ Nat
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   │   ├─ Infer (- 1 1)
+│   │   │   │   ├─ Infer -
+│   │   │   │   └─ OK: - : Π(A : Type 0). Π(_ : #0). Π(_ : #1). #2
+│   │   │   │   ├─ Check 1 ⇐ ?13
+│   │   │   │   │   ├─ Infer 1
+│   │   │   │   │   └─ OK: 1 : Nat
+│   │   │   │   │   ├─ Conv  Nat ≡ ?13
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check 1 ⇐ Nat
+│   │   │   │   │   ├─ Infer 1
+│   │   │   │   │   └─ OK: 1 : Nat
+│   │   │   │   │   ├─ Conv  Nat ≡ Nat
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   └─ OK: (- 1 1) : Nat
+│   │   └─ OK: (> 1 1 (- 1 1)) : ?14
+│   │   ├─ Conv  ?14 ≡ ?11
+│   │   └─ OK
+│   └─ OK
+└─ OK: (show (> 1 1 (- 1 1))) : String
+
+  [dep] Warning: 1 unsolved metavariable(s) remain
+    • ?11 [?impl] at depth 0
+      Expected type: Type 0
+  - Hint: This is expected during bootstrap. Untyped library functions (like '>=') generate holes.
+
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify 'm38 ~ (Int → Int)
+└─ OK
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ 'b
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify 'm38 ~ (Int → (Int → Int))
+└─ OK
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ 'b
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify 'm38 ~ (Int → (Int → Int))
+└─ OK
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ 'b
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify 'm38 ~ (Int → (Int → Int))
+└─ OK
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Bool
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify ('c → ('c → Bool)) ~ (Int → (Int → 'd))
+│   ├─ HM Unify 'c ~ Int
+│   └─ OK
+│   ├─ HM Unify (Int → Bool) ~ (Int → 'd)
+│   │   ├─ HM Unify Int ~ Int
+│   │   └─ OK
+│   │   ├─ HM Unify Bool ~ 'd
+│   │   └─ OK
+│   └─ OK
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify 'm38 ~ (Int → (Int → Bool))
+└─ OK
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Bool
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify ('c → ('c → Bool)) ~ (Int → (Int → 'd))
+│   ├─ HM Unify 'c ~ Int
+│   └─ OK
+│   ├─ HM Unify (Int → Bool) ~ (Int → 'd)
+│   │   ├─ HM Unify Int ~ Int
+│   │   └─ OK
+│   │   ├─ HM Unify Bool ~ 'd
+│   │   └─ OK
+│   └─ OK
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify 'm38 ~ (Int → (Int → Bool))
+└─ OK
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Bool
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify ('c → ('c → Bool)) ~ (Int → (Int → 'd))
+│   ├─ HM Unify 'c ~ Int
+│   └─ OK
+│   ├─ HM Unify (Int → Bool) ~ (Int → 'd)
+│   │   ├─ HM Unify Int ~ Int
+│   │   └─ OK
+│   │   ├─ HM Unify Bool ~ 'd
+│   │   └─ OK
+│   └─ OK
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify 'm38 ~ (Int → (Int → Bool))
+└─ OK
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Bool
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify ('c → ('c → Bool)) ~ (Int → (Int → 'd))
+│   ├─ HM Unify 'c ~ Int
+│   └─ OK
+│   ├─ HM Unify (Int → Bool) ~ (Int → 'd)
+│   │   ├─ HM Unify Int ~ Int
+│   │   └─ OK
+│   │   ├─ HM Unify Bool ~ 'd
+│   │   └─ OK
+│   └─ OK
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify 'm38 ~ (Int → (Int → Bool))
+└─ OK
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Bool
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify ('c → ('c → Bool)) ~ (Int → (Int → 'd))
+│   ├─ HM Unify 'c ~ Int
+│   └─ OK
+│   ├─ HM Unify (Int → Bool) ~ (Int → 'd)
+│   │   ├─ HM Unify Int ~ Int
+│   │   └─ OK
+│   │   ├─ HM Unify Bool ~ 'd
+│   │   └─ OK
+│   └─ OK
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify 'm38 ~ (Int → (Int → Bool))
+└─ OK
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Bool
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify ('c → ('c → Bool)) ~ (Int → (Int → 'd))
+│   ├─ HM Unify 'c ~ Int
+│   └─ OK
+│   ├─ HM Unify (Int → Bool) ~ (Int → 'd)
+│   │   ├─ HM Unify Int ~ Int
+│   │   └─ OK
+│   │   ├─ HM Unify Bool ~ 'd
+│   │   └─ OK
+│   └─ OK
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify 'm38 ~ (Int → (Int → (Int → Int)))
+└─ OK
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Bool
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify ('c → ('c → Bool)) ~ (Int → (Int → 'd))
+│   ├─ HM Unify 'c ~ Int
+│   └─ OK
+│   ├─ HM Unify (Int → Bool) ~ (Int → 'd)
+│   │   ├─ HM Unify Int ~ Int
+│   │   └─ OK
+│   │   ├─ HM Unify Bool ~ 'd
+│   │   └─ OK
+│   └─ OK
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify 'm38 ~ (Int → (Int → Int))
+└─ OK
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Bool
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify ('c → ('c → Bool)) ~ (Int → (Int → 'd))
+│   ├─ HM Unify 'c ~ Int
+│   └─ OK
+│   ├─ HM Unify (Int → Bool) ~ (Int → 'd)
+│   │   ├─ HM Unify Int ~ Int
+│   │   └─ OK
+│   │   ├─ HM Unify Bool ~ 'd
+│   │   └─ OK
+│   └─ OK
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify 'm38 ~ (Int → (Int → Int))
+└─ OK
+├─ Interop HM unifies with prior Dependent Type check: Bool
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify 'm38 ~ (Bool → Bool)
+└─ OK
+/tmp/monadc-fuzz-shrink_compare_variadic_gt_false_on_duplicate_compare_variadic_gt_false_on_duplicate-1-hq3arkci/fuzz_1.mon:45:20: error: '>' requires 2 arguments
+  module: Main
+[dep] running bidirectional type checker...
+DEFINED [fuzz-id-int :: Int -> Int]
+DEFINED [fuzz-add :: Int -> Int -> Int]
+DEFINED [fuzz-sub :: Int -> Int -> Int]
+DEFINED [fuzz-mul :: Int -> Int -> Int]
+DEFINED [fuzz-lt? :: Int -> Int -> Bool]
+DEFINED [fuzz-lte? :: Int -> Int -> Bool]
+DEFINED [fuzz-gt? :: Int -> Int -> Bool]
+DEFINED [fuzz-gte? :: Int -> Int -> Bool]
+DEFINED [fuzz-eq-int? :: Int -> Int -> Bool]
+DEFINED [fuzz-choose-less :: Int -> Int -> Int -> Int]
+DEFINED [fuzz-min :: Int -> Int -> Int]
+DEFINED [fuzz-max :: Int -> Int -> Int]
+DEFINED [fuzz-bool-id? :: Bool -> Bool]
+#+END_EXAMPLE

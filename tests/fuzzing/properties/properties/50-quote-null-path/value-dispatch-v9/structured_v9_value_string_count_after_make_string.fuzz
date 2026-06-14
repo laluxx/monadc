@@ -1,0 +1,7 @@
+name: structured_v9_value_string_count_after_make_string
+section: quote-null-string-v9
+args: 
+type: Bool
+expect: True
+description: Stress string/char dispatch, null coalescing, nil predicates, quote, quasiquote, and unquote lowering.
+law: (= (count (make-string 6 (Char 121))) 6)

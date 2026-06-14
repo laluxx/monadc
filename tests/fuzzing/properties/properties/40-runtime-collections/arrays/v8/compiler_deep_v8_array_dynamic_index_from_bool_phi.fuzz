@@ -1,0 +1,7 @@
+name: compiler_deep_v8_array_dynamic_index_from_bool_phi
+section: runtime-arrays-v8
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Array-as-function call should accept an index chosen by an if PHI.
+law: (= (with [xs [{a} {b}] i (if {p} 1 0)] (xs i)) (if {p} {b} {a}))

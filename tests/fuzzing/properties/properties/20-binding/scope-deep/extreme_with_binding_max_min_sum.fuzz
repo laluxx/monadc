@@ -1,0 +1,7 @@
+name: extreme_with_binding_max_min_sum
+section: binding-scope-deep
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Lexical binding and shadowing must preserve dependency order and branch-local scope.
+law: (with [lo (fuzz-min {a} {b})] (with [hi (fuzz-max {a} {b})] (= (+ lo hi) (+ {a} {b}))))

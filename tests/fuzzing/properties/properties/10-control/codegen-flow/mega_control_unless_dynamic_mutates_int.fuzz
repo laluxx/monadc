@@ -1,0 +1,7 @@
+name: mega_control_unless_dynamic_mutates_int
+section: codegen-control-flow
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: unless with generated condition must gate mutation.
+law: (= (with [x {a}] (do (unless {p} (set! x {b})) x)) (if {p} {a} {b}))

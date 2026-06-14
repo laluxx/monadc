@@ -1,0 +1,7 @@
+name: structured_v9_cross_set_mutation_then_array_index_branch
+section: cross-compiler-v9
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Stress cross-feature lowering across control flow, env lookup, runtime collections, predicates, quote/null, and operator dispatch.
+law: (= (with [s (set) xs [{a} {b}]] (do (if {p} (conj! s (xs 0)) (conj! s (xs 1))) (contains? s (if {p} {a} {b})))) True)

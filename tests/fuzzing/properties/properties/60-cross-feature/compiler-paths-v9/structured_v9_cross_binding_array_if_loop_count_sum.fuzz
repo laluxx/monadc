@@ -1,0 +1,7 @@
+name: structured_v9_cross_binding_array_if_loop_count_sum
+section: cross-compiler-v9
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Stress cross-feature lowering across control flow, env lookup, runtime collections, predicates, quote/null, and operator dispatch.
+law: (= (with [xs [(if {p} {a} {b}) {a}] i 0 acc 0] (do (while (< i 2) (begin (set! acc (+ acc (xs i))) (set! i (+ i 1)))) acc)) (+ (if {p} {a} {b}) {a}))

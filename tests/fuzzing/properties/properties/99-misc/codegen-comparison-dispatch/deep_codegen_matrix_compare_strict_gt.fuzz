@@ -1,0 +1,7 @@
+name: deep_codegen_matrix_compare_strict_gt
+section: codegen-comparison-dispatch
+args: a:Int
+type: Bool
+expect: True
+description: > comparison dispatcher targeted matrix probe.
+law: (> (+ {a} 1) {a})

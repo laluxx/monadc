@@ -1,0 +1,7 @@
+name: compiler_deep_v8_shift_left_then_right_small_positive
+section: bitwise-mixed-v8
+args: a:Int
+type: Bool
+expect: True
+description: A masked generated non-negative value should survive left/right shift round-trip.
+law: (= (>> (<< (& {a} 15) 2) 2) (& {a} 15))

@@ -1,0 +1,7 @@
+name: compiler_deep_v8_outer_mutation_survives_inner_shadow_set
+section: binding-scope-mutation-v8
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Inner shadowed set! must not mutate the outer binding cell.
+law: (= (with [x {a}] (do (set! x {b}) (with [x {c}] (set! x (+ x 1))) x)) {b})

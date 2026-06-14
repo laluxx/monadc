@@ -1,0 +1,7 @@
+name: mega_bind_rhs_reads_old_before_store
+section: codegen-binding-env
+args: a:Int b:Int
+type: Bool
+expect: True
+description: set! RHS must load old value before storing new value.
+law: (= (with [x {a}] (do (set! x (+ x {b})) x)) (+ {a} {b}))

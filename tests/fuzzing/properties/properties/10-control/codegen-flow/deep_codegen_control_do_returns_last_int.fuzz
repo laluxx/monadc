@@ -1,0 +1,7 @@
+name: deep_codegen_control_do_returns_last_int
+section: codegen-control-flow
+args: a:Int b:Int
+type: Bool
+expect: True
+description: do must evaluate forms and return the final Int value.
+law: (= (do {a} {b}) {b})

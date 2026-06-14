@@ -1,0 +1,7 @@
+name: deep_codegen_matrix_multiplication_identity_left
+section: codegen-arithmetic-dispatch
+args: a:Int
+type: Bool
+expect: True
+description: multiplication dispatcher identity on the left side.
+law: (= (* 1 {a}) {a})

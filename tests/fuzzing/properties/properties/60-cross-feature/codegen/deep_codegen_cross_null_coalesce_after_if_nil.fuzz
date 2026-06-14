@@ -1,0 +1,7 @@
+name: deep_codegen_cross_null_coalesce_after_if_nil
+section: codegen-cross-feature
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: ?? must join an if that may produce nil with scalar default.
+law: (= (?? (if {p} nil {a}) {b}) (if {p} {b} {a}))

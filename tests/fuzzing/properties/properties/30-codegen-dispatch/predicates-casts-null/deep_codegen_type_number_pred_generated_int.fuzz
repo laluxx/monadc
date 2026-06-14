@@ -1,0 +1,7 @@
+name: deep_codegen_type_number_pred_generated_int
+section: codegen-predicates-casts-null
+args: a:Int
+type: Bool
+expect: True
+description: Number? must accept generated Int values.
+law: (Number? {a})

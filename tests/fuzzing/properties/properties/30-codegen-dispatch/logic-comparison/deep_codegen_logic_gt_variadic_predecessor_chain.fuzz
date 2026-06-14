@@ -1,0 +1,7 @@
+name: deep_codegen_logic_gt_variadic_predecessor_chain
+section: codegen-logic-comparison
+args: a:Int
+type: Bool
+expect: True
+description: Variadic > must compare pairwise across generated predecessor chain.
+law: (> (+ {a} 2) (+ {a} 1) {a})

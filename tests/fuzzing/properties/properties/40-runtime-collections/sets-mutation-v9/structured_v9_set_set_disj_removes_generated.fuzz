@@ -1,0 +1,7 @@
+name: structured_v9_set_set_disj_removes_generated
+section: collections-set-v9
+args: a:Int
+type: Bool
+expect: True
+description: Stress persistent and mutable set operations, membership, duplicate handling, and branch guarded mutation.
+law: (= (contains? (disj (set {a}) {a}) {a}) False)

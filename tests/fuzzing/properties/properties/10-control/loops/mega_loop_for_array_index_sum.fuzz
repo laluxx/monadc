@@ -1,0 +1,7 @@
+name: mega_loop_for_array_index_sum
+section: codegen-control-loops
+args: 
+type: Bool
+expect: True
+description: for induction variable must index env array and mutate an accumulator.
+law: (= (with [xs [1 2 3 4] sum 0] (do (for [i 0 4] (set! sum (+ sum (xs i)))) sum)) 10)

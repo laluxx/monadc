@@ -1,0 +1,7 @@
+name: structured_v9_loop_for_adds_branch_value_7_times
+section: control-loop-mutation-v9
+args: p:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: for loop must preserve loop-carried accumulator state across 7 iterations with branch-selected increment.
+law: (= (with [acc {a}] (do (for 7 (set! acc (+ acc (if {p} {b} {c})))) acc)) (+ {a} (* (if {p} {b} {c}) 7)))

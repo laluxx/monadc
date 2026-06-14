@@ -1,0 +1,7 @@
+name: deep_codegen_control_for_range_step_counts_three
+section: codegen-control-flow
+args: 
+type: Bool
+expect: True
+description: numeric for with step must execute the expected number of iterations.
+law: (= (with [x 0] (do (for [i 0 6 2] (set! x (+ x 1))) x)) 3)

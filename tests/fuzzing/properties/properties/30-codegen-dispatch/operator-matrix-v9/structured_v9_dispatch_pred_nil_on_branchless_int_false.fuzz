@@ -1,0 +1,7 @@
+name: structured_v9_dispatch_pred_nil_on_branchless_int_false
+section: dispatch-matrix-v9
+args: a:Int
+type: Bool
+expect: True
+description: Stress direct operator and predicate dispatch in expression, branch, and operand positions.
+law: (= (nil? (do True {a})) False)

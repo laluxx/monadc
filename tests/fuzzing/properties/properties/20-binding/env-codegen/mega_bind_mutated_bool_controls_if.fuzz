@@ -1,0 +1,7 @@
+name: mega_bind_mutated_bool_controls_if
+section: codegen-binding-env
+args: p:Bool q:Bool a:Int b:Int
+type: Bool
+expect: True
+description: mutated Bool alloca must control later if branch.
+law: (= (with [x {p}] (do (set! x {q}) (if x {a} {b}))) (if {q} {a} {b}))

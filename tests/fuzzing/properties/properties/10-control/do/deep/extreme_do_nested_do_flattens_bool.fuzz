@@ -1,0 +1,7 @@
+name: extreme_do_nested_do_flattens_bool
+section: control-do-deep
+args: a:Int p:Bool q:Bool
+type: Bool
+expect: True
+description: Sequencing must return the last expression and compose inside branches, comparisons, and bindings.
+law: (= (do {a} (do {p} {q})) (do {a} {p} {q}))

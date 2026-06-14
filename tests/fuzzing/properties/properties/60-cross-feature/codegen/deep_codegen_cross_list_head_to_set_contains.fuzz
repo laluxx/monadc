@@ -1,0 +1,7 @@
+name: deep_codegen_cross_list_head_to_set_contains
+section: codegen-cross-feature
+args: a:Int
+type: Bool
+expect: True
+description: head over list must produce a value suitable for set membership.
+law: (contains? (set {a}) (head (cons {a} (list))))

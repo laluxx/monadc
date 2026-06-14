@@ -1,0 +1,7 @@
+name: mega_arith_mul_with_mutated_operand
+section: codegen-arith-binding
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Arithmetic * must use the value after set! from a nested with expression.
+law: (= (* (with [x {a}] (do (set! x {b}) x)) {c}) (* {b} {c}))

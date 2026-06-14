@@ -1,0 +1,7 @@
+name: mega_compare_variadic_gte_triple_pairwise
+section: codegen-compare-variadic
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Variadic >= must be equivalent to adjacent pairwise comparisons.
+law: (= (>= {a} {b} {c}) (and (>= {a} {b}) (>= {b} {c})))

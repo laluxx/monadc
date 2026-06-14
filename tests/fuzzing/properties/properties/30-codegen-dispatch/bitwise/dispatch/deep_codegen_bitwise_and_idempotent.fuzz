@@ -1,0 +1,7 @@
+name: deep_codegen_bitwise_and_idempotent
+section: codegen-bitwise-dispatch
+args: a:Int
+type: Bool
+expect: True
+description: Bitwise AND idempotence checks generated Int unboxing to i64.
+law: (= (& {a} {a}) {a})

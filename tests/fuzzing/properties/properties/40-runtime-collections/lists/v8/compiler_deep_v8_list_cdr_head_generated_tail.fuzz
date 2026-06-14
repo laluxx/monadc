@@ -1,0 +1,7 @@
+name: compiler_deep_v8_list_cdr_head_generated_tail
+section: runtime-lists-v8
+args: a:Int b:Int
+type: Bool
+expect: True
+description: cdr followed by head should observe the generated tail element.
+law: (= (head (cdr (cons {a} (cons {b} (list))))) {b})

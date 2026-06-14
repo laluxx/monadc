@@ -1,0 +1,7 @@
+name: deep_codegen_bitwise_and_commutes
+section: codegen-bitwise-dispatch
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Bitwise AND must commute for generated operands.
+law: (= (& {a} {b}) (& {b} {a}))

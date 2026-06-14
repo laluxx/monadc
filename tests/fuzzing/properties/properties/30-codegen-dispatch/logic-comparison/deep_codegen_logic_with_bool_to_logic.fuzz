@@ -1,0 +1,7 @@
+name: deep_codegen_logic_with_bool_to_logic
+section: codegen-logic-comparison
+args: p:Bool q:Bool
+type: Bool
+expect: True
+description: with-bound Bool values must feed logic dispatch.
+law: (= (with [x {p}] (and x {q})) (and {p} {q}))

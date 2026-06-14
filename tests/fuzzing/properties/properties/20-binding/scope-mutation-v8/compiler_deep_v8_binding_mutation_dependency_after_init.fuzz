@@ -1,0 +1,7 @@
+name: compiler_deep_v8_binding_mutation_dependency_after_init
+section: binding-scope-mutation-v8
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Mutation after dependent binding initialization must not retroactively change the dependent binding.
+law: (= (with [x {a} y (+ x {b})] (do (set! x {c}) y)) (+ {a} {b}))

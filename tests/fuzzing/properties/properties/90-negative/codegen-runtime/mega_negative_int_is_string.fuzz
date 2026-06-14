@@ -1,0 +1,7 @@
+name: mega_negative_int_is_string
+section: codegen-negative-runtime
+args: a:Int
+type: Bool
+expect: False
+description: Generated Int expression should not be a String.
+law: (String? {a})

@@ -1,0 +1,7 @@
+name: deep_codegen_mod_one_is_zero
+section: codegen-arithmetic-dispatch
+args: a:Int
+type: Bool
+expect: True
+description: Modulo by one must always be zero.
+law: (= (mod {a} 1) 0)

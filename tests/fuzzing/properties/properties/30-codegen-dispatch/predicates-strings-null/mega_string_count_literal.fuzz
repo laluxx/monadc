@@ -1,0 +1,7 @@
+name: mega_string_count_literal
+section: codegen-preds-strings-null
+args: 
+type: Bool
+expect: True
+description: string count must use runtime strlen path for literal.
+law: (= (count "compiler") 8)

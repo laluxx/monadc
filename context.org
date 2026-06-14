@@ -68,7 +68,7 @@ stable LLM facts.
 
 | Area       | File                   | Purpose                                     |
 |------------+------------------------+---------------------------------------------|
-| Language   | [[file:info/index.org][info/]]                 | Monad language reference (user-facing info) |
+| Language   | [[file:info/index.org][info/]]                  | Monad language reference (user-facing info) |
 | Format     | [[file:context/index.org][context/index.org]]      | Schema, notation, visual conventions        |
 | Reader     | [[file:context/reader.org][context/reader.org]]     | AST, tokens, parser and Wisp boundary       |
 | Build      | [[file:context/build.org][context/build.org]]      | Build/install commands and verification     |

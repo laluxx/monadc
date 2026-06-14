@@ -1,0 +1,7 @@
+name: structured_v9_env_nested_mutation_with_branch_selected_rhs
+section: binding-env-v9
+args: p:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Stress lexical environment lowering, shadowing, initializer order, and mutable variable lookup.
+law: (= (with [x {a}] (do (if {p} (set! x (+ x {b})) (set! x (+ x {c}))) x)) (+ {a} (if {p} {b} {c})))

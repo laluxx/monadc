@@ -1,0 +1,7 @@
+name: deep_codegen_type_char_pred_string_index
+section: codegen-predicates-casts-null
+args: 
+type: Bool
+expect: True
+description: Char? must accept char produced by string indexing.
+law: (Char? ("abc" 0))

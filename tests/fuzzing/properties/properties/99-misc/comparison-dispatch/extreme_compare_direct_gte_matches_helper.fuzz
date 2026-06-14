@@ -1,0 +1,7 @@
+name: extreme_compare_direct_gte_matches_helper
+section: comparison-dispatch
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Direct >= dispatch must agree with helper predicate.
+law: (= (>= {a} {b}) (fuzz-gte? {a} {b}))

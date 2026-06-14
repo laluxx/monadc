@@ -1,0 +1,7 @@
+name: mega_bitwise_left_shift_zero
+section: codegen-bitwise-dispatch
+args: a:Int
+type: Bool
+expect: True
+description: left shift by zero must be identity.
+law: (= (<< {a} 0) {a})

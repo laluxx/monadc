@@ -1,0 +1,7 @@
+name: mega_bitwise_or_idempotent_deep_operand
+section: codegen-bitwise-dispatch
+args: a:Int b:Int
+type: Bool
+expect: True
+description: bit-or idempotence must hold after arithmetic operands.
+law: (= (bit-or (- {a} {b}) (- {a} {b})) (- {a} {b}))

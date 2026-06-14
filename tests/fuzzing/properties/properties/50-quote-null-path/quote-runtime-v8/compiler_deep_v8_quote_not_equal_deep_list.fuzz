@@ -1,0 +1,7 @@
+name: compiler_deep_v8_quote_not_equal_deep_list
+section: quote-runtime-v8
+args: 
+type: Bool
+expect: True
+description: equal? should reject different quoted nested literals.
+law: (= (equal? (quote (a (b c) d)) (quote (a (b x) d))) False)

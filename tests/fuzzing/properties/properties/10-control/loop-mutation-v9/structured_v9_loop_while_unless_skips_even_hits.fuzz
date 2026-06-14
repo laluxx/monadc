@@ -1,0 +1,7 @@
+name: structured_v9_loop_while_unless_skips_even_hits
+section: control-loop-mutation-v9
+args: 
+type: Bool
+expect: True
+description: Stress lowering of loops, mutable locals, nested blocks, and branch guarded mutation.
+law: (= (with [i 0 hits 0] (do (while (< i 8) (begin (unless (= (% i 2) 0) (set! hits (+ hits 1))) (set! i (+ i 1)))) hits)) 4)

@@ -1,0 +1,7 @@
+name: mega_array_literal_prime_index_0
+section: codegen-array-env
+args: 
+type: Bool
+expect: True
+description: inline array literal fixed index 0 must load the expected constant.
+law: (= ([2 3 5 7] 0) 2)

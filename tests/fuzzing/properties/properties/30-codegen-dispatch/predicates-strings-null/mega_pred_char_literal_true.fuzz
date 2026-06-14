@@ -1,0 +1,7 @@
+name: mega_pred_char_literal_true
+section: codegen-preds-strings-null
+args: 
+type: Bool
+expect: True
+description: Char? must recognize Char conversion result.
+law: (Char? (Char 65))

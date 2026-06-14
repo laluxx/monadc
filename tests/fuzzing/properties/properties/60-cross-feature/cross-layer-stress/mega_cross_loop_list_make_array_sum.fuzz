@@ -1,0 +1,7 @@
+name: mega_cross_loop_list_make_array_sum
+section: codegen-cross-layer-stress
+args: 
+type: Bool
+expect: True
+description: while + count + array-as-function must sum array elements.
+law: (= (with [xs [1 2 3] i 0 acc 0] (do (while (< i (count xs)) (begin (set! acc (+ acc (xs i))) (set! i (+ i 1)))) acc)) 6)

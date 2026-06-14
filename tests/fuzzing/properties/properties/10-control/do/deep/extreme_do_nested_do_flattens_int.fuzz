@@ -1,0 +1,7 @@
+name: extreme_do_nested_do_flattens_int
+section: control-do-deep
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Sequencing must return the last expression and compose inside branches, comparisons, and bindings.
+law: (= (do {a} (do {b} {c})) (do {a} {b} {c}))

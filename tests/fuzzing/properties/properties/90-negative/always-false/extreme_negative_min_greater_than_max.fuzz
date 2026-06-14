@@ -1,0 +1,7 @@
+name: extreme_negative_min_greater_than_max
+section: negative-always-false
+args: a:Int b:Int
+type: Bool
+expect: False
+description: This deliberately false law should remain false for every generated input.
+law: (> (fuzz-min {a} {b}) (fuzz-max {a} {b}))

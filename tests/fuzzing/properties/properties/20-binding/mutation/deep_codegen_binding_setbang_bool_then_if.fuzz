@@ -1,0 +1,7 @@
+name: deep_codegen_binding_setbang_bool_then_if
+section: codegen-binding-mutation
+args: p:Bool q:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Bool set! result must drive a later if condition.
+law: (= (with [x {p}] (do (set! x {q}) (if x {a} {b}))) (if {q} {a} {b}))

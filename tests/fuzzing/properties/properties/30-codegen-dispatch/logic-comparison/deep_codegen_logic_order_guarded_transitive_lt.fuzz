@@ -1,0 +1,7 @@
+name: deep_codegen_logic_order_guarded_transitive_lt
+section: codegen-logic-comparison
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Guarded < transitivity stresses nested logic and comparison dispatch.
+law: (if (and (< {a} {b}) (< {b} {c})) (< {a} {c}) True)

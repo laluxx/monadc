@@ -1,0 +1,7 @@
+name: compiler_deep_v8_logic_or_if_encoded_truth_table
+section: logic-coercion-v8
+args: p:Bool q:Bool
+type: Bool
+expect: True
+description: Nested if should encode Bool disjunction symmetrically.
+law: (= (if {p} True {q}) (if {q} True {p}))

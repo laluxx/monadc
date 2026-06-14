@@ -1,0 +1,7 @@
+name: mega_compare_neq_successor_true
+section: codegen-compare-equality
+args: a:Int
+type: Bool
+expect: True
+description: != must report generated Int successor as different from original value.
+law: (!= (+ {a} 1) {a})

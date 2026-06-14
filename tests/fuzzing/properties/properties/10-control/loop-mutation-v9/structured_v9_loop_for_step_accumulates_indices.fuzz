@@ -1,0 +1,7 @@
+name: structured_v9_loop_for_step_accumulates_indices
+section: control-loop-mutation-v9
+args: 
+type: Bool
+expect: True
+description: Stress lowering of loops, mutable locals, nested blocks, and branch guarded mutation.
+law: (= (with [sum 0] (do (for [i 0 8 2] (set! sum (+ sum i))) sum)) 12)

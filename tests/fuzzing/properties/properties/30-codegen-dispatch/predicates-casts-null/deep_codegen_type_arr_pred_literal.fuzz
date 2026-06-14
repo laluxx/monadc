@@ -1,0 +1,7 @@
+name: deep_codegen_type_arr_pred_literal
+section: codegen-predicates-casts-null
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Arr? must accept inline array literals.
+law: (Arr? [{a} {b}])

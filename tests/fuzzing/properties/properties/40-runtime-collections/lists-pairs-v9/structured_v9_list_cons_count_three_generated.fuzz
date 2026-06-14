@@ -1,0 +1,7 @@
+name: structured_v9_list_cons_count_three_generated
+section: collections-list-v9
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Stress list constructors, pair accessors, head/cdr chains, make-list, and list-copy.
+law: (= (count (cons {a} (cons {b} (cons {c} (list))))) 3)

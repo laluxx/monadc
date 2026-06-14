@@ -1,0 +1,7 @@
+name: deep_codegen_string_make_string_contains_char
+section: codegen-string-char
+args: 
+type: Bool
+expect: True
+description: make-string result must interact with contains?.
+law: (contains? (make-string 4 ("aaaa" 0)) "aa")

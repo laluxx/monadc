@@ -1,0 +1,7 @@
+name: deep_codegen_control_if_branch_mutation_then
+section: codegen-control-flow
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: if branches must sequence set! stores into the outer alloca.
+law: (= (with [x {a}] (do (if {p} (set! x {b}) (set! x {a})) x)) (if {p} {b} {a}))

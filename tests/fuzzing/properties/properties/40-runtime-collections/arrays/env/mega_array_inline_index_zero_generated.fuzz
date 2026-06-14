@@ -1,0 +1,7 @@
+name: mega_array_inline_index_zero_generated
+section: codegen-array-env
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: inline array indexing must extract element 0.
+law: (= ([{a} {b} {c}] 0) {a})

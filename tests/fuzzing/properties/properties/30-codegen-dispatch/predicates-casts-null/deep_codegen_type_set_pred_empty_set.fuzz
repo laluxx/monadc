@@ -1,0 +1,7 @@
+name: deep_codegen_type_set_pred_empty_set
+section: codegen-predicates-casts-null
+args: 
+type: Bool
+expect: True
+description: Set? must accept zero-arg set construction.
+law: (Set? (set))

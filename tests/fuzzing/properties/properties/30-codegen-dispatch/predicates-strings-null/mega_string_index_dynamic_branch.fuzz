@@ -1,0 +1,7 @@
+name: mega_string_index_dynamic_branch
+section: codegen-preds-strings-null
+args: p:Bool
+type: Bool
+expect: True
+description: string indexing must accept branch-selected index.
+law: (= ("ab" (if {p} 0 1)) (if {p} (Char 97) (Char 98)))

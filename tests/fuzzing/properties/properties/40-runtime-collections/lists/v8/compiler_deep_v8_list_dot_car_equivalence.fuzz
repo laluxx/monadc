@@ -1,0 +1,7 @@
+name: compiler_deep_v8_list_dot_car_equivalence
+section: runtime-lists-v8
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Dot pair car should read the generated left component.
+law: (= (car (. {a} {b})) {a})

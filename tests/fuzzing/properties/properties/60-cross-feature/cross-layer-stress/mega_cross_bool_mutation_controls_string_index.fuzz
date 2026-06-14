@@ -1,0 +1,7 @@
+name: mega_cross_bool_mutation_controls_string_index
+section: codegen-cross-layer-stress
+args: p:Bool
+type: Bool
+expect: True
+description: mutated Bool must control string indexing branch.
+law: (= (with [q {p}] (do (set! q (not q)) ("ab" (if q 0 1)))) (if {p} (Char 98) (Char 97)))

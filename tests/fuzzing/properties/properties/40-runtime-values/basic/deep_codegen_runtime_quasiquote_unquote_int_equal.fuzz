@@ -1,0 +1,7 @@
+name: deep_codegen_runtime_quasiquote_unquote_int_equal
+section: codegen-runtime-values
+args: a:Int
+type: Bool
+expect: True
+description: quasiquote with an unquoted generated Int must produce stable equal values.
+law: (equal? (quasiquote (x (unquote {a}) z)) (quasiquote (x (unquote {a}) z)))

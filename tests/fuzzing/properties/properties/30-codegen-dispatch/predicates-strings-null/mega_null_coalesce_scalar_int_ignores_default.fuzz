@@ -1,0 +1,7 @@
+name: mega_null_coalesce_scalar_int_ignores_default
+section: codegen-preds-strings-null
+args: a:Int b:Int
+type: Bool
+expect: True
+description: ?? must return scalar left operand because scalar Int is never nil.
+law: (= (?? {a} {b}) {a})

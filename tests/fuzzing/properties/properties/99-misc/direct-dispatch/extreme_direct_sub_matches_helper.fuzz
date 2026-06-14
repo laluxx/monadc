@@ -1,0 +1,7 @@
+name: extreme_direct_sub_matches_helper
+section: direct-dispatch
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Direct - dispatch must agree with the typed helper wrapper.
+law: (= (- {a} {b}) (fuzz-sub {a} {b}))

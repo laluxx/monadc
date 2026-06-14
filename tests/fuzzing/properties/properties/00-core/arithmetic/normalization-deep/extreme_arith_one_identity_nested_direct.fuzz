@@ -1,0 +1,7 @@
+name: extreme_arith_one_identity_nested_direct
+section: arithmetic-normalization-deep
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Deep arithmetic normalization must preserve integer semantics across direct codegen and helper calls.
+law: (= (* 1 (+ {a} {b})) (+ {a} {b}))

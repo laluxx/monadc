@@ -1,0 +1,7 @@
+name: deep_codegen_type_bool_pred_generated
+section: codegen-predicates-casts-null
+args: p:Bool
+type: Bool
+expect: True
+description: Bool? must accept generated Bool values.
+law: (Bool? {p})

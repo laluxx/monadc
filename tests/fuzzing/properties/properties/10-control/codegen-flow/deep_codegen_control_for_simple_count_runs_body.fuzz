@@ -1,0 +1,7 @@
+name: deep_codegen_control_for_simple_count_runs_body
+section: codegen-control-flow
+args: 
+type: Bool
+expect: True
+description: simple count for form must execute body count times.
+law: (= (with [x 0] (do (for 5 (set! x (+ x 1))) x)) 5)

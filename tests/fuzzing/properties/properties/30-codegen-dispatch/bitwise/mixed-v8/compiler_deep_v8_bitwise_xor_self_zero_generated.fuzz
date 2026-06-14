@@ -1,0 +1,7 @@
+name: compiler_deep_v8_bitwise_xor_self_zero_generated
+section: bitwise-mixed-v8
+args: a:Int
+type: Bool
+expect: True
+description: Bitwise xor of a generated Int with itself should be zero.
+law: (= (bit-xor {a} {a}) 0)

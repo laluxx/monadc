@@ -1,0 +1,7 @@
+name: compiler_deep_v8_do_inside_if_condition_observes_previous_set
+section: control-flow-mutation-v8
+args: p:Bool q:Bool a:Int b:Int
+type: Bool
+expect: True
+description: A condition computed after set! must observe the updated Bool cell.
+law: (= (with [flag {p}] (do (set! flag {q}) (if flag {a} {b}))) (if {q} {a} {b}))

@@ -1,0 +1,7 @@
+name: oracle_path_string_roundtrip_contains_slash
+section: oracle-path
+args: p:Path
+type: Bool
+expect-python: "/" in str(p)
+description: Generated path cast to String should contain a slash.
+law: (contains? (String {p}) "/")

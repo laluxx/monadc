@@ -1,0 +1,7 @@
+name: deep_codegen_string_string_index_second_diff_false
+section: codegen-string-char
+args: 
+type: Bool
+expect: False
+description: Different indexed chars should not compare equal.
+law: (= ("abc" 1) ("axc" 1))

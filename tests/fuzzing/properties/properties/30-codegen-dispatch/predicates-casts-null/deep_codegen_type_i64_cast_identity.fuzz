@@ -1,0 +1,7 @@
+name: deep_codegen_type_i64_cast_identity
+section: codegen-predicates-casts-null
+args: a:Int
+type: Bool
+expect: True
+description: I64 cast of generated Int should preserve numeric value.
+law: (= (I64 {a}) {a})

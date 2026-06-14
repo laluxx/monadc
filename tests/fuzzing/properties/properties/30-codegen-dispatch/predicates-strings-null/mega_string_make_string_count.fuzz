@@ -1,0 +1,7 @@
+name: mega_string_make_string_count
+section: codegen-preds-strings-null
+args: 
+type: Bool
+expect: True
+description: make-string must produce requested length.
+law: (= (count (make-string 4 (Char 120))) 4)

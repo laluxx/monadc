@@ -1,0 +1,7 @@
+name: compiler_deep_v8_set_disjbang_guarded_removes
+section: runtime-sets-v8
+args: p:Bool a:Int
+type: Bool
+expect: True
+description: Mutable set disj! behind when should remove a generated element iff the guard is true.
+law: (= (with [s (set {a})] (do (when {p} (disj! s {a})) (contains? s {a}))) (if {p} False True))

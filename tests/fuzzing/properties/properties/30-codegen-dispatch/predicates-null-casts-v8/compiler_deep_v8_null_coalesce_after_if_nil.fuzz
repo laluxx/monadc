@@ -1,0 +1,7 @@
+name: compiler_deep_v8_null_coalesce_after_if_nil
+section: predicates-null-casts-v8
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Null coalescing after an if-produced nil should choose default only on the nil branch.
+law: (= (?? (if {p} nil {a}) {b}) (if {p} {b} {a}))

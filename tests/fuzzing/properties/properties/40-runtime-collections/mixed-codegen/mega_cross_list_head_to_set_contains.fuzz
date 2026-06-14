@@ -1,0 +1,7 @@
+name: mega_cross_list_head_to_set_contains
+section: codegen-runtime-collections
+args: a:Int
+type: Bool
+expect: True
+description: generated value through list head must be usable as set key.
+law: (contains? (set {a}) (head (cons {a} (list))))

@@ -1,0 +1,7 @@
+name: oracle_string_missing_after_suffix_marker
+section: oracle-string
+args: s:String
+type: Bool
+expect-python: False
+description: Generated string should not contain a sentinel substring outside generator alphabet.
+law: (contains? {s} "␀-not-generated")

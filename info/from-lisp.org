@@ -10,7 +10,7 @@ at home, but the type system and compilation model change how you write code.
 
 * Compilation: LLVM Native Code, Not Interpreted
 
-| Lisp / Scheme          | Monad                            |
+| Lisp / Scheme | Monad |
 +------------------------+----------------------------------+
 | Interpreted or JIT-compiled | Ahead-of-time native via LLVM               |
 | =compile-file= = load         | =monad file.mon= — single step                |

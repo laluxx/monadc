@@ -1,0 +1,7 @@
+name: deep_codegen_type_nil_pred_nil_true
+section: codegen-predicates-casts-null
+args: 
+type: Bool
+expect: True
+description: nil? must recognize nil literal.
+law: (nil? nil)

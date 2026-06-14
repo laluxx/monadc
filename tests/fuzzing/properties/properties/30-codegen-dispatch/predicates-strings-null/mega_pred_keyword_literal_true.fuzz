@@ -1,0 +1,7 @@
+name: mega_pred_keyword_literal_true
+section: codegen-preds-strings-null
+args: 
+type: Bool
+expect: True
+description: Keyword? must recognize keyword literal.
+law: (Keyword? :compiler)

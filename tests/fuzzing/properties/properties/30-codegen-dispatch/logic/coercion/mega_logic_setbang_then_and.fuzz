@@ -1,0 +1,7 @@
+name: mega_logic_setbang_then_and
+section: codegen-logic-coercion
+args: p:Bool q:Bool
+type: Bool
+expect: True
+description: and must read Bool mutated by set!.
+law: (= (with [x {p}] (do (set! x {q}) (and x True))) {q})

@@ -715,14 +715,22 @@ def print_section_header(section: str) -> None:
     print_section_line(heading, color, bold=True)
 
 
-def print_section_line(title: str, color: str, *, bold: bool = False) -> None:
-    text = f" {title} "
-    width = WIDTH + 2
-    left = max(6, (width - len(text)) // 3)
-    right = max(1, width - left - len(text))
-    weight = BOLD if bold else ""
-    print(f"{color}{weight}{'─' * left}{text}{'─' * right}{RESET}")
+SEPARATOR_WIDTH = 180
 
+BLACK_BOLD = "\033[1;30m"
+
+
+def background_code(color: str) -> str:
+    match = re.search(r"\[(?:1;)?3(\d)m", color)
+    digit = match.group(1) if match else "7"
+    return f"\033[4{digit}m"
+
+
+def print_section_line(title: str, color: str, *, bold: bool = False) -> None:
+    bg = background_code(color)
+    label = f" {title} "
+    cap_right = f"{color}{chr(0x25d7)}{RESET}"
+    print(f"{bg}{BLACK_BOLD}{label}{RESET}{cap_right}")
 
 def print_result(
     result: TestResult,
@@ -747,6 +755,9 @@ def print_result(
             print(indent_output(result.output))
 
 
+BRACKET_COLOR = "\033[38;2;157;129;186m"
+
+
 def progress_prefix(
     loc_path: str,
     loc_line: int,
@@ -761,6 +772,8 @@ def progress_prefix(
     location = f"{loc_path}:{loc_line}:{loc_col}: {severity}:"
     location = location.ljust(loc_width)
     counter_text = f"{WHITE}{counter}{RESET}" if colored else counter
+    if colored:
+        return f"{location} {BRACKET_COLOR}[{RESET}{counter_text}{BRACKET_COLOR}]{RESET} {name}"
     return f"{location} [{counter_text}] {name}"
 
 
@@ -850,7 +863,7 @@ def format_duration(elapsed_ns: int) -> str:
 
 
 def color_duration(value: float, unit: str) -> str:
-    return f"[{value:7.2f} ] {CYAN}{unit:>2}{RESET}"
+    return f"{BRACKET_COLOR}[{RESET}{value:7.2f} {BRACKET_COLOR}]{RESET} {CYAN}{unit:>2}{RESET}"
 
 
 def strip_ansi(value: str) -> str:
@@ -978,10 +991,10 @@ def print_changes(regressions: list[str], fixes: list[str]) -> None:
     YELLOW = "\033[33m"
     RESET = "\033[0m"
     if regressions:
-        print(f"  {BOLD_RED}REGRESSIONS (pass {chr(8594)} fail):{RESET}")
+        print_section_line(f"REGRESSIONS (pass {chr(8594)} fail)", BOLD_RED)
         print_name_grid(regressions, "x", BOLD_RED)
     if fixes:
-        print(f"  {BOLD_GREEN}FIXES (fail {chr(8594)} pass):{RESET}")
+        print_section_line(f"FIXES (fail {chr(8594)} pass)", GREEN)
         print_name_grid(fixes, "+", BOLD_GREEN)
 
 

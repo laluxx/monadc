@@ -1,0 +1,7 @@
+name: structured_v9_list_cdr_head_second_after_nested_cons
+section: collections-list-v9
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Stress list constructors, pair accessors, head/cdr chains, make-list, and list-copy.
+law: (= (head (cdr (cons {a} (cons {b} (cons {c} (list)))))) {b})

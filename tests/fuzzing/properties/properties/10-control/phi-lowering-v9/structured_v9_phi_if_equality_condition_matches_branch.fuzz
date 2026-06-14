@@ -1,0 +1,7 @@
+name: structured_v9_phi_if_equality_condition_matches_branch
+section: control-phi-v9
+args: a:Int b:Int yes:Int no:Int
+type: Bool
+expect: True
+description: Stress branch PHI lowering and nested conditional codegen.
+law: (= (if (= {a} {b}) {yes} {no}) (if (fuzz-eq-int? {a} {b}) {yes} {no}))

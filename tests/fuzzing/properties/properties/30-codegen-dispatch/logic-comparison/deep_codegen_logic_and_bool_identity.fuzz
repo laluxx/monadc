@@ -1,0 +1,7 @@
+name: deep_codegen_logic_and_bool_identity
+section: codegen-logic-comparison
+args: p:Bool
+type: Bool
+expect: True
+description: and must preserve a generated Bool when combined with True.
+law: (= (and {p} True) {p})

@@ -1,0 +1,7 @@
+name: extreme_if_common_right_sub
+section: control-if-dispatch
+args: cond:Bool common:Int a:Int b:Int
+type: Bool
+expect: True
+description: A common right operand can be moved through an if branch for -.
+law: (= (- (if {cond} {a} {b}) {common}) (if {cond} (- {a} {common}) (- {b} {common})))

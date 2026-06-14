@@ -1,0 +1,7 @@
+name: deep_codegen_string_head_string_matches_index_zero
+section: codegen-string-char
+args: 
+type: Bool
+expect: True
+description: head on string must match string-indexing at zero.
+law: (= (head "abc") ("abc" 0))

@@ -1,0 +1,7 @@
+name: extreme_order_gte_transitive_guarded
+section: order-logic-deep
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Guarded order implication must preserve direct comparison semantics.
+law: (if (>= {a} {b}) (if (>= {b} {c}) (>= {a} {c}) True) True)

@@ -1,0 +1,7 @@
+name: structured_v9_env_branch_scope_result_feeds_outer_mutation
+section: binding-env-v9
+args: p:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Stress lexical environment lowering, shadowing, initializer order, and mutable variable lookup.
+law: (= (with [x {a}] (do (set! x (if {p} (with [y {b}] y) (with [y {c}] y))) x)) (if {p} {b} {c}))

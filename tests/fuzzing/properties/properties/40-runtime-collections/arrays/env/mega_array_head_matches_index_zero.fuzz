@@ -1,0 +1,7 @@
+name: mega_array_head_matches_index_zero
+section: codegen-array-env
+args: a:Int b:Int
+type: Bool
+expect: True
+description: head over array must agree with inline index zero.
+law: (= (head [{a} {b}]) ([{a} {b}] 0))

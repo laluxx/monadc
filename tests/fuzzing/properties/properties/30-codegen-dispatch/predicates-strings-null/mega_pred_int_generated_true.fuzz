@@ -1,0 +1,7 @@
+name: mega_pred_int_generated_true
+section: codegen-preds-strings-null
+args: a:Int
+type: Bool
+expect: True
+description: Int? must fold true for generated Int expression.
+law: (Int? {a})

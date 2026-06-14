@@ -1,0 +1,7 @@
+name: compiler_deep_v8_if_branch_set_local_bool_phi
+section: control-flow-mutation-v8
+args: p:Bool q:Bool r:Bool s:Bool
+type: Bool
+expect: True
+description: Exercise if branch codegen, mutable locals, and branch result merging.
+law: (= (with [q {q}] (if {p} (do (set! q {r}) q) (do (set! q {s}) q))) (if {p} {r} {s}))

@@ -1,0 +1,7 @@
+name: compiler_deep_v8_make_string_count_and_contains
+section: runtime-strings-v8
+args: 
+type: Bool
+expect: True
+description: make-string should create a countable string with the repeated substring.
+law: (contains? (make-string 5 (Char 120)) "xxx")

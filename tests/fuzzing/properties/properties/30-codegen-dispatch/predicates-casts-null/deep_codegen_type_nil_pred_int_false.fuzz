@@ -1,0 +1,7 @@
+name: deep_codegen_type_nil_pred_int_false
+section: codegen-predicates-casts-null
+args: a:Int
+type: Bool
+expect: False
+description: nil? over scalar Int must fold to false.
+law: (nil? {a})

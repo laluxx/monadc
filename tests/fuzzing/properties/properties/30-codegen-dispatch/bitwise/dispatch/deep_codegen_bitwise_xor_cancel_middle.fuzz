@@ -1,0 +1,7 @@
+name: deep_codegen_bitwise_xor_cancel_middle
+section: codegen-bitwise-dispatch
+args: a:Int b:Int
+type: Bool
+expect: True
+description: bit-xor cancellation tests nested dispatcher calls.
+law: (= (bit-xor (bit-xor {a} {b}) {b}) {a})

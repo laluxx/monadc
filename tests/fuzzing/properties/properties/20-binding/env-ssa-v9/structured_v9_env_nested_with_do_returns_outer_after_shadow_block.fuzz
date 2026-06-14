@@ -1,0 +1,7 @@
+name: structured_v9_env_nested_with_do_returns_outer_after_shadow_block
+section: binding-env-v9
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Stress lexical environment lowering, shadowing, initializer order, and mutable variable lookup.
+law: (= (with [x {a}] (do (with [x {b}] x) x)) {a})

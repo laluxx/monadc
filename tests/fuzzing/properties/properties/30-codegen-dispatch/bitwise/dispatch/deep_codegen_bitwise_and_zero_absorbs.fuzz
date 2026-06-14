@@ -1,0 +1,7 @@
+name: deep_codegen_bitwise_and_zero_absorbs
+section: codegen-bitwise-dispatch
+args: a:Int
+type: Bool
+expect: True
+description: Bitwise AND dispatcher must absorb zero.
+law: (= (& {a} 0) 0)

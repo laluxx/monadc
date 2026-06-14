@@ -1,0 +1,7 @@
+name: mega_bitwise_xor_self_zero_deep_operand
+section: codegen-bitwise-dispatch
+args: a:Int b:Int
+type: Bool
+expect: True
+description: bit-xor self must zero after arithmetic operands.
+law: (= (bit-xor (* {a} {b}) (* {a} {b})) 0)

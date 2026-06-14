@@ -1,0 +1,7 @@
+name: mega_cross_loop_then_predicate_set_6
+section: codegen-cross-layer-stress
+args: 
+type: Bool
+expect: True
+description: for loop to 6 must mutate set with final induction value.
+law: (with [s (set)] (do (for [i 0 6] (conj! s i)) (contains? s 5)))

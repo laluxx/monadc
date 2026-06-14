@@ -1,0 +1,7 @@
+name: structured_v9_value_nil_predicate_through_do_int_false
+section: quote-null-string-v9
+args: a:Int
+type: Bool
+expect: True
+description: Stress string/char dispatch, null coalescing, nil predicates, quote, quasiquote, and unquote lowering.
+law: (= (nil? (do nil {a})) False)

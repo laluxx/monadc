@@ -1,0 +1,7 @@
+name: structured_v9_future_mod_nonzero_oracle
+section: future-number-oracle-v9
+args: a:Int b:PositiveInt
+type: Int
+expect-python: a % b
+description: Modulo oracle with generated positive divisor.
+law: (% {a} {b})

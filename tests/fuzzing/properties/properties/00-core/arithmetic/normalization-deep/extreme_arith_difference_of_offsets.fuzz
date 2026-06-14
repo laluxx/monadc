@@ -1,0 +1,7 @@
+name: extreme_arith_difference_of_offsets
+section: arithmetic-normalization-deep
+args: base:Int left:Int right:Int
+type: Bool
+expect: True
+description: Deep arithmetic normalization must preserve integer semantics across direct codegen and helper calls.
+law: (= (- (+ {base} {left}) (+ {base} {right})) (- {left} {right}))

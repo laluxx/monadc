@@ -1,0 +1,7 @@
+name: deep_codegen_control_while_skips_false_condition
+section: codegen-control-flow
+args: 
+type: Bool
+expect: True
+description: while False must skip the loop body entirely.
+law: (= (with [x 7] (do (while False (set! x 9)) x)) 7)

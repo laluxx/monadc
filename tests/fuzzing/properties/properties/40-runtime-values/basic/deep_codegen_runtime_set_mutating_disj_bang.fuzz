@@ -1,0 +1,7 @@
+name: deep_codegen_runtime_set_mutating_disj_bang
+section: codegen-runtime-values
+args: a:Int
+type: Bool
+expect: True
+description: disj! must mutate a with-bound set variable in place.
+law: (with [s (set {a})] (do (disj! s {a}) (not (contains? s {a}))))

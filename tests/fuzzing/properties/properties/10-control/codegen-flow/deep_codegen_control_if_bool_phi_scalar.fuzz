@@ -1,0 +1,7 @@
+name: deep_codegen_control_if_bool_phi_scalar
+section: codegen-control-flow
+args: p:Bool q:Bool r:Bool
+type: Bool
+expect: True
+description: if must construct a scalar PHI for generated Bool branches.
+law: (= (if {p} {q} {r}) (if {p} {q} {r}))

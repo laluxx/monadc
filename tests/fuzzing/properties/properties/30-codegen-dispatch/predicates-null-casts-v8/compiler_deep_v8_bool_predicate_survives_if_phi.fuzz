@@ -1,0 +1,7 @@
+name: compiler_deep_v8_bool_predicate_survives_if_phi
+section: predicates-null-casts-v8
+args: p:Bool q:Bool r:Bool
+type: Bool
+expect: True
+description: Bool? should see a Bool if PHI result.
+law: (Bool? (if {p} {q} {r}))

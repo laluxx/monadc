@@ -1,0 +1,7 @@
+name: deep_codegen_type_null_coalesce_nil_returns_default_int
+section: codegen-predicates-casts-null
+args: a:Int
+type: Bool
+expect: True
+description: ?? over nil must return the generated default Int.
+law: (= (?? nil {a}) {a})

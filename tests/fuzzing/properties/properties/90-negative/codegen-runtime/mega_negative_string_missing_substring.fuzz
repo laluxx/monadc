@@ -1,0 +1,7 @@
+name: mega_negative_string_missing_substring
+section: codegen-negative-runtime
+args: 
+type: Bool
+expect: False
+description: Absent substring should remain false through string contains? dispatch.
+law: (contains? "compiler" "runtime-missing")

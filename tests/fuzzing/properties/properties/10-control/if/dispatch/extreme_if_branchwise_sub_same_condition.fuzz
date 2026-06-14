@@ -1,0 +1,7 @@
+name: extreme_if_branchwise_sub_same_condition
+section: control-if-dispatch
+args: cond:Bool a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Branchwise - under the same condition equals selecting the already-computed branch result.
+law: (= (- (if {cond} {a} {b}) (if {cond} {c} {d})) (if {cond} (- {a} {c}) (- {b} {d})))

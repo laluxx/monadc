@@ -1,0 +1,7 @@
+name: extreme_arith_factor_common_left_direct
+section: arithmetic-normalization-deep
+args: k:Int a:Int b:Int
+type: Bool
+expect: True
+description: Deep arithmetic normalization must preserve integer semantics across direct codegen and helper calls.
+law: (= (+ (* {k} {a}) (* {k} {b})) (* {k} (+ {a} {b})))

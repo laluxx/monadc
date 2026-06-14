@@ -1,0 +1,7 @@
+name: mega_quote_symbol_head_is_symbol
+section: codegen-quote-runtime
+args: 
+type: Bool
+expect: True
+description: quoted list head must be runtime symbol.
+law: (Symbol? (head (quote (a b c))))

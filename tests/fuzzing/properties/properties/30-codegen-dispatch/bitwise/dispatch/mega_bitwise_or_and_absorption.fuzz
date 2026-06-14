@@ -1,0 +1,7 @@
+name: mega_bitwise_or_and_absorption
+section: codegen-bitwise-dispatch
+args: a:Int b:Int
+type: Bool
+expect: True
+description: bitwise absorption bit-or a (a & b) = a must hold.
+law: (= (bit-or {a} (& {a} {b})) {a})

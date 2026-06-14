@@ -1,0 +1,7 @@
+name: deep_codegen_div_identity_one_direct
+section: codegen-arithmetic-dispatch
+args: a:Int
+type: Bool
+expect: True
+description: Division dispatcher must preserve any generated Int divided by one.
+law: (= (/ {a} 1) {a})

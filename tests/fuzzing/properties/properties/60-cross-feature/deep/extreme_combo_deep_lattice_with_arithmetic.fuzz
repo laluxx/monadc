@@ -1,0 +1,7 @@
+name: extreme_combo_deep_lattice_with_arithmetic
+section: feature-interactions-deep
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Mixed helpers, direct dispatch, control flow, and bindings should compose without changing semantics.
+law: (with [lo (fuzz-min {a} {b})] (with [hi (fuzz-max {a} {b})] (= (+ (* lo {c}) (* hi {c})) (* (+ {a} {b}) {c}))))

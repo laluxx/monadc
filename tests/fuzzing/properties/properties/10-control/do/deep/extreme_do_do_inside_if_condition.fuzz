@@ -1,0 +1,7 @@
+name: extreme_do_do_inside_if_condition
+section: control-do-deep
+args: setup:Int cond:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Sequencing must return the last expression and compose inside branches, comparisons, and bindings.
+law: (= (if (do {setup} {cond}) {a} {b}) (if {cond} {a} {b}))

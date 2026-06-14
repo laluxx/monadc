@@ -1,0 +1,7 @@
+name: mega_cross_predicate_branch_array_or_list
+section: codegen-cross-layer-stress
+args: p:Bool
+type: Bool
+expect: True
+description: collection? must accept PHI between array and list boxed values.
+law: (= (collection? (if {p} [1 2] (list))) True)

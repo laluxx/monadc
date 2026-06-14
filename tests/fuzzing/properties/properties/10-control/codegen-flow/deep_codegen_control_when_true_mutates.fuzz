@@ -1,0 +1,7 @@
+name: deep_codegen_control_when_true_mutates
+section: codegen-control-flow
+args: a:Int b:Int
+type: Bool
+expect: True
+description: when True must execute body and mutate a bound variable.
+law: (= (with [x {a}] (do (when True (set! x {b})) x)) {b})

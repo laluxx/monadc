@@ -1,0 +1,7 @@
+name: deep_codegen_binding_with_array_like_bind_order_ints
+section: codegen-binding-mutation
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: with-bound Int variables must feed variadic arithmetic directly.
+law: (= (with [x {a} y {b}] (+ x y {c})) (+ {a} {b} {c}))

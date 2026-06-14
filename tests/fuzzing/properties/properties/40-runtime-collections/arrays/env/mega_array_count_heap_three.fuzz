@@ -1,0 +1,7 @@
+name: mega_array_count_heap_three
+section: codegen-array-env
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: count over heap array literal must return literal arity.
+law: (= (count ~[{a} {b} {c}]) 3)

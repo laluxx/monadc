@@ -1,0 +1,7 @@
+name: extreme_arith_double_negation_via_zero
+section: arithmetic-normalization-deep
+args: a:Int
+type: Bool
+expect: True
+description: Deep arithmetic normalization must preserve integer semantics across direct codegen and helper calls.
+law: (= (- 0 (- 0 {a})) {a})

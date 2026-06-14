@@ -1,0 +1,7 @@
+name: deep_codegen_array_heap_array_inline_index
+section: codegen-array-indexing
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Heap array literal must be indexable through array-as-function path.
+law: (= (~[{a} {b} {c}] 1) {b})

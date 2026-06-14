@@ -1,0 +1,7 @@
+name: compiler_deep_v8_array_index_after_mutated_index
+section: runtime-arrays-v8
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Mutable index variable should affect the later array-as-function lookup.
+law: (= (with [xs [{a} {b}] i 0] (do (when {p} (set! i 1)) (xs i))) (if {p} {b} {a}))

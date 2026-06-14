@@ -1,0 +1,7 @@
+name: deep_codegen_bitwise_de_morgan_bitwise_or
+section: codegen-bitwise-dispatch
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Bitwise De Morgan tests ~, bit-or, and & together.
+law: (= (~ (bit-or {a} {b})) (& (~ {a}) (~ {b})))

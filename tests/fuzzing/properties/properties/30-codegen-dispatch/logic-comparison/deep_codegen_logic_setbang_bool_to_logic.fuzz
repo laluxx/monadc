@@ -1,0 +1,7 @@
+name: deep_codegen_logic_setbang_bool_to_logic
+section: codegen-logic-comparison
+args: p:Bool q:Bool
+type: Bool
+expect: True
+description: set! on a Bool alloca must update later logic evaluation.
+law: (= (with [x {p}] (do (set! x {q}) (and x True))) {q})

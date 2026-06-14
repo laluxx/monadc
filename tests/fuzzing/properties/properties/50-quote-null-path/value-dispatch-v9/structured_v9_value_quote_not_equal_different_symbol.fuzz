@@ -1,0 +1,7 @@
+name: structured_v9_value_quote_not_equal_different_symbol
+section: quote-null-string-v9
+args: 
+type: Bool
+expect: True
+description: Stress string/char dispatch, null coalescing, nil predicates, quote, quasiquote, and unquote lowering.
+law: (= (equal? (quote compiler) (quote runtime)) False)

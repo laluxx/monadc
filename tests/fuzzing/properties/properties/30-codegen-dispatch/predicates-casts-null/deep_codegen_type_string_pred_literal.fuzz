@@ -1,0 +1,7 @@
+name: deep_codegen_type_string_pred_literal
+section: codegen-predicates-casts-null
+args: 
+type: Bool
+expect: True
+description: String? must accept string literals.
+law: (String? "abc")

@@ -1,0 +1,7 @@
+name: deep_codegen_string_string_count_literal
+section: codegen-string-char
+args: 
+type: Bool
+expect: True
+description: count on a string literal must lower to strlen.
+law: (= (count "monadc") 6)

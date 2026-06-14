@@ -1,0 +1,7 @@
+name: extreme_if_negation_involution_encoded
+section: control-if-structure
+args: cond:Bool
+type: Bool
+expect: True
+description: Nested if structure must preserve branch semantics and boolean reconstruction.
+law: (= (if (if {cond} False True) False True) {cond})

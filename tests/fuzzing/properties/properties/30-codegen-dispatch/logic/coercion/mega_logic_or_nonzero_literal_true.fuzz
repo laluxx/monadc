@@ -1,0 +1,7 @@
+name: mega_logic_or_nonzero_literal_true
+section: codegen-logic-coercion
+args: a:Int
+type: Bool
+expect: True
+description: or with nonzero integer literal must be true.
+law: (= (or 1 {a} False) True)

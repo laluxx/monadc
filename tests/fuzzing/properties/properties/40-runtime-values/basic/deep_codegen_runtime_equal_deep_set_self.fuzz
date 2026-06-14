@@ -1,0 +1,7 @@
+name: deep_codegen_runtime_equal_deep_set_self
+section: codegen-runtime-values
+args: a:Int b:Int
+type: Bool
+expect: True
+description: equal? must deep-compare set values independent of pointer identity.
+law: (equal? (set {a} {b}) (set {a} {b}))

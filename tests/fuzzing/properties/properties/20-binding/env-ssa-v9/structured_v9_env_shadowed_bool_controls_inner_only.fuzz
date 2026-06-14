@@ -1,0 +1,7 @@
+name: structured_v9_env_shadowed_bool_controls_inner_only
+section: binding-env-v9
+args: p:Bool q:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Stress lexical environment lowering, shadowing, initializer order, and mutable variable lookup.
+law: (= (with [flag {p}] (with [flag {q}] (if flag {a} {b}))) (if {q} {a} {b}))

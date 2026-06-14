@@ -1,0 +1,7 @@
+name: structured_v9_loop_for_nested_when_mutates_bool_once
+section: control-loop-mutation-v9
+args: p:Bool
+type: Bool
+expect: True
+description: Stress lowering of loops, mutable locals, nested blocks, and branch guarded mutation.
+law: (= (with [seen {p}] (do (for 3 (when seen (set! seen False))) seen)) False)

@@ -1,0 +1,7 @@
+name: structured_v9_phi_if_begin_branch_phi_int
+section: control-phi-v9
+args: p:Bool a:Int b:Int setup:Int
+type: Bool
+expect: True
+description: Stress branch PHI lowering and nested conditional codegen.
+law: (= (if {p} (begin {setup} {a}) (begin {setup} {b})) (if {p} {a} {b}))

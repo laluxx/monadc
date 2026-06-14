@@ -1,0 +1,7 @@
+name: structured_v9_phi_if_boolean_result_as_outer_condition
+section: control-phi-v9
+args: p:Bool q:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Stress branch PHI lowering and nested conditional codegen.
+law: (= (if (if {p} {q} (not {q})) {a} {b}) (if {p} (if {q} {a} {b}) (if {q} {b} {a})))

@@ -1,0 +1,7 @@
+name: extreme_arith_multiply_commutes_after_with_binding
+section: arithmetic-normalization-deep
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Deep arithmetic normalization must preserve integer semantics across direct codegen and helper calls.
+law: (with [x (+ {a} {b})] (= (* x {c}) (* {c} x)))

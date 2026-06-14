@@ -1,0 +1,7 @@
+name: deep_codegen_cross_set_contains_array_head
+section: codegen-cross-feature
+args: a:Int b:Int
+type: Bool
+expect: True
+description: head over array must produce a value suitable for set membership.
+law: (contains? (set {a} {b}) (head [{a} {b}]))

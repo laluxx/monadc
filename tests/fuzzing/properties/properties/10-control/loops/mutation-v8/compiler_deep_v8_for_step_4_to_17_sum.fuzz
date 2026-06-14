@@ -1,0 +1,7 @@
+name: compiler_deep_v8_for_step_4_to_17_sum
+section: control-loop-mutation-v8
+args: a:Int
+type: Bool
+expect: True
+description: for step form should expose stepped index values for step 4 ending at 17.
+law: (= (with [acc {a}] (do (for [i 0 17 4] (set! acc (+ acc i))) acc)) (+ {a} 24))

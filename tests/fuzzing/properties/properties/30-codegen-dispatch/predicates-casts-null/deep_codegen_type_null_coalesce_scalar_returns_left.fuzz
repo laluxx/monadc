@@ -1,0 +1,7 @@
+name: deep_codegen_type_null_coalesce_scalar_returns_left
+section: codegen-predicates-casts-null
+args: a:Int
+type: Bool
+expect: True
+description: ?? over a scalar Int must return the left side directly.
+law: (= (?? {a} 999) {a})

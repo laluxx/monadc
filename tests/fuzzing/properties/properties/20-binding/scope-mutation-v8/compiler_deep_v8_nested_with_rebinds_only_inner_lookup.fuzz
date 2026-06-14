@@ -1,0 +1,7 @@
+name: compiler_deep_v8_nested_with_rebinds_only_inner_lookup
+section: binding-scope-mutation-v8
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Nested with should rebind inner lookups without changing outer scope after return.
+law: (= (with [x {a}] (+ (with [x {b}] (+ x {c})) x)) (+ (+ {b} {c}) {a}))

@@ -1,0 +1,7 @@
+name: extreme_with_bound_condition_controls_branch
+section: binding-scope-deep
+args: cond:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Lexical binding and shadowing must preserve dependency order and branch-local scope.
+law: (with [p {cond}] (= (if p {a} {b}) (if {cond} {a} {b})))

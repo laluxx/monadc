@@ -1,0 +1,7 @@
+name: structured_v9_phi_if_diamond_subtraction_merge
+section: control-phi-v9
+args: p:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Stress branch PHI lowering and nested conditional codegen.
+law: (= (- (if {p} {a} {b}) (if {p} {c} {c})) (if {p} (- {a} {c}) (- {b} {c})))

@@ -1,0 +1,7 @@
+name: extreme_if_compare_common_left_eq
+section: control-if-comparison
+args: cond:Bool common:Int a:Int b:Int
+type: Bool
+expect: True
+description: Common left comparison operand must move through if for =.
+law: (= (= {common} (if {cond} {a} {b})) (if {cond} (= {common} {a}) (= {common} {b})))

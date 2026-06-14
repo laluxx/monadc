@@ -1,0 +1,7 @@
+name: deep_codegen_array_inline_array_second
+section: codegen-array-indexing
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Inline array indexing must load element one.
+law: (= ([{a} {b} {c}] 1) {b})

@@ -1,0 +1,7 @@
+name: deep_codegen_logic_if_bool_phi_to_logic
+section: codegen-logic-comparison
+args: p:Bool q:Bool r:Bool
+type: Bool
+expect: True
+description: Bool PHI results from if must feed logic dispatch.
+law: (= (and (if {p} {q} {r}) True) (if {p} {q} {r}))

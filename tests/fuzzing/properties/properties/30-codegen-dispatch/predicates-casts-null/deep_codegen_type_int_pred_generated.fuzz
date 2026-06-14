@@ -1,0 +1,7 @@
+name: deep_codegen_type_int_pred_generated
+section: codegen-predicates-casts-null
+args: a:Int
+type: Bool
+expect: True
+description: Int? must resolve generated Int type at compile time.
+law: (Int? {a})

@@ -1,0 +1,7 @@
+name: deep_codegen_control_for_range_counts_four
+section: codegen-control-flow
+args: 
+type: Bool
+expect: True
+description: numeric for [i 0 4] must execute exactly four iterations.
+law: (= (with [x 0] (do (for [i 0 4] (set! x (+ x 1))) x)) 4)

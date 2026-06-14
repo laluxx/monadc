@@ -1,0 +1,7 @@
+name: deep_codegen_cross_type_pred_after_if_array
+section: codegen-cross-feature
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Arr? must recognize array PHI results from if branches.
+law: (Arr? (if {p} [{a}] [{b}]))

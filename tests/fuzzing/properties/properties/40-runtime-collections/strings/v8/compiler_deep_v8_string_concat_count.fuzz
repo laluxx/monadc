@@ -1,0 +1,7 @@
+name: compiler_deep_v8_string_concat_count
+section: runtime-strings-v8
+args: 
+type: Bool
+expect: True
+description: String concatenation should preserve total count across literals.
+law: (= (count (++ "mon" "adc")) 6)

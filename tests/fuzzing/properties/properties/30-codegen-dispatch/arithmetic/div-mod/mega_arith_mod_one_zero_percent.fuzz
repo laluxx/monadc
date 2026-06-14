@@ -1,0 +1,7 @@
+name: mega_arith_mod_one_zero_percent
+section: codegen-arith-div-mod
+args: a:Int
+type: Bool
+expect: True
+description: Percent modulo by one must always produce zero.
+law: (= (% (+ (* {a} 5) 3) 1) 0)

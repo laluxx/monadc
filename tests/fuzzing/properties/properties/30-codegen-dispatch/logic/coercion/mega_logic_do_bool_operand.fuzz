@@ -1,0 +1,7 @@
+name: mega_logic_do_bool_operand
+section: codegen-logic-coercion
+args: p:Bool q:Bool setup:Int
+type: Bool
+expect: True
+description: and must use final do Bool operand.
+law: (= (and (do {setup} {p}) {q}) (and {p} {q}))

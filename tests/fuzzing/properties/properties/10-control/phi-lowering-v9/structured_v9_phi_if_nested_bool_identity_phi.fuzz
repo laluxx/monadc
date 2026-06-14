@@ -1,0 +1,7 @@
+name: structured_v9_phi_if_nested_bool_identity_phi
+section: control-phi-v9
+args: p:Bool q:Bool r:Bool
+type: Bool
+expect: True
+description: Stress branch PHI lowering and nested conditional codegen.
+law: (= (if {p} (if {q} {r} {q}) (if {q} {q} {r})) (if {q} (if {p} {r} {q}) (if {p} {q} {r})))

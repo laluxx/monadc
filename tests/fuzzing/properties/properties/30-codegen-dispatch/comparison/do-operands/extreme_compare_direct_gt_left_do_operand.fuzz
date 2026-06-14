@@ -1,0 +1,7 @@
+name: extreme_compare_direct_gt_left_do_operand
+section: comparison-dispatch-do
+args: setup:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Direct > must ignore do setup in the left operand.
+law: (= (> (do {setup} {a}) {b}) (> {a} {b}))

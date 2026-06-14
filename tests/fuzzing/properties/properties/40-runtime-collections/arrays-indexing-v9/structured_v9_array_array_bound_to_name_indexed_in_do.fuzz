@@ -1,0 +1,7 @@
+name: structured_v9_array_array_bound_to_name_indexed_in_do
+section: collections-array-v9
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Stress array literal, heap-array literal, array-as-function indexing, count, and contains dispatch.
+law: (= (with [xs [{a} {b} {c}]] (do True (xs 2))) {c})

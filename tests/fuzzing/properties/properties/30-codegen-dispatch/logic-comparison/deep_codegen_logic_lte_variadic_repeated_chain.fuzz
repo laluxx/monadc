@@ -1,0 +1,7 @@
+name: deep_codegen_logic_lte_variadic_repeated_chain
+section: codegen-logic-comparison
+args: a:Int
+type: Bool
+expect: True
+description: Variadic <= must allow equal adjacent values then larger successor.
+law: (<= {a} {a} (+ {a} 1))

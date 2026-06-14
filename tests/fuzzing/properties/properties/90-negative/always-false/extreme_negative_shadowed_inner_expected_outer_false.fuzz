@@ -1,0 +1,7 @@
+name: extreme_negative_shadowed_inner_expected_outer_false
+section: negative-always-false
+args: outer:Int
+type: Bool
+expect: False
+description: This deliberately false law should remain false for every generated input.
+law: (with [x {outer}] (with [x (+ {outer} 1)] (= x {outer})))

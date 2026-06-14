@@ -1,0 +1,7 @@
+name: mega_control_do_set_twice_reads_last
+section: codegen-control-flow
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: do must sequence two stores and return the final read.
+law: (= (with [x {a}] (do (set! x {b}) (set! x (+ x {c})) x)) (+ {b} {c}))

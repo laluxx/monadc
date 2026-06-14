@@ -1,0 +1,7 @@
+name: deep_codegen_var_sub_begin_operand
+section: codegen-arithmetic-dispatch
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: begin return value must feed subtraction correctly.
+law: (= (- (begin {a} {b}) {c}) (- {b} {c}))

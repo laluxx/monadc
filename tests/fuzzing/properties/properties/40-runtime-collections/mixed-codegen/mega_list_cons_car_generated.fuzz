@@ -1,0 +1,7 @@
+name: mega_list_cons_car_generated
+section: codegen-runtime-collections
+args: a:Int
+type: Bool
+expect: True
+description: cons/car must roundtrip generated value.
+law: (= (car (cons {a} (list))) {a})

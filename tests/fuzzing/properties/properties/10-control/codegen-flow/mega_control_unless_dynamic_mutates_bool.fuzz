@@ -1,0 +1,7 @@
+name: mega_control_unless_dynamic_mutates_bool
+section: codegen-control-flow
+args: p:Bool q:Bool
+type: Bool
+expect: True
+description: unless must gate Bool mutation and branch value.
+law: (= (with [x {p}] (do (unless {q} (set! x (not x))) x)) (if {q} {p} (not {p})))

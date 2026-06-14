@@ -1,0 +1,7 @@
+name: extreme_arith_add_commutes_after_if_selected_operand
+section: arithmetic-normalization-deep
+args: cond:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Deep arithmetic normalization must preserve integer semantics across direct codegen and helper calls.
+law: (= (+ (if {cond} {a} {b}) {c}) (+ {c} (if {cond} {a} {b})))

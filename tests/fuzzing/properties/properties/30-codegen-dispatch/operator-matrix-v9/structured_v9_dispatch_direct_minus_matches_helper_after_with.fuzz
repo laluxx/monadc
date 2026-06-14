@@ -1,0 +1,7 @@
+name: structured_v9_dispatch_direct_minus_matches_helper_after_with
+section: dispatch-matrix-v9
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Stress direct operator and predicate dispatch in expression, branch, and operand positions.
+law: (= (with [x {a} y {b}] (- x y)) (fuzz-sub {a} {b}))

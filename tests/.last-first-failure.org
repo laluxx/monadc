@@ -1,5 +1,5 @@
 #+TITLE: Last First Failing Test
-#+DATE: 2026-06-14T19:03:19
+#+DATE: 2026-06-15T01:04:07
 
 [OBS id:obs.tests.last-first-failure src:tests/run.py conf:high]
   This generated record captures the first failing test from the latest
@@ -9,7 +9,7 @@
 * Failure
 - Test: =interaction.interaction_layout_method_gap_documented=
 - Status: =FAIL=
-- Duration: =[ 122.62 ] ms=
+- Duration: =[ 143.68 ] ms=
 - Reason: =expected fail:compile but compile succeeded=
 
 ** Materialized Source
@@ -39,15 +39,15 @@ define red Color 255 0 0
 ** Output
 #+BEGIN_EXAMPLE
 
-=== wisp expanded (/tmp/monadc-tests-wqw7q0vr/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented.mon) ===
+=== wisp expanded (/tmp/monadc-tests-myy1az8k/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented.mon) ===
 (#line 1 1) (module Main)
 (#line 9 1) (layout Color (#line 3 1) [r :: U8] (#line 4 1) [g :: U8] (#line 5 1) [b :: U8] (#line 6 1) where (#line 7 1) method fromRGB :: U8 -> U8 -> U8 -> Color (#line 8 1) r g b -> (Color r g b))
 (#line 10 1) (define red (Color 255 0 0))
 === end ===
 
 
-=== desugared AST (/tmp/monadc-tests-wqw7q0vr/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented.mon) ===
-[compile] /tmp/monadc-tests-wqw7q0vr/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented.mon
+=== desugared AST (/tmp/monadc-tests-myy1az8k/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented.mon) ===
+[compile] /tmp/monadc-tests-myy1az8k/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented.mon
 (module Main)
 (layout Color [r :: U8] [g :: U8] [b :: U8])
 (define Color.fromRGB (lambda ([r :: U8] [g :: U8] [b :: U8] -> Color) (Color r g b)))
@@ -137,9 +137,9 @@ define red Color 255 0 0
 Layout Color :: 24 bytes (3 fields)
 DEFINED [Color.fromRGB :: U8 -> U8 -> U8 -> Color ?]
 DEFINED [red :: Color]
-  wrote object: /tmp/monadc-tests-wqw7q0vr/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented.o
+  wrote object: /tmp/monadc-tests-myy1az8k/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented.o
 
-[link] clang -fuse-ld=mold /tmp/monadc-tests-wqw7q0vr/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented.o -o /tmp/monadc-tests-wqw7q0vr/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented /usr/local/lib/libmonad.a `llvm-config --ldflags --libs core` -lm -lgmp -no-pie
-[link] 103 ms
-[done] /tmp/monadc-tests-wqw7q0vr/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented
+[link] clang -fuse-ld=mold /tmp/monadc-tests-myy1az8k/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented.o -o /tmp/monadc-tests-myy1az8k/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented /usr/local/lib/libmonad.a `llvm-config --ldflags --libs core` -lm -lgmp -no-pie
+[link] 120 ms
+[done] /tmp/monadc-tests-myy1az8k/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented
 #+END_EXAMPLE

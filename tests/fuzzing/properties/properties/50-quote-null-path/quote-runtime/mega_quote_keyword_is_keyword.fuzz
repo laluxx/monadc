@@ -1,0 +1,7 @@
+name: mega_quote_keyword_is_keyword
+section: codegen-quote-runtime
+args: 
+type: Bool
+expect: True
+description: quote must preserve keyword literal as keyword value.
+law: (Keyword? (quote :compiler))

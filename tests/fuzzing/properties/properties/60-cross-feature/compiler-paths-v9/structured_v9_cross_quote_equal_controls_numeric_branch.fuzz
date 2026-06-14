@@ -1,0 +1,7 @@
+name: structured_v9_cross_quote_equal_controls_numeric_branch
+section: cross-compiler-v9
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Stress cross-feature lowering across control flow, env lookup, runtime collections, predicates, quote/null, and operator dispatch.
+law: (= (if (equal? (quote a) (quote a)) {a} {b}) {a})

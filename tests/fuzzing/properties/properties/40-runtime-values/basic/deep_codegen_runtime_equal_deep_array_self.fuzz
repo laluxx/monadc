@@ -1,0 +1,7 @@
+name: deep_codegen_runtime_equal_deep_array_self
+section: codegen-runtime-values
+args: a:Int b:Int
+type: Bool
+expect: True
+description: equal? must deep-compare array values through runtime boxing.
+law: (equal? [{a} {b}] [{a} {b}])

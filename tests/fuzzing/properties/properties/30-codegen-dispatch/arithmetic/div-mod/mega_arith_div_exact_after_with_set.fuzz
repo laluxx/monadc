@@ -1,0 +1,7 @@
+name: mega_arith_div_exact_after_with_set
+section: codegen-arith-div-mod
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Division must read the final mutated alloca value and preserve exact quotient.
+law: (= (with [x (* {a} 6)] (do (set! x (+ x (* {b} 6))) (/ x 3))) (* (+ {a} {b}) 2))

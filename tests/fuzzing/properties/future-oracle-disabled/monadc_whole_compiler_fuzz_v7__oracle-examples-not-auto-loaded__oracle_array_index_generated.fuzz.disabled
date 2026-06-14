@@ -1,0 +1,7 @@
+name: oracle_array_index_generated
+section: oracle-array
+args: xs:ArrInt i:IndexOf(xs)
+type: Int
+expect-python: xs[i]
+description: Generated array-as-function must return Python oracle element.
+law: ({xs} {i})

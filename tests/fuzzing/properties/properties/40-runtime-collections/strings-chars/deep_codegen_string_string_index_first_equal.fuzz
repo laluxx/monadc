@@ -1,0 +1,7 @@
+name: deep_codegen_string_string_index_first_equal
+section: codegen-string-char
+args: 
+type: Bool
+expect: True
+description: Inline string indexing must load the first char.
+law: (= ("abc" 0) ("axz" 0))

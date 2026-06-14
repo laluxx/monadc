@@ -1,0 +1,7 @@
+name: mega_list_dot_alias_car
+section: codegen-runtime-collections
+args: a:Int
+type: Bool
+expect: True
+description: dot pair alias must behave like cons for car.
+law: (= (car (. {a} (list))) {a})

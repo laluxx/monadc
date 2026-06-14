@@ -1,0 +1,7 @@
+name: mega_array_concat_second_from_right
+section: codegen-array-env
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: array concat result must be indexable across left/right boundary.
+law: (= ((++ [{a}] [{b} {c}]) 1) {b})

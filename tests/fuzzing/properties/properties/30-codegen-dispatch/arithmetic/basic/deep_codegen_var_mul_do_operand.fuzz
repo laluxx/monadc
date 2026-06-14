@@ -1,0 +1,7 @@
+name: deep_codegen_var_mul_do_operand
+section: codegen-arithmetic-dispatch
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: do return value must feed multiplication correctly.
+law: (= (* (do {a} {b}) {c}) (* {b} {c}))

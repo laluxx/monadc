@@ -1,0 +1,7 @@
+name: deep_codegen_control_if_int_phi_scalar
+section: codegen-control-flow
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: if must construct a scalar PHI for generated Int branches.
+law: (= (if {p} {a} {b}) (if {p} {a} {b}))

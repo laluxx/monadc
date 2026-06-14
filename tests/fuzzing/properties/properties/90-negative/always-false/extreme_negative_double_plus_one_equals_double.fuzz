@@ -1,0 +1,7 @@
+name: extreme_negative_double_plus_one_equals_double
+section: negative-always-false
+args: a:Int
+type: Bool
+expect: False
+description: This deliberately false law should remain false for every generated input.
+law: (= (+ (* 2 {a}) 1) (* 2 {a}))

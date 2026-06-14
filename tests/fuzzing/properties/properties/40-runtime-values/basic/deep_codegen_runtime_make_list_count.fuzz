@@ -1,0 +1,7 @@
+name: deep_codegen_runtime_make_list_count
+section: codegen-runtime-values
+args: a:Int
+type: Bool
+expect: True
+description: make-list must construct requested length.
+law: (= (count (make-list 3 {a})) 3)

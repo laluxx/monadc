@@ -1,0 +1,7 @@
+name: structured_v9_phi_if_matrix_transpose_two_conditions
+section: control-phi-v9
+args: p:Bool q:Bool a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Stress branch PHI lowering and nested conditional codegen.
+law: (= (if {p} (if {q} {a} {b}) (if {q} {c} {d})) (if {q} (if {p} {a} {c}) (if {p} {b} {d})))

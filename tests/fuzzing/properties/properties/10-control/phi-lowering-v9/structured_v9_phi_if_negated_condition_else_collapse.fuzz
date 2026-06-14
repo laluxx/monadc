@@ -1,0 +1,7 @@
+name: structured_v9_phi_if_negated_condition_else_collapse
+section: control-phi-v9
+args: p:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Stress branch PHI lowering and nested conditional codegen.
+law: (= (if {p} {a} (if (not {p}) {b} {c})) (if {p} {a} {b}))

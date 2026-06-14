@@ -1,0 +1,7 @@
+name: structured_v9_loop_while_adds_branch_value_6_times
+section: control-loop-mutation-v9
+args: p:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: while loop must preserve loop-carried accumulator state across 6 iterations with branch-selected increment.
+law: (= (with [i 0 acc {a}] (do (while (< i 6) (begin (set! acc (+ acc (if {p} {b} {c}))) (set! i (+ i 1)))) acc)) (+ {a} (* (if {p} {b} {c}) 6)))

@@ -1,0 +1,7 @@
+name: deep_codegen_control_begin_returns_last_bool
+section: codegen-control-flow
+args: a:Int p:Bool
+type: Bool
+expect: True
+description: begin must return the final Bool value after an Int setup form.
+law: (= (begin {a} {p}) {p})

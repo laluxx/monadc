@@ -1,0 +1,7 @@
+name: deep_codegen_string_make_string_count
+section: codegen-string-char
+args: 
+type: Bool
+expect: True
+description: make-string must allocate requested length using char from string-indexing.
+law: (= (count (make-string 4 ("aaaa" 0))) 4)

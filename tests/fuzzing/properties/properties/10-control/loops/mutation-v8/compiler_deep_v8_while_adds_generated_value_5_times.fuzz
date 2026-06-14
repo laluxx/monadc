@@ -1,0 +1,7 @@
+name: compiler_deep_v8_while_adds_generated_value_5_times
+section: control-loop-mutation-v8
+args: a:Int b:Int
+type: Bool
+expect: True
+description: while loop with generated accumulator should execute exactly 5 times.
+law: (= (with [i 0 acc {a}] (do (while (< i 5) (begin (set! acc (+ acc {b})) (set! i (+ i 1)))) acc)) (+ {a} (* {b} 5)))

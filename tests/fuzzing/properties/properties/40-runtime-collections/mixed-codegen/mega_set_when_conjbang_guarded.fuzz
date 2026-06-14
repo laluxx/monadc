@@ -1,0 +1,7 @@
+name: mega_set_when_conjbang_guarded
+section: codegen-runtime-collections
+args: p:Bool a:Int
+type: Bool
+expect: True
+description: when must guard mutating set insert.
+law: (= (with [s (set)] (do (when {p} (conj! s {a})) (contains? s {a}))) {p})

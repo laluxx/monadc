@@ -1,0 +1,7 @@
+name: mega_string_contains_literal_true
+section: codegen-preds-strings-null
+args: 
+type: Bool
+expect: True
+description: contains? must dispatch to string substring search.
+law: (contains? "monadc-compiler" "compiler")

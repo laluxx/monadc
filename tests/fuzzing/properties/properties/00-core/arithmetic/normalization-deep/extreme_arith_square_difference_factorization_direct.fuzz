@@ -1,0 +1,7 @@
+name: extreme_arith_square_difference_factorization_direct
+section: arithmetic-normalization-deep
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Deep arithmetic normalization must preserve integer semantics across direct codegen and helper calls.
+law: (= (- (* {a} {a}) (* {b} {b})) (* (- {a} {b}) (+ {a} {b})))

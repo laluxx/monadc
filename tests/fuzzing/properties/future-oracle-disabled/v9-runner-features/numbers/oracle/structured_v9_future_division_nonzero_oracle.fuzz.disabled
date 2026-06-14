@@ -1,0 +1,7 @@
+name: structured_v9_future_division_nonzero_oracle
+section: future-number-oracle-v9
+args: a:Int b:NonZeroInt
+type: Int
+expect-python: a // b
+description: Integer division oracle with generated nonzero denominator.
+law: (/ {a} {b})

@@ -1,0 +1,7 @@
+name: deep_codegen_array_array_var_index_first
+section: codegen-array-indexing
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Env lookup array-as-function must index element zero.
+law: (= (with [xs [{a} {b} {c}]] (xs 0)) {a})

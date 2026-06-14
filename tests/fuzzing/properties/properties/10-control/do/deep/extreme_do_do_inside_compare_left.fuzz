@@ -1,0 +1,7 @@
+name: extreme_do_do_inside_compare_left
+section: control-do-deep
+args: setup:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Sequencing must return the last expression and compose inside branches, comparisons, and bindings.
+law: (= (< (do {setup} {a}) {b}) (< {a} {b}))

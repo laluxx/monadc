@@ -1,0 +1,7 @@
+name: compiler_deep_v8_logic_not_if_encoded_involution
+section: logic-coercion-v8
+args: p:Bool
+type: Bool
+expect: True
+description: Double negation through if should round-trip Bool PHI generation.
+law: (= (if (if {p} False True) False True) {p})

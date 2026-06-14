@@ -1,0 +1,7 @@
+name: mega_loop_while_count_to_5
+section: codegen-control-loops
+args: 
+type: Bool
+expect: True
+description: while must iterate until the loop-carried variable reaches 5.
+law: (= (with [i 0] (do (while (< i 5) (set! i (+ i 1))) i)) 5)

@@ -1,0 +1,7 @@
+name: mega_array_env_index_after_set_index
+section: codegen-array-env
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: array index alloca mutation must affect env array indexing.
+law: (= (with [xs [{a} {b}] i 0] (do (when {p} (set! i 1)) (xs i))) (if {p} {b} {a}))

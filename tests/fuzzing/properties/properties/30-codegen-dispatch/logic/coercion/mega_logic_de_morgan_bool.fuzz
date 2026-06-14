@@ -1,0 +1,7 @@
+name: mega_logic_de_morgan_bool
+section: codegen-logic-coercion
+args: p:Bool q:Bool
+type: Bool
+expect: True
+description: Bool de Morgan probes not+and+or dispatch composition.
+law: (= (not (and {p} {q})) (or (not {p}) (not {q})))

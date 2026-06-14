@@ -1,0 +1,7 @@
+name: mega_bind_branch_local_shadow_then_outer_mutation
+section: codegen-binding-env
+args: p:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: branch-local shadowed vars must not replace the outer binding.
+law: (= (with [x {a}] (do (if {p} (with [x {b}] x) (with [x {c}] x)) x)) {a})

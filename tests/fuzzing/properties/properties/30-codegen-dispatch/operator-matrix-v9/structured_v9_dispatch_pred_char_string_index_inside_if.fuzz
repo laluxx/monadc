@@ -1,0 +1,7 @@
+name: structured_v9_dispatch_pred_char_string_index_inside_if
+section: dispatch-matrix-v9
+args: p:Bool
+type: Bool
+expect: True
+description: Stress direct operator and predicate dispatch in expression, branch, and operand positions.
+law: (Char? ("ab" (if {p} 0 1)))

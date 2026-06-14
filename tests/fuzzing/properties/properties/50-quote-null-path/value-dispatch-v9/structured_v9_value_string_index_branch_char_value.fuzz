@@ -1,0 +1,7 @@
+name: structured_v9_value_string_index_branch_char_value
+section: quote-null-string-v9
+args: p:Bool
+type: Bool
+expect: True
+description: Stress string/char dispatch, null coalescing, nil predicates, quote, quasiquote, and unquote lowering.
+law: (= ("az" (if {p} 0 1)) (if {p} (Char 97) (Char 122)))

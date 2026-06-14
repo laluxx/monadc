@@ -1,0 +1,7 @@
+name: mega_arith_variadic_add_do_operands
+section: codegen-arith-variadic
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Variadic add must preserve operand values when do/begin appear inside operands.
+law: (= (+ (do {c} {a}) (begin {a} {b}) {c}) (+ {a} {b} {c}))

@@ -1,0 +1,7 @@
+name: compiler_deep_v8_for_sum_indices_to_8
+section: control-loop-mutation-v8
+args: a:Int
+type: Bool
+expect: True
+description: for loop index binding should accumulate triangular number for upper bound 8.
+law: (= (with [acc {a}] (do (for [i 0 8] (set! acc (+ acc i))) acc)) (+ {a} 28))

@@ -1,0 +1,7 @@
+name: structured_v9_dispatch_direct_plus_matches_helper_after_do
+section: dispatch-matrix-v9
+args: a:Int b:Int setup:Bool
+type: Bool
+expect: True
+description: Stress direct operator and predicate dispatch in expression, branch, and operand positions.
+law: (= (+ (do {setup} {a}) (do {setup} {b})) (fuzz-add {a} {b}))

@@ -1,0 +1,7 @@
+name: mega_set_disj_removes_single
+section: codegen-runtime-collections
+args: a:Int
+type: Bool
+expect: True
+description: pure disj must remove generated singleton element.
+law: (= (contains? (disj (set {a}) {a}) {a}) False)

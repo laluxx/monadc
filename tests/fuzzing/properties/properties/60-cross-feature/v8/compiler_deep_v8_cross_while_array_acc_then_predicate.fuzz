@@ -1,0 +1,7 @@
+name: compiler_deep_v8_cross_while_array_acc_then_predicate
+section: feature-interactions-v8
+args: 
+type: Bool
+expect: True
+description: while loop should accumulate array elements and feed result into Int? predicate.
+law: (Int? (with [xs [1 2 3] i 0 acc 0] (do (while (< i (count xs)) (begin (set! acc (+ acc (xs i))) (set! i (+ i 1)))) acc)))

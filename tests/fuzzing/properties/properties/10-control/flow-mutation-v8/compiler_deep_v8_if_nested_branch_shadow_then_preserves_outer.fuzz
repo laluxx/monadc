@@ -1,0 +1,7 @@
+name: compiler_deep_v8_if_nested_branch_shadow_then_preserves_outer
+section: control-flow-mutation-v8
+args: p:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Exercise if branch codegen, mutable locals, and branch result merging.
+law: (= (with [x {a}] (if {p} (with [x {b}] (do (set! x {c}) x)) x)) (if {p} {c} {a}))

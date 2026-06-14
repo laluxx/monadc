@@ -1,0 +1,7 @@
+name: structured_v9_env_mutation_before_child_scope_observed_by_child
+section: binding-env-v9
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Stress lexical environment lowering, shadowing, initializer order, and mutable variable lookup.
+law: (= (with [x {a}] (do (set! x {b}) (with [y {c}] (+ x y)))) (+ {b} {c}))

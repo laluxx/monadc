@@ -1,0 +1,7 @@
+name: mega_pred_string_literal_true
+section: codegen-preds-strings-null
+args: 
+type: Bool
+expect: True
+description: String? must recognize literal strings.
+law: (String? "compiler")

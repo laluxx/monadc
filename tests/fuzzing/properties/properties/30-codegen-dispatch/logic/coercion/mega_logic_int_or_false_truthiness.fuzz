@@ -1,0 +1,7 @@
+name: mega_logic_int_or_false_truthiness
+section: codegen-logic-coercion
+args: a:Int
+type: Bool
+expect: True
+description: or must coerce generated Int to truthiness.
+law: (= (or {a} False) (!= {a} 0))

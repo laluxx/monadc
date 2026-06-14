@@ -1,0 +1,7 @@
+name: compiler_deep_v8_cross_loop_array_set_membership
+section: feature-interactions-v8
+args: 
+type: Bool
+expect: True
+description: Loop over array indices should feed generated runtime values into mutable set membership.
+law: (with [xs [4 5 6] s (set)] (do (for [i 0 3] (conj! s (xs i))) (contains? s 6)))

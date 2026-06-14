@@ -1,0 +1,7 @@
+name: mega_control_if_phi_bool_to_int_branch
+section: codegen-control-flow
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Bool PHI from nested if must control outer branch.
+law: (= (if (if {p} True False) {a} {b}) (if {p} {a} {b}))

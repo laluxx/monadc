@@ -1,0 +1,7 @@
+name: deep_codegen_cross_while_array_index_accumulation
+section: codegen-cross-feature
+args: 
+type: Bool
+expect: True
+description: while must drive array indexing and multiple mutations per iteration.
+law: (= (with [xs [2 3 5] i 0 sum 0] (do (while (< i 3) (begin (set! sum (+ sum (xs i))) (set! i (+ i 1)))) sum)) 10)

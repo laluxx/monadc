@@ -1,0 +1,7 @@
+name: deep_codegen_cross_quasiquote_reads_with_binding
+section: codegen-cross-feature
+args: a:Int
+type: Bool
+expect: True
+description: quasiquote unquote must evaluate with-bound variables.
+law: (equal? (with [x {a}] (quasiquote (value (unquote x)))) (quasiquote (value (unquote {a}))))

@@ -1,0 +1,7 @@
+name: structured_v9_future_list_count_oracle
+section: future-list-oracle-v9
+args: xs:ListInt
+type: Int
+expect-python: len(xs)
+description: List count oracle over generated lists.
+law: (count {xs})

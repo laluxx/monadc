@@ -1,0 +1,7 @@
+name: deep_codegen_type_i32_cast_then_int_round_small
+section: codegen-predicates-casts-null
+args: 
+type: Bool
+expect: True
+description: I32 cast followed by Int cast must preserve small constant.
+law: (= (Int (I32 123)) 123)

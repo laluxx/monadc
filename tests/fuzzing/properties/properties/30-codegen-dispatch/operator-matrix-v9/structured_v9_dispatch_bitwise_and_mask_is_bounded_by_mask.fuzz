@@ -1,0 +1,7 @@
+name: structured_v9_dispatch_bitwise_and_mask_is_bounded_by_mask
+section: dispatch-matrix-v9
+args: a:Int
+type: Bool
+expect: True
+description: Stress direct operator and predicate dispatch in expression, branch, and operand positions.
+law: (<= (& {a} 7) 7)

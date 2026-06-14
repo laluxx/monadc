@@ -1,0 +1,7 @@
+name: structured_v9_value_string_ends_with_branch_literal
+section: quote-null-string-v9
+args: p:Bool
+type: Bool
+expect: True
+description: Stress string/char dispatch, null coalescing, nil predicates, quote, quasiquote, and unquote lowering.
+law: (= (ends-with? (if {p} "compiler" "runtime") "time") (not {p}))

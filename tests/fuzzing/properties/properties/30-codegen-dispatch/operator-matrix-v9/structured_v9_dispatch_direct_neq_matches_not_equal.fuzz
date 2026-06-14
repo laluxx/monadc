@@ -1,0 +1,7 @@
+name: structured_v9_dispatch_direct_neq_matches_not_equal
+section: dispatch-matrix-v9
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Stress direct operator and predicate dispatch in expression, branch, and operand positions.
+law: (= (!= {a} {b}) (not (= {a} {b})))

@@ -1,0 +1,7 @@
+name: extreme_combo_nested_with_if_lattice_selection
+section: feature-interactions-deep
+args: cond:Bool a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Mixed helpers, direct dispatch, control flow, and bindings should compose without changing semantics.
+law: (with [x (if {cond} (fuzz-min {a} {b}) (fuzz-max {c} {d}))] (= x (if {cond} (fuzz-min {a} {b}) (fuzz-max {c} {d}))))

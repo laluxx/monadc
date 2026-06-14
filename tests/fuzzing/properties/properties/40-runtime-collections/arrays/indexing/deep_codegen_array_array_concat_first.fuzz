@@ -1,0 +1,8 @@
+name: deep_codegen_array_array_concat_first
+section: codegen-array-indexing
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Array concatenation result must be indexable at first element.
+law: (= (with [ys (++ [{a}] [{b}])] (ys 0)) {a})
+

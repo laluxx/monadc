@@ -1,0 +1,7 @@
+name: mega_arith_mod_percent_alias_two
+section: codegen-arith-div-mod
+args: a:Int
+type: Bool
+expect: True
+description: Percent and mod dispatchers must agree for the same generated operand.
+law: (= (% (+ (* {a} 4) 2) 2) (mod (+ (* {a} 4) 2) 2))

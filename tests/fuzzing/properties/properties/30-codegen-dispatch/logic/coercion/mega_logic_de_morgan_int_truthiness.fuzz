@@ -1,0 +1,7 @@
+name: mega_logic_de_morgan_int_truthiness
+section: codegen-logic-coercion
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Int truthiness must compose consistently with de Morgan law.
+law: (= (not (and {a} {b})) (or (not {a}) (not {b})))

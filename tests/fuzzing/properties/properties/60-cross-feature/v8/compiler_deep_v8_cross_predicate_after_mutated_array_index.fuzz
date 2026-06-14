@@ -1,0 +1,7 @@
+name: compiler_deep_v8_cross_predicate_after_mutated_array_index
+section: feature-interactions-v8
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: A mutable index should drive array-as-function lookup before predicate checking.
+law: (Int? (with [xs [{a} {b}] i 0] (do (when {p} (set! i 1)) (xs i))))

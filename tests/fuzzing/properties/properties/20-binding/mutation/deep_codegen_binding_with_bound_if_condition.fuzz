@@ -1,0 +1,7 @@
+name: deep_codegen_binding_with_bound_if_condition
+section: codegen-binding-mutation
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: with-bound condition must be visible to if condition codegen.
+law: (= (with [cond {p}] (if cond {a} {b})) (if {p} {a} {b}))

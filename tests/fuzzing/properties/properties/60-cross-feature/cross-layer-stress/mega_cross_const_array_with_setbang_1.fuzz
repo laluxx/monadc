@@ -1,0 +1,7 @@
+name: mega_cross_const_array_with_setbang_1
+section: codegen-cross-layer-stress
+args: a:Int
+type: Bool
+expect: True
+description: env array indexing must see mutated index alloca and load constant slot 1.
+law: (= (with [xs [{a} 1] idx 0] (do (set! idx 1) (xs idx))) 1)

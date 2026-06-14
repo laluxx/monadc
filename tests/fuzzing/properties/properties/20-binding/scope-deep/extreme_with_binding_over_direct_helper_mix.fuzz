@@ -1,0 +1,7 @@
+name: extreme_with_binding_over_direct_helper_mix
+section: binding-scope-deep
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Lexical binding and shadowing must preserve dependency order and branch-local scope.
+law: (with [x (fuzz-add {a} {b})] (with [y (+ x {c})] (= y (+ (+ {a} {b}) {c}))))

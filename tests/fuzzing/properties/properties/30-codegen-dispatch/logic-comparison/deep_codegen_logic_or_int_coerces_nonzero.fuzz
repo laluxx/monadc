@@ -1,0 +1,7 @@
+name: deep_codegen_logic_or_int_coerces_nonzero
+section: codegen-logic-comparison
+args: a:Int
+type: Bool
+expect: True
+description: or must coerce generated Int values through nonzero truthiness.
+law: (= (or {a} False) (!= {a} 0))

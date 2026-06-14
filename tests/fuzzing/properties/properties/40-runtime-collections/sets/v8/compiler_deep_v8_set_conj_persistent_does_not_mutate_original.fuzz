@@ -1,0 +1,7 @@
+name: compiler_deep_v8_set_conj_persistent_does_not_mutate_original
+section: runtime-sets-v8
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Persistent conj should return a new set without requiring mutation of original binding.
+law: (contains? (conj (set {a}) {b}) {b})

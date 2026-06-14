@@ -1,0 +1,7 @@
+name: extreme_arith_helper_direct_mul_mix
+section: arithmetic-normalization-deep
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Deep arithmetic normalization must preserve integer semantics across direct codegen and helper calls.
+law: (= (fuzz-sub (* {a} (+ {b} {c})) (* {a} {b})) (* {a} {c}))

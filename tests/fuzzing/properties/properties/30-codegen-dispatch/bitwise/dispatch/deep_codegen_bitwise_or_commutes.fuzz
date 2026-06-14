@@ -1,0 +1,7 @@
+name: deep_codegen_bitwise_or_commutes
+section: codegen-bitwise-dispatch
+args: a:Int b:Int
+type: Bool
+expect: True
+description: bit-or must commute for generated operands.
+law: (= (bit-or {a} {b}) (bit-or {b} {a}))

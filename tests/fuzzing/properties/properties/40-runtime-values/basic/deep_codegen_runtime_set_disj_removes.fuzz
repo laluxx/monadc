@@ -1,0 +1,7 @@
+name: deep_codegen_runtime_set_disj_removes
+section: codegen-runtime-values
+args: a:Int
+type: Bool
+expect: True
+description: disj must remove a generated element from set.
+law: (not (contains? (disj (set {a}) {a}) {a}))

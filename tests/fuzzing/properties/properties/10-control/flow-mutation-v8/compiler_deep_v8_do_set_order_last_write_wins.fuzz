@@ -1,0 +1,7 @@
+name: compiler_deep_v8_do_set_order_last_write_wins
+section: control-flow-mutation-v8
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: do sequencing must preserve side-effect order and return the final mutated value.
+law: (= (with [x {a}] (do (set! x {b}) (set! x (+ x {c})) x)) (+ {b} {c}))

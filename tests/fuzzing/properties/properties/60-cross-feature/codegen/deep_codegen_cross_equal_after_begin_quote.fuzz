@@ -1,0 +1,7 @@
+name: deep_codegen_cross_equal_after_begin_quote
+section: codegen-cross-feature
+args: 
+type: Bool
+expect: True
+description: begin must return quoted runtime value for equal? comparison.
+law: (equal? (begin 1 (quote (a b))) (quote (a b)))

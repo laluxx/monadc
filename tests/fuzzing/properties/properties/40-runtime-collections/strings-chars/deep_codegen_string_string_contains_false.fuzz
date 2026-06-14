@@ -1,0 +1,7 @@
+name: deep_codegen_string_string_contains_false
+section: codegen-string-char
+args: 
+type: Bool
+expect: False
+description: contains? string path must reject a missing substring.
+law: (contains? "monadc" "xyz")

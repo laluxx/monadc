@@ -1,0 +1,7 @@
+name: mega_compare_neq_self_false_after_do
+section: codegen-compare-equality
+args: a:Int setup:Int
+type: Bool
+expect: True
+description: != must use deep/scalar equality and see do returning the final value.
+law: (= (!= (do {setup} {a}) {a}) False)

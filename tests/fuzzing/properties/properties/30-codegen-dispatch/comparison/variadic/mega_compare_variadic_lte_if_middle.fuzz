@@ -1,0 +1,7 @@
+name: mega_compare_variadic_lte_if_middle
+section: codegen-compare-variadic
+args: p:Bool a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Variadic <= must compose with a branch-selected middle operand.
+law: (= (<= {a} (if {p} {b} {c}) {d}) (if {p} (<= {a} {b} {d}) (<= {a} {c} {d})))

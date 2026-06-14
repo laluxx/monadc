@@ -1,0 +1,7 @@
+name: mega_logic_and_zero_absorbs
+section: codegen-logic-coercion
+args: a:Int
+type: Bool
+expect: True
+description: and with integer zero must be false.
+law: (= (and {a} 0 True) False)

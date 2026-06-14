@@ -1,0 +1,7 @@
+name: deep_codegen_type_list_pred_make_list
+section: codegen-predicates-casts-null
+args: a:Int
+type: Bool
+expect: True
+description: List? must accept make-list result.
+law: (List? (make-list 2 {a}))

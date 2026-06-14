@@ -1,0 +1,7 @@
+name: structured_v9_value_string_head_matches_index_zero
+section: quote-null-string-v9
+args: 
+type: Bool
+expect: True
+description: Stress string/char dispatch, null coalescing, nil predicates, quote, quasiquote, and unquote lowering.
+law: (= (head "abc") ("abc" 0))

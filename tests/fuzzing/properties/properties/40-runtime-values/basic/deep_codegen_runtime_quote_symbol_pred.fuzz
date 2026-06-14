@@ -1,0 +1,7 @@
+name: deep_codegen_runtime_quote_symbol_pred
+section: codegen-runtime-values
+args: 
+type: Bool
+expect: True
+description: quote of a symbol must produce a runtime Symbol.
+law: (Symbol? (quote alpha))

@@ -1,0 +1,7 @@
+name: mega_set_conjbang_contains_generated
+section: codegen-runtime-collections
+args: a:Int
+type: Bool
+expect: True
+description: mutating conj! must update set in place.
+law: (with [s (set)] (do (conj! s {a}) (contains? s {a})))

@@ -1,0 +1,7 @@
+name: deep_codegen_array_array_var_index_dynamic
+section: codegen-array-indexing
+args: p:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Env lookup array-as-function must accept generated scalar index expression.
+law: (= (with [xs [{a} {b} {c}]] (xs (if {p} 0 2))) (if {p} {a} {c}))

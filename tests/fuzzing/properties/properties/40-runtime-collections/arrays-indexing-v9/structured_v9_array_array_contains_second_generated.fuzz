@@ -1,0 +1,7 @@
+name: structured_v9_array_array_contains_second_generated
+section: collections-array-v9
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Stress array literal, heap-array literal, array-as-function indexing, count, and contains dispatch.
+law: (contains? [{a} {b}] {b})

@@ -1,0 +1,7 @@
+name: mega_array_env_index_dynamic_bool
+section: codegen-array-env
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: array-as-function must accept branch-selected index.
+law: (= (with [xs [{a} {b}]] (xs (if {p} 0 1))) (if {p} {a} {b}))

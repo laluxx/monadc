@@ -1,0 +1,7 @@
+name: mega_arith_exact_division_scale_5
+section: codegen-arith-div-mod
+args: a:Int
+type: Bool
+expect: True
+description: Exact integer division by constant 5 must survive generated operands.
+law: (= (/ (* {a} 15) 5) (* {a} 3))

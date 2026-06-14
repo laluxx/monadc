@@ -1,0 +1,7 @@
+name: extreme_with_shadow_inner_wins
+section: binding-scope-deep
+args: outer:Int inner:Int offset:Int
+type: Bool
+expect: True
+description: Lexical binding and shadowing must preserve dependency order and branch-local scope.
+law: (with [x {outer}] (with [x {inner}] (= (+ x {offset}) (+ {inner} {offset}))))

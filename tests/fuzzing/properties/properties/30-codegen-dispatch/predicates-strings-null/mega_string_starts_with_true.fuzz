@@ -1,0 +1,7 @@
+name: mega_string_starts_with_true
+section: codegen-preds-strings-null
+args: 
+type: Bool
+expect: True
+description: starts-with? must dispatch on string literals.
+law: (starts-with? "monadc" "mon")

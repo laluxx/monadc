@@ -1,0 +1,7 @@
+name: deep_codegen_string_string_cast_int_is_string
+section: codegen-string-char
+args: a:Int
+type: Bool
+expect: True
+description: String cast of generated Int must produce a String value.
+law: (String? (String {a}))

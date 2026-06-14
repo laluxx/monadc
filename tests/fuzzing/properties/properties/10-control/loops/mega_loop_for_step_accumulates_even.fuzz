@@ -1,0 +1,7 @@
+name: mega_loop_for_step_accumulates_even
+section: codegen-control-loops
+args: 
+type: Bool
+expect: True
+description: numeric for step loop must increment by requested step.
+law: (= (with [sum 0] (do (for [i 0 8 2] (set! sum (+ sum i))) sum)) 12)

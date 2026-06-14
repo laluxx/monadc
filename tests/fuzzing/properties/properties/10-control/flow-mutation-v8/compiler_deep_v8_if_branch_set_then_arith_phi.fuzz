@@ -1,0 +1,7 @@
+name: compiler_deep_v8_if_branch_set_then_arith_phi
+section: control-flow-mutation-v8
+args: p:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Exercise if branch codegen, mutable locals, and branch result merging.
+law: (= (with [x {a}] (if {p} (do (set! x (+ {a} {b})) x) (do (set! x (- {a} {c})) x))) (if {p} (+ {a} {b}) (- {a} {c})))

@@ -1,0 +1,7 @@
+name: structured_v9_list_dot_car_generated
+section: collections-list-v9
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Stress list constructors, pair accessors, head/cdr chains, make-list, and list-copy.
+law: (= (car (. {a} {b})) {a})

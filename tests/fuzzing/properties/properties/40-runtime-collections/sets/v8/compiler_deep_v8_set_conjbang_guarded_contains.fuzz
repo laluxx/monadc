@@ -1,0 +1,7 @@
+name: compiler_deep_v8_set_conjbang_guarded_contains
+section: runtime-sets-v8
+args: p:Bool a:Int
+type: Bool
+expect: True
+description: Mutable set conj! behind when should expose membership iff the guard is true.
+law: (= (with [s (set)] (do (when {p} (conj! s {a})) (contains? s {a}))) {p})

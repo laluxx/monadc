@@ -1,0 +1,7 @@
+name: extreme_with_shadow_inside_else_branch
+section: binding-scope-deep
+args: cond:Bool outer:Int inner:Int fallback:Int
+type: Bool
+expect: True
+description: Lexical binding and shadowing must preserve dependency order and branch-local scope.
+law: (with [x {outer}] (= (if {cond} {fallback} (with [x {inner}] x)) (if {cond} {fallback} {inner})))

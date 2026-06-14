@@ -1,0 +1,7 @@
+name: deep_codegen_runtime_quote_list_count
+section: codegen-runtime-values
+args: 
+type: Bool
+expect: True
+description: quote of a list must build a runtime list with expected count.
+law: (= (count (quote (a b c))) 3)

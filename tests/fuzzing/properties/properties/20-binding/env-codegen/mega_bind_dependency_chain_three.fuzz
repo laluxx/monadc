@@ -1,0 +1,7 @@
+name: mega_bind_dependency_chain_three
+section: codegen-binding-env
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: with binding values must see earlier bindings in order.
+law: (= (with [x {a} y (+ x {b}) z (+ y {c})] z) (+ {a} {b} {c}))

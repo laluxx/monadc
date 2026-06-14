@@ -1,0 +1,7 @@
+name: extreme_bitwise_shift_left_zero_identity
+section: bitwise-identities
+args: a:Int
+type: Bool
+expect: True
+description: Bitwise codegen identities should preserve integer bit operations without Bool coercion.
+law: (= (<< {a} 0) {a})

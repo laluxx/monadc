@@ -1,0 +1,7 @@
+name: structured_v9_value_string_make_string_head_matches_char
+section: quote-null-string-v9
+args: 
+type: Bool
+expect: True
+description: Stress string/char dispatch, null coalescing, nil predicates, quote, quasiquote, and unquote lowering.
+law: (= (head (make-string 3 (Char 120))) (Char 120))

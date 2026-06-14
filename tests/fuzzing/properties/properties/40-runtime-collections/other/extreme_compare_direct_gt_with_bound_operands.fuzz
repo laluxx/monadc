@@ -1,0 +1,7 @@
+name: extreme_compare_direct_gt_with_bound_operands
+section: comparison-dispatch-binding
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Direct > must work through lexically bound operands.
+law: (with [x {a}] (with [y {b}] (= (> x y) (> {a} {b}))))

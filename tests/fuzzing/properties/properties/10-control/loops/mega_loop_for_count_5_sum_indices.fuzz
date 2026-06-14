@@ -1,0 +1,7 @@
+name: mega_loop_for_count_5_sum_indices
+section: codegen-control-loops
+args: 
+type: Bool
+expect: True
+description: for [i 0 5] must sum generated induction values correctly.
+law: (= (with [sum 0] (do (for [i 0 5] (set! sum (+ sum i))) sum)) 10)

@@ -1,0 +1,7 @@
+name: structured_v9_phi_if_branch_result_feeds_lattice_max
+section: control-phi-v9
+args: p:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Stress branch PHI lowering and nested conditional codegen.
+law: (= (fuzz-max (if {p} {a} {b}) {c}) (if {p} (fuzz-max {a} {c}) (fuzz-max {b} {c})))

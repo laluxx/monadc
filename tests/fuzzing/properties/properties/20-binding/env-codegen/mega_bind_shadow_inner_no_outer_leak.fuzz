@@ -1,0 +1,7 @@
+name: mega_bind_shadow_inner_no_outer_leak
+section: codegen-binding-env
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: inner child env mutation must not leak into outer alloca.
+law: (= (with [x {a}] (do (with [x {b}] (set! x {c})) x)) {a})

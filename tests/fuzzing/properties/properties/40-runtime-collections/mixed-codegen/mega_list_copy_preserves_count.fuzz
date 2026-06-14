@@ -1,0 +1,7 @@
+name: mega_list_copy_preserves_count
+section: codegen-runtime-collections
+args: a:Int
+type: Bool
+expect: True
+description: list-copy must preserve runtime length.
+law: (= (count (list-copy (make-list 5 {a}))) 5)

@@ -1,0 +1,7 @@
+name: extreme_arith_add_sub_cancel_deep_left
+section: arithmetic-normalization-deep
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Deep arithmetic normalization must preserve integer semantics across direct codegen and helper calls.
+law: (= (- (+ (+ {a} {b}) {c}) (+ {b} {c})) {a})

@@ -1,0 +1,7 @@
+name: mega_string_index_first_char
+section: codegen-preds-strings-null
+args: 
+type: Bool
+expect: True
+description: string-as-function/indexing must load first char.
+law: (= ("abc" 0) (Char 97))

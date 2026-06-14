@@ -1,0 +1,7 @@
+name: deep_codegen_mod_and_percent_agree_one
+section: codegen-arithmetic-dispatch
+args: a:Int
+type: Bool
+expect: True
+description: Percent and mod dispatchers must agree on divisor one.
+law: (= (% {a} 1) (mod {a} 1))

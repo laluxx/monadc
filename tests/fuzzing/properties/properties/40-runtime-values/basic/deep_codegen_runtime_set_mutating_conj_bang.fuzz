@@ -1,0 +1,7 @@
+name: deep_codegen_runtime_set_mutating_conj_bang
+section: codegen-runtime-values
+args: a:Int
+type: Bool
+expect: True
+description: conj! must mutate a with-bound set variable in place.
+law: (with [s (set)] (do (conj! s {a}) (contains? s {a})))

@@ -1,0 +1,7 @@
+name: deep_codegen_bitwise_or_identity_zero
+section: codegen-bitwise-dispatch
+args: a:Int
+type: Bool
+expect: True
+description: bit-or dispatcher must preserve x | 0.
+law: (= (bit-or {a} 0) {a})

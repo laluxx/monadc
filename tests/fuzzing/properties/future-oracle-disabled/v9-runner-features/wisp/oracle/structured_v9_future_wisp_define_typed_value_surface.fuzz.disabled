@@ -1,0 +1,7 @@
+name: structured_v9_future_wisp_define_typed_value_surface
+section: future-wisp-oracle-v9
+args: x:Int
+type: Int
+expect-python: x
+description: Future Wisp surface syntax property once runner can generate Wisp sources, not only laws.
+law: define x :: Int {x}\nshow x

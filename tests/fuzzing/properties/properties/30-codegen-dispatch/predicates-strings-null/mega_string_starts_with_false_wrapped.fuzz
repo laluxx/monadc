@@ -1,0 +1,7 @@
+name: mega_string_starts_with_false_wrapped
+section: codegen-preds-strings-null
+args: 
+type: Bool
+expect: True
+description: starts-with? false path must work.
+law: (= (starts-with? "monadc" "nad") False)

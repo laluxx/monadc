@@ -1,0 +1,7 @@
+name: extreme_with_binding_if_bool_result
+section: binding-scope-deep
+args: cond:Bool p:Bool q:Bool
+type: Bool
+expect: True
+description: Lexical binding and shadowing must preserve dependency order and branch-local scope.
+law: (with [r (if {cond} {p} {q})] (= r (if {cond} {p} {q})))

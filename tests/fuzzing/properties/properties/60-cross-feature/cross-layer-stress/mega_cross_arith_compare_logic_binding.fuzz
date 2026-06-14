@@ -1,0 +1,7 @@
+name: mega_cross_arith_compare_logic_binding
+section: codegen-cross-layer-stress
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: binding + arithmetic + comparison + logic must preserve expression semantics.
+law: (= (with [x (+ {a} {b}) y (+ {b} {c})] (and (< x y) True)) (< (+ {a} {b}) (+ {b} {c})))

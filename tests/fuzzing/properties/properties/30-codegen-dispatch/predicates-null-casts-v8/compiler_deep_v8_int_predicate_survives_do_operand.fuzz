@@ -1,0 +1,7 @@
+name: compiler_deep_v8_int_predicate_survives_do_operand
+section: predicates-null-casts-v8
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Int? should see the final do expression, not the ignored setup value.
+law: (Int? (do {b} {a}))

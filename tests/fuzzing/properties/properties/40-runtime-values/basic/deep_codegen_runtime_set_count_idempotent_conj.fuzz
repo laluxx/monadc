@@ -1,0 +1,7 @@
+name: deep_codegen_runtime_set_count_idempotent_conj
+section: codegen-runtime-values
+args: a:Int
+type: Bool
+expect: True
+description: conj of an already-present element should not duplicate it.
+law: (= (count (conj (set {a}) {a})) 1)

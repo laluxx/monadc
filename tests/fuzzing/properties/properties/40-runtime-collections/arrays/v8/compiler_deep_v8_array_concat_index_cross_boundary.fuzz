@@ -1,0 +1,7 @@
+name: compiler_deep_v8_array_concat_index_cross_boundary
+section: runtime-arrays-v8
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Array concatenation should preserve right-array elements across the concatenation boundary.
+law: (= ((++ [{a}] [{b} {c}]) 2) {c})

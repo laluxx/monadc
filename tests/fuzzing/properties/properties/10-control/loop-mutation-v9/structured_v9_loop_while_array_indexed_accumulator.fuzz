@@ -1,0 +1,7 @@
+name: structured_v9_loop_while_array_indexed_accumulator
+section: control-loop-mutation-v9
+args: 
+type: Bool
+expect: True
+description: Stress lowering of loops, mutable locals, nested blocks, and branch guarded mutation.
+law: (= (with [xs [3 1 4 1] i 0 acc 0] (do (while (< i 4) (begin (set! acc (+ acc (xs i))) (set! i (+ i 1)))) acc)) 9)

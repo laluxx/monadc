@@ -1,0 +1,7 @@
+name: structured_v9_future_set_count_unique_oracle
+section: future-set-oracle-v9
+args: xs:SetInt
+type: Int
+expect-python: len(set(xs))
+description: Set count should match unique generated elements.
+law: (count {xs})

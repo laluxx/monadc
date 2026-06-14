@@ -1,0 +1,7 @@
+name: compiler_deep_v8_cross_set_contains_from_quasiquote_head
+section: feature-interactions-v8
+args: a:Int
+type: Bool
+expect: True
+description: quasiquote/unquote result should flow through head into set membership.
+law: (contains? (set {a}) (head (quasiquote ((unquote {a}) tail))))

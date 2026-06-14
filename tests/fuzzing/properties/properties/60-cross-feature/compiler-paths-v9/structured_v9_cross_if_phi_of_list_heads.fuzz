@@ -1,0 +1,7 @@
+name: structured_v9_cross_if_phi_of_list_heads
+section: cross-compiler-v9
+args: p:Bool a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Stress cross-feature lowering across control flow, env lookup, runtime collections, predicates, quote/null, and operator dispatch.
+law: (= (head (if {p} (cons {a} (cons {b} (list))) (cons {c} (cons {d} (list))))) (if {p} {a} {c}))

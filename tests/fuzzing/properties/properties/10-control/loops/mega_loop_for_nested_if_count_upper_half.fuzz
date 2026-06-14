@@ -1,0 +1,7 @@
+name: mega_loop_for_nested_if_count_upper_half
+section: codegen-control-loops
+args: 
+type: Bool
+expect: True
+description: for body with nested when must branch on induction variable.
+law: (= (with [hits 0] (do (for [i 0 6] (when (>= i 3) (set! hits (+ hits 1)))) hits)) 3)

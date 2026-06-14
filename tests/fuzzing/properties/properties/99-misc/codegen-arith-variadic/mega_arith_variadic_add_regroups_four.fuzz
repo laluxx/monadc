@@ -1,0 +1,7 @@
+name: mega_arith_variadic_add_regroups_four
+section: codegen-arith-variadic
+args: a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Variadic + dispatch must agree with nested binary grouping.
+law: (= (+ {a} {b} {c} {d}) (+ (+ {a} {b}) (+ {c} {d})))

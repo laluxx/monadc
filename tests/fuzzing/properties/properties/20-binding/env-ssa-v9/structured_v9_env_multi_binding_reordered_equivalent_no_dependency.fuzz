@@ -1,0 +1,7 @@
+name: structured_v9_env_multi_binding_reordered_equivalent_no_dependency
+section: binding-env-v9
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Stress lexical environment lowering, shadowing, initializer order, and mutable variable lookup.
+law: (= (with [x {a} y {b}] (+ x (+ y {c}))) (with [y {b} x {a}] (+ x (+ y {c}))))

@@ -1,0 +1,7 @@
+name: compiler_deep_v8_for_step_2_to_8_sum
+section: control-loop-mutation-v8
+args: a:Int
+type: Bool
+expect: True
+description: for step form should expose stepped index values for step 2 ending at 8.
+law: (= (with [acc {a}] (do (for [i 0 8 2] (set! acc (+ acc i))) acc)) (+ {a} 12))

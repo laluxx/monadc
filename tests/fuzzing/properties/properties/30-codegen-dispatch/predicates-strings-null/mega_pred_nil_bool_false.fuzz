@@ -1,0 +1,7 @@
+name: mega_pred_nil_bool_false
+section: codegen-preds-strings-null
+args: p:Bool
+type: Bool
+expect: True
+description: nil? must fold false for scalar Bool.
+law: (= (nil? {p}) False)

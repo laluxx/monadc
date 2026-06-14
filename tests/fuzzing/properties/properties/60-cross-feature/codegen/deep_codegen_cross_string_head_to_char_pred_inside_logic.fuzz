@@ -1,0 +1,7 @@
+name: deep_codegen_cross_string_head_to_char_pred_inside_logic
+section: codegen-cross-feature
+args: 
+type: Bool
+expect: True
+description: head over string must produce Char that feeds Char? and logic dispatch.
+law: (and (Char? (head "abc")) (String? "abc"))

@@ -1,0 +1,7 @@
+name: extreme_if_compare_common_right_gt
+section: control-if-comparison
+args: cond:Bool common:Int a:Int b:Int
+type: Bool
+expect: True
+description: Common right comparison operand must move through if for >.
+law: (= (> (if {cond} {a} {b}) {common}) (if {cond} (> {a} {common}) (> {b} {common})))

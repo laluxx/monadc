@@ -1,0 +1,7 @@
+name: mega_pred_symbol_quote_true
+section: codegen-preds-strings-null
+args: 
+type: Bool
+expect: True
+description: Symbol? must recognize quoted symbol runtime value.
+law: (Symbol? (quote compiler_symbol))

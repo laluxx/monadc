@@ -1,0 +1,7 @@
+name: deep_codegen_array_inline_array_first
+section: codegen-array-indexing
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Inline array indexing must load element zero.
+law: (= ([{a} {b} {c}] 0) {a})

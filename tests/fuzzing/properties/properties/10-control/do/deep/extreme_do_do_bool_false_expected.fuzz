@@ -1,0 +1,7 @@
+name: extreme_do_do_bool_false_expected
+section: control-do-deep
+args: setup:Int
+type: Bool
+expect: False
+description: Sequencing must return the last expression and compose inside branches, comparisons, and bindings.
+law: (do {setup} False)

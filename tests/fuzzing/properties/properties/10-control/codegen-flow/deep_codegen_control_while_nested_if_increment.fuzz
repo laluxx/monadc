@@ -1,0 +1,7 @@
+name: deep_codegen_control_while_nested_if_increment
+section: codegen-control-flow
+args: 
+type: Bool
+expect: True
+description: while body with nested if must still update induction state.
+law: (= (with [x 0] (do (while (< x 4) (set! x (if (< x 2) (+ x 1) (+ x 1)))) x)) 4)

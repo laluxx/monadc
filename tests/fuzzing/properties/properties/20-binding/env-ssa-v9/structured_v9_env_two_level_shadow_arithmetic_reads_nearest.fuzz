@@ -1,0 +1,7 @@
+name: structured_v9_env_two_level_shadow_arithmetic_reads_nearest
+section: binding-env-v9
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Stress lexical environment lowering, shadowing, initializer order, and mutable variable lookup.
+law: (= (with [x {a}] (with [x {b}] (with [y (+ x {c})] y))) (+ {b} {c}))

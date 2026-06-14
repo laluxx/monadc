@@ -1,0 +1,7 @@
+name: deep_codegen_array_array_head_first
+section: codegen-array-indexing
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: head over array must use array-specialized path.
+law: (= (head [{a} {b} {c}]) {a})

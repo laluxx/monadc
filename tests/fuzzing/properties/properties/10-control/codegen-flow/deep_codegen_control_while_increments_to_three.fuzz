@@ -1,0 +1,7 @@
+name: deep_codegen_control_while_increments_to_three
+section: codegen-control-flow
+args: 
+type: Bool
+expect: True
+description: while must reevaluate condition and mutate loop-carried state to 3.
+law: (= (with [x 0] (do (while (< x 3) (set! x (+ x 1))) x)) 3)

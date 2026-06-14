@@ -1,0 +1,7 @@
+name: structured_v9_env_binding_to_set_then_child_contains
+section: binding-env-v9
+args: a:Int
+type: Bool
+expect: True
+description: Stress lexical environment lowering, shadowing, initializer order, and mutable variable lookup.
+law: (with [s (set {a})] (with [x {a}] (contains? s x)))

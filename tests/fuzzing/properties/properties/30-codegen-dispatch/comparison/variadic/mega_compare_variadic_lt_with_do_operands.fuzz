@@ -1,0 +1,7 @@
+name: mega_compare_variadic_lt_with_do_operands
+section: codegen-compare-variadic
+args: a:Int b:Int c:Int setup:Int
+type: Bool
+expect: True
+description: Variadic < must evaluate do/begin operands and then compare adjacent values.
+law: (= (< (do {setup} {a}) (begin {setup} {b}) {c}) (< {a} {b} {c}))

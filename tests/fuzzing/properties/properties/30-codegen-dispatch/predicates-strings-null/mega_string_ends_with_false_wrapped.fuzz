@@ -1,0 +1,7 @@
+name: mega_string_ends_with_false_wrapped
+section: codegen-preds-strings-null
+args: 
+type: Bool
+expect: True
+description: ends-with? false path must work.
+law: (= (ends-with? "monadc" "mon") False)

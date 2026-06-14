@@ -1,0 +1,7 @@
+name: mega_bind_shadow_outer_set_visible_after_inner
+section: codegen-binding-env
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: outer set! must survive inner shadowing scope.
+law: (= (with [x {a}] (do (set! x {b}) (with [x {c}] x) x)) {b})

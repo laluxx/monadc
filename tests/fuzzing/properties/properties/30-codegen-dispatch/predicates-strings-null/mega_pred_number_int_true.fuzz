@@ -1,0 +1,7 @@
+name: mega_pred_number_int_true
+section: codegen-preds-strings-null
+args: a:Int
+type: Bool
+expect: True
+description: Number? must accept generated Int expression.
+law: (Number? {a})

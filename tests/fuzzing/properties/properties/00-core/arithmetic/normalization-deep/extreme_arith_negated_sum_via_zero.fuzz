@@ -1,0 +1,7 @@
+name: extreme_arith_negated_sum_via_zero
+section: arithmetic-normalization-deep
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Deep arithmetic normalization must preserve integer semantics across direct codegen and helper calls.
+law: (= (- 0 (+ (+ {a} {b}) {c})) (+ (+ (- 0 {a}) (- 0 {b})) (- 0 {c})))

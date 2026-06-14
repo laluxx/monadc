@@ -1,0 +1,7 @@
+name: deep_codegen_control_begin_with_setbang_visible
+section: codegen-control-flow
+args: a:Int b:Int
+type: Bool
+expect: True
+description: begin must sequence set! before reading a with-bound variable.
+law: (= (with [x {a}] (begin (set! x {b}) x)) {b})

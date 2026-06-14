@@ -1,0 +1,7 @@
+name: mega_quasiquote_unquote_head_int
+section: codegen-quote-runtime
+args: a:Int
+type: Bool
+expect: True
+description: quasiquote must evaluate unquote Int hole in head position.
+law: (= (head (quasiquote ((unquote {a}) b c))) {a})

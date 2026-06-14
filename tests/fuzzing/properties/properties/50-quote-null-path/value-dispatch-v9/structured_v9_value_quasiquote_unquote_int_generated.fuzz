@@ -1,0 +1,7 @@
+name: structured_v9_value_quasiquote_unquote_int_generated
+section: quote-null-string-v9
+args: a:Int
+type: Bool
+expect: True
+description: Stress string/char dispatch, null coalescing, nil predicates, quote, quasiquote, and unquote lowering.
+law: (= (quasiquote (unquote {a})) {a})

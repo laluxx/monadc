@@ -1,0 +1,7 @@
+name: oracle_string_contains_generated
+section: oracle-string
+args: haystack:String needle:SubstrOf(haystack)
+type: Bool
+expect-python: needle in haystack
+description: Example for newer oracle fuzzers: generated substring must be contained in generated haystack.
+law: (contains? {haystack} {needle})

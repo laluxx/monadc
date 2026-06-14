@@ -1,0 +1,7 @@
+name: deep_codegen_type_null_coalesce_bool_returns_left
+section: codegen-predicates-casts-null
+args: p:Bool
+type: Bool
+expect: True
+description: ?? over a scalar Bool must return the left side directly.
+law: (= (?? {p} False) {p})

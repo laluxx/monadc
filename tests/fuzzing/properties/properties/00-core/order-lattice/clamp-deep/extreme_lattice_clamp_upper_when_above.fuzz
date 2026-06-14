@@ -1,0 +1,7 @@
+name: extreme_lattice_clamp_upper_when_above
+section: lattice-clamp-deep
+args: x:Int lo:Int hi:Int
+type: Bool
+expect: True
+description: Min/max lattice and clamp laws must hold through helper-based branch implementations.
+law: (if (<= {lo} {hi}) (if (> {x} {hi}) (= (fuzz-min {hi} (fuzz-max {lo} {x})) {hi}) True) True)

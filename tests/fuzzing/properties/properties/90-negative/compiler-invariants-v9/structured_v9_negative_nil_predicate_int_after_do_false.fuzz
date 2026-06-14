@@ -1,0 +1,7 @@
+name: structured_v9_negative_nil_predicate_int_after_do_false
+section: negative-compiler-v9
+args: a:Int
+type: Bool
+expect: False
+description: Expected-false invariant to make sure the runner checks false laws and not only truthy success paths.
+law: (nil? (do nil {a}))

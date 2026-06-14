@@ -1,0 +1,7 @@
+name: compiler_deep_v8_cross_null_array_index_default
+section: feature-interactions-v8
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Null coalescing should integrate with array indexing and if-produced nil.
+law: (= (with [xs [{a} {b}]] (?? (if {p} nil (xs 1)) {a})) (if {p} {a} {b}))

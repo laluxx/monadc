@@ -1,0 +1,7 @@
+name: extreme_with_binding_do_setup_erased
+section: binding-scope-deep
+args: setup:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Lexical binding and shadowing must preserve dependency order and branch-local scope.
+law: (with [x (do {setup} (+ {a} {b}))] (= x (+ {a} {b})))

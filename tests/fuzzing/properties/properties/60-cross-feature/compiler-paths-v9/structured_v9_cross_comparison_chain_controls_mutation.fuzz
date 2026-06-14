@@ -1,0 +1,7 @@
+name: structured_v9_cross_comparison_chain_controls_mutation
+section: cross-compiler-v9
+args: a:Int b:Int c:Int yes:Int no:Int
+type: Bool
+expect: True
+description: Stress cross-feature lowering across control flow, env lookup, runtime collections, predicates, quote/null, and operator dispatch.
+law: (= (with [x {no}] (do (when (< {a} {b} {c}) (set! x {yes})) x)) (if (< {a} {b} {c}) {yes} {no}))

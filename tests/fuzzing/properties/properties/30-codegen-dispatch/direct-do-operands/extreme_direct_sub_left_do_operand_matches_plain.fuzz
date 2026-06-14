@@ -1,0 +1,7 @@
+name: extreme_direct_sub_left_do_operand_matches_plain
+section: direct-dispatch-do
+args: setup:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Direct - must ignore a do setup in the left operand.
+law: (= (- (do {setup} {a}) {b}) (- {a} {b}))

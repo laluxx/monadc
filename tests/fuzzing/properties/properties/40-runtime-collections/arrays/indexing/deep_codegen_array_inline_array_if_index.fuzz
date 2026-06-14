@@ -1,0 +1,7 @@
+name: deep_codegen_array_inline_array_if_index
+section: codegen-array-indexing
+args: p:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Inline array index expression may be a scalar if PHI.
+law: (= ([{a} {b} {c}] (if {p} 1 2)) (if {p} {b} {c}))

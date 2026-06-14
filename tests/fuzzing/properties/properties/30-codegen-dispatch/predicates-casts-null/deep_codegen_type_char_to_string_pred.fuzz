@@ -1,0 +1,7 @@
+name: deep_codegen_type_char_to_string_pred
+section: codegen-predicates-casts-null
+args: 
+type: Bool
+expect: True
+description: String cast of a Char must return a String.
+law: (String? (String ("abc" 0)))

@@ -1,0 +1,7 @@
+name: compiler_deep_v8_inner_shadow_can_read_outer_before_shadow
+section: binding-scope-mutation-v8
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Later bindings in with should see earlier bindings before shadowing.
+law: (= (with [x {a} y (+ x {b}) x {b}] y) (+ {a} {b}))

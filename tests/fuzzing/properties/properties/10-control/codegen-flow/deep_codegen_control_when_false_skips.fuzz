@@ -1,0 +1,7 @@
+name: deep_codegen_control_when_false_skips
+section: codegen-control-flow
+args: a:Int b:Int
+type: Bool
+expect: True
+description: when False must skip body and preserve the bound variable.
+law: (= (with [x {a}] (do (when False (set! x {b})) x)) {a})

@@ -1,0 +1,7 @@
+name: extreme_order_totality_lte_or_gte_direct
+section: order-logic-deep
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Guarded order implication must preserve direct comparison semantics.
+law: (if (<= {a} {b}) True (>= {a} {b}))

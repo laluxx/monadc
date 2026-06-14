@@ -1,0 +1,7 @@
+name: deep_codegen_runtime_quote_equal_self
+section: codegen-runtime-values
+args: 
+type: Bool
+expect: True
+description: quote must build stable runtime values for deep equality.
+law: (equal? (quote (a b c)) (quote (a b c)))

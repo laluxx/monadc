@@ -1,0 +1,7 @@
+name: mega_bind_shadow_tower_4_outer_preserved
+section: codegen-binding-env
+args: a:Int b:Int
+type: Bool
+expect: True
+description: 4 nested shadowing scopes must not overwrite the outer binding.
+law: (= (with [x {a}] (do (with [x (+ {b} 0)] x) (with [x (+ {b} 1)] x) (with [x (+ {b} 2)] x) (with [x (+ {b} 3)] x) x)) {a})

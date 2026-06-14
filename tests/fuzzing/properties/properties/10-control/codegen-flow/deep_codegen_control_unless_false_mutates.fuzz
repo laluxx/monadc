@@ -1,0 +1,7 @@
+name: deep_codegen_control_unless_false_mutates
+section: codegen-control-flow
+args: a:Int b:Int
+type: Bool
+expect: True
+description: unless False must execute body and mutate a bound variable.
+law: (= (with [x {a}] (do (unless False (set! x {b})) x)) {b})

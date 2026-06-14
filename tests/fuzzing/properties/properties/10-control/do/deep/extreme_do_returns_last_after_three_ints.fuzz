@@ -1,0 +1,7 @@
+name: extreme_do_returns_last_after_three_ints
+section: control-do-deep
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Sequencing must return the last expression and compose inside branches, comparisons, and bindings.
+law: (= (do {a} {b} {c}) {c})

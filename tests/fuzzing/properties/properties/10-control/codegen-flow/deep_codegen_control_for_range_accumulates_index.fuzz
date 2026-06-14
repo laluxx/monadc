@@ -1,0 +1,7 @@
+name: deep_codegen_control_for_range_accumulates_index
+section: codegen-control-flow
+args: 
+type: Bool
+expect: True
+description: for loop variable must be bound in body and update outer sum.
+law: (= (with [sum 0] (do (for [i 0 4] (set! sum (+ sum i))) sum)) 6)

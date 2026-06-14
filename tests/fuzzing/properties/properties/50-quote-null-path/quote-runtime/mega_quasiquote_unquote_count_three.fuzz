@@ -1,0 +1,7 @@
+name: mega_quasiquote_unquote_count_three
+section: codegen-quote-runtime
+args: a:Int b:Int
+type: Bool
+expect: True
+description: quasiquote must preserve list length while evaluating holes.
+law: (= (count (quasiquote ((unquote {a}) (unquote {b}) c))) 3)

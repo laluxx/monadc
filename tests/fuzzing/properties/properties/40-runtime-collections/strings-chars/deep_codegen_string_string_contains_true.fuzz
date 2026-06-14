@@ -1,0 +1,7 @@
+name: deep_codegen_string_string_contains_true
+section: codegen-string-char
+args: 
+type: Bool
+expect: True
+description: contains? string path must use substring search.
+law: (contains? "monadc" "nad")

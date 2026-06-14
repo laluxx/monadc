@@ -1,0 +1,7 @@
+name: deep_codegen_binding_with_shadow_inner_int
+section: codegen-binding-mutation
+args: a:Int b:Int
+type: Bool
+expect: True
+description: inner with binding must shadow outer binding.
+law: (= (with [x {a}] (with [x {b}] x)) {b})

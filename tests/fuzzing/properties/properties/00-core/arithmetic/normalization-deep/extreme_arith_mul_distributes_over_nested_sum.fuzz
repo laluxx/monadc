@@ -1,0 +1,7 @@
+name: extreme_arith_mul_distributes_over_nested_sum
+section: arithmetic-normalization-deep
+args: k:Int a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Deep arithmetic normalization must preserve integer semantics across direct codegen and helper calls.
+law: (= (* {k} (+ {a} (+ {b} {c}))) (+ (* {k} {a}) (+ (* {k} {b}) (* {k} {c}))))

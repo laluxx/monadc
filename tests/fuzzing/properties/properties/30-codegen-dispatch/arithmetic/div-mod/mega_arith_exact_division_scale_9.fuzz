@@ -1,0 +1,7 @@
+name: mega_arith_exact_division_scale_9
+section: codegen-arith-div-mod
+args: a:Int
+type: Bool
+expect: True
+description: Exact integer division by constant 9 must survive generated operands.
+law: (= (/ (* {a} 27) 9) (* {a} 3))

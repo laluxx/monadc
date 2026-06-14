@@ -1,0 +1,7 @@
+name: deep_codegen_string_string_starts_with_false
+section: codegen-string-char
+args: 
+type: Bool
+expect: False
+description: starts-with? string path must reject a non-prefix.
+law: (starts-with? "monadc" "nad")

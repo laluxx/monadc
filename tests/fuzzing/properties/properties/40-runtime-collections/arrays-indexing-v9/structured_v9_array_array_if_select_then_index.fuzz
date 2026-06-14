@@ -1,0 +1,7 @@
+name: structured_v9_array_array_if_select_then_index
+section: collections-array-v9
+args: p:Bool a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Stress array literal, heap-array literal, array-as-function indexing, count, and contains dispatch.
+law: (= ((if {p} [{a} {b}] [{c} {d}]) 1) (if {p} {b} {d}))

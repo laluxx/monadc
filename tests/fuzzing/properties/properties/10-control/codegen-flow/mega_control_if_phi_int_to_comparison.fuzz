@@ -1,0 +1,7 @@
+name: mega_control_if_phi_int_to_comparison
+section: codegen-control-flow
+args: p:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Int PHI from if must feed comparison dispatch.
+law: (= (< (if {p} {a} {b}) {c}) (if {p} (< {a} {c}) (< {b} {c})))

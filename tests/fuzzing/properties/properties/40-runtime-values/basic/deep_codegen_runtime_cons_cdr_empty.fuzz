@@ -1,0 +1,7 @@
+name: deep_codegen_runtime_cons_cdr_empty
+section: codegen-runtime-values
+args: a:Int
+type: Bool
+expect: True
+description: cdr after one cons should produce an empty list.
+law: (empty? (cdr (cons {a} (list))))

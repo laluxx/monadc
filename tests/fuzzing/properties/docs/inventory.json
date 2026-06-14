@@ -1,0 +1,1353 @@
+{
+  "active_properties": 1269,
+  "arg_types": {
+    "Bool": 393,
+    "Int": 2197
+  },
+  "disabled_total": 23,
+  "future_disabled_added": 16,
+  "future_records": [
+    {
+      "args": "haystack:String needle:String",
+      "expect_python": "needle in haystack",
+      "name": "structured_v9_future_string_contains_oracle",
+      "path": "future-oracle-disabled/v9-runner-features/strings/oracle/structured_v9_future_string_contains_oracle.fuzz.disabled",
+      "section": "future-string-oracle-v9"
+    },
+    {
+      "args": "s:String prefix:PrefixOf(s)",
+      "expect_python": "s.startswith(prefix)",
+      "name": "structured_v9_future_string_prefix_oracle",
+      "path": "future-oracle-disabled/v9-runner-features/strings/oracle/structured_v9_future_string_prefix_oracle.fuzz.disabled",
+      "section": "future-string-oracle-v9"
+    },
+    {
+      "args": "s:String suffix:SuffixOf(s)",
+      "expect_python": "s.endswith(suffix)",
+      "name": "structured_v9_future_string_suffix_oracle",
+      "path": "future-oracle-disabled/v9-runner-features/strings/oracle/structured_v9_future_string_suffix_oracle.fuzz.disabled",
+      "section": "future-string-oracle-v9"
+    },
+    {
+      "args": "s:NonEmptyString i:IndexOf(s)",
+      "expect_python": "ord(s[i])",
+      "name": "structured_v9_future_string_index_oracle",
+      "path": "future-oracle-disabled/v9-runner-features/strings/oracle/structured_v9_future_string_index_oracle.fuzz.disabled",
+      "section": "future-string-oracle-v9"
+    },
+    {
+      "args": "xs:ArrInt i:IndexOf(xs)",
+      "expect_python": "xs[i]",
+      "name": "structured_v9_future_array_index_oracle",
+      "path": "future-oracle-disabled/v9-runner-features/arrays/oracle/structured_v9_future_array_index_oracle.fuzz.disabled",
+      "section": "future-array-oracle-v9"
+    },
+    {
+      "args": "xs:ArrInt x:Int",
+      "expect_python": "x in xs",
+      "name": "structured_v9_future_array_contains_oracle",
+      "path": "future-oracle-disabled/v9-runner-features/arrays/oracle/structured_v9_future_array_contains_oracle.fuzz.disabled",
+      "section": "future-array-oracle-v9"
+    },
+    {
+      "args": "xs:ArrInt",
+      "expect_python": "len(xs)",
+      "name": "structured_v9_future_array_count_oracle",
+      "path": "future-oracle-disabled/v9-runner-features/arrays/oracle/structured_v9_future_array_count_oracle.fuzz.disabled",
+      "section": "future-array-oracle-v9"
+    },
+    {
+      "args": "xs:SetInt x:Int",
+      "expect_python": "x in xs",
+      "name": "structured_v9_future_set_contains_oracle",
+      "path": "future-oracle-disabled/v9-runner-features/sets/oracle/structured_v9_future_set_contains_oracle.fuzz.disabled",
+      "section": "future-set-oracle-v9"
+    },
+    {
+      "args": "xs:SetInt",
+      "expect_python": "len(set(xs))",
+      "name": "structured_v9_future_set_count_unique_oracle",
+      "path": "future-oracle-disabled/v9-runner-features/sets/oracle/structured_v9_future_set_count_unique_oracle.fuzz.disabled",
+      "section": "future-set-oracle-v9"
+    },
+    {
+      "args": "xs:NonEmptyListInt",
+      "expect_python": "xs[0]",
+      "name": "structured_v9_future_list_head_oracle",
+      "path": "future-oracle-disabled/v9-runner-features/lists/oracle/structured_v9_future_list_head_oracle.fuzz.disabled",
+      "section": "future-list-oracle-v9"
+    },
+    {
+      "args": "xs:ListInt",
+      "expect_python": "len(xs)",
+      "name": "structured_v9_future_list_count_oracle",
+      "path": "future-oracle-disabled/v9-runner-features/lists/oracle/structured_v9_future_list_count_oracle.fuzz.disabled",
+      "section": "future-list-oracle-v9"
+    },
+    {
+      "args": "p:Path",
+      "expect_python": "True",
+      "name": "structured_v9_future_path_predicate_oracle",
+      "path": "future-oracle-disabled/v9-runner-features/paths/oracle/structured_v9_future_path_predicate_oracle.fuzz.disabled",
+      "section": "future-path-oracle-v9"
+    },
+    {
+      "args": "a:Int b:NonZeroInt",
+      "expect_python": "a // b",
+      "name": "structured_v9_future_division_nonzero_oracle",
+      "path": "future-oracle-disabled/v9-runner-features/numbers/oracle/structured_v9_future_division_nonzero_oracle.fuzz.disabled",
+      "section": "future-number-oracle-v9"
+    },
+    {
+      "args": "a:Int b:PositiveInt",
+      "expect_python": "a % b",
+      "name": "structured_v9_future_mod_nonzero_oracle",
+      "path": "future-oracle-disabled/v9-runner-features/numbers/oracle/structured_v9_future_mod_nonzero_oracle.fuzz.disabled",
+      "section": "future-number-oracle-v9"
+    },
+    {
+      "args": "m:MapStringInt k:KeyOf(m)",
+      "expect_python": "m[k]",
+      "name": "structured_v9_future_map_lookup_oracle_disabled_until_maps_compile",
+      "path": "future-oracle-disabled/v9-runner-features/maps/oracle/structured_v9_future_map_lookup_oracle_disabled_until_maps_compile.fuzz.disabled",
+      "section": "future-map-oracle-v9"
+    },
+    {
+      "args": "x:Int",
+      "expect_python": "x",
+      "name": "structured_v9_future_wisp_define_typed_value_surface",
+      "path": "future-oracle-disabled/v9-runner-features/wisp/oracle/structured_v9_future_wisp_define_typed_value_surface.fuzz.disabled",
+      "section": "future-wisp-oracle-v9"
+    }
+  ],
+  "generated_at": "2026-06-14T22:55:20",
+  "new_active_properties": 159,
+  "new_records": [
+    {
+      "args": "p:Bool q:Bool a:Int b:Int c:Int d:Int",
+      "expect": "True",
+      "name": "structured_v9_phi_if_matrix_transpose_two_conditions",
+      "path": "properties/10-control/phi-lowering-v9/structured_v9_phi_if_matrix_transpose_two_conditions.fuzz",
+      "section": "control-phi-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_phi_if_same_condition_nested_then_collapse",
+      "path": "properties/10-control/phi-lowering-v9/structured_v9_phi_if_same_condition_nested_then_collapse.fuzz",
+      "section": "control-phi-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_phi_if_same_condition_nested_else_collapse",
+      "path": "properties/10-control/phi-lowering-v9/structured_v9_phi_if_same_condition_nested_else_collapse.fuzz",
+      "section": "control-phi-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_phi_if_negated_condition_then_collapse",
+      "path": "properties/10-control/phi-lowering-v9/structured_v9_phi_if_negated_condition_then_collapse.fuzz",
+      "section": "control-phi-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_phi_if_negated_condition_else_collapse",
+      "path": "properties/10-control/phi-lowering-v9/structured_v9_phi_if_negated_condition_else_collapse.fuzz",
+      "section": "control-phi-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_phi_if_bool_phi_with_arith_operands",
+      "path": "properties/10-control/phi-lowering-v9/structured_v9_phi_if_bool_phi_with_arith_operands.fuzz",
+      "section": "control-phi-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int setup:Int",
+      "expect": "True",
+      "name": "structured_v9_phi_if_do_branch_phi_int",
+      "path": "properties/10-control/phi-lowering-v9/structured_v9_phi_if_do_branch_phi_int.fuzz",
+      "section": "control-phi-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int setup:Int",
+      "expect": "True",
+      "name": "structured_v9_phi_if_begin_branch_phi_int",
+      "path": "properties/10-control/phi-lowering-v9/structured_v9_phi_if_begin_branch_phi_int.fuzz",
+      "section": "control-phi-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_phi_if_with_branch_env_is_local",
+      "path": "properties/10-control/phi-lowering-v9/structured_v9_phi_if_with_branch_env_is_local.fuzz",
+      "section": "control-phi-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_phi_if_branch_result_feeds_comparison",
+      "path": "properties/10-control/phi-lowering-v9/structured_v9_phi_if_branch_result_feeds_comparison.fuzz",
+      "section": "control-phi-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_phi_if_branch_result_feeds_lattice_min",
+      "path": "properties/10-control/phi-lowering-v9/structured_v9_phi_if_branch_result_feeds_lattice_min.fuzz",
+      "section": "control-phi-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_phi_if_branch_result_feeds_lattice_max",
+      "path": "properties/10-control/phi-lowering-v9/structured_v9_phi_if_branch_result_feeds_lattice_max.fuzz",
+      "section": "control-phi-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_phi_if_diamond_addition_merge",
+      "path": "properties/10-control/phi-lowering-v9/structured_v9_phi_if_diamond_addition_merge.fuzz",
+      "section": "control-phi-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_phi_if_diamond_subtraction_merge",
+      "path": "properties/10-control/phi-lowering-v9/structured_v9_phi_if_diamond_subtraction_merge.fuzz",
+      "section": "control-phi-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_phi_if_diamond_multiplication_merge",
+      "path": "properties/10-control/phi-lowering-v9/structured_v9_phi_if_diamond_multiplication_merge.fuzz",
+      "section": "control-phi-v9"
+    },
+    {
+      "args": "p:Bool q:Bool r:Bool",
+      "expect": "True",
+      "name": "structured_v9_phi_if_nested_bool_identity_phi",
+      "path": "properties/10-control/phi-lowering-v9/structured_v9_phi_if_nested_bool_identity_phi.fuzz",
+      "section": "control-phi-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_phi_if_condition_computed_in_do",
+      "path": "properties/10-control/phi-lowering-v9/structured_v9_phi_if_condition_computed_in_do.fuzz",
+      "section": "control-phi-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_phi_if_condition_computed_in_begin",
+      "path": "properties/10-control/phi-lowering-v9/structured_v9_phi_if_condition_computed_in_begin.fuzz",
+      "section": "control-phi-v9"
+    },
+    {
+      "args": "p:Bool q:Bool a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_phi_if_boolean_result_as_outer_condition",
+      "path": "properties/10-control/phi-lowering-v9/structured_v9_phi_if_boolean_result_as_outer_condition.fuzz",
+      "section": "control-phi-v9"
+    },
+    {
+      "args": "a:Int b:Int yes:Int no:Int",
+      "expect": "True",
+      "name": "structured_v9_phi_if_equality_condition_matches_branch",
+      "path": "properties/10-control/phi-lowering-v9/structured_v9_phi_if_equality_condition_matches_branch.fuzz",
+      "section": "control-phi-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_loop_while_adds_branch_value_1_times",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_while_adds_branch_value_1_times.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_loop_for_adds_branch_value_1_times",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_for_adds_branch_value_1_times.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_loop_while_adds_branch_value_2_times",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_while_adds_branch_value_2_times.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_loop_for_adds_branch_value_2_times",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_for_adds_branch_value_2_times.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_loop_while_adds_branch_value_3_times",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_while_adds_branch_value_3_times.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_loop_for_adds_branch_value_3_times",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_for_adds_branch_value_3_times.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_loop_while_adds_branch_value_4_times",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_while_adds_branch_value_4_times.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_loop_for_adds_branch_value_4_times",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_for_adds_branch_value_4_times.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_loop_while_adds_branch_value_5_times",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_while_adds_branch_value_5_times.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_loop_for_adds_branch_value_5_times",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_for_adds_branch_value_5_times.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_loop_while_adds_branch_value_6_times",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_while_adds_branch_value_6_times.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_loop_for_adds_branch_value_6_times",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_for_adds_branch_value_6_times.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_loop_while_adds_branch_value_7_times",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_while_adds_branch_value_7_times.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_loop_for_adds_branch_value_7_times",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_for_adds_branch_value_7_times.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "",
+      "expect": "True",
+      "name": "structured_v9_loop_while_nested_two_counters_cross_product",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_while_nested_two_counters_cross_product.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_loop_while_mutates_two_vars_in_order",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_while_mutates_two_vars_in_order.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "",
+      "expect": "True",
+      "name": "structured_v9_loop_for_range_uses_index_twice",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_for_range_uses_index_twice.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "",
+      "expect": "True",
+      "name": "structured_v9_loop_for_step_accumulates_indices",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_for_step_accumulates_indices.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "p:Bool",
+      "expect": "True",
+      "name": "structured_v9_loop_while_condition_reads_mutated_bool",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_while_condition_reads_mutated_bool.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "",
+      "expect": "True",
+      "name": "structured_v9_loop_while_array_indexed_accumulator",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_while_array_indexed_accumulator.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "",
+      "expect": "True",
+      "name": "structured_v9_loop_while_set_membership_after_index_loop",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_while_set_membership_after_index_loop.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "",
+      "expect": "True",
+      "name": "structured_v9_loop_while_unless_skips_even_hits",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_while_unless_skips_even_hits.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "",
+      "expect": "True",
+      "name": "structured_v9_loop_while_when_collects_even_hits",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_while_when_collects_even_hits.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "p:Bool",
+      "expect": "True",
+      "name": "structured_v9_loop_for_nested_when_mutates_bool_once",
+      "path": "properties/10-control/loop-mutation-v9/structured_v9_loop_for_nested_when_mutates_bool_once.fuzz",
+      "section": "control-loop-mutation-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_env_sequential_multi_binding_dependency_chain",
+      "path": "properties/20-binding/env-ssa-v9/structured_v9_env_sequential_multi_binding_dependency_chain.fuzz",
+      "section": "binding-env-v9"
+    },
+    {
+      "args": "a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_env_shadowed_inner_reads_outer_in_initializer",
+      "path": "properties/20-binding/env-ssa-v9/structured_v9_env_shadowed_inner_reads_outer_in_initializer.fuzz",
+      "section": "binding-env-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_env_inner_shadow_does_not_mutate_outer",
+      "path": "properties/20-binding/env-ssa-v9/structured_v9_env_inner_shadow_does_not_mutate_outer.fuzz",
+      "section": "binding-env-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_env_outer_mutation_visible_after_inner_scope",
+      "path": "properties/20-binding/env-ssa-v9/structured_v9_env_outer_mutation_visible_after_inner_scope.fuzz",
+      "section": "binding-env-v9"
+    },
+    {
+      "args": "a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_env_sibling_binding_uses_previous_binding_not_future",
+      "path": "properties/20-binding/env-ssa-v9/structured_v9_env_sibling_binding_uses_previous_binding_not_future.fuzz",
+      "section": "binding-env-v9"
+    },
+    {
+      "args": "a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_env_nested_with_do_returns_outer_after_shadow_block",
+      "path": "properties/20-binding/env-ssa-v9/structured_v9_env_nested_with_do_returns_outer_after_shadow_block.fuzz",
+      "section": "binding-env-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_env_nested_mutation_with_branch_selected_rhs",
+      "path": "properties/20-binding/env-ssa-v9/structured_v9_env_nested_mutation_with_branch_selected_rhs.fuzz",
+      "section": "binding-env-v9"
+    },
+    {
+      "args": "p:Bool q:Bool a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_env_shadowed_bool_controls_inner_only",
+      "path": "properties/20-binding/env-ssa-v9/structured_v9_env_shadowed_bool_controls_inner_only.fuzz",
+      "section": "binding-env-v9"
+    },
+    {
+      "args": "p:Bool q:Bool a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_env_outer_bool_survives_inner_shadow",
+      "path": "properties/20-binding/env-ssa-v9/structured_v9_env_outer_bool_survives_inner_shadow.fuzz",
+      "section": "binding-env-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_env_two_level_shadow_arithmetic_reads_nearest",
+      "path": "properties/20-binding/env-ssa-v9/structured_v9_env_two_level_shadow_arithmetic_reads_nearest.fuzz",
+      "section": "binding-env-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_env_setbang_after_shadow_targets_outer_again",
+      "path": "properties/20-binding/env-ssa-v9/structured_v9_env_setbang_after_shadow_targets_outer_again.fuzz",
+      "section": "binding-env-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_env_binding_to_array_then_index_in_child_scope",
+      "path": "properties/20-binding/env-ssa-v9/structured_v9_env_binding_to_array_then_index_in_child_scope.fuzz",
+      "section": "binding-env-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "True",
+      "name": "structured_v9_env_binding_to_set_then_child_contains",
+      "path": "properties/20-binding/env-ssa-v9/structured_v9_env_binding_to_set_then_child_contains.fuzz",
+      "section": "binding-env-v9"
+    },
+    {
+      "args": "a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_env_binding_to_list_then_nested_head",
+      "path": "properties/20-binding/env-ssa-v9/structured_v9_env_binding_to_list_then_nested_head.fuzz",
+      "section": "binding-env-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_env_multi_binding_reordered_equivalent_no_dependency",
+      "path": "properties/20-binding/env-ssa-v9/structured_v9_env_multi_binding_reordered_equivalent_no_dependency.fuzz",
+      "section": "binding-env-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_env_mutation_before_child_scope_observed_by_child",
+      "path": "properties/20-binding/env-ssa-v9/structured_v9_env_mutation_before_child_scope_observed_by_child.fuzz",
+      "section": "binding-env-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_env_child_scope_result_feeds_outer_mutation",
+      "path": "properties/20-binding/env-ssa-v9/structured_v9_env_child_scope_result_feeds_outer_mutation.fuzz",
+      "section": "binding-env-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_env_branch_scope_result_feeds_outer_mutation",
+      "path": "properties/20-binding/env-ssa-v9/structured_v9_env_branch_scope_result_feeds_outer_mutation.fuzz",
+      "section": "binding-env-v9"
+    },
+    {
+      "args": "a:Int b:Int setup:Bool",
+      "expect": "True",
+      "name": "structured_v9_dispatch_direct_plus_matches_helper_after_do",
+      "path": "properties/30-codegen-dispatch/operator-matrix-v9/structured_v9_dispatch_direct_plus_matches_helper_after_do.fuzz",
+      "section": "dispatch-matrix-v9"
+    },
+    {
+      "args": "a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_dispatch_direct_minus_matches_helper_after_with",
+      "path": "properties/30-codegen-dispatch/operator-matrix-v9/structured_v9_dispatch_direct_minus_matches_helper_after_with.fuzz",
+      "section": "dispatch-matrix-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_dispatch_direct_mul_matches_helper_in_branch",
+      "path": "properties/30-codegen-dispatch/operator-matrix-v9/structured_v9_dispatch_direct_mul_matches_helper_in_branch.fuzz",
+      "section": "dispatch-matrix-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "True",
+      "name": "structured_v9_dispatch_direct_mod_small_constant_range",
+      "path": "properties/30-codegen-dispatch/operator-matrix-v9/structured_v9_dispatch_direct_mod_small_constant_range.fuzz",
+      "section": "dispatch-matrix-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "True",
+      "name": "structured_v9_dispatch_direct_mod_subtract_remainder",
+      "path": "properties/30-codegen-dispatch/operator-matrix-v9/structured_v9_dispatch_direct_mod_subtract_remainder.fuzz",
+      "section": "dispatch-matrix-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_dispatch_direct_comparison_chained_lt_equiv",
+      "path": "properties/30-codegen-dispatch/operator-matrix-v9/structured_v9_dispatch_direct_comparison_chained_lt_equiv.fuzz",
+      "section": "dispatch-matrix-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_dispatch_direct_comparison_chained_lte_equiv",
+      "path": "properties/30-codegen-dispatch/operator-matrix-v9/structured_v9_dispatch_direct_comparison_chained_lte_equiv.fuzz",
+      "section": "dispatch-matrix-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_dispatch_direct_comparison_chained_gt_equiv",
+      "path": "properties/30-codegen-dispatch/operator-matrix-v9/structured_v9_dispatch_direct_comparison_chained_gt_equiv.fuzz",
+      "section": "dispatch-matrix-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_dispatch_direct_comparison_chained_gte_equiv",
+      "path": "properties/30-codegen-dispatch/operator-matrix-v9/structured_v9_dispatch_direct_comparison_chained_gte_equiv.fuzz",
+      "section": "dispatch-matrix-v9"
+    },
+    {
+      "args": "a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_dispatch_direct_neq_matches_not_equal",
+      "path": "properties/30-codegen-dispatch/operator-matrix-v9/structured_v9_dispatch_direct_neq_matches_not_equal.fuzz",
+      "section": "dispatch-matrix-v9"
+    },
+    {
+      "args": "p:Bool q:Bool",
+      "expect": "True",
+      "name": "structured_v9_dispatch_logic_and_short_form_matches_if",
+      "path": "properties/30-codegen-dispatch/operator-matrix-v9/structured_v9_dispatch_logic_and_short_form_matches_if.fuzz",
+      "section": "dispatch-matrix-v9"
+    },
+    {
+      "args": "p:Bool q:Bool",
+      "expect": "True",
+      "name": "structured_v9_dispatch_logic_or_short_form_matches_if",
+      "path": "properties/30-codegen-dispatch/operator-matrix-v9/structured_v9_dispatch_logic_or_short_form_matches_if.fuzz",
+      "section": "dispatch-matrix-v9"
+    },
+    {
+      "args": "p:Bool q:Bool",
+      "expect": "True",
+      "name": "structured_v9_dispatch_logic_xor_encoded_with_if",
+      "path": "properties/30-codegen-dispatch/operator-matrix-v9/structured_v9_dispatch_logic_xor_encoded_with_if.fuzz",
+      "section": "dispatch-matrix-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "True",
+      "name": "structured_v9_dispatch_bitwise_and_mask_is_bounded_by_mask",
+      "path": "properties/30-codegen-dispatch/operator-matrix-v9/structured_v9_dispatch_bitwise_and_mask_is_bounded_by_mask.fuzz",
+      "section": "dispatch-matrix-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "True",
+      "name": "structured_v9_dispatch_bitwise_or_sets_low_bit",
+      "path": "properties/30-codegen-dispatch/operator-matrix-v9/structured_v9_dispatch_bitwise_or_sets_low_bit.fuzz",
+      "section": "dispatch-matrix-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_dispatch_bitwise_xor_self_zero_in_branch",
+      "path": "properties/30-codegen-dispatch/operator-matrix-v9/structured_v9_dispatch_bitwise_xor_self_zero_in_branch.fuzz",
+      "section": "dispatch-matrix-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "True",
+      "name": "structured_v9_dispatch_bitwise_shift_roundtrip_masked",
+      "path": "properties/30-codegen-dispatch/operator-matrix-v9/structured_v9_dispatch_bitwise_shift_roundtrip_masked.fuzz",
+      "section": "dispatch-matrix-v9"
+    },
+    {
+      "args": "a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_dispatch_bitwise_demorgan_with_generated_operands",
+      "path": "properties/30-codegen-dispatch/operator-matrix-v9/structured_v9_dispatch_bitwise_demorgan_with_generated_operands.fuzz",
+      "section": "dispatch-matrix-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "True",
+      "name": "structured_v9_dispatch_pred_nil_on_branchless_int_false",
+      "path": "properties/30-codegen-dispatch/operator-matrix-v9/structured_v9_dispatch_pred_nil_on_branchless_int_false.fuzz",
+      "section": "dispatch-matrix-v9"
+    },
+    {
+      "args": "p:Bool",
+      "expect": "True",
+      "name": "structured_v9_dispatch_pred_char_string_index_inside_if",
+      "path": "properties/30-codegen-dispatch/operator-matrix-v9/structured_v9_dispatch_pred_char_string_index_inside_if.fuzz",
+      "section": "dispatch-matrix-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_array_array_index_constant_zero_generated",
+      "path": "properties/40-runtime-collections/arrays-indexing-v9/structured_v9_array_array_index_constant_zero_generated.fuzz",
+      "section": "collections-array-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_array_array_index_constant_one_generated",
+      "path": "properties/40-runtime-collections/arrays-indexing-v9/structured_v9_array_array_index_constant_one_generated.fuzz",
+      "section": "collections-array-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_array_array_index_constant_two_generated",
+      "path": "properties/40-runtime-collections/arrays-indexing-v9/structured_v9_array_array_index_constant_two_generated.fuzz",
+      "section": "collections-array-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_array_array_index_dynamic_bool_select",
+      "path": "properties/40-runtime-collections/arrays-indexing-v9/structured_v9_array_array_index_dynamic_bool_select.fuzz",
+      "section": "collections-array-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_array_array_bound_to_name_indexed_in_do",
+      "path": "properties/40-runtime-collections/arrays-indexing-v9/structured_v9_array_array_bound_to_name_indexed_in_do.fuzz",
+      "section": "collections-array-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_array_array_count_stable_after_generated_elements",
+      "path": "properties/40-runtime-collections/arrays-indexing-v9/structured_v9_array_array_count_stable_after_generated_elements.fuzz",
+      "section": "collections-array-v9"
+    },
+    {
+      "args": "a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_array_array_contains_first_generated",
+      "path": "properties/40-runtime-collections/arrays-indexing-v9/structured_v9_array_array_contains_first_generated.fuzz",
+      "section": "collections-array-v9"
+    },
+    {
+      "args": "a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_array_array_contains_second_generated",
+      "path": "properties/40-runtime-collections/arrays-indexing-v9/structured_v9_array_array_contains_second_generated.fuzz",
+      "section": "collections-array-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int d:Int",
+      "expect": "True",
+      "name": "structured_v9_array_array_if_select_then_index",
+      "path": "properties/40-runtime-collections/arrays-indexing-v9/structured_v9_array_array_if_select_then_index.fuzz",
+      "section": "collections-array-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_array_heap_array_index_constant_one_generated",
+      "path": "properties/40-runtime-collections/arrays-indexing-v9/structured_v9_array_heap_array_index_constant_one_generated.fuzz",
+      "section": "collections-array-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_array_heap_array_count_generated_elements",
+      "path": "properties/40-runtime-collections/arrays-indexing-v9/structured_v9_array_heap_array_count_generated_elements.fuzz",
+      "section": "collections-array-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_array_array_index_result_feeds_arithmetic",
+      "path": "properties/40-runtime-collections/arrays-indexing-v9/structured_v9_array_array_index_result_feeds_arithmetic.fuzz",
+      "section": "collections-array-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_list_cons_head_after_nested_cons",
+      "path": "properties/40-runtime-collections/lists-pairs-v9/structured_v9_list_cons_head_after_nested_cons.fuzz",
+      "section": "collections-list-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_list_cdr_head_second_after_nested_cons",
+      "path": "properties/40-runtime-collections/lists-pairs-v9/structured_v9_list_cdr_head_second_after_nested_cons.fuzz",
+      "section": "collections-list-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_list_cdr_cdr_head_third_after_nested_cons",
+      "path": "properties/40-runtime-collections/lists-pairs-v9/structured_v9_list_cdr_cdr_head_third_after_nested_cons.fuzz",
+      "section": "collections-list-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_list_cons_count_three_generated",
+      "path": "properties/40-runtime-collections/lists-pairs-v9/structured_v9_list_cons_count_three_generated.fuzz",
+      "section": "collections-list-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "True",
+      "name": "structured_v9_list_make_list_head_matches_fill",
+      "path": "properties/40-runtime-collections/lists-pairs-v9/structured_v9_list_make_list_head_matches_fill.fuzz",
+      "section": "collections-list-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "True",
+      "name": "structured_v9_list_make_list_count_four",
+      "path": "properties/40-runtime-collections/lists-pairs-v9/structured_v9_list_make_list_count_four.fuzz",
+      "section": "collections-list-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "True",
+      "name": "structured_v9_list_list_copy_preserves_count_four",
+      "path": "properties/40-runtime-collections/lists-pairs-v9/structured_v9_list_list_copy_preserves_count_four.fuzz",
+      "section": "collections-list-v9"
+    },
+    {
+      "args": "a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_list_dot_car_generated",
+      "path": "properties/40-runtime-collections/lists-pairs-v9/structured_v9_list_dot_car_generated.fuzz",
+      "section": "collections-list-v9"
+    },
+    {
+      "args": "a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_list_dot_cdr_generated",
+      "path": "properties/40-runtime-collections/lists-pairs-v9/structured_v9_list_dot_cdr_generated.fuzz",
+      "section": "collections-list-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_list_list_inside_if_selects_head",
+      "path": "properties/40-runtime-collections/lists-pairs-v9/structured_v9_list_list_inside_if_selects_head.fuzz",
+      "section": "collections-list-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "True",
+      "name": "structured_v9_set_set_contains_inserted_generated",
+      "path": "properties/40-runtime-collections/sets-mutation-v9/structured_v9_set_set_contains_inserted_generated.fuzz",
+      "section": "collections-set-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "True",
+      "name": "structured_v9_set_set_duplicate_count_one_generated",
+      "path": "properties/40-runtime-collections/sets-mutation-v9/structured_v9_set_set_duplicate_count_one_generated.fuzz",
+      "section": "collections-set-v9"
+    },
+    {
+      "args": "a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_set_set_conj_contains_generated",
+      "path": "properties/40-runtime-collections/sets-mutation-v9/structured_v9_set_set_conj_contains_generated.fuzz",
+      "section": "collections-set-v9"
+    },
+    {
+      "args": "a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_set_set_conj_preserves_existing_generated",
+      "path": "properties/40-runtime-collections/sets-mutation-v9/structured_v9_set_set_conj_preserves_existing_generated.fuzz",
+      "section": "collections-set-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "True",
+      "name": "structured_v9_set_set_disj_removes_generated",
+      "path": "properties/40-runtime-collections/sets-mutation-v9/structured_v9_set_set_disj_removes_generated.fuzz",
+      "section": "collections-set-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "True",
+      "name": "structured_v9_set_set_conjbang_contains_generated",
+      "path": "properties/40-runtime-collections/sets-mutation-v9/structured_v9_set_set_conjbang_contains_generated.fuzz",
+      "section": "collections-set-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "True",
+      "name": "structured_v9_set_set_disjbang_removes_generated",
+      "path": "properties/40-runtime-collections/sets-mutation-v9/structured_v9_set_set_disjbang_removes_generated.fuzz",
+      "section": "collections-set-v9"
+    },
+    {
+      "args": "p:Bool a:Int",
+      "expect": "True",
+      "name": "structured_v9_set_set_when_conjbang_guarded",
+      "path": "properties/40-runtime-collections/sets-mutation-v9/structured_v9_set_set_when_conjbang_guarded.fuzz",
+      "section": "collections-set-v9"
+    },
+    {
+      "args": "p:Bool a:Int",
+      "expect": "True",
+      "name": "structured_v9_set_set_unless_conjbang_guarded",
+      "path": "properties/40-runtime-collections/sets-mutation-v9/structured_v9_set_set_unless_conjbang_guarded.fuzz",
+      "section": "collections-set-v9"
+    },
+    {
+      "args": "p:Bool a:Int",
+      "expect": "True",
+      "name": "structured_v9_set_set_if_conj_or_disj_contains",
+      "path": "properties/40-runtime-collections/sets-mutation-v9/structured_v9_set_set_if_conj_or_disj_contains.fuzz",
+      "section": "collections-set-v9"
+    },
+    {
+      "args": "p:Bool",
+      "expect": "True",
+      "name": "structured_v9_value_string_index_branch_char_value",
+      "path": "properties/50-quote-null-path/value-dispatch-v9/structured_v9_value_string_index_branch_char_value.fuzz",
+      "section": "quote-null-string-v9"
+    },
+    {
+      "args": "",
+      "expect": "True",
+      "name": "structured_v9_value_string_head_matches_index_zero",
+      "path": "properties/50-quote-null-path/value-dispatch-v9/structured_v9_value_string_head_matches_index_zero.fuzz",
+      "section": "quote-null-string-v9"
+    },
+    {
+      "args": "",
+      "expect": "True",
+      "name": "structured_v9_value_string_make_string_head_matches_char",
+      "path": "properties/50-quote-null-path/value-dispatch-v9/structured_v9_value_string_make_string_head_matches_char.fuzz",
+      "section": "quote-null-string-v9"
+    },
+    {
+      "args": "",
+      "expect": "True",
+      "name": "structured_v9_value_string_count_after_make_string",
+      "path": "properties/50-quote-null-path/value-dispatch-v9/structured_v9_value_string_count_after_make_string.fuzz",
+      "section": "quote-null-string-v9"
+    },
+    {
+      "args": "p:Bool",
+      "expect": "True",
+      "name": "structured_v9_value_string_contains_branch_literal",
+      "path": "properties/50-quote-null-path/value-dispatch-v9/structured_v9_value_string_contains_branch_literal.fuzz",
+      "section": "quote-null-string-v9"
+    },
+    {
+      "args": "p:Bool",
+      "expect": "True",
+      "name": "structured_v9_value_string_starts_with_branch_literal",
+      "path": "properties/50-quote-null-path/value-dispatch-v9/structured_v9_value_string_starts_with_branch_literal.fuzz",
+      "section": "quote-null-string-v9"
+    },
+    {
+      "args": "p:Bool",
+      "expect": "True",
+      "name": "structured_v9_value_string_ends_with_branch_literal",
+      "path": "properties/50-quote-null-path/value-dispatch-v9/structured_v9_value_string_ends_with_branch_literal.fuzz",
+      "section": "quote-null-string-v9"
+    },
+    {
+      "args": "a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_value_nil_coalesce_left_value_int",
+      "path": "properties/50-quote-null-path/value-dispatch-v9/structured_v9_value_nil_coalesce_left_value_int.fuzz",
+      "section": "quote-null-string-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "True",
+      "name": "structured_v9_value_nil_coalesce_nil_fallback_int",
+      "path": "properties/50-quote-null-path/value-dispatch-v9/structured_v9_value_nil_coalesce_nil_fallback_int.fuzz",
+      "section": "quote-null-string-v9"
+    },
+    {
+      "args": "",
+      "expect": "True",
+      "name": "structured_v9_value_nil_predicate_through_do_nil",
+      "path": "properties/50-quote-null-path/value-dispatch-v9/structured_v9_value_nil_predicate_through_do_nil.fuzz",
+      "section": "quote-null-string-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "True",
+      "name": "structured_v9_value_nil_predicate_through_do_int_false",
+      "path": "properties/50-quote-null-path/value-dispatch-v9/structured_v9_value_nil_predicate_through_do_int_false.fuzz",
+      "section": "quote-null-string-v9"
+    },
+    {
+      "args": "",
+      "expect": "True",
+      "name": "structured_v9_value_quote_equal_same_symbol",
+      "path": "properties/50-quote-null-path/value-dispatch-v9/structured_v9_value_quote_equal_same_symbol.fuzz",
+      "section": "quote-null-string-v9"
+    },
+    {
+      "args": "",
+      "expect": "True",
+      "name": "structured_v9_value_quote_not_equal_different_symbol",
+      "path": "properties/50-quote-null-path/value-dispatch-v9/structured_v9_value_quote_not_equal_different_symbol.fuzz",
+      "section": "quote-null-string-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "True",
+      "name": "structured_v9_value_quasiquote_unquote_int_generated",
+      "path": "properties/50-quote-null-path/value-dispatch-v9/structured_v9_value_quasiquote_unquote_int_generated.fuzz",
+      "section": "quote-null-string-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_value_quasiquote_unquote_branch_generated",
+      "path": "properties/50-quote-null-path/value-dispatch-v9/structured_v9_value_quasiquote_unquote_branch_generated.fuzz",
+      "section": "quote-null-string-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_cross_loop_array_set_membership_with_generated_guard",
+      "path": "properties/60-cross-feature/compiler-paths-v9/structured_v9_cross_loop_array_set_membership_with_generated_guard.fuzz",
+      "section": "cross-compiler-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_cross_binding_array_if_loop_count_sum",
+      "path": "properties/60-cross-feature/compiler-paths-v9/structured_v9_cross_binding_array_if_loop_count_sum.fuzz",
+      "section": "cross-compiler-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_cross_set_mutation_then_array_index_branch",
+      "path": "properties/60-cross-feature/compiler-paths-v9/structured_v9_cross_set_mutation_then_array_index_branch.fuzz",
+      "section": "cross-compiler-v9"
+    },
+    {
+      "args": "a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_cross_list_head_feeds_set_contains",
+      "path": "properties/60-cross-feature/compiler-paths-v9/structured_v9_cross_list_head_feeds_set_contains.fuzz",
+      "section": "cross-compiler-v9"
+    },
+    {
+      "args": "p:Bool",
+      "expect": "True",
+      "name": "structured_v9_cross_string_index_feeds_array_char_compare",
+      "path": "properties/60-cross-feature/compiler-paths-v9/structured_v9_cross_string_index_feeds_array_char_compare.fuzz",
+      "section": "cross-compiler-v9"
+    },
+    {
+      "args": "a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_cross_quasiquote_value_feeds_array_index",
+      "path": "properties/60-cross-feature/compiler-paths-v9/structured_v9_cross_quasiquote_value_feeds_array_index.fuzz",
+      "section": "cross-compiler-v9"
+    },
+    {
+      "args": "a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_cross_nil_coalesce_feeds_set_membership",
+      "path": "properties/60-cross-feature/compiler-paths-v9/structured_v9_cross_nil_coalesce_feeds_set_membership.fuzz",
+      "section": "cross-compiler-v9"
+    },
+    {
+      "args": "p:Bool a:Int",
+      "expect": "True",
+      "name": "structured_v9_cross_with_loop_mutation_branch_set_contains",
+      "path": "properties/60-cross-feature/compiler-paths-v9/structured_v9_cross_with_loop_mutation_branch_set_contains.fuzz",
+      "section": "cross-compiler-v9"
+    },
+    {
+      "args": "a:Int x:Int y:Int",
+      "expect": "True",
+      "name": "structured_v9_cross_bitwise_result_as_array_index",
+      "path": "properties/60-cross-feature/compiler-paths-v9/structured_v9_cross_bitwise_result_as_array_index.fuzz",
+      "section": "cross-compiler-v9"
+    },
+    {
+      "args": "a:Int x:Int y:Int z:Int",
+      "expect": "True",
+      "name": "structured_v9_cross_mod_result_as_array_index",
+      "path": "properties/60-cross-feature/compiler-paths-v9/structured_v9_cross_mod_result_as_array_index.fuzz",
+      "section": "cross-compiler-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int yes:Int no:Int",
+      "expect": "True",
+      "name": "structured_v9_cross_comparison_chain_controls_mutation",
+      "path": "properties/60-cross-feature/compiler-paths-v9/structured_v9_cross_comparison_chain_controls_mutation.fuzz",
+      "section": "cross-compiler-v9"
+    },
+    {
+      "args": "a:Int b:Int c:Int",
+      "expect": "True",
+      "name": "structured_v9_cross_nested_scope_array_set_shadowing",
+      "path": "properties/60-cross-feature/compiler-paths-v9/structured_v9_cross_nested_scope_array_set_shadowing.fuzz",
+      "section": "cross-compiler-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "True",
+      "name": "structured_v9_cross_loop_generated_step_values_into_list_count",
+      "path": "properties/60-cross-feature/compiler-paths-v9/structured_v9_cross_loop_generated_step_values_into_list_count.fuzz",
+      "section": "cross-compiler-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int c:Int d:Int",
+      "expect": "True",
+      "name": "structured_v9_cross_if_phi_of_list_heads",
+      "path": "properties/60-cross-feature/compiler-paths-v9/structured_v9_cross_if_phi_of_list_heads.fuzz",
+      "section": "cross-compiler-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_cross_if_phi_of_set_contains",
+      "path": "properties/60-cross-feature/compiler-paths-v9/structured_v9_cross_if_phi_of_set_contains.fuzz",
+      "section": "cross-compiler-v9"
+    },
+    {
+      "args": "p:Bool a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_cross_begin_mutation_then_string_guard",
+      "path": "properties/60-cross-feature/compiler-paths-v9/structured_v9_cross_begin_mutation_then_string_guard.fuzz",
+      "section": "cross-compiler-v9"
+    },
+    {
+      "args": "a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_cross_quote_equal_controls_numeric_branch",
+      "path": "properties/60-cross-feature/compiler-paths-v9/structured_v9_cross_quote_equal_controls_numeric_branch.fuzz",
+      "section": "cross-compiler-v9"
+    },
+    {
+      "args": "a:Int b:Int",
+      "expect": "True",
+      "name": "structured_v9_cross_nil_predicate_controls_branch_after_coalesce",
+      "path": "properties/60-cross-feature/compiler-paths-v9/structured_v9_cross_nil_predicate_controls_branch_after_coalesce.fuzz",
+      "section": "cross-compiler-v9"
+    },
+    {
+      "args": "",
+      "expect": "True",
+      "name": "structured_v9_cross_array_count_controls_for_loop_count",
+      "path": "properties/60-cross-feature/compiler-paths-v9/structured_v9_cross_array_count_controls_for_loop_count.fuzz",
+      "section": "cross-compiler-v9"
+    },
+    {
+      "args": "",
+      "expect": "True",
+      "name": "structured_v9_cross_set_count_controls_for_loop_count",
+      "path": "properties/60-cross-feature/compiler-paths-v9/structured_v9_cross_set_count_controls_for_loop_count.fuzz",
+      "section": "cross-compiler-v9"
+    },
+    {
+      "args": "a:Int setup:Int",
+      "expect": "False",
+      "name": "structured_v9_negative_strict_lt_self_after_do_false",
+      "path": "properties/90-negative/compiler-invariants-v9/structured_v9_negative_strict_lt_self_after_do_false.fuzz",
+      "section": "negative-compiler-v9"
+    },
+    {
+      "args": "a:Int setup:Int",
+      "expect": "False",
+      "name": "structured_v9_negative_strict_gt_self_after_begin_false",
+      "path": "properties/90-negative/compiler-invariants-v9/structured_v9_negative_strict_gt_self_after_begin_false.fuzz",
+      "section": "negative-compiler-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "False",
+      "name": "structured_v9_negative_set_missing_after_disj_false",
+      "path": "properties/90-negative/compiler-invariants-v9/structured_v9_negative_set_missing_after_disj_false.fuzz",
+      "section": "negative-compiler-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "False",
+      "name": "structured_v9_negative_nil_predicate_int_after_do_false",
+      "path": "properties/90-negative/compiler-invariants-v9/structured_v9_negative_nil_predicate_int_after_do_false.fuzz",
+      "section": "negative-compiler-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "False",
+      "name": "structured_v9_negative_contains_empty_set_false",
+      "path": "properties/90-negative/compiler-invariants-v9/structured_v9_negative_contains_empty_set_false.fuzz",
+      "section": "negative-compiler-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "False",
+      "name": "structured_v9_negative_empty_list_not_contains_generated_false",
+      "path": "properties/90-negative/compiler-invariants-v9/structured_v9_negative_empty_list_not_contains_generated_false.fuzz",
+      "section": "negative-compiler-v9"
+    },
+    {
+      "args": "",
+      "expect": "False",
+      "name": "structured_v9_negative_quote_different_symbol_equal_false",
+      "path": "properties/90-negative/compiler-invariants-v9/structured_v9_negative_quote_different_symbol_equal_false.fuzz",
+      "section": "negative-compiler-v9"
+    },
+    {
+      "args": "a:Int b:Int",
+      "expect": "False",
+      "name": "structured_v9_negative_array_count_two_equals_three_false",
+      "path": "properties/90-negative/compiler-invariants-v9/structured_v9_negative_array_count_two_equals_three_false.fuzz",
+      "section": "negative-compiler-v9"
+    },
+    {
+      "args": "a:Int",
+      "expect": "False",
+      "name": "structured_v9_negative_make_list_count_two_equals_three_false",
+      "path": "properties/90-negative/compiler-invariants-v9/structured_v9_negative_make_list_count_two_equals_three_false.fuzz",
+      "section": "negative-compiler-v9"
+    },
+    {
+      "args": "a:Int b:Int",
+      "expect": "False",
+      "name": "structured_v9_negative_if_false_branch_not_taken_false",
+      "path": "properties/90-negative/compiler-invariants-v9/structured_v9_negative_if_false_branch_not_taken_false.fuzz",
+      "section": "negative-compiler-v9"
+    }
+  ],
+  "sections": {
+    "arithmetic": 62,
+    "arithmetic-dispatch": 11,
+    "arithmetic-function": 2,
+    "arithmetic-if": 4,
+    "arithmetic-negative": 2,
+    "arithmetic-normalization": 12,
+    "arithmetic-normalization-deep": 20,
+    "binding": 20,
+    "binding-do": 3,
+    "binding-env-v9": 18,
+    "binding-if": 8,
+    "binding-if-arithmetic": 1,
+    "binding-order": 4,
+    "binding-scope-deep": 16,
+    "binding-scope-mutation-v8": 5,
+    "bitwise": 15,
+    "bitwise-identities": 11,
+    "bitwise-mixed-v8": 4,
+    "bool": 1,
+    "codegen-arith-binding": 3,
+    "codegen-arith-div-mod": 13,
+    "codegen-arith-phi": 3,
+    "codegen-arith-variadic": 5,
+    "codegen-arithmetic-dispatch": 19,
+    "codegen-array-env": 16,
+    "codegen-array-indexing": 13,
+    "codegen-binding-env": 15,
+    "codegen-binding-mutation": 12,
+    "codegen-bitwise-dispatch": 28,
+    "codegen-compare-equality": 2,
+    "codegen-compare-variadic": 12,
+    "codegen-comparison-dispatch": 4,
+    "codegen-control-flow": 29,
+    "codegen-control-loops": 21,
+    "codegen-cross-feature": 15,
+    "codegen-cross-layer-stress": 28,
+    "codegen-logic-coercion": 11,
+    "codegen-logic-comparison": 20,
+    "codegen-negative-runtime": 6,
+    "codegen-predicates-casts-null": 18,
+    "codegen-preds-strings-null": 30,
+    "codegen-quote-runtime": 9,
+    "codegen-runtime-collections": 17,
+    "codegen-runtime-values": 23,
+    "codegen-string-char": 14,
+    "collections": 28,
+    "collections-array-v9": 12,
+    "collections-list-v9": 10,
+    "collections-set-v9": 10,
+    "combo": 8,
+    "combo-negative": 2,
+    "comparison": 33,
+    "comparison-dispatch": 4,
+    "comparison-dispatch-binding": 4,
+    "comparison-dispatch-do": 8,
+    "comparison-variadic": 10,
+    "control": 23,
+    "control-binding": 16,
+    "control-do": 11,
+    "control-do-deep": 12,
+    "control-do-if": 5,
+    "control-do-negative": 1,
+    "control-flow-mutation-v8": 9,
+    "control-if": 15,
+    "control-if-arithmetic": 9,
+    "control-if-comparison": 15,
+    "control-if-dispatch": 9,
+    "control-if-order": 4,
+    "control-if-structure": 8,
+    "control-loop-mutation-v8": 16,
+    "control-loop-mutation-v9": 24,
+    "control-phi-v9": 20,
+    "cross-compiler-v9": 20,
+    "direct-dispatch": 3,
+    "direct-dispatch-binding": 3,
+    "direct-dispatch-do": 6,
+    "dispatch-matrix-v9": 20,
+    "feature-interactions": 15,
+    "feature-interactions-deep": 14,
+    "feature-interactions-v8": 7,
+    "function": 13,
+    "function-bool": 1,
+    "function-order": 7,
+    "function-order-binding": 1,
+    "function-order-do": 1,
+    "lattice": 12,
+    "lattice-arithmetic": 2,
+    "lattice-clamp": 4,
+    "lattice-clamp-deep": 16,
+    "lattice-order": 3,
+    "lattice-selection": 6,
+    "logic": 11,
+    "logic-coercion": 6,
+    "logic-coercion-v8": 3,
+    "negative": 9,
+    "negative-always-false": 9,
+    "negative-compiler-v9": 10,
+    "order": 34,
+    "order-logic": 14,
+    "order-logic-deep": 14,
+    "order-negative": 4,
+    "predicates-conversions": 17,
+    "predicates-null-casts-v8": 5,
+    "quote-null-path": 12,
+    "quote-null-string-v9": 15,
+    "quote-runtime-v8": 4,
+    "runtime-arrays-v8": 6,
+    "runtime-lists-v8": 4,
+    "runtime-sets-v8": 4,
+    "runtime-strings-v8": 3
+  },
+  "version": "v9"
+}

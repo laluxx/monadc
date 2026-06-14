@@ -1,0 +1,7 @@
+name: compiler_deep_v8_order_if_guarded_transitive_lte
+section: feature-interactions-v8
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Guarded lte transitivity should only require the conclusion when both premises are true.
+law: (if (<= {a} {b}) (if (<= {b} {c}) (<= {a} {c}) True) True)

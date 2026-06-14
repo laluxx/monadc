@@ -1,0 +1,7 @@
+name: deep_codegen_matrix_addition_identity_left
+section: codegen-arithmetic-dispatch
+args: a:Int
+type: Bool
+expect: True
+description: addition dispatcher identity on the left side.
+law: (= (+ 0 {a}) {a})

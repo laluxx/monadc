@@ -1,0 +1,7 @@
+name: structured_v9_dispatch_bitwise_xor_self_zero_in_branch
+section: dispatch-matrix-v9
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Stress direct operator and predicate dispatch in expression, branch, and operand positions.
+law: (= (bit-xor (if {p} {a} {b}) (if {p} {a} {b})) 0)

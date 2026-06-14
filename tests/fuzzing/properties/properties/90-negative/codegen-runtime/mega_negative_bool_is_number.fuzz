@@ -1,0 +1,7 @@
+name: mega_negative_bool_is_number
+section: codegen-negative-runtime
+args: p:Bool
+type: Bool
+expect: False
+description: Generated Bool expression should not be a Number.
+law: (Number? {p})

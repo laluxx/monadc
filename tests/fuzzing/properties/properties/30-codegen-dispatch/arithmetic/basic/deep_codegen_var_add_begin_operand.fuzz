@@ -1,0 +1,7 @@
+name: deep_codegen_var_add_begin_operand
+section: codegen-arithmetic-dispatch
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: begin inside a variadic arithmetic operand must return its final value.
+law: (= (+ (begin {a} {b}) {c}) (+ {b} {c}))

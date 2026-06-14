@@ -1,0 +1,7 @@
+name: mega_set_conj_contains_generated
+section: codegen-runtime-collections
+args: a:Int b:Int
+type: Bool
+expect: True
+description: pure conj must add generated element.
+law: (contains? (conj (set {a}) {b}) {b})

@@ -1,0 +1,7 @@
+name: mega_equal_quote_different_list_false
+section: codegen-quote-runtime
+args: 
+type: Bool
+expect: True
+description: equal? must distinguish quoted list element changes.
+law: (= (equal? (quote (a b c)) (quote (a b d))) False)

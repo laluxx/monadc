@@ -1,0 +1,7 @@
+name: mega_quasiquote_equal_same_generated
+section: codegen-quote-runtime
+args: a:Int
+type: Bool
+expect: True
+description: equal? must compare quasiquoted values containing generated unquote holes.
+law: (equal? (quasiquote ((unquote {a}) b)) (quasiquote ((unquote {a}) b)))

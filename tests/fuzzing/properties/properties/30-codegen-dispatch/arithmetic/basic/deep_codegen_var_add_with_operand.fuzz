@@ -1,0 +1,7 @@
+name: deep_codegen_var_add_with_operand
+section: codegen-arithmetic-dispatch
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: with inside arithmetic operand must bind then return the expression value.
+law: (= (+ (with [x {a}] (+ x {b})) {c}) (+ (+ {a} {b}) {c}))

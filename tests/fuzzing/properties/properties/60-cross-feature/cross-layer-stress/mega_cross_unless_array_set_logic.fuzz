@@ -1,0 +1,7 @@
+name: mega_cross_unless_array_set_logic
+section: codegen-cross-layer-stress
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: unless + array-as-function + mutating set + contains? must compose.
+law: (= (with [xs [{a} {b}] s (set)] (do (unless {p} (conj! s (xs 0))) (contains? s {a}))) (not {p}))

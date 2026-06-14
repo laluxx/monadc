@@ -1,0 +1,7 @@
+name: mega_bind_branch_mutates_outer_then_reads
+section: codegen-binding-env
+args: p:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: set! in both if branches must merge into a later outer read.
+law: (= (with [x {a}] (do (if {p} (set! x {b}) (set! x {c})) x)) (if {p} {b} {c}))

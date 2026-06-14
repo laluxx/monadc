@@ -1,0 +1,7 @@
+name: deep_codegen_binding_with_body_multiple_values
+section: codegen-binding-mutation
+args: a:Int b:Int
+type: Bool
+expect: True
+description: with body sequencing must not accidentally mutate a binding.
+law: (= (with [x {a}] (do (+ x {b}) x)) {a})
