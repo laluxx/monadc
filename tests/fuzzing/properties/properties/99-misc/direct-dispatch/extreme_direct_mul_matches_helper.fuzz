@@ -1,5 +1,13 @@
 name: extreme_direct_mul_matches_helper
 section: direct-dispatch
+tier: stable
+kind: law
+features: arithmetic, direct, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, infer.arithmetic, infer.equality
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.core.multiply
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_multiply_associative, signal_v13_atom_multiply_commutative, signal_v13_atom_multiply_identity_one
+signal: medium
+corpus-role: semantic-law
 args: a:Int b:Int
 type: Bool
 expect: True

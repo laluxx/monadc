@@ -1,7 +1,16 @@
 name: control_while_accumulates_known_sum
 section: control-binding
+tier: experimental
+kind: law
+features: arithmetic, array, array-index, begin, comparison, control, env, equality, mutation, set, set!, while, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.comparison_dispatch, codegen.equality_dispatch, codegen.local_load, codegen.runtime_call, codegen.sequence, codegen.set_bang, codegen.store, codegen.while_loop, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.comparison, infer.env_child, infer.env_lookup, infer.equality, infer.loop, infer.mutation, reader.array_literal, reader.ast_begin, runtime.set
+uses-atoms: atom.binding.set-bang, atom.binding.with, atom.control.begin, atom.core.equality, atom.core.order.lt, atom.core.plus, atom.runtime.array
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_equality_reflexive, signal_v13_atom_lt_transitive, signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero, signal_v13_atom_with_substitution
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Bool
 expect: True
 description: while with nested begin must preserve sequential mutations inside the loop body.
 law: (with [i 0 sum 0] (begin (while (< i 5) (begin (set! sum (+ sum i)) (set! i (+ i 1)))) (= sum 10)))
+demoted-from: stable-by-signal-v13

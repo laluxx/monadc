@@ -1,7 +1,0 @@
-name: structured_v9_list_dot_cdr_generated
-section: collections-list-v9
-args: a:Int b:Int
-type: Bool
-expect: True
-description: Stress list constructors, pair accessors, head/cdr chains, make-list, and list-copy.
-law: (= (cdr (. {a} {b})) {b})

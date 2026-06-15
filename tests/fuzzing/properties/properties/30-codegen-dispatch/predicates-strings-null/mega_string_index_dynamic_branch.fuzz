@@ -1,5 +1,13 @@
 name: mega_string_index_dynamic_branch
 section: codegen-preds-strings-null
+tier: stable
+kind: law
+features: arithmetic, codegen, equality, if, phi, string
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.string_literal, infer.arithmetic, infer.equality, infer.if_phi, reader.ast_if, reader.string_literal, runtime.string
+uses-atoms: atom.codegen.dispatch, atom.control.if, atom.core.equality, atom.null.nil, atom.runtime.string
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_if_same_branch_eliminates, signal_v13_atom_string_contains_substring
+signal: medium
+corpus-role: semantic-law
 args: p:Bool
 type: Bool
 expect: True

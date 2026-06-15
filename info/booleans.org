@@ -1,0 +1,151 @@
+#+TITLE: Booleans
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:booleans:info:
+
+:PROPERTIES:
+:ID:       monadc.info.booleans
+:CONTEXT:  monadc.context.language, monadc.context.types, monadc.context.codegen
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:logic.org][Logic]] · [[file:conditionals.org][Conditionals]] · [[file:maybe.org][Maybe]] · [[file:numeric.org][Numeric Types]] · [[file:control.org][Control Flow]] · [[file:core.org][Core Library]] · [[file:fuzzing.org][Fuzzing]] · [[file:types.org][Types]]
+
+Test coverage: boolean operations verified by =rt_bool_*.mon= fixtures. Comparison operations by =rt_cmp_*.mon=. Logic operations by =rt_logic_*.mon=. All in [[file:../tests/codegen/][tests/codegen/]].
+
+The =Bool= type represents truth values. It is a primitive ground type (=TYPE_BOOL=) with two values: =True= and =False=.
+
+* Boolean Literals
+
+#+BEGIN_SRC monad
+True               ;; Boolean true
+False              ;; Boolean false
+#+END_SRC
+
+Bools are case-sensitive. =true=, =TRUE=, =false=, =FALSE= are not valid — they are treated as regular symbols.
+
+* Logical Operations (short-circuit)
+
+| Operation | Arity | Example               | Result |
+|-----------+-------+-----------------------+--------|
+| =and=       | 2..N  | =(and True False True)= | False  |
+| =or=        | 2..N  | =(or False True False)= | True   |
+| =not=       | 1..N  | =(not True)=            | False  |
+
+=and= and =or= short-circuit: they evaluate left to right and stop at the first determining value.
+
+#+BEGIN_SRC monad
+(and True False True)             ;; False (short-circuits at False)
+(or False True False)             ;; True  (short-circuits at True)
+(not (> 3 5))                     ;; True
+#+END_SRC
+
+#+BEGIN_SRC wisp
+and True False True
+or False True False
+not (> 3 5)
+#+END_SRC
+
+* Comparison Operations ([[file:numeric.org][Numeric Types]])
+
+Comparisons return =Bool=:
+
+#+BEGIN_SRC monad
+(= 1 1)                           ;; True
+(!= 1 2)                          ;; True
+(< 1 2)                           ;; True
+(<= 2 2)                          ;; True
+(> 3 2)                           ;; True
+(>= 3 3)                          ;; True
+(equal? '(1 2) '(1 2))            ;; True
+#+END_SRC
+
+#+BEGIN_SRC wisp
+= 1 1
+!= 1 2
+< 1 2
+<= 2 2
+> 3 2
+>= 3 3
+equal? '(1 2) '(1 2)
+#+END_SRC
+
+* Type Predicates
+
+All type predicates return =Bool=:
+
+#+BEGIN_SRC monad
+(Int? 42)                         ;; True
+(Float? 42)                       ;; False
+(String? "hello")                 ;; True
+(Bool? True)                      ;; True
+(Bool? 42)                        ;; False
+(nil? nil)                        ;; True
+(empty? [])                       ;; True
+#+END_SRC
+
+#+BEGIN_SRC wisp
+Int? 42
+Float? 42
+String? "hello"
+Bool? True
+Bool? 42
+nil? nil
+empty? []
+#+END_SRC
+
+* Boolean in Control Flow
+
+=Bool= is the condition type for all control flow constructs:
+
+#+BEGIN_SRC monad
+(if (> x 0) "positive" "non-positive")
+
+(while (not (done? state))
+  (step! state))
+
+(unless (empty? xs)
+  (process xs))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+if (> x 0) "positive" "non-positive"
+
+while (not (done? state))
+  step! state
+
+unless (empty? xs)
+  process xs
+#+END_SRC
+
+See [[file:control.org][Control Flow]].
+
+* Boolean in Pattern Matching
+
+Booleans can be matched literally:
+
+#+BEGIN_SRC monad
+(match b
+  True  -> "yes"
+  False -> "no")
+#+END_SRC
+
+#+BEGIN_SRC wisp
+match b
+  True  -> "yes"
+  False -> "no"
+#+END_SRC
+
+* Related Pages
+
+- [[file:control.org][Control Flow]] — if, cond, match, while
+- [[file:numeric.org][Numeric Types]] — comparison operations
+- [[file:core.org][Core Library]] — logic and comparison dispatch
+- [[file:patterns.org][Pattern Matching]] — boolean patterns
+- [[file:types.org][Types]] — Bool ground type
+
+* Context Links
+
+- [[file:../context/types.org][context/types.org]] — TYPE_BOOL
+- [[file:../context/language.org::working-dispatch][context/language.org — Logic dispatch]]
+- [[file:../codegen.c][codegen.c]] — Boolean codegen

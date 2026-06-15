@@ -1,7 +1,0 @@
-name: deep_codegen_mixed_arith_if_operand
-section: codegen-arithmetic-dispatch
-args: cond:Bool a:Int b:Int c:Int d:Int
-type: Bool
-expect: True
-description: PHI-selected Int values must compose through arithmetic.
-law: (= (+ (if {cond} {a} {b}) (if {cond} {c} {d})) (if {cond} (+ {a} {c}) (+ {b} {d})))

@@ -1,7 +1,16 @@
 name: arith_mod_constant_named_mod
 section: arithmetic-dispatch
+tier: experimental
+kind: law
+features: arithmetic, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, infer.arithmetic, infer.equality
+uses-atoms: atom.codegen.dispatch, atom.core.equality
+related-properties: signal_v13_atom_equality_reflexive
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Bool
 expect: True
 description: Named mod dispatch must compute the same integer remainder as percent modulo.
 law: (= (mod 23 5) 3)
+demoted-from: stable-by-signal-v13

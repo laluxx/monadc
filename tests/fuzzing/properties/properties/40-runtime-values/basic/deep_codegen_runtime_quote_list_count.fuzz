@@ -1,7 +1,16 @@
 name: deep_codegen_runtime_quote_list_count
 section: codegen-runtime-values
+tier: experimental
+kind: law
+features: arithmetic, codegen, equality, list, quote
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.quote, codegen.runtime_call, infer.arithmetic, infer.equality, reader.quote, runtime.list
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.quote.quote
+related-properties: signal_v13_atom_equality_reflexive
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Bool
 expect: True
 description: quote of a list must build a runtime list with expected count.
 law: (= (count (quote (a b c))) 3)
+demoted-from: stable-by-signal-v13

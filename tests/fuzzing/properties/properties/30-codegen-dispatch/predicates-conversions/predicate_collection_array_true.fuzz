@@ -1,7 +1,16 @@
 name: predicate_collection_array_true
 section: predicates-conversions
+tier: experimental
+kind: law
+features: arithmetic, array, array-index, predicate, predicates
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.predicate_dispatch, infer.arithmetic, infer.array, infer.callable_array, infer.type_predicate, reader.array_literal
+uses-atoms: atom.infer.predicate, atom.runtime.array
+related-properties: signal_v13_atom_array_index_valid
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Bool
 expect: True
 description: collection? must accept fixed arrays.
 law: (collection? [1 2 3])
+demoted-from: stable-by-signal-v13

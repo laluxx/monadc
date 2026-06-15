@@ -1,0 +1,138 @@
+#+TITLE: Equality and Comparison
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:equality:info:
+
+:PROPERTIES:
+:ID:       monadc.info.equality
+:CONTEXT:  monadc.context.codegen-ops, monadc.context.language
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:arithmetic.org][Arithmetic]] · [[file:logic.org][Logic]] · [[file:booleans.org][Booleans]] · [[file:fuzzing.org][Fuzzing]] · [[file:core.org][Core Library]] · [[file:type-classes.org][Type Classes]]
+
+Test coverage: comparison operators are exercised by =rt_cmp_*.mon=
+fixtures in [[file:../tests/codegen/][tests/codegen/]].
+
+All comparison operators work on Int, Float, and mixed Int/Float
+operands. Most are variadic (2..N arguments).
+
+* Equality: = / !=
+
+#+BEGIN_SRC monad
+(= 2 2)                        ;; True
+(= 2 3)                        ;; False
+(= "a" "b")                    ;; False
+(!= 2 3)                       ;; True
+(!= "a" "a")                   ;; False
+
+;; Variadic: all must be equal
+(= 1 1 1)                      ;; True
+(= 1 2 1)                      ;; False
+#+END_SRC
+
+#+BEGIN_SRC wisp
+= 2 2
+= 2 3
+= "a" "b"
+!= 2 3
+!= "a" "a"
+
+;; Variadic: all must be equal
+= 1 1 1
+= 1 2 1
+#+END_SRC
+
+* Ordering: < <= > >=
+
+#+BEGIN_SRC monad
+(< 2 3)                        ;; True
+(<= 2 2)                       ;; True
+(> 3 2)                        ;; True
+(>= 3 3)                       ;; True
+
+;; Mixed Int/Float
+(< 2 3.5)                      ;; True
+
+;; Variadic: chained comparison
+(< 1 2 3)                      ;; True — 1 < 2 < 3
+(< 1 3 2)                      ;; False — 3 >= 2
+#+END_SRC
+
+#+BEGIN_SRC wisp
+< 2 3
+<= 2 2
+> 3 2
+>= 3 3
+
+;; Mixed Int/Float
+< 2 3.5
+
+;; Variadic: chained comparison
+< 1 2 3
+< 1 3 2
+#+END_SRC
+
+Chained comparison evaluates left-to-right: =(< a b c)= checks
+=a < b= and =b < c=.
+
+* eq? (Identity)
+
+#+BEGIN_SRC monad
+(eq? x x)                      ;; True — same object
+(eq? "a" "a")                  ;; implementation-defined
+#+END_SRC
+
+#+BEGIN_SRC wisp
+eq? x x
+eq? "a" "a"
+#+END_SRC
+
+=eq?= tests object identity (pointer equality), not structural
+equality. For type class ==, see [[file:type-classes.org][Type Classes]].
+
+* = (Type Class ==)
+
+The =Eq= type class provides structural equality:
+
+#+BEGIN_SRC monad
+(class Eq a
+  (== (a a -> Bool)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+class Eq a
+  == (a a -> Bool)
+#+END_SRC
+
+Deriving =Eq= for a data type auto-generates =(Ctor x) == (Ctor y)=
+by comparing constructor tags and fields structurally.
+
+* Operator Table
+
+| Operator | Example      | Description       | Variadic |
+|----------+--------------+-------------------+----------|
+| =        | =(= a b)=    | Equal             | Yes (2+) |
+| !=       | =(!= a b)=   | Not equal         | Yes (2+) |
+| <        | =(< a b)=    | Less than         | Yes (3+) |
+| <=       | =(<= a b)=   | Less or equal     | Yes (3+) |
+| >        | =(> a b)=    | Greater than      | Yes (3+) |
+| >=       | =(>= a b)=   | Greater or equal  | Yes (3+) |
+| eq?      | =(eq? a b)=  | Object identity   | No       |
+
+* Related Pages
+
+- [[file:booleans.org][Booleans]] -- Bool type, comparison returns
+- [[file:arithmetic.org][Arithmetic]] -- numeric comparison operators
+- [[file:core.org][Core Library]] -- built-in function overview
+- [[file:types.org][Types]] -- type equality and identity
+- [[file:conditionals.org][Conditionals]] -- if, cond with comparisons
+
+* Context Links
+
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — operation dispatch
+- [[file:../context/language.org][context/language.org]] — comparison semantics
+- [[file:../codegen.c][codegen.c]] — =strcmp= handlers for =/!</=>
+- [[file:core.org][Core Library]] — built-in function overview
+- [[file:booleans.org][Booleans]] — Bool type
+- [[file:type-classes.org][Type Classes]] — Eq class

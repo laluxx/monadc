@@ -1,0 +1,131 @@
+#+TITLE: Symbols and Keywords
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:symbols:info:
+
+:PROPERTIES:
+:ID:       monadc.info.symbols
+:CONTEXT:  monadc.context.language, monadc.context.types, monadc.context.reader
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:strings.org][Strings]] · [[file:types.org][Types]] · [[file:quote.org][Quote]] · [[file:syntax.org][Syntax]] · [[file:macros.org][Macros]] · [[file:paths.org][Path Literals]]
+
+Test coverage: symbol/keyword parsing by reader atoms in [[file:../tests/reader-atoms.tsv]].
+
+Monad has two symbol-like types: =Symbol= (interned identifiers) and =Keyword= (colon-prefixed self-evaluating constants). Both are primitive ground types at the type level.
+
+* Symbols (=TYPE_SYMBOL=)
+
+Symbols are interned names used for identifiers, variable references, and quoted data:
+
+#+BEGIN_SRC monad
+'x                ;; symbol x (quoted)
+'my-function      ;; symbol my-function
+'π                ;; unicode symbol
+#+END_SRC
+
+#+BEGIN_SRC wisp
+'x                ;; symbol x (quoted)
+'my-function      ;; symbol my-function
+'π                ;; unicode symbol
+#+END_SRC
+
+Symbols are interned: two symbols with the same name share the same runtime object. This enables efficient equality comparison via pointer identity.
+
+** Symbol Intern Table ([[file:../env.c]])
+
+The compiler maintains a symbol intern table for fast lookup:
+
+| Aspect   | Detail            |
+|----------+-------------------|
+| Storage  | Hash map in =Env=   |
+| Key      | String name       |
+| Value    | =Symbol= pointer    |
+| Lifetime | Compiler lifetime |
+
+** Runtime Representation
+
+| Tag  | =RT_SYMBOL=                    |
+|------+------------------------------|
+| Data | =char*= (interned name string) |
+
+* Keywords (=TYPE_KEYWORD=)
+
+Keywords are colon-prefixed self-evaluating constants used for named parameters, map keys, and metadata:
+
+#+BEGIN_SRC monad
+:key              ;; keyword :key
+:alias            ;; keyword :alias
+:x-y              ;; keyword :x-y
+:monadc           ;; keyword :monadc
+#+END_SRC
+
+#+BEGIN_SRC wisp
+:key              ;; keyword :key
+:alias            ;; keyword :alias
+:x-y              ;; keyword :x-y
+:monadc           ;; keyword :monadc
+#+END_SRC
+
+Keywords evaluate to themselves — they do not need quoting:
+
+#+BEGIN_SRC monad
+:hello            ;; => :hello
+(= :key :key)     ;; Tru)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+:hello            ;; => :hello
+= :key :key     ;; Tru)
+#+END_SRC
+
+** Runtime Representation
+
+| Tag  | =RT_KEYWORD=                          |
+|------+-------------------------------------|
+| Data | =char*= (keyword name, without colon) |
+
+** Keyword Usage Patterns
+
+Keywords are commonly used for:
+
+- Map keys: =#{"key1" val1 :key2 val2}=
+- Named arguments (planned): =(fn x :verbose True)=
+- Metadata annotations: =:doc "description"=
+- Enum-like constants: =:red :green :blue=
+
+* Quoting
+
+Symbols require quoting to prevent evaluation:
+
+#+BEGIN_SRC monad
+(x                 ;; evaluates to the value bound to x)
+'x                ;; the symbol x itself
+:key              ;; evaluates to itself (no quote needed)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+x                 ;; evaluates to the value bound to x
+'x                ;; the symbol x itself
+:key              ;; evaluates to itself (no quote needed)
+#+END_SRC
+
+See [[file:collections.org][Collections]] for quoted list syntax.
+
+* Related Pages
+
+- [[file:types.org][Types]] — ground types: Symbol, Keyword
+- [[file:syntax.org][Syntax]] — literal syntax
+- [[file:macros.org][Macros]] — symbol manipulation in macro expansions
+- [[file:collections.org][Collections]] — quoted lists, keyword map keys
+- [[file:core.org][Core Library]] — symbol-related operations
+
+* Context Links
+
+- [[file:../context/types.org][context/types.org]] — TYPE_SYMBOL, TYPE_KEYWORD
+- [[file:../context/reader.org][context/reader.org]] — Symbol/keyword tokenization
+- [[file:../env.c][env.c]] — Symbol intern table
+
+
+

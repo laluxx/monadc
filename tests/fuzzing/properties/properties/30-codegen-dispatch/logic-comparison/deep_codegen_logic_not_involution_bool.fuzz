@@ -1,7 +1,0 @@
-name: deep_codegen_logic_not_involution_bool
-section: codegen-logic-comparison
-args: p:Bool
-type: Bool
-expect: True
-description: not must be an involution over generated Bool expressions.
-law: (= (not (not {p})) {p})

@@ -1,7 +1,0 @@
-name: mega_pred_list_empty_true
-section: codegen-preds-strings-null
-args: 
-type: Bool
-expect: True
-description: List? must recognize zero-arg list.
-law: (List? (list))

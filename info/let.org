@@ -1,0 +1,140 @@
+#+TITLE: Let Bindings
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:let:info:
+
+:PROPERTIES:
+:ID:       monadc.info.let
+:CONTEXT:  monadc.context.language, monadc.context.codegen, monadc.context.reader
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:lambda.org][Lambda]] · [[file:recursion.org][Recursion]] · [[file:syntax.org][Syntax]] · [[file:control.org][Control Flow]] · [[file:sequencing.org][Sequencing]] · [[file:functional-programming.org][Functional Programming]]
+
+Test coverage: =let=, =let*=, =letrec= are exercised by codegen
+fixtures in =rt_control_all.mon= and =rt_let_*.mon=.
+
+=let= forms create local bindings — they introduce new variable scopes
+within an expression. All =let= forms are expressions: they evaluate to
+the body's return value.
+
+* let
+
+Sequential bindings, evaluated in parallel (no dependency):
+
+#+BEGIN_SRC monad
+(let [x 1 y 2] (+ x y))            ;; 3
+(let [name "world"]
+  (++ "hello " name))               ;; "hello world"
+#+END_SRC
+
+#+BEGIN_SRC wisp
+let [x 1 y 2] + x y
+let [name "world"]
+  ++ "hello " name
+#+END_SRC
+
+Each binding in the vector sees the outer scope, not earlier bindings
+in the same =let=. Reader-desugared into nested lambda applications.
+
+* let*
+
+Sequential bindings, evaluated left-to-right:
+
+#+BEGIN_SRC monad
+(let* [x 1 y (+ x 1)] (+ x y))     ;; 3 — y uses x
+(let* [a 10 b (* a 2) c (+ a b)] c) ;; 30
+#+END_SRC
+
+#+BEGIN_SRC wisp
+let* [x 1 y + x 1] + x y
+let* [a 10 b * a 2 c + a b] c
+#+END_SRC
+
+Each binding sees all previous bindings. Desugars to nested =let=
+forms (each with a single binding).
+
+* letrec
+
+Recursive bindings — allows self-reference and mutual recursion:
+
+#+BEGIN_SRC monad
+(letrec [fact (lambda [n]
+                (if (<= n 1) 1
+                  (* n (fact (- n 1)))))]
+  (fact 5))                         ;; 120
+
+(letrec [even? (lambda [n] (if (= n 0) True (odd? (- n 1))))
+         odd?  (lambda [n] (if (= n 0) False (even? (- n 1))))]
+  (even? 4))                        ;; True
+#+END_SRC
+
+#+BEGIN_SRC wisp
+letrec [fact lambda [n]
+         if (<= n 1) 1
+           * n (fact (- n 1))]
+  fact 5
+
+letrec [even? lambda [n] if (= n 0) True (odd? (- n 1))
+        odd?  lambda [n] if (= n 0) False (even? (- n 1))]
+  even? 4
+#+END_SRC
+
+Reader-desugared — no separate strcmp dispatch handler exists.
+
+* Scope Rules
+
+| Form    | Evaluation Order | Can Refer to Earlier? | Can Be Recursive? |
+|---------+------------------+-----------------------+-------------------|
+| let     | Parallel         | No                    | No                |
+| let*    | Sequential       | Yes                   | No                |
+| letrec  | Lazy             | Yes                   | Yes               |
+
+All three use bracket vector syntax: =[name value ...]=.
+
+* Desugaring
+
+All =let= forms are reader-level desugaring — they produce =AST_LAMBDA=
+and =AST_APP= nodes before codegen:
+
+- =(let [x 1 y 2] body)= → =((lambda [x y] body) 1 2)=
+- =(let* [x 1 y (+ x 1)] body)= → =(let [x 1] (let [y (+ x 1)] body))=
+- =(letrec [f ...] body)= → inserted directly as =AST_LETREC= node
+
+Known gap: =let=, =let*=, =letrec= have no strcmp dispatch handler in
+codegen. They are =register_builtins=-only symbols — =(let ...)= in
+paren-mode is treated as an ordinary variable reference. Wisp syntax
+for =let= works because the reader processes it first.
+
+* with (Sequential Evaluation)
+
+=(with [x 1 y 2] body)= — a sugar for sequential =let= bindings with
+codegen dispatch (works in paren-mode):
+
+#+BEGIN_SRC monad
+(with [x 1 y (+ x 1)] (+ x y))     ;; 3
+#+END_SRC
+
+#+BEGIN_SRC wisp
+with [x 1 y + x 1] + x y
+#+END_SRC
+
+=with= has a strcmp handler in codegen ([[file:../codegen.c::7841]]),
+unlike =let=.
+
+* Related Pages
+
+- [[file:lambda.org][Lambda]] -- lambda expressions for let desugaring
+- [[file:recursion.org][Recursion]] -- letrec for recursive functions
+- [[file:control.org][Control Flow]] -- control flow and let bindings
+- [[file:sequencing.org][Sequencing]] -- with form for sequential bindings
+- [[file:functional-programming.org][Functional Programming]] -- immutability and let
+
+* Context Links
+
+- [[file:../context/language.org][context/language.org]] — let/let*/letrec representation
+- [[file:../context/language.org::codegen-gaps][context/language.org — Known gaps]]
+- [[file:../codegen.c][codegen.c]] — with handler, lambda codegen
+- [[file:control.org][Control Flow]] — if, for, while, with
+- [[file:lambda.org][Lambda]] — lambda expressions
+- [[file:recursion.org][Recursion]] — recursive functions and letrec

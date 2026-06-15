@@ -1,0 +1,89 @@
+#+TITLE: Path Literals
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:paths:info:
+
+:PROPERTIES:
+:ID:       monadc.info.paths
+:CONTEXT:  monadc.context.language, monadc.context.types, monadc.context.reader, monadc.context.codegen
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:strings.org][Strings]] · [[file:types.org][Types]] · [[file:symbols.org][Symbols & Keywords]] · [[file:ffi.org][C FFI]] · [[file:modules.org][Modules]] · [[file:syntax.org][Syntax]]
+
+Test coverage: path literal parsing by reader atoms in [[file:../tests/reader-atoms.tsv]].
+
+=Path= is a first-class literal type for filesystem paths. Paths are valid Unix path tokens that the reader recognizes as =AST_PATH= nodes ([[file:../reader.c]]).
+
+* Path Literals
+
+#+BEGIN_SRC monad
+~/xos/projects/c/monadc/context/     ; absolute with home
+/tmp/monadc-fuzz                     ; absolute
+./context                            ; relative
+../monadc                            ; parent
+#+END_SRC
+
+Path literals are valid as values in both S-expression and Wisp syntax:
+
+#+BEGIN_SRC monad
+(define context-dir ~/xos/projects/c/monadc/context/)
+(show context-dir)                   ; prints directory listing
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define context-dir ~/xos/projects/c/monadc/context/
+show context-dir
+#+END_SRC
+
+* Path Type
+
+=Path= is a primitive ground type (=TYPE_PATH=) in the type system ([[file:../types.h::8]]).
+
+| Aspect         | Detail              |
+|----------------+---------------------|
+| Type kind      | =TYPE_KIND_GROUND=    |
+| Type enum      | =TYPE_PATH=           |
+| Runtime tag    | =RT_PATH=             |
+| Representation | =char*= (path string) |
+
+* Path Operations
+
+Paths support =show= for display and comparison via ==== and =!=:
+
+#+BEGIN_SRC monad
+(= ./context ./context)             ; True
+(!= ./context /tmp)                 ; True
+#+END_SRC
+
+#+BEGIN_SRC wisp
+= ./context ./context
+!= ./context /tmp
+#+END_SRC
+
+* Path vs String
+
+| Aspect         | Path             | String               |
+|----------------+------------------+----------------------|
+| Type           | =Path= (=TYPE_PATH=) | =String= (=TYPE_STRING=) |
+| Literal syntax | =~/path=, =./path=   | ="text"=               |
+| Quote needed   | No               | No                   |
+| Use case       | Filesystem paths | General text         |
+
+A path literal is not a string — it has its own type and cannot be used where a =String= is expected without explicit conversion.
+
+* Related Pages
+
+- [[file:types.org][Types]] — ground type: Path
+- [[file:syntax.org][Syntax]] — literal syntax for all atoms
+- [[file:show.org][Show]] — file content / directory listing display
+- [[file:strings.org][Strings]] — string vs path comparison
+- [[file:ffi.org][C FFI]] — path usage in C interop
+- [[file:collections.org][Collections]] — path collection operations
+
+* Context Links
+
+- [[file:../context/types.org][context/types.org]] — TYPE_PATH
+- [[file:../context/reader.org][context/reader.org]] — Path tokenization
+- [[file:../reader.c][reader.c]] — AST_PATH parsing
+- [[file:../codegen.c][codegen.c]] — Path codegen

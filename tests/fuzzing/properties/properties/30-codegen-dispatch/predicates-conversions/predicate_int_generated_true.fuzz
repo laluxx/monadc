@@ -1,7 +1,0 @@
-name: predicate_int_generated_true
-section: predicates-conversions
-args: a:Int
-type: Bool
-expect: True
-description: Int? must resolve generated Int expressions at compile time.
-law: (Int? {a})

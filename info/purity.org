@@ -1,0 +1,121 @@
+#+TITLE: Purity
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:purity:info:
+
+:PROPERTIES:
+:ID:       monadc.info.purity
+:CONTEXT:  monadc.context.language, monadc.context.philosophy
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:functional-programming.org][Functional Programming]] · [[file:lambda.org][Lambda]] · [[file:mutation.org][Mutation]] · [[file:control.org][Control Flow]] · [[file:types.org][Types]] · [[file:recursion.org][Recursion]]
+
+Test coverage: purity is inherent in the design — all codegen fixtures
+verify that functions return the same value for the same arguments
+unless mutation is used.
+
+Monad functions are pure by default: given the same arguments, they
+return the same value and produce no side effects. This is enforced by
+the type system and the immutability of bindings.
+
+* Pure by Default
+
+All =define= and =let= bindings are immutable unless explicitly mutated:
+
+#+BEGIN_SRC monad
+(define x 42)                    ;; immutable — always 4)
+(define (square n) (* n n))     ;; pure — same input, same outpu)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define x 42                    ;; immutable — always 4)
+define (square n) (* n n)     ;; pure — same input, same outpu)
+#+END_SRC
+
+A function that does not call =set!= or =<-= is guaranteed pure.
+
+* Referential Transparency
+
+An expression is referentially transparent when it can be replaced by
+its value without changing program behavior:
+
+#+BEGIN_SRC monad
+;; These are equivalent:
+(+ (square 3) (square 3))        ;; 9 + 9 = 1)
+(+ 9 9)                          ;; same result — square is pur)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+;; These are equivalent:
++ (square 3) (square 3)        ;; 9 + 9 = 1)
++ 9 9                          ;; same result — square is pur)
+#+END_SRC
+
+=set!= breaks referential transparency for the mutated binding.
+
+* Mutation Impurifies
+
+Using =set!= or =<-= inside a function makes it impure:
+
+#+BEGIN_SRC monad
+(define counter 0)
+(define (increment)
+  (set! counter (+ counter 1))
+  (counter)                        ;; impure — different result each call)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define counter 0
+(define (increment)
+  set! counter (+ counter 1)
+  counter                        ;; impure — different result each call)
+#+END_SRC
+
+The compiler tracks which bindings are mutated to avoid unnecessary
+boxing. Future versions will track impurity for optimization.
+
+* Benefits of Purity
+
+| Benefit          | Description                                    |
+|------------------+------------------------------------------------|
+| Testability      | Pure functions are trivial to test             |
+| Composition      | Output depends only on input                   |
+| Caching          | Memoization is safe                            |
+| Parallelism      | No shared mutable state                        |
+| Reasoning        | Local reasoning — no hidden effects            |
+
+* Immutable Data Structures
+
+Collection operations return modified copies by default:
+
+#+BEGIN_SRC monad
+(assoc map key val)              ;; returns new map, original unchange)
+(conj set elem)                 ;; returns new set, original unchange)
+(cons elem list)               ;; returns new list, original unchange)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+assoc map key val              ;; returns new map, original unchange)
+conj set elem                 ;; returns new set, original unchange)
+cons elem list               ;; returns new list, original unchange)
+#+END_SRC
+
+Mutable variants (=assoc!=, =conj!=, =append!=) exist for performance
+but are opt-in.
+
+* Related Pages
+
+- [[file:functional-programming.org][Functional Programming]] -- functional style guide
+- [[file:lambda.org][Lambda]] -- pure anonymous functions
+- [[file:mutation.org][Mutation]] -- set!, <-, impurity
+- [[file:recursion.org][Recursion]] -- pure recursive functions
+- [[file:types.org][Types]] -- type system and purity
+
+* Context Links
+
+- [[file:../context/language.org][context/language.org]] — purity tracking
+- [[file:../context/philosophy.org][context/philosophy.org]] — design rationale
+- [[file:functional-programming.org][Functional Programming]] — functional style guide
+- [[file:mutation.org][Mutation]] — set!, <-, impurity
+- [[file:lambda.org][Lambda]] — pure anonymous functions

@@ -1,0 +1,15 @@
+name: structured_v11_predicate_int_generated_r06
+section: quote-predicate-v11
+tier: stable
+kind: law
+features: predicate, type, strategy
+compiler-path: codegen.predicate_dispatch, infer.type_predicate, runner.strategy_arg, runner.typed_generator
+uses-atoms: atom.control.if, atom.infer.predicate, atom.logic.not, atom.quote.quote
+related-properties: signal_v13_atom_if_same_branch_eliminates
+signal: medium
+corpus-role: semantic-law
+args: a:Int@edge+if+with
+type: Bool
+expect: True
+description: V11 stable compiler-path law predicate_int_generated variant 6; uses strategy args and explicit compiler-path metadata for feature coverage.
+law: (if (not False) (int? {a}) False)

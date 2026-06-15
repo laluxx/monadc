@@ -1,5 +1,13 @@
 name: mega_compare_neq_successor_true
 section: codegen-compare-equality
+tier: stable
+kind: law
+features: arithmetic, codegen, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.core.inequality, atom.core.plus, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: True

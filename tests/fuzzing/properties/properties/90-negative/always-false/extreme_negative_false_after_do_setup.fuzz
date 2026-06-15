@@ -1,5 +1,13 @@
 name: extreme_negative_false_after_do_setup
 section: negative-always-false
+tier: stable
+kind: law
+features: arithmetic, comparison, do, negative, set
+compiler-path: codegen.arithmetic_dispatch, codegen.comparison_dispatch, codegen.runtime_call, codegen.sequence, infer.arithmetic, infer.comparison, reader.ast_do, runtime.set
+uses-atoms: atom.control.do, atom.core.order.lt
+related-properties: signal_v13_atom_do_last_value, signal_v13_atom_lt_transitive
+signal: medium
+corpus-role: semantic-law
 args: setup:Bool a:Int
 type: Bool
 expect: False

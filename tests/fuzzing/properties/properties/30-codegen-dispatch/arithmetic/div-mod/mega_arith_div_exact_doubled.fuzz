@@ -1,5 +1,13 @@
 name: mega_arith_div_exact_doubled
 section: codegen-arith-div-mod
+tier: stable
+kind: law
+features: arithmetic, codegen, do, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.sequence, infer.arithmetic, infer.equality, reader.ast_do
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.core.multiply
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_multiply_associative, signal_v13_atom_multiply_commutative, signal_v13_atom_multiply_identity_one
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: True

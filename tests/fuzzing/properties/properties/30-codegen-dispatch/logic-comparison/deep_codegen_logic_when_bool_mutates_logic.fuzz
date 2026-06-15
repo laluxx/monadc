@@ -1,7 +1,0 @@
-name: deep_codegen_logic_when_bool_mutates_logic
-section: codegen-logic-comparison
-args: p:Bool q:Bool
-type: Bool
-expect: True
-description: when must guard a Bool set! mutation and preserve branch semantics.
-law: (= (with [x {p}] (do (when {q} (set! x (not x))) x)) (if {q} (not {p}) {p}))

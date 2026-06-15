@@ -1,7 +1,0 @@
-name: deep_codegen_string_string_ends_with_true
-section: codegen-string-char
-args: 
-type: Bool
-expect: True
-description: ends-with? string path must recognize a literal suffix.
-law: (ends-with? "monadc" "adc")

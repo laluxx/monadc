@@ -1,0 +1,13 @@
+name: structured_v10_compile_fail_helper_arity_fuzz_add_one_arg_r01
+section: v10-compile-fail
+tier: compile-fail
+kind: compile-fail
+features: compile-fail, arity, function
+compiler-path: diagnostic.expected_error, infer.arity_check, runner.compile_fail_kind
+signal: high
+corpus-role: negative-diagnostic
+args: a:Int@edge
+type: Bool
+expect-diagnostic: error:
+description: V10 compile-fail replacement helper_arity_fuzz_add_one_arg round 1; intentionally invalid and should emit an error.
+law: (fuzz-add {a})

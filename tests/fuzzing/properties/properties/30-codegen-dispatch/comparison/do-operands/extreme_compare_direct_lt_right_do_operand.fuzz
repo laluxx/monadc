@@ -1,7 +1,0 @@
-name: extreme_compare_direct_lt_right_do_operand
-section: comparison-dispatch-do
-args: setup:Bool a:Int b:Int
-type: Bool
-expect: True
-description: Direct < must ignore do setup in the right operand.
-law: (= (< {a} (do {setup} {b})) (< {a} {b}))

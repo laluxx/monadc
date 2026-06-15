@@ -1,5 +1,13 @@
 name: function_gt_helper_matches_builtin
 section: function
+tier: stable
+kind: law
+features: arithmetic, comparison, equality, function, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.comparison_dispatch, codegen.equality_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.comparison, infer.equality, infer.type_predicate
+uses-atoms: atom.core.equality, atom.core.order.gt, atom.infer.predicate
+related-properties: signal_v13_atom_equality_reflexive
+signal: medium
+corpus-role: semantic-law
 args: a:Int b:Int
 type: Bool
 expect: True

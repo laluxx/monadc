@@ -1,0 +1,17 @@
+name: structured_v10_stress_loop_array_set_quote_r04_disabled_duplicate_v13_863c36c0
+section: v10-stress
+tier: experimental
+kind: program
+features: stress, program, for, set!, array, contains
+compiler-path: codegen.array_literal, codegen.deep_program, codegen.for_loop, codegen.module_body, codegen.set_bang, infer.array, infer.loop, infer.mutation, reader.array_literal, runner.program_kind, runner.stress_tier
+uses-atoms: atom.binding.set-bang, atom.binding.with, atom.control.begin, atom.core.equality, atom.infer.predicate, atom.runtime.array
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_equality_reflexive, signal_v13_atom_with_substitution
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: a:Int@edge+if+with b:Int@edge+do c:Int@tiny+bitwise
+type: Bool
+expect: True
+description: V10 stress program stress_loop_array_set_quote round 4, intended for --tiers stress/all.
+program: (show (= (with [s (set)] (begin (for 3 (set! s (conj s ([{a} {b} {c}] 2)))) (contains? s {c}))) True))
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: structured_v10_stress_loop_array_set_quote_r01

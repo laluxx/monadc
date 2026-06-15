@@ -1,5 +1,13 @@
 name: deep_codegen_control_if_bool_phi_scalar
 section: codegen-control-flow
+tier: stable
+kind: law
+features: arithmetic, codegen, equality, if, phi
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, infer.arithmetic, infer.equality, infer.if_phi, reader.ast_if
+uses-atoms: atom.codegen.dispatch, atom.control.if, atom.core.equality
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_if_same_branch_eliminates
+signal: medium
+corpus-role: semantic-law
 args: p:Bool q:Bool r:Bool
 type: Bool
 expect: True

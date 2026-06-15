@@ -1,12 +1,28 @@
 #+TITLE: C FFI (Foreign Function Interface)
 #+STARTUP: showeverything
 #+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:ffi:info:
 
-[[file:index.org][<- Back to Index]] · [[file:layouts.org][Layout Types]] · [[file:from-c.org][Coming from C/Rust]]
+:PROPERTIES:
+:ID:       monadc.info.ffi
+:CONTEXT:  monadc.context.ffi, monadc.context.language
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:asm.org][Inline Assembly]] · [[file:from-c.org][From C]] · [[file:layouts.org][Layout Types]] · [[file:types.org][Types]] · [[file:core.org][Core Library]] · [[file:modules.org][Modules]]
 
 Monad calls C functions directly — no binding generators. The =include=
 directive ([[file:../ffi.c]]) parses C headers via libclang and registers typed
-wrappers in the environment ([[file:../context/ffi.org]]).
+wrappers in the environment ([[file:../context/ffi.org][context/ffi.org]]).
+
+Test coverage: FFI is tested by =rt_cffi_*.mon= fixtures including
+=math.h= (=sqrt=, =floor=, =ceil=), =stdlib.h= (=atoi=),
+=string.h= (=strlen=), =ctype.h= (=toupper=, =isdigit=).
+Working FFI call targets are documented at
+[[file:../context/language.org::542][context/language.org — C FFI working calls]]. Real-world FFI
+examples: [[file:../how_to/GlfwSpeedrun.mon][how_to/GlfwSpeedrun.mon]],
+[[file:../how_to/RaylibSpeedrun.mon][how_to/RaylibSpeedrun.mon]],
+[[file:../how_to/SdlSpeedrun.mon][how_to/SdlSpeedrun.mon]].
 
 * Include Syntax
 
@@ -149,6 +165,96 @@ Heap array syntax =~[...]= is not implemented.
 | =ffi_dump=                | Debug pretty-print of FFI context             |
 | =ffi_cache_save=          | Save parsed FFI data to disk cache            |
 | =ffi_cache_load=          | Load parsed FFI data from disk cache          |
+
+* Usage Examples
+
+Including and calling C math functions:
+
+#+BEGIN_SRC monad
+(include "math.h")
+(show (sqrt 9.0))     ;; prints 3.0
+(show (floor 3.9))    ;; prints 3.0
+(show (ceil 3.1))     ;; prints 4.0
+#+END_SRC
+
+#+BEGIN_SRC wisp
+include "math.h"
+show (sqrt 9.0)       # prints 3.0
+show (floor 3.9)      # prints 3.0
+show (ceil 3.1)       # prints 4.0
+#+END_SRC
+
+String length via C's =strlen=:
+
+#+BEGIN_SRC monad
+(include "string.h")
+(show (strlen "hello"))   ;; prints 5
+#+END_SRC
+
+#+BEGIN_SRC wisp
+include "string.h"
+show (strlen "hello")     # prints 5
+#+END_SRC
+
+Parsing integers with =atoi=:
+
+#+BEGIN_SRC monad
+(include "stdlib.h")
+(show (atoi "42"))        ;; prints 42
+#+END_SRC
+
+#+BEGIN_SRC wisp
+include "stdlib.h"
+show (atoi "42")          # prints 42
+#+END_SRC
+
+Character classification via =ctype.h=:
+
+#+BEGIN_SRC monad
+(include "ctype.h")
+(show (isdigit (ord "5")))   ;; prints 1 (true)
+(show (isdigit (ord "a")))   ;; prints 0 (false)
+(show (toupper (ord "a")))   ;; prints 65 ('A')
+#+END_SRC
+
+#+BEGIN_SRC wisp
+include "ctype.h"
+show (isdigit (ord "5"))     # prints 1 (true)
+show (isdigit (ord "a"))     # prints 0 (false)
+show (toupper (ord "a"))     # prints 65 ('A')
+#+END_SRC
+
+Using system headers with angle brackets:
+
+#+BEGIN_SRC monad
+(include <stdio.h>)       ;; angle brackets for system headers
+(include <GLFW/glfw3.h>)  ;; system header with subpath
+#+END_SRC
+
+#+BEGIN_SRC wisp
+include <stdio.h>         # angle brackets for system headers
+include <GLFW/glfw3.h>    # system header with subpath
+#+END_SRC
+
+Getting the address of a variable for C interop:
+
+#+BEGIN_SRC monad
+(define buf [256 U8])
+(send (buf))    ;; &buf — pass pointer to C function
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define buf [256 U8]
+send (&buf)     # &buf — pass pointer to C function
+#+END_SRC
+
+* Related Pages
+
+- [[file:from-c.org][From C]] -- C-to-Monad mapping guide
+- [[file:layouts.org][Layout Types]] -- layout types for FFI
+- [[file:asm.org][Inline Assembly]] -- inline assembly
+- [[file:types.org][Types]] -- fixed-width types for C interop
+- [[file:modules.org][Modules]] -- module system for FFI wrappers
 
 * Context Links
 

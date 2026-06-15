@@ -1,8 +1,85 @@
 #+TITLE: From C
 #+STARTUP: showeverything
 #+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:from-c:info:
 
-[[file:index.org][<- Back to Index]] · [[file:from-haskell.org][From Haskell]] · [[file:from-lisp.org][From Lisp]] · [[file:syntax.org][Syntax]] · [[file:ffi.org][C FFI]]
+:PROPERTIES:
+:ID:       monadc.info.from-c
+:CONTEXT:  monadc.context.philosophy, monadc.context.language, monadc.context.ffi, monadc.context.asm
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:casting.org][Casting]] · [[file:arithmetic.org][Arithmetic]] · [[file:numeric.org][Numeric]] · [[file:arrays.org][Arrays]] · [[file:heap.org][Heap]] · [[file:from-haskell.org][From Haskell]] · [[file:from-lisp.org][From Lisp]] · [[file:syntax.org][Syntax]] · [[file:ffi.org][C FFI]] · [[file:layouts.org][Layouts]]
+
+Test coverage: C FFI bindings are exercised by =rt_cffi_*.mon= fixtures.
+
+This guide maps C concepts to Monad equivalents for C/C++/Rust
+programmers. For the C FFI internals (libclang parsing, type mapping,
+cache layer), see [[file:../context/ffi.org][context/ffi.org]].
+For the inline assembly pipeline, see [[file:../context/asm.org][context/asm.org]].
+For the design philosophy behind zero-to-metal abstraction, see
+[[file:../context/philosophy.org][context/philosophy.org]].
+
+Working FFI targets with =rt_cffi_*.mon= test coverage: math.h
+(=sqrt=, =floor=, =ceil=), stdlib.h (=atoi=), string.h (=strlen=,
+=strcmp=), ctype.h (=toupper=, =isdigit=) — all verified by codegen
+runtime fixtures in [[file:../tests/codegen/][tests/codegen/]].
+
+* Quick Examples
+
+Variable declaration in C vs Monad:
+
+#+BEGIN_SRC monad
+(define x 5)                      ;; int x = 5;
+(define pi 3.14)                  ;; double pi = 3.14;
+(define name "Alice")            ;; const char *name = "Alice";
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define x 5                        # int x = 5;
+define pi 3.14                    # double pi = 3.14;
+define name "Alice"               # const char *name = "Alice";
+#+END_SRC
+
+Function definition:
+
+#+BEGIN_SRC monad
+(define (add a b -> Int) (+ a b))  ;; int add(int a, int b) { return a + b; }
+(define (fact n -> Int)            ;; int fact(int n) {
+  (if (<= n 1) 1 (* n (fact (- n 1)))))  ;;   return n <= 1 ? 1 : n * fact(n-1); }
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define (add a b -> Int) (+ a b)    # int add(int a, int b) { return a + b; }
+define (fact n -> Int)             # int fact(int n) {
+  if (<= n 1) 1 (* n (fact (- n 1)))  #   return n <= 1 ? 1 : n * fact(n-1); }
+#+END_SRC
+
+Struct vs layout type:
+
+#+BEGIN_SRC monad
+(layout Point [x :: Int] [y :: Float])  ;; struct Point { int x; float y; };
+(p.x)                                    ;; point.x
+(set! p.x 42)                            ;; point.x = 42;
+#+END_SRC
+
+#+BEGIN_SRC wisp
+layout Point [x :: Int] [y :: Float]    # struct Point { int x; float y; };
+(p.x)                                    # point.x
+set! p.x 42                              # point.x = 42;
+#+END_SRC
+
+Calling C functions (FFI):
+
+#+BEGIN_SRC monad
+(include "math.h")
+(show (sqrt 144.0))   ;; printf("%f\n", sqrt(144.0));
+#+END_SRC
+
+#+BEGIN_SRC wisp
+include "math.h"
+show (sqrt 144.0)     # printf("%f\n", sqrt(144.0));
+#+END_SRC
 
 * Memory Management
 
@@ -138,6 +215,38 @@ excel for programmatic generation and macro processing; Wisp excels for
 readability in large codebases. Both mix freely within a single file
 ([[file:../context/language.org::693][context/language.org — Wisp sugar effects]]).
 
+* Putting It All Together
+
+A short Monad program showing variables, functions, FFI, and control flow:
+
+#+BEGIN_SRC monad
+(include "math.h")
+
+(define (distance x y -> Float)
+  (sqrt (+ (* x x) (* y y))))
+
+(define (greet name -> String)
+  (++ "hello, " name))
+
+(show (greet "monad"))       ;; prints hello, monad
+(show (distance 3.0 4.0))   ;; prints 5.0
+#+END_SRC
+
+Same program in Wisp:
+
+#+BEGIN_SRC wisp
+include "math.h"
+
+define (distance x y -> Float)
+  sqrt (+ (* x x) (* y y))
+
+define (greet name -> String)
+  ++ "hello, " name
+
+show (greet "monad")        # prints hello, monad
+show (distance 3.0 4.0)    # prints 5.0
+#+END_SRC
+
 * Compilation Model
 
 | C              | Monad                        |
@@ -154,7 +263,15 @@ Monad compiles to native code via LLVM. The compilation pipeline is:
 5. Monomorphization (specialized copies per concrete type)
 6. LLVM codegen → native
 
-Context links:
+* Related Pages
+
+- [[file:from-haskell.org][From Haskell]] -- migration guide for Haskell programmers
+- [[file:from-lisp.org][From Lisp]] -- migration guide for Lisp programmers
+- [[file:ffi.org][C FFI]] -- C interop details
+- [[file:layouts.org][Layout Types]] -- C-compatible layout types
+- [[file:asm.org][Inline Assembly]] -- inline assembly
+
+* Context Links
 - [[file:../context/language.org]] — full language formalization
 - [[file:../context/philosophy.org]] — design philosophy
 - [[file:../context/types.org]] — type representation

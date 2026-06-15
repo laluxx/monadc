@@ -1,0 +1,126 @@
+#+TITLE: Quote and Quasiquote
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:quote:info:
+
+:PROPERTIES:
+:ID:       monadc.info.quote
+:CONTEXT:  monadc.context.reader, monadc.context.language
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:syntax.org][Syntax]] · [[file:define.org][Define]] · [[file:wisp.org][Wisp Syntax]] · [[file:list.org][Lists]] · [[file:patterns.org][Pattern Matching]] · [[file:macros.org][Macros]]
+
+Test coverage: quote and quasiquote are exercised by codegen fixtures
+=rt_quote_*.mon= and =rt_quasiquote_*.mon=.
+
+Quote and quasiquote prevent evaluation, treating the expression as
+literal data. They are the foundation of code-as-data macros.
+
+* quote
+
+Prevents evaluation of the following expression:
+
+#+BEGIN_SRC monad
+(quote (1 2 3))                  ;; '(1 2 3) — list literal
+'(1 2 3)                         ;; same, shorthand syntax
+'x                               ;; symbol x (not variable lookup)
+'()                              ;; empty list
+#+END_SRC
+
+#+BEGIN_SRC wisp
+quote (1 2 3)
+'(1 2 3)
+'x
+'()
+#+END_SRC
+
+The shorthand ='expr= is reader sugar for =(quote expr)=. The reader
+produces =AST_QQUOTE= nodes for quote (reader.h).
+
+Use cases:
+- Create list literals: ='(a b c)=
+- Refer to symbols as data: ='my-symbol=
+- Prevent macro expansion: ='(if x y z)=
+
+#+BEGIN_SRC monad
+(define my-list '(1 2 3))
+(car my-list)                    ;; 1
+(define s 'hello)                ;; symbol, not variable reference
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define my-list '(1 2 3)
+car my-list
+define s 'hello
+#+END_SRC
+
+* quasiquote
+
+Template with unquote holes. Uses corner bracket syntax:
+
+#+BEGIN_SRC monad
+⌜1 2 3⌝                       ; quasiquote = (quasiquote 1 2 3)
+⌜1 2 ⌞x⌟ 3⌝                   ; unquote: ⌞expr⌟ = (unquote expr)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+⌜1 2 3⌝
+⌜1 2 ⌞x⌟ 3⌝
+#+END_SRC
+
+=⌜= / =⌝= delimit the quasiquote (U+231C / U+231D).
+=⌞= / =⌟= delimit unquote holes (U+231E / U+231F).
+
+No backtick syntax — use corner brackets.
+
+* unquote-splicing
+
+Splice a list into the surrounding template:
+
+#+BEGIN_SRC monad
+(define xs '(2 3))
+⌜1 ⌞,@xs⌟ 4⌝                   ;; (1 2 3 4)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define xs '(2 3)
+⌜1 ⌞,@xs⌟ 4⌝
+#+END_SRC
+
+=⌞,@xs⌟ = =(unquote-splicing xs)= — flattens the list into the
+surrounding template.
+
+* Macro usage
+
+Quasiquote is the primary macro output template:
+
+#+BEGIN_SRC monad
+(define (when condition . body -> Syntax)
+  ⌜if condition (begin ⌞,@body⌟)⌝)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define (when condition . body -> Syntax)
+  ⌜if condition (begin ⌞,@body⌟)⌝
+#+END_SRC
+
+Inside the quasiquote, unquoted expressions (=⌞expr⌟=) are evaluated
+at macro-expansion time and spliced into the output.
+
+* Related Pages
+
+- [[file:syntax.org][Syntax]] -- S-expression syntax fundamentals
+- [[file:list.org][Lists]] -- quoted list literals
+- [[file:patterns.org][Pattern Matching]] -- pattern matching and quasiquote patterns
+- [[file:macros.org][Macros]] -- Syntax type, macro templates
+- [[file:wisp.org][Wisp Syntax]] -- quoting in Wisp syntax
+
+* Context Links
+
+- [[file:../context/reader.org][context/reader.org]] — quote/quasiquote reader handling
+- [[file:../context/language.org][context/language.org]] — quote dispatch
+- [[file:../context/macro.org][context/macro.org]] — macros and template output
+- [[file:syntax.org][Syntax]] — S-expression reference
+- [[file:macros.org][Macros]] — compile-time code transformation
+- [[file:list.org][Lists]] — quoted list literals

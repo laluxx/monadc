@@ -1,7 +1,0 @@
-name: structured_v9_set_set_conjbang_contains_generated
-section: collections-set-v9
-args: a:Int
-type: Bool
-expect: True
-description: Stress persistent and mutable set operations, membership, duplicate handling, and branch guarded mutation.
-law: (with [s (set)] (do (conj! s {a}) (contains? s {a})))

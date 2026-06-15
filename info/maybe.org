@@ -1,0 +1,137 @@
+#+TITLE: Maybe (Option)
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:maybe:info:
+
+:PROPERTIES:
+:ID:       monadc.info.maybe
+:CONTEXT:  monadc.context.language, monadc.context.codegen-ops
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:result.org][Result]] · [[file:error-handling.org][Error Handling]] · [[file:patterns.org][Pattern Matching]] · [[file:data.org][Data Types]] · [[file:conditionals.org][Conditionals]] · [[file:core.org][Core Library]]
+
+Test coverage: use of =(Option a)= pattern in codegen fixtures is
+verified indirectly by =rt_match_*.mon= and =rt_bind_*.mon=.
+
+=(Option a)= represents an optional value: either =None= (no value) or
+=(Some x)= (a value of type =a=). It is the standard safe alternative
+to bare =nil= returns.
+
+* Type Definition
+
+#+BEGIN_SRC monad
+(data Option a
+  None
+  (Some a))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+data Option a
+  None
+  (Some a)
+#+END_SRC
+
+=Option= is a regular algebraic data type — defined in the surface
+language, no special compiler support. It participates fully in pattern
+matching, type inference, and monomorphization.
+
+* Construction
+
+#+BEGIN_SRC monad
+(define no-value None)
+(define some-value (Some 42))
+(define maybe-string (Some "hello"))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define no-value None
+define some-value (Some 42)
+define maybe-string (Some "hello")
+#+END_SRC
+
+* Consumption With Pattern Matching
+
+The primary way to work with =Option= is =match=:
+
+#+BEGIN_SRC monad
+(define (safe-head xs -> (Option a))
+  (if (nil? xs) None
+    (Some (car xs))))
+
+(define (show-option x -> String)
+  (match x
+    None      -> "nothing"
+    (Some v)  -> (++ "got " (show v))))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define safe-head xs -> (Option a)
+  if (nil? xs) None
+    Some (car xs)
+
+define show-option x -> String
+  match x
+    None      -> "nothing"
+    (Some v)  -> ++ "got " (show v)
+#+END_SRC
+
+* Pattern: Safe Division
+
+#+BEGIN_SRC monad
+(define (safe-div a b -> (Option Int))
+  (if (= b 0) None
+    (Some (/ a b))))
+
+(define result (safe-div 10 2))     ;; (Some 5)
+(define bad    (safe-div 10 0))     ;; None
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define safe-div a b -> (Option Int)
+  if (= b 0) None
+    Some (/ a b)
+
+define result (safe-div 10 2)
+define bad    (safe-div 10 0)
+#+END_SRC
+
+* ?? With Option
+
+The null-coalescing operator works with =Option= values:
+
+#+BEGIN_SRC monad
+(?? (safe-div 10 0) 0)              ;; 0 — default on None
+(?? (safe-div 10 2) 0)              ;; 5 — unwrapped value
+#+END_SRC
+
+#+BEGIN_SRC wisp
+?? (safe-div 10 0) 0
+?? (safe-div 10 2) 0
+#+END_SRC
+
+* Related: Maybe in Other Languages
+
+| Language   | Type                          |
+|------------+-------------------------------|
+| Monad      | =(Option a)= or =(Maybe a)=    |
+| Haskell    | =Maybe a=                     |
+| Rust       | =Option<T>=                   |
+| OCaml      | ='a option=                  |
+| F#         | =Option<'a>=                 |
+
+* Related Pages
+
+- [[file:result.org][Result]] -- Result type with error messages
+- [[file:error-handling.org][Error Handling]] -- error handling patterns
+- [[file:patterns.org][Pattern Matching]] -- pattern matching on Maybe
+- [[file:data.org][Data Types]] -- ADT definition of Maybe
+- [[file:conditionals.org][Conditionals]] -- ?? null-coalescing
+
+* Context Links
+
+- [[file:result.org][Result]] — error type with error message
+- [[file:error-handling.org][Error Handling]] — runtime error mechanisms
+- [[file:data.org][Data Types]] — algebraic data type system
+- [[file:patterns.org][Pattern Matching]] — match expressions
+- [[file:../context/language.org][context/language.org]] — dispatch for Option operations

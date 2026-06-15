@@ -1,7 +1,16 @@
 name: structured_v9_value_quote_equal_same_symbol
 section: quote-null-string-v9
+tier: experimental
+kind: law
+features: arithmetic, path, predicate, quote, string
+compiler-path: codegen.arithmetic_dispatch, codegen.path_literal, codegen.predicate_dispatch, codegen.quote, codegen.string_literal, infer.arithmetic, infer.path, infer.type_predicate, reader.path_literal, reader.quote, reader.string_literal, runtime.string
+uses-atoms: atom.infer.predicate, atom.null.nil, atom.quote.quote, atom.runtime.path, atom.runtime.string
+related-properties: signal_v13_atom_string_contains_substring
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Bool
 expect: True
 description: Stress string/char dispatch, null coalescing, nil predicates, quote, quasiquote, and unquote lowering.
 law: (equal? (quote compiler) (quote compiler))
+demoted-from: stable-by-signal-v13

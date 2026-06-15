@@ -1,8 +1,19 @@
 #+TITLE: Algebraic Data Types
 #+STARTUP: showeverything
 #+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:data:info:
 
-[[file:index.org][<- Back to Index]] · [[file:patterns.org][Pattern Matching]] · [[file:types.org][Types]]
+:PROPERTIES:
+:ID:       monadc.info.data
+:CONTEXT:  monadc.context.types, monadc.context.pmatch, monadc.context.language
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:pair.org][Pair]] · [[file:heap.org][Heap]] · [[file:arena.org][Arena]] · [[file:patterns.org][Pattern Match]] · [[file:maybe.org][Maybe]] · [[file:result.org][Result]] · [[file:types.org][Types]] · [[file:layouts.org][Layouts]] · [[file:collections.org][Collections]]
+
+Test coverage: [[file:../tests/reader-atoms.tsv][tests/reader-atoms.tsv]] (data/type/class rows).
+Codegen verification: [[file:../tests/codegen/rt_match_*.mon][tests/codegen/rt_match_*.mon]].
+Usage examples: [[file:../how_to/AlgebraicDataTypes.mon][how_to/AlgebraicDataTypes.mon]].
 
 * Data Declaration Syntax
 
@@ -20,6 +31,13 @@ uppercase. Type parameters are bare symbols before constructors.
 (data Point Float Float)                        ;; single-constructor shorthand
 #+END_SRC
 
+#+BEGIN_SRC wisp
+data Bool False True
+data Option a None (Some a)
+data Tree a Leaf (Node Tree a a Tree)
+data Point Float Float
+#+END_SRC
+
 The shorthand single-constructor form =(data Point Float Float)= expands to
 =(data Point (Point Float Float))= — a data type whose only constructor shares
 the type name.
@@ -30,6 +48,12 @@ the type name.
 (data Color ~ Red | Green | Blue)
 (data Maybe a = Nothing | Just a)
 (data T = A | B | C)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+data Color ~ Red | Green | Blue
+data Maybe a = Nothing | Just a
+data T = A | B | C
 #+END_SRC
 
 The =~= or ==== separator separates type parameters from constructors; =|= separates
@@ -52,6 +76,12 @@ Deriving provides auto-generated instance implementations:
 (data Color Red Green Blue deriving Eq)
 (data Suit deriving [Eq Enum])
 (data T = A | B | C deriving [Bounded Enum Show])
+#+END_SRC
+
+#+BEGIN_SRC wisp
+data Color Red Green Blue deriving Eq
+data Suit deriving [Eq Enum]
+data T = A | B | C deriving [Bounded Enum Show]
 #+END_SRC
 
 The =deriving= clause appears at the end of a data declaration. Multiple classes
@@ -85,6 +115,12 @@ constructors. The canonical output format is parenthesised constructor syntax:
 (show (Node Leaf 1 Leaf))    ;; prints "(Node Leaf 1 Leaf)"
 #+END_SRC
 
+#+BEGIN_SRC wisp
+show (Point 3.0 4.0)
+show Red
+show (Node Leaf 1 Leaf)
+#+END_SRC
+
 The ADT show path in codegen ([[file:../codegen.c::5876]]) checks whether the
 value's layout has registered constructors. If yes, it emits canonical data
 syntax; otherwise it falls through to the generic runtime value printer.
@@ -104,6 +140,18 @@ ADT constructors are matched in pattern clauses using
   (match t with
     (Leaf)           -> 0
     (Node l _ r)     -> (+ 1 (max (tree-depth l) (tree-depth r)))))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define maybe->int [m :: (Option Int)] -> Int
+  match m with
+    (None)     -> 0
+    (Some x)   -> x
+
+define tree-depth [t :: (Tree a)] -> Int
+  match t with
+    (Leaf)           -> 0
+    (Node l _ r)     -> + 1 (max (tree-depth l) (tree-depth r))
 #+END_SRC
 
 Pattern match compilation ([[file:../context/pmatch.org][context/pmatch.org]]) desugars constructor
@@ -147,6 +195,14 @@ heap-allocated at call sites. The tag is computed by =adt_constructor_tag=
 The =layout= type ([[file:layouts.org]]) is the C-interop counterpart. ADTs
 use runtime tag dispatch; layouts use positional field access. Both can be
 printed via =show=, but only ADTs get the canonical =(Ctor field ...)= format.
+
+* Related Pages
+
+- [[file:patterns.org][Pattern Matching]] -- pattern matching on ADTs
+- [[file:pair.org][Pairs]] -- Pair product type
+- [[file:maybe.org][Maybe]] -- Option type for optional values
+- [[file:result.org][Result]] -- Result type for error handling
+- [[file:types.org][Types]] -- type system, ground types
 
 * Context Links
 

@@ -1,0 +1,17 @@
+name: structured_v11_program_nested_with_shadow_r03_disabled_duplicate_v13_3ac3ae30
+section: v11-program-kind
+tier: experimental
+kind: program
+features: program, with, env, shadow, arithmetic
+compiler-path: codegen.arithmetic_dispatch, codegen.local_load, codegen.module_body, codegen.with_binding, infer.arithmetic, infer.env_child, infer.env_lookup, runner.program_kind
+uses-atoms: atom.binding.with, atom.core.equality, atom.core.minus, atom.core.plus, atom.runtime.array
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_equality_reflexive, signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero, signal_v13_atom_with_substitution
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: a:Int@edge b:Int@edge c:Int@tiny
+type: Bool
+expect: True
+description: V11 program-kind compiler test program_nested_with_shadow round 3; exercises full program insertion instead of show-wrapped law mode.
+program: (show (= (with [x {a}] (with [y (+ x {b})] (with [x {c}] (- y {b})))) {a}))
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: structured_v11_program_nested_with_shadow_r01

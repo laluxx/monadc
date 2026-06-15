@@ -1,5 +1,12 @@
 name: mega_cross_list_head_to_set_contains
 section: codegen-runtime-collections
+tier: stable
+kind: law
+features: arithmetic, codegen, list, predicate, set
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, infer.arithmetic, infer.type_predicate, runtime.list, runtime.set
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: True

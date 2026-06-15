@@ -1,0 +1,17 @@
+name: structured_v10_oracle_mod_nonzero_python_r03_disabled_duplicate_v13_e2cc5731
+section: v10-oracle-mod_nonzero_python
+tier: experimental
+kind: law
+features: oracle, mod, if
+compiler-path: codegen.if_phi, codegen.mod_dispatch, infer.if_phi, reader.ast_if, runner.expect_python, runner.oracle_tier, runner.typed_generator
+uses-atoms: atom.control.if, atom.core.equality, atom.core.modulo
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_if_same_branch_eliminates
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: a:Int@edge b:Int@tiny+mod
+type: Int
+expect-python: a % (1 if b == 0 else b)
+description: V10 oracle property mod_nonzero_python round 3 using expect-python and dependent typed generators.
+law: (% {a} (if (= {b} 0) 1 {b}))
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: structured_v10_oracle_mod_nonzero_python_r01

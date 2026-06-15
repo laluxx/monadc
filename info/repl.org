@@ -1,8 +1,27 @@
 #+TITLE: Interactive REPL
 #+STARTUP: showeverything
 #+OPTIONS: toc:nil
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:repl:info:
 
-[[file:index.org][<- Back to Index]]
+:PROPERTIES:
+:ID:       monadc.info.repl
+:CONTEXT:  monadc.context.repl, monadc.context.cli, monadc.context.codegen-ops
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:cli.org][CLI Reference]] · [[file:build.org][Build System]] · [[file:testing.org][Testing]] · [[file:intro.org][Introduction]] · [[file:tutorial.org][Tutorial]] · [[file:show.org][Show]]
+
+* Quick Reference
+
+| Command                    | Description                        |
+|----------------------------+------------------------------------|
+| =monad= (no args)          | Enter REPL                         |
+| =monad -i=                 | Explicit REPL flag                 |
+| =monad -i file.mon=        | Compile file then enter REPL       |
+| =(quit)=                   | Exit REPL                          |
+| =Ctrl+D=                   | Exit REPL                          |
+
+Test coverage: REPL is tested by =rt_repl_*.mon= fixtures.
 
 The REPL (Read-Eval-Print Loop) provides an interactive environment
 where users enter Monad expressions and see results immediately. Built
@@ -11,6 +30,9 @@ and GNU Readline for line editing and tab-completion. Implementation:
 [[file:../repl.h][repl.h]] and [[file:../repl.c][repl.c]] (~3000 lines).
 
 For full implementation context, see [[file:../context/repl.org][context/repl.org]].
+The REPL is exercised indirectly by all codegen tests — every runtime
+fixture compiles source through the same pipeline. Error recovery
+(setjmp/longjmp) is tested by =rt_codegen_err_*.mon= diagnostic fixtures.
 
 ** Starting the REPL
 
@@ -158,7 +180,15 @@ hello
 Monad λ Ctrl+D
 #+END_SRC
 
-** Context Links
+* See Also
+
+- [[file:cli.org][CLI Reference]]
+- [[file:build.org][Build System]]
+- [[file:testing.org][Testing]]
+- [[file:core.org][Core Library]]
+- [[file:errors.org][Diagnostics]]
+
+* Context Links
 
 - [[file:../context/repl.org][context/repl.org]] — REPL implementation details
 - [[file:../repl.c][repl.c]] — source code

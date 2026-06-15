@@ -1,0 +1,15 @@
+name: signal_v13_future_path-invalid-diagnostic
+section: v13-future-runner-roadmap
+tier: experimental
+kind: law
+features: future,runner,atom-web
+compiler-path: reader.path-literal,infer.path-validation
+uses-atoms: atom.runtime.path, atom.reader.path-literal
+signal: future
+corpus-role: future-runner-roadmap
+args: 
+type: Bool
+expect: True
+description: Future structured invalid path literal diagnostic generator.
+law: (invalid-path-diagnostic "~/bad//path")
+disabled-reason: requires future fuzzer property kind or dialect support

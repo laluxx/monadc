@@ -1,13 +1,28 @@
-#+TITLE: Strings and Characters
+#+TITLE: Strings
 #+STARTUP: showeverything
 #+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:strings:info:
 
-[[file:index.org][<- Back to Index]] · [[file:core.org][Core Library]]
+:PROPERTIES:
+:ID:       monadc.info.strings
+:CONTEXT:  monadc.context.language, monadc.context.types, monadc.context.codegen
+:END:
 
-Strings are UTF-8 encoded and immutable. Characters are Unicode codepoints of
-type =Char=. The LLVM representation of a string is a global constant pointer
-(=i8*=) with an associated length. The runtime tag is =RT_STRING= wrapping a C
-=char*= and length ([[file:../context/language.org::runtime-value-system][context/language.org]]).
+[[file:index.org][<- Back to Index]] · [[file:characters.org][Characters]] · [[file:show.org][Show]] · [[file:list.org][Lists]] · [[file:map.org][Maps]] · [[file:core.org][Core Library]] · [[file:collections.org][Collections]] · [[file:types.org][Types]]
+
+Test coverage: string operations are verified by =rt_string_helpers.mon=
+(=count=), =rt_string_concat.mon= (=++=),
+=rt_string_prefix_suffix.mon= (=starts-with?=, =ends-with?=),
+=rt_string_equality_true.mon=, and =rt_string_equality_false.mon=
+fixtures. String indexing =("str" 0)= is covered by =rt_string_index.mon=.
+All fixtures in [[file:../tests/codegen/][tests/codegen/]].
+
+Strings are UTF-8 encoded and immutable. Characters (see [[file:characters.org][Characters]]) are
+Unicode codepoints of type =Char=. The LLVM representation of a string is a
+global constant pointer (=i8*=) with an associated length. The runtime tag is
+=RT_STRING= wrapping a C =char*= and length
+([[file:../context/language.org::runtime-value-system][context/language.org]]).
 
 ** String Literals
 
@@ -54,6 +69,14 @@ Type conversions dispatch through strcmp handlers ([[file:../codegen.c::13144]])
 (Oct 63)            ;; #o77 — integer to octal literal
 #+END_SRC
 
+#+BEGIN_SRC wisp
+Char 65
+Int 'A'
+Hex 255
+Bin 42
+Oct 63
+#+END_SRC
+
 All five conversion targets (Int, Float, Char, Hex, Oct, Bin) are verified by
 test fixtures (=tests/codegen/rt_arithmetic.mon= and type-conversion corpus).
 
@@ -65,6 +88,12 @@ Strings support = and != with full value comparison (not pointer identity):
 (= "abc" "abc")     ;; True
 (!= "abc" "def")   ;; True
 (= "abc" "def")    ;; False
+#+END_SRC
+
+#+BEGIN_SRC wisp
+= "abc" "abc"
+!= "abc" "def"
+= "abc" "def"
 #+END_SRC
 
 Test fixtures: =rt_string_equality_true.mon=, =rt_string_equality_false.mon=.
@@ -107,6 +136,11 @@ has no codegen strcmp handler yet — it is in the same gap category as =concat=
 ("hello" 1)   ;; 'e'
 #+END_SRC
 
+#+BEGIN_SRC wisp
+("hello" 0)
+("hello" 1)
+#+END_SRC
+
 Uses function-call syntax =("string" i)=. Returns a =Char= at index =i=.
 Also postfix bracket: =xs[0]= ([[file:../reader.c::6621]]). Both forms compile to
 a character load from the string's internal buffer with bounds checking.
@@ -125,6 +159,11 @@ Iteration via =for= is supported:
 #+BEGIN_SRC monad
 (for [c "hello"]
   (show c))               ;; prints 'h', 'e', 'l', 'l', 'o'
+#+END_SRC
+
+#+BEGIN_SRC wisp
+for [c "hello"]
+  show c
 #+END_SRC
 
 ** Wisp char escape limitation

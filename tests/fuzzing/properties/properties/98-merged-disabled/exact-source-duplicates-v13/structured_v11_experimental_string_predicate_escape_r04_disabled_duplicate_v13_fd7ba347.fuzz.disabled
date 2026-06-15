@@ -1,0 +1,17 @@
+name: structured_v11_experimental_string_predicate_escape_r04_disabled_duplicate_v13_fd7ba347
+section: v11-experimental
+tier: experimental
+kind: law
+features: experimental, string, predicate
+compiler-path: codegen.predicate_dispatch, codegen.string_literal, infer.type_predicate, reader.string_literal, runtime.string
+uses-atoms: atom.infer.predicate, atom.runtime.string
+related-properties: signal_v13_atom_string_contains_substring
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: s:String@escape
+type: Bool
+expect: True
+description: V11 experimental rich-feature property experimental_string_predicate_escape round 4; non-default tier for parser/runtime features that may still be maturing.
+law: (string? {s})
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: structured_v11_experimental_string_predicate_escape_r01

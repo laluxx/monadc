@@ -1,0 +1,172 @@
+#+TITLE: Show and Display
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:show:info:
+
+:PROPERTIES:
+:ID:       monadc.info.show
+:CONTEXT:  monadc.context.codegen-ops, monadc.context.language
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:arithmetic.org][Arithmetic]] · [[file:equality.org][Equality]] · [[file:core.org][Core Library]] · [[file:strings.org][Strings]] · [[file:paths.org][Paths]] · [[file:testing.org][Testing]]
+
+Test coverage: =show= is exercised by every runtime test fixture — it
+is the standard output mechanism used across the 423 codegen tests.
+
+=show= prints any value to stdout. Through the =Show= typeclass, every
+type — builtin, ADT, layout, or function — has a canonical string
+representation. You can literally show anything.
+
+* show (universal)
+
+Print one or more values to stdout, separated by spaces:
+
+#+BEGIN_SRC monad
+(show 42)                        ;; "42"
+(show "hello world")             ;; "hello world"
+(show (+ 1 2) "is three")       ;; "3 is three"
+(show x y z)                    ;; variadic, any types
+#+END_SRC
+
+#+BEGIN_SRC wisp
+show 42
+show "hello world"
+show (+ 1 2) "is three"
+show x y z
+#+END_SRC
+
+Variadic — takes 1..N arguments of any types. Prints each followed by
+a space, then a newline.
+
+* All types are showable
+
+=show= dispatches through the =Show= typeclass, which every type
+satisfies. This covers every value in the language:
+
+| Type     | Example output            |
+|----------+---------------------------|
+| Int      | =42=, =-7=                |
+| Float    | =3.14=, =1e10=            |
+| Char     | =a=, =\n=                 |
+| String   | =hello world= (no quotes) |
+| Bool     | =True=, =False=           |
+| Symbol   | =foo=, =:keyword=         |
+| Keyword  | =:keyword=                |
+| List     | =(1 2 3)=                 |
+| Array    | =[1 2 3]=                 |
+| Set      | ={1 2 3}=                 |
+| Map      | =#{:a 1 :b 2}=            |
+| Ratio    | =1/3=, =50%=              |
+| Hex      | =0xFF=                    |
+| Oct      | =0o77=                    |
+| Bin      | =0b1010=                  |
+| Path     | File content *or* =ls -la= of directory |
+| Data/ADT | =(Just 42)=, =Nothing=    |
+| Layout   | =(Point 3.0 4.0)=         |
+
+** ADTs print in constructor syntax
+
+Algebraic data types display their constructor name and fields:
+
+#+BEGIN_SRC monad
+(show (Just 42))                 ;; "(Just 42)"
+(show Nothing)                   ;; "Nothing"
+(show (Pair 1 "one"))            ;; "(Pair 1 one)"
+(show Red)                       ;; "Red"
+(show (Node Leaf 1 Leaf))        ;; "(Node Leaf 1 Leaf)"
+#+END_SRC
+
+#+BEGIN_SRC wisp
+show (Just 42)
+show Nothing
+show (Pair 1 "one")
+show Red
+show (Node Leaf 1 Leaf)
+#+END_SRC
+
+Every constructor and every field is included — no manual show
+instance needed.
+
+** Layouts show field names
+
+Layout types display their type name and field values:
+
+#+BEGIN_SRC monad
+(define p (Point 3.0 4.0))
+(show p)                         ;; "(Point 3.0 4.0)"
+
+(define r (Rect (Point 0 0) (Point 10 10)))
+(show r)                         ;; "(Rect (Point 0 0) (Point 10 10))"
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define p (Point 3.0 4.0)
+show p
+
+define r (Rect (Point 0 0) (Point 10 10))
+show r
+#+END_SRC
+
+** Functions show their type
+
+#+BEGIN_SRC monad
+(show +)                         ;; "<function: +>"
+(show id)                        ;; "<function: id>"
+#+END_SRC
+
+** Paths show file contents or directory listing
+
+Calling =show= on a =Path= value reads the filesystem:
+
+#+BEGIN_SRC monad
+(show (path "./README.org"))     ;; prints file contents to stdout
+(show (path "./src/"))           ;; prints directory listing (ls -la style)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+show path "./README.org"
+show path "./src/"
+#+END_SRC
+
+For a regular file, =show= writes its contents verbatim to stdout. For
+a directory, it prints an =ls -la=-style listing with permissions,
+size, and modification time for each entry.
+
+Non-existent paths print an error diagnostic.
+
+* assert-eq
+
+Test assertion that prints both values on failure via =show=:
+
+#+BEGIN_SRC monad
+(assert-eq expected actual)
+(assert-eq (+ 1 1) 2 "1+1=2")
+#+END_SRC
+
+#+BEGIN_SRC wisp
+assert-eq expected actual
+assert-eq (+ 1 1) 2 "1+1=2"
+#+END_SRC
+
+Codegen evaluates both arguments and calls =rt_equal_p=. On failure,
+prints both values via =show= ([[file:../codegen.c::6431]]).
+
+* Related Pages
+
+- [[file:strings.org][Strings]] -- string representation
+- [[file:core.org][Core Library]] -- built-in function overview
+- [[file:testing.org][Testing]] -- assert-eq and test output
+- [[file:types.org][Types]] -- show for all types
+- [[file:repl.org][REPL]] -- REPL output with show
+
+* Context Links
+
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — show dispatch
+- [[file:../context/language.org][context/language.org]] — output semantics
+- [[file:../codegen.c][codegen.c]] — show codegen at ~5876
+- [[file:../tests/codegen/][tests/codegen/]] — all fixtures use show
+- [[file:core.org][Core Library]] — built-in function overview
+- [[file:testing.org][Testing]] — assert-eq and test framework
+- [[file:paths.org][Path Literals]] — path display behavior
+- [[file:type-classes.org][Type Classes]] — Show typeclass

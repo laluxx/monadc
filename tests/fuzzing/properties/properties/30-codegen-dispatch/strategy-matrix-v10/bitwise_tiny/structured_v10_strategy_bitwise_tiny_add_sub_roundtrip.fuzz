@@ -1,0 +1,15 @@
+name: structured_v10_strategy_bitwise_tiny_add_sub_roundtrip
+section: v10-strategy-bitwise_tiny
+tier: stable
+kind: law
+features: arithmetic, comparison, strategy
+compiler-path: codegen.arithmetic_dispatch, codegen.comparison_dispatch, infer.arithmetic, infer.comparison, runner.strategy_arg, runner.typed_generator
+uses-atoms: atom.core.equality, atom.core.minus, atom.core.plus
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero
+signal: medium
+corpus-role: semantic-law
+args: a:Int@tiny+bitwise b:Int@tiny+bitwise p:Bool@logic+if
+type: Bool
+expect: True
+description: V10 strategy property add_sub_roundtrip generated with bitwise_tiny arguments to stress compiler dispatch, envs, and PHI lowering.
+law: (= (- (+ {a} {b}) {b}) {a})

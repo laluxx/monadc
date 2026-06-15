@@ -1,7 +1,0 @@
-name: deep_codegen_binding_setbang_then_shadow_no_leak
-section: codegen-binding-mutation
-args: a:Int b:Int c:Int
-type: Bool
-expect: True
-description: inner shadowing must not overwrite outer variable after set!.
-law: (= (with [x {a}] (do (set! x {b}) (with [x {c}] x) x)) {b})

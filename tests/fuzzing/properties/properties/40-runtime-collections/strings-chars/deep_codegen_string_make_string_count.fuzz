@@ -1,7 +1,16 @@
 name: deep_codegen_string_make_string_count
 section: codegen-string-char
+tier: experimental
+kind: law
+features: arithmetic, codegen, equality, string
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.string_literal, infer.arithmetic, infer.equality, reader.string_literal, runtime.string
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.runtime.string
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_string_contains_substring
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Bool
 expect: True
 description: make-string must allocate requested length using char from string-indexing.
 law: (= (count (make-string 4 ("aaaa" 0))) 4)
+demoted-from: stable-by-signal-v13

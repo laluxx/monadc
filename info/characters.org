@@ -1,0 +1,184 @@
+#+TITLE: Characters
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:characters:info:
+
+:PROPERTIES:
+:ID:       monadc.info.characters
+:CONTEXT:  monadc.context.language, monadc.context.types, monadc.context.codegen, monadc.context.reader
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:strings.org][Strings]] · [[file:types.org][Types]] · [[file:numeric.org][Numeric Types]] · [[file:casting.org][Casting]] · [[file:show.org][Show]] · [[file:core.org][Core Library]]
+
+Test coverage: character operations are verified by =rt_char_*.mon= fixtures in [[file:../tests/codegen/][tests/codegen/]]. Character conversions exercised in =rt_arithmetic.mon=. Character indexing in =rt_string_index.mon=.
+
+The =Char= type represents a single Unicode codepoint. At the type level it is a 32-bit codepoint; at the codegen level it is lowered to =i8= for ASCII-compatible values. The runtime tag =RT_CHAR= distinguishes it from other scalar types.
+
+* Character Literals ([[file:../reader.c::1369]])
+
+Characters use single-quote delimiters (=TOK_CHAR=):
+
+#+BEGIN_SRC monad
+'a'                ;; Char 'A'
+'\n'               ;; Newline
+'\x41'             ;; Hex escape — 'A'
+'\u03C0'           ;; Unicode — π
+'\''               ;; Literal single quote
+'\\'               ;; Literal backslash
+#+END_SRC
+
+#+BEGIN_SRC wisp
+'a'                ;; Char 'A'
+'\n'               ;; Newline
+'\x41'             ;; Hex escape — 'A'
+'\u03C0'           ;; Unicode — π
+'\''               ;; Literal single quote
+'\\'               ;; Literal backslash
+#+END_SRC
+
+Supported escape sequences:
+
+| Sequence | Meaning           |
+|----------+-------------------|
+| =\n=       | Newline           |
+| =\t=       | Tab               |
+| =\r=       | Carriage return   |
+| =\\=       | Backslash         |
+| =\'=       | Single quote      |
+| =\0=       | Null              |
+| =\xNN=     | Hex codepoint     |
+| =\uNNNN=   | Unicode codepoint |
+
+* Char Type
+
+The =Char= type is a primitive ground type ([[file:types.org][Types]]) defined as =TYPE_CHAR= in the type system ([[file:../types.h::8]]). Its kind is =TYPE_KIND_GROUND=.
+
+- **Runtime representation:** 32-bit integer tagged as =RT_CHAR=
+- **Codegen lowering:** =i8= for ASCII-compatible codepoints
+- **LLVM global format:** stored as =i8= in string globals
+
+* Type Conversions
+
+Character conversion operations dispatch through strcmp handlers ([[file:../codegen.c::13144]]):
+
+#+BEGIN_SRC monad
+(Char 65)           ;; 'A' — integer codepoint to Cha)
+(Int 'A')           ;; 65  — Char to integer codepoin)
+(Hex 255)           ;; 0xFF — integer to He)
+(Bin 42)            ;; 0b101010 — integer to Binar)
+(Oct 63)            ;; 0o77 — integer to Octa)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+Char 65           ;; 'A' — integer codepoint to Cha)
+Int 'A'           ;; 65  — Char to integer codepoin)
+Hex 255           ;; 0xFF — integer to He)
+Bin 42            ;; 0b101010 — integer to Binar)
+Oct 63            ;; 0o77 — integer to Octa)
+#+END_SRC
+
+All conversion paths are verified by test fixtures.
+
+* Type Predicate
+
+#+BEGIN_SRC monad
+(Char? 'a')         ;; Tru)
+(Char? 65)          ;; Fals)
+(Char? "hello")     ;; Fals)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+Char? 'a'         ;; Tru)
+Char? 65          ;; Fals)
+Char? "hello"     ;; Fals)
+#+END_SRC
+
+The =Char?= predicate checks =TYPE_CHAR= kind at the type level.
+
+* Character Operations
+
+** String Indexing ([[file:../codegen.c::9732]])
+
+String indexing returns a =Char=:
+
+#+BEGIN_SRC monad
+"hello" 0)         ;; 'h
+"hello" 1)         ;; 'e
+#+END_SRC
+
+#+BEGIN_SRC wisp
+"hello" 0)         ;; 'h
+"hello" 1)         ;; 'e
+#+END_SRC
+
+Postfix bracket syntax also works: =xs[0]= ([[file:../reader.c::6621]]). Both compile to a character load with bounds checking.
+
+** Iteration
+
+Strings iterate character-by-character via =for=:
+
+#+BEGIN_SRC monad
+for c -> "hello"
+  (show c)
+;; prints:
+;; 'h'
+;; 'e'
+;; 'l'
+;; 'l'
+;; 'o'
+#+END_SRC
+
+#+BEGIN_SRC wisp
+for c -> "hello"
+  show c
+;; prints:
+;; 'h'
+;; 'e'
+;; 'l'
+;; 'l'
+;; 'o'
+#+END_SRC
+
+Or backwards
+
+#+BEGIN_SRC monad
+for c <- "hello"
+  (show c)
+;; prints:
+;; 'o'
+;; 'l'
+;; 'l'
+;; 'e'
+;; 'h'
+#+END_SRC
+
+#+BEGIN_SRC wisp
+for c <- "hello"
+  show c
+;; prints:
+;; 'o'
+;; 'l'
+;; 'l'
+;; 'e'
+;; 'h'
+#+END_SRC
+
+
+* Related Pages
+
+- [[file:strings.org][Strings]] — string literals, operations, interpolation (planned)
+- [[file:collections.org][Collections]] — strings as character sequences
+- [[file:types.org][Types]] — ground type hierarchy
+- [[file:numeric.org][Numeric Types]] — Int, Float, Hex, Oct, Bin conversions
+
+
+* Context Links
+
+- [[file:../context/language.org::working-dispatch][context/language.org — Working dispatch]]
+- [[file:../context/types.org][context/types.org]] — TYPE_CHAR
+- [[file:../codegen.c::9732][codegen.c]] — String indexing codegen
+- [[file:../reader.c::1365][reader.c]] — Character literal parsing
+
+
+

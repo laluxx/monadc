@@ -1,0 +1,123 @@
+#+TITLE: Mutation
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:mutation:info:
+
+:PROPERTIES:
+:ID:       monadc.info.mutation
+:CONTEXT:  monadc.context.language, monadc.context.codegen
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:purity.org][Purity]] · [[file:conditionals.org][Conditionals]] · [[file:iteration.org][Iteration]] · [[file:sequencing.org][Sequencing]] · [[file:control.org][Control Flow]] · [[file:let.org][Let Bindings]]
+
+Test coverage: mutation is exercised by =rt_assoc_*.mon=,
+=rt_conj_*.mon=, and =rt_control_all.mon=.
+
+Monad supports mutable variable rebinding via =set!= (or its =<-=
+sugar). Functions using mutation are tracked as impure by the purity
+system.
+
+* set!
+
+Rebind a variable in the current scope:
+
+#+BEGIN_SRC monad
+(define x 10)
+(set! x 20)                    ;; x is now 20
+
+(define i 0)
+(while (< i 10)
+  (show i)
+  (set! i (+ i 1)))            ;; mutable loop counter
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define x 10
+set! x 20
+
+define i 0
+while (< i 10)
+  show i
+  set! i (+ i 1)
+#+END_SRC
+
+Mutates the binding at the current scope level. The compiler tracks
+which bindings are mutated to avoid unnecessary boxing
+([[file:../codegen.c::7471]]).
+
+* <- (Sugar)
+
+The =<-= form desugars to =set!= at the reader level:
+
+#+BEGIN_SRC monad
+(define y 5)
+(<- y 99)                      ;; same as (set! y 99)
+
+;; Field mutation:
+(set! obj.field val)
+(<- obj.field val)             ;; same
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define y 5
+<- y 99
+
+;; Field mutation:
+<- obj.field val
+#+END_SRC
+
+Works in both S-expression and Wisp syntax (Wisp: =obj.x <- val=).
+
+* Mutable Collections
+
+Collection types provide in-place mutation variants:
+
+| Operation | Pure                | Mutable       |
+|-----------+---------------------+---------------|
+| Maps      | =assoc=, =dissoc=   | =assoc!=, =dissoc!= |
+| Sets      | =conj=, =disj=      | =conj!=, =disj!=  |
+| Lists     | =cons=, =++=         | =append!=     |
+
+#+BEGIN_SRC monad
+(define m #{:a 1})
+(assoc! m :b 2)              ;; m is now #{:a 1 :b 2}
+
+(define s {1 2})
+(conj! s 3)                  ;; s is now {1 2 3}
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define m #{:a 1}
+assoc! m :b 2
+
+define s {1 2}
+conj! s 3
+#+END_SRC
+
+Pure operations copy the collection before modification; mutating
+variants modify in place. Both share the same type scheme — the choice
+is purely about aliasing, not enforced by the compiler.
+
+* Purity Tracking
+
+Functions that call =set!= or =<-= are considered impure. The purity
+tracking system (aspirational) will use this for optimization and
+effect typing.
+
+* Related Pages
+
+- [[file:purity.org][Purity]] -- pure vs impure functions
+- [[file:control.org][Control Flow]] -- overview of all control forms
+- [[file:conditionals.org][Conditionals]] -- if, cond, when, unless
+- [[file:iteration.org][Iteration]] -- for, while loops
+- [[file:let.org][Let Bindings]] -- immutable bindings
+
+* Context Links
+
+- [[file:../context/language.org][context/language.org]] — mutation tracking
+- [[file:../codegen.c::7471][codegen.c]] — =set!= codegen
+- [[file:control.org][Control Flow]] — overview of all control forms
+- [[file:conditionals.org][Conditionals]] — if, cond, when, unless
+- [[file:iteration.org][Iteration]] — for, while loops
+- [[file:let.org][Let Bindings]] — immutable bindings

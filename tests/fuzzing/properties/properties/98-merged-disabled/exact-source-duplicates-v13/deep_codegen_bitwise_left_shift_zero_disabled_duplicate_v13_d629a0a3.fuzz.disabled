@@ -1,0 +1,17 @@
+name: deep_codegen_bitwise_left_shift_zero_disabled_duplicate_v13_d629a0a3
+section: codegen-bitwise-dispatch
+tier: experimental
+kind: law
+features: arithmetic, bitwise, codegen, comparison, equality, if, phi, shift
+compiler-path: codegen.arithmetic_dispatch, codegen.bitwise_dispatch, codegen.branch_phi, codegen.comparison_dispatch, codegen.equality_dispatch, codegen.if_phi, codegen.shift_dispatch, infer.arithmetic, infer.comparison, infer.equality, infer.if_phi, reader.ast_if
+uses-atoms: atom.codegen.dispatch, atom.control.if, atom.core.equality, atom.core.order.lt
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_if_same_branch_eliminates, signal_v13_atom_lt_transitive
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: a:Int
+type: Bool
+expect: True
+description: Left shift by zero must preserve the generated Int.
+law: (= (<< {a} 0) {a})
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: bitwise_shift_left_zero_identity

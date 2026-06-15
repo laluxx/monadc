@@ -1,5 +1,13 @@
 name: structured_v9_cross_nil_predicate_controls_branch_after_coalesce
 section: cross-compiler-v9
+tier: stable
+kind: law
+features: arithmetic, cross, equality, if, null, path, phi, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.null_coalesce, codegen.path_literal, codegen.predicate_dispatch, infer.arithmetic, infer.equality, infer.if_phi, infer.nil, infer.path, infer.type_predicate, reader.ast_if, reader.path_literal
+uses-atoms: atom.control.if, atom.core.equality, atom.infer.predicate, atom.null.nil, atom.runtime.path
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_if_same_branch_eliminates
+signal: medium
+corpus-role: semantic-law
 args: a:Int b:Int
 type: Bool
 expect: True

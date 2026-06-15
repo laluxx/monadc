@@ -1,0 +1,139 @@
+#+TITLE: Conditionals
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:conditionals:info:
+
+:PROPERTIES:
+:ID:       monadc.info.conditionals
+:CONTEXT:  monadc.context.language, monadc.context.codegen
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:booleans.org][Booleans]] · [[file:iteration.org][Iteration]] · [[file:mutation.org][Mutation]] · [[file:sequencing.org][Sequencing]] · [[file:control.org][Control Flow]] · [[file:let.org][Let Bindings]]
+
+Test coverage: conditional forms are exercised by =rt_control_all.mon=,
+=rt_control_comp.mon=, and 35+ diagnostic error fixtures in
+[[file:../tests/codegen/rt_codegen_err_*.mon][tests/codegen/]].
+
+Conditional forms branch on boolean predicates. All are expressions
+that return values.
+
+* if
+
+Compiles to LLVM =icmp=, two basic blocks (then/else), and a PHI node:
+
+#+BEGIN_SRC monad
+(if True "yes" "no")            ;; "yes"
+(if (> x 0) "positive" "non-positive")
+(if (= b 0) (error "div by zero") (/ a b))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+if True "yes" "no"
+if
+  > x 0
+  "positive"
+  "non-positive"
+if
+  = b 0
+  error "div by zero"
+  / a b
+#+END_SRC
+
+Both branches are expressions and must have the same type. When both
+branches produce pointer-like types (e.g. =String=), the PHI node
+preserves the exact type for downstream dispatch
+([[file:../codegen.c::7572]]).
+
+* cond (codegen gap)
+
+Multi-branch conditional. No strcmp dispatch handler yet:
+
+#+BEGIN_SRC monad
+(cond
+  [(> x 0) "positive"]
+  [(< x 0) "negative"]
+  [True    "zero"])
+#+END_SRC
+
+#+BEGIN_SRC wisp
+cond
+  [(> x 0) "positive"]
+  [(< x 0) "negative"]
+  [True    "zero"]
+#+END_SRC
+
+Clauses =[predicate expr]= are evaluated in order. Parses and type-
+checks but has no codegen strcmp handler
+([[file:../context/language.org::codegen-gaps][context/language.org]]).
+
+* when
+
+Executes body when condition is true. Statement-like:
+
+#+BEGIN_SRC monad
+(when (starts-with? s "http")
+  (show "URL detected"))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+when (starts-with? s "http")
+  show "URL detected"
+#+END_SRC
+
+Has a strcmp dispatch handler ([[file:../codegen.c::7879]]).
+
+* unless
+
+Executes body when condition is false:
+
+#+BEGIN_SRC monad
+(unless (nil? xs)
+  (show (car xs)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+unless (nil? xs)
+  show (car xs)
+#+END_SRC
+
+=unless= is best used as a statement form; its return convention is
+still evolving ([[file:../codegen.c::7919]]).
+
+* ?? (null-coalescing)
+
+Returns =expr= if not =nil=, =default= otherwise:
+
+#+BEGIN_SRC monad
+(?? (lookup key dict) "default")
+(?? (safe-div a b) 0)
+(?? (scores "Sam") 0)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+?? (lookup key dict) "default"
+?? (safe-div a b) 0
+?? (scores "Sam") 0
+#+END_SRC
+
+Scalar types (Int, Float, Bool, Char) are never nil and skip the check
+([[file:../codegen.c::5763]]).
+
+* Related Pages
+
+- [[file:booleans.org][Booleans]] -- Bool type, True/False
+- [[file:control.org][Control Flow]] -- overview of all control forms
+- [[file:iteration.org][Iteration]] -- for, while loops
+- [[file:mutation.org][Mutation]] -- set!, <-
+- [[file:patterns.org][Pattern Matching]] -- cond as pattern match base
+
+* Context Links
+
+- [[file:../context/language.org][context/language.org]] — control flow constructs
+- [[file:../context/language.org::codegen-gaps][context/language.org — Known gaps]]
+- [[file:../codegen.c::7572][codegen.c]] — =if= codegen
+- [[file:../codegen.c::5763][codegen.c]] — =??= null-coalescing
+- [[file:control.org][Control Flow]] — overview of all control forms
+- [[file:booleans.org][Booleans]] — Bool type, True/False
+- [[file:iteration.org][Iteration]] — for, while loops
+- [[file:mutation.org][Mutation]] — set!, <-

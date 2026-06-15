@@ -1,7 +1,15 @@
 name: list_empty_predicate_true
 section: collections
+tier: experimental
+kind: law
+features: arithmetic, collections, list, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, infer.arithmetic, infer.type_predicate, runtime.list
+uses-atoms: atom.infer.predicate
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Bool
 expect: True
 description: empty? must recognize the zero-arg list as empty.
 law: (empty? (list))
+demoted-from: stable-by-signal-v13

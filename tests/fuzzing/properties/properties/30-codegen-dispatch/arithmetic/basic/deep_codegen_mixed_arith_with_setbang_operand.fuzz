@@ -1,7 +1,0 @@
-name: deep_codegen_mixed_arith_with_setbang_operand
-section: codegen-arithmetic-dispatch
-args: a:Int b:Int c:Int
-type: Bool
-expect: True
-description: set! through a with-bound alloca must update the value used by arithmetic.
-law: (= (+ (with [x {a}] (do (set! x {b}) x)) {c}) (+ {b} {c}))

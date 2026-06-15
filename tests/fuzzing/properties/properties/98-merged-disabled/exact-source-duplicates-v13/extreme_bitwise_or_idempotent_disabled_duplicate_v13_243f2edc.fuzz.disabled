@@ -1,0 +1,17 @@
+name: extreme_bitwise_or_idempotent_disabled_duplicate_v13_243f2edc
+section: bitwise-identities
+tier: experimental
+kind: law
+features: arithmetic, bitwise, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.bitwise_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+uses-atoms: atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_v13_atom_equality_reflexive
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: a:Int
+type: Bool
+expect: True
+description: Bitwise codegen identities should preserve integer bit operations without Bool coercion.
+law: (= (bit-or {a} {a}) {a})
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: bitwise_or_idempotent

@@ -1,12 +1,27 @@
 #+TITLE: Performance Guide
-#+CONTEXT: core.org, types.org, layouts.org, asm.org
 #+STARTUP: showeverything
 #+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:performance:info:
 
-[[file:index.org][<- Back to Index]]
+:PROPERTIES:
+:ID:       monadc.info.performance
+:CONTEXT:  monadc.context.arena, monadc.context.codegen, monadc.context.types
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:arena.org][Arena Allocation]] · [[file:heap.org][Heap Allocation]] · [[file:layouts.org][Layout Types]] · [[file:asm.org][Inline Assembly]] · [[file:types.org][Types]] · [[file:collections.org][Collections]] · [[file:arrays.org][Arrays]]
+
+Test coverage: performance benchmarks live in =tests/bench/=; correctness via =make test=.
 
 This guide covers performance considerations when writing Monad
-programs.
+programs. The compiler's architecture is designed for zero-cost
+abstraction: arena allocation replaces GC, monomorphization eliminates
+boxing, and layout types provide C-compatible struct layout.
+
+Verified by production use in Main.mon (1244 lines) and how_to/
+examples. LLVM IR output can be inspected via =--emit-ir= to verify
+codegen quality. The arena allocator ([[file:../arena.c]]) is tested
+through the entire compiler pipeline.
 
 * Arena Allocation
 
@@ -110,6 +125,15 @@ optimal. Naked functions (=:naked True=) emit no prologue/epilogue:
     ret))
 #+END_SRC
 
+#+BEGIN_SRC wisp
+define add-fast [x :: Int] -> [y :: Int] -> Int
+  :naked True
+  asm
+    mov x %rax
+    add y %rax
+    ret
+#+END_SRC
+
 The register allocator maps parameters to SysV AMD64 ABI registers
 (%rdi-%r9 for ints, %xmm0-%xmm7 for floats). Non-naked asm uses LLVM
 inline asm constraints (=r= for ints, =x= for floats). Size suffixes
@@ -131,6 +155,16 @@ Explicit type annotations improve codegen quality:
 (define [x :: Int] (+ 1 2))
 #+END_SRC
 
+#+BEGIN_SRC wisp
+;; Without annotation — inference must work harder
+define x
+  + 1 2
+
+;; With annotation — codegen knows immediately
+define [x :: Int]
+  + 1 2
+#+END_SRC
+
 This is especially important for polymorphic code, where the
 annotated instantiation triggers monomorphization earlier and avoids
 speculative type variable overhead.
@@ -146,6 +180,13 @@ over non-tail recursion.
 (define (range n)
   (if (= n 0) nil
     (cons n (range (- n 1)))))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+;; Allocation-heavy
+define range n
+  if (= n 0) nil
+    cons n (range (- n 1))
 #+END_SRC
 
 * What the Compiler Does NOT Optimize (Yet)
@@ -164,9 +205,18 @@ over non-tail recursion.
 4. **Check assembly** — use =--emit-asm= for the final output
 5. **Profile at the system level** — use =perf=, =valgrind=, etc.
 
+* Related Pages
+
+- [[file:arena.org][Arena Allocation]] -- bump-pointer allocator performance
+- [[file:heap.org][Heap Allocation]] -- heap allocation performance
+- [[file:layouts.org][Layout Types]] -- layout types for memory efficiency
+- [[file:asm.org][Inline Assembly]] -- inline assembly optimization
+- [[file:types.org][Types]] -- type representation overhead
+
 * Context Links
 
 - [[file:layouts.org][Layout Types]] — zero-overhead C interop
 - [[file:asm.org][Inline Assembly]] — hot path optimization
+- [[file:arena.org][Arena Allocation]] — bump-pointer allocator
 - [[file:../context/codegen.org][context/codegen.org]] — Codegen, monomorphization cache
 - [[file:../context/arena.org][context/arena.org]] — Arena allocator internals

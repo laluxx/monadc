@@ -1,7 +1,0 @@
-name: extreme_lattice_max_distributes_over_min
-section: lattice-clamp-deep
-args: a:Int b:Int c:Int
-type: Bool
-expect: True
-description: Min/max lattice and clamp laws must hold through helper-based branch implementations.
-law: (= (fuzz-max {a} (fuzz-min {b} {c})) (fuzz-min (fuzz-max {a} {b}) (fuzz-max {a} {c})))

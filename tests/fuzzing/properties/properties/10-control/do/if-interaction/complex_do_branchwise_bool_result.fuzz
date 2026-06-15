@@ -1,5 +1,13 @@
 name: complex_do_branchwise_bool_result
 section: control-do-if
+tier: stable
+kind: law
+features: arithmetic, control, do, equality, if, phi, set
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.runtime_call, codegen.sequence, infer.arithmetic, infer.equality, infer.if_phi, reader.ast_do, reader.ast_if, runtime.set
+uses-atoms: atom.control.do, atom.control.if, atom.core.equality
+related-properties: signal_v13_atom_do_last_value, signal_v13_atom_equality_reflexive, signal_v13_atom_if_same_branch_eliminates
+signal: medium
+corpus-role: semantic-law
 args: setup:Int cond:Bool p:Bool q:Bool
 type: Bool
 expect: True

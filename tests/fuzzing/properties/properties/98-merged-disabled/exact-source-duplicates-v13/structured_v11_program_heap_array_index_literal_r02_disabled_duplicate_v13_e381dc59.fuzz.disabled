@@ -1,0 +1,17 @@
+name: structured_v11_program_heap_array_index_literal_r02_disabled_duplicate_v13_e381dc59
+section: v11-program-kind
+tier: experimental
+kind: program
+features: program, heap-array, array-index, runtime
+compiler-path: codegen.array_index, codegen.heap_array, codegen.module_body, infer.callable_array, reader.heap_array, runner.program_kind
+uses-atoms: atom.core.equality, atom.runtime.array, atom.runtime.heap-array
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_equality_reflexive
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: a:Int@tiny b:Int@tiny c:Int@tiny
+type: Bool
+expect: True
+description: V11 program-kind compiler test program_heap_array_index_literal round 2; exercises full program insertion instead of show-wrapped law mode.
+program: (show (= (~[{a} {b} {c}] 2) {c}))
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: structured_v11_program_heap_array_index_literal_r01

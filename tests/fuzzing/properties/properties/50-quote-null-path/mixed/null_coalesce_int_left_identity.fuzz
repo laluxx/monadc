@@ -1,7 +1,0 @@
-name: null_coalesce_int_left_identity
-section: quote-null-path
-args: a:Int b:Int
-type: Bool
-expect: True
-description: null-coalescing over scalar Int values must return the non-nil left side.
-law: (= (?? {a} {b}) {a})

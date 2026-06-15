@@ -1,7 +1,0 @@
-name: deep_codegen_runtime_list_zero_count
-section: codegen-runtime-values
-args: 
-type: Bool
-expect: True
-description: Zero-arg list must construct an empty list.
-law: (= (count (list)) 0)

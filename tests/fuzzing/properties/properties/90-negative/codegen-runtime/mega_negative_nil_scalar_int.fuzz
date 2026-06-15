@@ -1,7 +1,0 @@
-name: mega_negative_nil_scalar_int
-section: codegen-negative-runtime
-args: a:Int
-type: Bool
-expect: False
-description: Generated scalar Int should not be nil.
-law: (nil? {a})

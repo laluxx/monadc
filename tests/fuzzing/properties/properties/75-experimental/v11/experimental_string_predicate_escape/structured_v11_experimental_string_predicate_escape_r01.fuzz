@@ -1,0 +1,15 @@
+name: structured_v11_experimental_string_predicate_escape_r01
+section: v11-experimental
+tier: experimental
+kind: law
+features: experimental, string, predicate
+compiler-path: codegen.predicate_dispatch, codegen.string_literal, infer.type_predicate, reader.string_literal, runtime.string
+uses-atoms: atom.infer.predicate, atom.runtime.string
+related-properties: signal_v13_atom_string_contains_substring
+signal: medium
+corpus-role: semantic-law
+args: s:String@escape
+type: Bool
+expect: True
+description: V11 experimental rich-feature property experimental_string_predicate_escape round 1; non-default tier for parser/runtime features that may still be maturing.
+law: (string? {s})

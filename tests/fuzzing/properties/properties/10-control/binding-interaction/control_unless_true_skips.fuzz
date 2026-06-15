@@ -1,7 +1,16 @@
 name: control_unless_true_skips
 section: control-binding
+tier: experimental
+kind: law
+features: arithmetic, array, array-index, begin, control, env, equality, mutation, set, set!, unless, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.equality_dispatch, codegen.if_void, codegen.local_load, codegen.runtime_call, codegen.sequence, codegen.set_bang, codegen.store, codegen.with_binding, desugar.unless, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.equality, infer.mutation, reader.array_literal, reader.ast_begin, runtime.set
+uses-atoms: atom.binding.set-bang, atom.binding.with, atom.control.begin, atom.core.equality, atom.runtime.array
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_equality_reflexive, signal_v13_atom_with_substitution
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Bool
 expect: True
 description: unless True must skip its body.
 law: (with [x 0] (begin (unless True (set! x 7)) (= x 0)))
+demoted-from: stable-by-signal-v13

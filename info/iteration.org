@@ -1,0 +1,114 @@
+#+TITLE: Iteration
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:iteration:info:
+
+:PROPERTIES:
+:ID:       monadc.info.iteration
+:CONTEXT:  monadc.context.language, monadc.context.codegen
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:conditionals.org][Conditionals]] · [[file:mutation.org][Mutation]] · [[file:sequencing.org][Sequencing]] · [[file:control.org][Control Flow]] · [[file:range.org][Ranges]] · [[file:collections.org][Collections]]
+
+Test coverage: =while= and =for= are exercised by =rt_control_all.mon=
+and =rt_heap_array_for.mon=.
+
+Iteration in Monad uses explicit loop forms. Recursion
+([[file:recursion.org]]) is the functional alternative.
+
+* while
+
+C-style conditional loop with an exit condition:
+
+#+BEGIN_SRC monad
+(define [i :: Int] 0)
+(while (< i 3)
+  (show i)
+  (set! i (+ i 1)))              ;; prints 0, 1, 2
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define [i :: Int] 0
+while (< i 3)
+  show i
+  set! i (+ i 1)
+#+END_SRC
+
+Emits a loop header block (condition check), a loop body block, and an
+exit block. Returns =nil= ([[file:../codegen.c::7957]]).
+
+* for
+
+Iterates over collections or numeric ranges. Four forms:
+
+#+BEGIN_SRC monad
+;; Numeric range
+(for [i 0 10]
+  (show "n _" i))                 ;; prints 0..9
+
+;; With step
+(for [i 0 10 2]
+  (show "n _" i))                 ;; prints 0, 2, 4, 6, 8
+
+;; Repeat n times (no binding)
+(for [10]
+  (show "looping 10 times!"))     ;; prints 10 times
+
+;; Over collections
+(for [x [1 2 3]]
+  (show x))                       ;; iterates array elements
+#+END_SRC
+
+#+BEGIN_SRC wisp
+;; Numeric range
+for [i 0 10]
+  show "n _" i
+
+;; With step
+for [i 0 10 2]
+  show "n _" i
+
+;; Repeat n times (no binding)
+for [10]
+  show "looping 10 times!"
+
+;; Over collections
+for [x [1 2 3]]
+  show x
+#+END_SRC
+
+The =for= compiles to =while=-loop IR with iterator, bounds check, and
+element extraction via the collection-as-function indexing path
+([[file:../codegen.c::8004]]).
+
+** Collection type iteration
+
+| Collection | Mechanism                         |
+|------------+-----------------------------------|
+| Arrays     | =(count arr)= + =(arr i)= indexing |
+| Lists      | =car=/=cdr= walking               |
+| Sets       | Hash-set traversal                |
+| Maps       | Key-value pair iteration          |
+| Strings    | =("str" i)= char-by-char          |
+
+The =:collect= keyword for gathering results into an output collection
+is aspirational.
+
+* Related Pages
+
+- [[file:conditionals.org][Conditionals]] -- if, cond, when, unless
+- [[file:recursion.org][Recursion]] -- functional iteration alternative
+- [[file:control.org][Control Flow]] -- overview of control forms
+- [[file:range.org][Ranges]] -- numeric ranges for for loops
+- [[file:collections.org][Collections]] -- iterable types
+
+* Context Links
+
+- [[file:../context/language.org::iteration-constructs][context/language.org — Iteration Constructs]]
+- [[file:../codegen.c::7957][codegen.c]] — =while= codegen
+- [[file:../codegen.c::8004][codegen.c]] — =for= codegen
+- [[file:control.org][Control Flow]] — overview of control forms
+- [[file:conditionals.org][Conditionals]] — if, cond, when, unless
+- [[file:recursion.org][Recursion]] — functional iteration
+- [[file:collections.org][Collections]] — iterable types

@@ -1,7 +1,0 @@
-name: mega_list_cons_head_generated
-section: codegen-runtime-collections
-args: a:Int
-type: Bool
-expect: True
-description: head must agree with car for a generated cons list.
-law: (= (head (cons {a} (list))) {a})

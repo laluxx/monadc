@@ -1,8 +1,39 @@
 #+TITLE: Contributing
 #+STARTUP: showeverything
 #+OPTIONS: toc:nil num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:project:contributing:info:
 
-[[file:index.org][<- Back to Index]]
+:PROPERTIES:
+:ID:       monadc.info.contributing
+:CONTEXT:  monadc.context.guidelines, monadc.context.commit-format, monadc.context.style
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:testing.org][Testing]] · [[file:fuzzing.org][Fuzzing]] · [[file:build.org][Build System]] · [[file:style.org][Style Guide]] · [[file:errors.org][Diagnostics]] · [[file:modules.org][Modules]]
+
+* Quick Reference
+
+| Command                      | Description                        |
+|------------------------------+------------------------------------|
+| =make=, =make debug=, =make release= | Build variants              |
+| =python3 tests/run.py=       | Run all tests                      |
+| =type(scope): summary=       | Commit message format              |
+| =context/=                   | Read before work, extend after     |
+
+Test coverage: No single test target; see =testing.org=.
+
+This page covers how to contribute to the MonadC compiler. For the full
+commit message format specification (types, scopes, examples), see
+[[file:../context/commit-format.org][context/commit-format.org]]. For the complete
+project guidelines (hard constraints and soft preferences), see
+[[file:../context/guidelines.org][context/guidelines.org]].
+
+The context-first workflow is the single most important contribution
+pattern: read context/ before work, extend context/ after work. Every
+session should leave a trace in the context corpus.
+
+Test-driven development: add a codegen fixture (=rt_<category>_<atom>.mon=)
+before implementing the feature, then run =python3 tests/run.py= to verify.
 
 * Building from Source
 
@@ -158,6 +189,22 @@ Core/prelude module tests: =python3 tests/run_core.py=
 4. Verify existing tests pass: =python3 tests/run.py=
 5. Use the commit format: =type(scope): description=
 6. After contributing, extend the context corpus with what was done
+
+* See Also
+
+- [[file:testing.org][Testing]]
+- [[file:fuzzing.org][Fuzzing]]
+- [[file:build.org][Build System]]
+- [[file:style.org][Style Guide]]
+- [[file:errors.org][Diagnostics]]
+
+* Related Pages
+
+- [[file:testing.org][Testing]] -- test suite and running tests
+- [[file:fuzzing.org][Fuzzing]] -- property-based testing contributions
+- [[file:build.org][Build System]] -- build system
+- [[file:style.org][Style Guide]] -- code style guide
+- [[file:from-c.org][From C]] -- C interop contributions
 
 * Context Links
 

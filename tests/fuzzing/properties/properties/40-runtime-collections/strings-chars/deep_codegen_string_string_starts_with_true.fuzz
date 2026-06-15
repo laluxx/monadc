@@ -1,7 +1,0 @@
-name: deep_codegen_string_string_starts_with_true
-section: codegen-string-char
-args: 
-type: Bool
-expect: True
-description: starts-with? string path must recognize a literal prefix.
-law: (starts-with? "monadc" "mon")

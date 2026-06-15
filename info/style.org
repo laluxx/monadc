@@ -1,12 +1,29 @@
 #+TITLE: Style Guide
 #+STARTUP: showeverything
 #+OPTIONS: toc:nil num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:style:info:
 
-[[file:index.org][<- Back to Index]]
+:PROPERTIES:
+:ID:       monadc.info.style
+:CONTEXT:  monadc.context.style, monadc.context.guidelines
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:syntax.org][Syntax]] · [[file:data.org][Data Types]] · [[file:patterns.org][Pattern Matching]] · [[file:functional-programming.org][Functional Programming]] · [[file:modules.org][Modules]] · [[file:contributing.org][Contributing]]
+
+Test coverage: style is enforced by code review; no automated test target.
 
 This file documents MonadC source-code style conventions. It is about
 how valid MonadC programs are written and read, not about compiler
-implementation style.
+implementation style. For the full style taxonomy with examples and
+rationale, see [[file:../context/style.org][context/style.org]].
+
+These conventions are enforced by the reader's constructor name check
+in [[file:../reader.c]] (types must start with uppercase, values with
+lowercase) and by project conventions documented in
+[[file:../context/guidelines.org][context/guidelines.org]]. Examples in
+[[file:../Main.mon][Main.mon]] (1244 lines) and [[file:../core/][core/]] modules
+demonstrate real usage of these conventions.
 
 * Naming
 
@@ -32,6 +49,12 @@ implementation style.
   None     -> (show "none"))
 #+END_SRC
 
+#+BEGIN_SRC wisp
+match x with
+  (Some v) -> (show v)
+  None     -> (show "none")
+#+END_SRC
+
 - =cond= clauses: condition on same indent level, body indented +2:
 
 #+BEGIN_SRC monad
@@ -41,10 +64,21 @@ implementation style.
   (else    (show "zero")))
 #+END_SRC
 
+#+BEGIN_SRC wisp
+cond
+  ((> x 0) (show "positive"))
+  ((< x 0) (show "negative"))
+  (else    (show "zero"))
+#+END_SRC
+
 - Pipe operator (=|>) chains: each pipe on a new line at same indent:
 
 #+BEGIN_SRC monad
 (data |> process |> transform |> show)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+data |> process |> transform |> show
 #+END_SRC
 
 * Comments
@@ -75,6 +109,19 @@ mutation are prominent:
     (set! g-vertex-count (g-vertex-count + 1))))
 #+END_SRC
 
+#+BEGIN_SRC wisp
+define push-vertex [x :: F32] [y :: F32]
+                   [u :: F32] [v :: F32]
+                   [c :: Color]
+  unless (g-vertex-count >= MAX-VERTICES)
+    define [vtx -> Vertex]
+      g-vertices g-vertex-count
+    set! vtx.x x
+    set! vtx.y y
+    set! g-vertex-count
+      g-vertex-count + 1
+#+END_SRC
+
 * Pattern Clause Alignment
 
 When a function has multiple clauses with patterns and guards, the
@@ -89,6 +136,14 @@ should align with the cons operator in the pattern when possible:
       | otherwise -> [])
 #+END_SRC
 
+#+BEGIN_SRC wisp
+define take :: Int -> [a] -> [a]
+  _ []            -> []
+  n [x|xs]
+      | n > 0     -> (x ++ (take (n - 1) xs))
+      | otherwise -> []
+#+END_SRC
+
 The =->= arrows line up in one column. The guard =|= lines up with
 the =[x|xs]= pattern binding — specifically the cons-bar aligns with
 the guard pipe, making the relationship between the destructured
@@ -100,6 +155,12 @@ Same rule applies to =match= clauses:
 (match x with
   (Just v)  -> (show v)
   Nothing   -> (show "none"))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+match x with
+  (Just v)  -> (show v)
+  Nothing   -> (show "none")
 #+END_SRC
 
 * Module Structure
@@ -126,11 +187,28 @@ import <math.h>  [sqrt]
 import <stdio.h> [printf]
 #+END_SRC
 
+#+BEGIN_SRC wisp
+module Main
+import Prelude
+import Coll
+
+import <math.h>  [sqrt]
+import <stdio.h> [printf]
+#+END_SRC
+
 * Context-First Workflow Rule
 
 Before making style-related changes, read [[file:../context/style.org][context/style.org]] for the
 complete style taxonomy, including the hybrid C-signature and Pure Wisp
 styles. After making changes, extend the context with new observations.
+
+* Related Pages
+
+- [[file:syntax.org][Syntax]] -- syntax conventions
+- [[file:functional-programming.org][Functional Programming]] -- functional style guide
+- [[file:data.org][Data Types]] -- ADT naming conventions
+- [[file:patterns.org][Pattern Matching]] -- pattern style
+- [[file:contributing.org][Contributing]] -- contribution conventions
 
 * Context Links
 

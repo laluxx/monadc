@@ -1,0 +1,18 @@
+name: deep_codegen_string_string_contains_true_disabled_duplicate_v13_b78c5fbd
+section: codegen-string-char
+tier: experimental
+kind: law
+features: arithmetic, codegen, predicate, string
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.string_literal, infer.arithmetic, infer.type_predicate, reader.string_literal, runtime.string
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate, atom.runtime.string
+related-properties: signal_v13_atom_string_contains_substring
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: 
+type: Bool
+expect: True
+description: contains? string path must use substring search.
+law: (contains? "monadc" "nad")
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: string_contains_literal
+demoted-from: stable-by-signal-v13

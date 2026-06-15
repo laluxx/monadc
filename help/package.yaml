@@ -1,0 +1,23 @@
+name:                help
+version:             0.1.0.0
+github:              "laluxx/help"
+license:             MIT
+author:              "laluxx"
+maintainer:          "lorenzoaddamo10@gmail.com"
+copyright:           "2026 laluxx"
+
+extra-source-files:
+
+description:         A Monad package
+
+dependencies:
+- core >= 0.1 && < 1.0
+
+monad-options:
+- -Wall
+- -Wextra
+
+executables:
+  help:
+    main: Main.mon
+    source-dirs: src

@@ -1,58 +1,46 @@
-# monadc structured fuzz properties v9
+# monadc fuzz properties — signal graph v13
 
-This is the latest structured properties archive, continuing from v8.
-
-## What changed in v9
-
-- Added **159** new active `.fuzz` properties.
-- Added **16** disabled future/oracle properties under `future-oracle-disabled/v9-runner-features/`.
-- Preserved the recursive feature taxonomy from v8 and added new feature-specific leaves:
-  - `10-control/phi-lowering-v9/`
-  - `10-control/loop-mutation-v9/`
-  - `20-binding/env-ssa-v9/`
-  - `30-codegen-dispatch/operator-matrix-v9/`
-  - `40-runtime-collections/arrays-indexing-v9/`
-  - `40-runtime-collections/lists-pairs-v9/`
-  - `40-runtime-collections/sets-mutation-v9/`
-  - `50-quote-null-path/value-dispatch-v9/`
-  - `60-cross-feature/compiler-paths-v9/`
-  - `90-negative/compiler-invariants-v9/`
+This archive is a signal-raising pass over the uploaded properties corpus.
+It keeps the runner-compatible `.fuzz` format, but treats properties as a graph of language atoms.
 
 ## Counts
 
-- Active properties: **1269**
-- New active properties in v9: **159**
-- Disabled future/oracle examples added in v9: **16**
-- Total disabled future/oracle examples: **23**
-- Sections: **110**
+- Active `.fuzz` properties: 2000
+- Disabled `.fuzz.disabled` properties: 583
+- New v13 active/future properties: 627
+- Exact duplicate active properties merged into disabled records: 556
+- Existing properties retrofitted with atom/signal metadata fields: 7521
+- Legacy fixed/no-argument stable smoke properties demoted to experimental: 172
 
-## Quality direction
+## New graph metadata
 
-The v9 additions target compiler structure more directly than broad algebraic identities:
+Each property may now include ignored-by-runner metadata:
 
-- branch PHI/diamond lowering with generated values;
-- loop-carried mutable state across `while` and `for`;
-- lexical environment and shadowing behavior around `with` and `set!`;
-- direct operator dispatch, not only helper wrappers;
-- array/list/set runtime operations with generated values;
-- string/char/null/quote dispatch smoke paths;
-- cross-feature paths where loop, array, set, mutation, predicates, quote, and arithmetic interact;
-- expected-false invariants to catch runners that accidentally only validate truthy cases.
+- `atom:` — the atom proved by a foundation property.
+- `proves:` — semantic atom established by the property.
+- `uses-atoms:` — primitive atoms used by the property.
+- `depends-on:` — stronger atom laws a derived property intentionally relies on.
+- `related-properties:` — concrete properties proving related atoms, e.g. `+` properties link to plus commutativity/associativity/identity.
+- `signal:` — high/medium/low-medium/legacy-smoke/disabled-duplicate/future.
+- `corpus-role:` — atom-foundation, derived-atom-linked, program-semantics, oracle, negative-diagnostic, stress-program, legacy-smoke, etc.
 
-The `.fuzz.disabled` files document the next Python runner work: generated `String`, `Path`, `ArrInt`, `SetInt`, `ListInt`, dependent index/substr/key types, and `expect-python:` oracles.
+The fuzzer ignores these keys today, but the catalog docs use them to build the web.
 
-## Runner requirement
+## Important docs
 
-Use recursive discovery:
+- `docs/v13-atom-index.tsv` — atom to property/frequency map.
+- `docs/v13-property-links.tsv` — giant web: property -> atoms -> dependencies -> related properties.
+- `docs/v13-added-properties.tsv` — all new v13 properties.
+- `docs/v13-merge-report.tsv` — exact duplicates moved to disabled records.
+- `docs/v13-quality-report.tsv` — counts and signal distribution.
+- `docs/inventory.json` — machine-readable inventory.
 
-```python
-paths = sorted(PROPERTY_ROOT.rglob("*.fuzz"))
-```
+## Design note
 
-Disabled future files intentionally end in `.fuzz.disabled` and should not be loaded by the current runner.
+This pass intentionally raises average signal instead of only increasing count:
 
-See:
-
-- `docs/inventory.json`
-- `docs/v9-added-properties.tsv`
-- `docs/v9-future-runner-properties.tsv`
+1. It adds atom-foundation properties for core facts like `+` commutativity and identity.
+2. It makes derived properties link to those atom foundations using metadata.
+3. It adds program-kind, oracle, compile-fail, and stress properties using the latest runner fields.
+4. It merges exact duplicates by disabling redundant copies with a `merged-into` pointer.
+5. It keeps corpus coverage, but demotes no-argument fixed smoke tests from default stable to experimental.

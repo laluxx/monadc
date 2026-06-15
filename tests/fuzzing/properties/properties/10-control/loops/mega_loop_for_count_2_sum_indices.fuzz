@@ -1,7 +1,16 @@
 name: mega_loop_for_count_2_sum_indices
 section: codegen-control-loops
+tier: experimental
+kind: law
+features: arithmetic, array, array-index, codegen, do, env, equality, for, logic, mutation, set, set!, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.equality_dispatch, codegen.for_loop, codegen.local_load, codegen.logic_dispatch, codegen.runtime_call, codegen.sequence, codegen.set_bang, codegen.store, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.equality, infer.logic, infer.loop, infer.mutation, reader.array_literal, reader.ast_do, runtime.set
+uses-atoms: atom.binding.set-bang, atom.binding.with, atom.codegen.dispatch, atom.control.do, atom.core.equality, atom.core.plus, atom.logic.and, atom.logic.not, atom.logic.or, atom.runtime.array
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_do_last_value, signal_v13_atom_equality_reflexive, signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero, signal_v13_atom_with_substitution
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Bool
 expect: True
 description: for [i 0 2] must sum generated induction values correctly.
 law: (= (with [sum 0] (do (for [i 0 2] (set! sum (+ sum i))) sum)) 1)
+demoted-from: stable-by-signal-v13

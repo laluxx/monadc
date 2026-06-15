@@ -1,7 +1,0 @@
-name: mega_equal_quote_same_list_true
-section: codegen-quote-runtime
-args: 
-type: Bool
-expect: True
-description: equal? must deep-compare identical quoted lists as equal.
-law: (equal? (quote (a b c)) (quote (a b c)))

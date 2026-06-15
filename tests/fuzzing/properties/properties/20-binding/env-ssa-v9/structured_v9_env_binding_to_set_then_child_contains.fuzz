@@ -1,5 +1,13 @@
 name: structured_v9_env_binding_to_set_then_child_contains
 section: binding-env-v9
+tier: stable
+kind: law
+features: arithmetic, array, array-index, binding, env, predicate, set, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.local_load, codegen.predicate_dispatch, codegen.runtime_call, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.type_predicate, reader.array_literal, runtime.set
+uses-atoms: atom.binding.with, atom.infer.predicate, atom.runtime.array
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_with_substitution
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: True

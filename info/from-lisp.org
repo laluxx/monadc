@@ -1,12 +1,33 @@
 #+TITLE: Coming from Lisp / Scheme
-#+CONTEXT: intro.org, syntax.org, macros.org, wisp.org
 #+STARTUP: showeverything
 #+OPTIONS: toc:3 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:from-lisp:info:
 
-[[file:index.org][<- Back to Index]] · [[file:from-c.org][From C]] · [[file:from-haskell.org][From Haskell]]
+:PROPERTIES:
+:ID:       monadc.info.from-lisp
+:CONTEXT:  monadc.context.philosophy, monadc.context.language, monadc.context.macro, monadc.context.wisp
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:from-c.org][From C]] · [[file:from-haskell.org][From Haskell]] · [[file:syntax.org][Syntax]] · [[file:macros.org][Macros]] · [[file:quote.org][Quote]] · [[file:patterns.org][Pattern Matching]] · [[file:lambda.org][Lambda]]
+
+Test coverage: S-expression parsing is exercised by =rt_reader_*.mon= fixtures.
 
 Monad uses S-expressions and code-as-data — Lisp programmers will feel
 at home, but the type system and compilation model change how you write code.
+For the design philosophy behind dual syntax, see
+[[file:../context/philosophy.org][context/philosophy.org]].
+For the macro system architecture (hygiene, fixpoint, variadic splicing),
+see [[file:../context/macro.org][context/macro.org]].
+For the arena allocator replacing GC, see [[file:../context/arena.org][context/arena.org]].
+For the monomorphization engine, see [[file:../context/codegen.org][context/codegen.org]].
+
+Known gaps vs Common Lisp/Scheme are documented at
+[[file:../context/language.org::287][context/language.org — Known codegen gaps]].
+Clone of S-expression familiarity: =car=, =cdr=, =cons=, =quote=,
+=quasiquote=, =define=, =lambda=, =if=, =cond=, =and=, =or=, =not=,
+=let=, =let*=, =letrec= all work with familiar semantics where
+codegen dispatch exists.
 
 * Compilation: LLVM Native Code, Not Interpreted
 
@@ -33,6 +54,10 @@ parens IS the parse tree the compiler walks:
 (if (> x 0) (print "pos") (print "neg"))
 #+END_SRC
 
+#+BEGIN_SRC wisp
+if (> x 0) (print "pos") (print "neg")
+#+END_SRC
+
 The reader directly produces AST nodes ([[file:../reader.h::40]]). No separate
 parse tree, no CST, no intermediate representation. This means you can
 always drop into raw S-expressions. Wisp (indentation syntax) is a
@@ -43,6 +68,13 @@ freely in the same file — both syntaxes are first-class
 ([[file:../context/philosophy.org::92][context/philosophy.org — syntax is instrument]]):
 
 #+BEGIN_SRC monad
+;; Wisp
+if (> x 0)
+  (print "pos")     ;; raw s-expr where clarity matters
+  print "neg"       ;; back to wisp
+#+END_SRC
+
+#+BEGIN_SRC wisp
 ;; Wisp
 if (> x 0)
   (print "pos")     ;; raw s-expr where clarity matters
@@ -77,6 +109,11 @@ Refinement types provide subset predicates on ground types
 (type Even { x ∈ Int | (= (mod x 2) 0) })
 #+END_SRC
 
+#+BEGIN_SRC wisp
+type Pos { x ∈ Int | (> x 0) }
+type Even { x ∈ Int | (= (mod x 2) 0) }
+#+END_SRC
+
 * Monomorphization, Not Objects
 
 In Lisp, every parameter is a boxed object (pointer + type tag). In
@@ -90,6 +127,13 @@ Monad:
 (define (id x) x)              ;; polymorphic — monomorphized per use
 (define [id-int :: Int -> Int] ;; monomorphic — Int directly
   x -> x)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define id x
+  x              ;; polymorphic — monomorphized per use
+define [id-int :: Int -> Int] ;; monomorphic — Int directly
+  x -> x
 #+END_SRC
 
 Monomorphization means =(id 42)= and =(id "hi")= generate separate
@@ -209,6 +253,15 @@ Both syntaxes share the same AST. Mix freely in the same file
 | Closure allocation        | Partially implemented (closure ABI exists, =fn=/=lambda= strcmp dispatch missing) |
 | =let=, =let*=, =letrec=   | =register_builtins=-only, no strcmp dispatch        |
 | Wisp multi-line =define= with =->= arrow | Does not create correct lambda bindings (use s-expr form) |
+
+* Related Pages
+
+- [[file:from-c.org][From C]] -- migration guide for C programmers
+- [[file:from-haskell.org][From Haskell]] -- migration guide for Haskell programmers
+- [[file:syntax.org][Syntax]] -- S-expression syntax
+- [[file:macros.org][Macros]] -- macro system comparison
+- [[file:quote.org][Quote]] -- quoting differences
+- [[file:lambda.org][Lambda]] -- lambda forms
 
 * Context Links
 

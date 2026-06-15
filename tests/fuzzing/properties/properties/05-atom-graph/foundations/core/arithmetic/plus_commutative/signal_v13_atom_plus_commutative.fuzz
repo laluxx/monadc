@@ -1,0 +1,16 @@
+name: signal_v13_atom_plus_commutative
+section: v13-atom-foundation
+tier: stable
+kind: law
+features: arithmetic,+,equality
+compiler-path: codegen.expr.binary-add,infer.call.operator-plus,runtime.int.add
+atom: atom.core.plus.commutative
+proves: atom.core.plus.commutative
+uses-atoms: atom.core.equality, atom.core.plus
+signal: high
+corpus-role: atom-foundation
+args: a:Int@edge+if+with b:Int@edge+if+with
+type: Bool
+expect: True
+description: Foundation atom proof for atom.core.plus.commutative; derived properties link through uses-atoms/depends-on metadata.
+law: (= (+ {a} {b}) (+ {b} {a}))

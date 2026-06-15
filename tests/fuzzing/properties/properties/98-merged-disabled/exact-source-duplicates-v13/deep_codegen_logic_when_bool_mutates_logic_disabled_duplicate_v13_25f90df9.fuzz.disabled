@@ -1,0 +1,17 @@
+name: deep_codegen_logic_when_bool_mutates_logic_disabled_duplicate_v13_25f90df9
+section: codegen-logic-comparison
+tier: experimental
+kind: law
+features: arithmetic, array, array-index, codegen, do, env, equality, if, mutation, phi, set, set!, when, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.if_void, codegen.local_load, codegen.runtime_call, codegen.sequence, codegen.set_bang, codegen.store, codegen.with_binding, desugar.when, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.equality, infer.if_phi, infer.mutation, reader.array_literal, reader.ast_do, reader.ast_if, runtime.set
+uses-atoms: atom.binding.set-bang, atom.binding.with, atom.codegen.dispatch, atom.control.do, atom.control.if, atom.core.equality, atom.logic.not, atom.runtime.array
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_do_last_value, signal_v13_atom_equality_reflexive, signal_v13_atom_if_same_branch_eliminates, signal_v13_atom_with_substitution
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: p:Bool q:Bool
+type: Bool
+expect: True
+description: when must guard a Bool set! mutation and preserve branch semantics.
+law: (= (with [x {p}] (do (when {q} (set! x (not x))) x)) (if {q} (not {p}) {p}))
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: mega_control_when_dynamic_mutates_bool

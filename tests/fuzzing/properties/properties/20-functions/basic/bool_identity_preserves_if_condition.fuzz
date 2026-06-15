@@ -1,7 +1,0 @@
-name: bool_identity_preserves_if_condition
-section: function
-args: cond:Bool a:Int b:Int
-type: Bool
-expect: True
-description: Passing a generated Bool through the typed Bool identity must not change conditional branch selection.
-law: (= (if (fuzz-bool-id? {cond}) {a} {b}) (if {cond} {a} {b}))

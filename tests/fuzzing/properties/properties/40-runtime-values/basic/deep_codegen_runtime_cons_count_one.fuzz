@@ -1,7 +1,0 @@
-name: deep_codegen_runtime_cons_count_one
-section: codegen-runtime-values
-args: a:Int
-type: Bool
-expect: True
-description: count must see one element after cons onto empty list.
-law: (= (count (cons {a} (list))) 1)

@@ -1,7 +1,0 @@
-name: deep_codegen_runtime_cons_car_value
-section: codegen-runtime-values
-args: a:Int
-type: Bool
-expect: True
-description: cons must build a list whose car is the inserted value.
-law: (= (car (cons {a} (list))) {a})

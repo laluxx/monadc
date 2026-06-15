@@ -1,5 +1,13 @@
 name: compiler_deep_v8_int_predicate_survives_do_operand
 section: predicates-null-casts-v8
+tier: stable
+kind: law
+features: arithmetic, do, logic, predicate, predicates
+compiler-path: codegen.arithmetic_dispatch, codegen.logic_dispatch, codegen.predicate_dispatch, codegen.sequence, infer.arithmetic, infer.logic, infer.type_predicate, reader.ast_do
+uses-atoms: atom.control.do, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or, atom.null.nil
+related-properties: signal_v13_atom_do_last_value
+signal: medium
+corpus-role: semantic-law
 args: a:Int b:Int
 type: Bool
 expect: True

@@ -1,0 +1,15 @@
+name: signal_v13_compile_fail_reader-bad-call-tail_040
+section: v13-compile-fail
+tier: compile-fail
+kind: compile-fail
+features: reader,malformed,+
+compiler-path: reader.sexpr.malformed-call
+uses-atoms: atom.core.plus
+signal: high
+corpus-role: negative-diagnostic
+stage: reader
+args: a:Int@edge
+type: Bool
+expect-diagnostic: error:
+description: Structured negative property for compiler diagnostics; expected to fail compilation.
+law: (+ {a} )

@@ -1,5 +1,13 @@
 name: arith_direct_add_sub_inverse_variadic
 section: arithmetic-dispatch
+tier: stable
+kind: law
+features: arithmetic, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, infer.arithmetic, infer.equality
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.core.minus, atom.core.plus
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero
+signal: medium
+corpus-role: semantic-law
 args: a:Int b:Int c:Int
 type: Bool
 expect: True

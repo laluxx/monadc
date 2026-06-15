@@ -1,0 +1,15 @@
+name: structured_v11_compile_fail_call_int_as_function_r06_disabled_duplicate_v13_ba934f97
+section: v11-compile-fail
+tier: experimental
+kind: compile-fail
+features: compile-fail, type, call
+compiler-path: diagnostic.expected_error, runner.compile_fail_kind
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: a:Int@edge b:Int@edge
+type: Bool
+expect-diagnostic: error:
+description: V11 expected compiler diagnostic test call_int_as_function round 6; checks compile-fail tier, diagnostics, and failure clustering.
+law: ({a} {b})
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: structured_v11_compile_fail_call_int_as_function_r01

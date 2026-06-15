@@ -1,0 +1,15 @@
+name: structured_v10_exp_keyword_self_equal_r01
+section: v10-experimental
+tier: experimental
+kind: law
+features: experimental, keyword, equality
+compiler-path: codegen.equality_dispatch, infer.equality
+uses-atoms: atom.core.equality, atom.runtime.keyword
+related-properties: signal_v13_atom_equality_reflexive
+signal: medium
+corpus-role: semantic-law
+args: k:Keyword
+type: Bool
+expect: True
+description: V10 experimental generator property exp_keyword_self_equal round 1, intended for --tiers experimental/all.
+law: (= {k} {k})

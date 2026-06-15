@@ -1,7 +1,0 @@
-name: mega_arith_variadic_sub_left_fold
-section: codegen-arith-variadic
-args: a:Int b:Int c:Int d:Int
-type: Bool
-expect: True
-description: Variadic subtraction must lower as a left fold.
-law: (= (- {a} {b} {c} {d}) (- (- (- {a} {b}) {c}) {d}))

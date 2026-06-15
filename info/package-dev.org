@@ -1,8 +1,36 @@
 #+TITLE: Package Development
 #+STARTUP: showeverything
 #+OPTIONS: toc:nil num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:package:info:
 
-[[file:index.org][<- Back to Index]]
+:PROPERTIES:
+:ID:       monadc.info.package-dev
+:CONTEXT:  monadc.context.buildsystem, monadc.context.cli, monadc.context.module
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:build.org][Build System]] · [[file:modules.org][Modules]] · [[file:cli.org][CLI Reference]] · [[file:testing.org][Testing]] · [[file:stdlib.org][Standard Library]] · [[file:style.org][Style Guide]]
+
+* Quick Reference
+
+| Command                    | Description                        |
+|----------------------------+------------------------------------|
+| =monad new <name>=         | Create new package                 |
+| =monad build=              | Compile and link binary            |
+| =monad run=                | Build and execute                  |
+| =monad test <file>=        | Compile and run tests              |
+| =monad clean=              | Remove build artifacts             |
+| =monad install=            | Install to =~/.local/bin=          |
+| =package.yaml=             | Build manifest (YAML)              |
+
+The scaffold created by =monad new <name>= produces this layout.
+For the build info resolution process (resolve_build_info, do_build),
+see [[file:../context/cli.org][context/cli.org]] and
+[[file:../context/buildsystem.org][context/buildsystem.org]].
+
+Test coverage: project scaffolding is tested by the =cmd_new= handler
+in [[file:../cli.c::292][cli.c:292]]. Package builds are exercised through
+the =cmd_build= pipeline (cli.c:505).
 
 * Package Layout
 
@@ -109,6 +137,22 @@ Normal exit with any code counts as a pass.
 No built-in package manager or version enforcement. Version strings
 in =package.yaml= are advisory. Package distribution is manual via
 git or tarball.
+
+* See Also
+
+- [[file:build.org][Build System]]
+- [[file:modules.org][Module System]]
+- [[file:cli.org][CLI Reference]]
+- [[file:testing.org][Testing]]
+- [[file:stdlib.org][Standard Library]]
+
+* Related Pages
+
+- [[file:build.org][Build System]] -- build system for packages
+- [[file:modules.org][Modules]] -- module system
+- [[file:cli.org][CLI Reference]] -- packaging commands
+- [[file:stdlib.org][Standard Library]] -- library dependencies
+- [[file:testing.org][Testing]] -- testing packages
 
 * Context Links
 

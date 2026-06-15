@@ -1,9 +1,35 @@
 #+TITLE: From Haskell
-#+CONTEXT: functional-programming.org, types.org
 #+STARTUP: showeverything
 #+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:from-haskell:info:
 
-[[file:index.org][<- Back to Index]] · [[file:from-c.org][From C]] · [[file:from-lisp.org][From Lisp]] · [[file:types.org][Types]] · [[file:functional-programming.org][FP]]
+:PROPERTIES:
+:ID:       monadc.info.from-haskell
+:CONTEXT:  monadc.context.language, monadc.context.types, monadc.context.typeclass, monadc.context.philosophy
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:type-classes.org][Type Classes]] · [[file:maybe.org][Maybe]] · [[file:result.org][Result]] · [[file:equality.org][Equality]] · [[file:numeric.org][Numeric]] · [[file:booleans.org][Booleans]] · [[file:from-c.org][From C]] · [[file:from-lisp.org][From Lisp]] · [[file:types.org][Types]] · [[file:functional-programming.org][FP]] · [[file:advanced-types.org][Advanced Types]]
+
+Test coverage: Haskell-compatibility forms are exercised by =rt_haskell_*.mon= fixtures.
+
+This guide maps Haskell concepts to Monad equivalents. Key differences:
+strict evaluation (not lazy), S-expression syntax (optional Wisp), arena
+allocation (not GC), monomorphization (not boxed polymorphism), and
+inline assembly as a first-class language feature.
+
+For the dual type system (HM + ITT via NbE), see
+[[file:../context/language.org::501][context/language.org — Type system surface]].
+For type class dictionary-passing implementation, see
+[[file:../context/typeclass.org][context/typeclass.org]].
+For the design philosophy (strict evaluation, zero-cost abstraction),
+see [[file:../context/philosophy.org][context/philosophy.org]].
+
+Working Haskell-like operations are verified by =rt_arith_*.mon=,
+=rt_cmp_*.mon=, =rt_bitwise_*.mon= fixtures in
+[[file:../tests/codegen/][tests/codegen/]]. Known gaps vs Haskell (map,
+fold, closures, TCO, laziness) are documented at
+[[file:../context/language.org::287][context/language.org — Known codegen gaps]].
 
 * Syntax Differences
 
@@ -57,6 +83,11 @@ Monad supports refinement types — subset predicates on ground types
 (type Even { x ∈ Int | (= (mod x 2) 0) })
 #+END_SRC
 
+#+BEGIN_SRC wisp
+type Pos { x ∈ Int | (> x 0) }
+type Even { x ∈ Int | (= (mod x 2) 0) }
+#+END_SRC
+
 Refinements generate compile-time-checked predicate functions and materialized
 =Set= values. The predicate is evaluated statically when the argument is a
 literal ([[file:../context/types.org::1376][context/types.org — refinement_check_literal]]).
@@ -70,10 +101,19 @@ Type quantifiers use =∀= / =all= syntax:
   x -> x)
 #+END_SRC
 
+#+BEGIN_SRC wisp
+define [id :: (∀ t. t -> t)]
+  x -> x
+#+END_SRC
+
 Type class constraints use bracket syntax:
 
 #+BEGIN_SRC monad
 (∀ t. [Enum t, Bounded t] => Int -> (Maybe t))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+∀ t. [Enum t, Bounded t] => Int -> (Maybe t)
 #+END_SRC
 
 * Type Classes (Dictionary Passing)
@@ -185,6 +225,15 @@ For an up-to-date list of working dispatch handlers, see
 | Tail-call optimization | Planned                                     |
 | Closures         | Partially implemented (closure ABI exists, =fn=/=lambda= strcmp dispatch missing) |
 | Pipe operator =|>= | Reader parses, codegen does not dispatch          |
+
+* Related Pages
+
+- [[file:from-c.org][From C]] -- migration guide for C programmers
+- [[file:from-lisp.org][From Lisp]] -- migration guide for Lisp programmers
+- [[file:types.org][Types]] -- type system comparison
+- [[file:functional-programming.org][Functional Programming]] -- functional style
+- [[file:purity.org][Purity]] -- purity and effects
+- [[file:type-classes.org][Type Classes]] -- type class system
 
 * Context Links
 

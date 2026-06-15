@@ -1,0 +1,16 @@
+name: structured_v11_experimental_float_predicate_r03_disabled_duplicate_v13_71d72c49
+section: v11-experimental
+tier: experimental
+kind: law
+features: experimental, float, predicate
+compiler-path: codegen.predicate_dispatch, infer.type_predicate
+uses-atoms: atom.infer.predicate, atom.runtime.float
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: x:Float
+type: Bool
+expect: True
+description: V11 experimental rich-feature property experimental_float_predicate round 3; non-default tier for parser/runtime features that may still be maturing.
+law: (float? {x})
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: structured_v10_exp_float_roundtrip_pred_r01

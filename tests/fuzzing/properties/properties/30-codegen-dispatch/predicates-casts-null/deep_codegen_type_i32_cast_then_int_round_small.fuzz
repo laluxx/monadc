@@ -1,7 +1,16 @@
 name: deep_codegen_type_i32_cast_then_int_round_small
 section: codegen-predicates-casts-null
+tier: experimental
+kind: law
+features: arithmetic, codegen, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, infer.arithmetic, infer.equality
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.infer.predicate, atom.null.nil
+related-properties: signal_v13_atom_equality_reflexive
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Bool
 expect: True
 description: I32 cast followed by Int cast must preserve small constant.
 law: (= (Int (I32 123)) 123)
+demoted-from: stable-by-signal-v13

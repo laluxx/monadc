@@ -1,7 +1,15 @@
 name: deep_codegen_runtime_quote_symbol_pred
 section: codegen-runtime-values
+tier: experimental
+kind: law
+features: arithmetic, codegen, predicate, quote
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.quote, infer.arithmetic, infer.type_predicate, reader.quote
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate, atom.quote.quote
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Bool
 expect: True
 description: quote of a symbol must produce a runtime Symbol.
 law: (Symbol? (quote alpha))
+demoted-from: stable-by-signal-v13

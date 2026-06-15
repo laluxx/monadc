@@ -1,0 +1,132 @@
+#+TITLE: Result
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:result:info:
+
+:PROPERTIES:
+:ID:       monadc.info.result
+:CONTEXT:  monadc.context.language, monadc.context.codegen-ops
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:maybe.org][Maybe]] · [[file:error-handling.org][Error Handling]] · [[file:patterns.org][Pattern Matching]] · [[file:data.org][Data Types]] · [[file:core.org][Core Library]] · [[file:testing.org][Testing]]
+
+Test coverage: =(Error String)= is exercised in diagnostic fixture
+patterns (see =rt_codegen_err_*.mon=).
+
+=Result= represents a computation that can fail with an error message.
+It is the standard pattern for fallible operations where a bare =nil=
+is insufficient — the error carries a =String= message.
+
+* Error Type Definition
+
+#+BEGIN_SRC monad
+(data Error String)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+data Error String
+#+END_SRC
+
+#+BEGIN_SRC monad
+(define parse-error (Error "invalid input"))
+(define file-error  (Error "file not found"))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define parse-error (Error "invalid input")
+define file-error  (Error "file not found")
+#+END_SRC
+
+* Usage Pattern: Result
+
+#+BEGIN_SRC monad
+(define (parse-int s -> (Result Int String))
+  ...)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define parse-int s -> (Result Int String)
+  ...
+#+END_SRC
+
+Where =Result= is used as a general type for "ok or error" returns.
+The ok variant carries the success value; the error variant carries
+a diagnostic message.
+
+* error (Builtin)
+
+The =(error "message")= builtin halts the program at runtime:
+
+#+BEGIN_SRC monad
+(define (assert-nonzero n)
+  (if (= n 0) (error "assertion failed: n is zero")
+    n))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define assert-nonzero n
+  if (= n 0) (error "assertion failed: n is zero")
+    n
+#+END_SRC
+
+Codegen emits a call to =rt_error= which prints the message and calls
+=exit(1)= ([[file:../codegen.c::6604]]).
+
+* undefined (Builtin)
+
+=(undefined)= is a placeholder for unimplemented branches:
+
+#+BEGIN_SRC monad
+(match x
+  None    -> (undefined)
+  (Some v)-> v)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+match x
+  None    -> (undefined)
+  (Some v)-> v
+#+END_SRC
+
+Codegen emits an LLVM =unreachable= instruction or a call to
+=rt_undefined= depending on context
+([[file:../codegen.c::6685]]). Non-exhaustive pattern matches emit
+=(undefined)= as their fallback.
+
+* ?? With Result
+
+The null-coalescing operator =??= provides a default:
+
+#+BEGIN_SRC monad
+(?? (parse-int "abc") 0)           ;; 0 on parse failure
+#+END_SRC
+
+#+BEGIN_SRC wisp
+?? (parse-int "abc") 0
+#+END_SRC
+
+* Related: Result in Other Languages
+
+| Language   | Type                             |
+|------------+----------------------------------|
+| Monad      | =(Result a String)= or equivalent |
+| Rust       | =Result<T, E>=                  |
+| Haskell    | =Either e a=                    |
+| OCaml      | =('a, 'b) result=               |
+
+* Related Pages
+
+- [[file:maybe.org][Maybe]] -- Option type for optional values
+- [[file:error-handling.org][Error Handling]] -- error handling patterns
+- [[file:patterns.org][Pattern Matching]] -- pattern matching on Result
+- [[file:data.org][Data Types]] -- ADT definition of Result
+- [[file:testing.org][Testing]] -- assert-eq with Result
+
+* Context Links
+
+- [[file:maybe.org][Maybe (Option)]] — optional values without error messages
+- [[file:error-handling.org][Error Handling]] — runtime error mechanisms
+- [[file:data.org][Data Types]] — algebraic data type system
+- [[file:patterns.org][Pattern Matching]] — match expressions
+- [[file:../context/language.org][context/language.org]] — error dispatch, runtime diagnostics

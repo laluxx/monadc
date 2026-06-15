@@ -3064,7 +3064,9 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
             (strncmp(t, "instance", 8) == 0 &&
              (t[8] == ' ' || t[8] == '\t' || t[8] == '\0')) ||
             (strncmp(t, "match", 5) == 0 &&
-             (t[5] == ' ' || t[5] == '\t' || t[5] == '\0'))) {
+             (t[5] == ' ' || t[5] == '\t' || t[5] == '\0')) ||
+            (strncmp(t, "method", 6) == 0 &&
+             (t[6] == ' ' || t[6] == '\t' || t[6] == '\0'))) {
 
             size_t acc_cap = 256;
             char *acc = malloc(acc_cap);
@@ -4973,6 +4975,7 @@ ASTList wisp_parse_all(const char *source, const char *filename) {
 
     arity_set(&t, "match", -1);
     arity_set(&t, "assert-eq", 3);
+    arity_set(&t, "method", -1);
 
     arity_prescan(&t, stripped);
 

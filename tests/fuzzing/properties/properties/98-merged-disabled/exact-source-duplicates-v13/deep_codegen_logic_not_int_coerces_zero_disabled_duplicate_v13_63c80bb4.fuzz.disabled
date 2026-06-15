@@ -1,0 +1,17 @@
+name: deep_codegen_logic_not_int_coerces_zero_disabled_duplicate_v13_63c80bb4
+section: codegen-logic-comparison
+tier: experimental
+kind: law
+features: arithmetic, codegen, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, infer.arithmetic, infer.equality
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.logic.not
+related-properties: signal_v13_atom_equality_reflexive
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: a:Int
+type: Bool
+expect: True
+description: not must coerce generated Int values through zero truthiness.
+law: (= (not {a}) (= {a} 0))
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: logic_int_not_is_zero_test

@@ -1,0 +1,15 @@
+name: structured_v10_compile_fail_branch_type_mismatch_int_string_r01
+section: v10-compile-fail
+tier: compile-fail
+kind: compile-fail
+features: compile-fail, if, type
+compiler-path: codegen.if_phi, diagnostic.expected_error, infer.if_phi, reader.ast_if, runner.compile_fail_kind
+uses-atoms: atom.control.if, atom.runtime.string
+related-properties: signal_v13_atom_if_same_branch_eliminates, signal_v13_atom_string_contains_substring
+signal: high
+corpus-role: negative-diagnostic
+args: p:Bool@logic a:Int@edge
+type: Bool
+expect-diagnostic: error:
+description: V10 compile-fail replacement branch_type_mismatch_int_string round 1; intentionally invalid and should emit an error.
+law: (if {p} {a} "x")

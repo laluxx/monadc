@@ -66,6 +66,7 @@ PROPERTY_ROOT = FUZZ_ROOT / "properties"
 MONAD = ROOT / "monad"
 LAST_ROOT = FUZZ_ROOT / "last"
 RESULTS_FILE = FUZZ_ROOT / ".fuzz-results.json"
+HISTORY_FILE = FUZZ_ROOT / ".fuzz-history.json"
 FIRST_FAILURE_FILE = FUZZ_ROOT / ".last-first-failure.org"
 WIDTH = 118
 
@@ -116,6 +117,30 @@ SECTION_ORDER = {
 VALID_TIERS = {"stable", "experimental", "oracle", "compile-fail", "stress"}
 VALID_KINDS = {"law", "program", "compile-fail"}
 
+COMPILE_TIMEOUT_S = 30
+RUN_TIMEOUT_S = 5
+
+STAGE_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("reader",  re.compile(r"(?i)(reader|parse|lex|token|unexpected char|unexpected token|unterminated|bad indent|indent error|wisp)")),
+    ("desugar", re.compile(r"(?i)(desugar|macro|expand|rewrite|syntax error|bad syntax|malformed)")),
+    ("infer",   re.compile(r"(?i)(type error|infer|unify|mismatch|expected type|got type|arity|kind error|constraint)")),
+    ("codegen", re.compile(r"(?i)(codegen|emit|llvm|backend|ir |phi|alloca|undefined symbol|link)")),
+    ("runtime", re.compile(r"(?i)(runtime|segfault|signal|abort|bus error|stack overflow|assertion failed)")),
+]
+
+
+def detect_stage(compiler_output: str, run_phase: str) -> str:
+    """Heuristically identify which compiler stage produced a failure."""
+    if run_phase == "run":
+        return "runtime"
+    text = compiler_output
+    for stage, pattern in STAGE_PATTERNS:
+        if pattern.search(text):
+            return stage
+    if run_phase == "compile":
+        return "compile"
+    return "unknown"
+
 
 ### Data model
 
@@ -154,6 +179,7 @@ class PropertySpec:
     law: str | None
     program: str | None
     features: tuple[str, ...]
+    compiler_paths: tuple[str, ...]
     path: Path
     line: int
     xfail: bool = False
@@ -221,6 +247,7 @@ class CaseOutcome:
     message: str = ""
     compiler_output: str = ""
     shrunk: GeneratedCase | None = None
+    stage: str = "unknown"
 
 
 @dataclass
@@ -260,6 +287,7 @@ class RunStats:
     xpassed: int = 0
     rewrites: int = 0
     shrinks: int = 0
+    timeouts: int = 0
 
 
 @dataclass(frozen=True)
@@ -286,6 +314,7 @@ class Cli:
     shrink: bool
     max_shrink_steps: int
     feature_summary: bool
+    reset_history: bool
 
 
 ### Stable generated prelude
@@ -498,6 +527,7 @@ def print_status(
     status = {
         "PASS": f"{BOLD_GREEN}PASS{RESET}",
         "FAIL": f"{BOLD_RED}FAIL{RESET}",
+        "TIMEOUT": f"{BOLD_RED}TIMEOUT{RESET}",
         "XFAIL": f"{YELLOW}XFAIL{RESET}",
         "XPASS": f"{BOLD_RED}XPASS{RESET}",
         "SKIP": f"{YELLOW}SKIP{RESET}",
@@ -561,6 +591,7 @@ def print_failure_context(outcome: CaseOutcome, *, show_expr: bool) -> None:
         print(f"    replay:   {replay}")
     print(f"    reason:   {outcome.message or outcome.status}")
     print(f"    phase:    {outcome.phase}")
+    print(f"    stage:    {outcome.stage}")
     print(f"    expect:   {outcome.expected}")
     print(f"    actual:   {outcome.actual if outcome.actual is not None else '∅'}")
     print(f"    tier:     {gen.spec.tier}")
@@ -1109,6 +1140,7 @@ def load_property(path: Path, *, disabled: bool = False) -> PropertySpec:
     features = split_csv(data.get("features", ""))
     if not features:
         features = infer_features(data.get("section", ""), law or program or "")
+    compiler_paths = split_csv(data.get("compiler-path", ""))
 
     return PropertySpec(
         name=data["name"],
@@ -1124,6 +1156,7 @@ def load_property(path: Path, *, disabled: bool = False) -> PropertySpec:
         law=law,
         program=program,
         features=features,
+        compiler_paths=compiler_paths,
         path=path,
         line=line,
         xfail=parse_bool(data.get("xfail", "False")),
@@ -1343,14 +1376,26 @@ def compile_and_run(seed: int, cases: Sequence[GeneratedCase], *, keep: bool, la
         src.write_text(source, encoding="utf-8")
 
         compile_start = time.perf_counter_ns()
-        compile_result = subprocess.run(
-            [str(MONAD), str(src), "-o", str(exe)],
-            cwd=ROOT,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            check=False,
-        )
+        try:
+            compile_result = subprocess.run(
+                [str(MONAD), str(src), "-o", str(exe)],
+                cwd=ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+                timeout=COMPILE_TIMEOUT_S,
+            )
+        except subprocess.TimeoutExpired as exc:
+            compile_ns = time.perf_counter_ns() - compile_start
+            partial = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
+            replay = save_replay(label, seed, source, expected, "", partial)
+            return (
+                ExecutionResult(False, "compile", -1, compile_ns, 0, "", partial, f"compile timed out after {COMPILE_TIMEOUT_S}s"),
+                source,
+                expected,
+                replay,
+            )
         compile_ns = time.perf_counter_ns() - compile_start
         if compile_result.returncode != 0:
             replay = save_replay(label, seed, source, expected, "", compile_result.stdout)
@@ -1371,14 +1416,26 @@ def compile_and_run(seed: int, cases: Sequence[GeneratedCase], *, keep: bool, la
             )
 
         run_start = time.perf_counter_ns()
-        run_result = subprocess.run(
-            [str(exe)],
-            cwd=ROOT,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            check=False,
-        )
+        try:
+            run_result = subprocess.run(
+                [str(exe)],
+                cwd=ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+                timeout=RUN_TIMEOUT_S,
+            )
+        except subprocess.TimeoutExpired as exc:
+            run_ns = time.perf_counter_ns() - run_start
+            partial = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
+            replay = save_replay(label, seed, source, expected, partial, compile_result.stdout)
+            return (
+                ExecutionResult(False, "run", -1, compile_ns, run_ns, partial, compile_result.stdout, f"run timed out after {RUN_TIMEOUT_S}s"),
+                source,
+                expected,
+                replay,
+            )
         run_ns = time.perf_counter_ns() - run_start
         ok = run_result.returncode == 0 and run_result.stdout == expected
         message = "ok"
@@ -1404,26 +1461,36 @@ def compile_and_run_at(seed: int, cases: Sequence[GeneratedCase], opt_flag: str,
         src = tmp / f"fuzz_{seed}.mon"
         exe = tmp / f"fuzz_{seed}"
         src.write_text(source, encoding="utf-8")
-        compile_result = subprocess.run(
-            [str(MONAD), str(src), opt_flag, "-o", str(exe)],
-            cwd=ROOT,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            check=False,
-        )
+        try:
+            compile_result = subprocess.run(
+                [str(MONAD), str(src), opt_flag, "-o", str(exe)],
+                cwd=ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+                timeout=COMPILE_TIMEOUT_S,
+            )
+        except subprocess.TimeoutExpired as exc:
+            partial = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
+            return -1, "", partial + f"\ncompile timed out after {COMPILE_TIMEOUT_S}s ({opt_flag})"
         if compile_result.returncode != 0:
             return compile_result.returncode, "", compile_result.stdout
         if not exe.exists() or not exe.stat().st_mode & 0o111:
             return 0, "", compile_result.stdout
-        run_result = subprocess.run(
-            [str(exe)],
-            cwd=ROOT,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            check=False,
-        )
+        try:
+            run_result = subprocess.run(
+                [str(exe)],
+                cwd=ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+                timeout=RUN_TIMEOUT_S,
+            )
+        except subprocess.TimeoutExpired as exc:
+            partial = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
+            return -1, partial, compile_result.stdout + f"\nrun timed out after {RUN_TIMEOUT_S}s ({opt_flag})"
         return run_result.returncode, run_result.stdout, compile_result.stdout
 
 
@@ -1470,14 +1537,26 @@ def compile_only(seed: int, case: GeneratedCase, *, keep: bool, label: str) -> t
         exe = tmp / f"fuzz_{seed}"
         src.write_text(source, encoding="utf-8")
         compile_start = time.perf_counter_ns()
-        compile_result = subprocess.run(
-            [str(MONAD), str(src), "-o", str(exe)],
-            cwd=ROOT,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            check=False,
-        )
+        try:
+            compile_result = subprocess.run(
+                [str(MONAD), str(src), "-o", str(exe)],
+                cwd=ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+                timeout=COMPILE_TIMEOUT_S,
+            )
+        except subprocess.TimeoutExpired as exc:
+            compile_ns = time.perf_counter_ns() - compile_start
+            partial = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
+            replay = save_replay(label, seed, source, diagnostic + "\n", partial, partial)
+            return (
+                ExecutionResult(False, "compile", -1, compile_ns, 0, partial, partial, f"compile timed out after {COMPILE_TIMEOUT_S}s"),
+                source,
+                diagnostic,
+                replay,
+            )
         compile_ns = time.perf_counter_ns() - compile_start
         ok = compile_result.returncode != 0 and (not diagnostic or diagnostic in compile_result.stdout)
         message = "expected compile failure observed" if ok else "compile-fail expectation did not match"
@@ -1503,11 +1582,15 @@ def run_isolated_case(case: GeneratedCase, *, keep: bool, label: str) -> CaseOut
         actual = result.stdout.splitlines()[0] if result.stdout.splitlines() else None
         ok = result.ok and actual == case.expected
 
-    if spec.xfail:
+    is_timeout = result.returncode == -1 and "timed out" in result.message
+    if is_timeout:
+        status = "TIMEOUT"
+    elif spec.xfail:
         status = "XFAIL" if not ok else "XPASS"
     else:
         status = "PASS" if ok else "FAIL"
     elapsed = result.compile_ns + result.run_ns
+    stage = detect_stage(result.output, result.phase)
     return CaseOutcome(
         generated=case,
         ok=ok,
@@ -1519,6 +1602,7 @@ def run_isolated_case(case: GeneratedCase, *, keep: bool, label: str) -> CaseOut
         replay_path=replay,
         message=result.message,
         compiler_output=result.output if not ok else "",
+        stage=stage,
     )
 
 
@@ -1561,7 +1645,7 @@ def failure_signature(outcome: CaseOutcome) -> str:
 
 
 def try_shrink(outcome: CaseOutcome, *, max_steps: int) -> CaseOutcome:
-    if outcome.ok or outcome.generated.spec.kind == "program" or max_steps <= 0:
+    if outcome.ok or outcome.status == "TIMEOUT" or outcome.generated.spec.kind == "program" or max_steps <= 0:
         return outcome
     current = outcome.generated
     current_sig = failure_signature(outcome)
@@ -1651,7 +1735,7 @@ class FuzzRunner:
 
     def record(self, outcome: CaseOutcome, index: int, *, show: bool) -> None:
         self.results.append(outcome)
-        if outcome.status in {"FAIL", "XPASS"}:
+        if outcome.status in {"FAIL", "XPASS", "TIMEOUT"}:
             self.failures.append(outcome)
             if self.first_failure is None:
                 self.first_failure = outcome
@@ -1803,6 +1887,7 @@ def print_summary(stats: RunStats, runner: FuzzRunner, started_ns: int) -> None:
         ("Executed", f"{stats.executed_cases:6d}"),
         ("Passed", f"{stats.passed:6d}"),
         ("Failed", f"{stats.failed:6d}"),
+        ("Timeout", f"{stats.timeouts:6d}"),
         ("Blocked", f"{stats.blocked:6d}"),
         ("XFail", f"{stats.xfailed:6d}"),
         ("XPass", f"{stats.xpassed:6d}"),
@@ -1814,6 +1899,20 @@ def print_summary(stats: RunStats, runner: FuzzRunner, started_ns: int) -> None:
     keyw = max(len(k) for k, _v in rows)
     for key, value in rows:
         print(f"  {key + ':':<{keyw + 1}} {value}")
+
+    failures = [o for o in runner.results if o.status in {"FAIL", "XPASS", "TIMEOUT"}]
+    if failures:
+        stage_counts: dict[str, int] = {}
+        for o in failures:
+            stage_counts[o.stage] = stage_counts.get(o.stage, 0) + 1
+        print()
+        print(f"  {'Stage breakdown of failures':}")
+        stage_order = ["reader", "desugar", "infer", "codegen", "runtime", "compile", "unknown"]
+        for stage in stage_order:
+            count = stage_counts.get(stage, 0)
+            if count:
+                bar = BOLD_RED + "#" * min(count, 40) + RESET
+                print(f"    {stage:<12} {count:4d}  {bar}")
 
 
 def save_results(results: Sequence[CaseOutcome]) -> None:
@@ -1832,6 +1931,120 @@ def save_results(results: Sequence[CaseOutcome]) -> None:
     }
     RESULTS_FILE.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
+
+def load_history() -> dict[str, dict[str, Any]]:
+    if not HISTORY_FILE.exists():
+        return {}
+    try:
+        data = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+        return data.get("properties", {})
+    except Exception:
+        return {}
+
+
+@dataclass
+class RegressionReport:
+    new_failures: list[str] = dataclasses.field(default_factory=list)
+    still_failing: list[tuple[str, int]] = dataclasses.field(default_factory=list)
+    fixed: list[str] = dataclasses.field(default_factory=list)
+    new_timeouts: list[str] = dataclasses.field(default_factory=list)
+    flaky: list[str] = dataclasses.field(default_factory=list)
+
+
+def diff_history(history: Mapping[str, dict[str, Any]], outcomes: Sequence[CaseOutcome]) -> RegressionReport:
+    report = RegressionReport()
+    ok_statuses = {"PASS", "XFAIL"}
+    for outcome in outcomes:
+        if outcome.generated.spec.section == "batch":
+            continue
+        name = outcome.generated.spec.name
+        prev = history.get(name)
+        now_ok = outcome.status in ok_statuses
+        prev_ok = prev is not None and prev.get("status") in ok_statuses
+        prev_status = prev.get("status") if prev else None
+
+        if now_ok and prev is not None and not prev_ok:
+            report.fixed.append(name)
+        elif not now_ok and prev is not None and prev_ok:
+            if outcome.status == "TIMEOUT":
+                report.new_timeouts.append(name)
+            else:
+                report.new_failures.append(name)
+        elif not now_ok and prev is not None and not prev_ok:
+            if prev_status != outcome.status:
+                report.flaky.append(name)
+            else:
+                streak = int(prev.get("times_seen_failing", 0)) + 1
+                report.still_failing.append((name, streak))
+        elif not now_ok and prev is None:
+            report.new_failures.append(name)
+    return report
+
+
+def save_history(outcomes: Sequence[CaseOutcome], previous: Mapping[str, dict[str, Any]], *, keep_names: set[str] | None = None) -> None:
+    ok_statuses = {"PASS", "XFAIL"}
+    properties: dict[str, dict[str, Any]] = {}
+    if keep_names is not None:
+        properties = {name: entry for name, entry in previous.items() if name in keep_names}
+    else:
+        properties = dict(previous)
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    for outcome in outcomes:
+        name = outcome.generated.spec.name
+        if outcome.generated.spec.section == "batch":
+            continue
+        now_ok = outcome.status in ok_statuses
+        prev = previous.get(name)
+        prev_ok = prev is not None and prev.get("status") in ok_statuses
+        if now_ok:
+            first_failed_at = None
+            times_seen_failing = 0
+        elif prev is not None and not prev_ok:
+            first_failed_at = prev.get("first_failed_at") or timestamp
+            times_seen_failing = int(prev.get("times_seen_failing", 0)) + 1
+        else:
+            first_failed_at = timestamp
+            times_seen_failing = 1
+        properties[name] = {
+            "status": outcome.status,
+            "message": outcome.message,
+            "phase": outcome.phase,
+            "last_seen": timestamp,
+            "signature": failure_signature(outcome) if not now_ok else "",
+            "first_failed_at": first_failed_at,
+            "times_seen_failing": times_seen_failing,
+        }
+    payload = {"timestamp": timestamp, "properties": properties}
+    HISTORY_FILE.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def print_regression_report(report: RegressionReport) -> None:
+    if not (report.new_failures or report.new_timeouts or report.fixed or report.still_failing or report.flaky):
+        return
+    print()
+    print_rule("REGRESSION REPORT")
+    print()
+    if report.new_failures:
+        print(f"  {BOLD_RED}NEW FAILURES{RESET} (passed last run, failing now): {len(report.new_failures)}")
+        for name in report.new_failures[:25]:
+            print(f"    {BOLD_RED}*{RESET} {name}")
+    if report.new_timeouts:
+        print(f"  {BOLD_RED}NEW TIMEOUTS{RESET} (passed last run, now hanging): {len(report.new_timeouts)}")
+        for name in report.new_timeouts[:25]:
+            print(f"    {BOLD_RED}*{RESET} {name}")
+    if report.flaky:
+        print(f"  {YELLOW}FLAKY{RESET} (failure mode changed since last run): {len(report.flaky)}")
+        for name in report.flaky[:25]:
+            print(f"    {YELLOW}*{RESET} {name}")
+    if report.fixed:
+        print(f"  {BOLD_GREEN}FIXED{RESET} (failing last run, passing now): {len(report.fixed)}")
+        for name in report.fixed[:25]:
+            print(f"    {BOLD_GREEN}*{RESET} {name}")
+    if report.still_failing:
+        print(f"  {GRAY}known failing, unchanged: {len(report.still_failing)}{RESET}")
+        worst = sorted(report.still_failing, key=lambda kv: -kv[1])[:10]
+        for name, streak in worst:
+            print(f"    {GRAY}* {name} (failing {streak} runs){RESET}")
 
 def save_first_failure(outcome: CaseOutcome | None) -> None:
     timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -1945,6 +2158,8 @@ def run_coverage(runner: FuzzRunner, cli: Cli, stats: RunStats) -> None:
             stats.xfailed += 1
         elif outcome.status == "XPASS":
             stats.xpassed += 1
+        elif outcome.status == "TIMEOUT":
+            stats.timeouts += 1
         else:
             stats.failed += 1
         show = outcome.status != "PASS" or cli.show_expr
@@ -1989,6 +2204,7 @@ def run_random_batches(runner: FuzzRunner, cli: Cli, stats: RunStats) -> None:
             law="True",
             program=None,
             features=("batch",),
+            compiler_paths=(),
             path=Path(__file__).resolve(),
             line=1,
         )
@@ -2066,6 +2282,7 @@ def parse_args() -> Cli:
     parser.add_argument("--no-shrink", action="store_true", help="disable shrink-on-failure")
     parser.add_argument("--max-shrink-steps", type=int, default=20)
     parser.add_argument("--no-feature-summary", action="store_true")
+    parser.add_argument("--reset-history", action="store_true", help="discard saved fuzz history before this run")
     parser.add_argument("--no-rich", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
 
@@ -2108,6 +2325,7 @@ def parse_args() -> Cli:
         shrink=not args.no_shrink,
         max_shrink_steps=max(0, args.max_shrink_steps),
         feature_summary=not args.no_feature_summary,
+        reset_history=args.reset_history,
     )
 
 
@@ -2144,6 +2362,7 @@ def main() -> int:
         return 0
 
     clear_last_root()
+    history = {} if cli.reset_history else load_history()
     stats = RunStats(
         loaded=len(specs),
         selected=len(selected),
@@ -2164,12 +2383,16 @@ def main() -> int:
 
     save_results(runner.results)
     save_first_failure(runner.first_failure)
+    regression_report = diff_history(history, runner.results)
+    keep_names = {spec.name for spec in selected}
+    save_history(runner.results, history, keep_names=keep_names)
 
     print()
     print_section_summary(runner)
     if cli.feature_summary:
         print_feature_summary(runner)
     print_failure_clusters(runner.failures[: cli.max_failures])
+    print_regression_report(regression_report)
     print_summary(stats, runner, started_ns)
 
     if cli.json_summary:

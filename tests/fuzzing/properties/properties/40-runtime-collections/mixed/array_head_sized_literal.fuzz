@@ -1,7 +1,16 @@
 name: array_head_sized_literal
 section: collections
+tier: experimental
+kind: law
+features: arithmetic, array, array-index, collections, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.equality_dispatch, infer.arithmetic, infer.array, infer.callable_array, infer.equality, reader.array_literal
+uses-atoms: atom.core.equality, atom.runtime.array
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_equality_reflexive
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Bool
 expect: True
 description: head must use the optimized fixed-array path.
 law: (= (head [10 20 30]) 10)
+demoted-from: stable-by-signal-v13

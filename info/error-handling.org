@@ -1,8 +1,20 @@
 #+TITLE: Error Handling
 #+STARTUP: showeverything
 #+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:errors:info:
 
-[[file:index.org][<- Back to Index]] · [[file:core.org][Core Library]] · [[file:errors.org][CLI Errors]]
+:PROPERTIES:
+:ID:       monadc.info.error-handling
+:CONTEXT:  monadc.context.language, monadc.context.codegen
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:conditionals.org][Conditionals]] · [[file:maybe.org][Maybe (Option)]] · [[file:result.org][Result]] · [[file:booleans.org][Booleans]] · [[file:heap.org][Heap]] · [[file:core.org][Core Library]] · [[file:errors.org][Diagnostics]] · [[file:testing.org][Testing]]
+
+Test coverage: the =rt_codegen_err_*.mon= diagnostic fixture pattern
+(43+ fixtures) covers expected compiler errors for every stable error
+path. The =??= null-coalescing operator is verified by =rt_null_coalesce.mon=.
+See [[file:../tests/codegen/rt_codegen_err_*.mon][tests/codegen/rt_codegen_err_*.mon]].
 
 MonadC provides several mechanisms for handling and signalling errors, from
 compiler diagnostics to runtime error values.
@@ -81,11 +93,20 @@ as their fallback.
 (?? (scores "Sam") 0)           ;; map lookup with default
 #+END_SRC
 
+#+BEGIN_SRC wisp
+?? (lookup key dict) "default"
+?? (safe-div a b) 0
+?? (scores "Sam") 0
+#+END_SRC
+
 Implementation: evaluates =lhs=, checks nil via =rt_value_is_nil=, branches to
 =rhs= or returns =lhs= unwrapped. Scalar types (Int, Float, Bool, Char) are
 never nil and skip the check entirely.
 
 * Pattern: Option type with match
+
+The =(Option a)= type provides a safe return type for fallible
+operations. See [[file:maybe.org][Maybe (Option)]] for the full reference.
 
 #+BEGIN_SRC monad
 (define (safe-div a b -> (Option Int))
@@ -93,9 +114,27 @@ never nil and skip the check entirely.
     (Some (/ a b))))
 #+END_SRC
 
-The =(Option a)= type is =(data Option a None (Some a))= and provides a safe
-return type for operations that can fail. Pattern match on =None= vs =Some x=
-handles both cases.
+#+BEGIN_SRC wisp
+define safe-div a b -> (Option Int)
+  if (= b 0) None
+    Some (/ a b)
+#+END_SRC
+
+* Pattern: Result pattern
+
+Use =(Error String)= for operations that need error messages:
+
+#+BEGIN_SRC monad
+(define (parse-int s -> (Result Int String))
+  ...)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define parse-int s -> (Result Int String)
+  ...
+#+END_SRC
+
+See [[file:result.org][Result]] for the full reference.
 
 * Debug vs Release nil behaviour
 
@@ -128,9 +167,19 @@ fails, it prints a diagnostic with =show= of both values and reports the
 failure location ([[file:../codegen.c::6431]]). Used extensively in codegen
 test fixtures.
 
+* Related Pages
+
+- [[file:errors.org][Diagnostics]] -- error codes and diagnostics
+- [[file:maybe.org][Maybe]] -- Option type for optional values
+- [[file:result.org][Result]] -- Result type with diagnostic messages
+- [[file:conditionals.org][Conditionals]] -- ?? null-coalescing operator
+- [[file:testing.org][Testing]] -- assert-eq for test assertions
+
 * Context Links
 
 - [[file:../context/language.org::codegen-diagnostics][context/language.org — Codegen Diagnostics]]
 - [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]]
 - [[file:errors.org][CLI Errors]] — error codes and diagnostics
+- [[file:maybe.org][Maybe (Option)]] — optional values
+- [[file:result.org][Result]] — error type with messages
 - [[file:../tests/codegen/rt_codegen_err_*.mon][tests/codegen/rt_codegen_err_*.mon]] — diagnostic fixtures

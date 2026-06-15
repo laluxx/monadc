@@ -1,5 +1,13 @@
 name: structured_v9_dispatch_direct_mod_subtract_remainder
 section: dispatch-matrix-v9
+tier: stable
+kind: law
+features: arithmetic, dispatch, equality, logic, mod
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, codegen.mod_dispatch, infer.arithmetic, infer.equality, infer.logic
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.core.minus, atom.core.modulo, atom.core.multiply, atom.core.plus, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_multiply_associative, signal_v13_atom_multiply_commutative, signal_v13_atom_multiply_identity_one, signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: True

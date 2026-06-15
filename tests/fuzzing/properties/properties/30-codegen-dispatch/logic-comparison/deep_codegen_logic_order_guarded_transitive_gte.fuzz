@@ -1,5 +1,13 @@
 name: deep_codegen_logic_order_guarded_transitive_gte
 section: codegen-logic-comparison
+tier: stable
+kind: law
+features: arithmetic, codegen, comparison, equality, if, logic, phi
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.comparison_dispatch, codegen.equality_dispatch, codegen.if_phi, codegen.logic_dispatch, infer.arithmetic, infer.comparison, infer.equality, infer.if_phi, infer.logic, reader.ast_if
+uses-atoms: atom.codegen.dispatch, atom.control.if, atom.core.equality, atom.core.order.gt, atom.core.order.gte, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_if_same_branch_eliminates
+signal: medium
+corpus-role: semantic-law
 args: a:Int b:Int c:Int
 type: Bool
 expect: True

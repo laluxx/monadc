@@ -1,0 +1,139 @@
+#+TITLE: Type Casting
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:casting:info:
+
+:PROPERTIES:
+:ID:       monadc.info.casting
+:CONTEXT:  monadc.context.codegen-ops, monadc.context.language, monadc.context.types
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:numeric.org][Numeric Types]] · [[file:types.org][Types]] · [[file:arithmetic.org][Arithmetic]] · [[file:core.org][Core Library]] · [[file:strings.org][Strings]] · [[file:characters.org][Characters]]
+
+Test coverage: type conversions are exercised comprehensively in
+=Main.mon= (lines 1103-1215) and by =rt_cast_*.mon= fixtures.
+
+Type names are callable as conversion functions. =(TargetType value)=
+converts =value= to the target type.
+
+* Numeric Conversions
+
+#+BEGIN_SRC monad
+(Int 3.14)                       ;; 3 — truncation
+(Float 42)                      ;; 42.0
+(Hex 255)                       ;; "FF"
+(Oct 64)                        ;; "100"
+(Bin 7)                        ;; "111"
+#+END_SRC
+
+#+BEGIN_SRC wisp
+Int 3.14
+Float 42
+Hex 255
+Oct 64
+Bin 7
+#+END_SRC
+
+Conversion between numeric types is explicit. No implicit coercions
+beyond the Int/Float mixed-operation promotion.
+
+* Fixed-Width Conversions
+
+#+BEGIN_SRC monad
+(I8 128)                         ;; -128 (wraps)
+(U8 255)                        ;; 255
+(I16 1000)                      ;; 1000
+(U16 65535)                     ;; 65535
+(I32 100000)                    ;; 100000
+(U32 4000000000)                ;; 4000000000
+(I64 -1)                        ;; -1
+(U64 18446744073709551615)      ;; max U64
+(I128 x)                        ;; 128-bit signed
+(U128 x)                        ;; 128-bit unsigned
+(F32 3.14159265358979)          ;; float (32-bit)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+I8 128
+U8 255
+I16 1000
+U16 65535
+I32 100000
+U32 4000000000
+I64 -1
+U64 18446744073709551615
+I128 x
+U128 x
+F32 3.14159265358979
+#+END_SRC
+
+Fixed-width types have the same size as their LLVM counterparts and
+wrap on overflow (two's complement).
+
+* Char Conversions
+
+#+BEGIN_SRC monad
+(Char 65)                        ;; 'A'
+(Char 0x3C0)                    ;; 'π'
+(Int 'A')                       ;; 65
+#+END_SRC
+
+#+BEGIN_SRC wisp
+Char 65
+Char 0x3C0
+Int 'A'
+#+END_SRC
+
+=Char= converts between codepoint integer and character.
+
+* String Conversions
+
+#+BEGIN_SRC monad
+(String 42)                      ;; "42"
+(String 3.14)                   ;; "3.14"
+(String 'A')                    ;; "A"
+#+END_SRC
+
+#+BEGIN_SRC wisp
+String 42
+String 3.14
+String 'A'
+#+END_SRC
+
+=String= produces the display representation of any value.
+
+* Conversion Table
+
+| Syntax          | Description                  |
+|-----------------+------------------------------|
+| =(Int x)=         | Convert to signed 63-bit int |
+| =(Float x)=       | Convert to 64-bit float      |
+| =(Char x)=        | Convert integer to character |
+| =(String x)=      | Convert to string            |
+| =(Hex x)=         | Format as hex string         |
+| =(Oct x)=         | Format as octal string       |
+| =(Bin x)=         | Format as binary string      |
+| =(I8/U8 x)=       | 8-bit conversion             |
+| =(I16/U16 x)=     | 16-bit conversion            |
+| =(I32/U32 x)=     | 32-bit conversion            |
+| =(I64/U64 x)=     | 64-bit conversion            |
+| =(I128/U128 x)= | 128-bit conversion           |
+| =(F32 x)=         | 32-bit float conversion      |
+
+* Related Pages
+
+- [[file:numeric.org][Numeric Types]] -- numeric type hierarchy and conversions
+- [[file:types.org][Types]] -- type system, ground types
+- [[file:core.org][Core Library]] -- built-in conversion functions
+- [[file:strings.org][Strings]] -- string to/from numeric conversion
+- [[file:characters.org][Characters]] -- Char conversion operations
+
+* Context Links
+
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — conversion dispatch
+- [[file:../context/language.org][context/language.org]] — casting semantics
+- [[file:../codegen.c][codegen.c]] — conversion codegen at ~13144
+- [[file:core.org][Core Library]] — built-in function overview
+- [[file:types.org][Types]] — ground type system
+- [[file:numeric.org][Numeric Types]] — Int, Float, fixed-width types

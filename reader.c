@@ -1366,7 +1366,8 @@ Token lexer_next_token(Lexer *lex) {
         return lexer_next_token(lex);
     }
 
-    // Character literal or quote
+///// Character literal or quote
+
     if (c == '\'') {
         size_t lp = lex->pos + 1;
         if (lp < strlen(lex->source)) {
@@ -5402,6 +5403,281 @@ static AST *parse_list(Parser *p) {
         node->column     = lay_col;
         node->end_column = end_col;
         return node;
+    }
+
+    /* Top-level method definition for type files (Int.mon, String.mon, etc.)
+     * Syntax (from wisp):
+     *   method [name : Self : -> :: RetType]
+     *     param -> body
+     * The current filename must be TypeName.mon — Self resolves to TypeName.
+     * Emits: (define TypeName.name (lambda (self ...) body))
+     * via g_pending_defines, same as layout where methods.              */
+    if (p->current.type == TOK_SYMBOL &&
+        strcmp(p->current.value, "method") == 0) {
+
+        int meth_line = p->current.line;
+        int meth_col  = p->current.column;
+        p->current = lexer_next_token(p->lexer); /* consume 'method' */
+
+        /* Derive type name from filename: /path/to/Int.mon -> "Int" */
+        char type_name_buf[256] = {0};
+        if (current_filename) {
+            /* Find last path separator */
+            const char *base = current_filename;
+            const char *sep  = strrchr(current_filename, '/');
+            if (!sep) sep = strrchr(current_filename, '\\');
+            if (sep) base = sep + 1;
+            /* Copy stem (everything before last '.') */
+            const char *dot = strrchr(base, '.');
+            size_t stem_len = dot ? (size_t)(dot - base) : strlen(base);
+            if (stem_len >= sizeof(type_name_buf))
+                stem_len = sizeof(type_name_buf) - 1;
+            memcpy(type_name_buf, base, stem_len);
+            type_name_buf[stem_len] = '\0';
+        }
+
+        /* Validate: type name must start with uppercase */
+        if (!type_name_buf[0] || type_name_buf[0] < 'A' || type_name_buf[0] > 'Z') {
+            compiler_error(meth_line, meth_col,
+                "top-level 'method' is only allowed in type files named Type.mon "
+                "(e.g. Int.mon, String.mon) — this file ('%s') does not name a type",
+                current_filename ? current_filename : "<unknown>");
+        }
+
+        const char *lay_name = type_name_buf;
+
+        /* Parse the signature bracket: [name : Self : -> :: RetType]
+         * or bare symbol name followed by :: tokens (Lisp mode).
+         * We extract: method name, param types, return type.           */
+        char mname[256]   = {0};
+        char sig_buf[512] = {0};
+
+        if (p->current.type == TOK_LBRACKET) {
+            /* Wisp mode: [double : Self : -> :: Int]
+             * First symbol inside is the method name.
+             * Rest (after first colon) is the type signature.
+             * We reassemble: strip the name, join remaining tokens
+             * replacing ':' with '->' for type reconstruction.         */
+            p->current = lexer_next_token(p->lexer); /* consume '[' */
+
+            /* First token = method name */
+            if (p->current.type != TOK_SYMBOL)
+                compiler_error(p->current.line, p->current.column,
+                               "Expected method name after 'method'");
+            strncpy(mname, p->current.value, sizeof(mname) - 1);
+            p->current = lexer_next_token(p->lexer); /* consume name */
+
+            /* Consume leading ':' separator (wisp puts one here) */
+            if (p->current.type == TOK_COLON)
+                p->current = lexer_next_token(p->lexer);
+
+            /* Now collect remaining tokens until ']' building type sig.
+             * Wisp produces:  Self : -> :: Int
+             * We want:        Self -> Int
+             * Rules:
+             *   bare ':'  before '->'  -> skip (it is the wisp separator)
+             *   '::'                   -> keep as-is
+             *   everything else        -> keep                           */
+            bool last_was_colon = false;
+            while (p->current.type != TOK_RBRACKET &&
+                   p->current.type != TOK_EOF) {
+
+                /* bare colon — wisp separator, skip but set flag */
+                if (p->current.type == TOK_COLON) {
+                    last_was_colon = true;
+                    p->current = lexer_next_token(p->lexer);
+                    continue;
+                }
+
+                const char *tv = NULL;
+                if (p->current.type == TOK_ARROW)       tv = "->";
+                else if (p->current.type == TOK_SYMBOL)  tv = p->current.value;
+
+                if (tv) {
+                    /* Replace Self with lay_name */
+                    const char *emit = (strcmp(tv, "Self") == 0) ? lay_name : tv;
+                    if (sig_buf[0]) strncat(sig_buf, " ",
+                        sizeof(sig_buf) - strlen(sig_buf) - 1);
+                    strncat(sig_buf, emit,
+                        sizeof(sig_buf) - strlen(sig_buf) - 1);
+                }
+                last_was_colon = false;
+                p->current = lexer_next_token(p->lexer);
+            }
+            if (p->current.type == TOK_RBRACKET)
+                p->current = lexer_next_token(p->lexer); /* consume ']' */
+
+        } else if (p->current.type == TOK_SYMBOL) {
+            /* Lisp mode: method name :: Self -> Int */
+            strncpy(mname, p->current.value, sizeof(mname) - 1);
+            p->current = lexer_next_token(p->lexer); /* consume name */
+
+            /* consume '::' */
+            if (p->current.type == TOK_SYMBOL &&
+                strcmp(p->current.value, "::") == 0)
+                p->current = lexer_next_token(p->lexer);
+
+            /* collect type sig until body (first lowercase param or arrow) */
+            while (p->current.type != TOK_EOF &&
+                   p->current.type != TOK_RPAREN) {
+                /* Stop at body: lowercase sym followed by '->' */
+                if (p->current.type == TOK_SYMBOL && p->current.value &&
+                    p->current.value[0] >= 'a' && p->current.value[0] <= 'z' &&
+                    strstr(sig_buf, "->")) {
+                    Lexer pk = *p->lexer;
+                    Token pt = lexer_next_token(&pk);
+                    bool next_arrow = (pt.type == TOK_ARROW) ||
+                                      (pt.type == TOK_SYMBOL && pt.value &&
+                                       pt.value[0] >= 'a' && pt.value[0] <= 'z');
+                    free(pt.value);
+                    if (next_arrow) break;
+                }
+                const char *tv = NULL;
+                if (p->current.type == TOK_ARROW)       tv = "->";
+                else if (p->current.type == TOK_SYMBOL)  tv = p->current.value;
+                if (tv) {
+                    const char *emit = (strcmp(tv, "Self") == 0) ? lay_name : tv;
+                    if (sig_buf[0]) strncat(sig_buf, " ",
+                        sizeof(sig_buf) - strlen(sig_buf) - 1);
+                    strncat(sig_buf, emit,
+                        sizeof(sig_buf) - strlen(sig_buf) - 1);
+                }
+                p->current = lexer_next_token(p->lexer);
+            }
+        } else {
+            compiler_error(p->current.line, p->current.column,
+                           "Expected method name after 'method'");
+        }
+
+        if (!mname[0])
+            compiler_error(meth_line, meth_col,
+                           "method declaration is missing a name");
+
+        /* Split sig_buf by '->' to get param types and return type.
+         * Same logic as layout where method parser.                    */
+        char *sig_copy = my_strdup(sig_buf);
+        char *parts[32];
+        int nparts = 0;
+        char *tok_ptr2 = sig_copy;
+        char *arrow_pos2;
+        while ((arrow_pos2 = strstr(tok_ptr2, "->")) != NULL && nparts < 31) {
+            *arrow_pos2 = '\0';
+            char *s = tok_ptr2;
+            while (*s == ' ') s++;
+            char *e = s + strlen(s);
+            while (e > s && *(e-1) == ' ') e--;
+            *e = '\0';
+            parts[nparts++] = s;
+            tok_ptr2 = arrow_pos2 + 2;
+        }
+        {
+            char *s = tok_ptr2;
+            while (*s == ' ') s++;
+            char *e2 = s + strlen(s);
+            while (e2 > s && *(e2-1) == ' ') e2--;
+            *e2 = '\0';
+            parts[nparts++] = s;
+        }
+
+        /* Count params from arrows: N arrows = N params, last part = ret */
+        int mparam_count = nparts > 1 ? nparts - 1 : 0;
+
+        /* Parse body clause: pname* -> expr
+         * Wisp produces param names as bare symbols then '->' then body. */
+        char *pnames[64];
+        int actual_params = 0;
+        while (p->current.type == TOK_SYMBOL &&
+               p->current.value &&
+               p->current.value[0] >= 'a' && p->current.value[0] <= 'z' &&
+               actual_params < 64) {
+            Lexer pk2 = *p->lexer;
+            Token pt2 = lexer_next_token(&pk2);
+            bool is_param = (pt2.type == TOK_ARROW) ||
+                            (pt2.type == TOK_SYMBOL && pt2.value &&
+                             pt2.value[0] >= 'a' && pt2.value[0] <= 'z');
+            free(pt2.value);
+            if (!is_param) break;
+            pnames[actual_params++] = my_strdup(p->current.value);
+            p->current = lexer_next_token(p->lexer);
+        }
+
+        if (p->current.type == TOK_ARROW)
+            p->current = lexer_next_token(p->lexer); /* consume '->' */
+
+        AST *body_expr = parse_expr(p);
+
+        /* Build params with types from sig parts */
+        ASTParam *mparams = malloc(sizeof(ASTParam) * (actual_params ? actual_params : 1));
+        for (int i = 0; i < actual_params; i++) {
+            mparams[i].name = my_strdup(pnames[i]);
+            if (i < nparts - 1 && parts[i][0]) {
+                /* Replace Self with lay_name in type string */
+                char pt_buf[256];
+                snprintf(pt_buf, sizeof(pt_buf), "%s", parts[i]);
+                char *self_pos2;
+                while ((self_pos2 = strstr(pt_buf, "Self")) != NULL) {
+                    char tmp2[256];
+                    size_t plen = self_pos2 - pt_buf;
+                    snprintf(tmp2, sizeof(tmp2), "%.*s%s%s",
+                             (int)plen, pt_buf, lay_name, self_pos2 + 4);
+                    strncpy(pt_buf, tmp2, sizeof(pt_buf) - 1);
+                }
+                mparams[i].type_name = my_strdup(pt_buf);
+            } else {
+                mparams[i].type_name = NULL;
+            }
+            mparams[i].is_rest = false;
+            mparams[i].is_anon = false;
+        }
+        for (int i = 0; i < actual_params; i++) free(pnames[i]);
+        free(sig_copy);
+
+        char *ret_type2 = (nparts > 0 && parts[nparts-1][0])
+                          ? my_strdup(parts[nparts-1]) : NULL;
+        if (ret_type2) {
+            char rt_buf2[256];
+            strncpy(rt_buf2, ret_type2, sizeof(rt_buf2) - 1);
+            char *self_pos3;
+            while ((self_pos3 = strstr(rt_buf2, "Self")) != NULL) {
+                char tmp3[256];
+                size_t plen3 = self_pos3 - rt_buf2;
+                snprintf(tmp3, sizeof(tmp3), "%.*s%s%s",
+                         (int)plen3, rt_buf2, lay_name, self_pos3 + 4);
+                strncpy(rt_buf2, tmp3, sizeof(rt_buf2) - 1);
+            }
+            free(ret_type2);
+            ret_type2 = my_strdup(rt_buf2);
+        }
+
+        /* Consume closing ')' — wisp wraps the whole thing in parens */
+        if (p->current.type == TOK_RPAREN)
+            p->current = lexer_next_token(p->lexer);
+
+        AST **body_exprs2 = malloc(sizeof(AST*));
+        body_exprs2[0] = body_expr;
+        AST *method_lam = ast_new_lambda(mparams, actual_params,
+                                         ret_type2, NULL, NULL, false,
+                                         body_expr, body_exprs2, 1);
+        method_lam->line   = meth_line;
+        method_lam->column = meth_col;
+        free(ret_type2);
+
+        /* Emit as (define TypeName.methodname lambda) */
+        char full_mname[512];
+        snprintf(full_mname, sizeof(full_mname), "%s.%s", lay_name, mname);
+
+        AST *def = ast_new_list();
+        ast_list_append(def, ast_new_symbol("define"));
+        AST *fname_ast2 = ast_new_symbol(full_mname);
+        fname_ast2->line   = meth_line;
+        fname_ast2->column = meth_col;
+        ast_list_append(def, fname_ast2);
+        ast_list_append(def, method_lam);
+        def->line   = meth_line;
+        def->column = meth_col;
+
+        ast_free(list);
+        return def;
     }
 
     /* (include <stdio.h>) or (include "myheader.h") */

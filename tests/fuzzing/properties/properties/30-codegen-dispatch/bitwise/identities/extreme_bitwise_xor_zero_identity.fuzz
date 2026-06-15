@@ -1,7 +1,0 @@
-name: extreme_bitwise_xor_zero_identity
-section: bitwise-identities
-args: a:Int
-type: Bool
-expect: True
-description: Bitwise codegen identities should preserve integer bit operations without Bool coercion.
-law: (= (bit-xor {a} 0) {a})

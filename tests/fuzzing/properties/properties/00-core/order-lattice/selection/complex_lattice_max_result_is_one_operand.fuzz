@@ -1,5 +1,13 @@
 name: complex_lattice_max_result_is_one_operand
 section: lattice-selection
+tier: stable
+kind: law
+features: arithmetic, equality, if, lattice, logic, phi
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.if_phi, infer.logic, reader.ast_if
+uses-atoms: atom.control.if, atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_if_same_branch_eliminates
+signal: medium
+corpus-role: semantic-law
 args: a:Int b:Int
 type: Bool
 expect: True

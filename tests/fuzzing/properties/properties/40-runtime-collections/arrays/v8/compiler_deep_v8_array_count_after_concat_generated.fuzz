@@ -1,7 +1,0 @@
-name: compiler_deep_v8_array_count_after_concat_generated
-section: runtime-arrays-v8
-args: a:Int b:Int c:Int
-type: Bool
-expect: True
-description: Array concatenation count should be independent of generated element values.
-law: (= (count (++ [{a} {b}] [{c}])) 3)

@@ -1,7 +1,0 @@
-name: structured_v9_array_array_index_constant_zero_generated
-section: collections-array-v9
-args: a:Int b:Int c:Int
-type: Bool
-expect: True
-description: Stress array literal, heap-array literal, array-as-function indexing, count, and contains dispatch.
-law: (= ([{a} {b} {c}] 0) {a})

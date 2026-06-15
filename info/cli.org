@@ -1,14 +1,25 @@
 #+TITLE: Command Line Interface
 #+STARTUP: showeverything
 #+OPTIONS: toc:nil
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:cli:info:
 
-[[file:index.org][<- Back to Index]] · [[file:build.org][Build System]]
+:PROPERTIES:
+:ID:       monadc.info.cli
+:CONTEXT:  monadc.context.cli, monadc.context.buildsystem, monadc.context.main
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:build.org][Build System]] · [[file:repl.org][REPL]] · [[file:testing.org][Testing]] · [[file:errors.org][Diagnostics]] · [[file:modules.org][Modules]] · [[file:package-dev.org][Package Development]]
+
+Test coverage: CLI options are tested by =make test= and =rt_cli_*.mon= fixtures.
 
 The CLI argument parser maps command-line arguments to a =CompilerFlags=
 struct and dispatches to the appropriate command handler. Implementation:
 [[file:../cli.h][cli.h]] (type definitions) and [[file:../cli.c][cli.c]] (~730 lines, all =cmd_*= functions).
 
 For full implementation context, see [[file:../context/cli.org][context/cli.org]].
+For the build info resolution and monad.json schema, see
+[[file:../context/buildsystem.org][context/buildsystem.org]].
 
 ** CommandMode Enum
 
@@ -110,7 +121,66 @@ Core module resolution order (for =import= statements):
 2. =$MONAD_CORE= environment variable, if set
 3. =/usr/local/lib/monad/core/= (system installation path)
 
-** Context Links
+** Usage Examples
+
+Basic compile (produces object file):
+
+#+BEGIN_SRC monad
+monad hello.mon
+#+END_SRC
+
+View help:
+
+#+BEGIN_SRC monad
+monad --help
+#+END_SRC
+
+Emit LLVM IR and assembly alongside the object file:
+
+#+BEGIN_SRC monad
+monad file.mon --emit-ir --emit-asm
+#+END_SRC
+
+Simplify by using Wisp syntax as the file extension; the compiler detects the
+syntax from the file extension (.mon vs .wisp):
+
+#+BEGIN_SRC wisp
+monad program.wisp --emit-asm
+#+END_SRC
+
+Launch the interactive REPL:
+
+#+BEGIN_SRC monad
+monad
+#+END_SRC
+
+Build a project from monad.json:
+
+#+BEGIN_SRC monad
+monad build
+#+END_SRC
+
+Scaffold a new project:
+
+#+BEGIN_SRC monad
+monad new my-project
+#+END_SRC
+
+Compile and run tests, then delete the binary:
+
+#+BEGIN_SRC monad
+monad test tests/test-suite.mon
+#+END_SRC
+
+* Related Pages
+
+- [[file:build.org][Build System]] -- build system commands
+- [[file:repl.org][REPL]] -- interactive REPL
+- [[file:testing.org][Testing]] -- test runner invocation
+- [[file:errors.org][Diagnostics]] -- diagnostic output
+- [[file:modules.org][Modules]] -- module compilation options
+
+* Context Links
 
 - [[file:../context/cli.org][context/cli.org]] — CLI implementation details
 - [[file:../cli.c][cli.c]] — source code

@@ -1,7 +1,16 @@
 name: structured_v9_negative_quote_different_symbol_equal_false
 section: negative-compiler-v9
+tier: experimental
+kind: law
+features: arithmetic, if, negative, phi, predicate, quote
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.if_phi, codegen.predicate_dispatch, codegen.quote, infer.arithmetic, infer.if_phi, infer.type_predicate, reader.ast_if, reader.quote
+uses-atoms: atom.control.if, atom.infer.predicate, atom.quote.quote
+related-properties: signal_v13_atom_if_same_branch_eliminates
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Bool
 expect: False
 description: Expected-false invariant to make sure the runner checks false laws and not only truthy success paths.
 law: (equal? (quote left) (quote right))
+demoted-from: stable-by-signal-v13

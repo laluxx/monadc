@@ -1,0 +1,15 @@
+name: structured_v10_strategy_edge_do_mod_list_cons_head_direct
+section: v10-strategy-edge_do_mod
+tier: stable
+kind: law
+features: list, cons, head, strategy
+compiler-path: codegen.runtime_call, runner.strategy_arg, runner.typed_generator, runtime.list
+uses-atoms: atom.core.equality
+related-properties: signal_v13_atom_equality_reflexive
+signal: medium
+corpus-role: semantic-law
+args: a:Int@edge+do+mod b:Int@tiny+mod p:Bool@logic+if
+type: Bool
+expect: True
+description: V10 strategy property list_cons_head_direct generated with edge_do_mod arguments to stress compiler dispatch, envs, and PHI lowering.
+law: (= (head (cons {a} (cons {b} (list)))) {a})

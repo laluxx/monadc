@@ -1,7 +1,15 @@
 name: mega_quote_keyword_is_keyword
 section: codegen-quote-runtime
+tier: experimental
+kind: law
+features: arithmetic, codegen, logic, path, predicate, quote
+compiler-path: codegen.arithmetic_dispatch, codegen.logic_dispatch, codegen.path_literal, codegen.predicate_dispatch, codegen.quote, infer.arithmetic, infer.logic, infer.path, infer.type_predicate, reader.path_literal, reader.quote
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or, atom.quote.quote, atom.runtime.path
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Bool
 expect: True
 description: quote must preserve keyword literal as keyword value.
 law: (Keyword? (quote :compiler))
+demoted-from: stable-by-signal-v13

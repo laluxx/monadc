@@ -1,5 +1,13 @@
 name: deep_codegen_type_null_coalesce_nil_returns_default_bool
 section: codegen-predicates-casts-null
+tier: stable
+kind: law
+features: arithmetic, codegen, equality, null, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.null_coalesce, codegen.predicate_dispatch, infer.arithmetic, infer.equality, infer.nil, infer.type_predicate
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.infer.predicate, atom.null.nil
+related-properties: signal_v13_atom_equality_reflexive
+signal: medium
+corpus-role: semantic-law
 args: p:Bool
 type: Bool
 expect: True

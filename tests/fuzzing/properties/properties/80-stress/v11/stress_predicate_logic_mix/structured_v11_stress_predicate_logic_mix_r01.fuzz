@@ -1,0 +1,15 @@
+name: structured_v11_stress_predicate_logic_mix_r01
+section: v11-stress
+tier: stress
+kind: program
+features: stress, program, predicate, logic, if
+compiler-path: codegen.deep_program, codegen.if_phi, codegen.logic_dispatch, codegen.module_body, codegen.predicate_dispatch, infer.if_phi, infer.logic, infer.type_predicate, reader.ast_if, runner.program_kind, runner.stress_tier
+uses-atoms: atom.control.if, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_v13_atom_if_same_branch_eliminates
+signal: high
+corpus-role: program-semantics
+args: a:Int@edge p:Bool@logic
+type: Bool
+expect: True
+description: V11 stress program stress_predicate_logic_mix round 1; combines multiple compiler paths in non-default stress tier.
+program: (show (if (and (int? {a}) {p}) (or True False) (not False)))

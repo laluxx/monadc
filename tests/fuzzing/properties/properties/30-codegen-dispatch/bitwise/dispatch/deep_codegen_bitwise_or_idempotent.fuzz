@@ -1,7 +1,0 @@
-name: deep_codegen_bitwise_or_idempotent
-section: codegen-bitwise-dispatch
-args: a:Int
-type: Bool
-expect: True
-description: bit-or idempotence checks generated Int coercion.
-law: (= (bit-or {a} {a}) {a})

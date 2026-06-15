@@ -1,5 +1,12 @@
 name: mega_negative_bool_is_number
 section: codegen-negative-runtime
+tier: stable
+kind: law
+features: arithmetic, codegen, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.type_predicate
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate
+signal: medium
+corpus-role: semantic-law
 args: p:Bool
 type: Bool
 expect: False

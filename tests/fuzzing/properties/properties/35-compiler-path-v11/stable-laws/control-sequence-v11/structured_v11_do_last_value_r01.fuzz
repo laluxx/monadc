@@ -1,0 +1,15 @@
+name: structured_v11_do_last_value_r01
+section: control-sequence-v11
+tier: stable
+kind: law
+features: do, sequence, arithmetic, strategy
+compiler-path: codegen.arithmetic_dispatch, codegen.sequence, infer.arithmetic, reader.ast_do, runner.strategy_arg, runner.typed_generator
+uses-atoms: atom.control.do, atom.core.equality, atom.core.plus
+related-properties: signal_v13_atom_do_last_value, signal_v13_atom_equality_reflexive, signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero
+signal: medium
+corpus-role: semantic-law
+args: a:Int@edge+do b:Int@edge+do
+type: Bool
+expect: True
+description: V11 stable compiler-path law do_last_value variant 1; uses strategy args and explicit compiler-path metadata for feature coverage.
+law: (= (do {a} (+ {a} {b})) (+ {a} {b}))

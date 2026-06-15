@@ -1,0 +1,15 @@
+name: structured_v10_program_for_set_contains_variant_01
+section: v10-program-kind
+tier: stable
+kind: program
+features: program, for, set!, set, contains
+compiler-path: codegen.for_loop, codegen.module_body, codegen.runtime_call, codegen.set_bang, infer.loop, infer.mutation, runner.program_kind, runtime.set
+uses-atoms: atom.binding.set-bang, atom.binding.with, atom.control.begin, atom.infer.predicate, atom.runtime.array
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_with_substitution
+signal: high
+corpus-role: program-semantics
+args: a:Int@tiny
+type: Bool
+expect: True
+description: V10 program-kind property variant 1 for program_for_set_contains, checking full program source handling rather than show-wrapped law handling.
+program: (show (with [s (set)] (begin (for 2 (set! s (conj s {a}))) (contains? s {a}))))

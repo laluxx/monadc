@@ -1,149 +1,94 @@
 #+TITLE: Control Flow
 #+STARTUP: showeverything
 #+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:control:info:
 
-[[file:index.org][<- Back to Index]] · [[file:syntax.org][Syntax]] · [[file:core.org][Core Lib]]
+:PROPERTIES:
+:ID:       monadc.info.control
+:CONTEXT:  monadc.context.language, monadc.context.codegen
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:conditionals.org][Conditionals]] · [[file:iteration.org][Iteration]] · [[file:mutation.org][Mutation]] · [[file:sequencing.org][Sequencing]] · [[file:let.org][Let Bindings]] · [[file:booleans.org][Booleans]]
 
 All control forms are expressions — they return values. Codegen dispatch for
-control forms begins at [[file:../codegen.c::7471]].
+control forms begins at [[file:../codegen.c::7471][codegen.c:7471]].
+
+Test coverage: control flow is exercised by =rt_control_all.mon=,
+=rt_control_comp.mon=, and 35+ diagnostic error fixtures.
+
+This page provides an overview of Monad's control flow forms. Each
+group has a dedicated reference page.
+
+* Dedicated Pages
+
+| Page                          | Covers                                   |
+|-------------------------------+------------------------------------------|
+| [[file:conditionals.org][Conditionals]]         | if, cond, when, unless, ??               |
+| [[file:iteration.org][Iteration]]             | for, while, loop forms                   |
+| [[file:mutation.org][Mutation]]               | set!, <-, mutable bindings               |
+| [[file:sequencing.org][Sequencing]]             | begin, do, with                          |
+| [[file:let.org][Let Bindings]]         | let, let*, letrec                        |
 
 * Working Control Forms
 
 These forms have strcmp dispatch handlers and are callable from paren-mode:
 
-| Form     | Example                                    | Codegen source           |
-|----------+--------------------------------------------+--------------------------|
-| if       | =(if cond t f)=                              | [[file:../codegen.c::7572]] |
-| unless   | =(unless cond body ...)=                     | [[file:../codegen.c::7919]] |
-| while    | =(while cond body ...)=                      | [[file:../codegen.c::7957]] |
-| for      | =(for [i 0 10] (show i))=                    | [[file:../codegen.c::8004]] |
-| begin    | =(begin e1 e2 ...)=                          | [[file:../codegen.c::7561]] |
-| do       | =(do expr ...)=                              | alias for =begin=, [[file:../codegen.c::7830]] |
-| when     | =(when test body ...)=                        | [[file:../codegen.c::7879]] |
-| with     | =(with [x 1 y 2] body)=                       | [[file:../codegen.c::7841]] |
+| Form   | Example                 | Codegen source                           |
+|--------+-------------------------+------------------------------------------|
+| if     | =(if cond t f)=           | [[file:../codegen.c::7572]]                  |
+| unless | =(unless cond body ...)=  | [[file:../codegen.c::7919]]                  |
+| while  | =(while cond body ...)=   | [[file:../codegen.c::7957]]                  |
+| for    | =(for [i 0 10] (show i))= | [[file:../codegen.c::8004]]                  |
+| begin  | =(begin e1 e2 ...)=       | [[file:../codegen.c::7561]]                  |
+| do     | =(do expr ...)=           | alias for =begin=, [[file:../codegen.c::7830]] |
+| when   | =(when test body ...)=    | [[file:../codegen.c::7879]]                  |
+| with   | =(with [x 1 y 2] body)=   | [[file:../codegen.c::7841]]                  |
 
-** =if= (condition, then, else)
+* Known Codegen Gaps
 
-Compiles to an LLVM =icmp= condition, two basic blocks (then/else), and a PHI
-node merging the results. When both branches produce the same pointer-like type
-(e.g. both =String=), the PHI node preserves the exact type so downstream
-operations like =show= dispatch correctly:
+The following forms have no strcmp dispatch handler:
 
-#+BEGIN_SRC monad
-(if True "yes" "no")            ;; "yes" — String PHI preserved
-(if (> x 10) "big" "small")    ;; String branch type preserved
-#+END_SRC
+| Form   | Example                         | Status                                    |
+|--------+---------------------------------+-------------------------------------------|
+| cond   | =(cond [t1 e1] [t2 e2] [else e])= | No strcmp dispatch — not yet implemented. |
+| let    | =(let [x 1 y 2] (+ x y))=         | No strcmp dispatch — not yet implemented. |
+| let*   | =(let* [x 1 y (+ x 1)] (+ x y))=  | No strcmp dispatch — not yet implemented. |
+| letrec | =(letrec [f (lambda ...)] (f 0))= | No strcmp dispatch — not yet implemented. |
 
-The pointer-like type preservation is verified by goldens in
-=tests/codegen/rt_control_all.mon= and =rt_control_comp.mon=
-([[file:../context/language.org::codegen-diagnostics][context/language.org]]).
-
-** =unless= (negated condition, body)
-
-Statement-like form that executes the body when the condition is false.
-
-#+BEGIN_SRC monad
-(unless False (show "executed"))   ;; prints "executed"
-#+END_SRC
-
-=unless= is best used as a statement form. Returning a value from =unless= is
-not well-defined (its return convention is still evolving).
-
-** =while= (condition, body...)
-
-C-style conditional loop. Emits a loop header basic block (condition), a loop
-body block, and an exit block. Returns =nil=.
-
-#+BEGIN_SRC monad
-(define [i :: Int] 0)
-(while (< i 3)
-  (show i)
-  (set! i (+ i 1)))              ;; prints 0, 1, 2
-#+END_SRC
-
-** =for= (comprehension) ([[file:../codegen.c::8004]])
-
-Iterates over a collection. Three forms:
-
-#+BEGIN_SRC monad
-;; Numeric range iteration
-(for [i 0 10]
-  (show "iter n _" i))             ;; prints 0..9
-
-;; Numeric range with step
-(for [i 0 10 2]
-  (show "iter n _" i))             ;; prints 0, 2, 4, 6, 8
-
-;; Repeat n times (no binding)
-(for [10]
-  (show "looping 10 times!"))      ;; prints 10 times
-
-;; Over collections (arrays, lists, sets, strings)
-(for [x [1 2 3]]
-  (show x))                        ;; iterates array elements
-#+END_SRC
-
-The =for= form compiles to =while=-loop IR with an iterator variable, bounds
-check, and element extraction via the collection-as-function indexing path.
-The =:collect= keyword in body position gathers results into an output
-collection (currently aspirational — see reader.c for parsing support).
-
-** Comprehensions over different collection types
-
-- **Arrays**: iterates via =(count arr)= and =(arr i)= indexing. Supports all
-  three array forms (stack, fat, heap). Wisp =for i -> heap= exercises the
-  runtime-sized array path (verified by =rt_heap_array_for.mon=).
-- **Lists**: iterates via =car=/=cdr= walking.
-- **Sets**: iterates via hash-set traversal.
-- **Strings**: iterates character-by-character via =("str" i)= indexing.
-
-* Known Codegen Gaps — Not Yet Implemented
-
-The following forms have no strcmp dispatch handler in codegen. They are
-registered only in =register_builtins=
-([[file:../context/language.org::codegen-gaps][context/language.org]]):
-
-| Form   | Example                                       | Status                           |
-|--------+-----------------------------------------------+----------------------------------|
-| cond   | =(cond [t1 e1] [t2 e2] [else e])=             | No strcmp dispatch — not yet implemented. |
-| let    | =(let [x 1 y 2] (+ x y))=                     | No strcmp dispatch — not yet implemented. |
-| let*   | =(let* [x 1 y (+ x 1)] (+ x y))=             | No strcmp dispatch — not yet implemented. |
-| letrec | =(letrec [f (lambda ...)] (f 0))=             | No strcmp dispatch — not yet implemented. |
-
-These are =register_builtins=-only symbols ([[file:../codegen.c::12960]]):
-they exist in the environment but lack a strcmp handler in =codegen_expr=,
-so =(cond ...)= is treated as an ordinary variable reference.
-
-* Mutation
-
-| Form | Example                    | Codegen source          |
-|------+----------------------------+-------------------------|
-| set! | =(set! x 42)=              | [[file:../codegen.c::7471]] |
-| <-   | =(<- x 42)=                | desugars to =set!=       |
-| set! | =(set! obj.field val)=    | [[file:../codegen.c::7471]] |
-| <-   | =(<- obj.field val)=      | desugars to =set!=       |
-
-The =<-= sugar (=x <- 42=) desugars to =(set! x 42)= at the reader level.
-Valid in both S-expression and Wisp syntax. The compiler tracks which bindings
-are mutated to avoid unnecessary boxing.
+These are =register_builtins=-only symbols ([[file:../codegen.c::12960]]).
 
 * Null-Coalescing
 
 =(?? expr default)= ([[file:../codegen.c::5763]]) returns =expr= if not =nil=,
-=default= otherwise. Implementation evaluates =lhs=, checks nil via
-=rt_value_is_nil=, branches to =rhs= or returns =lhs= unwrapped. Scalar types
-(Int, Float, Bool, Char) are never nil and skip the nil check.
+=default= otherwise. Scalar types skip the nil check.
 
 #+BEGIN_SRC monad
 (?? (lookup key dict) "default")
 (?? (safe-div a b) 0)
 #+END_SRC
 
+#+BEGIN_SRC wisp
+?? (lookup key dict) "default"
+?? (safe-div a b) 0
+#+END_SRC
+
+* Related Pages
+
+- [[file:conditionals.org][Conditionals]] -- if, cond, when, unless
+- [[file:iteration.org][Iteration]] -- for, while, loop forms
+- [[file:mutation.org][Mutation]] -- set!, <-, mutable bindings
+- [[file:sequencing.org][Sequencing]] -- begin, do, with
+- [[file:let.org][Let Bindings]] -- let bindings
+
 * Context Links
 
 - [[file:../context/language.org::control-flow-constructs][context/language.org — Control Flow Constructs]]
 - [[file:../context/language.org::codegen-gaps][context/language.org — Known Codegen Gaps]]
 - [[file:../context/codegen.org][context/codegen.org]] — Codegen context and dispatch
-- [[file:../context/language.org::iteration-constructs][context/language.org — Iteration Constructs]]
 - [[file:../codegen.c::7572][codegen.c]] — =if= codegen
 - [[file:../codegen.c::8004][codegen.c]] — =for= codegen
+- [[file:conditionals.org][Conditionals]] — if, cond, when, unless
+- [[file:iteration.org][Iteration]] — for, while
+- [[file:mutation.org][Mutation]] — set!, <-
+- [[file:sequencing.org][Sequencing]] — begin, do

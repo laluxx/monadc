@@ -1,0 +1,15 @@
+name: structured_v10_strategy_array_indexed_do_erases_setup_int
+section: v10-strategy-array_indexed
+tier: stable
+kind: law
+features: do, sequence, arithmetic, strategy
+compiler-path: codegen.arithmetic_dispatch, codegen.sequence, infer.arithmetic, reader.ast_do, runner.strategy_arg, runner.typed_generator
+uses-atoms: atom.control.do, atom.core.equality, atom.core.plus
+related-properties: signal_v13_atom_do_last_value, signal_v13_atom_equality_reflexive, signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero
+signal: medium
+corpus-role: semantic-law
+args: a:Int@array+edge b:Int@tiny+array p:Bool@logic+if
+type: Bool
+expect: True
+description: V10 strategy property do_erases_setup_int generated with array_indexed arguments to stress compiler dispatch, envs, and PHI lowering.
+law: (= (do {p} (+ {a} {b})) (+ {a} {b}))

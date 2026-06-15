@@ -1,0 +1,13 @@
+
+method double :: Self -> Int
+  s -> 2s
+
+method another :: a -> a
+  (bleh)
+
+method another :: a -> a
+  (bleh)
+
+method another :: a -> a
+  (bleh)
+

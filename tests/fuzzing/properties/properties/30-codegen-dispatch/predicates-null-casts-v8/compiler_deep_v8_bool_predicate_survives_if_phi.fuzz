@@ -1,5 +1,13 @@
 name: compiler_deep_v8_bool_predicate_survives_if_phi
 section: predicates-null-casts-v8
+tier: stable
+kind: law
+features: arithmetic, if, phi, predicate, predicates
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.if_phi, codegen.predicate_dispatch, infer.arithmetic, infer.if_phi, infer.type_predicate, reader.ast_if
+uses-atoms: atom.control.if, atom.infer.predicate, atom.null.nil
+related-properties: signal_v13_atom_if_same_branch_eliminates
+signal: medium
+corpus-role: semantic-law
 args: p:Bool q:Bool r:Bool
 type: Bool
 expect: True

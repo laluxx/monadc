@@ -1,7 +1,0 @@
-name: predicate_nil_on_scalar_false
-section: predicates-conversions
-args: a:Int
-type: Bool
-expect: False
-description: nil? must reject scalar Int values at compile time.
-law: (nil? {a})

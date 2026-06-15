@@ -1,7 +1,0 @@
-name: deep_codegen_control_begin_returns_last_int
-section: codegen-control-flow
-args: a:Int b:Int
-type: Bool
-expect: True
-description: begin must evaluate forms and return the final Int value.
-law: (= (begin {a} {b}) {b})

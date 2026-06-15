@@ -1,18 +1,35 @@
 #+TITLE: Module System
 #+STARTUP: showeverything
 #+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:modules:info:
 
-[[file:index.org][<- Back to Index]] · [[file:syntax.org][Syntax]] · [[file:core.org][Core Library]]
+:PROPERTIES:
+:ID:       monadc.info.modules
+:CONTEXT:  monadc.context.module, monadc.context.module-export, monadc.context.buildsystem
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:stdlib.org][Standard Library]] · [[file:core.org][Core Library]] · [[file:build.org][Build System]] · [[file:cli.org][CLI Reference]] · [[file:package-dev.org][Package Development]] · [[file:syntax.org][Syntax]]
 
 Monad has a module system with named exports, selective and qualified imports,
 and export manifest (.mexp) files that bridge compilation units
-([[file:../context/module.org]]).
+([[file:../context/module.org][context/module.org]]).
+
+Implementation: [[file:../module.c][module.c]] (import/decl parser), [[file:../module.h][module.h]]
+(module API), [[file:../module_export.h][module_export.h]] (manifest API).
+Test coverage: module resolution and imports are exercised by =rt_module_*.mon=
+fixtures in [[file:../tests/codegen/][tests/codegen/]].
 
 * Module Declaration ([[file:../module.c::414]])
 
 #+BEGIN_SRC monad
 (module Name [exports...])
 (module Math [pi e tau square sqrt])
+#+END_SRC
+
+#+BEGIN_SRC wisp
+module Name [exports...]
+module Math [pi e tau square sqrt]
 #+END_SRC
 
 - File ~Name.mon~ must exist (guessed from path if missing, default: ~Main~).
@@ -149,6 +166,14 @@ API functions ([[file:../module_export.h::68]]):
 - No compiler-version stamp in the .mexp file; a mangling-scheme change across
   compiler versions would produce stale external declarations
   ([[file:../context/module-export.org::think.module-export.cache-invalidation-missing]]).
+
+* Related Pages
+
+- [[file:stdlib.org][Standard Library]] -- standard library modules
+- [[file:build.org][Build System]] -- compilation and module resolution
+- [[file:package-dev.org][Package Development]] -- module structure, distribution
+- [[file:cli.org][CLI Reference]] -- module-related command-line options
+- [[file:syntax.org][Syntax]] -- import and module declarations
 
 * Context Links
 

@@ -1,5 +1,13 @@
 name: deep_codegen_matrix_compare_strict_lt
 section: codegen-comparison-dispatch
+tier: stable
+kind: law
+features: arithmetic, codegen, comparison
+compiler-path: codegen.arithmetic_dispatch, codegen.comparison_dispatch, infer.arithmetic, infer.comparison
+uses-atoms: atom.codegen.dispatch, atom.core.order.lt, atom.core.plus
+related-properties: signal_v13_atom_lt_transitive, signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: True

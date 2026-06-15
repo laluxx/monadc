@@ -1,5 +1,13 @@
 name: control_begin_returns_last_bool
 section: control-binding
+tier: stable
+kind: law
+features: arithmetic, begin, control, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.sequence, infer.arithmetic, infer.equality, reader.ast_begin
+uses-atoms: atom.control.begin, atom.core.equality
+related-properties: signal_v13_atom_equality_reflexive
+signal: medium
+corpus-role: semantic-law
 args: a:Int p:Bool
 type: Bool
 expect: True

@@ -1,0 +1,150 @@
+#+TITLE: Sets
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:set:info:
+
+:PROPERTIES:
+:ID:       monadc.info.set
+:CONTEXT:  monadc.context.language, monadc.context.codegen-ops, monadc.context.types
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:collections.org][Collections]] · [[file:list.org][Lists]] · [[file:map.org][Maps]] · [[file:arrays.org][Arrays]] · [[file:range.org][Ranges]] · [[file:heap.org][Heap Allocation]] · [[file:core.org][Core Library]]
+
+Test coverage: =rt_set_*.mon=, =rt_conj_*.mon= fixtures in
+[[file:../tests/codegen/][tests/codegen/]].
+
+Sets are hash sets stored as open-addressing hash tables at runtime.
+O(1) average insert/lookup/delete. Elements are boxed.
+
+* Literal Syntax
+
+#+BEGIN_SRC monad
+{1 2 3}                 ;; set of Ints
+{"a" "b"}               ;; set of Strings
+{}                      ;; empty set
+(set 1 2 3)             ;; set function call
+#+END_SRC
+
+#+BEGIN_SRC wisp
+{1 2 3}
+{"a" "b"}
+{}
+set 1 2 3
+#+END_SRC
+
+The ={}= syntax is shared with refinement types — the parser peeks
+ahead for =∈= after the first symbol: refinement if found, set literal
+otherwise ([[file:../reader.c::5998]]).
+
+** Known gap: untyped set construction
+
+Literal sets like ={1 2 3}= require an explicit =:: Set= annotation
+to avoid garbage at runtime. Without it, elements are unboxed and
+corrupt the hash table
+([[file:../context/language.org::codegen-gaps][context/language.org]]).
+
+* Core Operations
+
+| Function    | Example             | Result    |
+|-------------+---------------------+-----------|
+| conj        | =(conj {1 2} 3)=      | {1 2 3}   |
+| disj        | =(disj {1 2 3} 2)=    | {1 3}     |
+| conj!       | =(conj! s 3)=         | mutates s |
+| disj!       | =(disj! s 2)=         | mutates s |
+| contains?   | =(contains? {1 2} 1)= | True      |
+| count       | =(count {1 2 3})=     | 3         |
+| Set?        | =(Set? {1 2})=        | True      |
+| collection? | =(collection? {1 2})= | True      |
+
+* conj / disj
+
+#+BEGIN_SRC monad
+(conj {1 2} 3)               ;; {1 2 3}
+(disj {1 2 3} 2)             ;; {1 3}
+#+END_SRC
+
+#+BEGIN_SRC wisp
+conj {1 2} 3
+disj {1 2 3} 2
+#+END_SRC
+
+=conj= and =disj= copy the set before modifying (pure).
+=conj!= and =disj!= mutate in place. Both share the scheme
+=∀a. Set → a → Set=.
+
+* contains?
+
+#+BEGIN_SRC monad
+(contains? {1 2 3} 2)        ;; True
+(contains? {1 2 3} 99)       ;; False
+#+END_SRC
+
+#+BEGIN_SRC wisp
+contains? {1 2 3} 2
+contains? {1 2 3} 99
+#+END_SRC
+
+* Set-as-Function
+
+A set variable can be used as a function:
+
+#+BEGIN_SRC monad
+(define s {1 2 3})
+(s 2)                       ;; 2 — element found
+(s 99)                      ;; nil — not found
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define s {1 2 3}
+s 2
+s 99
+#+END_SRC
+
+Inference skips =TYPE_ARROW= unification when the function position
+has =TYPE_SET= ([[file:../codegen.c::9880]]).
+
+* Mutable vs Immutable
+
+| Operation | Semantics       | Use Case                 |
+|-----------+-----------------+--------------------------|
+| conj      | Copy + insert   | Pure, no aliasing        |
+| disj      | Copy + remove   | Pure, no aliasing        |
+| conj!     | In-place insert | Performance, owned refs  |
+| disj!     | In-place remove | Performance, owned refs  |
+
+The choice is purely about aliasing, not enforced by the compiler.
+
+* Iteration
+
+Sets can be iterated with =for=:
+
+#+BEGIN_SRC monad
+(for [x {1 2 3}]
+  (show x))                  ;; prints 1, 2, 3
+#+END_SRC
+
+#+BEGIN_SRC wisp
+for [x {1 2 3}]
+  show x
+#+END_SRC
+
+Iteration order is not guaranteed (hash table traversal).
+
+* Related Pages
+
+- [[file:collections.org][Collections]] -- overview of all collection types
+- [[file:list.org][Lists]] -- linked cons cells
+- [[file:map.org][Maps]] -- hash maps
+- [[file:arrays.org][Arrays]] -- array type
+- [[file:heap.org][Heap Allocation]] -- heap allocation
+
+* Context Links
+
+- [[file:../context/language.org][context/language.org]] — set dispatch, hash table representation
+- [[file:../context/language.org::codegen-gaps][context/language.org — Known gaps]]
+- [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]]
+- [[file:list.org][Lists]] — linked list collection
+- [[file:map.org][Maps]] — hash map collection
+- [[file:collections.org][Collections]] — overview of all collection types
+- [[file:core.org][Core Library]] — builtin collection operations

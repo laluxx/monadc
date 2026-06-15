@@ -1,5 +1,12 @@
 name: structured_v9_negative_empty_list_not_contains_generated_false
 section: negative-compiler-v9
+tier: stable
+kind: law
+features: arithmetic, list, negative, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, infer.arithmetic, infer.type_predicate, runtime.list
+uses-atoms: atom.infer.predicate
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: False

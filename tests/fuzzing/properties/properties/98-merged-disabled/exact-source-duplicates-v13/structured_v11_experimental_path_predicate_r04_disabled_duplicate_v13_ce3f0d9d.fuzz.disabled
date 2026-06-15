@@ -1,0 +1,16 @@
+name: structured_v11_experimental_path_predicate_r04_disabled_duplicate_v13_ce3f0d9d
+section: v11-experimental
+tier: experimental
+kind: law
+features: experimental, path, predicate
+compiler-path: codegen.path_literal, codegen.predicate_dispatch, infer.path, infer.type_predicate, reader.path_literal
+uses-atoms: atom.infer.predicate, atom.runtime.path
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: p:Path
+type: Bool
+expect: True
+description: V11 experimental rich-feature property experimental_path_predicate round 4; non-default tier for parser/runtime features that may still be maturing.
+law: (path? {p})
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: structured_v11_experimental_path_predicate_r01

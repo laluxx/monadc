@@ -120,66 +120,29 @@ See `context/philosophy.org` for the full witnessed philosophy, and `context/opi
 The compiler runs 11 sequential phases (plus a Phase 0 FFI pre-pass), orchestrated by `main.c:compile_one()`. Detailed OBS records for each phase are in `context/language.org::* Compilation Pipeline`.
 
 ```
-source.mon
-    │
-    ▼
-┌──────────────────────────────────────────────────────────────┐
-│ Phase 0: FFI Pre-pass                                        │
-│   Scan includes, parse C headers (libclang), register        │
-│   function arities with wisp expander                        │
-├──────────────────────────────────────────────────────────────┤
-│ Phase 1: Wisp Expansion + Parsing                            │
-│   wisp_parse_all(source) → desugared AST list                │
-│   Also: optional JSON or Typst emission at this point        │
-├──────────────────────────────────────────────────────────────┤
-│ Phase 2: Module/Import Declarations                          │
-│   Extract (module ...) and (import ...) forms                │
-│   Recursively compile dependencies via compile_one()         │
-├──────────────────────────────────────────────────────────────┤
-│ Phase 3: LLVM Setup + Builtins                               │
-│   LLVMInitializeNativeTarget/AsmPrinter/AsmParser            │
-│   register_builtins(&ctx) — 94 codegen builtins              │
-│   dep_register_builtins(dep_ctx) — dependent type builtins   │
-│   declare_runtime_functions(&ctx) — GC, list, set, map       │
-├──────────────────────────────────────────────────────────────┤
-│ Phase 4: External Declarations                               │
-│   For each import, declare externals from CompiledModule     │
-├──────────────────────────────────────────────────────────────┤
-│ Phase 5: Init/Main Function                                  │
-│   Create LLVM function (main for top, __init_<mod> for libs) │
-│   Position builder at entry block                            │
-├──────────────────────────────────────────────────────────────┤
-│ Phase 6: *features* Global                                   │
-│   Build feature keyword list at compile time                 │
-│   detect_features() → feature-conditional compilation        │
-├──────────────────────────────────────────────────────────────┤
-│ Phase 6.5: Dependent Type Checking (Shadow Pass)             │
-│   dep_toplevel() — bidir type checking with NbE              │
-│   Fatal on error; does not produce code                      │
-├──────────────────────────────────────────────────────────────┤
-│ Phase 7: Codegen                                             │
-│   For each expression: codegen_expr(&ctx, expr)              │
-│   AST_LIST dispatch (83+ strcmp symbols) → LLVM IR           │
-│   register_builtins entries (94 total)                       │
-├──────────────────────────────────────────────────────────────┤
-│ Phase 8: Function Termination                                │
-│   main → return 0 (or last expression value)                 │
-│   library → ret void                                         │
-├──────────────────────────────────────────────────────────────┤
-│ Phase 9: Registry + Name Mangling                            │
-│   Build CompiledModule with exports, layouts                 │
-│   mangle(mod_name, name) — LLVM symbol renaming              │
-├──────────────────────────────────────────────────────────────┤
-│ Phase 10: Verify + Optional Emit                             │
-│   LLVMVerifyModule, then optionally emit:                    │
-│   .ll (IR), .s (asm), .bc (bitcode), .o (object)            │
-├──────────────────────────────────────────────────────────────┤
-│ Phase 11: Object File Emit                                   │
-│   emit_object() → .o (skipped if up-to-date)                │
-└──────────────────────────────────────────────────────────────┘
-    │
-    ▼
-  executable (main)  or  .o library
+source.mon  ──►  Phase 0: FFI Pre-pass          ──►  Phase 1: Wisp Expansion + Parsing
+                       (libclang C header parse)             (wisp_parse_all → desugared AST)
+                                                             (optional JSON/Typst emit)
+
+Phase 1  ──►  Phase 2: Module/Import Decls  ──►  Phase 3: LLVM Setup + Builtins
+                   (extract module/import forms)          (LLVM init, 94 codegen + dep builtins,
+                   (recursive compile dependencies)        declare_runtime_functions)
+
+Phase 3  ──►  Phase 4: External Declarations  ──►  Phase 5: Init/Main Function
+                   (declare import externals)                 (create LLVM fn, position builder)
+
+Phase 5  ──►  Phase 6: *features* Global  ──►  Phase 6.5: Dependent Type Checking
+                   (feature-conditional compilation)        (dep_toplevel, bidir + NbE, fatal)
+
+Phase 6.5  ──►  Phase 7: Codegen  ──►  Phase 8: Function Termination
+                   (codegen_expr per AST node,                  (main → return 0, lib → ret void)
+                    83+ strcmp dispatch, 94 builtins)
+
+Phase 8  ──►  Phase 9: Registry + Name Mangling  ──►  Phase 10: Verify + Optional Emit
+                   (CompiledModule, mangle)                     (LLVMVerifyModule → .ll/.s/.bc/.o)
+
+Phase 10  ──►  Phase 11: Object File Emit  ──►  executable (main)  or  .o library
+                   (emit_object, skip if up-to-date)
 ```
 
 Phases are timed with `PHASE_START()`/`PHASE_END()` macros and logged to stderr. See `main.c:525-1290` for the full pipeline implementation.
@@ -869,7 +832,96 @@ See `context/tests.org` for coverage analysis and known failures.
 
 -----
 
-## 12. Build System
+## 12. Fuzzing System
+
+A deterministic QuickCheck-style fuzzing harness for the compiler, located at `tests/fuzzing/`. The runner (`tests/fuzzing/fuzz_codegen.py`, 2369 lines) loads structured property files from a recursive property corpus, generates typed expressions, compiles them with `monad`, runs the resulting binary, and checks stdout against expected values.
+
+**Property corpus** (`tests/fuzzing/properties/`): **1933+ active `.fuzz` properties** organized in a hierarchical directory taxonomy across 15 top-level categories:
+
+| Directory | Focus | Count |
+|-----------|-------|-------|
+| `00-core/` | Arithmetic, comparison, order, lattice | ~300 |
+| `10-control/` | if/cond/while/for, phi lowering, loop mutation | ~100 |
+| `20-binding/` | Env, `with`, `set!`, shadowing, SSA | ~100 |
+| `20-functions/` | Function dispatch, arity | ~80 |
+| `30-codegen-dispatch/` | Operator dispatch, strategy matrix | ~250 |
+| `35-compiler-path-v11/` | Compiler-path targeted laws | ~150 |
+| `40-runtime-collections/` | Arrays, lists, sets, mutation | ~200 |
+| `40-runtime-values/` | Runtime value construction | ~80 |
+| `50-quote-null-path/` | Quote, null, path, predicate, cast | ~100 |
+| `60-cross-feature/` | Cross-feature compiler paths | ~150 |
+| `70-oracle/` | Python oracles (future) | ~50 |
+| `75-experimental/` | Unstable feature probes | ~50 |
+| `80-stress/` | Large/many-form programs | ~50 |
+| `90-negative/` | Expected-compile-fail invariants | ~200 |
+| `99-misc/` | Everything else | ~50 |
+
+Each `.fuzz` file is a self-contained property specification with optional metadata:
+
+```text
+name: int_add_commutative
+section: arithmetic
+tier: stable
+kind: law
+args: a:Int b:Int
+features: arithmetic, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch
+type: Bool
+expect: True
+description: Addition must be commutative for generated Int expressions.
+law: (= (fuzz-add {a} {b}) (fuzz-add {b} {a}))
+```
+
+Properties support 5 tiers (`stable`, `experimental`, `oracle`, `compile-fail`, `stress`), 3 kinds (`law`, `program`, `compile-fail`), strategy-annotated generators (`x:Int@edge+if`), Python oracles (`expect-python:`), and variadic `=` lowering via the built-in rewriter.
+
+**Type-directed generators** produce typed Int, Bool, String, Char, Float, Arr, List, and dependent types (IndexOf, SubstrOf, ElemOf, DifferentFrom) with strategy modifiers:
+
+| Strategy | Effect |
+|----------|--------|
+| `tiny` | Small magnitude values |
+| `nat`/`index` | Non-negative small values |
+| `edge` | Edge-case values (-128, -1, 0, 1, 127, etc.) |
+| `bitwise` | Include bitwise operators |
+| `if`/`phi` | Bias toward `if` expressions |
+| `with`/`env` | Bias toward `with` bindings |
+| `array` | Include array-index expressions |
+
+**Runner features:**
+- Recursive `.fuzz` discovery (1933+ active, 23 disabled)
+- Coverage mode: one generated instance per property
+- Random batch mode: mixes random laws into programs
+- Shrink-on-failure: isolates minimal counterexample via `simpler_exprs`
+- Failure isolation: breaks failed batches into individual law runs
+- Regression tracking: persists history to `.fuzz-history.json`
+- Emacs-compatible output: `path:line:col:` for compilation-mode navigation
+- Styled output matching `tests/run.py` (Unicode dividers, colorized durations)
+
+**Fuzzer self-tests** (`tests/fuzzing/fuzz_fuzzing.py`) exercise the generation and rewrite logic in isolation with no compiler binary required:
+
+```
+python3 -m unittest tests.fuzzing.fuzz_fuzzing -v
+```
+
+Run the fuzzer via Make:
+
+```bash
+make fuzzing
+```
+
+Or directly with various options:
+
+```bash
+python3 tests/fuzzing/fuzz_codegen.py --seed 41 --cases 1 --keep
+python3 tests/fuzzing/fuzz_codegen.py --properties int_add_commutative
+python3 tests/fuzzing/fuzz_codegen.py --tiers all
+python3 tests/fuzzing/fuzz_codegen.py --list-properties
+```
+
+See `tests/fuzzing/README.md` for the complete reference.
+
+-----
+
+## 13. Build System
 
 ```bash
 make              # Debug build (default)
@@ -886,7 +938,7 @@ The static runtime `libmonad.a` (archive of `runtime.o` + `arena.o`) is linked i
 
 -----
 
-## 13. Known Limitations
+## 14. Known Limitations
 
 These are documented architectural gaps — not bugs in the test suite:
 
@@ -911,7 +963,7 @@ These are documented architectural gaps — not bugs in the test suite:
 
 -----
 
-## 14. TODO
+## 15. TODO
 
 See `context/todo.org` for the full priority-ranked list with confidence levels. Highlights:
 
@@ -925,7 +977,7 @@ See `context/todo.org` for the full priority-ranked list with confidence levels.
 
 -----
 
-## 15. Contributing & License
+## 16. Contributing & License
 
 Every feature, bug fix, or test addition should be accompanied by context records explaining why it exists and what it verifies.
 

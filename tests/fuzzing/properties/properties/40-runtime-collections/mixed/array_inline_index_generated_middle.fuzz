@@ -1,7 +1,0 @@
-name: array_inline_index_generated_middle
-section: collections
-args: a:Int b:Int c:Int
-type: Bool
-expect: True
-description: Inline array indexing should preserve generated middle element identity.
-law: (= ([{a} {b} {c}] 1) {b})

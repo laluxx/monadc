@@ -1,5 +1,13 @@
 name: extreme_arith_zero_absorbs_nested_direct
 section: arithmetic-normalization-deep
+tier: stable
+kind: law
+features: arithmetic, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+uses-atoms: atom.core.equality, atom.core.multiply, atom.core.plus, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_multiply_associative, signal_v13_atom_multiply_commutative, signal_v13_atom_multiply_identity_one, signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero
+signal: medium
+corpus-role: semantic-law
 args: a:Int b:Int c:Int
 type: Bool
 expect: True

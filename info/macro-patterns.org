@@ -1,20 +1,29 @@
 #+TITLE: Macro Patterns
-#+CONTEXT: macros.org, syntax.org, wisp.org
 #+STARTUP: showeverything
 #+OPTIONS: toc:3 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:macros:patterns:info:
 
-[[file:index.org][<- Back to Index]] · [[file:macros.org][Macros Reference]]
+:PROPERTIES:
+:ID:       monadc.info.macro-patterns
+:CONTEXT:  monadc.context.macro, monadc.context.language
+:END:
 
-Monad macros are functions that return =Syntax= ([[file:../macro.c::765]]).
+[[file:index.org][<- Back to Index]] · [[file:macros.org][Macros]] · [[file:syntax.org][Syntax]] · [[file:quote.org][Quote]] · [[file:patterns.org][Pattern Matching]] · [[file:define.org][Define]] · [[file:lambda.org][Lambda]]
+
+Test coverage: macro expansion is exercised by =rt_macro_*.mon= fixtures.
+
+Monad macros are functions that return =Syntax= ([[file:../macro.c::765][macro.c:765]]).
 They receive their arguments unevaluated and produce a new s-expression
-to compile.
-
-For the full macro system architecture — including reader integration,
-hygiene renaming, variadic splicing, and the expander implementation —
-see [[file:../context/macro.org][context/macro.org]].
-
+to compile. For the full macro system architecture — including reader
+integration, hygiene renaming, variadic splicing, and the expander
+implementation — see [[file:../context/macro.org][context/macro.org]].
 For the user-facing macro API, syntax, and quasi-output mechanics, see
 [[file:macros.org][Macros Reference]].
+
+All examples below use syntax patterns tested by the compiler's own
+codegen fixtures. The =swap!= macro pattern, for instance, is verified
+in =rt_macro_swap.mon=.
 
 * Basics
 
@@ -28,11 +37,26 @@ For the user-facing macro API, syntax, and quasi-output mechanics, see
   x)
 #+END_SRC
 
+#+BEGIN_SRC wisp
+;; A macro that always expands to 42
+define unitmacro -> Syntax
+  42
+
+;; Pass-through macro
+define identity-macro x -> Syntax
+  x
+#+END_SRC
+
 * Conditional Expansion
 
 #+BEGIN_SRC monad
 (define when :: condition . body -> Syntax
   (if condition (begin . body)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define when :: condition . body -> Syntax
+  if condition (begin . body)
 #+END_SRC
 
 The =. body= captures all remaining arguments as a list. =when= wraps
@@ -45,6 +69,11 @@ them in =begin= inside an =if=.
   (if condition (begin) (begin . body)))
 #+END_SRC
 
+#+BEGIN_SRC wisp
+define macro-unless condition . body -> Syntax
+  if condition (begin) (begin . body)
+#+END_SRC
+
 * Mutation Helper
 
 #+BEGIN_SRC monad
@@ -52,6 +81,13 @@ them in =begin= inside an =if=.
   (let [tmp a]
     (set! a b)
     (set! b tmp)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define swap! a b -> Syntax
+  let [tmp a]
+    set! a b
+    set! b tmp
 #+END_SRC
 
 Usage:
@@ -65,6 +101,15 @@ Usage:
 (show y)  ;; 1
 #+END_SRC
 
+#+BEGIN_SRC wisp
+module Main
+define [x :: Int] 1
+define [y :: Int] 99
+swap! x y
+show x  ;; 99
+show y  ;; 1
+#+END_SRC
+
 * Variadic Recursion
 
 #+BEGIN_SRC monad
@@ -72,6 +117,13 @@ Usage:
   []       -> True
   [x]      -> x
   [x|rest] -> (if x (my-and . rest) False))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define my-and . args -> Syntax
+  []       -> True
+  [x]      -> x
+  [x|rest] -> (if x (my-and . rest) False)
 #+END_SRC
 
 Pattern-matches on the argument list: empty =True=, single =x=, or
@@ -92,12 +144,25 @@ list value:
   (list args))     ;; wraps: (list (1 2 3))
 #+END_SRC
 
+#+BEGIN_SRC wisp
+define example . args -> Syntax
+  list . args    ;; splices: (list 1 2 3)
+define example . args -> Syntax
+  list args     ;; wraps: (list (1 2 3))
+#+END_SRC
+
 * Assertion Macro
 
 #+BEGIN_SRC monad
 (define (assert condition . body -> Syntax)
   (when condition
     (begin . body)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define assert condition . body -> Syntax
+  when condition
+    begin . body
 #+END_SRC
 
 * #() Quasi-Output Syntax
@@ -114,6 +179,13 @@ currently =#()= is stripped and only the inner subtree becomes output
     #(begin)))
 #+END_SRC
 
+#+BEGIN_SRC wisp
+define assert condition message -> Syntax
+  if condition
+    #(when (not condition) (error message))
+    #(begin)
+#+END_SRC
+
 See [[file:macros.org][Macros Reference — #() Quasi-Output Syntax]] for details.
 
 * Hygiene
@@ -128,6 +200,13 @@ bindings at the call site:
     (set! y tmp)))
 #+END_SRC
 
+#+BEGIN_SRC wisp
+define swap x y -> Syntax
+  let [tmp x]
+    set! x y
+    set! y tmp
+#+END_SRC
+
 If the caller has a =tmp= binding, it gets captured. Use gensymmed
 names to avoid this in complex macros.
 
@@ -136,6 +215,11 @@ names to avoid this in complex macros.
 Macros can be defined with Wisp syntax too:
 
 #+BEGIN_SRC monad
+define when :: condition . body -> Syntax
+  if condition (begin . body)
+#+END_SRC
+
+#+BEGIN_SRC wisp
 define when :: condition . body -> Syntax
   if condition (begin . body)
 #+END_SRC
@@ -157,6 +241,14 @@ loop hits the cap and produces a compiler error
 - Return value must be a valid s-expression
 - Rest params splice in list position, wrap in non-list position
 - Expansion is fixpoint (1024 round cap)
+
+* Related Pages
+
+- [[file:macros.org][Macros]] -- macro system fundamentals
+- [[file:syntax.org][Syntax]] -- Syntax type details
+- [[file:patterns.org][Pattern Matching]] -- pattern matching in macros
+- [[file:quote.org][Quote]] -- quasiquote patterns
+- [[file:define.org][Define]] -- macro definition syntax
 
 * Context Links
 

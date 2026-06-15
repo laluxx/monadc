@@ -1,0 +1,104 @@
+#+TITLE: Arena Allocation
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:arena:info:
+
+:PROPERTIES:
+:ID:       monadc.info.arena
+:CONTEXT:  monadc.context.arena, monadc.context.codegen, monadc.context.runtime
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:heap.org][Heap Allocation]] · [[file:performance.org][Performance]] · [[file:arrays.org][Arrays]] · [[file:data.org][Data Types]] · [[file:layouts.org][Layout Types]] · [[file:types.org][Types]]
+
+Test coverage: the arena allocator ([[file:../arena.c]]) is tested
+through the entire compiler pipeline — every codegen fixture exercises
+arena allocation.
+
+Monad does not have a garbage collector. All runtime values are
+allocated in compiler-managed arena regions — bump-pointer allocation
+with deterministic lifetime and no GC pauses.
+
+* Bump-Pointer Arena
+
+The primary allocator ([[file:../arena.c]], [[file:../arena.h]]) is a
+bump-pointer arena:
+
+- Blocks are 4 MiB (=ARENA_DEFAULT_BLOCK=, arena.h:36)
+- Allocation is O(1): pointer bumped by =size= bytes, rounded to
+  =ARENA_ALIGN= (8 bytes)
+- When a block is full, a new block is allocated (doubling in size,
+  growth factor ~2) and prepended to the singly-linked list
+
+#+BEGIN_SRC text
+Arena blocks:
+[4MB block] -> [8MB block] -> [16MB block] -> ...
+^                                    ^
+bump pointer (allocates here)        next block (overflow)
+#+END_SRC
+
+* Free / Reset
+
+| Operation        | Behavior                                       |
+|------------------+------------------------------------------------|
+| =arena_free=     | Walks block chain, frees all OS memory         |
+| =arena_reset=    | Rewinds all blocks (used=0), keeps memory mapped |
+| =arena_checkpoint=| Saves (block, offset) snapshot                  |
+| =arena_restore=  | Rewinds to checkpoint, frees later blocks       |
+
+=arena_reset= is the common fast path — zero mallocs.
+
+* Checkpoint / Restore
+
+=ArenaCheckpoint= saves (block, offset). =arena_restore= rewinds to
+that point and frees any blocks allocated after it:
+
+#+BEGIN_SRC C
+ArenaCheckpoint cp = arena_checkpoint(&arena);
+// ... allocate temporary values ...
+arena_restore(&arena, &cp);    // free everything after checkpoint
+#+END_SRC
+
+This is a stack-based rollback (LIFO only).
+
+* Tradeoffs vs GC
+
+| Aspect         | Arena Allocation                | Garbage Collector              |
+|----------------+---------------------------------|---------------------------------|
+| Allocation     | O(1) bump-pointer               | O(1) bump + GC pauses later     |
+| Deallocation   | Batch (arena reset/free)        | Incremental/mark-sweep          |
+| Pauses         | None (deterministic)            | Stop-the-world for GC cycles    |
+| Fragmentation  | None (linear bump)              | Can fragment over time          |
+| Flexibility    | LIFO only (stack discipline)    | Any order (cycle collection)    |
+| Memory return  | Keeps mapped (arena_reset)      | Returns to OS lazily            |
+
+The tradeoff is acceptable for a compiler workload: allocations follow
+a stack discipline (parse → infer → codegen → reset).
+
+* Lifetime Model
+
+1. Compilation begins: arena is fresh
+2. Parser allocates AST nodes in the arena
+3. Macro expansion allocates new nodes
+4. Type inference allocates type trees
+5. Codegen consumes arena — output is LLVM IR (arena-independent)
+6. Compilation ends: =arena_free= — all memory reclaimed at once
+
+No individual =free= calls. No reference counting. No GC.
+
+* Related Pages
+
+- [[file:heap.org][Heap Allocation]] -- heap allocation with arena
+- [[file:performance.org][Performance]] -- arena allocation performance
+- [[file:arrays.org][Arrays]] -- arena-allocated arrays
+- [[file:data.org][Data Types]] -- ADT allocation via arena
+- [[file:types.org][Types]] -- type representation in arena
+
+* Context Links
+
+- [[file:../arena.c][arena.c]] — arena allocator implementation
+- [[file:../arena.h][arena.h]] — arena API and constants
+- [[file:../context/arena.org][context/arena.org]] — arena design document
+- [[file:performance.org][Performance]] — performance guide
+- [[file:heap.org][Heap Allocation]] — runtime heap for collections
+- [[file:arrays.org][Arrays]] — stack vs heap allocation tradeoffs

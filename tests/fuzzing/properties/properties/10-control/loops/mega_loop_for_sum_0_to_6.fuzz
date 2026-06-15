@@ -1,7 +1,0 @@
-name: mega_loop_for_sum_0_to_6
-section: codegen-control-loops
-args: 
-type: Bool
-expect: True
-description: numeric for loop must expose induction variable and execute expected iterations.
-law: (= (with [sum 0] (do (for [i 0 7] (set! sum (+ sum i))) sum)) 21)

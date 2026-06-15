@@ -1,5 +1,13 @@
 name: complex_arith_helper_add_sub_roundtrip_through_id
 section: arithmetic-function
+tier: stable
+kind: law
+features: arithmetic, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, infer.arithmetic, infer.equality
+uses-atoms: atom.core.equality
+related-properties: signal_v13_atom_equality_reflexive
+signal: medium
+corpus-role: semantic-law
 args: a:Int b:Int
 type: Bool
 expect: True

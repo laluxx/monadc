@@ -1,7 +1,0 @@
-name: mega_pred_bool_generated_true
-section: codegen-preds-strings-null
-args: p:Bool
-type: Bool
-expect: True
-description: Bool? must fold true for generated Bool expression.
-law: (Bool? {p})

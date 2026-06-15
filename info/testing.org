@@ -1,13 +1,35 @@
 #+TITLE: Testing
 #+STARTUP: showeverything
 #+OPTIONS: toc:nil
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:testing:info:
 
-[[file:index.org][<- Back to Index]]
+:PROPERTIES:
+:ID:       monadc.info.testing
+:CONTEXT:  monadc.context.tests-arch, monadc.context.tests, monadc.context.language
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:show.org][Show]] · [[file:equality.org][Equality]] · [[file:fuzzing.org][Fuzzing]] · [[file:core.org][Core Library]] · [[file:booleans.org][Booleans]] · [[file:build.org][Build System]] · [[file:contributing.org][Contributing]] · [[file:errors.org][Diagnostics]]
+
+* Quick Reference
+
+| Operation               | Description                        |
+|-------------------------+------------------------------------|
+| =tests (assert-eq...)=  | Embedded test block                |
+| =TEST-EXPECT: compile=  | Fixture assertion mode             |
+| =python3 tests/run.py=  | Primary test runner                |
+| =make fuzzing=          | Property-based fuzzing             |
+| =./monad test <file>=   | Compile and run tests              |
 
 The MonadC test suite comprises ~1305 test assets across four major
 categories: codegen runtime fixtures, TSV-driven parser corpora, inline
 ASM behavior tests, and property-based fuzzing. The primary test runner
 is =tests/run.py=, written in Python.
+
+For the full test architecture, per-category fixture listings, and runner
+internals, see [[file:../context/tests-arch.org][context/tests-arch.org]].
+For per-module tests: =python3 tests/run_core.py=.
+For fuzzing: =make fuzzing= (41 algebraic laws, 96 seeds, 960 generated programs).
 
 * Suite Overview
 
@@ -42,6 +64,16 @@ Every fixture carries mandatory header comments:
 ;; TEST-EXPECT: compile, run
 (module Main)
 (show (+ 1 2))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+;; TEST-ID: tests.codegen.rt-arith-all
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Complete arithmetic operator coverage
+;; TEST-ATOM: (+ 1 2) = 3, (- 10 3) = 7
+;; TEST-EXPECT: compile, run
+module Main
+show (+ 1 2)
 #+END_SRC
 
 The =TEST-EXPECT= field drives the assertion mode: =compile=, =run=,
@@ -142,6 +174,14 @@ which compile alongside executable code without blocking runtime output:
 (show 42)
 #+END_SRC
 
+#+BEGIN_SRC wisp
+module Main
+tests
+  assert-eq (square 2)  4   "square of 2"
+  assert-eq (square 0)  0   "square of 0"
+show 42
+#+END_SRC
+
 The =(tests ...)= form is itself exercised by the dedicated fixture
 =rt_tests_block.mon=.
 
@@ -173,9 +213,17 @@ cffi, refinement, wisp, layout, map, ratio, diagnostic, codegen,
 language, sugar. Each section has a color-coded header and per-section
 stats.
 
+* See Also
+
+- [[file:../fuzzing.org][Fuzzing]]
+- [[file:../build.org][Build System]]
+- [[file:../contributing.org][Contributing]]
+- [[file:../errors.org][Diagnostics]]
+
 * Context Links
 
 - [[file:../context/tests-arch.org][context/tests-arch.org]] — Full test architecture, per-category
   fixture listings, runner internals
+- [[file:fuzzing.org][Fuzzing]] — property-based testing
 - [[file:build.org][Build System]] — Build and test commands
 - [[file:../tests/run.py][tests/run.py]] — Primary test runner script

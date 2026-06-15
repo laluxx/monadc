@@ -1,5 +1,13 @@
 name: compiler_deep_v8_list_cdr_head_generated_tail
 section: runtime-lists-v8
+tier: stable
+kind: law
+features: arithmetic, equality, list, runtime
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.runtime_call, infer.arithmetic, infer.equality, runtime.list
+uses-atoms: atom.core.equality
+related-properties: signal_v13_atom_equality_reflexive
+signal: medium
+corpus-role: semantic-law
 args: a:Int b:Int
 type: Bool
 expect: True

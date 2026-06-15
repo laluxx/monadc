@@ -1,206 +1,253 @@
 #+TITLE: Core Library
 #+STARTUP: showeverything
 #+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:core:info:
 
-[[file:index.org][<- Back to Index]] · [[file:stdlib.org][Standard Library Modules]]
+:PROPERTIES:
+:ID:       monadc.info.core
+:CONTEXT:  monadc.context.codegen-ops, monadc.context.language
+:END:
 
-Built-in functions with =strcmp= dispatch in
-[[file:../codegen.c]] =codegen_expr=. Always available without
-import. Functions registered in =register_builtins= only (NOT
-callable from paren-mode) are marked as such.
+[[file:index.org][<- Back to Index]] · [[file:arithmetic.org][Arithmetic]] · [[file:equality.org][Equality]] · [[file:logic.org][Logic]] · [[file:show.org][Show]] · [[file:casting.org][Casting]] · [[file:list.org][Lists]] · [[file:set.org][Sets]] · [[file:map.org][Maps]] · [[file:math-module.org][Math]] · [[file:coll-module.org][Coll]]
 
-Dispatch architecture ([[file:../context/language.org::176]]):
+Built-in functions with =strcmp= dispatch in codegen. Always available
+without import. This page provides an overview; each category has a
+dedicated reference page.
 
-1. =codegen_expr= switches on AST type
-2. For =AST_LIST=, strcmp on head symbol (83+ symbols)
-3. =register_builtins= registers 94 entries — only callable if also
-   has a strcmp handler
+Test coverage: exercised by 423 codegen runtime fixtures in
+[[file:../tests/codegen/][tests/codegen/]] and =Main.mon=
+(1244 lines).
 
-* Arithmetic (all work: int, float, mixed, variadic)
+* Dedicated Pages
 
-  | Name  | Arity | Notes                  |
-  |-------+-------+------------------------|
-  | =+=     | 1..N  | Variadic sum           |
-  | =-=     | 1..N  | Subtract or negate     |
-  | =*=     | 1..N  | Variadic product       |
-  | =/=     | 1..N  | Divide                 |
-  | =%=     | 2     | Modulo                 |
+| Page                          | Covers                                          |
+|-------------------------------+-------------------------------------------------|
+| [[file:arithmetic.org][Arithmetic]]           | +, -, *, /, %, bitwise, superscript sugars       |
+| [[file:equality.org][Equality]]             | =, !=, <, >, <=, >=, eq?                        |
+| [[file:logic.org][Logic]]                 | and, or, not, short-circuit evaluation           |
+| [[file:show.org][Show]]                   | show, print, assert-eq, display formats          |
+| [[file:casting.org][Casting]]               | (Int x), (Float x), fixed-width conversions      |
+| [[file:list.org][Lists]]                 | cons, car, cdr, nil, ++, count, make-list        |
+| [[file:set.org][Sets]]                  | conj, disj, contains?, set literals              |
+| [[file:map.org][Maps]]                  | assoc, dissoc, find, merge, keys, vals           |
 
-* Bitwise
+* Map Operations
 
-  | Name      | Arity |
-  |-----------+-------|
-  | =&=         | 2..N  |
-  | =bit-or=    | 2..N  |
-  | =∨=         | 2..N  |  (U+2228, alias for bit-or)
-  | =bit-xor=   | 2..N  |
-  | =⊕=         | 2..N  |  (U+2295, alias for bit-xor)
-  | =~=         | 1     |
-  | =<<=        | 2     |
-  | =>>=        | 2     |
-  | =>>>=       | 2     |
+| Name       | Arity | Description                      |
+|------------+-------+----------------------------------|
+| =assoc=    | 3     | Add/update key (immutable)       |
+| =assoc!=   | 3     | Add/update key (in place)        |
+| =dissoc=   | 2     | Remove key (immutable)           |
+| =dissoc!=  | 2     | Remove key (in place)            |
+| =find=     | 2     | Lookup key, returns (key val) or nil |
+| =keys=     | 1     | List all keys                    |
+| =vals=     | 1     | List all values                  |
+| =merge=    | 2     | Merge two maps                   |
+| =Map?=     | 1     | Type predicate                   |
+| =contains?=| 2     | Key membership                   |
+| =count=    | 1     | Size                             |
 
-* Comparison (all work: int, float, mixed)
+Map literal: =#{:a 1}=. Runtime construction broken without =:: Map=
+annotation ([[file:../context/language.org::303]]).
 
-  | Name   | Arity |
-  |--------+-------|
-  | ====   | 2..N  |
-  | =!=    | 2..N  |
-  | =<=    | 2..N  |
-  | =<==   | 2..N  |
-  | =>==   | 2..N  |
-  | =>=    | 2..N  |
+* Set Operations
 
-* Logic (short-circuit)
+| Name      | Arity | Description                      |
+|-----------+-------+----------------------------------|
+| =set=     | 0..N  | Create a set                     |
+| =conj=    | 2     | Add element (immutable)          |
+| =disj=    | 2     | Remove element (immutable)       |
+| =conj!=   | 2     | Add element (in place)           |
+| =disj!=   | 2     | Remove element (in place)        |
+| =contains?=| 2     | Element membership               |
+| =Set?=    | 1     | Type predicate                   |
 
-  | Name   | Arity |
-  |--------+-------|
-  | =and=  | 2..N  |
-  | =or=   | 2..N  |
-  | =not=  | 1..N  |
+Set literal: ={1 2 3}=. Requires =:: Set= annotation.
 
-* Map (+ sets)
+* List Operations
 
-  | Name       | Arity | Description                      |
-  |------------+-------+----------------------------------|
-  | =assoc=    | 3     | Add/update key (immutable)       |
-  | =assoc!=   | 3     | Add/update key (in place)        |
-  | =dissoc=   | 2     | Remove key (immutable)           |
-  | =dissoc!=  | 2     | Remove key (in place)            |
-  | =find=     | 2     | Lookup key, returns (key val) or nil |
-  | =keys=     | 1     | List all keys                    |
-  | =vals=     | 1     | List all values                  |
-  | =merge=    | 2     | Merge two maps                   |
-  | =Map?=     | 1     | Type predicate                   |
-  | =contains?=| 2     | Key membership                   |
-  | =count=    | 1     | Size                             |
+| Name      | Arity | Callable? | Description                    |
+|-----------+-------+-----------+--------------------------------|
+| =nil=     | 0     | Yes       | Empty list / null               |
+| =list=    | 0..N  | Partial   | Zero-arg works; variadic broken |
+| =cons=    | 2     | Yes       | Prepend element                |
+| =.=       | 2     | Yes       | Alias for =cons=               |
+| =car=     | 1     | Yes       | First element                  |
+| =cdr=     | 1     | Yes       | Rest                           |
+| =head=    | 1     | Yes       | First (List, Array, String)    |
+| =tail=    | 1     | Partial   | Segfaults on lists             |
+| =++=      | 2     | Yes       | Concatenate                    |
+| =count=   | 1     | Yes       | Length                         |
+| =empty?=  | 1     | Yes       | Empty check                    |
+| =pair?=   | 1     | Yes       | Non-empty check                |
+| =nil?=    | 1     | Yes       | Nil check                      |
+| =append!= | 2     | Yes       | Mutable append                 |
 
-  Map literal: =#{:a 1}= ([[file:../reader.c::6039]]). Map-as-function:
-  =(m :key)= for lookup. Runtime construction broken without type
-  annotation (=:: Map=) — functional =assoc=/=dissoc=/=merge= get
-  garbage inputs. Only =assoc!= with typed variables works
-  ([[file:../context/language.org::303]]).
+NOT callable (register_builtins only): =length=, =reverse=, =nth=,
+=reduce=, =concat=, =substring=.
 
-* Set
+* String Operations
 
-  | Name      | Arity | Description                      |
-  |-----------+-------+----------------------------------|
-  | =set=     | 0..N  | Create a set                     |
-  | =conj=    | 2     | Add element (immutable)          |
-  | =disj=    | 2     | Remove element (immutable)       |
-  | =conj!=   | 2     | Add element (in place)           |
-  | =disj!=   | 2     | Remove element (in place)        |
-  | =contains?=| 2     | Element membership               |
-  | =Set?=    | 1     | Type predicate                   |
+| Name           | Arity | Notes                          |
+|----------------+-------+--------------------------------|
+| =show=         | 1..N  | Prints to stdout               |
+| =make-string=  | 2     | Works                          |
+| =count=        | 1     | Works                          |
+| =starts-with?= | 2     | Works                          |
+| =ends-with?=   | 2     | Works                          |
+| =contains?=    | 2     | Works                          |
 
-  Set literal: ={1 2 3}= ([[file:../reader.c::5998]]). Same runtime gap
-  as maps: requires =:: Set= type annotation.
+* Other Builtins
 
-* List
-
-  | Name      | Arity | Callable? | Description                    |
-  |-----------+-------+-----------+--------------------------------|
-  | =nil=     | 0     | Yes       | Empty list / null               |
-  | =list=    | 0..N  | Partial   | Zero-arg works; =(list 1 2 3)= broken ([[file:../context/language.org::309]]) |
-  | =cons=    | 2     | Yes       | Prepend element                |
-  |=.=        | 2     | Yes       | Alias for =cons=               |
-  | =car=     | 1     | Yes       | First element                  |
-  | =cdr=     | 1     | Yes       | Rest                           |
-  | =head=    | 1     | Yes       | First (List, Array, String)    |
-  | =tail=    | 1     | Partial   | Segfaults on lists ([[file:../context/language.org::314]]) |
-  | =++=      | 2     | Yes       | Concatenate (primary list builder) |
-  | =count=   | 1     | Yes       | Length (strings + lists)       |
-  | =empty?=  | 1     | Yes       | Empty check                    |
-  | =pair?=   | 1     | Yes       | Non-empty check                |
-  | =nil?=    | 1     | Yes       | Nil check                      |
-  | =append!= | 2     | Yes       | Mutable append                 |
-
-  NOT callable (register_builtins only, [[file:../context/language.org::293]]):
-  =length=, =reverse=, =nth=, =reduce=, =concat=, =substring=.
-
-* String
-
-  | Name           | Arity | Notes                          |
-  |----------------+-------+--------------------------------|
-  | =show=         | 1..N  | Prints to stdout               |
-  | =make-string=  | 2     | Works                          |
-  | =count=        | 1     | Works (strings + lists)        |
-  | =starts-with?= | 2     | Works                          |
-  | =ends-with?=   | 2     | Works                          |
-  | =contains?=    | 2     | Works                          |
-
-  Indexing: =("hello" 0)= returns =Char= at position 0
-  ([[file:../codegen.c::9732]]).
-
-* Control (working)
-
-  | Name     | Arity | Codegen source            |
-  |----------+-------+---------------------------|
-  | =if=     | 3     | [[file:../codegen.c::7572]]     |
-  | =unless= | 2..N  | builtin                   |
-  | =while=  | 2..N  | [[file:../codegen.c::7957]]     |
-  | =for=    | 2..N  | [[file:../codegen.c::8004]]     |
-  | =begin=  | 0..N  | [[file:../codegen.c::7561]]     |
-  | =match=  | 1..N  | [[file:../pmatch.c]]          |
-  | =set!=   | 2     | [[file:../codegen.c::7471]]     |
-  | =??=     | 2     | [[file:../codegen.c::5763]]     |
-| =do=     | 1..N  | [[file:../codegen.c::7830]]     |
-| =when=   | 2..N  | [[file:../codegen.c::7879]]     |
-| =with=   | 2..N  | [[file:../codegen.c::7841]]     |
-
-NOT callable (no strcmp handler, [[file:../context/language.org::298]]):
-=cond=, =let=, =let*=, =letrec=.
-
-* Other builtins
-
-  | Name         | Arity | Notes                          |
-  |--------------+-------+--------------------------------|
-  | =quote=      | 1     | =(quote (1 2 3))=               |
-  | =quasiquote= | 1..N  | Corner bracket =⌜expr⌝= sugar   |
-  | =include=    | 1     | C FFI: =(include "math.h")=     |
-  | =import=     | 1..N  | Module import                   |
-  | =define=     | 2..N  | Value/function definition       |
-  | =lambda=     | 2..N  | Anonymous function              |
-  | =type=       | 1..N  | Type alias/refinement           |
-  | =show=       | 1..N  | Print value                     |
-  | =error=      | 1     | Abort with message              |
-  | =code=       | 1     | Return source AST of function   |
-  | =expand=     | 1     | Expand macros in expression     |
-  | =assert-eq=  | 3     | Test assertion                  |
-
-* Type Conversions (all work, [[file:../codegen.c::13144]])
-
-  | Syntax        | Description                    |
-  |---------------+--------------------------------|
-  | =(Int x)=     | Convert to signed 63-bit int   |
-  | =(Float x)=   | Convert to 64-bit float        |
-  | =(Char x)=    | Convert integer to character   |
-  | =(String x)=  | Convert to string              |
-  | =(Hex x)=     | Format as hex string           |
-  | =(Oct x)=     | Format as octal string         |
-  | =(Bin x)=     | Format as binary string        |
-  | =(I8/U8 x)=   | 8-bit conversion               |
-  | =(I16/U16 x)= | 16-bit conversion              |
-  | =(I32/U32 x)= | 32-bit conversion              |
-  | =(I64/U64 x)= | 64-bit conversion              |
-  | =(I128/U128 x)=| 128-bit conversion            |
-  | =(F32 x)=     | 32-bit float conversion        |
-
-* Superscript Sugar
-
-  | Written | Desugars to | Notes                         |
-  |---------+-------------+-------------------------------|
-  |=x²=     | =(^ x 2)=   | =^= has no strcmp handler —
-  |=x³=     | =(^ x 3)=   | not callable ([[file:../context/language.org::404]]) |
+| Name         | Arity | Notes                          |
+|--------------+-------+--------------------------------|
+| =quote=      | 1     | See [[file:quote.org][Quote]]                     |
+| =define=     | 2..N  | See [[file:define.org][Define]]                   |
+| =lambda=     | 2..N  | See [[file:lambda.org][Lambda]]                   |
+| =include=    | 1     | C FFI: =(include "math.h")=     |
+| =import=     | 1..N  | Module import                   |
+| =type=       | 1..N  | Type alias/refinement           |
+| =error=      | 1     | Abort with message              |
+| =code=       | 1     | Return source AST of function   |
+| =expand=     | 1     | Expand macros in expression     |
+| =assert-eq=  | 3     | Test assertion                  |
 
 * NOT callable (summary)
 
-  These are register_builtins-only or broken:
 =map=, =fn=, =defn=, =concat=, =substring=, =reverse=, =nth=,
 =length=, =reduce=, =cond=, =let=, =let*=, =letrec=, =^= (superscript).
+
+* Usage Examples
+
+Arithmetic:
+
+#+BEGIN_SRC monad
+(+ 1 2 3)          ;; => 6
+(* 2 5)            ;; => 10
+(- 10 4 3)         ;; => 3
+(/ 12 4)           ;; => 3
+#+END_SRC
+
+#+BEGIN_SRC wisp
++ 1 2 3            # => 6
+* 2 5              # => 10
+- 10 4 3           # => 3
+/ 12 4             # => 3
+#+END_SRC
+
+Printing with =show=:
+
+#+BEGIN_SRC monad
+(show "hello, world")
+(show "the sum is " (+ 1 2))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+show "hello, world"
+show "the sum is " + 1 2
+#+END_SRC
+
+Assertions:
+
+#+BEGIN_SRC monad
+(assert-eq (+ 2 2) 4 "two plus two")
+(assert-eq (* 3 3) 9 "three squared")
+#+END_SRC
+
+#+BEGIN_SRC wisp
+assert-eq (+ 2 2) 4 "two plus two"
+assert-eq (* 3 3) 9 "three squared"
+#+END_SRC
+
+Type conversion:
+
+#+BEGIN_SRC monad
+(Int 3.14)       ;; => 3
+(Float 42)       ;; => 42.0
+#+END_SRC
+
+#+BEGIN_SRC wisp
+Int 3.14         # => 3
+Float 42         # => 42.0
+#+END_SRC
+
+Aborting with an error:
+
+#+BEGIN_SRC monad
+(error "something went wrong")
+#+END_SRC
+
+#+BEGIN_SRC wisp
+error "something went wrong"
+#+END_SRC
+
+List operations:
+
+#+BEGIN_SRC monad
+(define lst (cons 1 (cons 2 nil)))
+(car lst)            ;; => 1
+(cdr lst)            ;; => (2)
+(count lst)          ;; => 2
+(head lst)           ;; => 1
+(empty? nil)         ;; => #t
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define lst cons 1 (cons 2 nil)
+car lst               # => 1
+cdr lst               # => (2)
+count lst             # => 2
+head lst              # => 1
+empty? nil            # => #t
+#+END_SRC
+
+Map operations:
+
+#+BEGIN_SRC monad
+(define m #{:a 1 :b 2})
+(find m :a)       ;; => (:a 1)
+(keys m)          ;; => (:a :b)
+(vals m)          ;; => (1 2)
+(count m)         ;; => 2
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define m #{:a 1 :b 2}
+find m :a         # => (:a 1)
+keys m            # => (:a :b)
+vals m            # => (1 2)
+count m           # => 2
+#+END_SRC
+
+String operations:
+
+#+BEGIN_SRC monad
+(count "hello")         ;; => 5
+(starts-with? "hello" "he")   ;; => #t
+(ends-with? "hello" "lo")     ;; => #t
+(contains? "hello" "ll")      ;; => #t
+#+END_SRC
+
+#+BEGIN_SRC wisp
+count "hello"               # => 5
+starts-with? "hello" "he"   # => #t
+ends-with? "hello" "lo"     # => #t
+contains? "hello" "ll"      # => #t
+#+END_SRC
+
+* Related Pages
+
+- [[file:arithmetic.org][Arithmetic]] -- + -, *, /, %, bitwise operators
+- [[file:equality.org][Equality]] -- =, !=, <, >, <=, >=, eq?
+- [[file:logic.org][Logic]] -- and, or, not, short-circuit
+- [[file:show.org][Show]] -- show, display, assert-eq
+- [[file:casting.org][Casting]] -- type conversions
 
 * Context Links
 
 - [[file:../context/codegen-ops.org][context/codegen-ops.org]] — Operation dispatch
 - [[file:../context/language.org][context/language.org]] — Working dispatch + known gaps
 - [[file:../codegen.c][codegen.c]] — ~register_builtins~ at line 13144
+- [[file:math-module.org][Math Module]] — mathematical functions and constants
+- [[file:coll-module.org][Coll Module]] — collection operations

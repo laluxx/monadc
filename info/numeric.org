@@ -1,0 +1,168 @@
+#+TITLE: Numeric Types
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:numeric:info:
+
+:PROPERTIES:
+:ID:       monadc.info.numeric
+:CONTEXT:  monadc.context.language, monadc.context.types, monadc.context.codegen
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:arithmetic.org][Arithmetic]] · [[file:casting.org][Casting]] · [[file:rationals.org][Rationals]] · [[file:math-module.org][Math Module]] · [[file:type-classes.org][Classes]] · [[file:types.org][Types]] · [[file:core.org][Core Library]] · [[file:syntax.org][Syntax]]
+
+Test coverage: arithmetic by =rt_arith_*.mon=, bitwise by =rt_bitwise_*.mon=, comparison by =rt_cmp_*.mon=, conversions by =rt_typeconv_*.mon=.
+
+Monad provides a comprehensive numeric type hierarchy spanning arbitrary-precision concepts down to fixed-width machine types for C interop.
+
+* Primary Numeric Types
+
+| Type | Description | Example | Precision |
+|------+-------------+---------+-----------|
+| =Int= | Architecture-width signed | =42=, =-7= | 64-bit (x86-64) |
+| =Float= | IEEE 754 double | =3.14=, =1e10= | 64-bit |
+| =Ratio= | Exact rational | =1/3=, =50%= | Arbitrary (num/den) |
+
+See [[file:rationals.org][Rationals]] for the =Ratio= type.
+
+* Literal Notations
+
+#+BEGIN_SRC monad
+(42                 ;; Int)
+(-7                 ;; Int (negated))
+(3.14               ;; Float)
+(1e10               ;; Float (scientific notation))
+(1/3                ;; Ratio)
+(50%                ;; Ratio (= 1/2))
+(0xFF               ;; Hex (255))
+(0b1010             ;; Binary (10))
+(0o777              ;; Octal (511))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+42                 ;; Int
+-7                 ;; Int (negated)
+3.14               ;; Float
+1e10               ;; Float (scientific notation)
+1/3                ;; Ratio
+50%                ;; Ratio (= 1/2)
+0xFF               ;; Hex (255)
+0b1010             ;; Binary (10)
+0o777              ;; Octal (511)
+#+END_SRC
+
+* Fixed-Width Numeric Types
+
+For C interop and bit-level control ([[file:types.org][Types]]):
+
+| Type | Width | Description |
+|------+-------+-------------|
+| =I8= | 8 | Signed byte |
+| =U8= | 8 | Unsigned byte |
+| =I16= | 16 | Short |
+| =U16= | 16 | Unsigned short |
+| =I32= | 32 | Int |
+| =U32= | 32 | Unsigned int |
+| =I64= | 64 | Long |
+| =U64= | 64 | Unsigned long |
+| =I128= | 128 | Quad word |
+| =U128= | 128 | Unsigned quad |
+| =F32= | 32 | IEEE 754 single |
+| =F80= | 80 | x86 extended precision |
+
+Note: =Int= maps to the machine word (i64 on x86-64). Use fixed-width types for explicit layout control or FFI.
+
+* Type Conversions ([[file:../codegen.c::13144]])
+
+Numeric types are first-class casting functions:
+
+#+BEGIN_SRC monad
+(Int   40.3)          ;; 4)
+(Float 20)            ;; 20.)
+(Hex   65)            ;; 0x4)
+(Oct   63)            ;; 0o7)
+(Bin   42)            ;; 0b10101)
+(Char  65)            ;; 'A)
+(Arr   20)            ;; [20)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+Int   40.3          ;; 4)
+Float 20            ;; 20.)
+Hex   65            ;; 0x4)
+Oct   63            ;; 0o7)
+Bin   42            ;; 0b10101)
+Char  65            ;; 'A)
+Arr   20            ;; [20)
+#+END_SRC
+
+* Arithmetic Operations ([[file:core.org][Core Library]])
+
+All working on Int, Float, and mixed operands:
+
+| Operation | Example | Variadic |
+|-----------+---------+----------|
+| =+= | =(+ 1 2 3)= | Yes (1..N) |
+| =-= | =(- 10 3)= | Yes (1..N) |
+| =*= | =(* 2 3 4)= | Yes (1..N) |
+| =/= | =(/ 10 3)= | Yes (1..N) |
+| =%= | =(% 10 3)= | No (binary) |
+
+* Bitwise Operations
+
+| Operation | Example | Variadic |
+|-----------+---------+----------|
+| =&= | =(& 0xFF 0x0F)= | Yes |
+| =bit-or=, =∨= | =(bit-or 1 2 4)= | Yes |
+| =bit-xor=, =⊕= | =(bit-xor 5 3)= | Yes |
+| =~= | =(~ 0xFF)= | Unary |
+| =<<= | =(<< 1 4)= | Binary |
+| =>>= | =(>> 16 2)= | Binary |
+| =>>>= | =(>>> -1 1)= | Binary |
+
+* Comparison Operations
+
+| Operation | Example | Variadic |
+|-----------+---------+----------|
+| ==== | =(= 1 1 1)= | Yes (2..N) |
+| =!= | =(!= 1 2)= | Yes |
+| =<= | =(< 1 2 3)= | Yes |
+| =<== | =(<= 1 2)= | Yes |
+| =>= | =(> 3 2 1)= | Yes |
+| =>== | =(>= 3 3)= | Yes |
+
+* Type Predicates
+
+#+BEGIN_SRC monad
+(Int?    42)        ;; Tru)
+(Float?  3.14)      ;; Tru)
+(Number? 42)         ;; Tru)
+(Number? 3.14)       ;; Tru)
+(Number? "hello")    ;; Fals)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+Int?    42        ;; Tru)
+Float?  3.14      ;; Tru)
+Number? 42         ;; Tru)
+Number? 3.14       ;; Tru)
+Number? "hello"    ;; Fals)
+#+END_SRC
+
+* Related Pages
+
+- [[file:rationals.org][Rationals]] — exact rational arithmetic
+- [[file:types.org][Types]] — type system, ground types
+- [[file:core.org][Core Library]] — arithmetic/bitwise/comparison dispatch
+- [[file:syntax.org][Syntax]] — literal syntax
+- [[file:strings.org][Strings]] — numeric string conversion
+- [[file:ffi.org][C FFI]] — fixed-width types for interop
+
+* Context Links
+
+- [[file:../context/types.org][context/types.org]] — Numeric type kinds
+- [[file:../context/language.org::working-dispatch][context/language.org — Arithmetic dispatch]]
+- [[file:../codegen.c::13144][codegen.c]] — Type conversion handlers
+
+
+

@@ -1,0 +1,123 @@
+#+TITLE: Logic
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:logic:info:
+
+:PROPERTIES:
+:ID:       monadc.info.logic
+:CONTEXT:  monadc.context.codegen-ops, monadc.context.language
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:booleans.org][Booleans]] · [[file:conditionals.org][Conditionals]] · [[file:equality.org][Equality]] · [[file:core.org][Core Library]] · [[file:control.org][Control Flow]] · [[file:types.org][Types]]
+
+Test coverage: logic operators are exercised by =rt_cmp_*.mon=
+fixtures.
+
+Boolean logic operators combine truth values. =and= and =or= use
+short-circuit evaluation — the second argument is only evaluated if
+needed.
+
+* and
+
+Logical conjunction — returns =True= if all arguments are true:
+
+#+BEGIN_SRC monad
+(and True True)                  ;; True
+(and True False)                 ;; False
+(and (> x 0) (< x 100))         ;; True if x in range
+#+END_SRC
+
+#+BEGIN_SRC wisp
+and True True
+and True False
+and
+  > x 0
+  < x 100
+#+END_SRC
+
+Short-circuit: if any argument is =False=, remaining arguments are
+not evaluated. Variadic: 2..N arguments.
+
+* or
+
+Logical disjunction — returns =True= if any argument is true:
+
+#+BEGIN_SRC monad
+(or False True)                  ;; True
+(or False False)                ;; False
+(or (< x 0) (> x 100))          ;; True if x out of range
+#+END_SRC
+
+#+BEGIN_SRC wisp
+or False True
+or False False
+or
+  < x 0
+  > x 100
+#+END_SRC
+
+Short-circuit: if any argument is =True=, remaining arguments are not
+evaluated. Variadic: 2..N arguments.
+
+* not
+
+Logical negation:
+
+#+BEGIN_SRC monad
+(not True)                       ;; False
+(not False)                      ;; True
+(not (= x 0))                   ;; True if x != 0
+#+END_SRC
+
+#+BEGIN_SRC wisp
+not True
+not False
+not (= x 0)
+#+END_SRC
+
+=not= takes a single argument.
+
+* Truthiness
+
+Only =False= and =nil= are considered falsey in condition position. All
+other values are truthy:
+
+#+BEGIN_SRC monad
+(if 0 "truthy" "falsey")        ;; "truthy" — 0 is truthy
+(if "" "truthy" "falsey")       ;; "truthy" — "" is truthy
+(if False "truthy" "falsey")    ;; "falsey"
+(if nil "truthy" "falsey")      ;; "falsey"
+#+END_SRC
+
+#+BEGIN_SRC wisp
+if 0 "truthy" "falsey"
+if "" "truthy" "falsey"
+if False "truthy" "falsey"
+if nil "truthy" "falsey"
+#+END_SRC
+
+* Operator Table
+
+| Operator | Example        | Description           | Short-circuit |
+|----------+----------------+-----------------------+---------------|
+| and      | =(and a b)=    | Logical AND           | Yes           |
+| or       | =(or a b)=     | Logical OR            | Yes           |
+| not      | =(not a)=      | Logical NOT           | N/A           |
+
+* Related Pages
+
+- [[file:booleans.org][Booleans]] -- Bool type, True/False
+- [[file:conditionals.org][Conditionals]] -- if, cond with boolean conditions
+- [[file:equality.org][Equality]] -- comparison returning Bool
+- [[file:core.org][Core Library]] -- logic dispatch builtins
+- [[file:control.org][Control Flow]] -- control flow with boolean conditions
+
+* Context Links
+
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — operation dispatch
+- [[file:../context/language.org][context/language.org]] — logic semantics
+- [[file:../codegen.c][codegen.c]] — =strcmp= handlers
+- [[file:core.org][Core Library]] — built-in function overview
+- [[file:booleans.org][Booleans]] — Bool type, True/False
+- [[file:conditionals.org][Conditionals]] — if, cond, when, unless

@@ -1,7 +1,16 @@
 name: heap_array_tail_count_literal
 section: collections
+tier: experimental
+kind: law
+features: arithmetic, array, array-index, collections, equality, heap-array
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.equality_dispatch, codegen.heap_array, infer.arithmetic, infer.array, infer.callable_array, infer.equality, reader.array_literal, reader.heap_array
+uses-atoms: atom.core.equality, atom.runtime.array, atom.runtime.heap-array
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_equality_reflexive
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Bool
 expect: True
 description: tail must work on heap array literals and preserve the runtime-sized count.
 law: (= (count (tail ~[1 2 3])) 2)
+demoted-from: stable-by-signal-v13

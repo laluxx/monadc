@@ -1,0 +1,16 @@
+name: structured_v9_set_set_conj_contains_generated_disabled_duplicate_v13_dddc810e
+section: collections-set-v9
+tier: experimental
+kind: law
+features: arithmetic, collections, predicate, set
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, infer.arithmetic, infer.type_predicate, runtime.set
+uses-atoms: atom.infer.predicate
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Stress persistent and mutable set operations, membership, duplicate handling, and branch guarded mutation.
+law: (contains? (conj (set {a}) {b}) {b})
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: mega_set_conj_contains_generated

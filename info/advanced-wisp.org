@@ -1,8 +1,23 @@
 #+TITLE: Advanced Wisp
 #+STARTUP: showeverything
 #+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:wisp:advanced:info:
 
-[[file:index.org][<- Back to Index]] · [[file:wisp.org][Wisp Basics]]
+:PROPERTIES:
+:ID:       monadc.info.advanced-wisp
+:CONTEXT:  monadc.context.wisp, monadc.context.language
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:wisp.org][Wisp Syntax]] · [[file:syntax.org][Syntax]] · [[file:lambda.org][Lambda]] · [[file:quote.org][Quote]] · [[file:conditionals.org][Conditionals]] · [[file:patterns.org][Pattern Matching]]
+
+This page covers the Wisp expander internals, arity table architecture,
+sugar transformations (!-sugar, ?-sugar, @-sugar), and known Wisp bugs.
+For the user-facing Wisp reference, see [[file:wisp.org][Wisp Syntax]].
+
+Implementation: [[file:../wisp.c][wisp.c]] (4785+ lines) and [[file:../context/wisp.org][context/wisp.org]].
+Test coverage: wisp-specific bugs and edge cases are covered by
+=tests/sugar/= (192 TSV entries) and =rt_wisp_*.mon= codegen fixtures.
 
 * Wisp Expansion Pipeline
 
@@ -165,19 +180,27 @@ match x
 
 * Known Wisp Bugs
 
-| Issue | Description | Workaround |
-|-------+-------------+------------|
-| Multi-line =define= with =->= | Wisp-style =define name :: T -> T= with body on next line creates incorrect lambda bindings (simple-clause heuristic misclassifies parameters) | Use S-expression form |
-| Guards with arrows | =x | x > 0 -> body= in Wisp =define= may not desugar correctly | Use S-expression |
-| Metadata in Wisp =define= | =:alias=, =:doc= keywords emitted as separate top-level forms instead of being inside the =define= | Use S-expression |
-| Char escape in Wisp | ='\n'= and similar char escapes may not parse correctly in Wisp mode (wisp expands =\\n= to a real newline, splitting the literal) | Use S-expression for char literals with escapes |
-| Sugar interference with untyped vars | =conj! s 3= becomes =(s conj! 3)= when =s= is untyped | Type-annotate the variable: =define [s :: Set]= |
+| Issue                                | Description                                                                                                                                  | Workaround                                              |                  |
+|--------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------+------------------|
+| Multi-line =define= with =->=            | Wisp-style =define name :: T -> T= with body on next line creates incorrect lambda bindings (simple-clause heuristic misclassifies parameters) | Use S-expression form                                   |                  |
+| Guards with arrows                   | =x                                                                                                                                           | x > 0 -> body= in Wisp =define= may not desugar correctly | Use S-expression |
+| Metadata in Wisp =define=              | =:alias=, =:doc= keywords emitted as separate top-level forms instead of being inside the =define=                                                 | Use S-expression                                        |                  |
+| Char escape in Wisp                  | ='\n'= and similar char escapes may not parse correctly in Wisp mode (wisp expands =\\n= to a real newline, splitting the literal)               | Use S-expression for char literals with escapes         |                  |
+| Sugar interference with untyped vars | =conj! s 3= becomes =(s conj! 3)= when =s= is untyped                                                                                              | Type-annotate the variable: =define [s :: Set]=           |                  |
 
 * Mixing Wisp and S-expressions
 
 Any line can use S-expression syntax. The expander only transforms
 lines detected as Wisp-style (indentation-based prefix form). This
 allows gradual migration and selective use of parentheses for clarity.
+
+* Related Pages
+
+- [[file:wisp.org][Wisp Syntax]] -- Wisp syntax overview
+- [[file:syntax.org][Syntax]] -- S-expression syntax fundamentals
+- [[file:lambda.org][Lambda]] -- Wisp arrow forms
+- [[file:quote.org][Quote]] -- quoting and quasiquoting
+- [[file:patterns.org][Pattern Matching]] -- pattern matching
 
 * Context Links
 

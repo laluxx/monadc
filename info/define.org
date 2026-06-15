@@ -1,0 +1,167 @@
+#+TITLE: Define
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:define:info:
+
+:PROPERTIES:
+:ID:       monadc.info.define
+:CONTEXT:  monadc.context.language, monadc.context.reader
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:syntax.org][Syntax]] · [[file:lambda.org][Lambda]] · [[file:let.org][Let Bindings]] · [[file:quote.org][Quote]] · [[file:types.org][Types]] · [[file:recursion.org][Recursion]]
+
+Test coverage: =define= is exercised by every codegen fixture — it is
+the primary binding form used across all 423 runtime tests.
+
+=define= binds a name to a value at the top level of a module or REPL.
+It is the standard way to introduce variables, functions, and aliases.
+
+* Simple Value Binding
+
+#+BEGIN_SRC monad
+(define pi 3.14159)
+(define name "Monad")
+(define x 42)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define pi 3.14159
+define name "Monad"
+define x 42
+#+END_SRC
+
+Creates a binding visible to all subsequent forms in the module.
+
+* Typed Value Binding
+
+Bracket syntax for type annotation:
+
+#+BEGIN_SRC monad
+(define [x :: Int] 42)
+(define [pi :: Float] 3.14159)
+(define [name :: String] "hello")
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define [x :: Int] 42
+define [pi :: Float] 3.14159
+define [name :: String] "hello"
+#+END_SRC
+
+The annotation constrains inference. Without annotation, the type is
+inferred from the value.
+
+* Function Definition
+
+#+BEGIN_SRC monad
+;; Simple
+(define (add a b) (+ a b))
+
+;; Typed signature
+(define (add :: Int -> Int -> Int)
+  a b -> (+ a b))
+
+;; Single-parameter
+(define (square [x :: Int] -> Int)
+  (* x x))
+
+;; With documentation
+(define (mult [x :: Float] [y :: Float] -> Float)
+  "Multiply X and Y as Floats"
+  (* x y))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+;; Simple
+define add a b -> + a b
+
+;; Typed signature
+define add :: Int -> Int -> Int
+  a b -> + a b
+
+;; Single-parameter
+define square [x :: Int] -> Int
+  * x x
+
+;; With documentation
+define mult [x :: Float] [y :: Float] -> Float
+  "Multiply X and Y as Floats"
+  * x y
+#+END_SRC
+
+The function form =(define (f params) body)= desugars to
+=(define f (lambda params body))=.
+
+* Metadata Keywords
+
+| Keyword | Example                       | Description              |
+|---------+-------------------------------+--------------------------|
+| :doc    | =(define pi 3.14 :doc "Pi")=    | Documentation string     |
+| :alias  | =(define x 1 :alias X)=         | Alternative display name |
+| :naked  | =(define (f) body :naked True)= | Raw asm (no prologue)    |
+
+#+BEGIN_SRC monad
+(define [pi :: Float] 3.14159
+  :doc "Archimedes' constant"
+  :alias π)
+
+(define (addnaked a b)
+  "Add with inline asm, naked"
+  (asm mov a %rax
+       add b %rax
+       ret)
+  :naked True)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define [pi :: Float] 3.14159
+  :doc "Archimedes' constant"
+  :alias π
+
+define addnaked a b
+  "Add with inline asm, naked"
+  asm mov a %rax
+      add b %rax
+      ret
+  :naked True
+#+END_SRC
+
+* Wisp Syntax
+
+#+BEGIN_SRC wisp
+define [pi :: Float] 3.14159
+  :doc "Archimedes' constant"
+  :alias π
+
+define square x -> x * x
+
+define add :: Int -> Int -> Int
+  a b -> + a b
+#+END_SRC
+
+* Scope
+
+=define= bindings are module-level (not lexically scoped like =let=).
+They are available from the point of definition to the end of the file,
+including in subsequent definitions.
+
+Multiple =define=s of the same name shadow the previous binding (not
+an error unless the types conflict).
+
+* Related Pages
+
+- [[file:syntax.org][Syntax]] -- S-expressions, special forms overview
+- [[file:lambda.org][Lambda]] -- anonymous functions
+- [[file:let.org][Let Bindings]] -- local bindings
+- [[file:types.org][Types]] -- type annotations and inference
+- [[file:recursion.org][Recursion]] -- recursive function definitions
+
+* Context Links
+
+- [[file:../context/language.org][context/language.org]] — binding representation
+- [[file:../context/reader.org][context/reader.org]] — define parsing
+- [[file:syntax.org][Syntax]] — full syntax reference
+- [[file:lambda.org][Lambda]] — anonymous function syntax
+- [[file:let.org][Let Bindings]] — local bindings
+- [[file:types.org][Types]] — type annotations

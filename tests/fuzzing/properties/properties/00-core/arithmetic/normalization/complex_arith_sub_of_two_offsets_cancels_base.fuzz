@@ -1,5 +1,13 @@
 name: complex_arith_sub_of_two_offsets_cancels_base
 section: arithmetic-normalization
+tier: stable
+kind: law
+features: arithmetic, equality, logic, set
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, codegen.runtime_call, infer.arithmetic, infer.equality, infer.logic, runtime.set
+uses-atoms: atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_v13_atom_equality_reflexive
+signal: medium
+corpus-role: semantic-law
 args: base:Int left:Int right:Int
 type: Bool
 expect: True

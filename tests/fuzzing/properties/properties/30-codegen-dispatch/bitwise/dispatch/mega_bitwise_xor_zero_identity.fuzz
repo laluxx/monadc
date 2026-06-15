@@ -1,7 +1,0 @@
-name: mega_bitwise_xor_zero_identity
-section: codegen-bitwise-dispatch
-args: a:Int
-type: Bool
-expect: True
-description: bit-xor with zero must be identity.
-law: (= (bit-xor {a} 0) {a})

@@ -1,0 +1,16 @@
+name: signal_v13_atom_multiply_commutative
+section: v13-atom-foundation
+tier: stable
+kind: law
+features: arithmetic,*,equality
+compiler-path: codegen.expr.binary-mul,runtime.int.mul
+atom: atom.core.multiply.commutative
+proves: atom.core.multiply.commutative
+uses-atoms: atom.core.equality, atom.core.multiply
+signal: high
+corpus-role: atom-foundation
+args: a:Int@tiny+if b:Int@tiny+with
+type: Bool
+expect: True
+description: Foundation atom proof for atom.core.multiply.commutative; derived properties link through uses-atoms/depends-on metadata.
+law: (= (* {a} {b}) (* {b} {a}))

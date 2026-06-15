@@ -1,0 +1,17 @@
+name: extreme_bitwise_shift_left_zero_identity_disabled_duplicate_v13_0a102ec0
+section: bitwise-identities
+tier: experimental
+kind: law
+features: arithmetic, bitwise, comparison, equality, if, phi, shift
+compiler-path: codegen.arithmetic_dispatch, codegen.bitwise_dispatch, codegen.branch_phi, codegen.comparison_dispatch, codegen.equality_dispatch, codegen.if_phi, codegen.shift_dispatch, infer.arithmetic, infer.comparison, infer.equality, infer.if_phi, reader.ast_if
+uses-atoms: atom.control.if, atom.core.equality, atom.core.order.lt
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_if_same_branch_eliminates, signal_v13_atom_lt_transitive
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: a:Int
+type: Bool
+expect: True
+description: Bitwise codegen identities should preserve integer bit operations without Bool coercion.
+law: (= (<< {a} 0) {a})
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: bitwise_shift_left_zero_identity

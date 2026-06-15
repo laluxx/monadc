@@ -1,0 +1,15 @@
+name: structured_v10_strategy_edge_do_mod_sub_add_roundtrip
+section: v10-strategy-edge_do_mod
+tier: stable
+kind: law
+features: arithmetic, comparison, strategy
+compiler-path: codegen.arithmetic_dispatch, codegen.comparison_dispatch, infer.arithmetic, infer.comparison, runner.strategy_arg, runner.typed_generator
+uses-atoms: atom.core.equality, atom.core.minus, atom.core.plus
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero
+signal: medium
+corpus-role: semantic-law
+args: a:Int@edge+do+mod b:Int@tiny+mod p:Bool@logic+if
+type: Bool
+expect: True
+description: V10 strategy property sub_add_roundtrip generated with edge_do_mod arguments to stress compiler dispatch, envs, and PHI lowering.
+law: (= (+ (- {a} {b}) {b}) {a})

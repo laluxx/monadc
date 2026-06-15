@@ -1,7 +1,7 @@
 CC      = gcc
 PYTHON  = python3
 CFLAGS  = -Wall -Wextra -std=c99 $(shell llvm-config --cflags)
-LDFLAGS = -lm -lreadline -lgmp $(shell llvm-config --ldflags --libs core) -lclang
+LDFLAGS = -lm -lreadline -lpthread -lgmp $(shell llvm-config --ldflags --libs core) -lclang
 TARGET  = monad
 PREFIX  = /usr/local
 BINDIR  = $(PREFIX)/bin

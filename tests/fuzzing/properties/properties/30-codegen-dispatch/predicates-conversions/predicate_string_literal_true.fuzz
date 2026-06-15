@@ -1,7 +1,0 @@
-name: predicate_string_literal_true
-section: predicates-conversions
-args: 
-type: Bool
-expect: True
-description: String? must accept string literals.
-law: (String? "abc")

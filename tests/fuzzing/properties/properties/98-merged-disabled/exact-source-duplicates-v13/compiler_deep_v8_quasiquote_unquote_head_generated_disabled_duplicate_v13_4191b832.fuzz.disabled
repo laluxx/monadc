@@ -1,0 +1,17 @@
+name: compiler_deep_v8_quasiquote_unquote_head_generated_disabled_duplicate_v13_4191b832
+section: quote-runtime-v8
+tier: experimental
+kind: law
+features: arithmetic, equality, path, quasiquote, quote, unquote
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.path_literal, codegen.quote, desugar.quasiquote, infer.arithmetic, infer.equality, infer.path, reader.path_literal, reader.quasiquote, reader.quote, reader.unquote
+uses-atoms: atom.core.equality, atom.core.plus, atom.quote.quote, atom.runtime.path
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: a:Int b:Int
+type: Bool
+expect: True
+description: quasiquote/unquote should preserve generated value in first list position.
+law: (= (head (quasiquote ((unquote (+ {a} {b})) tail))) (+ {a} {b}))
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: mega_quasiquote_unquote_arith_value

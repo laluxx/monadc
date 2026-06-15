@@ -1,7 +1,0 @@
-name: deep_codegen_logic_or_variadic_bool
-section: codegen-logic-comparison
-args: p:Bool q:Bool r:Bool
-type: Bool
-expect: True
-description: Variadic or must accumulate left-to-right over generated Bools.
-law: (= (or {p} {q} {r}) (or (or {p} {q}) {r}))

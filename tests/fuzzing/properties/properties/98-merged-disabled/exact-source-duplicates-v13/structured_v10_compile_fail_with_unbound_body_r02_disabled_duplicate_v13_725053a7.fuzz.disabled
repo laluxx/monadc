@@ -1,0 +1,17 @@
+name: structured_v10_compile_fail_with_unbound_body_r02_disabled_duplicate_v13_725053a7
+section: v10-compile-fail
+tier: experimental
+kind: compile-fail
+features: compile-fail, with, unbound
+compiler-path: codegen.with_binding, diagnostic.expected_error, infer.env_child, infer.unbound_symbol, runner.compile_fail_kind
+uses-atoms: atom.binding.with, atom.core.plus, atom.runtime.array
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero, signal_v13_atom_with_substitution
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: a:Int@edge
+type: Bool
+expect-diagnostic: error:
+description: V10 compile-fail property with_unbound_body round 2; must fail to compile and emit a compiler error.
+law: (with [x {a}] (+ y 1))
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: structured_v10_compile_fail_with_unbound_body_r01

@@ -1,5 +1,13 @@
 name: deep_codegen_mod_one_is_zero
 section: codegen-arithmetic-dispatch
+tier: stable
+kind: law
+features: arithmetic, codegen, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, infer.arithmetic, infer.equality
+uses-atoms: atom.codegen.dispatch, atom.core.equality
+related-properties: signal_v13_atom_equality_reflexive
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: True

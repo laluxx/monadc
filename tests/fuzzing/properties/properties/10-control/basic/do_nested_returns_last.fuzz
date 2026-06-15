@@ -1,5 +1,13 @@
 name: do_nested_returns_last
 section: control
+tier: stable
+kind: law
+features: arithmetic, control, do, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.sequence, infer.arithmetic, infer.equality, reader.ast_do
+uses-atoms: atom.control.do, atom.core.equality
+related-properties: signal_v13_atom_do_last_value, signal_v13_atom_equality_reflexive
+signal: medium
+corpus-role: semantic-law
 args: a:Int b:Int c:Int
 type: Bool
 expect: True

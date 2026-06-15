@@ -1,0 +1,18 @@
+name: mega_cross_loop_then_predicate_set_4_disabled_duplicate_v13_c8ee9c2b
+section: codegen-cross-layer-stress
+tier: experimental
+kind: law
+features: arithmetic, array, array-index, codegen, do, env, for, logic, predicate, set, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.for_loop, codegen.local_load, codegen.logic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, codegen.sequence, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.logic, infer.loop, infer.type_predicate, reader.array_literal, reader.ast_do, runtime.set
+uses-atoms: atom.binding.with, atom.codegen.dispatch, atom.control.do, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or, atom.runtime.array
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_do_last_value, signal_v13_atom_with_substitution
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: 
+type: Bool
+expect: True
+description: for loop to 4 must mutate set with final induction value.
+law: (with [s (set)] (do (for [i 0 4] (conj! s i)) (contains? s 3)))
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: mega_cross_loop_set_contains_last_index
+demoted-from: stable-by-signal-v13

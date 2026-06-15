@@ -1,5 +1,12 @@
 name: mega_cross_quasiquote_head_into_set
 section: codegen-cross-layer-stress
+tier: stable
+kind: law
+features: arithmetic, codegen, predicate, quasiquote, quote, set, unquote
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.quote, codegen.runtime_call, desugar.quasiquote, infer.arithmetic, infer.type_predicate, reader.quasiquote, reader.quote, reader.unquote, runtime.set
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate, atom.quote.quote
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: True

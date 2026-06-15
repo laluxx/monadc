@@ -1,0 +1,129 @@
+#+TITLE: Arithmetic
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:arithmetic:info:
+
+:PROPERTIES:
+:ID:       monadc.info.arithmetic
+:CONTEXT:  monadc.context.codegen-ops, monadc.context.language
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:equality.org][Equality]] · [[file:logic.org][Logic]] · [[file:numeric.org][Numeric Types]] · [[file:core.org][Core Library]] · [[file:casting.org][Casting]] · [[file:math-module.org][Math Module]]
+
+Test coverage: arithmetic is exercised by =rt_arith_*.mon= fixtures
+and by =rt_bitwise_*.mon= for bitwise operations.
+
+All arithmetic operators work on Int, Float, and mixed Int/Float
+operands. Most are variadic (1..N arguments).
+
+* Basic Operations
+
+| Operator | Example  | Description    | Arity |
+|----------+----------+----------------+-------|
+| +        | =(+ 1 2)=  | Addition       | 0..N  |
+| -        | =(- 5 2)=  | Subtraction    | 1..N  |
+| *        | =(* 3 4)=  | Multiplication | 0..N  |
+| /        | =(/ 10 2)= | Division       | 1..N  |
+| %        | =(% 10 3)= | Modulo         | 2     |
+
+#+BEGIN_SRC monad
+(+ 1 2 3)                       ;; 6 — variadic sum
+(- 10 3 2)                      ;; 5 — 10 - 3 - 2
+(* 2 3 4)                       ;; 24
+(/ 10 2)                        ;; 5
+
+(- 5)                           ;; -5 — negation
+(/ 7 2)                         ;; 3 (integer division)
+(/ 7.0 2)                       ;; 3.5 (float division)
+#+END_SRC
+
+#+BEGIN_SRC wisp
++ 1 2 3
+- 10 3 2
+* 2 3 4
+/ 10 2
+
+- 5
+/ 7 2
+/ 7.0 2
+#+END_SRC
+
+Mixed Int/Float promotes to Float:
+#+BEGIN_SRC monad
+(+ 1 2.5)                        ;; 3.5 — Float
+(* 3 0.5)                       ;; 1.5 — Float
+#+END_SRC
+
+#+BEGIN_SRC wisp
++ 1 2.5
+* 3 0.5
+#+END_SRC
+
+* Bitwise
+
+| Operator   | Example           | Description        |
+|------------+-------------------+--------------------|
+| &          | =(bit-and x 0xFF)= | Bitwise AND        |
+| bit-or / ∨ | =(bit-or a b)=    | Bitwise OR         |
+| bit-xor / ⊕| =(bit-xor a b)=   | Bitwise XOR        |
+| ~          | =(~ x)=           | Bitwise NOT        |
+| <<         | =(<< x 2)=        | Left shift         |
+| >>         | =(>> x 2)=        | Right shift        |
+| >>>        | =(>>> x 2)=       | Unsigned right shift |
+
+#+BEGIN_SRC monad
+(& 0xFF 0x0F)                    ;; 0x0F
+(<< 1 8)                        ;; 256
+(~ 0)                           ;; -1 (all bits set)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+& 0xFF 0x0F
+<< 1 8
+~ 0
+#+END_SRC
+
+* Superscript Sugar
+
+| Written | Desugars to |
+|---------+-------------|
+| =x²=      | =(^ x 2)=     |
+| =x³=      | =(^ x 3)=     |
+
+=^= has no strcmp handler — not callable from paren-mode
+([[file:../context/language.org::404]]).
+
+* Operator Table (Full)
+
+| Operator | Example         | Description     | Variadic |
+|----------+-----------------+-----------------+----------|
+| +        | =(+ 1 2 3)=       | Addition        | 0..N     |
+| -        | =(- 10 3)=        | Subtraction/neg | 1..N     |
+| *        | =(* 2 3 4)=       | Multiplication  | 0..N     |
+| /        | =(/ 10 2)=        | Division        | 1..N     |
+| %        | =(% 10 3)=        | Modulo          | 2        |
+| &        | =(& a b)=         | Bitwise AND     | 2..N     |
+| bit-or   | =(bit-or a b)=  | Bitwise OR      | 2..N     |
+| bit-xor  | =(bit-xor a b)= | Bitwise XOR     | 2..N     |
+| ~        | =(~ x)=           | Bitwise NOT     | 1        |
+| <<       | =(<< x n)=        | Left shift      | 2        |
+| >>       | =(>> x n)=        | Right shift     | 2        |
+| >>>      | =(>>> x n)=       | Unsigned rshift | 2        |
+
+* Related Pages
+
+- [[file:numeric.org][Numeric Types]] -- Int, Float, numeric type hierarchy
+- [[file:core.org][Core Library]] -- built-in function overview
+- [[file:equality.org][Equality]] -- comparison and equality
+- [[file:math-module.org][Math Module]] -- gcd, sin, factorial, pi
+- [[file:casting.org][Casting]] -- numeric type conversions
+
+* Context Links
+
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — operation dispatch
+- [[file:../context/language.org][context/language.org]] — arithmetic semantics
+- [[file:../codegen.c][codegen.c]] — =strcmp= handlers
+- [[file:core.org][Core Library]] — built-in function overview
+- [[file:numeric.org][Numeric Types]] — Int, Float, Hex, etc.
+- [[file:type-classes.org][Type Classes]] — Numeric class hierarchy

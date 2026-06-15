@@ -1,5 +1,13 @@
 name: do_true_literal_returns_true
 section: control
+tier: stable
+kind: law
+features: arithmetic, control, do, set
+compiler-path: codegen.arithmetic_dispatch, codegen.runtime_call, codegen.sequence, infer.arithmetic, reader.ast_do, runtime.set
+uses-atoms: atom.control.do
+related-properties: signal_v13_atom_do_last_value
+signal: medium
+corpus-role: semantic-law
 args: setup:Int
 type: Bool
 expect: True

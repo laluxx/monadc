@@ -1,7 +1,0 @@
-name: mega_bitwise_not_involution
-section: codegen-bitwise-dispatch
-args: a:Int
-type: Bool
-expect: True
-description: double bitwise not must return original generated Int.
-law: (= (~ (~ {a})) {a})

@@ -1,7 +1,0 @@
-name: extreme_lattice_max_associative_deep
-section: lattice-clamp-deep
-args: a:Int b:Int c:Int d:Int
-type: Bool
-expect: True
-description: Min/max lattice and clamp laws must hold through helper-based branch implementations.
-law: (= (fuzz-max (fuzz-max {a} {b}) (fuzz-max {c} {d})) (fuzz-max {a} (fuzz-max {b} (fuzz-max {c} {d}))))

@@ -1,7 +1,16 @@
 name: arith_mod_constant_percent
 section: arithmetic-dispatch
+tier: experimental
+kind: law
+features: arithmetic, equality, mod
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.mod_dispatch, infer.arithmetic, infer.equality
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.core.modulo
+related-properties: signal_v13_atom_equality_reflexive
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Bool
 expect: True
 description: Percent modulo dispatch must compute integer remainder for constants.
 law: (= (% 23 5) 3)
+demoted-from: stable-by-signal-v13

@@ -1,5 +1,13 @@
 name: logic_int_and_zero_forces_false
 section: logic-coercion
+tier: stable
+kind: law
+features: arithmetic, equality, for, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.for_loop, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic, infer.loop
+uses-atoms: atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_v13_atom_equality_reflexive
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: True

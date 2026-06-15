@@ -1,0 +1,15 @@
+name: structured_v10_exp_array_value_roundtrip_oracleless_r01
+section: v10-experimental
+tier: experimental
+kind: law
+features: experimental, array, dependent-index
+compiler-path: codegen.array_literal, infer.array, reader.array_literal
+uses-atoms: atom.core.equality, atom.dependent.index-of, atom.runtime.array
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_equality_reflexive
+signal: high
+corpus-role: semantic-law
+args: xs:NonEmptyArrInt@small i:IndexOf(xs)
+type: Bool
+expect: True
+description: V10 experimental generator property exp_array_value_roundtrip_oracleless round 1, intended for --tiers experimental/all.
+law: (= ({xs} {i}) ({xs} {i}))

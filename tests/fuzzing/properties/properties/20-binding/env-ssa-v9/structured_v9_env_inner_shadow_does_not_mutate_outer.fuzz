@@ -1,7 +1,0 @@
-name: structured_v9_env_inner_shadow_does_not_mutate_outer
-section: binding-env-v9
-args: a:Int b:Int c:Int
-type: Bool
-expect: True
-description: Stress lexical environment lowering, shadowing, initializer order, and mutable variable lookup.
-law: (= (with [x {a}] (do (with [x {b}] (set! x {c})) x)) {a})

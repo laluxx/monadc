@@ -1,5 +1,13 @@
 name: deep_codegen_cross_type_pred_after_if_array
 section: codegen-cross-feature
+tier: stable
+kind: law
+features: arithmetic, array, array-index, codegen, if, phi, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.branch_phi, codegen.if_phi, codegen.predicate_dispatch, infer.arithmetic, infer.array, infer.callable_array, infer.if_phi, infer.type_predicate, reader.array_literal, reader.ast_if
+uses-atoms: atom.codegen.dispatch, atom.control.if, atom.infer.predicate, atom.runtime.array
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_if_same_branch_eliminates
+signal: medium
+corpus-role: semantic-law
 args: p:Bool a:Int b:Int
 type: Bool
 expect: True

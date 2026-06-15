@@ -1,5 +1,13 @@
 name: arith_mod_after_equal_subtraction
 section: arithmetic-dispatch
+tier: stable
+kind: law
+features: arithmetic, equality, mod
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.mod_dispatch, infer.arithmetic, infer.equality
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.core.minus, atom.core.modulo, atom.core.multiply, atom.core.plus
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_multiply_associative, signal_v13_atom_multiply_commutative, signal_v13_atom_multiply_identity_one, signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: True

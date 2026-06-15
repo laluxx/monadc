@@ -1,5 +1,12 @@
 name: compare_variadic_gt_false_on_duplicate
 section: comparison-variadic
+tier: stable
+kind: law
+features: arithmetic, comparison
+compiler-path: codegen.arithmetic_dispatch, codegen.comparison_dispatch, infer.arithmetic, infer.comparison
+uses-atoms: atom.core.minus, atom.core.order.gt
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: False

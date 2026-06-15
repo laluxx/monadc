@@ -1,0 +1,17 @@
+name: complex_lattice_min_max_sum_preserves_two_values_disabled_duplicate_v13_cf8161bc
+section: lattice-arithmetic
+tier: experimental
+kind: law
+features: arithmetic, equality, lattice, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+uses-atoms: atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_v13_atom_equality_reflexive
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: a:Int b:Int
+type: Bool
+expect: True
+description: For two values, min plus max must equal the original sum.
+law: (= (fuzz-add (fuzz-min {a} {b}) (fuzz-max {a} {b})) (fuzz-add {a} {b}))
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: min_max_sum_decomposition

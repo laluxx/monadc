@@ -1,0 +1,207 @@
+#+TITLE: Lists
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:list:info:
+
+:PROPERTIES:
+:ID:       monadc.info.list
+:CONTEXT:  monadc.context.language, monadc.context.codegen-ops, monadc.context.types
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:collections.org][Collections]] · [[file:set.org][Sets]] · [[file:map.org][Maps]] · [[file:arrays.org][Arrays]] · [[file:pair.org][Pairs]] · [[file:patterns.org][Pattern Matching]] · [[file:range.org][Ranges]]
+
+Test coverage: =rt_list_*.mon= fixtures in
+[[file:../tests/codegen/][tests/codegen/]]. List destructuring via pattern
+matching tested by =rt_match_*.mon=.
+
+Lists in Monad are linked cons cells at runtime — a chain of pairs where
+each cell holds a value and a pointer to the rest. They are the classic
+Lisp list: O(1) prepend, O(n) random access.
+
+* Literal Syntax
+
+Quoted S-expression lists are the primary construction form:
+
+#+BEGIN_SRC monad
+'(1 2 3)                ;; quote shorthand
+(quote (1 2 3))         ;; explicit quote
+'()                     ;; empty list (same as nil)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+'(1 2 3)
+quote (1 2 3)
+'()
+#+END_SRC
+
+The reader treats =(quote ...)= specially, producing a chain of
+=AST_CONS= nodes terminating in =AST_NIL=.
+
+* Core Operations
+
+| Function  | Example                 | Result    |
+|-----------+-------------------------+-----------|
+| cons      | =(cons 1 '(2 3))=         | (1 2 3)   |
+| car       | =(car '(1 2 3))=          | 1         |
+| cdr       | =(cdr '(1 2 3))=          | (2 3)     |
+| nil       | =nil=                     | ()        |
+| ++        | =(++ '(1 2) '(3 4))=      | (1 2 3 4) |
+| count     | =(count '(1 2 3))=        | 3         |
+| empty?    | =(empty? '(1))=           | False     |
+| nil?      | =(nil? nil)=              | True      |
+| pair?     | =(pair? '(1 2))=          | True      |
+| list      | =(list)=                  | ()        |
+| make-list | =(make-list 3 'x)=        | (x x x)   |
+| reduce    | =(reduce + 0 '(1 2 3))= | 6         |
+
+* cons
+
+Prepend an element to a list:
+
+#+BEGIN_SRC monad
+(cons 1 '(2 3))         ;; (1 2 3)
+(cons 'x '())            ;; (x)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+cons 1 '(2 3)
+cons 'x '()
+#+END_SRC
+
+Allocates a new cons cell in the arena. The original list is unchanged
+— the new cell points to it.
+
+* ++ (append/prepend)
+
+The =++= operator is overloaded for lists:
+
+#+BEGIN_SRC monad
+(++ 1 '(2 3))           ;; (1 2 3) — prepend element
+(++ '(1 2) '(3 4))      ;; (1 2 3 4) — append lists
+#+END_SRC
+
+#+BEGIN_SRC wisp
+++ 1 '(2 3)
+++ '(1 2) '(3 4)
+#+END_SRC
+
+When the first argument is not a list, it is consed onto the front of
+the second. When both are lists, the first is copied and the last cdr
+points to the second.
+
+* car / cdr
+
+Destructure a non-empty list:
+
+#+BEGIN_SRC monad
+(car '(1 2 3))          ;; 1
+(cdr '(1 2 3))          ;; (2 3)
+(car (cons 'a '(b c)))  ;; a
+#+END_SRC
+
+#+BEGIN_SRC wisp
+car '(1 2 3)
+cdr '(1 2 3)
+car (cons 'a '(b c))
+#+END_SRC
+
+Known bug: =tail= on lists segfaults due to a runtime list
+implementation issue
+([[file:../context/language.org::codegen-gaps][context/language.org]]).
+
+* nil? / pair? / empty?
+
+Predicates for list structure:
+
+#+BEGIN_SRC monad
+(nil? '())              ;; True
+(nil? '(1 2))           ;; False
+(pair? '(1 2))          ;; True
+(pair? 42)              ;; False
+(empty? '(1))           ;; False
+(empty? '())            ;; True
+#+END_SRC
+
+#+BEGIN_SRC wisp
+nil? '()
+nil? '(1 2)
+pair? '(1 2)
+pair? 42
+empty? '(1)
+empty? '()
+#+END_SRC
+
+=empty?= delegates to =(= count x 0)=.
+
+* Pattern Matching With Cons
+
+List destructuring uses the =[x|xs]= cons-pattern:
+
+#+BEGIN_SRC monad
+(define take :: Int -> [a] -> [a]
+  _ []          -> []
+  n [x|xs]
+    | n > 0     -> (x ++ (take (n - 1) xs))
+    | otherwise -> [])
+
+(define (length xs -> Int)
+  (reduce (lambda [acc _] (+ acc 1)) 0 xs))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define take :: Int -> [a] -> [a]
+  _ []          -> []
+  n [x|xs]
+    | n > 0     -> x ++ (take (n - 1) xs)
+    | otherwise -> []
+
+define length xs -> Int
+  reduce (lambda [acc _] + acc 1) 0 xs
+#+END_SRC
+
+The =[x|xs]= pattern binds the head and tail of the list. The empty
+list pattern =[]= matches ='()=.
+
+* List-as-Function Indexing
+
+Lists can be used as functions for lookup:
+
+#+BEGIN_SRC monad
+('(10 20 30) 1)         ;; 20 — index access
+(my-list 0)             ;; first element
+#+END_SRC
+
+#+BEGIN_SRC wisp
+('(10 20 30) 1)
+my-list 0
+#+END_SRC
+
+Returns the i-th element or =nil= if out of bounds
+([[file:../codegen.c::9880]]).
+
+* Known Gap: Variadic list
+
+=(list 1 2 3)= with multiple arguments is broken — =(car (list 1 2 3))=
+returns =nil=. Only =(list)= (zero-arg) and =(make-list n val)= work
+correctly
+([[file:../context/language.org::codegen-gaps][context/language.org]]).
+
+* Related Pages
+
+- [[file:collections.org][Collections]] -- overview of all collection types
+- [[file:set.org][Sets]] -- hash sets
+- [[file:map.org][Maps]] -- hash maps
+- [[file:pair.org][Pairs]] -- Pair type, fst/snd, tuples
+- [[file:patterns.org][Pattern Matching]] -- list pattern matching
+
+* Context Links
+
+- [[file:../context/language.org][context/language.org]] — list dispatch, cons cell representation
+- [[file:../context/language.org::codegen-gaps][context/language.org — Known gaps]]
+- [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]]
+- [[file:patterns.org][Pattern Matching]] — [x|xs] destructuring
+- [[file:collections.org][Collections]] — overview of all collection types
+- [[file:set.org][Sets]] — hash set collection
+- [[file:map.org][Maps]] — hash map collection
+- [[file:core.org][Core Library]] — builtin collection operations

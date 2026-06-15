@@ -1,0 +1,18 @@
+name: mega_quote_list_count_three_disabled_duplicate_v13_a96fbb6b
+section: codegen-quote-runtime
+tier: experimental
+kind: law
+features: arithmetic, codegen, equality, list, path, quote
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.path_literal, codegen.quote, codegen.runtime_call, infer.arithmetic, infer.equality, infer.path, reader.path_literal, reader.quote, runtime.list
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.quote.quote, atom.runtime.path
+related-properties: signal_v13_atom_equality_reflexive
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: 
+type: Bool
+expect: True
+description: quote must build runtime list preserving list arity.
+law: (= (count (quote (a b c))) 3)
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: deep_codegen_runtime_quote_list_count
+demoted-from: stable-by-signal-v13

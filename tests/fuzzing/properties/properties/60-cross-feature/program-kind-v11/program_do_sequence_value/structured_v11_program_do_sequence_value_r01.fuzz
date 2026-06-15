@@ -1,0 +1,15 @@
+name: structured_v11_program_do_sequence_value_r01
+section: v11-program-kind
+tier: stable
+kind: program
+features: program, do, sequence, arithmetic
+compiler-path: codegen.arithmetic_dispatch, codegen.module_body, codegen.sequence, infer.arithmetic, reader.ast_do, runner.program_kind
+uses-atoms: atom.control.do, atom.core.equality, atom.core.plus
+related-properties: signal_v13_atom_do_last_value, signal_v13_atom_equality_reflexive, signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero
+signal: high
+corpus-role: program-semantics
+args: a:Int@edge b:Int@edge
+type: Bool
+expect: True
+description: V11 program-kind compiler test program_do_sequence_value round 1; exercises full program insertion instead of show-wrapped law mode.
+program: (show (= (do {a} {b} (+ {a} {b})) (+ {a} {b})))

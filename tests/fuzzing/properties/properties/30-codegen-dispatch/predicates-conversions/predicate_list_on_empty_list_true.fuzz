@@ -1,7 +1,15 @@
 name: predicate_list_on_empty_list_true
 section: predicates-conversions
+tier: experimental
+kind: law
+features: arithmetic, list, predicate, predicates
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, infer.arithmetic, infer.type_predicate, runtime.list
+uses-atoms: atom.infer.predicate
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Bool
 expect: True
 description: List? must accept zero-arg lists.
 law: (List? (list))
+demoted-from: stable-by-signal-v13

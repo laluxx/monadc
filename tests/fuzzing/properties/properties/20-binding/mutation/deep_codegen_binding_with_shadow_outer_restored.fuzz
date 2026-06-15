@@ -1,7 +1,0 @@
-name: deep_codegen_binding_with_shadow_outer_restored
-section: codegen-binding-mutation
-args: a:Int b:Int
-type: Bool
-expect: True
-description: outer with binding must be restored after inner child env exits.
-law: (= (with [x {a}] (do (with [x {b}] x) x)) {a})

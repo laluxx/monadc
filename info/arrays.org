@@ -1,0 +1,155 @@
+#+TITLE: Arrays
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:arrays:info:
+
+:PROPERTIES:
+:ID:       monadc.info.arrays
+:CONTEXT:  monadc.context.language, monadc.context.codegen-ops, monadc.context.types
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:collections.org][Collections]] · [[file:list.org][Lists]] · [[file:map.org][Maps]] · [[file:range.org][Ranges]] · [[file:heap.org][Heap Allocation]] · [[file:layouts.org][Layout Types]] · [[file:types.org][Types]]
+
+Test coverage: array operations verified by =rt_array_*.mon= fixtures in [[file:../tests/codegen/][tests/codegen/]]. Heap array iteration via =rt_heap_array_for.mon=. Array indexing via =rt_array_index.mon=.
+
+Monad provides three array variants with different memory and performance characteristics ([[file:../types.c::493]][types.c]):
+
+| Variant | Syntax | Memory | Size | Use Case |
+|---------+--------+--------+------+----------|
+| Stack | =[1 2 3]= | Stack frame | Fixed at compile time | Small, short-lived arrays |
+| Fat pointer | =[16kb I32]= | Stack/heap | Runtime-sized, fixed cap | C-interop sized buffers |
+| Heap-growable | =~[1 2 3]= | Heap | Runtime-sized, mutable | Long-lived out-of-frame data |
+
+* Stack Arrays ([[file:../reader.c::5821]])
+
+Stack arrays are fixed-size arrays allocated in the current stack frame:
+
+#+BEGIN_SRC monad
+(define arr [1 2 3])              ;; Arr :: Int :: 3
+(define typed [x :: Arr :: Int :: 5] [1 2 3 4 5])
+
+[1 2 3]                           ;; literal
+[]                                ;; empty array
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define arr [1 2 3]
+define typed [x :: Arr :: Int :: 5] [1 2 3 4 5]
+
+[1 2 3]
+[]
+#+END_SRC
+
+Size is inferred from the literal element count. For type-annotated declarations, the declared size must match.
+
+* Heap Arrays (tilde prefix, [[file:../reader.c::5898]])
+
+Heap arrays use the =~= prefix and are allocated on the heap with runtime-determined size:
+
+#+BEGIN_SRC monad
+~[1 2 3]                          ;; heap-allocated, runtime-sized
+~[]                               ;; empty heap array
+
+(define heap-arr ~[1 2 3])        ;; HeapArr :: Int :: 3
+#+END_SRC
+
+#+BEGIN_SRC wisp
+~[1 2 3]
+~[]
+
+define heap-arr ~[1 2 3]
+#+END_SRC
+
+Heap arrays support push/pop semantics and can outlive their defining scope. See [[file:heap.org][Heap Allocation]].
+
+* Fat Pointer Arrays ([[file:../reader.c::5933]])
+
+Fat pointer arrays carry a size tag alongside the data pointer:
+
+#+BEGIN_SRC monad
+[16kb I32]                        ;; fat pointer: {i8*, i64}
+#+END_SRC
+
+The size specifier can use =kb=, =mb=, or raw byte counts. The backing allocation may be stack or heap depending on size.
+
+* Array Indexing
+
+Arrays support collection-as-function semantics:
+
+#+BEGIN_SRC monad
+([1 2 3] 0)                       ;; 1
+([1 2 3] 1)                       ;; 2
+([1 2 3] 10)                      ;; nil (out of bounds)
+(~[1 2 3] 0)                      ;; 1 (heap array)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+([1 2 3] 0)
+([1 2 3] 1)
+([1 2 3] 10)
+(~[1 2 3] 0)
+#+END_SRC
+
+Postfix bracket syntax also works: =arr[0]= ([[file:../reader.c::6621]]). Bounds checking is performed at runtime.
+
+* Array Operations
+
+| Operation | Example | Returns |
+|-----------+---------+---------|
+| count | =(count [1 2 3])= | 3 |
+| head | =(head [1 2 3])= | 1 |
+| tail | =(tail [1 2 3])= | [2 3] |
+| ++ | =(++ [1 2] [3 4])= | [1 2 3 4] |
+| take | =(take 2 [1 2 3])= | [1 2] |
+| drop | =(drop 1 [1 2 3])= | [2 3] |
+
+Type conversion creates single-element arrays: =(Arr 20)= → =[20]=.
+
+* Iteration
+
+Arrays support =for= iteration:
+
+#+BEGIN_SRC monad
+(for [x [1 2 3]]
+  (show x))                        ;; prints 1, 2, 3
+
+(for [i -> [1 2 3]]
+  (show i))                        ;; prints 0, 1, 2 (indexed)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+for [x [1 2 3]]
+  show x
+
+for [i -> [1 2 3]]
+  show i
+#+END_SRC
+
+* Internal Representation
+
+All three array variants are lowered to a fat-pointer struct ={i8*, i64}= at the LLVM level:
+
+| Field | Type | Purpose |
+|-------+------+---------|
+| data | =i8*= | Pointer to element data |
+| length | =i64= | Element count |
+
+Heap arrays add a third field for capacity (=i64=) to support push/pop.
+
+The type system distinguishes them via flags: =arr_is_fat=, =arr_is_heap=, =arr_size=.
+
+* Related Pages
+
+- [[file:heap.org][Heap Allocation]] — heap array semantics, when to use =~[]=
+- [[file:collections.org][Collections]] — lists, sets, maps comparison
+- [[file:performance.org][Performance]] — array allocation costs
+- [[file:core.org][Core Library]] — array operations dispatch
+- [[file:types.org][Types]] — Arr, HeapArr type kinds
+- [[file:control.org][Control Flow]] — =for= iteration over arrays
+
+* Context Links
+
+- [[file:../context/language.org::collections][context/language.org — Collections]]
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — Array codegen
+- [[file:../types.c::493][types.c]] — Array type variants

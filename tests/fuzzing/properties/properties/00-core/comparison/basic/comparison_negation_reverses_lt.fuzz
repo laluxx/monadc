@@ -1,5 +1,13 @@
 name: comparison_negation_reverses_lt
 section: comparison
+tier: stable
+kind: law
+features: arithmetic, comparison, if, logic, phi, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.comparison_dispatch, codegen.if_phi, codegen.logic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.comparison, infer.if_phi, infer.logic, infer.type_predicate, reader.ast_if
+uses-atoms: atom.control.if, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_v13_atom_if_same_branch_eliminates
+signal: medium
+corpus-role: semantic-law
 args: a:Int b:Int
 type: Bool
 expect: True

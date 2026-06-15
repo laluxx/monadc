@@ -1,7 +1,0 @@
-name: mega_pred_nil_literal_true
-section: codegen-preds-strings-null
-args: 
-type: Bool
-expect: True
-description: nil? must recognize nil literal.
-law: (nil? nil)

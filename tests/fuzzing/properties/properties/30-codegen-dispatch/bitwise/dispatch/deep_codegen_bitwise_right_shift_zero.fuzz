@@ -1,7 +1,0 @@
-name: deep_codegen_bitwise_right_shift_zero
-section: codegen-bitwise-dispatch
-args: a:Int
-type: Bool
-expect: True
-description: Arithmetic right shift by zero must preserve the generated Int.
-law: (= (>> {a} 0) {a})

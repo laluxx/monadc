@@ -1,0 +1,180 @@
+#+TITLE: Recursion
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:recursion:info:
+
+:PROPERTIES:
+:ID:       monadc.info.recursion
+:CONTEXT:  monadc.context.language, monadc.context.codegen
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:lambda.org][Lambda]] · [[file:let.org][Let Bindings]] · [[file:functional-programming.org][Functional Programming]] · [[file:iteration.org][Iteration]] · [[file:patterns.org][Pattern Matching]] · [[file:purity.org][Purity]]
+
+Test coverage: recursion via =fib= is tested in =rt_arith_all.mon= and
+multiple codegen fixtures. Mutual recursion via =letrec= is exercised
+by =rt_letrec_*.mon=.
+
+Monad supports recursive functions at top-level (via =define=) and
+locally (via =letrec=). Recursion is the standard way to iterate when
+closures are unavailable.
+
+* Top-Level Recursion
+
+Named =define= can refer to itself:
+
+#+BEGIN_SRC monad
+(define (fib [n :: Int] -> Int)
+  (if (<= n 2) 1
+    (+ (fib (- n 1)) (fib (- n 2)))))
+
+(define (factorial [n :: Int] -> Int)
+  (if (<= n 1) 1
+    (* n (factorial (- n 1)))))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define fib [n :: Int] -> Int
+  if (<= n 2) 1
+    + (fib (- n 1)) (fib (- n 2))
+
+define factorial [n :: Int] -> Int
+  if (<= n 1) 1
+    * n (factorial (- n 1))
+#+END_SRC
+
+Top-level =define= names are in scope for their own bodies.
+
+* Local Recursion with letrec
+
+For local recursive bindings, use =letrec=:
+
+#+BEGIN_SRC monad
+(define (fact n)
+  (letrec [fact-iter (lambda [acc n]
+                       (if (<= n 1) acc
+                         (fact-iter (* acc n) (- n 1))))]
+    (fact-iter 1 n)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define fact n
+  letrec [fact-iter lambda [acc n]
+           if (<= n 1) acc
+             fact-iter (* acc n) (- n 1)]
+    fact-iter 1 n
+#+END_SRC
+
+=letrec= supports mutual recursion:
+
+#+BEGIN_SRC monad
+(letrec [even? (lambda [n] (if (= n 0) True (odd? (- n 1))))
+         odd?  (lambda [n] (if (= n 0) False (even? (- n 1))))]
+  (even? 42))                        ;; True
+#+END_SRC
+
+#+BEGIN_SRC wisp
+letrec [even? lambda [n] if (= n 0) True (odd? (- n 1))
+        odd?  lambda [n] if (= n 0) False (even? (- n 1))]
+  even? 42
+#+END_SRC
+
+See [[file:let.org][Let Bindings]] for more on =letrec= semantics.
+
+* Recursion Over Lists
+
+Lists are naturally recursive:
+
+#+BEGIN_SRC monad
+(define (sum xs -> Int)
+  (match xs
+    []       -> 0
+    [x|rest] -> (+ x (sum rest))))
+
+(define (map-add1 xs -> [Int])
+  (match xs
+    []       -> []
+    [x|rest] -> (++ (+ x 1) (map-add1 rest))))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define sum xs -> Int
+  match xs
+    []       -> 0
+    [x|rest] -> + x (sum rest)
+
+define map-add1 xs -> [Int]
+  match xs
+    []       -> []
+    [x|rest] -> ++ (+ x 1) (map-add1 rest)
+#+END_SRC
+
+#+BEGIN_SRC monad
+
+(define (length xs -> Int)
+  (reduce (lambda [acc _] (+ acc 1)) 0 xs))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define length xs -> Int
+  reduce (lambda [acc _] + acc 1) 0 xs
+#+END_SRC
+
+The =[x|xs]= cons pattern destructures the head and tail.
+
+* Tail Recursion
+
+Tail-recursive functions use an accumulator:
+
+#+BEGIN_SRC monad
+(define (fact-tail [n :: Int] -> Int)
+  (letrec [iter (lambda [acc n]
+                  (if (<= n 1) acc
+                    (iter (* acc n) (- n 1))))]
+    (iter 1 n)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define fact-tail [n :: Int] -> Int
+  letrec [iter lambda [acc n]
+           if (<= n 1) acc
+             iter (* acc n) (- n 1)]
+    iter 1 n
+#+END_SRC
+
+Tail-call optimization is planned but not yet implemented — recursive
+calls currently grow the stack.
+
+* Workaround: No Closures
+
+Since closures have a codegen gap, recursion is the primary iteration
+pattern. Write concrete typed helpers instead of passing lambdas:
+
+#+BEGIN_SRC monad
+;; Instead of (map f xs), recurse explicitly:
+(define map-add1 :: [Int] -> [Int]
+  []     -> []
+  [x|xs] -> (++ (+ x 1) (map-add1 xs)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define map-add1 :: [Int] -> [Int]
+  []     -> []
+  [x|xs] -> ++ (+ x 1) (map-add1 xs)
+#+END_SRC
+
+* Related Pages
+
+- [[file:lambda.org][Lambda]] -- anonymous recursive functions
+- [[file:let.org][Let Bindings]] -- letrec for recursive bindings
+- [[file:iteration.org][Iteration]] -- iterative vs recursive style
+- [[file:functional-programming.org][Functional Programming]] -- recursion patterns
+- [[file:patterns.org][Pattern Matching]] -- recursive pattern matching
+
+* Context Links
+
+- [[file:../context/language.org][context/language.org]] — recursion in codegen
+- [[file:../context/language.org::codegen-gaps][context/language.org — Known gaps (TCO, closures)]]
+- [[file:let.org][Let Bindings]] — let/let*/letrec
+- [[file:lambda.org][Lambda]] — lambda expressions
+- [[file:functional-programming.org][Functional Programming]] — higher-order functions

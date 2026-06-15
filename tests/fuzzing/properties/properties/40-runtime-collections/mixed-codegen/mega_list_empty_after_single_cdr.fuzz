@@ -1,7 +1,0 @@
-name: mega_list_empty_after_single_cdr
-section: codegen-runtime-collections
-args: a:Int
-type: Bool
-expect: True
-description: cdr after one cons cell must be empty list.
-law: (empty? (cdr (cons {a} (list))))

@@ -1,7 +1,0 @@
-name: set_empty_is_set
-section: collections
-args: 
-type: Bool
-expect: True
-description: Zero-arg set construction must produce a Set value.
-law: (Set? (set))

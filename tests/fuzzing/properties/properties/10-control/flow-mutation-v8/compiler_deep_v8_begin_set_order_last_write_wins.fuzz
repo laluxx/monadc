@@ -1,7 +1,0 @@
-name: compiler_deep_v8_begin_set_order_last_write_wins
-section: control-flow-mutation-v8
-args: a:Int b:Int c:Int
-type: Bool
-expect: True
-description: begin sequencing must preserve side-effect order and return the final mutated value.
-law: (= (with [x {a}] (begin (set! x {b}) (set! x (+ x {c})) x)) (+ {b} {c}))

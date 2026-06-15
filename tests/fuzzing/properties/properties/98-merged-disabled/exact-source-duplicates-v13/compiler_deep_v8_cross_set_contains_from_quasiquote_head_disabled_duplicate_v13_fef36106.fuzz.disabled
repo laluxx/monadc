@@ -1,0 +1,16 @@
+name: compiler_deep_v8_cross_set_contains_from_quasiquote_head_disabled_duplicate_v13_fef36106
+section: feature-interactions-v8
+tier: experimental
+kind: law
+features: arithmetic, feature, predicate, quasiquote, quote, set, unquote
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.quote, codegen.runtime_call, desugar.quasiquote, infer.arithmetic, infer.type_predicate, reader.quasiquote, reader.quote, reader.unquote, runtime.set
+uses-atoms: atom.infer.predicate, atom.quote.quote
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: a:Int
+type: Bool
+expect: True
+description: quasiquote/unquote result should flow through head into set membership.
+law: (contains? (set {a}) (head (quasiquote ((unquote {a}) tail))))
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: mega_cross_quasiquote_head_into_set

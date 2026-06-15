@@ -1,5 +1,12 @@
 name: extreme_negative_min_greater_than_max
 section: negative-always-false
+tier: stable
+kind: law
+features: arithmetic, comparison, negative
+compiler-path: codegen.arithmetic_dispatch, codegen.comparison_dispatch, infer.arithmetic, infer.comparison
+uses-atoms: atom.core.order.gt
+signal: medium
+corpus-role: semantic-law
 args: a:Int b:Int
 type: Bool
 expect: False

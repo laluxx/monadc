@@ -7644,6 +7644,3072 @@
       "seed": 1,
       "status": "PASS"
     },
+    "structured_v10_compile_fail_array_as_function_too_many_args_r01": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_array_as_function_too_many_args_r02": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_array_as_function_too_many_args_r03": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_array_as_function_too_many_args_r04": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_branch_type_mismatch_int_string_r01": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_branch_type_mismatch_int_string_r02": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_branch_type_mismatch_int_string_r03": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_branch_type_mismatch_int_string_r04": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_call_int_as_function_r01": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_call_int_as_function_r02": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_call_int_as_function_r03": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_compile_fail_call_int_as_function_r04": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_helper_arity_fuzz_add_one_arg_r01": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_helper_arity_fuzz_add_one_arg_r02": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_helper_arity_fuzz_add_one_arg_r03": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_helper_arity_fuzz_add_one_arg_r04": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_if_missing_else_r01": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_if_missing_else_r02": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_if_missing_else_r03": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_if_missing_else_r04": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_setbang_unbound_target_r01": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_compile_fail_setbang_unbound_target_r02": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_compile_fail_setbang_unbound_target_r03": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_compile_fail_setbang_unbound_target_r04": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_compile_fail_type_error_add_bool_r01": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_type_error_add_bool_r02": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_type_error_add_bool_r03": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_type_error_add_bool_r04": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_type_error_add_string_r01": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_type_error_add_string_r02": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_type_error_add_string_r03": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_type_error_add_string_r04": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_type_error_head_int_r01": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_type_error_head_int_r02": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_type_error_head_int_r03": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_type_error_head_int_r04": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_compile_fail_unbound_symbol_in_arithmetic_r01": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_compile_fail_unbound_symbol_in_arithmetic_r02": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_compile_fail_unbound_symbol_in_arithmetic_r03": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_compile_fail_unbound_symbol_in_arithmetic_r04": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_compile_fail_variadic_equal_stays_illegal_r01": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_compile_fail_variadic_equal_stays_illegal_r02": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_compile_fail_variadic_equal_stays_illegal_r03": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_compile_fail_variadic_equal_stays_illegal_r04": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_compile_fail_with_unbound_body_r01": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_compile_fail_with_unbound_body_r02": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_compile_fail_with_unbound_body_r03": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_compile_fail_with_unbound_body_r04": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_array_index_after_with_variant_01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_array_index_after_with_variant_02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_array_index_after_with_variant_03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_do_with_array_head_variant_01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_do_with_array_head_variant_02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_do_with_array_head_variant_03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_for_set_contains_variant_01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_for_set_contains_variant_02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_for_set_contains_variant_03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_heap_count_after_do_variant_01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_heap_count_after_do_variant_02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_heap_count_after_do_variant_03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_if_phi_arithmetic_variant_01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_if_phi_arithmetic_variant_02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_if_phi_arithmetic_variant_03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_list_cdr_head_variant_01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_list_cdr_head_variant_02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_list_cdr_head_variant_03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_loop_counter_zero_variant_01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_loop_counter_zero_variant_02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_loop_counter_zero_variant_03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_null_nested_int_variant_01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_null_nested_int_variant_02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_null_nested_int_variant_03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_quote_count_after_begin_variant_01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_quote_count_after_begin_variant_02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_quote_count_after_begin_variant_03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_set_disj_removes_variant_01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_set_disj_removes_variant_02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_set_disj_removes_variant_03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_string_pred_index_variant_01": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_program_string_pred_index_variant_02": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_program_string_pred_index_variant_03": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v10_program_with_setbang_value_variant_01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_with_setbang_value_variant_02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_program_with_setbang_value_variant_03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_array_indexed_add_sub_roundtrip": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_array_indexed_array_count_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_array_indexed_array_index_phi_value": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_array_indexed_begin_final_value": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_array_indexed_bool_logic_idempotent": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_array_indexed_comparison_branch_consistency": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_array_indexed_do_erases_setup_int": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_array_indexed_heap_array_head_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_array_indexed_if_same_branch_value": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_array_indexed_if_substitution_branch": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_array_indexed_list_cons_head_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_array_indexed_mul_zero_absorb_left": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_array_indexed_null_coalesce_int_identity": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_array_indexed_set_conj_contains_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_array_indexed_sub_add_roundtrip": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_array_indexed_with_dependency_order": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_array_indexed_with_shadow_recovers_outer": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_bitwise_tiny_add_sub_roundtrip": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_bitwise_tiny_array_count_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_bitwise_tiny_array_index_phi_value": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_bitwise_tiny_begin_final_value": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_bitwise_tiny_bool_logic_idempotent": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_bitwise_tiny_comparison_branch_consistency": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_bitwise_tiny_do_erases_setup_int": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_bitwise_tiny_heap_array_head_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_bitwise_tiny_if_same_branch_value": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_bitwise_tiny_if_substitution_branch": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_bitwise_tiny_list_cons_head_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_bitwise_tiny_mul_zero_absorb_left": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_bitwise_tiny_null_coalesce_int_identity": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_bitwise_tiny_set_conj_contains_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_bitwise_tiny_sub_add_roundtrip": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_bitwise_tiny_with_dependency_order": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_bitwise_tiny_with_shadow_recovers_outer": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_deep_mix_add_sub_roundtrip": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_deep_mix_array_count_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_deep_mix_array_index_phi_value": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_deep_mix_begin_final_value": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_deep_mix_bool_logic_idempotent": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_deep_mix_comparison_branch_consistency": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_deep_mix_do_erases_setup_int": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_deep_mix_heap_array_head_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_deep_mix_if_same_branch_value": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_deep_mix_if_substitution_branch": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_deep_mix_list_cons_head_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_deep_mix_mul_zero_absorb_left": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_deep_mix_null_coalesce_int_identity": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_deep_mix_set_conj_contains_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_deep_mix_sub_add_roundtrip": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_deep_mix_with_dependency_order": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_deep_mix_with_shadow_recovers_outer": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_do_mod_add_sub_roundtrip": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_do_mod_array_count_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_do_mod_array_index_phi_value": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_do_mod_begin_final_value": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_do_mod_bool_logic_idempotent": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_do_mod_comparison_branch_consistency": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_do_mod_do_erases_setup_int": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_do_mod_heap_array_head_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_do_mod_if_same_branch_value": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_do_mod_if_substitution_branch": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_do_mod_list_cons_head_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_do_mod_mul_zero_absorb_left": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_do_mod_null_coalesce_int_identity": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_do_mod_set_conj_contains_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_do_mod_sub_add_roundtrip": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_do_mod_with_dependency_order": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_do_mod_with_shadow_recovers_outer": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_if_with_add_sub_roundtrip": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_if_with_array_count_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_if_with_array_index_phi_value": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_if_with_begin_final_value": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_if_with_bool_logic_idempotent": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_if_with_comparison_branch_consistency": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_if_with_do_erases_setup_int": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_if_with_heap_array_head_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_if_with_if_same_branch_value": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_if_with_if_substitution_branch": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_if_with_list_cons_head_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_if_with_mul_zero_absorb_left": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_if_with_null_coalesce_int_identity": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_if_with_set_conj_contains_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_if_with_sub_add_roundtrip": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_if_with_with_dependency_order": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_edge_if_with_with_shadow_recovers_outer": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_phi_env_add_sub_roundtrip": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_phi_env_array_count_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_phi_env_array_index_phi_value": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_phi_env_begin_final_value": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_phi_env_bool_logic_idempotent": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_phi_env_comparison_branch_consistency": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_phi_env_do_erases_setup_int": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_phi_env_heap_array_head_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_phi_env_if_same_branch_value": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_phi_env_if_substitution_branch": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_phi_env_list_cons_head_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_phi_env_mul_zero_absorb_left": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_phi_env_null_coalesce_int_identity": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_phi_env_set_conj_contains_direct": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_phi_env_sub_add_roundtrip": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_phi_env_with_dependency_order": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v10_strategy_phi_env_with_shadow_recovers_outer": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_begin_last_value_r01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_begin_last_value_r02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_begin_last_value_r03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_begin_last_value_r04": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_begin_last_value_r05": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_begin_last_value_r06": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_begin_last_value_r07": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_begin_last_value_r08": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_bitwise_and_self_r01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_bitwise_and_self_r02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_bitwise_and_self_r03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_bitwise_and_self_r04": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_bitwise_and_self_r05": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_bitwise_and_self_r06": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_bitwise_and_self_r07": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_bitwise_and_self_r08": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_bitwise_xor_self_zero_r01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_bitwise_xor_self_zero_r02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_bitwise_xor_self_zero_r03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_bitwise_xor_self_zero_r04": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_bitwise_xor_self_zero_r05": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_bitwise_xor_self_zero_r06": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_bitwise_xor_self_zero_r07": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_bitwise_xor_self_zero_r08": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_comparison_if_guard_r01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_comparison_if_guard_r02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_comparison_if_guard_r03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_comparison_if_guard_r04": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_comparison_if_guard_r05": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_comparison_if_guard_r06": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_comparison_if_guard_r07": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_comparison_if_guard_r08": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_array_called_with_bool_index_r01": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_array_called_with_bool_index_r02": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_array_called_with_bool_index_r03": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_array_called_with_bool_index_r04": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_array_called_with_bool_index_r05": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_array_called_with_bool_index_r06": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_call_int_as_function_r01": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_call_int_as_function_r02": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_call_int_as_function_r03": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_call_int_as_function_r04": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_call_int_as_function_r05": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_call_int_as_function_r06": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_if_extra_branch_r01": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_if_extra_branch_r02": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_if_extra_branch_r03": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_if_extra_branch_r04": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_if_extra_branch_r05": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_if_extra_branch_r06": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_if_missing_else_r01": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_if_missing_else_r02": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_if_missing_else_r03": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_if_missing_else_r04": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_if_missing_else_r05": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_if_missing_else_r06": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_not_int_type_error_r01": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_not_int_type_error_r02": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_not_int_type_error_r03": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_not_int_type_error_r04": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_not_int_type_error_r05": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_not_int_type_error_r06": {
+      "message": "compile-fail expectation did not match",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_compile_fail_quote_unquote_outside_quasiquote_r01": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_quote_unquote_outside_quasiquote_r02": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_quote_unquote_outside_quasiquote_r03": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_quote_unquote_outside_quasiquote_r04": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_quote_unquote_outside_quasiquote_r05": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_quote_unquote_outside_quasiquote_r06": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_setbang_unbound_target_r01": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_setbang_unbound_target_r02": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_setbang_unbound_target_r03": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_setbang_unbound_target_r04": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_setbang_unbound_target_r05": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_setbang_unbound_target_r06": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_unbound_symbol_add_r01": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_unbound_symbol_add_r02": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_unbound_symbol_add_r03": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_unbound_symbol_add_r04": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_unbound_symbol_add_r05": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_unbound_symbol_add_r06": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_variadic_equal_illegal_r01": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_variadic_equal_illegal_r02": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_variadic_equal_illegal_r03": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_variadic_equal_illegal_r04": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_variadic_equal_illegal_r05": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_variadic_equal_illegal_r06": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_with_missing_binding_value_r01": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_with_missing_binding_value_r02": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_with_missing_binding_value_r03": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_with_missing_binding_value_r04": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_with_missing_binding_value_r05": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_compile_fail_with_missing_binding_value_r06": {
+      "message": "expected compile failure observed",
+      "passed": true,
+      "phase": "compile",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_do_last_value_r01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_do_last_value_r02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_do_last_value_r03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_do_last_value_r04": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_do_last_value_r05": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_do_last_value_r06": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_do_last_value_r07": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_do_last_value_r08": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_commuted_sum_r01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_commuted_sum_r02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_commuted_sum_r03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_commuted_sum_r04": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_commuted_sum_r05": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_commuted_sum_r06": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_commuted_sum_r07": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_commuted_sum_r08": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_same_add_r01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_same_add_r02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_same_add_r03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_same_add_r04": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_same_add_r05": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_same_add_r06": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_same_add_r07": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_same_add_r08": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_zero_difference_r01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_zero_difference_r02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_zero_difference_r03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_zero_difference_r04": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_zero_difference_r05": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_zero_difference_r06": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_zero_difference_r07": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_if_phi_zero_difference_r08": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_mod_by_one_zero_r01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_mod_by_one_zero_r02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_mod_by_one_zero_r03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_mod_by_one_zero_r04": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_mod_by_one_zero_r05": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_mod_by_one_zero_r06": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_mod_by_one_zero_r07": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_mod_by_one_zero_r08": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_predicate_bool_generated_r01": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_predicate_bool_generated_r02": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_predicate_bool_generated_r03": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_predicate_bool_generated_r04": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_predicate_bool_generated_r05": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_predicate_bool_generated_r06": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_predicate_bool_generated_r07": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_predicate_bool_generated_r08": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_predicate_int_generated_r01": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_predicate_int_generated_r02": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_predicate_int_generated_r03": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_predicate_int_generated_r04": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_predicate_int_generated_r05": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_predicate_int_generated_r06": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_predicate_int_generated_r07": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_predicate_int_generated_r08": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_program_array_index_literal_r01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_array_index_literal_r02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_array_index_literal_r03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_array_index_literal_r04": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_array_index_literal_r05": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_array_index_literal_r06": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_array_index_literal_r07": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_array_index_literal_r08": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_begin_sequence_value_r01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_begin_sequence_value_r02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_begin_sequence_value_r03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_begin_sequence_value_r04": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_begin_sequence_value_r05": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_begin_sequence_value_r06": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_begin_sequence_value_r07": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_begin_sequence_value_r08": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_bitwise_dispatch_identity_r01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_bitwise_dispatch_identity_r02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_bitwise_dispatch_identity_r03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_bitwise_dispatch_identity_r04": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_bitwise_dispatch_identity_r05": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_bitwise_dispatch_identity_r06": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_bitwise_dispatch_identity_r07": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_bitwise_dispatch_identity_r08": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_do_sequence_value_r01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_do_sequence_value_r02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_do_sequence_value_r03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_do_sequence_value_r04": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_do_sequence_value_r05": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_do_sequence_value_r06": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_do_sequence_value_r07": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_do_sequence_value_r08": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_heap_array_index_literal_r01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_heap_array_index_literal_r02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_heap_array_index_literal_r03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_heap_array_index_literal_r04": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_heap_array_index_literal_r05": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_heap_array_index_literal_r06": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_heap_array_index_literal_r07": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_heap_array_index_literal_r08": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_nested_with_shadow_r01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_nested_with_shadow_r02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_nested_with_shadow_r03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_nested_with_shadow_r04": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_nested_with_shadow_r05": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_nested_with_shadow_r06": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_nested_with_shadow_r07": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_nested_with_shadow_r08": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_predicate_dispatch_r01": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_program_predicate_dispatch_r02": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_program_predicate_dispatch_r03": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_program_predicate_dispatch_r04": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_program_predicate_dispatch_r05": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_program_predicate_dispatch_r06": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_program_predicate_dispatch_r07": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_program_predicate_dispatch_r08": {
+      "message": "compile failed",
+      "passed": false,
+      "phase": "compile",
+      "seed": 1,
+      "status": "FAIL"
+    },
+    "structured_v11_program_with_mutation_two_show_r01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_with_mutation_two_show_r02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_with_mutation_two_show_r03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_with_mutation_two_show_r04": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_with_mutation_two_show_r05": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_with_mutation_two_show_r06": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_with_mutation_two_show_r07": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_program_with_mutation_two_show_r08": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_setbang_add_sub_inverse_r01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_setbang_add_sub_inverse_r02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_setbang_add_sub_inverse_r03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_setbang_add_sub_inverse_r04": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_setbang_add_sub_inverse_r05": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_setbang_add_sub_inverse_r06": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_setbang_add_sub_inverse_r07": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_setbang_add_sub_inverse_r08": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_setbang_overwrite_value_r01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_setbang_overwrite_value_r02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_setbang_overwrite_value_r03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_setbang_overwrite_value_r04": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_setbang_overwrite_value_r05": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_setbang_overwrite_value_r06": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_setbang_overwrite_value_r07": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_setbang_overwrite_value_r08": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_env_roundtrip_r01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_env_roundtrip_r02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_env_roundtrip_r03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_env_roundtrip_r04": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_env_roundtrip_r05": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_env_roundtrip_r06": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_env_roundtrip_r07": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_env_roundtrip_r08": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_shadow_inner_wins_r01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_shadow_inner_wins_r02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_shadow_inner_wins_r03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_shadow_inner_wins_r04": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_shadow_inner_wins_r05": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_shadow_inner_wins_r06": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_shadow_inner_wins_r07": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_shadow_inner_wins_r08": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_two_binding_lookup_r01": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_two_binding_lookup_r02": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_two_binding_lookup_r03": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_two_binding_lookup_r04": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_two_binding_lookup_r05": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_two_binding_lookup_r06": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_two_binding_lookup_r07": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
+    "structured_v11_with_two_binding_lookup_r08": {
+      "message": "ok",
+      "passed": true,
+      "phase": "run",
+      "seed": 1,
+      "status": "PASS"
+    },
     "structured_v9_array_array_bound_to_name_indexed_in_do": {
       "message": "ok",
       "passed": true,
@@ -8884,5 +11950,5 @@
       "status": "PASS"
     }
   },
-  "timestamp": "2026-06-15T01:24:52"
+  "timestamp": "2026-06-15T03:43:05"
 }

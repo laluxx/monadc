@@ -11,6 +11,8 @@ typedef enum {
     CMD_CLEAN,
     CMD_INSTALL,
     CMD_TEST,
+    CMD_CHECK,
+    CMD_LSP,
 } CommandMode;
 
 typedef struct {
@@ -28,7 +30,7 @@ typedef struct {
     char *package_name;
 } CompilerFlags;
 
-void print_usage(const char *prog);
+/* print_usage is now defined in completion.c */
 CompilerFlags parse_flags(int argc, char **argv);
 char *get_base_executable_name(const char *path);
 
@@ -38,5 +40,6 @@ void cmd_run(void);
 void cmd_clean(void);
 void cmd_install(void);
 void cmd_test(const char *input_file);
-
+void cmd_check(const char *input_file);
+void cmd_lsp(void);
 #endif

@@ -1,5 +1,13 @@
 name: compiler_deep_v8_quasiquote_count_with_two_unquotes
 section: quote-runtime-v8
+tier: stable
+kind: law
+features: arithmetic, env, equality, path, quasiquote, quote, unquote, with
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.local_load, codegen.path_literal, codegen.quote, codegen.with_binding, desugar.quasiquote, infer.arithmetic, infer.env_child, infer.env_lookup, infer.equality, infer.path, reader.path_literal, reader.quasiquote, reader.quote, reader.unquote
+uses-atoms: atom.binding.with, atom.core.equality, atom.quote.quote, atom.runtime.path
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_with_substitution
+signal: medium
+corpus-role: semantic-law
 args: a:Int b:Int
 type: Bool
 expect: True

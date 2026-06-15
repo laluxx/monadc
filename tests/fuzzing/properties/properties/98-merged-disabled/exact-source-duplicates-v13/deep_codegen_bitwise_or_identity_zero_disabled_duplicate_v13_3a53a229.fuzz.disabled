@@ -1,0 +1,17 @@
+name: deep_codegen_bitwise_or_identity_zero_disabled_duplicate_v13_3a53a229
+section: codegen-bitwise-dispatch
+tier: experimental
+kind: law
+features: arithmetic, bitwise, codegen, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.bitwise_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_v13_atom_equality_reflexive
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: a:Int
+type: Bool
+expect: True
+description: bit-or dispatcher must preserve x | 0.
+law: (= (bit-or {a} 0) {a})
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: bitwise_or_zero_identity

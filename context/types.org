@@ -1330,13 +1330,13 @@ Caller owns the returned type.
 :END:
 
 [DOC id:doc.types.refinement-system date:2026-06-13 by:codex]
-Refinement types are a lightweight static contract system. A refinement type
-(e.g. "Even", "Pos") wraps a base type (e.g. "Int") with a predicate AST
-that is evaluated statically at compile time when possible. The =refinement_check_literal=
-function walks alias chains and evaluates the predicate AST against a literal
-value. Predicates support arithmetic ops (+, -, *, mod), comparison ops
-(=, !=, >, >=, <, <=), logical ops (and, or, not), and recursive refinement
-lookups via naming conventions (e.g. "Even?" look up refinement "Even").
+  Refinement types are a lightweight static contract system. A refinement type
+  (e.g. "Even", "Pos") wraps a base type (e.g. "Int") with a predicate AST
+  that is evaluated statically at compile time when possible. The =refinement_check_literal=
+  function walks alias chains and evaluates the predicate AST against a literal
+  value. Predicates support arithmetic ops (+, -, *, mod), comparison ops
+  (=, !=, >, >=, <, <=), logical ops (and, or, not), and recursive refinement
+  lookups via naming conventions (e.g. "Even?" look up refinement "Even").
 
 ** refinement_register
 :PROPERTIES:
@@ -1347,9 +1347,9 @@ lookups via naming conventions (e.g. "Even?" look up refinement "Even").
 :END:
 
 [OBS id:obs.types.refinement.refinement_register src:types.c:45-56 conf:high]
-=void refinement_register(name, pred_name, base_type, pred_ast, var)=
-Allocates a =RefinementEntry=, strdup's all string fields, clones =pred_ast=,
-and prepends to =g_refinements= linked list.
+  =void refinement_register(name, pred_name, base_type, pred_ast, var)=
+  Allocates a =RefinementEntry=, strdup's all string fields, clones =pred_ast=,
+  and prepends to =g_refinements= linked list.
 
 ** refinement_pred_name
 :PROPERTIES:
@@ -1360,9 +1360,9 @@ and prepends to =g_refinements= linked list.
 :END:
 
 [OBS id:obs.types.refinement.refinement_pred_name src:types.c:58-62 conf:high]
-=const char *refinement_pred_name(const char *type_name)=
-Linear search of =g_refinements= list. Returns the =pred_name= if found,
-NULL otherwise.
+  =const char *refinement_pred_name(const char *type_name)=
+  Linear search of =g_refinements= list. Returns the =pred_name= if found,
+  NULL otherwise.
 
 ** refinement_check_literal
 :PROPERTIES:

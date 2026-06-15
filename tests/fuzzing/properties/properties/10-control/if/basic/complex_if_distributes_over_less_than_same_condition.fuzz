@@ -1,5 +1,13 @@
 name: complex_if_distributes_over_less_than_same_condition
 section: control-if
+tier: stable
+kind: law
+features: arithmetic, control, equality, if, phi, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.predicate_dispatch, infer.arithmetic, infer.equality, infer.if_phi, infer.type_predicate, reader.ast_if
+uses-atoms: atom.control.if, atom.core.equality, atom.infer.predicate
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_if_same_branch_eliminates
+signal: medium
+corpus-role: semantic-law
 args: cond:Bool a:Int b:Int c:Int d:Int
 type: Bool
 expect: True

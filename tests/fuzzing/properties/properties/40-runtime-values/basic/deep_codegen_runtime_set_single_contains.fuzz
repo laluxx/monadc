@@ -1,7 +1,0 @@
-name: deep_codegen_runtime_set_single_contains
-section: codegen-runtime-values
-args: a:Int
-type: Bool
-expect: True
-description: Set constructed from a generated Int must contain that Int.
-law: (contains? (set {a}) {a})

@@ -1,7 +1,0 @@
-name: mega_list_make_list_count_four
-section: codegen-runtime-collections
-args: a:Int
-type: Bool
-expect: True
-description: make-list must produce requested runtime count.
-law: (= (count (make-list 4 {a})) 4)

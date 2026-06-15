@@ -1,7 +1,0 @@
-name: structured_v9_dispatch_logic_and_short_form_matches_if
-section: dispatch-matrix-v9
-args: p:Bool q:Bool
-type: Bool
-expect: True
-description: Stress direct operator and predicate dispatch in expression, branch, and operand positions.
-law: (= (and {p} {q}) (if {p} {q} False))

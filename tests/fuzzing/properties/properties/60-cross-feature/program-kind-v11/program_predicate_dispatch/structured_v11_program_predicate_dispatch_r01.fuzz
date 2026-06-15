@@ -1,0 +1,15 @@
+name: structured_v11_program_predicate_dispatch_r01
+section: v11-program-kind
+tier: stable
+kind: program
+features: program, predicate, type, arithmetic
+compiler-path: codegen.arithmetic_dispatch, codegen.module_body, codegen.predicate_dispatch, infer.arithmetic, infer.type_predicate, runner.program_kind
+uses-atoms: atom.core.plus, atom.infer.predicate
+related-properties: signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero
+signal: high
+corpus-role: program-semantics
+args: a:Int@edge
+type: Bool
+expect: True
+description: V11 program-kind compiler test program_predicate_dispatch round 1; exercises full program insertion instead of show-wrapped law mode.
+program: (show (int? (+ {a} 1)))

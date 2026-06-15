@@ -1,0 +1,16 @@
+name: structured_v11_experimental_char_predicate_r03_disabled_duplicate_v13_981e9ab9
+section: v11-experimental
+tier: experimental
+kind: law
+features: experimental, char, predicate
+compiler-path: codegen.predicate_dispatch, infer.type_predicate
+uses-atoms: atom.infer.predicate, atom.runtime.char
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: c:Char
+type: Bool
+expect: True
+description: V11 experimental rich-feature property experimental_char_predicate round 3; non-default tier for parser/runtime features that may still be maturing.
+law: (char? {c})
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: structured_v10_exp_char_pred_generated_r01

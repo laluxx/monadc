@@ -1,5 +1,13 @@
 name: mega_quasiquote_unquote_count_three
 section: codegen-quote-runtime
+tier: stable
+kind: law
+features: arithmetic, codegen, equality, path, quasiquote, quote, unquote
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.path_literal, codegen.quote, desugar.quasiquote, infer.arithmetic, infer.equality, infer.path, reader.path_literal, reader.quasiquote, reader.quote, reader.unquote
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.quote.quote, atom.runtime.path
+related-properties: signal_v13_atom_equality_reflexive
+signal: medium
+corpus-role: semantic-law
 args: a:Int b:Int
 type: Bool
 expect: True

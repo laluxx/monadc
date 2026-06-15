@@ -1,0 +1,15 @@
+name: signal_v13_program_path-predicate_112
+section: v13-program-semantics
+tier: experimental
+kind: program
+features: program,path,keyword,char,predicate,runtime-value
+compiler-path: program.module.body,reader.path-literal,infer.predicate.path,codegen.runtime-value
+uses-atoms: atom.runtime.path, atom.infer.predicate
+depends-on: 
+signal: high
+corpus-role: program-semantics
+args: p:Path k:Keyword c:Char
+type: Bool
+expect: True
+description: Program-kind property: source contains its own show and links real program codegen to foundational atoms.
+program: (show (path? {p}))

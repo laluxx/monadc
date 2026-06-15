@@ -1,7 +1,0 @@
-name: deep_codegen_array_array_count_three
-section: codegen-array-indexing
-args: a:Int b:Int c:Int
-type: Bool
-expect: True
-description: count over inline array must use array size path.
-law: (= (count [{a} {b} {c}]) 3)

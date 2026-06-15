@@ -1,7 +1,0 @@
-name: complex_order_lt_transitive_nested_if
-section: order-logic
-args: a:Int b:Int c:Int
-type: Bool
-expect: True
-description: Strict less-than transitivity should hold through nested if guards.
-law: (if (fuzz-lt? {a} {b}) (if (fuzz-lt? {b} {c}) (fuzz-lt? {a} {c}) True) True)

@@ -1,7 +1,0 @@
-name: deep_codegen_array_inline_array_third
-section: codegen-array-indexing
-args: a:Int b:Int c:Int
-type: Bool
-expect: True
-description: Inline array indexing must load element two.
-law: (= ([{a} {b} {c}] 2) {c})

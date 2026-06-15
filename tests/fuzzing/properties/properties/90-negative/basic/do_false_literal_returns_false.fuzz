@@ -1,7 +1,0 @@
-name: do_false_literal_returns_false
-section: negative
-args: setup:Int
-type: Bool
-expect: False
-description: A do expression ending in literal False must return False even after evaluating an Int first expression.
-law: (do {setup} False)

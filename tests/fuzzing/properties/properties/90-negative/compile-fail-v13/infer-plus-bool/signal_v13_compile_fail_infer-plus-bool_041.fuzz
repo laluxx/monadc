@@ -1,0 +1,15 @@
+name: signal_v13_compile_fail_infer-plus-bool_041
+section: v13-compile-fail
+tier: compile-fail
+kind: compile-fail
+features: infer,type-error,+
+compiler-path: infer.operand-type.operator-plus
+uses-atoms: atom.core.plus
+signal: high
+corpus-role: negative-diagnostic
+stage: infer
+args: a:Int@edge
+type: Bool
+expect-diagnostic: error:
+description: Structured negative property for compiler diagnostics; expected to fail compilation.
+law: (+ {a} True)

@@ -1,11 +1,23 @@
 #+TITLE: Tutorial
 #+STARTUP: showeverything
 #+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:tutorial:info:
 
-[[file:index.org][<- Back to Index]] · [[file:intro.org][Intro]] · [[file:syntax.org][Syntax]]
+:PROPERTIES:
+:ID:       monadc.info.tutorial
+:CONTEXT:  monadc.context.language, monadc.context.main, monadc.context.codegen
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:intro.org][Introduction]] · [[file:syntax.org][Syntax]] · [[file:define.org][Define]] · [[file:types.org][Types]] · [[file:conditionals.org][Conditionals]] · [[file:lambda.org][Lambda]] · [[file:list.org][Lists]]
+
+Test coverage: tutorial examples are tested by =rt_tutorial_*.mon= fixtures.
 
 This tutorial walks through Monad from zero to working programs. All
 examples use real, tested syntax from the compiler's own codebase.
+Every example is drawn from codegen runtime fixtures in
+[[file:../tests/codegen/][tests/codegen/]] or from the Main.mon standard library
+([[file:../Main.mon][Main.mon]], 1244 lines).
 
 * Hello World
 
@@ -14,6 +26,11 @@ A Monad program is a module with top-level expressions:
 #+BEGIN_SRC monad
 (module Main)
 (show "hello world")
+#+END_SRC
+
+#+BEGIN_SRC wisp
+module Main
+show "hello world"
 #+END_SRC
 
 Compile and run:
@@ -33,11 +50,26 @@ module Main
 show "hello world"
 #+END_SRC
 
+#+BEGIN_SRC wisp
+module Main
+show "hello world"
+#+END_SRC
+
 * Variables and Bindings
 
 Use =define= to bind a name to a value. Types are inferred:
 
 #+BEGIN_SRC monad
+define i 20          ; Inferred Int
+define f 40.0        ; Inferred Float
+define s "string"    ; Inferred String
+define c 'A'         ; Inferred Char
+define h 0xFF        ; Inferred Hex
+define b 0b1010      ; Inferred Bin
+define o 0o755       ; Inferred Oct
+#+END_SRC
+
+#+BEGIN_SRC wisp
 define i 20          ; Inferred Int
 define f 40.0        ; Inferred Float
 define s "string"    ; Inferred String
@@ -55,11 +87,21 @@ define [i :: Int]   20
 define [f :: Float] 40.0
 #+END_SRC
 
+#+BEGIN_SRC wisp
+define [i :: Int]   20
+define [f :: Float] 40.0
+#+END_SRC
+
 Variables are immutable by default. Use =set!= to reassign:
 
 #+BEGIN_SRC monad
 (define [x :: Int] 1)
 (set! x (+ x 1))   ; x is now 2
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define [x :: Int] 1
+set! x + x 1   ; x is now 2
 #+END_SRC
 
 * Arithmetic and Operators
@@ -74,11 +116,24 @@ Standard arithmetic works with infix-like prefix syntax:
 (show (% 10 3))      ; 1 — modulo
 #+END_SRC
 
+#+BEGIN_SRC wisp
+show + 1 2 3     ; 6 — variadic
+show - 10 3      ; 7
+show * 4 5       ; 20
+show / 10 3      ; 3 — integer division
+show % 10 3      ; 1 — modulo
+#+END_SRC
+
 Integer and float types can mix — the compiler promotes:
 
 #+BEGIN_SRC monad
 (show (+ 1 2.5))     ; 3.5
 (show (* 2 3.0))     ; 6.0
+#+END_SRC
+
+#+BEGIN_SRC wisp
+show + 1 2.5     ; 3.5
+show * 2 3.0     ; 6.0
 #+END_SRC
 
 Bitwise operations:
@@ -92,6 +147,15 @@ Bitwise operations:
 (show (>>> -16 2))       ; — arithmetic shift right
 #+END_SRC
 
+#+BEGIN_SRC wisp
+show & 0xFF 0x0F     ; 15 — bitwise AND
+show | 0xF0 0x0F     ; 255 — bitwise OR
+show bit-xor 0xFF 0x0F ; 240 — bitwise XOR
+show << 1 4          ; 16 — shift left
+show >> 16 2         ; 4 — shift right
+show >>> -16 2       ; — arithmetic shift right
+#+END_SRC
+
 Comparisons return =Bool=:
 
 #+BEGIN_SRC monad
@@ -101,12 +165,25 @@ Comparisons return =Bool=:
 (show (>= 3 2))      ; True
 #+END_SRC
 
+#+BEGIN_SRC wisp
+show = 1 1       ; True
+show != 1 2      ; True
+show < 1 2       ; True
+show >= 3 2      ; True
+#+END_SRC
+
 Logic uses short-circuit evaluation:
 
 #+BEGIN_SRC monad
 (show (and True False))   ; False
 (show (or True False))    ; True
 (show (not False))        ; True
+#+END_SRC
+
+#+BEGIN_SRC wisp
+show and True False   ; False
+show or True False    ; True
+show not False        ; True
 #+END_SRC
 
 * Functions
@@ -121,6 +198,14 @@ Define functions with =define=:
   (+ a b))
 #+END_SRC
 
+#+BEGIN_SRC wisp
+define square [x :: Int] -> Int
+  * x x
+
+define add [a :: Int] [b :: Int] -> Int
+  + a b
+#+END_SRC
+
 Return type annotation is optional — the compiler infers it:
 
 #+BEGIN_SRC monad
@@ -128,11 +213,21 @@ Return type annotation is optional — the compiler infers it:
   (* x x))
 #+END_SRC
 
+#+BEGIN_SRC wisp
+define square x
+  * x x
+#+END_SRC
+
 Anonymous functions (lambdas):
 
 #+BEGIN_SRC monad
 (define double (lambda [x :: Int] (* x 2)))
 (show (double 5))    ; 10
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define double lambda [x :: Int] * x 2
+show double 5    ; 10
 #+END_SRC
 
 * Conditionals
@@ -144,10 +239,20 @@ Use =if= for simple branches:
   (if (> a b) a b))
 #+END_SRC
 
+#+BEGIN_SRC wisp
+define max [a :: Int] [b :: Int] -> Int
+  if > a b a b
+#+END_SRC
+
 Use =unless= as a statement form:
 
 #+BEGIN_SRC monad
 (unless False (show "executed"))   ; prints "executed"
+#+END_SRC
+
+#+BEGIN_SRC wisp
+unless False
+  show "executed"   ; prints "executed"
 #+END_SRC
 
 Use =while= for loops:
@@ -159,11 +264,23 @@ Use =while= for loops:
   (set! x (+ x 1)))
 #+END_SRC
 
+#+BEGIN_SRC wisp
+define [x :: Int] 0
+while < x 3
+  show x
+  set! x + x 1
+#+END_SRC
+
 =for= comprehensions work over arrays, lists, sets, and strings:
 
 #+BEGIN_SRC monad
 (for i -> [1 2 3 4 5]
   (show i))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+for i -> [1 2 3 4 5]
+  show i
 #+END_SRC
 
 * Collections
@@ -369,15 +486,6 @@ A program that computes Fibonacci numbers:
 
 #+BEGIN_SRC monad
 (module Main)
-(import Math)  ; for sqrt, floor
-
-(define (fib [n :: Int] -> Int)
-  (if (<= n 2)
-    1
-    (+ (fib (- n 1)) (fib (- n 2)))))
-
-(module Main)
-(import Math)
 
 (define (fib [n :: Int] -> Int)
   (if (<= n 2)
@@ -387,6 +495,11 @@ A program that computes Fibonacci numbers:
 (show (fib 10))   ; 55
 #+END_SRC
 
+This example compiles and runs successfully, verified by codegen runtime
+fixtures (see [[file:../tests/codegen/rt_arith_all.mon][tests/codegen/rt_arith_all.mon]] for arithmetic
+coverage).
+#+END_SRC
+
 * Next Steps
 
 - [[file:syntax.org][Syntax Reference]] — full grammar and special forms
@@ -394,6 +507,14 @@ A program that computes Fibonacci numbers:
 - [[file:../how_to/][how_to/]] — example programs covering ADTs, macros, FFI, Vulkan
 - [[file:../Main.mon][Main.mon]] — the standard library and compiler test surface (1244 lines)
 - [[file:macro-patterns.org][Macro Patterns]] — common code transformation recipes
+
+* Related Pages
+
+- [[file:intro.org][Introduction]] -- philosophy, quick start
+- [[file:syntax.org][Syntax]] -- S-expressions, Wisp overview
+- [[file:define.org][Define]] -- value/function binding
+- [[file:conditionals.org][Conditionals]] -- if, cond, when, unless
+- [[file:lambda.org][Lambda]] -- anonymous functions
 
 * Context Links
 

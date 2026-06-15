@@ -1,13 +1,38 @@
 #+TITLE: Monad Type System
 #+STARTUP: showeverything
 #+OPTIONS: toc:3 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:types:info:
 
-[[file:index.org][<- Back to Index]] · [[file:refinements.org][Refinements]] · [[file:data.org][Data Types]] · [[file:layouts.org][Layout Types]]
+:PROPERTIES:
+:ID:       monadc.info.types
+:CONTEXT:  monadc.context.types, monadc.context.infer, monadc.context.dep
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:pair.org][Pairs]] · [[file:casting.org][Casting]] · [[file:numeric.org][Numeric]] · [[file:booleans.org][Bool]] · [[file:characters.org][Char]] · [[file:strings.org][String]] · [[file:rationals.org][Ratio]] · [[file:symbols.org][Symbol]] · [[file:paths.org][Path]] · [[file:type-classes.org][Classes]] · [[file:dependent-types.org][Dep Types]] · [[file:type-inference.org][Inference]] · [[file:refinements.org][Refinements]] · [[file:purity.org][Purity]]
+
+* Quick Reference
+
+| Form                          | Description                       |
+|-------------------------------+-----------------------------------|
+| Type :: Base                  | Ground type (e.g. =Int=, =Float=) |
+| =(define [x :: Int] 42)=      | Typed value binding               |
+| =A -> B=                      | Function type                     |
+| =(data T (A ...))=            | Algebraic data type               |
+| =(type Name Base)=            | Type alias                        |
+| =(class C a (meth ...))=     | Type class declaration            |
+| ={ x ∈ T | pred }=            | Refinement type                   |
+
+Test coverage: type-system features are exercised by =rt_type_*.mon= and =rt_infer_*.mon= fixtures.
 
 Monad has a dual type system: Hindley-Milner (HM) inference
 ([[file:../infer.c]]) for the surface language, and a dependent type
 checker ([[file:../dep.c]]) based on Intuitionistic Type Theory (ITT)
-for advanced use.
+for advanced use. The two systems are bridged by a =TERM_EMBED= node
+type (see [[file:../context/dep.org::49][context/dep.org — HM/ITT Bridge]]).
+
+The =TypeKind= enum ([[file:../types.h::8]]) defines 40 type categories
+documented in [[file:../context/types.org][context/types.org]].
 
 * Ground Types ([[file:../types.h::8]])
 
@@ -79,12 +104,30 @@ define square :: Int -> Int
   x -> x * x
 #+END_SRC
 
+#+BEGIN_SRC wisp
+;; Typed value definition
+define x :: Int = 42
+
+;; Typed function parameter
+lambda x :: Int
+  + x 1
+
+;; Function with typed signature
+define square :: Int -> Int
+  x -> x * x
+#+END_SRC
+
 The =::= (double colon) syntax is desugared to a single colon in the
 AST — both forms are accepted:
 
 #+BEGIN_SRC monad
 (define [x :: Int] 42)    ;; identical to
 (define [x : Int] 42)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define x :: Int = 42    ;; identical to
+define x : Int = 42
 #+END_SRC
 
 * Hindley-Milner Inference
@@ -121,6 +164,11 @@ contract:
   ...)
 #+END_SRC
 
+#+BEGIN_SRC wisp
+define vec-append :: Vec a n -> Vec a m -> Vec a (+ n m)
+  ...
+#+END_SRC
+
 The HM path handles the polymorphic =a= and the outer scheme; the ITT
 path handles the arithmetic over =n= and =m= in the return type. The
 bridge is:
@@ -155,6 +203,11 @@ Set comprehension syntax ([[file:../reader.c::6003]]):
 (type Even { n ∈ Int | (= (% n 2) 0) })
 #+END_SRC
 
+#+BEGIN_SRC wisp
+type Positive { x ∈ Int | > x 0 }
+type Even { n ∈ Int | = (% n 2) 0 }
+#+END_SRC
+
 See [[file:refinements.org][Refinement Types]].
 
 * Algebraic Data Types
@@ -163,6 +216,18 @@ See [[file:refinements.org][Refinement Types]].
 (data Bool False True)
 (data Option a None (Some a))
 (data Tree a Leaf (Node Tree a a Tree))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+data Bool
+  False
+  True
+data Option a
+  None
+  Some a
+data Tree a
+  Leaf
+  Node Tree a a Tree
 #+END_SRC
 
 See [[file:data.org][Data Types]].
@@ -175,12 +240,26 @@ See [[file:data.org][Data Types]].
   (define (= a b -> Bool) (builtin-= a b)))
 #+END_SRC
 
+#+BEGIN_SRC wisp
+class Eq a
+  = (a a -> Bool)
+instance Eq Int
+  define = a b -> Bool
+    builtin-= a b
+#+END_SRC
+
 * Layout Types
 
 C-compatible struct types ([[file:../reader.c]] layout parsing):
 
 #+BEGIN_SRC monad
 (layout Point [x :: Float] [y :: Float])
+#+END_SRC
+
+#+BEGIN_SRC wisp
+layout Point
+  x :: Float
+  y :: Float
 #+END_SRC
 
 See [[file:layouts.org][Layout Types]].
@@ -246,6 +325,16 @@ The =TypeKind= enum ([[file:../types.h::8]]) defines 40 type categories:
 | Meta     |     5 | UNKNOWN, VAR, ARROW, VARIADIC, APP                                               |
 
 See [[file:../context/types.org][context/types.org]] for full per-kind documentation.
+
+* See Also
+
+- [[file:refinements.org][Refinement Types]]
+- [[file:data.org][Data Types]]
+- [[file:layouts.org][Layout Types]]
+- [[file:collections.org][Collections]]
+- [[file:type-classes.org][Type Classes]]
+- [[file:dependent-types.org][Dependent Types]]
+- [[file:type-inference.org][Type Inference]]
 
 * Context Links
 

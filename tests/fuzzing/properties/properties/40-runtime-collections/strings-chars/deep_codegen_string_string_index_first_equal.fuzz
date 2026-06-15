@@ -1,7 +1,16 @@
 name: deep_codegen_string_string_index_first_equal
 section: codegen-string-char
+tier: experimental
+kind: law
+features: arithmetic, codegen, equality, string
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.string_literal, infer.arithmetic, infer.equality, reader.string_literal, runtime.string
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.runtime.string
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_string_contains_substring
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Bool
 expect: True
 description: Inline string indexing must load the first char.
 law: (= ("abc" 0) ("axz" 0))
+demoted-from: stable-by-signal-v13

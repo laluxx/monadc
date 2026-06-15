@@ -1,5 +1,13 @@
 name: null_coalesce_bool_false_is_not_nil
 section: quote-null-path
+tier: stable
+kind: law
+features: arithmetic, equality, null, path, predicate, quote
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.null_coalesce, codegen.path_literal, codegen.predicate_dispatch, codegen.quote, infer.arithmetic, infer.equality, infer.nil, infer.path, infer.type_predicate, reader.path_literal, reader.quote
+uses-atoms: atom.core.equality, atom.infer.predicate, atom.null.nil, atom.quote.quote, atom.runtime.path
+related-properties: signal_v13_atom_equality_reflexive
+signal: medium
+corpus-role: semantic-law
 args: p:Bool
 type: Bool
 expect: True

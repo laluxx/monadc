@@ -1,28 +1,128 @@
 #+TITLE: Pattern Matching
 #+STARTUP: showeverything
 #+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:patterns:info:
 
-[[file:index.org][<- Back to Index]] · [[file:data.org][Data Types]] · [[file:syntax.org][Syntax]]
+:PROPERTIES:
+:ID:       monadc.info.patterns
+:CONTEXT:  monadc.context.pmatch, monadc.context.language, monadc.context.codegen
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:pair.org][Pairs]] · [[file:list.org][Lists]] · [[file:data.org][Data Types]] · [[file:maybe.org][Maybe]] · [[file:result.org][Result]] · [[file:booleans.org][Booleans]] · [[file:control.org][Control Flow]]
 
 Pattern matching is compiled by the pattern match compiler
 ([[file:../pmatch.c]]) which desugars =pattern -> expr= clauses into
-equivalent =(cond ...)= chains that the generic codegen can lower. The
-desugaring pipeline ([[file:../context/pmatch.org::254]]):
+equivalent =(cond ...)= chains that the generic codegen can lower.
 
-1. Reader produces =AST_PMATCH= node with =ASTPMatchClause= array
-2. =pmatch_rename_anon_params= rewrites anonymous parameter references
+Test coverage: =rt_match_*.mon= fixtures in
+[[file:../tests/codegen/][tests/codegen/]] cover ADT constructor matching, list
+destructuring, guard clauses, and wildcard fallbacks.
+
+Pipeline:
+
+1. Reader produces =AST_PMATCH= with =ASTPMatchClause= array
+2. =pmatch_rename_anon_params= rewrites anonymous parameter refs
 3. Codegen calls =pmatch_desugar= which generates =(cond ...)=
-4. Codegen compiles the resulting cond chain via the normal dispatch
+4. Codegen compiles the cond chain via normal dispatch
 
 Desugaring happens at codegen time (after inference), not during
 parsing, because the full type environment and ADT definitions are
 only available after inference ([[file:../context/pmatch.org::56]]).
 
-* match expression ([[file:../pmatch.c]])
+* Implicit Pattern Matching (the default)
+
+Inside a =define=, =lambda=, or =(let ...)= body, you do NOT need an
+explicit =(match ...)= expression. If the body consists of multiple
+clauses with =->= arrows, the function automatically pattern matches
+on its parameters.
+
+** Function with pattern clauses
+
+#+BEGIN_SRC monad
+;; Implicit match on the argument — no (match ...) needed
+(define fact
+  0 -> 1
+  n -> (* n (fact (- n 1))))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define fact
+  0 -> 1
+  n -> * n (fact (- n 1))
+#+END_SRC
+
+This is equivalent to:
+
+#+BEGIN_SRC monad
+(define fact (lambda (n)
+  (match n with
+    0 -> 1
+    n -> (* n (fact (- n 1))))))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define fact lambda n
+  match n with
+    0 -> 1
+    n -> * n (fact (- n 1))
+#+END_SRC
+
+The compiler recognizes that the body of =define= is a sequence of
+pattern clauses and wraps them in an implicit =match= on the
+function's parameters.
+
+** Lambda with pattern clauses
+
+Same applies to anonymous lambdas:
+
+#+BEGIN_SRC monad
+;; Wisp: default body is implicit match
+define classify :: Int -> String
+  | 0       -> "zero"
+  | n | > 0 -> "positive"
+  | _       -> "negative"
+
+;; S-expr: same thing
+(define classify
+  (lambda (n :: Int -> String)
+    | 0 -> "zero"
+    | n | (> n 0) -> "positive"
+    | _ -> "negative"))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define classify
+  lambda n :: Int -> String
+    | 0 -> "zero"
+    | n | (> n 0) -> "positive"
+    | _ -> "negative"
+#+END_SRC
+
+You can think of =define name pattern -> body= as the fundamental
+form — the =match= expression is just the explicit version.
+
+** Why this works
+
+The reader's =parse_lambda= function (reader.c:2714-2773) detects when
+the body starts with a pattern clause token (=->=, =|=) and creates an
+=AST_PMATCH= node wrapping the clauses instead of a regular expression
+body. The codegen then desugars the =PMATCH= into a =cond= chain.
+
+* explicit match expression
+
+Use =match= explicitly when you need to match on a specific
+sub-expression (not the function parameter), or inside a non-function
+body:
 
 #+BEGIN_SRC monad
 (match value with
   pattern -> body ...)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+match value with
+  pattern -> body ...
 #+END_SRC
 
 Patterns tried in order from top to bottom. The first matching clause
@@ -33,27 +133,18 @@ fires.
 The =PatternKind= enum ([[file:../reader.h::90]]) defines the
 supported pattern forms:
 
-| Pattern        | Example   | Matches                          |                           |
-|----------------+-----------+----------------------------------+---------------------------|
-| Wildcard       | ~_~         | Any value, no binding            |                           |
-| Variable       | ~n~         | Any value, bound as ~n~            |                           |
-| Int literal    | ~0~, ~-1~     | Exact integer                    |                           |
-| Float literal  | ~1.5~       | Exact float                      |                           |
-| String literal | ~"a"~       | Exact string                     |                           |
-| Char literal   | ~'\n'~      | Exact character                  |                           |
-| Empty list     | ~[]~ or ~nil~ | Empty list / null                |                           |
-| List with tail | ~[x       | xs]~                             | Destructure head and tail |
-| List fixed     | ~[a b c]~   | Fixed-length list match          |                           |
-| Constructor    | ~(Just x)~  | ADT constructor + field bindings |                           |
-
-The =ASTPattern= struct ([[file:../reader.h::101]]) carries a =kind=
-discriminator, =var_name= (for =PAT_VAR=), =lit_value= (numeric/string
-literals), =elements/=element_count= and =tail= (for =PAT_LIST=), and
-=ctor_fields/=ctor_field_count= (for =PAT_CONSTRUCTOR=).
-
-Each clause is an =ASTPMatchClause= ([[file:../reader.h::114]]) with
-=patterns/=pattern_count= (one per function parameter), =body=, and
-=guard_conds/=guard_bodies/=guard_count= (for guarded alternatives).
+| Pattern        | Example  | Matches                          |                           |
+|----------------+----------+----------------------------------+---------------------------|
+| Wildcard       | ~_~        | Any value, no binding            |                           |
+| Variable       | ~n~        | Any value, bound as ~n~            |                           |
+| Int literal    | ~0~, ~-1~    | Exact integer                    |                           |
+| Float literal  | ~1.5~      | Exact float                      |                           |
+| String literal | ~"a"~      | Exact string                     |                           |
+| Char literal   | ~'\n'~     | Exact character                  |                           |
+| Empty list     | ~[]~ / ~nil~ | Empty list / null                |                           |
+| List with tail | ~[x      | xs]~                             | Destructure head and tail |
+| List fixed     | ~[a b c]~  | Fixed-length list match          |                           |
+| Constructor    | ~(Just x)~ | ADT constructor + field bindings |                           |
 
 * Guard clauses
 
@@ -64,68 +155,66 @@ Each clause is an =ASTPMatchClause= ([[file:../reader.h::114]]) with
   _            -> "zero")
 #+END_SRC
 
+#+BEGIN_SRC wisp
+match x with
+  n | (> n 0) -> "positive"
+  n | (< n 0) -> "negative"
+  _            -> "zero"
+#+END_SRC
+
 Use ~|~ (pipe) after the pattern, then a guard condition, then ~->~
 and the body. Multiple guards per clause are separated by pipes.
 
 The guard condition is combined with the pattern condition as
-=(and pattern-condition guard-condition)= during desugaring
-([[file:../context/pmatch.org::175]]).
+=(and pattern-condition guard-condition)= during desugaring.
 
 * Leading pipe separator
 
-Match clauses may have an optional leading ~|~ before the pattern
-([[file:../context/language.org::455]]):
+Pattern clauses may have an optional leading ~|~:
 
 #+BEGIN_SRC monad
 (match x with
   | 0 -> "zero"
   | _ -> "non-zero")
+
+(lambda (x)
+  | 0 -> "zero"
+  | _ -> "non-zero")
 #+END_SRC
 
-The parser consumes this as a clause separator rather than treating it
-as part of the pattern.
+#+BEGIN_SRC wisp
+match x with
+  | 0 -> "zero"
+  | _ -> "non-zero"
+
+lambda x
+  | 0 -> "zero"
+  | _ -> "non-zero"
+#+END_SRC
+
+The parser consumes ~|~ as a clause separator, not part of the
+pattern. Both with and without leading pipe work identically.
 
 * Tail patterns (head | tail)
 
-List patterns support destructuring with the ~|~ separator between
-head and tail elements:
+List patterns support destructuring with ~|~ separating head and tail:
 
 #+BEGIN_SRC monad
 (match xs with
-  [x|xs] -> (show x)    ;; binds head to x, tail to xs
+  [x|xs] -> (show x)        ;; binds head to x, tail to xs
   []     -> "empty")
 #+END_SRC
 
-The tail element captures the rest of the list after the head
-elements.
-
-* Lambda with pattern clauses
-
-Multiple ~define~ clauses desugar to ~match~:
-
-#+BEGIN_SRC monad
-(define fact
-  0 -> 1
-  n -> (* n (fact (- n 1))))
+#+BEGIN_SRC wisp
+match xs with
+  [x|xs] -> show x
+  []     -> "empty"
 #+END_SRC
-
-This is equivalent to:
-
-#+BEGIN_SRC monad
-(define fact
-  (match n with
-    0 -> 1
-    n -> (* n (fact (- n 1)))))
-#+END_SRC
-
-Use ~lambda~ (no ~fn~ shorthand) for anonymous pattern functions.
 
 * Exhaustive Checking
 
 Constructor pattern matching requires a wildcard fallback clause.
-Without an explicit wildcard, the compiler emits an =(undefined)=
-fallback that codegen rejects outside function scope
-([[file:../context/language.org::460]]). This means:
+Without it, the compiler emits an =(undefined)= fallback:
 
 #+BEGIN_SRC monad
 (match x with
@@ -134,34 +223,42 @@ fallback that codegen rejects outside function scope
   ;; compiles to (cond ((__adt_tag_ x 0) ...) (else (undefined)))
 #+END_SRC
 
+#+BEGIN_SRC wisp
+match x with
+  (Just v) -> show v
+#+END_SRC
+
 Always include ~_~ or ~default~ fallback clause for coverage.
 
 * Desugaring Internals
 
-The =build_pattern_conditions= function
-([[file:../context/pmatch.org::184]]) generates the following condition
-expressions per pattern kind:
+=build_pattern_conditions= ([[file:../context/pmatch.org::184]])
+generates condition expressions per pattern kind:
 
 | Pattern        | Generated condition                            |
 |----------------+------------------------------------------------|
 | Wildcard       | always true                                    |
 | Variable       | always true (binds the name)                   |
-| Int literal    | =(= param value)=                                |
-| Float literal  | =(= param value)=                                |
-| String literal | =(string= param value)=                          |
-| Empty list     | =(empty? param)=                                 |
-| List           | length check + element destructuring via =nth=   |
+| Int literal    | =(= param value)=                              |
+| Float literal  | =(= param value)=                              |
+| String literal | =(string= param value)=                        |
+| Empty list     | =(empty? param)=                               |
+| List           | length check + element destructuring via =nth= |
 | Constructor    | tag check via =__adt_tag_= + field destructuring |
 
-Helper constructors ([[file:../context/pmatch.org::197]]) build the
-AST fragments for the desugared output: =make_eq_int=,
-=make_eq_float=, =make_list_length=, =make_count=,
-=make_coll_is_empty=, =make_index_access=, =make_and=, etc.
+* Related Pages
+
+- [[file:lambda.org][Lambda]] -- pattern clause lambdas
+- [[file:data.org][Data Types]] -- ADT definition and constructor patterns
+- [[file:pair.org][Pairs]] -- pair destructuring
+- [[file:list.org][Lists]] -- list pattern matching
+- [[file:conditionals.org][Conditionals]] -- cond as desugaring target
 
 * Context Links
 
 - [[file:../context/pmatch.org][context/pmatch.org]] — pattern match compilation
 - [[file:../context/codegen.org][context/codegen.org]] — pattern codegen
 - [[file:../pmatch.c][pmatch.c]] — pattern parser and desugaring
-- [[file:../tests/codegen/][tests/codegen/]] — rt_match_* test files
+- [[file:lambda.org][Lambda]] — pattern clause lambdas
 - [[file:data.org][Data Types]] — ADT definition syntax
+- [[file:let.org][Let Bindings]] — let/let*/letrec with pattern clauses

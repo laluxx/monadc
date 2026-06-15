@@ -1,0 +1,166 @@
+#+TITLE: Type Classes
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:type-classes:info:
+
+:PROPERTIES:
+:ID:       monadc.info.type-classes
+:CONTEXT:  monadc.context.typeclass, monadc.context.language, monadc.context.codegen
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:types.org][Types]] · [[file:advanced-types.org][Advanced Types]] · [[file:dependent-types.org][Dependent Types]] · [[file:type-inference.org][Type Inference]] · [[file:data.org][Data Types]] · [[file:core.org][Core Library]]
+
+* Quick Reference
+
+| Form                        | Description                  |
+|-----------------------------+------------------------------|
+| =(class C a (method (sig)))=  | Class declaration            |
+| =(instance C T (define ...))= | Instance for concrete type   |
+| =(data T ... deriving C)=     | Auto-derive instance         |
+| =∀ t. [C t] => type=           | Constrained polymorphic type |
+
+Test coverage: type class deriving is tested by =rt_derive_*.mon=
+fixtures in [[file:../tests/codegen/][tests/codegen/]].
+
+Monad provides a type class system with dictionary-passing
+implementation ([[file:../typeclass.c]], [[file:../typeclass.h]]). A class
+declaration defines method signatures; an instance provides concrete
+implementations for a specific type. The compiler compiles each
+instance into an LLVM global dictionary struct of function pointers
+named =__dict_ClassName_TypeName= ([[file:../typeclass.c::438]]).
+
+* Class Declaration
+
+#+BEGIN_SRC monad
+(class Eq a where
+  ((==) (a a -> Bool)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+class Eq a where
+  (==) (a a -> Bool)
+#+END_SRC
+
+Internally stored as a =TCClass= ([[file:../typeclass.h::27]]) with
+=name=, =type_var=, =methods= (name + type_str), and optional
+=default_names/=default_bodies= (AST lambda bodies for methods with
+default implementations). Associated type names are stored in
+=assoc_types= ([[file:../typeclass.h::30]]).
+
+* Instance Declaration
+
+#+BEGIN_SRC monad
+(instance Eq Int
+  (define (== a b -> Bool)
+    (builtin-== a b)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+instance Eq Int
+  define == a b -> Bool
+    builtin-== a b
+#+END_SRC
+
+Registered via =tc_register_instance= ([[file:../typeclass.c::258]])
+which:
+1. Compiles each method body, substituting type variables with concrete
+   types and falling back to default implementations when no body is
+   given.
+2. Builds the LLVM dictionary global =__dict_ClassName_TypeName= as a
+   struct of function pointers (erased to =i8*= via BitCast for uniform
+   layout).
+3. Registers compiled methods in the environment as =ENV_FUNC= entries
+   for direct dispatch.
+
+* Dictionary Dispatch
+
+Each instance produces a named global =__dict_Eq_TrafficLight=
+([[file:../typeclass.c::64]]). Method calls are resolved at compile
+time via the strcmp dispatch layer in codegen
+([[file:../codegen.c::8905]]): codegen checks if the operator symbol
+is a known method via =tc_is_method=, determines the concrete type from
+arguments, and emits a direct call to the matching function pointer via
+=tc_get_method= ([[file:../typeclass.c::510]]).
+
+This is the standard dictionary-passing strategy used by GHC and Rust
+trait objects. Instance resolution happens at codegen time (not type-
+checking time), within a single compilation unit where all instances
+are known ([[file:../context/typeclass.org::312]]).
+
+* Deriving
+
+#+BEGIN_SRC monad
+(data Suit Hearts Diamonds Clubs Spades deriving Eq)
+(data T = A | B | C deriving [Eq Enum Show])
+#+END_SRC
+
+#+BEGIN_SRC wisp
+data Suit
+  Hearts
+  Diamonds
+  Clubs
+  Spades
+  deriving Eq
+data T
+  A
+  B
+  C
+  deriving [Eq Enum Show]
+#+END_SRC
+
+Codegen auto-generates =instance Eq T= (structural == comparing
+constructor tags and fields) and =instance Enum T= (=fromEnum= maps to
+constructor index, =toEnum= maps index to constructor). Deriving
+supports a single class or a list: =deriving [Eq Enum]=
+([[file:../codegen.c::13144]]). The class must be defined before use
+or a warning is emitted.
+
+* Constraints with =~>=
+
+#+BEGIN_SRC monad
+(define toEnumSafe :: ∀ t. [Enum t, Bounded t] => Int -> (Option t)
+  n | >= 0 -> (Just (toEnum n))
+    | otherwise -> Nothing)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define toEnumSafe :: ∀ t. [Enum t, Bounded t] => Int -> Option t
+  n | >= 0 -> Just (toEnum n)
+    | otherwise -> Nothing
+#+END_SRC
+
+Universal quantifier =∀= (or =forall=) with multi-class constraints in
+brackets. Type variables are implicitly universally quantified in
+surface syntax; explicit =∀= is required for constraint-bearing
+polymorphism.
+
+* Known Gaps
+
+- No superclass constraints (e.g. =(class Eq a => Ord a)=)
+- No higher-kinded types (WIP)
+- No type families (WIP)
+- Associated types are declared but type-level computation during
+  instance resolution is incomplete
+- Instance resolution is local (visible instances at point of use)
+  rather than global (all instances in scope)
+
+See [[file:../context/typeclass.org::337]] for full details.
+
+* See Also
+
+- [[file:dependent-types.org][Dependent Types]]
+- [[file:type-inference.org][Type Inference]]
+- [[file:advanced-types.org][Advanced Types]]
+- [[file:types.org][Types]]
+- [[file:data.org][Data Types]]
+
+* Context Links
+
+- [[file:../context/typeclass.org][context/typeclass.org]] — type class implementation
+- [[file:../typeclass.c][typeclass.c]] — class/instance registration and dispatch
+- [[file:../codegen.c][codegen.c]] — method dispatch via strcmp layer
+- [[file:dependent-types.org][Dependent Types]] — ITT/NbE shadow pass
+- [[file:type-inference.org][Type Inference]] — HM inference engine
+- [[file:advanced-types.org][Advanced Types]] — type class overview
+- [[file:data.org][Data Types]] — algebraic data types with deriving

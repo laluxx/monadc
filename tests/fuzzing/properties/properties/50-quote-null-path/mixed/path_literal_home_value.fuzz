@@ -1,7 +1,15 @@
 name: path_literal_home_value
 section: quote-null-path
+tier: experimental
+kind: law
+features: arithmetic, path, quote
+compiler-path: codegen.arithmetic_dispatch, codegen.path_literal, codegen.quote, infer.arithmetic, infer.path, reader.path_literal, reader.quote
+uses-atoms: atom.null.nil, atom.quote.quote, atom.runtime.path
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Path
 expect: ~/monadc/context/
 description: home-relative path literals are first-class Path values and show as path text.
 law: ~/monadc/context/
+demoted-from: stable-by-signal-v13

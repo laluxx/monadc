@@ -1,7 +1,0 @@
-name: mega_bitwise_and_zero_absorbs
-section: codegen-bitwise-dispatch
-args: a:Int
-type: Bool
-expect: True
-description: & with zero must absorb generated Int.
-law: (= (& {a} 0) 0)

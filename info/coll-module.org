@@ -1,0 +1,98 @@
+#+TITLE: Coll Module
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:coll-module:info:
+
+:PROPERTIES:
+:ID:       monadc.info.coll-module
+:CONTEXT:  monadc.context.core-libs, monadc.context.language
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:stdlib.org][Standard Library]] · [[file:math-module.org][Math Module]] · [[file:list.org][Lists]] · [[file:collections.org][Collections]] · [[file:core.org][Core Library]] · [[file:functional-programming.org][Functional Programming]]
+
+Test coverage: =make test-core= runs per-module tests via
+=python3 tests/run_core.py=. Coll module tested by =rt_core_coll.mon=.
+
+The =Coll= module ([[file:../core/prelude/Coll.mon]], ~100 lines) provides
+higher-order collection operations. Import with =(import Coll)=.
+
+* Functions
+
+| Function     | Example                           | Description                   |
+|--------------+-----------------------------------+-------------------------------|
+| =take=       | =(take 3 '(1 2 3 4 5))=           | First n elements              |
+| =drop=       | =(drop 2 '(1 2 3 4 5))=           | Drop n elements               |
+| =takeWhile=  | =(takeWhile even? '(2 4 5 7))=    | Take while predicate holds    |
+| =dropWhile=  | =(dropWhile even? '(2 4 5 7))=    | Drop while predicate holds    |
+| =map=        | =(map (lambda [x] (+ x 1)) '(1 2 3))= | Transform each element   |
+| =all?=       | =(all? even? '(2 4 6))=           | All elements satisfy predicate|
+| =foldl=      | =(foldl + 0 '(1 2 3 4))=          | Left fold                     |
+| =foldr=      | =(foldr + 0 '(1 2 3 4))=          | Right fold                    |
+
+#+BEGIN_SRC monad
+(import Coll)
+
+(show (take 3 '(1 2 3 4 5)))        ;; (1 2 3)
+(show (drop 2 '(1 2 3 4 5)))        ;; (3 4 5)
+(show (all? even? '(2 4 6)))        ;; Tru)
+(show (foldl + 0 '(1 2 3 4)))       ;; 1)
+(show (map (lambda [x] (+ x 1)) '(1 2 3))) ;; (2 3 4)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+import Coll
+
+show (take 3 '(1 2 3 4 5))        ;; (1 2 3)
+show (drop 2 '(1 2 3 4 5))        ;; (3 4 5)
+show (all? even? '(2 4 6))        ;; Tru)
+show (foldl + 0 '(1 2 3 4))       ;; 1)
+show (map (lambda [x] (+ x 1)) '(1 2 3)) ;; (2 3 4)
+#+END_SRC
+
+* Known Issues
+
+- =import Coll= fails while compiling =takeWhile=
+- Functions that take function arguments (=map=, =filter=, =all?=,
+  =foldl=, =foldr=) are affected by the closure codegen gap: lambdas
+  cannot be passed as arguments from paren-mode
+- Module requires explicit =import Coll= — not automatic
+
+* Workaround
+
+When the closure gap blocks higher-order use, use manual recursion or
+list-comprehension patterns instead:
+
+#+BEGIN_SRC monad
+;; Instead of (map f xs):
+(define (add1 xs -> [Int])
+  ((match xs))
+    []      -> []
+    [x|xs]  -> (++ (+ x 1) (add1 xs))))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+;; Instead of (map f xs):
+(define (add1 xs -> [Int])
+  (match xs)
+    []      -> []
+    [x|xs]  -> (++ (+ x 1) (add1 xs))))
+#+END_SRC
+
+* Related Pages
+
+- [[file:stdlib.org][Standard Library]] -- library overview
+- [[file:math-module.org][Math Module]] -- Math module
+- [[file:list.org][Lists]] -- list type used by Coll functions
+- [[file:collections.org][Collections]] -- collection types overview
+- [[file:functional-programming.org][Functional Programming]] -- HOFs and closure gap
+
+* Context Links
+
+- [[file:../core/prelude/Coll.mon][core/prelude/Coll.mon]] — source (~100 lines)
+- [[file:../context/core-libs.org][context/core-libs.org]] — library architecture
+- [[file:math-module.org][Math Module]] — mathematical functions
+- [[file:stdlib.org][Standard Library]] — library overview
+- [[file:list.org][Lists]] — collection type used by Coll functions
+- [[file:collections.org][Collections]] — collection types overview
+- [[file:functional-programming.org][Functional Programming]] — HOFs and closure gap

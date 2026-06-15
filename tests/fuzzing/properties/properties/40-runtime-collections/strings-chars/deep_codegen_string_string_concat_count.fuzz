@@ -1,7 +1,0 @@
-name: deep_codegen_string_string_concat_count
-section: codegen-string-char
-args: 
-type: Bool
-expect: True
-description: ++ on strings must concatenate and expose correct count.
-law: (= (count (++ "mon" "adc")) 6)

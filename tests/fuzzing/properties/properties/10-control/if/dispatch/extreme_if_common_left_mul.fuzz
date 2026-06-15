@@ -1,5 +1,13 @@
 name: extreme_if_common_left_mul
 section: control-if-dispatch
+tier: stable
+kind: law
+features: arithmetic, control, equality, if, phi
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, infer.arithmetic, infer.equality, infer.if_phi, reader.ast_if
+uses-atoms: atom.codegen.dispatch, atom.control.if, atom.core.equality, atom.core.multiply
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_if_same_branch_eliminates, signal_v13_atom_multiply_associative, signal_v13_atom_multiply_commutative, signal_v13_atom_multiply_identity_one
+signal: medium
+corpus-role: semantic-law
 args: cond:Bool common:Int a:Int b:Int
 type: Bool
 expect: True

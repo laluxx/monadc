@@ -44,7 +44,7 @@
 (define space 32)   ; space
 (define del   127)  ; delete/rubout
 
-(define case-delta (- 'a' 'A'))
+define case-delta 'a' - 'A'
 
 
 (define (char-upcase [c : Char] -> Char)
@@ -84,9 +84,37 @@
   (or (char-alphabetic? c) (char-numeric? c)))
 
 
+
+
+
+
+
+
+
 (define (char-whitespace? [c : Char] -> Bool)
   "Return True if C is a whitespace character."
   (or (= c ' ') (= c  '\t') (= c '\n') (= c '\r')))
+
+:doc "Return True if C is a whitespace character."
+define char-whitespace? :: Char -> Bool
+  c -> or c = ' '  c = '\t'
+          c = '\n' c = '\r'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ;; (tests
 ;;   (assert-eq lowercase "abcdefghijklmnopqrstuvwxyz"                            "lowercase")

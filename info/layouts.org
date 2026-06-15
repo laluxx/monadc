@@ -1,14 +1,26 @@
 #+TITLE: Layout Types
-#+CONTEXT: types.org, ffi.org
 #+STARTUP: showeverything
 #+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:layouts:info:
 
-[[file:index.org][<- Back to Index]] · [[file:data.org][Data Types]] · [[file:ffi.org][C FFI]]
+:PROPERTIES:
+:ID:       monadc.info.layouts
+:CONTEXT:  monadc.context.types, monadc.context.codegen, monadc.context.ffi
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:data.org][Data Types]] · [[file:types.org][Types]] · [[file:arrays.org][Arrays]] · [[file:ffi.org][C FFI]] · [[file:asm.org][Inline Assembly]] · [[file:performance.org][Performance]] · [[file:heap.org][Heap Allocation]]
 
 Layout types provide C-compatible memory layouts for struct-like data.
 Internally they are represented as =TYPE_LAYOUT= (types.h:23) with fields
 stored in =LayoutField= structs (types.h:62-67): each field has a =name=,
-=type=, =offset= (computed), and =size=.
+=type=, =offset= (computed by =layout_compute_offsets= in types.c), and
+=size=.
+
+Test coverage: layout type construction, field access, and methods are
+tested by =rt_layout_*.mon= fixtures (see
+[[file:../tests/codegen/][tests/codegen/]]). FFI struct layout mapping via libclang is
+covered by =rt_cffi_*.mon= fixtures. Examples: [[file:../how_to/Layouts.mon][how_to/Layouts.mon]].
 
 ** Declaration
 
@@ -20,10 +32,23 @@ stored in =LayoutField= structs (types.h:62-67): each field has a =name=,
   [m31 :: Float] [m32 :: Float] [m33 :: Float])
 #+END_SRC
 
+#+BEGIN_SRC wisp
+layout Point [x :: Float] [y :: Float]
+layout Matrix3x3
+  [m11 :: Float] [m12 :: Float] [m13 :: Float]
+  [m21 :: Float] [m22 :: Float] [m23 :: Float]
+  [m31 :: Float] [m32 :: Float] [m33 :: Float]
+#+END_SRC
+
 ** Construction
 
 #+BEGIN_SRC monad
 (define p (Point 3.0 4.0))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define p
+  Point 3.0 4.0
 #+END_SRC
 
 ** Field Access
@@ -39,6 +64,11 @@ to a fixed-offset load from an LLVM struct pointer.
 (<- p.x 5.0)       ;; sugar for set!
 #+END_SRC
 
+#+BEGIN_SRC wisp
+set! p.x 5.0     ;; mutates field in-place
+<- p.x 5.0       ;; sugar for set!
+#+END_SRC
+
 ** Field Options
 
 Each field can carry options that modify its layout behavior:
@@ -50,6 +80,10 @@ Each field can carry options that modify its layout behavior:
 
 #+BEGIN_SRC monad
 (layout Packet [flags :: U8 :packed] [len :: Int :align 8])
+#+END_SRC
+
+#+BEGIN_SRC wisp
+layout Packet [flags :: U8 :packed] [len :: Int :align 8]
 #+END_SRC
 
 Additional field-level flags stored on the =LayoutField= (types.c):
@@ -97,6 +131,16 @@ layout as the element type:
 (define [points :: Arr :: Point] ~[])
 #+END_SRC
 
+#+BEGIN_SRC wisp
+layout Point [x :: Float] [y :: Float]
+
+;; Fixed-size array of 10 Points
+define [points :: Arr :: Point :: 10] []
+
+;; Heap array of Points
+define [points :: Arr :: Point] ~[]
+#+END_SRC
+
 Each Point element is stored contiguously in the array, matching C
 struct array layout.
 
@@ -119,22 +163,44 @@ accessed with arrow syntax:
 (show v->array)   ; [1.0 2.0 3.0]
 #+END_SRC
 
+#+BEGIN_SRC wisp
+layout Vec3
+  [x :: Float]
+  [y :: Float]
+  [z :: Float]
+  where
+    method ->array :: Self -> Array
+      s -> [s.x s.y s.z]
+
+define v
+  Vec3 1.0 2.0 3.0
+show v->array   ; [1.0 2.0 3.0]
+#+END_SRC
+
 Method dispatch is tested in =rt_layout_*.mon= fixtures. The
 =where= block can contain multiple =method= forms.
 
 ** Comparison: =layout= vs =data=
 
-| Aspect       | =data= (ADT)          | =layout=             |
+| Aspect       | =data= (ADT)            | =layout=               |
 |--------------+-----------------------+----------------------|
 | Memory       | Heap-allocated (cons) | Stack or inline      |
 | C compat     | No                    | Yes                  |
 | Polymorphism | Yes (type params)     | No                   |
 | Field access | Pattern matching      | Dot notation         |
-| Mutation     | Immutable             | =set!= / =<-=        |
+| Mutation     | Immutable             | =set!= / =<-=            |
 | Layout       | Linked list / tagged  | C struct, contiguous |
 
 Layout types trade polymorphism and immutability for C-compatible
 contiguous memory, predictable offsets, and zero-copy FFI.
+
+* Related Pages
+
+- [[file:data.org][Data Types]] -- ADT vs layout comparison
+- [[file:ffi.org][C FFI]] -- C interop with layout types
+- [[file:arrays.org][Arrays]] -- sized arrays as layouts
+- [[file:asm.org][Inline Assembly]] -- inline assembly with layouts
+- [[file:performance.org][Performance]] -- memory layout performance
 
 * Context Links
 

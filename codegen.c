@@ -3106,9 +3106,6 @@ static LLVMValueRef codegen_dot_chain(CodegenContext *ctx, const char *symbol, T
             return NULL;
         }
     }
-    fprintf(stderr, "DEBUG dot_chain: var='%s' base_entry=%p type_kind=%d\n",
-            var_name, (void*)base_entry,
-            (base_entry && base_entry->type) ? base_entry->type->kind : -1);
 
     Type *current_lay = base_entry->type;
 
@@ -3125,7 +3122,144 @@ static LLVMValueRef codegen_dot_chain(CodegenContext *ctx, const char *symbol, T
             return NULL;
         }
     } else if (current_lay->kind != TYPE_LAYOUT) {
-        return NULL;
+        /* Non-layout type: resolve the type name and look up TypeName.method
+         * directly in the environment (e.g. x.double -> Int.double).
+         * We derive the type name string from the type kind, then do a
+         * single env lookup. No GEP, no struct pointer — function ref only. */
+        const char *type_name_str = NULL;
+        char type_name_tmp[64] = {0};
+
+        switch (current_lay->kind) {
+        case TYPE_INT:
+            type_name_str = "Int";
+            break;
+        case TYPE_INT_ARBITRARY:
+            if (current_lay->numeric_signed) {
+                if (current_lay->numeric_width == 0 ||
+                    current_lay->numeric_width == 64)
+                    type_name_str = "Int";
+                else {
+                    snprintf(type_name_tmp, sizeof(type_name_tmp),
+                             "I%d", current_lay->numeric_width);
+                    type_name_str = type_name_tmp;
+                }
+            } else {
+                snprintf(type_name_tmp, sizeof(type_name_tmp),
+                         "U%d", current_lay->numeric_width ?
+                                current_lay->numeric_width : 64);
+                type_name_str = type_name_tmp;
+            }
+            break;
+        case TYPE_I8:   type_name_str = "I8";   break;
+        case TYPE_U8:   type_name_str = "U8";   break;
+        case TYPE_I16:  type_name_str = "I16";  break;
+        case TYPE_U16:  type_name_str = "U16";  break;
+        case TYPE_I32:  type_name_str = "I32";  break;
+        case TYPE_U32:  type_name_str = "U32";  break;
+        case TYPE_I64:  type_name_str = "I64";  break;
+        case TYPE_U64:  type_name_str = "U64";  break;
+        case TYPE_I128: type_name_str = "I128"; break;
+        case TYPE_U128: type_name_str = "U128"; break;
+        case TYPE_FLOAT: type_name_str = "Float"; break;
+        case TYPE_F32:   type_name_str = "F32";   break;
+        case TYPE_F80:   type_name_str = "F80";   break;
+        case TYPE_BOOL:   type_name_str = "Bool";   break;
+        case TYPE_STRING: type_name_str = "String"; break;
+        case TYPE_CHAR:   type_name_str = "Char";   break;
+        case TYPE_APP:
+            if (current_lay->app_constructor)
+                type_name_str = current_lay->app_constructor;
+            break;
+        default:
+            break;
+        }
+
+        if (!type_name_str) {
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot use dot-access on "
+                          "a value of this type (no type name resolvable)",
+                          parser_get_filename(), ast->line, ast->column);
+            return NULL;
+        }
+
+        /* Build the fully-qualified method name and look it up */
+        const char *rest_of_chain = first_dot + 1;
+        char method_key[512];
+        snprintf(method_key, sizeof(method_key), "%s.%s",
+                 type_name_str, rest_of_chain);
+
+        EnvEntry *mentry = env_lookup(ctx->env, method_key);
+        if (!mentry || !mentry->func_ref) {
+            fprintf(stderr, "DEBUG method lookup failed: method_key='%s' mentry=%p func_ref=%p\n",
+                    method_key, (void*)mentry,
+                    mentry ? (void*)mentry->func_ref : NULL);
+            /* Dump all env entries containing a dot to help diagnose */
+            fprintf(stderr, "DEBUG env entries with dots:\n");
+            for (size_t _bi = 0; _bi < ctx->env->size; _bi++) {
+                for (EnvEntry *_e = ctx->env->buckets[_bi]; _e; _e = _e->next) {
+                    if (strchr(_e->name, '.'))
+                        fprintf(stderr, "  '%s' kind=%d func_ref=%p\n",
+                                _e->name, _e->kind, (void*)_e->func_ref);
+                }
+            }
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: type '%s' has no method '%s' "
+                          "(looked up '%s' -- is %s.mon compiled and loaded?)",
+                          parser_get_filename(), ast->line, ast->column,
+                          type_name_str, rest_of_chain, method_key,
+                          type_name_str);
+            return NULL;
+        }
+
+        if (out_is_method) *out_is_method = true;
+        /* out_type should be the return type of the method so callers
+         * know what the call result is, not the full function type.   */
+        if (out_type) {
+            if (mentry->return_type)
+                *out_type = mentry->return_type;
+            else
+                *out_type = mentry->type;
+        }
+
+        /* Load self: the actual value of x to pass as first argument.
+         * base_entry->value is an alloca (pointer to the value) for
+         * local variables — load through it to get the real integer/float. */
+        if (out_self) {
+            if (base_entry->value) {
+                LLVMTypeRef val_t = LLVMTypeOf(base_entry->value);
+                if (LLVMGetTypeKind(val_t) == LLVMPointerTypeKind) {
+                    /* Pick the correct LLVM integer type for the load */
+                    LLVMTypeRef load_t = LLVMInt64TypeInContext(ctx->context);
+                    switch (current_lay->kind) {
+                    case TYPE_I8:  case TYPE_U8:
+                        load_t = LLVMInt8TypeInContext(ctx->context);  break;
+                    case TYPE_I16: case TYPE_U16:
+                        load_t = LLVMInt16TypeInContext(ctx->context); break;
+                    case TYPE_I32: case TYPE_U32:
+                        load_t = LLVMInt32TypeInContext(ctx->context); break;
+                    case TYPE_I128: case TYPE_U128:
+                        load_t = LLVMInt128TypeInContext(ctx->context); break;
+                    case TYPE_INT_ARBITRARY:
+                        if (current_lay->numeric_width > 0 &&
+                            current_lay->numeric_width <= 128)
+                            load_t = LLVMIntTypeInContext(
+                                ctx->context, current_lay->numeric_width);
+                        break;
+                    case TYPE_FLOAT:
+                        load_t = LLVMDoubleTypeInContext(ctx->context); break;
+                    case TYPE_F32:
+                        load_t = LLVMFloatTypeInContext(ctx->context);  break;
+                    default:
+                        load_t = LLVMInt64TypeInContext(ctx->context);  break;
+                    }
+                    *out_self = LLVMBuildLoad2(ctx->builder, load_t,
+                                               base_entry->value, var_name);
+                } else {
+                    *out_self = base_entry->value;
+                }
+            } else {
+                *out_self = NULL;
+            }
+        }
+        return mentry->func_ref;
     }
 
 
@@ -3432,9 +3566,22 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
         LLVMValueRef dot_self_sym = NULL;
         LLVMValueRef dot_ptr = codegen_dot_chain(ctx, ast->symbol, &dot_type, ast, &dot_is_method_sym, &dot_self_sym);
         if (dot_ptr && dot_is_method_sym) {
-            /* Symbol evaluates to a layout method — return the func_ref directly.
-             * The caller (a wrapping call expression) will handle dispatch.
-             * We store dot_self in a thread-local so the call site can prepend it. */
+            /* Primitive type method call: x.double — call it immediately with self.
+             * dot_ptr is the func_ref, dot_self_sym is the loaded self value.
+             * Build the direct call and return the result.                    */
+            if (dot_self_sym) {
+                Type *ret_type = dot_type;
+                LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
+                LLVMTypeRef ret_lt = (ret_type && ret_type->kind == TYPE_FLOAT)
+                    ? LLVMDoubleTypeInContext(ctx->context) : i64_t;
+                LLVMTypeRef fn_t = LLVMFunctionType(ret_lt, &i64_t, 1, 0);
+                LLVMValueRef call_result = LLVMBuildCall2(ctx->builder, fn_t,
+                                               dot_ptr, &dot_self_sym, 1, "method_result");
+                result.value = call_result;
+                result.type  = ret_type ? type_clone(ret_type) : type_int();
+                return result;
+            }
+            /* No self — fall through to return func_ref for use as a value */
             result.value = dot_ptr;
             result.type  = dot_type ? type_clone(dot_type) : type_unknown();
             return result;

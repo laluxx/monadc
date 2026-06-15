@@ -1,7 +1,0 @@
-name: compiler_deep_v8_quasiquote_unquote_head_generated
-section: quote-runtime-v8
-args: a:Int b:Int
-type: Bool
-expect: True
-description: quasiquote/unquote should preserve generated value in first list position.
-law: (= (head (quasiquote ((unquote (+ {a} {b})) tail))) (+ {a} {b}))

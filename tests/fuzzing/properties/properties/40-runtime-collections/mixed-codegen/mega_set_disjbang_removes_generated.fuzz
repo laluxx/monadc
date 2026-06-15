@@ -1,5 +1,13 @@
 name: mega_set_disjbang_removes_generated
 section: codegen-runtime-collections
+tier: stable
+kind: law
+features: arithmetic, array, array-index, codegen, do, env, equality, predicate, set, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.equality_dispatch, codegen.local_load, codegen.predicate_dispatch, codegen.runtime_call, codegen.sequence, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.equality, infer.type_predicate, reader.array_literal, reader.ast_do, runtime.set
+uses-atoms: atom.binding.with, atom.codegen.dispatch, atom.control.do, atom.core.equality, atom.infer.predicate, atom.runtime.array
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_do_last_value, signal_v13_atom_equality_reflexive, signal_v13_atom_with_substitution
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: True

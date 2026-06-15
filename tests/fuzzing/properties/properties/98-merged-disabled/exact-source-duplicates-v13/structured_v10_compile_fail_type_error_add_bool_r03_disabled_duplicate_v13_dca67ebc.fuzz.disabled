@@ -1,0 +1,17 @@
+name: structured_v10_compile_fail_type_error_add_bool_r03_disabled_duplicate_v13_dca67ebc
+section: v10-compile-fail
+tier: experimental
+kind: compile-fail
+features: compile-fail, type, arithmetic
+compiler-path: codegen.arithmetic_dispatch, diagnostic.expected_error, infer.arithmetic, runner.compile_fail_kind
+uses-atoms: atom.core.plus
+related-properties: signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: a:Int@edge p:Bool@logic
+type: Bool
+expect-diagnostic: error:
+description: V10 compile-fail property type_error_add_bool round 3; must fail to compile and emit a compiler error.
+law: (+ {a} {p})
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: structured_v10_compile_fail_type_error_add_bool_r01

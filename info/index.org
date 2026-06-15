@@ -3,51 +3,121 @@
 #+DATE: 2026-06-14
 #+STARTUP: showeverything
 #+OPTIONS: toc:3 num:t
+#+TOC: headlines 2
+#+TOC: headlines 2
+#+TOC: headlines 2
 #+FILETAGS: :monad:language:reference:info:
 #+LANGUAGE: en
+#+TYPEFORMAT: info
+
+:PROPERTIES:
+:ID:       monadc.info.index
+:CONTEXT:  monadc.context.index
+:END:
 
 This is the Monad language reference. It covers the language from the
 user's perspective — syntax, types, standard library, tooling — NOT the
 compiler internals (those live in [[file:../context.org][context/]]).
 
 Written in Org mode. Export to GNU Info via Emacs: ~C-c C-e i i~.
+Monad version: 0.1.0. Compiler source: [[file:../main.c][main.c]] (1432 lines).
 
 * Navigation
 
+** Getting Started
    - [[file:intro.org][Introduction]] — philosophy, hello world, quick start
    - [[file:tutorial.org][Tutorial]] — step-by-step from zero to working programs
-   - [[file:syntax.org][Syntax]] — S-expressions, Wisp, special forms, literals
-   - [[file:types.org][Types]] — type system, HM inference, refinement types
-   - [[file:advanced-types.org][Advanced Types]] — type classes, dependent types, universes
-   - [[file:data.org][Data Types]] — algebraic data types
-   - [[file:layouts.org][Layout Types]] — C-compatible memory layouts
-   - [[file:refinements.org][Refinement Types]] — subset types with predicates
-   - [[file:control.org][Control Flow]] — if, cond, match, let, while, for
-   - [[file:collections.org][Collections]] — arrays, sets, maps, ranges, lists, strings
-   - [[file:strings.org][Strings]] — string and character reference
-   - [[file:patterns.org][Pattern Matching]] — match expressions, destructuring
-   - [[file:functional-programming.org][Functional Programming]] — lambdas, recursion, HOFs
-   - [[file:error-handling.org][Error Handling]] — Error type, Option pattern
-   - [[file:core.org][Core Library]] — predefined functions and constants
-   - [[file:stdlib.org][Standard Library]] — Math, List (WIP)
+
+** Syntax
+   - [[file:syntax.org][Syntax]] — S-expressions, Wisp, special forms overview
+   - [[file:define.org][Define]] — value/function binding, typed signatures
+   - [[file:quote.org][Quote]] — quote, quasiquote, unquote, splicing
    - [[file:wisp.org][Wisp Syntax]] — indentation-aware surface language
    - [[file:advanced-wisp.org][Advanced Wisp]] — Wisp patterns and known bugs
+
+** Primitive Types
+   - [[file:types.org][Types]] — type system overview, all ground types
+   - [[file:numeric.org][Numeric Types]] — Int, Float, Hex, Oct, Bin, fixed-width
+   - [[file:booleans.org][Booleans]] — Bool, True, False, logic operations
+   - [[file:characters.org][Characters]] — Char, codepoints, escape sequences
+   - [[file:strings.org][Strings]] — UTF-8 strings, operations, indexing
+   - [[file:rationals.org][Rationals]] — Ratio, exact arithmetic, percentages
+   - [[file:symbols.org][Symbols & Keywords]] — Symbol, Keyword, interning
+   - [[file:paths.org][Path Literals]] — filesystem path values
+
+** Compound Types
+   - [[file:collections.org][Collections]] — overview of all collection types
+   - [[file:list.org][Lists]] — linked cons cells, quoted lists
+   - [[file:set.org][Sets]] — hash sets, conj/disj, contains?
+   - [[file:map.org][Maps]] — hash maps, assoc/dissoc/find/merge
+   - [[file:arrays.org][Arrays]] — stack, fat pointer, heap-growable variants
+   - [[file:range.org][Ranges]] — eager [0..10], lazy (0..) numeric sequences
+   - [[file:heap.org][Heap Allocation]] — heap arrays, ADT allocation, arena
+   - [[file:data.org][Data Types]] — algebraic data types, sum/product types
+   - [[file:pair.org][Pairs]] — Pair type, fst/snd, tuples
+   - [[file:layouts.org][Layout Types]] — C-compatible memory layouts
+   - [[file:refinements.org][Refinement Types]] — subset types with predicates
+
+** Type System
+   - [[file:advanced-types.org][Advanced Types]] — overview of extended type features
+   - [[file:type-classes.org][Type Classes]] — dictionary-passing polymorphism
+   - [[file:dependent-types.org][Dependent Types]] — ITT/NbE, Pi/Sigma, universes
+   - [[file:type-inference.org][Type Inference]] — Hindley-Milner, Algorithm W
+   - [[file:patterns.org][Pattern Matching]] — match expressions, destructuring
+
+** Functions
+    - [[file:functional-programming.org][Functional Programming]] — purity, lambdas, HOFs
+    - [[file:purity.org][Purity]] — pure functions, referential transparency
+    - [[file:lambda.org][Lambda]] — anonymous functions, closures
+   - [[file:recursion.org][Recursion]] — recursive functions, letrec, tail calls
+   - [[file:let.org][Let Bindings]] — let, let*, letrec
+
+** Control & Error
+   - [[file:control.org][Control Flow]] — overview of all control forms
+   - [[file:conditionals.org][Conditionals]] — if, cond, when, unless, ??
+   - [[file:iteration.org][Iteration]] — for, while, loop forms
+   - [[file:mutation.org][Mutation]] — set!, <-, mutable bindings
+   - [[file:sequencing.org][Sequencing]] — begin, do, with
+   - [[file:error-handling.org][Error Handling]] — error, undefined, assert-eq
+   - [[file:maybe.org][Maybe (Option)]] — optional values, None/Some
+   - [[file:result.org][Result]] — error type with diagnostic messages
+
+** Core Library
+   - [[file:core.org][Core Library]] — overview of all built-in functions
+   - [[file:arithmetic.org][Arithmetic]] — +, -, *, /, %, bitwise operators
+   - [[file:equality.org][Equality]] — =, !=, <, >, <=, >=, eq?
+   - [[file:logic.org][Logic]] — and, or, not, short-circuit
+   - [[file:show.org][Show]] — show, display, assert-eq
+   - [[file:casting.org][Casting]] — type conversions, (Int x), (Float x)
+
+** Libraries
+    - [[file:stdlib.org][Standard Library]] — Math, Coll, List, Set, Map modules
+    - [[file:math-module.org][Math Module]] — gcd, sin, factorial, pi, sequences
+    - [[file:coll-module.org][Coll Module]] — take, drop, map, foldl, foldr
+
+** Tooling
    - [[file:modules.org][Module System]] — declarations, imports, resolution
    - [[file:macros.org][Macros]] — compile-time code transformation
    - [[file:macro-patterns.org][Macro Patterns]] — common macro recipes
    - [[file:asm.org][Inline Assembly]] — x86-64 assembly in Monad
    - [[file:ffi.org][C FFI]] — calling C libraries directly
    - [[file:style.org][Style Guide]] — naming, formatting, organization
-   - [[file:performance.org][Performance]] — arena allocation, ADT layout
+    - [[file:arena.org][Arena Allocation]] — bump-pointer allocator, no GC
+    - [[file:performance.org][Performance]] — arena allocation, ADT layout
    - [[file:testing.org][Testing]] — embedded tests and test runner
+   - [[file:fuzzing.org][Fuzzing]] — property-based testing, algebraic laws
    - [[file:repl.org][REPL]] — interactive read-eval-print loop
    - [[file:cli.org][CLI Reference]] — command line options
    - [[file:errors.org][Debugging]] — error messages and debugging
    - [[file:build.org][Build System]] — compilation, testing, packaging
    - [[file:package-dev.org][Package Development]] — module structure, distribution
+
+** Migration Guides
    - [[file:from-c.org][Coming from C/Rust]]
    - [[file:from-lisp.org][Coming from Lisp/Scheme]]
    - [[file:from-haskell.org][Coming from Haskell]]
+
+** Reference
    - [[file:contributing.org][Contributing]]
    - [[file:faq.org][FAQ]]
 
@@ -65,20 +135,53 @@ Cross-references to the compiler context link to [[file:../context.org][context/
 
 * Quick Index
 
-| Form             | Page           |
-|------------------+----------------|
-| define           | [[file:syntax.org][Syntax]]         |
-| lambda           | [[file:syntax.org][Syntax]]         |
-| if  cond  match  | [[file:control.org][Control]]        |
-| let let*  letrec | [[file:control.org][Control]]        |
-| data             | [[file:data.org][Data Types]]     |
-| layout           | [[file:layouts.org][Layouts]]        |
-| type             | [[file:refinements.org][Refinements]]    |
-| class   instance | [[file:advanced-types.org][Advanced Types]] |
-| asm              | [[file:asm.org][Assembly]]       |
-| include          | [[file:ffi.org][C FFI]]          |
-| import  module   | [[file:modules.org][Modules]]        |
-| for              | [[file:control.org][Control]]        |
-| show             | [[file:core.org][Core Lib]]       |
-| match            | [[file:patterns.org][Patterns]]       |
-| Syntax           | [[file:macros.org][Macros]]         |
+| Form                    | Page                     |
+|-------------------------+--------------------------|
+| Int, Float, Hex, Oct..  | [[file:numeric.org][Numeric]]                |
+| Bool, True, False       | [[file:booleans.org][Booleans]]               |
+| Char, 'a', '\n'         | [[file:characters.org][Characters]]             |
+| String, "hello"         | [[file:strings.org][Strings]]                |
+| 1/3, 50%, ratio         | [[file:rationals.org][Rationals]]              |
+| Symbol, 'x, :keyword     | [[file:symbols.org][Symbols]]                |
+| ~/path, ./file          | [[file:paths.org][Paths]]                  |
+| define                  | [[file:define.org][Define]]                 |
+| lambda                  | [[file:lambda.org][Lambda]]                 |
+| let let*  letrec        | [[file:let.org][Let Bindings]]           |
+| if cond when unless     | [[file:conditionals.org][Conditionals]]            |
+| for while               | [[file:iteration.org][Iteration]]              |
+| set! <-                 | [[file:mutation.org][Mutation]]               |
+| begin do                | [[file:sequencing.org][Sequencing]]             |
+| quote quasiquote        | [[file:quote.org][Quote]]                  |
+| data                    | [[file:data.org][Data Types]]             |
+| Pair fst snd            | [[file:pair.org][Pairs]]                  |
+| layout                  | [[file:layouts.org][Layouts]]                |
+| type                    | [[file:refinements.org][Refinements]]            |
+| class  instance         | [[file:type-classes.org][Type Classes]]           |
+| Pi Sigma                | [[file:dependent-types.org][Dependent Types]]        |
+| forall                  | [[file:type-inference.org][Type Inference]]         |
+| nil, cons, car, cdr     | [[file:list.org][Lists]]                  |
+| conj disj set           | [[file:set.org][Sets]]                   |
+| assoc dissoc find merge | [[file:map.org][Maps]]                   |
+| [1 2 3]  ~[1 2 3]       | [[file:arrays.org][Arrays]]                 |
+| ~[1 2 3] heap           | [[file:heap.org][Heap Allocation]]        |
+| [0..10]  (0..)          | [[file:range.org][Ranges]]                 |
+| None Some Option        | [[file:maybe.org][Maybe (Option)]]          |
+| Error result            | [[file:result.org][Result]]                 |
+| + - * / %               | [[file:arithmetic.org][Arithmetic]]             |
+| = != < > <= >= eq?     | [[file:equality.org][Equality]]               |
+| and or not              | [[file:logic.org][Logic]]                  |
+| show                    | [[file:show.org][Show]]                   |
+| (Int x) (Float x) cast  | [[file:casting.org][Casting]]               |
+| asm                     | [[file:asm.org][Assembly]]               |
+| include                 | [[file:ffi.org][C FFI]]                  |
+| import  module          | [[file:modules.org][Modules]]                |
+| match                   | [[file:patterns.org][Patterns]]               |
+| Syntax-rules            | [[file:macros.org][Macros]]                 |
+| testing                 | [[file:testing.org][Testing]]                |
+| assert-eq               | [[file:testing.org][Testing]]                |
+| fib, fact, recursion    | [[file:recursion.org][Recursion]]              |
+| purity, pure            | [[file:purity.org][Purity]]                 |
+| fuzzing                 | [[file:fuzzing.org][Fuzzing]]                |
+| arena alloc             | [[file:arena.org][Arena Allocation]]        |
+| Math module             | [[file:math-module.org][Math Module]]            |
+| Coll module             | [[file:coll-module.org][Coll Module]]            |

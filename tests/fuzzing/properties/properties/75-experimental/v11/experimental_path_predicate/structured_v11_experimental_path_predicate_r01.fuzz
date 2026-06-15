@@ -1,0 +1,14 @@
+name: structured_v11_experimental_path_predicate_r01
+section: v11-experimental
+tier: experimental
+kind: law
+features: experimental, path, predicate
+compiler-path: codegen.path_literal, codegen.predicate_dispatch, infer.path, infer.type_predicate, reader.path_literal
+uses-atoms: atom.infer.predicate, atom.runtime.path
+signal: medium
+corpus-role: semantic-law
+args: p:Path
+type: Bool
+expect: True
+description: V11 experimental rich-feature property experimental_path_predicate round 1; non-default tier for parser/runtime features that may still be maturing.
+law: (path? {p})

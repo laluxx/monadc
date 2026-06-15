@@ -1,5 +1,12 @@
 name: set_conj_contains_generated
 section: collections
+tier: stable
+kind: law
+features: arithmetic, collections, predicate, set
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, infer.arithmetic, infer.type_predicate, runtime.set
+uses-atoms: atom.infer.predicate
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: True

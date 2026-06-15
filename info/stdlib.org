@@ -1,8 +1,29 @@
 #+TITLE: Standard Library
 #+STARTUP: showeverything
 #+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:stdlib:info:
 
-[[file:index.org][<- Back to Index]] · [[file:core.org][Core Library]]
+:PROPERTIES:
+:ID:       monadc.info.stdlib
+:CONTEXT:  monadc.context.core-libs, monadc.context.language, monadc.context.main-mon
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:core.org][Core Library]] · [[file:math-module.org][Math Module]] · [[file:coll-module.org][Coll Module]] · [[file:numeric.org][Numeric]] · [[file:strings.org][Strings]] · [[file:collections.org][Collections]] · [[file:modules.org][Modules]]
+
+* Quick Reference
+
+| Module     | Key Exports                                    |
+|------------+------------------------------------------------|
+| Core       | Built-in functions (always available)          |
+| Math       | =gcd=, =lcm=, =factorial=, =sin=, =sqrt=, =pi= |
+| Coll       | =map=, =foldl=, =foldr=, =take=, =drop=        |
+| Test       | =assert-eq=, =deftest=, =run-tests=             |
+| Ascii      | =upper=, =lower=                                 |
+
+Test coverage: =make test-core= runs per-module tests via
+=python3 tests/run_core.py=. Individual modules are tested by=rt_core_*.mon=
+fixtures. Main.mon coverage is documented under [[file:../context/main-mon.org][context/main-mon.org]].
 
 The Monad standard library is currently composed of two layers:
 
@@ -16,10 +37,10 @@ The Monad standard library is currently composed of two layers:
 
 The =core/= directory contains per-module library sources:
 
-| Module | File                      | Working Status                                 |
-|--------+---------------------------+------------------------------------------------|
-| Math   | =core/Math.mon= (400 lines) | Partially working. Exports 30+ functions/constants including =gcd=, =lcm=, =factorial=, =fib=, =prime?=, =clamp=, =sin=, =sqrt=, =pow=, =floor=, =ceiling=, =round=, constants =pi=, =e=, =tau=, =phi=, infinite sequences =naturals=, =positives=, =evens=, =odds=. Known issue: variadic =gcd= fails. |
-| Coll   | =core/prelude/Coll.mon= (100 lines) | Partially working. Exports =take=, =drop=, =takeWhile=, =dropWhile=, =map=, =all?=, =foldl=, =foldr=. Known issue: =takeWhile= inference fails during compilation. |
+| Module | File                              | Working Status                                                                                                                                                                                                                                                |
+|--------+-----------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Math   | =core/Math.mon= (400 lines)         | Partially working. Exports 30+ functions/constants including =gcd=, =lcm=, =factorial=, =fib=, =prime?=, =clamp=, =sin=, =sqrt=, =pow=, =floor=, =ceiling=, =round=, constants =pi=, =e=, =tau=, =phi=, infinite sequences =naturals=, =positives=, =evens=, =odds=. Known issue: variadic =gcd= fails. |
+| Coll   | =core/prelude/Coll.mon= (100 lines) | Partially working. Exports =take=, =drop=, =takeWhile=, =dropWhile=, =map=, =all?=, =foldl=, =foldr=. Known issue: =takeWhile= inference fails during compilation.                                                                                                              |
 
 ** Usage examples
 
@@ -33,6 +54,16 @@ The =core/= directory contains per-module library sources:
 (show (clamp 0 100 150)); 100
 #+END_SRC
 
+#+BEGIN_SRC wisp
+import Math
+
+show (gcd 12 8)       ; 4
+show (even? 42)       ; True
+show (factorial 5)    ; 120
+show pi               ; 3.14159...
+show (clamp 0 100 150); 100
+#+END_SRC
+
 #+BEGIN_SRC monad
 (import Coll)
 
@@ -42,11 +73,63 @@ The =core/= directory contains per-module library sources:
 (show (foldl + 0 '(1 2 3 4)))      ; 10
 #+END_SRC
 
+#+BEGIN_SRC wisp
+import Coll
+
+show (take 3 '(1 2 3 4 5))       ; (1 2 3)
+show (drop 2 '(1 2 3 4 5))       ; (3 4 5)
+show (all? even? '(2 4 6))       ; True
+show (foldl + 0 '(1 2 3 4))      ; 10
+#+END_SRC
+
 Note: Core prelude modules are not yet automatically imported at
 startup. Explicit =import= statements are required. Known compilation
 issues exist (context/language.org:417-424): =import Coll= currently
 fails while compiling =takeWhile= in =Coll.mon=; variadic =gcd= in
 =Math.mon= fails.
+
+** Test module
+
+The =core/prelude/Test.mon= module provides =assert-eq=, =assert-true=,
+=assert-false=, =deftest=, and =run-tests= for embedded testing:
+
+#+BEGIN_SRC monad
+(import Test)
+
+(deftest arithmetic
+  (assert-eq (+ 1 1) 2 "1+1=2")
+  (assert-true (= 2 (+ 1 1)) "2=1+1"))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+import Test
+
+deftest arithmetic
+  assert-eq (+ 1 1) 2 "1+1=2"
+  assert-true (= 2 (+ 1 1)) "2=1+1"
+#+END_SRC
+
+See [[file:testing.org][Testing]] for the full test framework reference.
+
+** String module
+
+The =core/text/= directory contains =Ascii.mon= and =String.mon= (WIP):
+
+#+BEGIN_SRC monad
+(import Ascii)
+
+(show (Ascii/upper "hello"))  ;; "HELLO"
+(show (Ascii/lower "WORLD"))  ;; "world"
+#+END_SRC
+
+#+BEGIN_SRC wisp
+import Ascii
+
+show (Ascii/upper "hello")  ;; "HELLO"
+show (Ascii/lower "WORLD")  ;; "world"
+#+END_SRC
+
+See [[file:strings.org][Strings]] and [[file:characters.org][Characters]].
 
 * Main.mon
 
@@ -113,6 +196,14 @@ previous compiler era. They are NOT currently importable:
 
 These files use older syntax and are not compiled by the current
 compiler. They serve as design references for future library work.
+
+* See Also
+
+- [[file:core.org][Core Library]]
+- [[file:math-module.org][Math Module]]
+- [[file:coll-module.org][Coll Module]]
+- [[file:modules.org][Module System]]
+- [[file:testing.org][Testing]]
 
 * Context Links
 

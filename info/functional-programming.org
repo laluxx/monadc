@@ -1,8 +1,20 @@
 #+TITLE: Functional Programming
 #+STARTUP: showeverything
 #+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:functional:info:
 
-[[file:index.org][<- Back to Index]] · [[file:types.org][Types]] · [[file:patterns.org][Pattern Matching]]
+:PROPERTIES:
+:ID:       monadc.info.functional-programming
+:CONTEXT:  monadc.context.language, monadc.context.types, monadc.context.infer
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:purity.org][Purity]] · [[file:pair.org][Pairs]] · [[file:lambda.org][Lambda]] · [[file:recursion.org][Recursion]] · [[file:let.org][Let]] · [[file:show.org][Show]] · [[file:types.org][Types]] · [[file:patterns.org][Pattern Matching]] · [[file:control.org][Control Flow]]
+
+Test coverage: polymorphic identity and const functions are verified
+by codegen fixtures (see [[file:../context/language.org::501][context/language.org — HM surface]]).
+Recursion via =fib= is tested in =rt_arith_all.mon=. The closure gap
+is documented at [[file:../context/language.org::codegen-gaps][context/language.org — Known gaps]].
 
 * Pure Functions
 
@@ -11,12 +23,21 @@ the same value and produce no side effects. Mutation via =set!= impurifies the
 containing function for the purposes of the purity tracking system.
 
 #+BEGIN_SRC monad
-(define (square [x :: Int] -> Int)
+(define (square [x :: Int] -> Int))
   (* x x))
 
 (define (multf [x :: Float] -> [y :: Float] -> Float)
   "Multiply X and Y as Floats"
-  (* x y))
+(* x y)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define (square [x :: Int] -> Int)
+  * x x)
+
+(define (multf [x :: Float] -> [y :: Float] -> Float)
+  "Multiply X and Y as Floats"
+* x y
 #+END_SRC
 
 Functions are defined with typed signatures using bracket syntax:
@@ -27,6 +48,11 @@ Functions are defined with typed signatures using bracket syntax:
 #+BEGIN_SRC monad
 (define increment (lambda [x] (+ x 1)))
 (define apply (lambda [f x] (f x)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define increment (lambda [x] (+ x 1))
+define apply (lambda [f x] (f x))
 #+END_SRC
 
 No =fn= shorthand — use =lambda= ([[file:../codegen.c]]). All surface syntax
@@ -40,15 +66,27 @@ forms — the distinction is purely syntactic.
 Named =define= is the standard form for recursion. For local recursion:
 
 #+BEGIN_SRC monad
-(letrec [fact (lambda [n]
-                (if (<= n 1) 1
-                  (* n (fact (- n 1)))))]
+(letrec [fact (lambda [n]))
+                ((if (<= n 1) 1))
+                  ((* n (fact (- n 1)))))])
   (fact 5))
 
 ;; Top-level recursive function:
 (define (fib [n :: Int] -> Int)
-  (if (<= n 2) 1
-    (+ (fib (- n 1)) (fib (- n 2)))))
+  ((if (<= n 2) 1))
+    (+ (fib (- n 1)) (fib (- n 2))))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+letrec [fact (lambda [n])
+                (if (<= n 1) 1)
+                  (* n (fact (- n 1))))])
+  fact 5)
+
+;; Top-level recursive function:
+(define (fib [n :: Int] -> Int)
+  (if (<= n 2) 1)
+    + (fib (- n 1)) (fib (- n 2)))
 #+END_SRC
 
 =letrec= is reader-desugared (no strcmp dispatch handler) — see
@@ -67,11 +105,19 @@ etc.). Polymorphic functions like identity instantiate correctly at multiple
 concrete types via monomorphization:
 
 #+BEGIN_SRC monad
-(define [id :: a -> a]
+(define [id :: a -> a])
   (lambda [x] x))
 
-(show (id 42))          ;; id_Int — specialized to Int
-(show (id "hello"))     ;; id_String — specialized to String
+(show (id 42))          ;; id_Int — specialized to In)
+(show (id "hello"))     ;; id_String — specialized to Strin)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define [id :: a -> a]
+  lambda [x] x)
+
+show (id 42)          ;; id_Int — specialized to In)
+show (id "hello")     ;; id_String — specialized to Strin)
 #+END_SRC
 
 The compiler generates a separate LLVM function for each concrete type
@@ -127,10 +173,29 @@ functions instead of passing lambdas as arguments:
   [x|xs] -> (++ (+ x 1) (map-add1 xs)))
 #+END_SRC
 
+#+BEGIN_SRC wisp
+;; Instead of (map f xs), recurse explicitly:
+(define map-add1 :: [Int] -> [Int]
+  []     -> []
+  [x|xs] -> (++ (+ x 1) (map-add1 xs)))
+#+END_SRC
+
+* Related Pages
+
+- [[file:purity.org][Purity]] -- pure functions, referential transparency
+- [[file:lambda.org][Lambda]] -- anonymous functions, closures
+- [[file:recursion.org][Recursion]] -- recursion patterns
+- [[file:patterns.org][Pattern Matching]] -- pattern matching in FP style
+- [[file:collections.org][Collections]] -- functional collection operations
+
 * Context Links
 
 - [[file:../context/language.org::primitive-function][context/language.org — Function representation and closure gap]]
 - [[file:../context/language.org::hm-polymorphism][context/language.org — HM polymorphism]]
 - [[file:../context/language.org::codegen-gaps][context/language.org — Known codegen gaps]]
+- [[file:purity.org][Purity]] — purity and side effects
 - [[file:../Main.mon][Main.mon]] — Real usage examples
 - [[file:../context/types.org][context/types.org]] — TYPE_FN, TYPE_ARROW, TYPE_VAR
+
+
+

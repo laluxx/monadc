@@ -1,7 +1,0 @@
-name: deep_codegen_bitwise_xor_identity_zero
-section: codegen-bitwise-dispatch
-args: a:Int
-type: Bool
-expect: True
-description: bit-xor dispatcher must preserve x xor 0.
-law: (= (bit-xor {a} 0) {a})

@@ -1,0 +1,18 @@
+name: deep_codegen_string_string_starts_with_true_disabled_duplicate_v13_7dcc189f
+section: codegen-string-char
+tier: experimental
+kind: law
+features: arithmetic, codegen, env, predicate, string, with
+compiler-path: codegen.arithmetic_dispatch, codegen.local_load, codegen.predicate_dispatch, codegen.string_literal, codegen.with_binding, infer.arithmetic, infer.env_child, infer.env_lookup, infer.type_predicate, reader.string_literal, runtime.string
+uses-atoms: atom.binding.with, atom.codegen.dispatch, atom.infer.predicate, atom.runtime.string
+related-properties: signal_v13_atom_string_contains_substring, signal_v13_atom_with_substitution
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: 
+type: Bool
+expect: True
+description: starts-with? string path must recognize a literal prefix.
+law: (starts-with? "monadc" "mon")
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: mega_string_starts_with_true
+demoted-from: stable-by-signal-v13

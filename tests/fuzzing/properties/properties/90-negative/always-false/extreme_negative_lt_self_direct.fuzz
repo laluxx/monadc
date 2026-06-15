@@ -1,5 +1,13 @@
 name: extreme_negative_lt_self_direct
 section: negative-always-false
+tier: stable
+kind: law
+features: arithmetic, comparison, negative
+compiler-path: codegen.arithmetic_dispatch, codegen.comparison_dispatch, infer.arithmetic, infer.comparison
+uses-atoms: atom.core.order.lt
+related-properties: signal_v13_atom_lt_transitive
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: False

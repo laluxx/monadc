@@ -1,5 +1,13 @@
 name: complex_function_comparison_helpers_survive_do_wrapping
 section: function-order-do
+tier: stable
+kind: law
+features: arithmetic, do, equality, function, logic, predicate, set
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, codegen.sequence, infer.arithmetic, infer.equality, infer.logic, infer.type_predicate, reader.ast_do, runtime.set
+uses-atoms: atom.control.do, atom.core.equality, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_v13_atom_do_last_value, signal_v13_atom_equality_reflexive
+signal: medium
+corpus-role: semantic-law
 args: setup:Int a:Int b:Int
 type: Bool
 expect: True

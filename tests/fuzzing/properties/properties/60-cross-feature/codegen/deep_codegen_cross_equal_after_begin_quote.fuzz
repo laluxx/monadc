@@ -1,7 +1,15 @@
 name: deep_codegen_cross_equal_after_begin_quote
 section: codegen-cross-feature
+tier: experimental
+kind: law
+features: arithmetic, begin, codegen, predicate, quote
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.quote, codegen.sequence, infer.arithmetic, infer.type_predicate, reader.ast_begin, reader.quote
+uses-atoms: atom.codegen.dispatch, atom.control.begin, atom.infer.predicate, atom.quote.quote
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Bool
 expect: True
 description: begin must return quoted runtime value for equal? comparison.
 law: (equal? (begin 1 (quote (a b))) (quote (a b)))
+demoted-from: stable-by-signal-v13

@@ -1,7 +1,0 @@
-name: complex_lattice_min_between_bounds
-section: lattice-order
-args: a:Int b:Int
-type: Bool
-expect: True
-description: The minimum must be less than or equal to the maximum.
-law: (fuzz-lte? (fuzz-min {a} {b}) (fuzz-max {a} {b}))

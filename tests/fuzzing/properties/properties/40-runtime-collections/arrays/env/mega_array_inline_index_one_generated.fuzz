@@ -1,5 +1,13 @@
 name: mega_array_inline_index_one_generated
 section: codegen-array-env
+tier: stable
+kind: law
+features: arithmetic, array, array-index, codegen, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.equality_dispatch, infer.arithmetic, infer.array, infer.callable_array, infer.equality, reader.array_literal
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.runtime.array
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_equality_reflexive
+signal: medium
+corpus-role: semantic-law
 args: a:Int b:Int c:Int
 type: Bool
 expect: True

@@ -1,5 +1,5 @@
 #+TITLE: Last First Fuzz Failure
-#+DATE: 2026-06-15T01:24:52
+#+DATE: 2026-06-15T03:43:05
 
 [OBS id:obs.fuzz.last-first-failure src:tests/fuzzing/fuzz_codegen.py conf:high]
   This record captures the first failing fuzz property from the latest run.
@@ -9,7 +9,7 @@
 - Status: =FAIL=
 - Phase: =compile=
 - Reason: =compile failed=
-- Source: =tests/fuzzing/properties/properties/30-codegen-dispatch/comparison/variadic/compare_variadic_gt_false_on_duplicate.fuzz:7=
+- Source: =tests/fuzzing/properties/properties/30-codegen-dispatch/comparison/variadic/compare_variadic_gt_false_on_duplicate.fuzz:11=
 - Replay: =tests/fuzzing/last/shrink_compare_variadic_gt_false_on_duplicate_compare_variadic_gt_false_on_duplicate_seed_000001.mon=
 - Expected: =False=
 - Actual: =∅=
@@ -25,7 +25,7 @@
 ** Output
 #+BEGIN_EXAMPLE
 
-=== wisp expanded (/tmp/monadc-fuzz-shrink_compare_variadic_gt_false_on_duplicate_compare_variadic_gt_false_on_duplicate-1-hq3arkci/fuzz_1.mon) ===
+=== wisp expanded (/tmp/monadc-fuzz-shrink_compare_variadic_gt_false_on_duplicate_compare_variadic_gt_false_on_duplicate-1-se6m80gw/fuzz_1.mon) ===
 (#line 3 1) (module Main)
 (#line 5 1) (define (fuzz-id-int [x : Int] -> Int) x)
 (#line 8 1) (define (fuzz-add [x : Int] [y : Int] -> Int) (+ x y))
@@ -44,8 +44,8 @@
 === end ===
 
 
-=== desugared AST (/tmp/monadc-fuzz-shrink_compare_variadic_gt_false_on_duplicate_compare_variadic_gt_false_on_duplicate-1-hq3arkci/fuzz_1.mon) ===
-[compile] /tmp/monadc-fuzz-shrink_compare_variadic_gt_false_on_duplicate_compare_variadic_gt_false_on_duplicate-1-hq3arkci/fuzz_1.mon
+=== desugared AST (/tmp/monadc-fuzz-shrink_compare_variadic_gt_false_on_duplicate_compare_variadic_gt_false_on_duplicate-1-se6m80gw/fuzz_1.mon) ===
+[compile] /tmp/monadc-fuzz-shrink_compare_variadic_gt_false_on_duplicate_compare_variadic_gt_false_on_duplicate-1-se6m80gw/fuzz_1.mon
 (module Main)
 (define fuzz-id-int (lambda ([x :: Int] -> Int) x))
 (define fuzz-add (lambda ([x :: Int] [y :: Int] -> Int) (+ x y)))
@@ -797,7 +797,7 @@
 └─ OK
 ├─ HM Unify 'm38 ~ (Bool → Bool)
 └─ OK
-/tmp/monadc-fuzz-shrink_compare_variadic_gt_false_on_duplicate_compare_variadic_gt_false_on_duplicate-1-hq3arkci/fuzz_1.mon:45:20: error: '>' requires 2 arguments
+/tmp/monadc-fuzz-shrink_compare_variadic_gt_false_on_duplicate_compare_variadic_gt_false_on_duplicate-1-se6m80gw/fuzz_1.mon:45:20: error: '>' requires 2 arguments
   module: Main
 [dep] running bidirectional type checker...
 DEFINED [fuzz-id-int :: Int -> Int]

@@ -1,0 +1,123 @@
+#+TITLE: Pairs
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:pair:info:
+
+:PROPERTIES:
+:ID:       monadc.info.pair
+:CONTEXT:  monadc.context.types, monadc.context.codegen, monadc.context.language
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:data.org][Data Types]] · [[file:list.org][Lists]] · [[file:map.org][Maps]] · [[file:patterns.org][Pattern Matching]] · [[file:types.org][Types]] · [[file:collections.org][Collections]]
+
+Test coverage: pairs are exercised by =rt_match_*.mon= and
+=rt_adt_*.mon= fixtures.
+
+A =Pair= is a product type holding two values of possibly different
+types. It is the simplest compound data structure, analogous to tuples
+in other languages.
+
+* Type
+
+#+BEGIN_SRC monad
+(data Pair a b
+  (Pair a b))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+data Pair a b
+  Pair a b
+#+END_SRC
+
+=Pair= is a regular algebraic data type. The constructor shares the
+type name.
+
+* Construction
+
+#+BEGIN_SRC monad
+(Pair 1 "one")                  ;; Pair Int String
+(Pair "hello" 42)              ;; Pair String Int
+(Pair x y)                     ;; from variables
+#+END_SRC
+
+#+BEGIN_SRC wisp
+Pair 1 "one"
+Pair "hello" 42
+Pair x y
+#+END_SRC
+
+Pairs are created with the =Pair= constructor in both S-expression and
+Wisp syntax.
+
+* fst / snd
+
+#+BEGIN_SRC monad
+(define p (Pair 1 "one"))
+(fst p)                        ;; 1
+(snd p)                        ;; "one"
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define p (Pair 1 "one")
+fst p
+snd p
+#+END_SRC
+
+Pattern matching on =Pair=:
+
+#+BEGIN_SRC monad
+(define (swap [p :: (Pair a b)] -> (Pair b a))
+  (match p with
+    (Pair x y) -> (Pair y x)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define swap [p :: (Pair a b)] -> (Pair b a)
+  match p with
+    (Pair x y) -> Pair y x
+#+END_SRC
+
+* Nesting
+
+Pairs can be nested for multi-field structures:
+
+#+BEGIN_SRC monad
+(Pair 1 (Pair 2 3))            ;; Pair Int (Pair Int Int)
+(Pair (Pair "a" 1) (Pair "b" 2))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+Pair 1 (Pair 2 3)
+Pair (Pair "a" 1) (Pair "b" 2)
+#+END_SRC
+
+For more than two fields, consider =data= types
+([[file:data.org][Data Types]]) or =layout= types
+([[file:layouts.org][Layout Types]]).
+
+* Pair vs Layout vs Data
+
+| Aspect    | Pair                       | data                    | layout          |
+|-----------+----------------------------+-------------------------+-----------------|
+| Fields    | 2, named by position        | 0..N named by position  | Named           |
+| Tag       | None (no sum type)          | Automatic i32 tag       | None (untagged) |
+| C compat  | No                          | No                      | Yes             |
+| Pattern   | =(Pair x y)=                | =(Ctor x y)=            | =(=struct= f v)= |
+
+* Related Pages
+
+- [[file:data.org][Data Types]] -- algebraic data types
+- [[file:list.org][Lists]] -- lists built from pairs
+- [[file:map.org][Maps]] -- maps with key-value pairs
+- [[file:patterns.org][Pattern Matching]] -- pattern matching on pairs
+- [[file:collections.org][Collections]] -- collection types overview
+
+* Context Links
+
+- [[file:../context/types.org][context/types.org]] — TYPE_APP, Pair representation
+- [[file:../context/codegen.org][context/codegen.org]] — Pair lowering
+- [[file:../context/language.org][context/language.org]] — Pair dispatch
+- [[file:data.org][Data Types]] — algebraic data type reference
+- [[file:list.org][Lists]] — linked cons cells (pairs of head + tail)
+- [[file:patterns.org][Pattern Matching]] — Pair destructuring

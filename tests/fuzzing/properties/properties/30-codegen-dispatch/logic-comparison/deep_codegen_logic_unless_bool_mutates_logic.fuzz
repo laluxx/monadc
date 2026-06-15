@@ -1,7 +1,0 @@
-name: deep_codegen_logic_unless_bool_mutates_logic
-section: codegen-logic-comparison
-args: p:Bool q:Bool
-type: Bool
-expect: True
-description: unless must guard a Bool set! mutation and preserve branch semantics.
-law: (= (with [x {p}] (do (unless {q} (set! x (not x))) x)) (if {q} {p} (not {p})))

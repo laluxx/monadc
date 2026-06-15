@@ -1,0 +1,161 @@
+#+TITLE: Maps
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:map:info:
+
+:PROPERTIES:
+:ID:       monadc.info.map
+:CONTEXT:  monadc.context.language, monadc.context.codegen-ops, monadc.context.types
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:collections.org][Collections]] · [[file:list.org][Lists]] · [[file:set.org][Sets]] · [[file:arrays.org][Arrays]] · [[file:pair.org][Pairs]] · [[file:heap.org][Heap Allocation]] · [[file:core.org][Core Library]]
+
+Test coverage: =rt_map_*.mon=, =rt_assoc_*.mon= fixtures in
+[[file:../tests/codegen/][tests/codegen/]].
+
+Maps (hash maps / dictionaries) store key-value pairs in an
+open-addressing hash table. O(1) average lookup/insert/delete.
+
+* Literal Syntax
+
+#+BEGIN_SRC monad
+#{:a 1 :b 2}            ;; (keyword <-> Int) map
+#{}                     ;; empty map
+#+END_SRC
+
+#+BEGIN_SRC wisp
+#{:a 1 :b 2}
+#{}
+#+END_SRC
+
+Key-value pairs alternate in the literal (even node count).
+
+** Known gap: untyped map construction
+
+Literal maps =#{:a 1}= produce garbage at runtime without an explicit
+=:: Map= annotation. This is the most significant runtime bug
+([[file:../context/language.org::codegen-gaps][context/language.org]]).
+Functional operations (=assoc=, =dissoc=, =merge=) receive garbage
+inputs in untyped contexts. Only =assoc!= and =find= with typed
+variables work correctly.
+
+* Core Operations
+
+| Function    | Example                  | Result       |
+|-------------+--------------------------+--------------|
+| assoc       | =(assoc #{:a 1} :b 2)=     | #{:a 1 :b 2} |
+| assoc!      | =(assoc! m :b 2)=          | mutates m    |
+| dissoc      | =(dissoc #{:a 1 :b 2} :a)= | #{:b 2}      |
+| dissoc!     | =(dissoc! m :a)=           | mutates m    |
+| find        | =(find #{:a 1} :a)=        | (:a 1)       |
+| keys        | =(keys #{:a 1 :b 2})=      | (:a :b)      |
+| vals        | =(vals #{:a 1 :b 2})=      | (1 2)        |
+| merge       | =(merge #{:a 1} #{:b 2})=  | #{:a 1 :b 2} |
+| contains?   | =(contains? #{:a 1} :a)=   | True         |
+| count       | =(count #{:a 1 :b 2})=     | 2            |
+| Map?        | =(Map? #{:a 1})=           | True         |
+| collection? | =(collection? #{:a 1})=    | True         |
+
+* assoc / dissoc
+
+#+BEGIN_SRC monad
+(assoc #{:a 1} :b 2)            ;; #{:a 1 :b 2}
+(dissoc #{:a 1 :b 2} :a)        ;; #{:b 2}
+#+END_SRC
+
+#+BEGIN_SRC wisp
+assoc #{:a 1} :b 2
+dissoc #{:a 1 :b 2} :a
+#+END_SRC
+
+=assoc= and =dissoc= copy the map before modifying (pure).
+=assoc!= and =dissoc!= mutate in place.
+
+* find / get
+
+#+BEGIN_SRC monad
+(find #{:a 1} :a)               ;; (:a 1) — found as pair
+(find #{:a 1} :z)               ;; nil — not found
+#+END_SRC
+
+#+BEGIN_SRC wisp
+find #{:a 1} :a
+find #{:a 1} :z
+#+END_SRC
+
+=find= returns the key-value pair as a list or =nil= on miss.
+
+* Map-as-Function
+
+Maps are callable by key:
+
+#+BEGIN_SRC monad
+(define directions #{:north 0 :east 90 :south 180 :west 270})
+(directions :north)             ;; 0
+(directions :northwest -1)      ;; -1 with default on miss
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define directions #{:north 0 :east 90 :south 180 :west 270}
+directions :north
+directions :northwest -1
+#+END_SRC
+
+The second argument provides a default when the key is absent.
+
+* keys / vals
+
+#+BEGIN_SRC monad
+(keys #{:a 1 :b 2})             ;; (:a :b)
+(vals #{:a 1 :b 2})             ;; (1 2)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+keys #{:a 1 :b 2}
+vals #{:a 1 :b 2}
+#+END_SRC
+
+* merge
+
+#+BEGIN_SRC monad
+(merge #{:a 1} #{:b 2})        ;; #{:a 1 :b 2}
+(merge #{:a 1} #{:a 99})       ;; #{:a 99} — last wins
+#+END_SRC
+
+#+BEGIN_SRC wisp
+merge #{:a 1} #{:b 2}
+merge #{:a 1} #{:a 99}
+#+END_SRC
+
+* Iteration
+
+Maps are iterable with =for=:
+
+#+BEGIN_SRC monad
+(for [[k v] #{:a 1 :b 2}]
+  (show k v))                   ;; prints pairs
+#+END_SRC
+
+#+BEGIN_SRC wisp
+for [[k v] #{:a 1 :b 2}]
+  show k v
+#+END_SRC
+
+* Related Pages
+
+- [[file:collections.org][Collections]] -- overview of all collection types
+- [[file:list.org][Lists]] -- linked cons cells
+- [[file:set.org][Sets]] -- hash sets
+- [[file:pair.org][Pairs]] -- pairs for key-value entries
+- [[file:core.org][Core Library]] -- assoc/dissoc/find builtins
+
+* Context Links
+
+- [[file:../context/language.org][context/language.org]] — map dispatch, hash table representation
+- [[file:../context/language.org::codegen-gaps][context/language.org — Known gaps]]
+- [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]]
+- [[file:list.org][Lists]] — linked list collection
+- [[file:set.org][Sets]] — hash set collection
+- [[file:collections.org][Collections]] — overview of all collection types
+- [[file:core.org][Core Library]] — builtin collection operations

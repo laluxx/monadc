@@ -1,7 +1,0 @@
-name: compiler_deep_v8_bitwise_or_zero_identity_generated
-section: bitwise-mixed-v8
-args: a:Int
-type: Bool
-expect: True
-description: Bitwise or with zero should preserve generated Int.
-law: (= (bit-or {a} 0) {a})

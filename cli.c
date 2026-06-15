@@ -1,4 +1,6 @@
 #include "cli.h"
+#include "completion.h"
+#include "lsp_repl.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -165,29 +167,46 @@ static char *yaml_first_exe(const char *content) {
 }
 
 /// Usage
+//
+// Levenshtein distance for "did you mean?" suggestions.
+// Works on short strings (subcommand names) so a stack matrix is fine.
+//
+static int levenshtein(const char *a, const char *b)
+{
+    int la = (int)strlen(a), lb = (int)strlen(b);
+    /* cap to avoid VLA abuse on garbage input */
+    if (la > 32) la = 32;
+    if (lb > 32) lb = 32;
+    int d[33][33];
+    for (int i = 0; i <= la; i++) d[i][0] = i;
+    for (int j = 0; j <= lb; j++) d[0][j] = j;
+    for (int i = 1; i <= la; i++)
+        for (int j = 1; j <= lb; j++) {
+            int cost = (a[i-1] == b[j-1]) ? 0 : 1;
+            int del  = d[i-1][j] + 1;
+            int ins  = d[i][j-1] + 1;
+            int sub  = d[i-1][j-1] + cost;
+            d[i][j]  = del < ins ? (del < sub ? del : sub)
+                                 : (ins < sub ? ins : sub);
+        }
+    return d[la][lb];
+}
 
-void print_usage(const char *prog) {
-    fprintf(stderr, "Usage: %s [options] [<file.mon>]\n", prog);
-    fprintf(stderr, "       %s new <package-name>\n", prog);
-    fprintf(stderr, "       %s build\n", prog);
-    fprintf(stderr, "       %s run\n", prog);
-    fprintf(stderr, "       %s clean\n", prog);
-    fprintf(stderr, "       %s install\n", prog);
-    fprintf(stderr, "       %s test <file.mon>\n", prog);
-    fprintf(stderr, "       %s --test <file.mon>\n\n", prog);
-    fprintf(stderr, "Options:\n");
-    fprintf(stderr, "  -i             Start interactive REPL\n");
-    fprintf(stderr, "  -o <file>      Output file name\n");
-    fprintf(stderr, "  --test         Compile and embed tests (keep binary)\n");
-    fprintf(stderr, "  --emit-ir      Emit LLVM IR (.ll)\n");
-    fprintf(stderr, "  --emit-bc      Emit LLVM bitcode (.bc)\n");
-    fprintf(stderr, "  --emit-asm     Emit assembly (.s)\n");
-    fprintf(stderr, "  --emit-obj     Emit object file (.o)\n");
-    fprintf(stderr, "  --emit-json    Emit AST as JSON (.json)\n");
-    fprintf(stderr, "  --emit-typst   Emit Typst math document (.typ) and compile to PDF\n");
-    fprintf(stderr, "  -Wall          Enable all warnings (accepted, no-op)\n");
-    fprintf(stderr, "  -Wextra        Enable extra warnings (accepted, no-op)\n");
-    fprintf(stderr, "  -h, --help     Show this help message\n");
+static const char *SUBCOMMANDS[] = {
+    "new", "build", "run", "clean", "install",
+    "test", "check", "lsp", "help", NULL
+};
+
+static void suggest_subcommand(const char *unknown)
+{
+    const char *best  = NULL;
+    int         best_d = 4;   /* only suggest if distance <= 3 */
+    for (int i = 0; SUBCOMMANDS[i]; i++) {
+        int d = levenshtein(unknown, SUBCOMMANDS[i]);
+        if (d < best_d) { best_d = d; best = SUBCOMMANDS[i]; }
+    }
+    if (best)
+        fprintf(stderr, "\n  Did you mean \x1b[33m%s\x1b[0m?\n", best);
 }
 
 CompilerFlags parse_flags(int argc, char **argv) {
@@ -199,6 +218,13 @@ CompilerFlags parse_flags(int argc, char **argv) {
     // Help
     if (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
         print_usage(argv[0]); exit(0);
+    }
+    if (strcmp(argv[1], "help") == 0) {
+        if (argc >= 3)
+            print_subcommand_menu(argv[2]);
+        else
+            print_usage(argv[0]);
+        exit(0);
     }
 
     // Subcommands
@@ -212,7 +238,13 @@ CompilerFlags parse_flags(int argc, char **argv) {
     if (strcmp(argv[1], "build")   == 0) { flags.mode = CMD_BUILD;   return flags; }
     if (strcmp(argv[1], "clean")   == 0) { flags.mode = CMD_CLEAN;   return flags; }
     if (strcmp(argv[1], "install") == 0) { flags.mode = CMD_INSTALL; return flags; }
+    if (strcmp(argv[1], "check")   == 0) {
+        flags.mode = CMD_CHECK;
+        if (argc >= 3) flags.input_file = argv[2];
+        return flags;
+    }
     if (strcmp(argv[1], "-i")      == 0) { flags.mode = CMD_REPL; flags.start_repl = true; return flags; }
+    if (strcmp(argv[1], "lsp")     == 0) { flags.mode = CMD_LSP;  return flags; }
 
     // monad test <file.mon>  ->  compile with tests, run _test binary, delete it
     if (strcmp(argv[1], "test") == 0) {
@@ -259,7 +291,28 @@ CompilerFlags parse_flags(int argc, char **argv) {
         return flags;
     }
 
-    // monad <file.mon> [flags...]  ->  normal compile
+    /* If the first argument looks like a subcommand (no dot, no slash, no dash)
+       but wasn't recognised, offer a Levenshtein suggestion before falling
+       through to treat it as a filename.                                       */
+    {
+        const char *a1 = argv[1];
+        bool looks_like_subcmd = (a1[0] != '-' && a1[0] != '.'
+                                  && !strchr(a1, '/') && !strchr(a1, '.'));
+        if (looks_like_subcmd) {
+            bool known = false;
+            for (int k = 0; SUBCOMMANDS[k]; k++)
+                if (strcmp(a1, SUBCOMMANDS[k]) == 0) { known = true; break; }
+            if (!known) {
+                fprintf(stderr, "\x1b[31merror:\x1b[0m unknown subcommand '%s'\n", a1);
+                suggest_subcommand(a1);
+                fprintf(stderr, "\n");
+                print_usage(argv[0]);
+                exit(1);
+            }
+        }
+    }
+
+    /* monad <file.mon> [flags...]  ->  normal compile */
     flags.input_file = argv[1];
     for (int i = 2; i < argc; i++) {
         if      (!strcmp(argv[i], "--emit-ir"   )) flags.emit_ir    = true;
@@ -671,6 +724,60 @@ void cmd_install(void) {
     exit(rc == 0 ? 0 : 1);
 }
 
+
+void cmd_check(const char *input_file) {
+    /* If a specific file was given, check just that file (no link).
+     * Otherwise find the project's main file and check the whole project.
+     * Either way: compile only, no link, no binary emitted.
+     * Exit 0 = no errors, exit 1 = errors (for flycheck/editors).    */
+    char self[1024] = "monad";
+    {
+        char buf[1024] = {0};
+        ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+        if (n > 0) strncpy(self, buf, sizeof(self) - 1);
+    }
+
+    const char *target = input_file;
+    BuildInfo bi = {0};
+    bool used_bi = false;
+
+    if (!target) {
+        /* No file given — find the project main file */
+        bi = resolve_build_info();
+        used_bi = true;
+        target = bi.main_file;
+    }
+
+    /* Compile with --emit-obj so dependencies are resolved and type-checked,
+     * but suppress the linker step by not passing -o.
+     * We use a temp output name that we delete afterwards.            */
+    char tmp_out[1024];
+    snprintf(tmp_out, sizeof(tmp_out), "/tmp/__monad_check_%d", (int)getpid());
+
+    char cmd[4096];
+    snprintf(cmd, sizeof(cmd), "%s %s -o %s 2>&1", self, target, tmp_out);
+
+    int rc = system(cmd);
+
+    /* Clean up any binary that was produced */
+    remove(tmp_out);
+
+    if (used_bi) build_info_free(&bi);
+    exit(WIFEXITED(rc) && WEXITSTATUS(rc) == 0 ? 0 : 1);
+}
+
+void cmd_lsp(void) {
+    extern int lsp_server_main(void);   /* defined in lsp.c */
+
+    if (isatty(STDOUT_FILENO)) {
+        /* Interactive terminal: run the REPL instead of just printing */
+        int rc = lsp_repl_run();
+        exit(rc);
+    }
+
+    int rc = lsp_server_main();
+    exit(rc);
+}
 
 void cmd_test(const char *input_file) {
     char self[1024] = "monad";

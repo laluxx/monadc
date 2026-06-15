@@ -1,7 +1,0 @@
-name: deep_codegen_logic_neq_variadic_distinct_chain
-section: codegen-logic-comparison
-args: a:Int
-type: Bool
-expect: True
-description: Variadic != must accept pairwise distinct generated successor values.
-law: (!= {a} (+ {a} 1) (+ {a} 2))

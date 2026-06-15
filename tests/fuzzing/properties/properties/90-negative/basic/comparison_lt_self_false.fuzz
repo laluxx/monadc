@@ -1,5 +1,12 @@
 name: comparison_lt_self_false
 section: negative
+tier: stable
+kind: law
+features: arithmetic, negative, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.type_predicate
+uses-atoms: atom.infer.predicate
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: False

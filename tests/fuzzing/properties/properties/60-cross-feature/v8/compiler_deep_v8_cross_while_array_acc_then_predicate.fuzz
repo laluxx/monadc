@@ -1,7 +1,16 @@
 name: compiler_deep_v8_cross_while_array_acc_then_predicate
 section: feature-interactions-v8
+tier: experimental
+kind: law
+features: arithmetic, array, array-index, begin, comparison, do, env, feature, mutation, predicate, set, set!, while, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.comparison_dispatch, codegen.local_load, codegen.predicate_dispatch, codegen.runtime_call, codegen.sequence, codegen.set_bang, codegen.store, codegen.while_loop, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.comparison, infer.env_child, infer.env_lookup, infer.loop, infer.mutation, infer.type_predicate, reader.array_literal, reader.ast_begin, reader.ast_do, runtime.set
+uses-atoms: atom.binding.set-bang, atom.binding.with, atom.control.begin, atom.control.do, atom.core.order.lt, atom.core.plus, atom.infer.predicate, atom.runtime.array
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_do_last_value, signal_v13_atom_lt_transitive, signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero, signal_v13_atom_with_substitution
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Bool
 expect: True
 description: while loop should accumulate array elements and feed result into Int? predicate.
 law: (Int? (with [xs [1 2 3] i 0 acc 0] (do (while (< i (count xs)) (begin (set! acc (+ acc (xs i))) (set! i (+ i 1)))) acc)))
+demoted-from: stable-by-signal-v13

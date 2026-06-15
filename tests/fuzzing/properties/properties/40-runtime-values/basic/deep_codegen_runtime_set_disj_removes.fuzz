@@ -1,5 +1,12 @@
 name: deep_codegen_runtime_set_disj_removes
 section: codegen-runtime-values
+tier: stable
+kind: law
+features: arithmetic, codegen, predicate, set
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, infer.arithmetic, infer.type_predicate, runtime.set
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate, atom.logic.not
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: True

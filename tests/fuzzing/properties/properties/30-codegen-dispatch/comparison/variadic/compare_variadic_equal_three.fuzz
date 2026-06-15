@@ -1,5 +1,13 @@
 name: compare_variadic_equal_three
 section: comparison-variadic
+tier: stable
+kind: law
+features: arithmetic, comparison, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.comparison_dispatch, codegen.equality_dispatch, infer.arithmetic, infer.comparison, infer.equality
+uses-atoms: atom.core.equality
+related-properties: signal_v13_atom_equality_reflexive
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: True

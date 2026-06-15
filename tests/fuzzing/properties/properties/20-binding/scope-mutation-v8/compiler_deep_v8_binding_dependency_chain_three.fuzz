@@ -1,7 +1,0 @@
-name: compiler_deep_v8_binding_dependency_chain_three
-section: binding-scope-mutation-v8
-args: a:Int b:Int c:Int
-type: Bool
-expect: True
-description: with dependency order should thread generated values through a three-node dependency chain.
-law: (= (with [x {a} y (+ x {b}) z (+ y {c})] z) (+ (+ {a} {b}) {c}))

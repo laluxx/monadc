@@ -1,5 +1,13 @@
 name: comparison_neq_self_false
 section: negative
+tier: stable
+kind: law
+features: arithmetic, equality, negative
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, infer.arithmetic, infer.equality
+uses-atoms: atom.core.equality, atom.core.inequality
+related-properties: signal_v13_atom_equality_reflexive
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: False

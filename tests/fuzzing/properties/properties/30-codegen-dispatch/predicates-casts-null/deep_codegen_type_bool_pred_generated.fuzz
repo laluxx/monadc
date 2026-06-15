@@ -1,5 +1,12 @@
 name: deep_codegen_type_bool_pred_generated
 section: codegen-predicates-casts-null
+tier: stable
+kind: law
+features: arithmetic, codegen, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.type_predicate
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate, atom.null.nil
+signal: medium
+corpus-role: semantic-law
 args: p:Bool
 type: Bool
 expect: True

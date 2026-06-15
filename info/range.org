@@ -1,0 +1,98 @@
+#+TITLE: Ranges
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:range:info:
+
+:PROPERTIES:
+:ID:       monadc.info.range
+:CONTEXT:  monadc.context.language, monadc.context.codegen-ops
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:collections.org][Collections]] · [[file:list.org][Lists]] · [[file:arrays.org][Arrays]] · [[file:iteration.org][Iteration]] · [[file:functional-programming.org][Functional Programming]] · [[file:numeric.org][Numeric Types]]
+
+Test coverage: lazy range coverage in =rt_range_*.mon= fixtures.
+
+Monad provides two range syntaxes with different evaluation strategies:
+eager arrays (bracket syntax) and lazy lists (paren syntax).
+
+* Bracket Syntax — Eager Array
+
+Evaluated at runtime, producing a finite array:
+
+#+BEGIN_SRC monad
+[0..10]                   ;; [0 1 2 3 4 5 6 7 8 9 10] inclusive
+[0,2..10]                 ;; [0 2 4 6 8 10] with step
+#+END_SRC
+
+#+BEGIN_SRC wisp
+[0..10]
+[0,2..10]
+#+END_SRC
+
+Parser rejects =[0..]= (infinite arrays not possible). The result is a
+contiguous fixed-size array — use =count= for length, =head=/=tail= for
+access, =(arr i)= for indexing.
+
+* Paren Syntax — Lazy Lists
+
+Lazy ranges produce linked cons cells via runtime thunks:
+
+#+BEGIN_SRC monad
+(0..10)                   ;; Lazy list 0 through 10
+(0..)                     ;; Infinite lazy list from 0
+(0,2..10)                 ;; Lazy list with step
+(0,2..)                   ;; Infinite lazy list with step
+#+END_SRC
+
+#+BEGIN_SRC wisp
+(0..10)
+(0..)
+(0,2..10)
+(0,2..)
+#+END_SRC
+
+Lazy ranges call =list_from= and =list_from_step= runtime functions.
+They can be infinite — elements are computed on demand. Use =take= to
+consume a finite prefix.
+
+* Iteration Over Ranges
+
+Ranges are iterable with =for=:
+
+#+BEGIN_SRC monad
+(for [i [0..5]] (show i))        ;; prints 0, 1, 2, 3, 4, 5
+(for [i (0..5)] (show i))        ;; same, but lazy
+#+END_SRC
+
+#+BEGIN_SRC wisp
+for [i [0..5]] show i
+for [i (0..5)] show i
+#+END_SRC
+
+* Eager vs Lazy
+
+| Aspect     | =[0..10]= (bracket)         | =(0..10)= (paren)          |
+|------------+---------------------------+--------------------------|
+| Allocation | Array (contiguous memory) | Cons cells (linked list) |
+| Evaluation | Eager (all at once)       | Lazy (on demand)         |
+| Memory     | O(n)                      | O(1) head, O(n) to force |
+| Infinite   | Not allowed               | Supported: =(0..)=         |
+| Access     | O(1) index                | O(n) index (list walk)   |
+
+* Related Pages
+
+- [[file:collections.org][Collections]] -- overview of all collection types
+- [[file:iteration.org][Iteration]] -- for loops over ranges
+- [[file:arrays.org][Arrays]] -- array generation from ranges
+- [[file:list.org][Lists]] -- list generation from ranges
+- [[file:numeric.org][Numeric Types]] -- numeric types in ranges
+
+* Context Links
+
+- [[file:../context/language.org][context/language.org]] — range dispatch
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — range codegen
+- [[file:collections.org][Collections]] — collection type overview
+- [[file:list.org][Lists]] — lazy range underlying structure
+- [[file:arrays.org][Arrays]] — eager range underlying structure
+- [[file:iteration.org][Iteration]] — for loop over ranges

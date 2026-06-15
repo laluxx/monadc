@@ -1,7 +1,0 @@
-name: deep_codegen_binding_setbang_chain_two_stores
-section: codegen-binding-mutation
-args: a:Int b:Int c:Int
-type: Bool
-expect: True
-description: Multiple set! stores must sequence in order.
-law: (= (with [x {a}] (do (set! x {b}) (set! x (+ x {c})) x)) (+ {b} {c}))

@@ -1,7 +1,0 @@
-name: mega_bitwise_or_zero_identity
-section: codegen-bitwise-dispatch
-args: a:Int
-type: Bool
-expect: True
-description: bit-or with zero must be identity.
-law: (= (bit-or {a} 0) {a})

@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <dirent.h>
 
 #include "reader.h"
 #include "cli.h"
@@ -289,10 +290,32 @@ static char *base_no_ext(const char *path) {
 
 static char *path_to_module_name(const char *path) {
     char *b = base_no_ext(path);
-    for (char *p = b; *p; p++) if (*p == '/') *p = '.';
+
+    /* Strip leading ./ and ../ segments */
     char *start = b;
-    if (start[0] == '.' && start[1] == '/') start += 2;
-    char *r = strdup(start);
+    while (true) {
+        if (start[0] == '.' && start[1] == '/') {
+            start += 2;
+        } else if (start[0] == '.' && start[1] == '.' && start[2] == '/') {
+            start += 3;
+        } else {
+            break;
+        }
+    }
+
+    for (char *p = start; *p; p++) if (*p == '/') *p = '.';
+
+    /* If the result contains dots (path components like "src.Int"),
+     * use only the last component as the module name when it starts
+     * with an uppercase letter — type method files are always named
+     * after their type (Int.mon -> "Int") regardless of directory.  */
+    char *last_dot = strrchr(start, '.');
+    char *r;
+    if (last_dot && (last_dot[1] >= 'A' && last_dot[1] <= 'Z')) {
+        r = strdup(last_dot + 1);
+    } else {
+        r = strdup(start);
+    }
     free(b);
     return r;
 }
@@ -508,14 +531,20 @@ static CompiledModule *compile_one(const char *source_path,
     // Reserve this module in the registry immediately by obj_path so any
     // recursive pre-scan calls for the same file bail out before doing any work.
     if (!is_main_module) {
-        if (registry_find_by_obj(obj_path)) {
+        CompiledModule *_existing = registry_find_by_obj(obj_path);
+        if (_existing && !_existing->was_skipped) {
+            /* Already fully compiled — safe to return immediately */
             free(base); free(obj_path); free(my_source_path);
-            return registry_find_by_obj(obj_path);
+            return _existing;
         }
-        // placeholder so recursive calls see it immediately
-        char *guessed = path_to_module_name(my_source_path);
-        registry_new(guessed, obj_path, true);
-        free(guessed);
+        if (!_existing) {
+            /* Register placeholder so recursive calls see it immediately */
+            char *guessed = path_to_module_name(my_source_path);
+            registry_new(guessed, obj_path, true);
+            free(guessed);
+        }
+        /* If _existing but was_skipped=true, fall through to run full codegen
+         * so exports get populated, then update it in Phase 9. */
     }
 
     // Check if we can skip emitting a new .o (but we still run full codegen
@@ -629,6 +658,66 @@ static CompiledModule *compile_one(const char *source_path,
         register_builtins(&tmp_ctx);
         wisp_register_arities_from_env(tmp_env);
         env_free(tmp_env);
+    }
+
+    /* Auto-load primitive type method files (Int.mon, String.mon, etc.).
+     * We identify type method files by matching against the canonical set
+     * of primitive type names — NOT by capitalization, because user modules
+     * like Main.mon also start with uppercase and are not type method files. */
+    {
+        static const char *k_primitive_type_stems[] = {
+            "Int", "I8", "I16", "I32", "I64", "I128",
+            "U8",  "U16", "U32", "U64", "U128",
+            "Float", "F32", "F80",
+            "Bool", "String", "Char",
+            NULL
+        };
+
+        /* Derive the directory containing my_source_path */
+        char src_dir[1024] = ".";
+        const char *last_sep = strrchr(my_source_path, '/');
+        if (!last_sep) last_sep = strrchr(my_source_path, '\\');
+        if (last_sep) {
+            size_t dlen = last_sep - my_source_path;
+            if (dlen < sizeof(src_dir)) {
+                memcpy(src_dir, my_source_path, dlen);
+                src_dir[dlen] = '\0';
+            }
+        }
+
+        for (int _ti = 0; k_primitive_type_stems[_ti]; _ti++) {
+            const char *stem = k_primitive_type_stems[_ti];
+
+            /* Build the candidate path: src_dir/Stem.mon */
+            char type_path[1024];
+            snprintf(type_path, sizeof(type_path), "%s/%s.mon", src_dir, stem);
+
+            /* Only proceed if the file actually exists */
+            if (!file_exists(type_path)) continue;
+
+            /* Do not auto-load ourselves */
+            if (strcmp(type_path, my_source_path) == 0) continue;
+
+            /* Skip if already in the registry under any path tail matching stem */
+            bool already_done = false;
+            for (CompiledModule *_cm = g_compiled; _cm && !already_done; _cm = _cm->next) {
+                const char *mn = _cm->module_name;
+                const char *dot   = strrchr(mn, '.');
+                const char *slash = strrchr(mn, '/');
+                const char *tail_dot   = dot   ? dot   + 1 : mn;
+                const char *tail_slash = slash ? slash + 1 : mn;
+                if (strcmp(mn,         stem) == 0) already_done = true;
+                if (strcmp(tail_dot,   stem) == 0) already_done = true;
+                if (strcmp(tail_slash, stem) == 0) already_done = true;
+            }
+
+            if (already_done) continue;
+
+            /* Compile the type method file as a dependency */
+            printf("[type]    %s\n", type_path);
+            compile_one(type_path, flags, false);
+            parser_set_context(my_source_path, source);
+        }
     }
 
     /* Pre-scan imports and compile dependencies BEFORE wisp expansion
@@ -961,6 +1050,69 @@ static CompiledModule *compile_one(const char *source_path,
          * (parsed when that module was compiled) — nothing to do here. */
     }
 
+    /* Auto-declare primitive type method modules (Int, String, etc.).
+     * Same canonical list as the auto-compile pass above — no directory
+     * scan, no capitalization heuristic.  For each known primitive stem,
+     * find its compiled module in the registry and call declare_externals
+     * so that Int.double etc. are visible in the current module's env.  */
+    {
+        static const char *k_primitive_type_stems2[] = {
+            "Int", "I8", "I16", "I32", "I64", "I128",
+            "U8",  "U16", "U32", "U64", "U128",
+            "Float", "F32", "F80",
+            "Bool", "String", "Char",
+            NULL
+        };
+
+        for (int _ti = 0; k_primitive_type_stems2[_ti]; _ti++) {
+            const char *stem2 = k_primitive_type_stems2[_ti];
+
+            /* Find the compiled module for this primitive type */
+            CompiledModule *type_mod = NULL;
+            for (CompiledModule *_cm = g_compiled; _cm; _cm = _cm->next) {
+                const char *mn = _cm->module_name;
+                /* Match exact name, or tail after last dot (e.g. "src.Int" -> "Int"),
+                 * or tail after last slash (defensive, for any un-normalised paths) */
+                const char *dot   = strrchr(mn, '.');
+                const char *slash = strrchr(mn, '/');
+                const char *tail_dot   = dot   ? dot   + 1 : mn;
+                const char *tail_slash = slash ? slash + 1 : mn;
+                if (strcmp(mn, stem2) == 0 ||
+                    strcmp(tail_dot,   stem2) == 0 ||
+                    strcmp(tail_slash, stem2) == 0) {
+                    type_mod = _cm;
+                    break;
+                }
+            }
+
+            if (!type_mod) continue;
+
+            /* Already declared via explicit import? Skip. */
+            bool already = false;
+            for (size_t ii = 0; ii < mod_ctx->import_count; ii++) {
+                const char *imn = mod_ctx->imports[ii]->module_name;
+                const char *slash = strrchr(imn, '/');
+                const char *tail  = slash ? slash + 1 : imn;
+                if (strcmp(tail, stem2) == 0 || strcmp(imn, stem2) == 0) {
+                    already = true; break;
+                }
+            }
+            if (already) continue;
+
+            /* Force the module_name on the registry entry to the bare stem
+             * so declare_externals builds "Int.double" not "src/Int.double" */
+            char *old_mn = type_mod->module_name;
+            type_mod->module_name = (char *)stem2;  /* temporary, not freed */
+
+            ImportDecl *syn = import_decl_create(stem2, NULL, IMPORT_UNQUALIFIED);
+            declare_externals(&ctx, type_mod, syn);
+            import_decl_free(syn);
+
+            type_mod->module_name = old_mn;  /* restore */
+        }
+    }
+
+
 /// Phase 5: Create init/main function and position builder
 // (Must happen BEFORE any IR-building calls like features setup)
 
@@ -1150,7 +1302,16 @@ static CompiledModule *compile_one(const char *source_path,
                 if (!alias_exported) { ent = ent->next; continue; }
             }
 
-            char *ms = mangle(mod_name, ent->name);
+            /* If the symbol name is already qualified (e.g. "Int.double"
+             * from a method definition), use only the part after the last
+             * dot as the local name so we get "Int__double" not
+             * "Int__Int.double".                                          */
+            const char *_local_name = ent->name;
+            {
+                const char *_dot = strrchr(ent->name, '.');
+                if (_dot) _local_name = _dot + 1;
+            }
+            char *ms = mangle(mod_name, _local_name);
 
             if (ent->kind == ENV_FUNC) {
                 /* Never rename FFI functions — they must keep their original
@@ -1423,6 +1584,8 @@ int main(int argc, char **argv) {
     case CMD_CLEAN:   cmd_clean();                       return 0;
     case CMD_INSTALL: cmd_install();                     return 0;
     case CMD_TEST:    cmd_test(flags.input_file);        return 0;
+    case CMD_CHECK:   cmd_check(flags.input_file);       return 0;
+    case CMD_LSP:     cmd_lsp();                         return 0;
     case CMD_COMPILE:
     default:
         compile(&flags);

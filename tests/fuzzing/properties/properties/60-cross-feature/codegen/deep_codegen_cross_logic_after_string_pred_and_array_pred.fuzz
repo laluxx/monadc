@@ -1,5 +1,13 @@
 name: deep_codegen_cross_logic_after_string_pred_and_array_pred
 section: codegen-cross-feature
+tier: stable
+kind: law
+features: arithmetic, array, array-index, codegen, logic, predicate, string
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.logic_dispatch, codegen.predicate_dispatch, codegen.string_literal, infer.arithmetic, infer.array, infer.callable_array, infer.logic, infer.type_predicate, reader.array_literal, reader.string_literal, runtime.string
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or, atom.runtime.array, atom.runtime.string
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_string_contains_substring
+signal: medium
+corpus-role: semantic-law
 args: a:Int b:Int
 type: Bool
 expect: True

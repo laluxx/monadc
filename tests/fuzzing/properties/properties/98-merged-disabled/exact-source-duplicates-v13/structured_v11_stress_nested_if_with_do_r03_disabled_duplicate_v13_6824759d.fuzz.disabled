@@ -1,0 +1,17 @@
+name: structured_v11_stress_nested_if_with_do_r03_disabled_duplicate_v13_6824759d
+section: v11-stress
+tier: experimental
+kind: program
+features: stress, program, if, phi, with, do, arithmetic
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.deep_program, codegen.if_phi, codegen.module_body, codegen.sequence, codegen.with_binding, infer.arithmetic, infer.env_child, infer.if_phi, reader.ast_do, reader.ast_if, runner.program_kind, runner.stress_tier
+uses-atoms: atom.binding.with, atom.control.do, atom.control.if, atom.core.equality, atom.core.plus, atom.runtime.array
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_do_last_value, signal_v13_atom_equality_reflexive, signal_v13_atom_if_same_branch_eliminates, signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero, signal_v13_atom_with_substitution
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: a:Int@edge+if+with+do b:Int@edge+if+with+do p:Bool@logic+if q:Bool@logic+if
+type: Bool
+expect: True
+description: V11 stress program stress_nested_if_with_do round 3; combines multiple compiler paths in non-default stress tier.
+program: (show (= (with [x (if {p} {a} {b})] (do (if {q} x {a}) (+ x 0))) (if {p} {a} {b})))
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: structured_v11_stress_nested_if_with_do_r01

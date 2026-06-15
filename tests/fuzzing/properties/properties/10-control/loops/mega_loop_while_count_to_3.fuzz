@@ -1,7 +1,16 @@
 name: mega_loop_while_count_to_3
 section: codegen-control-loops
+tier: experimental
+kind: law
+features: arithmetic, array, array-index, codegen, comparison, do, env, equality, mutation, set, set!, while, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.comparison_dispatch, codegen.equality_dispatch, codegen.local_load, codegen.runtime_call, codegen.sequence, codegen.set_bang, codegen.store, codegen.while_loop, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.comparison, infer.env_child, infer.env_lookup, infer.equality, infer.loop, infer.mutation, reader.array_literal, reader.ast_do, runtime.set
+uses-atoms: atom.binding.set-bang, atom.binding.with, atom.codegen.dispatch, atom.control.do, atom.core.equality, atom.core.order.lt, atom.core.plus, atom.runtime.array
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_do_last_value, signal_v13_atom_equality_reflexive, signal_v13_atom_lt_transitive, signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero, signal_v13_atom_with_substitution
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Bool
 expect: True
 description: while must iterate until the loop-carried variable reaches 3.
 law: (= (with [i 0] (do (while (< i 3) (set! i (+ i 1))) i)) 3)
+demoted-from: stable-by-signal-v13

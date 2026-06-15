@@ -1,5 +1,13 @@
 name: compare_variadic_gt_predecessor_chain
 section: comparison-variadic
+tier: stable
+kind: law
+features: arithmetic, comparison, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.comparison_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.comparison, infer.logic
+uses-atoms: atom.core.order.gt, atom.core.plus, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: True

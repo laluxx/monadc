@@ -1,0 +1,16 @@
+name: signal_v13_atom_equality_reflexive
+section: v13-atom-foundation
+tier: stable
+kind: law
+features: equality,reflexive
+compiler-path: codegen.expr.equal,infer.call.operator-equal
+atom: atom.core.equality.reflexive
+proves: atom.core.equality.reflexive
+uses-atoms: atom.core.equality
+signal: high
+corpus-role: atom-foundation
+args: a:Int@edge+if+with
+type: Bool
+expect: True
+description: Foundation atom proof for atom.core.equality.reflexive; derived properties link through uses-atoms/depends-on metadata.
+law: (= {a} {a})

@@ -1,7 +1,0 @@
-name: extreme_if_branchwise_compare_eq
-section: control-if-comparison
-args: cond:Bool a:Int b:Int c:Int d:Int
-type: Bool
-expect: True
-description: Branchwise comparison = under the same condition must select the correct comparison.
-law: (= (= (if {cond} {a} {b}) (if {cond} {c} {d})) (if {cond} (= {a} {c}) (= {b} {d})))

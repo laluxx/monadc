@@ -1,7 +1,0 @@
-name: deep_codegen_array_heap_array_count
-section: codegen-array-indexing
-args: a:Int b:Int c:Int
-type: Bool
-expect: True
-description: Heap array literal must carry the same count as fixed array literal.
-law: (= (count ~[{a} {b} {c}]) 3)

@@ -1,5 +1,13 @@
 name: structured_v9_dispatch_logic_xor_encoded_with_if
 section: dispatch-matrix-v9
+tier: stable
+kind: law
+features: arithmetic, dispatch, env, equality, if, logic, phi, with
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.local_load, codegen.logic_dispatch, codegen.with_binding, infer.arithmetic, infer.env_child, infer.env_lookup, infer.equality, infer.if_phi, infer.logic, reader.ast_if
+uses-atoms: atom.binding.with, atom.codegen.dispatch, atom.control.if, atom.core.equality, atom.core.inequality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_if_same_branch_eliminates, signal_v13_atom_with_substitution
+signal: medium
+corpus-role: semantic-law
 args: p:Bool q:Bool
 type: Bool
 expect: True

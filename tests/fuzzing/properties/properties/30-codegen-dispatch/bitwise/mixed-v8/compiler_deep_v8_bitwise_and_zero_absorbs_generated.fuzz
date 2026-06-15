@@ -1,7 +1,0 @@
-name: compiler_deep_v8_bitwise_and_zero_absorbs_generated
-section: bitwise-mixed-v8
-args: a:Int
-type: Bool
-expect: True
-description: Bitwise and with zero should absorb a generated Int.
-law: (= (& {a} 0) 0)

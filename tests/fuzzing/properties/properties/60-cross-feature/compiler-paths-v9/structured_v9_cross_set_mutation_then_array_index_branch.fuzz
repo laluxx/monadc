@@ -1,5 +1,13 @@
 name: structured_v9_cross_set_mutation_then_array_index_branch
 section: cross-compiler-v9
+tier: stable
+kind: law
+features: arithmetic, array, array-index, cross, do, env, equality, if, path, phi, predicate, set, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.local_load, codegen.path_literal, codegen.predicate_dispatch, codegen.runtime_call, codegen.sequence, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.equality, infer.if_phi, infer.path, infer.type_predicate, reader.array_literal, reader.ast_do, reader.ast_if, reader.path_literal, runtime.set
+uses-atoms: atom.binding.with, atom.control.do, atom.control.if, atom.core.equality, atom.infer.predicate, atom.runtime.array, atom.runtime.path
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_do_last_value, signal_v13_atom_equality_reflexive, signal_v13_atom_if_same_branch_eliminates, signal_v13_atom_with_substitution
+signal: medium
+corpus-role: semantic-law
 args: p:Bool a:Int b:Int
 type: Bool
 expect: True

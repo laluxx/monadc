@@ -1,5 +1,12 @@
 name: deep_codegen_runtime_quasiquote_unquote_bool_equal
 section: codegen-runtime-values
+tier: stable
+kind: law
+features: arithmetic, codegen, predicate, quasiquote, quote, unquote
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.quote, desugar.quasiquote, infer.arithmetic, infer.type_predicate, reader.quasiquote, reader.quote, reader.unquote
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate, atom.quote.quote
+signal: medium
+corpus-role: semantic-law
 args: p:Bool
 type: Bool
 expect: True

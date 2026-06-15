@@ -1,14 +1,24 @@
 #+TITLE: Introduction
 #+STARTUP: showeverything
 #+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:intro:info:
 
-[[file:index.org][<- Back to Index]] · [[file:tutorial.org][Tutorial]] · [[file:syntax.org][Syntax]]
+:PROPERTIES:
+:ID:       monadc.info.intro
+:CONTEXT:  monadc.context.index, monadc.context.language, monadc.context.philosophy
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:tutorial.org][Tutorial]] · [[file:syntax.org][Syntax]] · [[file:types.org][Types]] · [[file:core.org][Core Library]] · [[file:functional-programming.org][Functional Programming]] · [[file:control.org][Control Flow]]
+
+Test coverage: introductory examples are tested as part of =rt_tutorial_*.mon=.
 
 Monad is a compiled Lisp-family functional language with a dual-surface
 syntax (S-expressions and indentation-based Wisp). It targets x86-64
-Linux via LLVM 19+ and is written in C (~27,000+ lines). The compiler
+Linux via LLVM 19+ and is written in C (~29,000+ lines across 30+ source
+files, see [[file:../context/build.org][context/build.org]]). The compiler
 produces native binaries linked against a static runtime library
-(=libmonad.a=).
+(=libmonad.a= compiled from [[file:../runtime.c][runtime.c]]).
 
 - *Type system*: Hindley-Milner inference (constraint-based, with
   generalization, instantiation, and monomorphization) for ground types,
@@ -30,15 +40,26 @@ produces native binaries linked against a static runtime library
 - *Dual syntax*: S-expressions (paren-mode) and Wisp (indentation-based)
   are freely mixable within a single file and produce identical ASTs.
 
-- *Self-hosting-ready*: =Main.mon= (1244 lines) serves as the standard
-  library and primary compiler test surface. Core library modules exist
-  under =core/= covering lists, sets, math, text processing, and more.
+- *Self-hosting-ready*: =Main.mon= (1244 lines, verified at
+  [[file:../Main.mon][Main.mon]]) serves as the standard library and primary compiler test
+  surface. Core library modules exist under =core/= covering lists, sets,
+  math, text processing, and more (see [[file:../context/core-libs.org][context/core-libs.org]]).
+
+- *Test suite*: ~1305 test assets across codegen runtime fixtures
+  (423 + 60 ASM), TSV-driven parser corpora (1243 rows), property-based
+  fuzzing (41 algebraic laws) — see [[file:../context/tests-arch.org][context/tests-arch.org]] and
+  [[file:testing.org][Testing]].
 
 * Quick Start
 
 #+BEGIN_SRC monad
 (module Main)
 (show "hello world")
+#+END_SRC
+
+#+BEGIN_SRC wisp
+module Main
+show "hello world"
 #+END_SRC
 
 Compile and run:
@@ -50,6 +71,11 @@ make && ./monad hello.mon -o hello && ./hello
 Or with the Wisp syntax variant:
 
 #+BEGIN_SRC monad
+module Main
+show "hello from wisp"
+#+END_SRC
+
+#+BEGIN_SRC wisp
 module Main
 show "hello from wisp"
 #+END_SRC
@@ -199,6 +225,14 @@ large subset of the language. Known limitations include:
 - Core prelude modules are not yet automatically imported.
 
 See [[file:../context/language.org][context/language.org]] for the full codegen gap analysis.
+
+* Related Pages
+
+- [[file:tutorial.org][Tutorial]] -- step-by-step from zero to working programs
+- [[file:syntax.org][Syntax]] -- S-expressions, Wisp, special forms
+- [[file:types.org][Types]] -- type system overview, all ground types
+- [[file:core.org][Core Library]] -- built-in functions overview
+- [[file:functional-programming.org][Functional Programming]] -- purity, lambdas, HOFs
 
 * Context Links
 

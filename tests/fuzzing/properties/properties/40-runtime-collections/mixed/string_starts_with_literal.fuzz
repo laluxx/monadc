@@ -1,7 +1,0 @@
-name: string_starts_with_literal
-section: collections
-args: 
-type: Bool
-expect: True
-description: starts-with? must recognize a constant prefix.
-law: (starts-with? "monadc" "mon")

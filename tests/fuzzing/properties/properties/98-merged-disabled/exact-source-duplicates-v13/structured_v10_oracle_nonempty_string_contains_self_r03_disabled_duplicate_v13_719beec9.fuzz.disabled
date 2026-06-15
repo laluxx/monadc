@@ -1,0 +1,17 @@
+name: structured_v10_oracle_nonempty_string_contains_self_r03_disabled_duplicate_v13_719beec9
+section: v10-oracle-nonempty_string_contains_self
+tier: experimental
+kind: law
+features: oracle, string, contains
+compiler-path: codegen.string_literal, reader.string_literal, runner.expect_python, runner.oracle_tier, runner.typed_generator, runtime.string
+uses-atoms: atom.infer.predicate, atom.runtime.string
+related-properties: signal_v13_atom_string_contains_substring
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: s:NonEmptyString@escape
+type: Bool
+expect-python: s in s
+description: V10 oracle property nonempty_string_contains_self round 3 using expect-python and dependent typed generators.
+law: (contains? {s} {s})
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: structured_v10_oracle_nonempty_string_contains_self_r01

@@ -1,0 +1,15 @@
+name: signal_v13_program_predicate-if_047
+section: v13-program-semantics
+tier: stable
+kind: program
+features: program,predicate,if,equality,logic
+compiler-path: program.module.body,infer.predicate.bool,codegen.expr.if,codegen.expr.equal
+uses-atoms: atom.infer.predicate, atom.control.if, atom.core.equality.reflexive
+depends-on: atom.core.equality.reflexive
+signal: high
+corpus-role: program-semantics
+args: flag:Bool@logic+predicate x:Int@edge+if
+type: Bool
+expect: True
+description: Program-kind property: source contains its own show and links real program codegen to foundational atoms.
+program: (show (if (bool? {flag}) (= {x} {x}) False))

@@ -1,0 +1,15 @@
+name: signal_v13_compile_fail_infer-non-bool-if-condition_144
+section: v13-compile-fail
+tier: compile-fail
+kind: compile-fail
+features: infer,type-error,if
+compiler-path: infer.condition.bool
+uses-atoms: atom.control.if
+signal: high
+corpus-role: negative-diagnostic
+stage: infer
+args: x:Int@edge
+type: Bool
+expect-diagnostic: error:
+description: Structured negative property for compiler diagnostics; expected to fail compilation.
+law: (if {x} 1 2)

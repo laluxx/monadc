@@ -1,5 +1,13 @@
 name: list_cons_car_roundtrip
 section: collections
+tier: stable
+kind: law
+features: arithmetic, collections, equality, list
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.runtime_call, infer.arithmetic, infer.equality, runtime.list
+uses-atoms: atom.core.equality
+related-properties: signal_v13_atom_equality_reflexive
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: True

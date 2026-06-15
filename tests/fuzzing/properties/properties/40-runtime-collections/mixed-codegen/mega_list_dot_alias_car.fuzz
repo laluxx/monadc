@@ -1,5 +1,13 @@
 name: mega_list_dot_alias_car
 section: codegen-runtime-collections
+tier: stable
+kind: law
+features: arithmetic, codegen, do, equality, list
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.runtime_call, codegen.sequence, infer.arithmetic, infer.equality, reader.ast_do, runtime.list
+uses-atoms: atom.codegen.dispatch, atom.core.equality
+related-properties: signal_v13_atom_equality_reflexive
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: True

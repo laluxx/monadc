@@ -1,5 +1,13 @@
 name: deep_codegen_type_arr_pred_literal
 section: codegen-predicates-casts-null
+tier: stable
+kind: law
+features: arithmetic, array, array-index, codegen, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.predicate_dispatch, infer.arithmetic, infer.array, infer.callable_array, infer.type_predicate, reader.array_literal
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate, atom.null.nil, atom.runtime.array
+related-properties: signal_v13_atom_array_index_valid
+signal: medium
+corpus-role: semantic-law
 args: a:Int b:Int
 type: Bool
 expect: True

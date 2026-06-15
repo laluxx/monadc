@@ -1,0 +1,15 @@
+name: signal_v13_program_mod-bound_102
+section: v13-program-semantics
+tier: stable
+kind: program
+features: program,mod,comparison,operator-dispatch
+compiler-path: program.module.body,codegen.dispatch.mod,codegen.expr.compare-lt
+uses-atoms: atom.core.modulo, atom.core.order.lt
+depends-on: 
+signal: high
+corpus-role: program-semantics
+args: x:Int@edge+mod
+type: Bool
+expect: True
+description: Program-kind property: source contains its own show and links real program codegen to foundational atoms.
+program: (show (< (% {x} 7) 7))

@@ -1,7 +1,0 @@
-name: deep_codegen_cross_for_array_index_accumulation
-section: codegen-cross-feature
-args: 
-type: Bool
-expect: True
-description: for loop variable must drive array-as-function indexing and mutation accumulation.
-law: (= (with [xs [1 2 3 4] sum 0] (do (for [i 0 4] (set! sum (+ sum (xs i)))) sum)) 10)

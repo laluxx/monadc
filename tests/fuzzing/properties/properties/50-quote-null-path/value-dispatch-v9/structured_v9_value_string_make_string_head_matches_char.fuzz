@@ -1,7 +1,16 @@
 name: structured_v9_value_string_make_string_head_matches_char
 section: quote-null-string-v9
+tier: experimental
+kind: law
+features: arithmetic, equality, path, quote, string
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.path_literal, codegen.quote, codegen.string_literal, infer.arithmetic, infer.equality, infer.path, reader.path_literal, reader.quote, reader.string_literal, runtime.string
+uses-atoms: atom.core.equality, atom.null.nil, atom.quote.quote, atom.runtime.path, atom.runtime.string
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_string_contains_substring
+signal: legacy-smoke
+corpus-role: legacy-smoke
 args: 
 type: Bool
 expect: True
 description: Stress string/char dispatch, null coalescing, nil predicates, quote, quasiquote, and unquote lowering.
 law: (= (head (make-string 3 (Char 120))) (Char 120))
+demoted-from: stable-by-signal-v13

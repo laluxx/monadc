@@ -1,7 +1,0 @@
-name: deep_codegen_bitwise_xor_self_zero
-section: codegen-bitwise-dispatch
-args: a:Int
-type: Bool
-expect: True
-description: bit-xor of a generated Int with itself must be zero.
-law: (= (bit-xor {a} {a}) 0)

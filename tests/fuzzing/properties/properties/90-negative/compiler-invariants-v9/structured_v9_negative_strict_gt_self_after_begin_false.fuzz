@@ -1,5 +1,12 @@
 name: structured_v9_negative_strict_gt_self_after_begin_false
 section: negative-compiler-v9
+tier: stable
+kind: law
+features: arithmetic, begin, comparison, negative, set
+compiler-path: codegen.arithmetic_dispatch, codegen.comparison_dispatch, codegen.runtime_call, codegen.sequence, infer.arithmetic, infer.comparison, reader.ast_begin, runtime.set
+uses-atoms: atom.control.begin, atom.core.order.gt
+signal: medium
+corpus-role: semantic-law
 args: a:Int setup:Int
 type: Bool
 expect: False

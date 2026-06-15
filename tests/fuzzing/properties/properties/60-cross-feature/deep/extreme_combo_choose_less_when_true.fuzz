@@ -1,5 +1,13 @@
 name: extreme_combo_choose_less_when_true
 section: feature-interactions-deep
+tier: stable
+kind: law
+features: arithmetic, comparison, equality, feature, if, phi, when
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.comparison_dispatch, codegen.equality_dispatch, codegen.if_phi, codegen.if_void, desugar.when, infer.arithmetic, infer.comparison, infer.equality, infer.if_phi, reader.ast_if
+uses-atoms: atom.control.if, atom.core.equality, atom.core.order.lt
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_if_same_branch_eliminates, signal_v13_atom_lt_transitive
+signal: medium
+corpus-role: semantic-law
 args: a:Int b:Int fallback:Int
 type: Bool
 expect: True

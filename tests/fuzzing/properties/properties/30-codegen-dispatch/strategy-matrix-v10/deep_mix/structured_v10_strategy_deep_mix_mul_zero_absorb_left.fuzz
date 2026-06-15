@@ -1,0 +1,15 @@
+name: structured_v10_strategy_deep_mix_mul_zero_absorb_left
+section: v10-strategy-deep_mix
+tier: stable
+kind: law
+features: arithmetic, strategy
+compiler-path: codegen.arithmetic_dispatch, infer.arithmetic, runner.strategy_arg, runner.typed_generator
+uses-atoms: atom.core.equality, atom.core.multiply, atom.core.plus
+related-properties: signal_v13_atom_equality_reflexive, signal_v13_atom_multiply_associative, signal_v13_atom_multiply_commutative, signal_v13_atom_multiply_identity_one, signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero
+signal: medium
+corpus-role: semantic-law
+args: a:Int@edge+if+with+do+mod b:Int@tiny+bitwise+if p:Bool@logic+if
+type: Bool
+expect: True
+description: V10 strategy property mul_zero_absorb_left generated with deep_mix arguments to stress compiler dispatch, envs, and PHI lowering.
+law: (= (* 0 (+ {a} {b})) 0)

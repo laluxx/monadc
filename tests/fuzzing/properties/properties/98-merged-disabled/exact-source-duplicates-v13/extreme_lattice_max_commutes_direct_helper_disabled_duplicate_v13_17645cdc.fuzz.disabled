@@ -1,0 +1,17 @@
+name: extreme_lattice_max_commutes_direct_helper_disabled_duplicate_v13_17645cdc
+section: lattice-clamp-deep
+tier: experimental
+kind: law
+features: arithmetic, equality, lattice, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+uses-atoms: atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_v13_atom_equality_reflexive
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Min/max lattice and clamp laws must hold through helper-based branch implementations.
+law: (= (fuzz-max {a} {b}) (fuzz-max {b} {a}))
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: max_commutative

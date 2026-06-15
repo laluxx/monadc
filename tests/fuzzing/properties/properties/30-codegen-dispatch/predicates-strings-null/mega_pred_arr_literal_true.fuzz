@@ -1,7 +1,0 @@
-name: mega_pred_arr_literal_true
-section: codegen-preds-strings-null
-args: 
-type: Bool
-expect: True
-description: Arr? must recognize array literal.
-law: (Arr? [1 2 3])

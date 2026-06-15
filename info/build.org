@@ -1,8 +1,27 @@
 #+TITLE: Build System
 #+STARTUP: showeverything
 #+OPTIONS: toc:nil
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:build:info:
 
-[[file:index.org][<- Back to Index]] · [[file:cli.org][CLI Reference]]
+:PROPERTIES:
+:ID:       monadc.info.build
+:CONTEXT:  monadc.context.build, monadc.context.makefile, monadc.context.buildsystem, monadc.context.scripts
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:cli.org][CLI Reference]] · [[file:testing.org][Testing]] · [[file:modules.org][Modules]] · [[file:package-dev.org][Package Development]] · [[file:repl.org][REPL]] · [[file:errors.org][Diagnostics]]
+
+Test coverage: =make test= is the primary test target.
+
+The MonadC compiler uses a Makefile at the project root
+([[file:../Makefile][Makefile]], 112 lines) for building =monad= and =libmonad.a=.
+The build manifest =package.yaml= (for user packages) is documented in
+[[file:package-dev.org][Package Development]]; its schema is documented at
+[[file:../context/buildsystem.org][context/buildsystem.org]].
+
+For full build verification, test targets, and helper scripts, see
+[[file:../context/build.org][context/build.org]]. For Makefile structure, build
+modes, and LLVM discovery, see [[file:../context/makefile.org][context/makefile.org]].
 
 ** Compilation Pipeline
 
@@ -145,7 +164,15 @@ via =resolve_build_info=, then compiles sources and links the output binary.
 For details on the build resolution process, see
 [[file:../context/cli.org][context/cli.org]] and [[file:../context/buildsystem.org][context/buildsystem.org]].
 
-** Context Links
+* Related Pages
+
+- [[file:cli.org][CLI Reference]] -- command-line reference
+- [[file:testing.org][Testing]] -- test runner
+- [[file:modules.org][Modules]] -- module compilation
+- [[file:package-dev.org][Package Development]] -- packaging for distribution
+- [[file:from-c.org][From C]] -- compilation for C interop
+
+* Context Links
 
 - [[file:../context/build.org][context/build.org]] — build verification, test targets, helper scripts
 - [[file:../context/makefile.org][context/makefile.org]] — Makefile structure, build modes, LLVM discovery

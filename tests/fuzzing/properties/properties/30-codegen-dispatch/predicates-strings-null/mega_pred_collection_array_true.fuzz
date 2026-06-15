@@ -1,7 +1,0 @@
-name: mega_pred_collection_array_true
-section: codegen-preds-strings-null
-args: 
-type: Bool
-expect: True
-description: collection? must recognize arrays.
-law: (collection? [1 2 3])

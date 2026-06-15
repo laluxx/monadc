@@ -1,7 +1,0 @@
-name: mega_quote_list_count_three
-section: codegen-quote-runtime
-args: 
-type: Bool
-expect: True
-description: quote must build runtime list preserving list arity.
-law: (= (count (quote (a b c))) 3)

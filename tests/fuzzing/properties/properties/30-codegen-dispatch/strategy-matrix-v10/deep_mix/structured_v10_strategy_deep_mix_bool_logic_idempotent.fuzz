@@ -1,0 +1,15 @@
+name: structured_v10_strategy_deep_mix_bool_logic_idempotent
+section: v10-strategy-deep_mix
+tier: stable
+kind: law
+features: logic, bool, strategy
+compiler-path: codegen.logic_dispatch, infer.logic, runner.strategy_arg, runner.typed_generator
+uses-atoms: atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_v13_atom_equality_reflexive
+signal: medium
+corpus-role: semantic-law
+args: a:Int@edge+if+with+do+mod b:Int@tiny+bitwise+if p:Bool@logic+if
+type: Bool
+expect: True
+description: V10 strategy property bool_logic_idempotent generated with deep_mix arguments to stress compiler dispatch, envs, and PHI lowering.
+law: (= (and {p} {p}) {p})

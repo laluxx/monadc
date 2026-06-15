@@ -1,7 +1,0 @@
-name: mega_null_coalesce_scalar_bool_ignores_default
-section: codegen-preds-strings-null
-args: p:Bool
-type: Bool
-expect: True
-description: ?? must return scalar Bool left operand because scalar Bool is never nil.
-law: (= (?? {p} False) {p})

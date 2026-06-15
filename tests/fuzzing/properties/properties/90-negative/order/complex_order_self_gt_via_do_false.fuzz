@@ -1,5 +1,13 @@
 name: complex_order_self_gt_via_do_false
 section: order-negative
+tier: stable
+kind: law
+features: arithmetic, do, logic, order, predicate, set
+compiler-path: codegen.arithmetic_dispatch, codegen.logic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, codegen.sequence, infer.arithmetic, infer.logic, infer.type_predicate, reader.ast_do, runtime.set
+uses-atoms: atom.control.do, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_v13_atom_do_last_value
+signal: medium
+corpus-role: semantic-law
 args: setup:Int a:Int
 type: Bool
 expect: False

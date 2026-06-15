@@ -1,0 +1,14 @@
+name: structured_v11_predicate_int_generated_r01
+section: quote-predicate-v11
+tier: stable
+kind: law
+features: predicate, type, strategy
+compiler-path: codegen.predicate_dispatch, infer.type_predicate, runner.strategy_arg, runner.typed_generator
+uses-atoms: atom.infer.predicate, atom.quote.quote
+signal: medium
+corpus-role: semantic-law
+args: a:Int@edge+if+with
+type: Bool
+expect: True
+description: V11 stable compiler-path law predicate_int_generated variant 1; uses strategy args and explicit compiler-path metadata for feature coverage.
+law: (int? {a})

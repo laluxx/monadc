@@ -1,0 +1,101 @@
+#+TITLE: Sequencing
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:sequencing:info:
+
+:PROPERTIES:
+:ID:       monadc.info.sequencing
+:CONTEXT:  monadc.context.language, monadc.context.codegen
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:conditionals.org][Conditionals]] · [[file:iteration.org][Iteration]] · [[file:mutation.org][Mutation]] · [[file:control.org][Control Flow]] · [[file:let.org][Let Bindings]] · [[file:functional-programming.org][Functional Programming]]
+
+Test coverage: =begin= and =do= are exercised by =rt_control_all.mon=.
+
+Sequencing forms evaluate multiple expressions in order, returning the
+last value. They are the standard way to combine side-effecting
+operations.
+
+* begin
+
+Evaluate expressions left-to-right, return the last:
+
+#+BEGIN_SRC monad
+(begin
+  (show "step 1")
+  (show "step 2")
+  42)                           ;; prints "step 1", "step 2", returns 42
+#+END_SRC
+
+#+BEGIN_SRC wisp
+begin
+  show "step 1"
+  show "step 2"
+  42
+#+END_SRC
+
+Body has implicit =begin= in many forms (=define=, =lambda=, =if=
+branches, =while= bodies). Explicit =begin= is needed when you want
+sequencing in a single-branch position
+([[file:../codegen.c::7561]]).
+
+* do
+
+Alias for =begin= — identical semantics:
+
+#+BEGIN_SRC monad
+(do
+  (show "hello")
+  (show "world")
+  (+ 1 2))                      ;; prints "hello", "world", returns 3
+#+END_SRC
+
+#+BEGIN_SRC wisp
+do
+  show "hello"
+  show "world"
+  + 1 2
+#+END_SRC
+
+Same codegen path as =begin= ([[file:../codegen.c::7830]]).
+
+* with
+
+Sequential bindings in a scope:
+
+#+BEGIN_SRC monad
+(with [x 1 y (+ x 1)] (+ x y))  ;; 3 — y sees x
+#+END_SRC
+
+#+BEGIN_SRC wisp
+with [x 1 y + x 1] + x y
+#+END_SRC
+
+=with= has a strcmp handler ([[file:../codegen.c::7841]]) and evaluates
+bindings left-to-right. Unlike =let= (which binds in parallel), =with=
+is sequential — each binding sees previous ones.
+
+* Implicit Sequencing
+
+Many forms implicitly sequence their body:
+- =lambda= body: multiple expressions run in order
+- =define= value position: =(define x (begin (show "init") 42))=
+- =if= branches: each branch can have multiple expressions via =begin=
+- =while= / =for= body: implicit =begin= around the body forms
+
+* Related Pages
+
+- [[file:conditionals.org][Conditionals]] -- if, cond, when, unless
+- [[file:control.org][Control Flow]] -- overview of control forms
+- [[file:let.org][Let Bindings]] -- let and with bindings
+- [[file:iteration.org][Iteration]] -- for, while bodies
+- [[file:functional-programming.org][Functional Programming]] -- pure sequencing
+
+* Context Links
+
+- [[file:../context/language.org][context/language.org]] — expression sequencing
+- [[file:../codegen.c::7561][codegen.c]] — =begin= codegen
+- [[file:../codegen.c::7841][codegen.c]] — =with= codegen
+- [[file:control.org][Control Flow]] — overview of control forms
+- [[file:let.org][Let Bindings]] — let, let*, letrec

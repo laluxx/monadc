@@ -1,7 +1,0 @@
-name: compiler_deep_v8_set_disj_persistent_removes_generated
-section: runtime-sets-v8
-args: a:Int
-type: Bool
-expect: True
-description: Persistent disj should remove a generated value from the returned set.
-law: (= (contains? (disj (set {a}) {a}) {a}) False)

@@ -1,0 +1,114 @@
+#+TITLE: Heap Allocation
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:heap:info:
+
+:PROPERTIES:
+:ID:       monadc.info.heap
+:CONTEXT:  monadc.context.language, monadc.context.runtime, monadc.context.codegen
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:collections.org][Collections]] · [[file:arrays.org][Arrays]] · [[file:arena.org][Arena Allocation]] · [[file:performance.org][Performance]] · [[file:data.org][Data Types]] · [[file:layouts.org][Layout Types]]
+
+Test coverage: heap array operations verified by =rt_heap_array_*.mon= fixtures. Heap allocation in ADTs exercised by =rt_match_*.mon=.
+
+Monad uses heap allocation for data that outlives its defining scope or has runtime-determined size. Heap-allocated objects use bump allocation (arena) or =malloc= depending on context.
+
+* Heap Array Syntax
+
+Heap arrays use the =~= tilde prefix:
+
+#+BEGIN_SRC monad
+~[1 2 3]                          ;; heap-allocated Int array
+~[]                               ;; empty heap array
+(define heap-arr ~[1 2 3])
+#+END_SRC
+
+#+BEGIN_SRC wisp
+~[1 2 3]                          ;; heap-allocated Int array
+~[]                               ;; empty heap array
+define heap-arr ~[1 2 3]
+#+END_SRC
+
+See [[file:arrays.org][Arrays]] for the full array variant reference.
+
+* When Heap Allocation Happens
+
+| Construct             | Allocation    | Reason                     |
+|-----------------------+---------------+----------------------------|
+| =~[1 2 3]= (heap array) | Heap (malloc) | Explicit heap request      |
+| ADT constructors      | Heap (malloc) | Tagged union, dynamic size |
+| Cons cells            | Heap (malloc) | Persistent linked lists    |
+| Closures (planned)    | Heap          | Environment capture        |
+| =[16kb I32]= (fat)      | Stack or heap | Depends on size            |
+| =[1 2 3]= (stack)       | Stack frame   | Known size at compile time |
+
+* Runtime Memory Model
+
+** Arena Allocator ([[file:../arena.c]])
+
+The compiler uses a bump allocator for internal allocations:
+
+#+BEGIN_SRC c
+Arena arena;                     // compiler-internal arena
+arena_alloc(&arena, size);       // bump-allocate
+arena_reset(&arena);             // free all at once
+#+END_SRC
+
+** Runtime Allocator ([[file:../runtime.c]])
+
+Runtime heap allocations go through the runtime's allocation layer:
+
+| Function           | Purpose                    |
+|--------------------+----------------------------|
+| =runtime_alloc=      | General heap allocation    |
+| =runtime_alloc_cons= | Cons cell allocation       |
+| =runtime_alloc_adt=  | ADT constructor allocation |
+
+See [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]].
+
+* Heap Arrays vs Stack Arrays
+
+| Aspect     | Stack Array =[1 2 3]= | Heap Array =~[1 2 3]=   |
+|------------+---------------------+-----------------------|
+| Allocation | Stack frame         | Heap (malloc)         |
+| Lifetime   | Scope-bound         | Manual or GC          |
+| Resizable  | No                  | Yes (push/pop)        |
+| C-interop  | Yes (decays to ptr) | Yes (decays to ptr)   |
+| Overhead   | None                | Allocation + capacity |
+
+* ADT Heap Allocation
+
+Algebraic data types ([[file:data.org][Data Types]]) are heap-allocated tagged unions:
+
+#+BEGIN_SRC monad
+(data Tree a Leaf (Node Tree a a Tree))
+
+;; Node allocates a heap record with tag + fields
+(Node Leaf 42 Leaf)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+data Tree a Leaf (Node Tree a a Tree)
+
+;; Node allocates a heap record with tag + fields
+Node Leaf 42 Leaf
+#+END_SRC
+
+The tag byte is followed by constructor fields. Pattern matching ([[file:patterns.org][Pattern Matching]]) reads the tag to dispatch.
+
+* Related Pages
+
+- [[file:arrays.org][Arrays]] — stack, fat, and heap array variants
+- [[file:data.org][Data Types]] — ADT heap allocation
+- [[file:performance.org][Performance]] — allocation costs and optimization
+- [[file:collections.org][Collections]] — list/set/map memory model
+- [[file:error-handling.org][Error Handling]] — heap allocation in error paths
+
+* Context Links
+
+- [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]]
+- [[file:../context/runtime.org][context/runtime.org]] — GC and memory
+- [[file:../arena.c][arena.c]] — Bump allocator implementation
+- [[file:../runtime.c][runtime.c]] — Runtime allocator

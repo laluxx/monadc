@@ -1,0 +1,14 @@
+name: structured_v11_predicate_bool_generated_r05
+section: quote-predicate-v11
+tier: stable
+kind: law
+features: predicate, type, logic, strategy
+compiler-path: codegen.logic_dispatch, codegen.predicate_dispatch, infer.logic, infer.type_predicate, runner.strategy_arg, runner.typed_generator
+uses-atoms: atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or, atom.quote.quote
+signal: medium
+corpus-role: semantic-law
+args: p:Bool@logic+if
+type: Bool
+expect: True
+description: V11 stable compiler-path law predicate_bool_generated variant 5; uses strategy args and explicit compiler-path metadata for feature coverage.
+law: (and True (bool? {p}))

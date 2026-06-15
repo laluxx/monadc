@@ -1,5 +1,13 @@
 name: combo_quasiquote_generated_value_inside_logic
 section: feature-interactions
+tier: stable
+kind: law
+features: arithmetic, equality, feature, logic, predicate, quasiquote, quote, unquote
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, codegen.predicate_dispatch, codegen.quote, desugar.quasiquote, infer.arithmetic, infer.equality, infer.logic, infer.type_predicate, reader.quasiquote, reader.quote, reader.unquote
+uses-atoms: atom.core.equality, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or, atom.quote.quote
+related-properties: signal_v13_atom_equality_reflexive
+signal: medium
+corpus-role: semantic-law
 args: a:Int
 type: Bool
 expect: True

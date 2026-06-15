@@ -1,0 +1,15 @@
+name: structured_v10_oracle_array_index_generated_r01
+section: v10-oracle-array_index_generated
+tier: oracle
+kind: law
+features: oracle, array, index
+compiler-path: codegen.array_literal, infer.array, reader.array_literal, runner.expect_python, runner.oracle_tier, runner.typed_generator
+uses-atoms: atom.dependent.index-of, atom.runtime.array
+related-properties: signal_v13_atom_array_index_valid
+signal: high
+corpus-role: oracle
+args: xs:NonEmptyArrInt@small i:IndexOf(xs)
+type: Int
+expect-python: xs[i]
+description: V10 oracle property array_index_generated round 1 using expect-python and dependent typed generators.
+law: ({xs} {i})

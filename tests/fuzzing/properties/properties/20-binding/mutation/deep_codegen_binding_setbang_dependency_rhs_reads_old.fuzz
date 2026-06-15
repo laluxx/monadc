@@ -1,7 +1,0 @@
-name: deep_codegen_binding_setbang_dependency_rhs_reads_old
-section: codegen-binding-mutation
-args: a:Int b:Int
-type: Bool
-expect: True
-description: set! RHS must read the old alloca value before storing the new value.
-law: (= (with [x {a}] (do (set! x (+ x {b})) x)) (+ {a} {b}))

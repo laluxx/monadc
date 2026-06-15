@@ -1,0 +1,13 @@
+name: structured_v11_compile_fail_call_int_as_function_r01
+section: v11-compile-fail
+tier: compile-fail
+kind: compile-fail
+features: compile-fail, type, call
+compiler-path: diagnostic.expected_error, runner.compile_fail_kind
+signal: high
+corpus-role: negative-diagnostic
+args: a:Int@edge b:Int@edge
+type: Bool
+expect-diagnostic: error:
+description: V11 expected compiler diagnostic test call_int_as_function round 1; checks compile-fail tier, diagnostics, and failure clustering.
+law: ({a} {b})

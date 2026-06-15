@@ -1,0 +1,14 @@
+name: signal_v13_oracle_int-add_025
+section: v13-oracle
+tier: oracle
+kind: law
+features: oracle,+,arithmetic
+compiler-path: oracle.expected-python,codegen.expr.binary-add,runtime.int.add
+uses-atoms: atom.core.plus
+signal: high
+corpus-role: oracle
+args: a:Int@edge+if b:Int@edge+with
+type: Int
+expect-python: a + b
+description: Oracle property with generated Python expected value and explicit atom links.
+law: (+ {a} {b})

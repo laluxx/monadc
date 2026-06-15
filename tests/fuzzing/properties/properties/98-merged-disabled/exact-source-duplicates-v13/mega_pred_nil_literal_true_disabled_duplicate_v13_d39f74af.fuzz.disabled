@@ -1,0 +1,18 @@
+name: mega_pred_nil_literal_true_disabled_duplicate_v13_d39f74af
+section: codegen-preds-strings-null
+tier: experimental
+kind: law
+features: arithmetic, codegen, null, predicate, string
+compiler-path: codegen.arithmetic_dispatch, codegen.null_coalesce, codegen.predicate_dispatch, codegen.string_literal, infer.arithmetic, infer.nil, infer.type_predicate, reader.string_literal, runtime.string
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate, atom.null.nil, atom.runtime.string
+related-properties: signal_v13_atom_string_contains_substring
+signal: disabled-duplicate
+corpus-role: merged-duplicate
+args: 
+type: Bool
+expect: True
+description: nil? must recognize nil literal.
+law: (nil? nil)
+disabled-reason: exact duplicate source/args/expect merged by signal-v13
+merged-into: deep_codegen_type_nil_pred_nil_true
+demoted-from: stable-by-signal-v13

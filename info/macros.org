@@ -1,13 +1,26 @@
 #+TITLE: Macros
 #+STARTUP: showeverything
 #+OPTIONS: toc:3 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:macros:info:
 
-[[file:index.org][<- Back to Index]] · [[file:macro-patterns.org][Macro Patterns]]
+:PROPERTIES:
+:ID:       monadc.info.macros
+:CONTEXT:  monadc.context.macro, monadc.context.reader
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:macro-patterns.org][Macro Patterns]] · [[file:syntax.org][Syntax]] · [[file:quote.org][Quote]] · [[file:define.org][Define]] · [[file:lambda.org][Lambda]] · [[file:wisp.org][Wisp Syntax]]
 
 Monad supports compile-time metaprogramming via macros ([[file:../macro.c]]).
 There is no separate =macro= keyword — macros are ordinary =define= forms
 whose lambda declares =-> Syntax= as the return type
-([[file:../context/macro.org::macro-syntax-convention]]).
+([[file:../context/macro.org::macro-syntax-convention][context/macro.org — Syntax convention]]).
+
+Implementation: [[file:../macro.c][macro.c]] (expander, 765+ lines),
+[[file:../context/macro.org][context/macro.org]] (architecture, hygiene, variadic splicing).
+Test coverage: macro expansion is tested by codegen fixtures that use
+macro-defined forms; the fixpoint cap (1024 rounds) at
+[[file:../macro.c::32][macro.c:32]] is exercised by recursive macro tests.
 
 * How Macros Work
 
@@ -34,11 +47,22 @@ Define a macro as a function returning =Syntax=:
   42)
 #+END_SRC
 
+#+BEGIN_SRC wisp
+;; A macro that discards its argument and returns 42
+define my-macro x -> Syntax
+  42
+#+END_SRC
+
 Variadic macros use =. name= for the rest argument:
 
 #+BEGIN_SRC monad
 (define when :: condition . body -> Syntax
   (if condition (begin . body)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define when :: condition . body -> Syntax
+  if condition (begin . body)
 #+END_SRC
 
 The =Syntax= return type is what distinguishes macros from functions. The
@@ -58,6 +82,13 @@ is the output template ([[file:../context/macro.org::marco-quasi-output]]):
     #(begin)))
 #+END_SRC
 
+#+BEGIN_SRC wisp
+define assert condition message -> Syntax
+  if debug-mode
+    #(when (not condition) (error message))
+    #(begin)
+#+END_SRC
+
 Currently, code outside =#()= is not evaluated at compile time — both branches
 of the conditional survive into the output. Full compile-time evaluation of the
 non-=#()= portion is future work ([[file:../context/macro.org::think.context.macro.quasi-output-eval]]).
@@ -75,6 +106,13 @@ Construction uses plain function calls — no quasiquotation needed:
 (double-it 5)  ;; expands to (* 2 5)
 #+END_SRC
 
+#+BEGIN_SRC wisp
+define double-it x -> Syntax
+  list '* 2 x
+
+double-it 5  ;; expands to (* 2 5)
+#+END_SRC
+
 =Syntax= is a first-class type in the surface type system but does not exist at
 runtime — macro defines are consumed during expansion and no LLVM IR is emitted
 for them.
@@ -88,6 +126,13 @@ Use =match= to destructure the argument list:
   []       -> True
   [x]      -> x
   [x|rest] -> (if x (my-and . rest) False))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define my-and . args -> Syntax
+  []       -> True
+  [x]      -> x
+  [x|rest] -> (if x (my-and . rest) False)
 #+END_SRC
 
 * Expansion Phase
@@ -126,6 +171,12 @@ single-element rest wraps in =(begin ...)=
 ;; rest spliced into the 'if' tail produces N-ary chaining
 #+END_SRC
 
+#+BEGIN_SRC wisp
+define my-and . args -> Syntax
+  [x|rest] -> (if x (my-and . rest) False)
+;; rest spliced into the 'if' tail produces N-ary chaining
+#+END_SRC
+
 * Important Notes
 
 - Macros run at compile time.
@@ -138,6 +189,14 @@ single-element rest wraps in =(begin ...)=
   between compilation units.
 - No ellipsis =...= patterns (Scheme-style) — variadic behaviour is via a
   single rest parameter ([[file:../context/macro.org::think.context.macro.pattern-variables]]).
+
+* Related Pages
+
+- [[file:macro-patterns.org][Macro Patterns]] -- common macro recipes
+- [[file:syntax.org][Syntax]] -- Syntax type details
+- [[file:quote.org][Quote]] -- quote and quasiquote in macros
+- [[file:define.org][Define]] -- define-based macros
+- [[file:wisp.org][Wisp Syntax]] -- Wisp syntax and macros
 
 * Context Links
 

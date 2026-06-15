@@ -1,13 +1,26 @@
 #+TITLE: Wisp Syntax
 #+STARTUP: showeverything
 #+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:wisp:info:
 
-[[file:index.org][<- Back to Index]] · [[file:advanced-wisp.org][Advanced Wisp]] · [[file:syntax.org][S-expression Syntax]]
+:PROPERTIES:
+:ID:       monadc.info.wisp
+:CONTEXT:  monadc.context.wisp, monadc.context.reader, monadc.context.language
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:syntax.org][Syntax]] · [[file:advanced-wisp.org][Advanced Wisp]] · [[file:lambda.org][Lambda]] · [[file:define.org][Define]] · [[file:quote.org][Quote]] · [[file:conditionals.org][Conditionals]]
 
 Wisp is an indentation-aware surface syntax for Monad
-([[file:../wisp.c]]). It expands to standard S-expressions in a pre-pass before
+([[file:../wisp.c]], 4785+ lines). It expands to standard S-expressions in a pre-pass before
 the reader — both produce identical ASTs and mix freely in the same file
-([[file:../context/wisp.org::wisp-architecture]]).
+([[file:../context/wisp.org::wisp-architecture][context/wisp.org — architecture]]).
+
+Test coverage: Wisp desugaring is tested by =tests/sugar/= (192 TSV entries
+covering all sugar types) and =tests/wisp/= full compile/run tests. Many
+=reader-atoms.tsv= entries also exercise wisp paths. Codegen coverage:
+=rt_wisp_*.mon= and =wisp_*.mon= fixtures in
+[[file:../tests/codegen/][tests/codegen/]].
 
 * How It Works
 
@@ -350,6 +363,14 @@ Wisp desugaring is tested by =tests/sugar/= (192 TSV entries covering all sugar
 types). Full compile/run tests are in =tests/wisp/=. Many =reader-atoms.tsv=
 entries also exercise wisp paths since the test runner feeds source through the
 full wisp→reader pipeline ([[file:../context/wisp.org::wisp-coverage]]).
+
+* Related Pages
+
+- [[file:syntax.org][Syntax]] -- S-expression and Wisp syntax overview
+- [[file:advanced-wisp.org][Advanced Wisp]] -- Wisp patterns and known bugs
+- [[file:lambda.org][Lambda]] -- Wisp arrow syntax
+- [[file:define.org][Define]] -- define in Wisp
+- [[file:conditionals.org][Conditionals]] -- Wisp conditional forms
 
 * Context Links
 

@@ -1,0 +1,15 @@
+name: structured_v10_strategy_phi_env_array_index_phi_value
+section: v10-strategy-phi_env
+tier: stable
+kind: law
+features: array, index, if, phi, strategy
+compiler-path: codegen.array_literal, codegen.branch_phi, codegen.if_phi, infer.array, infer.if_phi, reader.array_literal, reader.ast_if, runner.strategy_arg, runner.typed_generator
+uses-atoms: atom.control.if, atom.core.equality, atom.core.plus, atom.runtime.array
+related-properties: signal_v13_atom_array_index_valid, signal_v13_atom_equality_reflexive, signal_v13_atom_if_same_branch_eliminates, signal_v13_atom_plus_associative, signal_v13_atom_plus_commutative, signal_v13_atom_plus_identity_zero
+signal: medium
+corpus-role: semantic-law
+args: a:Int@if+phi+env b:Int@with+do p:Bool@logic+if
+type: Bool
+expect: True
+description: V10 strategy property array_index_phi_value generated with phi_env arguments to stress compiler dispatch, envs, and PHI lowering.
+law: (= ([{a} {b} (+ {a} {b})] (if {p} 0 1)) (if {p} {a} {b}))
