@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.deep.deep_diag_array_index_type
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: type-errors
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostics.type.errors.deep.diag.array.index.type
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Expected diagnostic for non-integer array index.
+;; TEST-ATOM: Array index codegen should require numeric index type.
+;; TEST-EXPECT: fail:compile
+;; TEST-COVERAGE: codegen.c:array index type checking
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/type-errors/atom.codegen.diagnostics.type.errors.deep.diag.array.index.type
+;; TEST-MENU-PATH: codegen/errors/codegen/type-errors/atom.codegen.diagnostics.type.errors.deep.diag.array.index.type
+;; TEST-ATOM-LEAF: atom.codegen.diagnostics.type.errors.deep.diag.array.index.type
+;; TEST-CLI-TARGET: codegen errors codegen type-errors
+(module Main)
+(define xs [1 2 3])
+(show (xs "bad"))

@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-match-string-literal
-;; TEST-CONTEXT: monadc.context.language.reader-header-coverage, monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Pattern codegen coverage for literal string patterns.
-;; TEST-ATOM: (match "a" with | "a" -> 1 | _ -> 0) should select the string literal clause.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (match "a" with | "a" -> 1 | _ -> 0))

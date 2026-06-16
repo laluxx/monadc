@@ -1,0 +1,191 @@
+#+TITLE: Test Contracts and Context Links
+#+AUTHOR: GPT-5.5 Thinking
+#+DATE: 2026-06-16
+#+CREATED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-16
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:tests:contracts:quality:
+#+PROPERTY: CONTEXT_VERSION 3
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.tests
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY hideblocks
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* Purpose
+:PROPERTIES:
+:ID: monadc.context.tests.contracts
+:CUSTOM_ID: test-contracts-purpose
+:CONTEXT_KIND: tests
+:CONTEXT_DESCRIPTION: The contract between executable tests and context nodes.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/test-contracts.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.tests.contracts-purpose src:context/test-contracts.org conf:high]
+  Test metadata is part of the language specification. A fixture without
+  context, purpose, expectation, and tier is weaker than a fixture that explains
+  the compiler contract it protects.
+
+* Tier Policy
+:PROPERTIES:
+:ID: monadc.context.tests.tier-policy
+:CUSTOM_ID: test-tier-policy
+:CONTEXT_KIND: tests
+:CONTEXT_DESCRIPTION: The green/known-fail/future tier split used by the enhanced runner.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/test-contracts.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Current tier model from enhanced test inventory
+| Tier | Count | Meaning | Default gate? |
+|------+-------+---------+---------------|
+| regression | 1267 | Passing behavior that should gate normal changes | yes |
+| known-fail | 780 | Active bug witnesses, expected to fail until fixed | no |
+| future | 735 | Aspirational contracts/spec pressure | no |
+
+[DEC id:dec.tests.default-gate-regression date:2026-06-16 by:llm]
+  The default test gate should run only =TEST-TIER: regression=. Known-fail and
+  future tests are valuable, but they should not hide fresh regressions behind a
+  wall of expected red output.
+
+[DEC id:dec.tests.red-tests-are-assets date:2026-06-16 by:llm]
+  Red tests should not be deleted merely because they fail. They should be
+  classified. Delete only malformed, duplicate, misleading, or obsolete tests.
+
+* Required Test Metadata
+:PROPERTIES:
+:ID: monadc.context.tests.required-metadata
+:CUSTOM_ID: test-required-metadata
+:CONTEXT_KIND: schema
+:CONTEXT_DESCRIPTION: Minimum metadata required for a durable test fixture.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/test-contracts.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Fixture metadata schema
+| Field | Required | Meaning |
+|-------+----------+---------|
+| =TEST-ID= | yes | Globally unique stable test ID |
+| =TEST-CONTEXT= | yes | Existing =monadc.context.*= heading ID |
+| =TEST-PURPOSE= | yes | Human-readable contract |
+| =TEST-EXPECT= | yes | Expected action/result class |
+| =TEST-TIER= | yes | =regression=, =known-fail=, or =future= |
+| =TEST-STATUS= | yes | =active=, =known-fail=, =future=, =archived= |
+| =TEST-KNOWN-FAILURE= | for red tiers | Why it is quarantined |
+| =TEST-COVERAGE= | recommended | Source functions/paths covered |
+
+[DEC id:dec.tests.context-link-required date:2026-06-16 by:llm]
+  Every durable test must connect to a real context heading. Dangling
+  =TEST-CONTEXT= links should fail validation because they break the garden graph.
+
+* Current Inventory Snapshot
+:PROPERTIES:
+:ID: monadc.context.tests.inventory-snapshot
+:CUSTOM_ID: test-inventory-snapshot
+:CONTEXT_KIND: observation
+:CONTEXT_DESCRIPTION: Snapshot of the enhanced test tar inventory used to improve context links.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/test-contracts.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests.inventory.snapshot src:tests/docs/inventory.json conf:high]
+  Enhanced test inventory registers 2782 tests. Origins:
+  fixture=1756, corpus=1026.
+  Context links: total=5282, unique_contexts=77, missing=0.
+
+#+CAPTION: Tests by section
+| Section | Count |
+|---------+-------|
+| codegen | 1756 |
+| interaction | 100 |
+| language | 597 |
+| layout | 10 |
+| ratio | 31 |
+| refinement | 104 |
+| sugar | 110 |
+| superset | 50 |
+| wisp | 24 |
+
+#+CAPTION: Tests by expectation
+| Expectation | Count |
+|-------------+-------|
+| compile | 17 |
+| compile, run | 976 |
+| fail:compile | 766 |
+| inventory | 1 |
+| json:ast, compile, run | 2 |
+| parse-json | 1020 |
+
+* Promotion Rules
+:PROPERTIES:
+:ID: monadc.context.tests.promotion-rules
+:CUSTOM_ID: test-promotion-rules
+:CONTEXT_KIND: workflow
+:CONTEXT_DESCRIPTION: How a red test becomes a regression test.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/test-contracts.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.tests.promote-with-proof date:2026-06-16 by:llm]
+  To promote a =known-fail= or =future= test to =regression=, update the fixture
+  metadata, run the specific test, run the regression gate, and record the
+  compiler change in the nearest topic context file.
+
+[TODO id:todo.tests.add-tier-history owner:codex status:open]
+  Add optional =TEST-PROMOTED-BY= and =TEST-PROMOTED-DATE= fields once test
+  promotion becomes frequent enough to need audit history.

@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.arithmetic-div
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Integer division evaluates at runtime.
-;; TEST-ATOM: (/ 10 3) evaluates to 3.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (/ 10 3))

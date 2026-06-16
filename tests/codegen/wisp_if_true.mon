@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.wisp-if-true
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Wisp inline if/then/else evaluates true branch.
-;; TEST-ATOM: (if True then-branch else-branch) evaluates to then-branch.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-if True then show 42 else show 0

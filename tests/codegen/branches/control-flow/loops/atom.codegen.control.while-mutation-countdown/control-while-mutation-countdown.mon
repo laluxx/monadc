@@ -1,0 +1,35 @@
+;; TEST-ID: tests.codegen.branch.control-while-mutation-countdown
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: loops
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise while loop blocks, repeated mutation, and exit condition.
+;; TEST-ATOM: atom.codegen.control.while-mutation-countdown
+;; TEST-CODEGEN-ATOM: atom.codegen.control.while-mutation-countdown
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.while.cond
+;; TEST-CODEGEN-PATH: codegen.while.body
+;; TEST-CODEGEN-PATH: codegen.while.exit
+;; TEST-DEPENDS-ON: atom.codegen.control.sequence-return-last
+;; TEST-TAG: run
+;; TEST-TAG: control
+;; TEST-TAG: while
+;; TEST-COVERAGE: codegen.c:8130-8175 while condition/body/end blocks
+;; TEST-COVERAGE: codegen.c:7642 set! branch
+
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/loops/atom.codegen.control.while-mutation-countdown
+;; TEST-MENU-PATH: codegen/branches/control-flow/loops/atom.codegen.control.while-mutation-countdown
+;; TEST-ATOM-LEAF: atom.codegen.control.while-mutation-countdown
+;; TEST-CLI-TARGET: codegen branches control-flow loops
+(module Main)
+(define x 3)
+(define acc 0)
+(while (> x 0)
+  (set! acc (+ acc x))
+  (set! x (- x 1)))
+(show acc)
+(show x)

@@ -1,0 +1,17 @@
+name: structured_oracle_string_count_generated_r04_disabled_duplicate_ff543cf2
+section: current-oracle-string-count-generated
+tier: experimental
+kind: law
+features: oracle, string, count
+compiler-path: codegen.string_literal, reader.string_literal, runner.expect_python, runner.oracle_tier, runner.typed_generator, runtime.string
+signal: high
+corpus-role: merged-duplicate
+uses-atoms: atom.runtime.string
+related-properties: signal_atom_string_contains_substring
+merged-into: structured_oracle_string_count_generated_r01
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: s:String@escape
+type: Int
+expect-python: len(s)
+description: V10 oracle property string_count_generated round 4 using expect-python and dependent typed generators.
+law: (count {s})

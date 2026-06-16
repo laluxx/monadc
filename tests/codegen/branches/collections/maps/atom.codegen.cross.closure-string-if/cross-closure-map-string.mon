@@ -1,0 +1,35 @@
+;; TEST-ID: tests.codegen.branch.cross-closure-map-string
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-SUBSET: maps
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise closure capture, string indexing, and conditional return in the same codegen path.
+;; TEST-ATOM: atom.codegen.cross.closure-string-if
+;; TEST-CODEGEN-ATOM: atom.codegen.cross.closure-string-if
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.cross.closure
+;; TEST-CODEGEN-PATH: codegen.cross.string-index
+;; TEST-CODEGEN-PATH: codegen.cross.if-char-phi
+;; TEST-DEPENDS-ON: atom.codegen.closure.capture-and-call
+;; TEST-DEPENDS-ON: atom.codegen.collection.string-boundary-index
+;; TEST-TAG: run
+;; TEST-TAG: cross
+;; TEST-TAG: closure
+;; TEST-COVERAGE: codegen.c:9900 string-as-function index branch
+;; TEST-COVERAGE: codegen.c:9900-12100 closure call branches
+;; TEST-COVERAGE: codegen.c:7743-7965 if PHI branch
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/maps/atom.codegen.cross.closure-string-if
+;; TEST-MENU-PATH: codegen/branches/collections/maps/atom.codegen.cross.closure-string-if
+;; TEST-ATOM-LEAF: atom.codegen.cross.closure-string-if
+;; TEST-CLI-TARGET: codegen branches collections maps
+(module Main)
+(define pick (lambda ([s : String] -> Fn) (lambda ([i : Int] -> Char) (if (< i (count s)) (s i) (Char 63)))))
+(define p (pick "abc"))
+(show (p 1))
+(show (p 9))

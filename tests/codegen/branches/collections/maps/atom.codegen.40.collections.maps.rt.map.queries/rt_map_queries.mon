@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.rt-map-queries
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.maps.rt.map.queries
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: maps
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime map predicates and query helpers operate on map literals.
+;; TEST-ATOM: Map?, find, keys, and vals observe a literal keyword map.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:40-collections/maps branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/maps/atom.codegen.40.collections.maps.rt.map.queries
+;; TEST-MENU-PATH: codegen/branches/collections/maps/atom.codegen.40.collections.maps.rt.map.queries
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.maps.rt.map.queries
+;; TEST-CLI-TARGET: codegen branches collections maps
+(module Main)
+(define m #{:a 1 :b 2})
+(show (Map? m))
+(show (find m :a))
+(show (keys m))
+(show (vals m))

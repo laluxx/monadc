@@ -15,21 +15,22 @@ Test coverage: character operations are verified by =rt_char_*.mon= fixtures in 
 
 The =Char= type represents a single Unicode codepoint. At the type level it is a 32-bit codepoint; at the codegen level it is lowered to =i8= for ASCII-compatible values. The runtime tag =RT_CHAR= distinguishes it from other scalar types.
 
-* Character Literals ([[file:../reader.c::1369]])
+See [[file:strings.org][Strings]] for strings as character sequences and [[file:types.org][Types]] for the ground type hierarchy.
+
+* 1. Character Literals ([[file:../reader.c::1369]])
 
 Characters use single-quote delimiters (=TOK_CHAR=):
 
 #+BEGIN_SRC monad
-'a'                ;; Char 'A'
+'a'                ;; Char 'a'
 '\n'               ;; Newline
 '\x41'             ;; Hex escape — 'A'
 '\u03C0'           ;; Unicode — π
 '\''               ;; Literal single quote
 '\\'               ;; Literal backslash
-#+END_SRC
 
 #+BEGIN_SRC wisp
-'a'                ;; Char 'A'
+'a'                ;; Char 'a'
 '\n'               ;; Newline
 '\x41'             ;; Hex escape — 'A'
 '\u03C0'           ;; Unicode — π
@@ -50,7 +51,16 @@ Supported escape sequences:
 | =\xNN=     | Hex codepoint     |
 | =\uNNNN=   | Unicode codepoint |
 
-* Char Type
+Note: In [[file:wisp.org][Wisp]] syntax, ='\n'= may fail because the Wisp expander expands =\\n= to a real newline. Use S-expression syntax for escape sequences involving backslash (see [[file:strings.org][Wisp char escape limitation]]).
+
+Key Points:
+- Character literals use single-quote delimiters: ='a'=, ='\n'=, ='\x41'=, ='\u03C0'=
+- Supported escapes: =\n=, =\t=, =\r=, =\\=, =\'=, =\0=, =\xNN=, =\uNNNN=
+- In Wisp mode, backslash escapes may break; use s-expression syntax for literals with escapes
+
+See also: [[file:wisp.org][Wisp]]
+
+* 2. Char Type
 
 The =Char= type is a primitive ground type ([[file:types.org][Types]]) defined as =TYPE_CHAR= in the type system ([[file:../types.h::8]]). Its kind is =TYPE_KIND_GROUND=.
 
@@ -58,63 +68,70 @@ The =Char= type is a primitive ground type ([[file:types.org][Types]]) defined a
 - **Codegen lowering:** =i8= for ASCII-compatible codepoints
 - **LLVM global format:** stored as =i8= in string globals
 
-* Type Conversions
+This page covers the =Char= type: character literals, type
+conversions, type predicates, and string iteration.
 
-Character conversion operations dispatch through strcmp handlers ([[file:../codegen.c::13144]]):
+See [[file:../context/types.org][context/types.org]] for =TYPE_CHAR= and [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]].
+
+* 3. Type Conversions
+
+Character conversion operations dispatch through strcmp handlers ([[file:../codegen.c::13144]], [[file:../context/codegen-ops.org][context/codegen-ops.org]]):
 
 #+BEGIN_SRC monad
-(Char 65)           ;; 'A' — integer codepoint to Cha)
-(Int 'A')           ;; 65  — Char to integer codepoin)
-(Hex 255)           ;; 0xFF — integer to He)
-(Bin 42)            ;; 0b101010 — integer to Binar)
-(Oct 63)            ;; 0o77 — integer to Octa)
+(Char 65)           ;; 'A' — integer codepoint to Char
+(Int 'A')           ;; 65  — Char to integer codepoint
+(Hex 255)           ;; 0xFF — integer to Hex
+(Bin 42)            ;; 0b101010 — integer to Binary
+(Oct 63)            ;; 0o77 — integer to Octal
 #+END_SRC
 
 #+BEGIN_SRC wisp
-Char 65           ;; 'A' — integer codepoint to Cha)
-Int 'A'           ;; 65  — Char to integer codepoin)
-Hex 255           ;; 0xFF — integer to He)
-Bin 42            ;; 0b101010 — integer to Binar)
-Oct 63            ;; 0o77 — integer to Octa)
+Char 65           ;; 'A' — integer codepoint to Char
+Int 'A'           ;; 65  — Char to integer codepoint
+Hex 255           ;; 0xFF — integer to Hex
+Bin 42            ;; 0b101010 — integer to Binary
+Oct 63            ;; 0o77 — integer to Octal
 #+END_SRC
 
-All conversion paths are verified by test fixtures.
+All conversion paths are verified by test fixtures. See [[file:casting.org][Casting]] for the full conversion reference.
 
-* Type Predicate
+See also: [[file:casting.org][Casting]]
+
+* 4. Type Predicate
 
 #+BEGIN_SRC monad
-(Char? 'a')         ;; Tru)
-(Char? 65)          ;; Fals)
-(Char? "hello")     ;; Fals)
+(Char? 'a')         ;; True
+(Char? 65)          ;; False
+(Char? "hello")     ;; False
 #+END_SRC
 
 #+BEGIN_SRC wisp
-Char? 'a'         ;; Tru)
-Char? 65          ;; Fals)
-Char? "hello"     ;; Fals)
+Char? 'a'         ;; True
+Char? 65          ;; False
+Char? "hello"     ;; False
 #+END_SRC
 
 The =Char?= predicate checks =TYPE_CHAR= kind at the type level.
 
-* Character Operations
+* 5. Character Operations
 
-** String Indexing ([[file:../codegen.c::9732]])
+** 5.1. String Indexing ([[file:../codegen.c::9732]])
 
 String indexing returns a =Char=:
 
 #+BEGIN_SRC monad
-"hello" 0)         ;; 'h
-"hello" 1)         ;; 'e
+("hello" 0)        ;; 'h'
+("hello" 1)        ;; 'e'
 #+END_SRC
 
 #+BEGIN_SRC wisp
-"hello" 0)         ;; 'h
-"hello" 1)         ;; 'e
+("hello" 0)        ;; 'h'
+("hello" 1)        ;; 'e'
 #+END_SRC
 
-Postfix bracket syntax also works: =xs[0]= ([[file:../reader.c::6621]]). Both compile to a character load with bounds checking.
+Postfix bracket syntax also works: =xs[0]= ([[file:../reader.c::6621]]). Both compile to a character load with bounds checking. See [[file:strings.org][String Indexing]].
 
-** Iteration
+** 5.2. Iteration
 
 Strings iterate character-by-character via =for=:
 
@@ -140,7 +157,7 @@ for c -> "hello"
 ;; 'o'
 #+END_SRC
 
-Or backwards
+Or backwards:
 
 #+BEGIN_SRC monad
 for c <- "hello"
@@ -164,6 +181,22 @@ for c <- "hello"
 ;; 'h'
 #+END_SRC
 
+See [[file:iteration.org][Iteration]] for the full =for= loop reference.
+
+See also: [[file:iteration.org][Iteration]]
+
+* Implementation Notes
+
+Character handling source components:
+
+| Component | Source | Role |
+|-----------+--------+------|
+| =TOK_CHAR= parsing | [[file:../reader.c::1369][reader.c:1369]] | Character literal tokenization |
+| Escape sequence handler | [[file:../reader.c][reader.c]] | =\n=, =\xNN=, =\uNNNN= parsing |
+| =TYPE_CHAR= definition | [[file:../types.h::8][types.h:8]] | Ground type for characters |
+| Char codegen lowering | [[file:../codegen.c][codegen.c]] | LLVM =i8= for ASCII values |
+| String indexing codegen | [[file:../codegen.c::9732][codegen.c:9732]] | Bounds-checked character load |
+| =RT_CHAR= runtime tag | [[file:../context/language.org::runtime-value-system][context/language.org]] | Runtime value discrimination |
 
 * Related Pages
 
@@ -171,14 +204,25 @@ for c <- "hello"
 - [[file:collections.org][Collections]] — strings as character sequences
 - [[file:types.org][Types]] — ground type hierarchy
 - [[file:numeric.org][Numeric Types]] — Int, Float, Hex, Oct, Bin conversions
-
+- [[file:casting.org][Casting]] — type conversion reference
+- [[file:iteration.org][Iteration]] — for loops over strings
+- [[file:show.org][Show]] — character display representation
+- [[file:core.org][Core Library]] — built-in function dispatch
+- [[file:wisp.org][Wisp]] — Wisp char escape limitation
 
 * Context Links
 
 - [[file:../context/language.org::working-dispatch][context/language.org — Working dispatch]]
 - [[file:../context/types.org][context/types.org]] — TYPE_CHAR
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — conversion dispatch
 - [[file:../codegen.c::9732][codegen.c]] — String indexing codegen
 - [[file:../reader.c::1365][reader.c]] — Character literal parsing
 
+* Further Reading
 
-
+- [[file:../context/reader.org][context/reader.org]] — detailed reader tokenisation
+- [[file:../context/codegen.org][context/codegen.org]] — LLVM IR generation for characters
+- [[file:../context/language.org][context/language.org]] — character semantics
+- [[file:../tests/codegen/][tests/codegen/]] — character test fixtures
+- [[file:../context/features.org][context/features.org]] — character feature tracking
+- [[file:../types.h::8][types.h]] — TYPE_CHAR definition

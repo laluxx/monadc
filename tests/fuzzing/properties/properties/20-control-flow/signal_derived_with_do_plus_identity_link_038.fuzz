@@ -1,0 +1,16 @@
+name: signal_derived_with_do_plus_identity_link_038
+section: current-atom-derived
+tier: stable
+kind: law
+features: with, do, +, identity, equality, env
+compiler-path: infer.env.push, codegen.binding.with, codegen.expr.do, codegen.expr.binary-add
+signal: medium
+corpus-role: derived-atom-linked
+uses-atoms: atom.core.plus, atom.core.plus.identity.zero, atom.binding.with, atom.control.do, atom.core.equality
+depends-on: atom.core.plus.identity.zero, atom.binding.with.substitution, atom.control.do.last-value
+related-properties: signal_atom_plus_identity_zero, signal_atom_with_substitution, signal_atom_do_last_value
+args: x:Int@edge+with+do y:Int@edge+if
+type: Bool
+expect: True
+description: Derived property that explicitly links a real language/compiler path to foundational atom properties.
+law: (= (with [v (+ {x} 0)] (do {y} v)) {x})

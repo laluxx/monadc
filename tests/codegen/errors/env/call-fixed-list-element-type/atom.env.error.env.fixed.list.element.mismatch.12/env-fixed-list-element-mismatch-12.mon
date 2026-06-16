@@ -1,0 +1,37 @@
+;; TEST-ID: tests.codegen.env-error.env.fixed.list.element.mismatch.12
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: env-errors/call-fixed-list-element-type
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.env-error-coverage
+;; TEST-PURPOSE: Trigger env.c diagnostic: Couldn't match expected type
+;; TEST-ATOM: atom.env.error.env.fixed.list.element.mismatch.12
+;; TEST-CODEGEN-ATOM: atom.env.error.env.fixed.list.element.mismatch.12
+;; TEST-QUALITY: env-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ENV-ERROR: Couldn't match expected type
+;; TEST-ENV-PATH: env.c:857 call.fixed-list-element-type
+;; TEST-CODEGEN-PATH: diagnostic.env.call.fixed-list-element-type
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: env
+;; TEST-TAG: hm
+;; TEST-COVERAGE: env.c:857 Couldn't match expected type
+;; TEST-USES-ATOM: atom.env.error.env.fixed.list.element.mismatch.12
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.env.error
+;; TEST-USES-ATOM: atom.env.error.family.call.fixed.list.element.type
+;; TEST-DEPENDS-ON: atom.env.hm.call.fixed-list-element-type
+;; TEST-DEPENDS-ON: atom.codegen.collection.array.literal
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-REFINES: atom.env.error
+;; TEST-MENU: errors/env/call-fixed-list-element-type/atom.env.error.env.fixed.list.element.mismatch.12
+;; TEST-MENU-PATH: codegen/errors/env/call-fixed-list-element-type/atom.env.error.env.fixed.list.element.mismatch.12
+;; TEST-ATOM-LEAF: atom.env.error.env.fixed.list.element.mismatch.12
+;; TEST-CLI-TARGET: codegen errors env call-fixed-list-element-type
+
+(module Main)
+(define (env_list_elem_12 [xs : [Int Bool String]] -> Int) 0)
+(show (env_list_elem_12 [1 2 "ok"]))

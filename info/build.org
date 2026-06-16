@@ -13,102 +13,147 @@
 
 Test coverage: =make test= is the primary test target.
 
-The MonadC compiler uses a Makefile at the project root
+The Monad compiler uses a Makefile at the project root
 ([[file:../Makefile][Makefile]], 112 lines) for building =monad= and =libmonad.a=.
 The build manifest =package.yaml= (for user packages) is documented in
 [[file:package-dev.org][Package Development]]; its schema is documented at
 [[file:../context/buildsystem.org][context/buildsystem.org]].
 
+This page covers the build system: compilation pipeline, build modes,
+test targets, linking, install layout, and the package manifest format.
+
 For full build verification, test targets, and helper scripts, see
 [[file:../context/build.org][context/build.org]]. For Makefile structure, build
 modes, and LLVM discovery, see [[file:../context/makefile.org][context/makefile.org]].
 
-** Compilation Pipeline
+1. Compilation Pipeline
 
 #+BEGIN_SRC
-source → wisp → reader → macro → infer → dep → codegen → emit
+source -> wisp -> reader -> macro -> infer -> dep -> codegen -> emit
 #+END_SRC
 
-| Stage   | Source             | Description                              |
+| Stage | Source | Description |
 |---------+--------------------+------------------------------------------|
-| Wisp    | [[file:../wisp.c]]     | Indentation-based syntax → S-expressions |
-| Reader  | [[file:../reader.c]]   | S-expressions → AST nodes                |
-| Macro   | [[file:../macro.c]]    | Macro calls → expanded AST               |
-| Infer   | [[file:../infer.c]]    | Constraint generation and unification    |
-| Dep     | [[file:../dep.c]]      | Bidirectional dependent type checking    |
-| Codegen | [[file:../codegen.c]]  | AST → LLVM IR                            |
-| Emit    | LLVM TargetMachine | LLVM IR → =.o=                             |
+| Wisp | [[file:../wisp.c]] | Indentation-based syntax -> S-expressions (see [[file:wisp.org][Wisp]]) |
+| Reader | [[file:../reader.c]] | S-expressions -> AST nodes (see [[file:syntax.org][Syntax]]) |
+| Macro | [[file:../macro.c]] | Macro calls -> expanded AST (see [[file:macros.org][Macros]]) |
+| Infer | [[file:../infer.c]] | Constraint generation and unification (see [[file:type-inference.org][Type Inference]]) |
+| Dep | [[file:../dep.c]] | Bidirectional dependent type checking (see [[file:dependent-types.org][Dependent Types]]) |
+| Codegen | [[file:../codegen.c]] | AST -> LLVM IR |
+| Emit | LLVM TargetMachine | LLVM IR -> =.o= |
 
 For details on each stage, see [[file:../context/build.org][context/build.org]] and [[file:../context/makefile.org][context/makefile.org]].
+For the CLI dispatch that triggers this pipeline, see [[file:cli.org][CLI Reference]].
 
-** Three Build Modes
+*** Key Points
+- Seven stages from source to object file
+- Wisp and Reader handle syntax; Macro and Infer handle semantics
+- Codegen produces LLVM IR; Emit uses LLVM TargetMachine for final output
+
+See also: [[file:cli.org][CLI Reference]]
+
+2. Three Build Modes
 
 The Makefile at the project root defines three build modes via target-specific
 CFLAGS overrides. All three build the =monad= binary and =libmonad.a= static
 archive.
 
 #+CAPTION: Build Modes
-| Mode    | Make Target      | CFLAGS                                                | Use Case                                                         |
+| Mode | Make Target | CFLAGS | Use Case |
 |---------+------------------+-------------------------------------------------------+------------------------------------------------------------------|
-| Debug   | =make= or =make all= | =-g -DDEBUG=                                            | Development, debugging (default)                                 |
-| ASan    | =make asan=        | =-g -fsanitize=address -fno-omit-frame-pointer -DDEBUG= | Memory error detection (-fsanitize=address added to LDFLAGS too) |
-| Release | =make release=     | =-DNDEBUG -O2=                                          | Production, benchmarks                                           |
+| Debug | =make= or =make all= | =-g -DDEBUG= | Development, debugging (default) |
+| ASan | =make asan= | =-g -fsanitize=address -fno-omit-frame-pointer -DDEBUG= | Memory error detection |
+| Release | =make release= | =-DNDEBUG -O2= | Production, benchmarks |
 
 - **Debug** (default): Full DWARF symbols, assertions enabled, no optimisation.
   Fastest edit-compile-test cycle, slowest runtime.
 - **ASan**: AddressSanitizer catches buffer overflows, use-after-free, and memory
-  leaks at runtime (~2× overhead). Run before release, especially important for
+  leaks at runtime (~2x overhead). Run before release, especially important for
   a compiler using arena allocation (see [[file:../context/arena.org][context/arena.org]]).
 - **Release**: Optimised binary with =-O2=, no debug symbols, no assertions.
   Use for production installation and benchmarking.
 
 For the full LLVM analysis of these trade-offs, see
 [[file:../context/build.org][context/build.org]].
+For the arena allocator used by the compiler, see [[file:arena.org][Arena]].
 
-** Verification Ladder
+*** Key Points
+- Debug: symbols + assertions, no optimisation (fastest compile)
+- ASan: address sanitizer (best for catching memory bugs)
+- Release: -O2 with assertions off (fastest runtime)
+- All modes build both =monad= binary and =libmonad.a=
+
+See also: [[file:arena.org][Arena]]
+
+3. Verification Ladder
 
 Every install should follow this sequence:
 
-| Step    | Command           | Privilege | Required Before |
+| Step | Command | Privilege | Required Before |
 |---------+-------------------+-----------+-----------------|
-| Clean   | =make clean=        | user      | compile         |
-| Compile | =make=              | user      | install         |
-| Install | =sudo make install= | root      | system use      |
+| Clean | =make clean= | user | compile |
+| Compile | =make= | user | install |
+| Install | =sudo make install= | root | system use |
 
 Always run =make clean= after modifying compiler headers. The Makefile does not
 track header dependencies automatically (see
 [[file:../context/makefile.org][context/makefile.org]]).
 
-** Test Targets
+*** Key Points
+- Always clean after header changes (no automatic header dependency tracking)
+- Install requires root for default =/usr/local= prefix
+- Clean -> Compile -> Install is the safe upgrade path
+
+See also: [[file:contributing.org][Contributing]]
+
+4. Test Targets
 
 #+CAPTION: Make Test Targets
-| Target         | Command                   | What It Tests                         |
+| Target | Command | What It Tests |
 |----------------+---------------------------+---------------------------------------|
-| =make test=      | =python3 tests/run.py=      | Codegen + reader (atoms, sugar, lang) |
-| =make test-core= | =python3 tests/run_core.py= | Core module per-module tests          |
+| =make test= | =python3 tests/run.py= | Codegen + reader (atoms, sugar, lang) |
+| =make test-core= | =python3 tests/run_core.py= | Core module per-module tests |
 
 Both targets build the compiler first (=all=) then run the test harness.
-Every test fixture is compiled to a binary and executed — these are codegen
+Every test fixture is compiled to a binary and executed -- these are codegen
 tests that exercise the full compilation pipeline.
 
 For the architecture of the test suite, see
 [[file:../context/tests-arch.org][context/tests-arch.org]].
+For the CLI test runner, see [[file:testing.org][Testing]].
 
-** Helper Script Targets
+*** Key Points
+- Two test targets: full codegen tests and core module tests
+- Each fixture compiles source -> runs binary -- end-to-end verification
+- Test runner rebuilds the compiler first on every invocation
+
+See also: [[file:testing.org][Testing]]
+
+5. Helper Script Targets
 
 These Makefile front-doors wrap Python helper scripts (see
 [[file:../context/build.org][context/build.org]] and [[file:../context/scripts.org][context/scripts.org]]):
 
 #+CAPTION: Helper Script Make Targets
-| Target                           | Command                                  | Purpose                       |
+| Target | Command | Purpose |
 |----------------------------------+------------------------------------------+-------------------------------|
-| =make generate-asm-tests=          | =python3 create_asm_tests.py=              | Regenerate asm codegen subset |
-| =make generate-asm-tests-extra=    | =python3 create_asm_tests_extra.py=        | Compatibility asm generator   |
-| =make test-runner=                 | =python3 tests/test_run.py=                | Unit tests for test runner    |
-| =make test-context-visualizer=     | =python3 tests/test_context_visualizer.py= | Unit tests for visualizer     |
-| =make test-fuzzing= / =make fuzzing= | =python3 tests/fuzzing/fuzz_codegen.py=    | Deterministic codegen fuzzing |
+| =make generate-asm-tests= | =python3 create_asm_tests.py= | Regenerate asm codegen subset |
+| =make generate-asm-tests-extra= | =python3 create_asm_tests_extra.py= | Compatibility asm generator |
+| =make test-runner= | =python3 tests/test_run.py= | Unit tests for test runner |
+| =make test-context-visualizer= | =python3 tests/test_context_visualizer.py= | Unit tests for visualizer |
+| =make test-fuzzing= / =make fuzzing= | =python3 tests/fuzzing/fuzz_codegen.py= | Deterministic codegen fuzzing |
 
-** Linking
+For inline ASM tests and generation, see [[file:asm.org][Assembly]].
+For fuzzing property details, see [[file:fuzzing.org][Fuzzing]].
+
+*** Key Points
+- Helper targets wrap Python scripts for test generation and fuzzing
+- ASM test generators create codegen fixtures from specification
+- Fuzzing target exercises the compiler with random valid inputs
+
+See also: [[file:fuzzing.org][Fuzzing]]
+
+6. Linking
 
 The =monad= binary is linked with =gcc= (CC in the Makefile). Linker flags:
 
@@ -116,53 +161,111 @@ The =monad= binary is linked with =gcc= (CC in the Makefile). Linker flags:
 LDFLAGS = -lm -lreadline -lgmp $(shell llvm-config --ldflags --libs core) -lclang
 #+END_SRC
 
-- =-lm= — math library
-- =-lreadline= — line editing for the REPL
-- =-lgmp= — GNU Multiple Precision Arithmetic Library
-- =$(shell llvm-config --ldflags --libs core)= — LLVM core libraries (version
+- =-lm= -- math library
+- =-lreadline= -- line editing for the REPL (see [[file:repl.org][REPL]])
+- =-lgmp= -- GNU Multiple Precision Arithmetic Library (see [[file:arithmetic.org][Arithmetic]])
+- =$(shell llvm-config --ldflags --libs core)= -- LLVM core libraries (version
   detected at build time)
-- =-lclang= — libclang for FFI header parsing
-- =-rdynamic= — runtime symbols available for FFI =dlopen=
+- =-lclang= -- libclang for FFI header parsing (see [[file:ffi.org][FFI]])
+- =-rdynamic= -- runtime symbols available for FFI =dlopen=
 
 The static runtime library =libmonad.a= (from =runtime.c= and =arena.c=,
-compiled with =-fPIC=) is absorbed directly into the binary — no shared
+compiled with =-fPIC=) is absorbed directly into the binary -- no shared
 library dependency at runtime.
 
 For details on LLVM discovery and linker fallback behaviour, see
 [[file:../context/makefile.org][context/makefile.org]].
 
-** Install Layout
+*** Key Points
+- Five linked libraries: math, readline, GMP, LLVM core, libclang
+- Static runtime (=libmonad.a=) is absorbed into the binary
+- No shared library dependency at runtime for the Monad-specific parts
+
+See also: [[file:ffi.org][C FFI]]
+
+7. Install Layout
 
 =make install= copies files under =PREFIX= (default =/usr/local=):
 
-| Path                             | Content                   |
+| Path | Content |
 |----------------------------------+---------------------------|
-| =PREFIX/bin/monad=                 | Compiler binary           |
-| =PREFIX/lib/libmonad.a=            | Static runtime library    |
-| =PREFIX/include/monad/runtime.h= | Runtime C header          |
-| =PREFIX/lib/monad/core/=           | Core =.mon= library modules |
+| =PREFIX/bin/monad= | Compiler binary |
+| =PREFIX/lib/libmonad.a= | Static runtime library |
+| =PREFIX/include/monad/runtime.h= | Runtime C header |
+| =PREFIX/lib/monad/core/= | Core =.mon= library modules |
 
-=make uninstall= reverses all these operations — removes the binary, static
+=make uninstall= reverses all these operations -- removes the binary, static
 library, include directory, and core module tree.
 
-** Object Files and Caching
+For the core library module reference, see [[file:core.org][Core Library]].
+For the standard library, see [[file:stdlib.org][Standard Library]].
+
+*** Key Points
+- Four components installed: binary, static lib, C header, core modules
+- Default prefix is =/usr/local= (overridable)
+- =make uninstall= reverses all install operations
+
+See also: [[file:core.org][Core Library]]
+
+8. Object Files and Caching
 
 Compiler object files (all =.c= except =runtime.c= and =arena.c=) are compiled
 via a generic pattern rule and placed alongside their sources. The =filter-out=
 pattern prevents parallel-make race conditions on the runtime sources, which are
 compiled with =-fPIC= for the static archive.
 
-** Package Manifest
+*** Key Points
+- Object files sit alongside source files
+- =runtime.c= and =arena.c= have special handling (=-fPIC= for static archive)
+- =filter-out= prevents parallel-make race conditions
 
-| File         | Role                                                                   |
+9. Package Manifest
+
+| File | Role |
 |--------------+------------------------------------------------------------------------|
 | =package.yaml= | Project metadata, executable definition, source dirs, compiler options |
-|              |                                                                        |
 
 The =cmd_build= function in [[file:../cli.c][cli.c]] resolves build configuration from =package.yaml=
 via =resolve_build_info=, then compiles sources and links the output binary.
 For details on the build resolution process, see
 [[file:../context/cli.org][context/cli.org]] and [[file:../context/buildsystem.org][context/buildsystem.org]].
+For the full =package.yaml= field reference, see [[file:package-dev.org][Package Development]].
+
+*** Key Points
+- =package.yaml= is the user-facing build manifest
+- =cmd_build= resolves it via =resolve_build_info= then compiles and links
+- Separate from the compiler's own Makefile
+
+See also: [[file:package-dev.org][Package Development]]
+
+* Implementation Notes
+
+Key source locations for the build system:
+
+| Source | Key Symbols / Sections |
+|--------+-----------------------|
+| [[file:../Makefile][Makefile]] | All build targets, build modes, install layout |
+| [[file:../cli.c:415][cli.c:415]] | =resolve_build_info= -- monad.json/package.yaml parsing |
+| [[file:../cli.c:505][cli.c:505]] | =do_build= -- multi-file compile and link |
+| [[file:../main.c][main.c]] | =compile_one= -- single-file compilation pipeline |
+| [[file:../buildsystem.c][buildsystem.c]] | =do_build= orchestrator |
+| [[file:../context/buildsystem.org][context/buildsystem.org]] | Programmatic build system for user packages |
+| [[file:../context/makefile.org][context/makefile.org]] | Makefile structure, build modes, LLVM discovery |
+| [[file:../context/build.org][context/build.org]] | Build verification, test targets, helper scripts |
+| [[file:../context/cli.org][context/cli.org]] | CLI command dispatch |
+| [[file:../context/scripts.org][context/scripts.org]] | Helper scripts |
+| [[file:../context/tests-arch.org][context/tests-arch.org]] | Test suite architecture |
+
+Related context documents:
+
+- [[file:../context/build.org][context/build.org]] -- build verification, test targets, helper scripts
+- [[file:../context/makefile.org][context/makefile.org]] -- Makefile structure, build modes, LLVM discovery
+- [[file:../context/buildsystem.org][context/buildsystem.org]] -- programmatic build system
+- [[file:../context/cli.org][context/cli.org]] -- CLI command dispatch (cmd_build, cmd_install, cmd_test)
+- [[file:../cli.c][cli.c]] -- command handlers
+- [[file:../buildsystem.c][buildsystem.c]] -- package build orchestrator
+- [[file:../context/scripts.org][context/scripts.org]] -- helper scripts
+- [[file:../context/tests-arch.org][context/tests-arch.org]] -- test suite architecture
 
 * Related Pages
 
@@ -171,12 +274,29 @@ For details on the build resolution process, see
 - [[file:modules.org][Modules]] -- module compilation
 - [[file:package-dev.org][Package Development]] -- packaging for distribution
 - [[file:from-c.org][From C]] -- compilation for C interop
+- [[file:repl.org][REPL]] -- interactive REPL
+- [[file:errors.org][Diagnostics]] -- compiler error output
+- [[file:fuzzing.org][Fuzzing]] -- property-based fuzzing via make
+- [[file:arena.org][Arena]] -- arena allocator
+
+* Further Reading
+
+- [[file:../context/build.org][context/build.org]] -- build verification, test targets, helper scripts
+- [[file:../context/makefile.org][context/makefile.org]] -- Makefile structure, build modes, LLVM discovery
+- [[file:../context/buildsystem.org][context/buildsystem.org]] -- programmatic build system for user packages
+- [[file:../context/cli.org][context/cli.org]] -- CLI command dispatch (cmd_build, cmd_install, cmd_test)
+- [[file:../cli.c][cli.c]] -- command handlers
+- [[file:../buildsystem.c][buildsystem.c]] -- package build orchestrator
+- [[file:../context/scripts.org][context/scripts.org]] -- helper scripts
+- [[file:../context/tests-arch.org][context/tests-arch.org]] -- test suite architecture
 
 * Context Links
 
-- [[file:../context/build.org][context/build.org]] — build verification, test targets, helper scripts
-- [[file:../context/makefile.org][context/makefile.org]] — Makefile structure, build modes, LLVM discovery
-- [[file:../context/buildsystem.org][context/buildsystem.org]] — programmatic build system for user packages
-- [[file:../context/cli.org][context/cli.org]] — CLI command dispatch (cmd_build, cmd_install, cmd_test)
-- [[file:../cli.c][cli.c]] — command handlers
-- [[file:../buildsystem.c][buildsystem.c]] — package build orchestrator
+- [[file:../context/build.org][context/build.org]] -- build verification, test targets, helper scripts
+- [[file:../context/makefile.org][context/makefile.org]] -- Makefile structure, build modes, LLVM discovery
+- [[file:../context/buildsystem.org][context/buildsystem.org]] -- programmatic build system for user packages
+- [[file:../context/cli.org][context/cli.org]] -- CLI command dispatch (cmd_build, cmd_install, cmd_test)
+- [[file:../cli.c][cli.c]] -- command handlers
+- [[file:../buildsystem.c][buildsystem.c]] -- package build orchestrator
+- [[file:../context/scripts.org][context/scripts.org]] -- helper scripts
+- [[file:../context/arena.org][context/arena.org]] -- arena allocator details

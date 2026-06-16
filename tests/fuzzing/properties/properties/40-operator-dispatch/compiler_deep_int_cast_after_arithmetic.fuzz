@@ -1,0 +1,15 @@
+name: compiler_deep_int_cast_after_arithmetic
+section: predicates-null-casts-current
+tier: stable
+kind: law
+features: arithmetic, equality, predicates
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, infer.arithmetic, infer.equality
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.core.plus, atom.infer.predicate, atom.null.nil
+related-properties: signal_atom_equality_reflexive, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Int cast should preserve an arithmetic Int expression.
+law: (= (Int (+ {a} {b})) (+ {a} {b}))

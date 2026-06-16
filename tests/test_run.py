@@ -36,12 +36,53 @@ class TestRunnerFormattingTests(unittest.TestCase):
             origin_col=1,
         )
 
-        runner = runner_mod.Runner([short, long])
+        options = runner_mod.RunnerOptions(
+            filters=(),
+            fail_fast=False,
+            max_failures=None,
+            keep_passing_artifacts=False,
+            preserve_failures=False,
+            no_color=True,
+        )
+        runner = runner_mod.Runner([short, long], options)
 
         self.assertLess(
             runner.section_widths["wisp"].location,
             runner.section_widths["layout"].location,
         )
+
+
+    def test_default_tier_filter_selects_regression_only(self):
+        runner_mod = load_runner()
+        regression = runner_mod.TestCase(
+            name="language.green",
+            metadata={"TEST-ID": "tests.language.green", "TEST-TIER": "regression"},
+        )
+        future = runner_mod.TestCase(
+            name="language.future",
+            metadata={"TEST-ID": "tests.language.future", "TEST-TIER": "future"},
+        )
+        args = runner_mod.parse_args([])
+
+        selected = runner_mod.filter_cases([regression, future], args)
+
+        self.assertEqual([case.name for case in selected], ["language.green"])
+
+    def test_all_tiers_keeps_quarantined_tests_visible(self):
+        runner_mod = load_runner()
+        regression = runner_mod.TestCase(
+            name="language.green",
+            metadata={"TEST-ID": "tests.language.green", "TEST-TIER": "regression"},
+        )
+        known_fail = runner_mod.TestCase(
+            name="language.todo",
+            metadata={"TEST-ID": "tests.language.todo", "TEST-TIER": "known-fail"},
+        )
+        args = runner_mod.parse_args(["--all-tiers"])
+
+        selected = runner_mod.filter_cases([regression, known_fail], args)
+
+        self.assertEqual([case.name for case in selected], ["language.green", "language.todo"])
 
     def test_corpus_json_golden_table_detects_ast_mismatch(self):
         runner_mod = load_runner()

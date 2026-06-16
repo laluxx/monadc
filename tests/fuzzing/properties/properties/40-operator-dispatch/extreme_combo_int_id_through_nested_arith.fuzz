@@ -1,0 +1,15 @@
+name: extreme_combo_int_id_through_nested_arith
+section: feature-interactions-deep
+tier: stable
+kind: law
+features: arithmetic, equality, feature
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, infer.arithmetic, infer.equality
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.core.multiply, atom.core.plus
+related-properties: signal_atom_equality_reflexive, signal_atom_multiply_associative, signal_atom_multiply_commutative, signal_atom_multiply_identity_one, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Mixed helpers, direct dispatch, control flow, and bindings should compose without changing semantics.
+law: (= (fuzz-id-int (+ (* {a} {b}) {c})) (+ (* {a} {b}) {c}))

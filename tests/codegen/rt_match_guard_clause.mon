@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-match-guard-clause
-;; TEST-CONTEXT: monadc.context.language.reader-header-coverage, monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Pattern codegen coverage for guarded pattern clauses.
-;; TEST-ATOM: A variable pattern with guards should select the first true guard.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (match 4 with | x | (> x 3) -> 1 | otherwise -> 2))

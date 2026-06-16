@@ -1,0 +1,17 @@
+name: atom_plus_commutative
+section: atom-foundation
+tier: stable
+kind: law
+features: arithmetic, comparison
+compiler-path: codegen.operator.arithmetic, codegen.operator.comparison
+signal: high
+corpus-role: atom-foundation
+atom: atom.core.plus
+proves: atom.core.plus.commutative
+uses-atoms: atom.core.plus, atom.core.equality
+depends-on: atom.core.plus, atom.core.equality
+args: a:Int@edge+if b:Int@edge+with
+type: Bool
+expect: True
+description: Foundational atom property proving atom.core.plus.commutative.
+law: (= (+ {a} {b}) (+ {b} {a}))

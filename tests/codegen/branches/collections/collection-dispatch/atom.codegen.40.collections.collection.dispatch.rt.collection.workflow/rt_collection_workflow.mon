@@ -1,0 +1,38 @@
+;; TEST-ID: tests.codegen.rt-collection-workflow
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.collection.dispatch.rt.collection.workflow
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: collection-dispatch
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Connected workflow exercising set ops (conj!, disj!, contains?, count),
+;;               list ops (append!, car, cdr), and predicates (collection?).
+;;               Demonstrates cross-type collection operations in a single program.
+;; TEST-ATOM: Set mutation + query + list mutation + car/cdr + collection? predicates.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:40-collections/collection-dispatch branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/collection-dispatch/atom.codegen.40.collections.collection.dispatch.rt.collection.workflow
+;; TEST-MENU-PATH: codegen/branches/collections/collection-dispatch/atom.codegen.40.collections.collection.dispatch.rt.collection.workflow
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.collection.dispatch.rt.collection.workflow
+;; TEST-CLI-TARGET: codegen branches collections collection-dispatch
+(module Main)
+(define [s :: Set] {1 2 3})
+(conj! s 4)
+(show (contains? s 4))
+(disj! s 1)
+(show (contains? s 1))
+(show (count s))
+
+(define [xs :: List] (list))
+(append! xs 10)
+(append! xs 20)
+(show (car xs))
+(show (car (cdr xs)))
+
+(show (collection? s))
+(show (collection? xs))
+(show (collection? 42))

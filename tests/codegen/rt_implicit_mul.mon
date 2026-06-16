@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-implicit-mul
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Implicit multiplication sugar 3x desugars to (* 3 x).
-;; TEST-ATOM: 5x with x=3 evaluates to 15.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(define x 3)
-(show 5x)

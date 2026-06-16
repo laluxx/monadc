@@ -1,0 +1,15 @@
+name: structured_strategy_deep_mix_do_erases_setup_int
+section: current-strategy-deep-mix
+tier: stable
+kind: law
+features: do, sequence, arithmetic, strategy
+compiler-path: codegen.arithmetic_dispatch, codegen.sequence, infer.arithmetic, reader.ast_do, runner.strategy_arg, runner.typed_generator
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.do, atom.core.equality, atom.core.plus
+related-properties: signal_atom_do_last_value, signal_atom_equality_reflexive, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero
+args: a:Int@edge+if+with+do+mod b:Int@tiny+bitwise+if p:Bool@logic+if
+type: Bool
+expect: True
+description: V10 strategy property do_erases_setup_int generated with deep_mix arguments to stress compiler dispatch, envs, and PHI lowering.
+law: (= (do {p} (+ {a} {b})) (+ {a} {b}))

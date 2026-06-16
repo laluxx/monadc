@@ -1,0 +1,28 @@
+;; TEST-ID: tests.codegen.branch200.00.values.casts.predicates.value.cast.predicate.06
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 00-values
+;; TEST-SUBSET: casts-predicates
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.branch200.00.values.casts.predicates.value.cast.predicate.06
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Int to Float cast displays through float show branch
+;; TEST-ATOM: atom.codegen.branch200.00.values.casts.predicates.value.cast.predicate.06
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.emit-type-cast
+;; TEST-CODEGEN-PATH: codegen.type-predicate
+;; TEST-CODEGEN-PATH: codegen.show-value
+;; TEST-COVERAGE: codegen.c:emit_type_cast conversion lattice
+;; TEST-COVERAGE: codegen.c:5765-5792 nil? scalar/pointer branches
+;; TEST-COVERAGE: codegen.c:12152 type conversion constructor dispatch
+
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-USES-ATOM: atom.codegen.subset.00.values.casts.predicates
+;; TEST-MENU: branches/values/casts-predicates/atom.codegen.branch200.00.values.casts.predicates.value.cast.predicate.06
+;; TEST-MENU-PATH: codegen/branches/values/casts-predicates/atom.codegen.branch200.00.values.casts.predicates.value.cast.predicate.06
+;; TEST-ATOM-LEAF: atom.codegen.branch200.00.values.casts.predicates.value.cast.predicate.06
+;; TEST-CLI-TARGET: codegen branches values casts-predicates
+
+(module Main)
+(show (Float 5))

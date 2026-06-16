@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-if-equal-branch
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.if.cond.phi.rt.if.equal.branch
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: if-cond-phi
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: If with equality as condition evaluates correctly.
+;; TEST-ATOM: (if (= 2 2) 42 0) evaluates to 42.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/if-cond-phi branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/if-cond-phi/atom.codegen.30.control.flow.if.cond.phi.rt.if.equal.branch
+;; TEST-MENU-PATH: codegen/branches/control-flow/if-cond-phi/atom.codegen.30.control.flow.if.cond.phi.rt.if.equal.branch
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.if.cond.phi.rt.if.equal.branch
+;; TEST-CLI-TARGET: codegen branches control-flow if-cond-phi
+(module Main)
+(show (if (= 2 2) 42 0))

@@ -1,0 +1,28 @@
+;; TEST-ID: tests.codegen.branch.data-show-adt-and-match
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SUBSET: layouts-fields
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.data.show.adt.and.match
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover ADT constructor show and constructor pattern matching together.
+;; TEST-ATOM: Parameterized ADT values should print canonically and match on constructor tags.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:1215 codegen_show_value layout/app ADT branch
+;; TEST-COVERAGE: codegen.c:1785 codegen_data
+;; TEST-COVERAGE: codegen.c pattern constructor lowering
+
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/layouts-fields/atom.codegen.data.show.adt.and.match
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts-fields/atom.codegen.data.show.adt.and.match
+;; TEST-ATOM-LEAF: atom.codegen.data.show.adt.and.match
+;; TEST-CLI-TARGET: codegen branches data-layout layouts-fields
+(module Main)
+(data Maybe Nothing | Just Int)
+(define x (Just 7))
+(show x)
+(show (match x with | Just n -> n | Nothing -> 0))
+(show (match Nothing with | Just n -> n | Nothing -> 99))

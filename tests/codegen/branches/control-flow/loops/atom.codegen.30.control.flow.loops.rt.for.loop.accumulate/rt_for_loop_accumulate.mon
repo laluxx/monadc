@@ -1,0 +1,29 @@
+;; TEST-ID: tests.codegen.rt-for-loop-accumulate
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.loops.rt.for.loop.accumulate
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: loops
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime for loop range accumulates to expected sum.
+;; TEST-ATOM: (for [i 0 5] ...) sums 0..4 = 10; (for [i 1 4] ...) sums 1..3 = 6.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/loops branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/loops/atom.codegen.30.control.flow.loops.rt.for.loop.accumulate
+;; TEST-MENU-PATH: codegen/branches/control-flow/loops/atom.codegen.30.control.flow.loops.rt.for.loop.accumulate
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.loops.rt.for.loop.accumulate
+;; TEST-CLI-TARGET: codegen branches control-flow loops
+(module Main)
+(define sum1 0)
+(define sum2 0)
+(define sum3 0)
+(for [i 0 5] (set! sum1 (+ sum1 i)))
+(for [i 1 4] (set! sum2 (+ sum2 i)))
+(for [i 3 6] (set! sum3 (+ sum3 i)))
+(show sum1)
+(show sum2)
+(show sum3)

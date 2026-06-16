@@ -1,0 +1,17 @@
+name: deep_codegen_bitwise_not_involution_disabled_duplicate_b53c4857
+section: codegen-bitwise-dispatch
+tier: experimental
+kind: law
+features: arithmetic, bitwise, codegen, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.bitwise_dispatch, codegen.equality_dispatch, infer.arithmetic, infer.equality
+signal: medium
+corpus-role: merged-duplicate
+uses-atoms: atom.codegen.dispatch, atom.core.equality
+related-properties: signal_atom_equality_reflexive
+merged-into: bitwise_not_involution
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int
+type: Bool
+expect: True
+description: Bitwise NOT dispatcher must be an involution.
+law: (= (~ (~ {a})) {a})

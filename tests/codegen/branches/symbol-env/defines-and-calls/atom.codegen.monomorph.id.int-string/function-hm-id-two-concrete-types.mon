@@ -1,0 +1,33 @@
+;; TEST-ID: tests.codegen.branch.function-hm-id-two-concrete-types
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: defines-and-calls
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise HM generalization, monomorphization cache, and two concrete instantiations of one lambda.
+;; TEST-ATOM: atom.codegen.monomorph.id.int-string
+;; TEST-CODEGEN-ATOM: atom.codegen.monomorph.id.int-string
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: mono_cache.lookup
+;; TEST-CODEGEN-PATH: mono_cache.insert
+;; TEST-CODEGEN-PATH: codegen_specialize.lambda
+;; TEST-CODEGEN-PATH: call.monomorphic.instantiation
+;; TEST-DEPENDS-ON: atom.codegen.env.global-set-load-sequence
+;; TEST-TAG: run
+;; TEST-TAG: hm
+;; TEST-TAG: monomorphization
+;; TEST-COVERAGE: codegen.c:120-168 mono_cache_lookup/insert
+;; TEST-COVERAGE: codegen.c:245-466 codegen_specialize
+;; TEST-COVERAGE: codegen.c:10900-11950 generic call specialization
+
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/defines-and-calls/atom.codegen.monomorph.id.int-string
+;; TEST-MENU-PATH: codegen/branches/symbol-env/defines-and-calls/atom.codegen.monomorph.id.int-string
+;; TEST-ATOM-LEAF: atom.codegen.monomorph.id.int-string
+;; TEST-CLI-TARGET: codegen branches symbol-env defines-and-calls
+(module Main)
+(define id (lambda (x) x))
+(show (id 42))
+(show (id "ok"))

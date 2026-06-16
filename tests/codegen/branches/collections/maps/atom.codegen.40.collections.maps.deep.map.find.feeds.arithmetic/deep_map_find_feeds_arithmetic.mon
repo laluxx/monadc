@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.deep.deep_map_find_feeds_arithmetic
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-SUBSET: maps
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.maps.deep.map.find.feeds.arithmetic
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise map find results consumed by arithmetic.
+;; TEST-ATOM: Map values should unbox/flow into numeric dispatch.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.40.collections, atom.codegen.subset.maps
+;; TEST-COVERAGE: codegen.c:map find result feeding arithmetic
+;; TEST-MENU: branches/collections/maps/atom.codegen.40.collections.maps.deep.map.find.feeds.arithmetic
+;; TEST-MENU-PATH: codegen/branches/collections/maps/atom.codegen.40.collections.maps.deep.map.find.feeds.arithmetic
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.maps.deep.map.find.feeds.arithmetic
+;; TEST-CLI-TARGET: codegen branches collections maps
+
+(module Main)
+(define m #{:a 20 :b 5})
+(show (+ (find m :a) (find m :b)))

@@ -1,0 +1,32 @@
+;; TEST-ID: tests.codegen.branch.value-path-local-and-global
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: paths
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 00-values
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise AST_PATH lowering as a normal definable value in global and local environments.
+;; TEST-ATOM: atom.codegen.value.path-literal-value
+;; TEST-CODEGEN-ATOM: atom.codegen.value.path-literal-value
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen_expr.AST_PATH
+;; TEST-CODEGEN-PATH: codegen_show_value.TYPE_PATH
+;; TEST-CODEGEN-PATH: env.define.global
+;; TEST-CODEGEN-PATH: env.with.local
+;; TEST-DEPENDS-ON: atom.codegen.value.scalar-display-spectrum
+;; TEST-TAG: run
+;; TEST-TAG: path
+;; TEST-TAG: env
+;; TEST-COVERAGE: codegen.c:3865 AST_PATH literal branch
+;; TEST-COVERAGE: codegen.c:1221 TYPE_PATH show branch
+
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/paths/atom.codegen.value.path-literal-value
+;; TEST-MENU-PATH: codegen/branches/values/paths/atom.codegen.value.path-literal-value
+;; TEST-ATOM-LEAF: atom.codegen.value.path-literal-value
+;; TEST-CLI-TARGET: codegen branches values paths
+(module Main)
+(define root ./context)
+(show root)
+(show (with [p ./tests/fuzzing] p))

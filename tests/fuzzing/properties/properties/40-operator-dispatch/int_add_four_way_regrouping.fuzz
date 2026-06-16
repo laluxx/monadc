@@ -1,0 +1,15 @@
+name: int_add_four_way_regrouping
+section: arithmetic
+tier: stable
+kind: law
+features: arithmetic, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+args: a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Addition of four generated values must be stable under regrouping and re-pairing.
+law: (= (fuzz-add (fuzz-add {a} {b}) (fuzz-add {c} {d})) (fuzz-add (fuzz-add {a} {c}) (fuzz-add {b} {d})))

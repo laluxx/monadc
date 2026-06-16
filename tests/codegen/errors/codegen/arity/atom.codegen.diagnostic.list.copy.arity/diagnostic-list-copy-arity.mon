@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.branch.diagnostic-list-copy-arity
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: arity
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.list.copy.arity
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover list-copy arity diagnostics.
+;; TEST-ATOM: list-copy should require exactly one argument.
+;; TEST-EXPECT: fail:compile
+;; TEST-COVERAGE: codegen.c:7580 list-copy arity diagnostic
+;; TEST-COVERAGE: codegen.c:3476 REQUIRE_ARGS
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/arity/atom.codegen.diagnostic.list.copy.arity
+;; TEST-MENU-PATH: codegen/errors/codegen/arity/atom.codegen.diagnostic.list.copy.arity
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.list.copy.arity
+;; TEST-CLI-TARGET: codegen errors codegen arity
+(module Main)
+(list-copy)

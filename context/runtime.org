@@ -2,7 +2,7 @@
 #+AUTHOR: codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -1078,3 +1078,42 @@
   maps) use explicit heap allocation with reference counting or explicit free.
   The LLVM declaration layer (~65 get_rt_* functions) ensures every runtime
   function is accessible from generated code through a consistent pattern.
+
+* Runtime Category Contract
+:PROPERTIES:
+:ID: monadc.context.runtime.category-contract
+:CUSTOM_ID: runtime-category-contract
+:CONTEXT_KIND: contract
+:CONTEXT_DESCRIPTION: Category contract for runtime ownership, invariants, tests, and failure routing.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/runtime.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.runtime.category-contract src:context/runtime.org conf:high]
+  This section declares the category contract for =runtime=. It is the
+  routing target for failures and future test/context links touching this area.
+
+#+CAPTION: Runtime Category Contract
+| Field | Contract |
+|-------+----------|
+| Owned phase | Runtime value representation, collections, show/print behavior, memory/heap support. |
+| Inputs | Generated C calls and runtime values emitted by codegen. |
+| Outputs | Concrete execution semantics, printed values, collection operations, memory-managed objects. |
+| Invariants | Runtime behavior should be stable enough for stdout goldens; representation changes require explicit migration notes. |
+| Test hooks | runtime codegen fixtures, heap/path/data constructor tests, collection branch coverage. |
+| Failure symptoms | stdout-mismatch, pointer-looking output, collection iteration mismatch, show behavior regression. |
+| Context neighbors | codegen, core-libs, arena, tests |
+
+[DEC id:dec.runtime.category-contract-owner date:2026-06-16 by:llm]
+  Failures matching the symptoms above should start triage in this category, then
+  follow the listed neighbors only when the local contract does not explain the
+  issue.

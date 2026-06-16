@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-match-bare-constructor
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.50.data.layout.adt.constructors.rt.match.bare.constructor
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: adt-constructors
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.reader-header-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Pattern codegen coverage for bare ADT constructor patterns.
+;; TEST-ATOM: (match Nothing with | Nothing -> 1 | _ -> 0) should select a nullary constructor clause.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:50-data-layout/adt-constructors branch family
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/adt-constructors/atom.codegen.50.data.layout.adt.constructors.rt.match.bare.constructor
+;; TEST-MENU-PATH: codegen/branches/data-layout/adt-constructors/atom.codegen.50.data.layout.adt.constructors.rt.match.bare.constructor
+;; TEST-ATOM-LEAF: atom.codegen.50.data.layout.adt.constructors.rt.match.bare.constructor
+;; TEST-CLI-TARGET: codegen branches data-layout adt-constructors
+(module Main)
+(data Maybe Nothing | Just Int)
+(show (match Nothing with | Nothing -> 1 | _ -> 0))

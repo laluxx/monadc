@@ -1,0 +1,15 @@
+name: combo_logic_over_type_predicates
+section: feature-interactions
+tier: stable
+kind: law
+features: arithmetic, feature, logic, predicate, string
+compiler-path: codegen.arithmetic_dispatch, codegen.logic_dispatch, codegen.predicate_dispatch, codegen.string_literal, infer.arithmetic, infer.logic, infer.type_predicate, reader.string_literal, runtime.string
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or, atom.runtime.string
+related-properties: signal_atom_string_contains_substring
+args: a:Int
+type: Bool
+expect: True
+description: logic dispatch must combine compile-time type predicate results.
+law: (and (Int? {a}) (not (String? {a})) (Number? {a}))

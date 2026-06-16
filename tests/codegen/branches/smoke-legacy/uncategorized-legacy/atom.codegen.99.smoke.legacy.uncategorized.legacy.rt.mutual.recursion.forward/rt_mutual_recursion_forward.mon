@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.rt-mutual-recursion-forward
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-CODEGEN-ATOM: atom.codegen.99.smoke.legacy.uncategorized.legacy.rt.mutual.recursion.forward
+;; TEST-QUALITY: legacy-smoke
+;; TEST-SUBSET: uncategorized-legacy
+;; TEST-CATEGORY: 99-smoke-legacy
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime mutually recursive top-level functions are a codegen-backed forward-reference coverage point.
+;; TEST-ATOM: even? calls odd? before odd? is defined and should still evaluate even? 10.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:99-smoke-legacy/uncategorized-legacy branch family
+;; TEST-USES-ATOM: atom.codegen.category.99.smoke.legacy
+;; TEST-MENU: branches/smoke-legacy/uncategorized-legacy/atom.codegen.99.smoke.legacy.uncategorized.legacy.rt.mutual.recursion.forward
+;; TEST-MENU-PATH: codegen/branches/smoke-legacy/uncategorized-legacy/atom.codegen.99.smoke.legacy.uncategorized.legacy.rt.mutual.recursion.forward
+;; TEST-ATOM-LEAF: atom.codegen.99.smoke.legacy.uncategorized.legacy.rt.mutual.recursion.forward
+;; TEST-CLI-TARGET: codegen branches smoke-legacy uncategorized-legacy
+(module Main)
+(define (even? [n : Int] -> Bool) (if (= n 0) True (odd? (- n 1))))
+(define (odd? [n : Int] -> Bool) (if (= n 0) False (even? (- n 1))))
+(show (even? 10))

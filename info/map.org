@@ -13,11 +13,17 @@
 
 Test coverage: =rt_map_*.mon=, =rt_assoc_*.mon= fixtures in
 [[file:../tests/codegen/][tests/codegen/]].
+Test architecture reference: [[file:../context/tests-arch.org][context/tests-arch.org]].
 
 Maps (hash maps / dictionaries) store key-value pairs in an
-open-addressing hash table. O(1) average lookup/insert/delete.
+open-addressing hash table. O(1) average lookup/insert/delete. Keys are
+hashed for distribution; values are boxed and stored alongside their keys.
 
-* Literal Syntax
+See [[file:collections.org][Collections]] for an overview of all collection
+types and [[file:../context/codegen-ops.org][context/codegen-ops.org]] for
+operation dispatch.
+
+* 1. Literal Syntax
 
 #+BEGIN_SRC monad
 #{:a 1 :b 2}            ;; (keyword <-> Int) map
@@ -29,9 +35,13 @@ open-addressing hash table. O(1) average lookup/insert/delete.
 #{}
 #+END_SRC
 
-Key-value pairs alternate in the literal (even node count).
+Key-value pairs alternate in the literal (even node count). The reader
+parses =#{...}= specially, creating the map at read time.
 
-** Known gap: untyped map construction
+See [[file:symbols.org][Symbols and Keywords]] for keyword syntax and
+[[file:../context/reader.org][context/reader.org]] for map literal parsing.
+
+** 1.1 Known gap: untyped map construction
 
 Literal maps =#{:a 1}= produce garbage at runtime without an explicit
 =:: Map= annotation. This is the most significant runtime bug
@@ -40,7 +50,17 @@ Functional operations (=assoc=, =dissoc=, =merge=) receive garbage
 inputs in untyped contexts. Only =assoc!= and =find= with typed
 variables work correctly.
 
-* Core Operations
+The root cause is that map literals bypass the type-directed boxing
+path during codegen. A type annotation (=:: Map Key Val=) forces the
+correct boxing. This is tracked as a known gap in codegen.
+
+Key Points:
+- Map literal syntax: =#{key val key val ...}=
+- Empty map: =#{}=
+- Untyped map literals produce garbage at runtime — always annotate =:: Map=
+- The =#{...}= reader syntax is distinct from set ={}= and refiment ={x ∈ ...}=
+
+* 2. Core Operations
 
 | Function    | Example                  | Result       |
 |-------------+--------------------------+--------------|
@@ -57,7 +77,9 @@ variables work correctly.
 | Map?        | =(Map? #{:a 1})=           | True         |
 | collection? | =(collection? #{:a 1})=    | True         |
 
-* assoc / dissoc
+See [[file:core.org][Core Library]] for builtin implementations.
+
+** 2.1 assoc / dissoc
 
 #+BEGIN_SRC monad
 (assoc #{:a 1} :b 2)            ;; #{:a 1 :b 2}
@@ -72,7 +94,9 @@ dissoc #{:a 1 :b 2} :a
 =assoc= and =dissoc= copy the map before modifying (pure).
 =assoc!= and =dissoc!= mutate in place.
 
-* find / get
+See [[file:mutation.org][Mutation]] for mutable vs immutable semantics.
+
+** 2.2 find / get
 
 #+BEGIN_SRC monad
 (find #{:a 1} :a)               ;; (:a 1) — found as pair
@@ -86,7 +110,9 @@ find #{:a 1} :z
 
 =find= returns the key-value pair as a list or =nil= on miss.
 
-* Map-as-Function
+See [[file:pair.org][Pairs]] for pair representation.
+
+** 2.3 Map-as-Function
 
 Maps are callable by key:
 
@@ -102,9 +128,12 @@ directions :north
 directions :northwest -1
 #+END_SRC
 
-The second argument provides a default when the key is absent.
+The second argument provides a default when the key is absent. Without
+a default, a missing key returns =nil=.
 
-* keys / vals
+See [[file:collections.org][Collections]] for the collection-as-function protocol.
+
+** 2.4 keys / vals
 
 #+BEGIN_SRC monad
 (keys #{:a 1 :b 2})             ;; (:a :b)
@@ -116,7 +145,9 @@ keys #{:a 1 :b 2}
 vals #{:a 1 :b 2}
 #+END_SRC
 
-* merge
+Iteration order is not guaranteed (hash table traversal).
+
+** 2.5 merge
 
 #+BEGIN_SRC monad
 (merge #{:a 1} #{:b 2})        ;; #{:a 1 :b 2}
@@ -128,7 +159,17 @@ merge #{:a 1} #{:b 2}
 merge #{:a 1} #{:a 99}
 #+END_SRC
 
-* Iteration
+Last-write-wins semantics: when duplicate keys exist, the rightmost
+map's value is kept.
+
+Key Points:
+- Pure operations (=assoc=, =dissoc=, =merge=) copy the map
+- Mutable operations (=assoc!=, =dissoc!=) modify in place
+- =find= returns a pair =(key val)= or =nil= on miss
+- Maps accept an optional default argument in function-call syntax
+- =merge= uses last-wins semantics for duplicate keys
+
+* 3. Iteration
 
 Maps are iterable with =for=:
 
@@ -142,20 +183,90 @@ for [[k v] #{:a 1 :b 2}]
   show k v
 #+END_SRC
 
-* Related Pages
+The destructuring pattern =[k v]= binds each key-value pair. Iteration
+order is not guaranteed.
+
+See [[file:iteration.org][Iteration]] for for-loop semantics and
+[[file:../context/language.org][context/language.org]] for map iteration
+dispatch.
+
+Key Points:
+- =for= over maps destructures key-value pairs with =[k v]=
+- Iteration order is unspecified (hash table dependent)
+- Use =keys= or =vals= to extract collections of keys or values
+
+* 4. Runnable Example
+
+#+BEGIN_SRC monad
+;; run with: monadc map-demo.mon
+
+;; Always annotate map literals to avoid garbage
+(define m :: (Map :a Int) #{:a 1 :b 2 :c 3})
+
+(show (count m))                  ;; prints 3
+(show (find m :a))                ;; prints (:a 1)
+(show (find m :z))                ;; prints nil
+
+(define m2 (assoc m :d 4))
+(show (count m2))                 ;; prints 4
+
+(define m3 (dissoc m2 :a))
+(show (count m3))                 ;; prints 3
+(show (keys m3))                  ;; prints (:b :c :d)
+
+;; Map-as-function with default
+(show (m :a))                     ;; prints 1
+(show (m :missing -1))            ;; prints -1
+
+(define merged (merge m #{:d 4}))
+(show (count merged))             ;; prints 4
+#+END_SRC
+
+* 5. Gotchas
+
+Common mistakes and surprising behaviours with maps:
+
+- **Untyped map literal =#{}= produces garbage** — always annotate =:: (Map K V)=. This is the most significant runtime bug in the compiler ([[file:../context/language.org::codegen-gaps]]).
+
+- **=find= returns a pair, not a value** — =(find m :a)= returns =(:a 1)=, not =1=. Use =snd= or pattern matching to extract the value.
+
+- **Iteration order is unspecified** — hash table traversal means =keys=, =vals=, and =for= produce no guaranteed ordering.
+
+- **=merge= uses last-wins semantics** — duplicate keys keep the rightmost map's value, which may differ from other languages' behaviour.
+
+- **Mutable ops (=assoc!=, =dissoc!=) do not copy** — aliasing the map before mutation affects all references.
+
+* 6. Implementation Notes
+
+| Component   | Context File        | Topic                                         |
+|-------------+---------------------+-----------------------------------------------|
+| Types       | types.org           | [[file:../context/types.org::#kind-TYPE_MAP][TYPE_MAP type representation]] |
+| Codegen     | codegen-ops.org     | [[file:../context/codegen-ops.org::#ops-collection][Map operation codegen]] |
+| Language    | language.org        | [[file:../context/language.org::#primitive-map][Map representation and dispatch]] |
+| Reader      | reader.org          | [[file:../context/reader.org::#ast-and-token-header][Map literal parsing]] |
+| Core Libs   | core-libs.org       | [[file:../context/core-libs.org::#core-libs-coll][Stdlib map modules]] |
+| Inference   | infer.org           | [[file:../context/infer.org::#collection-as-function][Map-as-function inference]] |
+| Codegen     | language.org        | [[file:../context/language.org::codegen-gaps][Known gap: untyped map literals]] |
+
+Related Pages
 
 - [[file:collections.org][Collections]] -- overview of all collection types
 - [[file:list.org][Lists]] -- linked cons cells
 - [[file:set.org][Sets]] -- hash sets
 - [[file:pair.org][Pairs]] -- pairs for key-value entries
 - [[file:core.org][Core Library]] -- assoc/dissoc/find builtins
+- [[file:iteration.org][Iteration]] -- for loops over maps
+- [[file:mutation.org][Mutation]] -- mutable vs immutable operations
+- [[file:symbols.org][Symbols and Keywords]] -- keyword keys
+- [[file:patterns.org][Pattern Matching]] -- map destructuring
 
-* Context Links
+Further Reading
 
 - [[file:../context/language.org][context/language.org]] — map dispatch, hash table representation
 - [[file:../context/language.org::codegen-gaps][context/language.org — Known gaps]]
 - [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]]
-- [[file:list.org][Lists]] — linked list collection
-- [[file:set.org][Sets]] — hash set collection
-- [[file:collections.org][Collections]] — overview of all collection types
-- [[file:core.org][Core Library]] — builtin collection operations
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — map operation codegen
+- [[file:../context/types.org][context/types.org]] — TYPE_MAP type representation
+- [[file:../context/core-libs.org][context/core-libs.org]] — stdlib map modules
+- [[file:../context/infer.org][context/infer.org]] — type inference for map literals
+- [[file:../context/reader.org][context/reader.org]] — map literal parsing

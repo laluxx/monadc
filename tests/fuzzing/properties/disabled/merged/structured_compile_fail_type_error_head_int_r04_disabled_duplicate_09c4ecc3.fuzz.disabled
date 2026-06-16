@@ -1,0 +1,16 @@
+name: structured_compile_fail_type_error_head_int_r04_disabled_duplicate_09c4ecc3
+section: current-compile-fail
+tier: experimental
+kind: compile-fail
+features: compile-fail, type, head
+compiler-path: diagnostic.expected_error, runner.compile_fail_kind
+signal: high
+corpus-role: merged-duplicate
+uses-atoms: atom.diagnostic.compile_fail, atom.misc
+merged-into: structured_compile_fail_type_error_head_int_r01
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int@edge
+type: Bool
+expect-diagnostic: error:
+description: V10 compile-fail replacement type_error_head_int round 4; intentionally invalid and should emit an error.
+law: (head {a})

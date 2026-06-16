@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-codegen-err-quote-index-oob
-;; TEST-SECTION: diagnostic
-;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
-;; TEST-PURPOSE: Codegen bounds-checks literal quoted-list indexing at compile time.
-;; TEST-ATOM: ('(1 2) 2) must fail because index 2 is outside a two-element literal list.
-;; TEST-EXPECT: fail:compile
-
-(module Main)
-(show ('(1 2) 2))

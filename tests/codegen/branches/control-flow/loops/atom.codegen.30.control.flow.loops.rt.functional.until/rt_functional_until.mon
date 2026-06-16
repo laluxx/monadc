@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.rt-functional-until
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.loops.rt.functional.until
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: loops
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Functional higher-order until iterates a function.
+;; TEST-ATOM: (until (> 10) (+ 1) 5) starts at 5, adds 1 until > 10, returns 11.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/loops branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/loops/atom.codegen.30.control.flow.loops.rt.functional.until
+;; TEST-MENU-PATH: codegen/branches/control-flow/loops/atom.codegen.30.control.flow.loops.rt.functional.until
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.loops.rt.functional.until
+;; TEST-CLI-TARGET: codegen branches control-flow loops
+(module Main)
+(define (until [p : (a -> Bool)] [f : (a -> a)] [x : a] -> a)
+  (if (p x) x (until p f (f x))))
+(show (until (> 10) (+ 1) 5))

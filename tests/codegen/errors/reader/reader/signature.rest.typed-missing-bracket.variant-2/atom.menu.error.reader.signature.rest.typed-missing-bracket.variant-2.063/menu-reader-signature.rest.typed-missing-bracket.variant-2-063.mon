@@ -1,0 +1,40 @@
+;; TEST-ID: tests.codegen.menu.errors.reader.signature.rest.typed.missing.bracket.variant.2.063
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: errors
+;; TEST-SUBSET: reader/signature.rest.typed-missing-bracket.variant-2
+;; TEST-MENU: errors/reader/signature.rest.typed-missing-bracket.variant-2/atom.menu.error.reader.signature.rest.typed-missing-bracket.variant-2.063
+;; TEST-MENU-PATH: codegen/errors/reader/signature.rest.typed-missing-bracket.variant-2/atom.menu.error.reader.signature.rest.typed-missing-bracket.variant-2.063
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.error-menu
+;; TEST-PURPOSE: Pin reader.c diagnostic: Expected ']' after typed rest parameter
+;; TEST-ATOM: atom.menu.error.reader.signature.rest.typed-missing-bracket.variant-2.063
+;; TEST-CODEGEN-ATOM: atom.menu.error.reader.signature.rest.typed-missing-bracket.variant-2.063
+;; TEST-ATOM-LEAF: atom.menu.error.reader.signature.rest.typed-missing-bracket.variant-2.063
+;; TEST-QUALITY: menu-error-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ERROR-STAGE: reader
+;; TEST-ERROR-FAMILY: signature.rest.typed-missing-bracket.variant-2
+;; TEST-ERROR-MESSAGE: Expected ']' after typed rest parameter
+;; TEST-ERROR-SOURCE: reader.c
+;; TEST-ERROR-PATH: reader.c:2031
+;; TEST-CODEGEN-PATH: diagnostic.reader.signature.rest.typed-missing-bracket.variant-2
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-TAG: menu
+;; TEST-COVERAGE: reader.c:2031 Expected ']' after typed rest parameter
+;; TEST-USES-ATOM: atom.menu.error.reader.signature.rest.typed-missing-bracket.variant-2.063
+;; TEST-USES-ATOM: atom.error.reader
+;; TEST-USES-ATOM: atom.error.reader.signature.rest.typed-missing-bracket.variant-2
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-DEPENDS-ON: atom.reader.lex.parse
+;; TEST-REFINES: atom.error.reader
+;; TEST-REFINES: atom.error.reader.signature.rest.typed-missing-bracket.variant-2
+;; TEST-REFINES: atom.reader.error
+;; TEST-RELATED: atom.codegen.error.menu
+;; TEST-CLI-TARGET: codegen errors reader reader
+
+(module Main)
+;; reader menu variant 2
+(define (bad . [xs : Int -> Int) 0)

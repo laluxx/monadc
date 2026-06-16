@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.rt-set-mutate-conj-bang
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.sets.rt.set.mutate.conj.bang
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: sets
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: conj! mutates a set by adding an element in place.
+;; TEST-ATOM: (conj! s 3) adds 3 to set s, observable via contains? and count.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:40-collections/sets branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/sets/atom.codegen.40.collections.sets.rt.set.mutate.conj.bang
+;; TEST-MENU-PATH: codegen/branches/collections/sets/atom.codegen.40.collections.sets.rt.set.mutate.conj.bang
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.sets.rt.set.mutate.conj.bang
+;; TEST-CLI-TARGET: codegen branches collections sets
+(module Main)
+(define [s :: Set] {1 2})
+(conj! s 3)
+(show (contains? s 3))
+(show (count s))

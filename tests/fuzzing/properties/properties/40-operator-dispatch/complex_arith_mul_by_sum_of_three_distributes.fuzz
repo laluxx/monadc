@@ -1,0 +1,15 @@
+name: complex_arith_mul_by_sum_of_three_distributes
+section: arithmetic-normalization
+tier: stable
+kind: law
+features: arithmetic, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+args: k:Int a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Multiplication must distribute over a three-term sum.
+law: (= (fuzz-mul {k} (fuzz-add {a} (fuzz-add {b} {c}))) (fuzz-add (fuzz-mul {k} {a}) (fuzz-add (fuzz-mul {k} {b}) (fuzz-mul {k} {c}))))

@@ -1,0 +1,14 @@
+name: signal_oracle_string_contains_112
+section: current-oracle
+tier: oracle
+kind: law
+features: oracle, string, contains, dependent-arg
+compiler-path: oracle.expected-python, runtime.string.contains
+signal: high
+corpus-role: oracle
+uses-atoms: atom.runtime.string.contains.substring
+args: s:NonEmptyString@escape needle:SubstrOf(s)
+type: Bool
+expect-python: needle in s
+description: Oracle property with generated Python expected value and explicit atom links.
+law: (contains? {s} {needle})

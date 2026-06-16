@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-do-variants
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.begin.do.sequence.rt.do.variants
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: begin-do-sequence
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime do forms are a codegen-backed coverage point for do sequencing.
+;; TEST-ATOM: (do 42) and (do 1 2 3) should evaluate to their final values.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/begin-do-sequence branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/begin-do-sequence/atom.codegen.30.control.flow.begin.do.sequence.rt.do.variants
+;; TEST-MENU-PATH: codegen/branches/control-flow/begin-do-sequence/atom.codegen.30.control.flow.begin.do.sequence.rt.do.variants
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.begin.do.sequence.rt.do.variants
+;; TEST-CLI-TARGET: codegen branches control-flow begin-do-sequence
+(module Main)
+(show (do 42))
+(show (do 1 2 3))

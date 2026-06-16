@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.rt-data-deriving-gadt
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.50.data.layout.adt.constructors.rt.data.deriving.gadt
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: adt-constructors
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.reader-header-coverage
+;; TEST-PURPOSE: Runtime data declarations cover deriving clauses and parameterized constructor fields.
+;; TEST-ATOM: Data deriving and Vec-style parameterized constructors compile as declarations.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:50-data-layout/adt-constructors branch family
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/adt-constructors/atom.codegen.50.data.layout.adt.constructors.rt.data.deriving.gadt
+;; TEST-MENU-PATH: codegen/branches/data-layout/adt-constructors/atom.codegen.50.data.layout.adt.constructors.rt.data.deriving.gadt
+;; TEST-ATOM-LEAF: atom.codegen.50.data.layout.adt.constructors.rt.data.deriving.gadt
+;; TEST-CLI-TARGET: codegen branches data-layout adt-constructors
+(module Main)
+(data Color Red | Green | Blue deriving [Eq Show])
+(data Vec a | Nil | Cons a (Vec a))
+(define c Red)
+(define xs Nil)

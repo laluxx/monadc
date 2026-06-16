@@ -1,0 +1,28 @@
+;; TEST-ID: tests.codegen.stateful.operator.variadic.multiplication.with.one
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-SUBSET: comparisons
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.stateful.operator.variadic.multiplication.with.one
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Variadic multiplication lowers as left fold.
+;; TEST-ATOM: atom.codegen.stateful.operator.variadic.multiplication.with.one
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.operator.dispatch
+;; TEST-CODEGEN-PATH: codegen.numeric-dispatch
+;; TEST-DEPENDS-ON: atom.codegen.primitive.integer
+;; TEST-DEPENDS-ON: atom.codegen.primitive.bool
+;; TEST-COVERAGE: codegen.c:8932-9453 comparison dispatch branches
+;; TEST-COVERAGE: codegen.c:9463-9810 arithmetic dispatch branches
+;; TEST-COVERAGE: codegen.c:7689-7731 bitwise/not operator special forms
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-USES-ATOM: atom.codegen.subset.20.operators.comparisons
+;; TEST-MENU: branches/operators/comparisons/atom.codegen.stateful.operator.variadic.multiplication.with.one
+;; TEST-MENU-PATH: codegen/branches/operators/comparisons/atom.codegen.stateful.operator.variadic.multiplication.with.one
+;; TEST-ATOM-LEAF: atom.codegen.stateful.operator.variadic.multiplication.with.one
+;; TEST-CLI-TARGET: codegen branches operators comparisons
+
+(module Main)
+(show (* 6 7 1))

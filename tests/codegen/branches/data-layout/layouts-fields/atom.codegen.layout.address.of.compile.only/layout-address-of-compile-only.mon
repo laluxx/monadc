@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.branch.layout-address-of-compile-only
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: layouts-fields
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.layout.address.of.compile.only
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover address-of codegen for a scalar variable without relying on nondeterministic pointer text.
+;; TEST-ATOM: Taking &x should compile through AST_ADDRESS_OF and pointer type lowering.
+;; TEST-EXPECT: compile
+;; TEST-COVERAGE: codegen.c:3906 AST_ADDRESS_OF
+;; TEST-COVERAGE: codegen.c:3356 codegen_lvalue symbol branch
+
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/layouts-fields/atom.codegen.layout.address.of.compile.only
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts-fields/atom.codegen.layout.address.of.compile.only
+;; TEST-ATOM-LEAF: atom.codegen.layout.address.of.compile.only
+;; TEST-CLI-TARGET: codegen branches data-layout layouts-fields
+(module Main)
+(define x 42)
+&x

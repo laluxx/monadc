@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-pair-p
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.99.smoke.legacy.uncategorized.legacy.rt.pair.p
+;; TEST-QUALITY: legacy-smoke
+;; TEST-SUBSET: uncategorized-legacy
+;; TEST-CATEGORY: 99-smoke-legacy
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Runtime pair? predicate works on dotted pairs.
+;; TEST-ATOM: (pair? '(1 . 2)) = True.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:99-smoke-legacy/uncategorized-legacy branch family
+;; TEST-USES-ATOM: atom.codegen.category.99.smoke.legacy
+;; TEST-MENU: branches/smoke-legacy/uncategorized-legacy/atom.codegen.99.smoke.legacy.uncategorized.legacy.rt.pair.p
+;; TEST-MENU-PATH: codegen/branches/smoke-legacy/uncategorized-legacy/atom.codegen.99.smoke.legacy.uncategorized.legacy.rt.pair.p
+;; TEST-ATOM-LEAF: atom.codegen.99.smoke.legacy.uncategorized.legacy.rt.pair.p
+;; TEST-CLI-TARGET: codegen branches smoke-legacy uncategorized-legacy
+(module Main)
+(show (pair? '(1 . 2)))

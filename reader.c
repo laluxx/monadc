@@ -2807,64 +2807,80 @@ typedef struct {
 
 // Scans items[start .. end-1] for optional metadata before the body.
 // The LAST item is always the body — we scan everything before it.
-static DefineMetadata parse_define_metadata(Parser *p) {
-    DefineMetadata m = {NULL, NULL, 0};
-
-    // We peek at the current token repeatedly.
-    // Metadata items are:
-    //   "string"        -> docstring (only if no :doc seen yet)
-    //   :doc "string"   -> docstring
-    //   :alias symbol   -> alias
-    // Anything else = stop, that's the body.
-
-    while (true) {
-        // Plain string docstring — only if something follows before ')'
-        // If the string is the only thing left, it's the function body.
-        if (p->current.type == TOK_STRING && !m.docstring) {
-            Lexer saved_lex = *p->lexer;
-            Token saved_cur = p->current;
-            char *s = my_strdup(p->current.value);
-            p->current = lexer_next_token(p->lexer);
-
-            bool has_pmatch = false;
-                Lexer peek_lex = *p->lexer;
-                Token peek_tok = p->current;
-                if (peek_tok.value) peek_tok.value = my_strdup(peek_tok.value);
-                int depth = 0;
-                while (!(peek_tok.type == TOK_RPAREN && depth == 0) && peek_tok.type != TOK_EOF && peek_tok.type != TOK_KEYWORD) {
-                if (peek_tok.type == TOK_LPAREN || peek_tok.type == TOK_LBRACKET) depth++;
-                if ((peek_tok.type == TOK_RPAREN || peek_tok.type == TOK_RBRACKET) && depth > 0) depth--;
-                if (depth == 0 && (peek_tok.type == TOK_ARROW || peek_tok.type == TOK_PIPE ||
-                                   (peek_tok.type == TOK_SYMBOL && peek_tok.value && strcmp(peek_tok.value, "|") == 0))) {
-                    has_pmatch = true;
-                    free(peek_tok.value);
-                    break;
-                }
+/* peek_has_body: scan forward from the current lexer state to decide
+ * whether there is a non-metadata, non-closing token before ')'/EOF.
+ * Returns true  -> something that looks like a body follows.
+ * Returns false -> only metadata keywords / closing paren / EOF follow.
+ * Used to distinguish a lone bare string (= body) from a prefix docstring
+ * that is followed by a parameter clause or expression body.              */
+static bool peek_has_body(Parser *p) {
+    Lexer peek_lex = *p->lexer;
+    Token peek_tok = p->current;
+    if (peek_tok.value) peek_tok.value = my_strdup(peek_tok.value);
+    int depth = 0;
+    while (peek_tok.type != TOK_EOF) {
+        if (peek_tok.type == TOK_RPAREN && depth == 0) {
+            free(peek_tok.value);
+            return false;
+        }
+        if (peek_tok.type == TOK_LPAREN || peek_tok.type == TOK_LBRACKET ||
+            peek_tok.type == TOK_LBRACE || peek_tok.type == TOK_HASH_LBRACE) depth++;
+        if ((peek_tok.type == TOK_RPAREN || peek_tok.type == TOK_RBRACKET ||
+             peek_tok.type == TOK_RBRACE) && depth > 0) depth--;
+        /* An arrow at depth 0 means a parameter clause or pmatch clause follows */
+        if (depth == 0 && peek_tok.type == TOK_ARROW) {
+            free(peek_tok.value);
+            return true;
+        }
+        /* A pipe at depth 0 means pmatch clauses follow */
+        if (depth == 0 && (peek_tok.type == TOK_PIPE ||
+            (peek_tok.type == TOK_SYMBOL && peek_tok.value &&
+             strcmp(peek_tok.value, "|") == 0))) {
+            free(peek_tok.value);
+            return true;
+        }
+        /* A keyword that is NOT a metadata keyword means body follows */
+        if (depth == 0 && peek_tok.type == TOK_KEYWORD) {
+            bool is_meta = (peek_tok.value &&
+                           (strcmp(peek_tok.value, "doc")   == 0 ||
+                            strcmp(peek_tok.value, "alias") == 0 ||
+                            strcmp(peek_tok.value, "naked") == 0));
+            free(peek_tok.value);
+            if (!is_meta) return true;
+            /* skip the metadata keyword and its argument */
+            peek_tok = lexer_next_token(&peek_lex);
+            if (peek_tok.type == TOK_STRING || peek_tok.type == TOK_SYMBOL) {
                 free(peek_tok.value);
                 peek_tok = lexer_next_token(&peek_lex);
             }
-            if (!has_pmatch) free(peek_tok.value);
-
-            if (p->current.type == TOK_RPAREN ||
-                p->current.type == TOK_EOF ||
-                has_pmatch) {
-                /* Nothing after, or it's a pattern clause — restore and let body parsing take it */
-                *p->lexer  = saved_lex;
-                p->current = saved_cur;
-                free(s);
-                break;
-            }
-            m.docstring = s;
-            m.consumed++;
             continue;
         }
+        /* Any non-keyword, non-string, non-closing token at depth 0 is a body */
+        if (depth == 0 &&
+            peek_tok.type != TOK_STRING &&
+            peek_tok.type != TOK_KEYWORD) {
+            free(peek_tok.value);
+            return true;
+        }
+        /* A bare string at depth 0 — keep scanning; if only metadata and ')' follow
+         * then this string IS the body; if something else follows it is a docstring */
+        free(peek_tok.value);
+        peek_tok = lexer_next_token(&peek_lex);
+    }
+    free(peek_tok.value);
+    return false;
+}
 
-        // :doc "string"
+static DefineMetadata parse_define_metadata(Parser *p) {
+    DefineMetadata m = {NULL, NULL, false, false, 0};
+
+    while (true) {
+        /* :doc "string" — explicit docstring keyword, always consumed as metadata */
         if (p->current.type == TOK_KEYWORD &&
             strcmp(p->current.value, "doc") == 0) {
             p->current = lexer_next_token(p->lexer);
             if (p->current.type == TOK_STRING) {
-                free(m.docstring);  // override if already set
+                free(m.docstring);
                 m.docstring = my_strdup(p->current.value);
                 p->current  = lexer_next_token(p->lexer);
             }
@@ -2872,7 +2888,7 @@ static DefineMetadata parse_define_metadata(Parser *p) {
             continue;
         }
 
-        // :alias symbol
+        /* :alias symbol */
         if (p->current.type == TOK_KEYWORD &&
             strcmp(p->current.value, "alias") == 0) {
             p->current = lexer_next_token(p->lexer);
@@ -2885,7 +2901,7 @@ static DefineMetadata parse_define_metadata(Parser *p) {
             continue;
         }
 
-        // :naked True / :naked False
+        /* :naked True / :naked False */
         if (p->current.type == TOK_KEYWORD &&
             strcmp(p->current.value, "naked") == 0) {
             p->current = lexer_next_token(p->lexer);
@@ -2910,7 +2926,29 @@ static DefineMetadata parse_define_metadata(Parser *p) {
             continue;
         }
 
-        break;  // not a metadata token — must be the body
+        /* Bare string — only treat as metadata docstring if something
+         * that looks like a body (arrow, pmatch pipe, expression) follows.
+         * If the string is the last thing before ')' or EOF it is the body,
+         * not a docstring, so we stop and let the caller parse it.         */
+        if (p->current.type == TOK_STRING && !m.docstring) {
+            Lexer saved_lex = *p->lexer;
+            Token saved_cur = p->current;
+            char *s = my_strdup(p->current.value);
+            p->current = lexer_next_token(p->lexer);
+
+            if (!peek_has_body(p)) {
+                /* Nothing body-like follows — restore, this string is the body */
+                *p->lexer  = saved_lex;
+                p->current = saved_cur;
+                free(s);
+                break;
+            }
+            m.docstring = s;
+            m.consumed++;
+            continue;
+        }
+
+        break; /* not a metadata token — must be the body */
     }
 
     return m;
@@ -3487,8 +3525,19 @@ static AST *parse_list(Parser *p) {
     if (p->current.type == TOK_SYMBOL &&
         strcmp(p->current.value, "define") == 0) {
         if (g_scope_depth > 0 && !_came_from_def) {
-            compiler_error(p->current.line, p->current.column,
-                "can't use 'define' inside a function body, use 'def' instead");
+            /* Allow (define [name :: Type] value) inside a function body:
+             * this form is produced by wisp-expanding  def name :: [N]
+             * (typed local array binding).  The bracket distinguishes it
+             * from a bare (define name value) which is always an error here. */
+            Lexer peek_lex = *p->lexer;
+            Token peek_tok = lexer_next_token(&peek_lex);
+            bool is_typed_local = (peek_tok.type == TOK_LBRACKET);
+            free(peek_tok.value);
+            if (!is_typed_local) {
+                compiler_error(p->current.line, p->current.column,
+                    "can't use 'define' inside a function body, use 'def' instead");
+            }
+            _came_from_def = true;
         }
 
         // Peek ahead to see if it's (define (fname ...) or (define name ...)

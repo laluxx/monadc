@@ -1,0 +1,28 @@
+;; TEST-ID: tests.codegen.stateful.value.path.define.and.show
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 00-values
+;; TEST-SUBSET: show-casts-predicates
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.stateful.value.path.define.and.show
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Path literals can be bound and displayed through TYPE_PATH.
+;; TEST-ATOM: atom.codegen.stateful.value.path.define.and.show
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.show-value
+;; TEST-CODEGEN-PATH: codegen.cast
+;; TEST-CODEGEN-PATH: codegen.type-predicate
+;; TEST-COVERAGE: codegen.c:44-72 emit_type_cast conversion lattice
+;; TEST-COVERAGE: codegen.c:1190-1270 codegen_show_value primitive display branches
+;; TEST-COVERAGE: codegen.c:12152-12551 cast constructor dispatch
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-USES-ATOM: atom.codegen.subset.00.values.show.casts.predicates
+;; TEST-MENU: branches/values/show-casts-predicates/atom.codegen.stateful.value.path.define.and.show
+;; TEST-MENU-PATH: codegen/branches/values/show-casts-predicates/atom.codegen.stateful.value.path.define.and.show
+;; TEST-ATOM-LEAF: atom.codegen.stateful.value.path.define.and.show
+;; TEST-CLI-TARGET: codegen branches values show-casts-predicates
+
+(module Main)
+(define p ./tests/codegen)
+(show p)

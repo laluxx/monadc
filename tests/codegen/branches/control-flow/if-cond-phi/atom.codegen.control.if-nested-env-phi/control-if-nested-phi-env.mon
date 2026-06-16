@@ -1,0 +1,33 @@
+;; TEST-ID: tests.codegen.branch.control-if-nested-phi-env
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: if-cond-phi
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise nested if PHI construction where each branch performs environment lookups.
+;; TEST-ATOM: atom.codegen.control.if-nested-env-phi
+;; TEST-CODEGEN-ATOM: atom.codegen.control.if-nested-env-phi
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.if.condition
+;; TEST-CODEGEN-PATH: codegen.if.then
+;; TEST-CODEGEN-PATH: codegen.if.else
+;; TEST-CODEGEN-PATH: codegen.if.phi
+;; TEST-DEPENDS-ON: atom.codegen.env.global-set-load-sequence
+;; TEST-DEPENDS-ON: atom.codegen.operator.compare.integer
+;; TEST-TAG: run
+;; TEST-TAG: control
+;; TEST-TAG: if
+;; TEST-COVERAGE: codegen.c:7743-7965 if condition, branch blocks, and PHI construction
+
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/if-cond-phi/atom.codegen.control.if-nested-env-phi
+;; TEST-MENU-PATH: codegen/branches/control-flow/if-cond-phi/atom.codegen.control.if-nested-env-phi
+;; TEST-ATOM-LEAF: atom.codegen.control.if-nested-env-phi
+;; TEST-CLI-TARGET: codegen branches control-flow if-cond-phi
+(module Main)
+(define x 10)
+(define y 20)
+(show (if (> x y) x y))
+(show (if (< x y) (if True (+ x 1) 0) (if False 0 (+ y 1))))

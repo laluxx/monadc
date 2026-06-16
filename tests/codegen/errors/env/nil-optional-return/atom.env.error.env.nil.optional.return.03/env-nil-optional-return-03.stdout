@@ -1,0 +1,1 @@
+error: Function ‘env_nil_return_03’ can return nil but return type 'Float' does not end with ‘?’

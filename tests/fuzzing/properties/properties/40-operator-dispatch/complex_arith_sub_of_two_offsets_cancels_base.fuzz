@@ -1,0 +1,15 @@
+name: complex_arith_sub_of_two_offsets_cancels_base
+section: arithmetic-normalization
+tier: stable
+kind: law
+features: arithmetic, equality, logic, set
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, codegen.runtime_call, infer.arithmetic, infer.equality, infer.logic, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+args: base:Int left:Int right:Int
+type: Bool
+expect: True
+description: Subtracting two values sharing the same base should remove the base and leave the offset difference.
+law: (= (fuzz-sub (fuzz-add {base} {left}) (fuzz-add {base} {right})) (fuzz-sub {left} {right}))

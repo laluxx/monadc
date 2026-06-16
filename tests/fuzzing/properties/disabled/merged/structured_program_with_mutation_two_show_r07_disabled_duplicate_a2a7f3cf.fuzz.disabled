@@ -1,0 +1,17 @@
+name: structured_program_with_mutation_two_show_r07_disabled_duplicate_a2a7f3cf
+section: current-program-kind
+tier: experimental
+kind: program
+features: program, with, set!, mutation, begin, arithmetic
+compiler-path: codegen.arithmetic_dispatch, codegen.module_body, codegen.sequence, codegen.set_bang, codegen.store, codegen.with_binding, infer.arithmetic, infer.env_child, infer.mutation, reader.ast_begin, runner.program_kind
+signal: high
+corpus-role: merged-duplicate
+uses-atoms: atom.binding.set-bang, atom.binding.with, atom.control.begin, atom.core.equality, atom.core.minus, atom.core.plus, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero, signal_atom_with_substitution
+merged-into: structured_program_with_setbang_value_variant_01
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int@edge b:Int@tiny
+type: Bool
+expect: True
+description: V11 program-kind compiler test program_with_mutation_two_show round 7; exercises full program insertion instead of show-wrapped law mode.
+program: (show (= (with [x {a}] (begin (set! x (+ x {b})) (- x {b}))) {a}))

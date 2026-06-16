@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.deep.deep_diag_append_wrong_arity
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: arity
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.90.diagnostics.arity.deep.diag.append.wrong.arity
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Expected diagnostic for append without required arguments.
+;; TEST-ATOM: Builtin arity checks should reject missing arguments.
+;; TEST-EXPECT: fail:compile
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics, atom.codegen.subset.arity
+;; TEST-COVERAGE: codegen.c:builtin append arity branch
+;; TEST-MENU: errors/codegen/arity/atom.codegen.90.diagnostics.arity.deep.diag.append.wrong.arity
+;; TEST-MENU-PATH: codegen/errors/codegen/arity/atom.codegen.90.diagnostics.arity.deep.diag.append.wrong.arity
+;; TEST-ATOM-LEAF: atom.codegen.90.diagnostics.arity.deep.diag.append.wrong.arity
+;; TEST-CLI-TARGET: codegen errors codegen arity
+
+(module Main)
+(show (append))

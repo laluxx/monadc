@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.deep.deep_comparison_result_feeds_if
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-SUBSET: comparison
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.20.operators.comparison.deep.comparison.result.feeds.if
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise comparison results feeding control-flow PHI.
+;; TEST-ATOM: Comparison Bool values should feed if branches.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.20.operators, atom.codegen.subset.comparison
+;; TEST-COVERAGE: codegen.c:comparison result consumed by AST_IF
+;; TEST-MENU: branches/operators/comparison/atom.codegen.20.operators.comparison.deep.comparison.result.feeds.if
+;; TEST-MENU-PATH: codegen/branches/operators/comparison/atom.codegen.20.operators.comparison.deep.comparison.result.feeds.if
+;; TEST-ATOM-LEAF: atom.codegen.20.operators.comparison.deep.comparison.result.feeds.if
+;; TEST-CLI-TARGET: codegen branches operators comparison
+
+(module Main)
+(show (if (< 1 2) 100 0))
+(show (if (!= 3 3) 0 200))

@@ -1,0 +1,14 @@
+name: structured_predicate_int_generated_r05
+section: quote-predicate-current
+tier: stable
+kind: law
+features: predicate, type, strategy
+compiler-path: codegen.predicate_dispatch, infer.type_predicate, runner.strategy_arg, runner.typed_generator
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.infer.predicate, atom.logic.and, atom.quote.quote
+args: a:Int@edge+if+with
+type: Bool
+expect: True
+description: V11 stable compiler-path law predicate_int_generated variant 5; uses strategy args and explicit compiler-path metadata for feature coverage.
+law: (and True (int? {a}))

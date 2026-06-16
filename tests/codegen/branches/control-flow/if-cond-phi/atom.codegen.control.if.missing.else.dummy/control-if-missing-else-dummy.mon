@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.branch.control-if-missing-else-dummy
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: if-cond-phi
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.control.if.missing.else.dummy
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover if with no else branch returning the dummy integer value.
+;; TEST-ATOM: A missing else branch should merge cleanly and return 0 when used as a value.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:7806-7810 no-else/missing-value dummy branch
+
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/if-cond-phi/atom.codegen.control.if.missing.else.dummy
+;; TEST-MENU-PATH: codegen/branches/control-flow/if-cond-phi/atom.codegen.control.if.missing.else.dummy
+;; TEST-ATOM-LEAF: atom.codegen.control.if.missing.else.dummy
+;; TEST-CLI-TARGET: codegen branches control-flow if-cond-phi
+(module Main)
+(show (if False 42))
+(show (if True 42))

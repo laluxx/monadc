@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-closure-hof-argument
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.05.symbol.env.closures.rt.closure.hof.argument
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: closures
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.type-system-surface, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Closure codegen pressure for passing a function value as a typed Fn parameter.
+;; TEST-ATOM: apply1 should call a function argument through the runtime closure ABI.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:05-symbol-env/closures branch family
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/closures/atom.codegen.05.symbol.env.closures.rt.closure.hof.argument
+;; TEST-MENU-PATH: codegen/branches/symbol-env/closures/atom.codegen.05.symbol.env.closures.rt.closure.hof.argument
+;; TEST-ATOM-LEAF: atom.codegen.05.symbol.env.closures.rt.closure.hof.argument
+;; TEST-CLI-TARGET: codegen branches symbol-env closures
+(module Main)
+(define apply1 (lambda ([f : Fn] [x : Int] -> Int) (f x)))
+(define inc (lambda ([x : Int] -> Int) (+ x 1)))
+(show (apply1 inc 41))

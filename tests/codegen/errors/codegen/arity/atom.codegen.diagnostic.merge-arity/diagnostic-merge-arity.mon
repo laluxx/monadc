@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.branch.diagnostic-merge-arity
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SUBSET: arity
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise merge arity diagnostic.
+;; TEST-ATOM: atom.codegen.diagnostic.merge-arity
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.merge-arity
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-CODEGEN-PATH: diagnostic.map.merge-arity
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: map
+;; TEST-COVERAGE: codegen.c:8508 merge arity diagnostic
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/arity/atom.codegen.diagnostic.merge-arity
+;; TEST-MENU-PATH: codegen/errors/codegen/arity/atom.codegen.diagnostic.merge-arity
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.merge-arity
+;; TEST-CLI-TARGET: codegen errors codegen arity
+(module Main)
+(show (merge #{:a 1}))

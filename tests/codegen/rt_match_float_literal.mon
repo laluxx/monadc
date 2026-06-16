@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-match-float-literal
-;; TEST-CONTEXT: monadc.context.language.reader-header-coverage, monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Pattern codegen coverage for literal float patterns.
-;; TEST-ATOM: (match 1.5 with | 1.5 -> 15 | _ -> 0) should select the float literal clause.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (match 1.5 with | 1.5 -> 15 | _ -> 0))

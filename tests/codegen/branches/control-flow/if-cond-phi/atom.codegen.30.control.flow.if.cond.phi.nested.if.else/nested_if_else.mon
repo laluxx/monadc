@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.nested-if-else
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.if.cond.phi.nested.if.else
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: if-cond-phi
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Nested if-else evaluates the correct branch at runtime.
+;; TEST-ATOM: (if True (if False 1 2) 3) evaluates to 2.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/if-cond-phi branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/if-cond-phi/atom.codegen.30.control.flow.if.cond.phi.nested.if.else
+;; TEST-MENU-PATH: codegen/branches/control-flow/if-cond-phi/atom.codegen.30.control.flow.if.cond.phi.nested.if.else
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.if.cond.phi.nested.if.else
+;; TEST-CLI-TARGET: codegen branches control-flow if-cond-phi
+(module Main)
+(show (if True (if False 1 2) 3))

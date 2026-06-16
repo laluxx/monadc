@@ -1,0 +1,15 @@
+name: do_nested_mixed_returns_last_bool
+section: control
+tier: stable
+kind: law
+features: arithmetic, control, do, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.sequence, infer.arithmetic, infer.equality, reader.ast_do
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.do, atom.core.equality
+related-properties: signal_atom_do_last_value, signal_atom_equality_reflexive
+args: a:Int b:Int cond:Bool
+type: Bool
+expect: True
+description: Nested mixed-type do sequencing must return the final Bool expression.
+law: (= (do {a} (do {b} {cond})) {cond})

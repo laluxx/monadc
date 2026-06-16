@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-make-list-all
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: make-list with various sizes and fill values
-;; TEST-ATOM: (make-list 3 "x") has elements ("x" "x" "x"), (make-list 0 "a") produces ()
-;; TEST-EXPECT: compile, run
-(module Main)
-(show (make-list 3 "x"))
-(show (make-list 0 "a"))
-(show (make-list 5 1))

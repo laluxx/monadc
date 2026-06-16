@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-arith-chained
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.20.operators.arithmetic.rt.arith.chained
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: arithmetic
+;; TEST-CATEGORY: 20-operators
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Chained arithmetic with variadic +, -, *, /.
+;; TEST-ATOM: (+ 1 2 3 4 5) = 15, (- 100 10 20) = 70, (* 2 3 4) = 24, (/ 100 5 2) = 10
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:20-operators/arithmetic branch family
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/arithmetic/atom.codegen.20.operators.arithmetic.rt.arith.chained
+;; TEST-MENU-PATH: codegen/branches/operators/arithmetic/atom.codegen.20.operators.arithmetic.rt.arith.chained
+;; TEST-ATOM-LEAF: atom.codegen.20.operators.arithmetic.rt.arith.chained
+;; TEST-CLI-TARGET: codegen branches operators arithmetic
+(module Main)
+(show (+ 1 2 3 4 5))
+(show (- 100 10 20))
+(show (* 2 3 4))
+(show (/ 100 5 2))

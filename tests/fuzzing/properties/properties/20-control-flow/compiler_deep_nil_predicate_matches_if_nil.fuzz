@@ -1,0 +1,15 @@
+name: compiler_deep_nil_predicate_matches_if_nil
+section: predicates-null-casts-current
+tier: stable
+kind: law
+features: arithmetic, equality, if, null, phi, predicate, predicates
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.null_coalesce, codegen.predicate_dispatch, infer.arithmetic, infer.equality, infer.if_phi, infer.nil, infer.type_predicate, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.if, atom.core.equality, atom.infer.predicate, atom.null.nil
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+args: p:Bool a:Int
+type: Bool
+expect: True
+description: nil? must observe nil produced by a conditional expression.
+law: (= (nil? (if {p} nil {a})) {p})

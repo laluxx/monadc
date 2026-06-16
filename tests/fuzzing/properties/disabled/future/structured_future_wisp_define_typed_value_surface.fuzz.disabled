@@ -1,0 +1,15 @@
+name: structured_future_wisp_define_typed_value_surface
+section: future-wisp-oracle-current
+tier: stable
+kind: law
+features: arithmetic, logic, program
+compiler-path: codegen.operator.arithmetic, codegen.operator.logic, reader.module, codegen.program
+signal: high
+corpus-role: oracle
+uses-atoms: atom.core.arithmetic, atom.core.logic, atom.compiler.program
+disabled-reason: disabled future or merged property; kept for provenance but not loaded by default
+args: x:Int
+type: Int
+expect-python: x
+description: Future Wisp surface syntax property once runner can generate Wisp sources, not only laws.
+law: define x :: Int {x}\nshow x

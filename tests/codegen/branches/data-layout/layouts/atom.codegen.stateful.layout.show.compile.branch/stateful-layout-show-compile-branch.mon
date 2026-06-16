@@ -1,0 +1,31 @@
+;; TEST-ID: tests.codegen.stateful.layout.show.compile.branch
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SUBSET: layouts
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.stateful.layout.show.compile.branch
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Layout pretty printer compile/display branch.
+;; TEST-ATOM: atom.codegen.stateful.layout.show.compile.branch
+;; TEST-EXPECT: compile
+;; TEST-CODEGEN-PATH: codegen.layout
+;; TEST-CODEGEN-PATH: codegen.adt
+;; TEST-CODEGEN-PATH: codegen.dot
+;; TEST-COVERAGE: codegen.c:826-933 type_to_llvm TYPE_LAYOUT/TYPE_APP branches
+;; TEST-COVERAGE: codegen.c:1239-1310 codegen_show_value layout/ADT display branches
+;; TEST-COVERAGE: codegen.c:12669 keyword constructor field initialization
+;; TEST-COVERAGE: codegen.c:12902-12952 dot special form
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-USES-ATOM: atom.codegen.subset.50.data.layout.layouts
+;; TEST-MENU: branches/data-layout/layouts/atom.codegen.stateful.layout.show.compile.branch
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts/atom.codegen.stateful.layout.show.compile.branch
+;; TEST-ATOM-LEAF: atom.codegen.stateful.layout.show.compile.branch
+;; TEST-CLI-TARGET: codegen branches data-layout layouts
+
+(module Main)
+(layout Point [x :: Int] [y :: Int])
+(define p (Point 20 22))
+(show p)

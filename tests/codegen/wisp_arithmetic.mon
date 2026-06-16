@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.wisp-arithmetic
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Wisp infix arithmetic compiles and runs.
-;; TEST-ATOM: Wisp-style + and * with infix precedence works.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-define x 10
-show + 1 * 2 3

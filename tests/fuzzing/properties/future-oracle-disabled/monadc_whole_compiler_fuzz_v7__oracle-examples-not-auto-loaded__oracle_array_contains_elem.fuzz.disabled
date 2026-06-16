@@ -1,7 +1,0 @@
-name: oracle_array_contains_elem
-section: oracle-array
-args: xs:ArrInt x:ElemOf(xs)
-type: Bool
-expect-python: True
-description: Generated array/collection contains? should find generated element.
-law: (contains? {xs} {x})

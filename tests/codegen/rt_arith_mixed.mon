@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-arith-mixed
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Mixed int/float arithmetic.
-;; TEST-ATOM: (+ 1 2.5) = 3.5, (* 3 2.0) = 6.0, (/ 10 4.0) = 2.5
-;; TEST-EXPECT: compile, run
-(module Main)
-(show (+ 1 2.5))
-(show (* 3 2.0))
-(show (/ 10 4.0))

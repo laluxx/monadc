@@ -1,0 +1,15 @@
+name: int_double_negation
+section: arithmetic
+tier: stable
+kind: law
+features: arithmetic, do, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, codegen.sequence, infer.arithmetic, infer.equality, infer.logic, reader.ast_do
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+args: a:Int
+type: Bool
+expect: True
+description: Negating an Int twice through subtraction from zero must recover the original.
+law: (= (fuzz-sub 0 (fuzz-sub 0 {a})) {a})

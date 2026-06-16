@@ -1,0 +1,14 @@
+name: signal_oracle_bit_or_063
+section: current-oracle
+tier: oracle
+kind: law
+features: oracle, bitwise, operator-dispatch
+compiler-path: oracle.expected-python, codegen.dispatch.bit-or
+signal: high
+corpus-role: oracle
+uses-atoms: atom.codegen.dispatch
+args: a:Int@tiny+bitwise b:Int@tiny+bitwise
+type: Int
+expect-python: a | b
+description: Oracle property with generated Python expected value and explicit atom links.
+law: (bit-or {a} {b})

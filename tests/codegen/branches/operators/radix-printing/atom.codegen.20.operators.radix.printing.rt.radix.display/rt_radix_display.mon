@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-radix-display
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.20.operators.radix.printing.rt.radix.display
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: radix-printing
+;; TEST-CATEGORY: 20-operators
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Runtime Hex/Bin/Oct display conversions work.
+;; TEST-ATOM: (Hex 255) = 0xFF, (Bin 5) = 0b101, (Oct 8) = 0o10.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:20-operators/radix-printing branch family
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/radix-printing/atom.codegen.20.operators.radix.printing.rt.radix.display
+;; TEST-MENU-PATH: codegen/branches/operators/radix-printing/atom.codegen.20.operators.radix.printing.rt.radix.display
+;; TEST-ATOM-LEAF: atom.codegen.20.operators.radix.printing.rt.radix.display
+;; TEST-CLI-TARGET: codegen branches operators radix-printing
+(module Main)
+(show (Hex 255))
+(show (Bin 5))
+(show (Oct 8))

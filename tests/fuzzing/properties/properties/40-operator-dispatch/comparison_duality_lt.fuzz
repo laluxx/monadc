@@ -1,0 +1,15 @@
+name: comparison_duality_lt
+section: comparison
+tier: stable
+kind: law
+features: arithmetic, comparison, equality, logic, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.comparison_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.comparison, infer.equality, infer.logic, infer.type_predicate
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Less-than must agree with reversed greater-than.
+law: (= (fuzz-lt? {a} {b}) (fuzz-gt? {b} {a}))

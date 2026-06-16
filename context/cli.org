@@ -1,8 +1,8 @@
 #+TITLE: CLI Argument Parser
 #+AUTHOR: codex
-#+DATE: 2026-06-13
+#+DATE: 2026-06-16
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -227,37 +227,37 @@
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.cli.cmd-new src:cli.c:292 conf:high]
+[OBS id:obs.cli.cmd-new.handler src:cli.c:292 conf:high]
   =void cmd_new(const char *package_name)= — Scaffolds a new Monad
   project. Creates directory structure (=src/=, =lib/=), writes a
   =monad.json= manifest with metadata from =git config=, and writes
   a default =src/main.monad= entry point. Uses static helpers
   =make_dir=, =write_file=, =git_config=, =current_year=.
 
-[OBS id:obs.cli.cmd-build src:cli.c:520 conf:high]
+[OBS id:obs.cli.cmd-build.handler src:cli.c:520 conf:high]
   =void cmd_build(void)= — Top-level build command. Calls
   =resolve_build_info= (line 415) to parse =monad.json= and locate
   sources, then =do_build= (line 505) which invokes =compile_one= from
   =main.c= on each source file and links the resulting objects with the
   Monad runtime into an executable.
 
-[OBS id:obs.cli.cmd-run src:cli.c:536 conf:high]
+[OBS id:obs.cli.cmd-run.handler src:cli.c:536 conf:high]
   =void cmd_run(void)= — Builds (via =cmd_build= internally through
   =do_build=) and executes the resulting binary. Looks up the executable
   path from the build info and runs it with any additional arguments.
 
-[OBS id:obs.cli.cmd-clean src:cli.c:593 conf:high]
+[OBS id:obs.cli.cmd-clean.handler src:cli.c:593 conf:high]
   =void cmd_clean(void)= — Removes build artifacts: object files
   (via =clean_ext_in_dir=), the output binary, and the =target/=
   directory (via =rmdir_recursive=). Walks all source directories
   to find and remove =.o= files.
 
-[OBS id:obs.cli.cmd-install src:cli.c:620 conf:high]
+[OBS id:obs.cli.cmd-install.handler src:cli.c:620 conf:high]
   =void cmd_install(void)= — Builds the project then copies the output
   binary to =~/.local/bin= (or =$PREFIX/bin= if set). Creates the target
   directory if it does not exist.
 
-[OBS id:obs.cli.cmd-test src:cli.c:675 conf:high]
+[OBS id:obs.cli.cmd-test.handler src:cli.c:675 conf:high]
   =void cmd_test(const char *input_file)= — Compiles the given input
   file (or project) with =test_mode= enabled, runs the resulting test
   binary, and (when =test_run=) deletes it after execution.

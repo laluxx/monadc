@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-char-constructor-aliases
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.50.data.layout.adt.constructors.rt.char.constructor.aliases
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: adt-constructors
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime char constructor aliases are codegen-backed coverage points.
+;; TEST-ATOM: (Char 65) produces 'A', (Char 66) produces 'B'.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:50-data-layout/adt-constructors branch family
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/adt-constructors/atom.codegen.50.data.layout.adt.constructors.rt.char.constructor.aliases
+;; TEST-MENU-PATH: codegen/branches/data-layout/adt-constructors/atom.codegen.50.data.layout.adt.constructors.rt.char.constructor.aliases
+;; TEST-ATOM-LEAF: atom.codegen.50.data.layout.adt.constructors.rt.char.constructor.aliases
+;; TEST-CLI-TARGET: codegen branches data-layout adt-constructors
+(module Main)
+(show (Char 65))
+(show (Char 66))

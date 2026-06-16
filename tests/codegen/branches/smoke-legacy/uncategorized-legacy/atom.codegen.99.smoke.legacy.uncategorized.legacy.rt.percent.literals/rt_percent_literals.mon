@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-percent-literals
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.99.smoke.legacy.uncategorized.legacy.rt.percent.literals
+;; TEST-QUALITY: legacy-smoke
+;; TEST-SUBSET: uncategorized-legacy
+;; TEST-CATEGORY: 99-smoke-legacy
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime percentage literal sugar compiles to exact ratio values.
+;; TEST-ATOM: Integer, decimal, and negative percentages print as normalized ratios.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:99-smoke-legacy/uncategorized-legacy branch family
+;; TEST-USES-ATOM: atom.codegen.category.99.smoke.legacy
+;; TEST-MENU: branches/smoke-legacy/uncategorized-legacy/atom.codegen.99.smoke.legacy.uncategorized.legacy.rt.percent.literals
+;; TEST-MENU-PATH: codegen/branches/smoke-legacy/uncategorized-legacy/atom.codegen.99.smoke.legacy.uncategorized.legacy.rt.percent.literals
+;; TEST-ATOM-LEAF: atom.codegen.99.smoke.legacy.uncategorized.legacy.rt.percent.literals
+;; TEST-CLI-TARGET: codegen branches smoke-legacy uncategorized-legacy
+(module Main)
+(show 33%)
+(show 12.5%)
+(show -33%)

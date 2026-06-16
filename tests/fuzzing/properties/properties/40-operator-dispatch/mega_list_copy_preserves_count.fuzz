@@ -1,0 +1,15 @@
+name: mega_list_copy_preserves_count
+section: codegen-runtime-collections
+tier: stable
+kind: law
+features: arithmetic, codegen, equality, list
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.runtime_call, infer.arithmetic, infer.equality, runtime.list
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.core.equality
+related-properties: signal_atom_equality_reflexive
+args: a:Int
+type: Bool
+expect: True
+description: list-copy must preserve runtime length.
+law: (= (count (list-copy (make-list 5 {a}))) 5)

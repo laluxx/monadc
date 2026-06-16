@@ -1,1 +1,206 @@
-I'm trying to let the LLMs express themself in a format they design and extend for themself.
+#+TITLE: MonadC Context Garden README
+#+AUTHOR: GPT-5.5 Thinking
+#+DATE: 2026-06-16
+#+CREATED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-16
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:readme:garden:
+#+PROPERTY: CONTEXT_VERSION 3
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.readme
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY hideblocks
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* Purpose
+:PROPERTIES:
+:ID: monadc.context.readme.purpose
+:CUSTOM_ID: readme-purpose
+:CONTEXT_KIND: portal
+:CONTEXT_DESCRIPTION: Human and LLM landing page for the MonadC context garden.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/README.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.readme.garden-purpose src:context/README.org conf:high]
+  This directory is the living knowledge garden for MonadC. It is not a loose
+  notes folder. It is a source-grounded, ID-addressable map of compiler facts,
+  decisions, test contracts, bug witnesses, and future design pressure.
+
+[DEC id:dec.readme.context-is-garden date:2026-06-16 by:human+llm]
+  Treat =context/= as the garden where compiler knowledge lives. Add, prune,
+  connect, and supersede records as the project changes. Do not let stale notes
+  pretend to be current truth.
+
+* First Places To Open
+:PROPERTIES:
+:ID: monadc.context.readme.first-places
+:CUSTOM_ID: readme-first-places
+:CONTEXT_KIND: navigation
+:CONTEXT_DESCRIPTION: The shortest route through the context garden for a human or an agent.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/README.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Recommended entry points
+| Need | Open |
+|------+------|
+| Root portal | [[file:context.org][context.org]] |
+| Formal schema and notation | [[file:index.org][index.org]] |
+| Garden rules and pruning conventions | [[file:garden.org][garden.org]] |
+| Generated inventory and corpus health | [[file:inventory.org][inventory.org]] |
+| Quality gates and validation commands | [[file:quality.org][quality.org]] |
+| Test-suite contracts and tier policy | [[file:test-contracts.org][test-contracts.org]] |
+| Current bug agenda | [[file:debug-agenda.org][debug-agenda.org]] |
+| Source-file routing | [[file:navigation.org][navigation.org]] |
+
+* Operating Rule For Agents
+:PROPERTIES:
+:ID: monadc.context.readme.agent-rule
+:CUSTOM_ID: readme-agent-rule
+:CONTEXT_KIND: workflow
+:CONTEXT_DESCRIPTION: The minimal rule every LLM agent must follow before editing MonadC.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/README.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.readme.read-context-first date:2026-06-16 by:human+llm]
+  Before changing compiler behavior or tests, read the relevant topic file(s),
+  the linked context nodes, and the test metadata. After changing behavior,
+  update the context with either a new decision, a superseding note, or a
+  quality warning. No silent garden drift.
+
+[DEC id:dec.readme.evidence-before-confidence date:2026-06-16 by:llm]
+  High-confidence records require source code, test output, compiler output, or
+  an explicit user decision. Inferences must be marked =INF= and linked to their
+  observations. Opinions belong in =THINK= or =IDEA=, not =OBS=.
+
+* Clean Tar Workflow
+:PROPERTIES:
+:ID: monadc.context.readme.tar-workflow
+:CUSTOM_ID: readme-tar-workflow
+:CONTEXT_KIND: workflow
+:CONTEXT_DESCRIPTION: How to package the context garden without generated noise.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/README.org
+:CONFIDENCE: high
+:END:
+
+#+BEGIN_SRC sh
+# From repository root:
+python3 context/tools/context_lint.py context   # when available
+find context -name '__pycache__' -o -name '*.pyc' -delete
+tar -czf monadc_context.tar.gz context
+#+END_SRC
+
+[FIX id:fix.readme.added-context-lint date:2026-06-16 by:llm]
+  Added =context/tools/context_lint.py= as a dependency-free linter for heading
+  ID uniqueness, bracket record uniqueness, common file headers, and local file
+  link hygiene.
+
+* Second Garden Pass: Category Context
+:PROPERTIES:
+:ID: monadc.context.readme.round2-category-context
+:CUSTOM_ID: readme-round2-category-context
+:CONTEXT_KIND: navigation
+:CONTEXT_DESCRIPTION: Documents the second garden pass and points readers to new category-context files.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/README.org
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.readme.round2-category-context date:2026-06-16 by:llm]
+  Added a dedicated category-context layer, traceability spine, curation
+  playbook, and category contracts for the major compiler/test topics.
+
+Start here when asking "where does this failure belong?":
+
+- [[file:category-context.org][category-context.org]] for objects, morphisms, and category contracts.
+- [[file:traceability.org][traceability.org]] for source/context/test/failure chains.
+- [[file:curation.org][curation.org]] for garden maintenance loops.
+
+* Round 3 Category Directory
+:PROPERTIES:
+:ID: monadc.context.readme.round3-category-directory
+:CONTEXT_KIND: navigation
+:CONTEXT_STATUS: active
+:SOURCE: context/README.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.readme.round3-category-directory src:context/README.org conf:high]
+  The formal category context now lives in [[file:category/index.org][category/index.org]].  It defines the free-category model, taxonomy preorder,
+  context type system, information metrics, and executable scripts.
+
+* Live Category Tooling
+:PROPERTIES:
+:ID: monadc.context.readme.live-category-tooling
+:CUSTOM_ID: readme-live-category-tooling
+:CONTEXT_KIND: portal
+:CONTEXT_STATUS: active
+:SOURCE: context/README.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.readme.live-category-tooling src:context/README.org conf:high]
+  The category subsystem now includes a live terminal explorer and query
+  language.  Start with [[file:category/query-language.org][category/query-language.org]] and
+  [[file:category/tui.org][category/tui.org]], then run:
+
+#+begin_src sh
+python3 context/category/scripts/catq.py context 'typed define :Record'
+cd context/category/catface && zig build run -- --query 'typed define :Record' ../../
+cd context/category/catface && zig build run -- ../../
+#+end_src

@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.rt-wisp-mutation
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.basic.values.rt.wisp.mutation
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: basic-values
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.wisp.mutation
+;; TEST-PURPOSE: Wisp set! mutation works
+;; TEST-ATOM: set! x 5 changes x from 0 to 5
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:80-wisp-codegen/basic-values branch family
+;; TEST-USES-ATOM: atom.codegen.category.80.wisp.codegen
+;; TEST-MENU: branches/wisp-codegen/basic-values/atom.codegen.80.wisp.codegen.basic.values.rt.wisp.mutation
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/basic-values/atom.codegen.80.wisp.codegen.basic.values.rt.wisp.mutation
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.basic.values.rt.wisp.mutation
+;; TEST-CLI-TARGET: codegen branches wisp-codegen basic-values
+module Main
+define x 0
+show x
+set! x 5
+show x
+set! x (+ x 1)
+show x

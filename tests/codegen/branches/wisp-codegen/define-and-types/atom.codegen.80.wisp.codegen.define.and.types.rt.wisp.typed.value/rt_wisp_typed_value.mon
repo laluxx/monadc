@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.rt-wisp-typed-value
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.typed.value
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: define-and-types
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Wisp typed value binding compiles and runs.
+;; TEST-ATOM: define x :: Int 42 then (show x) prints 42.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:80-wisp-codegen/define-and-types branch family
+;; TEST-USES-ATOM: atom.codegen.category.80.wisp.codegen
+;; TEST-MENU: branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.typed.value
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.typed.value
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.typed.value
+;; TEST-CLI-TARGET: codegen branches wisp-codegen define-and-types
+module Main
+(define [x :: Int] 42)
+(define y :: Int 42)
+define z :: Int 42
+(show x)
+(show y)
+(show z)

@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-for-while-guard
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: For loop with :while guard stops early.
-;; TEST-ATOM: (for [i 0 10] :while (< i 3) (show i)) prints 0,1,2.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(for [i 0 10] :while (< i 3) (show i))

@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-bitwise-ops
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.20.operators.bitwise.rt.bitwise.ops
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: bitwise
+;; TEST-CATEGORY: 20-operators
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Bitwise operations on integers (only & and ~ work; | is reserved for pipe).
+;; TEST-ATOM: (& 12 5) = 4, (~ 0) = -1, (~ -1) = 0
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:20-operators/bitwise branch family
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/bitwise/atom.codegen.20.operators.bitwise.rt.bitwise.ops
+;; TEST-MENU-PATH: codegen/branches/operators/bitwise/atom.codegen.20.operators.bitwise.rt.bitwise.ops
+;; TEST-ATOM-LEAF: atom.codegen.20.operators.bitwise.rt.bitwise.ops
+;; TEST-CLI-TARGET: codegen branches operators bitwise
+(module Main)
+(show (& 12 5))
+(show (~ 0))
+(show (~ -1))

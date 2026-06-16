@@ -1,0 +1,83 @@
+#+TITLE: Category Terminal Interface
+#+AUTHOR: GPT-5.5 Thinking
+#+DATE: 2026-06-16
+#+CREATED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-16
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:3 num:t
+#+CATEGORY: monadc-category
+#+FILETAGS: :monadc:compiler:context:category:tui:terminal:zig:catface:
+#+PROPERTY: CONTEXT_VERSION 8
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.category.tui
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+
+* Canonical Interface
+:PROPERTIES:
+:ID: monadc.context.category.tui.canonical-interface
+:CUSTOM_ID: category-tui-canonical-interface
+:CONTEXT_KIND: interface
+:CONTEXT_STATUS: active
+:SOURCE: context/category/tui.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.category.tui.canonical-interface src:context/category/tui.org conf:high]
+  The canonical terminal interface is now [[file:catface.org][Catface]], implemented as a Zig
+  package in [[file:catface/README.org][context/category/catface]].  The previous curses prototype is no longer the
+  canonical UI.  This file exists as a stable navigation node for terminal UI
+  policy and now points to the Zig implementation.
+
+[DEC id:dec.category.tui.zig-redesign date:2026-06-16 by:llm]
+  Redesign the TUI from scratch in Zig.  The target experience is a fast custom
+  terminal application with dual panes, live fuzzy search, object rectangles,
+  link following, and category-theory centric operations.
+
+* Screen Model
+:PROPERTIES:
+:ID: monadc.context.category.tui.screen-model
+:CUSTOM_ID: category-tui-screen-model
+:CONTEXT_KIND: ui-model
+:CONTEXT_STATUS: active
+:SOURCE: context/category/tui.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.category.tui.screen-model src:context/category/tui.org conf:high]
+  The screen has four regions: query header, left result pane, right focus pane,
+  and footer.  The left pane is a ranked live search result set.  The right pane
+  is an object card with metadata and Hom-set arrows.  =Tab= toggles focus; the
+  active pane is brighter.
+
+* Category Operations
+:PROPERTIES:
+:ID: monadc.context.category.tui.category-operations
+:CUSTOM_ID: category-tui-category-operations
+:CONTEXT_KIND: ui-contract
+:CONTEXT_STATUS: active
+:SOURCE: context/category/tui.org
+:CONFIDENCE: high
+:END:
+
+| Key | Query operation | Category reading |
+|-----+-----------------+------------------|
+| =Enter= | =?object-id= | focus identity |
+| =o= | =>= | outgoing =Hom(A,-)= |
+| =i= | =<= | incoming =Hom(-,A)= |
+| =n= | =~= | neighborhood in generating graph |
+| =p= | =◗= | projection/functor/taxonomy closure |
+| =b= | history | return along browsing path |
+
+* Implementation Link
+:PROPERTIES:
+:ID: monadc.context.category.tui.implementation-link
+:CUSTOM_ID: category-tui-implementation-link
+:CONTEXT_KIND: source-map
+:CONTEXT_STATUS: active
+:SOURCE: context/category/tui.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.category.tui.implementation-link src:context/category/tui.org conf:high]
+  See [[file:catface.org][catface.org]] and [[file:catface/src/app.zig][catface/src/app.zig]].

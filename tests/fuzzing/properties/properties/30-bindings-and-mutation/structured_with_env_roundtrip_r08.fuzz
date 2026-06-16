@@ -1,0 +1,15 @@
+name: structured_with_env_roundtrip_r08
+section: binding-env-current
+tier: stable
+kind: law
+features: with, env, arithmetic, strategy
+compiler-path: codegen.arithmetic_dispatch, codegen.local_load, codegen.with_binding, infer.arithmetic, infer.env_child, infer.env_lookup, runner.strategy_arg, runner.typed_generator
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.with, atom.core.equality, atom.core.plus, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero, signal_atom_with_substitution
+args: a:Int@edge+with b:Int@tiny
+type: Bool
+expect: True
+description: V11 stable compiler-path law with_env_roundtrip variant 8; uses strategy args and explicit compiler-path metadata for feature coverage.
+law: (with [unused 1] (= (with [x {a}] (+ x {b})) (+ {a} {b})))

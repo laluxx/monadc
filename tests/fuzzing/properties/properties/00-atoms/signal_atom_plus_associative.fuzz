@@ -1,0 +1,16 @@
+name: signal_atom_plus_associative
+section: current-atom-foundation
+tier: stable
+kind: law
+features: arithmetic, +, equality
+compiler-path: codegen.expr.binary-add, codegen.expr.nested-call, runtime.int.add
+signal: medium
+corpus-role: atom-foundation
+atom: atom.core.plus.associative
+proves: atom.core.plus.associative
+uses-atoms: atom.core.equality, atom.core.plus
+args: a:Int@edge+if b:Int@edge+with c:Int@edge+do
+type: Bool
+expect: True
+description: Foundation atom proof for atom.core.plus.associative; derived properties link through uses-atoms/depends-on metadata.
+law: (= (+ (+ {a} {b}) {c}) (+ {a} (+ {b} {c})))

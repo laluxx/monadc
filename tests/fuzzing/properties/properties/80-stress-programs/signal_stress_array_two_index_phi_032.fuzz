@@ -1,0 +1,15 @@
+name: signal_stress_array_two_index_phi_032
+section: current-stress
+tier: stress
+kind: program
+features: stress, program, array, index, if, phi, dependent-arg
+compiler-path: stress.program, codegen.array.literal, codegen.call.array-as-function, codegen.expr.if
+signal: high
+corpus-role: stress-program
+uses-atoms: atom.runtime.array.index.valid, atom.control.if, atom.core.equality.reflexive
+depends-on: atom.runtime.array.index.valid, atom.core.equality.reflexive
+args: xs:NonEmptyArrInt@small i:IndexOf(xs) j:IndexOf(xs) flag:Bool@logic
+type: Bool
+expect: True
+description: Stress program property combining several compiler stages while linked to foundational atoms.
+program: (show (= (if {flag} ({xs} {i}) ({xs} {j})) (if {flag} ({xs} {i}) ({xs} {j}))))

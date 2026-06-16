@@ -1,0 +1,41 @@
+;; TEST-ID: tests.codegen.menu.errors.reader.lexer.character.unterminated.simple.variant.4.090
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: expected-fail-compiled
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: errors
+;; TEST-SUBSET: reader/lexer.character.unterminated.simple.variant-4
+;; TEST-MENU: errors/reader/lexer.character.unterminated.simple.variant-4/atom.menu.error.reader.lexer.character.unterminated.simple.variant-4.090
+;; TEST-MENU-PATH: codegen/errors/reader/lexer.character.unterminated.simple.variant-4/atom.menu.error.reader.lexer.character.unterminated.simple.variant-4.090
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.error-menu
+;; TEST-PURPOSE: Pin reader.c diagnostic: unterminated character literal
+;; TEST-ATOM: atom.menu.error.reader.lexer.character.unterminated.simple.variant-4.090
+;; TEST-CODEGEN-ATOM: atom.menu.error.reader.lexer.character.unterminated.simple.variant-4.090
+;; TEST-ATOM-LEAF: atom.menu.error.reader.lexer.character.unterminated.simple.variant-4.090
+;; TEST-QUALITY: menu-error-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ERROR-STAGE: reader
+;; TEST-ERROR-FAMILY: lexer.character.unterminated.simple.variant-4
+;; TEST-ERROR-MESSAGE: unterminated character literal
+;; TEST-ERROR-SOURCE: reader.c
+;; TEST-ERROR-PATH: reader.c:1402
+;; TEST-CODEGEN-PATH: diagnostic.reader.lexer.character.unterminated.simple.variant-4
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-TAG: menu
+;; TEST-COVERAGE: reader.c:1402 unterminated character literal
+;; TEST-USES-ATOM: atom.menu.error.reader.lexer.character.unterminated.simple.variant-4.090
+;; TEST-USES-ATOM: atom.error.reader
+;; TEST-USES-ATOM: atom.error.reader.lexer.character.unterminated.simple.variant-4
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-DEPENDS-ON: atom.reader.lex.parse
+;; TEST-REFINES: atom.error.reader
+;; TEST-REFINES: atom.error.reader.lexer.character.unterminated.simple.variant-4
+;; TEST-REFINES: atom.reader.error
+;; TEST-RELATED: atom.codegen.error.menu
+;; TEST-CLI-TARGET: codegen errors reader reader
+
+(module Main)
+;; reader menu variant 4
+(show 'x)

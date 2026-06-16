@@ -11,11 +11,16 @@
 
 [[file:index.org][<- Back to Index]] · [[file:strings.org][Strings]] · [[file:types.org][Types]] · [[file:symbols.org][Symbols & Keywords]] · [[file:ffi.org][C FFI]] · [[file:modules.org][Modules]] · [[file:syntax.org][Syntax]]
 
-Test coverage: path literal parsing by reader atoms in [[file:../tests/reader-atoms.tsv]].
+Test coverage: path literal parsing by reader atoms in
+[[file:../tests/reader-atoms.tsv]]. The test architecture is documented at
+[[file:../context/tests-arch.org][context/tests-arch.org]].
 
-=Path= is a first-class literal type for filesystem paths. Paths are valid Unix path tokens that the reader recognizes as =AST_PATH= nodes ([[file:../reader.c]]).
+=Path= is a first-class literal type for filesystem paths. Paths are valid
+Unix path tokens that the reader recognizes as =AST_PATH= nodes
+([[file:../reader.c]]). See [[file:syntax.org][Syntax]] for the reader's
+atom classification rules.
 
-* Path Literals
+* 1. Path Literals
 
 #+BEGIN_SRC monad
 ~/xos/projects/c/monadc/context/     ; absolute with home
@@ -36,9 +41,31 @@ define context-dir ~/xos/projects/c/monadc/context/
 show context-dir
 #+END_SRC
 
-* Path Type
+#+BEGIN_SRC monad
+;; Reading a source file
+(define src ~/monad/main.mon)
+(show src)
 
-=Path= is a primitive ground type (=TYPE_PATH=) in the type system ([[file:../types.h::8]]).
+;; Working directory relative
+(define build-dir ./build/)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+;; Reading a source file
+define src ~/monad/main.mon
+show src
+
+;; Working directory relative
+define build-dir ./build/
+#+END_SRC
+
+See [[file:show.org][Show]] for path display semantics and
+[[file:../context/reader.org][context/reader.org]] for =AST_PATH= tokenization.
+
+* 2. Path Type
+
+=Path= is a primitive ground type (=TYPE_PATH=) in the type system
+([[file:../types.h::8]]).
 
 | Aspect         | Detail              |
 |----------------+---------------------|
@@ -47,7 +74,11 @@ show context-dir
 | Runtime tag    | =RT_PATH=             |
 | Representation | =char*= (path string) |
 
-* Path Operations
+See [[file:types.org][Types → Primitive Types]] for the ground type
+overview and [[file:../context/types.org][context/types.org]] for the
+=TYPE_PATH= enum definition and runtime tagging.
+
+* 3. Path Operations
 
 Paths support =show= for display and comparison via ==== and =!=:
 
@@ -61,7 +92,26 @@ Paths support =show= for display and comparison via ==== and =!=:
 != ./context /tmp
 #+END_SRC
 
-* Path vs String
+#+BEGIN_SRC monad
+;; Path comparison in conditionals
+(if (= ./config.json ./config.prod.json)
+  (show "production config")
+  (show "development config"))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+;; Path comparison in conditionals
+if = ./config.json ./config.prod.json
+  show "production config"
+  show "development config"
+#+END_SRC
+
+See [[file:equality.org][Equality]] for the full equality protocol and
+[[file:show.org][Show]] for the display protocol. Path operations at the
+codegen level are documented in
+[[file:../context/codegen.org][context/codegen.org]].
+
+* 4. Path vs String
 
 | Aspect         | Path             | String               |
 |----------------+------------------+----------------------|
@@ -70,20 +120,99 @@ Paths support =show= for display and comparison via ==== and =!=:
 | Quote needed   | No               | No                   |
 | Use case       | Filesystem paths | General text         |
 
-A path literal is not a string — it has its own type and cannot be used where a =String= is expected without explicit conversion.
+A path literal is not a string — it has its own type and cannot be used
+where a =String= is expected without explicit conversion.
+
+#+BEGIN_SRC monad
+;; Path literal (type Path)
+(define p ~/data/file.txt)
+
+;; String literal (type String)
+(define s "~/data/file.txt")
+
+;; These are NOT the same type
+(= p s)              ; type error: Path vs String
+#+END_SRC
+
+#+BEGIN_SRC wisp
+;; Path literal (type Path)
+define p ~/data/file.txt
+
+;; String literal (type String)
+define s "~/data/file.txt"
+
+;; These are NOT the same type
+= p s                # type error: Path vs String
+#+END_SRC
+
+See [[file:strings.org][Strings]] for the string type and
+[[file:casting.org][Casting]] for type conversion between path and
+string representations.
+
+* 5. Paths in Context
+
+Paths interact with several compiler subsystems:
+
+- **C FFI**: paths used for C library include directories
+  ([[file:ffi.org][C FFI]], [[file:../context/ffi.org][context/ffi.org]]).
+- **Modules**: paths for module resolution and import
+  ([[file:modules.org][Modules]],
+  [[file:../context/module.org][context/module.org]]).
+- **CLI**: command-line path arguments
+  ([[file:cli.org][CLI Reference]],
+  [[file:../context/cli.org][context/cli.org]]).
+- **Build system**: source and output paths
+  ([[file:build.org][Build System]],
+  [[file:../context/buildsystem.org][context/buildsystem.org]]).
+- **Reader**: path token recognition
+  ([[file:../reader.c][reader.c]]).
+
+Implementation Notes
+
+- **Reader tokenisation**: the reader (=reader.c=) identifies path tokens
+  by their leading =~/=, =/=, =./=, or =../= prefix and produces
+  =AST_PATH= nodes ([[file:../context/reader.org][context/reader.org — path tokens]]).
+- **Type system**: =TYPE_PATH= (=types.h:8=) is a primitive ground type
+  with runtime tag =RT_PATH=
+  ([[file:../context/types.org][context/types.org — TYPE_PATH]]).
+- **Codegen**: path literals lower to LLVM global string constants with
+  the path text; equality compiles to =memcmp=
+  ([[file:../context/codegen.org][context/codegen.org — path codegen]]).
+- **No implicit conversion**: paths and strings are separate types;
+  casting between them requires explicit conversion.
+
+Key Points
+
+- Path literals start with =~/=, =/=, =./=, or =../= — they have their
+  own type (=Path=) separate from =String=.
+- Use =~/path= for home-relative, =./path= for cwd-relative,
+  =/abs/path= for absolute, =../= for parent directory.
+- Paths support ==== and =!= comparison but cannot be used where strings
+  are expected without explicit conversion.
+- The reader distinguishes path tokens from symbols by the leading path
+  prefix characters.
 
 * Related Pages
 
 - [[file:types.org][Types]] — ground type: Path
-- [[file:syntax.org][Syntax]] — literal syntax for all atoms
-- [[file:show.org][Show]] — file content / directory listing display
+- [[file:syntax.org][Syntax]] — literal syntax for all atomic types
+- [[file:show.org][Show]] — path display function
 - [[file:strings.org][Strings]] — string vs path comparison
-- [[file:ffi.org][C FFI]] — path usage in C interop
+- [[file:ffi.org][C FFI]] — path usage in C library resolution
 - [[file:collections.org][Collections]] — path collection operations
+- [[file:modules.org][Modules]] — path-based module resolution
+- [[file:cli.org][CLI Reference]] — command-line path arguments
+- [[file:build.org][Build System]] — source and output paths
+- [[file:casting.org][Casting]] — path-to-string type conversion
+- [[file:equality.org][Equality]] — path equality semantics
 
-* Context Links
+* Further Reading
 
-- [[file:../context/types.org][context/types.org]] — TYPE_PATH
-- [[file:../context/reader.org][context/reader.org]] — Path tokenization
-- [[file:../reader.c][reader.c]] — AST_PATH parsing
-- [[file:../codegen.c][codegen.c]] — Path codegen
+- [[file:../context/types.org][context/types.org]] — TYPE_PATH enum and runtime tag
+- [[file:../context/reader.org][context/reader.org]] — Path tokenization, AST_PATH node
+- [[file:../context/codegen.org][context/codegen.org]] — Path codegen LLVM lowering
+- [[file:../context/language.org][context/language.org]] — language formalization for path literals
+- [[file:../reader.c][reader.c]] — AST_PATH parsing implementation
+- [[file:../codegen.c][codegen.c]] — Path codegen implementation
+- [[file:../types.h::8][types.h]] — TypeKind enum including TYPE_PATH
+- [[file:../tests/reader-atoms.tsv][tests/reader-atoms.tsv]] — path atom test cases

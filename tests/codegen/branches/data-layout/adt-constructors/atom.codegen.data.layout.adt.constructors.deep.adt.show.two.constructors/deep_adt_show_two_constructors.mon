@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.deep.deep_adt_show_two_constructors
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SUBSET: adt-constructors
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.data.layout.adt.constructors.deep.adt.show.two.constructors
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise ADT constructor allocation and show dispatch.
+;; TEST-ATOM: ADT values should print canonical constructor syntax.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:ADT constructor codegen
+;; TEST-COVERAGE: codegen.c:codegen_show_value TYPE_LAYOUT/TYPE_APP ADT branch
+
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/adt-constructors/atom.codegen.data.layout.adt.constructors.deep.adt.show.two.constructors
+;; TEST-MENU-PATH: codegen/branches/data-layout/adt-constructors/atom.codegen.data.layout.adt.constructors.deep.adt.show.two.constructors
+;; TEST-ATOM-LEAF: atom.codegen.data.layout.adt.constructors.deep.adt.show.two.constructors
+;; TEST-CLI-TARGET: codegen branches data-layout adt-constructors
+(module Main)
+(data Maybe Nothing | Just Int)
+(show Nothing)
+(show (Just 42))

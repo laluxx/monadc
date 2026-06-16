@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.asm.three-placeholder-sum
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.70.ffi.asm.inline.asm.asm.three.placeholder.sum
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: inline-asm
+;; TEST-CATEGORY: 70-ffi-asm
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Three parameter placeholders are split correctly.
+;; TEST-ATOM: a + b + c with three params returns 42.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:70-ffi-asm/inline-asm branch family
+;; TEST-USES-ATOM: atom.codegen.category.70.ffi.asm
+;; TEST-MENU: branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.three.placeholder.sum
+;; TEST-MENU-PATH: codegen/branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.three.placeholder.sum
+;; TEST-ATOM-LEAF: atom.codegen.70.ffi.asm.inline.asm.asm.three.placeholder.sum
+;; TEST-CLI-TARGET: codegen branches ffi-asm inline-asm
+module AsmTest
+
+define asm-three-placeholders :: Int -> Int -> Int -> Int
+  a b c -> (asm add a b add a c)
+
+show (asm-three-placeholders 10 20 12)

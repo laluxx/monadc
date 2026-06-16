@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.rt-data-single-constructor
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-CODEGEN-ATOM: atom.codegen.50.data.layout.adt.constructors.rt.data.single.constructor
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: adt-constructors
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Data type with single parameterized constructor works.
+;; TEST-ATOM: (data Point Float Float) then (Point 3.0 4.0) creates a value.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:50-data-layout/adt-constructors branch family
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/adt-constructors/atom.codegen.50.data.layout.adt.constructors.rt.data.single.constructor
+;; TEST-MENU-PATH: codegen/branches/data-layout/adt-constructors/atom.codegen.50.data.layout.adt.constructors.rt.data.single.constructor
+;; TEST-ATOM-LEAF: atom.codegen.50.data.layout.adt.constructors.rt.data.single.constructor
+;; TEST-CLI-TARGET: codegen branches data-layout adt-constructors
+(module Main)
+(data Point Float Float)
+(define p (Point 3.0 4.0))
+(show p)

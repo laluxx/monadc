@@ -11,34 +11,27 @@
 
 [[file:index.org][<- Back to Index]] · [[file:characters.org][Characters]] · [[file:show.org][Show]] · [[file:list.org][Lists]] · [[file:map.org][Maps]] · [[file:core.org][Core Library]] · [[file:collections.org][Collections]] · [[file:types.org][Types]]
 
-Test coverage: string operations are verified by =rt_string_helpers.mon=
-(=count=), =rt_string_concat.mon= (=++=),
-=rt_string_prefix_suffix.mon= (=starts-with?=, =ends-with?=),
-=rt_string_equality_true.mon=, and =rt_string_equality_false.mon=
-fixtures. String indexing =("str" 0)= is covered by =rt_string_index.mon=.
-All fixtures in [[file:../tests/codegen/][tests/codegen/]].
+Test coverage: string operations are verified by =rt_string_helpers.mon= (=count=), =rt_string_concat.mon= (=++=), =rt_string_prefix_suffix.mon= (=starts-with?=, =ends-with?=), =rt_string_equality_true.mon=, and =rt_string_equality_false.mon= fixtures. String indexing =("str" 0)= is covered by =rt_string_index.mon=. All fixtures in [[file:../tests/codegen/][tests/codegen/]].
 
-Strings are UTF-8 encoded and immutable. Characters (see [[file:characters.org][Characters]]) are
-Unicode codepoints of type =Char=. The LLVM representation of a string is a
-global constant pointer (=i8*=) with an associated length. The runtime tag is
-=RT_STRING= wrapping a C =char*= and length
-([[file:../context/language.org::runtime-value-system][context/language.org]]).
+This page covers strings in Monad: literals, comparison, operations,
+indexing, and the =Char= type.
 
-** String Literals
+Strings are UTF-8 encoded and immutable. Characters (see [[file:characters.org][Characters]]) are Unicode codepoints of type =Char=. The LLVM representation of a string is a global constant pointer (=i8*=) with an associated length. The runtime tag is =RT_STRING= wrapping a C =char*= and length ([[file:../context/language.org::runtime-value-system][context/language.org]]).
+
+* 1. String Literals
 
 #+BEGIN_SRC monad
 "hello"  "line1\nline2"  "unicode: \u03C0"  "multi-line
 string inside quotes"
 #+END_SRC
 
-Multi-line strings work: a newline character inside quoted text is part of the
-string. No line-continuation escape is needed.
+Multi-line strings work: a newline character inside quoted text is part of the string. No line-continuation escape is needed.
 
-Adjacent string literals (=="hello""world"=) are a compile-time syntax error
-— Monad does not support implicit concatenation. Use one literal or an
-explicit =++= operation.
+Adjacent string literals (=="hello""world"=) are a compile-time syntax error — Monad does not support implicit concatenation. Use one literal or an explicit =++= operation.
 
-** Character Literals ([[file:../reader.c::1365]])
+See [[file:syntax.org][Syntax]] for the full string literal grammar.
+
+* 2. Character Literals ([[file:../reader.c::1365]])
 
 #+BEGIN_SRC monad
 'a'                ;; Char 'A'
@@ -47,17 +40,19 @@ explicit =++= operation.
 '\u03C0'           ;; Unicode code point (π)
 #+END_SRC
 
-Delimited by single quotes (=TOK_CHAR=). Supported escape sequences:
-=\n=, =\t=, =\r=, =\\=, =\'=, =\0=, =\xNN=, =\uNNNN=.
+Delimited by single quotes (=TOK_CHAR=). Supported escape sequences: =\n=, =\t=, =\r=, =\\=, =\'=, =\0=, =\xNN=, =\uNNNN=.
 
-** Char type
+See [[file:characters.org][Characters]] for full character literal documentation.
 
-The =Char= type is a 32-bit Unicode codepoint at the type-and-semantic level.
-Codegen lowers =TYPE_CHAR= to =i8= for ASCII-compatible codepoints. The runtime
-tag =RT_CHAR= distinguishes it from other scalar types. Type predicate =Char?=
-checks the type kind.
+See also: [[file:characters.org][Characters]]
 
-** Char conversions
+* 3. Char Type
+
+The =Char= type is a 32-bit Unicode codepoint at the type-and-semantic level. Codegen lowers =TYPE_CHAR= to =i8= for ASCII-compatible codepoints. The runtime tag =RT_CHAR= distinguishes it from other scalar types. Type predicate =Char?= checks the type kind.
+
+See [[file:../context/types.org][context/types.org]] for TYPE_CHAR, TYPE_STRING and [[file:types.org][Types]] for the ground type hierarchy.
+
+* 4. Char Conversions
 
 Type conversions dispatch through strcmp handlers ([[file:../codegen.c::13144]]):
 
@@ -77,10 +72,9 @@ Bin 42
 Oct 63
 #+END_SRC
 
-All five conversion targets (Int, Float, Char, Hex, Oct, Bin) are verified by
-test fixtures (=tests/codegen/rt_arithmetic.mon= and type-conversion corpus).
+All five conversion targets (Int, Float, Char, Hex, Oct, Bin) are verified by test fixtures (=tests/codegen/rt_arithmetic.mon= and type-conversion corpus). See [[file:casting.org][Casting]] for the full conversion reference.
 
-** String comparison
+* 5. String Comparison
 
 Strings support = and != with full value comparison (not pointer identity):
 
@@ -96,12 +90,11 @@ Strings support = and != with full value comparison (not pointer identity):
 = "abc" "def"
 #+END_SRC
 
-Test fixtures: =rt_string_equality_true.mon=, =rt_string_equality_false.mon=.
+Test fixtures: =rt_string_equality_true.mon=, =rt_string_equality_false.mon=. See [[file:equality.org][Equality]] for comparison semantics.
 
-** Operations
+* 6. Operations
 
-String operations have strcmp dispatch handlers and are callable from paren-mode
-([[file:../context/language.org::working-dispatch][context/language.org]]):
+String operations have strcmp dispatch handlers and are callable from paren-mode ([[file:../context/language.org::working-dispatch][context/language.org]]):
 
 | Function     | Example                       | Returns               |
 |--------------+-------------------------------+-----------------------|
@@ -117,19 +110,55 @@ String operations have strcmp dispatch handlers and are callable from paren-mode
 | take         | =(take 3 "hello")=            | "hel"                 |
 | drop         | =(drop 2 "hello")=            | "llo"                 |
 
-Test fixtures: =rt_string_helpers.mon= (=count=), =rt_string_concat.mon= (=++=),
-=rt_string_prefix_suffix.mon= (=starts-with?=, =ends-with?=).
+#+BEGIN_SRC monad
+(show 42)              ;; "42"
+(make-string 5 'a')    ;; "aaaaa"
+(count "hello")        ;; 5
+(starts-with? "hi" 'h') ;; True
+(ends-with? "hi" 'i')  ;; True
+(contains? "hello" "ell") ;; True
+(++ "hello" " world")  ;; "hello world"
+(head "hello")         ;; 'h'
+(tail "hello")         ;; "ello"
+(take 3 "hello")       ;; "hel"
+(drop 2 "hello")       ;; "llo"
+#+END_SRC
 
-The =count= function works uniformly on strings, lists, arrays, sets, and maps.
+#+BEGIN_SRC wisp
+show 42
+make-string 5 'a'
+count "hello"
+starts-with? "hi" 'h'
+ends-with? "hi" 'i'
+contains? "hello" "ell"
+++ "hello" " world"
+head "hello"
+tail "hello"
+take 3 "hello"
+drop 2 "hello"
+#+END_SRC
 
-** Substring
+Test fixtures: =rt_string_helpers.mon= (=count=), =rt_string_concat.mon= (=++=), =rt_string_prefix_suffix.mon= (=starts-with?=, =ends-with?=).
 
-=substring= is registered as a builtin (=env_insert_builtin= with arity 3) but
-has no codegen strcmp handler yet — it is in the same gap category as =concat=,
-=reverse=, and =nth= ([[file:core.org][Core Library — NOT callable]]). Use =take= and
-=drop= for substring-like operations in the meantime.
+The =count= function works uniformly on strings, lists, arrays, sets, and maps (see [[file:collections.org][Collections]]).
 
-** String Indexing ([[file:../codegen.c::9732]])
+Key Points:
+- Strings are UTF-8 encoded, immutable, with LLVM =i8*= global constants
+- =show= converts any value to its string representation
+- =++= concatenates strings; =head=, =tail=, =take=, =drop= treat strings as sequences
+- =count= works uniformly on all collection types
+- String indexing via =("str" i)= or =xs[i]= returns a =Char= with bounds checking
+
+See also: [[file:collections.org][Collections]]
+
+* 7. Substring
+
+=substring= is registered as a builtin (=env_insert_builtin= with arity 3) but has no codegen strcmp handler yet — it is in the same gap category as =concat=, =reverse=, and =nth= ([[file:core.org][Core Library — NOT callable]]). Use =take= and =drop= for substring-like operations in the meantime.
+
+* 8. String Indexing ([[file:../codegen.c::9732]])
+
+Uses function-call syntax =("string" i)=. Returns a =Char= at index =i=.
+Also postfix bracket: =xs[0]= ([[file:../reader.c::6621]]). Both forms compile to a character load from the string's internal buffer with bounds checking.
 
 #+BEGIN_SRC monad
 ("hello" 0)   ;; 'h'
@@ -141,20 +170,15 @@ has no codegen strcmp handler yet — it is in the same gap category as =concat=
 ("hello" 1)
 #+END_SRC
 
-Uses function-call syntax =("string" i)=. Returns a =Char= at index =i=.
-Also postfix bracket: =xs[0]= ([[file:../reader.c::6621]]). Both forms compile to
-a character load from the string's internal buffer with bounds checking.
+See [[file:characters.org][Character Operations — String Indexing]].
 
-** String Interpolation
+* 9. String Interpolation
 
-Planned but not implemented. Future syntax may embed values inside string
-literals using =_= placeholders or =${}= syntax.
+Planned but not implemented. Future syntax may embed values inside string literals using =_= placeholders or =${}= syntax.
 
-** Strings as collections
+* 10. Strings as Collections
 
-Strings participate in the collection-as-function model. Operations like
-=head=, =tail=, =count=, =++=, =take=, =drop= work on strings uniformly.
-Iteration via =for= is supported:
+Strings participate in the collection-as-function model. Operations like =head=, =tail=, =count=, =++=, =take=, =drop= work on strings uniformly. Iteration via =for= is supported:
 
 #+BEGIN_SRC monad
 (for [c "hello"]
@@ -166,17 +190,60 @@ for [c "hello"]
   show c
 #+END_SRC
 
-** Wisp char escape limitation
+See [[file:collections.org][Collections]] for the collection protocol and [[file:iteration.org][Iteration]] for =for= loops.
 
-In Wisp syntax, ='\n'= fails because the Wisp expander expands =\\n= to a real
-newline, splitting the literal across lines. Use S-expression syntax for
-character escape sequences involving backslash.
+* 11. Wisp Char Escape Limitation
+
+In Wisp syntax, ='\n'= fails because the Wisp expander expands =\\n= to a real newline, splitting the literal across lines. Use S-expression syntax for character escape sequences involving backslash.
+
+See [[file:wisp.org][Wisp]] for details on the Wisp expander.
+
+See also: [[file:wisp.org][Wisp]]
+
+* Implementation Notes
+
+String handling source components:
+
+| Component | Source | Role |
+|-----------+--------+------|
+| String literal parsing | [[file:../reader.c][reader.c]] | =TOK_STRING= tokenization |
+| =TYPE_STRING= definition | [[file:../types.h][types.h]] | Ground type for strings |
+| String operations dispatch | [[file:../codegen.c][codegen.c]] | =strcmp= handler table |
+| String indexing codegen | [[file:../codegen.c::9732][codegen.c:9732]] | Bounds-checked char load |
+| =RT_STRING= runtime tag | [[file:../context/language.org::runtime-value-system][context/language.org]] | =char*= + length wrapper |
+| LLVM global string layout | [[file:../context/language.org][context/language.org]] | Global constant pointer format |
+
+* Related Pages
+
+- [[file:characters.org][Characters]] — Char type, character literals, operations
+- [[file:show.org][Show]] — display representation
+- [[file:collections.org][Collections]] — string as collection
+- [[file:types.org][Types]] — ground type hierarchy
+- [[file:casting.org][Casting]] — string conversions
+- [[file:core.org][Core Library]] — built-in function list
+- [[file:iteration.org][Iteration]] — for loops over strings
+- [[file:syntax.org][Syntax]] — string literal syntax
+- [[file:equality.org][Equality]] — string comparison
+- [[file:wisp.org][Wisp]] — Wisp syntax limitations
+- [[file:list.org][Lists]] — similar collection operations
+- [[file:map.org][Maps]] — key-value collection
 
 * Context Links
 
 - [[file:../context/language.org::working-dispatch][context/language.org — Working string dispatch]]
 - [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]]
 - [[file:../context/types.org][context/types.org]] — TYPE_STRING, TYPE_CHAR
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — operation dispatch
 - [[file:../codegen.c::9732][codegen.c]] — String indexing codegen
 - [[file:../context/codegen.org][context/codegen.org]] — String format globals
 - [[file:../context/tests-arch.org::codegen-rt-strings][context/tests-arch.org — String test architecture]]
+- [[file:../reader.c::1365][reader.c]] — Character literal parsing
+
+* Further Reading
+
+- [[file:../context/language.org][context/language.org]] — full string semantics
+- [[file:../context/codegen.org][context/codegen.org]] — LLVM global string format
+- [[file:../tests/codegen/][tests/codegen/]] — string test fixtures
+- [[file:../context/features.org][context/features.org]] — string feature tracking
+- [[file:../context/runtime.org][context/runtime.org]] — RT_STRING runtime representation
+- [[file:../Main.mon][Main.mon]] — string usage examples

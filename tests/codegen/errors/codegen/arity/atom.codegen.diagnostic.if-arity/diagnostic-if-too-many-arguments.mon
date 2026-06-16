@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.branch.diagnostic-if-too-many-arguments
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: arity
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise if arity diagnostic for too many operands.
+;; TEST-ATOM: atom.codegen.diagnostic.if-arity
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.if-arity
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-CODEGEN-PATH: diagnostic.if.arity
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: arity
+;; TEST-COVERAGE: codegen.c:7745 if arity diagnostic
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/arity/atom.codegen.diagnostic.if-arity
+;; TEST-MENU-PATH: codegen/errors/codegen/arity/atom.codegen.diagnostic.if-arity
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.if-arity
+;; TEST-CLI-TARGET: codegen errors codegen arity
+(module Main)
+(show (if True 1 2 3))

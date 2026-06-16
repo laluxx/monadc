@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.rt-type-conversions
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.00.values.casts.conversions.rt.type.conversions
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: casts-conversions
+;; TEST-CATEGORY: 00-values
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Type conversion functions Int, Float, Hex, Oct, Bin, Char.
+;; TEST-ATOM: (Float 42) = 42.0, (Int 3.14) = 3, (Hex 255) = 0xFF,
+;;           (Oct 255) = 0o377, (Bin 7) = 0b111, (Char 65) = #\A
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:00-values/casts-conversions branch family
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/casts-conversions/atom.codegen.00.values.casts.conversions.rt.type.conversions
+;; TEST-MENU-PATH: codegen/branches/values/casts-conversions/atom.codegen.00.values.casts.conversions.rt.type.conversions
+;; TEST-ATOM-LEAF: atom.codegen.00.values.casts.conversions.rt.type.conversions
+;; TEST-CLI-TARGET: codegen branches values casts-conversions
+(module Main)
+(show (Float 42))
+(show (Int 3.14))
+(show (Hex 255))
+(show (Oct 255))
+(show (Bin 7))
+(show (Char 65))

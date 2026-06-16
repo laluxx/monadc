@@ -1,0 +1,15 @@
+name: compiler_deep_string_index_inside_char_pred
+section: runtime-strings-current
+tier: experimental
+kind: law
+features: arithmetic, predicate, runtime, string
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.string_literal, infer.arithmetic, infer.type_predicate, reader.string_literal, runtime.string
+signal: low
+corpus-role: legacy-smoke
+uses-atoms: atom.infer.predicate, atom.runtime.string
+related-properties: signal_atom_string_contains_substring
+args: 
+type: Bool
+expect: True
+description: String indexing should produce a Char accepted by Char?.
+law: (Char? ("compiler" 3))

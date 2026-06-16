@@ -1,7 +1,0 @@
-name: structured_v9_future_list_head_oracle
-section: future-list-oracle-v9
-args: xs:NonEmptyListInt
-type: Int
-expect-python: xs[0]
-description: List head oracle over generated nonempty lists.
-law: (head {xs})

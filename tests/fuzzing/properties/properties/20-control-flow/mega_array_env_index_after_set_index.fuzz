@@ -1,0 +1,15 @@
+name: mega_array_env_index_after_set_index
+section: codegen-array-env
+tier: stable
+kind: law
+features: arithmetic, array, array-index, codegen, do, env, equality, if, mutation, phi, set, set!, when, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.if_void, codegen.local_load, codegen.runtime_call, codegen.sequence, codegen.set_bang, codegen.store, codegen.with_binding, desugar.when, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.equality, infer.if_phi, infer.mutation, reader.array_literal, reader.ast_do, reader.ast_if, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.set-bang, atom.binding.with, atom.codegen.dispatch, atom.control.do, atom.control.if, atom.core.equality, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_do_last_value, signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates, signal_atom_with_substitution
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: array index alloca mutation must affect env array indexing.
+law: (= (with [xs [{a} {b}] i 0] (do (when {p} (set! i 1)) (xs i))) (if {p} {b} {a}))

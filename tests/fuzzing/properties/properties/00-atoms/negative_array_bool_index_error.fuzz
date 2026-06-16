@@ -1,0 +1,16 @@
+name: negative_array_bool_index_error
+section: negative-atom-web
+tier: compile-fail
+kind: compile-fail
+features: compile-fail, diagnostic
+compiler-path: infer.type_mismatch, diagnostic.compile_fail, stage.infer
+stage: infer
+signal: high
+corpus-role: negative-diagnostic
+uses-atoms: atom.runtime.array.index, atom.diagnostic.type_error
+depends-on: atom.runtime.array.index, atom.diagnostic.type_error
+args: xs:NonEmptyArrInt@small b:Bool@logic
+type: Bool
+expect-diagnostic: error:
+description: Structured negative property linked to diagnostic atom dependencies.
+law: ({xs} {b})

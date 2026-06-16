@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.deep.deep_array_index_edges
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-SUBSET: arrays-ranges
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.collections.arrays.ranges.deep.array.index.edges
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise array literal storage and index edge positions.
+;; TEST-ATOM: Array indexing should read first/middle/last entries.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:array literal lowering
+;; TEST-COVERAGE: codegen.c:array bounds/check and load
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/arrays-ranges/atom.codegen.collections.arrays.ranges.deep.array.index.edges
+;; TEST-MENU-PATH: codegen/branches/collections/arrays-ranges/atom.codegen.collections.arrays.ranges.deep.array.index.edges
+;; TEST-ATOM-LEAF: atom.codegen.collections.arrays.ranges.deep.array.index.edges
+;; TEST-CLI-TARGET: codegen branches collections arrays-ranges
+(module Main)
+(define a [10 20 30])
+(show (a 0))
+(show (a 1))
+(show (a 2))
+(show (count a))

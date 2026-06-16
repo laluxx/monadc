@@ -1,0 +1,30 @@
+;; TEST-ID: tests.codegen.branch.control-when-unless-while-zero
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: loops
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.control.when.unless.while.zero
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover when/unless skip and execute paths plus while zero-iteration path.
+;; TEST-ATOM: Control forms should preserve state depending on their condition.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:8050 when branch
+;; TEST-COVERAGE: codegen.c:8090 unless branch
+;; TEST-COVERAGE: codegen.c:8128 while condition/zero iteration branch
+
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/loops/atom.codegen.control.when.unless.while.zero
+;; TEST-MENU-PATH: codegen/branches/control-flow/loops/atom.codegen.control.when.unless.while.zero
+;; TEST-ATOM-LEAF: atom.codegen.control.when.unless.while.zero
+;; TEST-CLI-TARGET: codegen branches control-flow loops
+(module Main)
+(define x 0)
+(when False (set! x 1))
+(unless True (set! x 2))
+(while False (set! x 3))
+(show x)
+(when True (set! x 4))
+(unless False (set! x (+ x 1)))
+(show x)

@@ -1,0 +1,14 @@
+name: predicate_float_on_int_false
+section: predicates-conversions
+tier: stable
+kind: law
+features: arithmetic, predicate, predicates
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.type_predicate
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.infer.predicate
+args: a:Int
+type: Bool
+expect: False
+description: Float? must reject generated Int expressions.
+law: (Float? {a})

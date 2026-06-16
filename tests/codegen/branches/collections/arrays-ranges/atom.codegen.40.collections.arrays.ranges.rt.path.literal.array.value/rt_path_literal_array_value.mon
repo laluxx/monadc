@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-path-literal-array-value
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.arrays.ranges.rt.path.literal.array.value
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: arrays-ranges
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.path-literals, monadc.context.language.path-values, monadc.context.tests.heap-path-regressions
+;; TEST-PURPOSE: Verify Path values are valid array elements.
+;; TEST-ATOM: A home-relative Unix path literal nested inside an array literal compiles and show prints the path element.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:40-collections/arrays-ranges branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.path.literal.array.value
+;; TEST-MENU-PATH: codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.path.literal.array.value
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.arrays.ranges.rt.path.literal.array.value
+;; TEST-CLI-TARGET: codegen branches collections arrays-ranges
+(module PathLiteralArrayValue)
+(define paths [~/xos/projects/c/monadc/context/])
+(show paths)

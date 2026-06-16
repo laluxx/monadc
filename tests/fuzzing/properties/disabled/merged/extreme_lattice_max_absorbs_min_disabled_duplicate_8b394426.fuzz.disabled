@@ -1,0 +1,17 @@
+name: extreme_lattice_max_absorbs_min_disabled_duplicate_8b394426
+section: lattice-clamp-deep
+tier: experimental
+kind: law
+features: arithmetic, equality, lattice, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+signal: medium
+corpus-role: merged-duplicate
+uses-atoms: atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+merged-into: max_min_absorption
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Min/max lattice and clamp laws must hold through helper-based branch implementations.
+law: (= (fuzz-max {a} (fuzz-min {a} {b})) {a})

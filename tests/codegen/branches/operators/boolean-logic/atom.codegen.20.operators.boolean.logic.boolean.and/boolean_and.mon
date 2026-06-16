@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.boolean-and
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.20.operators.boolean.logic.boolean.and
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: boolean-logic
+;; TEST-CATEGORY: 20-operators
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Boolean and evaluates correctly.
+;; TEST-ATOM: (and True False) = False, (and True True) = True.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:20-operators/boolean-logic branch family
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/boolean-logic/atom.codegen.20.operators.boolean.logic.boolean.and
+;; TEST-MENU-PATH: codegen/branches/operators/boolean-logic/atom.codegen.20.operators.boolean.logic.boolean.and
+;; TEST-ATOM-LEAF: atom.codegen.20.operators.boolean.logic.boolean.and
+;; TEST-CLI-TARGET: codegen branches operators boolean-logic
+(module Main)
+(show (and True False))
+(show (and True True))

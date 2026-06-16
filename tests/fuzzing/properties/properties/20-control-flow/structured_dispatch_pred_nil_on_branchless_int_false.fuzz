@@ -1,0 +1,15 @@
+name: structured_dispatch_pred_nil_on_branchless_int_false
+section: dispatch-matrix-current
+tier: stable
+kind: law
+features: arithmetic, dispatch, do, equality, logic, null, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, codegen.null_coalesce, codegen.predicate_dispatch, codegen.sequence, infer.arithmetic, infer.equality, infer.logic, infer.nil, infer.type_predicate, reader.ast_do
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.control.do, atom.core.equality, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or, atom.null.nil
+related-properties: signal_atom_do_last_value, signal_atom_equality_reflexive
+args: a:Int
+type: Bool
+expect: True
+description: Stress direct operator and predicate dispatch in expression, branch, and operand positions.
+law: (= (nil? (do True {a})) False)

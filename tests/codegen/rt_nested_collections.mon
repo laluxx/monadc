@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-nested-collections
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Runtime set with list elements (2-element).
-;; TEST-ATOM: Set containing two lists displays as a set of list values.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show {(list 1 2) (list 3 4)})

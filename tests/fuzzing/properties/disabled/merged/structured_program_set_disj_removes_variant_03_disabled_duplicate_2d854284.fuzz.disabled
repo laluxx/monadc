@@ -1,0 +1,17 @@
+name: structured_program_set_disj_removes_variant_03_disabled_duplicate_2d854284
+section: current-program-kind
+tier: experimental
+kind: program
+features: program, set, conj, disj, contains
+compiler-path: codegen.module_body, codegen.runtime_call, runner.program_kind, runtime.set
+signal: high
+corpus-role: merged-duplicate
+uses-atoms: atom.core.equality, atom.infer.predicate
+related-properties: signal_atom_equality_reflexive
+merged-into: structured_program_set_disj_removes_variant_01
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int@tiny
+type: Bool
+expect: True
+description: V10 program-kind property variant 3 for program_set_disj_removes, checking full program source handling rather than show-wrapped law handling.
+program: (show (= (contains? (disj (conj (set) {a}) {a}) {a}) False))

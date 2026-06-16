@@ -1,0 +1,17 @@
+name: structured_program_begin_sequence_value_r04_disabled_duplicate_16eca1e8
+section: current-program-kind
+tier: experimental
+kind: program
+features: program, begin, sequence, arithmetic
+compiler-path: codegen.arithmetic_dispatch, codegen.module_body, codegen.sequence, infer.arithmetic, reader.ast_begin, runner.program_kind
+signal: high
+corpus-role: merged-duplicate
+uses-atoms: atom.control.begin, atom.control.do, atom.core.equality, atom.core.plus
+related-properties: signal_atom_do_last_value, signal_atom_equality_reflexive, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero
+merged-into: structured_program_begin_sequence_value_r01
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int@edge b:Int@edge
+type: Bool
+expect: True
+description: V11 program-kind compiler test program_begin_sequence_value round 4; exercises full program insertion instead of show-wrapped law mode.
+program: (show (= (begin {a} {b} (+ {a} {b})) (+ {a} {b})))

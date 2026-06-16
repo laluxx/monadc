@@ -1,7 +1,0 @@
-name: structured_v9_future_map_lookup_oracle_disabled_until_maps_compile
-section: future-map-oracle-v9
-args: m:MapStringInt k:KeyOf(m)
-type: Int
-expect-python: m[k]
-description: Future map lookup oracle once map literals/codegen are stable.
-law: ({m} {k})

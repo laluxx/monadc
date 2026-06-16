@@ -1,0 +1,17 @@
+name: structured_compile_fail_if_missing_else_r03_disabled_duplicate_70577292
+section: current-compile-fail
+tier: experimental
+kind: compile-fail
+features: compile-fail, arity, if
+compiler-path: codegen.if_phi, diagnostic.expected_error, infer.arity_check, infer.if_phi, reader.ast_if, runner.compile_fail_kind
+signal: high
+corpus-role: merged-duplicate
+uses-atoms: atom.control.if
+related-properties: signal_atom_if_same_branch_eliminates
+merged-into: structured_compile_fail_if_missing_else_r01
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: p:Bool@logic a:Int@edge
+type: Bool
+expect-diagnostic: error:
+description: V11 expected compiler diagnostic test if_missing_else round 3; checks compile-fail tier, diagnostics, and failure clustering.
+law: (if {p} {a})

@@ -1,0 +1,15 @@
+name: compiler_deep_int_predicate_survives_do_operand
+section: predicates-null-casts-current
+tier: stable
+kind: law
+features: arithmetic, do, logic, predicate, predicates
+compiler-path: codegen.arithmetic_dispatch, codegen.logic_dispatch, codegen.predicate_dispatch, codegen.sequence, infer.arithmetic, infer.logic, infer.type_predicate, reader.ast_do
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.do, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or, atom.null.nil
+related-properties: signal_atom_do_last_value
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Int? should see the final do expression, not the ignored setup value.
+law: (Int? (do {b} {a}))

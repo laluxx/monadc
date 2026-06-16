@@ -1,0 +1,31 @@
+;; TEST-ID: tests.codegen.branch.function-hm-const-two-specializations
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: lists
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise polymorphic two-argument function specialization at two concrete return types.
+;; TEST-ATOM: atom.codegen.monomorph.const.two-specializations
+;; TEST-CODEGEN-ATOM: atom.codegen.monomorph.const.two-specializations
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: mono_apply_subst.TYPE_VAR
+;; TEST-CODEGEN-PATH: codegen_specialize.params
+;; TEST-CODEGEN-PATH: codegen_specialize.return
+;; TEST-DEPENDS-ON: atom.codegen.monomorph.id.int-string
+;; TEST-TAG: run
+;; TEST-TAG: hm
+;; TEST-TAG: specialization
+;; TEST-COVERAGE: codegen.c:192-215 mono_apply_subst TYPE_VAR/TYPE_ARROW
+;; TEST-COVERAGE: codegen.c:285-466 codegen_specialize param/return substitution
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/lists/atom.codegen.monomorph.const.two-specializations
+;; TEST-MENU-PATH: codegen/branches/collections/lists/atom.codegen.monomorph.const.two-specializations
+;; TEST-ATOM-LEAF: atom.codegen.monomorph.const.two-specializations
+;; TEST-CLI-TARGET: codegen branches collections lists
+(module Main)
+(define const (lambda (x y) x))
+(show (const 7 "ignored"))
+(show (const "left" 99))

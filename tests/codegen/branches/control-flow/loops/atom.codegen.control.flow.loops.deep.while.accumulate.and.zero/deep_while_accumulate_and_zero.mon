@@ -1,0 +1,27 @@
+;; TEST-ID: tests.codegen.deep.deep_while_accumulate_and_zero
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SUBSET: loops
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.control.flow.loops.deep.while.accumulate.and.zero
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise while loop body and zero-iteration exit path.
+;; TEST-ATOM: while should branch correctly for true loop and false entry.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:while loop cond/body/end branches
+
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/loops/atom.codegen.control.flow.loops.deep.while.accumulate.and.zero
+;; TEST-MENU-PATH: codegen/branches/control-flow/loops/atom.codegen.control.flow.loops.deep.while.accumulate.and.zero
+;; TEST-ATOM-LEAF: atom.codegen.control.flow.loops.deep.while.accumulate.and.zero
+;; TEST-CLI-TARGET: codegen branches control-flow loops
+(module Main)
+(define i 0)
+(define sum 0)
+(while (< i 5) (begin (set! sum (+ sum i)) (set! i (+ i 1))))
+(show sum)
+(define z 99)
+(while False (set! z 0))
+(show z)

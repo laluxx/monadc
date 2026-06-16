@@ -16,11 +16,13 @@ Test coverage: mutation is exercised by =rt_assoc_*.mon=,
 
 Monad supports mutable variable rebinding via =set!= (or its =<-=
 sugar). Functions using mutation are tracked as impure by the purity
-system.
+system. By default, all =define= and =let= bindings are immutable —
+mutation is an explicit opt-in via =set!=.
 
-* set!
+* 1. set!
 
-Rebind a variable in the current scope:
+Rebind a variable in the current scope
+([[file:../codegen.c::7471][codegen.c:7471]]):
 
 #+BEGIN_SRC monad
 (define x 10)
@@ -43,12 +45,51 @@ while (< i 10)
 #+END_SRC
 
 Mutates the binding at the current scope level. The compiler tracks
-which bindings are mutated to avoid unnecessary boxing
-([[file:../codegen.c::7471]]).
+which bindings are mutated to avoid unnecessary boxing.
 
-* <- (Sugar)
+** 1.1 set! with Typed Bindings
 
-The =<-= form desugars to =set!= at the reader level:
+#+BEGIN_SRC monad
+(define [counter :: Int] 0)
+(set! counter 42)              ;; type-checked: Int = Int
+
+(define [name :: String] "old")
+(set! name "new")              ;; type-checked: String = String
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define [counter :: Int] 0
+set! counter 42
+
+define [name :: String] "old"
+set! name "new"
+#+END_SRC
+
+** 1.2 set! on Fields
+
+#+BEGIN_SRC monad
+(set! obj.field val)           ;; field mutation
+(set! (get-field obj :x) 5)    ;; computed field access
+#+END_SRC
+
+#+BEGIN_SRC wisp
+set! obj.field val
+set! (get-field obj :x) 5
+#+END_SRC
+
+#+BEGIN_QUOTE
+Key Points:
+- Rebind any variable in the current scope
+- Type-checked: new value must match the binding's type
+- Compiler tracks mutation for boxing optimization
+- Has strcmp dispatch handler — works in paren-mode
+- Preferred over =<-= in paren-mode (primitive, no reader dependency)
+#+END_QUOTE
+
+* 2. <- (Sugar)
+
+The =<-= form desugars to =set!= at the reader level
+([[file:../context/reader.org::sugar-registry][context/reader.org — Sugar Registry (assign arrow)]]):
 
 #+BEGIN_SRC monad
 (define y 5)
@@ -69,7 +110,31 @@ define y 5
 
 Works in both S-expression and Wisp syntax (Wisp: =obj.x <- val=).
 
-* Mutable Collections
+** 2.1 Compound Assignment with <-
+
+#+BEGIN_SRC monad
+(<- x (+ x 1))                 ;; increment x
+(<- acc (* acc 2))             ;; double acc
+(<- name (++ name "!"))        ;; append to string
+#+END_SRC
+
+#+BEGIN_SRC wisp
+<- x (+ x 1)
+<- acc (* acc 2)
+<- name (++ name "!")
+#+END_SRC
+
+Each desugars to =(set! x (+ x 1))= etc.
+
+#+BEGIN_QUOTE
+Key Points:
+- =<-= is syntactic sugar for =set!= (reader desugaring)
+- More concise for compound assignment patterns
+- Works in both S-expression and Wisp syntax
+- Same semantics as =set!= after desugaring
+#+END_QUOTE
+
+* 3. Mutable Collections
 
 Collection types provide in-place mutation variants:
 
@@ -99,11 +164,81 @@ Pure operations copy the collection before modification; mutating
 variants modify in place. Both share the same type scheme — the choice
 is purely about aliasing, not enforced by the compiler.
 
-* Purity Tracking
+See [[file:map.org][Maps]] for =assoc!/dissoc!=, [[file:set.org][Sets]] for
+=conj!/disj!=, and [[file:list.org][Lists]] for =append!=.
+
+* 4. Mutation in Loop Bodies
+
+Mutation is commonly used in [[file:iteration.org][=while=]] and [[file:iteration.org][=for=]]
+loops for counters and accumulators:
+
+#+BEGIN_SRC monad
+(define total 0)
+(define i 0)
+(while (< i (count prices))
+  (set! total (+ total (prices i)))
+  (set! i (+ i 1)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define total 0
+define i 0
+while (< i (count prices))
+  set! total (+ total (prices i))
+  set! i (+ i 1)
+#+END_SRC
+
+See [[file:iteration.org][Iteration]] for loop forms and
+[[file:../context/language.org::iteration-constructs][context/language.org — Iteration Constructs]].
+
+* 5. Purity Tracking
 
 Functions that call =set!= or =<-= are considered impure. The purity
 tracking system (aspirational) will use this for optimization and
-effect typing.
+effect typing ([[file:../context/language.org::codegen-gaps][context/language.org — Known Gaps]]).
+
+See [[file:purity.org][Purity]] for the purity system and
+[[file:functional-programming.org][Functional Programming]] for
+immutability patterns.
+
+* 6. Mutation vs Immutability
+
+| Approach       | Form               | Thread-safe? | Compiler Opt. | Use Case               |
+|----------------+--------------------+--------------+---------------+------------------------|
+| Mutable rebind | =set!=, =<-=       | No           | Minimal       | Loop counters, state   |
+| Local rebind   | =let*= shadowing   | Yes          | Full          | Sequential computation |
+| Collection mut | =assoc!=, =conj!=   | No           | None          | In-place updates       |
+| Collection pure| =assoc=, =conj=    | Yes          | Full          | Shared state           |
+
+Immutable bindings with =let= and =define= are preferred when possible.
+Use =set!= only when mutation is essential for performance or when
+interfacing with imperative patterns.
+
+* 7. Implementation Notes
+
+Key source locations for mutation:
+
+| Aspect                | Location                                                              |
+|-----------------------+-----------------------------------------------------------------------|
+| =set!= codegen        | [[file:../codegen.c::7471][codegen.c:7471]] — =set!= dispatch                   |
+| Assign arrow sugar    | [[file:../context/reader.org::sugar-registry][context/reader.org — Sugar Registry (assign arrow)]] |
+| Binding constructs    | [[file:../context/language.org::binding-constructs][context/language.org — Binding Constructs]] |
+| Purity tracking gaps  | [[file:../context/language.org::codegen-gaps][context/language.org — Known Gaps]]           |
+| Iteration constructs  | [[file:../context/language.org::iteration-constructs][context/language.org — Iteration Constructs]] |
+
+The =set!= codegen emits a simple store instruction after resolving the
+variable's storage location. The compiler tracks mutated bindings to
+avoid boxing in the non-mutated case. The =<-= reader sugar transforms
+into =set!= AST nodes before codegen sees them.
+
+#+BEGIN_QUOTE
+Key Points:
+- =set!=: primitive mutation, has strcmp dispatch
+- =<-=: reader sugar for =set!=, more concise
+- Mutable collections: =assoc!=, =conj!=, =append!= for in-place ops
+- Purity tracking is aspirational (not yet enforced by compiler)
+- Prefer immutable bindings when possible; use mutation deliberately
+#+END_QUOTE
 
 * Related Pages
 
@@ -112,11 +247,28 @@ effect typing.
 - [[file:conditionals.org][Conditionals]] -- if, cond, when, unless
 - [[file:iteration.org][Iteration]] -- for, while loops
 - [[file:let.org][Let Bindings]] -- immutable bindings
+- [[file:functional-programming.org][Functional Programming]] -- immutability patterns
+- [[file:map.org][Maps]] -- mutable map operations
+- [[file:set.org][Sets]] -- mutable set operations
+- [[file:list.org][Lists]] -- mutable list operations
+
+* Further Reading
+
+- [[file:../context/language.org][context/language.org]] — mutation tracking
+- [[file:../context/language.org::binding-constructs][context/language.org — Binding Constructs]]
+- [[file:../context/language.org::codegen-gaps][context/language.org — Known Gaps (purity tracking)]]
+- [[file:../context/reader.org][context/reader.org]] — assign arrow desugaring
+- [[file:../context/reader.org::sugar-registry][context/reader.org — Sugar Registry (assign arrow)]]
+- [[file:../codegen.c][codegen.c]] — =set!= codegen
+- [[file:../tests/codegen/rt_assoc_basic.mon][rt_assoc_basic.mon]] — mutation test fixtures
 
 * Context Links
 
 - [[file:../context/language.org][context/language.org]] — mutation tracking
+- [[file:../context/language.org::binding-constructs][context/language.org — Binding Constructs]]
+- [[file:../context/language.org::codegen-gaps][context/language.org — Known Gaps (purity tracking)]]
 - [[file:../codegen.c::7471][codegen.c]] — =set!= codegen
+- [[file:../context/reader.org::sugar-registry][context/reader.org — Sugar Registry (assign arrow)]]
 - [[file:control.org][Control Flow]] — overview of all control forms
 - [[file:conditionals.org][Conditionals]] — if, cond, when, unless
 - [[file:iteration.org][Iteration]] — for, while loops

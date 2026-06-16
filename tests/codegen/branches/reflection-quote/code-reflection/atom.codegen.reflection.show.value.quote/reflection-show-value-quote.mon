@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.branch.reflection-show-value-quote
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: failure
+;; TEST-SUBSET: code-reflection
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 60-reflection-quote
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.reflection.show.value.quote
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover show-value and expand/quote runtime-value branches.
+;; TEST-ATOM: Quoted runtime values should print through the generic RuntimeValue printer.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:5872 quote branch
+;; TEST-COVERAGE: codegen.c:6024 expand branch
+;; TEST-COVERAGE: codegen.c:7530 show-value branch
+;; TEST-COVERAGE: codegen.c:1020 ast_to_runtime_value
+
+;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote
+;; TEST-MENU: branches/reflection-quote/code-reflection/atom.codegen.reflection.show.value.quote
+;; TEST-MENU-PATH: codegen/branches/reflection-quote/code-reflection/atom.codegen.reflection.show.value.quote
+;; TEST-ATOM-LEAF: atom.codegen.reflection.show.value.quote
+;; TEST-CLI-TARGET: codegen branches reflection-quote code-reflection
+(module Main)
+(show-value '(1 2 3))
+(show (expand '(+ 1 2)))

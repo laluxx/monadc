@@ -1,12 +1,57 @@
 #+title: TODO.org
 
-* TODO Program synthesis [0/2]
+* TODO Program synthesis [0/1]
 - [ ] Full idris-like hole driven development
 - [ ] Holes in functions type signature, let the compiler fill them in
 - “A bidirectional type system is complete for synthesis if every type has at least one term.”
 
 
-* TODO Refinement types [0/1]
+
+* TODO Drawers [0/1]
+- [ ] Just like org-mode
+
+#+begin_src monad
+:drawer:
+alot
+of
+Meta
+data
+:end:
+#+end_src
+
+
+* TODO Code blocks [0/2]
+- [ ] We shoudl have code blocks for any language
+- [ ] The major mode should syntax highlight based on the language like org-mode
+
+#+begin_src c
+static const char *TOKEN_TYPE_NAMES[] = {
+    "namespace", "type", "class", "enum", "interface", "struct",
+    "typeParameter", "parameter", "variable", "property", "enumMember",
+    "event", "function", "method", "macro", "keyword", "modifier",
+    "comment", "string", "number", "operator", "decorator",
+};
+#+end_src
+
+
+* TODO Postfix metadatas [0/1]
+- [ ] we should allow postfix metadatas alongside prefix
+
+#+begin_src monad
+define read-char :: Int -> Int
+  fd -> def buf :: [10]
+        def n (sys-read fd &buf 1)
+        if <= n 0 then -1
+        else buf 0
+
+  :doc "Reads one byte from fd.
+        Returns -1 on EOF or error."
+#+end_src
+
+
+
+
+
 
 
 * TODO Optimizations [0/2]

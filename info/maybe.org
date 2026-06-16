@@ -9,7 +9,7 @@
 :CONTEXT:  monadc.context.language, monadc.context.codegen-ops
 :END:
 
-[[file:index.org][<- Back to Index]] · [[file:result.org][Result]] · [[file:error-handling.org][Error Handling]] · [[file:patterns.org][Pattern Matching]] · [[file:data.org][Data Types]] · [[file:conditionals.org][Conditionals]] · [[file:core.org][Core Library]]
+[[file:index.org][<- Back to Index]] · [[file:result.org][Result]] · [[file:error-handling.org][Error Handling]] · [[file:patterns.org][Pattern Matching]] · [[file:data.org][Data Types]] · [[file:conditionals.org][Conditionals]] · [[file:core.org][Core Library]] · [[file:functional-programming.org][Functional Programming]] · [[file:pair.org][Pairs]] · [[file:list.org][Lists]]
 
 Test coverage: use of =(Option a)= pattern in codegen fixtures is
 verified indirectly by =rt_match_*.mon= and =rt_bind_*.mon=.
@@ -18,7 +18,10 @@ verified indirectly by =rt_match_*.mon= and =rt_bind_*.mon=.
 =(Some x)= (a value of type =a=). It is the standard safe alternative
 to bare =nil= returns.
 
-* Type Definition
+For the error-carrying variant, see [[file:result.org][Result]]. For the design
+rationale, see [[file:../context/language.org][context/language.org]].
+
+* 1. Type Definition
 
 #+BEGIN_SRC monad
 (data Option a
@@ -34,9 +37,17 @@ data Option a
 
 =Option= is a regular algebraic data type — defined in the surface
 language, no special compiler support. It participates fully in pattern
-matching, type inference, and monomorphization.
+matching, type inference, and monomorphization. See [[file:data.org][Data Types]]
+and [[file:patterns.org][Pattern Matching]].
 
-* Construction
+*** Key Points
+- =Option= is an ordinary ADT — no magic, no special compiler treatment
+- Two constructors: =None= (absent) and =(Some a)= (present)
+- Fully generic over any type =a= via Hindley-Milner polymorphism
+
+See also: [[file:data.org][Data Types]], [[file:patterns.org][Pattern Matching]]
+
+* 2. Construction
 
 #+BEGIN_SRC monad
 (define no-value None)
@@ -50,7 +61,14 @@ define some-value (Some 42)
 define maybe-string (Some "hello")
 #+END_SRC
 
-* Consumption With Pattern Matching
+*** Key Points
+- Construct =None= for absence, =(Some value)= for presence
+- Type is inferred from the wrapped value
+- Works with any type — Int, String, ADTs, layouts, etc.
+
+See also: [[file:patterns.org][Pattern Matching]]
+
+* 3. Consumption With Pattern Matching
 
 The primary way to work with =Option= is =match=:
 
@@ -76,7 +94,18 @@ define show-option x -> String
     (Some v)  -> ++ "got " (show v)
 #+END_SRC
 
-* Pattern: Safe Division
+See [[file:patterns.org][Pattern Matching]] for full match expression
+reference and [[file:../context/pmatch.org][context/pmatch.org]] for the pattern
+match compiler.
+
+*** Key Points
+- =match= destructures =Option= by constructor
+- Exhaustiveness checking ensures no case is forgotten
+- Pattern variables bind the unwrapped value
+
+See also: [[file:../context/pmatch.org][context/pmatch.org]]
+
+* 4. Pattern: Safe Division
 
 #+BEGIN_SRC monad
 (define (safe-div a b -> (Option Int))
@@ -96,7 +125,17 @@ define result (safe-div 10 2)
 define bad    (safe-div 10 0)
 #+END_SRC
 
-* ?? With Option
+See [[file:error-handling.org][Error Handling]] for more error-handling
+patterns.
+
+*** Key Points
+- =Option= replaces sentinel values (nil, -1, etc.) with a type-safe alternative
+- The return type =(Option Int)= documents that the operation can fail
+- Callers must handle both =None= and =(Some v)= — no silent nil propagation
+
+See also: [[file:error-handling.org][Error Handling]]
+
+* 5. ?? With Option
 
 The null-coalescing operator works with =Option= values:
 
@@ -110,7 +149,16 @@ The null-coalescing operator works with =Option= values:
 ?? (safe-div 10 2) 0
 #+END_SRC
 
-* Related: Maybe in Other Languages
+See [[file:conditionals.org][Conditionals]] for the =??= operator reference.
+
+*** Key Points
+- =??= unwraps =Some= or falls back to a default on =None=
+- Type-safe: the default must match the wrapped type
+- Shorter than a full =match= when a fallback value suffices
+
+See also: [[file:conditionals.org][Conditionals]]
+
+* 6. Related: Option in Other Languages
 
 | Language   | Type                          |
 |------------+-------------------------------|
@@ -119,19 +167,61 @@ The null-coalescing operator works with =Option= values:
 | Rust       | =Option<T>=                   |
 | OCaml      | ='a option=                  |
 | F#         | =Option<'a>=                 |
+| Java       | =Optional<T>=                |
+| Swift      | =T?= (Optional)              |
 
-* Related Pages
+*** Key Points
+- =(Option a)= is the Monad equivalent of Rust's =Option<T>= or Haskell's =Maybe a=
+- No null pointer exceptions — =None= is a first-class value, not a special sentinel
+
+* 7. Implementation Notes
+
+Key source locations for =Option= handling:
+
+| Source | Key Symbols / Sections |
+|--------+-----------------------|
+| [[file:../codegen.c][codegen.c]] | ADT codegen for Option (tagged union dispatch) |
+| [[file:../runtime.c][runtime.c]] | Runtime value representation for ADTs |
+| [[file:../infer.c][infer.c]] | Type inference for polymorphic ADTs |
+| [[file:../context/pmatch.org][context/pmatch.org]] | Pattern match compiler for Option |
+| [[file:../context/codegen-ops.org][context/codegen-ops.org]] | Codegen operations for ADT dispatch |
+| [[file:../context/language.org][context/language.org]] | Language semantics for Option |
+| [[file:../context/types.org][context/types.org]] | Type representation for ADTs |
+| [[file:../context/infer.org][context/infer.org]] | Type inference for ADTs |
+| [[file:../context/runtime.org][context/runtime.org]] | Runtime value representation |
+
+Related context documents:
+
+- [[file:../context/language.org][context/language.org]] — dispatch for Option operations, error semantics
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — codegen operations for ADTs
+- [[file:../context/pmatch.org][context/pmatch.org]] — pattern match compiler internals
+- [[file:../context/infer.org][context/infer.org]] — type inference for ADTs
+- [[file:../context/types.org][context/types.org]] — type system representation
+- [[file:../context/runtime.org][context/runtime.org]] — runtime value representation and allocation
+
+* 8. Related Pages
 
 - [[file:result.org][Result]] -- Result type with error messages
 - [[file:error-handling.org][Error Handling]] -- error handling patterns
 - [[file:patterns.org][Pattern Matching]] -- pattern matching on Maybe
 - [[file:data.org][Data Types]] -- ADT definition of Maybe
-- [[file:conditionals.org][Conditionals]] -- ?? null-coalescing
+- [[file:conditionals.org][Conditionals]] -- ?? null-coalescing operator
+- [[file:core.org][Core Library]] -- built-in function overview
+- [[file:functional-programming.org][Functional Programming]] -- functional patterns
+- [[file:pair.org][Pairs]] -- Pair type and tuple patterns
+- [[file:list.org][Lists]] -- list operations with Option returns
+- [[file:collections.org][Collections]] -- collection operations returning Option
+- [[file:type-classes.org][Type Classes]] -- type class system
 
-* Context Links
+* 9. Further Reading
 
 - [[file:result.org][Result]] — error type with error message
 - [[file:error-handling.org][Error Handling]] — runtime error mechanisms
 - [[file:data.org][Data Types]] — algebraic data type system
 - [[file:patterns.org][Pattern Matching]] — match expressions
 - [[file:../context/language.org][context/language.org]] — dispatch for Option operations
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — codegen operations
+- [[file:../context/pmatch.org][context/pmatch.org]] — pattern match compiler
+- [[file:../context/infer.org][context/infer.org]] — type inference for ADTs
+- [[file:../context/types.org][context/types.org]] — type system internals
+- [[file:../context/runtime.org][context/runtime.org]] — runtime value representation

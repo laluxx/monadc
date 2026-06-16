@@ -1,0 +1,42 @@
+;; TEST-ID: tests.codegen.menu.errors.env.call.fixed.list.size.009
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: errors
+;; TEST-SUBSET: env/call.fixed.list.size
+;; TEST-MENU: errors/env/call.fixed.list.size/atom.menu.error.env.call.fixed.list.size.009
+;; TEST-MENU-PATH: codegen/errors/env/call.fixed.list.size/atom.menu.error.env.call.fixed.list.size.009
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.error-menu
+;; TEST-PURPOSE: Pin env.c diagnostic: Couldn't match expected list size
+;; TEST-ATOM: atom.menu.error.env.call.fixed.list.size.009
+;; TEST-CODEGEN-ATOM: atom.menu.error.env.call.fixed.list.size.009
+;; TEST-ATOM-LEAF: atom.menu.error.env.call.fixed.list.size.009
+;; TEST-QUALITY: menu-error-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ERROR-STAGE: env
+;; TEST-ERROR-FAMILY: call.fixed.list.size
+;; TEST-ERROR-MESSAGE: Couldn't match expected list size
+;; TEST-ERROR-SOURCE: env.c
+;; TEST-ERROR-PATH: env.c:814
+;; TEST-CODEGEN-PATH: diagnostic.env.call.fixed.list.size
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: env
+;; TEST-TAG: menu
+;; TEST-COVERAGE: env.c:814 Couldn't match expected list size
+;; TEST-USES-ATOM: atom.menu.error.env.call.fixed.list.size.009
+;; TEST-USES-ATOM: atom.error.env
+;; TEST-USES-ATOM: atom.error.env.call.fixed.list.size
+;; TEST-USES-ATOM: atom.env.error
+;; TEST-DEPENDS-ON: atom.env.hm.check.call
+;; TEST-DEPENDS-ON: atom.env.hm.infer.define
+;; TEST-REFINES: atom.error.env
+;; TEST-REFINES: atom.error.env.call.fixed.list.size
+;; TEST-REFINES: atom.env.error
+;; TEST-RELATED: atom.codegen.error.menu
+;; TEST-CLI-TARGET: codegen errors env env
+
+(module Main)
+(define (env_menu_pair_4_9 [xs : [Int String]] -> Int) 0)
+(show (env_menu_pair_4_9 [1]))

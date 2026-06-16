@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.rt-equal-all
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.99.smoke.legacy.uncategorized.legacy.rt.equal.all
+;; TEST-QUALITY: legacy-smoke
+;; TEST-SUBSET: uncategorized-legacy
+;; TEST-CATEGORY: 99-smoke-legacy
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: equal? with int, string, list, set values
+;; TEST-ATOM: (equal? 1 1) = True, (equal? 1 2) = False, (equal? "a" "a") = True, (equal? '(1 2) '(1 2)) = True, (equal? '(1 2) '(3 4)) = False
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:99-smoke-legacy/uncategorized-legacy branch family
+;; TEST-USES-ATOM: atom.codegen.category.99.smoke.legacy
+;; TEST-MENU: branches/smoke-legacy/uncategorized-legacy/atom.codegen.99.smoke.legacy.uncategorized.legacy.rt.equal.all
+;; TEST-MENU-PATH: codegen/branches/smoke-legacy/uncategorized-legacy/atom.codegen.99.smoke.legacy.uncategorized.legacy.rt.equal.all
+;; TEST-ATOM-LEAF: atom.codegen.99.smoke.legacy.uncategorized.legacy.rt.equal.all
+;; TEST-CLI-TARGET: codegen branches smoke-legacy uncategorized-legacy
+(module Main)
+(show (equal? 1 1))
+(show (equal? 1 2))
+(show (equal? "a" "a"))
+(show (equal? '(1 2) '(1 2)))
+(show (equal? '(1 2) '(3 4)))

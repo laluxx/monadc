@@ -1,0 +1,16 @@
+name: mega_negative_nil_scalar_int_disabled_duplicate_11573f75
+section: codegen-negative-runtime
+tier: experimental
+kind: law
+features: arithmetic, codegen, null, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.null_coalesce, codegen.predicate_dispatch, infer.arithmetic, infer.nil, infer.type_predicate
+signal: medium
+corpus-role: merged-duplicate
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate, atom.null.nil
+merged-into: deep_codegen_type_nil_pred_int_false
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int
+type: Bool
+expect: False
+description: Generated scalar Int should not be nil.
+law: (nil? {a})

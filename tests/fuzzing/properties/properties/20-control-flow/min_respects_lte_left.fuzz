@@ -1,0 +1,15 @@
+name: min_respects_lte_left
+section: order
+tier: stable
+kind: law
+features: arithmetic, equality, if, logic, order, phi, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.logic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.equality, infer.if_phi, infer.logic, infer.type_predicate, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.if, atom.core.equality, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+args: a:Int b:Int
+type: Bool
+expect: True
+description: If the left value is less-or-equal, min must return the left value.
+law: (if (fuzz-lte? {a} {b}) (= (fuzz-min {a} {b}) {a}) True)

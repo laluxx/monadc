@@ -1,0 +1,15 @@
+name: string_index_returns_char_type
+section: collections
+tier: experimental
+kind: law
+features: arithmetic, collections, predicate, string
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.string_literal, infer.arithmetic, infer.type_predicate, reader.string_literal, runtime.string
+signal: low
+corpus-role: legacy-smoke
+uses-atoms: atom.infer.predicate, atom.runtime.string
+related-properties: signal_atom_string_contains_substring
+args: 
+type: Bool
+expect: True
+description: Inline string indexing must return a Char value.
+law: (Char? ("abc" 1))

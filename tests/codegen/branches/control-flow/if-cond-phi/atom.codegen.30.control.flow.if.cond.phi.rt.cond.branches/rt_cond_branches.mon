@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-cond-branches
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.if.cond.phi.rt.cond.branches
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: if-cond-phi
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Runtime cond expression evaluates correct branch.
+;; TEST-ATOM: (cond [(> 5 3) 1] [else 0]) = 1.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/if-cond-phi branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/if-cond-phi/atom.codegen.30.control.flow.if.cond.phi.rt.cond.branches
+;; TEST-MENU-PATH: codegen/branches/control-flow/if-cond-phi/atom.codegen.30.control.flow.if.cond.phi.rt.cond.branches
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.if.cond.phi.rt.cond.branches
+;; TEST-CLI-TARGET: codegen branches control-flow if-cond-phi
+(module Main)
+(show (cond [(> 5 3) 1] [else 0]))

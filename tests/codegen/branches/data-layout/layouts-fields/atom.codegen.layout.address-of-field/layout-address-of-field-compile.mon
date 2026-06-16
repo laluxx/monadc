@@ -1,0 +1,30 @@
+;; TEST-ID: tests.codegen.branch.layout-address-of-field-compile
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: emit-json-failed
+;; TEST-SUBSET: layouts-fields
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise address-of lowering for layout fields as compile-only pointer branch coverage.
+;; TEST-ATOM: atom.codegen.layout.address-of-field
+;; TEST-CODEGEN-ATOM: atom.codegen.layout.address-of-field
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile
+;; TEST-CODEGEN-PATH: codegen.address-of.layout-field
+;; TEST-CODEGEN-PATH: codegen.lvalue.field
+;; TEST-DEPENDS-ON: atom.codegen.layout.keyword-constructor-dot-order
+;; TEST-TAG: compile
+;; TEST-TAG: layout
+;; TEST-TAG: address
+;; TEST-COVERAGE: codegen.c:3410-3472 address-of and lvalue pointer branches
+
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/layouts-fields/atom.codegen.layout.address-of-field
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts-fields/atom.codegen.layout.address-of-field
+;; TEST-ATOM-LEAF: atom.codegen.layout.address-of-field
+;; TEST-CLI-TARGET: codegen branches data-layout layouts-fields
+(module Main)
+(layout Cell [x :: Int])
+(define c (Cell 5))
+(& c.x)

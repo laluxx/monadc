@@ -1,0 +1,27 @@
+;; TEST-ID: tests.codegen.branch.operator-string-and-mixed-comparisons
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: strings
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.operator.string.and.mixed.comparisons
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover string equality, string inequality, float comparison, and mixed-width integer comparison.
+;; TEST-ATOM: Comparison codegen should choose strcmp, FCmp, or ICmp according to operand types.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:9363-9382 string comparison strcmp branch
+;; TEST-COVERAGE: codegen.c:9432-9454 float/int comparison branches
+;; TEST-COVERAGE: codegen.c:9445 integer width promotion
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/strings/atom.codegen.operator.string.and.mixed.comparisons
+;; TEST-MENU-PATH: codegen/branches/collections/strings/atom.codegen.operator.string.and.mixed.comparisons
+;; TEST-ATOM-LEAF: atom.codegen.operator.string.and.mixed.comparisons
+;; TEST-CLI-TARGET: codegen branches collections strings
+(module Main)
+(show (= "abc" "abc"))
+(show (!= "abc" "def"))
+(show (< 1.5 2.0))
+(show (= (I8 1) (U16 1)))
+(show (>= (I16 -1) (I8 -2)))

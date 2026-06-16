@@ -1,0 +1,15 @@
+name: arith_direct_sub_variadic_left_fold
+section: arithmetic-dispatch
+tier: stable
+kind: law
+features: arithmetic, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, infer.arithmetic, infer.equality
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.core.minus
+related-properties: signal_atom_equality_reflexive
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Direct variadic - dispatch must behave as a left fold.
+law: (= (- {a} {b} {c}) (- (- {a} {b}) {c}))

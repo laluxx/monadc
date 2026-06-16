@@ -1,0 +1,35 @@
+;; TEST-ID: tests.codegen.type.dep.annotations.annotation.mismatch.001
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: types
+;; TEST-SUBSET: dep/annotations/annotation-mismatch
+;; TEST-QUALITY: type-system-negative-regression
+;; TEST-CODEGEN-ATOM: atom.type.dep.annotations.annotation-mismatch.001
+;; TEST-TYPE-ATOM: atom.type.dep.annotations.annotation-mismatch.001
+;; TEST-CONTEXT: monadc.context.language.codegen-type-system-corpus, monadc.context.language.hm-dependent-type-coverage
+;; TEST-PURPOSE: Dependent annotation checker rejects an annotated term whose type differs from the expected type.
+;; TEST-ATOM: TERM_ANN must check the annotated term against its declared type.
+;; TEST-EXPECT: fail:compile
+;; TEST-MENU: types/dep/annotations/annotation-mismatch/atom.type.dep.annotations.annotation-mismatch.001
+;; TEST-MENU-PATH: codegen/types/dep/annotations/annotation-mismatch/atom.type.dep.annotations.annotation-mismatch.001
+;; TEST-ATOM-LEAF: atom.type.dep.annotations.annotation-mismatch.001
+;; TEST-CLI-TARGET: codegen types dep annotations annotation-mismatch
+;; TEST-INFER-PATH: infer.c:annotation bridge
+;; TEST-DEP-PATH: dep.c:TERM_ANN/dep_check conversion mismatch
+;; TEST-ERROR-STAGE: dep
+;; TEST-ERROR-FAMILY: dep.annotation-mismatch
+;; TEST-ERROR-MESSAGE: Dependent Type Error
+;; TEST-COVERAGE: dep.c:TERM_ANN infer/check branch
+;; TEST-COVERAGE: dep.c:conversion structural mismatch
+;; TEST-USES-ATOM: atom.codegen.category.types
+;; TEST-USES-ATOM: atom.type.system
+;; TEST-USES-ATOM: atom.type.dep.annotation
+;; TEST-USES-ATOM: atom.type.dep.conversion
+;; TEST-DEPENDS-ON: atom.type.hm.annotation
+;; TEST-REFINES: atom.type.dep.annotation-mismatch
+
+(module Main)
+(define (dep_ann_mismatch_01 [x : Int] -> Int) (the String x))
+(show (dep_ann_mismatch_01 1))

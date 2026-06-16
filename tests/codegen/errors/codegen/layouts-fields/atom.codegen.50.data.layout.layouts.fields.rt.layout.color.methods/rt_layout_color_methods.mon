@@ -1,0 +1,37 @@
+;; TEST-ID: tests.codegen.rt-layout-color-methods
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-CODEGEN-ATOM: atom.codegen.50.data.layout.layouts.fields.rt.layout.color.methods
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: layouts-fields
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.wisp.limitations, monadc.context.language.layout-records
+;; TEST-PURPOSE: Desired layout-local method syntax is captured as an expected compiler gap.
+;; TEST-ATOM: Color.fromRGB and red.eql red should eventually compile as layout methods.
+;; TEST-EXPECT: fail:compile
+
+;; TEST-COVERAGE: codegen.c:50-data-layout/layouts-fields branch family
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: errors/codegen/layouts-fields/atom.codegen.50.data.layout.layouts.fields.rt.layout.color.methods
+;; TEST-MENU-PATH: codegen/errors/codegen/layouts-fields/atom.codegen.50.data.layout.layouts.fields.rt.layout.color.methods
+;; TEST-ATOM-LEAF: atom.codegen.50.data.layout.layouts.fields.rt.layout.color.methods
+;; TEST-CLI-TARGET: codegen errors codegen layouts-fields
+module Main
+
+layout Color
+  [r :: U8]
+  [g :: U8]
+  [b :: U8]
+  where
+    method fromRGB :: U8 -> U8 -> U8 -> Color
+      r g b -> Color r g b
+
+    method eql :: Self -> Color -> Bool
+      s o -> and s.r = o.r
+                 s.g = o.g
+                 s.b = o.b
+
+define red Color.fromRGB 255 0 0
+show red.eql red

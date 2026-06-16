@@ -1,0 +1,33 @@
+;; TEST-ID: tests.codegen.branch.operator-and-or-coercion-family
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: boolean-logic
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise and/or boolean lowering and scalar condition coercions feeding logic branches.
+;; TEST-ATOM: atom.codegen.operator.logic-coercion-family
+;; TEST-CODEGEN-ATOM: atom.codegen.operator.logic-coercion-family
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.operator.and
+;; TEST-CODEGEN-PATH: codegen.operator.or
+;; TEST-CODEGEN-PATH: codegen.condition.bool
+;; TEST-DEPENDS-ON: atom.codegen.operator.compare.integer
+;; TEST-TAG: run
+;; TEST-TAG: operator
+;; TEST-TAG: logic
+;; TEST-COVERAGE: codegen.c:7718-7730 and/or branches
+;; TEST-COVERAGE: codegen.c:7743-7805 condition coercion helper paths
+
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/boolean-logic/atom.codegen.operator.logic-coercion-family
+;; TEST-MENU-PATH: codegen/branches/operators/boolean-logic/atom.codegen.operator.logic-coercion-family
+;; TEST-ATOM-LEAF: atom.codegen.operator.logic-coercion-family
+;; TEST-CLI-TARGET: codegen branches operators boolean-logic
+(module Main)
+(show (and True True))
+(show (and True False))
+(show (or False True))
+(show (or False False))
+(show (and (> 3 2) (< 1 2)))

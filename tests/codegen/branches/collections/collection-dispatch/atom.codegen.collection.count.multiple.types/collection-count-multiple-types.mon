@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.branch.collection-count-multiple-types
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: collection-dispatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.collection.count.multiple.types
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover count branches for string, list, array, set, and map values.
+;; TEST-ATOM: count should dispatch on runtime container representation.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:8858-8925 count dispatch branches
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/collection-dispatch/atom.codegen.collection.count.multiple.types
+;; TEST-MENU-PATH: codegen/branches/collections/collection-dispatch/atom.codegen.collection.count.multiple.types
+;; TEST-ATOM-LEAF: atom.codegen.collection.count.multiple.types
+;; TEST-CLI-TARGET: codegen branches collections collection-dispatch
+(module Main)
+(show (count "abcd"))
+(show (count '(1 2 3)))
+(show (count [4 5 6]))
+(show (count {7 8}))
+(show (count #{:x 1 :y 2}))

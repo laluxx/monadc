@@ -1,0 +1,16 @@
+name: complex_lattice_min_between_bounds_disabled_duplicate_2de375f3
+section: lattice-order
+tier: experimental
+kind: law
+features: arithmetic, lattice, logic, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.logic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.logic, infer.type_predicate
+signal: medium
+corpus-role: merged-duplicate
+uses-atoms: atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or
+merged-into: min_lte_max
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The minimum must be less than or equal to the maximum.
+law: (fuzz-lte? (fuzz-min {a} {b}) (fuzz-max {a} {b}))

@@ -19,12 +19,17 @@ Test coverage: FFI is tested by =rt_cffi_*.mon= fixtures including
 =math.h= (=sqrt=, =floor=, =ceil=), =stdlib.h= (=atoi=),
 =string.h= (=strlen=), =ctype.h= (=toupper=, =isdigit=).
 Working FFI call targets are documented at
-[[file:../context/language.org::542][context/language.org — C FFI working calls]]. Real-world FFI
+[[file:../context/language.org::542][context/language.org — C FFI working calls]].
+The test architecture is documented at
+[[file:../context/tests-arch.org][context/tests-arch.org]]. Real-world FFI
 examples: [[file:../how_to/GlfwSpeedrun.mon][how_to/GlfwSpeedrun.mon]],
 [[file:../how_to/RaylibSpeedrun.mon][how_to/RaylibSpeedrun.mon]],
 [[file:../how_to/SdlSpeedrun.mon][how_to/SdlSpeedrun.mon]].
 
-* Include Syntax
+Also see [[file:from-c.org][From C]] for the C-to-Monad migration guide and
+[[file:layouts.org][Layout Types]] for C-compatible struct layout.
+
+* 1. Include Syntax
 
 | Form                      | Use case               |
 |---------------------------+------------------------|
@@ -36,48 +41,79 @@ The =system= flag (true for <= >=, false for =" "=) influences include-path
 resolution and may affect which declarations are visible. Deduplication against
 an internal =included= array prevents re-parsing the same header.
 
-* Architecture
+The =(include ...)= form is parsed by the reader
+([[file:../reader.c]]) and lowered via =ffi_parse_header=
+([[file:../context/language.org::542][context/language.org]]). For the module-level
+import mechanism see [[file:modules.org][Modules]].
+
+#+BEGIN_SRC monad
+(include <stdio.h>)       ;; system header
+(include "math.h")        ;; local header
+(include <GLFW/glfw3.h>)  ;; system header with subpath
+#+END_SRC
+
+#+BEGIN_SRC wisp
+include <stdio.h>         # system header
+include "math.h"          # local header
+include <GLFW/glfw3.h>    # system header with subpath
+#+END_SRC
+
+* 2. Architecture
 
 The FFI subsystem ([[file:../ffi.h]]) parses C headers via libclang and stores
 the extracted declarations in an =FFIContext= accumulator
-([[file:../context/ffi.org::ffi-context]]).
+([[file:../context/ffi.org::ffi-context]]). The pipeline is:
 
-** FFIParam ([[file:../ffi.h::12]])
+1. Reader encounters =(include ...)= and calls =ffi_parse_header=
+   ([[file:../ffi.c]]).
+2. Libclang produces a =CXCursor= tree which is walked by
+   =ffi_parse_header= ([[file:../context/ffi.org][context/ffi.org]]).
+3. Extracted =FFIFunction=, =FFIConstant=, and =FFIStruct= are pushed
+   into the =FFIContext= accumulator.
+4. At codegen time, =ffi_inject_into_env= registers all symbols as
+   =ENV_FUNC= / =ENV_VAR= entries in the codegen environment
+   ([[file:../context/codegen.org][context/codegen.org]]).
+
+** 2.1 FFIParam ([[file:../ffi.h::12]])
 
 A single parameter in a C function signature: =name= (may be NULL for anonymous
 params) and =type= (=Type *=).
 
-** FFIFunction ([[file:../ffi.h::19]])
+** 2.2 FFIFunction ([[file:../ffi.h::19]])
 
 A parsed C function declaration: =name=, =params= (=FFIParam *=),
 =param_count=, =variadic= (=bool=, true for C varargs), =return_type= (=Type *=),
 and =doc= (char *, extracted from preceding comments). Injected as =ENV_FUNC=
 entries by =ffi_inject_into_env= with ExternalLinkage =LLVMValueRef=.
 
-** FFIConstant ([[file:../ffi.h::30]])
+** 2.3 FFIConstant ([[file:../ffi.h::30]])
 
 A parsed C constant (macro or enum value): =name=, =value= (=long long=),
 =is_float=, =float_value=, =is_string=, =str_value=, =is_struct_literal=.
 Supports integer, float, string, and compound literal constants. Injected as
 =ENV_VAR= entries with constant =LLVMValueRef=.
 
-** FFIStructField / FFIStruct ([[file:../ffi.h::42]])
+** 2.4 FFIStructField / FFIStruct ([[file:../ffi.h::42]])
 
 C struct/typedef descriptors:
 - =FFIStructField=: =name= (=char *=), =type= (=Type *=).
 - =FFIStruct=: =name=, =alias_of= (non-NULL for typedef aliases), =fields=
   (=FFIStructField *=), =field_count=, =size_bytes=, =packed= (=bool=),
   =is_scalar_typedef= (=bool= for =uint64_t=/pointer typedefs). Injected as
-  layout type registrations via =env_insert_layout=.
+  layout type registrations via =env_insert_layout=
+  ([[file:../context/ffi.org][context/ffi.org]]).
 
-** FFIContext ([[file:../ffi.h::64]])
+See [[file:layouts.org][Layout Types]] for the user-facing layout type
+interface that these structs map into.
+
+** 2.5 FFIContext ([[file:../ffi.h::64]])
 
 Accumulator for everything parsed from =(include ...)= forms: growable arrays
 of =FFIFunction=, =FFIConstant=, =FFIStruct=. Also tracks already-included
 headers, =strip_prefixes= for the =:unprefix= option, and per-module injection
 watermarks to support incremental injection across compilation units.
 
-* Type Mapping
+* 3. Type Mapping
 
 | C type        | Monad type     |
 |---------------+----------------|
@@ -97,14 +133,24 @@ are stripped. Pointer types map to Monad pointer types. Returns
 =type_unknown()= for unrecognised types
 ([[file:../context/ffi.org::think.context.ffi.map-type-precision]]).
 
-* Header Resolution
+For fixed-width integer types such as =int32_t= and =uint64_t=, see
+[[file:types.org][Types → Numeric Fixed-Width Types]] and
+[[file:numeric.org][Numeric Types]]. For character handling see
+[[file:casting.org][Casting]] and [[file:characters.org][Characters]].
+
+* 4. Header Resolution
 
 =ffi_resolve_header= ([[file:../ffi.h::115]]) takes a header token (e.g.
 ="stdio.h"=) and a =system= flag. Returns a malloc'd absolute path or NULL if
 not found. Searches standard system include paths for =system= headers, and
 project-local paths for =system=false=.
 
-* Cache Layer
+Resolution follows the C compiler convention: system headers are looked up
+in the standard include path (e.g. =/usr/include=, =/usr/local/include=),
+while local headers are resolved relative to the source file's directory.
+See [[file:../context/ffi.org][context/ffi.org]] for the full resolution algorithm.
+
+* 5. Cache Layer
 
 Parsing C headers via libclang is expensive. The FFI subsystem provides a
 persistent cache layer ([[file:../context/ffi.org::ffi-cache]]):
@@ -119,54 +165,109 @@ cache file's mtime. If the header is newer the cache is invalidated and
 =ffi_parse_header= is re-run. The cache format is a binary dump of the
 serialised =FFIFunction=/=FFIConstant=/=FFIStruct= arrays.
 
-* Real Examples
+See [[file:../context/ffi.org][context/ffi.org]] for cache internals, serialisation
+format, and invalidation strategy.
 
-=(include <GLFW/glfw3.h>)= then call =glfwInit=, =glfwCreateWindow=,
-=glfwSwapBuffers=, =glfwPollEvents= directly (how_to/GlfwSpeedrun.mon).
+* 6. Real Examples
 
-=(include <raylib.h>)= then call =InitWindow=, =BeginDrawing=,
-=ClearBackground=, =DrawFPS= directly (how_to/RaylibSpeedrun.mon).
+Full working examples are available in the =how_to= directory:
 
-=(include <SDL3/SDL.h>)= then call =SDL_Init=, =SDL_CreateWindow=,
-=SDL_SetRenderDrawColor= directly (how_to/SdlSpeedrun.mon).
+- [[file:../how_to/GlfwSpeedrun.mon][GLFW Speedrun]]: =(include <GLFW/glfw3.h>)= then call =glfwInit=,
+  =glfwCreateWindow=, =glfwSwapBuffers=, =glfwPollEvents= directly.
 
-* Pointer Access
+#+BEGIN_SRC monad
+(include <GLFW/glfw3.h>)
+(glfwInit)
+(define window (glfwCreateWindow 800 600 "Monad" NULL NULL))
+(glfwMakeContextCurrent window)
+(glfwSwapInterval 1)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+include <GLFW/glfw3.h>
+glfwInit
+define window
+  glfwCreateWindow 800 600 "Monad" NULL NULL
+glfwMakeContextCurrent window
+glfwSwapInterval 1
+#+END_SRC
+
+- [[file:../how_to/RaylibSpeedrun.mon][Raylib Speedrun]]: =(include <raylib.h>)= then call =InitWindow=,
+  =BeginDrawing=, =ClearBackground=, =DrawFPS= directly.
+
+#+BEGIN_SRC monad
+(include <raylib.h>)
+(InitWindow 800 450 "Monad + Raylib")
+(SetTargetFPS 60)
+(while (not (WindowShouldClose))
+  (begin
+    (BeginDrawing)
+    (ClearBackground RAYWHITE)
+    (DrawFPS 10 10)
+    (EndDrawing)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+include <raylib.h>
+InitWindow 800 450 "Monad + Raylib"
+SetTargetFPS 60
+while not (WindowShouldClose)
+  begin
+    BeginDrawing
+    ClearBackground RAYWHITE
+    DrawFPS 10 10
+    EndDrawing
+#+END_SRC
+
+- [[file:../how_to/SdlSpeedrun.mon][SDL Speedrun]]: =(include <SDL3/SDL.h>)= then call =SDL_Init=,
+  =SDL_CreateWindow=, =SDL_SetRenderDrawColor= directly.
+
+#+BEGIN_SRC monad
+(include <SDL3/SDL.h>)
+(SDL_Init SDL_INIT_VIDEO)
+(define window (SDL_CreateWindow "Monad" 800 600 0))
+(define renderer (SDL_CreateRenderer window nil))
+(SDL_SetRenderDrawColor renderer 255 255 255 255)
+(SDL_RenderClear renderer)
+(SDL_RenderPresent renderer)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+include <SDL3/SDL.h>
+SDL_Init SDL_INIT_VIDEO
+define window
+  SDL_CreateWindow "Monad" 800 600 0
+define renderer
+  SDL_CreateRenderer window nil
+SDL_SetRenderDrawColor renderer 255 255 255 255
+SDL_RenderClear renderer
+SDL_RenderPresent renderer
+#+END_SRC
+
+* 7. Pointer Access
 
 Prefix a variable with =&= to get a C pointer (address-of operator):
 =send(&buf)=.
 
-Heap array syntax =~[...]= is not implemented.
+Heap array syntax =~[...]= is not implemented (see [[file:arrays.org][Arrays]] for
+array types and [[file:heap.org][Heap Allocation]] for heap variants).
 
-* Known Limitations and Gaps
+#+BEGIN_SRC monad
+(define buf [256 U8])
+(send (buf))    ;; &buf — pass pointer to C function
+#+END_SRC
 
-- C struct layout is handled through [[file:layouts.org][layout types]], not
-  automatic FFI struct mapping.
-- Complex macros (function-like macros, conditional definitions) may fail to
-  parse.
-- Math functions returning =double= (=pow=, =sin=, =cos=) produce garbage
-  values at runtime — suspected codegen issue with float-returning FFI
-  functions (parses and invokes correctly at the LLVM level, but the return
-  value is corrupted).
-- =unsigned long long=, =_Bool=, and other C types with no direct Monad
-  equivalent are mapped to the nearest supported width (=i64=, =i1=).
-- No automatic struct member access — FFI structs are registered as layout
-  types but must be accessed manually via pointer arithmetic.
+#+BEGIN_SRC wisp
+define buf [256 U8]
+send (&buf)     # &buf — pass pointer to C function
+#+END_SRC
 
-* API Reference ([[file:../ffi.h]])
+See [[file:../context/language.org::397][context/language.org — pointer coercion]]
+for the current state of pointer type coercion and
+[[file:../context/codegen.org][context/codegen.org]] for the LLVM address-of
+lowering.
 
-| Function                | Purpose                                       |
-|-------------------------+-----------------------------------------------|
-| =ffi_context_create=      | Allocate a zero-initialised FFIContext        |
-| =ffi_context_free=        | Free all parsed data and the context          |
-| =ffi_parse_header=        | Parse a C header via libclang                |
-| =ffi_inject_into_env=     | Inject all symbols into codegen env           |
-| =ffi_resolve_header=      | Resolve #include path to absolute path        |
-| =ffi_map_c_type=          | Convert C type spelling to Monad Type*        |
-| =ffi_dump=                | Debug pretty-print of FFI context             |
-| =ffi_cache_save=          | Save parsed FFI data to disk cache            |
-| =ffi_cache_load=          | Load parsed FFI data from disk cache          |
-
-* Usage Examples
+* 8. Usage Examples
 
 Including and calling C math functions:
 
@@ -248,18 +349,113 @@ define buf [256 U8]
 send (&buf)     # &buf — pass pointer to C function
 #+END_SRC
 
+* 9. API Reference ([[file:../ffi.h]])
+
+| Function                | Purpose                                       |
+|-------------------------+-----------------------------------------------|
+| =ffi_context_create=      | Allocate a zero-initialised FFIContext        |
+| =ffi_context_free=        | Free all parsed data and the context          |
+| =ffi_parse_header=        | Parse a C header via libclang                |
+| =ffi_inject_into_env=     | Inject all symbols into codegen env           |
+| =ffi_resolve_header=      | Resolve #include path to absolute path        |
+| =ffi_map_c_type=          | Convert C type spelling to Monad Type*        |
+| =ffi_dump=                | Debug pretty-print of FFI context             |
+| =ffi_cache_save=          | Save parsed FFI data to disk cache            |
+| =ffi_cache_load=          | Load parsed FFI data from disk cache          |
+
+See [[file:../context/ffi.org][context/ffi.org]] for the full API documentation
+including struct layouts, edge cases, and internal helper functions.
+
+* 10. Implementation Notes
+
+The FFI subsystem integrates with the compiler in four phases:
+
+- **Phase 0 (FFI pre-pass)**: =main.c= calls =ffi_parse_header= on every
+  =(include ...)= form before the wisp expander runs, so arities from C
+  functions are available for layout inference
+  ([[file:../context/ffi.org::ffi-prepass][context/ffi.org — FFI pre-pass]]).
+- **Parsing**: =ffi_parse_header= walks the =CXCursor= tree from libclang
+  and populates the =FFIContext= accumulator with =FFIFunction=,
+  =FFIConstant=, and =FFIStruct= entries
+  ([[file:../context/ffi.org][context/ffi.org — FFI context]]).
+- **Type mapping**: =ffi_map_c_type= (=ffi.h:119=) converts C type spellings
+  to Monad =Type *= pointers, stripping qualifiers and mapping to the
+  nearest supported width
+  ([[file:../context/ffi.org::ffi-map-type][context/ffi.org — type mapping]]).
+- **Codegen injection**: =ffi_inject_into_env= (=ffi.h=) registers all
+  parsed symbols as =ENV_FUNC= and =ENV_VAR= entries before LLVM codegen
+  ([[file:../context/codegen.org][context/codegen.org]]).
+- **Caching**: =ffi_cache_save= / =ffi_cache_load= persist parsed FFI data
+  to disk, invalidating when header mtime changes
+  ([[file:../context/ffi.org::ffi-cache][context/ffi.org — cache layer]]).
+
+Key data structures: =FFIContext= (=ffi.h:64=) is the top-level accumulator;
+=FFIFunction= (=ffi.h:19=) carries param info, variadic flag, and doc
+string; =FFIStruct= (=ffi.h:42=) tracks field layout, packed flag, and
+typedef aliases.
+
+* 11. Known Limitations and Gaps
+
+- C struct layout is handled through [[file:layouts.org][layout types]], not
+  automatic FFI struct mapping.
+- Complex macros (function-like macros, conditional definitions) may fail to
+  parse.
+- Math functions returning =double= (=pow=, =sin=, =cos=) produce garbage
+  values at runtime — suspected codegen issue with float-returning FFI
+  functions (parses and invokes correctly at the LLVM level, but the return
+  value is corrupted). Tracked in
+  [[file:../context/language.org][context/language.org]].
+- =unsigned long long=, =_Bool=, and other C types with no direct Monad
+  equivalent are mapped to the nearest supported width (=i64=, =i1=).
+- No automatic struct member access — FFI structs are registered as layout
+  types but must be accessed manually via pointer arithmetic.
+- String-to-=*U8= call coercion for syscall convenience is not implemented
+  — see [[file:asm.org][Inline Assembly]] for the current approach.
+- No support for C++ headers or Objective-C — only C99/C11 headers via
+  libclang.
+
+See [[file:../context/ffi.org][context/ffi.org]] for implementation-level issues
+and [[file:../context/language.org][context/language.org]] for the C FFI runtime
+section.
+
+* Key Points
+
+- =(include "header.h")= parses C headers via libclang — no hand-written
+  bindings needed.
+- C functions become callable directly after =(include ...)=; structs are
+  registered as layout types.
+- Type mapping matches C conventions: =int= → =Int=, =double= → =Float=,
+  =char*= → =String=, =T *= → =Pointer :: T=.
+- Header resolution follows C compiler conventions (system vs local paths).
+- FFI parsing is cached to disk with mtime-based invalidation.
+- Known float-return bug affects =pow=, =sin=, =cos= — use =sqrt= and
+  =floor= as alternatives.
+- Use =&= prefix for address-of when passing buffers to C functions.
+
 * Related Pages
 
-- [[file:from-c.org][From C]] -- C-to-Monad mapping guide
-- [[file:layouts.org][Layout Types]] -- layout types for FFI
-- [[file:asm.org][Inline Assembly]] -- inline assembly
-- [[file:types.org][Types]] -- fixed-width types for C interop
-- [[file:modules.org][Modules]] -- module system for FFI wrappers
+- [[file:from-c.org][From C]] — C-to-Monad mapping guide
+- [[file:layouts.org][Layout Types]] — C-compatible struct layout
+- [[file:asm.org][Inline Assembly]] — inline assembly for low-level control
+- [[file:types.org][Types]] — fixed-width types and type system
+- [[file:modules.org][Modules]] — module system for FFI wrappers
+- [[file:casting.org][Casting]] — type conversion functions for C interop
+- [[file:numeric.org][Numeric Types]] — fixed-width integer types (I8, U8, I32, etc.)
+- [[file:arrays.org][Arrays]] — array types for C buffer interop
+- [[file:heap.org][Heap Allocation]] — heap arrays for long-lived data
+- [[file:syntax.org][Syntax]] — =(include ...)= special form syntax
+- [[file:performance.org][Performance]] — FFI call overhead considerations
+- [[file:paths.org][Path Literals]] — filesystem path values for file I/O
 
-* Context Links
+* Further Reading
 
-- [[file:../context/ffi.org][context/ffi.org]] — FFI implementation details
-- [[file:layouts.org][Layout Types]] — C-compatible memory layouts
-- [[file:from-c.org][Coming from C/Rust]] — interop guide
-- [[file:../ffi.h][ffi.h]] — FFI API header
-- [[file:../ffi.c][ffi.c]] — FFI implementation
+- [[file:../context/ffi.org][context/ffi.org]] — FFI implementation details, API reference
+- [[file:../context/language.org::542][context/language.org — C FFI]] — working calls, known bugs
+- [[file:../context/codegen.org][context/codegen.org]] — codegen for external symbols, =ffi_inject_into_env=
+- [[file:../context/types.org][context/types.org]] — =Type= representation, =ffi_map_c_type= target types
+- [[file:../ffi.h][ffi.h]] — FFI API header with full struct definitions
+- [[file:../ffi.c][ffi.c]] — FFI implementation, libclang parsing
+- [[file:../reader.c][reader.c]] — reader integration for =(include ...)=
+- [[file:../how_to/GlfwSpeedrun.mon][how_to/GlfwSpeedrun.mon]] — GLFW FFI example
+- [[file:../how_to/RaylibSpeedrun.mon][how_to/RaylibSpeedrun.mon]] — Raylib FFI example
+- [[file:../how_to/SdlSpeedrun.mon][how_to/SdlSpeedrun.mon]] — SDL FFI example

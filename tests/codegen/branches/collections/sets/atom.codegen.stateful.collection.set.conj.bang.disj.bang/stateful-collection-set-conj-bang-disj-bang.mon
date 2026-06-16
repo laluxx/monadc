@@ -1,0 +1,34 @@
+;; TEST-ID: tests.codegen.stateful.collection.set.conj.bang.disj.bang
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-SUBSET: sets
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.stateful.collection.set.conj.bang.disj.bang
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Mutable set operations update in place.
+;; TEST-ATOM: atom.codegen.stateful.collection.set.conj.bang.disj.bang
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.collection.dispatch
+;; TEST-CODEGEN-PATH: codegen.runtime.collection
+;; TEST-COVERAGE: codegen.c:3934-4016 array/set/map/range literal branches
+;; TEST-COVERAGE: codegen.c:6965-7313 list primitive branches
+;; TEST-COVERAGE: codegen.c:8362-8555 set/map operation branches
+;; TEST-COVERAGE: codegen.c:8555-8905 contains?/starts-with?/ends-with?/count branches
+;; TEST-COVERAGE: codegen.c:9920-10160 collection-as-function indexing branches
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-USES-ATOM: atom.codegen.subset.40.collections.sets
+;; TEST-MENU: branches/collections/sets/atom.codegen.stateful.collection.set.conj.bang.disj.bang
+;; TEST-MENU-PATH: codegen/branches/collections/sets/atom.codegen.stateful.collection.set.conj.bang.disj.bang
+;; TEST-ATOM-LEAF: atom.codegen.stateful.collection.set.conj.bang.disj.bang
+;; TEST-CLI-TARGET: codegen branches collections sets
+
+(module Main)
+(define s {1 2})
+(conj! s 42)
+(disj! s 1)
+(show (contains? s 42))
+(show (contains? s 1))

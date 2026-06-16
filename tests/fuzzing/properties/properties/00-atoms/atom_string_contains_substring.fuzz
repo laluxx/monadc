@@ -1,0 +1,17 @@
+name: atom_string_contains_substring
+section: atom-foundation
+tier: stable
+kind: law
+features: string
+compiler-path: runtime.string
+signal: high
+corpus-role: atom-foundation
+atom: atom.runtime.string.contains
+proves: atom.runtime.string.contains.substring
+uses-atoms: atom.runtime.string, atom.core.bool
+depends-on: atom.runtime.string, atom.core.bool
+args: s:NonEmptyString@escape needle:SubstrOf(s)
+type: Bool
+expect: True
+description: Foundational atom property proving atom.runtime.string.contains.substring.
+law: (contains? {s} {needle})

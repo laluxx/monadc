@@ -1,0 +1,15 @@
+name: structured_program_array_index_after_with_variant_01
+section: current-program-kind
+tier: stable
+kind: program
+features: program, array, if, index
+compiler-path: codegen.array_literal, codegen.if_phi, codegen.module_body, infer.array, infer.if_phi, reader.array_literal, reader.ast_if, runner.program_kind
+signal: high
+corpus-role: program-semantics
+uses-atoms: atom.control.if, atom.core.equality, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+args: a:Int@edge b:Int@edge p:Bool@logic
+type: Bool
+expect: True
+description: V10 program-kind property variant 1 for program_array_index_after_with, checking full program source handling rather than show-wrapped law handling.
+program: (show (= ([{a} {b}] (if {p} 0 1)) (if {p} {a} {b})))

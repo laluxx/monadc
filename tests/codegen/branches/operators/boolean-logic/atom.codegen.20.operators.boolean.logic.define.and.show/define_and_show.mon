@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.define-and-show
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.20.operators.boolean.logic.define.and.show
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: boolean-logic
+;; TEST-CATEGORY: 20-operators
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Define a variable and show its value.
+;; TEST-ATOM: (define x 5) then (show x) prints 5.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:20-operators/boolean-logic branch family
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/boolean-logic/atom.codegen.20.operators.boolean.logic.define.and.show
+;; TEST-MENU-PATH: codegen/branches/operators/boolean-logic/atom.codegen.20.operators.boolean.logic.define.and.show
+;; TEST-ATOM-LEAF: atom.codegen.20.operators.boolean.logic.define.and.show
+;; TEST-CLI-TARGET: codegen branches operators boolean-logic
+(module Main)
+(define x 5)
+(show x)

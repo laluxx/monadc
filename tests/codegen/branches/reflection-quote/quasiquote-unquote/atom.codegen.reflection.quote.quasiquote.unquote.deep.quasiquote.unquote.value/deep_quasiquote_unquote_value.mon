@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.deep.deep_quasiquote_unquote_value
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: emit-json-failed
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 60-reflection-quote
+;; TEST-SUBSET: quasiquote-unquote
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.reflection.quote.quasiquote.unquote.deep.quasiquote.unquote.value
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise quasiquote with unquoted value insertion.
+;; TEST-ATOM: Unquote should evaluate and splice a runtime value into a quoted structure.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:quasiquote/unquote lowering
+
+;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote
+;; TEST-MENU: branches/reflection-quote/quasiquote-unquote/atom.codegen.reflection.quote.quasiquote.unquote.deep.quasiquote.unquote.value
+;; TEST-MENU-PATH: codegen/branches/reflection-quote/quasiquote-unquote/atom.codegen.reflection.quote.quasiquote.unquote.deep.quasiquote.unquote.value
+;; TEST-ATOM-LEAF: atom.codegen.reflection.quote.quasiquote.unquote.deep.quasiquote.unquote.value
+;; TEST-CLI-TARGET: codegen branches reflection-quote quasiquote-unquote
+(module Main)
+(define x 5)
+(show `(1 ,x 3))

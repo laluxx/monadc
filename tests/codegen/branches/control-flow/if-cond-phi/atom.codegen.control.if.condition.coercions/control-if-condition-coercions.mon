@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.branch.control-if-condition-coercions
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SUBSET: if-cond-phi
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.control.if.condition.coercions
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover if condition coercion for integer and floating conditions.
+;; TEST-ATOM: Zero numeric conditions select else; non-zero numeric conditions select then.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:7743-7805 if arity and condition coercion branches
+
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/if-cond-phi/atom.codegen.control.if.condition.coercions
+;; TEST-MENU-PATH: codegen/branches/control-flow/if-cond-phi/atom.codegen.control.if.condition.coercions
+;; TEST-ATOM-LEAF: atom.codegen.control.if.condition.coercions
+;; TEST-CLI-TARGET: codegen branches control-flow if-cond-phi
+(module Main)
+(show (if 0 1 2))
+(show (if 3 1 2))
+(show (if 0.0 1 2))
+(show (if 0.25 1 2))

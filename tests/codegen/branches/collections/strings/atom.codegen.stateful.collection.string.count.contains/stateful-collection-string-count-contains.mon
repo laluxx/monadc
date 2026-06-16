@@ -1,0 +1,31 @@
+;; TEST-ID: tests.codegen.stateful.collection.string.count.contains
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-SUBSET: strings
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.stateful.collection.string.count.contains
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: String count uses strlen; contains? uses strstr.
+;; TEST-ATOM: atom.codegen.stateful.collection.string.count.contains
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.collection.dispatch
+;; TEST-CODEGEN-PATH: codegen.runtime.collection
+;; TEST-COVERAGE: codegen.c:3934-4016 array/set/map/range literal branches
+;; TEST-COVERAGE: codegen.c:6965-7313 list primitive branches
+;; TEST-COVERAGE: codegen.c:8362-8555 set/map operation branches
+;; TEST-COVERAGE: codegen.c:8555-8905 contains?/starts-with?/ends-with?/count branches
+;; TEST-COVERAGE: codegen.c:9920-10160 collection-as-function indexing branches
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-USES-ATOM: atom.codegen.subset.40.collections.strings
+;; TEST-MENU: branches/collections/strings/atom.codegen.stateful.collection.string.count.contains
+;; TEST-MENU-PATH: codegen/branches/collections/strings/atom.codegen.stateful.collection.string.count.contains
+;; TEST-ATOM-LEAF: atom.codegen.stateful.collection.string.count.contains
+;; TEST-CLI-TARGET: codegen branches collections strings
+
+(module Main)
+(show (count "monadc"))
+(show (contains? "monadc" "nad"))
+(show (contains? "monadc" "xyz"))

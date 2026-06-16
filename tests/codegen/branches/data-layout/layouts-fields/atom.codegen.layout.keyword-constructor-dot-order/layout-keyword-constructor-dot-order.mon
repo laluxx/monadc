@@ -1,0 +1,31 @@
+;; TEST-ID: tests.codegen.branch.layout-keyword-constructor-dot-order
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: layouts-fields
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise layout constructor keyword arguments, field order, and dot access.
+;; TEST-ATOM: atom.codegen.layout.keyword-constructor-dot-order
+;; TEST-CODEGEN-ATOM: atom.codegen.layout.keyword-constructor-dot-order
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.layout.constructor.keyword-args
+;; TEST-CODEGEN-PATH: codegen.layout.dot.field
+;; TEST-DEPENDS-ON: atom.codegen.value.scalar-display-spectrum
+;; TEST-TAG: run
+;; TEST-TAG: layout
+;; TEST-TAG: dot
+;; TEST-COVERAGE: codegen.c:12660-12675 keyword constructor argument branches
+;; TEST-COVERAGE: codegen.c:12919-12930 layout dot lookup branches
+
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/layouts-fields/atom.codegen.layout.keyword-constructor-dot-order
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts-fields/atom.codegen.layout.keyword-constructor-dot-order
+;; TEST-ATOM-LEAF: atom.codegen.layout.keyword-constructor-dot-order
+;; TEST-CLI-TARGET: codegen branches data-layout layouts-fields
+(module Main)
+(layout Person [name :: String] [age :: Int])
+(define p (Person :age 37 :name "ada"))
+(show p.name)
+(show p.age)

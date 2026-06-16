@@ -1,0 +1,35 @@
+;; TEST-ID: tests.codegen.branch.control-when-unless-side-effects
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: if-cond-phi
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise when/unless condition blocks with multiple body expressions and skipped branches.
+;; TEST-ATOM: atom.codegen.control.when-unless-side-effects
+;; TEST-CODEGEN-ATOM: atom.codegen.control.when-unless-side-effects
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.when
+;; TEST-CODEGEN-PATH: codegen.unless
+;; TEST-CODEGEN-PATH: codegen.condition.bool
+;; TEST-DEPENDS-ON: atom.codegen.control.sequence-return-last
+;; TEST-TAG: run
+;; TEST-TAG: control
+;; TEST-TAG: when
+;; TEST-TAG: unless
+;; TEST-COVERAGE: codegen.c:8052-8091 when branch blocks
+;; TEST-COVERAGE: codegen.c:8092-8129 unless branch blocks
+
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/if-cond-phi/atom.codegen.control.when-unless-side-effects
+;; TEST-MENU-PATH: codegen/branches/control-flow/if-cond-phi/atom.codegen.control.when-unless-side-effects
+;; TEST-ATOM-LEAF: atom.codegen.control.when-unless-side-effects
+;; TEST-CLI-TARGET: codegen branches control-flow if-cond-phi
+(module Main)
+(define x 0)
+(when True (set! x 1) (set! x (+ x 1)))
+(when False (set! x 99))
+(unless False (set! x (+ x 3)))
+(unless True (set! x 100))
+(show x)

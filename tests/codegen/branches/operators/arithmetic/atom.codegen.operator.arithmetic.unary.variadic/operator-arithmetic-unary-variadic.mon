@@ -1,0 +1,28 @@
+;; TEST-ID: tests.codegen.branch.operator-arithmetic-unary-variadic
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-SUBSET: arithmetic
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.operator.arithmetic.unary.variadic
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover arithmetic operator lowering for unary and variadic integer chains.
+;; TEST-ATOM: Arithmetic operators should reduce left-to-right and preserve unary behavior.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:9494-9810 arithmetic operator branches
+;; TEST-COVERAGE: codegen.c:9499 minimum arity check
+
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/arithmetic/atom.codegen.operator.arithmetic.unary.variadic
+;; TEST-MENU-PATH: codegen/branches/operators/arithmetic/atom.codegen.operator.arithmetic.unary.variadic
+;; TEST-ATOM-LEAF: atom.codegen.operator.arithmetic.unary.variadic
+;; TEST-CLI-TARGET: codegen branches operators arithmetic
+(module Main)
+(show (+ 7))
+(show (- 7))
+(show (+ 1 2 3 4))
+(show (- 10 3 2))
+(show (* 2 3 4))
+(show (/ 100 5 2))

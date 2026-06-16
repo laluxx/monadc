@@ -2,7 +2,7 @@
 #+AUTHOR: codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -100,7 +100,7 @@
   kind-check is a proof, and the set of all compile-time propositions is the
   set of all TypeKind values.
 
-[INF id:inf.references.propositions-as-types-connects from:doc.references.propositions-as-types,obs.references.propositions-as-types-nbe,obs.references.propositions-as-types-refinements,obs.references.propositions-as-types-set-predicate,obs.language.set-grounded-in-model conf:high]
+[INF id:inf.references.propositions-as-types-connects from:doc.references.propositions-as-types,obs.references.propositions-as-types-nbe,obs.references.propositions-as-types-refinements,obs.references.propositions-as-types-set-predicate,inf.language.set-grounded-in-model conf:high]
   connects-to -> `monadc.context.philosophy.sets-are-the-model` (the set-theoretic
   model is Curry-Howard applied to collections) ·
   `monadc.context.language.primitive-dependent-types` (the ITT kernel is a direct
@@ -212,7 +212,7 @@
   exactly once (by the body) and consumed. The closure ABI (with captured
   environment) is the non-linear path where values may be shared.
 
-[INF id:inf.references.linear-lisp-connects from:doc.references.linear-lisp,obs.references.linear-lisp-set-mutation,obs.references.linear-lisp-typed-abi,obs.language.set-two-mutability-modes,obs.language.set-functional-mutability-why conf:high]
+[INF id:inf.references.linear-lisp-connects from:doc.references.linear-lisp,obs.references.linear-lisp-set-mutation,obs.references.linear-lisp-typed-abi,obs.language.set-two-mutability-modes,inf.language.set-functional-mutability-why conf:high]
   connects-to -> `monadc.context.language.primitive-set` (the conj!/disj! mutable
   variants implement Baker's linear update pattern) ·
   `monadc.context.language.primitive-function` (the typed ABI / closure ABI dual
@@ -266,7 +266,7 @@
   semantics differ: lists compute on demand, arrays materialize eagerly. The
   programmer chooses based on the access pattern, not the data model.
 
-[INF id:inf.references.cons-lazy-connects from:doc.references.cons-lazy,obs.references.cons-lazy-thunk-cells,obs.references.cons-lazy-list-vs-array,obs.language.array-as-function,obs.language.set-as-function conf:high]
+[INF id:inf.references.cons-lazy-connects from:doc.references.cons-lazy,obs.references.cons-lazy-thunk-cells,obs.references.cons-lazy-list-vs-array,think.language.array-as-function,obs.language.set-as-function conf:high]
   connects-to -> `monadc.context.language.primitive-array` (strict arrays are the
   counterpart to lazy lists — the choice between laziness and strictness is
   part of the zero-to-metal ladder) ·

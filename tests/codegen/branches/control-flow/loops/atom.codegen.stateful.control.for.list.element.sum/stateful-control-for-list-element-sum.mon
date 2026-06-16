@@ -1,0 +1,36 @@
+;; TEST-ID: tests.codegen.stateful.control.for.list.element.sum
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SUBSET: loops
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.stateful.control.for.list.element.sum
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: for over runtime list iterates values.
+;; TEST-ATOM: atom.codegen.stateful.control.for.list.element.sum
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.control-flow
+;; TEST-CODEGEN-PATH: codegen.phi
+;; TEST-CODEGEN-PATH: codegen.env-mutation
+;; TEST-COVERAGE: codegen.c:7732 begin special form
+;; TEST-COVERAGE: codegen.c:7743-7977 if/PHI branch lowering
+;; TEST-COVERAGE: codegen.c:8001 do special form
+;; TEST-COVERAGE: codegen.c:8012 with child env
+;; TEST-COVERAGE: codegen.c:8050 when branch
+;; TEST-COVERAGE: codegen.c:8090 unless branch
+;; TEST-COVERAGE: codegen.c:8128 while loop
+;; TEST-COVERAGE: codegen.c:8175 for loop
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-USES-ATOM: atom.codegen.subset.30.control.flow.loops
+;; TEST-MENU: branches/control-flow/loops/atom.codegen.stateful.control.for.list.element.sum
+;; TEST-MENU-PATH: codegen/branches/control-flow/loops/atom.codegen.stateful.control.for.list.element.sum
+;; TEST-ATOM-LEAF: atom.codegen.stateful.control.for.list.element.sum
+;; TEST-CLI-TARGET: codegen branches control-flow loops
+
+(module Main)
+(define s 0)
+(for x -> (list 10 20 12) (set! s (+ s x)))
+(show s)

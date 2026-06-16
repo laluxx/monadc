@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.rt-set-literal-count
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.sets.rt.set.literal.count
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: sets
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime set predicates and count observe set literals.
+;; TEST-ATOM: Set?, collection?, and count recognize a literal set.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:40-collections/sets branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/sets/atom.codegen.40.collections.sets.rt.set.literal.count
+;; TEST-MENU-PATH: codegen/branches/collections/sets/atom.codegen.40.collections.sets.rt.set.literal.count
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.sets.rt.set.literal.count
+;; TEST-CLI-TARGET: codegen branches collections sets
+(module Main)
+(define s {1 2})
+(show (Set? s))
+(show (collection? s))
+(show (count s))

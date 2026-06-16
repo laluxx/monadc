@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-class-assoc-default
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.05.symbol.env.typeclasses.rt.class.assoc.default
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: typeclasses
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.reader-header-coverage
+;; TEST-PURPOSE: Runtime class declarations cover associated types and default methods.
+;; TEST-ATOM: Associated-type and default-method class declarations compile before executable code.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:05-symbol-env/typeclasses branch family
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/typeclasses/atom.codegen.05.symbol.env.typeclasses.rt.class.assoc.default
+;; TEST-MENU-PATH: codegen/branches/symbol-env/typeclasses/atom.codegen.05.symbol.env.typeclasses.rt.class.assoc.default
+;; TEST-ATOM-LEAF: atom.codegen.05.symbol.env.typeclasses.rt.class.assoc.default
+;; TEST-CLI-TARGET: codegen branches symbol-env typeclasses
+(module Main)
+(class Collection c where type Elem c (insert) :: c -> Elem c -> c)
+(class Eq a where (=) :: a -> a -> Bool (!=) :: a -> a -> Bool (x != y) => (not (x = y)))
+(show 42)

@@ -1,0 +1,16 @@
+name: if_same_branch_preserves_array_index
+section: atom-derived-language
+tier: stable
+kind: law
+features: if, array, comparison
+compiler-path: codegen.control.if_phi, runtime.array.index
+signal: high
+corpus-role: derived-property
+uses-atoms: atom.control.if.same_branch, atom.runtime.array.index
+depends-on: atom.control.if.same_branch, atom.runtime.array.index
+related-properties: if_same_branch, array_index
+args: c:Bool@logic i:IndexOf(xs) xs:NonEmptyArrInt@small
+type: Bool
+expect: True
+description: Derived language property connected to foundational atom graph dependencies.
+law: (= (if {c} ({xs} {i}) ({xs} {i})) ({xs} {i}))

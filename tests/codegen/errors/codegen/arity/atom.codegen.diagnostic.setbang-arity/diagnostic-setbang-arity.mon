@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.branch.diagnostic-setbang-arity
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: arity
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise set! arity diagnostic.
+;; TEST-ATOM: atom.codegen.diagnostic.setbang-arity
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.setbang-arity
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-CODEGEN-PATH: diagnostic.setbang.arity
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: setbang
+;; TEST-COVERAGE: codegen.c:7644 set! arity diagnostic
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/arity/atom.codegen.diagnostic.setbang-arity
+;; TEST-MENU-PATH: codegen/errors/codegen/arity/atom.codegen.diagnostic.setbang-arity
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.setbang-arity
+;; TEST-CLI-TARGET: codegen errors codegen arity
+(module Main)
+(set! x)

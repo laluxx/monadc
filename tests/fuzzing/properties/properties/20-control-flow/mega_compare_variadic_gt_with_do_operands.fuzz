@@ -1,0 +1,15 @@
+name: mega_compare_variadic_gt_with_do_operands
+section: codegen-compare-variadic
+tier: stable
+kind: law
+features: arithmetic, begin, codegen, comparison, do, env, equality, logic, set, with
+compiler-path: codegen.arithmetic_dispatch, codegen.comparison_dispatch, codegen.equality_dispatch, codegen.local_load, codegen.logic_dispatch, codegen.runtime_call, codegen.sequence, codegen.with_binding, infer.arithmetic, infer.comparison, infer.env_child, infer.env_lookup, infer.equality, infer.logic, reader.ast_begin, reader.ast_do, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.with, atom.codegen.dispatch, atom.control.begin, atom.control.do, atom.core.equality, atom.core.order.gt, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_do_last_value, signal_atom_equality_reflexive, signal_atom_with_substitution
+args: a:Int b:Int c:Int setup:Int
+type: Bool
+expect: True
+description: Variadic > must evaluate do/begin operands and then compare adjacent values.
+law: (= (> (do {setup} {a}) (begin {setup} {b}) {c}) (> {a} {b} {c}))

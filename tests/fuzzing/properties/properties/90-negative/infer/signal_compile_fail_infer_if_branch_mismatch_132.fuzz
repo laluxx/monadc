@@ -1,0 +1,15 @@
+name: signal_compile_fail_infer_if_branch_mismatch_132
+section: current-compile-fail
+tier: compile-fail
+kind: compile-fail
+features: infer, type-error, if, phi
+compiler-path: infer.branch.join-type
+stage: infer
+signal: high
+corpus-role: negative-diagnostic
+uses-atoms: atom.control.if
+args: b:Bool@logic x:Int@edge
+type: Bool
+expect-diagnostic: error:
+description: Structured negative property for compiler diagnostics; expected to fail compilation.
+law: (if {b} {x} True)

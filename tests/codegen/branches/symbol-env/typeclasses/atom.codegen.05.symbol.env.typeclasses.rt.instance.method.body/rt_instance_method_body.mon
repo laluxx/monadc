@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-instance-method-body
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.05.symbol.env.typeclasses.rt.instance.method.body
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: typeclasses
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.reader-header-coverage
+;; TEST-PURPOSE: Runtime instance declarations cover method bodies.
+;; TEST-ATOM: An instance declaration with pattern-style method clauses compiles before executable code.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:05-symbol-env/typeclasses branch family
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/typeclasses/atom.codegen.05.symbol.env.typeclasses.rt.instance.method.body
+;; TEST-MENU-PATH: codegen/branches/symbol-env/typeclasses/atom.codegen.05.symbol.env.typeclasses.rt.instance.method.body
+;; TEST-ATOM-LEAF: atom.codegen.05.symbol.env.typeclasses.rt.instance.method.body
+;; TEST-CLI-TARGET: codegen branches symbol-env typeclasses
+(module Main)
+(instance Eq Int where (0 = 0) => True (_ = _) => False)
+(show 42)

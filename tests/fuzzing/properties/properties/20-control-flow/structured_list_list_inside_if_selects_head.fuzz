@@ -1,0 +1,15 @@
+name: structured_list_list_inside_if_selects_head
+section: collections-list-current
+tier: stable
+kind: law
+features: arithmetic, collections, equality, if, list, phi
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.runtime_call, infer.arithmetic, infer.equality, infer.if_phi, reader.ast_if, runtime.list
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.if, atom.core.equality
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Stress list constructors, pair accessors, head/cdr chains, make-list, and list-copy.
+law: (= (head (if {p} (cons {a} (list)) (cons {b} (list)))) (if {p} {a} {b}))

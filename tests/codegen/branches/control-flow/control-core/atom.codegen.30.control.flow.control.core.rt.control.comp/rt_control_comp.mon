@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-control-comp
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.control.core.rt.control.comp
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: control-core
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Compact control flow check: if string branches, begin, and unless body execution.
+;; TEST-ATOM: (if True "yes" "no") = "yes", (if False "yes" "no") = "no", (begin 1 2 3) = 3, (unless False (show "executed")) prints executed.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:30-control-flow/control-core branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/control-core/atom.codegen.30.control.flow.control.core.rt.control.comp
+;; TEST-MENU-PATH: codegen/branches/control-flow/control-core/atom.codegen.30.control.flow.control.core.rt.control.comp
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.control.core.rt.control.comp
+;; TEST-CLI-TARGET: codegen branches control-flow control-core
+(module Main)
+(show (if True "yes" "no"))
+(show (if False "yes" "no"))
+(show (begin 1 2 3))
+(unless False (show "executed"))

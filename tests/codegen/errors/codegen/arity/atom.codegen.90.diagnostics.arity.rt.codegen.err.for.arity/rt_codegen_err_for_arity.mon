@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-for-arity
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.90.diagnostics.arity.rt.codegen.err.for.arity
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: arity
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen enforces for arity.
+;; TEST-ATOM: (for) must fail because for requires a binding and a body.
+;; TEST-EXPECT: fail:compile
+
+;; TEST-COVERAGE: codegen.c:90-diagnostics/arity branch family
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/arity/atom.codegen.90.diagnostics.arity.rt.codegen.err.for.arity
+;; TEST-MENU-PATH: codegen/errors/codegen/arity/atom.codegen.90.diagnostics.arity.rt.codegen.err.for.arity
+;; TEST-ATOM-LEAF: atom.codegen.90.diagnostics.arity.rt.codegen.err.for.arity
+;; TEST-CLI-TARGET: codegen errors codegen arity
+(module Main)
+(for)

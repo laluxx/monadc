@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-and-comparison-false
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: And with a false comparison returns False.
-;; TEST-ATOM: (and (< 5 3) (> 10 2)) evaluates to False.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (and (< 5 3) (> 10 2)))

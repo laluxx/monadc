@@ -1,0 +1,32 @@
+;; TEST-ID: tests.codegen.branch.function-recursive-factorial-phi
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: recursion
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise recursive self-call lookup and if/PHI return coercion inside a typed function.
+;; TEST-ATOM: atom.codegen.function.recursive-self-call
+;; TEST-CODEGEN-ATOM: atom.codegen.function.recursive-self-call
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.if.phi
+;; TEST-CODEGEN-PATH: call.recursive.current-function
+;; TEST-CODEGEN-PATH: codegen.operator.multiply
+;; TEST-DEPENDS-ON: atom.codegen.operator.less-equal
+;; TEST-DEPENDS-ON: atom.codegen.operator.multiply
+;; TEST-TAG: run
+;; TEST-TAG: recursion
+;; TEST-TAG: phi
+;; TEST-COVERAGE: codegen.c:7743-7965 if PHI branches
+;; TEST-COVERAGE: codegen.c:10000-11950 recursive function call path
+
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/recursion/atom.codegen.function.recursive-self-call
+;; TEST-MENU-PATH: codegen/branches/symbol-env/recursion/atom.codegen.function.recursive-self-call
+;; TEST-ATOM-LEAF: atom.codegen.function.recursive-self-call
+;; TEST-CLI-TARGET: codegen branches symbol-env recursion
+(module Main)
+(define (fact [n : Int] -> Int)
+  (if (<= n 1) 1 (* n (fact (- n 1)))))
+(show (fact 5))

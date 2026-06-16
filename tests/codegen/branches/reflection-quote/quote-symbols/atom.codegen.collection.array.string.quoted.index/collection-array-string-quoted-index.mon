@@ -1,0 +1,28 @@
+;; TEST-ID: tests.codegen.branch.collection-array-string-quoted-index
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SUBSET: quote-symbols
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 60-reflection-quote
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.collection.array.string.quoted.index
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover inline string indexing, inline array indexing, and quoted-list indexing with static and dynamic index paths.
+;; TEST-ATOM: Indexing forms should select the correct element and enforce codegen conversion of float/dynamic indices.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:4168-4193 inline string indexing
+;; TEST-COVERAGE: codegen.c:4195-4210 inline array indexing and bounds check
+;; TEST-COVERAGE: codegen.c:4212-4255 quoted-list indexing static/dynamic paths
+
+;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote
+;; TEST-MENU: branches/reflection-quote/quote-symbols/atom.codegen.collection.array.string.quoted.index
+;; TEST-MENU-PATH: codegen/branches/reflection-quote/quote-symbols/atom.codegen.collection.array.string.quoted.index
+;; TEST-ATOM-LEAF: atom.codegen.collection.array.string.quoted.index
+;; TEST-CLI-TARGET: codegen branches reflection-quote quote-symbols
+(module Main)
+(show ("abc" 2.0))
+(show ([10 20 30] 1.0))
+(show ('(7 8 9) 2))
+(define i 1)
+(show ('(7 8 9) i))

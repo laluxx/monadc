@@ -1,0 +1,15 @@
+name: mega_equal_quote_different_list_false
+section: codegen-quote-runtime
+tier: experimental
+kind: law
+features: arithmetic, codegen, equality, if, list, path, phi, predicate, quote
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.path_literal, codegen.predicate_dispatch, codegen.quote, codegen.runtime_call, infer.arithmetic, infer.equality, infer.if_phi, infer.path, infer.type_predicate, reader.ast_if, reader.path_literal, reader.quote, runtime.list
+signal: low
+corpus-role: legacy-smoke
+uses-atoms: atom.codegen.dispatch, atom.control.if, atom.core.equality, atom.infer.predicate, atom.quote.quote, atom.runtime.path
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+args: 
+type: Bool
+expect: True
+description: equal? must distinguish quoted list element changes.
+law: (= (equal? (quote (a b c)) (quote (a b d))) False)

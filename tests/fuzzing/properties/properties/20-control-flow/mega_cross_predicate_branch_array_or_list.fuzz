@@ -1,0 +1,15 @@
+name: mega_cross_predicate_branch_array_or_list
+section: codegen-cross-layer-stress
+tier: stable
+kind: law
+features: arithmetic, array, array-index, codegen, equality, if, list, logic, phi, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.logic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, infer.arithmetic, infer.array, infer.callable_array, infer.equality, infer.if_phi, infer.logic, infer.type_predicate, reader.array_literal, reader.ast_if, runtime.list
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.control.if, atom.core.equality, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+args: p:Bool
+type: Bool
+expect: True
+description: collection? must accept PHI between array and list boxed values.
+law: (= (collection? (if {p} [1 2] (list))) True)

@@ -1,0 +1,15 @@
+name: extreme_if_common_right_add
+section: control-if-dispatch
+tier: stable
+kind: law
+features: arithmetic, control, equality, if, phi
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, infer.arithmetic, infer.equality, infer.if_phi, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.control.if, atom.core.equality, atom.core.plus
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero
+args: cond:Bool common:Int a:Int b:Int
+type: Bool
+expect: True
+description: A common right operand can be moved through an if branch for +.
+law: (= (+ (if {cond} {a} {b}) {common}) (if {cond} (+ {a} {common}) (+ {b} {common})))

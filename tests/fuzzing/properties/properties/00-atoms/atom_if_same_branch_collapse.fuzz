@@ -1,0 +1,17 @@
+name: atom_if_same_branch_collapse
+section: atom-foundation
+tier: stable
+kind: law
+features: if, comparison
+compiler-path: codegen.control.if_phi, codegen.operator.comparison
+signal: high
+corpus-role: atom-foundation
+atom: atom.control.if
+proves: atom.control.if.same_branch
+uses-atoms: atom.control.if, atom.core.equality
+depends-on: atom.control.if, atom.core.equality
+args: c:Bool@logic x:Int@edge+if
+type: Bool
+expect: True
+description: Foundational atom property proving atom.control.if.same_branch.
+law: (= (if {c} {x} {x}) {x})

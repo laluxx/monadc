@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.rt-assign-arrow-sugar
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.99.smoke.legacy.uncategorized.legacy.rt.assign.arrow.sugar
+;; TEST-QUALITY: legacy-smoke
+;; TEST-SUBSET: uncategorized-legacy
+;; TEST-CATEGORY: 99-smoke-legacy
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime assignment-arrow sugar mutates variables.
+;; TEST-ATOM: x <- value desugars to set! and updates x.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:99-smoke-legacy/uncategorized-legacy branch family
+;; TEST-USES-ATOM: atom.codegen.category.99.smoke.legacy
+;; TEST-MENU: branches/smoke-legacy/uncategorized-legacy/atom.codegen.99.smoke.legacy.uncategorized.legacy.rt.assign.arrow.sugar
+;; TEST-MENU-PATH: codegen/branches/smoke-legacy/uncategorized-legacy/atom.codegen.99.smoke.legacy.uncategorized.legacy.rt.assign.arrow.sugar
+;; TEST-ATOM-LEAF: atom.codegen.99.smoke.legacy.uncategorized.legacy.rt.assign.arrow.sugar
+;; TEST-CLI-TARGET: codegen branches smoke-legacy uncategorized-legacy
+(module Main)
+(define x 0)
+x <- 5
+(show x)
+x <- x + 2
+(show x)

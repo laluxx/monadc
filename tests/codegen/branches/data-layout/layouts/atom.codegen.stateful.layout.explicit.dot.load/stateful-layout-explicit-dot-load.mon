@@ -1,0 +1,32 @@
+;; TEST-ID: tests.codegen.stateful.layout.explicit.dot.load
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SUBSET: layouts
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.stateful.layout.explicit.dot.load
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Explicit dot special form branch.
+;; TEST-ATOM: atom.codegen.stateful.layout.explicit.dot.load
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.layout
+;; TEST-CODEGEN-PATH: codegen.adt
+;; TEST-CODEGEN-PATH: codegen.dot
+;; TEST-COVERAGE: codegen.c:826-933 type_to_llvm TYPE_LAYOUT/TYPE_APP branches
+;; TEST-COVERAGE: codegen.c:1239-1310 codegen_show_value layout/ADT display branches
+;; TEST-COVERAGE: codegen.c:12669 keyword constructor field initialization
+;; TEST-COVERAGE: codegen.c:12902-12952 dot special form
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-USES-ATOM: atom.codegen.subset.50.data.layout.layouts
+;; TEST-MENU: branches/data-layout/layouts/atom.codegen.stateful.layout.explicit.dot.load
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts/atom.codegen.stateful.layout.explicit.dot.load
+;; TEST-ATOM-LEAF: atom.codegen.stateful.layout.explicit.dot.load
+;; TEST-CLI-TARGET: codegen branches data-layout layouts
+
+(module Main)
+(layout Point [x :: Int] [y :: Int])
+(define p (Point 42 1))
+(show (dot p x))

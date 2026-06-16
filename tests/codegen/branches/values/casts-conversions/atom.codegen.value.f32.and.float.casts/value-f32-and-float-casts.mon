@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.branch.value-f32-and-float-casts
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: casts-conversions
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 00-values
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.value.f32.and.float.casts
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover Float/F32 cast and show branches, including int-to-float and float-to-int conversion.
+;; TEST-ATOM: F32 values should print through the f32 extension path; Int/Float casts should round/truncate predictably.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:1236 TYPE_F32 show branch
+;; TEST-COVERAGE: codegen.c:12513-12534 numeric cast targets
+;; TEST-COVERAGE: codegen.c:44-72 emit_type_cast numeric conversions
+
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/casts-conversions/atom.codegen.value.f32.and.float.casts
+;; TEST-MENU-PATH: codegen/branches/values/casts-conversions/atom.codegen.value.f32.and.float.casts
+;; TEST-ATOM-LEAF: atom.codegen.value.f32.and.float.casts
+;; TEST-CLI-TARGET: codegen branches values casts-conversions
+(module Main)
+(show (F32 3.5))
+(show (Float 42))
+(show (Int 3.75))
+(show (Float (I8 7)))

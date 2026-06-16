@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.rt-layout-keyword-constructor
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.50.data.layout.layouts.fields.rt.layout.keyword.constructor
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: layouts-fields
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime layout construction with unordered keyword fields is a codegen-backed coverage point.
+;; TEST-ATOM: (Point :x 3 :y 4) should construct the same layout value as positional construction.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:50-data-layout/layouts-fields branch family
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/layouts-fields/atom.codegen.50.data.layout.layouts.fields.rt.layout.keyword.constructor
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts-fields/atom.codegen.50.data.layout.layouts.fields.rt.layout.keyword.constructor
+;; TEST-ATOM-LEAF: atom.codegen.50.data.layout.layouts.fields.rt.layout.keyword.constructor
+;; TEST-CLI-TARGET: codegen branches data-layout layouts-fields
+(module Main)
+(layout Point [x :: Int] [y :: Int])
+(define p (Point :y 3 :x 4))
+(show p.x)
+(show p.y)

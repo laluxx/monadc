@@ -1,5 +1,5 @@
 #+TITLE: Last First Failing Test
-#+DATE: 2026-06-15T01:04:07
+#+DATE: 2026-06-16T06:46:21
 
 [OBS id:obs.tests.last-first-failure src:tests/run.py conf:high]
   This generated record captures the first failing test from the latest
@@ -7,139 +7,117 @@
   debugging pass can start from the earliest observed failure.
 
 * Failure
-- Test: =interaction.interaction_layout_method_gap_documented=
+- Test: =codegen.rt-size-array-value=
 - Status: =FAIL=
-- Duration: =[ 143.68 ] ms=
-- Reason: =expected fail:compile but compile succeeded=
-
-** Materialized Source
-#+BEGIN_SRC monad
-module Main
-layout Color
-  [r :: U8]
-  [g :: U8]
-  [b :: U8]
-  where
-    method fromRGB :: U8 -> U8 -> U8 -> Color
-      r g b -> (Color r g b)
-
-define red Color 255 0 0
-#+END_SRC
+- Menu: =codegen/branches/collections/arrays-ranges=
+- Duration: =[  36.12 ] ms=
+- Reason: =compile failed=
+- Failure kind: =desugar-mismatch=
+- Fixture: =tests/codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.size.array.value/rt_size_array_value.mon=
+- Artifacts: =tests/.last-failures/codegen.rt-size-array-value=
 
 ** Metadata
-- =TEST-CONTEXT=: monadc.context.language.feature-interactions
-- =TEST-EXPECT=: fail:compile
-- =TEST-EXPECT-DIAGNOSTIC=: Expected '[' for layout field
-- =TEST-ID=: tests.interaction.interaction_layout_method_gap_documented
-- =TEST-PURPOSE=: Layout with where methods remains represented as an expected parser gap.
+- =TEST-ATOM=: [16kb] as a value should construct an array-like buffer with count 16384.
+- =TEST-ATOM-LEAF=: atom.codegen.40.collections.arrays.ranges.rt.size.array.value
+- =TEST-CATEGORY=: 40-collections
+- =TEST-CLI-TARGET=: codegen branches collections arrays-ranges
+- =TEST-CODEGEN-ATOM=: atom.codegen.40.collections.arrays.ranges.rt.size.array.value
+- =TEST-CONTEXT=: monadc.context.language.runtime-codegen-corpus
+- =TEST-COVERAGE=: codegen.c:40-collections/arrays-ranges branch family
+- =TEST-EXPECT=: compile, run
+- =TEST-ID=: tests.codegen.rt-size-array-value
+- =TEST-MENU=: branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.size.array.value
+- =TEST-MENU-PATH=: codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.size.array.value
+- =TEST-PURPOSE=: Runtime size-array value syntax is a codegen-backed coverage point.
+- =TEST-QUALITY=: branch-regression
+- =TEST-SECTION=: codegen
+- =TEST-STATUS=: passing-baseline-2026-06-15
+- =TEST-SUBSET=: arrays-ranges
+- =TEST-TIER=: regression
+- =TEST-USES-ATOM=: atom.codegen.category.40.collections
 
 ** Context Links
-- =monadc.context.language.feature-interactions=
+- =monadc.context.language.runtime-codegen-corpus=
 
 ** Output
 #+BEGIN_EXAMPLE
+DEBUG define arity = 2
+DEBUG arrow-block entry t='(module Main)'
+DEBUG arrow=(nil) has_colon_colon=0 t='(module Main)'
+DEBUG arrow-block entry t='(show (Arr? buffer))'
+DEBUG arrow=(nil) has_colon_colon=0 t='(show (Arr? buffer))'
+DEBUG arrow-block entry t='(show (count buffer))'
+DEBUG arrow=(nil) has_colon_colon=0 t='(show (count buffer))'
 
-=== wisp expanded (/tmp/monadc-tests-myy1az8k/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented.mon) ===
-(#line 1 1) (module Main)
-(#line 9 1) (layout Color (#line 3 1) [r :: U8] (#line 4 1) [g :: U8] (#line 5 1) [b :: U8] (#line 6 1) where (#line 7 1) method fromRGB :: U8 -> U8 -> U8 -> Color (#line 8 1) r g b -> (Color r g b))
-(#line 10 1) (define red (Color 255 0 0))
+=== wisp expanded (<repo>/tests/codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.size.array.value/rt_size_array_value.mon) ===
+(#line 20 1) (module Main)
+(#line 21 1) (define [buffer :: Arr :: 16384 :: U8] [])
+(#line 22 1) (show (Arr? buffer))
+(#line 23 1) (show (count buffer))
 === end ===
 
 
-=== desugared AST (/tmp/monadc-tests-myy1az8k/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented.mon) ===
-[compile] /tmp/monadc-tests-myy1az8k/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented.mon
+=== desugared AST (<repo>/tests/codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.size.array.value/rt_size_array_value.mon) ===
+[compile] <repo>/tests/codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.size.array.value/rt_size_array_value.mon
 (module Main)
-(layout Color [r :: U8] [g :: U8] [b :: U8])
-(define Color.fromRGB (lambda ([r :: U8] [g :: U8] [b :: U8] -> Color) (Color r g b)))
-(define red (Color 255 0 0))
+(define (buffer :: Arr :: 16384 :: U8) [])
+(show (Arr? buffer))
+(show (count buffer))
 === end desugared AST ===
 
-├─ Infer (λ(r : U8). λ(g : U8). λ(b : U8). (__ctor_Color r g b) : Π(r : U8). Π(g : U8). Π(b : U8). __type_Color)
-│   ├─ Check λ(r : U8). λ(g : U8). λ(b : U8). (__ctor_Color r g b) ⇐ Π(r : U8). Π(g : U8). Π(b : U8). __type_Color
-│   │   ├─ Conv  U8 ≡ U8
-│   │   └─ OK
-│   │   ├─ Check λ(g : U8). λ(b : U8). (__ctor_Color r g b) ⇐ Π(g : U8). Π(b : U8). __type_Color
-│   │   │   ├─ Conv  U8 ≡ U8
-│   │   │   └─ OK
-│   │   │   ├─ Check λ(b : U8). (__ctor_Color r g b) ⇐ Π(b : U8). __type_Color
-│   │   │   │   ├─ Conv  U8 ≡ U8
-│   │   │   │   └─ OK
-│   │   │   │   ├─ Check (__ctor_Color r g b) ⇐ __type_Color
-│   │   │   │   │   ├─ Infer (__ctor_Color r g b)
-│   │   │   │   │   │   ├─ Infer __ctor_Color
-│   │   │   │   │   │   └─ OK: __ctor_Color : Π(__ctor_p0 : U8). Π(__ctor_p1 : U8). Π(__ctor_p2 : U8). __type_Color
-│   │   │   │   │   │   ├─ Check r ⇐ U8
-│   │   │   │   │   │   │   ├─ Infer r
-│   │   │   │   │   │   │   └─ OK: r : U8
-│   │   │   │   │   │   │   ├─ Conv  U8 ≡ U8
-│   │   │   │   │   │   │   └─ OK
-│   │   │   │   │   │   └─ OK
-│   │   │   │   │   │   ├─ Check g ⇐ U8
-│   │   │   │   │   │   │   ├─ Infer g
-│   │   │   │   │   │   │   └─ OK: g : U8
-│   │   │   │   │   │   │   ├─ Conv  U8 ≡ U8
-│   │   │   │   │   │   │   └─ OK
-│   │   │   │   │   │   └─ OK
-│   │   │   │   │   │   ├─ Check b ⇐ U8
-│   │   │   │   │   │   │   ├─ Infer b
-│   │   │   │   │   │   │   └─ OK: b : U8
-│   │   │   │   │   │   │   ├─ Conv  U8 ≡ U8
-│   │   │   │   │   │   │   └─ OK
-│   │   │   │   │   │   └─ OK
-│   │   │   │   │   └─ OK: (__ctor_Color r g b) : __type_Color
-│   │   │   │   │   ├─ Conv  __type_Color ≡ __type_Color
-│   │   │   │   │   └─ OK
-│   │   │   │   └─ OK
-│   │   │   └─ OK
+├─ Infer _
+└─ OK: _ : ?0
+├─ Infer (show (Arr? buffer))
+│   ├─ Infer show
+│   └─ OK: show : Π(A : Type 0). Π(_ : #0). String
+│   ├─ Check (Arr? buffer) ⇐ ?1
+│   │   ├─ Infer (Arr? buffer)
+│   │   │   ├─ Infer Arr?
+│   │   │   └─ OK: Arr? : Type 0
+│   │   │   ├─ Infer buffer
+│   │   │   └─ OK: buffer : ?2
+│   │   └─ OK: (Arr? buffer) : ?3
+│   │   ├─ Conv  ?3 ≡ ?1
 │   │   └─ OK
 │   └─ OK
-└─ OK: (λ(r : U8). λ(g : U8). λ(b : U8). (__ctor_Color r g b) : Π(r : U8). Π(g : U8). Π(b : U8). __type_Color) : Π(r : U8). Π(g : U8). Π(b : U8). __type_Color
-├─ Infer (__ctor_Color 255 0 0)
-│   ├─ Infer __ctor_Color
-│   └─ OK: __ctor_Color : Π(__ctor_p0 : U8). Π(__ctor_p1 : U8). Π(__ctor_p2 : U8). __type_Color
-│   ├─ Check 255 ⇐ U8
-│   │   ├─ Infer 255
-│   │   └─ OK: 255 : Nat
-│   │   ├─ Conv  Nat ≡ U8
+└─ OK: (show (Arr? buffer)) : String
+
+  [dep] Warning: 3 unsolved metavariable(s) remain
+    • ?0 [_hole_infer] at depth 0
+      Expected type: Type 0
+    • ?1 [?impl] at depth 0
+      Expected type: Type 0
+    • ?2 [?inst] at depth 0
+      Expected type: Type 0
+  - Hint: This is expected during bootstrap. Untyped library functions (like '>=') generate holes.
+
+├─ Infer (show (count buffer))
+│   ├─ Infer show
+│   └─ OK: show : Π(A : Type 0). Π(_ : #0). String
+│   ├─ Check (count buffer) ⇐ ?4
+│   │   ├─ Infer (count buffer)
+│   │   │   ├─ Infer count
+│   │   │   └─ OK: count : ?5
+│   │   └─ OK: (count buffer) : ?6
+│   │   ├─ Conv  ?6 ≡ ?4
 │   │   └─ OK
 │   └─ OK
-│   ├─ Check 0 ⇐ U8
-│   │   ├─ Infer 0
-│   │   └─ OK: 0 : Nat
-│   │   ├─ Conv  Nat ≡ U8
-│   │   └─ OK
-│   └─ OK
-│   ├─ Check 0 ⇐ U8
-│   │   ├─ Infer 0
-│   │   └─ OK: 0 : Nat
-│   │   ├─ Conv  Nat ≡ U8
-│   │   └─ OK
-│   └─ OK
-└─ OK: (__ctor_Color 255 0 0) : __type_Color
-├─ Interop HM unifies with prior Dependent Type check: U8
-├─ Interop HM unifies with prior Dependent Type check: U8
-├─ Interop HM unifies with prior Dependent Type check: U8
-├─ Interop HM unifies with prior Dependent Type check: Color ?
-├─ HM Unify U8 ~ U8
-└─ OK
-├─ HM Unify U8 ~ U8
-└─ OK
-├─ HM Unify U8 ~ U8
-└─ OK
-├─ HM Unify 'b ~ (U8 → (U8 → (U8 → 'c)))
-└─ OK
-├─ HM Unify 'c ~ Color ?
-└─ OK
-├─ HM Unify 'm38 ~ (U8 → (U8 → (U8 → Color ?)))
-└─ OK
+└─ OK: (show (count buffer)) : String
+
+  [dep] Warning: 5 unsolved metavariable(s) remain
+    • ?0 [_hole_infer] at depth 0
+      Expected type: Type 0
+    • ?1 [?impl] at depth 0
+      Expected type: Type 0
+    • ?2 [?inst] at depth 0
+      Expected type: Type 0
+    • ?4 [?impl] at depth 0
+      Expected type: Type 0
+    • ?5 [count] at depth 0
+      Expected type: Type 0
+  - Hint: This is expected during bootstrap. Untyped library functions (like '>=') generate holes.
+
+error: 'count' not supported for type Int
   module: Main
 [dep] running bidirectional type checker...
-Layout Color :: 24 bytes (3 fields)
-DEFINED [Color.fromRGB :: U8 -> U8 -> U8 -> Color ?]
-DEFINED [red :: Color]
-  wrote object: /tmp/monadc-tests-myy1az8k/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented.o
-
-[link] clang -fuse-ld=mold /tmp/monadc-tests-myy1az8k/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented.o -o /tmp/monadc-tests-myy1az8k/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented /usr/local/lib/libmonad.a `llvm-config --ldflags --libs core` -lm -lgmp -no-pie
-[link] 120 ms
-[done] /tmp/monadc-tests-myy1az8k/interaction.interaction_layout_method_gap_documented/interaction.interaction_layout_method_gap_documented
 #+END_EXAMPLE

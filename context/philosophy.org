@@ -2,7 +2,7 @@
 #+AUTHOR: human + big-pickle (claude-opencode)
 #+DATE: 2026-06-12
 #+CREATED: 2026-06-12
-#+LAST_MODIFIED: 2026-06-12
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -262,7 +262,7 @@
   exists to make the root system visible so a human or LLM can see which way
   the roots are growing before the foundation cracks.
 
-[INF id:inf.philosophy.principles-connect-to-primitives from:dec.philosophy.smallest-atom,dec.philosophy.no-tradeoff-principle,dec.philosophy.zero-to-metal,dec.philosophy.sets-are-the-model,think.philosophy.principled-extensibility,obs.language.set-grounded-in-model,obs.language.array-ladder,obs.language.set-as-function-why,obs.language.map-bug-significance,obs.language.dep-why-shadow-pass conf:high]
+[INF id:inf.philosophy.principles-connect-to-primitives from:dec.philosophy.smallest-atom,dec.philosophy.no-tradeoff-principle,dec.philosophy.zero-to-metal,dec.philosophy.sets-are-the-model,think.philosophy.principled-extensibility,inf.language.set-grounded-in-model,inf.language.array-ladder,inf.language.set-as-function-why,think.language.map-bug-significance,think.language.dep-why-shadow-pass conf:high]
   connects-to -> `monadc.context.language.primitive-philosophy` (the primitives section records design intent grounded in these principles) ·
   `monadc.context.language.primitive-array` (the three array forms are the zero-to-metal ladder made concrete) ·
   `monadc.context.language.primitive-set` (TYPE_SET is the runtime incarnation of types-are-sets) ·

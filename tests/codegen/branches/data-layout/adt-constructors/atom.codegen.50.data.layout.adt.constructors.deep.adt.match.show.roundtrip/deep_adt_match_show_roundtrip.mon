@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.deep.deep_adt_match_show_roundtrip
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SUBSET: adt-constructors
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.50.data.layout.adt.constructors.deep.adt.match.show.roundtrip
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise ADT construction followed by match extraction.
+;; TEST-ATOM: ADT constructor payload should be readable by pattern matching.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout, atom.codegen.subset.adt.constructors
+;; TEST-COVERAGE: codegen.c:ADT allocation plus pattern codegen
+;; TEST-MENU: branches/data-layout/adt-constructors/atom.codegen.50.data.layout.adt.constructors.deep.adt.match.show.roundtrip
+;; TEST-MENU-PATH: codegen/branches/data-layout/adt-constructors/atom.codegen.50.data.layout.adt.constructors.deep.adt.match.show.roundtrip
+;; TEST-ATOM-LEAF: atom.codegen.50.data.layout.adt.constructors.deep.adt.match.show.roundtrip
+;; TEST-CLI-TARGET: codegen branches data-layout adt-constructors
+
+(module Main)
+(data Maybe Nothing | Just Int)
+(define m (Just 42))
+(show (match m with | (Just x) -> x | _ -> 0))

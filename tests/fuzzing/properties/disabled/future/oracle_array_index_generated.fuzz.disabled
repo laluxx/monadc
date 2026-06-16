@@ -1,0 +1,15 @@
+name: oracle_array_index_generated
+section: oracle-array
+tier: stable
+kind: law
+features: arithmetic, logic, for, array
+compiler-path: codegen.operator.arithmetic, codegen.operator.logic, codegen.control.for_loop, runtime.array.index, codegen.array.literal
+signal: high
+corpus-role: oracle
+uses-atoms: atom.core.arithmetic, atom.core.logic, atom.control.for, atom.runtime.array
+disabled-reason: disabled future or merged property; kept for provenance but not loaded by default
+args: xs:ArrInt i:IndexOf(xs)
+type: Int
+expect-python: xs[i]
+description: Example for newer oracle fuzzers: generated array indexing should match Python oracle.
+law: ({xs} {i})

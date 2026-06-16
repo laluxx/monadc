@@ -1,0 +1,15 @@
+name: oracle_string_contains_generated_substr
+section: oracle-string
+tier: stable
+kind: law
+features: arithmetic, logic, string, set, predicate
+compiler-path: codegen.operator.arithmetic, codegen.operator.logic, runtime.string, runtime.set, infer.predicate, codegen.predicate
+signal: high
+corpus-role: oracle
+uses-atoms: atom.core.arithmetic, atom.core.logic, atom.runtime.string, atom.runtime.set, atom.core.predicate
+disabled-reason: disabled future or merged property; kept for provenance but not loaded by default
+args: s:String needle:SubstrOf(s)
+type: Bool
+expect-python: needle in s
+description: Generated string must contain a generated substring of itself.
+law: (contains? {s} {needle})

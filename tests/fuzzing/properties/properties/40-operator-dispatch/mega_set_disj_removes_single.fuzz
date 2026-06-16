@@ -1,0 +1,15 @@
+name: mega_set_disj_removes_single
+section: codegen-runtime-collections
+tier: stable
+kind: law
+features: arithmetic, codegen, equality, predicate, set
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.predicate_dispatch, codegen.runtime_call, infer.arithmetic, infer.equality, infer.type_predicate, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.infer.predicate
+related-properties: signal_atom_equality_reflexive
+args: a:Int
+type: Bool
+expect: True
+description: pure disj must remove generated singleton element.
+law: (= (contains? (disj (set {a}) {a}) {a}) False)

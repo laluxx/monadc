@@ -1,0 +1,15 @@
+name: structured_strategy_phi_env_heap_array_head_direct
+section: current-strategy-phi-env
+tier: stable
+kind: law
+features: heap-array, head, strategy
+compiler-path: codegen.heap_array, reader.heap_array, runner.strategy_arg, runner.typed_generator
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.runtime.array, atom.runtime.heap-array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive
+args: a:Int@if+phi+env b:Int@with+do p:Bool@logic+if
+type: Bool
+expect: True
+description: V10 strategy property heap_array_head_direct generated with phi_env arguments to stress compiler dispatch, envs, and PHI lowering.
+law: (= (head ~[{a} {b}]) {a})

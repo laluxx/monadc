@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.asm.byte-width-zero-extend
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.70.ffi.asm.inline.asm.asm.byte.width.zero.extend
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: inline-asm
+;; TEST-CATEGORY: 70-ffi-asm
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Writing eax in asm zero-extends to the Int return register.
+;; TEST-ATOM: mov immediate %eax ret exposes x86-64 zero-extension behavior for 32-bit writes.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:70-ffi-asm/inline-asm branch family
+;; TEST-USES-ATOM: atom.codegen.category.70.ffi.asm
+;; TEST-MENU: branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.byte.width.zero.extend
+;; TEST-MENU-PATH: codegen/branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.byte.width.zero.extend
+;; TEST-ATOM-LEAF: atom.codegen.70.ffi.asm.inline.asm.asm.byte.width.zero.extend
+;; TEST-CLI-TARGET: codegen branches ffi-asm inline-asm
+module AsmTest
+
+define asm-eax-zero-extend :: Int -> Int
+  x -> (asm mov 4294967295 %eax ret)
+
+show (asm-eax-zero-extend 0)

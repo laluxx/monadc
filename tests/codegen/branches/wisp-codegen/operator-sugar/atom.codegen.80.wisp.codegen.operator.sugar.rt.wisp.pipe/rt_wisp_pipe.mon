@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-wisp-pipe
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.operator.sugar.rt.wisp.pipe
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: operator-sugar
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.wisp.sugar-transforms
+;; TEST-PURPOSE: Wisp pipe |> chains function application.
+;; TEST-ATOM: (5 |> double |> add1) = 11
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:80-wisp-codegen/operator-sugar branch family
+;; TEST-USES-ATOM: atom.codegen.category.80.wisp.codegen
+;; TEST-MENU: branches/wisp-codegen/operator-sugar/atom.codegen.80.wisp.codegen.operator.sugar.rt.wisp.pipe
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/operator-sugar/atom.codegen.80.wisp.codegen.operator.sugar.rt.wisp.pipe
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.operator.sugar.rt.wisp.pipe
+;; TEST-CLI-TARGET: codegen branches wisp-codegen operator-sugar
+module Main
+define double x -> x * 2
+define add1 x -> x + 1
+show 5 |> double |> add1

@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.multi-define
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.05.symbol.env.defines.and.calls.multi.define
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: defines-and-calls
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Multiple top-level defines compile and interact correctly.
+;; TEST-ATOM: Two defines and their usage in show evaluates correctly.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:05-symbol-env/defines-and-calls branch family
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/defines-and-calls/atom.codegen.05.symbol.env.defines.and.calls.multi.define
+;; TEST-MENU-PATH: codegen/branches/symbol-env/defines-and-calls/atom.codegen.05.symbol.env.defines.and.calls.multi.define
+;; TEST-ATOM-LEAF: atom.codegen.05.symbol.env.defines.and.calls.multi.define
+;; TEST-CLI-TARGET: codegen branches symbol-env defines-and-calls
+(module Main)
+(define x 10)
+(define y 20)
+(show (+ x y))

@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-begin-side-effect
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.begin.do.sequence.rt.begin.side.effect
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: begin-do-sequence
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Runtime begin with mutation and return value works.
+;; TEST-ATOM: (begin (set! x (+ x 1)) x) with x=1 returns 2.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/begin-do-sequence branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/begin-do-sequence/atom.codegen.30.control.flow.begin.do.sequence.rt.begin.side.effect
+;; TEST-MENU-PATH: codegen/branches/control-flow/begin-do-sequence/atom.codegen.30.control.flow.begin.do.sequence.rt.begin.side.effect
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.begin.do.sequence.rt.begin.side.effect
+;; TEST-CLI-TARGET: codegen branches control-flow begin-do-sequence
+(module Main)
+(define x 1)
+(show (begin (set! x (+ x 1)) (set! x (+ x 1)) x))

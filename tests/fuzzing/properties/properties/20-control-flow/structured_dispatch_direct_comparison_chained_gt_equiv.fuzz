@@ -1,0 +1,15 @@
+name: structured_dispatch_direct_comparison_chained_gt_equiv
+section: dispatch-matrix-current
+tier: stable
+kind: law
+features: arithmetic, comparison, dispatch, equality, if, logic, phi
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.comparison_dispatch, codegen.equality_dispatch, codegen.if_phi, codegen.logic_dispatch, infer.arithmetic, infer.comparison, infer.equality, infer.if_phi, infer.logic, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.control.if, atom.core.equality, atom.core.order.gt, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Stress direct operator and predicate dispatch in expression, branch, and operand positions.
+law: (= (> {a} {b} {c}) (if (> {a} {b}) (> {b} {c}) False))

@@ -1,7 +1,0 @@
-name: oracle_string_contains_generated_substr
-section: oracle-string
-args: s:String needle:SubstrOf(s)
-type: Bool
-expect-python: needle in s
-description: Generated string must contain a generated substring of itself.
-law: (contains? {s} {needle})

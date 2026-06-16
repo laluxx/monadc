@@ -1,0 +1,30 @@
+;; TEST-ID: tests.codegen.branch.collection-set-functional-mutating
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SUBSET: sets
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.collection.set.functional.mutating
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover set functional and mutating operation branches.
+;; TEST-ATOM: Functional conj/disj should return new sets; mutating conj!/disj! should update the original set.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:8362 set literal/function branch
+;; TEST-COVERAGE: codegen.c:8438-8447 conj/disj/conj!/disj! branches
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/sets/atom.codegen.collection.set.functional.mutating
+;; TEST-MENU-PATH: codegen/branches/collections/sets/atom.codegen.collection.set.functional.mutating
+;; TEST-ATOM-LEAF: atom.codegen.collection.set.functional.mutating
+;; TEST-CLI-TARGET: codegen branches collections sets
+(module Main)
+(define s {1 2})
+(show (count s))
+(show (count (conj s 3)))
+(show (count s))
+(conj! s 3)
+(show (count s))
+(disj! s 1)
+(show (count s))

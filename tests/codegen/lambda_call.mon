@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.lambda-call
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Lambda expression evaluates when called.
-;; TEST-ATOM: ((lambda (Int -> Int) x -> x) 99) evaluates to 99.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show ((lambda (Int -> Int) x -> x) 99))

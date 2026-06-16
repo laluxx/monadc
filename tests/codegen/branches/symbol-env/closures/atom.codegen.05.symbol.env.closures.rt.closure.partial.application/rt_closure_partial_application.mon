@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-closure-partial-application
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.05.symbol.env.closures.rt.closure.partial.application
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: closures
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.type-system-surface, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Closure codegen covers partial application of a two-argument function.
+;; TEST-ATOM: (add 10) returns a closure that can later be called with the remaining argument.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:05-symbol-env/closures branch family
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/closures/atom.codegen.05.symbol.env.closures.rt.closure.partial.application
+;; TEST-MENU-PATH: codegen/branches/symbol-env/closures/atom.codegen.05.symbol.env.closures.rt.closure.partial.application
+;; TEST-ATOM-LEAF: atom.codegen.05.symbol.env.closures.rt.closure.partial.application
+;; TEST-CLI-TARGET: codegen branches symbol-env closures
+(module Main)
+(define add (lambda ([x : Int] [y : Int] -> Int) (+ x y)))
+(define add10 (add 10))
+(show (add10 5))

@@ -21,10 +21,13 @@ Implementation: [[file:../macro.c][macro.c]] (expander, 765+ lines),
 Test coverage: macro expansion is tested by codegen fixtures that use
 macro-defined forms; the fixpoint cap (1024 rounds) at
 [[file:../macro.c::32][macro.c:32]] is exercised by recursive macro tests.
+The test architecture is documented at
+[[file:../context/tests-arch.org][context/tests-arch.org]].
 
-* How Macros Work
+* 1. How Macros Work
 
-1. The reader ([[file:../reader.c]]) parses source into S-expressions (AST).
+1. The reader ([[file:../reader.c]]) parses source into S-expressions (AST)
+   ([[file:../context/reader.org][context/reader.org]]).
 2. The macro expander =macro_expand_all= ([[file:../macro.c::78]]) scans every
    top-level define whose lambda return type is ="Syntax"=, registers them as
    macros, and removes the define forms from the output (macros are compile-time
@@ -37,7 +40,7 @@ macro-defined forms; the fixpoint cap (1024 rounds) at
    [[file:../macro.c::32]]), so macros that expand into other macro calls are
    fully resolved. If the cap is reached, expansion is aborted.
 
-* Defining Macros
+* 2. Defining Macros
 
 Define a macro as a function returning =Syntax=:
 
@@ -69,7 +72,10 @@ The =Syntax= return type is what distinguishes macros from functions. The
 type-checker uses =macro_is_registered= ([[file:../macro.c::86]]) to skip
 macro define forms during codegen.
 
-* #() Quasi-Output Syntax
+See [[file:define.org][Define — Function Definitions]] for general =define= syntax and
+[[file:lambda.org][Lambda]] for the function return type annotation syntax.
+
+* 3. #() Quasi-Output Syntax
 
 If the macro body contains =#(...)= the expander strips the marker and only the
 inner subtree becomes the macro output. If no =#(...)= appears, the entire body
@@ -93,7 +99,7 @@ Currently, code outside =#()= is not evaluated at compile time — both branches
 of the conditional survive into the output. Full compile-time evaluation of the
 non-=#()= portion is future work ([[file:../context/macro.org::think.context.macro.quasi-output-eval]]).
 
-* How Syntax Works
+* 4. How Syntax Works
 
 =Syntax= is the type of unevaluated S-expressions. A macro receives its
 arguments as =Syntax= values and must construct a valid S-expression to return.
@@ -117,9 +123,13 @@ double-it 5  ;; expands to (* 2 5)
 runtime — macro defines are consumed during expansion and no LLVM IR is emitted
 for them.
 
-* Pattern Matching on Arguments
+For details on the =Syntax= type and its place in the type hierarchy, see
+[[file:syntax.org][Syntax Reference]] and [[file:types.org][Types]].
 
-Use =match= to destructure the argument list:
+* 5. Pattern Matching on Arguments
+
+Use =match= to destructure the argument list
+([[file:../context/pmatch.org][context/pmatch.org]] for the pattern-match compiler):
 
 #+BEGIN_SRC monad
 (define (my-and . args -> Syntax)
@@ -135,29 +145,63 @@ define my-and . args -> Syntax
   [x|rest] -> (if x (my-and . rest) False)
 #+END_SRC
 
-* Expansion Phase
+For more pattern-matching recipes see [[file:patterns.org][Pattern Matching]] and
+[[file:macro-patterns.org][Macro Patterns]].
 
-Macro expansion happens after reader parsing but before type inference. Macros
-work on the raw AST, not on typed representations. The expander is
-outermost-first: it expands the outer list first, then recurses into the result.
-A macro that produces another macro call is expanded in a subsequent fixpoint
-round ([[file:../context/macro.org::think.context.macro.expansion-order]]).
+* 6. Expansion Phase
 
-* Hygiene
+Macro expansion happens after reader parsing but before type inference
+([[file:../context/infer.org][context/infer.org]]). Macros work on the raw AST, not on
+typed representations. The expander is outermost-first: it expands the outer list
+first, then recurses into the result. A macro that produces another macro call
+is expanded in a subsequent fixpoint round
+([[file:../context/macro.org::think.context.macro.expansion-order]]):
+
+#+BEGIN_EXAMPLE
+Source → Reader → Macro Expansion → Type Inference → Codegen
+         ↑          |
+         └──────────┘
+       (raw AST)
+#+END_EXAMPLE
+
+After expansion completes, the resulting AST passes to type inference
+([[file:../context/infer.org][context/infer.org]]) and then LLVM codegen
+([[file:../context/codegen.org][context/codegen.org]]).
+
+* 7. Hygiene
 
 Macro-generated names are hygienically renamed to prevent unintentional capture
 ([[file:../context/macro.org::macro-hygiene]]). Names introduced inside a macro
 body (lambda parameters, =let= bindings, inner =define=s) that are NOT pattern
 variables are renamed to the pattern: =macroname__varname__N=, where N is a
 global monotonic counter reset between compilation units by =macro_clear()=
-([[file:../macro.c::94]]).
+([[file:../macro.c::94]]):
+
+#+BEGIN_SRC monad
+;; The 'tmp' binding below is hygienically renamed
+(define (swap-hygienic a b -> Syntax)
+  (let [tmp a]
+    (set! a b)
+    (set! b tmp)))
+;; Expands with: tmp → swap-hygienic__tmp__0
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define swap-hygienic a b -> Syntax
+  let [tmp a]
+    set! a b
+    set! b tmp
+#+END_SRC
 
 Pattern variables (the formal parameters of the macro lambda) and free
 references to outer definitions pass through unchanged. The double-underscore
 separator =__= is reserved by the compiler and cannot appear in user-written
 identifiers.
 
-* Variadic Splicing
+For unhygienic macro patterns and intentional capture, see
+[[file:macro-patterns.org][Macro Patterns — Hygiene]].
+
+* 8. Variadic Splicing
 
 A rest parameter (=. name=) captures zero or more trailing arguments. In the
 template, if the rest name appears as a list element the captured nodes are
@@ -177,29 +221,99 @@ define my-and . args -> Syntax
 ;; rest spliced into the 'if' tail produces N-ary chaining
 #+END_SRC
 
-* Important Notes
+Splicing vs. wrapping:
 
-- Macros run at compile time.
-- Macros can see other macros defined earlier.
+#+BEGIN_SRC monad
+(define (splice-demo . args -> Syntax)
+  (list . args))    ;; splices: (list 1 2 3)
+(define (wrap-demo . args -> Syntax)
+  (list args))      ;; wraps: (list (1 2 3))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define splice-demo . args -> Syntax
+  list . args    ;; splices: (list 1 2 3)
+define wrap-demo . args -> Syntax
+  list args      ;; wraps: (list (1 2 3))
+#+END_SRC
+
+See [[file:macro-patterns.org][Macro Patterns — Variadic Macro Semantics]] for more variadic patterns.
+
+* 9. Important Notes
+
+- Macros run at compile time only.
+- Macros can see other macros defined earlier in the same compilation unit.
 - Recursive macros must avoid infinite expansion (fixpoint cap at 1024 rounds).
 - =Syntax= return type distinguishes macros from functions; codegen skips
   macro defines entirely via =macro_is_registered=.
-- The macro system is compile-time only — =Syntax= does not exist at runtime.
+- =Syntax= does not exist at runtime — macro forms compile away entirely.
 - =macro_clear()= frees all registered macros and resets the hygiene counter
   between compilation units.
 - No ellipsis =...= patterns (Scheme-style) — variadic behaviour is via a
   single rest parameter ([[file:../context/macro.org::think.context.macro.pattern-variables]]).
+- The =#()= quasi-output syntax marks template output regions.
+- Macro expansion is outermost-first with a 1024-round fixpoint.
+- The double-underscore =__= separator in hygiene renames is reserved.
+
+Implementation Notes
+
+The macro expander (=macro.c=, 765+ lines) integrates between the reader
+and the type inference phase:
+
+- **Registration**: =macro_is_registered= (=macro.c:86=) checks whether a
+  define form has return type =Syntax=; if so, it's registered as a macro
+  and removed from the codegen stream (no LLVM IR emitted)
+  ([[file:../context/macro.org::macro-syntax-convention][context/macro.org — syntax convention]]).
+- **Expansion order**: =macro_expand_all= (=macro.c:78=) walks the AST
+  outermost-first, recursing into results. A fixpoint (capped at 1024
+  rounds) ensures macros expanding to other macro calls are fully resolved
+  ([[file:../context/macro.org::macro-fixpoint][context/macro.org — fixpoint]]).
+- **Hygiene**: names introduced in macro bodies (not pattern variables)
+  are renamed to =macroname__varname__N= with a global monotonic counter
+  reset by =macro_clear()= between compilation units
+  ([[file:../context/macro.org::macro-hygiene][context/macro.org — hygiene]]).
+- **Variadic splicing**: rest parameters (=. name=) splice captured nodes
+  flat in list position; in non-list position a single-element rest wraps
+  in =(begin ...)= ([[file:../context/macro.org::macro-variadic-splicing][context/macro.org — variadic splicing]]).
+- **Quasi-output =#()=**: the expander strips the =#()= wrapper and uses
+  only the inner subtree as output; code outside is reserved for future
+  compile-time evaluation
+  ([[file:../context/macro.org::marco-quasi-output][context/macro.org — quasi-output]]).
+
+Key Points
+
+- Macros are =define= forms whose return type is =Syntax= — no separate
+  =macro= keyword.
+- Arguments are received **unevaluated** as =Syntax= values.
+- Template construction uses ordinary function calls (no quasiquotation
+  required, though supported via =⌜…⌟=).
+- =#(...)= quasi-output syntax delimits the template output region.
+- Hygienic renaming prevents capture: =macroname__varname__N=.
+- Variadic macros use =. name= for rest args; splicing vs wrapping
+  depends on list vs non-list position.
+- Fixpoint expansion (1024-round cap) resolves nested macro calls.
+- Macros are compile-time only — no LLVM IR emitted.
 
 * Related Pages
 
-- [[file:macro-patterns.org][Macro Patterns]] -- common macro recipes
-- [[file:syntax.org][Syntax]] -- Syntax type details
-- [[file:quote.org][Quote]] -- quote and quasiquote in macros
-- [[file:define.org][Define]] -- define-based macros
-- [[file:wisp.org][Wisp Syntax]] -- Wisp syntax and macros
+- [[file:macro-patterns.org][Macro Patterns]] — common macro recipes and patterns
+- [[file:syntax.org][Syntax]] — Syntax type, S-expression forms, and grammar
+- [[file:quote.org][Quote]] — quotation and quasiquotation in macro templates
+- [[file:define.org][Define]] — define-based macro definition syntax
+- [[file:lambda.org][Lambda]] — function types and arrow syntax for =-> Syntax=
+- [[file:patterns.org][Pattern Matching]] — destructuring in macro bodies
+- [[file:wisp.org][Wisp Syntax]] — defining macros with indentation-based syntax
+- [[file:types.org][Types]] — type system overview including Syntax
+- [[file:type-inference.org][Type Inference]] — macro expansion runs before inference
 
-* Context Links
+* Further Reading
 
-- [[file:macro-patterns.org][Macro Patterns]] — common macro recipes
-- [[file:../context/macro.org][context/macro.org]] — Macro expander implementation
-- [[file:../context/reader.org][context/reader.org]] — Reader and AST representation
+- [[file:../context/macro.org][context/macro.org]] — macro expander architecture (hygiene, variadic splicing, quasi-output)
+- [[file:../context/reader.org][context/reader.org]] — reader and AST representation
+- [[file:../context/infer.org][context/infer.org]] — type inference (expansion precedes inference)
+- [[file:../context/codegen.org][context/codegen.org]] — LLVM IR codegen (macro defines are skipped)
+- [[file:../context/language.org][context/language.org]] — language overview and syntactic conventions
+- [[file:../context/pmatch.org][context/pmatch.org]] — pattern-match compiler internals
+- [[file:../macro.c][macro.c]] — C source: macro expander (765+ lines)
+- [[file:../reader.c][reader.c]] — C source: reader and parser
+- [[file:../tests/codegen/][tests/codegen/]] — macro-related codegen fixtures (=rt_macro_*.mon=)

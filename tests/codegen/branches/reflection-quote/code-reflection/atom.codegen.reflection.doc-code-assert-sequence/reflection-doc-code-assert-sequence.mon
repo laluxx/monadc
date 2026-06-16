@@ -1,0 +1,37 @@
+;; TEST-ID: tests.codegen.branch.reflection-doc-code-assert-sequence
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: emit-json-failed
+;; TEST-SUBSET: code-reflection
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 60-reflection-quote
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise doc, code, Fn?, and assert-eq reflection branches in one source-bearing function.
+;; TEST-ATOM: atom.codegen.reflection.doc-code-assert-sequence
+;; TEST-CODEGEN-ATOM: atom.codegen.reflection.doc-code-assert-sequence
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.doc
+;; TEST-CODEGEN-PATH: codegen.code
+;; TEST-CODEGEN-PATH: codegen.assert-eq
+;; TEST-DEPENDS-ON: atom.codegen.function.recursive-self-call
+;; TEST-TAG: run
+;; TEST-TAG: reflection
+;; TEST-TAG: assert
+;; TEST-COVERAGE: codegen.c:6539 doc branch
+;; TEST-COVERAGE: codegen.c:6569 code branch
+;; TEST-COVERAGE: codegen.c:6602 assert-eq branch
+
+;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote
+;; TEST-MENU: branches/reflection-quote/code-reflection/atom.codegen.reflection.doc-code-assert-sequence
+;; TEST-MENU-PATH: codegen/branches/reflection-quote/code-reflection/atom.codegen.reflection.doc-code-assert-sequence
+;; TEST-ATOM-LEAF: atom.codegen.reflection.doc-code-assert-sequence
+;; TEST-CLI-TARGET: codegen branches reflection-quote code-reflection
+(module Main)
+(define plus1 :: Int -> Int
+  "add one"
+  x -> (+ x 1))
+(show (Fn? plus1))
+(show (doc plus1))
+(show (code plus1))
+(show (assert-eq (plus1 2) 3 "plus1"))

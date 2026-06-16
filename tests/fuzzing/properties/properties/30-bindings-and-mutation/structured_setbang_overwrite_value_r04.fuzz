@@ -1,0 +1,15 @@
+name: structured_setbang_overwrite_value_r04
+section: binding-mutation-current
+tier: stable
+kind: law
+features: with, set!, mutation, begin, env, strategy
+compiler-path: codegen.local_load, codegen.sequence, codegen.set_bang, codegen.store, codegen.with_binding, infer.env_child, infer.env_lookup, infer.mutation, reader.ast_begin, runner.strategy_arg, runner.typed_generator
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.set-bang, atom.binding.with, atom.control.begin, atom.control.if, atom.core.equality, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates, signal_atom_with_substitution
+args: a:Int@edge b:Int@edge
+type: Bool
+expect: True
+description: V11 stable compiler-path law setbang_overwrite_value variant 4; uses strategy args and explicit compiler-path metadata for feature coverage.
+law: (with [guard True] (if guard (= (with [x {a}] (begin (set! x {b}) x)) {b}) False))

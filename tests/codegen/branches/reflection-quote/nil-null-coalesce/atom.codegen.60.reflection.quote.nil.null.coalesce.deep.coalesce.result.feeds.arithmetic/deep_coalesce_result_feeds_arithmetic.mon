@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.deep.deep_coalesce_result_feeds_arithmetic
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 60-reflection-quote
+;; TEST-SUBSET: nil-null-coalesce
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.60.reflection.quote.nil.null.coalesce.deep.coalesce.result.feeds.arithmetic
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise ?? result used in arithmetic dispatch.
+;; TEST-ATOM: Coalesce should return typed values usable by numeric operations.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote, atom.codegen.subset.nil.null.coalesce
+;; TEST-COVERAGE: codegen.c:null coalesce output to arithmetic
+;; TEST-MENU: branches/reflection-quote/nil-null-coalesce/atom.codegen.60.reflection.quote.nil.null.coalesce.deep.coalesce.result.feeds.arithmetic
+;; TEST-MENU-PATH: codegen/branches/reflection-quote/nil-null-coalesce/atom.codegen.60.reflection.quote.nil.null.coalesce.deep.coalesce.result.feeds.arithmetic
+;; TEST-ATOM-LEAF: atom.codegen.60.reflection.quote.nil.null.coalesce.deep.coalesce.result.feeds.arithmetic
+;; TEST-CLI-TARGET: codegen branches reflection-quote nil-null-coalesce
+
+(module Main)
+(show (+ (?? nil 40) (?? 5 99)))

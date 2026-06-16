@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.rt-layout-field-mutation
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.50.data.layout.layouts.fields.rt.layout.field.mutation
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: layouts-fields
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Layout field access and mutation via set! works.
+;; TEST-ATOM: (layout Vec2 [x :: Int] [y :: Int]) with field get/set.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:50-data-layout/layouts-fields branch family
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/layouts-fields/atom.codegen.50.data.layout.layouts.fields.rt.layout.field.mutation
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts-fields/atom.codegen.50.data.layout.layouts.fields.rt.layout.field.mutation
+;; TEST-ATOM-LEAF: atom.codegen.50.data.layout.layouts.fields.rt.layout.field.mutation
+;; TEST-CLI-TARGET: codegen branches data-layout layouts-fields
+(module Main)
+(layout Vec2 [x :: Int] [y :: Int])
+(define v (Vec2 10 20))
+(show v.x)
+(set! v.x 99)
+(show v.x)

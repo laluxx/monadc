@@ -1,0 +1,27 @@
+;; TEST-ID: tests.codegen.branch200.20.operators.arithmetic.operator.dispatch.09
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-SUBSET: arithmetic
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.branch200.20.operators.arithmetic.operator.dispatch.09
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: float division dispatch
+;; TEST-ATOM: atom.codegen.branch200.20.operators.arithmetic.operator.dispatch.09
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.operator.dispatch
+;; TEST-TAG: operator
+;; TEST-COVERAGE: codegen.c:7668-7714 bitwise/logical operator special forms
+;; TEST-COVERAGE: codegen.c:8932-9453 comparison dispatch branches
+;; TEST-COVERAGE: codegen.c:9463-9810 arithmetic dispatch branches
+
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-USES-ATOM: atom.codegen.subset.20.operators.arithmetic
+;; TEST-MENU: branches/operators/arithmetic/atom.codegen.branch200.20.operators.arithmetic.operator.dispatch.09
+;; TEST-MENU-PATH: codegen/branches/operators/arithmetic/atom.codegen.branch200.20.operators.arithmetic.operator.dispatch.09
+;; TEST-ATOM-LEAF: atom.codegen.branch200.20.operators.arithmetic.operator.dispatch.09
+;; TEST-CLI-TARGET: codegen branches operators arithmetic
+
+(module Main)
+(show (/ 7.5 2.5))

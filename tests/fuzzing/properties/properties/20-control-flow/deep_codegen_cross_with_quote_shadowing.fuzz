@@ -1,0 +1,15 @@
+name: deep_codegen_cross_with_quote_shadowing
+section: codegen-cross-feature
+tier: stable
+kind: law
+features: arithmetic, array, array-index, codegen, do, env, predicate, quote, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.local_load, codegen.predicate_dispatch, codegen.quote, codegen.sequence, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.type_predicate, reader.array_literal, reader.ast_do, reader.quote
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.with, atom.codegen.dispatch, atom.infer.predicate, atom.quote.quote, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_with_substitution
+args: a:Int
+type: Bool
+expect: True
+description: quote must not capture or evaluate with-bound symbols.
+law: (equal? (with [x {a}] (quote (x y))) (quote (x y)))

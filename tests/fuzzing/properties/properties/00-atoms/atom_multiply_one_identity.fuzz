@@ -1,0 +1,17 @@
+name: atom_multiply_one_identity
+section: atom-foundation
+tier: stable
+kind: law
+features: arithmetic, comparison
+compiler-path: codegen.operator.arithmetic, codegen.operator.comparison
+signal: high
+corpus-role: atom-foundation
+atom: atom.core.multiply.identity
+proves: atom.core.multiply.identity.one
+uses-atoms: atom.core.multiply, atom.core.one, atom.core.equality
+depends-on: atom.core.multiply, atom.core.one, atom.core.equality
+args: a:Int@edge+with
+type: Bool
+expect: True
+description: Foundational atom property proving atom.core.multiply.identity.one.
+law: (= (* {a} 1) {a})

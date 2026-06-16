@@ -1,0 +1,103 @@
+#+TITLE: Category Context Interfaces
+#+AUTHOR: GPT-5.5 Thinking
+#+DATE: 2026-06-16
+#+CREATED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-16
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:3 num:t
+#+CATEGORY: monadc-category
+#+FILETAGS: :monadc:compiler:context:category:scripts:interfaces:search:reports:cli:
+#+PROPERTY: CONTEXT_VERSION 5
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.category.interfaces
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+
+* Interface Principle
+:PROPERTIES:
+:ID: monadc.context.category.interfaces.principle
+:CUSTOM_ID: category-interfaces-principle
+:CONTEXT_KIND: interface
+:CONTEXT_STATUS: active
+:SOURCE: context/category/interfaces.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.category.interfaces.principle src:context/category/interfaces.org conf:high]
+  The context should be readable as prose, navigable as Org, queryable as a
+  graph, measurable as information, and executable as scripts.  Each interface is
+  a functor/projection from the full category, and each projection should state
+  what it forgets.
+
+* Scripts
+:PROPERTIES:
+:ID: monadc.context.category.interfaces.scripts
+:CUSTOM_ID: category-interfaces-scripts
+:CONTEXT_KIND: interface
+:CONTEXT_STATUS: active
+:SOURCE: context/category/interfaces.org
+:CONFIDENCE: high
+:END:
+
+| Script | Interface | Example |
+|--------+-----------+---------|
+| [[file:scripts/verify_category.py][verify_category.py]] | structural proof/check | =python3 context/category/scripts/verify_category.py context --self-test= |
+| [[file:scripts/search_context.py][search_context.py]] | search | =python3 context/category/scripts/search_context.py context "typed define" --limit 5= |
+| [[file:scripts/info_metrics.py][info_metrics.py]] | information metrics | =python3 context/category/scripts/info_metrics.py context --json= |
+| [[file:scripts/render_docs.py][render_docs.py]] | generated documentation | =python3 context/category/scripts/render_docs.py context --out context/category/generated-report.org= |
+| [[file:scripts/demo.py][demo.py]] | integrated demo | =python3 context/category/scripts/demo.py context= |
+| [[file:scripts/test_category.py][test_category.py]] | unit tests | =python3 context/category/scripts/test_category.py= |
+
+* JSON Interface
+:PROPERTIES:
+:ID: monadc.context.category.interfaces.json
+:CUSTOM_ID: category-interfaces-json
+:CONTEXT_KIND: interface
+:CONTEXT_STATUS: active
+:SOURCE: context/category/interfaces.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.category.interfaces.json src:context/category/interfaces.org conf:high]
+  Scripts expose JSON output for programmatic use.  JSON reports should include
+  counts, unresolved edges, entropy values, and top-ranked search results.  The
+  prose layer should link to generated artifacts rather than copy giant JSON
+  blobs into Org.
+
+* Org Interface
+:PROPERTIES:
+:ID: monadc.context.category.interfaces.org
+:CUSTOM_ID: category-interfaces-org
+:CONTEXT_KIND: interface
+:CONTEXT_STATUS: active
+:SOURCE: context/category/interfaces.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.category.interfaces.org src:context/category/interfaces.org conf:high]
+  Generated Org reports should be deterministic and clearly marked as generated.
+  Human-authored files own decisions and contracts; generated files own snapshots
+  and indexes.
+
+* Live Query and TUI Interfaces
+:PROPERTIES:
+:ID: monadc.context.category.interfaces.live-query-tui
+:CUSTOM_ID: category-interfaces-live-query-tui
+:CONTEXT_KIND: interface
+:CONTEXT_STATUS: active
+:SOURCE: context/category/interfaces.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.category.interfaces.live-query-tui src:context/category/interfaces.org conf:high]
+  The live interface layer consists of a compact query language plus the Zig Catface TUI.  Both are projections from the same parsed category model, so CLI search,
+  JSON output, card rendering, and terminal exploration agree on object IDs,
+  edge IDs, and category operations.
+
+| Script | Interface | Example |
+|--------+-----------+---------|
+| [[file:catface.org][catface.org]] | Zig live interface contract | =cd context/category/catface && zig build run -- ../../= |
+| [[file:catface/src/main.zig][catface/main.zig]] | executable CLI/TUI | =zig build run -- --query 'typed :Record' ../../= |
+| [[file:scripts/catq.py][catq.py]] | legacy/batch query CLI | =python3 context/category/scripts/catq.py context 'typed define :Record'= |
+| [[file:scripts/query_language.py][query_language.py]] | evaluator library | =python3 context/category/scripts/query_language.py context '#reader ~' --json= |
+| [[file:scripts/test_query_language.py][test_query_language.py]] | tests | =python3 context/category/scripts/test_query_language.py= |

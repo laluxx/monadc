@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.deep.deep_string_concat_count_index
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-SUBSET: strings
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.collections.strings.deep.string.concat.count.index
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise string concat/count/index/equality paths.
+;; TEST-ATOM: String runtime operations should compose through codegen.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:string literal/runtime helper lowering
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/strings/atom.codegen.collections.strings.deep.string.concat.count.index
+;; TEST-MENU-PATH: codegen/branches/collections/strings/atom.codegen.collections.strings.deep.string.concat.count.index
+;; TEST-ATOM-LEAF: atom.codegen.collections.strings.deep.string.concat.count.index
+;; TEST-CLI-TARGET: codegen branches collections strings
+(module Main)
+(define s (concat "abc" "def"))
+(show s)
+(show (count s))
+(show (s 2))
+(show (= s "abcdef"))

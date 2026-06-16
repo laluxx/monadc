@@ -1,0 +1,15 @@
+name: extreme_lattice_clamp_idempotent_ordered
+section: lattice-clamp-deep
+tier: stable
+kind: law
+features: arithmetic, comparison, equality, if, lattice, logic, phi
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.comparison_dispatch, codegen.equality_dispatch, codegen.if_phi, codegen.logic_dispatch, infer.arithmetic, infer.comparison, infer.equality, infer.if_phi, infer.logic, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.if, atom.core.equality, atom.core.order.lt, atom.core.order.lte, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates, signal_atom_lt_transitive
+args: x:Int lo:Int hi:Int
+type: Bool
+expect: True
+description: Min/max lattice and clamp laws must hold through helper-based branch implementations.
+law: (if (<= {lo} {hi}) (= (fuzz-min {hi} (fuzz-max {lo} (fuzz-min {hi} (fuzz-max {lo} {x})))) (fuzz-min {hi} (fuzz-max {lo} {x}))) True)

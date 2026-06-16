@@ -1,0 +1,32 @@
+;; TEST-ID: tests.codegen.reader-error.reader-adjacent-string-literals
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: reader-errors/lexer-tokens
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.reader-error-coverage
+;; TEST-PURPOSE: Trigger and pin diagnostic: adjacent string literals are not supported
+;; TEST-ATOM: atom.reader.error.reader.adjacent.string.literals
+;; TEST-CODEGEN-ATOM: atom.reader.error.reader.adjacent.string.literals
+;; TEST-QUALITY: diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-READER-ERROR: adjacent string literals are not supported
+;; TEST-READER-PATH: reader.c:6788 lexer.adjacent-strings
+;; TEST-CODEGEN-PATH: diagnostic.lexer.adjacent-strings
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-COVERAGE: reader.c:6788 adjacent string literals are not supported
+;; TEST-USES-ATOM: atom.reader.error.reader.adjacent.string.literals
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-USES-ATOM: atom.reader.error.family.lexer.adjacent.strings
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-REFINES: atom.reader.error
+;; TEST-MENU: errors/reader/lexer-tokens/atom.reader.error.reader.adjacent.string.literals
+;; TEST-MENU-PATH: codegen/errors/reader/lexer-tokens/atom.reader.error.reader.adjacent.string.literals
+;; TEST-ATOM-LEAF: atom.reader.error.reader.adjacent.string.literals
+;; TEST-CLI-TARGET: codegen errors reader lexer-tokens
+
+(module Main)
+(show "hello""world")

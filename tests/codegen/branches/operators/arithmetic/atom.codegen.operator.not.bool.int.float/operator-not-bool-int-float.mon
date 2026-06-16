@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.branch.operator-not-bool-int-float
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: arithmetic
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.operator.not.bool.int.float
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover not codegen for boolean, integer, and floating operands.
+;; TEST-ATOM: not should invert booleans and compare numeric values to zero.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:7978-7999 not bool/float/int branches
+
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/arithmetic/atom.codegen.operator.not.bool.int.float
+;; TEST-MENU-PATH: codegen/branches/operators/arithmetic/atom.codegen.operator.not.bool.int.float
+;; TEST-ATOM-LEAF: atom.codegen.operator.not.bool.int.float
+;; TEST-CLI-TARGET: codegen branches operators arithmetic
+(module Main)
+(show (not True))
+(show (not False))
+(show (not 0))
+(show (not 3))
+(show (not 0.0))
+(show (not 0.25))

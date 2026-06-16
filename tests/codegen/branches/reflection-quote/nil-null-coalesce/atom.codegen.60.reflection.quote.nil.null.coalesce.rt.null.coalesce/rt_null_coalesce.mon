@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-null-coalesce
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.60.reflection.quote.nil.null.coalesce.rt.null.coalesce
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: nil-null-coalesce
+;; TEST-CATEGORY: 60-reflection-quote
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Runtime ?? null-coalescing operator works.
+;; TEST-ATOM: (?? nil 42) = 42, (?? 0 99) = 0.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:60-reflection-quote/nil-null-coalesce branch family
+;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote
+;; TEST-MENU: branches/reflection-quote/nil-null-coalesce/atom.codegen.60.reflection.quote.nil.null.coalesce.rt.null.coalesce
+;; TEST-MENU-PATH: codegen/branches/reflection-quote/nil-null-coalesce/atom.codegen.60.reflection.quote.nil.null.coalesce.rt.null.coalesce
+;; TEST-ATOM-LEAF: atom.codegen.60.reflection.quote.nil.null.coalesce.rt.null.coalesce
+;; TEST-CLI-TARGET: codegen branches reflection-quote nil-null-coalesce
+(module Main)
+(show (?? nil 42))
+(show (?? 0 99))

@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.arithmetic-mul
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.20.operators.arithmetic.arithmetic.mul
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: arithmetic
+;; TEST-CATEGORY: 20-operators
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Integer multiplication evaluates at runtime.
+;; TEST-ATOM: (* 6 7) evaluates to 42.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:20-operators/arithmetic branch family
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/arithmetic/atom.codegen.20.operators.arithmetic.arithmetic.mul
+;; TEST-MENU-PATH: codegen/branches/operators/arithmetic/atom.codegen.20.operators.arithmetic.arithmetic.mul
+;; TEST-ATOM-LEAF: atom.codegen.20.operators.arithmetic.arithmetic.mul
+;; TEST-CLI-TARGET: codegen branches operators arithmetic
+(module Main)
+(show (* 6 7))

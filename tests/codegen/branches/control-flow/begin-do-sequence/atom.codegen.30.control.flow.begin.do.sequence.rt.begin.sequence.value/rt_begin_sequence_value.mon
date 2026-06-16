@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-begin-sequence-value
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.begin.do.sequence.rt.begin.sequence.value
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: begin-do-sequence
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Begin with multiple expressions returns the last value.
+;; TEST-ATOM: (begin (+ 1 2) (* 3 4)) evaluates to 12.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/begin-do-sequence branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/begin-do-sequence/atom.codegen.30.control.flow.begin.do.sequence.rt.begin.sequence.value
+;; TEST-MENU-PATH: codegen/branches/control-flow/begin-do-sequence/atom.codegen.30.control.flow.begin.do.sequence.rt.begin.sequence.value
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.begin.do.sequence.rt.begin.sequence.value
+;; TEST-CLI-TARGET: codegen branches control-flow begin-do-sequence
+(module Main)
+(show (begin (+ 1 2) (* 3 4)))

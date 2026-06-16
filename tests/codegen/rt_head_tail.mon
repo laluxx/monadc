@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-head-tail
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Runtime car and cdr functions work on lists.
-;; TEST-ATOM: (car '(1 2 3)) = 1, (cdr '(1 2 3)) = (2 3).
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (car '(1 2 3)))
-(show (cdr '(1 2 3)))

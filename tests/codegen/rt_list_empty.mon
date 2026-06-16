@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-list-empty
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: empty? predicate catches uncovered dispatch path codegen.c:7322.
-;; TEST-ATOM: (empty? (list)) is True, (empty? '(1 2 3)) is False.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (empty? (list)))
-(show (empty? '(1 2 3)))

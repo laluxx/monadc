@@ -11,11 +11,75 @@
 
 [[file:index.org][<- Back to Index]] · [[file:numeric.org][Numeric Types]] · [[file:types.org][Types]] · [[file:arithmetic.org][Arithmetic]] · [[file:math-module.org][Math Module]] · [[file:core.org][Core Library]] · [[file:casting.org][Casting]]
 
-Test coverage: rational literals parsed by reader atoms ([[file:../tests/reader-atoms.tsv]]). Arithmetic expressions in =rt_arith_*.mon= fixtures.
+Test coverage: rational literals parsed by reader atoms ([[file:../tests/reader-atoms.tsv][tests/reader-atoms.tsv]]).
+Arithmetic expressions in
+[[file:../tests/codegen/branches/operators/][tests/codegen/branches/operators/]]
+(=rt_arith_*.mon= fixtures). See
+[[file:../context/tests-arch.org][context/tests-arch.org]] for the full test architecture.
 
 =Ratio= is an exact rational number type. It represents a numerator/denominator pair with no floating-point rounding. Unlike =Float= (64-bit IEEE 754), =Ratio= preserves precision through arithmetic operations.
 
-* Ratio Literals ([[file:../reader.c::265]])
+Think of =Ratio= as the type you use when you need exact fractions — measurements, percentages, probabilities, or any domain where =1/3= should stay =1/3= and not become =0.3333333333333333=.
+
+See [[file:numeric.org][Numeric Types]] for the full numeric type hierarchy and [[file:arithmetic.org][Arithmetic]] for mixed-type operation semantics.
+
+** Complete example:
+
+#+BEGIN_SRC monad
+;; Save as rationals-demo.mon && monadc rationals-demo.mon && ./rationals-demo
+(module Main)
+
+;; Ratio literals
+(define half 1/2)
+(define third 1/3)
+(define pct 50%)               ;; = 1/2
+
+;; Ratio arithmetic (exact, no floating-point)
+(show (+ 1/2 1/3))             ;; 5/6
+(show (- 3/4 1/4))             ;; 1/2
+(show (* 2/3 3/4))             ;; 1/2
+(show (/ 1/2 1/4))             ;; 2/1
+
+;; Mixed Int promotes to Ratio
+(show (+ 1/2 3))               ;; 7/2
+
+;; Mixed Ratio/Float promotes to Float
+(show (+ 1/2 0.5))             ;; 1.0
+
+;; Ratio as function (scaling)
+(define total 100)
+(show (1/2 total))             ;; 50
+
+;; Comparison (exact, cross-multiplication)
+(show (= 1/2 2/4))            ;; True — structural
+(show (< 1/3 1/2))            ;; True
+(show (> 3/4 1/2))            ;; True
+
+;; Type predicate
+(show (Ratio? 1/2))            ;; True
+(show (Ratio? 42))             ;; False
+#+END_SRC
+
+** Common Pitfalls
+
+- **Ratio literals are NOT division**: =1/3= is a single =AST_RATIO=
+  token, NOT sugar for =(/ 1 3)=. You cannot use variables in ratio
+  syntax — =(/ a b)= is the runtime division operation.
+- **Mixed Ratio/Float promotes to Float, losing precision**: If you
+  mix =Ratio= and =Float= in an operation, the ratio is converted to
+  a float, losing exactness. Use pure ratio arithmetic for exactness.
+- **Ratio as function returns Int (truncated)**: =(1/2 100)= evaluates
+  to =(* 1 100) / 2= with integer truncation. For =Float= scaling,
+  use =(Float x)= explicitly.
+- **Denominator must be positive**: =1/-2= is not a valid ratio
+  literal. Use =-1/2= instead.
+- **Ratios are auto-reduced at construction time**: =2/4= becomes
+  =1/2= in the AST. You cannot distinguish =(= 1/2 2/4)= — they are
+  structurally equal.
+
+* 1. Ratio Literals ([[file:../reader.c::265]])
+
+The reader tokenises =1/3= as a single =AST_RATIO= token, not a division expression. The ratio syntax is: =<integer>/<positive-integer>=.
 
 #+BEGIN_SRC monad
 (1/2           ;; one half)
@@ -31,11 +95,16 @@ Test coverage: rational literals parsed by reader atoms ([[file:../tests/reader-
 -5/8          ;; negative ratio
 #+END_SRC
 
-The reader tokenises =1/3= as a single =AST_RATIO= token, not a division expression. The ratio syntax is: =<integer>/<positive-integer>=.
+** Key Points
 
-* Percentage Syntax
+- =a/b= is parsed as a single token — it is NOT sugar for =(/ a b)=
+- The denominator must be a positive integer
+- Negative ratios use a negative numerator (e.g., =-5/8=)
+- Ratios are automatically reduced at construction time
 
-Percentages desugar to ratios at parse time:
+* 2. Percentage Syntax
+
+Percentages desugar to ratios at parse time. The =%= suffix is recognised by the reader and converted to an =AST_RATIO= node with denominator 100, reduced (see [[file:../reader.c::265][reader.c]]):
 
 #+BEGIN_SRC monad
 (50%           ;; = 1/2)
@@ -51,9 +120,14 @@ Percentages desugar to ratios at parse time:
 150%          ;; = 3/2
 #+END_SRC
 
-The =%= suffix is recognised by the reader and converted to an =AST_RATIO= node with denominator 100, reduced.
+** Implementation Notes
 
-* Ratio Type
+- The =%= suffix triggers ratio tokenisation in the reader
+  ([[file:../reader.c::265]])
+- Percentages are immediately reduced: =50%= becomes =1/2=
+  in the AST
+
+* 3. Ratio Type
 
 The =Ratio= type is a primitive ground type ([[file:types.org][Types]]) defined as =TYPE_RATIO= in the type system. Its runtime representation is a pair of 64-bit integers (numerator, denominator) tagged as =RT_RATIO=.
 
@@ -65,80 +139,139 @@ The =Ratio= type is a primitive ground type ([[file:types.org][Types]]) defined 
 | Representation | struct { int64_t num; int64_t den; } |
 | Codegen        | LLVM struct ={i64, i64}=               |
 
-* Ratio Arithmetic
+See [[file:../context/types.org][context/types.org]] for TYPE_RATIO and [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]].
 
-Ratios support full arithmetic with automatic reduction:
+* 4. Ratio Arithmetic
+
+Ratios support full arithmetic with automatic reduction. Operations dispatch through the same strcmp handlers as other numeric types ([[file:../context/codegen-ops.org][context/codegen-ops.org]]):
 
 #+BEGIN_SRC monad
-(+ 1/2 1/3)       ;; 5/)
-(- 3/4 1/4)       ;; 1/)
-(* 2/3 3/4)       ;; 1/)
-(/ 1/2 1/4)       ;; 2/)
+(+ 1/2 1/3)       ;; 5/6)
+(- 3/4 1/4)       ;; 1/2)
+(* 2/3 3/4)       ;; 1/2)
+(/ 1/2 1/4)       ;; 2/1)
 #+END_SRC
 
 #+BEGIN_SRC wisp
-+ 1/2 1/3       ;; 5/)
-- 3/4 1/4       ;; 1/)
-* 2/3 3/4       ;; 1/)
-/ 1/2 1/4       ;; 2/)
++ 1/2 1/3       ;; 5/6)
+- 3/4 1/4       ;; 1/2)
+* 2/3 3/4       ;; 1/2)
+/ 1/2 1/4       ;; 2/1)
 #+END_SRC
 
 Mixed-type operations with =Int= and =Float=:
 
 #+BEGIN_SRC monad
-(+ 1/2 3)         ;; 7/2  — Int promoted to rati)
-(+ 1/2 0.5)       ;; 1.0  — promoted to Floa)
+(+ 1/2 3)         ;; 7/2  — Int promoted to ratio)
+(+ 1/2 0.5)       ;; 1.0  — promoted to Float)
 #+END_SRC
 
 #+BEGIN_SRC wisp
-+ 1/2 3         ;; 7/2  — Int promoted to rati)
-+ 1/2 0.5       ;; 1.0  — promoted to Floa)
++ 1/2 3         ;; 7/2  — Int promoted to ratio)
++ 1/2 0.5       ;; 1.0  — promoted to Float)
 #+END_SRC
 
-* Ratio as Function
+See [[file:numeric.org][Numeric Types — Arithmetic Operations]] for the full operation table.
 
-=Ratio= values can be used as functions:
+** Implementation Notes
+
+- Arithmetic dispatch via strcmp
+  ([[file:../context/codegen-ops.org::124]])
+- Ratios promote to Float in mixed Ratio/Float operations
+- Int values are promoted to Ratio in mixed Int/Ratio operations
+
+** Key Points
+
+- All arithmetic results are automatically reduced
+  (= =/4 6/8 3/4=)
+- Division by zero is detected at runtime (same as Int division)
+- Mixed Int/Ratio: Int → Ratio (exact)
+- Mixed Ratio/Float: Ratio → Float (may lose precision)
+
+* 5. Ratio as Function
+
+=Ratio= values can be used as functions. This works via the codegen dispatch for =AST_RATIO= in function position ([[file:../codegen.c]]). The ratio takes a single =Int= argument and returns the integer result of =(/ (* num arg) den)=.
 
 #+BEGIN_SRC monad
-(1/2 100)         ;; 50 — multiplies numerator by arg, divides by denominato)
-(1/3 9)           ;;)
+(1/2 100)         ;; 50 — multiplies numerator by arg, divides by denominator)
+(1/3 9)           ;; 3)
 #+END_SRC
 
 #+BEGIN_SRC wisp
-1/2 100         ;; 50 — multiplies numerator by arg, divides by denominato)
-1/3 9           ;;)
+1/2 100         ;; 50 — multiplies numerator by arg, divides by denominator)
+1/3 9           ;; 3)
 #+END_SRC
 
-This works via the codegen dispatch for =AST_RATIO= in function position ([[file:../codegen.c]]). The ratio takes a single =Int= argument and returns the integer result of =(/ (* num arg) den)=.
+This is analogous to using other types as conversion functions ([[file:casting.org][Casting]]).
 
-* Comparison
+** Key Points
+
+- =Ratio= as function computes =(num * arg) / den= (integer division)
+- Useful for scaling: =(3/4 total)= gives three quarters of total
+- The result is always Int (truncated toward zero)
+
+* 6. Comparison
+
+Ratios are compared by cross-multiplying to avoid floating point. All comparison operators work on ratios (see [[file:equality.org][Equality]]):
 
 #+BEGIN_SRC monad
-(= 1/2 2/4)       ;; True  — structural equalit)
-(< 1/3 1/2)       ;; Tru)
-(> 3/4 1/2)       ;; Tru)
+(= 1/2 2/4)       ;; True  — structural equality)
+(< 1/3 1/2)       ;; True)
+(> 3/4 1/2)       ;; True)
 #+END_SRC
 
 #+BEGIN_SRC wisp
-= 1/2 2/4       ;; True  — structural equalit)
-< 1/3 1/2       ;; Tru)
-> 3/4 1/2       ;; Tru)
+= 1/2 2/4       ;; True  — structural equality)
+< 1/3 1/2       ;; True)
+> 3/4 1/2       ;; True)
 #+END_SRC
 
-Ratios are compared by cross-multiplying to avoid floating point.
+** Key Points
+
+- Comparison is exact (cross-multiplication) — no floating-point
+  rounding errors
+- =1/2= and =2/4= are structurally equal (both reduce to same ratio)
+- Mixed Ratio/Int comparison works via Int → Ratio promotion
+
+* 7. Type Predicate
+
+#+BEGIN_SRC monad
+(Ratio? 1/2)      ;; True)
+(Ratio? 42)       ;; False)
+(Ratio? 3.14)     ;; False)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+Ratio? 1/2      ;; True)
+Ratio? 42       ;; False)
+Ratio? 3.14     ;; False)
+#+END_SRC
+
+See [[file:types.org][Types]] for the full set of type predicates.
 
 * Related Pages
 
 - [[file:numeric.org][Numeric Types]] — Int, Float, Hex, Oct, Bin, fixed-width types
+- [[file:arithmetic.org][Arithmetic]] — operations on ratios
 - [[file:types.org][Types]] — ground type hierarchy
 - [[file:syntax.org][Syntax]] — literal syntax for all types
 - [[file:core.org][Core Library]] — arithmetic operations
+- [[file:casting.org][Casting]] — type conversion with Ratio
+- [[file:math-module.org][Math Module]] — extended math with rationals
+- [[file:type-classes.org][Type Classes]] — Rational type class hierarchy
 
 * Context Links
 
 - [[file:../context/types.org][context/types.org]] — TYPE_RATIO
 - [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]]
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — operation dispatch
 - [[file:../reader.c::265][reader.c]] — Ratio tokenisation
+- [[file:../codegen.c][codegen.c]] — ratio codegen
 
+* Further Reading
 
-
+- [[file:../context/language.org][context/language.org]] — arithmetic semantics for rationals
+- [[file:../context/reader.org][context/reader.org]] — reader tokenisation details
+- [[file:../tests/reader-atoms.tsv][tests/reader-atoms.tsv]] — reader atom test vectors
+- [[file:../tests/codegen/][tests/codegen/]] — arithmetic test fixtures
+- [[file:../context/features.org][context/features.org]] — rational feature tracking

@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.deep.deep_diag_unbound_call
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: symbol-resolution
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostics.symbol.resolution.deep.diag.unbound.call
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Expected diagnostic for an unbound function call.
+;; TEST-ATOM: Unbound symbols should fail through symbol resolution/codegen diagnostics.
+;; TEST-EXPECT: fail:compile
+;; TEST-COVERAGE: codegen.c:resolve_symbol_with_modules unbound path
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/symbol-resolution/atom.codegen.diagnostics.symbol.resolution.deep.diag.unbound.call
+;; TEST-MENU-PATH: codegen/errors/codegen/symbol-resolution/atom.codegen.diagnostics.symbol.resolution.deep.diag.unbound.call
+;; TEST-ATOM-LEAF: atom.codegen.diagnostics.symbol.resolution.deep.diag.unbound.call
+;; TEST-CLI-TARGET: codegen errors codegen symbol-resolution
+(module Main)
+(show (missing-symbol 1))

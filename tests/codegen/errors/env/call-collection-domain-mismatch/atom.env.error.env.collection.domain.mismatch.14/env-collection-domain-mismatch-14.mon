@@ -1,0 +1,39 @@
+;; TEST-ID: tests.codegen.env-error.env.collection.domain.mismatch.14
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: env-errors/call-collection-domain-mismatch
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.env-error-coverage
+;; TEST-PURPOSE: Trigger env.c diagnostic: Couldn't match collection element type
+;; TEST-ATOM: atom.env.error.env.collection.domain.mismatch.14
+;; TEST-CODEGEN-ATOM: atom.env.error.env.collection.domain.mismatch.14
+;; TEST-QUALITY: env-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ENV-ERROR: Couldn't match collection element type
+;; TEST-ENV-PATH: env.c:1049 call.collection-domain-mismatch
+;; TEST-CODEGEN-PATH: diagnostic.env.call.collection-domain-mismatch
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: env
+;; TEST-TAG: hm
+;; TEST-COVERAGE: env.c:1049 Couldn't match collection element type
+;; TEST-USES-ATOM: atom.env.error.env.collection.domain.mismatch.14
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.env.error
+;; TEST-USES-ATOM: atom.env.error.family.call.collection.domain.mismatch
+;; TEST-DEPENDS-ON: atom.env.hm.check.call.collection-domain
+;; TEST-DEPENDS-ON: atom.codegen.collection.array.literal
+;; TEST-DEPENDS-ON: atom.codegen.higher-order.map
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-REFINES: atom.env.error
+;; TEST-MENU: errors/env/call-collection-domain-mismatch/atom.env.error.env.collection.domain.mismatch.14
+;; TEST-MENU-PATH: codegen/errors/env/call-collection-domain-mismatch/atom.env.error.env.collection.domain.mismatch.14
+;; TEST-ATOM-LEAF: atom.env.error.env.collection.domain.mismatch.14
+;; TEST-CLI-TARGET: codegen errors env call-collection-domain-mismatch
+
+(module Main)
+(define (env_domain_fn_14 [x : Bool] -> Bool) x)
+(define (env_map_domain_14 [f : Fn] [xs : Coll] -> Coll) (map f xs))
+(show (env_map_domain_14 env_domain_fn_14 ["a" "b"]))

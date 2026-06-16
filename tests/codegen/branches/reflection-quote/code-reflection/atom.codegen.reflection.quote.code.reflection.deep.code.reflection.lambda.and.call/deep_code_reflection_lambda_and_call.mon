@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.deep.deep_code_reflection_lambda_and_call
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 60-reflection-quote
+;; TEST-SUBSET: code-reflection
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.reflection.quote.code.reflection.deep.code.reflection.lambda.and.call
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise function? and code reflection display.
+;; TEST-ATOM: Code reflection should preserve lambda source shape.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:code reflection/function predicate branches
+
+;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote
+;; TEST-MENU: branches/reflection-quote/code-reflection/atom.codegen.reflection.quote.code.reflection.deep.code.reflection.lambda.and.call
+;; TEST-MENU-PATH: codegen/branches/reflection-quote/code-reflection/atom.codegen.reflection.quote.code.reflection.deep.code.reflection.lambda.and.call
+;; TEST-ATOM-LEAF: atom.codegen.reflection.quote.code.reflection.deep.code.reflection.lambda.and.call
+;; TEST-CLI-TARGET: codegen branches reflection-quote code-reflection
+(module Main)
+(define f (lambda (x) (+ x 1)))
+(show (function? f))
+(show (code f))

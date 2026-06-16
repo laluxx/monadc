@@ -1,0 +1,15 @@
+name: if_bool_true_false_roundtrip
+section: control
+tier: stable
+kind: law
+features: arithmetic, control, equality, if, phi
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, infer.arithmetic, infer.equality, infer.if_phi, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.if, atom.core.equality
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+args: cond:Bool
+type: Bool
+expect: True
+description: Choosing between True and False with a Bool condition must return that condition.
+law: (= (if {cond} True False) {cond})

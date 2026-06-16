@@ -1,0 +1,39 @@
+;; TEST-ID: tests.codegen.branch.cross-layout-adt-match
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SUBSET: layouts-fields
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise layout construction, ADT payload, match, dot access, and arithmetic together.
+;; TEST-ATOM: atom.codegen.cross.layout-adt-match
+;; TEST-CODEGEN-ATOM: atom.codegen.cross.layout-adt-match
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.cross.layout
+;; TEST-CODEGEN-PATH: codegen.cross.adt
+;; TEST-CODEGEN-PATH: codegen.cross.match
+;; TEST-CODEGEN-PATH: codegen.cross.dot
+;; TEST-DEPENDS-ON: atom.codegen.layout.nested-field-access
+;; TEST-DEPENDS-ON: atom.codegen.adt.match-field-load
+;; TEST-TAG: run
+;; TEST-TAG: cross
+;; TEST-TAG: layout
+;; TEST-TAG: adt
+;; TEST-COVERAGE: codegen.c:717-769 TYPE_LAYOUT
+;; TEST-COVERAGE: codegen.c:1267-1395 ADT show/tag paths
+;; TEST-COVERAGE: codegen.c:3315-3340 nested dot field branches
+
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/layouts-fields/atom.codegen.cross.layout-adt-match
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts-fields/atom.codegen.cross.layout-adt-match
+;; TEST-ATOM-LEAF: atom.codegen.cross.layout-adt-match
+;; TEST-CLI-TARGET: codegen branches data-layout layouts-fields
+(module Main)
+(layout Point [x :: Int] [y :: Int])
+(data Shape Unit | Dot Point)
+(define (score [s : Shape] -> Int)
+  (match s with | Unit -> 0 | (Dot p) -> (+ p.x p.y)))
+(show (score Unit))
+(show (score (Dot (Point 2 5))))

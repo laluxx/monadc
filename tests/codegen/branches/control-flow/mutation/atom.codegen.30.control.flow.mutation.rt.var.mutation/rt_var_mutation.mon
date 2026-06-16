@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-var-mutation
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.mutation.rt.var.mutation
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: mutation
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Variable mutation with set!
+;; TEST-ATOM: (define x 1) then (set! x 2) then x = 2
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:30-control-flow/mutation branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/mutation/atom.codegen.30.control.flow.mutation.rt.var.mutation
+;; TEST-MENU-PATH: codegen/branches/control-flow/mutation/atom.codegen.30.control.flow.mutation.rt.var.mutation
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.mutation.rt.var.mutation
+;; TEST-CLI-TARGET: codegen branches control-flow mutation
+(module Main)
+(define x 1)
+(set! x 2)
+(show x)

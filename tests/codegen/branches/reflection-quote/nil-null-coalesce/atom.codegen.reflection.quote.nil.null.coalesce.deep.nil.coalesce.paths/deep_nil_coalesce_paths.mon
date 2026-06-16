@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.deep.deep_nil_coalesce_paths
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 60-reflection-quote
+;; TEST-SUBSET: nil-null-coalesce
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.reflection.quote.nil.null.coalesce.deep.nil.coalesce.paths
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise nil predicate and null-coalescing runtime branches.
+;; TEST-ATOM: ?? should choose fallback only for nil.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:nil/coalesce lowering
+
+;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote
+;; TEST-MENU: branches/reflection-quote/nil-null-coalesce/atom.codegen.reflection.quote.nil.null.coalesce.deep.nil.coalesce.paths
+;; TEST-MENU-PATH: codegen/branches/reflection-quote/nil-null-coalesce/atom.codegen.reflection.quote.nil.null.coalesce.deep.nil.coalesce.paths
+;; TEST-ATOM-LEAF: atom.codegen.reflection.quote.nil.null.coalesce.deep.nil.coalesce.paths
+;; TEST-CLI-TARGET: codegen branches reflection-quote nil-null-coalesce
+(module Main)
+(show (?? nil 42))
+(show (?? 7 42))
+(show (nil? nil))
+(show (nil? 1))

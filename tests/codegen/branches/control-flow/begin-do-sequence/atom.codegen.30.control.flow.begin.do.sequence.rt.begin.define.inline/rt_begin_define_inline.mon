@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.rt-begin-define-inline
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.begin.do.sequence.rt.begin.define.inline
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: begin-do-sequence
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Begin with multiple defines and a show.
+;; TEST-ATOM: (begin (define x 1) (define y 2) (show (+ x y))) prints 3.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/begin-do-sequence branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/begin-do-sequence/atom.codegen.30.control.flow.begin.do.sequence.rt.begin.define.inline
+;; TEST-MENU-PATH: codegen/branches/control-flow/begin-do-sequence/atom.codegen.30.control.flow.begin.do.sequence.rt.begin.define.inline
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.begin.do.sequence.rt.begin.define.inline
+;; TEST-CLI-TARGET: codegen branches control-flow begin-do-sequence
+(module Main)
+(begin
+  (define x 1)
+  (define y 2)
+  (show (+ x y)))

@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.deep.deep_diag_qualified_unknown_prefix
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: symbol-resolution
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.90.diagnostics.symbol.resolution.deep.diag.qualified.unknown.prefix
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Expected diagnostic for unknown qualified module prefix.
+;; TEST-ATOM: Qualified names without imports should fail in module symbol resolution.
+;; TEST-EXPECT: fail:compile
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics, atom.codegen.subset.symbol.resolution
+;; TEST-COVERAGE: codegen.c:resolve_symbol_with_modules unknown prefix
+;; TEST-MENU: errors/codegen/symbol-resolution/atom.codegen.90.diagnostics.symbol.resolution.deep.diag.qualified.unknown.prefix
+;; TEST-MENU-PATH: codegen/errors/codegen/symbol-resolution/atom.codegen.90.diagnostics.symbol.resolution.deep.diag.qualified.unknown.prefix
+;; TEST-ATOM-LEAF: atom.codegen.90.diagnostics.symbol.resolution.deep.diag.qualified.unknown.prefix
+;; TEST-CLI-TARGET: codegen errors codegen symbol-resolution
+
+(module Main)
+(show (Missing.symbol 1))

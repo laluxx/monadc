@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-codegen-err-refinement-lowercase-name
-;; TEST-SECTION: diagnostic
-;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
-;; TEST-PURPOSE: Codegen rejects lowercase refinement type names.
-;; TEST-ATOM: (type positive ...) must fail because refinement names are type constructors.
-;; TEST-EXPECT: fail:compile
-
-(module Main)
-(type positive { n ∈ Int | (> n 0) })

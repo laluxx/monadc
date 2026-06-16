@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-match-list-literal
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.lists.rt.match.list.literal
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: lists
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.reader-header-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Pattern codegen coverage for fixed element list patterns.
+;; TEST-ATOM: (match [1 2] with | [1 2] -> 12 | _ -> 0) should select the fixed-list clause.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:40-collections/lists branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/lists/atom.codegen.40.collections.lists.rt.match.list.literal
+;; TEST-MENU-PATH: codegen/branches/collections/lists/atom.codegen.40.collections.lists.rt.match.list.literal
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.lists.rt.match.list.literal
+;; TEST-CLI-TARGET: codegen branches collections lists
+(module Main)
+(show (match [1 2] with | [1 2] -> 12 | _ -> 0))

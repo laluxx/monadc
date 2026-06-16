@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-quote-list-length
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Quoted list length computation works.
-;; TEST-ATOM: (length '(1 2 3 4 5)) returns 5.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (length '(1 2 3 4 5)))

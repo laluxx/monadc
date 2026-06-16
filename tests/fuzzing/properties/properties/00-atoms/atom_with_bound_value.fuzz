@@ -1,0 +1,17 @@
+name: atom_with_bound_value
+section: atom-foundation
+tier: stable
+kind: law
+features: with, comparison
+compiler-path: infer.env.lookup, codegen.env.binding, codegen.operator.comparison
+signal: high
+corpus-role: atom-foundation
+atom: atom.binding.with
+proves: atom.binding.with.bound_value
+uses-atoms: atom.binding.with, atom.core.equality
+depends-on: atom.binding.with, atom.core.equality
+args: x:Int@edge+with
+type: Bool
+expect: True
+description: Foundational atom property proving atom.binding.with.bound_value.
+law: (= (with [a {x}] a) {x})

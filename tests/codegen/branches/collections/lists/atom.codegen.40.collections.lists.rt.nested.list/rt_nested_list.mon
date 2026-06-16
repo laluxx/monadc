@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-nested-list
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.lists.rt.nested.list
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: lists
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Runtime display of nested list structures works.
+;; TEST-ATOM: (show '((1 2) (3 4))) = ((1 2) (3 4)).
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:40-collections/lists branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/lists/atom.codegen.40.collections.lists.rt.nested.list
+;; TEST-MENU-PATH: codegen/branches/collections/lists/atom.codegen.40.collections.lists.rt.nested.list
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.lists.rt.nested.list
+;; TEST-CLI-TARGET: codegen branches collections lists
+(module Main)
+(show '((1 2) (3 4)))

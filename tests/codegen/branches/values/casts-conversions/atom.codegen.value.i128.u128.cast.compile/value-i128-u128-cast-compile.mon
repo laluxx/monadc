@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.branch.value-i128-u128-cast-compile
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: casts-conversions
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 00-values
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.value.i128.u128.cast.compile
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover I128 and U128 cast construction branches without relying on current display truncation behavior.
+;; TEST-ATOM: I128/U128 constructor calls should compile and lower to 128-bit integer LLVM values.
+;; TEST-EXPECT: compile
+;; TEST-COVERAGE: codegen.c:12550-12551 I128/U128 cast targets
+
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/casts-conversions/atom.codegen.value.i128.u128.cast.compile
+;; TEST-MENU-PATH: codegen/branches/values/casts-conversions/atom.codegen.value.i128.u128.cast.compile
+;; TEST-ATOM-LEAF: atom.codegen.value.i128.u128.cast.compile
+;; TEST-CLI-TARGET: codegen branches values casts-conversions
+(module Main)
+(I128 5)
+(U128 5)

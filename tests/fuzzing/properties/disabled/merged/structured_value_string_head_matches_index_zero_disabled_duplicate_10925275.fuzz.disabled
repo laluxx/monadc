@@ -1,0 +1,17 @@
+name: structured_value_string_head_matches_index_zero_disabled_duplicate_10925275
+section: quote-null-string-current
+tier: experimental
+kind: law
+features: arithmetic, equality, path, quote, string
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.path_literal, codegen.quote, codegen.string_literal, infer.arithmetic, infer.equality, infer.path, reader.path_literal, reader.quote, reader.string_literal, runtime.string
+signal: low
+corpus-role: merged-duplicate
+uses-atoms: atom.core.equality, atom.null.nil, atom.quote.quote, atom.runtime.path, atom.runtime.string
+related-properties: signal_atom_equality_reflexive, signal_atom_string_contains_substring
+merged-into: deep_codegen_string_head_string_matches_index_zero
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: 
+type: Bool
+expect: True
+description: Stress string/char dispatch, null coalescing, nil predicates, quote, quasiquote, and unquote lowering.
+law: (= (head "abc") ("abc" 0))

@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.branch.diagnostic-assert-eq-arity
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: arity
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.assert.eq.arity
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover assert-eq arity diagnostics.
+;; TEST-ATOM: assert-eq should require actual, expected, and label arguments.
+;; TEST-EXPECT: fail:compile
+;; TEST-COVERAGE: codegen.c:6602 assert-eq arity diagnostic
+;; TEST-COVERAGE: codegen.c:3476 REQUIRE_ARGS
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/arity/atom.codegen.diagnostic.assert.eq.arity
+;; TEST-MENU-PATH: codegen/errors/codegen/arity/atom.codegen.diagnostic.assert.eq.arity
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.assert.eq.arity
+;; TEST-CLI-TARGET: codegen errors codegen arity
+(module Main)
+(assert-eq 1 1)

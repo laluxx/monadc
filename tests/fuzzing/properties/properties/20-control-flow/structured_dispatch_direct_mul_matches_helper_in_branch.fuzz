@@ -1,0 +1,15 @@
+name: structured_dispatch_direct_mul_matches_helper_in_branch
+section: dispatch-matrix-current
+tier: stable
+kind: law
+features: arithmetic, dispatch, equality, if, logic, phi
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.if_phi, infer.logic, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.control.if, atom.core.equality, atom.core.multiply, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates, signal_atom_multiply_associative, signal_atom_multiply_commutative, signal_atom_multiply_identity_one
+args: p:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Stress direct operator and predicate dispatch in expression, branch, and operand positions.
+law: (= (if {p} (* {a} {b}) (* {a} {c})) (* {a} (if {p} {b} {c})))

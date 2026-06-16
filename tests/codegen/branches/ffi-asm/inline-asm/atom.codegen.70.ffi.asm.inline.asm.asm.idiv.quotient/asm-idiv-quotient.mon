@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.asm.idiv-quotient
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.70.ffi.asm.inline.asm.asm.idiv.quotient
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: inline-asm
+;; TEST-CATEGORY: 70-ffi-asm
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Signed division uses explicit rax/rdx setup around a placeholder divisor.
+;; TEST-ATOM: mov into rax, cqo, and idiv by a parameter returns the quotient.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:70-ffi-asm/inline-asm branch family
+;; TEST-USES-ATOM: atom.codegen.category.70.ffi.asm
+;; TEST-MENU: branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.idiv.quotient
+;; TEST-MENU-PATH: codegen/branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.idiv.quotient
+;; TEST-ATOM-LEAF: atom.codegen.70.ffi.asm.inline.asm.asm.idiv.quotient
+;; TEST-CLI-TARGET: codegen branches ffi-asm inline-asm
+module AsmTest
+
+define asm-idiv :: Int -> Int -> Int
+  a b -> (asm mov a %rax cqo idiv b ret)
+
+show (asm-idiv 84 2)

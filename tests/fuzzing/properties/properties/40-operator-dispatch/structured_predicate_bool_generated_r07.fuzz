@@ -1,0 +1,15 @@
+name: structured_predicate_bool_generated_r07
+section: quote-predicate-current
+tier: stable
+kind: law
+features: predicate, type, logic, strategy
+compiler-path: codegen.logic_dispatch, codegen.predicate_dispatch, infer.logic, infer.type_predicate, runner.strategy_arg, runner.typed_generator
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.do, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or, atom.quote.quote
+related-properties: signal_atom_do_last_value
+args: p:Bool@logic+if
+type: Bool
+expect: True
+description: V11 stable compiler-path law predicate_bool_generated variant 7; uses strategy args and explicit compiler-path metadata for feature coverage.
+law: (do (fuzz-id-int 0) (bool? {p}))

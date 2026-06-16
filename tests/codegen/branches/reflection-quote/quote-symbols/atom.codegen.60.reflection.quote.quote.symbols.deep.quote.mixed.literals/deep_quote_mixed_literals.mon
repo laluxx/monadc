@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.deep.deep_quote_mixed_literals
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: emit-json-failed
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 60-reflection-quote
+;; TEST-SUBSET: quote-symbols
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.60.reflection.quote.quote.symbols.deep.quote.mixed.literals
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise quoted mixed literal runtime conversion.
+;; TEST-ATOM: Quoted literals should preserve number/string/keyword nodes.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote, atom.codegen.subset.quote.symbols
+;; TEST-COVERAGE: codegen.c:ast_to_runtime_value mixed AST literal cases
+;; TEST-MENU: branches/reflection-quote/quote-symbols/atom.codegen.60.reflection.quote.quote.symbols.deep.quote.mixed.literals
+;; TEST-MENU-PATH: codegen/branches/reflection-quote/quote-symbols/atom.codegen.60.reflection.quote.quote.symbols.deep.quote.mixed.literals
+;; TEST-ATOM-LEAF: atom.codegen.60.reflection.quote.quote.symbols.deep.quote.mixed.literals
+;; TEST-CLI-TARGET: codegen branches reflection-quote quote-symbols
+
+(module Main)
+(show (quote (1 "x" :k)))

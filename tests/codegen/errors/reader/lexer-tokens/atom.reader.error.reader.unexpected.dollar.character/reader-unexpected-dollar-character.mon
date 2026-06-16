@@ -1,0 +1,32 @@
+;; TEST-ID: tests.codegen.reader-error.reader-unexpected-dollar-character
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: reader-errors/lexer-tokens
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.reader-error-coverage
+;; TEST-PURPOSE: Trigger and pin diagnostic: unexpected character '$'
+;; TEST-ATOM: atom.reader.error.reader.unexpected.dollar.character
+;; TEST-CODEGEN-ATOM: atom.reader.error.reader.unexpected.dollar.character
+;; TEST-QUALITY: diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-READER-ERROR: unexpected character '$'
+;; TEST-READER-PATH: reader.c:1 lexer.unexpected-character
+;; TEST-CODEGEN-PATH: diagnostic.lexer.unexpected-character
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-COVERAGE: reader.c:1 unexpected character '$'
+;; TEST-USES-ATOM: atom.reader.error.reader.unexpected.dollar.character
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-USES-ATOM: atom.reader.error.family.lexer.unexpected.character
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-REFINES: atom.reader.error
+;; TEST-MENU: errors/reader/lexer-tokens/atom.reader.error.reader.unexpected.dollar.character
+;; TEST-MENU-PATH: codegen/errors/reader/lexer-tokens/atom.reader.error.reader.unexpected.dollar.character
+;; TEST-ATOM-LEAF: atom.reader.error.reader.unexpected.dollar.character
+;; TEST-CLI-TARGET: codegen errors reader lexer-tokens
+
+(module Main)
+$

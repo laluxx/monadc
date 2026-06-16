@@ -1,0 +1,17 @@
+name: structured_oracle_array_count_r03_disabled_duplicate_bff4c71d
+section: current-oracle
+tier: experimental
+kind: law
+features: oracle, array, count
+compiler-path: codegen.array_literal, infer.array, reader.array_literal, runner.expect_python, runner.oracle_tier, runner.typed_generator
+signal: high
+corpus-role: merged-duplicate
+uses-atoms: atom.runtime.array
+related-properties: signal_atom_array_index_valid
+merged-into: structured_oracle_array_count_generated_r01
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: xs:ArrInt@small
+type: Int
+expect-python: len(xs)
+description: V11 oracle property oracle_array_count round 3; validates Python expected-value support with generated rich/dependent arguments.
+law: (count {xs})

@@ -1,0 +1,37 @@
+;; TEST-ID: tests.codegen.type.bridge.dep.hm.adt.return.mismatch.000
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: types
+;; TEST-SUBSET: bridge/dep-hm/adt-return-mismatch
+;; TEST-QUALITY: type-system-negative-regression
+;; TEST-CODEGEN-ATOM: atom.type.bridge.dep-hm.adt-return-mismatch.000
+;; TEST-TYPE-ATOM: atom.type.bridge.dep-hm.adt-return-mismatch.000
+;; TEST-CONTEXT: monadc.context.language.codegen-type-system-corpus, monadc.context.language.hm-dependent-type-coverage
+;; TEST-PURPOSE: HM rejects a function whose dependent/ADT argument is well-formed but whose return type disagrees with the body.
+;; TEST-ATOM: Dependent ADT bridge succeeds, then HM return unification must fail.
+;; TEST-EXPECT: fail:compile
+;; TEST-MENU: types/bridge/dep-hm/adt-return-mismatch/atom.type.bridge.dep-hm.adt-return-mismatch.000
+;; TEST-MENU-PATH: codegen/types/bridge/dep-hm/adt-return-mismatch/atom.type.bridge.dep-hm.adt-return-mismatch.000
+;; TEST-ATOM-LEAF: atom.type.bridge.dep-hm.adt-return-mismatch.000
+;; TEST-CLI-TARGET: codegen types bridge dep-hm adt-return-mismatch
+;; TEST-INFER-PATH: infer.c:cannot unify String with Int
+;; TEST-DEP-PATH: dep.c:global declaration/value type bridge
+;; TEST-ERROR-STAGE: infer
+;; TEST-ERROR-FAMILY: bridge.adt-return-mismatch
+;; TEST-ERROR-MESSAGE: type error: cannot unify
+;; TEST-COVERAGE: dep.c:ADT/type declaration bridge
+;; TEST-COVERAGE: infer.c:ground type mismatch cannot unify
+;; TEST-USES-ATOM: atom.codegen.category.types
+;; TEST-USES-ATOM: atom.type.system
+;; TEST-USES-ATOM: atom.type.bridge.dep-hm
+;; TEST-USES-ATOM: atom.type.hm.cannot-unify
+;; TEST-USES-ATOM: atom.codegen.adt
+;; TEST-DEPENDS-ON: atom.type.dep.adt-bridge
+;; TEST-REFINES: atom.type.bridge.adt-return-mismatch
+
+(module Main)
+(data BridgeMaybe00 BN | BJ Int)
+(define (bridge_bad_00 [m : BridgeMaybe00] -> Int) "wrong")
+(show (bridge_bad_00 BN))

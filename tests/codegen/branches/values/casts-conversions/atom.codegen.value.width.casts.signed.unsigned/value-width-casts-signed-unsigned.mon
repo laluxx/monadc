@@ -1,0 +1,29 @@
+;; TEST-ID: tests.codegen.branch.value-width-casts-signed-unsigned
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: casts-conversions
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 00-values
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.value.width.casts.signed.unsigned
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover integer width conversion branches for signed and unsigned truncation/extension.
+;; TEST-ATOM: Narrow integer casts should truncate deterministically and show through signed/unsigned display branches.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:12542-12549 numeric width cast targets
+;; TEST-COVERAGE: codegen.c:1230-1236 signed/unsigned show branches
+
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/casts-conversions/atom.codegen.value.width.casts.signed.unsigned
+;; TEST-MENU-PATH: codegen/branches/values/casts-conversions/atom.codegen.value.width.casts.signed.unsigned
+;; TEST-ATOM-LEAF: atom.codegen.value.width.casts.signed.unsigned
+;; TEST-CLI-TARGET: codegen branches values casts-conversions
+(module Main)
+(show (I8 257))
+(show (U8 257))
+(show (I16 65537))
+(show (U16 65537))
+(show (I32 65537))
+(show (U32 65537))
+(show (I64 -5))
+(show (U64 5))

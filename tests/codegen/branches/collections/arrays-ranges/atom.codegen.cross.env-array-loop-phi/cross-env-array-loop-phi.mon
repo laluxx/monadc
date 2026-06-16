@@ -1,0 +1,35 @@
+;; TEST-ID: tests.codegen.branch.cross-env-array-loop-phi
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: arrays-ranges
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise env mutation, array indexing, for-loop lowering, and if/PHI in a full program-style fixture.
+;; TEST-ATOM: atom.codegen.cross.env-array-loop-phi
+;; TEST-CODEGEN-ATOM: atom.codegen.cross.env-array-loop-phi
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.cross.for-array-index
+;; TEST-CODEGEN-PATH: codegen.cross.if-phi-loop
+;; TEST-CODEGEN-PATH: codegen.cross.env-mutation
+;; TEST-DEPENDS-ON: atom.codegen.collection.array-count-index-head-tail
+;; TEST-DEPENDS-ON: atom.codegen.control.for-range-step
+;; TEST-TAG: run
+;; TEST-TAG: cross
+;; TEST-TAG: program
+;; TEST-COVERAGE: codegen.c:8177-8360 for loop branch
+;; TEST-COVERAGE: codegen.c:9927 array used as function branch
+;; TEST-COVERAGE: codegen.c:7743-7965 if PHI branch
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/arrays-ranges/atom.codegen.cross.env-array-loop-phi
+;; TEST-MENU-PATH: codegen/branches/collections/arrays-ranges/atom.codegen.cross.env-array-loop-phi
+;; TEST-ATOM-LEAF: atom.codegen.cross.env-array-loop-phi
+;; TEST-CLI-TARGET: codegen branches collections arrays-ranges
+(module Main)
+(define xs [1 2 3 4])
+(define sum 0)
+(for [i 0 (count xs)]
+  (set! sum (+ sum (if (> (xs i) 2) (xs i) 0))))
+(show sum)

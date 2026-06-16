@@ -1,0 +1,28 @@
+;; TEST-ID: tests.codegen.branch.data-adt-tag-symbol-and-runtime
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SUBSET: layouts-fields
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.data.adt.tag.symbol.and.runtime
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover ADT constructor tag symbol lowering and runtime __adt_tag extraction.
+;; TEST-ATOM: Compile-time __adt_tag_CtorName symbols and runtime __adt_tag calls should agree.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:3550 __adt_tag_ symbol branch
+;; TEST-COVERAGE: codegen.c:7543 __adt_tag runtime branch
+;; TEST-COVERAGE: codegen.c:1785 codegen_data constructor tags
+
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/layouts-fields/atom.codegen.data.adt.tag.symbol.and.runtime
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts-fields/atom.codegen.data.adt.tag.symbol.and.runtime
+;; TEST-ATOM-LEAF: atom.codegen.data.adt.tag.symbol.and.runtime
+;; TEST-CLI-TARGET: codegen branches data-layout layouts-fields
+(module Main)
+(data Maybe Nothing | Just Int)
+(show __adt_tag_Nothing)
+(show __adt_tag_Just)
+(show (__adt_tag Nothing))
+(show (__adt_tag (Just 42)))

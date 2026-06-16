@@ -1,0 +1,16 @@
+name: do_sequence_preserves_plus_atom
+section: atom-derived-language
+tier: stable
+kind: law
+features: do, arithmetic, comparison
+compiler-path: codegen.control.sequence, codegen.operator.arithmetic
+signal: high
+corpus-role: derived-property
+uses-atoms: atom.control.sequence, atom.core.plus.commutative
+depends-on: atom.control.sequence, atom.core.plus.commutative
+related-properties: control_sequence, plus_commutative
+args: a:Int@edge+if b:Int@edge+with
+type: Bool
+expect: True
+description: Derived language property connected to foundational atom graph dependencies.
+law: (= (do {a} (+ {a} {b})) (+ {b} {a}))

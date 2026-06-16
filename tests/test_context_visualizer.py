@@ -8,7 +8,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def load_visualizer():
-    spec = importlib.util.spec_from_file_location("context_visualizer", ROOT / "context-visualizer.py")
+    script = ROOT / "context-visualizer.py"
+    if not script.exists():
+        raise unittest.SkipTest("context-visualizer.py is not present in this checkout")
+    spec = importlib.util.spec_from_file_location("context_visualizer", script)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     sys.modules[spec.name] = module

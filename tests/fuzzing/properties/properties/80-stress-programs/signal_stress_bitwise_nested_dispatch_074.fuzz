@@ -1,0 +1,15 @@
+name: signal_stress_bitwise_nested_dispatch_074
+section: current-stress
+tier: stress
+kind: program
+features: stress, program, bitwise, operator-dispatch, equality
+compiler-path: stress.program, codegen.dispatch.bit-or, codegen.dispatch.bit-xor
+signal: high
+corpus-role: stress-program
+uses-atoms: atom.codegen.dispatch, atom.core.equality.reflexive
+depends-on: atom.core.equality.reflexive
+args: a:Int@tiny+bitwise b:Int@tiny+bitwise c:Int@tiny+bitwise
+type: Bool
+expect: True
+description: Stress program property combining several compiler stages while linked to foundational atoms.
+program: (show (= (bit-xor (bit-or {a} {b}) {c}) (bit-xor (bit-or {a} {b}) {c})))

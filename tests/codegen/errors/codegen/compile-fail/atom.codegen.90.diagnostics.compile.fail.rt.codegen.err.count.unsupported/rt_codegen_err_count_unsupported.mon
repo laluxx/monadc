@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-count-unsupported
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.90.diagnostics.compile.fail.rt.codegen.err.count.unsupported
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: compile-fail
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen rejects count on unsupported scalar types.
+;; TEST-ATOM: (count 1) must fail because Int is not a countable collection.
+;; TEST-EXPECT: fail:compile
+
+;; TEST-COVERAGE: codegen.c:90-diagnostics/compile-fail branch family
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/compile-fail/atom.codegen.90.diagnostics.compile.fail.rt.codegen.err.count.unsupported
+;; TEST-MENU-PATH: codegen/errors/codegen/compile-fail/atom.codegen.90.diagnostics.compile.fail.rt.codegen.err.count.unsupported
+;; TEST-ATOM-LEAF: atom.codegen.90.diagnostics.compile.fail.rt.codegen.err.count.unsupported
+;; TEST-CLI-TARGET: codegen errors codegen compile-fail
+(module Main)
+(show (count 1))

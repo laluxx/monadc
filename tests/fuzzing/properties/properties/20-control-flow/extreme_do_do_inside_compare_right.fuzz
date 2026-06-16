@@ -1,0 +1,15 @@
+name: extreme_do_do_inside_compare_right
+section: control-do-deep
+tier: stable
+kind: law
+features: arithmetic, comparison, control, do, equality, set
+compiler-path: codegen.arithmetic_dispatch, codegen.comparison_dispatch, codegen.equality_dispatch, codegen.runtime_call, codegen.sequence, infer.arithmetic, infer.comparison, infer.equality, reader.ast_do, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.do, atom.core.equality, atom.core.order.lt
+related-properties: signal_atom_do_last_value, signal_atom_equality_reflexive, signal_atom_lt_transitive
+args: setup:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Sequencing must return the last expression and compose inside branches, comparisons, and bindings.
+law: (= (< {a} (do {setup} {b})) (< {a} {b}))

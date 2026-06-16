@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.deep.deep_arithmetic_function_arguments
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-SUBSET: arithmetic
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.operators.arithmetic.deep.arithmetic.function.arguments
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise arithmetic inside typed function arguments and returns.
+;; TEST-ATOM: Typed function codegen should pass and return arithmetic values correctly.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:function call argument lowering
+;; TEST-COVERAGE: codegen.c:typed return coercion
+
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/arithmetic/atom.codegen.operators.arithmetic.deep.arithmetic.function.arguments
+;; TEST-MENU-PATH: codegen/branches/operators/arithmetic/atom.codegen.operators.arithmetic.deep.arithmetic.function.arguments
+;; TEST-ATOM-LEAF: atom.codegen.operators.arithmetic.deep.arithmetic.function.arguments
+;; TEST-CLI-TARGET: codegen branches operators arithmetic
+(module Main)
+(define (mix [x : Int] [y : Int] -> Int) (+ (* x y) (- x y)))
+(show (mix 4 3))
+(show (mix 1 2))
+(show (mix 10 5))

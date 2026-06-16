@@ -1,6 +1,6 @@
 #+TITLE: Advanced Wisp
 #+STARTUP: showeverything
-#+OPTIONS: toc:2 num:t
+#+OPTIONS: toc:3 num:t
 #+TOC: headlines 2
 #+FILETAGS: :monad:language:wisp:advanced:info:
 
@@ -18,29 +18,31 @@ For the user-facing Wisp reference, see [[file:wisp.org][Wisp Syntax]].
 Implementation: [[file:../wisp.c][wisp.c]] (4785+ lines) and [[file:../context/wisp.org][context/wisp.org]].
 Test coverage: wisp-specific bugs and edge cases are covered by
 =tests/sugar/= (192 TSV entries) and =rt_wisp_*.mon= codegen fixtures.
+The test architecture is documented at
+[[file:../context/tests-arch.org][context/tests-arch.org]].
 
-* Wisp Expansion Pipeline
+* 1. Wisp Expansion Pipeline
 
-Wisp expansion is a two-pass process (context/wisp.org:73-84):
+Wisp expansion is a two-pass process ([[file:../context/wisp.org::73][context/wisp.org:73-84]]):
 
-** Pass 1: Tokenization
+** 1.1 Pass 1: Tokenization
 
 Source text is split into tokens (parens, brackets, symbols, strings,
 numbers, etc.). Balanced brackets (=~[...]=, =[...]=, ={...}=) are
 preserved as single tokens. The token stream includes indent/dedent
 markers indicating line nesting depth.
 
-** Pass 2: Layout Expansion (=wisp_parse_all=, 10-step pipeline)
+** 1.2 Pass 2: Layout Expansion (=wisp_parse_all=, 10-step pipeline)
 
 The indent/dedent markers are converted to S-expression parentheses
 using the arity table to infer correct parenthesization. The 10 steps
-(wisp.c:4696-4785):
+([[file:../wisp.c::4696][wisp.c:4696-4785]]):
 
 1. Strip comments preserving line/column positions.
 2. Desugar 2D fractions (=desugar_fractions=).
 3. Heuristic scan: if no wisp-style lines, short-circuit to =parse_all=.
 4. Build local =ArityTable= seeded from global FFI arity registry.
-5. Run =arity_prescan= (wisp.c:107-767) to register user-defined
+5. Run =arity_prescan= ([[file:../wisp.c::107][wisp.c:107-767]]) to register user-defined
    layout, data, class, and define arities.
 6. Build flat =WTokenStream= via =build_token_stream=.
 7. Parse all top-level expressions into an S-expression string.
@@ -49,20 +51,23 @@ using the arity table to infer correct parenthesization. The 10 steps
 10. Persist discovered arities back to global =g_ffi_arities=.
 
 The output is a flat list of standard S-expressions that feed directly
-into =reader.c:'s =parse_expr=. The reader has no awareness that the
+into =reader.c='s =parse_expr=. The reader has no awareness that the
 source was originally wisp — it sees only parenthesized forms.
 
-* Arity Table
+See [[file:wisp.org][Wisp Syntax — How It Works]] for the user-facing overview and
+[[file:../context/reader.org][context/reader.org]] for the reader's =parse_expr=.
+
+* 2. Arity Table
 
 The arity table (=wisp_arity_map=) drives line-splitting decisions:
 a known function with arity N consumes the next N indented forms as
 its arguments. Unknown forms fall back to generic layout rules.
 
-** Structure
+** 2.1 Structure
 
 The arity table is a fixed-size hash map with 128 buckets
-(=ARITY_BUCKETS=, wisp.c:21-23). Each bucket is a singly-linked list
-of =ArityEntry= nodes (wisp.c:11-17). The hash function is djb2:
+(=ARITY_BUCKETS=, [[file:../wisp.c::21][wisp.c:21-23]]). Each bucket is a singly-linked list
+of =ArityEntry= nodes ([[file:../wisp.c::11][wisp.c:11-17]]). The hash function is djb2:
 
 #+BEGIN_EXAMPLE
 h = 5381
@@ -74,20 +79,21 @@ Each =ArityEntry= stores the function name, its arity, an array of
 =ParamKind= values (=PARAM_VALUE= or =PARAM_FUNC=), and per-parameter
 function arities.
 
-** Arity Sources
+** 2.2 Arity Sources
 
 Arities are registered from three sources:
 
-1. *Builtin functions* — =wisp_register_arities_from_env= (wisp.c:4468)
+1. *Builtin functions* — =wisp_register_arities_from_env= ([[file:../wisp.c::4468][wisp.c:4468]])
    scans the env for registered functions and inserts their param
    counts. Run from main.c Phase 1 (with a temporary env) and again
    from Phase 3 (after the real env is populated).
 2. *FFI declarations* — libclang-parsed function signatures from
-   =include= directives register their arities during the pre-pass.
+   =include= directives register their arities during the pre-pass
+   ([[file:../context/ffi.org][context/ffi.org]]).
 3. *Layout constructors* — struct field counts from =layout=
    declarations and FFI structs are registered as constructor arities.
 
-** Two Table Instances
+** 2.3 Two Table Instances
 
 There are two arity table instances:
 - =g_ffi_arities= (global) — persistent across module compilation.
@@ -95,26 +101,29 @@ There are two arity table instances:
   builtins + prescan. Discovered arities are merged back into the
   global table at the end for subsequent modules.
 
-** Phase Ordering
+** 2.4 Phase Ordering
 
-Arity registration order matters (main.c Phase 0, context/wisp.org:120):
+Arity registration order matters (main.c Phase 0, [[file:../context/wisp.org::120][context/wisp.org:120]]):
 
 1. *Phase 0 (FFI pre-pass)* — =main.c:621= calls the FFI pre-pass which
-   parses =include= headers via libclang and registers every C function's
-   arity with =wisp_register_arity= before anything else runs.
+   parses =include= headers via libclang ([[file:../context/ffi.org][context/ffi.org]]) and registers
+   every C function's arity with =wisp_register_arity= before anything else runs.
 2. *Phase 1 (wisp expansion)* — =wisp_parse_all= runs, using the
    pre-registered FFI arities for correct layout inference.
 3. *Phase 3* — the real env is populated; arities from builtins are
-   registered again.
+   registered again ([[file:../context/env.org][context/env.org]]).
 
 This ordering means =(include <raylib.h>)= followed by
 =(InitWindow 1920 1080 "Hi")= correctly generates
 =(InitWindow 1920 1080 "Hi")= because wisp knows InitWindow takes 3
-params (context/wisp.org:190-193).
+params ([[file:../context/wisp.org::190][context/wisp.org:190-193]]).
 
-* Sugar Transformations
+See [[file:wisp.org][Wisp Syntax — Arity Table]] for the user-facing description and
+[[file:ffi.org][FFI]] for C interop.
 
-** !-sugar
+* 3. Sugar Transformations
+
+** 3.1 !-sugar
 
 Transforms =(fn! var args)= to =(var fn! args)= when =var= is an
 untyped symbol. Affects all !=-suffixed builtins (=conj!=, =disj!=,
@@ -125,12 +134,15 @@ conj! my-set 1          ; becomes (my-set conj! 1)
 #+END_SRC
 
 Workaround: bind with a type annotation to prevent the sugar:
+
 #+BEGIN_SRC wisp
 define [s :: (Set Int)] {1 2 3}
 conj! s 4               ; no sugar applied, works correctly
 #+END_SRC
 
-** ?-sugar
+See [[file:wisp.org][Wisp Syntax — !-sugar]] and [[file:set.org][Sets]] for =conj!= semantics.
+
+** 3.2 ?-sugar
 
 Transforms =(pred? var arg)= to =(var pred? arg)= when =var= is an
 untyped symbol:
@@ -140,6 +152,7 @@ contains? my-set 1      ; becomes (my-set contains? 1)
 #+END_SRC
 
 Workaround: inline the set construction or use set-as-function syntax:
+
 #+BEGIN_SRC wisp
 contains? (conj {} 1) 1  ; explicit set value prevents sugar
 (s 1)                    ; set-as-function for containment check
@@ -149,23 +162,37 @@ The heuristic fires only when the first argument is a bare, untyped
 symbol. =conj! {1 2 3} 4= works correctly because ={1 2 3}= is a
 literal, not a symbol.
 
-** @-sugar
+** 3.3 @-sugar
 
 The =@= prefix provides array/list indexing shorthand in Wisp
-contexts (wisp.c:158-159, reader.c:1828-1839). =@= followed by an
+contexts ([[file:../wisp.c::158][wisp.c:158-159]], [[file:../reader.c::1828][reader.c:1828-1839]]). =@= followed by an
 index expression indexes into the preceding form. The reader
 recognises =@= as part of identifier characters along with =~=,
-=+=, =%=, etc. In wisp, =@= expands to an indexed access form.
+=+=, =%=, etc. In wisp, =@= expands to an indexed access form:
 
-** , (Line Continuation)
+#+BEGIN_SRC wisp
+arr @ 0        ; (index arr 0)
+matrix @ 1 @ 2 ; (index (index matrix 1) 2)
+#+END_SRC
+
+See [[file:wisp.org][Wisp Syntax — @-sugar]] and [[file:arrays.org][Arrays]] for array indexing.
+
+** 3.4 , (Line Continuation)
 
 The comma character =,= serves as a line continuation marker in Wisp
-(wisp.c:1188). When the expander encounters a comma at the start of a
+([[file:../wisp.c::1188][wisp.c:1188]]). When the expander encounters a comma at the start of a
 token, it skips it (p++), joining the current line with the next. This
 allows breaking long expressions across lines without changing the
-indentation-based parse tree.
+indentation-based parse tree:
 
-* Deep Nesting
+#+BEGIN_SRC wisp
+define long-calculation x y ->
+  + x
+  , y
+  , 100    ;; all on one logical line: (+ x y 100)
+#+END_SRC
+
+* 4. Deep Nesting
 
 Parentheses override wisp indentation for inline patterns:
 
@@ -178,32 +205,87 @@ match x
     show "nothing"
 #+END_SRC
 
-* Known Wisp Bugs
+See [[file:patterns.org][Pattern Matching]] for match syntax details.
 
-| Issue                                | Description                                                                                                                                  | Workaround                                              |                  |
-|--------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------+------------------|
-| Multi-line =define= with =->=            | Wisp-style =define name :: T -> T= with body on next line creates incorrect lambda bindings (simple-clause heuristic misclassifies parameters) | Use S-expression form                                   |                  |
-| Guards with arrows                   | =x                                                                                                                                           | x > 0 -> body= in Wisp =define= may not desugar correctly | Use S-expression |
-| Metadata in Wisp =define=              | =:alias=, =:doc= keywords emitted as separate top-level forms instead of being inside the =define=                                                 | Use S-expression                                        |                  |
-| Char escape in Wisp                  | ='\n'= and similar char escapes may not parse correctly in Wisp mode (wisp expands =\\n= to a real newline, splitting the literal)               | Use S-expression for char literals with escapes         |                  |
-| Sugar interference with untyped vars | =conj! s 3= becomes =(s conj! 3)= when =s= is untyped                                                                                              | Type-annotate the variable: =define [s :: Set]=           |                  |
+* 5. Known Wisp Bugs
 
-* Mixing Wisp and S-expressions
+| Issue                                | Description                                                                                                                                    | Workaround                                              |
+|--------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------|
+| Multi-line =define= with =->=        | Wisp-style =define name :: T -> T= with body on next line creates incorrect lambda bindings (simple-clause heuristic misclassifies parameters) | Use S-expression form                                   |
+| Guards with arrows                   | =n | > 0 -> body= in Wisp =define= may not desugar correctly                                                                                       | Use S-expression                                        |
+| Metadata in Wisp =define=            | =:alias=, =:doc= keywords emitted as separate top-level forms instead of being inside the =define=                                             | Use S-expression                                        |
+| Char escape in Wisp                  | ='\n'= and similar char escapes may not parse correctly in Wisp mode (wisp expands =\\n= to a real newline, splitting the literal)                 | Use S-expression for char literals with escapes         |
+| Sugar interference with untyped vars | =conj! s 3= becomes =(s conj! 3)= when =s= is untyped                                                                                            | Type-annotate the variable: =define [s :: Set]=           |
+
+* 6. Mixing Wisp and S-expressions
 
 Any line can use S-expression syntax. The expander only transforms
 lines detected as Wisp-style (indentation-based prefix form). This
-allows gradual migration and selective use of parentheses for clarity.
+allows gradual migration and selective use of parentheses for clarity:
+
+#+BEGIN_SRC wisp
+define greeting "Hello"
+(define farewell "Goodbye")  ;; S-expression on a Wisp line
+show greeting
+#+END_SRC
+
+Implementation Notes
+
+Advanced wisp expands on the internals of the wisp expander
+(described in [[file:wisp.org][Wisp Syntax — Implementation Notes]]):
+
+- **Arity table details**: =ARITY_BUCKETS= (128) with djb2 hash;
+  =ArityEntry= stores function name, arity, =ParamKind= array
+  (=PARAM_VALUE= or =PARAM_FUNC=), and per-parameter function arities
+  ([[file:../context/wisp.org::wisp-arity-table-internal][context/wisp.org — arity table internals]]).
+- **Sugar heuristics**: =?= and =!= sugar fire only when the first arg
+  is a bare, untyped symbol. This is determined by checking the token
+  type in the wisp token stream before fully parsing
+  ([[file:../context/wisp.org][context/wisp.org — sugar transforms]]).
+- **Line continuation**: =,= at line start skips the newline, joining
+  the logical line — implemented in =build_token_stream=
+  (=wisp.c:1188=) by incrementing the token pointer past the comma.
+- **Phase ordering constraint**: the FFI pre-pass (Phase 0) must register
+  C function arities before wisp expansion (Phase 1); otherwise, C
+  function calls in wisp style misparenthesize
+  ([[file:../context/wisp.org::120][context/wisp.org — phase ordering]]).
+
+Key Points
+
+- Arity table: 128-bucket hash map (djb2) mapping names to param counts.
+- Three arity sources: builtins, FFI headers, layout constructors.
+- Two table instances: global (=g_ffi_arities=) and local (per module).
+- =?= and =!= sugar fire on untyped symbols only — annotate types to
+  suppress.
+- =,= at line start continues the logical line past the newline.
+- Phase 0 (FFI pre-pass) must precede Phase 1 (wisp expansion) for
+  correct C function layout inference.
+- Known bugs: multi-line =define= with =->= misclassifies params;
+  char escapes split; metadata keywords emit as separate forms.
 
 * Related Pages
 
-- [[file:wisp.org][Wisp Syntax]] -- Wisp syntax overview
-- [[file:syntax.org][Syntax]] -- S-expression syntax fundamentals
-- [[file:lambda.org][Lambda]] -- Wisp arrow forms
-- [[file:quote.org][Quote]] -- quoting and quasiquoting
-- [[file:patterns.org][Pattern Matching]] -- pattern matching
+- [[file:wisp.org][Wisp Syntax]] — user-facing Wisp reference (basic rules, definitions, sugar)
+- [[file:syntax.org][Syntax]] — S-expression syntax fundamentals
+- [[file:lambda.org][Lambda]] — arrow forms and anonymous functions
+- [[file:quote.org][Quote]] — quoting and quasiquoting
+- [[file:patterns.org][Pattern Matching]] — pattern matching with =match=
+- [[file:conditionals.org][Conditionals]] — =if=, =when=, =unless= in Wisp
+- [[file:define.org][Define]] — define in Wisp syntax
+- [[file:arrays.org][Arrays]] — array indexing and =@= sugar
+- [[file:set.org][Sets]] — =conj!=, =disj!=, and !-sugar
+- [[file:ffi.org][FFI]] — C interop and arity registration
+- [[file:let.org][Let Bindings]] — =let= and =where= clauses
 
-* Context Links
+* Further Reading
 
-- [[file:wisp.org][Wisp Basics]]
-- [[file:../context/wisp.org][context/wisp.org]] — wisp expander implementation internals
-  (arity table, sugar transforms, architecture)
+- [[file:../context/wisp.org][context/wisp.org]] — wisp expander implementation internals (arity table, sugar transforms, architecture)
+- [[file:../context/reader.org][context/reader.org]] — reader internals and =@= sugar handling
+- [[file:../context/env.org][context/env.org]] — environment and builtin registration
+- [[file:../context/ffi.org][context/ffi.org]] — FFI pre-pass and C arity registration
+- [[file:../context/language.org][context/language.org]] — language conventions
+- [[file:../wisp.c][wisp.c]] — C source: wisp expander (4785+ lines)
+- [[file:../reader.c][reader.c]] — C source: reader and parser
+- [[file:../main.c][main.c]] — C source: compiler driver and phase ordering
+- [[file:../tests/sugar/][tests/sugar/]] — sugar desugaring test corpus (192 TSV entries)
+- [[file:../tests/codegen/rt_wisp_*.mon][tests/codegen/rt_wisp_*.mon]] — wisp codegen test fixtures

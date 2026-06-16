@@ -1,0 +1,15 @@
+name: if_order_partition_lte
+section: control
+tier: stable
+kind: law
+features: arithmetic, control, if, logic, phi, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.if_phi, codegen.logic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.if_phi, infer.logic, infer.type_predicate, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.if, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_if_same_branch_eliminates
+args: a:Int b:Int
+type: Bool
+expect: True
+description: An if over less-or-equal must select a value that remains less-or-equal to the other branch boundary.
+law: (fuzz-lte? (if (fuzz-lte? {a} {b}) {a} {b}) (if (fuzz-lte? {a} {b}) {b} {a}))

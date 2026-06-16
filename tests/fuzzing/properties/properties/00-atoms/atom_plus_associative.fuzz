@@ -1,0 +1,17 @@
+name: atom_plus_associative
+section: atom-foundation
+tier: stable
+kind: law
+features: arithmetic, comparison
+compiler-path: codegen.operator.arithmetic, codegen.operator.comparison
+signal: high
+corpus-role: atom-foundation
+atom: atom.core.plus
+proves: atom.core.plus.associative
+uses-atoms: atom.core.plus, atom.core.equality
+depends-on: atom.core.plus, atom.core.equality
+args: a:Int@edge b:Int@edge c:Int@edge
+type: Bool
+expect: True
+description: Foundational atom property proving atom.core.plus.associative.
+law: (= (+ (+ {a} {b}) {c}) (+ {a} (+ {b} {c})))

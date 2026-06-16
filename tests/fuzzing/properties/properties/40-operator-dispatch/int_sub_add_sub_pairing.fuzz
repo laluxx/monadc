@@ -1,0 +1,15 @@
+name: int_sub_add_sub_pairing
+section: arithmetic
+tier: stable
+kind: law
+features: arithmetic, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+args: a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: A pair of subtractions added together must match subtracting the paired right operands from the paired left operands.
+law: (= (fuzz-add (fuzz-sub {a} {b}) (fuzz-sub {c} {d})) (fuzz-sub (fuzz-add {a} {c}) (fuzz-add {b} {d})))

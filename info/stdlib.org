@@ -11,7 +11,9 @@
 
 [[file:index.org][<- Back to Index]] · [[file:core.org][Core Library]] · [[file:math-module.org][Math Module]] · [[file:coll-module.org][Coll Module]] · [[file:numeric.org][Numeric]] · [[file:strings.org][Strings]] · [[file:collections.org][Collections]] · [[file:modules.org][Modules]]
 
-* Quick Reference
+The Monad standard library consists of core modules (=Math=, =Coll=, =Test=, =Ascii=) imported via =(import ...)= plus built-in functions always available. See [[file:core.org][Core Library]] for builtins.
+
+1. Quick Reference
 
 | Module     | Key Exports                                    |
 |------------+------------------------------------------------|
@@ -24,6 +26,8 @@
 Test coverage: =make test-core= runs per-module tests via
 =python3 tests/run_core.py=. Individual modules are tested by=rt_core_*.mon=
 fixtures. Main.mon coverage is documented under [[file:../context/main-mon.org][context/main-mon.org]].
+The test architecture is documented at
+[[file:../context/tests-arch.org][context/tests-arch.org]].
 
 The Monad standard library is currently composed of two layers:
 
@@ -33,7 +37,9 @@ The Monad standard library is currently composed of two layers:
 2. *Core modules* — source files under =core/= that contain reusable
    definitions compiled as needed.
 
-* Core Modules
+See [[file:../context/core-libs.org][context/core-libs.org]] for the library architecture.
+
+2. Core Modules
 
 The =core/= directory contains per-module library sources:
 
@@ -42,7 +48,7 @@ The =core/= directory contains per-module library sources:
 | Math   | =core/Math.mon= (400 lines)         | Partially working. Exports 30+ functions/constants including =gcd=, =lcm=, =factorial=, =fib=, =prime?=, =clamp=, =sin=, =sqrt=, =pow=, =floor=, =ceiling=, =round=, constants =pi=, =e=, =tau=, =phi=, infinite sequences =naturals=, =positives=, =evens=, =odds=. Known issue: variadic =gcd= fails. |
 | Coll   | =core/prelude/Coll.mon= (100 lines) | Partially working. Exports =take=, =drop=, =takeWhile=, =dropWhile=, =map=, =all?=, =foldl=, =foldr=. Known issue: =takeWhile= inference fails during compilation.                                                                                                              |
 
-** Usage examples
+**2.1 Usage examples**
 
 #+BEGIN_SRC monad
 (import Math)
@@ -88,7 +94,7 @@ issues exist (context/language.org:417-424): =import Coll= currently
 fails while compiling =takeWhile= in =Coll.mon=; variadic =gcd= in
 =Math.mon= fails.
 
-** Test module
+**2.2 Test module**
 
 The =core/prelude/Test.mon= module provides =assert-eq=, =assert-true=,
 =assert-false=, =deftest=, and =run-tests= for embedded testing:
@@ -111,7 +117,7 @@ deftest arithmetic
 
 See [[file:testing.org][Testing]] for the full test framework reference.
 
-** String module
+**2.3 String module**
 
 The =core/text/= directory contains =Ascii.mon= and =String.mon= (WIP):
 
@@ -131,7 +137,7 @@ show (Ascii/lower "WORLD")  ;; "world"
 
 See [[file:strings.org][Strings]] and [[file:characters.org][Characters]].
 
-* Main.mon
+3. Main.mon
 
 The file =Main.mon= (1244 lines) serves as both the compiler's primary
 test surface and a de facto standard library reference. It demonstrates
@@ -178,7 +184,10 @@ Relevant sections from Main.mon:
 | 1103-1215 | Type casting reference                      |
 | 1219-1244 | Conditional compilation                      |
 
-* old-core/ (Aspirational / Pre-Rewrite)
+See [[file:../context/main-mon.org][context/main-mon.org]] for detailed analysis of Main.mon.
+See [[file:core.org][Core Library]] for the built-in functions always available.
+
+4. old-core/ (Aspirational / Pre-Rewrite)
 
 The =old-core/= directory contains aspirational library modules from a
 previous compiler era. They are NOT currently importable:
@@ -197,16 +206,61 @@ previous compiler era. They are NOT currently importable:
 These files use older syntax and are not compiled by the current
 compiler. They serve as design references for future library work.
 
-* See Also
+5. Modules
 
-- [[file:core.org][Core Library]]
-- [[file:math-module.org][Math Module]]
-- [[file:coll-module.org][Coll Module]]
-- [[file:modules.org][Module System]]
-- [[file:testing.org][Testing]]
+The module system ([[file:modules.org]]) provides =(import ModuleName)= syntax.
+Module resolution searches =core/= for library sources. See
+[[file:../context/module.org][context/module.org]] for the module resolution algorithm and
+[[file:../context/module-export.org][context/module-export.org]] for the export system.
 
-* Context Links
+Implementation Notes
+
+- **Library architecture**: core modules are compiled on demand when
+  =(import ...)= is encountered; the module registry caches compiled
+  modules by name to avoid recompilation
+  ([[file:../context/core-libs.org][context/core-libs.org — architecture]]).
+- **Module resolution**: =module_name_to_path= converts dot-separated
+  module names to filesystem paths (="Std.Math"= → ="Std/Math.mon"=);
+  the 4-step resolution chain searches registry, local, =MONAD_CORE=,
+  and installed paths ([[file:../context/module.org][context/module.org — resolution]]).
+- **Main.mon**: serves as both test surface and de facto stdlib reference;
+  its 1244 lines exercise every language feature and are verified by
+  =make test-core= ([[file:../context/main-mon.org][context/main-mon.org]]).
+- **Old-core**: aspirational modules from a previous compiler era; they
+  use older syntax and are not compiled by the current compiler.
+
+Key Points
+
+- Two layers: **builtins** (always available, see [[file:core.org][Core Library]])
+  and **core modules** (importable via =(import ...)=).
+- Core modules live in =core/=: =Math.mon= (400 lines), =Coll.mon=
+  (100 lines), =Test.mon=, =Ascii.mon=.
+- =Main.mon= (1244 lines) is the primary test surface demonstrating every
+  language feature.
+- Explicit =import= required — no automatic prelude import yet.
+- Known compilation issues: =takeWhile= in =Coll.mon= fails, variadic
+  =gcd= in =Math.mon= fails.
+- =old-core/= contains aspirational library designs from a previous era
+  (not currently compilable).
+
+6. Related Pages
 
 - [[file:core.org][Core Library]] — built-in functions (always available)
-- [[file:../Main.mon][Main.mon]] — standard library / test surface (1244 lines)
+- [[file:math-module.org][Math Module]] — Math module
+- [[file:coll-module.org][Coll Module]] — Coll module
+- [[file:modules.org][Module System]] — module import system
+- [[file:testing.org][Testing]] — test framework
+- [[file:strings.org][Strings]] — string operations
+- [[file:collections.org][Collections]] — collection types
+- [[file:numeric.org][Numeric]] — numeric types
+- [[file:list.org][Lists]] — list operations
+
+7. Further Reading
+
+- [[file:../context/core-libs.org][context/core-libs.org]] — library architecture
 - [[file:../context/language.org][context/language.org]] — codegen dispatch, core prelude gaps
+- [[file:../context/main-mon.org][context/main-mon.org]] — Main.mon documentation
+- [[file:../context/module.org][context/module.org]] — module system internals
+- [[file:../core/Math.mon][core/Math.mon]] — Math module source (400 lines)
+- [[file:../core/prelude/Coll.mon][core/prelude/Coll.mon]] — Coll module source (100 lines)
+- [[file:../Main.mon][Main.mon]] — standard library / test surface (1244 lines)

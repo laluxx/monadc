@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-char-conversion
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.00.values.casts.conversions.rt.char.conversion
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: casts-conversions
+;; TEST-CATEGORY: 00-values
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Char constructor and char to int conversion work.
+;; TEST-ATOM: (Char 65) produces 'A', (Int (Char 65)) produces 65.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:00-values/casts-conversions branch family
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/casts-conversions/atom.codegen.00.values.casts.conversions.rt.char.conversion
+;; TEST-MENU-PATH: codegen/branches/values/casts-conversions/atom.codegen.00.values.casts.conversions.rt.char.conversion
+;; TEST-ATOM-LEAF: atom.codegen.00.values.casts.conversions.rt.char.conversion
+;; TEST-CLI-TARGET: codegen branches values casts-conversions
+(module Main)
+(show (Char 65))
+(show (Int (Char 65)))

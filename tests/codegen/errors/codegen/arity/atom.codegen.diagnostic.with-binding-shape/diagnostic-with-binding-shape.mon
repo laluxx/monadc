@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.branch.diagnostic-with-binding-shape
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: arity
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise with binding shape diagnostic.
+;; TEST-ATOM: atom.codegen.diagnostic.with-binding-shape
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.with-binding-shape
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-CODEGEN-PATH: diagnostic.with.binding-shape
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: with
+;; TEST-COVERAGE: codegen.c:8019 with binding shape diagnostic
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/arity/atom.codegen.diagnostic.with-binding-shape
+;; TEST-MENU-PATH: codegen/errors/codegen/arity/atom.codegen.diagnostic.with-binding-shape
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.with-binding-shape
+;; TEST-CLI-TARGET: codegen errors codegen arity
+(module Main)
+(show (with x 1))

@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.branch.value-radix-zero-edge
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: radix-printing
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.value.radix.zero.edge
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover Hex, Bin, and Oct show branches for the zero edge case.
+;; TEST-ATOM: Radix display for zero should use the dedicated codegen_show_value branches.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:1224-1230 hex/bin/oct show branches
+;; TEST-COVERAGE: codegen.c:515 get_or_declare_print_binary zero branch
+
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/radix-printing/atom.codegen.value.radix.zero.edge
+;; TEST-MENU-PATH: codegen/branches/operators/radix-printing/atom.codegen.value.radix.zero.edge
+;; TEST-ATOM-LEAF: atom.codegen.value.radix.zero.edge
+;; TEST-CLI-TARGET: codegen branches operators radix-printing
+(module Main)
+(show (Hex 0))
+(show (Bin 0))
+(show (Oct 0))

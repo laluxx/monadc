@@ -1,0 +1,17 @@
+name: bool_identity_preserves_if_condition_disabled_duplicate_43450523
+section: function
+tier: experimental
+kind: law
+features: arithmetic, equality, function, if, phi, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.predicate_dispatch, infer.arithmetic, infer.equality, infer.if_phi, infer.type_predicate, reader.ast_if
+signal: medium
+corpus-role: merged-duplicate
+uses-atoms: atom.control.if, atom.core.equality, atom.infer.predicate
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+merged-into: complex_if_bool_identity_condition_preserves_int_branch
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: cond:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Passing a generated Bool through the typed Bool identity must not change conditional branch selection.
+law: (= (if (fuzz-bool-id? {cond}) {a} {b}) (if {cond} {a} {b}))

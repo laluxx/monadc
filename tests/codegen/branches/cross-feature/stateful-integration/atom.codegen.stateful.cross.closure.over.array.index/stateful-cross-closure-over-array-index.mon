@@ -1,0 +1,32 @@
+;; TEST-ID: tests.codegen.stateful.cross.closure.over.array.index
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 70-cross-feature
+;; TEST-SUBSET: stateful-integration
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.stateful.cross.closure.over.array.index
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Closure captures an array and indexes it after call.
+;; TEST-ATOM: atom.codegen.stateful.cross.closure.over.array.index
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.cross.closure-array-index
+;; TEST-CODEGEN-PATH: codegen.lambda.capture
+;; TEST-CODEGEN-PATH: codegen.array.index
+;; TEST-COVERAGE: codegen.c:4161-5688 function/lambda branches
+;; TEST-COVERAGE: codegen.c:7743-7977 if/PHI branch lowering
+;; TEST-COVERAGE: codegen.c:8555-8905 collection dispatch branches
+;; TEST-COVERAGE: codegen.c:12902-12952 dot special form
+;; TEST-USES-ATOM: atom.codegen.category.70.cross.feature
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-USES-ATOM: atom.codegen.subset.70.cross.feature.stateful.integration
+;; TEST-MENU: branches/cross-feature/stateful-integration/atom.codegen.stateful.cross.closure.over.array.index
+;; TEST-MENU-PATH: codegen/branches/cross-feature/stateful-integration/atom.codegen.stateful.cross.closure.over.array.index
+;; TEST-ATOM-LEAF: atom.codegen.stateful.cross.closure.over.array.index
+;; TEST-CLI-TARGET: codegen branches cross-feature stateful-integration
+
+(module Main)
+(define xs [40 2])
+(define f (lambda (i) (xs i)))
+(show (+ (f 0) (f 1)))

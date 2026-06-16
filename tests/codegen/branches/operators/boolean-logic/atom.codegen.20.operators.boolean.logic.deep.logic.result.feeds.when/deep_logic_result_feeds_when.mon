@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.deep.deep_logic_result_feeds_when
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-SUBSET: boolean-logic
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.20.operators.boolean.logic.deep.logic.result.feeds.when
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise boolean result used as statement condition.
+;; TEST-ATOM: Boolean expressions should branch when used in when.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.20.operators, atom.codegen.subset.boolean.logic
+;; TEST-COVERAGE: codegen.c:boolean logic feeding conditional branch
+;; TEST-MENU: branches/operators/boolean-logic/atom.codegen.20.operators.boolean.logic.deep.logic.result.feeds.when
+;; TEST-MENU-PATH: codegen/branches/operators/boolean-logic/atom.codegen.20.operators.boolean.logic.deep.logic.result.feeds.when
+;; TEST-ATOM-LEAF: atom.codegen.20.operators.boolean.logic.deep.logic.result.feeds.when
+;; TEST-CLI-TARGET: codegen branches operators boolean-logic
+
+(module Main)
+(define x 0)
+(when (and True (not False)) (set! x 7))
+(show x)

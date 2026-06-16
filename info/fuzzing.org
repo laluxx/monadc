@@ -14,26 +14,34 @@
 Test coverage: 41 algebraic law properties, 96 seeds, ~960 generated
 programs. Run via =make fuzzing=.
 
+This page covers property-based fuzzing: architecture, running, algebraic
+laws, stable definitions, and adding new properties.
+
 Monad includes a QuickCheck-style property-based testing system that
 generates typed programs from algebraic law specifications, compiles
 them, runs them, and checks the laws.
 
-* Architecture
+For the main test suite overview, see [[file:testing.org][Testing]].
+
+1. Architecture
 
 The fuzzing system lives in =tests/fuzzing/=:
 
-| Component       | Purpose                                      |
-|-----------------+----------------------------------------------|
-| =fuzz.h=        | Header with types, AST, term representation  |
-| =fuzz_arith.c=  | Arithmetic law generators                    |
-| =fuzz_bitwise.c=| Bitwise law generators                        |
-| =fuzz_list.c=   | List law generators                          |
-| =fuzz_coll.c=   | Collection law generators                    |
-| =fuzz_misc.c=   | Misc law generators                          |
-| =fuzz_run.c=    | Main runner / loop                           |
-| =make fuzzing=  | Run all fuzz tests                           |
+| Component      | Purpose                                     |
+|----------------+---------------------------------------------|
+| =fuzz.h=         | Header with types, AST, term representation |
+| =fuzz_arith.c=   | Arithmetic law generators                   |
+| =fuzz_bitwise.c= | Bitwise law generators                      |
+| =fuzz_list.c=    | List law generators                         |
+| =fuzz_coll.c=    | Collection law generators                   |
+| =fuzz_misc.c=    | Misc law generators                         |
+| =fuzz_run.c=     | Main runner / loop                          |
+| =make fuzzing=   | Run all fuzz tests                          |
 
-* Running
+For the codegen pipeline that fuzzing exercises, see [[file:build.org][Build System # Compilation Pipeline]].
+For the test runner implementation, see [[file:../context/tests-arch.org][context/tests-arch.org]].
+
+2. Running
 
 #+BEGIN_SRC sh
 make fuzzing                # Run the fuzzer (takes ~seconds)
@@ -44,15 +52,20 @@ The fuzzer generates typed programs from property specifications,
 compiles them through the full pipeline, runs the resulting binary,
 and checks algebraic laws.
 
-* Algebraic Laws
+For build system test targets, see [[file:build.org][Build System # Test Targets]].
+For the =make fuzzing= Makefile target implementation, see [[file:../context/build.org][context/build.org]].
+
+3. Algebraic Laws
 
 Example properties verified by the fuzzer:
+
+S-expression syntax:
 
 #+BEGIN_SRC monad
 ;; Addition is commutative
 (∀ (a b) (= (+ a b) (+ b a)))
 
-;; Addition is associative  
+;; Addition is associative
 (∀ (a b c) (= (+ (+ a b) c) (+ a (+ b c))))
 
 ;; Concatenation has identity
@@ -62,17 +75,19 @@ Example properties verified by the fuzzer:
 (∀ (f xs ys) (= (map f (++ xs ys)) (++ (map f xs) (map f ys))))
 #+END_SRC
 
-#+BEGIN_SRC monad
-;; Addition is commutative
+Wisp syntax:
 
-∀ab. a + b = b + a
+#+BEGIN_SRC wisp
+;; Addition is commutative
+∀ (a b)
+  = (+ a b) (+ b a)
 
 ;; Addition is associative
 ∀ (a b c)
   = (+ (+ a b) c) (+ a (+ b c))
 
 ;; Concatenation has identity
-∀ (xs)
+∀ xs
   = (++ nil xs) xs
 
 ;; Map distributes over append
@@ -83,19 +98,51 @@ Example properties verified by the fuzzer:
 The properties are defined in =fuzz_arith.c=, =fuzz_list.c=, and
 =fuzz_coll.c= with ~1933+ property specifications.
 
-* Stable Definitions
+For the arithmetic laws verified, see [[file:arithmetic.org][Arithmetic]].
+For equality semantics, see [[file:equality.org][Equality]].
+For list and collection operations, see [[file:list.org][List]] and [[file:collections.org][Collections]].
+
+Key Points:
+- 41 algebraic laws verified: commutativity, associativity, identity, distributivity
+- 96 deterministic seeds produce ~960 generated programs
+- Properties defined in =fuzz_*.c= files with ~1933+ specifications
+- =STABLE_DEFS= prefix provides ground-truth functions for generation building blocks
+
+See also: [[file:testing.org][Testing]]
+
+4. Stable Definitions
 
 The =STABLE_DEFS= prefix in the fuzzer defines a set of ground-truth
 functions (named helpers like =fuzz-add=, =fuzz-concat=) that are known
 to compile and run correctly. These serve as the building blocks for
 property generation.
 
-* Adding New Properties
+5. Adding New Properties
 
 To add a new fuzzing property:
 1. Add the law definition to the appropriate =fuzz_*.c= file
 2. Register it in the =fuzz_run.c= runner
 3. Run =make fuzzing= to verify
+
+For the style guide and contribution guidelines, see [[file:style.org][Style Guide]]
+and [[file:contributing.org][Contributing]].
+
+See also: [[file:contributing.org][Contributing]]
+
+* Implementation Notes
+
+Fuzzing infrastructure source files:
+
+| Component       | Source          | Role                            |
+|-----------------+-----------------+---------------------------------|
+| =fuzz.h=          | [[file:../tests/fuzzing/fuzz.h][fuzz.h]]          | Types, AST, term representation |
+| =fuzz_arith.c=    | [[file:../tests/fuzzing/fuzz_arith.c][fuzz_arith.c]]    | Arithmetic law generators       |
+| =fuzz_bitwise.c=  | [[file:../tests/fuzzing/fuzz_bitwise.c][fuzz_bitwise.c]]  | Bitwise law generators          |
+| =fuzz_list.c=     | [[file:../tests/fuzzing/fuzz_list.c][fuzz_list.c]]     | List law generators             |
+| =fuzz_coll.c=     | [[file:../tests/fuzzing/fuzz_coll.c][fuzz_coll.c]]     | Collection law generators       |
+| =fuzz_misc.c=     | [[file:../tests/fuzzing/fuzz_misc.c][fuzz_misc.c]]     | Misc law generators             |
+| =fuzz_run.c=      | [[file:../tests/fuzzing/fuzz_run.c][fuzz_run.c]]      | Main runner and seed loop       |
+| =fuzz_codegen.py= | [[file:../tests/fuzzing/fuzz_codegen.py][fuzz_codegen.py]] | Python test driver              |
 
 * Related Pages
 
@@ -104,6 +151,20 @@ To add a new fuzzing property:
 - [[file:build.org][Build System]] -- running fuzz tests
 - [[file:errors.org][Diagnostics]] -- error diagnostics in fuzzing
 - [[file:arithmetic.org][Arithmetic]] -- algebraic property laws
+- [[file:equality.org][Equality]] -- operators verified by fuzzing
+- [[file:booleans.org][Booleans]] -- boolean laws verified by fuzzing
+- [[file:core.org][Core Library]] -- builtins verified by fuzzing
+
+* Further Reading
+
+- [[file:../context/tests-arch.org][context/tests-arch.org]] — test architecture
+- [[file:../tests/fuzzing/][tests/fuzzing/]] — fuzzing source code
+- [[file:testing.org][Testing]] — overall test suite
+- [[file:equality.org][Equality]] — operators verified by fuzzing
+- [[file:core.org][Core Library]] — builtins verified by fuzzing
+- [[file:build.org][Build System]] — make fuzzing target
+- [[file:../context/build.org][context/build.org]] — build and test infrastructure
+- [[file:../context/language.org][context/language.org]] — language semantics
 
 * Context Links
 
@@ -113,3 +174,5 @@ To add a new fuzzing property:
 - [[file:equality.org][Equality]] — operators verified by fuzzing
 - [[file:core.org][Core Library]] — builtins verified by fuzzing
 - [[file:build.org][Build System]] — make fuzzing target
+- [[file:../context/build.org][context/build.org]] — build and test infrastructure
+- [[file:../context/language.org][context/language.org]] — language semantics

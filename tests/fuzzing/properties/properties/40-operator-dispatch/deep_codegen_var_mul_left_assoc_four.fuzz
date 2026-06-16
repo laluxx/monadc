@@ -1,0 +1,15 @@
+name: deep_codegen_var_mul_left_assoc_four
+section: codegen-arithmetic-dispatch
+tier: stable
+kind: law
+features: arithmetic, codegen, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, infer.arithmetic, infer.equality
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.core.multiply
+related-properties: signal_atom_equality_reflexive, signal_atom_multiply_associative, signal_atom_multiply_commutative, signal_atom_multiply_identity_one
+args: a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Variadic * must lower as a left-associated multiply chain.
+law: (= (* {a} {b} {c} {d}) (* (* (* {a} {b}) {c}) {d}))

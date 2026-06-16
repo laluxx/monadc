@@ -1,0 +1,4 @@
+True
+add one
+(lambda (x) (+ x 1))
+True

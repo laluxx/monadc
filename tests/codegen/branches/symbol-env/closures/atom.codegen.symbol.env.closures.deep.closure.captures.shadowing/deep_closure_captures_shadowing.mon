@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.deep.deep_closure_captures_shadowing
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SUBSET: closures
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.symbol.env.closures.deep.closure.captures.shadowing
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise closure capture and separate closure environments.
+;; TEST-ATOM: Nested lambdas should capture the correct outer binding.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:closure/lifted env lowering
+
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/closures/atom.codegen.symbol.env.closures.deep.closure.captures.shadowing
+;; TEST-MENU-PATH: codegen/branches/symbol-env/closures/atom.codegen.symbol.env.closures.deep.closure.captures.shadowing
+;; TEST-ATOM-LEAF: atom.codegen.symbol.env.closures.deep.closure.captures.shadowing
+;; TEST-CLI-TARGET: codegen branches symbol-env closures
+(module Main)
+(define make-adder (lambda ([x : Int]) (lambda ([y : Int] -> Int) (+ x y))))
+(define add10 (make-adder 10))
+(show (add10 5))
+(define add100 (make-adder 100))
+(show (add100 3))

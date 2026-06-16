@@ -1,0 +1,15 @@
+name: oracle_string_contains_generated
+section: oracle-string
+tier: stable
+kind: law
+features: arithmetic, logic, for, string, set, predicate
+compiler-path: codegen.operator.arithmetic, codegen.operator.logic, codegen.control.for_loop, runtime.string, runtime.set, infer.predicate, codegen.predicate
+signal: high
+corpus-role: oracle
+uses-atoms: atom.core.arithmetic, atom.core.logic, atom.control.for, atom.runtime.string, atom.runtime.set, atom.core.predicate
+disabled-reason: disabled future or merged property; kept for provenance but not loaded by default
+args: haystack:String needle:SubstrOf(haystack)
+type: Bool
+expect-python: needle in haystack
+description: Example for newer oracle fuzzers: generated substring must be contained in generated haystack.
+law: (contains? {haystack} {needle})

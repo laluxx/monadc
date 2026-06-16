@@ -1,0 +1,15 @@
+name: list_empty_count_zero
+section: collections
+tier: experimental
+kind: law
+features: arithmetic, collections, equality, list
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.runtime_call, infer.arithmetic, infer.equality, runtime.list
+signal: low
+corpus-role: legacy-smoke
+uses-atoms: atom.core.equality
+related-properties: signal_atom_equality_reflexive
+args: 
+type: Bool
+expect: True
+description: Zero-arg list construction must produce an empty list.
+law: (= (count (list)) 0)

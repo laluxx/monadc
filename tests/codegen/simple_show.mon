@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.simple-show
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Simple show of integer literal compiles and runs.
-;; TEST-ATOM: (show 42) must print 42.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show 42)

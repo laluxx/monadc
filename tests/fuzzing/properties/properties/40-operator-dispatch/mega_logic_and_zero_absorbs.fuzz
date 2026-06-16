@@ -1,0 +1,15 @@
+name: mega_logic_and_zero_absorbs
+section: codegen-logic-coercion
+tier: stable
+kind: law
+features: arithmetic, codegen, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+args: a:Int
+type: Bool
+expect: True
+description: and with integer zero must be false.
+law: (= (and {a} 0 True) False)

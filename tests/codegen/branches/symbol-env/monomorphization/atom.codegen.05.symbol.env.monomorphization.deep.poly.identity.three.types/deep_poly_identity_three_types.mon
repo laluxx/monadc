@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.deep.deep_poly_identity_three_types
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SUBSET: monomorphization
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.05.symbol.env.monomorphization.deep.poly.identity.three.types
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise polymorphic identity at three concrete types.
+;; TEST-ATOM: Monomorphization/cache should handle multiple type instantiations.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env, atom.codegen.subset.monomorphization
+;; TEST-COVERAGE: codegen.c:codegen_specialize and mono_cache_lookup/insert
+;; TEST-MENU: branches/symbol-env/monomorphization/atom.codegen.05.symbol.env.monomorphization.deep.poly.identity.three.types
+;; TEST-MENU-PATH: codegen/branches/symbol-env/monomorphization/atom.codegen.05.symbol.env.monomorphization.deep.poly.identity.three.types
+;; TEST-ATOM-LEAF: atom.codegen.05.symbol.env.monomorphization.deep.poly.identity.three.types
+;; TEST-CLI-TARGET: codegen branches symbol-env monomorphization
+
+(module Main)
+(define id (lambda (x) x))
+(show (id 7))
+(show (id "ok"))
+(show (id True))

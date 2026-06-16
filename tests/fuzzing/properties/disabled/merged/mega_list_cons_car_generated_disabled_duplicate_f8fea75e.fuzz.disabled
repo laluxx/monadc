@@ -1,0 +1,17 @@
+name: mega_list_cons_car_generated_disabled_duplicate_f8fea75e
+section: codegen-runtime-collections
+tier: experimental
+kind: law
+features: arithmetic, codegen, equality, list
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.runtime_call, infer.arithmetic, infer.equality, runtime.list
+signal: medium
+corpus-role: merged-duplicate
+uses-atoms: atom.codegen.dispatch, atom.core.equality
+related-properties: signal_atom_equality_reflexive
+merged-into: list_cons_car_roundtrip
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int
+type: Bool
+expect: True
+description: cons/car must roundtrip generated value.
+law: (= (car (cons {a} (list))) {a})

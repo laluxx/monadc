@@ -1,0 +1,37 @@
+;; TEST-ID: tests.codegen.env-error.env.call.argument.mismatch.04
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: env-errors/call-argument-type-mismatch
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.env-error-coverage
+;; TEST-PURPOSE: Trigger env.c diagnostic: Couldn't match expected type
+;; TEST-ATOM: atom.env.error.env.call.argument.mismatch.04
+;; TEST-CODEGEN-ATOM: atom.env.error.env.call.argument.mismatch.04
+;; TEST-QUALITY: env-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ENV-ERROR: Couldn't match expected type
+;; TEST-ENV-PATH: env.c:975 call.argument-type-mismatch
+;; TEST-CODEGEN-PATH: diagnostic.env.call.argument-type-mismatch
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: env
+;; TEST-TAG: hm
+;; TEST-COVERAGE: env.c:975 Couldn't match expected type
+;; TEST-USES-ATOM: atom.env.error.env.call.argument.mismatch.04
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.env.error
+;; TEST-USES-ATOM: atom.env.error.family.call.argument.type.mismatch
+;; TEST-DEPENDS-ON: atom.env.hm.check.call.argument-type
+;; TEST-DEPENDS-ON: atom.codegen.value.string
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-REFINES: atom.env.error
+;; TEST-MENU: errors/env/call-argument-type-mismatch/atom.env.error.env.call.argument.mismatch.04
+;; TEST-MENU-PATH: codegen/errors/env/call-argument-type-mismatch/atom.env.error.env.call.argument.mismatch.04
+;; TEST-ATOM-LEAF: atom.env.error.env.call.argument.mismatch.04
+;; TEST-CLI-TARGET: codegen errors env call-argument-type-mismatch
+
+(module Main)
+(define (env_arg_mismatch_04 [x : Char] -> Int) 0)
+(show (env_arg_mismatch_04 "A"))

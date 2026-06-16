@@ -1,0 +1,17 @@
+name: structured_program_string_pred_index_variant_02_disabled_duplicate_498dc5ec
+section: current-program-kind
+tier: experimental
+kind: program
+features: program, string, index, predicate
+compiler-path: codegen.module_body, codegen.predicate_dispatch, codegen.string_literal, infer.type_predicate, reader.string_literal, runner.program_kind, runtime.string
+signal: high
+corpus-role: merged-duplicate
+uses-atoms: atom.infer.predicate, atom.runtime.string
+related-properties: signal_atom_string_contains_substring
+merged-into: structured_program_string_pred_index_variant_01
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: 
+type: Bool
+expect: True
+description: V10 program-kind property variant 2 for program_string_pred_index, checking full program source handling rather than show-wrapped law handling.
+program: (show (char? ("abc" 1)))

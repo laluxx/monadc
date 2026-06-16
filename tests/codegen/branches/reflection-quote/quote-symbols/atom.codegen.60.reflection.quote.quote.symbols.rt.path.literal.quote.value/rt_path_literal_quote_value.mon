@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-path-literal-quote-value
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.60.reflection.quote.quote.symbols.rt.path.literal.quote.value
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: quote-symbols
+;; TEST-CATEGORY: 60-reflection-quote
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.path-literals, monadc.context.language.path-values, monadc.context.tests.heap-path-regressions
+;; TEST-PURPOSE: Verify quoted syntax can contain Path literals.
+;; TEST-ATOM: A quoted list containing a home-relative path compiles via AST-to-runtime reflection.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:60-reflection-quote/quote-symbols branch family
+;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote
+;; TEST-MENU: branches/reflection-quote/quote-symbols/atom.codegen.60.reflection.quote.quote.symbols.rt.path.literal.quote.value
+;; TEST-MENU-PATH: codegen/branches/reflection-quote/quote-symbols/atom.codegen.60.reflection.quote.quote.symbols.rt.path.literal.quote.value
+;; TEST-ATOM-LEAF: atom.codegen.60.reflection.quote.quote.symbols.rt.path.literal.quote.value
+;; TEST-CLI-TARGET: codegen branches reflection-quote quote-symbols
+(module PathLiteralQuoteValue)
+(show '(~/xos/projects/c/monadc/context/))

@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.branch.diagnostic-starts-with-arity
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: arity
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.starts.with.arity
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover starts-with? arity diagnostics.
+;; TEST-ATOM: starts-with? should require exactly two arguments.
+;; TEST-EXPECT: fail:compile
+;; TEST-COVERAGE: codegen.c:8620 starts-with?/ends-with? arity diagnostic
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/arity/atom.codegen.diagnostic.starts.with.arity
+;; TEST-MENU-PATH: codegen/errors/codegen/arity/atom.codegen.diagnostic.starts.with.arity
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.starts.with.arity
+;; TEST-CLI-TARGET: codegen errors codegen arity
+(module Main)
+(starts-with? "abc")

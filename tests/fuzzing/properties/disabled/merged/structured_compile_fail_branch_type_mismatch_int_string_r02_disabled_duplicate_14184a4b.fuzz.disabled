@@ -1,0 +1,17 @@
+name: structured_compile_fail_branch_type_mismatch_int_string_r02_disabled_duplicate_14184a4b
+section: current-compile-fail
+tier: experimental
+kind: compile-fail
+features: compile-fail, if, type
+compiler-path: codegen.if_phi, diagnostic.expected_error, infer.if_phi, reader.ast_if, runner.compile_fail_kind
+signal: high
+corpus-role: merged-duplicate
+uses-atoms: atom.control.if, atom.runtime.string
+related-properties: signal_atom_if_same_branch_eliminates, signal_atom_string_contains_substring
+merged-into: structured_compile_fail_branch_type_mismatch_int_string_r01
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: p:Bool@logic a:Int@edge
+type: Bool
+expect-diagnostic: error:
+description: V10 compile-fail replacement branch_type_mismatch_int_string round 2; intentionally invalid and should emit an error.
+law: (if {p} {a} "x")

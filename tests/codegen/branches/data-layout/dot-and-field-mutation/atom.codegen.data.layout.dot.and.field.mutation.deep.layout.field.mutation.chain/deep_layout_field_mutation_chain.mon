@@ -1,0 +1,28 @@
+;; TEST-ID: tests.codegen.deep.deep_layout_field_mutation_chain
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SUBSET: dot-and-field-mutation
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.data.layout.dot.and.field.mutation.deep.layout.field.mutation.chain
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise dot field access and field set! mutation.
+;; TEST-ATOM: Field mutation should update only the selected layout field.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:dot field GEP/load
+;; TEST-COVERAGE: codegen.c:set! field store
+
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/dot-and-field-mutation/atom.codegen.data.layout.dot.and.field.mutation.deep.layout.field.mutation.chain
+;; TEST-MENU-PATH: codegen/branches/data-layout/dot-and-field-mutation/atom.codegen.data.layout.dot.and.field.mutation.deep.layout.field.mutation.chain
+;; TEST-ATOM-LEAF: atom.codegen.data.layout.dot.and.field.mutation.deep.layout.field.mutation.chain
+;; TEST-CLI-TARGET: codegen branches data-layout dot-and-field-mutation
+(module Main)
+(layout Cell [x :: Int] [y :: Int])
+(define c (Cell 10 20))
+(show c.x)
+(set! c.y (+ c.x c.y 1))
+(show c.y)
+(show (+ c.x c.y))

@@ -1,0 +1,15 @@
+name: structured_loop_while_when_collects_even_hits
+section: control-loop-mutation-current
+tier: experimental
+kind: law
+features: arithmetic, array, array-index, begin, comparison, control, do, env, equality, mod, mutation, set, set!, when, while, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.comparison_dispatch, codegen.equality_dispatch, codegen.if_void, codegen.local_load, codegen.mod_dispatch, codegen.runtime_call, codegen.sequence, codegen.set_bang, codegen.store, codegen.while_loop, codegen.with_binding, desugar.when, infer.arithmetic, infer.array, infer.callable_array, infer.comparison, infer.env_child, infer.env_lookup, infer.equality, infer.loop, infer.mutation, reader.array_literal, reader.ast_begin, reader.ast_do, runtime.set
+signal: low
+corpus-role: legacy-smoke
+uses-atoms: atom.binding.set-bang, atom.binding.with, atom.control.begin, atom.control.do, atom.core.equality, atom.core.modulo, atom.core.order.lt, atom.core.plus, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_do_last_value, signal_atom_equality_reflexive, signal_atom_lt_transitive, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero, signal_atom_with_substitution
+args: 
+type: Bool
+expect: True
+description: Stress lowering of loops, mutable locals, nested blocks, and branch guarded mutation.
+law: (= (with [i 0 hits 0] (do (while (< i 8) (begin (when (= (% i 2) 0) (set! hits (+ hits 1))) (set! i (+ i 1)))) hits)) 4)

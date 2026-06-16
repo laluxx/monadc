@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-error-abort
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: failure
+;; TEST-CODEGEN-ATOM: atom.codegen.20.operators.boolean.logic.rt.error.abort
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: boolean-logic
+;; TEST-CATEGORY: 20-operators
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime error form aborts execution with a diagnostic.
+;; TEST-ATOM: (error "boom") compiles and exits nonzero with the message boom.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:20-operators/boolean-logic branch family
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/boolean-logic/atom.codegen.20.operators.boolean.logic.rt.error.abort
+;; TEST-MENU-PATH: codegen/branches/operators/boolean-logic/atom.codegen.20.operators.boolean.logic.rt.error.abort
+;; TEST-ATOM-LEAF: atom.codegen.20.operators.boolean.logic.rt.error.abort
+;; TEST-CLI-TARGET: codegen branches operators boolean-logic
+(module Main)
+(error "boom")

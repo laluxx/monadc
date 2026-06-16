@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-define-compose
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.05.symbol.env.defines.and.calls.rt.define.compose
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: defines-and-calls
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Composition of a typed define function with itself works.
+;; TEST-ATOM: (double (double 3)) evaluates to 12.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:05-symbol-env/defines-and-calls branch family
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/defines-and-calls/atom.codegen.05.symbol.env.defines.and.calls.rt.define.compose
+;; TEST-MENU-PATH: codegen/branches/symbol-env/defines-and-calls/atom.codegen.05.symbol.env.defines.and.calls.rt.define.compose
+;; TEST-ATOM-LEAF: atom.codegen.05.symbol.env.defines.and.calls.rt.define.compose
+;; TEST-CLI-TARGET: codegen branches symbol-env defines-and-calls
+(module Main)
+(define (double [x : Int] -> Int) (* 2 x))
+(show (double (double 3)))

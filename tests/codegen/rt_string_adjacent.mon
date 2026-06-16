@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-string-adjacent
-;; TEST-CONTEXT: monadc.context.language.adjacent-strings, monadc.context.tests.expected-failures
-;; TEST-PURPOSE: Duplicate coverage for the connected-string diagnostic in the runtime/codegen corpus.
-;; TEST-ATOM: "hello""world" is not implicit compile-time concatenation.
-;; TEST-EXPECT: fail:compile
-
-(module Main)
-(show "hello""world")

@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-wisp-logic
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.control.and.logic.rt.wisp.logic
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: control-and-logic
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.wisp.logic-operators
+;; TEST-PURPOSE: Wisp infix logic operators work
+;; TEST-ATOM: True and False → False, True or False → True
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:80-wisp-codegen/control-and-logic branch family
+;; TEST-USES-ATOM: atom.codegen.category.80.wisp.codegen
+;; TEST-MENU: branches/wisp-codegen/control-and-logic/atom.codegen.80.wisp.codegen.control.and.logic.rt.wisp.logic
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/control-and-logic/atom.codegen.80.wisp.codegen.control.and.logic.rt.wisp.logic
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.control.and.logic.rt.wisp.logic
+;; TEST-CLI-TARGET: codegen branches wisp-codegen control-and-logic
+module Main
+show True and False
+show True or False
+show False and True
+show False or True

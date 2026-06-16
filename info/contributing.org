@@ -11,7 +11,7 @@
 
 [[file:index.org][<- Back to Index]] · [[file:testing.org][Testing]] · [[file:fuzzing.org][Fuzzing]] · [[file:build.org][Build System]] · [[file:style.org][Style Guide]] · [[file:errors.org][Diagnostics]] · [[file:modules.org][Modules]]
 
-* Quick Reference
+1. Quick Reference
 
 | Command                      | Description                        |
 |------------------------------+------------------------------------|
@@ -20,7 +20,10 @@
 | =type(scope): summary=       | Commit message format              |
 | =context/=                   | Read before work, extend after     |
 
-Test coverage: No single test target; see =testing.org=.
+Test coverage: No single test target; see [[file:testing.org][testing.org]].
+
+This page covers contributing to Monad: building from source, code
+structure, the context-first workflow, commit format, and TDD pattern.
 
 This page covers how to contribute to the MonadC compiler. For the full
 commit message format specification (types, scopes, examples), see
@@ -35,7 +38,9 @@ session should leave a trace in the context corpus.
 Test-driven development: add a codegen fixture (=rt_<category>_<atom>.mon=)
 before implementing the feature, then run =python3 tests/run.py= to verify.
 
-* Building from Source
+See also: [[file:testing.org][Testing]]
+
+2. Building from Source
 
 Requires LLVM 19+, C11 compiler (=gcc= or =clang=), make:
 
@@ -48,105 +53,11 @@ make
 Build variants: =make= (debug), =make debug= (assertions and debug
 output), =make release= (optimized, LTO). Clean with =make clean=.
 
-* Context-First Workflow
+See [[file:build.org][Build System]] for full build documentation and
+[[file:../context/build.org][context/build.org]] for build system internals.
+For system requirements, see [[file:../context/env.org][context/env.org]].
 
-Before starting any work, read the relevant context files in
-=context/=. The context corpus records design decisions, invariants,
-and rationale that the source code alone does not capture.
-
-After completing work, extend the context corpus: record new
-discoveries, decisions, verification results, and follow-up TODOs.
-Every session should leave a trace in the context. See
-[[file:../context/guidelines.org][context/guidelines.org]] for full rules.
-
-* Commit Message Format
-
-Every commit follows this structure:
-
-#+BEGIN_EXAMPLE
-<type>(<scope>): <summary>
-
-<body>
-#+END_EXAMPLE
-
-** Allowed Types
-
-| Type      | When to use                                                       |
-|-----------++------------------------------------------------------------------|
-| =feat=      | New language feature, compiler pass, or user-visible capability   |
-| =fix=       | Bug fix                                                           |
-| =refactor=  | Code restructuring, no behaviour change                           |
-| =test=      | New or updated tests, corpus rows, or test infrastructure         |
-| =context=   | Changes only to =context/= Org files or the visualizer              |
-| =build=     | Makefile, CI, install, or toolchain changes                       |
-| =docs=      | Documentation outside the context corpus (READMEs, man pages)     |
-| =perf=      | Measurable performance improvement                                |
-| =chore=     | Maintenance with no semantic effect (renaming, moves, cleanup)    |
-
-** Allowed Scopes
-
-| Scope       | Covers                                      |
-|-------------+---------------------------------------------|
-| =reader=      | reader.h, reader.c, lexer, parser, AST      |
-| =wisp=        | wisp.c, Wisp surface-syntax layer           |
-| =types=       | types.h, types.c, type system               |
-| =infer=       | infer.c, type inference                     |
-| =codegen=     | codegen.c, LLVM code generation             |
-| =dep=         | dep.c, dependency and term elaboration      |
-| =tests=       | tests/run.py, tests/*.mon, corpus TSV       |
-| =context=     | context/ Org files                          |
-| =visualizer=  | context-visualizer.py, context/visualizer/  |
-| =build=       | Makefile, install scripts                   |
-
-** Rules
-
-- First line: 72-character hard limit, no trailing period
-- Imperative mood throughout (e.g. "Add path literals", not "Added")
-- Active voice, present tense for invariants
-- Body wrapped at 72 characters
-- Exact symbol names in =monospace=
-- Prose, never bullet lists
-- No footer section — everything in body prose
-- Section order mirrors compilation pipeline: wisp → reader → types →
-  infer → codegen → tests → context
-
-See [[file:../context/commit-format.org][context/commit-format.org]] for full format specification and
-examples.
-
-* Code Style Conventions
-
-- **Naming**: Types =PascalCase=, values =camelCase= or =kebab-case=,
-  predicates suffix with =?= (e.g. =zero?=, =empty?=), mutating
-  operations suffix with =!= (e.g. =set!=, =reset!=
-- **Indentation**: 2 spaces, no tabs
-- **Comments**: =;;= for line comments, =;| |;= for block comments
-- **Hybrid C-Lisp style**: function signatures use =[param :: Type]=
-  declarations while bodies remain S-expressions, common in low-level/
-  graphics code
-- **Pure Wisp style**: indentation-based with equation definitions,
-  type signatures, and pattern clauses, used in =core/prelude=
-
-See [[file:style.org][Style Guide]] for the complete conventions.
-
-* Test-Driven Development Pattern
-
-When adding a new feature:
-
-1. **Context** — Read the relevant context files in =context/= to
-   understand the subsystem architecture and design rationale.
-2. **Test** — Add a codegen fixture in =tests/codegen/= following the
-   =rt_<category>_<atom>.mon= naming convention with appropriate
-   =TEST-*= header metadata.
-3. **Implementation** — Implement the feature in the compiler.
-4. **Verification** — Run =python3 tests/run.py= and verify all tests
-   pass. Add golden =.stdout= (and optionally =.json=, =.desugar=)
-   sidecars as needed.
-
-For parser-level features, add TSV rows to the appropriate
-=reader-*.tsv= corpus file instead of (or in addition to) a codegen
-fixture.
-
-* Code Structure
+3. Code Structure
 
 | Directory   | Contents                                |
 |-------------+-----------------------------------------|
@@ -170,7 +81,191 @@ Key source files:
 | =repl.c=       | Interactive REPL      |
 | =buildsystem.c=| Build orchestration   |
 
-* Running Tests
+For subsystem internals, see [[file:../context/reader.org][context/reader.org]],
+[[file:../context/wisp.org][context/wisp.org]], [[file:../context/infer.org][context/infer.org]],
+[[file:../context/codegen.org][context/codegen.org]], [[file:../context/macro.org][context/macro.org]],
+[[file:../context/pmatch.org][context/pmatch.org]], [[file:../context/module.org][context/module.org]],
+and [[file:../context/repl.org][context/repl.org]].
+
+4. Context-First Workflow
+
+Before starting any work, read the relevant context files in
+=context/=. The context corpus records design decisions, invariants,
+and rationale that the source code alone does not capture.
+
+After completing work, extend the context corpus: record new
+discoveries, decisions, verification results, and follow-up TODOs.
+Every session should leave a trace in the context. See
+[[file:../context/guidelines.org][context/guidelines.org]] for full rules and
+[[file:../context/workflow.org][context/workflow.org]] for workflow examples.
+
+Example workflow:
+
+#+BEGIN_SRC sh
+# Before work: read context
+cat context/reader.org context/types.org
+
+# Implement feature in compiler
+vim reader.c types.c
+
+# After work: extend context
+cat >> context/reader.org << EOF
+** discovered: ...
+EOF
+#+END_SRC
+
+Key Points:
+- Read =context/= before starting work, extend it after completing
+- Every session should leave a trace in the context corpus
+- Use TDD: add a codegen fixture first, implement, then verify with =python3 tests/run.py=
+- The context corpus records design decisions the source code alone does not capture
+
+5. Commit Message Format
+
+Every commit follows this structure:
+
+#+BEGIN_EXAMPLE
+<type>(<scope>): <summary>
+
+<body>
+#+END_EXAMPLE
+
+  5.1 Allowed Types
+
+| Type      | When to use                                                       |
+|-----------+-------------------------------------------------------------------|
+| =feat=      | New language feature, compiler pass, or user-visible capability   |
+| =fix=       | Bug fix                                                           |
+| =refactor=  | Code restructuring, no behaviour change                           |
+| =test=      | New or updated tests, corpus rows, or test infrastructure         |
+| =context=   | Changes only to =context/= Org files or the visualizer              |
+| =build=     | Makefile, CI, install, or toolchain changes                       |
+| =docs=      | Documentation outside the context corpus (READMEs, man pages)     |
+| =perf=      | Measurable performance improvement                                |
+| =chore=     | Maintenance with no semantic effect (renaming, moves, cleanup)    |
+
+  5.2 Allowed Scopes
+
+| Scope       | Covers                                      |
+|-------------+---------------------------------------------|
+| =reader=      | reader.h, reader.c, lexer, parser, AST      |
+| =wisp=        | wisp.c, Wisp surface-syntax layer           |
+| =types=       | types.h, types.c, type system               |
+| =infer=       | infer.c, type inference                     |
+| =codegen=     | codegen.c, LLVM code generation             |
+| =dep=         | dep.c, dependency and term elaboration      |
+| =tests=       | tests/run.py, tests/*.mon, corpus TSV       |
+| =context=     | context/ Org files                          |
+| =visualizer=  | context-visualizer.py, context/visualizer/  |
+| =build=       | Makefile, install scripts                   |
+
+  5.3 Rules
+
+- First line: 72-character hard limit, no trailing period
+- Imperative mood throughout (e.g. "Add path literals", not "Added")
+- Active voice, present tense for invariants
+- Body wrapped at 72 characters
+- Exact symbol names in =monospace=
+- Prose, never bullet lists
+- No footer section — everything in body prose
+- Section order mirrors compilation pipeline: wisp → reader → types →
+  infer → codegen → tests → context
+
+See [[file:../context/commit-format.org][context/commit-format.org]] for full format specification and
+examples.
+
+6. Code Style Conventions
+
+- **Naming**: Types =PascalCase=, values =camelCase= or =kebab-case=,
+  predicates suffix with =?= (e.g. =zero?=, =empty?=), mutating
+  operations suffix with =!= (e.g. =set!=, =reset!=
+- **Indentation**: 2 spaces, no tabs
+- **Comments**: =;;= for line comments, =;| |;= for block comments
+- **Hybrid C-Lisp style**: function signatures use =[param :: Type]=
+  declarations while bodies remain S-expressions, common in low-level/
+  graphics code
+- **Pure Wisp style**: indentation-based with equation definitions,
+  type signatures, and pattern clauses, used in =core/prelude=
+
+Example of code style conventions:
+
+#+BEGIN_SRC monad
+;; Naming: PascalCase for types, kebab-case for values
+(define Color Int)
+(define (zero? n) (== n 0))
+(define (reset! state) ...)
+
+;; Comments: ;; for line, ;| |; for block
+;; Indentation: 2 spaces, close parens at end of line
+(define (greet name)
+  (if (zero? (length name))
+    (show "Hello, World")
+    (show (++ "Hello, " name))))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+# Naming: PascalCase for types, kebab-case for values
+define Color Int
+define zero? n
+  == n 0
+define reset! state ...
+
+# Comments: ;; for line, ;| |; for block
+# Indentation: 2 spaces
+define greet name
+  if (zero? (length name))
+    show "Hello, World"
+    show (++ "Hello, " name)
+#+END_SRC
+
+See [[file:style.org][Style Guide]] for the complete conventions and
+[[file:../context/style.org][context/style.org]] for the full style taxonomy.
+
+7. Test-Driven Development Pattern
+
+When adding a new feature:
+
+1. **Context** — Read the relevant context files in =context/= to
+   understand the subsystem architecture and design rationale.
+2. **Test** — Add a codegen fixture in =tests/codegen/= following the
+   =rt_<category>_<atom>.mon= naming convention with appropriate
+   =TEST-*= header metadata.
+3. **Implementation** — Implement the feature in the compiler.
+4. **Verification** — Run =python3 tests/run.py= and verify all tests
+   pass. Add golden =.stdout= (and optionally =.json=, =.desugar=)
+   sidecars as needed.
+
+For parser-level features, add TSV rows to the appropriate
+=reader-*.tsv= corpus file instead of (or in addition to) a codegen
+fixture.
+
+Example of a codegen fixture:
+
+#+BEGIN_SRC monad
+;; tests/codegen/rt_arith_add.mon
+;; TEST-ARGS: -O0
+;; TEST-NAME: arithmetic add
+
+(define (main)
+  (show (+ 1 2)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+# tests/codegen/rt_arith_add.mon
+# TEST-ARGS: -O0
+# TEST-NAME: arithmetic add
+
+define main
+  show (+ 1 2)
+#+END_SRC
+
+See [[file:testing.org][Testing]] for test infrastructure and
+[[file:fuzzing.org][Fuzzing]] for property-based testing. See
+[[file:../context/tests.org][context/tests.org]] for test architecture
+and [[file:../context/tests-arch.org][context/tests-arch.org]] for the test
+corpus design.
+
+8. Running Tests
 
 #+BEGIN_SRC sh
 python3 tests/run.py              # All tests (codegen, TSV, ASM)
@@ -181,7 +276,19 @@ make fuzzing                      # Property-based fuzzing (41 .fuzz laws)
 
 Core/prelude module tests: =python3 tests/run_core.py=
 
-* Before Contributing
+For test-writing conventions, see [[file:testing.org][Testing]] and
+[[file:../context/test-contracts.org][context/test-contracts.org]].
+
+See also: [[file:fuzzing.org][Fuzzing]]
+
+Key Points:
+- =python3 tests/run.py= runs all tests (codegen, TSV, ASM)
+- =python3 tests/run.py --ci= for verbose CI failure output
+- =python3 tests/run.py codegen= runs only codegen fixtures
+- =make fuzzing= runs property-based testing (41 .fuzz laws)
+- =python3 tests/run_core.py= runs core/prelude module tests
+
+9. Before Contributing
 
 1. Read relevant context docs in =context/= for the subsystem
 2. Match the project's C coding style (arena allocator, no GC, C11)
@@ -190,27 +297,55 @@ Core/prelude module tests: =python3 tests/run_core.py=
 5. Use the commit format: =type(scope): description=
 6. After contributing, extend the context corpus with what was done
 
-* See Also
+For the C coding style conventions, see [[file:../context/style.org][context/style.org]]
+and [[file:../context/arena.org][context/arena.org]] for the arena allocator pattern.
 
-- [[file:testing.org][Testing]]
-- [[file:fuzzing.org][Fuzzing]]
-- [[file:build.org][Build System]]
-- [[file:style.org][Style Guide]]
-- [[file:errors.org][Diagnostics]]
+See also: [[file:style.org][Style Guide]]
 
-* Related Pages
+* Implementation Notes
+
+Contribution infrastructure:
+
+| Component | Source | Role |
+|-----------+--------+------|
+| Build targets | [[file:../Makefile][Makefile]] | Compilation and test automation |
+| Test runner | [[file:../tests/run.py][tests/run.py]] | Primary test execution |
+| CI workflows | [[file:../.github/workflows][.github/workflows]] | Automated test runs |
+| Context corpus | [[file:../context/][context/]] | Design documentation |
+| Commit format spec | [[file:../context/commit-format.org][context/commit-format.org]] | Full format specification |
+| Project guidelines | [[file:../context/guidelines.org][context/guidelines.org]] | Hard constraints, soft preferences |
+
+10. Related Pages
 
 - [[file:testing.org][Testing]] -- test suite and running tests
 - [[file:fuzzing.org][Fuzzing]] -- property-based testing contributions
 - [[file:build.org][Build System]] -- build system
 - [[file:style.org][Style Guide]] -- code style guide
+- [[file:errors.org][Diagnostics]] -- error reporting and diagnostics
+- [[file:modules.org][Modules]] -- module system
 - [[file:from-c.org][From C]] -- C interop contributions
+- [[file:wisp.org][Wisp]] -- Wisp surface syntax contributions
 
-* Context Links
+11. Further Reading
 
-- [[file:../context/guidelines.org][context/guidelines.org]] — Project guidelines (hard constraints and
-  soft preferences)
+- [[file:../context/guidelines.org][context/guidelines.org]] — Project guidelines (hard constraints and soft preferences)
 - [[file:../context/commit-format.org][context/commit-format.org]] — Commit message format specification
+- [[file:../context/workflow.org][context/workflow.org]] — Workflow patterns
+- [[file:../context/style.org][context/style.org]] — Full style taxonomy
+- [[file:../context/tests.org][context/tests.org]] — Test architecture
+- [[file:../context/tests-arch.org][context/tests-arch.org]] — Test corpus design
+- [[file:../context/test-contracts.org][context/test-contracts.org]] — Test contracts
+- [[file:../context/reader.org][context/reader.org]] — Reader internals
+- [[file:../context/wisp.org][context/wisp.org]] — Wisp syntax layer
+- [[file:../context/infer.org][context/infer.org]] — Type inference
+- [[file:../context/codegen.org][context/codegen.org]] — Code generation
+- [[file:../context/module.org][context/module.org]] — Module resolution
+- [[file:../context/macro.org][context/macro.org]] — Macro expansion
+- [[file:../context/pmatch.org][context/pmatch.org]] — Pattern matching
+- [[file:../context/repl.org][context/repl.org]] — REPL design
+- [[file:../context/build.org][context/build.org]] — Build system internals
+- [[file:../context/arena.org][context/arena.org]] — Arena allocator pattern
+- [[file:../context/env.org][context/env.org]] — Environment and requirements
 - [[file:../context/][context/]] — Compiler internals documentation
 - [[file:style.org][Style Guide]] — Code style conventions
 - [[file:testing.org][Testing]] — Test suite architecture

@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.comparison-ops
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.20.operators.comparison.comparison.ops
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: comparison
+;; TEST-CATEGORY: 20-operators
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Comparison operators evaluate at runtime.
+;; TEST-ATOM: (< 3 5) evaluates to True, (> 5 3) evaluates to True, (= 4 4) evaluates to True.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:20-operators/comparison branch family
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/comparison/atom.codegen.20.operators.comparison.comparison.ops
+;; TEST-MENU-PATH: codegen/branches/operators/comparison/atom.codegen.20.operators.comparison.comparison.ops
+;; TEST-ATOM-LEAF: atom.codegen.20.operators.comparison.comparison.ops
+;; TEST-CLI-TARGET: codegen branches operators comparison
+(module Main)
+(show (< 3 5))
+(show (> 5 3))
+(show (= 4 4))
+(show (<= 3 3))
+(show (>= 5 5))

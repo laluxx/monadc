@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-cond-else
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Cond with else clause falls through to default.
-;; TEST-ATOM: (cond [False 1] [False 2] [else 3]) evaluates to 3.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (cond [False 1] [False 2] [else 3]))

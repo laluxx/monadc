@@ -1,0 +1,16 @@
+name: predicate_int_survives_do_sequence
+section: atom-derived-language
+tier: stable
+kind: law
+features: do, predicate
+compiler-path: codegen.control.sequence, infer.predicate
+signal: high
+corpus-role: derived-property
+uses-atoms: atom.control.sequence, atom.core.predicate.int
+depends-on: atom.control.sequence, atom.core.predicate.int
+related-properties: control_sequence, predicate_int
+args: a:Int@edge+if
+type: Bool
+expect: True
+description: Derived language property connected to foundational atom graph dependencies.
+law: (do {a} (int? {a}))

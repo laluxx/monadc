@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.rt-percent-arithmetic-complex
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.20.operators.arithmetic.rt.percent.arithmetic.complex
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: arithmetic
+;; TEST-CATEGORY: 20-operators
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.percent, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Percentage literals participate in arithmetic and comparison as ratios.
+;; TEST-ATOM: Percent literals add, multiply, print normalized ratios, and apply as fraction functions.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:20-operators/arithmetic branch family
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/arithmetic/atom.codegen.20.operators.arithmetic.rt.percent.arithmetic.complex
+;; TEST-MENU-PATH: codegen/branches/operators/arithmetic/atom.codegen.20.operators.arithmetic.rt.percent.arithmetic.complex
+;; TEST-ATOM-LEAF: atom.codegen.20.operators.arithmetic.rt.percent.arithmetic.complex
+;; TEST-CLI-TARGET: codegen branches operators arithmetic
+(module Main)
+(show (+ 25% 75%))
+(show (* 12.5% 8))
+(show 0.5%)
+(show (1.5% 200))

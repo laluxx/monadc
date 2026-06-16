@@ -1,0 +1,42 @@
+;; TEST-ID: tests.codegen.menu.errors.env.infer.define.signature.failed.001
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: errors
+;; TEST-SUBSET: env/infer.define.signature.failed
+;; TEST-MENU: errors/env/infer.define.signature.failed/atom.menu.error.env.infer.define.signature.failed.001
+;; TEST-MENU-PATH: codegen/errors/env/infer.define.signature.failed/atom.menu.error.env.infer.define.signature.failed.001
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.error-menu
+;; TEST-PURPOSE: Pin env.c diagnostic: Type inference failed for function
+;; TEST-ATOM: atom.menu.error.env.infer.define.signature.failed.001
+;; TEST-CODEGEN-ATOM: atom.menu.error.env.infer.define.signature.failed.001
+;; TEST-ATOM-LEAF: atom.menu.error.env.infer.define.signature.failed.001
+;; TEST-QUALITY: menu-error-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ERROR-STAGE: env
+;; TEST-ERROR-FAMILY: infer.define.signature.failed
+;; TEST-ERROR-MESSAGE: Type inference failed for function
+;; TEST-ERROR-SOURCE: env.c
+;; TEST-ERROR-PATH: env.c:642
+;; TEST-CODEGEN-PATH: diagnostic.env.infer.define.signature.failed
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: env
+;; TEST-TAG: menu
+;; TEST-COVERAGE: env.c:642 Type inference failed for function
+;; TEST-USES-ATOM: atom.menu.error.env.infer.define.signature.failed.001
+;; TEST-USES-ATOM: atom.error.env
+;; TEST-USES-ATOM: atom.error.env.infer.define.signature.failed
+;; TEST-USES-ATOM: atom.env.error
+;; TEST-DEPENDS-ON: atom.env.hm.check.call
+;; TEST-DEPENDS-ON: atom.env.hm.infer.define
+;; TEST-REFINES: atom.error.env
+;; TEST-REFINES: atom.error.env.infer.define.signature.failed
+;; TEST-REFINES: atom.env.error
+;; TEST-RELATED: atom.codegen.error.menu
+;; TEST-CLI-TARGET: codegen errors env env
+
+(module Main)
+(define (env_menu_infer_sig_0_1 [x : Int] -> String) (+ x 1))
+(show (env_menu_infer_sig_0_1 1))

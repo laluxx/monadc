@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -882,7 +882,7 @@
 :CONFIDENCE: high
 :END:
 
-[INF id:inf.tests-arch.tests-org from:obs.tests-arch.file,obs.tests-arch.overview conf:high]
+[INF id:inf.tests-arch.tests-org from:obs.tests-arch.file,monadc.context.tests-arch.overview conf:high]
   connects-to -> `monadc.context.tests.file-metadata` (the test metadata
   format, llm orientation, philosophy, and runner policy are in tests.org) ·
   `monadc.context.tests.codegen-directory` (codegen test discovery and
@@ -890,7 +890,7 @@
   `monadc.context.tests.metadata-format` (TEST-ID, TEST-CONTEXT,
   TEST-PURPOSE, TEST-ATOM, TEST-EXPECT specification)
 
-[INF id:inf.tests-arch.codegen-ops from:obs.tests-arch.codegen,obs.tests-arch.codegen.arithmetic,obs.tests-arch.codegen.bitwise,obs.tests-arch.codegen.comparison,obs.tests-arch.codegen.control,obs.tests-arch.codegen.collections,obs.tests-arch.codegen.functions conf:high]
+[INF id:inf.tests-arch.codegen-ops from:monadc.context.tests-arch.codegen,obs.tests-arch.codegen.arithmetic-files,obs.tests-arch.codegen.bitwise-files,obs.tests-arch.codegen.comparison-files,obs.tests-arch.codegen.control-files,obs.tests-arch.codegen.list-files,obs.tests-arch.codegen.fn-files conf:high]
   connects-to -> `monadc.context.codegen-ops.architecture` (the
   three-layer dispatch architecture) ·
   `monadc.context.codegen-ops.arithmetic` (every arithmetic strcmp
@@ -902,14 +902,14 @@
   `monadc.context.codegen-ops.collection` ·
   `monadc.context.codegen-ops.gaps` (known missing dispatch coverage)
 
-[INF id:inf.tests-arch.runtime from:obs.tests-arch.codegen.functions,obs.tests-arch.codegen.collections,obs.tests-arch.codegen.string conf:high]
+[INF id:inf.tests-arch.runtime from:obs.tests-arch.codegen.fn-files,obs.tests-arch.codegen.list-files,obs.tests-arch.codegen.str-files conf:high]
   connects-to -> `monadc.context.runtime.value-system` (RuntimeValue tags,
   arena allocation, boxed/unboxed representation) ·
   `monadc.context.runtime.list-representation` (ConsCell, lazy thunks,
   rt_list_car/cdr) ·
   `monadc.context.runtime.collection-ops` (set/map hash table operations)
 
-[INF id:inf.tests-arch.fuzzing-dispatch from:obs.tests-arch.fuzzing,obs.tests-arch.fuzzing.harness,obs.tests-arch.fuzzing.property-categories,obs.tests-arch.fuzzing.arithmetic,obs.tests-arch.fuzzing.comparison,obs.tests-arch.fuzzing.control,obs.tests-arch.fuzzing.minmax conf:high]
+[INF id:inf.tests-arch.fuzzing-dispatch from:monadc.context.tests-arch.fuzzing,obs.tests-arch.fuzzing.harness,obs.tests-arch.fuzzing.property-categories,obs.tests-arch.fuzzing.arithmetic,obs.tests-arch.fuzzing.comparison,obs.tests-arch.fuzzing.control,obs.tests-arch.fuzzing.minmax conf:high]
   connects-to -> `monadc.context.tests.fuzzing-codegen` (the fuzzing
   system: harness architecture, property file format, type-directed
   generation, algebraic law categories) ·
@@ -993,7 +993,7 @@
   output comparison — parallel test output is interleaved. A buffered
   approach (collect per-test output, display on completion) solves this.
 
-[INF id:inf.tests-arch.asm from:obs.tests-arch.asm,obs.tests-arch.asm.topics,obs.tests-arch.asm.generator conf:high]
+[INF id:inf.tests-arch.asm from:monadc.context.tests-arch.asm,obs.tests-arch.asm.topics,obs.tests-arch.asm.generator conf:high]
   connects-to -> `monadc.context.asm` (asm.c/asm.h architecture:
   mnemonic splitting, suffix inference, AT&T reordering) ·
   `monadc.context.tests.inline-asm-coverage` ·

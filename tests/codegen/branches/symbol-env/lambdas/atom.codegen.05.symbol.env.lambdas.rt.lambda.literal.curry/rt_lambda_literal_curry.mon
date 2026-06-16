@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-lambda-literal-curry
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-CODEGEN-ATOM: atom.codegen.05.symbol.env.lambdas.rt.lambda.literal.curry
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: lambdas
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Lambda literal λx.λy. body desugars to nested lambdas and applies.
+;; TEST-ATOM: (λx.λy. + x y) 3 4 evaluates to 7.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:05-symbol-env/lambdas branch family
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/lambdas/atom.codegen.05.symbol.env.lambdas.rt.lambda.literal.curry
+;; TEST-MENU-PATH: codegen/branches/symbol-env/lambdas/atom.codegen.05.symbol.env.lambdas.rt.lambda.literal.curry
+;; TEST-ATOM-LEAF: atom.codegen.05.symbol.env.lambdas.rt.lambda.literal.curry
+;; TEST-CLI-TARGET: codegen branches symbol-env lambdas
+(module Main)
+(show ((λx.λy. + x y) 3 4))

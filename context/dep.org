@@ -2,7 +2,7 @@
 #+AUTHOR: codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -1327,7 +1327,7 @@
   pure ITT checking without codegen side effects — is purity-is-practical
   applied to the compiler's own architecture)
 
-[INF id:inf.dep.connects-to-references from:obs.dep.nbe-kernel src:dep.h:304-320 conf:high]
+[INF id:inf.dep.connects-to-references from:monadc.context.dep.nbe-kernel src:dep.h:304-320 conf:high]
   connects-to -> `monadc.context.references.types-2020` (the NbE model follows
   Abel 2013, simplified to avoid levitation) ·
   `monadc.context.references.typechecking-dependent-types` (the bidir algorithm

@@ -1,0 +1,31 @@
+;; TEST-ID: tests.codegen.branch200.60.reflection.quote.quote.coalesce.reflection.reflection.branch.08
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 60-reflection-quote
+;; TEST-SUBSET: quote-coalesce-reflection
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.branch200.60.reflection.quote.quote.coalesce.reflection.reflection.branch.08
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: quote keyword runtime value path
+;; TEST-ATOM: atom.codegen.branch200.60.reflection.quote.quote.coalesce.reflection.reflection.branch.08
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.quote
+;; TEST-CODEGEN-PATH: codegen.quasiquote
+;; TEST-CODEGEN-PATH: codegen.null-coalesce
+;; TEST-CODEGEN-PATH: codegen.reflection
+;; TEST-COVERAGE: codegen.c:5795-5865 quasiquote branch
+;; TEST-COVERAGE: codegen.c:5872 quote branch
+;; TEST-COVERAGE: codegen.c:5934-6017 null coalescing branch
+;; TEST-COVERAGE: codegen.c:6566 code branch
+;; TEST-COVERAGE: codegen.c:6602 assert-eq branch
+
+;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote
+;; TEST-USES-ATOM: atom.codegen.subset.60.reflection.quote.quote.coalesce.reflection
+;; TEST-MENU: branches/reflection-quote/quote-coalesce-reflection/atom.codegen.branch200.60.reflection.quote.quote.coalesce.reflection.reflection.branch.08
+;; TEST-MENU-PATH: codegen/branches/reflection-quote/quote-coalesce-reflection/atom.codegen.branch200.60.reflection.quote.quote.coalesce.reflection.reflection.branch.08
+;; TEST-ATOM-LEAF: atom.codegen.branch200.60.reflection.quote.quote.coalesce.reflection.reflection.branch.08
+;; TEST-CLI-TARGET: codegen branches reflection-quote quote-coalesce-reflection
+
+(module Main)
+(show (quote :kw))

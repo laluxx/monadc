@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.rt-type-conv-comp
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.00.values.casts.conversions.rt.type.conv.comp
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: casts-conversions
+;; TEST-CATEGORY: 00-values
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: All type conversion builtins with strcmp handlers: Int Float Char Hex Oct Bin
+;; TEST-ATOM: (Float 42) = 42.0, (Int 3.14) = 3, (Int 42.9) = 42, (Hex 255) = 0xFF, (Oct 255) = 0o377, (Bin 7) = 0b111, (Char 65) = #\A
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:00-values/casts-conversions branch family
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/casts-conversions/atom.codegen.00.values.casts.conversions.rt.type.conv.comp
+;; TEST-MENU-PATH: codegen/branches/values/casts-conversions/atom.codegen.00.values.casts.conversions.rt.type.conv.comp
+;; TEST-ATOM-LEAF: atom.codegen.00.values.casts.conversions.rt.type.conv.comp
+;; TEST-CLI-TARGET: codegen branches values casts-conversions
+(module Main)
+(show (Float 42))
+(show (Int 3.14))
+(show (Int 42.9))
+(show (Hex 255))
+(show (Oct 255))
+(show (Bin 7))
+(show (Char 65))

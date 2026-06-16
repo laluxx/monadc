@@ -1,0 +1,15 @@
+name: structured_oracle_substring_contains_r01
+section: current-oracle
+tier: oracle
+kind: law
+features: oracle, string, substring, contains
+compiler-path: codegen.string_literal, reader.string_literal, runner.expect_python, runner.oracle_tier, runner.typed_generator, runtime.string
+signal: high
+corpus-role: oracle
+uses-atoms: atom.core.minus, atom.dependent.substring-of, atom.infer.predicate, atom.runtime.string
+related-properties: signal_atom_string_contains_substring
+args: s:NonEmptyString@escape needle:SubstrOf(s)
+type: Bool
+expect-python: needle in s
+description: V11 oracle property oracle_substring_contains round 1; validates Python expected-value support with generated rich/dependent arguments.
+law: (contains? {s} {needle})

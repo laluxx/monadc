@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-string-helpers
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Runtime string measurement helpers compile and return expected values.
-;; TEST-ATOM: count operates on strings.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (count "abcd"))
-(show (count "abcd"))

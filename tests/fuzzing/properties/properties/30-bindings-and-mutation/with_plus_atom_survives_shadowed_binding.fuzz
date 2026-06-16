@@ -1,0 +1,16 @@
+name: with_plus_atom_survives_shadowed_binding
+section: atom-derived-language
+tier: stable
+kind: law
+features: with, arithmetic, comparison
+compiler-path: infer.env.lookup, codegen.env.binding, codegen.operator.arithmetic
+signal: high
+corpus-role: derived-property
+uses-atoms: atom.binding.with, atom.core.plus.commutative
+depends-on: atom.binding.with, atom.core.plus.commutative
+related-properties: binding_with, plus_commutative
+args: a:Int@edge+if b:Int@edge+with
+type: Bool
+expect: True
+description: Derived language property connected to foundational atom graph dependencies.
+law: (= (with [x {a}] (+ x {b})) (+ {a} {b}))

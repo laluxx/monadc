@@ -1,0 +1,15 @@
+name: structured_compile_fail_array_as_function_too_many_args_r01
+section: current-compile-fail
+tier: compile-fail
+kind: compile-fail
+features: compile-fail, arity, array
+compiler-path: codegen.array_literal, diagnostic.expected_error, infer.arity_check, infer.array, reader.array_literal, runner.compile_fail_kind
+signal: high
+corpus-role: negative-diagnostic
+uses-atoms: atom.runtime.array
+related-properties: signal_atom_array_index_valid
+args: a:Int@edge b:Int@edge
+type: Bool
+expect-diagnostic: error:
+description: V10 compile-fail property array_as_function_too_many_args round 1; must fail to compile and emit a compiler error.
+law: ([{a} {b}] 0 1)

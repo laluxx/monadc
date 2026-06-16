@@ -1,0 +1,27 @@
+;; TEST-ID: tests.codegen.deep.deep_layout_keyword_and_positional
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SUBSET: layouts-fields
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.data.layout.layouts.fields.deep.layout.keyword.and.positional
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise layout positional and keyword constructor branches.
+;; TEST-ATOM: Layout constructors should populate fields by position and keyword.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:layout constructor positional/keyword field lowering
+
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/layouts-fields/atom.codegen.data.layout.layouts.fields.deep.layout.keyword.and.positional
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts-fields/atom.codegen.data.layout.layouts.fields.deep.layout.keyword.and.positional
+;; TEST-ATOM-LEAF: atom.codegen.data.layout.layouts.fields.deep.layout.keyword.and.positional
+;; TEST-CLI-TARGET: codegen branches data-layout layouts-fields
+(module Main)
+(layout Point [x :: Int] [y :: Int])
+(define p (Point 3 4))
+(define q (Point :y 7 :x 8))
+(show p.x)
+(show p.y)
+(show q.x)
+(show q.y)

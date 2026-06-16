@@ -1,0 +1,31 @@
+;; TEST-ID: tests.codegen.stateful.collection.list.starts.with.list
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-SUBSET: lists
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.stateful.collection.list.starts.with.list
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: starts-with? list/list branch uses nth/equal runtime helpers.
+;; TEST-ATOM: atom.codegen.stateful.collection.list.starts.with.list
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.collection.dispatch
+;; TEST-CODEGEN-PATH: codegen.runtime.collection
+;; TEST-COVERAGE: codegen.c:3934-4016 array/set/map/range literal branches
+;; TEST-COVERAGE: codegen.c:6965-7313 list primitive branches
+;; TEST-COVERAGE: codegen.c:8362-8555 set/map operation branches
+;; TEST-COVERAGE: codegen.c:8555-8905 contains?/starts-with?/ends-with?/count branches
+;; TEST-COVERAGE: codegen.c:9920-10160 collection-as-function indexing branches
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-USES-ATOM: atom.codegen.subset.40.collections.lists
+;; TEST-MENU: branches/collections/lists/atom.codegen.stateful.collection.list.starts.with.list
+;; TEST-MENU-PATH: codegen/branches/collections/lists/atom.codegen.stateful.collection.list.starts.with.list
+;; TEST-ATOM-LEAF: atom.codegen.stateful.collection.list.starts.with.list
+;; TEST-CLI-TARGET: codegen branches collections lists
+
+(module Main)
+(show (starts-with? (list 1 2 3) (list 1 2)))
+(show (starts-with? (list 1 2 3) (list 2)))

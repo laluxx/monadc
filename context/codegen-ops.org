@@ -719,7 +719,7 @@
   args are prefix strip patterns. Delegates to =ffi_parse_header= +
   =ffi_inject_into_env=.
 
-[OBS id:obs.codegen-ops.module.import-export conf:high]
+[OBS id:obs.codegen-ops.module.import-export src:codegen.c conf:high]
   =(import ...)=, =(module ...)=, =(export ...)= — No strcmp
   dispatchers. Registered as builtins only (codegen.c:13235-13236).
   Module system operates at the =codegen_data= / =codegen_layout=

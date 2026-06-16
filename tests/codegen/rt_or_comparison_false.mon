@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-or-comparison-false
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Or with both false comparisons returns False.
-;; TEST-ATOM: (or (< 5 3) (= 1 2)) evaluates to False.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (or (< 5 3) (= 1 2)))

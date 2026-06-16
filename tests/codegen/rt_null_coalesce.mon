@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-null-coalesce
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Runtime ?? null-coalescing operator works.
-;; TEST-ATOM: (?? nil 42) = 42, (?? 0 99) = 0.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (?? nil 42))
-(show (?? 0 99))

@@ -1,0 +1,27 @@
+;; TEST-ID: tests.codegen.branch.control-do-with-set-shadow
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: sets
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.control.do.with.set.shadow
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover do sequencing, with environment creation, local shadowing, and set! lvalue mutation.
+;; TEST-ATOM: Nested environments should isolate shadowed variables while preserving outer mutation.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:8001 do sequence branch
+;; TEST-COVERAGE: codegen.c:8012 with binding environment branch
+;; TEST-COVERAGE: codegen.c:7642 set! lvalue branch
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/sets/atom.codegen.control.do.with.set.shadow
+;; TEST-MENU-PATH: codegen/branches/collections/sets/atom.codegen.control.do.with.set.shadow
+;; TEST-ATOM-LEAF: atom.codegen.control.do.with.set.shadow
+;; TEST-CLI-TARGET: codegen branches collections sets
+(module Main)
+(define x 1)
+(show (with [x 10] (do (set! x (+ x 5)) x)))
+(show x)
+(set! x 7)
+(show x)

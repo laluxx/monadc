@@ -12,11 +12,17 @@
 [[file:index.org][<- Back to Index]] · [[file:collections.org][Collections]] · [[file:list.org][Lists]] · [[file:arrays.org][Arrays]] · [[file:iteration.org][Iteration]] · [[file:functional-programming.org][Functional Programming]] · [[file:numeric.org][Numeric Types]]
 
 Test coverage: lazy range coverage in =rt_range_*.mon= fixtures.
+Test architecture reference: [[file:../context/tests-arch.org][context/tests-arch.org]].
 
 Monad provides two range syntaxes with different evaluation strategies:
-eager arrays (bracket syntax) and lazy lists (paren syntax).
+eager arrays (bracket syntax) and lazy lists (paren syntax). Both
+support optional step values for arithmetic progression.
 
-* Bracket Syntax — Eager Array
+See [[file:collections.org][Collections]] for an overview of all collection
+types and [[file:../context/codegen-ops.org][context/codegen-ops.org]] for
+range codegen.
+
+* 1. Bracket Syntax — Eager Array
 
 Evaluated at runtime, producing a finite array:
 
@@ -32,9 +38,19 @@ Evaluated at runtime, producing a finite array:
 
 Parser rejects =[0..]= (infinite arrays not possible). The result is a
 contiguous fixed-size array — use =count= for length, =head=/=tail= for
-access, =(arr i)= for indexing.
+access, =(arr i)= for indexing. The bounds are inclusive (both start
+and end values are included in the result).
 
-* Paren Syntax — Lazy Lists
+See [[file:arrays.org][Arrays]] for array operations and
+[[file:../context/language.org][context/language.org]] for eager range dispatch.
+
+Key Points:
+- Bracket syntax =[start..end]= produces an eager array
+- Step syntax: =[start,step..end]= for arithmetic progression
+- Inclusive bounds: both start and end are included
+- Parser rejects infinite bracket ranges
+
+* 2. Paren Syntax — Lazy Lists
 
 Lazy ranges produce linked cons cells via runtime thunks:
 
@@ -54,9 +70,20 @@ Lazy ranges produce linked cons cells via runtime thunks:
 
 Lazy ranges call =list_from= and =list_from_step= runtime functions.
 They can be infinite — elements are computed on demand. Use =take= to
-consume a finite prefix.
+consume a finite prefix. The thunk system ensures each element is
+computed at most once (memoization).
 
-* Iteration Over Ranges
+See [[file:list.org][Lists]] for list operations and
+[[file:../context/language.org][context/language.org]] for lazy thunk semantics.
+
+Key Points:
+- Paren syntax =(start..end)= produces a lazy list
+- Infinite ranges: omit the end value =(0..)=
+- Step syntax: =(start,step..end)= or =(start,step..)=
+- Uses thunks for memoized on-demand computation
+- Use =take= to consume a prefix of an infinite range
+
+* 3. Iteration Over Ranges
 
 Ranges are iterable with =for=:
 
@@ -70,7 +97,18 @@ for [i [0..5]] show i
 for [i (0..5)] show i
 #+END_SRC
 
-* Eager vs Lazy
+Both eager and lazy ranges support for-loop iteration. The difference
+is memory: eager pre-computes all elements, lazy computes on demand.
+
+See [[file:iteration.org][Iteration]] for for-loop semantics and
+[[file:../context/language.org][context/language.org]] for range iteration.
+
+Key Points:
+- Both bracket and paren ranges work with =for=
+- Eager: O(n) memory, O(1) per iteration
+- Lazy: O(1) memory for the thunk, O(n) total computation
+
+* 4. Eager vs Lazy
 
 | Aspect     | =[0..10]= (bracket)         | =(0..10)= (paren)          |
 |------------+---------------------------+--------------------------|
@@ -79,19 +117,120 @@ for [i (0..5)] show i
 | Memory     | O(n)                      | O(1) head, O(n) to force |
 | Infinite   | Not allowed               | Supported: =(0..)=         |
 | Access     | O(1) index                | O(n) index (list walk)   |
+| Use case   | Known-size, all needed    | Large/infinite, streaming |
 
-* Related Pages
+See [[file:performance.org][Performance]] for cost analysis and
+[[file:functional-programming.org][Functional Programming]] for lazy
+evaluation patterns.
+
+Key Points:
+- Eager arrays: contiguous, O(1) index, must be finite
+- Lazy lists: cons cells, O(n) index, can be infinite
+- Choose eager for small known-size; choose lazy for streaming or potentially infinite
+
+* 5. Examples
+
+** 5.1 Summing a range
+
+#+BEGIN_SRC monad
+(reduce + 0 [1..100])            ;; 5050 — eager
+(reduce + 0 (1..100))            ;; 5050 — lazy
+#+END_SRC
+
+#+BEGIN_SRC wisp
+reduce + 0 [1..100]             ;; 5050
+reduce + 0 (1..100)             ;; 5050
+#+END_SRC
+
+** 5.2 Taking from an infinite range
+
+#+BEGIN_SRC monad
+(take 5 (0,2..))                 ;; (0 2 4 6 8)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+take 5 (0,2..)                  ;; (0 2 4 6 8)
+#+END_SRC
+
+See [[file:list.org][Lists]] for =take= and =reduce= and
+[[file:recursion.org][Recursion]] for recursive range processing.
+
+Key Points:
+- =reduce= works on both eager and lazy ranges
+- =take= is the canonical way to consume infinite lazy ranges
+- Lazy ranges compose well with other list operations
+
+* 6. Runnable Example
+
+#+BEGIN_SRC monad
+;; run with: monadc range-demo.mon
+
+;; Eager array range — produces a contiguous array
+(define eager-sum (reduce + 0 [1..100]))
+(show eager-sum)                  ;; prints 5050
+
+;; Lazy list range — produces cons cells on demand
+(show (take 10 (1..)))            ;; prints (1 2 3 4 5 6 7 8 9 10)
+
+;; Lazy range with step
+(show (take 5 (0,2..)))           ;; prints (0 2 4 6 8)
+
+;; Eager range with step
+(show [0,2..10])                  ;; prints [0 2 4 6 8 10]
+
+;; Iteration
+(for [i [0..5]] (show i))         ;; prints 0 1 2 3 4 5
+
+;; Lazy range iteration (same result, different memory)
+(for [i (0..5)] (show i))         ;; prints 0 1 2 3 4 5
+#+END_SRC
+
+* 7. Gotchas
+
+Common mistakes and surprising behaviours with ranges:
+
+- **Eager bracket ranges =[0..10]= are inclusive** — both start and end values appear in the result. =[0..10]= has 11 elements (0 through 10 inclusive).
+
+- **=step= syntax uses a comma before the step** — =[0,2..10]=, not =[0..2..10]=. The comma separates the starting value from the step.
+
+- **Infinite eager arrays are rejected** — =[0..]= is a parse error. Use lazy paren syntax =(0..)= for infinite ranges.
+
+- **Infinite lazy ranges need =take=** — calling =count= or =reduce= without a limit on =(0..)= will never terminate.
+
+- **Lazy range indexing is O(n)** — paren ranges produce linked cons cells, so =(range 1000)= traverses 1000 cells. Use bracket ranges for O(1) random access.
+
+- **Lazy ranges allocate thunks** — each element is wrapped in a thunk for memoization. Forcing the full list allocates O(n) thunks; use eager ranges for small known-size sequences.
+
+* 8. Implementation Notes
+
+| Component   | Context File        | Topic                                        |
+|-------------+---------------------+----------------------------------------------|
+| Codegen     | codegen-ops.org     | [[file:../context/codegen-ops.org::#ops-range][Range operation codegen]] |
+| Language    | language.org        | [[file:../context/language.org::#primitive-array][Eager range representation]] |
+| Thunks      | language.org        | [[file:../context/language.org::runtime-value-system][Lazy thunk system]] |
+| Reader      | reader.org          | [[file:../context/reader.org::#ast-and-token-header][Range literal parsing]] |
+| Inference   | infer.org           | [[file:../context/infer.org::#expression-inference][Type inference for range expressions]] |
+| Source      | runtime             | =list_from=, =list_from_step= runtime functions |
+
+Related Pages
 
 - [[file:collections.org][Collections]] -- overview of all collection types
 - [[file:iteration.org][Iteration]] -- for loops over ranges
 - [[file:arrays.org][Arrays]] -- array generation from ranges
 - [[file:list.org][Lists]] -- list generation from ranges
 - [[file:numeric.org][Numeric Types]] -- numeric types in ranges
+- [[file:functional-programming.org][Functional Programming]] -- lazy evaluation
+- [[file:performance.org][Performance]] -- eager vs lazy costs
+- [[file:recursion.org][Recursion]] -- recursive range algorithms
+- [[file:core.org][Core Library]] -- range builtins
 
-* Context Links
+Further Reading
 
-- [[file:../context/language.org][context/language.org]] — range dispatch
+- [[file:../context/language.org][context/language.org]] — range dispatch, thunk system
 - [[file:../context/codegen-ops.org][context/codegen-ops.org]] — range codegen
+- [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]]
+- [[file:../context/infer.org][context/infer.org]] — type inference for ranges
+- [[file:../context/reader.org][context/reader.org]] — range literal parsing
 - [[file:collections.org][Collections]] — collection type overview
 - [[file:list.org][Lists]] — lazy range underlying structure
 - [[file:arrays.org][Arrays]] — eager range underlying structure

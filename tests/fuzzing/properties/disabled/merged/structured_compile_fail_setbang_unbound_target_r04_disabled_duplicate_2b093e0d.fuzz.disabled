@@ -1,0 +1,16 @@
+name: structured_compile_fail_setbang_unbound_target_r04_disabled_duplicate_2b093e0d
+section: current-compile-fail
+tier: experimental
+kind: compile-fail
+features: compile-fail, set!, unbound
+compiler-path: codegen.set_bang, diagnostic.expected_error, infer.mutation, infer.unbound_symbol, runner.compile_fail_kind
+signal: high
+corpus-role: merged-duplicate
+uses-atoms: atom.binding.set-bang
+merged-into: structured_compile_fail_setbang_unbound_target_r01
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int@edge
+type: Bool
+expect-diagnostic: error:
+description: V10 compile-fail property setbang_unbound_target round 4; must fail to compile and emit a compiler error.
+law: (set! missing {a})

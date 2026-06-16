@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-lambda-docstring
-;; TEST-CONTEXT: monadc.context.language.reader-header-coverage
-;; TEST-PURPOSE: Runtime lambda payload coverage includes docstring-bearing lambdas.
-;; TEST-ATOM: A lambda with a docstring and typed parameter compiles and can be called.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(define f (lambda ([x : Int] -> Int) "doc" (+ x 1)))
-(show (f 41))

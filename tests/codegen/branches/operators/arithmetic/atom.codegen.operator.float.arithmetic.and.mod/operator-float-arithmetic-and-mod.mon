@@ -1,0 +1,27 @@
+;; TEST-ID: tests.codegen.branch.operator-float-arithmetic-and-mod
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: arithmetic
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.operator.float.arithmetic.and.mod
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover floating arithmetic and floating remainder codegen.
+;; TEST-ATOM: Mixed float arithmetic should choose floating LLVM ops; float mod should use FRem.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:9432-9436 float comparisons
+;; TEST-COVERAGE: codegen.c:9463-9492 float mod branch
+;; TEST-COVERAGE: codegen.c:9802-9805 floating arithmetic ops
+
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/arithmetic/atom.codegen.operator.float.arithmetic.and.mod
+;; TEST-MENU-PATH: codegen/branches/operators/arithmetic/atom.codegen.operator.float.arithmetic.and.mod
+;; TEST-ATOM-LEAF: atom.codegen.operator.float.arithmetic.and.mod
+;; TEST-CLI-TARGET: codegen branches operators arithmetic
+(module Main)
+(show (+ 1.5 2))
+(show (- 7.5 2))
+(show (* 1.5 4))
+(show (/ 7.5 2.5))
+(show (% 5.5 2.0))

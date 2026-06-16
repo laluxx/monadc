@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.deep.deep_cast_int_float_char_string
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 00-values
+;; TEST-SUBSET: casts-conversions
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.values.casts.conversions.deep.cast.int.float.char.string
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise numeric, char, and string cast lowering.
+;; TEST-ATOM: Cast constructors should lower through emit_type_cast/runtime conversion paths.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:emit_type_cast integer/float/char conversion branches
+
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/casts-conversions/atom.codegen.values.casts.conversions.deep.cast.int.float.char.string
+;; TEST-MENU-PATH: codegen/branches/values/casts-conversions/atom.codegen.values.casts.conversions.deep.cast.int.float.char.string
+;; TEST-ATOM-LEAF: atom.codegen.values.casts.conversions.deep.cast.int.float.char.string
+;; TEST-CLI-TARGET: codegen branches values casts-conversions
+(module Main)
+(show (Int 7.9))
+(show (Int (Float 7)))
+(show (Char 66))
+(show (Int (Char 66)))
+(show (String 66))

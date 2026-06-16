@@ -1,0 +1,35 @@
+;; TEST-ID: tests.codegen.type.dep.adt.layout.constructor.indexing.002
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: emit-json-failed
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: types
+;; TEST-SUBSET: dep/adt-layout/constructor-indexing
+;; TEST-QUALITY: type-system-positive-regression
+;; TEST-CODEGEN-ATOM: atom.type.dep.adt-layout.constructor-indexing.002
+;; TEST-TYPE-ATOM: atom.type.dep.adt-layout.constructor-indexing.002
+;; TEST-CONTEXT: monadc.context.language.codegen-type-system-corpus, monadc.context.language.hm-dependent-type-coverage
+;; TEST-PURPOSE: Dependent type bridge carries ADT constructor/layout type information into HM and codegen.
+;; TEST-ATOM: ADT layout/type application compatibility is preserved through match.
+;; TEST-EXPECT: compile, run
+;; TEST-MENU: types/dep/adt-layout/constructor-indexing/atom.type.dep.adt-layout.constructor-indexing.002
+;; TEST-MENU-PATH: codegen/types/dep/adt-layout/constructor-indexing/atom.type.dep.adt-layout.constructor-indexing.002
+;; TEST-ATOM-LEAF: atom.type.dep.adt-layout.constructor-indexing.002
+;; TEST-CLI-TARGET: codegen types dep adt-layout constructor-indexing
+;; TEST-INFER-PATH: infer.c:TYPE_APP ~ TYPE_LAYOUT compatibility
+;; TEST-DEP-PATH: dep.c:TERM_EMBED and global declaration bridge
+;; TEST-COVERAGE: dep.c:TERM_EMBED/type bridge
+;; TEST-COVERAGE: infer.c:TYPE_APP/TYPE_LAYOUT compatibility
+;; TEST-COVERAGE: codegen.c:ADT match branch
+;; TEST-USES-ATOM: atom.codegen.category.types
+;; TEST-USES-ATOM: atom.type.system
+;; TEST-USES-ATOM: atom.type.dep.embed
+;; TEST-USES-ATOM: atom.type.hm.type-app
+;; TEST-USES-ATOM: atom.codegen.adt.match
+;; TEST-DEPENDS-ON: atom.codegen.data.adt
+;; TEST-REFINES: atom.type.dep.adt-bridge
+
+(module Main)
+(data DepMaybe02 DNothing | DJust Int)
+(define (dep_match_02 [m : DepMaybe02] -> Int) (match m (DJust x) -> x DNothing -> 0))
+(show (dep_match_02 (DJust 5)))

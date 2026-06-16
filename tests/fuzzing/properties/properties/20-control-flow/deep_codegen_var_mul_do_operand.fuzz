@@ -1,0 +1,15 @@
+name: deep_codegen_var_mul_do_operand
+section: codegen-arithmetic-dispatch
+tier: stable
+kind: law
+features: arithmetic, codegen, do, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, codegen.sequence, infer.arithmetic, infer.equality, infer.logic, reader.ast_do
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.control.do, atom.core.equality, atom.core.multiply, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_do_last_value, signal_atom_equality_reflexive, signal_atom_multiply_associative, signal_atom_multiply_commutative, signal_atom_multiply_identity_one
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: do return value must feed multiplication correctly.
+law: (= (* (do {a} {b}) {c}) (* {b} {c}))

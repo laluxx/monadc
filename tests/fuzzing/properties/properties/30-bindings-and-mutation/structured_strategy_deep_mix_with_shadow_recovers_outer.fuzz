@@ -1,0 +1,15 @@
+name: structured_strategy_deep_mix_with_shadow_recovers_outer
+section: current-strategy-deep-mix
+tier: stable
+kind: law
+features: with, env, shadow, strategy
+compiler-path: codegen.local_load, codegen.with_binding, infer.env_child, infer.env_lookup, runner.strategy_arg, runner.typed_generator
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.with, atom.core.equality, atom.core.minus, atom.core.plus, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero, signal_atom_with_substitution
+args: a:Int@edge+if+with+do+mod b:Int@tiny+bitwise+if p:Bool@logic+if
+type: Bool
+expect: True
+description: V10 strategy property with_shadow_recovers_outer generated with deep_mix arguments to stress compiler dispatch, envs, and PHI lowering.
+law: (= (with [x {a}] (with [x (+ x {b})] (- x {b}))) {a})

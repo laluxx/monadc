@@ -1,0 +1,27 @@
+;; TEST-ID: tests.codegen.deep.deep_for_array_iteration_sum
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-SUBSET: arrays-ranges
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.arrays.ranges.deep.for.array.iteration.sum
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise for iteration over inline array literal.
+;; TEST-ATOM: for over array should bind each element and mutate accumulator.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.40.collections, atom.codegen.subset.arrays.ranges
+;; TEST-COVERAGE: codegen.c:for collection iteration branch
+;; TEST-MENU: branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.deep.for.array.iteration.sum
+;; TEST-MENU-PATH: codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.deep.for.array.iteration.sum
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.arrays.ranges.deep.for.array.iteration.sum
+;; TEST-CLI-TARGET: codegen branches collections arrays-ranges
+
+module Main
+
+define total 0
+
+for x -> [1 2 3]
+  total <- (+ total x)
+
+show total

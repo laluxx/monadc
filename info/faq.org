@@ -1,6 +1,6 @@
 #+TITLE: Frequently Asked Questions
 #+STARTUP: showeverything
-#+OPTIONS: toc:nil
+#+OPTIONS: toc:nil num:t
 #+FILETAGS: :monad:faq:info:
 
 :PROPERTIES:
@@ -10,63 +10,6 @@
 
 [[file:index.org][<- Back to Index]] · [[file:intro.org][Introduction]] · [[file:tutorial.org][Tutorial]] · [[file:syntax.org][Syntax]] · [[file:types.org][Types]] · [[file:core.org][Core Library]] · [[file:collections.org][Collections]] · [[file:errors.org][Diagnostics]]
 
-Test coverage: FAQ content is not tested; see =testing.org=.
+Test coverage: FAQ content is not tested; see [[file:testing.org][testing.org]].
 
 We don't have many questions yet — this language is young.
-
-** What does Monad code look like?
-
-#+BEGIN_SRC monad
-(define (factorial n -> Int)
-  (if (<= n 1)
-    1
-    (* n (factorial (- n 1)))))
-
-(show (factorial 10))  ;; prints 3628800
-#+END_SRC
-
-#+BEGIN_SRC wisp
-define (factorial n -> Int)
-  if (<= n 1)
-    1
-    * n (factorial (- n 1))
-
-show (factorial 10)    # prints 3628800
-#+END_SRC
-
-** How do I call C functions?
-
-#+BEGIN_SRC monad
-(include "math.h")
-(show (sqrt 144.0))   ;; prints 12.0
-#+END_SRC
-
-#+BEGIN_SRC wisp
-include "math.h"
-show (sqrt 144.0)     # prints 12.0
-#+END_SRC
-
-** Can I use two syntaxes in one file?
-
-Yes — S-expressions and Wisp mix freely within a single file:
-
-#+BEGIN_SRC monad
-(define x 5)
-# this is wisp
-set! x 10
-(show x)
-#+END_SRC
-
-* Related Pages
-
-- [[file:intro.org][Introduction]] -- language introduction
-- [[file:tutorial.org][Tutorial]] -- step-by-step tutorial
-- [[file:syntax.org][Syntax]] -- S-expression syntax
-- [[file:types.org][Types]] -- type system
-- [[file:core.org][Core Library]] -- built-in functions
-
-* Context Links
-
-- [[file:../context/language.org::codegen-gaps][context/language.org — Known codegen gaps]]
-- [[file:../context/language.org][context/language.org]] — full language reference
-- [[file:../context/philosophy.org][context/philosophy.org]] — design decisions

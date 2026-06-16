@@ -1,0 +1,32 @@
+;; TEST-ID: tests.codegen.type.hm.polymorphism.identity.and.const.017
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: types
+;; TEST-SUBSET: hm/polymorphism/identity-and-const
+;; TEST-QUALITY: type-system-positive-regression
+;; TEST-CODEGEN-ATOM: atom.type.hm.polymorphism.identity-and-const.017
+;; TEST-TYPE-ATOM: atom.type.hm.polymorphism.identity-and-const.017
+;; TEST-CONTEXT: monadc.context.language.codegen-type-system-corpus, monadc.context.language.hm-dependent-type-coverage
+;; TEST-PURPOSE: HM accepts simple identity/const definitions and preserves concrete Int signatures.
+;; TEST-ATOM: Identity and const are foundational HM atom paths used by later tests.
+;; TEST-EXPECT: compile, run
+;; TEST-MENU: types/hm/polymorphism/identity-and-const/atom.type.hm.polymorphism.identity-and-const.017
+;; TEST-MENU-PATH: codegen/types/hm/polymorphism/identity-and-const/atom.type.hm.polymorphism.identity-and-const.017
+;; TEST-ATOM-LEAF: atom.type.hm.polymorphism.identity-and-const.017
+;; TEST-CLI-TARGET: codegen types hm polymorphism identity-and-const
+;; TEST-INFER-PATH: infer.c:infer_toplevel/infer_generalise happy path
+;; TEST-COVERAGE: infer.c:infer_env_insert/infer_env_lookup
+;; TEST-COVERAGE: infer.c:infer_generalise/infer_instantiate happy path
+;; TEST-USES-ATOM: atom.codegen.category.types
+;; TEST-USES-ATOM: atom.type.system
+;; TEST-USES-ATOM: atom.type.hm.polymorphism
+;; TEST-USES-ATOM: atom.type.hm.generalise
+;; TEST-DEPENDS-ON: atom.codegen.function.call
+;; TEST-REFINES: atom.type.hm.identity
+
+(module Main)
+(define (hm_id_17 [x : Int] -> Int) x)
+(define (hm_const_17 [x : Int] [y : String] -> Int) x)
+(show (hm_id_17 18))
+(show (hm_const_17 18 "ignored"))

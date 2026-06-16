@@ -1,0 +1,15 @@
+name: structured_stress_nested_if_with_do_r01
+section: current-stress
+tier: stress
+kind: program
+features: stress, program, if, phi, with, do, arithmetic
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.deep_program, codegen.if_phi, codegen.module_body, codegen.sequence, codegen.with_binding, infer.arithmetic, infer.env_child, infer.if_phi, reader.ast_do, reader.ast_if, runner.program_kind, runner.stress_tier
+signal: high
+corpus-role: program-semantics
+uses-atoms: atom.binding.with, atom.control.do, atom.control.if, atom.core.equality, atom.core.plus, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_do_last_value, signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero, signal_atom_with_substitution
+args: a:Int@edge+if+with+do b:Int@edge+if+with+do p:Bool@logic+if q:Bool@logic+if
+type: Bool
+expect: True
+description: V11 stress program stress_nested_if_with_do round 1; combines multiple compiler paths in non-default stress tier.
+program: (show (= (with [x (if {p} {a} {b})] (do (if {q} x {a}) (+ x 0))) (if {p} {a} {b})))

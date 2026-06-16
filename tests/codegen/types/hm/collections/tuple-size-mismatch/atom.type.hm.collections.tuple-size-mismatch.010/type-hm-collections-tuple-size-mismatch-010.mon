@@ -1,0 +1,35 @@
+;; TEST-ID: tests.codegen.type.hm.collections.tuple.size.mismatch.010
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: types
+;; TEST-SUBSET: hm/collections/tuple-size-mismatch
+;; TEST-QUALITY: type-system-negative-regression
+;; TEST-CODEGEN-ATOM: atom.type.hm.collections.tuple-size-mismatch.010
+;; TEST-TYPE-ATOM: atom.type.hm.collections.tuple-size-mismatch.010
+;; TEST-CONTEXT: monadc.context.language.codegen-type-system-corpus, monadc.context.language.hm-dependent-type-coverage
+;; TEST-PURPOSE: HM fixed list/tuple checker rejects the wrong number of elements.
+;; TEST-ATOM: Declared two-element list receives three elements and must report tuple/list size mismatch.
+;; TEST-EXPECT: fail:compile
+;; TEST-MENU: types/hm/collections/tuple-size-mismatch/atom.type.hm.collections.tuple-size-mismatch.010
+;; TEST-MENU-PATH: codegen/types/hm/collections/tuple-size-mismatch/atom.type.hm.collections.tuple-size-mismatch.010
+;; TEST-ATOM-LEAF: atom.type.hm.collections.tuple-size-mismatch.010
+;; TEST-CLI-TARGET: codegen types hm collections tuple-size-mismatch
+;; TEST-TYPE-PATH: env.c:env_hm_check_call/list_count mismatch
+;; TEST-INFER-PATH: infer.c:663 tuple size mismatch
+;; TEST-ERROR-STAGE: infer
+;; TEST-ERROR-FAMILY: hm.tuple-size-mismatch
+;; TEST-ERROR-MESSAGE: Couldn't match expected list size
+;; TEST-COVERAGE: env.c:fixed list size mismatch
+;; TEST-COVERAGE: infer.c:663 tuple size mismatch
+;; TEST-USES-ATOM: atom.codegen.category.types
+;; TEST-USES-ATOM: atom.type.system
+;; TEST-USES-ATOM: atom.type.hm.collection
+;; TEST-USES-ATOM: atom.type.hm.tuple
+;; TEST-DEPENDS-ON: atom.env.error.fixed-list-size
+;; TEST-REFINES: atom.type.hm.tuple-size
+
+(module Main)
+(define (hm_tuple2_10 [xs : [Int Int]] -> Int) (+ (xs 0) (xs 1)))
+(show (hm_tuple2_10 [1 2 3]))

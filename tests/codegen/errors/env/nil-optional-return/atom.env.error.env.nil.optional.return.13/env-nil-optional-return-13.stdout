@@ -1,0 +1,1 @@
+error: Function ‘env_nil_return_13’ can return nil but return type 'Bool' does not end with ‘?’

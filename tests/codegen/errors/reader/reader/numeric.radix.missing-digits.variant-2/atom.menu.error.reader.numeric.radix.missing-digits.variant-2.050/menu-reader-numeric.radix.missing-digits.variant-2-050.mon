@@ -1,0 +1,40 @@
+;; TEST-ID: tests.codegen.menu.errors.reader.numeric.radix.missing.digits.variant.2.050
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: errors
+;; TEST-SUBSET: reader/numeric.radix.missing-digits.variant-2
+;; TEST-MENU: errors/reader/numeric.radix.missing-digits.variant-2/atom.menu.error.reader.numeric.radix.missing-digits.variant-2.050
+;; TEST-MENU-PATH: codegen/errors/reader/numeric.radix.missing-digits.variant-2/atom.menu.error.reader.numeric.radix.missing-digits.variant-2.050
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.error-menu
+;; TEST-PURPOSE: Pin reader.c diagnostic: expected digits after radix prefix '2r'
+;; TEST-ATOM: atom.menu.error.reader.numeric.radix.missing-digits.variant-2.050
+;; TEST-CODEGEN-ATOM: atom.menu.error.reader.numeric.radix.missing-digits.variant-2.050
+;; TEST-ATOM-LEAF: atom.menu.error.reader.numeric.radix.missing-digits.variant-2.050
+;; TEST-QUALITY: menu-error-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ERROR-STAGE: reader
+;; TEST-ERROR-FAMILY: numeric.radix.missing-digits.variant-2
+;; TEST-ERROR-MESSAGE: expected digits after radix prefix '2r'
+;; TEST-ERROR-SOURCE: reader.c
+;; TEST-ERROR-PATH: reader.c:1540
+;; TEST-CODEGEN-PATH: diagnostic.reader.numeric.radix.missing-digits.variant-2
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-TAG: menu
+;; TEST-COVERAGE: reader.c:1540 expected digits after radix prefix '2r'
+;; TEST-USES-ATOM: atom.menu.error.reader.numeric.radix.missing-digits.variant-2.050
+;; TEST-USES-ATOM: atom.error.reader
+;; TEST-USES-ATOM: atom.error.reader.numeric.radix.missing-digits.variant-2
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-DEPENDS-ON: atom.reader.lex.parse
+;; TEST-REFINES: atom.error.reader
+;; TEST-REFINES: atom.error.reader.numeric.radix.missing-digits.variant-2
+;; TEST-REFINES: atom.reader.error
+;; TEST-RELATED: atom.codegen.error.menu
+;; TEST-CLI-TARGET: codegen errors reader reader
+
+(module Main)
+;; reader menu variant 2
+(show 2r)

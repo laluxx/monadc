@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.branch.diagnostic-empty-list-codegen
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: compile-fail
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.begin.empty.list
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover AST_LIST empty-list codegen diagnostic.
+;; TEST-ATOM: An empty list expression should be rejected by codegen.
+;; TEST-EXPECT: fail:compile
+;; TEST-COVERAGE: codegen.c:4161 AST_LIST empty list diagnostic
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/compile-fail/atom.codegen.diagnostic.begin.empty.list
+;; TEST-MENU-PATH: codegen/errors/codegen/compile-fail/atom.codegen.diagnostic.begin.empty.list
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.begin.empty.list
+;; TEST-CLI-TARGET: codegen errors codegen compile-fail
+(module Main)
+()

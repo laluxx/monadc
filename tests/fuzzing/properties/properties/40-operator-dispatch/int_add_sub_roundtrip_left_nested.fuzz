@@ -1,0 +1,15 @@
+name: int_add_sub_roundtrip_left_nested
+section: arithmetic
+tier: stable
+kind: law
+features: arithmetic, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Adding two values and subtracting one of them inside a larger expression must round-trip the other.
+law: (= (fuzz-sub (fuzz-add (fuzz-add {a} {b}) {c}) (fuzz-add {b} {c})) {a})

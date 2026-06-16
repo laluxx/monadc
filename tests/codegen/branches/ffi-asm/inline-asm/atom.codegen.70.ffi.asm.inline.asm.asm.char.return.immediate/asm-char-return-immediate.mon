@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.asm.char-return-immediate
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.70.ffi.asm.inline.asm.asm.char.return.immediate
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: inline-asm
+;; TEST-CATEGORY: 70-ffi-asm
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Immediate mov can return Char values.
+;; TEST-ATOM: mov 65 %al ret returns character A.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:70-ffi-asm/inline-asm branch family
+;; TEST-USES-ATOM: atom.codegen.category.70.ffi.asm
+;; TEST-MENU: branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.char.return.immediate
+;; TEST-MENU-PATH: codegen/branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.char.return.immediate
+;; TEST-ATOM-LEAF: atom.codegen.70.ffi.asm.inline.asm.asm.char.return.immediate
+;; TEST-CLI-TARGET: codegen branches ffi-asm inline-asm
+module AsmTest
+
+define asm-char-const :: Int -> Char
+  x -> (asm mov 65 %al ret)
+
+show (asm-char-const 0)

@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.rt-data-record-constructor
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.50.data.layout.records.rt.data.record.constructor
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: records
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus, monadc.context.language.layout-records
+;; TEST-PURPOSE: Runtime record-like values use layout declarations, not ADT brace fields.
+;; TEST-ATOM: (layout Person [name :: String] [age :: Int]) constructs and exposes named fields.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:50-data-layout/records branch family
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/records/atom.codegen.50.data.layout.records.rt.data.record.constructor
+;; TEST-MENU-PATH: codegen/branches/data-layout/records/atom.codegen.50.data.layout.records.rt.data.record.constructor
+;; TEST-ATOM-LEAF: atom.codegen.50.data.layout.records.rt.data.record.constructor
+;; TEST-CLI-TARGET: codegen branches data-layout records
+(module Main)
+(layout Person [name :: String] [age :: Int])
+(define p (Person "ada" 37))
+(show p.name)
+(show p.age)

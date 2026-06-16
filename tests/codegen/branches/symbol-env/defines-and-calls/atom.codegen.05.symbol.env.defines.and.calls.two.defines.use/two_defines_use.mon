@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.two-defines-use
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.05.symbol.env.defines.and.calls.two.defines.use
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: defines-and-calls
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Two defines compute a combined expression.
+;; TEST-ATOM: (define ...) twice then (+ x y) evaluates correctly.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:05-symbol-env/defines-and-calls branch family
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/defines-and-calls/atom.codegen.05.symbol.env.defines.and.calls.two.defines.use
+;; TEST-MENU-PATH: codegen/branches/symbol-env/defines-and-calls/atom.codegen.05.symbol.env.defines.and.calls.two.defines.use
+;; TEST-ATOM-LEAF: atom.codegen.05.symbol.env.defines.and.calls.two.defines.use
+;; TEST-CLI-TARGET: codegen branches symbol-env defines-and-calls
+(module Main)
+(define x 10)
+(define y 32)
+(show (+ x y))

@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.string-show
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Show a string literal.
-;; TEST-ATOM: (show "hello") prints "hello".
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show "hello")

@@ -1,0 +1,35 @@
+;; TEST-ID: tests.codegen.type.hm.optional.nil.return.without.question.004
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: types
+;; TEST-SUBSET: hm/optional/nil-return-without-question
+;; TEST-QUALITY: type-system-negative-regression
+;; TEST-CODEGEN-ATOM: atom.type.hm.optional.nil-return-without-question.004
+;; TEST-TYPE-ATOM: atom.type.hm.optional.nil-return-without-question.004
+;; TEST-CONTEXT: monadc.context.language.codegen-type-system-corpus, monadc.context.language.hm-dependent-type-coverage
+;; TEST-PURPOSE: HM optional checker rejects a function that can return nil without a ? return annotation.
+;; TEST-ATOM: Nil return must force Optional return type syntax.
+;; TEST-EXPECT: fail:compile
+;; TEST-MENU: types/hm/optional/nil-return-without-question/atom.type.hm.optional.nil-return-without-question.004
+;; TEST-MENU-PATH: codegen/types/hm/optional/nil-return-without-question/atom.type.hm.optional.nil-return-without-question.004
+;; TEST-ATOM-LEAF: atom.type.hm.optional.nil-return-without-question.004
+;; TEST-CLI-TARGET: codegen types hm optional nil-return-without-question
+;; TEST-TYPE-PATH: env.c:env_hm_infer_define/nil optional return
+;; TEST-INFER-PATH: infer.c:TYPE_NIL/TYPE_OPTIONAL guards
+;; TEST-ERROR-STAGE: infer
+;; TEST-ERROR-FAMILY: hm.nil-return
+;; TEST-ERROR-MESSAGE: can return nil but return type
+;; TEST-COVERAGE: env.c:nil optional return checker
+;; TEST-COVERAGE: infer.c:TYPE_NIL strictly unifies only with Optional
+;; TEST-USES-ATOM: atom.codegen.category.types
+;; TEST-USES-ATOM: atom.type.system
+;; TEST-USES-ATOM: atom.type.hm.optional
+;; TEST-USES-ATOM: atom.type.hm.nil
+;; TEST-DEPENDS-ON: atom.env.error.nil.optional.return
+;; TEST-REFINES: atom.type.hm.optional.nil-guard
+
+(module Main)
+(define (hm_nil_return_04 [flag : Bool] -> Int) (if flag nil 0))
+(show (hm_nil_return_04 False))

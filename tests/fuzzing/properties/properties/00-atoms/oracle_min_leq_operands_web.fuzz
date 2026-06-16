@@ -1,0 +1,15 @@
+name: oracle_min_leq_operands_web
+section: oracle-atom-web
+tier: oracle
+kind: law
+features: oracle, arithmetic, comparison, array, string
+compiler-path: oracle.expect_python, codegen.operator.comparison, runtime.array.index, runtime.string.contains
+signal: high
+corpus-role: oracle
+uses-atoms: atom.core.order, atom.core.comparison
+depends-on: atom.core.order, atom.core.comparison
+args: a:Int@edge b:Int@edge
+type: Bool
+expect-python: min(a,b) <= a and min(a,b) <= b
+description: Python-oracle property connected to atom dependencies.
+law: (and (<= (fuzz-min {a} {b}) {a}) (<= (fuzz-min {a} {b}) {b}))

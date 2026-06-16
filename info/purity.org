@@ -9,7 +9,7 @@
 :CONTEXT:  monadc.context.language, monadc.context.philosophy
 :END:
 
-[[file:index.org][<- Back to Index]] · [[file:functional-programming.org][Functional Programming]] · [[file:lambda.org][Lambda]] · [[file:mutation.org][Mutation]] · [[file:control.org][Control Flow]] · [[file:types.org][Types]] · [[file:recursion.org][Recursion]]
+[[file:index.org][<- Back to Index]] · [[file:functional-programming.org][Functional Programming]] · [[file:lambda.org][Lambda]] · [[file:mutation.org][Mutation]] · [[file:control.org][Control Flow]] · [[file:types.org][Types]] · [[file:recursion.org][Recursion]] · [[file:define.org][Define]] · [[file:let.org][Let Bindings]] · [[file:conditionals.org][Conditionals]]
 
 Test coverage: purity is inherent in the design — all codegen fixtures
 verify that functions return the same value for the same arguments
@@ -19,42 +19,61 @@ Monad functions are pure by default: given the same arguments, they
 return the same value and produce no side effects. This is enforced by
 the type system and the immutability of bindings.
 
-* Pure by Default
+For the design rationale, see [[file:../context/philosophy.org][context/philosophy.org]] and
+[[file:functional-programming.org][Functional Programming]].
+
+* 1. Pure by Default
 
 All =define= and =let= bindings are immutable unless explicitly mutated:
 
 #+BEGIN_SRC monad
-(define x 42)                    ;; immutable — always 4)
-(define (square n) (* n n))     ;; pure — same input, same outpu)
+(define x 42)                    ;; immutable — always 42
+(define (square n) (* n n))     ;; pure — same input, same output
 #+END_SRC
 
 #+BEGIN_SRC wisp
-define x 42                    ;; immutable — always 4)
-define (square n) (* n n)     ;; pure — same input, same outpu)
+define x 42                    ;; immutable — always 42
+define (square n) (* n n)     ;; pure — same input, same output
 #+END_SRC
 
-A function that does not call =set!= or =<-= is guaranteed pure.
+A function that does not call =set!= or =<-= is guaranteed pure. See
+[[file:define.org][Define]] and [[file:let.org][Let Bindings]].
 
-* Referential Transparency
+*** Key Points
+- Bindings are immutable by default — no =const/=let=var distinction
+- Purity follows from immutability: no =set!= → pure function
+- The compiler can rely on this for optimisation (e.g., CSE, inlining)
+
+See also: [[file:define.org][Define]], [[file:let.org][Let Bindings]]
+
+* 2. Referential Transparency
 
 An expression is referentially transparent when it can be replaced by
 its value without changing program behavior:
 
 #+BEGIN_SRC monad
 ;; These are equivalent:
-(+ (square 3) (square 3))        ;; 9 + 9 = 1)
-(+ 9 9)                          ;; same result — square is pur)
+(+ (square 3) (square 3))        ;; 9 + 9 = 18
+(+ 9 9)                          ;; same result — square is pure
 #+END_SRC
 
 #+BEGIN_SRC wisp
 ;; These are equivalent:
-+ (square 3) (square 3)        ;; 9 + 9 = 1)
-+ 9 9                          ;; same result — square is pur)
++ (square 3) (square 3)        ;; 9 + 9 = 18
++ 9 9                          ;; same result — square is pure
 #+END_SRC
 
-=set!= breaks referential transparency for the mutated binding.
+=set!= breaks referential transparency for the mutated binding. See
+[[file:mutation.org][Mutation]].
 
-* Mutation Impurifies
+*** Key Points
+- Referential transparency enables local reasoning
+- Pure expression = safe to inline, reorder, cache, or common-subexpression-eliminate
+- Only =set!= and =<-= break transparency — everything else is safe
+
+See also: [[file:functional-programming.org][Functional Programming]]
+
+* 3. Mutation Impurifies
 
 Using =set!= or =<-= inside a function makes it impure:
 
@@ -62,20 +81,28 @@ Using =set!= or =<-= inside a function makes it impure:
 (define counter 0)
 (define (increment)
   (set! counter (+ counter 1))
-  (counter)                        ;; impure — different result each call)
+  counter                          ;; impure — different result each call)
 #+END_SRC
 
 #+BEGIN_SRC wisp
 define counter 0
-(define (increment)
+define increment
   set! counter (+ counter 1)
-  counter                        ;; impure — different result each call)
+  counter                        ;; impure — different result each call
 #+END_SRC
 
 The compiler tracks which bindings are mutated to avoid unnecessary
-boxing. Future versions will track impurity for optimization.
+boxing. Future versions will track impurity for optimization. See
+[[file:../context/language.org][context/language.org]] for purity tracking details.
 
-* Benefits of Purity
+*** Key Points
+- Mutation is opt-in: =set!= and =<-= are the only impure operations
+- Impurity is localised: only the containing function is affected
+- The compiler tracks mutation to guide boxing decisions
+
+See also: [[file:mutation.org][Mutation]]
+
+* 4. Benefits of Purity
 
 | Benefit          | Description                                    |
 |------------------+------------------------------------------------|
@@ -85,37 +112,86 @@ boxing. Future versions will track impurity for optimization.
 | Parallelism      | No shared mutable state                        |
 | Reasoning        | Local reasoning — no hidden effects            |
 
-* Immutable Data Structures
+See [[file:testing.org][Testing]] for testing pure functions and
+[[file:functional-programming.org][Functional Programming]] for composition patterns.
+
+*** Key Points
+- Purity makes every function a mathematical function — input → output
+- Testing, caching, and parallelism all become simpler
+- Local reasoning: you never need to check what else might have changed state
+
+See also: [[file:testing.org][Testing]], [[file:functional-programming.org][Functional Programming]]
+
+* 5. Immutable Data Structures
 
 Collection operations return modified copies by default:
 
 #+BEGIN_SRC monad
-(assoc map key val)              ;; returns new map, original unchange)
-(conj set elem)                 ;; returns new set, original unchange)
-(cons elem list)               ;; returns new list, original unchange)
+(assoc map key val)              ;; returns new map, original unchanged
+(conj set elem)                 ;; returns new set, original unchanged
+(cons elem list)               ;; returns new list, original unchanged
 #+END_SRC
 
 #+BEGIN_SRC wisp
-assoc map key val              ;; returns new map, original unchange)
-conj set elem                 ;; returns new set, original unchange)
-cons elem list               ;; returns new list, original unchange)
+assoc map key val              ;; returns new map, original unchanged
+conj set elem                 ;; returns new set, original unchanged
+cons elem list               ;; returns new list, original unchanged
 #+END_SRC
 
 Mutable variants (=assoc!=, =conj!=, =append!=) exist for performance
-but are opt-in.
+but are opt-in. See [[file:collections.org][Collections]], [[file:map.org][Maps]],
+[[file:set.org][Sets]], and [[file:list.org][Lists]].
 
-* Related Pages
+*** Key Points
+- Immutable by default — mutable variants are explicit opt-in (=name!= convention)
+- Persistent data structures enable efficient immutable updates
+- Mutable variants exist for hot paths where allocation cost matters
+
+See also: [[file:collections.org][Collections]]
+
+* 6. Implementation Notes
+
+Key source locations for purity tracking:
+
+| Source | Key Symbols / Sections |
+|--------+-----------------------|
+| [[file:../codegen.c][codegen.c]] | =set!= and =<-= codegen — mutability detection |
+| [[file:../infer.c][infer.c]] | Type inference for mutable vs immutable bindings |
+| [[file:../reader.c][reader.c]] | =AST_SET= (=set!=) node construction |
+| [[file:../context/language.org][context/language.org]] | Purity tracking and semantics |
+| [[file:../context/philosophy.org][context/philosophy.org]] | Design rationale for purity |
+| [[file:../context/codegen.org][context/codegen.org]] | Codegen for pure vs impure code |
+| [[file:../context/codegen-ops.org][context/codegen-ops.org]] | =set!= and =<-= codegen operations |
+
+Related context documents:
+
+- [[file:../context/language.org][context/language.org]] — purity semantics, known gaps
+- [[file:../context/philosophy.org][context/philosophy.org]] — why purity by default?
+- [[file:../context/codegen.org][context/codegen.org]] — codegen for pure vs impure
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — codegen operations for mutation
+- [[file:../context/infer.org][context/infer.org]] — type inference and purity tracking
+
+* 7. Related Pages
 
 - [[file:functional-programming.org][Functional Programming]] -- functional style guide
 - [[file:lambda.org][Lambda]] -- pure anonymous functions
 - [[file:mutation.org][Mutation]] -- set!, <-, impurity
 - [[file:recursion.org][Recursion]] -- pure recursive functions
 - [[file:types.org][Types]] -- type system and purity
+- [[file:define.org][Define]] -- immutable value bindings
+- [[file:let.org][Let Bindings]] -- immutable local bindings
+- [[file:conditionals.org][Conditionals]] -- pure conditional expressions
+- [[file:testing.org][Testing]] -- testing pure functions
+- [[file:collections.org][Collections]] -- immutable collection operations
+- [[file:control.org][Control Flow]] -- pure control flow constructs
 
-* Context Links
+* 8. Further Reading
 
-- [[file:../context/language.org][context/language.org]] — purity tracking
-- [[file:../context/philosophy.org][context/philosophy.org]] — design rationale
+- [[file:../context/language.org][context/language.org]] — purity tracking and semantics
+- [[file:../context/philosophy.org][context/philosophy.org]] — design rationale for purity
+- [[file:../context/codegen.org][context/codegen.org]] — codegen for pure vs impure code
 - [[file:functional-programming.org][Functional Programming]] — functional style guide
 - [[file:mutation.org][Mutation]] — set!, <-, impurity
 - [[file:lambda.org][Lambda]] — pure anonymous functions
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — codegen operations
+- [[file:../context/infer.org][context/infer.org]] — type inference and purity

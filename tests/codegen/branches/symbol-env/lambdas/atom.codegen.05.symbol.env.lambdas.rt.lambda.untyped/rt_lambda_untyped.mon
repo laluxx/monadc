@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-lambda-untyped
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.05.symbol.env.lambdas.rt.lambda.untyped
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: lambdas
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Untyped lambda with paren syntax works at runtime.
+;; TEST-ATOM: ((lambda (x) (+ x 1)) 41) = 42.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:05-symbol-env/lambdas branch family
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/lambdas/atom.codegen.05.symbol.env.lambdas.rt.lambda.untyped
+;; TEST-MENU-PATH: codegen/branches/symbol-env/lambdas/atom.codegen.05.symbol.env.lambdas.rt.lambda.untyped
+;; TEST-ATOM-LEAF: atom.codegen.05.symbol.env.lambdas.rt.lambda.untyped
+;; TEST-CLI-TARGET: codegen branches symbol-env lambdas
+(module Main)
+(show ((lambda (x) (+ x 1)) 41))

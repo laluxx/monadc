@@ -1,0 +1,15 @@
+name: oracle_abs_non_negative_web
+section: oracle-atom-web
+tier: oracle
+kind: law
+features: oracle, arithmetic, comparison, array, string
+compiler-path: oracle.expect_python, codegen.operator.comparison, runtime.array.index, runtime.string.contains
+signal: high
+corpus-role: oracle
+uses-atoms: atom.core.order, atom.core.int
+depends-on: atom.core.order, atom.core.int
+args: x:Int@edge+if
+type: Bool
+expect-python: abs(x) >= 0
+description: Python-oracle property connected to atom dependencies.
+law: (>= (abs {x}) 0)

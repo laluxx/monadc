@@ -16,11 +16,13 @@ fixtures in =rt_control_all.mon= and =rt_let_*.mon=.
 
 =let= forms create local bindings — they introduce new variable scopes
 within an expression. All =let= forms are expressions: they evaluate to
-the body's return value.
+the body's return value. Unlike [[file:define.org][=define=]] (which is
+module-level), =let= bindings are lexically scoped to their body.
 
-* let
+* 1. let
 
-Sequential bindings, evaluated in parallel (no dependency):
+Sequential bindings, evaluated in parallel (no dependency between
+bindings):
 
 #+BEGIN_SRC monad
 (let [x 1 y 2] (+ x y))            ;; 3
@@ -35,9 +37,18 @@ let [name "world"]
 #+END_SRC
 
 Each binding in the vector sees the outer scope, not earlier bindings
-in the same =let=. Reader-desugared into nested lambda applications.
+in the same =let=. Reader-desugared into nested lambda applications
+([[file:../context/reader.org::sugar-registry][context/reader.org — Sugar Registry]]).
 
-* let*
+#+BEGIN_QUOTE
+Key Points:
+- Bindings are evaluated in parallel (no cross-reference)
+- Desugars to =((lambda [x y] body) 1 2)=
+- Returns the body's value
+- No strcmp dispatch handler — use Wisp or let desugar only
+#+END_QUOTE
+
+* 2. let*
 
 Sequential bindings, evaluated left-to-right:
 
@@ -52,11 +63,13 @@ let* [a 10 b * a 2 c + a b] c
 #+END_SRC
 
 Each binding sees all previous bindings. Desugars to nested =let=
-forms (each with a single binding).
+forms (each with a single binding). See
+[[file:../context/reader.org::sugar-registry][context/reader.org — Sugar Registry (let desugar)]].
 
-* letrec
+* 3. letrec
 
-Recursive bindings — allows self-reference and mutual recursion:
+Recursive bindings — allows self-reference and mutual recursion within
+a local scope:
 
 #+BEGIN_SRC monad
 (letrec [fact (lambda [n]
@@ -80,9 +93,55 @@ letrec [even? lambda [n] if (= n 0) True (odd? (- n 1))
   even? 4
 #+END_SRC
 
-Reader-desugared — no separate strcmp dispatch handler exists.
+Reader-desugared — no separate strcmp dispatch handler exists
+([[file:../context/language.org::codegen-gaps][context/language.org — Known Gaps]]).
+See [[file:recursion.org][Recursion]] for mutual recursion patterns.
 
-* Scope Rules
+** 3.1 letrec with List Recursion
+
+#+BEGIN_SRC monad
+(letrec [sum (lambda [xs]
+               (match xs
+                 [] -> 0
+                 [x|rest] -> (+ x (sum rest))))]
+  (sum [1 2 3 4 5]))               ;; 15
+#+END_SRC
+
+#+BEGIN_SRC wisp
+letrec [sum lambda [xs]
+         match xs
+           [] -> 0
+           [x|rest] -> + x (sum rest)]
+  sum [1 2 3 4 5]
+#+END_SRC
+
+#+BEGIN_QUOTE
+Key Points:
+- =letrec= enables local recursion and mutual recursion
+- All bindings are in scope for each other's bodies
+- No strcmp dispatch handler (reader-desugared)
+- Essential for local recursive helpers without top-level =define=
+#+END_QUOTE
+
+* 4. Typed let Bindings
+
+All =let= forms support type annotations on bindings using the same
+bracket syntax as [[file:define.org][=define=]]:
+
+#+BEGIN_SRC monad
+(let [[x :: Int] 1 [y :: Int] 2] (+ x y))
+(let* [[acc :: Int] 0 [n :: Int] 10] (+ acc n))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+let [[x :: Int] 1 [y :: Int] 2] + x y
+let* [[acc :: Int] 0 [n :: Int] 10] + acc n
+#+END_SRC
+
+See [[file:types.org][Types]] for type annotation syntax and
+[[file:type-inference.org][Type Inference]] for inference rules.
+
+* 5. Scope Rules
 
 | Form    | Evaluation Order | Can Refer to Earlier? | Can Be Recursive? |
 |---------+------------------+-----------------------+-------------------|
@@ -92,7 +151,7 @@ Reader-desugared — no separate strcmp dispatch handler exists.
 
 All three use bracket vector syntax: =[name value ...]=.
 
-* Desugaring
+* 6. Desugaring
 
 All =let= forms are reader-level desugaring — they produce =AST_LAMBDA=
 and =AST_APP= nodes before codegen:
@@ -102,11 +161,17 @@ and =AST_APP= nodes before codegen:
 - =(letrec [f ...] body)= → inserted directly as =AST_LETREC= node
 
 Known gap: =let=, =let*=, =letrec= have no strcmp dispatch handler in
-codegen. They are =register_builtins=-only symbols — =(let ...)= in
+codegen ([[file:../context/language.org::codegen-gaps][context/language.org — Known Gaps]]).
+They are =register_builtins=-only symbols
+([[file:../codegen.c::12960][codegen.c:12960]]) — =(let ...)= in
 paren-mode is treated as an ordinary variable reference. Wisp syntax
 for =let= works because the reader processes it first.
 
-* with (Sequential Evaluation)
+See [[file:../context/reader.org::sugar-registry][context/reader.org — Sugar Registry]]
+and [[file:../context/reader.org::reader-lambda-params][context/reader.org — Lambda Param Syntax]]
+for reader-level desugaring details.
+
+* 7. with (Sequential Evaluation)
 
 =(with [x 1 y 2] body)= — a sugar for sequential =let= bindings with
 codegen dispatch (works in paren-mode):
@@ -119,8 +184,87 @@ codegen dispatch (works in paren-mode):
 with [x 1 y + x 1] + x y
 #+END_SRC
 
-=with= has a strcmp handler in codegen ([[file:../codegen.c::7841]]),
-unlike =let=.
+=with= has a strcmp handler in codegen ([[file:../codegen.c::7841][codegen.c:7841]]),
+unlike =let=. See [[file:sequencing.org][Sequencing]] for more on =with=.
+
+** 7.1 with vs let Comparison
+
+| Aspect       | let                              | with                             |
+|--------------+----------------------------------+----------------------------------|
+| Evaluation   | Parallel                         | Sequential                       |
+| Paren-mode   | No strcmp handler                | Has strcmp handler               |
+| Desugaring   | Lambda application               | Direct codegen                   |
+| Use case     | Independent bindings             | Dependent bindings               |
+
+* 8. Nested let Forms
+
+#+BEGIN_SRC monad
+(let [x 1]
+  (let [y 2]
+    (+ x y)))                       ;; 3
+#+END_SRC
+
+#+BEGIN_SRC wisp
+let [x 1]
+  let [y 2]
+    + x y
+#+END_SRC
+
+Nesting is the standard way to combine independent binding scopes.
+Each inner =let= captures the outer bindings via lexical scoping.
+
+* 9. Implementation Notes
+
+Key source locations for let bindings:
+
+| Aspect                | Location                                                              |
+|-----------------------+-----------------------------------------------------------------------|
+| Sugar registry        | [[file:../context/reader.org::sugar-registry][context/reader.org — Sugar Registry]]          |
+| Lambda param syntax   | [[file:../context/reader.org::reader-lambda-params][context/reader.org — Lambda Param Syntax]] |
+| Binding constructs    | [[file:../context/language.org::binding-constructs][context/language.org — Binding Constructs]] |
+| Codegen gaps          | [[file:../context/language.org::codegen-gaps][context/language.org — Known Gaps]]           |
+| =with= handler        | [[file:../codegen.c::7841][codegen.c:7841]] — with codegen                   |
+| Builtins registration | [[file:../codegen.c::12960][codegen.c:12960]] — register_builtins             |
+
+All =let= variants are processed by the reader into core AST nodes
+before codegen sees them. The =with= form is the only sequential
+binding with a direct codegen handler, making it the practical choice
+when paren-mode dispatch is required.
+
+#+BEGIN_QUOTE
+Key Points:
+- =let=: parallel, non-recursive, no strcmp
+- =let*=: sequential, non-recursive, no strcmp
+- =letrec=: lazy, recursive, no strcmp
+- =with=: sequential, has strcmp, works in paren-mode
+- Prefer =with= when you need paren-mode dispatch with sequential bindings
+#+END_QUOTE
+
+* 10. Runnable Example
+
+#+BEGIN_SRC monad
+;; run with: monadc
+(define (sum-to [n :: Int] -> Int)
+  (letrec [loop (lambda [acc i]
+                  (if (> i n) acc
+                    (loop (+ acc i) (+ i 1))))]
+    (loop 0 1)))
+(show (sum-to 10))  ;; 55
+#+END_SRC
+
+* 11. Gotchas
+
+- **No strcmp handler**: =let=, =let*=, =letrec= have no codegen
+  dispatch in paren-mode ([[file:../codegen.c::12960][codegen.c:12960]]).
+  They are =register_builtins=-only — =(let ...)= in paren-mode is
+  treated as a variable reference. Use Wisp syntax or =with= instead.
+- **Parallel evaluation**: =let= bindings cannot refer to each other.
+  Use =let*= (=let* [x 1 y (+ x 1)]=) when you need sequential deps.
+- **No local recursion from =let=/=let*=**: Only =letrec= supports
+  recursive bindings. =let= and =let*= fail if a binding refers to
+  itself.
+- **=with= is the practical choice**: Unlike =let=, =with= has a strcmp
+  handler and is callable from paren-mode with sequential semantics.
 
 * Related Pages
 
@@ -129,12 +273,30 @@ unlike =let=.
 - [[file:control.org][Control Flow]] -- control flow and let bindings
 - [[file:sequencing.org][Sequencing]] -- with form for sequential bindings
 - [[file:functional-programming.org][Functional Programming]] -- immutability and let
+- [[file:define.org][Define]] -- top-level bindings vs let
+- [[file:mutation.org][Mutation]] -- mutable rebinding with set!
+- [[file:types.org][Types]] -- type annotations in let bindings
+
+* Further Reading
+
+- [[file:../context/language.org][context/language.org]] — let/let*/letrec representation
+- [[file:../context/language.org::binding-constructs][context/language.org — Binding Constructs]]
+- [[file:../context/language.org::codegen-gaps][context/language.org — Known Gaps]]
+- [[file:../context/reader.org][context/reader.org]] — reader desugaring
+- [[file:../context/reader.org::sugar-registry][context/reader.org — Sugar Registry (let desugar)]]
+- [[file:../codegen.c][codegen.c]] — with handler, lambda codegen
+- [[file:../tests/codegen/rt_let_nested.mon][rt_let_nested.mon]] — nested let test fixtures
+- [[file:../tests/codegen/branches/control-flow/lexical-scope/][tests/ — let/let* test fixtures]]
+- [[file:../context/tests-arch.org][context/tests-arch.org]] — test suite architecture
 
 * Context Links
 
 - [[file:../context/language.org][context/language.org]] — let/let*/letrec representation
+- [[file:../context/language.org::binding-constructs][context/language.org — Binding Constructs]]
 - [[file:../context/language.org::codegen-gaps][context/language.org — Known gaps]]
+- [[file:../context/reader.org][context/reader.org]] — reader desugaring
+- [[file:../context/reader.org::sugar-registry][context/reader.org — Sugar Registry]]
 - [[file:../codegen.c][codegen.c]] — with handler, lambda codegen
 - [[file:control.org][Control Flow]] — if, for, while, with
 - [[file:lambda.org][Lambda]] — lambda expressions
-- [[file:recursion.org][Recursion]] — recursive functions and letrec
+- [[file:recursion.org][Recursion]] -- recursive functions and letrec

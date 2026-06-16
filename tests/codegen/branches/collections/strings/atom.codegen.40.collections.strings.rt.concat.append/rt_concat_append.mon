@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-concat-append
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.strings.rt.concat.append
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: strings
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Runtime ++ (concat) function works.
+;; TEST-ATOM: (++ '(1 2) '(3 4)) = (1 2 3 4).
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:40-collections/strings branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/strings/atom.codegen.40.collections.strings.rt.concat.append
+;; TEST-MENU-PATH: codegen/branches/collections/strings/atom.codegen.40.collections.strings.rt.concat.append
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.strings.rt.concat.append
+;; TEST-CLI-TARGET: codegen branches collections strings
+(module Main)
+(show (++ '(1 2) '(3 4)))

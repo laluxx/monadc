@@ -1,0 +1,15 @@
+name: structured_future_array_count_oracle
+section: future-array-oracle-current
+tier: stable
+kind: law
+features: arithmetic, logic, array
+compiler-path: codegen.operator.arithmetic, codegen.operator.logic, runtime.array.index, codegen.array.literal
+signal: high
+corpus-role: oracle
+uses-atoms: atom.core.arithmetic, atom.core.logic, atom.runtime.array
+disabled-reason: disabled future or merged property; kept for provenance but not loaded by default
+args: xs:ArrInt
+type: Int
+expect-python: len(xs)
+description: Array count oracle over generated arrays.
+law: (count {xs})

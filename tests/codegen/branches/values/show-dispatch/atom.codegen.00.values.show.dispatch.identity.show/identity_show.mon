@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.identity-show
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.00.values.show.dispatch.identity.show
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: show-dispatch
+;; TEST-CATEGORY: 00-values
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Define an identity function, call it with show.
+;; TEST-ATOM: (define id ...) compiles and (show (id 42)) prints 42
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:00-values/show-dispatch branch family
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/show-dispatch/atom.codegen.00.values.show.dispatch.identity.show
+;; TEST-MENU-PATH: codegen/branches/values/show-dispatch/atom.codegen.00.values.show.dispatch.identity.show
+;; TEST-ATOM-LEAF: atom.codegen.00.values.show.dispatch.identity.show
+;; TEST-CLI-TARGET: codegen branches values show-dispatch
+(module Main)
+(define (id [x : Int] -> Int) x)
+(show (id 42))

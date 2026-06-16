@@ -1,0 +1,44 @@
+;; TEST-ID: tests.codegen.branch.collection-map-count-contains-mutation
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: emit-json-failed
+;; TEST-SUBSET: maps
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise map literal, Map?, contains?, assoc/assoc!, dissoc/dissoc!, and count branches using stable count oracles.
+;; TEST-ATOM: atom.codegen.collection.map-count-mutation
+;; TEST-CODEGEN-ATOM: atom.codegen.collection.map-count-mutation
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.map.literal
+;; TEST-CODEGEN-PATH: codegen.map.assoc
+;; TEST-CODEGEN-PATH: codegen.map.assoc-mut
+;; TEST-CODEGEN-PATH: codegen.map.dissoc-mut
+;; TEST-CODEGEN-PATH: codegen.map.count
+;; TEST-DEPENDS-ON: atom.codegen.collection.set-functional-mutating
+;; TEST-TAG: run
+;; TEST-TAG: collection
+;; TEST-TAG: map
+;; TEST-COVERAGE: codegen.c:4217-4224 map op branches
+;; TEST-COVERAGE: codegen.c:4237 merge branch
+;; TEST-COVERAGE: codegen.c:4272 Map? branch
+;; TEST-COVERAGE: codegen.c:4286 contains? branch
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/maps/atom.codegen.collection.map-count-mutation
+;; TEST-MENU-PATH: codegen/branches/collections/maps/atom.codegen.collection.map-count-mutation
+;; TEST-ATOM-LEAF: atom.codegen.collection.map-count-mutation
+;; TEST-CLI-TARGET: codegen branches collections maps
+(module Main)
+(define m #{:a 1})
+(show (Map? m))
+(show (count m))
+(show (contains? m :a))
+(define m2 (assoc m :b 2))
+(show (count m))
+(show (count m2))
+(assoc! m :b 2)
+(show (count m))
+(dissoc! m :a)
+(show (count m))

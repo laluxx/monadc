@@ -1,0 +1,15 @@
+name: structured_program_null_nested_int_variant_01
+section: current-program-kind
+tier: stable
+kind: program
+features: program, null, coalesce
+compiler-path: codegen.module_body, codegen.null_coalesce, infer.nil, runner.program_kind
+signal: high
+corpus-role: program-semantics
+uses-atoms: atom.core.equality, atom.infer.predicate, atom.null.nil
+related-properties: signal_atom_equality_reflexive
+args: a:Int@edge b:Int@edge c:Int@edge
+type: Bool
+expect: True
+description: V10 program-kind property variant 1 for program_null_nested_int, checking full program source handling rather than show-wrapped law handling.
+program: (show (= (?? (?? {a} {b}) {c}) {a}))

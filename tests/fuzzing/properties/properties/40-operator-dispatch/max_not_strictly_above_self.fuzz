@@ -1,0 +1,14 @@
+name: max_not_strictly_above_self
+section: negative
+tier: stable
+kind: law
+features: arithmetic, negative, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.type_predicate
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.infer.predicate
+args: a:Int
+type: Bool
+expect: False
+description: The max of an Int with itself must not be strictly above that Int.
+law: (fuzz-gt? (fuzz-max {a} {a}) {a})

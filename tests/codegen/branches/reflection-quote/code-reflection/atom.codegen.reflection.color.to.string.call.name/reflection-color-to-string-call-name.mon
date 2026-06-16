@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.branch.reflection-color-to-string-call-name
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: code-reflection
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 60-reflection-quote
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.reflection.color.to.string.call.name
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover the generic call-site branch keyed by the color-to-string function name.
+;; TEST-ATOM: A normal user function named color-to-string should compile, call, and print normally.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:12072 color-to-string call-site branch
+
+;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote
+;; TEST-MENU: branches/reflection-quote/code-reflection/atom.codegen.reflection.color.to.string.call.name
+;; TEST-MENU-PATH: codegen/branches/reflection-quote/code-reflection/atom.codegen.reflection.color.to.string.call.name
+;; TEST-ATOM-LEAF: atom.codegen.reflection.color.to.string.call.name
+;; TEST-CLI-TARGET: codegen branches reflection-quote code-reflection
+(module Main)
+(define (color-to-string [x : Int] -> String) "red")
+(show (color-to-string 0))

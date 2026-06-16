@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-codegen-err-tail-arity
-;; TEST-SECTION: diagnostic
-;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
-;; TEST-PURPOSE: Codegen enforces tail arity.
-;; TEST-ATOM: (tail) must fail because tail requires one collection argument.
-;; TEST-EXPECT: fail:compile
-
-(module Main)
-(show (tail))

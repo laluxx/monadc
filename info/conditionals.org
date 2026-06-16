@@ -16,11 +16,12 @@ Test coverage: conditional forms are exercised by =rt_control_all.mon=,
 [[file:../tests/codegen/rt_codegen_err_*.mon][tests/codegen/]].
 
 Conditional forms branch on boolean predicates. All are expressions
-that return values.
+that return values, making them composable with other control forms.
 
-* if
+* 1. if
 
-Compiles to LLVM =icmp=, two basic blocks (then/else), and a PHI node:
+Compiles to LLVM =icmp=, two basic blocks (then/else), and a PHI node
+([[file:../codegen.c::7572][codegen.c:7572]]):
 
 #+BEGIN_SRC monad
 (if True "yes" "no")            ;; "yes"
@@ -40,14 +41,37 @@ if
   / a b
 #+END_SRC
 
-Both branches are expressions and must have the same type. When both
+Both branches are expressions and must have compatible types. When both
 branches produce pointer-like types (e.g. =String=), the PHI node
 preserves the exact type for downstream dispatch
-([[file:../codegen.c::7572]]).
+([[file:../context/language.org::control-flow-constructs][context/language.org — Control Flow Constructs]]).
 
-* cond (codegen gap)
+** 1.1 Nested if
 
-Multi-branch conditional. No strcmp dispatch handler yet:
+#+BEGIN_SRC monad
+(if (< x 0) "negative"
+  (if (= x 0) "zero"
+    "positive"))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+if (< x 0) "negative"
+  if (= x 0) "zero"
+    "positive"
+#+END_SRC
+
+#+BEGIN_QUOTE
+Key Points:
+- Two-branch conditional: test, then-branch, else-branch
+- Both branches must have compatible types
+- Compiles to LLVM icmp + PHI node
+- Has strcmp dispatch handler — works in paren-mode
+#+END_QUOTE
+
+* 2. cond (codegen gap)
+
+Multi-branch conditional. No strcmp dispatch handler yet
+([[file:../context/language.org::codegen-gaps][context/language.org — Known Gaps]]):
 
 #+BEGIN_SRC monad
 (cond
@@ -64,12 +88,47 @@ cond
 #+END_SRC
 
 Clauses =[predicate expr]= are evaluated in order. Parses and type-
-checks but has no codegen strcmp handler
-([[file:../context/language.org::codegen-gaps][context/language.org]]).
+checks but has no codegen strcmp handler. The reader desugars =cond=
+to nested =if= expressions
+([[file:../context/reader.org::sugar-registry][context/reader.org — Sugar Registry (cond to if)]]).
 
-* when
+Workaround: use Wisp syntax (reader processes =cond= before codegen)
+or write nested =if= expressions directly.
 
-Executes body when condition is true. Statement-like:
+** 2.1 cond with Multiple Clauses
+
+#+BEGIN_SRC monad
+(define (describe-score n)
+  (cond
+    [(>= n 90) "A"]
+    [(>= n 80) "B"]
+    [(>= n 70) "C"]
+    [(>= n 60) "D"]
+    [True      "F"]))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define describe-score n
+  cond
+    [(>= n 90) "A"]
+    [(>= n 80) "B"]
+    [(>= n 70) "C"]
+    [(>= n 60) "D"]
+    [True      "F"]
+#+END_SRC
+
+#+BEGIN_QUOTE
+Key Points:
+- Multi-branch: N clauses with predicate-expression pairs
+- No strcmp dispatch — use Wisp or nested =if=
+- Predicates evaluated in order; first true wins
+- =True= as final clause provides a default/else
+#+END_QUOTE
+
+* 3. when
+
+Executes body when condition is true. Statement-like
+([[file:../codegen.c::7879][codegen.c:7879]]):
 
 #+BEGIN_SRC monad
 (when (starts-with? s "http")
@@ -81,11 +140,28 @@ when (starts-with? s "http")
   show "URL detected"
 #+END_SRC
 
-Has a strcmp dispatch handler ([[file:../codegen.c::7879]]).
+Has a strcmp dispatch handler. Returns =nil= when the condition is false.
 
-* unless
+** 3.1 when with Multiple Body Forms
 
-Executes body when condition is false:
+#+BEGIN_SRC monad
+(when debug
+  (show "debug mode")
+  (show "x =" x)
+  (show "y =" y))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+when debug
+  show "debug mode"
+  show "x =" x
+  show "y =" y
+#+END_SRC
+
+* 4. unless
+
+Executes body when condition is false
+([[file:../codegen.c::7919][codegen.c:7919]]):
 
 #+BEGIN_SRC monad
 (unless (nil? xs)
@@ -98,11 +174,35 @@ unless (nil? xs)
 #+END_SRC
 
 =unless= is best used as a statement form; its return convention is
-still evolving ([[file:../codegen.c::7919]]).
+still evolving ([[file:../context/language.org::control-flow-constructs][context/language.org — Control Flow Constructs]]).
 
-* ?? (null-coalescing)
+** 4.1 unless with Multiple Body Forms
 
-Returns =expr= if not =nil=, =default= otherwise:
+#+BEGIN_SRC monad
+(unless (empty? queue)
+  (pop! queue)
+  (process (peek queue)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+unless (empty? queue)
+  pop! queue
+  process (peek queue)
+#+END_SRC
+
+#+BEGIN_QUOTE
+Key Points:
+- =when=: executes body when condition is True
+- =unless=: executes body when condition is False
+- Both have strcmp dispatch handlers
+- Both return =nil= when the condition skips the body
+- Best used for side-effecting guards (not value-producing)
+#+END_QUOTE
+
+* 5. ?? (null-coalescing)
+
+Returns =expr= if not =nil=, =default= otherwise
+([[file:../codegen.c::5763][codegen.c:5763]]):
 
 #+BEGIN_SRC monad
 (?? (lookup key dict) "default")
@@ -116,8 +216,75 @@ Returns =expr= if not =nil=, =default= otherwise:
 ?? (scores "Sam") 0
 #+END_SRC
 
-Scalar types (Int, Float, Bool, Char) are never nil and skip the check
-([[file:../codegen.c::5763]]).
+Scalar types (Int, Float, Bool, Char) are never nil and skip the check.
+See [[file:maybe.org][Maybe]] and [[file:error-handling.org][Error Handling]]
+for related patterns.
+
+* 6. Comparison of Conditional Forms
+
+| Form   | Branches | Has strcmp? | Returns     | Use Case                    |
+|--------+----------+-------------+-------------+-----------------------------|
+| if     | 2        | Yes         | Branch val  | Binary branching            |
+| cond   | N        | No          | Clause val  | Multi-way branching         |
+| when   | 1 (T)    | Yes         | Last / nil  | Guard with side effects     |
+| unless | 1 (F)    | Yes         | Last / nil  | Negated guard               |
+| ??     | 2 (nil)  | Yes         | Non-nil val | Defaulting nil expressions  |
+
+* 7. Runnable Example
+
+#+BEGIN_SRC monad
+;; run with: monadc
+(define [x :: Int] 42)
+(define (classify n)
+  (if (< n 0) "negative"
+    (if (= n 0) "zero"
+      (when (> n 100) (show "large number!"))
+      "positive")))
+(show (classify x))          ;; "positive"
+(show (classify -5))         ;; "negative"
+(?? (classify 0) "default")  ;; "zero"
+#+END_SRC
+
+* 8. Gotchas
+
+- **=cond= has no strcmp**: Multi-branch =cond= cannot be called from
+  paren-mode. Use nested =if= or Wisp syntax (the reader desugars
+  =cond= to nested =if=).
+- **=when=/=unless= return =nil=**: These are statement-like — they
+  return =nil= when the condition skips the body. Do not rely on their
+  return value for logic.
+- **=unless= return unstable**: The return convention for =unless= is
+  still evolving. Prefer =when= or =if= for predictable semantics.
+- **=??= skips scalars**: Scalar types (Int, Float, Bool, Char) are
+  never nil, so =??= always returns the expression, never the default.
+
+* 9. Implementation Notes
+
+Key source locations for conditionals:
+
+| Aspect                | Location                                                              |
+|-----------------------+-----------------------------------------------------------------------|
+| =if= codegen          | [[file:../codegen.c::7572][codegen.c:7572]]                                    |
+| =??= codegen          | [[file:../codegen.c::5763][codegen.c:5763]]                                    |
+| =when= codegen        | [[file:../codegen.c::7879][codegen.c:7879]]                                    |
+| =unless= codegen      | [[file:../codegen.c::7919][codegen.c:7919]]                                    |
+| Control constructs    | [[file:../context/language.org::control-flow-constructs][context/language.org — Control Flow Constructs]] |
+| Sugar registry (cond) | [[file:../context/reader.org::sugar-registry][context/reader.org — Sugar Registry]]          |
+| Codegen gaps          | [[file:../context/language.org::codegen-gaps][context/language.org — Known Gaps]]           |
+
+The =if= codegen emits LLVM PHI nodes to merge the two branch values.
+=cond= is parsed and type-checked but relies on reader desugaring to
+nested =if= for codegen. =when= and =unless= emit conditional branch +
+body blocks with nil fallthrough.
+
+#+BEGIN_QUOTE
+Key Points:
+- =if=: workhorse conditional, has strcmp, use for most branching
+- =cond=: multi-branch, no strcmp (use Wisp or nested =if=)
+- =when= / =unless=: guards for side effects, have strcmp
+- =??=: nil-safe defaulting
+- All forms are expressions — they return values
+#+END_QUOTE
 
 * Related Pages
 
@@ -126,13 +293,32 @@ Scalar types (Int, Float, Bool, Char) are never nil and skip the check
 - [[file:iteration.org][Iteration]] -- for, while loops
 - [[file:mutation.org][Mutation]] -- set!, <-
 - [[file:patterns.org][Pattern Matching]] -- cond as pattern match base
+- [[file:maybe.org][Maybe]] -- option types and nullable patterns
+- [[file:error-handling.org][Error Handling]] -- errors and exceptions
+- [[file:../context/language.org::control-flow-constructs][context/language.org — Control Flow Constructs]]
+
+* Further Reading
+
+- [[file:../context/language.org][context/language.org]] — control flow constructs
+- [[file:../context/language.org::control-flow-constructs][context/language.org — Control Flow Constructs]]
+- [[file:../context/language.org::codegen-gaps][context/language.org — Known gaps]]
+- [[file:../context/reader.org][context/reader.org]] — cond desugaring
+- [[file:../context/reader.org::sugar-registry][context/reader.org — Sugar Registry (cond to if)]]
+- [[file:../codegen.c][codegen.c]] — if/when/unless codegen
+- [[file:../tests/codegen/rt_control_all.mon][rt_control_all.mon]] — conditional test fixtures
+- [[file:../tests/codegen/branches/control-flow/when-unless/][tests/ — when/unless test fixtures]]
+- [[file:../context/tests-arch.org][context/tests-arch.org]] — test suite architecture
 
 * Context Links
 
 - [[file:../context/language.org][context/language.org]] — control flow constructs
+- [[file:../context/language.org::control-flow-constructs][context/language.org — Control Flow Constructs]]
 - [[file:../context/language.org::codegen-gaps][context/language.org — Known gaps]]
 - [[file:../codegen.c::7572][codegen.c]] — =if= codegen
 - [[file:../codegen.c::5763][codegen.c]] — =??= null-coalescing
+- [[file:../codegen.c::7879][codegen.c]] — =when= codegen
+- [[file:../codegen.c::7919][codegen.c]] — =unless= codegen
+- [[file:../context/reader.org::sugar-registry][context/reader.org — Sugar Registry]]
 - [[file:control.org][Control Flow]] — overview of all control forms
 - [[file:booleans.org][Booleans]] — Bool type, True/False
 - [[file:iteration.org][Iteration]] — for, while loops

@@ -1,0 +1,6 @@
+typed define :Record @wisp
+@tests TODO
+@info category proj
+@source reader
+?monadc.context.category.index.purpose ~
+superset proj

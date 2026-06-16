@@ -1,0 +1,51 @@
+{
+  "by_expectation": {
+    "compile": 17,
+    "compile, run": 976,
+    "fail:compile": 766,
+    "inventory": 1,
+    "json:ast, compile, run": 2,
+    "parse-json": 1020
+  },
+  "by_origin": {
+    "corpus": 1026,
+    "fixture": 1756
+  },
+  "by_section": {
+    "codegen": 1756,
+    "interaction": 100,
+    "language": 597,
+    "layout": 10,
+    "ratio": 31,
+    "refinement": 104,
+    "sugar": 110,
+    "superset": 50,
+    "wisp": 24
+  },
+  "by_tier": {
+    "future": 735,
+    "known-fail": 780,
+    "regression": 1267
+  },
+  "by_top_menu": {
+    "codegen/branches": 929,
+    "codegen/errors": 627,
+    "codegen/types": 200,
+    "interaction": 100,
+    "language": 635,
+    "refinement": 104,
+    "sugar": 137,
+    "superset": 50
+  },
+  "context_links": {
+    "missing": 0,
+    "total": 5282,
+    "unique_contexts": 77
+  },
+  "default_gate": {
+    "tests": 1267,
+    "tier": "regression"
+  },
+  "generated_at": "2026-06-16T00:00:00+02:00",
+  "total_tests": 2782
+}

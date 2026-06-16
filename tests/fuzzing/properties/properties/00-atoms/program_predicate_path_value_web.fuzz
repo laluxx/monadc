@@ -1,0 +1,16 @@
+name: program_predicate_path_value_web
+section: program-atom-web
+tier: stable
+kind: program
+features: program, with, do, if, array, string, path, predicate
+compiler-path: reader.module, codegen.program.full_module, infer.env.lookup, codegen.control.if_phi
+signal: high
+corpus-role: program-behavior
+uses-atoms: atom.frontend.path.literal.value, atom.core.predicate
+depends-on: atom.frontend.path.literal.value, atom.core.predicate
+related-properties: atom.frontend.path.literal.value, atom.core.predicate
+args: p:Path
+type: Bool
+expect: True
+description: Full program property linked into the atom graph.
+program: (show (path? {p}))

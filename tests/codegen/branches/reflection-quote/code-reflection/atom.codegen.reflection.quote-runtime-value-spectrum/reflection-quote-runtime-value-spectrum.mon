@@ -1,0 +1,33 @@
+;; TEST-ID: tests.codegen.branch.reflection-quote-runtime-value-spectrum
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: code-reflection
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 60-reflection-quote
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise ast_to_runtime_value for quoted numbers, strings, keywords, symbols, nested lists, and lambdas.
+;; TEST-ATOM: atom.codegen.reflection.quote-runtime-value-spectrum
+;; TEST-CODEGEN-ATOM: atom.codegen.reflection.quote-runtime-value-spectrum
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile
+;; TEST-CODEGEN-PATH: ast_to_runtime_value.AST_NUMBER
+;; TEST-CODEGEN-PATH: ast_to_runtime_value.AST_STRING
+;; TEST-CODEGEN-PATH: ast_to_runtime_value.AST_KEYWORD
+;; TEST-CODEGEN-PATH: ast_to_runtime_value.AST_SYMBOL
+;; TEST-CODEGEN-PATH: ast_to_runtime_value.AST_LIST
+;; TEST-CODEGEN-PATH: ast_to_runtime_value.AST_LAMBDA
+;; TEST-DEPENDS-ON: atom.codegen.collection.list-primitive-spectrum
+;; TEST-TAG: compile
+;; TEST-TAG: reflection
+;; TEST-TAG: quote
+;; TEST-COVERAGE: codegen.c:966-1006 codegen_print_ast cases
+;; TEST-COVERAGE: codegen.c:1025-1071 ast_to_runtime_value cases
+
+;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote
+;; TEST-MENU: branches/reflection-quote/code-reflection/atom.codegen.reflection.quote-runtime-value-spectrum
+;; TEST-MENU-PATH: codegen/branches/reflection-quote/code-reflection/atom.codegen.reflection.quote-runtime-value-spectrum
+;; TEST-ATOM-LEAF: atom.codegen.reflection.quote-runtime-value-spectrum
+;; TEST-CLI-TARGET: codegen branches reflection-quote code-reflection
+(module Main)
+(show-value '(1 "x" :k sym (2 3)))
+(show-value (quote (lambda (x) (+ x 1))))

@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.deep.deep_diag_set_missing_field
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: layout-dot-field
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.90.diagnostics.layout.dot.field.deep.diag.set.missing.field
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Expected diagnostic for setting unknown layout field.
+;; TEST-ATOM: Field mutation should validate layout field names.
+;; TEST-EXPECT: fail:compile
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics, atom.codegen.subset.layout.dot.field
+;; TEST-COVERAGE: codegen.c:set! dot field diagnostics
+;; TEST-MENU: errors/codegen/layout-dot-field/atom.codegen.90.diagnostics.layout.dot.field.deep.diag.set.missing.field
+;; TEST-MENU-PATH: codegen/errors/codegen/layout-dot-field/atom.codegen.90.diagnostics.layout.dot.field.deep.diag.set.missing.field
+;; TEST-ATOM-LEAF: atom.codegen.90.diagnostics.layout.dot.field.deep.diag.set.missing.field
+;; TEST-CLI-TARGET: codegen errors codegen layout-dot-field
+
+(module Main)
+(layout Cell [x :: Int])
+(define c (Cell 1))
+(set! c.y 2)

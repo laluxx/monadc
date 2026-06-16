@@ -1,0 +1,16 @@
+name: signal_atom_with_substitution
+section: current-atom-foundation
+tier: stable
+kind: law
+features: with, env, equality
+compiler-path: infer.env.push, codegen.env.lookup, codegen.binding.with
+signal: medium
+corpus-role: atom-foundation
+atom: atom.binding.with.substitution
+proves: atom.binding.with.substitution
+uses-atoms: atom.binding.with, atom.core.equality, atom.runtime.array
+args: x:Int@edge+if
+type: Bool
+expect: True
+description: Foundation atom proof for atom.binding.with.substitution; derived properties link through uses-atoms/depends-on metadata.
+law: (= (with [v {x}] v) {x})

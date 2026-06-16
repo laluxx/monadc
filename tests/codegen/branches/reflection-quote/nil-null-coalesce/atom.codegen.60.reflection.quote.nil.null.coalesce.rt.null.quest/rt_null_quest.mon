@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-null-quest
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.60.reflection.quote.nil.null.coalesce.rt.null.quest
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: nil-null-coalesce
+;; TEST-CATEGORY: 60-reflection-quote
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Null-coalescing operator ?? provides default for nil values
+;; TEST-ATOM: (?? nil "default") = "default", (?? 42 "default") = 42
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:60-reflection-quote/nil-null-coalesce branch family
+;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote
+;; TEST-MENU: branches/reflection-quote/nil-null-coalesce/atom.codegen.60.reflection.quote.nil.null.coalesce.rt.null.quest
+;; TEST-MENU-PATH: codegen/branches/reflection-quote/nil-null-coalesce/atom.codegen.60.reflection.quote.nil.null.coalesce.rt.null.quest
+;; TEST-ATOM-LEAF: atom.codegen.60.reflection.quote.nil.null.coalesce.rt.null.quest
+;; TEST-CLI-TARGET: codegen branches reflection-quote nil-null-coalesce
+(module Main)
+(show (?? nil "default"))
+(show (?? 42 "default"))

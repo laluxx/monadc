@@ -1,0 +1,8 @@
+target	count	fail_compile	pass_run	example
+bridge.adt-return-mismatch	5	5	0	types/bridge/dep-hm/adt-return-mismatch/atom.type.bridge.dep-hm.adt-return-mismatch.000/type-bridge-dep-hm-adt-return-mismatch-000.mon
+dep.annotation-mismatch	5	5	0	types/dep/annotations/annotation-mismatch/atom.type.dep.annotations.annotation-mismatch.000/type-dep-annotations-annotation-mismatch-000.mon
+dep.c:TERM_EMBED and global declaration bridge	6	0	6	types/dep/adt-layout/constructor-indexing/atom.type.dep.adt-layout.constructor-indexing.000/type-dep-adt-layout-constructor-indexing-000.mon
+dep.c:TERM_EMBED/type_to_term bridge	5	0	5	types/bridge/dep-hm/refinement-to-hm/atom.type.bridge.dep-hm.refinement-to-hm.000/type-bridge-dep-hm-refinement-to-hm-000.mon
+dep.c:dependent checker happy path	6	0	6	types/dep/refinement/predicate-success/atom.type.dep.refinement.predicate-success.000/type-dep-refinement-predicate-success-000.mon
+dep.hole	5	5	0	types/dep/holes/explicit-hole-report/atom.type.dep.holes.explicit-hole-report.000/type-dep-holes-explicit-hole-report-000.mon
+dep.refinement	8	8	0	types/dep/refinement/predicate-failure/atom.type.dep.refinement.predicate-failure.000/type-dep-refinement-predicate-failure-000.mon

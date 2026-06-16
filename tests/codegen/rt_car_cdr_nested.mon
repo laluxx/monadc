@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-car-cdr-nested
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Nested car/cdr accesses the second element of a list.
-;; TEST-ATOM: (car (cdr '(1 2 3))) evaluates to 2.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (car (cdr '(1 2 3))))

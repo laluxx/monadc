@@ -1,0 +1,33 @@
+;; TEST-ID: tests.codegen.codegen-error.codegen-branch-setbang-non-symbol-connected
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: codegen-errors/precise-mutation
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.reader-error-coverage
+;; TEST-PURPOSE: Trigger and pin diagnostic: set!
+;; TEST-ATOM: atom.codegen.diagnostic.codegen.branch.setbang.non.symbol.connected
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.codegen.branch.setbang.non.symbol.connected
+;; TEST-QUALITY: diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-READER-ERROR: set!
+;; TEST-READER-PATH: reader.c:3417 codegen.setbang.target
+;; TEST-CODEGEN-PATH: diagnostic.codegen.setbang.target
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: codegen
+;; TEST-COVERAGE: reader.c:3417 set!
+;; TEST-USES-ATOM: atom.codegen.diagnostic.codegen.branch.setbang.non.symbol.connected
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.codegen.error.precise
+;; TEST-DEPENDS-ON: atom.reader.special.setbang
+;; TEST-DEPENDS-ON: atom.codegen.env.mutation
+;; TEST-REFINES: atom.codegen.diagnostic.setbang-target
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/precise-mutation/atom.codegen.diagnostic.codegen.branch.setbang.non.symbol.connected
+;; TEST-MENU-PATH: codegen/errors/codegen/precise-mutation/atom.codegen.diagnostic.codegen.branch.setbang.non.symbol.connected
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.codegen.branch.setbang.non.symbol.connected
+;; TEST-CLI-TARGET: codegen errors codegen precise-mutation
+
+(module Main)
+(set! 1 2)

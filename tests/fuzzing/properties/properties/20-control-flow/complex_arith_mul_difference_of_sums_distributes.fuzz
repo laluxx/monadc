@@ -1,0 +1,15 @@
+name: complex_arith_mul_difference_of_sums_distributes
+section: arithmetic-normalization
+tier: stable
+kind: law
+features: arithmetic, equality, if, logic, phi
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.if_phi, infer.logic, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.if, atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+args: k:Int a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Multiplying a regrouped difference of sums should agree with distributing over pairwise differences.
+law: (= (fuzz-mul {k} (fuzz-sub (fuzz-add {a} {b}) (fuzz-add {c} {d}))) (fuzz-add (fuzz-mul {k} (fuzz-sub {a} {c})) (fuzz-mul {k} (fuzz-sub {b} {d}))))

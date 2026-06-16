@@ -1,0 +1,15 @@
+name: structured_program_string_pred_index_variant_01
+section: current-program-kind
+tier: stable
+kind: program
+features: program, string, index, predicate
+compiler-path: codegen.module_body, codegen.predicate_dispatch, codegen.string_literal, infer.type_predicate, reader.string_literal, runner.program_kind, runtime.string
+signal: high
+corpus-role: program-semantics
+uses-atoms: atom.infer.predicate, atom.runtime.string
+related-properties: signal_atom_string_contains_substring
+args: 
+type: Bool
+expect: True
+description: V10 program-kind property variant 1 for program_string_pred_index, checking full program source handling rather than show-wrapped law handling.
+program: (show (char? ("abc" 1)))

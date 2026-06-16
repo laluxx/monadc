@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.deep.deep_when_unless_nested_begin
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SUBSET: when-unless
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.when.unless.deep.when.unless.nested.begin
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise when body with nested begin and skipped unless.
+;; TEST-ATOM: Conditional bodies should preserve nested sequencing.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow, atom.codegen.subset.when.unless
+;; TEST-COVERAGE: codegen.c:when/unless body block lowering
+;; TEST-MENU: branches/control-flow/when-unless/atom.codegen.30.control.flow.when.unless.deep.when.unless.nested.begin
+;; TEST-MENU-PATH: codegen/branches/control-flow/when-unless/atom.codegen.30.control.flow.when.unless.deep.when.unless.nested.begin
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.when.unless.deep.when.unless.nested.begin
+;; TEST-CLI-TARGET: codegen branches control-flow when-unless
+
+(module Main)
+(define x 1)
+(when True (begin (set! x (+ x 1)) (set! x (+ x 2))))
+(unless True (set! x 99))
+(show x)

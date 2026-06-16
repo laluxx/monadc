@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.deep.deep_array_if_index
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-SUBSET: arrays-ranges
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.collections.arrays.ranges.deep.array.if.index
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise array index expression codegen through if PHI.
+;; TEST-ATOM: Array index may be produced by control-flow expressions.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:array index expression
+;; TEST-COVERAGE: codegen.c:if PHI feeding GEP/load
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/arrays-ranges/atom.codegen.collections.arrays.ranges.deep.array.if.index
+;; TEST-MENU-PATH: codegen/branches/collections/arrays-ranges/atom.codegen.collections.arrays.ranges.deep.array.if.index
+;; TEST-ATOM-LEAF: atom.codegen.collections.arrays.ranges.deep.array.if.index
+;; TEST-CLI-TARGET: codegen branches collections arrays-ranges
+(module Main)
+(define a [7 8 9])
+(show (a (if True 0 2)))
+(show (a (if False 0 2)))

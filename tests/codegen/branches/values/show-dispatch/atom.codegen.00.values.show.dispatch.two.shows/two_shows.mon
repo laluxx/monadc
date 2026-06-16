@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.two-shows
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.00.values.show.dispatch.two.shows
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: show-dispatch
+;; TEST-CATEGORY: 00-values
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Multiple show expressions in sequence both run.
+;; TEST-ATOM: Two sequential (show ...) calls
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:00-values/show-dispatch branch family
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/show-dispatch/atom.codegen.00.values.show.dispatch.two.shows
+;; TEST-MENU-PATH: codegen/branches/values/show-dispatch/atom.codegen.00.values.show.dispatch.two.shows
+;; TEST-ATOM-LEAF: atom.codegen.00.values.show.dispatch.two.shows
+;; TEST-CLI-TARGET: codegen branches values show-dispatch
+(module Main)
+(show 1)
+(show 2)

@@ -1,0 +1,28 @@
+;; TEST-ID: tests.codegen.branch.function-undefined-inside-body-compile
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: emit-json-failed
+;; TEST-SUBSET: defines-and-calls
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise the undefined sentinel branch that is legal only inside function bodies.
+;; TEST-ATOM: atom.codegen.function.undefined-inside-body
+;; TEST-CODEGEN-ATOM: atom.codegen.function.undefined-inside-body
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile
+;; TEST-CODEGEN-PATH: codegen.undefined.inside-function
+;; TEST-TAG: compile
+;; TEST-TAG: function
+;; TEST-TAG: sentinel
+;; TEST-COVERAGE: codegen.c:6860 undefined special form valid only in function body
+
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/defines-and-calls/atom.codegen.function.undefined-inside-body
+;; TEST-MENU-PATH: codegen/branches/symbol-env/defines-and-calls/atom.codegen.function.undefined-inside-body
+;; TEST-ATOM-LEAF: atom.codegen.function.undefined-inside-body
+;; TEST-CLI-TARGET: codegen branches symbol-env defines-and-calls
+(module Main)
+(define placeholder :: Int -> Int
+  x -> undefined)
+placeholder

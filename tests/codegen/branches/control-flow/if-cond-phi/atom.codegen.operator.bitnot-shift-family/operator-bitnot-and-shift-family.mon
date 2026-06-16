@@ -1,0 +1,35 @@
+;; TEST-ID: tests.codegen.branch.operator-bitnot-and-shift-family
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: if-cond-phi
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise bitnot, signed right shift, logical right shift, and left shift branches.
+;; TEST-ATOM: atom.codegen.operator.bitnot-shift-family
+;; TEST-CODEGEN-ATOM: atom.codegen.operator.bitnot-shift-family
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.operator.bitnot
+;; TEST-CODEGEN-PATH: codegen.operator.and
+;; TEST-CODEGEN-PATH: codegen.operator.shift-left
+;; TEST-CODEGEN-PATH: codegen.operator.shift-right
+;; TEST-DEPENDS-ON: atom.codegen.operator.integer-reduction
+;; TEST-TAG: run
+;; TEST-TAG: operator
+;; TEST-TAG: bitwise
+;; TEST-COVERAGE: codegen.c:7668 bitwise &, bit-or, bit-xor branches
+;; TEST-COVERAGE: codegen.c:7691 bitnot arity branch
+;; TEST-COVERAGE: codegen.c:7703 shift << >> >>> branches
+
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/if-cond-phi/atom.codegen.operator.bitnot-shift-family
+;; TEST-MENU-PATH: codegen/branches/control-flow/if-cond-phi/atom.codegen.operator.bitnot-shift-family
+;; TEST-ATOM-LEAF: atom.codegen.operator.bitnot-shift-family
+;; TEST-CLI-TARGET: codegen branches control-flow if-cond-phi
+(module Main)
+(show (~ 0))
+(show (& 7 3))
+(show (<< 3 2))
+(show (>> -8 1))
+(show (>>> 16 2))

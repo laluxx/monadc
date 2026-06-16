@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.deep.deep_char_keyword_symbol_display
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 00-values
+;; TEST-SUBSET: char-keyword-symbol
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.values.char.keyword.symbol.deep.char.keyword.symbol.display
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise char, keyword, and quoted symbol display paths.
+;; TEST-ATOM: Non-numeric atoms should preserve printable representation.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:AST_CHAR/AST_KEYWORD/AST_SYMBOL
+;; TEST-COVERAGE: codegen.c:codegen_print_ast symbol path
+
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/char-keyword-symbol/atom.codegen.values.char.keyword.symbol.deep.char.keyword.symbol.display
+;; TEST-MENU-PATH: codegen/branches/values/char-keyword-symbol/atom.codegen.values.char.keyword.symbol.deep.char.keyword.symbol.display
+;; TEST-ATOM-LEAF: atom.codegen.values.char.keyword.symbol.deep.char.keyword.symbol.display
+;; TEST-CLI-TARGET: codegen branches values char-keyword-symbol
+(module Main)
+(show (Char 90))
+(show :key)
+(show (quote sym))

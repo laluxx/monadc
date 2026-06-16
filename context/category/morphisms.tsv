@@ -1,0 +1,9 @@
+kind	domain	codomain	meaning
+contains	File|Script|Report	Heading|Record|Script|Report	Structural containment.
+file-link	File|Heading|Record	File	Explicit Org file link.
+id-link	File|Heading|Record	Heading	Explicit Org stable ID link.	supports	Record	Record|Heading	Evidence supports claim or contract.
+supersedes	Record	Record|Heading	Newer fact/decision replaces older guidance.	verifies	Test|Record	Heading|Record	Test or record protects contract/claim.
+blocks	Record	Heading|Record	Task or bug prevents contract from holding.
+classifies-as	File|Heading|Record|Test|Script|Report	Concept	Taxonomy membership.
+refines	Concept	Concept	Taxonomy specialization edge.
+forgets-to	File|Heading|Record|Script|Report|Concept	Concept	Functor/projection witness.

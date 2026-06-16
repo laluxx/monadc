@@ -1,0 +1,126 @@
+#+TITLE: Type System for Context Objects and Morphisms
+#+AUTHOR: GPT-5.5 Thinking
+#+DATE: 2026-06-16
+#+CREATED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-16
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:3 num:t
+#+CATEGORY: monadc-category
+#+FILETAGS: :monadc:compiler:context:category:type-system:schema:contracts:validation:
+#+PROPERTY: CONTEXT_VERSION 5
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.category.types
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+
+* Type Judgments
+:PROPERTIES:
+:ID: monadc.context.category.types.judgments
+:CUSTOM_ID: category-types-judgments
+:CONTEXT_KIND: type-system
+:CONTEXT_STATUS: active
+:SOURCE: context/category/type-system.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.category.types.judgments src:context/category/type-system.org conf:high]
+  The context type system assigns kinds to objects and morphisms.  A well-typed
+  generating morphism has a source object whose kind is accepted by the morphism
+  domain and a target object whose kind is accepted by the morphism codomain.
+
+#+BEGIN_EXAMPLE
+Γ ⊢ X : ObjectKind
+Γ ⊢ f : X -> Y [MorphismKind]
+Γ ⊢ path(f1,...,fn) : X0 -> Xn
+#+END_EXAMPLE
+
+* Object Kinds
+:PROPERTIES:
+:ID: monadc.context.category.types.objects
+:CUSTOM_ID: category-types-objects
+:CONTEXT_KIND: type-system
+:CONTEXT_STATUS: active
+:SOURCE: context/category/type-system.org
+:CONFIDENCE: high
+:END:
+
+| Kind | Constructor | Invariant |
+|------+-------------+-----------|
+| File | =file:path= | path exists in context tar or is an allowed generated path |
+| Heading | org =:ID:= | ID is globally unique |
+| Record | bracket record | record id is globally unique |
+| Test | =test:<TEST-ID>= | TEST-ID is globally unique in tests tar |
+| SourceRegion | =src:path:line-range= | source path and region are precise when full repo is present |
+| Script | =script:path= | executable or importable file inside context/category/scripts |
+| Report | =report:path= | generated and reproducible from scripts |
+| Concept | =concept:name= | belongs to taxonomy preorder |
+
+* Morphism Type Rules
+:PROPERTIES:
+:ID: monadc.context.category.types.morphisms
+:CUSTOM_ID: category-types-morphisms
+:CONTEXT_KIND: type-system
+:CONTEXT_STATUS: active
+:SOURCE: context/category/type-system.org
+:CONFIDENCE: high
+:END:
+
+| Rule | Domain | Codomain | Check |
+|------+--------+----------+-------|
+| contains | File/Script/Report | Heading/Record/Script/Report | object line/path lies inside file |
+| file-link | File | File | target file exists or is explicitly external |
+| id-link | File/Heading/Record | Heading | target ID resolves |
+| supports | Record | Record/Heading | target resolves to claim or contract |
+| supersedes | Record | Record/Heading | temporal/update relation resolves |
+| verifies | Test/Record | Heading/Record | target is a contract or claim |
+| blocks | Record | Heading/Record | target resolves to blocked contract |
+| classifies-as | any | Concept | concept exists in taxonomy |
+| refines | Concept | Concept | preorder edge is acyclic modulo equivalence |
+
+[DEC id:dec.category.types.no-unknown-links date:2026-06-16 by:llm]
+  Unknown target IDs are type errors in the category layer.  A prose note may be
+  speculative, but a typed morphism should either resolve or be marked TODO with
+  an explicit nonbinding status.
+
+* Context Metadata Types
+:PROPERTIES:
+:ID: monadc.context.category.types.metadata
+:CUSTOM_ID: category-types-metadata
+:CONTEXT_KIND: type-system
+:CONTEXT_STATUS: active
+:SOURCE: context/category/type-system.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.category.types.metadata src:context/category/type-system.org conf:high]
+  Metadata is a dependent record over context nodes.  Required fields depend on
+  node kind.  For example, a contract heading should have CONTEXT_KIND=contract,
+  owner/phase information, and links to tests or known TODOs; an observation
+  record must have source and confidence.
+
+| Field | Type | Required for |
+|-------+------+--------------|
+| :ID: | stable symbol | Heading |
+| CONTEXT_KIND | enum | Heading |
+| CONTEXT_STATUS | enum | Heading |
+| SOURCE | path or source label | Heading/Record |
+| CONFIDENCE | low/medium/high | Heading/Record |
+| id: | stable symbol | Record |
+| src: | path/source label | Record when evidence-bearing |
+| from:/supports:/verifies:/blocks:/supersedes: | reference list | Record when edge-bearing |
+
+* Proof Obligations
+:PROPERTIES:
+:ID: monadc.context.category.types.proof-obligations
+:CUSTOM_ID: category-types-proof-obligations
+:CONTEXT_KIND: validation
+:CONTEXT_STATUS: active
+:SOURCE: context/category/type-system.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.category.types.proof-obligations src:context/category/type-system.org conf:high]
+  The verifier is not a theorem prover for MonadC.  It proves structural facts
+  about the garden: uniqueness, endpoint resolution, identity availability,
+  composable path typing, record-reference validity, and stable generated
+  reports.  Semantic compiler claims still require tests and source inspection.

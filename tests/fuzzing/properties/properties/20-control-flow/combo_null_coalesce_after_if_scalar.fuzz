@@ -1,0 +1,15 @@
+name: combo_null_coalesce_after_if_scalar
+section: feature-interactions
+tier: stable
+kind: law
+features: arithmetic, equality, feature, if, phi, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.predicate_dispatch, infer.arithmetic, infer.equality, infer.if_phi, infer.type_predicate, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.if, atom.core.equality, atom.infer.predicate, atom.null.nil
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+args: p:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: ?? must preserve scalar if results across PHI unification.
+law: (= (?? (if {p} {a} {b}) {c}) (if {p} {a} {b}))

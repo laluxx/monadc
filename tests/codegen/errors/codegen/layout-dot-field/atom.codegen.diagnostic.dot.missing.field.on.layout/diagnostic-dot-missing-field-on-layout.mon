@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.branch.diagnostic-dot-missing-field-on-layout
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SUBSET: layout-dot-field
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.dot.missing.field.on.layout
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover explicit dot diagnostics when the selected layout lacks the field.
+;; TEST-ATOM: dot should report layout-specific missing fields after resolving the base type.
+;; TEST-EXPECT: fail:compile
+;; TEST-COVERAGE: codegen.c:12929 explicit dot missing-field diagnostic
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/layout-dot-field/atom.codegen.diagnostic.dot.missing.field.on.layout
+;; TEST-MENU-PATH: codegen/errors/codegen/layout-dot-field/atom.codegen.diagnostic.dot.missing.field.on.layout
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.dot.missing.field.on.layout
+;; TEST-CLI-TARGET: codegen errors codegen layout-dot-field
+(module Main)
+(layout Point [x :: Int])
+(show (dot (Point 1) y))

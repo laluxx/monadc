@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.asm.int-and-then-or
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.70.ffi.asm.inline.asm.asm.int.and.then.or
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: inline-asm
+;; TEST-CATEGORY: 70-ffi-asm
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Logical instruction stream preserves order.
+;; TEST-ATOM: and a b then or a c returns (a & b) | c.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:70-ffi-asm/inline-asm branch family
+;; TEST-USES-ATOM: atom.codegen.category.70.ffi.asm
+;; TEST-MENU: branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.int.and.then.or
+;; TEST-MENU-PATH: codegen/branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.int.and.then.or
+;; TEST-ATOM-LEAF: atom.codegen.70.ffi.asm.inline.asm.asm.int.and.then.or
+;; TEST-CLI-TARGET: codegen branches ffi-asm inline-asm
+module AsmTest
+
+define asm-and-or :: Int -> Int -> Int -> Int
+  a b c -> (asm and a b or a c)
+
+show (asm-and-or 47 40 2)

@@ -1,0 +1,15 @@
+name: compiler_deep_outer_mutation_survives_inner_shadow_set
+section: binding-scope-mutation-current
+tier: stable
+kind: law
+features: arithmetic, array, array-index, binding, do, env, equality, mutation, set, set!, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.equality_dispatch, codegen.local_load, codegen.runtime_call, codegen.sequence, codegen.set_bang, codegen.store, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.equality, infer.mutation, reader.array_literal, reader.ast_do, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.set-bang, atom.binding.with, atom.control.do, atom.core.equality, atom.core.plus, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_do_last_value, signal_atom_equality_reflexive, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero, signal_atom_with_substitution
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Inner shadowed set! must not mutate the outer binding cell.
+law: (= (with [x {a}] (do (set! x {b}) (with [x {c}] (set! x (+ x 1))) x)) {b})

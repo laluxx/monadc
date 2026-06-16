@@ -1,0 +1,15 @@
+name: mega_array_heap_inline_index_one
+section: codegen-array-env
+tier: stable
+kind: law
+features: arithmetic, array, array-index, codegen, equality, heap-array
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.equality_dispatch, codegen.heap_array, infer.arithmetic, infer.array, infer.callable_array, infer.equality, reader.array_literal, reader.heap_array
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.runtime.array, atom.runtime.heap-array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: heap array literal must support inline indexing path.
+law: (= (~[{a} {b} {c}] 1) {b})

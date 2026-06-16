@@ -1,0 +1,17 @@
+name: extreme_combo_helper_order_branch_consistency_disabled_duplicate_1a446639
+section: feature-interactions-deep
+tier: experimental
+kind: law
+features: arithmetic, comparison, equality, feature, if, logic, phi, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.comparison_dispatch, codegen.equality_dispatch, codegen.if_phi, codegen.logic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.comparison, infer.equality, infer.if_phi, infer.logic, infer.type_predicate, reader.ast_if
+signal: medium
+corpus-role: merged-duplicate
+uses-atoms: atom.control.if, atom.core.equality, atom.core.order.lt, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates, signal_atom_lt_transitive
+merged-into: complex_function_predicate_helpers_branch_consistency
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int b:Int yes:Int no:Int
+type: Bool
+expect: True
+description: Mixed helpers, direct dispatch, control flow, and bindings should compose without changing semantics.
+law: (= (if (fuzz-lt? {a} {b}) {yes} {no}) (if (< {a} {b}) {yes} {no}))

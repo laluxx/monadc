@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-until-simple
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.loops.rt.until.simple
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: loops
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Until loop iterates until condition is met.
+;; TEST-ATOM: (until (>= i 3) (set! i (+ i 1))) with i=0 loops 3 times.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/loops branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/loops/atom.codegen.30.control.flow.loops.rt.until.simple
+;; TEST-MENU-PATH: codegen/branches/control-flow/loops/atom.codegen.30.control.flow.loops.rt.until.simple
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.loops.rt.until.simple
+;; TEST-CLI-TARGET: codegen branches control-flow loops
+(module Main)
+(define i 0)
+(until (>= i 3) (begin (show i) (set! i (+ i 1))))

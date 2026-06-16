@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-bitwise-xor-not-rshift
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.if.cond.phi.rt.bitwise.xor.not.rshift
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: if-cond-phi
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Runtime bitwise xor, not, and logical right shift work.
+;; TEST-ATOM: (bit-xor 5 3) = 6, (~ 42) = -43, (>>> 16 2) = 4.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/if-cond-phi branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/if-cond-phi/atom.codegen.30.control.flow.if.cond.phi.rt.bitwise.xor.not.rshift
+;; TEST-MENU-PATH: codegen/branches/control-flow/if-cond-phi/atom.codegen.30.control.flow.if.cond.phi.rt.bitwise.xor.not.rshift
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.if.cond.phi.rt.bitwise.xor.not.rshift
+;; TEST-CLI-TARGET: codegen branches control-flow if-cond-phi
+(module Main)
+(show (bit-xor 5 3))
+(show (~ 42))
+(show (>>> 16 2))

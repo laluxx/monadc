@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.rt-set-bang-field
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-CODEGEN-ATOM: atom.codegen.50.data.layout.dot.and.field.mutation.rt.set.bang.field
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: dot-and-field-mutation
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Set! on layout field mutates the field value.
+;; TEST-ATOM: (set! (p . x) 5) changes p.x from 3 to 5.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:50-data-layout/dot-and-field-mutation branch family
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/dot-and-field-mutation/atom.codegen.50.data.layout.dot.and.field.mutation.rt.set.bang.field
+;; TEST-MENU-PATH: codegen/branches/data-layout/dot-and-field-mutation/atom.codegen.50.data.layout.dot.and.field.mutation.rt.set.bang.field
+;; TEST-ATOM-LEAF: atom.codegen.50.data.layout.dot.and.field.mutation.rt.set.bang.field
+;; TEST-CLI-TARGET: codegen branches data-layout dot-and-field-mutation
+(module Main)
+(layout Point [x :: Int] [y :: Int])
+(define p (Point 3 4))
+(set! (p . x) 5)
+(show p.x)
+(show p.y)

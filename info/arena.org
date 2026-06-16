@@ -9,7 +9,7 @@
 :CONTEXT:  monadc.context.arena, monadc.context.codegen, monadc.context.runtime
 :END:
 
-[[file:index.org][<- Back to Index]] · [[file:heap.org][Heap Allocation]] · [[file:performance.org][Performance]] · [[file:arrays.org][Arrays]] · [[file:data.org][Data Types]] · [[file:layouts.org][Layout Types]] · [[file:types.org][Types]]
+[[file:index.org][<- Back to Index]] · [[file:heap.org][Heap Allocation]] · [[file:performance.org][Performance]] · [[file:arrays.org][Arrays]] · [[file:data.org][Data Types]] · [[file:layouts.org][Layout Types]] · [[file:types.org][Types]] · [[file:collections.org][Collections]] · [[file:error-handling.org][Error Handling]]
 
 Test coverage: the arena allocator ([[file:../arena.c]]) is tested
 through the entire compiler pipeline — every codegen fixture exercises
@@ -19,7 +19,14 @@ Monad does not have a garbage collector. All runtime values are
 allocated in compiler-managed arena regions — bump-pointer allocation
 with deterministic lifetime and no GC pauses.
 
-* Bump-Pointer Arena
+For the internal design, see [[file:../context/arena.org][context/arena.org]]. For the runtime
+memory model, see [[file:../context/runtime.org][context/runtime.org]].
+
+This page covers the arena allocator used throughout the Monad
+compiler: bump-pointer allocation, checkpoint/restore, lifetime model,
+and tradeoffs vs garbage collection.
+
+* 1. Bump-Pointer Arena
 
 The primary allocator ([[file:../arena.c]], [[file:../arena.h]]) is a
 bump-pointer arena:
@@ -37,7 +44,21 @@ Arena blocks:
 bump pointer (allocates here)        next block (overflow)
 #+END_SRC
 
-* Free / Reset
+The arena is used throughout the compiler: the parser ([[file:../reader.c]])
+allocates AST nodes, the macro expander ([[file:../macro.c]]) allocates
+expanded forms, the type inferencer ([[file:../infer.c]]) allocates type
+trees, and the codegen ([[file:../codegen.c]]) consumes the arena. See
+[[file:../context/codegen.org][context/codegen.org]] for the codegen pipeline.
+
+*** Key Points
+- O(1) bump-pointer allocation — no malloc overhead per allocation
+- 4 MiB default blocks with doubling growth factor
+- Every compiler phase uses the same arena: parse, expand, infer, codegen
+- No GC, no reference counting, no per-object free
+
+See also: [[file:performance.org][Performance]]
+
+* 2. Free / Reset
 
 | Operation        | Behavior                                       |
 |------------------+------------------------------------------------|
@@ -48,7 +69,18 @@ bump pointer (allocates here)        next block (overflow)
 
 =arena_reset= is the common fast path — zero mallocs.
 
-* Checkpoint / Restore
+The two-arena strategy (permanent + scratch) is documented in
+[[file:performance.org][Performance Guide]] and
+[[file:../context/arena.org][context/arena.org]].
+
+*** Key Points
+- =arena_reset= keeps memory mapped — fastest reuse, no syscalls
+- =arena_free= returns everything to the OS (cleanup on exit)
+- Two-arena pattern: permanent = whole compilation, scratch = per-phase
+
+See also: [[file:performance.org][Performance]]
+
+* 3. Checkpoint / Restore
 
 =ArenaCheckpoint= saves (block, offset). =arena_restore= rewinds to
 that point and frees any blocks allocated after it:
@@ -59,12 +91,22 @@ ArenaCheckpoint cp = arena_checkpoint(&arena);
 arena_restore(&arena, &cp);    // free everything after checkpoint
 #+END_SRC
 
-This is a stack-based rollback (LIFO only).
+This is a stack-based rollback (LIFO only). Checkpoint/restore is
+essential for the REPL ([[file:repl.org][REPL]]) and the language server,
+where compilation phases are interleaved with user interaction. See
+[[file:../context/repl.org][context/repl.org]].
 
-* Tradeoffs vs GC
+*** Key Points
+- LIFO stack discipline only — non-LIFO patterns require the heap
+- Zero runtime cost when no restore is needed
+- Enables REPL incremental compilation without leaking memory
+
+See also: [[file:repl.org][REPL]]
+
+* 4. Tradeoffs vs GC
 
 | Aspect         | Arena Allocation                | Garbage Collector              |
-|----------------+---------------------------------|---------------------------------|
+|----------------+---------------------------------+---------------------------------|
 | Allocation     | O(1) bump-pointer               | O(1) bump + GC pauses later     |
 | Deallocation   | Batch (arena reset/free)        | Incremental/mark-sweep          |
 | Pauses         | None (deterministic)            | Stop-the-world for GC cycles    |
@@ -73,32 +115,91 @@ This is a stack-based rollback (LIFO only).
 | Memory return  | Keeps mapped (arena_reset)      | Returns to OS lazily            |
 
 The tradeoff is acceptable for a compiler workload: allocations follow
-a stack discipline (parse → infer → codegen → reset).
+a stack discipline (parse → infer → codegen → reset). For runtime data
+that outlives the compiler pass, see [[file:heap.org][Heap Allocation]].
 
-* Lifetime Model
+*** Key Points
+- Arena wins on determinism, allocation speed, and cache behaviour
+- GC wins on flexibility (non-LIFO lifetimes, cyclic data)
+- Compiler workloads fit the stack-discipline sweet spot perfectly
+
+See also: [[file:heap.org][Heap Allocation]]
+
+* 5. Lifetime Model
 
 1. Compilation begins: arena is fresh
-2. Parser allocates AST nodes in the arena
-3. Macro expansion allocates new nodes
-4. Type inference allocates type trees
-5. Codegen consumes arena — output is LLVM IR (arena-independent)
+2. Parser allocates AST nodes in the arena ([[file:../reader.c]])
+3. Macro expansion ([[file:../macro.c]]) allocates new nodes
+4. Type inference ([[file:../infer.c]]) allocates type trees
+5. Codegen ([[file:../codegen.c]]) consumes arena — output is LLVM IR (arena-independent)
 6. Compilation ends: =arena_free= — all memory reclaimed at once
 
 No individual =free= calls. No reference counting. No GC.
 
-* Related Pages
+For the compilation pipeline, see [[file:build.org][Build System]] and
+[[file:../context/build.org][context/build.org]].
 
-- [[file:heap.org][Heap Allocation]] -- heap allocation with arena
-- [[file:performance.org][Performance]] -- arena allocation performance
-- [[file:arrays.org][Arrays]] -- arena-allocated arrays
+*** Key Points
+- Single pass: allocate throughout, consume at codegen, free all at once
+- LLVM IR output is arena-independent — no dangling pointer risk
+- Entire compiler uses exactly one memory management strategy
+
+See also: [[file:build.org][Build System]]
+
+* 6. Implementation Notes
+
+Key source locations for the arena allocator:
+
+| Source | Key Symbols |
+|--------+-------------|
+| [[file:../arena.h:36][arena.h:36]] | =ARENA_DEFAULT_BLOCK= (4 MiB), =ARENA_ALIGN= (8) |
+| [[file:../arena.h:66][arena.h:66]] | =arena_init= — initialise with optional block size |
+| [[file:../arena.h:70][arena.h:70]] | =arena_free= — release all OS memory |
+| [[file:../arena.h:74][arena.h:74]] | =arena_reset= — rewind blocks, keep mapped |
+| [[file:../arena.h:80][arena.h:80]] | =arena_alloc= — bump allocation, never returns NULL |
+| [[file:../arena.h:101][arena.h:101]] | =arena_checkpoint= / =arena_restore= — LIFO rollback |
+| [[file:../arena.c:30][arena.c:30]] | =arena_init= — block allocation and initialisation |
+| [[file:../arena.c:49][arena.c:49]] | =arena_reset= — block chain rewind |
+| [[file:../arena.c:72][arena.c:72]] | =arena_alloc= — aligned bump allocation |
+| [[file:../arena.c:143][arena.c:143]] | =arena_checkpoint= — snapshot current position |
+| [[file:../arena.c:150][arena.c:150]] | =arena_restore= — rewind to checkpoint |
+
+Related context documents:
+
+- [[file:../context/arena.org][context/arena.org]] — internal design, block list, alignment strategy
+- [[file:../context/codegen.org][context/codegen.org]] — how codegen consumes arena memory
+- [[file:../context/runtime.org][context/runtime.org]] — runtime memory model (separate from compiler arena)
+- [[file:../context/repl.org][context/repl.org]] — checkpoint/restore in the REPL lifecycle
+- [[file:../context/infer.org][context/infer.org]] — type inference arena usage
+- [[file:../context/reader.org][context/reader.org]] — parser AST allocation
+- [[file:../context/macro.org][context/macro.org]] — macro expansion allocation
+
+* 7. Related Pages
+
+- [[file:heap.org][Heap Allocation]] -- heap allocation for runtime data
+- [[file:performance.org][Performance]] -- arena allocation performance characteristics
+- [[file:arrays.org][Arrays]] -- arena-allocated array data
 - [[file:data.org][Data Types]] -- ADT allocation via arena
 - [[file:types.org][Types]] -- type representation in arena
+- [[file:collections.org][Collections]] -- collection memory model
+- [[file:error-handling.org][Error Handling]] -- error paths and arena safety
+- [[file:build.org][Build System]] -- compilation pipeline using arena
+- [[file:repl.org][REPL]] -- checkpoint/restore for incremental compilation
+- [[file:layouts.org][Layout Types]] -- layout type memory layout
 
-* Context Links
+* 8. Further Reading
 
 - [[file:../arena.c][arena.c]] — arena allocator implementation
 - [[file:../arena.h][arena.h]] — arena API and constants
-- [[file:../context/arena.org][context/arena.org]] — arena design document
-- [[file:performance.org][Performance]] — performance guide
-- [[file:heap.org][Heap Allocation]] — runtime heap for collections
-- [[file:arrays.org][Arrays]] — stack vs heap allocation tradeoffs
+- [[file:../context/arena.org][context/arena.org]] — arena design document and internals
+- [[file:../context/codegen.org][context/codegen.org]] — codegen pipeline using arena
+- [[file:../context/runtime.org][context/runtime.org]] — runtime memory model
+- [[file:../context/language.org][context/language.org]] — language semantics and allocation
+- [[file:../context/build.org][context/build.org]] — build system and compilation phases
+- [[file:../context/repl.org][context/repl.org]] — REPL checkpoint/restore
+- [[file:../context/infer.org][context/infer.org]] — type inference arena usage
+- [[file:../context/reader.org][context/reader.org]] — parser AST allocation
+- [[file:../context/macro.org][context/macro.org]] — macro expansion allocation
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — codegen operations
+- [[file:performance.org][Performance]] — performance tuning guide
+- [[file:heap.org][Heap Allocation]] — runtime heap allocation

@@ -1,0 +1,14 @@
+name: mega_negative_bool_is_number
+section: codegen-negative-runtime
+tier: stable
+kind: law
+features: arithmetic, codegen, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.type_predicate
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate
+args: p:Bool
+type: Bool
+expect: False
+description: Generated Bool expression should not be a Number.
+law: (Number? {p})

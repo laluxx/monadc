@@ -1,0 +1,33 @@
+;; TEST-ID: tests.codegen.reader-error.reader-param-missing-paren
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: reader-errors/signatures-params
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.reader-error-coverage
+;; TEST-PURPOSE: Trigger and pin diagnostic: Expected ')' after parameter
+;; TEST-ATOM: atom.reader.error.reader.param.missing.paren
+;; TEST-CODEGEN-ATOM: atom.reader.error.reader.param.missing.paren
+;; TEST-QUALITY: diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-READER-ERROR: Expected ')' after parameter
+;; TEST-READER-PATH: reader.c:2285 parser.parameters
+;; TEST-CODEGEN-PATH: diagnostic.parser.parameters
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-COVERAGE: reader.c:2285 Expected ')' after parameter
+;; TEST-USES-ATOM: atom.reader.error.reader.param.missing.paren
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-USES-ATOM: atom.reader.error.family.parser.parameters
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-REFINES: atom.reader.error
+;; TEST-MENU: errors/reader/signatures-params/atom.reader.error.reader.param.missing.paren
+;; TEST-MENU-PATH: codegen/errors/reader/signatures-params/atom.reader.error.reader.param.missing.paren
+;; TEST-ATOM-LEAF: atom.reader.error.reader.param.missing.paren
+;; TEST-CLI-TARGET: codegen errors reader signatures-params
+
+(module Main)
+(lambda ((x) x)

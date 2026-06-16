@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.branch200.00.values.show.formatting.show.format.07
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 00-values
+;; TEST-SUBSET: show-formatting
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.branch200.00.values.show.formatting.show.format.07
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: show formatter handles adjacent placeholder chunks
+;; TEST-ATOM: atom.codegen.branch200.00.values.show.formatting.show.format.07
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.show.variadic-format
+;; TEST-TAG: show
+;; TEST-TAG: format
+;; TEST-COVERAGE: codegen.c:6054-6104 variadic show formatter placeholder path
+
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-USES-ATOM: atom.codegen.subset.00.values.show.formatting
+;; TEST-MENU: branches/values/show-formatting/atom.codegen.branch200.00.values.show.formatting.show.format.07
+;; TEST-MENU-PATH: codegen/branches/values/show-formatting/atom.codegen.branch200.00.values.show.formatting.show.format.07
+;; TEST-ATOM-LEAF: atom.codegen.branch200.00.values.show.formatting.show.format.07
+;; TEST-CLI-TARGET: codegen branches values show-formatting
+
+(module Main)
+(show "_::_::_" 1 2 3)

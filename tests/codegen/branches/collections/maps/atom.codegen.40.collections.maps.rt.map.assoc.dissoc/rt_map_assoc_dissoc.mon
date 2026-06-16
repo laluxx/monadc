@@ -1,0 +1,29 @@
+;; TEST-ID: tests.codegen.rt-map-literal-complex
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.maps.rt.map.assoc.dissoc
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: maps
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Map literals support repeated query operations.
+;; TEST-ATOM: count, contains?, find, keys, and vals observe a three-entry keyword map through current runtime display semantics.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:40-collections/maps branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/maps/atom.codegen.40.collections.maps.rt.map.assoc.dissoc
+;; TEST-MENU-PATH: codegen/branches/collections/maps/atom.codegen.40.collections.maps.rt.map.assoc.dissoc
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.maps.rt.map.assoc.dissoc
+;; TEST-CLI-TARGET: codegen branches collections maps
+(module Main)
+(define palette #{:red 1 :green 2 :blue 3})
+(show (Map? palette))
+(show (count palette))
+(show (contains? palette :green))
+(show (contains? palette :cyan))
+(show (find palette :blue))
+(show (keys palette))
+(show (vals palette))

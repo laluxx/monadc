@@ -1,0 +1,27 @@
+;; TEST-ID: tests.codegen.branch200.00.values.quote.printing.quote.print.ast.04
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 00-values
+;; TEST-SUBSET: quote-printing
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.branch200.00.values.quote.printing.quote.print.ast.04
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: quoted lambda shape reaches AST list printer
+;; TEST-ATOM: atom.codegen.branch200.00.values.quote.printing.quote.print.ast.04
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.show.quote-print-ast
+;; TEST-TAG: show
+;; TEST-TAG: quote
+;; TEST-COVERAGE: codegen.c:6114-6127 show quote fast path and codegen_print_ast
+
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-USES-ATOM: atom.codegen.subset.00.values.quote.printing
+;; TEST-MENU: branches/values/quote-printing/atom.codegen.branch200.00.values.quote.printing.quote.print.ast.04
+;; TEST-MENU-PATH: codegen/branches/values/quote-printing/atom.codegen.branch200.00.values.quote.printing.quote.print.ast.04
+;; TEST-ATOM-LEAF: atom.codegen.branch200.00.values.quote.printing.quote.print.ast.04
+;; TEST-CLI-TARGET: codegen branches values quote-printing
+
+(module Main)
+(show '(lambda (x) x))

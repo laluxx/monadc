@@ -1,0 +1,20 @@
+target	count	fail_compile	pass_run	example
+bridge.adt-return-mismatch	5	5	0	types/bridge/dep-hm/adt-return-mismatch/atom.type.bridge.dep-hm.adt-return-mismatch.000/type-bridge-dep-hm-adt-return-mismatch-000.mon
+dep.annotation-mismatch	5	5	0	types/dep/annotations/annotation-mismatch/atom.type.dep.annotations.annotation-mismatch.000/type-dep-annotations-annotation-mismatch-000.mon
+dep.refinement	8	8	0	types/dep/refinement/predicate-failure/atom.type.dep.refinement.predicate-failure.000/type-dep-refinement-predicate-failure-000.mon
+hm.cannot-unify	20	20	0	types/hm/unification/cannot-unify/atom.type.hm.unification.cannot-unify.000/type-hm-unification-cannot-unify-000.mon
+hm.collection-domain-mismatch	10	10	0	types/bridge/dep-hm/collection-domain/atom.type.bridge.dep-hm.collection-domain.000/type-bridge-dep-hm-collection-domain-000.mon
+hm.function-vs-value	12	12	0	types/hm/functions/function-vs-value/atom.type.hm.functions.function-vs-value.000/type-hm-functions-function-vs-value-000.mon
+hm.nil-return	12	12	0	types/hm/optional/nil-return-without-question/atom.type.hm.optional.nil-return-without-question.000/type-hm-optional-nil-return-without-question-000.mon
+hm.occurs-check	12	12	0	types/hm/unification/occurs-check/atom.type.hm.unification.occurs-check.000/type-hm-unification-occurs-check-000.mon
+hm.scalar-as-collection	12	12	0	types/hm/collections/scalar-as-collection/atom.type.hm.collections.scalar-as-collection.000/type-hm-collections-scalar-as-collection-000.mon
+hm.tuple-element-mismatch	12	12	0	types/hm/collections/tuple-element-mismatch/atom.type.hm.collections.tuple-element-mismatch.000/type-hm-collections-tuple-element-mismatch-000.mon
+hm.tuple-size-mismatch	12	12	0	types/hm/collections/tuple-size-mismatch/atom.type.hm.collections.tuple-size-mismatch.000/type-hm-collections-tuple-size-mismatch-000.mon
+hm.type-app-mismatch	8	8	0	types/hm/type-app/constructor-mismatch/atom.type.hm.type-app.constructor-mismatch.000/type-hm-type-app-constructor-mismatch-000.mon
+infer.c:Interop HM unifies with prior Dependent Type check	5	0	5	types/bridge/dep-hm/refinement-to-hm/atom.type.bridge.dep-hm.refinement-to-hm.000/type-bridge-dep-hm-refinement-to-hm-000.mon
+infer.c:TYPE_APP ~ TYPE_LAYOUT compatibility	6	0	6	types/dep/adt-layout/constructor-indexing/atom.type.dep.adt-layout.constructor-indexing.000/type-dep-adt-layout-constructor-indexing-000.mon
+infer.c:TYPE_ARR ~ TYPE_ARROW collection indexing coercion	10	0	10	types/hm/collections/array-as-function/atom.type.hm.collections.array-as-function.000/type-hm-collections-array-as-function-000.mon
+infer.c:TYPE_INT <-> TYPE_FLOAT compatibility	15	0	15	types/hm/numeric/widening-coercions/atom.type.hm.numeric.widening-coercions.000/type-hm-numeric-widening-coercions-000.mon
+infer.c:collection_element_type TYPE_STRING returns type_char	5	0	5	types/hm/collections/string-element-char/atom.type.hm.collections.string-element-char.000/type-hm-collections-string-element-char-000.mon
+infer.c:infer_toplevel/infer_generalise happy path	20	0	20	types/hm/polymorphism/identity-and-const/atom.type.hm.polymorphism.identity-and-const.000/type-hm-polymorphism-identity-and-const-000.mon
+infer.c:refinement inferred_type bridge	6	0	6	types/dep/refinement/predicate-success/atom.type.dep.refinement.predicate-success.000/type-dep-refinement-predicate-success-000.mon

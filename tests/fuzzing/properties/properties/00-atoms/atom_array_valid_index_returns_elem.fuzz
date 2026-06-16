@@ -1,0 +1,17 @@
+name: atom_array_valid_index_returns_elem
+section: atom-foundation
+tier: stable
+kind: law
+features: array, comparison
+compiler-path: runtime.array.index, codegen.array.literal, codegen.operator.comparison
+signal: high
+corpus-role: atom-foundation
+atom: atom.runtime.array
+proves: atom.runtime.array.index
+uses-atoms: atom.runtime.array, atom.core.equality
+depends-on: atom.runtime.array, atom.core.equality
+args: xs:NonEmptyArrInt@small i:IndexOf(xs)
+type: Bool
+expect: True
+description: Foundational atom property proving atom.runtime.array.index.
+law: (= ({xs} {i}) ({xs} {i}))

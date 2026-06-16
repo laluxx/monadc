@@ -1,0 +1,29 @@
+;; TEST-ID: tests.codegen.stateful.env.function.captures.global
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SUBSET: definitions-lambdas-monomorphization
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.stateful.env.function.captures.global
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Function body should load a global env binding.
+;; TEST-ATOM: atom.codegen.stateful.env.function.captures.global
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.symbol.global-load
+;; TEST-CODEGEN-PATH: codegen.define.function
+;; TEST-COVERAGE: codegen.c:4161-5688 define/function/lambda/symbol resolution branches
+;; TEST-COVERAGE: codegen.c:133-330 monomorphization cache and specialization
+;; TEST-COVERAGE: codegen.c:13353 AST_LAMBDA codegen branch
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-USES-ATOM: atom.codegen.subset.05.symbol.env.definitions.lambdas.monomorphization
+;; TEST-MENU: branches/symbol-env/definitions-lambdas-monomorphization/atom.codegen.stateful.env.function.captures.global
+;; TEST-MENU-PATH: codegen/branches/symbol-env/definitions-lambdas-monomorphization/atom.codegen.stateful.env.function.captures.global
+;; TEST-ATOM-LEAF: atom.codegen.stateful.env.function.captures.global
+;; TEST-CLI-TARGET: codegen branches symbol-env definitions-lambdas-monomorphization
+
+(module Main)
+(define base 40)
+(define (add-base [x : Int] -> Int) (+ base x))
+(show (add-base 2))

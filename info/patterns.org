@@ -14,10 +14,12 @@
 Pattern matching is compiled by the pattern match compiler
 ([[file:../pmatch.c]]) which desugars =pattern -> expr= clauses into
 equivalent =(cond ...)= chains that the generic codegen can lower.
+This is the central dispatch mechanism for ADTs, lists, and conditionals.
 
 Test coverage: =rt_match_*.mon= fixtures in
 [[file:../tests/codegen/][tests/codegen/]] cover ADT constructor matching, list
 destructuring, guard clauses, and wildcard fallbacks.
+Test architecture reference: [[file:../context/tests-arch.org][context/tests-arch.org]].
 
 Pipeline:
 
@@ -30,14 +32,21 @@ Desugaring happens at codegen time (after inference), not during
 parsing, because the full type environment and ADT definitions are
 only available after inference ([[file:../context/pmatch.org::56]]).
 
-* Implicit Pattern Matching (the default)
+See [[file:../context/reader.org][context/reader.org]] for reader internals and
+[[file:../context/codegen.org][context/codegen.org]] for LLVM lowering.
+
+* 1. Implicit Pattern Matching (the default)
 
 Inside a =define=, =lambda=, or =(let ...)= body, you do NOT need an
 explicit =(match ...)= expression. If the body consists of multiple
 clauses with =->= arrows, the function automatically pattern matches
-on its parameters.
+on its parameters. This is the idiomatic way to write pattern-matching
+functions in Monad.
 
-** Function with pattern clauses
+See also [[file:define.org][Define]] for function definition syntax and
+[[file:lambda.org][Lambda]] for anonymous function syntax.
+
+** 1.1 Function with pattern clauses
 
 #+BEGIN_SRC monad
 ;; Implicit match on the argument — no (match ...) needed
@@ -70,18 +79,22 @@ define fact lambda n
 
 The compiler recognizes that the body of =define= is a sequence of
 pattern clauses and wraps them in an implicit =match= on the
-function's parameters.
+function's parameters. The same rule applies recursively: if a
+pattern clause body itself contains clauses, those are also
+implicit matches.
 
-** Lambda with pattern clauses
+For recursive patterns see [[file:recursion.org][Recursion]].
+
+** 1.2 Lambda with pattern clauses
 
 Same applies to anonymous lambdas:
 
 #+BEGIN_SRC monad
 ;; Wisp: default body is implicit match
-define classify :: Int -> String
+(define classify :: Int -> String
   | 0       -> "zero"
   | n | > 0 -> "positive"
-  | _       -> "negative"
+  | _       -> "negative")
 
 ;; S-expr: same thing
 (define classify
@@ -102,14 +115,20 @@ define classify
 You can think of =define name pattern -> body= as the fundamental
 form — the =match= expression is just the explicit version.
 
-** Why this works
+** 1.3 Why this works
 
 The reader's =parse_lambda= function (reader.c:2714-2773) detects when
 the body starts with a pattern clause token (=->=, =|=) and creates an
 =AST_PMATCH= node wrapping the clauses instead of a regular expression
 body. The codegen then desugars the =PMATCH= into a =cond= chain.
 
-* explicit match expression
+Key Points:
+- =define=, =lambda=, and =let= bodies automatically pattern-match if they contain =->= clauses
+- Explicit =(match ...)= is only needed for sub-expression matching
+- The reader detects pattern clauses by looking for =->= or =|= tokens in the body position
+- Implicit matching is syntactic sugar provided by the reader, not a separate IR node
+
+* 2. Explicit match expression
 
 Use =match= explicitly when you need to match on a specific
 sub-expression (not the function parameter), or inside a non-function
@@ -125,28 +144,50 @@ match value with
   pattern -> body ...
 #+END_SRC
 
-Patterns tried in order from top to bottom. The first matching clause
-fires.
+Patterns are tried in order from top to bottom. The first matching clause
+fires. There is no backtracking — once a pattern matches, its body is
+evaluated and the result is returned.
 
-* Pattern kinds
+See [[file:conditionals.org][Conditionals]] for =cond= as the desugaring target
+and [[file:control.org][Control Flow]] for general flow control.
+
+Key Points:
+- Explicit =(match value with ...)= for matching sub-expressions
+- Top-to-bottom ordering; first match wins (no backtracking)
+- =match= desugars to =(cond ...)= at codegen time
+
+* 3. Pattern kinds
 
 The =PatternKind= enum ([[file:../reader.h::90]]) defines the
 supported pattern forms:
 
-| Pattern        | Example  | Matches                          |                           |
-|----------------+----------+----------------------------------+---------------------------|
-| Wildcard       | ~_~        | Any value, no binding            |                           |
-| Variable       | ~n~        | Any value, bound as ~n~            |                           |
-| Int literal    | ~0~, ~-1~    | Exact integer                    |                           |
-| Float literal  | ~1.5~      | Exact float                      |                           |
-| String literal | ~"a"~      | Exact string                     |                           |
-| Char literal   | ~'\n'~     | Exact character                  |                           |
-| Empty list     | ~[]~ / ~nil~ | Empty list / null                |                           |
+| Pattern        | Example  | Matches                          |
+|----------------+----------+----------------------------------|
+| Wildcard       | ~_~        | Any value, no binding            |
+| Variable       | ~n~        | Any value, bound as ~n~            |
+| Int literal    | ~0~, ~-1~    | Exact integer                    |
+| Float literal  | ~1.5~      | Exact float                      |
+| String literal | ~"a"~      | Exact string                     |
+| Char literal   | ~'\n'~     | Exact character                  |
+| Empty list     | ~[]~ / ~nil~ | Empty list / null                |
 | List with tail | ~[x      | xs]~                             | Destructure head and tail |
-| List fixed     | ~[a b c]~  | Fixed-length list match          |                           |
-| Constructor    | ~(Just x)~ | ADT constructor + field bindings |                           |
+| List fixed     | ~[a b c]~  | Fixed-length list match          |
+| Constructor    | ~(Just x)~ | ADT constructor + field bindings |
 
-* Guard clauses
+Wildcard (=_=) and variable (=n=) patterns both match any value; the
+difference is that variable patterns bind the matched value for use in
+the body, while wildcard discards it.
+
+For more on ADT constructors see [[file:data.org][Algebraic Data Types]].
+For list patterns see [[file:list.org][Lists]].
+
+Key Points:
+- Literal patterns test exact equality (=int=, =float=, =string=, =char=)
+- Wildcard =_= matches anything without binding; variable patterns bind
+- List patterns support fixed-length =[a b c]= and cons =[x|xs]= forms
+- Constructor patterns destructure ADT fields by position
+
+* 4. Guard clauses
 
 #+BEGIN_SRC monad
 (match x with
@@ -163,12 +204,22 @@ match x with
 #+END_SRC
 
 Use ~|~ (pipe) after the pattern, then a guard condition, then ~->~
-and the body. Multiple guards per clause are separated by pipes.
+and the body. Multiple guards per clause are supported — each must be
+satisfied for the clause to match.
 
 The guard condition is combined with the pattern condition as
 =(and pattern-condition guard-condition)= during desugaring.
 
-* Leading pipe separator
+See [[file:booleans.org][Booleans]] for boolean logic and
+[[file:conditionals.org][Conditionals]] for conditional evaluation.
+
+Key Points:
+- Guards extend a pattern with an additional boolean condition
+- Syntax: =pattern | guard-condition -> body=
+- Multiple guards per clause: =pattern | guard1 | guard2 -> body=
+- Guards desugar to =(and pattern-condition guard)=
+
+* 5. Leading pipe separator
 
 Pattern clauses may have an optional leading ~|~:
 
@@ -193,9 +244,15 @@ lambda x
 #+END_SRC
 
 The parser consumes ~|~ as a clause separator, not part of the
-pattern. Both with and without leading pipe work identically.
+pattern. Both with and without leading pipe work identically. The
+leading pipe is purely cosmetic for aligning multi-clause matches.
 
-* Tail patterns (head | tail)
+Key Points:
+- Leading ~|~ is optional and purely cosmetic
+- Does not affect semantics or codegen
+- Encouraged for readability in multi-clause matches
+
+* 6. Tail patterns (head | tail)
 
 List patterns support destructuring with ~|~ separating head and tail:
 
@@ -211,7 +268,18 @@ match xs with
   []     -> "empty"
 #+END_SRC
 
-* Exhaustive Checking
+This is the standard Lisp cons-pattern: =[x|xs]= desugars to matching
+a non-empty list with head bound to =x= and tail bound to =xs=.
+
+See [[file:list.org][Lists]] for more list operations and
+[[file:pair.org][Pairs]] for the cons-cell structure.
+
+Key Points:
+- =[x|xs]= destructures a non-empty list into head and tail
+- =[]= matches the empty list (=nil=)
+- Fixed-length =[a b c]= matches lists of exactly 3 elements
+
+* 7. Exhaustive Checking
 
 Constructor pattern matching requires a wildcard fallback clause.
 Without it, the compiler emits an =(undefined)= fallback:
@@ -228,9 +296,21 @@ match x with
   (Just v) -> show v
 #+END_SRC
 
-Always include ~_~ or ~default~ fallback clause for coverage.
+Always include ~_~ or ~default~ fallback clause for coverage. The
+compiler does not currently perform exhaustiveness analysis — it simply
+inserts an =(undefined)= guard for unmatched cases. Exhaustiveness-aware
+fallback removal (where the compiler statically proves all branches are
+covered) is future work.
 
-* Desugaring Internals
+For error handling see [[file:error-handling.org][Error Handling]] and
+[[file:errors.org][Errors]].
+
+Key Points:
+- Missing wildcard causes an =(undefined)= fallback at runtime
+- Always add =_ -> ...= as the last clause for robustness
+- Exhaustiveness checking is not yet implemented
+
+* 8. Desugaring Internals
 
 =build_pattern_conditions= ([[file:../context/pmatch.org::184]])
 generates condition expressions per pattern kind:
@@ -246,19 +326,100 @@ generates condition expressions per pattern kind:
 | List           | length check + element destructuring via =nth= |
 | Constructor    | tag check via =__adt_tag_= + field destructuring |
 
-* Related Pages
+Each condition is AND-ed with the previous clause's negation to ensure
+first-match semantics. The resulting chain is emitted as a =(cond ...)=
+expression.
+
+See [[file:../context/pmatch.org][context/pmatch.org]] for the full compilation
+algorithm and [[file:../context/codegen.org][context/codegen.org]] for LLVM IR
+generation.
+
+Key Points:
+- Desugaring produces a =(cond ...)= chain with mutually-exclusive conditions
+- Each clause's condition includes the negation of all prior clause conditions
+- List patterns generate =nth= calls for element destructuring
+- ADT patterns generate =__adt_tag_= calls for tag checking
+
+* 9. Runnable Example
+
+#+BEGIN_SRC monad
+;; run with: monadc patterns-demo.mon
+
+(define (classify [n :: Int] -> String)
+  | 0       -> "zero"
+  | n | (> n 0) -> "positive"
+  | _       -> "negative")
+
+(show (classify 0))   ;; prints "zero"
+(show (classify 5))   ;; prints "positive"
+(show (classify -3))  ;; prints "negative"
+
+;; Implicit matching with guards + wildcard fallback
+(define (fact : Int -> Int)
+  0 -> 1
+  n -> (* n (fact (- n 1))))
+
+(show (fact 5))        ;; prints 120
+
+;; Explicit (match ...) on a sub-expression
+(define (describe-pair [p :: (Pair Int Int)] -> String)
+  (match p with
+    (Pair x y) | (= x y) -> "equal"
+    (Pair _ _)           -> "not equal"))
+
+(show (describe-pair (Pair 3 3)))  ;; prints "equal"
+(show (describe-pair (Pair 3 4)))  ;; prints "not equal"
+#+END_SRC
+
+* 10. Gotchas
+
+Common mistakes and surprising behaviours with pattern matching:
+
+- **Missing wildcard =_= fallback** — the compiler inserts =(undefined)= for uncovered cases, causing a runtime error. Always add =_ -> ...= as the last clause.
+
+- **Guards are evaluated after pattern match** — the pattern must match first; the guard is only checked if the pattern succeeds.
+
+- **No backtracking** — patterns are tried top-to-bottom with first-match semantics. Once a clause fires, its body is evaluated; there is no backtracking to try alternative matches.
+
+- **Variable vs wildcard** — =_= and =n= both match anything, but =_= does not bind. Using =_= when you intend to bind the value is a silent no-op.
+
+- **Leading pipe =|= is purely cosmetic** — adding or removing =|= before a clause has zero effect on semantics or codegen.
+
+- **Constructor patterns require inference first** — desugaring is deferred to codegen time because the full ADT definition is needed for tag resolution.
+
+* 11. Implementation Notes
+
+| Component   | Context File        | Topic                                       |
+|-------------+---------------------+---------------------------------------------|
+| Parser      | reader.org          | [[file:../context/reader.org::#match-syntax][AST_PMATCH parsing, clause detection]] |
+| Desugaring  | pmatch.org          | [[file:../context/pmatch.org::#pmatch-desugarer][Pattern match desugaring algorithm]] |
+| Pattern     | pmatch.org          | [[file:../context/pmatch.org::#pattern-types][PatternKind enum, condition generation]] |
+| Codegen     | codegen.org         | [[file:../context/codegen.org::#codegen-core][Cond chain emission, LLVM IR lowering]] |
+| Language    | language.org        | [[file:../context/language.org::#pattern-matching][Pattern matching language semantics]] |
+| Inference   | infer.org           | [[file:../context/infer.org::#expression-inference][Type inference for pattern clauses]] |
+| Source      | pmatch.c            | [[file:../pmatch.c][Pattern match compiler implementation]] |
+| Source      | reader.h            | [[file:../reader.h::90][PatternKind enum definition]] |
+
+Related Pages
 
 - [[file:lambda.org][Lambda]] -- pattern clause lambdas
 - [[file:data.org][Data Types]] -- ADT definition and constructor patterns
 - [[file:pair.org][Pairs]] -- pair destructuring
 - [[file:list.org][Lists]] -- list pattern matching
 - [[file:conditionals.org][Conditionals]] -- cond as desugaring target
+- [[file:define.org][Define]] -- pattern clause function definition
+- [[file:let.org][Let Bindings]] -- let/let*/letrec with pattern clauses
+- [[file:booleans.org][Booleans]] -- guard condition expressions
+- [[file:recursion.org][Recursion]] -- recursive pattern matching
+- [[file:maybe.org][Maybe]] -- Option type pattern matching
+- [[file:result.org][Result]] -- Result type pattern matching
 
-* Context Links
+Further Reading
 
 - [[file:../context/pmatch.org][context/pmatch.org]] — pattern match compilation
 - [[file:../context/codegen.org][context/codegen.org]] — pattern codegen
+- [[file:../context/language.org][context/language.org]] — pattern language semantics
+- [[file:../context/reader.org][context/reader.org]] — AST_PMATCH parsing
+- [[file:../context/infer.org][context/infer.org]] — type inference for pattern clauses
 - [[file:../pmatch.c][pmatch.c]] — pattern parser and desugaring
-- [[file:lambda.org][Lambda]] — pattern clause lambdas
-- [[file:data.org][Data Types]] — ADT definition syntax
-- [[file:let.org][Let Bindings]] — let/let*/letrec with pattern clauses
+- [[file:../reader.h::90][reader.h:90]] — PatternKind enum

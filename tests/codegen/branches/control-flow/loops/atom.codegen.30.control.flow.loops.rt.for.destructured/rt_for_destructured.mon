@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-for-destructured
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.loops.rt.for.destructured
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: loops
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: For with destructured pair bindings works.
+;; TEST-ATOM: (for [[x y] [[1 2] [3 4]]] (show (+ x y))) shows sums.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/loops branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/loops/atom.codegen.30.control.flow.loops.rt.for.destructured
+;; TEST-MENU-PATH: codegen/branches/control-flow/loops/atom.codegen.30.control.flow.loops.rt.for.destructured
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.loops.rt.for.destructured
+;; TEST-CLI-TARGET: codegen branches control-flow loops
+(module Main)
+(for [[x y] [[1 2] [3 4]]] (show (+ x y)))

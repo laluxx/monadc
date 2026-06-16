@@ -1,0 +1,16 @@
+name: structured_oracle_list_count_r06_disabled_duplicate_a08f3b52
+section: current-oracle
+tier: experimental
+kind: law
+features: oracle, list, count
+compiler-path: codegen.runtime_call, runner.expect_python, runner.oracle_tier, runner.typed_generator, runtime.list
+signal: high
+corpus-role: merged-duplicate
+uses-atoms: atom.misc, atom.runtime.list
+merged-into: structured_oracle_list_count_r01
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: xs:ListInt@small
+type: Int
+expect-python: len(xs)
+description: V11 oracle property oracle_list_count round 6; validates Python expected-value support with generated rich/dependent arguments.
+law: (count {xs})

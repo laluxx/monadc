@@ -1,0 +1,15 @@
+name: structured_program_heap_array_index_literal_r01
+section: current-program-kind
+tier: stable
+kind: program
+features: program, heap-array, array-index, runtime
+compiler-path: codegen.array_index, codegen.heap_array, codegen.module_body, infer.callable_array, reader.heap_array, runner.program_kind
+signal: high
+corpus-role: program-semantics
+uses-atoms: atom.core.equality, atom.runtime.array, atom.runtime.heap-array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive
+args: a:Int@tiny b:Int@tiny c:Int@tiny
+type: Bool
+expect: True
+description: V11 program-kind compiler test program_heap_array_index_literal round 1; exercises full program insertion instead of show-wrapped law mode.
+program: (show (= (~[{a} {b} {c}] 2) {c}))

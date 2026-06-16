@@ -1,0 +1,17 @@
+name: structured_program_null_nested_int_variant_02_disabled_duplicate_871432ec
+section: current-program-kind
+tier: experimental
+kind: program
+features: program, null, coalesce
+compiler-path: codegen.module_body, codegen.null_coalesce, infer.nil, runner.program_kind
+signal: high
+corpus-role: merged-duplicate
+uses-atoms: atom.core.equality, atom.infer.predicate, atom.null.nil
+related-properties: signal_atom_equality_reflexive
+merged-into: structured_program_null_nested_int_variant_01
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int@edge b:Int@edge c:Int@edge
+type: Bool
+expect: True
+description: V10 program-kind property variant 2 for program_null_nested_int, checking full program source handling rather than show-wrapped law handling.
+program: (show (= (?? (?? {a} {b}) {c}) {a}))

@@ -1,0 +1,14 @@
+name: structured_compile_fail_type_error_head_int_r01
+section: current-compile-fail
+tier: compile-fail
+kind: compile-fail
+features: compile-fail, type, head
+compiler-path: diagnostic.expected_error, runner.compile_fail_kind
+signal: high
+corpus-role: negative-diagnostic
+uses-atoms: atom.diagnostic.compile_fail, atom.misc
+args: a:Int@edge
+type: Bool
+expect-diagnostic: error:
+description: V10 compile-fail replacement type_error_head_int round 1; intentionally invalid and should emit an error.
+law: (head {a})

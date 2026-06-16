@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.deep.deep_wisp_if_logic_phi
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SUBSET: control-and-logic
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.wisp.codegen.control.and.logic.deep.wisp.if.logic.phi
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise Wisp if/logic lowering into codegen branches.
+;; TEST-ATOM: Wisp control syntax should lower to the same PHI and boolean codegen paths.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: wisp.c if/logic lowering
+;; TEST-COVERAGE: codegen.c if/boolean dispatch
+
+;; TEST-USES-ATOM: atom.codegen.category.80.wisp.codegen
+;; TEST-MENU: branches/wisp-codegen/control-and-logic/atom.codegen.wisp.codegen.control.and.logic.deep.wisp.if.logic.phi
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/control-and-logic/atom.codegen.wisp.codegen.control.and.logic.deep.wisp.if.logic.phi
+;; TEST-ATOM-LEAF: atom.codegen.wisp.codegen.control.and.logic.deep.wisp.if.logic.phi
+;; TEST-CLI-TARGET: codegen branches wisp-codegen control-and-logic
+module Main
+define x 7
+show if x > 3 then x else 0
+show and True (x = 7)

@@ -1,0 +1,31 @@
+;; TEST-ID: tests.codegen.env-graph.env.mutation.local.binding.survives.do.18
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SUBSET: env-graph-links
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.env-error-coverage
+;; TEST-PURPOSE: Positive env graph bridge: env mutation local binding survives do 18.
+;; TEST-ATOM: atom.env.graph.env.mutation.local.binding.survives.do.18
+;; TEST-CODEGEN-ATOM: atom.env.graph.env.mutation.local.binding.survives.do.18
+;; TEST-QUALITY: env-positive-branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: env.lookup.positive
+;; TEST-TAG: env
+;; TEST-TAG: positive
+;; TEST-COVERAGE: env.c:env_is_local detects local value
+;; TEST-COVERAGE: codegen.c:set! local store
+;; TEST-USES-ATOM: atom.env.graph.env.mutation.local.binding.survives.do.18
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-USES-ATOM: atom.env.lookup
+;; TEST-DEPENDS-ON: atom.env.mutation.local
+;; TEST-DEPENDS-ON: atom.codegen.do
+;; TEST-REFINES: atom.env.error
+;; TEST-MENU: branches/symbol-env/env-graph-links/atom.env.graph.env.mutation.local.binding.survives.do.18
+;; TEST-MENU-PATH: codegen/branches/symbol-env/env-graph-links/atom.env.graph.env.mutation.local.binding.survives.do.18
+;; TEST-ATOM-LEAF: atom.env.graph.env.mutation.local.binding.survives.do.18
+;; TEST-CLI-TARGET: codegen branches symbol-env env-graph-links
+
+(module Main)
+(define (f [x : Int] -> Int) (do (set! x (+ x 2)) x))
+(show (f 18))

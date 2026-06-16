@@ -1,0 +1,15 @@
+name: logic_int_or_one_forces_true
+section: logic-coercion
+tier: stable
+kind: law
+features: arithmetic, equality, for, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.for_loop, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic, infer.loop
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+args: a:Int
+type: Bool
+expect: True
+description: Integer one must coerce to True in or.
+law: (= (or {a} 1) True)

@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.branch.operator-bitwise-symbol-family
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: bitwise
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.operator.bitwise.symbol.family
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover bit-or, unicode-or alias, bit-xor, unicode-xor alias, and logical shift-right branches.
+;; TEST-ATOM: Bitwise aliases should lower to the same integer operations as their ASCII spellings.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:7668 bitwise &, bit-or/∨, bit-xor/⊕ branches
+;; TEST-COVERAGE: codegen.c:7703 shift <<, >>, >>> branches
+
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/bitwise/atom.codegen.operator.bitwise.symbol.family
+;; TEST-MENU-PATH: codegen/branches/operators/bitwise/atom.codegen.operator.bitwise.symbol.family
+;; TEST-ATOM-LEAF: atom.codegen.operator.bitwise.symbol.family
+;; TEST-CLI-TARGET: codegen branches operators bitwise
+(module Main)
+(show (bit-or 5 2))
+(show (∨ 5 2))
+(show (bit-xor 6 3))
+(show (⊕ 6 3))
+(show (>>> 16 2))

@@ -1,7 +1,0 @@
-name: structured_v9_future_string_index_oracle
-section: future-string-oracle-v9
-args: s:NonEmptyString i:IndexOf(s)
-type: Int
-expect-python: ord(s[i])
-description: String indexing should return the generated character code.
-law: (Int ({s} {i}))

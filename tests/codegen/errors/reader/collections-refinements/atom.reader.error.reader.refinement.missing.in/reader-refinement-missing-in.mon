@@ -1,0 +1,33 @@
+;; TEST-ID: tests.codegen.reader-error.reader-refinement-missing-in
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: reader-errors/collections-refinements
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.reader-error-coverage
+;; TEST-PURPOSE: Trigger and pin diagnostic: Expected '∈' after variable name
+;; TEST-ATOM: atom.reader.error.reader.refinement.missing.in
+;; TEST-CODEGEN-ATOM: atom.reader.error.reader.refinement.missing.in
+;; TEST-QUALITY: diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-READER-ERROR: Expected '∈' after variable name
+;; TEST-READER-PATH: reader.c:6343 parser.refinement
+;; TEST-CODEGEN-PATH: diagnostic.parser.refinement
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-COVERAGE: reader.c:6343 Expected '∈' after variable name
+;; TEST-USES-ATOM: atom.reader.error.reader.refinement.missing.in
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-USES-ATOM: atom.reader.error.family.parser.refinement
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-REFINES: atom.reader.error
+;; TEST-MENU: errors/reader/collections-refinements/atom.reader.error.reader.refinement.missing.in
+;; TEST-MENU-PATH: codegen/errors/reader/collections-refinements/atom.reader.error.reader.refinement.missing.in
+;; TEST-ATOM-LEAF: atom.reader.error.reader.refinement.missing.in
+;; TEST-CLI-TARGET: codegen errors reader collections-refinements
+
+(module Main)
+(type Positive { x Int | (> x 0) })

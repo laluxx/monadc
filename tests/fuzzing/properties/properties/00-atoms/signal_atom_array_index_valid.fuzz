@@ -1,0 +1,16 @@
+name: signal_atom_array_index_valid
+section: current-atom-foundation
+tier: stable
+kind: law
+features: array, index, equality
+compiler-path: runtime.array.index, codegen.array.literal, codegen.call.array-as-function
+signal: high
+corpus-role: atom-foundation
+atom: atom.runtime.array.index.valid
+proves: atom.runtime.array.index.valid
+uses-atoms: atom.core.equality, atom.dependent.index-of, atom.runtime.array
+args: xs:NonEmptyArrInt@small i:IndexOf(xs)
+type: Bool
+expect: True
+description: Foundation atom proof for atom.runtime.array.index.valid; derived properties link through uses-atoms/depends-on metadata.
+law: (= ({xs} {i}) ({xs} {i}))

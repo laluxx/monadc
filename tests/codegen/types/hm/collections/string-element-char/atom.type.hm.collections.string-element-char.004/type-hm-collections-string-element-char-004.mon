@@ -1,0 +1,31 @@
+;; TEST-ID: tests.codegen.type.hm.collections.string.element.char.004
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: types
+;; TEST-SUBSET: hm/collections/string-element-char
+;; TEST-QUALITY: type-system-positive-regression
+;; TEST-CODEGEN-ATOM: atom.type.hm.collections.string-element-char.004
+;; TEST-TYPE-ATOM: atom.type.hm.collections.string-element-char.004
+;; TEST-CONTEXT: monadc.context.language.codegen-type-system-corpus, monadc.context.language.hm-dependent-type-coverage
+;; TEST-PURPOSE: HM and codegen agree that String indexing yields Char through the collection element bridge.
+;; TEST-ATOM: String collection element type is Char.
+;; TEST-EXPECT: compile, run
+;; TEST-MENU: types/hm/collections/string-element-char/atom.type.hm.collections.string-element-char.004
+;; TEST-MENU-PATH: codegen/types/hm/collections/string-element-char/atom.type.hm.collections.string-element-char.004
+;; TEST-ATOM-LEAF: atom.type.hm.collections.string-element-char.004
+;; TEST-CLI-TARGET: codegen types hm collections string-element-char
+;; TEST-TYPE-PATH: codegen.c:string index lowering
+;; TEST-INFER-PATH: infer.c:collection_element_type TYPE_STRING returns type_char
+;; TEST-COVERAGE: infer.c:collection_element_type String -> Char
+;; TEST-COVERAGE: codegen.c:string indexing path
+;; TEST-USES-ATOM: atom.codegen.category.types
+;; TEST-USES-ATOM: atom.type.system
+;; TEST-USES-ATOM: atom.type.hm.collection.string-char
+;; TEST-USES-ATOM: atom.codegen.string.index
+;; TEST-DEPENDS-ON: atom.type.hm.collection-element
+;; TEST-REFINES: atom.type.hm.string-element-char
+
+(module Main)
+(define (hm_string_idx_04 [s : String] [idx : Int] -> Char) (s idx))
+(show (hm_string_idx_04 "abcd" 0))

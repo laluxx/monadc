@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-code-reflection
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.60.reflection.quote.code.reflection.rt.code.reflection
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: code-reflection
+;; TEST-CATEGORY: 60-reflection-quote
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime code reflection attempts to retrieve source for a defined function.
+;; TEST-ATOM: (code inc) is a codegen-backed coverage point for function source retention.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:60-reflection-quote/code-reflection branch family
+;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote
+;; TEST-MENU: branches/reflection-quote/code-reflection/atom.codegen.60.reflection.quote.code.reflection.rt.code.reflection
+;; TEST-MENU-PATH: codegen/branches/reflection-quote/code-reflection/atom.codegen.60.reflection.quote.code.reflection.rt.code.reflection
+;; TEST-ATOM-LEAF: atom.codegen.60.reflection.quote.code.reflection.rt.code.reflection
+;; TEST-CLI-TARGET: codegen branches reflection-quote code-reflection
+(module Main)
+(define (inc [x : Int] -> Int) (+ x 1))
+(show (Fn? inc))
+(show (code inc))

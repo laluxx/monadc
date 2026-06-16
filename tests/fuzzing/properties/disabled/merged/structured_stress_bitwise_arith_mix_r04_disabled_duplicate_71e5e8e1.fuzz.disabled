@@ -1,0 +1,17 @@
+name: structured_stress_bitwise_arith_mix_r04_disabled_duplicate_71e5e8e1
+section: current-stress
+tier: experimental
+kind: program
+features: stress, program, bitwise, arithmetic, dispatch
+compiler-path: codegen.arithmetic_dispatch, codegen.bitwise_dispatch, codegen.deep_program, codegen.module_body, infer.arithmetic, runner.program_kind, runner.stress_tier
+signal: high
+corpus-role: merged-duplicate
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.core.plus
+related-properties: signal_atom_equality_reflexive, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero
+merged-into: structured_stress_bitwise_arith_mix_r01
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int@tiny b:Int@tiny
+type: Bool
+expect: True
+description: V11 stress program stress_bitwise_arith_mix round 4; combines multiple compiler paths in non-default stress tier.
+program: (show (= (bit-xor (& (+ {a} 0) {a}) {a}) 0))

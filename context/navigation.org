@@ -1,8 +1,8 @@
 #+TITLE: Context Navigation
 #+AUTHOR: Codex
-#+DATE: 2026-06-12
+#+DATE: 2026-06-16
 #+CREATED: 2026-06-12
-#+LAST_MODIFIED: 2026-06-12
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:nil num:nil
@@ -168,3 +168,97 @@ file in =context/*.org=:
   Every context file's =CONTEXT_ID_PREFIX= should match its segment in
   =monadc.context.<segment>.*= IDs. When adding a new context file, add a row
   here first.
+
+
+* Garden Governance Routes
+:PROPERTIES:
+:ID: monadc.context.navigation.garden-routes
+:CUSTOM_ID: navigation-garden-routes
+:CONTEXT_KIND: navigation
+:CONTEXT_DESCRIPTION: Routes for garden governance and quality files added during the context enhancement pass.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/navigation.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Governance route table
+| Prefix / need | File |
+|---------------+------|
+| =monadc.context.garden= | [[file:garden.org][garden.org]] |
+| =monadc.context.quality= | [[file:quality.org][quality.org]] |
+| =monadc.context.inventory= | [[file:inventory.org][inventory.org]] |
+| =monadc.context.connections= | [[file:connections.org][connections.org]] |
+| =monadc.context.coverage= | [[file:coverage-roadmap.org][coverage-roadmap.org]] |
+| =monadc.context.debug= | [[file:debug-agenda.org][debug-agenda.org]] |
+| test metadata policy | [[file:test-contracts.org][test-contracts.org]] |
+
+[DEC id:dec.navigation.governance-routes date:2026-06-16 by:llm]
+  Governance files are first-class context topics and should be included in any
+  context-only tar.
+
+* Category Context Routes
+:PROPERTIES:
+:ID: monadc.context.navigation.category-routes
+:CUSTOM_ID: navigation-category-routes
+:CONTEXT_KIND: navigation
+:CONTEXT_DESCRIPTION: Routes for category context, traceability, and curation files.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/navigation.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Category context route table
+| Prefix / need | File |
+|---------------+------|
+| =monadc.context.category= | [[file:category-context.org][category-context.org]] |
+| =monadc.context.traceability= | [[file:traceability.org][traceability.org]] |
+| =monadc.context.curation= | [[file:curation.org][curation.org]] |
+| category objects/morphisms | [[file:category-context.org][category-context.org]] |
+| source ↔ context ↔ test chain | [[file:traceability.org][traceability.org]] |
+| prune/promote/split workflow | [[file:curation.org][curation.org]] |
+
+[DEC id:dec.navigation.category-routes date:2026-06-16 by:llm]
+  Category context, traceability, and curation are first-class garden routes.
+
+* Formal Category Navigation
+:PROPERTIES:
+:ID: monadc.context.navigation.round3-category-directory
+:CONTEXT_KIND: navigation
+:CONTEXT_STATUS: active
+:SOURCE: context/navigation.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.navigation.round3-category-directory src:context/navigation.org conf:high]
+  Category theory, taxonomy, type-system, and information-theory material now starts at [[file:category/index.org][category/index.org]].
+
+* Live Category Tooling
+:PROPERTIES:
+:ID: monadc.context.navigation.live-category-tooling
+:CUSTOM_ID: navigation-live-category-tooling
+:CONTEXT_KIND: navigation
+:CONTEXT_STATUS: active
+:SOURCE: context/navigation.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.navigation.live-category-tooling src:context/navigation.org conf:high]
+  Use [[file:category/query-language.org][query-language.org]] for the compact language and
+  [[file:category/tui.org][tui.org]] for the interactive explorer.  The fastest CLI is
+  [[file:category/scripts/catq.py][catq.py]].

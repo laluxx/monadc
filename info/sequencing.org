@@ -15,11 +15,12 @@ Test coverage: =begin= and =do= are exercised by =rt_control_all.mon=.
 
 Sequencing forms evaluate multiple expressions in order, returning the
 last value. They are the standard way to combine side-effecting
-operations.
+operations and produce a single result from multiple steps.
 
-* begin
+* 1. begin
 
-Evaluate expressions left-to-right, return the last:
+Evaluate expressions left-to-right, return the last
+([[file:../codegen.c::7561][codegen.c:7561]]):
 
 #+BEGIN_SRC monad
 (begin
@@ -37,12 +38,58 @@ begin
 
 Body has implicit =begin= in many forms (=define=, =lambda=, =if=
 branches, =while= bodies). Explicit =begin= is needed when you want
-sequencing in a single-branch position
-([[file:../codegen.c::7561]]).
+sequencing in a single-branch position.
 
-* do
+** 1.1 begin with Variable Binding
 
-Alias for =begin= — identical semantics:
+#+BEGIN_SRC monad
+(begin
+  (define x 1)
+  (define y 2)
+  (+ x y))                      ;; returns 3
+#+END_SRC
+
+#+BEGIN_SRC wisp
+begin
+  define x 1
+  define y 2
+  + x y
+#+END_SRC
+
+** 1.2 begin in if Branches
+
+#+BEGIN_SRC monad
+(if (> x 0)
+  (begin
+    (show "positive case")
+    (process x))
+  (begin
+    (show "non-positive case")
+    (default-val)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+if (> x 0)
+  begin
+    show "positive case"
+    process x
+  begin
+    show "non-positive case"
+    default-val
+#+END_SRC
+
+#+BEGIN_QUOTE
+Key Points:
+- Evaluate forms left-to-right, return last value
+- Implicit in function/lambda/loop bodies
+- Explicit =begin= needed in single-expression positions (e.g. =if= branches)
+- Has strcmp dispatch handler — works in paren-mode
+#+END_QUOTE
+
+* 2. do
+
+Alias for =begin= — identical semantics
+([[file:../codegen.c::7830][codegen.c:7830]]):
 
 #+BEGIN_SRC monad
 (do
@@ -58,11 +105,13 @@ do
   + 1 2
 #+END_SRC
 
-Same codegen path as =begin= ([[file:../codegen.c::7830]]).
+Same codegen path as =begin=. The =do= form is provided for stylistic
+preference and Scheme compatibility.
 
-* with
+* 3. with
 
-Sequential bindings in a scope:
+Sequential bindings in a scope
+([[file:../codegen.c::7841][codegen.c:7841]]):
 
 #+BEGIN_SRC monad
 (with [x 1 y (+ x 1)] (+ x y))  ;; 3 — y sees x
@@ -72,17 +121,82 @@ Sequential bindings in a scope:
 with [x 1 y + x 1] + x y
 #+END_SRC
 
-=with= has a strcmp handler ([[file:../codegen.c::7841]]) and evaluates
-bindings left-to-right. Unlike =let= (which binds in parallel), =with=
-is sequential — each binding sees previous ones.
+=with= has a strcmp handler and evaluates bindings left-to-right. Unlike
+=let= (which binds in parallel), =with= is sequential — each binding
+sees previous ones.
 
-* Implicit Sequencing
+** 3.1 with vs let vs let*
+
+| Form   | Evaluation | Sees Previous? | strcmp? | Use Case                 |
+|--------+------------+----------------+---------+--------------------------|
+| =with= | Sequential | Yes            | Yes     | Dependent bindings       |
+| =let=  | Parallel   | No             | No      | Independent bindings     |
+| =let*= | Sequential | Yes            | No      | Dependent, no strcmp     |
+
+See [[file:let.org][Let Bindings]] for full =let=/=let*/=letrec= reference
+and [[file:../context/language.org::binding-constructs][context/language.org — Binding Constructs]].
+
+** 3.2 with with Side Effects
+
+#+BEGIN_SRC monad
+(with [x (begin (show "init x") 1)
+       y (begin (show "init y") (+ x 1))]
+  (+ x y))                      ;; prints "init x", "init y", returns 3
+#+END_SRC
+
+#+BEGIN_SRC wisp
+with [x (begin (show "init x") 1)
+      y (begin (show "init y") (+ x 1))]
+  + x y
+#+END_SRC
+
+* 4. Implicit Sequencing
 
 Many forms implicitly sequence their body:
 - =lambda= body: multiple expressions run in order
 - =define= value position: =(define x (begin (show "init") 42))=
 - =if= branches: each branch can have multiple expressions via =begin=
 - =while= / =for= body: implicit =begin= around the body forms
+
+See [[file:../context/language.org::structural-constructs][context/language.org — Structural Constructs]]
+for the internal representation of sequenced expressions.
+
+* 5. Comparison of Sequencing Forms
+
+| Form    | strcmp? | Returns        | Primary Use              |
+|---------+---------+----------------+--------------------------|
+| =begin= | Yes     | Last expression | General sequencing       |
+| =do=    | Yes     | Last expression | Alias for =begin=        |
+| =with=  | Yes     | Body result     | Sequential bindings      |
+
+All three are expression-oriented — they produce values and compose with
+other control forms.
+
+* 6. Implementation Notes
+
+Key source locations for sequencing:
+
+| Aspect                | Location                                                              |
+|-----------------------+-----------------------------------------------------------------------|
+| =begin= codegen       | [[file:../codegen.c::7561][codegen.c:7561]]                                    |
+| =do= codegen          | [[file:../codegen.c::7830][codegen.c:7830]]                                    |
+| =with= codegen        | [[file:../codegen.c::7841][codegen.c:7841]]                                    |
+| Structural constructs | [[file:../context/language.org::structural-constructs][context/language.org — Structural Constructs]] |
+| Binding constructs    | [[file:../context/language.org::binding-constructs][context/language.org — Binding Constructs]] |
+
+All three forms have working strcmp dispatch handlers. =begin= and =do=
+share the same codegen path (emitting each expression in sequence and
+forwarding the last value). =with= generates bindings with left-to-right
+evaluation and a body block.
+
+#+BEGIN_QUOTE
+Key Points:
+- =begin= / =do=: general sequencing, evaluate left-to-right
+- =with=: sequential bindings (like =let*= but with strcmp)
+- All three have strcmp handlers — work in paren-mode
+- Implicit =begin= in function bodies, loop bodies, =if= branches
+- Expression-oriented: every sequencing form returns a value
+#+END_QUOTE
 
 * Related Pages
 
@@ -91,11 +205,24 @@ Many forms implicitly sequence their body:
 - [[file:let.org][Let Bindings]] -- let and with bindings
 - [[file:iteration.org][Iteration]] -- for, while bodies
 - [[file:functional-programming.org][Functional Programming]] -- pure sequencing
+- [[file:mutation.org][Mutation]] -- side effects and mutation
+- [[file:lambda.org][Lambda]] -- implicit begin in lambda bodies
+
+* Further Reading
+
+- [[file:../context/language.org][context/language.org]] — expression sequencing
+- [[file:../context/language.org::structural-constructs][context/language.org — Structural Constructs]]
+- [[file:../context/language.org::binding-constructs][context/language.org — Binding Constructs]]
+- [[file:../codegen.c][codegen.c]] — =begin=, =do=, =with= codegen
+- [[file:../tests/codegen/rt_control_all.mon][rt_control_all.mon]] — sequencing test fixtures
+- [[file:../context/reader.org::sugar-registry][context/reader.org — Sugar Registry]]
 
 * Context Links
 
 - [[file:../context/language.org][context/language.org]] — expression sequencing
+- [[file:../context/language.org::structural-constructs][context/language.org — Structural Constructs]]
 - [[file:../codegen.c::7561][codegen.c]] — =begin= codegen
+- [[file:../codegen.c::7830][codegen.c]] — =do= codegen
 - [[file:../codegen.c::7841][codegen.c]] — =with= codegen
 - [[file:control.org][Control Flow]] — overview of control forms
 - [[file:let.org][Let Bindings]] — let, let*, letrec

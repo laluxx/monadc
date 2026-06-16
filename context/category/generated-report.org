@@ -1,0 +1,60 @@
+#+TITLE: Generated Category Report
+#+AUTHOR: context/category/scripts/render_docs.py
+#+DATE: 2026-06-16
+#+CREATED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-16
+#+FILETAGS: :monadc:compiler:context:category:generated:report:
+#+PROPERTY: CONTEXT_VERSION 5
+
+* Summary
+:PROPERTIES:
+:ID: monadc.context.category.generated.summary
+:CONTEXT_KIND: generated-report
+:CONTEXT_STATUS: generated
+:SOURCE: context/category/scripts/render_docs.py
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.category.generated.summary src:context/category/scripts/render_docs.py conf:high]
+  Generated snapshot of the category graph and information metrics.
+
+- Objects: 3590
+- Edges: 4421
+- Unresolved edges: 0
+
+* Entropy
+:PROPERTIES:
+:ID: monadc.context.category.generated.entropy
+:CONTEXT_KIND: generated-report
+:CONTEXT_STATUS: generated
+:SOURCE: context/category/scripts/info_metrics.py
+:CONFIDENCE: high
+:END:
+
+| Signal          | Entropy bits |
+|-----------------+--------------|
+| object_kinds    |       1.0286 |
+| edge_kinds      |       0.9802 |
+| record_types    |       1.6172 |
+| records_by_file |        5.313 |
+
+* Top Record Types
+:PROPERTIES:
+:ID: monadc.context.category.generated.record-types
+:CONTEXT_KIND: generated-report
+:CONTEXT_STATUS: generated
+:SOURCE: context/category/scripts/info_metrics.py
+:CONFIDENCE: high
+:END:
+
+| Type  | Count |
+|-------+-------|
+| OBS   |  1767 |
+| THINK |   255 |
+| INF   |   215 |
+| DEC   |   191 |
+| DOC   |    97 |
+| TODO  |    57 |
+| IDEA  |     6 |
+| FIX   |     5 |
+

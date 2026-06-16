@@ -1,0 +1,15 @@
+name: structured_loop_for_adds_branch_value_6_times
+section: control-loop-mutation-current
+tier: stable
+kind: law
+features: arithmetic, array, array-index, control, do, env, equality, for, if, logic, mutation, phi, set, set!, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.branch_phi, codegen.equality_dispatch, codegen.for_loop, codegen.if_phi, codegen.local_load, codegen.logic_dispatch, codegen.runtime_call, codegen.sequence, codegen.set_bang, codegen.store, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.equality, infer.if_phi, infer.logic, infer.loop, infer.mutation, reader.array_literal, reader.ast_do, reader.ast_if, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.set-bang, atom.binding.with, atom.control.do, atom.control.if, atom.core.equality, atom.core.multiply, atom.core.plus, atom.logic.and, atom.logic.not, atom.logic.or, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_do_last_value, signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates, signal_atom_multiply_associative, signal_atom_multiply_commutative, signal_atom_multiply_identity_one, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero, signal_atom_with_substitution
+args: p:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: for loop must preserve loop-carried accumulator state across 6 iterations with branch-selected increment.
+law: (= (with [acc {a}] (do (for 6 (set! acc (+ acc (if {p} {b} {c})))) acc)) (+ {a} (* (if {p} {b} {c}) 6)))

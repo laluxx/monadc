@@ -1,0 +1,17 @@
+name: deep_codegen_runtime_list_zero_count_disabled_duplicate_d8dea5f9
+section: codegen-runtime-values
+tier: experimental
+kind: law
+features: arithmetic, codegen, equality, list
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.runtime_call, infer.arithmetic, infer.equality, runtime.list
+signal: low
+corpus-role: merged-duplicate
+uses-atoms: atom.codegen.dispatch, atom.core.equality
+related-properties: signal_atom_equality_reflexive
+merged-into: list_empty_count_zero
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: 
+type: Bool
+expect: True
+description: Zero-arg list must construct an empty list.
+law: (= (count (list)) 0)

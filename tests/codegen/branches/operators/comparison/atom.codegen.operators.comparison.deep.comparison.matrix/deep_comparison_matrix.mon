@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.deep.deep_comparison_matrix
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-SUBSET: comparison
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.operators.comparison.deep.comparison.matrix
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise comparison dispatch for all core integer predicates.
+;; TEST-ATOM: Comparison branches should produce Bool values.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:comparison operator dispatch
+
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/comparison/atom.codegen.operators.comparison.deep.comparison.matrix
+;; TEST-MENU-PATH: codegen/branches/operators/comparison/atom.codegen.operators.comparison.deep.comparison.matrix
+;; TEST-ATOM-LEAF: atom.codegen.operators.comparison.deep.comparison.matrix
+;; TEST-CLI-TARGET: codegen branches operators comparison
+(module Main)
+(show (< 1 2))
+(show (<= 2 2))
+(show (> 5 4))
+(show (>= 5 5))
+(show (!= 9 9))

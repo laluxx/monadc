@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.deep.deep_diag_if_branch_type_mismatch
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: type-errors
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.90.diagnostics.type.errors.deep.diag.if.branch.type.mismatch
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Expected diagnostic for incompatible if branch types.
+;; TEST-ATOM: if branch typing should reject incompatible PHI values.
+;; TEST-EXPECT: fail:compile
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics, atom.codegen.subset.type.errors
+;; TEST-COVERAGE: infer/codegen if branch type validation
+;; TEST-MENU: errors/codegen/type-errors/atom.codegen.90.diagnostics.type.errors.deep.diag.if.branch.type.mismatch
+;; TEST-MENU-PATH: codegen/errors/codegen/type-errors/atom.codegen.90.diagnostics.type.errors.deep.diag.if.branch.type.mismatch
+;; TEST-ATOM-LEAF: atom.codegen.90.diagnostics.type.errors.deep.diag.if.branch.type.mismatch
+;; TEST-CLI-TARGET: codegen errors codegen type-errors
+
+(module Main)
+(show (if True 1 "bad"))

@@ -1,0 +1,16 @@
+name: signal_derived_array_index_equality_link_028
+section: current-atom-derived
+tier: stable
+kind: law
+features: array, index, if, phi, equality, dependent-arg
+compiler-path: codegen.array.literal, codegen.call.array-as-function, codegen.expr.if, codegen.phi.int
+signal: high
+corpus-role: derived-atom-linked
+uses-atoms: atom.runtime.array, atom.runtime.array.index.valid, atom.control.if, atom.core.equality
+depends-on: atom.runtime.array.index.valid, atom.control.if.idempotent, atom.core.equality.reflexive
+related-properties: signal_atom_array_index_valid, signal_atom_if_same_branch_eliminates, signal_atom_equality_reflexive
+args: xs:NonEmptyArrInt@small i:IndexOf(xs) flag:Bool@logic
+type: Bool
+expect: True
+description: Derived property that explicitly links a real language/compiler path to foundational atom properties.
+law: (= (if {flag} ({xs} {i}) ({xs} {i})) ({xs} {i}))

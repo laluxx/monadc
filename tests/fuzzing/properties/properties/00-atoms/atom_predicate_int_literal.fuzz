@@ -1,0 +1,17 @@
+name: atom_predicate_int_literal
+section: atom-foundation
+tier: stable
+kind: law
+features: predicate
+compiler-path: infer.predicate, codegen.predicate
+signal: high
+corpus-role: atom-foundation
+atom: atom.core.predicate
+proves: atom.core.predicate.int
+uses-atoms: atom.core.predicate, atom.core.int
+depends-on: atom.core.predicate, atom.core.int
+args: x:Int@edge+if
+type: Bool
+expect: True
+description: Foundational atom property proving atom.core.predicate.int.
+law: (int? {x})

@@ -1,0 +1,36 @@
+;; TEST-ID: tests.codegen.branch.collection-map-merge-count-only
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: failure
+;; TEST-SUBSET: maps
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise merge, keys, and vals map branches through count-only stable oracles.
+;; TEST-ATOM: atom.codegen.collection.map-merge-keys-vals-count
+;; TEST-CODEGEN-ATOM: atom.codegen.collection.map-merge-keys-vals-count
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.map.merge
+;; TEST-CODEGEN-PATH: codegen.map.keys
+;; TEST-CODEGEN-PATH: codegen.map.vals
+;; TEST-DEPENDS-ON: atom.codegen.collection.map-count-mutation
+;; TEST-TAG: run
+;; TEST-TAG: collection
+;; TEST-TAG: map
+;; TEST-COVERAGE: codegen.c:4221-4222 keys/vals branches
+;; TEST-COVERAGE: codegen.c:4237 merge branch
+;; TEST-COVERAGE: codegen.c:8858 count map/list branches
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/maps/atom.codegen.collection.map-merge-keys-vals-count
+;; TEST-MENU-PATH: codegen/branches/collections/maps/atom.codegen.collection.map-merge-keys-vals-count
+;; TEST-ATOM-LEAF: atom.codegen.collection.map-merge-keys-vals-count
+;; TEST-CLI-TARGET: codegen branches collections maps
+(module Main)
+(define a #{:a 1})
+(define b #{:b 2 :c 3})
+(define c (merge a b))
+(show (count c))
+(show (count (keys c)))
+(show (count (vals c)))

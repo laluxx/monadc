@@ -1,0 +1,15 @@
+name: mega_pred_collection_list_true
+section: codegen-preds-strings-null
+tier: experimental
+kind: law
+features: arithmetic, codegen, list, predicate, string
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, codegen.string_literal, infer.arithmetic, infer.type_predicate, reader.string_literal, runtime.list, runtime.string
+signal: low
+corpus-role: legacy-smoke
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate, atom.null.nil, atom.runtime.string
+related-properties: signal_atom_string_contains_substring
+args: 
+type: Bool
+expect: True
+description: collection? must recognize lists.
+law: (collection? (list))

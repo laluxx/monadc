@@ -1,0 +1,15 @@
+name: mega_pred_symbol_quote_true
+section: codegen-preds-strings-null
+tier: experimental
+kind: law
+features: arithmetic, codegen, predicate, quote, string
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.quote, codegen.string_literal, infer.arithmetic, infer.type_predicate, reader.quote, reader.string_literal, runtime.string
+signal: low
+corpus-role: legacy-smoke
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate, atom.null.nil, atom.quote.quote, atom.runtime.string
+related-properties: signal_atom_string_contains_substring
+args: 
+type: Bool
+expect: True
+description: Symbol? must recognize quoted symbol runtime value.
+law: (Symbol? (quote compiler_symbol))

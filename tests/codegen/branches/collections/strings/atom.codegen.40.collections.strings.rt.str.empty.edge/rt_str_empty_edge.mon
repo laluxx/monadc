@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.rt-str-empty-edge
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.strings.rt.str.empty.edge
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: strings
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Edge cases for string predicates with empty strings
+;; TEST-ATOM: (starts-with? "" "") = True, (ends-with? "" "") = True, (contains? "" "") = True, (starts-with? "a" "") = True, (ends-with? "a" "") = True, (contains? "a" "") = True
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:40-collections/strings branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/strings/atom.codegen.40.collections.strings.rt.str.empty.edge
+;; TEST-MENU-PATH: codegen/branches/collections/strings/atom.codegen.40.collections.strings.rt.str.empty.edge
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.strings.rt.str.empty.edge
+;; TEST-CLI-TARGET: codegen branches collections strings
+(module Main)
+(show (starts-with? "" ""))
+(show (ends-with? "" ""))
+(show (contains? "" ""))
+(show (starts-with? "a" ""))
+(show (ends-with? "a" ""))
+(show (contains? "a" ""))

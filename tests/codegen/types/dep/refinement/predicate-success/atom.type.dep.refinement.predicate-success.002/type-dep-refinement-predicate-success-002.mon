@@ -1,0 +1,32 @@
+;; TEST-ID: tests.codegen.type.dep.refinement.predicate.success.002
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: types
+;; TEST-SUBSET: dep/refinement/predicate-success
+;; TEST-QUALITY: type-system-positive-regression
+;; TEST-CODEGEN-ATOM: atom.type.dep.refinement.predicate-success.002
+;; TEST-TYPE-ATOM: atom.type.dep.refinement.predicate-success.002
+;; TEST-CONTEXT: monadc.context.language.codegen-type-system-corpus, monadc.context.language.hm-dependent-type-coverage
+;; TEST-PURPOSE: Dependent/refinement checker accepts a value satisfying its predicate and lets codegen print it.
+;; TEST-ATOM: Refinement proof path reaches codegen after successful dependent check.
+;; TEST-EXPECT: compile, run
+;; TEST-MENU: types/dep/refinement/predicate-success/atom.type.dep.refinement.predicate-success.002
+;; TEST-MENU-PATH: codegen/types/dep/refinement/predicate-success/atom.type.dep.refinement.predicate-success.002
+;; TEST-ATOM-LEAF: atom.type.dep.refinement.predicate-success.002
+;; TEST-CLI-TARGET: codegen types dep refinement predicate-success
+;; TEST-INFER-PATH: infer.c:refinement inferred_type bridge
+;; TEST-DEP-PATH: dep.c:dependent checker happy path
+;; TEST-COVERAGE: dep.c:dep_check refinement happy path
+;; TEST-COVERAGE: codegen.c:typed define codegen
+;; TEST-USES-ATOM: atom.codegen.category.types
+;; TEST-USES-ATOM: atom.type.system
+;; TEST-USES-ATOM: atom.type.dep.refinement
+;; TEST-USES-ATOM: atom.type.dep.check
+;; TEST-DEPENDS-ON: atom.codegen.define.typed-value
+;; TEST-REFINES: atom.type.dep.predicate-success
+
+(module Main)
+(type DepPosOk02 { x ∈ Int | (> x 0) })
+(define [good :: DepPosOk02] 3)
+(show good)

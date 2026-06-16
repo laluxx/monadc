@@ -72,8 +72,8 @@ typedef struct LspSignatureHelp  LspSignatureHelp;
 //  We store them as 0-based and convert at the boundary.
 //
 typedef struct LspPosition {
-    uint32_t line;       /* 0-based line index        */
-    uint32_t character;  /* 0-based UTF-16 code units */
+    uint32_t line;       // 0-based line index
+    uint32_t character;  // 0-based UTF-16 code units
 } LspPosition;
 
 typedef struct LspRange {
@@ -82,7 +82,7 @@ typedef struct LspRange {
 } LspRange;
 
 typedef struct LspLocation {
-    char    *uri;    /* file:// URI, owned */
+    char    *uri;    // file:// URI, owned
     LspRange range;
 } LspLocation;
 
@@ -113,11 +113,11 @@ typedef struct LspDiagnosticRelated {
 typedef struct LspDiagnostic {
     LspRange   range;
     LspSeverity severity;
-    uint32_t    tags;       /* bitmask of LspDiagnosticTag */
-    char       *code;       /* e.g. "E001", owned          */
-    char       *source;     /* "monad", owned              */
-    char       *message;         /* human-readable, owned       */
-    char       *message_detail;  /* extended detail, owned      */
+    uint32_t    tags;            // bitmask of LspDiagnosticTag
+    char       *code;            // e.g. "E001", owned
+    char       *source;          // "monad", owned
+    char       *message;         // human-readable, owned
+    char       *message_detail;  // extended detail, owned
 
     LspDiagnosticRelated *related;
     size_t                related_count;
@@ -156,7 +156,7 @@ typedef enum {
 
 typedef enum {
     LSP_INSERT_TEXT_PLAIN   = 1,
-    LSP_INSERT_TEXT_SNIPPET = 2,   // $1, $2, ${1:placeholder}
+    LSP_INSERT_TEXT_SNIPPET = 2,         // $1, $2, ${1:placeholder}
 } LspInsertTextFormat;
 
 typedef struct LspCompletion {
@@ -283,9 +283,9 @@ typedef enum {
 } LspTokenModifier;
 
 typedef struct LspSemanticTokens {
-    uint32_t *data;       /* delta-encoded 5-tuples, owned */
-    size_t    count;      /* number of uint32 values (= tokens * 5) */
-    char     *result_id;  /* for incremental updates, owned */
+    uint32_t *data;       // delta-encoded 5-tuples, owned
+    size_t    count;      // number of uint32 values (= tokens * 5)
+    char     *result_id;  // for incremental updates, owned
 } LspSemanticTokens;
 
 

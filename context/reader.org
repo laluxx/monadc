@@ -1,8 +1,8 @@
 #+TITLE: Reader and Parser Context
 #+AUTHOR: Codex
-#+DATE: 2026-06-11
+#+DATE: 2026-06-16
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -663,7 +663,7 @@ Expected Wisp shape:
   change must be validated against both parser paths, effectively
   doubling the parser test surface.
 
-[INF id:inf.reader.connects-to from:obs.reader.purpose conf:high]
+[INF id:inf.reader.connects-to from:monadc.context.reader.file-metadata conf:high]
   connects-to -> `monadc.context.language` (reader produces AST consumed by
   codegen; ASTType values correspond to language constructs) ·
   `monadc.context.wisp` (wisp_parse_all expands Wisp to S-exprs, then reader
@@ -680,3 +680,300 @@ Expected Wisp shape:
   `monadc.context.tests-arch` (reader-atoms.tsv, reader-sugars.tsv corpora
   test reader edge cases) ·
   `monadc.context.tests` (reader tests exercise every ASTType path)
+
+* Test Coverage Anchors
+
+* Reader Sugar Address Of
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.address-of
+:CUSTOM_ID: test-anchor-reader-sugar-address-of
+:END:
+[OBS id:obs.reader.sugar.address-of.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Reader Sugar Assign Arrow
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.assign-arrow
+:CUSTOM_ID: test-anchor-reader-sugar-assign-arrow
+:END:
+[OBS id:obs.reader.sugar.assign-arrow.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Reader Sugar Cond To If
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.cond-to-if
+:CUSTOM_ID: test-anchor-reader-sugar-cond-to-if
+:END:
+[OBS id:obs.reader.sugar.cond-to-if.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Reader Sugar Dot Access
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.dot-access
+:CUSTOM_ID: test-anchor-reader-sugar-dot-access
+:END:
+[OBS id:obs.reader.sugar.dot-access.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Reader Sugar Feature Cond
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.feature-cond
+:CUSTOM_ID: test-anchor-reader-sugar-feature-cond
+:END:
+[OBS id:obs.reader.sugar.feature-cond.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Reader Sugar Heap Array
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.heap-array
+:CUSTOM_ID: test-anchor-reader-sugar-heap-array
+:END:
+[OBS id:obs.reader.sugar.heap-array.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Reader Sugar Implicit Mul
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.implicit-mul
+:CUSTOM_ID: test-anchor-reader-sugar-implicit-mul
+:END:
+[OBS id:obs.reader.sugar.implicit-mul.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Reader Sugar Infix
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.infix
+:CUSTOM_ID: test-anchor-reader-sugar-infix
+:END:
+[OBS id:obs.reader.sugar.infix.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Reader Sugar Lambda Lit
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.lambda-lit
+:CUSTOM_ID: test-anchor-reader-sugar-lambda-lit
+:END:
+[OBS id:obs.reader.sugar.lambda-lit.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Reader Sugar Let Desugar
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.let-desugar
+:CUSTOM_ID: test-anchor-reader-sugar-let-desugar
+:END:
+[OBS id:obs.reader.sugar.let-desugar.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Reader Sugar Path Literal
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.path-literal
+:CUSTOM_ID: test-anchor-reader-sugar-path-literal
+:END:
+[OBS id:obs.reader.sugar.path-literal.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Reader Sugar Percent
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.percent
+:CUSTOM_ID: test-anchor-reader-sugar-percent
+:END:
+[OBS id:obs.reader.sugar.percent.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Reader Sugar Periodic
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.periodic
+:CUSTOM_ID: test-anchor-reader-sugar-periodic
+:END:
+[OBS id:obs.reader.sugar.periodic.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Reader Sugar Pipe
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.pipe
+:CUSTOM_ID: test-anchor-reader-sugar-pipe
+:END:
+[OBS id:obs.reader.sugar.pipe.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Reader Sugar Postfix Call
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.postfix-call
+:CUSTOM_ID: test-anchor-reader-sugar-postfix-call
+:END:
+[OBS id:obs.reader.sugar.postfix-call.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Reader Sugar Postfix Index
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.postfix-index
+:CUSTOM_ID: test-anchor-reader-sugar-postfix-index
+:END:
+[OBS id:obs.reader.sugar.postfix-index.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Reader Sugar Ptr Type
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.ptr-type
+:CUSTOM_ID: test-anchor-reader-sugar-ptr-type
+:END:
+[OBS id:obs.reader.sugar.ptr-type.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Reader Sugar Quasiquote Corner
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.quasiquote-corner
+:CUSTOM_ID: test-anchor-reader-sugar-quasiquote-corner
+:END:
+[OBS id:obs.reader.sugar.quasiquote-corner.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Reader Sugar Quote
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.quote
+:CUSTOM_ID: test-anchor-reader-sugar-quote
+:END:
+[OBS id:obs.reader.sugar.quote.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Reader Sugar Range Sugar
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.range-sugar
+:CUSTOM_ID: test-anchor-reader-sugar-range-sugar
+:END:
+[OBS id:obs.reader.sugar.range-sugar.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Reader Sugar Size Array
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.size-array
+:CUSTOM_ID: test-anchor-reader-sugar-size-array
+:END:
+[OBS id:obs.reader.sugar.size-array.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Reader Sugar Superscript
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.superscript
+:CUSTOM_ID: test-anchor-reader-sugar-superscript
+:END:
+[OBS id:obs.reader.sugar.superscript.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Reader Sugar Unicode Prefix
+:PROPERTIES:
+:ID: monadc.context.reader.sugar.unicode-prefix
+:CUSTOM_ID: test-anchor-reader-sugar-unicode-prefix
+:END:
+[OBS id:obs.reader.sugar.unicode-prefix.test-anchor src:tests/reader-sugars.tsv conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+
+
+* Garden Links — Reader Verification Surface
+:PROPERTIES:
+:ID: monadc.context.reader.garden-links
+:CUSTOM_ID: reader-garden-links
+:CONTEXT_KIND: navigation
+:CONTEXT_DESCRIPTION: Links from reader context to test contracts and AST/desugar coverage requirements.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/reader.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.reader.garden-links src:context/reader.org conf:high]
+  Reader changes should normally update or add TSV corpus rows and JSON AST
+  goldens. See [[file:test-contracts.org][test contracts]] and
+  [[file:coverage-roadmap.org][coverage roadmap]].
+
+* Reader Category Contract
+:PROPERTIES:
+:ID: monadc.context.reader.category-contract
+:CUSTOM_ID: reader-category-contract
+:CONTEXT_KIND: contract
+:CONTEXT_DESCRIPTION: Category contract for reader ownership, invariants, tests, and failure routing.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/reader.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.reader.category-contract src:context/reader.org conf:high]
+  This section declares the category contract for =reader=. It is the
+  routing target for failures and future test/context links touching this area.
+
+#+CAPTION: Reader Category Contract
+| Field | Contract |
+|-------+----------|
+| Owned phase | Lexing, token classification, parsing, reader sugar, AST surface construction. |
+| Inputs | Source text, Wisp/Lisp surface forms, literal tokens, reader-level syntax sugar. |
+| Outputs | AST nodes and JSON-visible structure before type inference and code generation. |
+| Invariants | Syntax should be accepted/rejected at the reader boundary only when the problem is structural; semantic validity belongs to later phases. |
+| Test hooks | reader-atoms.tsv, reader-interactions.tsv, emit-json goldens, desugar goldens for reader sugar. |
+| Failure symptoms | emit-json-failed, parse diagnostic mismatch, AST_PATH/literal shape drift, sugar desugaring before inference. |
+| Context neighbors | wisp, macro, language, tests, source-map |
+
+[DEC id:dec.reader.category-contract-owner date:2026-06-16 by:llm]
+  Failures matching the symptoms above should start triage in this category, then
+  follow the listed neighbors only when the local contract does not explain the
+  issue.

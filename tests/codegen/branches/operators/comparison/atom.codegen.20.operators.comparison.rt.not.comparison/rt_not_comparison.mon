@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-not-comparison
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.20.operators.comparison.rt.not.comparison
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: comparison
+;; TEST-CATEGORY: 20-operators
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Not applied to comparison expression works at runtime.
+;; TEST-ATOM: (not (> 3 5)) evaluates to True since (> 3 5) is False.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:20-operators/comparison branch family
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/comparison/atom.codegen.20.operators.comparison.rt.not.comparison
+;; TEST-MENU-PATH: codegen/branches/operators/comparison/atom.codegen.20.operators.comparison.rt.not.comparison
+;; TEST-ATOM-LEAF: atom.codegen.20.operators.comparison.rt.not.comparison
+;; TEST-CLI-TARGET: codegen branches operators comparison
+(module Main)
+(show (not (> 3 5)))

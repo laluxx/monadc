@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-quasiquote-eval
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-CODEGEN-ATOM: atom.codegen.60.reflection.quote.quasiquote.unquote.rt.quasiquote.eval
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: quasiquote-unquote
+;; TEST-CATEGORY: 60-reflection-quote
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Quasiquoted expressions with unquote evaluate the unquoted parts.
+;; TEST-ATOM: (eval ⌜+ 1 2⌝) evaluates to 3.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:60-reflection-quote/quasiquote-unquote branch family
+;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote
+;; TEST-MENU: branches/reflection-quote/quasiquote-unquote/atom.codegen.60.reflection.quote.quasiquote.unquote.rt.quasiquote.eval
+;; TEST-MENU-PATH: codegen/branches/reflection-quote/quasiquote-unquote/atom.codegen.60.reflection.quote.quasiquote.unquote.rt.quasiquote.eval
+;; TEST-ATOM-LEAF: atom.codegen.60.reflection.quote.quasiquote.unquote.rt.quasiquote.eval
+;; TEST-CLI-TARGET: codegen branches reflection-quote quasiquote-unquote
+(module Main)
+(show (eval ⌜+ 1 2⌝))

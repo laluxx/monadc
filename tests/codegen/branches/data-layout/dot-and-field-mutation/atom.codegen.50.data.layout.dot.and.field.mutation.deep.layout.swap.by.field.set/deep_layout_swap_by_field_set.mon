@@ -1,0 +1,27 @@
+;; TEST-ID: tests.codegen.deep.deep_layout_swap_by_field_set
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SUBSET: dot-and-field-mutation
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.50.data.layout.dot.and.field.mutation.deep.layout.swap.by.field.set
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise two field stores on the same layout object.
+;; TEST-ATOM: Multiple field mutations should update the same allocation.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout, atom.codegen.subset.dot.and.field.mutation
+;; TEST-COVERAGE: codegen.c:layout field store sequence
+;; TEST-MENU: branches/data-layout/dot-and-field-mutation/atom.codegen.50.data.layout.dot.and.field.mutation.deep.layout.swap.by.field.set
+;; TEST-MENU-PATH: codegen/branches/data-layout/dot-and-field-mutation/atom.codegen.50.data.layout.dot.and.field.mutation.deep.layout.swap.by.field.set
+;; TEST-ATOM-LEAF: atom.codegen.50.data.layout.dot.and.field.mutation.deep.layout.swap.by.field.set
+;; TEST-CLI-TARGET: codegen branches data-layout dot-and-field-mutation
+
+(module Main)
+(layout Pair [a :: Int] [b :: Int])
+(define p (Pair 1 2))
+(define tmp p.a)
+(set! p.a p.b)
+(set! p.b tmp)
+(show p.a)
+(show p.b)

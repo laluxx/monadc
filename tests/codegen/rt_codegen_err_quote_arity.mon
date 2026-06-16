@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-codegen-err-quote-arity
-;; TEST-SECTION: diagnostic
-;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
-;; TEST-PURPOSE: Codegen enforces quote arity.
-;; TEST-ATOM: (quote 1 2) must fail because quote takes exactly one argument.
-;; TEST-EXPECT: fail:compile
-
-(module Main)
-(quote 1 2)

@@ -1,0 +1,15 @@
+name: do_bool_returns_last_after_int_first
+section: control
+tier: stable
+kind: law
+features: arithmetic, control, do, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.sequence, infer.arithmetic, infer.equality, reader.ast_do
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.do, atom.core.equality
+related-properties: signal_atom_do_last_value, signal_atom_equality_reflexive
+args: value:Int cond:Bool
+type: Bool
+expect: True
+description: A do expression with an Int first expression must return the final Bool expression.
+law: (= (do {value} {cond}) {cond})

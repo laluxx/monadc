@@ -1,0 +1,14 @@
+name: deep_codegen_type_nil_pred_int_false
+section: codegen-predicates-casts-null
+tier: stable
+kind: law
+features: arithmetic, codegen, null, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.null_coalesce, codegen.predicate_dispatch, infer.arithmetic, infer.nil, infer.type_predicate
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate, atom.null.nil
+args: a:Int
+type: Bool
+expect: False
+description: nil? over scalar Int must fold to false.
+law: (nil? {a})

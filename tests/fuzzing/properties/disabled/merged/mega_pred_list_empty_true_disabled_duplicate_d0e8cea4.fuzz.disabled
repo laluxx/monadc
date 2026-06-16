@@ -1,0 +1,17 @@
+name: mega_pred_list_empty_true_disabled_duplicate_d0e8cea4
+section: codegen-preds-strings-null
+tier: experimental
+kind: law
+features: arithmetic, codegen, list, predicate, string
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, codegen.string_literal, infer.arithmetic, infer.type_predicate, reader.string_literal, runtime.list, runtime.string
+signal: low
+corpus-role: merged-duplicate
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate, atom.null.nil, atom.runtime.string
+related-properties: signal_atom_string_contains_substring
+merged-into: predicate_list_on_empty_list_true
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: 
+type: Bool
+expect: True
+description: List? must recognize zero-arg list.
+law: (List? (list))

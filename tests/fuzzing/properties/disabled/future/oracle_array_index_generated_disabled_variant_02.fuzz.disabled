@@ -1,0 +1,15 @@
+name: oracle_array_index_generated_disabled_variant_02
+section: oracle-array
+tier: stable
+kind: law
+features: arithmetic, logic, array
+compiler-path: codegen.operator.arithmetic, codegen.operator.logic, runtime.array.index, codegen.array.literal
+signal: high
+corpus-role: oracle
+uses-atoms: atom.core.arithmetic, atom.core.logic, atom.runtime.array
+disabled-reason: disabled future or merged property; kept for provenance but not loaded by default
+args: xs:ArrInt i:IndexOf(xs)
+type: Int
+expect-python: xs[i]
+description: Generated array-as-function must return Python oracle element.
+law: ({xs} {i})

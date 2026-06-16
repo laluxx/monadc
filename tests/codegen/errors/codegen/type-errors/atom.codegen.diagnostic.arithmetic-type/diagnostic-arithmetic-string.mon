@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.branch.diagnostic-arithmetic-string
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SUBSET: type-errors
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise arithmetic type diagnostic for string operand.
+;; TEST-ATOM: atom.codegen.diagnostic.arithmetic-type
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.arithmetic-type
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-CODEGEN-PATH: diagnostic.arithmetic.type
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: operator
+;; TEST-COVERAGE: codegen.c:9512 arithmetic type diagnostic
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/type-errors/atom.codegen.diagnostic.arithmetic-type
+;; TEST-MENU-PATH: codegen/errors/codegen/type-errors/atom.codegen.diagnostic.arithmetic-type
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.arithmetic-type
+;; TEST-CLI-TARGET: codegen errors codegen type-errors
+(module Main)
+(show (+ "x" 1))

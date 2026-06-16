@@ -1,0 +1,16 @@
+name: derived_plus_commutes_through_if_phi
+section: atom-derived-control
+tier: stable
+kind: law
+features: arithmetic, if, comparison
+compiler-path: codegen.control.if_phi, codegen.operator.arithmetic
+signal: high
+corpus-role: derived-property
+uses-atoms: atom.core.plus.commutative, atom.control.if, atom.core.equality
+depends-on: atom.core.plus.commutative
+related-properties: atom_plus_commutative
+args: c:Bool@logic a:Int@edge+if b:Int@edge+with
+type: Bool
+expect: True
+description: Derived property links arithmetic atom to if/PHI lowering.
+law: (= (if {c} (+ {a} {b}) (+ {a} {a})) (if {c} (+ {a} {a}) (+ {a} {b})))

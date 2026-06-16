@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.deep.deep_radix_nonzero_edges
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 00-values
+;; TEST-SUBSET: radix-printing
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.values.radix.printing.deep.radix.nonzero.edges
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise radix print helpers on nonzero values.
+;; TEST-ATOM: Hex/Bin/Oct display branches should print expected prefixes.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:codegen_show_value TYPE_HEX/TYPE_BIN/TYPE_OCT
+;; TEST-COVERAGE: codegen.c:get_or_declare_print_binary nonzero branch
+
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/radix-printing/atom.codegen.values.radix.printing.deep.radix.nonzero.edges
+;; TEST-MENU-PATH: codegen/branches/values/radix-printing/atom.codegen.values.radix.printing.deep.radix.nonzero.edges
+;; TEST-ATOM-LEAF: atom.codegen.values.radix.printing.deep.radix.nonzero.edges
+;; TEST-CLI-TARGET: codegen branches values radix-printing
+(module Main)
+(show (Hex 16))
+(show (Bin 8))
+(show (Oct 8))

@@ -1,0 +1,15 @@
+name: mega_arith_mod_percent_alias_two
+section: codegen-arith-div-mod
+tier: stable
+kind: law
+features: arithmetic, codegen, equality, mod
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.mod_dispatch, infer.arithmetic, infer.equality
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.core.modulo, atom.core.multiply, atom.core.plus
+related-properties: signal_atom_equality_reflexive, signal_atom_multiply_associative, signal_atom_multiply_commutative, signal_atom_multiply_identity_one, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero
+args: a:Int
+type: Bool
+expect: True
+description: Percent and mod dispatchers must agree for the same generated operand.
+law: (= (% (+ (* {a} 4) 2) 2) (mod (+ (* {a} 4) 2) 2))

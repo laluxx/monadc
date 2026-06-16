@@ -1,0 +1,38 @@
+;; TEST-ID: tests.codegen.branch.collection-string-boundary-and-index
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: strings
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise make-string, count, contains?, starts-with?, ends-with?, and string-as-function indexing.
+;; TEST-ATOM: atom.codegen.collection.string-boundary-index
+;; TEST-CODEGEN-ATOM: atom.codegen.collection.string-boundary-index
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.string.make
+;; TEST-CODEGEN-PATH: codegen.string.starts-with
+;; TEST-CODEGEN-PATH: codegen.string.ends-with
+;; TEST-CODEGEN-PATH: codegen.string.index
+;; TEST-DEPENDS-ON: atom.codegen.collection.list-primitive-spectrum
+;; TEST-TAG: run
+;; TEST-TAG: collection
+;; TEST-TAG: string
+;; TEST-COVERAGE: codegen.c:2678 make-string branch
+;; TEST-COVERAGE: codegen.c:8620-8682 starts-with?/ends-with? branches
+;; TEST-COVERAGE: codegen.c:4286 contains? branch
+;; TEST-COVERAGE: codegen.c:9900 string-as-function index branch
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/strings/atom.codegen.collection.string-boundary-index
+;; TEST-MENU-PATH: codegen/branches/collections/strings/atom.codegen.collection.string-boundary-index
+;; TEST-ATOM-LEAF: atom.codegen.collection.string-boundary-index
+;; TEST-CLI-TARGET: codegen branches collections strings
+(module Main)
+(show (count "hello"))
+(show (make-string 3 (Char 65)))
+(show (starts-with? "hello" "he"))
+(show (ends-with? "hello" "lo"))
+(show (contains? "hello" "ell"))
+(show ("hello" 1))
+(show ("hello" 4))

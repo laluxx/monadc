@@ -1,0 +1,17 @@
+name: deep_codegen_array_array_count_three_disabled_duplicate_cc08d6f7
+section: codegen-array-indexing
+tier: experimental
+kind: law
+features: arithmetic, array, array-index, codegen, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.equality_dispatch, infer.arithmetic, infer.array, infer.callable_array, infer.equality, reader.array_literal
+signal: medium
+corpus-role: merged-duplicate
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive
+merged-into: mega_array_count_inline_three
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: count over inline array must use array size path.
+law: (= (count [{a} {b} {c}]) 3)

@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-size-array-value
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.arrays.ranges.rt.size.array.value
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: arrays-ranges
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime size-array value syntax is a codegen-backed coverage point.
+;; TEST-ATOM: [16kb] as a value should construct an array-like buffer with count 16384.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:40-collections/arrays-ranges branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.size.array.value
+;; TEST-MENU-PATH: codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.size.array.value
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.arrays.ranges.rt.size.array.value
+;; TEST-CLI-TARGET: codegen branches collections arrays-ranges
+(module Main)
+define buffer :: [16kb]
+(show (Arr? buffer))
+(show (count buffer))

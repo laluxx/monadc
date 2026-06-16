@@ -1,0 +1,41 @@
+;; TEST-ID: tests.codegen.menu.errors.codegen.arity.if.too.many.004
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: errors
+;; TEST-SUBSET: codegen/arity.if.too-many
+;; TEST-MENU: errors/codegen/arity.if.too-many/atom.menu.error.codegen.arity.if.too-many.004
+;; TEST-MENU-PATH: codegen/errors/codegen/arity.if.too-many/atom.menu.error.codegen.arity.if.too-many.004
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.error-menu
+;; TEST-PURPOSE: Pin codegen diagnostic: if expects
+;; TEST-ATOM: atom.menu.error.codegen.arity.if.too-many.004
+;; TEST-CODEGEN-ATOM: atom.menu.error.codegen.arity.if.too-many.004
+;; TEST-ATOM-LEAF: atom.menu.error.codegen.arity.if.too-many.004
+;; TEST-QUALITY: menu-error-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ERROR-STAGE: codegen
+;; TEST-ERROR-FAMILY: arity.if.too-many
+;; TEST-ERROR-MESSAGE: if expects
+;; TEST-ERROR-SOURCE: codegen.c
+;; TEST-ERROR-PATH: codegen.c:diagnostic
+;; TEST-CODEGEN-PATH: diagnostic.codegen.arity.if.too-many
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: codegen
+;; TEST-TAG: menu
+;; TEST-COVERAGE: codegen.c diagnostic if expects
+;; TEST-USES-ATOM: atom.menu.error.codegen.arity.if.too-many.004
+;; TEST-USES-ATOM: atom.error.codegen
+;; TEST-USES-ATOM: atom.error.codegen.arity.if.too-many
+;; TEST-USES-ATOM: atom.codegen.error
+;; TEST-DEPENDS-ON: atom.codegen.expr.dispatch
+;; TEST-REFINES: atom.error.codegen
+;; TEST-REFINES: atom.error.codegen.arity.if.too-many
+;; TEST-REFINES: atom.codegen.error
+;; TEST-RELATED: atom.codegen.error.menu
+;; TEST-CLI-TARGET: codegen errors codegen codegen
+
+(module Main)
+(show (if True 1 2 3))
+;; codegen menu variant 4

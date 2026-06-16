@@ -1,0 +1,15 @@
+name: with_shadowing_last_binding
+section: binding
+tier: stable
+kind: law
+features: arithmetic, array, array-index, binding, do, env, equality, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.equality_dispatch, codegen.local_load, codegen.sequence, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.equality, reader.array_literal, reader.ast_do
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.with, atom.core.equality, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive, signal_atom_with_substitution
+args: outer:Int inner:Int
+type: Bool
+expect: True
+description: Rebinding the same name in one with binding list must expose the last binding.
+law: (= (with [x {outer} x {inner}] x) {inner})

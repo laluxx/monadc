@@ -1,0 +1,14 @@
+name: deep_codegen_runtime_quasiquote_unquote_int_equal
+section: codegen-runtime-values
+tier: stable
+kind: law
+features: arithmetic, codegen, predicate, quasiquote, quote, unquote
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.quote, desugar.quasiquote, infer.arithmetic, infer.type_predicate, reader.quasiquote, reader.quote, reader.unquote
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate, atom.quote.quote
+args: a:Int
+type: Bool
+expect: True
+description: quasiquote with an unquoted generated Int must produce stable equal values.
+law: (equal? (quasiquote (x (unquote {a}) z)) (quasiquote (x (unquote {a}) z)))

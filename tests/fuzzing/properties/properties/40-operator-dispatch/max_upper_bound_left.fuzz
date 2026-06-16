@@ -1,0 +1,14 @@
+name: max_upper_bound_left
+section: order
+tier: stable
+kind: law
+features: arithmetic, logic, order, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.logic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.logic, infer.type_predicate
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The typed max helper must be greater than or equal to its left argument.
+law: (fuzz-gte? (fuzz-max {a} {b}) {a})

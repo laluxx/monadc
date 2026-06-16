@@ -1,0 +1,29 @@
+;; TEST-ID: tests.codegen.rt-control-all
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.control.core.rt.control.all
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: control-core
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Control flow: if string branches preserve String type; begin, and/or/not, unless statement body, and nil.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:30-control-flow/control-core branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/control-core/atom.codegen.30.control.flow.control.core.rt.control.all
+;; TEST-MENU-PATH: codegen/branches/control-flow/control-core/atom.codegen.30.control.flow.control.core.rt.control.all
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.control.core.rt.control.all
+;; TEST-CLI-TARGET: codegen branches control-flow control-core
+(module Main)
+(show (if True "yes" "no"))
+(show (if False "yes" "no"))
+(show (begin 1 2 3))
+(show (and True True))
+(show (and True False))
+(show (or False True))
+(show (or False False))
+(show (not True))
+(show (not False))
+(unless False (show "executed"))
+(show nil)

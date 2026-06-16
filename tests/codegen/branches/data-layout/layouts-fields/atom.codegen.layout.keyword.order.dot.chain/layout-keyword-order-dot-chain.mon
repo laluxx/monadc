@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.branch.layout-keyword-order-dot-chain
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: layouts-fields
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.layout.keyword.order.dot.chain
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover layout keyword constructor field ordering and dot-chain field access.
+;; TEST-ATOM: Keyword field construction should map fields by name, independent of argument order.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:2220 codegen_layout
+;; TEST-COVERAGE: codegen.c:12669 keyword layout constructor field matching
+;; TEST-COVERAGE: codegen.c:3089 codegen_dot_chain
+
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/layouts-fields/atom.codegen.layout.keyword.order.dot.chain
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts-fields/atom.codegen.layout.keyword.order.dot.chain
+;; TEST-ATOM-LEAF: atom.codegen.layout.keyword.order.dot.chain
+;; TEST-CLI-TARGET: codegen branches data-layout layouts-fields
+(module Main)
+(layout Point [x :: Int] [y :: Int])
+(define p (Point :y 40 :x 2))
+(show p.x)
+(show p.y)

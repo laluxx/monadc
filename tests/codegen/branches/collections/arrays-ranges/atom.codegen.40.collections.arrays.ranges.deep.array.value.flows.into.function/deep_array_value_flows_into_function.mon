@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.deep.deep_array_value_flows_into_function
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-SUBSET: arrays-ranges
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.arrays.ranges.deep.array.value.flows.into.function
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise array load result used as function argument.
+;; TEST-ATOM: Array loads should produce typed values usable by calls.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.40.collections, atom.codegen.subset.arrays.ranges
+;; TEST-COVERAGE: codegen.c:array load -> call argument
+;; TEST-MENU: branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.deep.array.value.flows.into.function
+;; TEST-MENU-PATH: codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.deep.array.value.flows.into.function
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.arrays.ranges.deep.array.value.flows.into.function
+;; TEST-CLI-TARGET: codegen branches collections arrays-ranges
+
+(module Main)
+(define (inc [x : Int] -> Int) (+ x 1))
+(define xs [10 20])
+(show (inc (xs 0)))

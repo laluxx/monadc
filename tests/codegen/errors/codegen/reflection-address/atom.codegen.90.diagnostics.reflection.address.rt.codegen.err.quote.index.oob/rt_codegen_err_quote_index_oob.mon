@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-quote-index-oob
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.90.diagnostics.reflection.address.rt.codegen.err.quote.index.oob
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: reflection-address
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen bounds-checks literal quoted-list indexing at compile time.
+;; TEST-ATOM: ('(1 2) 2) must fail because index 2 is outside a two-element literal list.
+;; TEST-EXPECT: fail:compile
+
+;; TEST-COVERAGE: codegen.c:90-diagnostics/reflection-address branch family
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/reflection-address/atom.codegen.90.diagnostics.reflection.address.rt.codegen.err.quote.index.oob
+;; TEST-MENU-PATH: codegen/errors/codegen/reflection-address/atom.codegen.90.diagnostics.reflection.address.rt.codegen.err.quote.index.oob
+;; TEST-ATOM-LEAF: atom.codegen.90.diagnostics.reflection.address.rt.codegen.err.quote.index.oob
+;; TEST-CLI-TARGET: codegen errors codegen reflection-address
+(module Main)
+(show ('(1 2) 2))

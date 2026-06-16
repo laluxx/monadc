@@ -1,0 +1,16 @@
+name: program_array_index_through_binding_web
+section: program-atom-web
+tier: stable
+kind: program
+features: program, with, do, if, array, string, path, predicate
+compiler-path: reader.module, codegen.program.full_module, infer.env.lookup, codegen.control.if_phi
+signal: high
+corpus-role: program-behavior
+uses-atoms: atom.runtime.array.index, atom.binding.with
+depends-on: atom.runtime.array.index, atom.binding.with
+related-properties: atom.runtime.array.index, atom.binding.with
+args: xs:NonEmptyArrInt@small i:IndexOf(xs)
+type: Bool
+expect: True
+description: Full program property linked into the atom graph.
+program: (show (= (with [idx {i}] ({xs} idx)) ({xs} {i})))

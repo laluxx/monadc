@@ -1,0 +1,17 @@
+name: extreme_if_swap_by_negated_condition_bool_disabled_duplicate_fbbd90e2
+section: control-if-structure
+tier: experimental
+kind: law
+features: arithmetic, control, equality, if, phi
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, infer.arithmetic, infer.equality, infer.if_phi, reader.ast_if
+signal: medium
+corpus-role: merged-duplicate
+uses-atoms: atom.control.if, atom.core.equality
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+merged-into: complex_if_negated_condition_swaps_bool_branches
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: cond:Bool p:Bool q:Bool
+type: Bool
+expect: True
+description: Nested if structure must preserve branch semantics and boolean reconstruction.
+law: (= (if (if {cond} False True) {p} {q}) (if {cond} {q} {p}))

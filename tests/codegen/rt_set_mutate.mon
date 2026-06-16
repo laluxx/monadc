@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-set-mutate
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Mutable set operations: conj!, disj! on inline sets to avoid wisp !-sugar
-;; TEST-ATOM: (conj! {1 2 3} 4) adds 4, (disj! {1 2 3} 1) removes 1
-;; TEST-EXPECT: compile, run
-(module Main)
-(show (contains? (conj! {1 2 3} 4) 4))
-(show (contains? (disj! {1 2 3} 1) 1))

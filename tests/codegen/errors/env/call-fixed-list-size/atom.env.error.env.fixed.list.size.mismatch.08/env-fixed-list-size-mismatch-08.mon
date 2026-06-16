@@ -1,0 +1,37 @@
+;; TEST-ID: tests.codegen.env-error.env.fixed.list.size.mismatch.08
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: env-errors/call-fixed-list-size
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.env-error-coverage
+;; TEST-PURPOSE: Trigger env.c diagnostic: Couldn't match expected list size
+;; TEST-ATOM: atom.env.error.env.fixed.list.size.mismatch.08
+;; TEST-CODEGEN-ATOM: atom.env.error.env.fixed.list.size.mismatch.08
+;; TEST-QUALITY: env-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ENV-ERROR: Couldn't match expected list size
+;; TEST-ENV-PATH: env.c:814 call.fixed-list-size
+;; TEST-CODEGEN-PATH: diagnostic.env.call.fixed-list-size
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: env
+;; TEST-TAG: hm
+;; TEST-COVERAGE: env.c:814 Couldn't match expected list size
+;; TEST-USES-ATOM: atom.env.error.env.fixed.list.size.mismatch.08
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.env.error
+;; TEST-USES-ATOM: atom.env.error.family.call.fixed.list.size
+;; TEST-DEPENDS-ON: atom.env.hm.call.fixed-list-size
+;; TEST-DEPENDS-ON: atom.codegen.collection.array.literal
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-REFINES: atom.env.error
+;; TEST-MENU: errors/env/call-fixed-list-size/atom.env.error.env.fixed.list.size.mismatch.08
+;; TEST-MENU-PATH: codegen/errors/env/call-fixed-list-size/atom.env.error.env.fixed.list.size.mismatch.08
+;; TEST-ATOM-LEAF: atom.env.error.env.fixed.list.size.mismatch.08
+;; TEST-CLI-TARGET: codegen errors env call-fixed-list-size
+
+(module Main)
+(define (env_list_size_08 [xs : [Bool Bool]] -> Int) 0)
+(show (env_list_size_08 [True]))

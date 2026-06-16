@@ -1,0 +1,15 @@
+name: structured_negative_make_list_count_two_equals_three_false
+section: negative-compiler-current
+tier: stable
+kind: law
+features: arithmetic, equality, list, negative
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.runtime_call, infer.arithmetic, infer.equality, runtime.list
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality
+related-properties: signal_atom_equality_reflexive
+args: a:Int
+type: Bool
+expect: False
+description: Expected-false invariant to make sure the runner checks false laws and not only truthy success paths.
+law: (= (count (make-list 2 {a})) 3)

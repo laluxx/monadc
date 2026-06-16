@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -444,7 +444,7 @@
 :CONFIDENCE: high
 :END:
 
-[INF id:inf.etc-assets.references from:obs.etc-assets.pdfs.dir,obs.etc-assets.pdfs.propositions-as-types,obs.etc-assets.pdfs.typechecking-dependent,obs.etc-assets.pdfs.linear-lisp,obs.etc-assets.pdfs.cons-lazy,obs.etc-assets.pdfs.cons-lazy-alloc,obs.etc-assets.pdfs.layered-modal,obs.etc-assets.pdfs.types-2020 conf:high]
+[INF id:inf.etc-assets.references from:obs.etc-assets.pdfs.dir,doc.etc-assets.pdf.propositions-as-types,doc.etc-assets.pdf.typechecking-dependent,doc.etc-assets.pdf.linear-lisp,doc.etc-assets.pdf.cons-lazy,doc.etc-assets.pdf.cons-lazy-alloc,doc.etc-assets.pdf.layered-modal,doc.etc-assets.pdf.types-2020 conf:high]
   connects-to -> `monadc.context.references.propositions-as-types` ·
   `monadc.context.references.typechecking-dependent-types` ·
   `monadc.context.references.linear-lisp` ·

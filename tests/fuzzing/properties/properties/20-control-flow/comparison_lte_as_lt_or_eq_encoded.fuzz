@@ -1,0 +1,15 @@
+name: comparison_lte_as_lt_or_eq_encoded
+section: comparison
+tier: stable
+kind: law
+features: arithmetic, comparison, equality, if, logic, phi, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.comparison_dispatch, codegen.equality_dispatch, codegen.if_phi, codegen.logic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.comparison, infer.equality, infer.if_phi, infer.logic, infer.type_predicate, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.if, atom.core.equality, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Less-or-equal must agree with the encoded less-than-or-equality definition.
+law: (= (fuzz-lte? {a} {b}) (if (fuzz-lt? {a} {b}) True (fuzz-eq-int? {a} {b})))

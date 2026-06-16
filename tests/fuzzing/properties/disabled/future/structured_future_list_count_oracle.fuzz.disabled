@@ -1,0 +1,15 @@
+name: structured_future_list_count_oracle
+section: future-list-oracle-current
+tier: stable
+kind: law
+features: arithmetic, logic, list
+compiler-path: codegen.operator.arithmetic, codegen.operator.logic, runtime.list
+signal: high
+corpus-role: oracle
+uses-atoms: atom.core.arithmetic, atom.core.logic, atom.runtime.list
+disabled-reason: disabled future or merged property; kept for provenance but not loaded by default
+args: xs:ListInt
+type: Int
+expect-python: len(xs)
+description: List count oracle over generated lists.
+law: (count {xs})

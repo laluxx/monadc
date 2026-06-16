@@ -1,0 +1,1 @@
+error: Function ‘env_nil_return_09’ can return nil but return type 'Map' does not end with ‘?’

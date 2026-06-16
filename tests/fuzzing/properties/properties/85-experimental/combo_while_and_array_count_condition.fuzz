@@ -1,0 +1,15 @@
+name: combo_while_and_array_count_condition
+section: feature-interactions
+tier: experimental
+kind: law
+features: arithmetic, array, array-index, begin, comparison, env, equality, feature, logic, mutation, set, set!, while, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.comparison_dispatch, codegen.equality_dispatch, codegen.local_load, codegen.logic_dispatch, codegen.runtime_call, codegen.sequence, codegen.set_bang, codegen.store, codegen.while_loop, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.comparison, infer.env_child, infer.env_lookup, infer.equality, infer.logic, infer.loop, infer.mutation, reader.array_literal, reader.ast_begin, runtime.set
+signal: low
+corpus-role: legacy-smoke
+uses-atoms: atom.binding.set-bang, atom.binding.with, atom.control.begin, atom.core.equality, atom.core.order.lt, atom.core.plus, atom.logic.and, atom.logic.not, atom.logic.or, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive, signal_atom_lt_transitive, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero, signal_atom_with_substitution
+args: 
+type: Bool
+expect: True
+description: while conditions must support count of a with-bound array.
+law: (with [x 0 xs [1 2 3]] (begin (while (< x (count xs)) (set! x (+ x 1))) (= x 3)))

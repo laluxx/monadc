@@ -1,0 +1,15 @@
+name: structured_future_set_count_unique_oracle
+section: future-set-oracle-current
+tier: stable
+kind: law
+features: arithmetic, logic, set
+compiler-path: codegen.operator.arithmetic, codegen.operator.logic, runtime.set
+signal: high
+corpus-role: oracle
+uses-atoms: atom.core.arithmetic, atom.core.logic, atom.runtime.set
+disabled-reason: disabled future or merged property; kept for provenance but not loaded by default
+args: xs:SetInt
+type: Int
+expect-python: len(set(xs))
+description: Set count should match unique generated elements.
+law: (count {xs})

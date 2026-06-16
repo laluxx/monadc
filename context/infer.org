@@ -1,8 +1,8 @@
 #+TITLE: HM Type Inference Engine
 #+AUTHOR: codex
-#+DATE: 2026-06-13
+#+DATE: 2026-06-16
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -1440,3 +1440,67 @@
   that grounds collection-as-function coercion) ·
   `monadc.context.references.layered-modal` (the HM/ITT dual is a layered
   modal architecture)
+
+
+* Garden Links — Inference Diagnostic Discipline
+:PROPERTIES:
+:ID: monadc.context.infer.garden-links
+:CUSTOM_ID: infer-garden-links
+:CONTEXT_KIND: navigation
+:CONTEXT_DESCRIPTION: Links from inference context to diagnostic stabilization and fail:compile test rules.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/infer.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.infer.garden-links src:context/infer.org conf:high]
+  Inference changes often surface as diagnostic mismatches. Pair this file with
+  [[file:debug-agenda.org::*Diagnostic Discipline][diagnostic discipline]] and
+  [[file:test-contracts.org][test contracts]].
+
+* Inference Category Contract
+:PROPERTIES:
+:ID: monadc.context.infer.category-contract
+:CUSTOM_ID: infer-category-contract
+:CONTEXT_KIND: contract
+:CONTEXT_DESCRIPTION: Category contract for infer ownership, invariants, tests, and failure routing.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/infer.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.infer.category-contract src:context/infer.org conf:high]
+  This section declares the category contract for =infer=. It is the
+  routing target for failures and future test/context links touching this area.
+
+#+CAPTION: Inference Category Contract
+| Field | Contract |
+|-------+----------|
+| Owned phase | HM inference, type checking, diagnostics, semantic rejection, and typed AST validation. |
+| Inputs | Reader/desugared AST, environment bindings, type declarations, module/typeclass context. |
+| Outputs | Typed expressions, inferred types, diagnostics, and rejection of semantically invalid programs. |
+| Invariants | Reject semantic invalidity deterministically; do not paper over unknown types in codegen when inference should decide. |
+| Test hooks | type-system corpus, diagnostic fixtures, expected-fail tests, refinement tests. |
+| Failure symptoms | diagnostic-mismatch, expected-fail-compiled, type goldens changing, semantic rejection missing. |
+| Context neighbors | types, env, typeclass, codegen, tests |
+
+[DEC id:dec.infer.category-contract-owner date:2026-06-16 by:llm]
+  Failures matching the symptoms above should start triage in this category, then
+  follow the listed neighbors only when the local contract does not explain the
+  issue.

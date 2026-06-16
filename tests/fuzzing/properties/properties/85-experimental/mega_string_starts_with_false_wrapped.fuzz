@@ -1,0 +1,15 @@
+name: mega_string_starts_with_false_wrapped
+section: codegen-preds-strings-null
+tier: experimental
+kind: law
+features: arithmetic, codegen, env, equality, predicate, string, with
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.local_load, codegen.predicate_dispatch, codegen.string_literal, codegen.with_binding, infer.arithmetic, infer.env_child, infer.env_lookup, infer.equality, infer.type_predicate, reader.string_literal, runtime.string
+signal: low
+corpus-role: legacy-smoke
+uses-atoms: atom.binding.with, atom.codegen.dispatch, atom.core.equality, atom.infer.predicate, atom.null.nil, atom.runtime.string
+related-properties: signal_atom_equality_reflexive, signal_atom_string_contains_substring, signal_atom_with_substitution
+args: 
+type: Bool
+expect: True
+description: starts-with? false path must work.
+law: (= (starts-with? "monadc" "nad") False)

@@ -9,7 +9,7 @@
 :CONTEXT:  monadc.context.arena, monadc.context.codegen, monadc.context.types
 :END:
 
-[[file:index.org][<- Back to Index]] · [[file:arena.org][Arena Allocation]] · [[file:heap.org][Heap Allocation]] · [[file:layouts.org][Layout Types]] · [[file:asm.org][Inline Assembly]] · [[file:types.org][Types]] · [[file:collections.org][Collections]] · [[file:arrays.org][Arrays]]
+[[file:index.org][<- Back to Index]] · [[file:arena.org][Arena Allocation]] · [[file:heap.org][Heap Allocation]] · [[file:layouts.org][Layout Types]] · [[file:asm.org][Inline Assembly]] · [[file:types.org][Types]] · [[file:collections.org][Collections]] · [[file:arrays.org][Arrays]] · [[file:data.org][Data Types]] · [[file:patterns.org][Pattern Matching]]
 
 Test coverage: performance benchmarks live in =tests/bench/=; correctness via =make test=.
 
@@ -23,7 +23,10 @@ examples. LLVM IR output can be inspected via =--emit-ir= to verify
 codegen quality. The arena allocator ([[file:../arena.c]]) is tested
 through the entire compiler pipeline.
 
-* Arena Allocation
+For detailed compiler internals see [[file:../context/codegen.org][context/codegen.org]] and
+[[file:../context/arena.org][context/arena.org]].
+
+* 1. Arena Allocation
 
 The primary allocator ([[file:../arena.c]], [[file:../arena.h]]) is a bump-pointer
 arena with 4 MiB (4,194,304 byte) blocks (=ARENA_DEFAULT_BLOCK= at
@@ -39,13 +42,13 @@ memory mapped — zero mallocs in the common fast path.
 that point and frees any blocks allocated after it. This is a
 stack-based rollback (LIFO only).
 
-** Tradeoffs
+** 1.1 Tradeoffs
 
 - *Good for*: batch-freed workloads like compiler passes. AST nodes,
   symbol tables, type objects — allocated in phases, freed all at
   once. Bump allocation converts malloc overhead (lock, freelist
   search, fragmentation) into a single pointer increment.
-- *Bad for*: long-lived small allocations that aren't batch-freed. If a
+- *Bad for*: long-lived small allocations that are not batch-freed. If a
   4 MiB block has 3.9 MiB unused, that memory cannot be reclaimed by
   other processes until the compiler exits. For the REPL or language
   server, checkpoint/restore provides the necessary control.
@@ -53,9 +56,18 @@ stack-based rollback (LIFO only).
   = whole compilation) and scratch (type variables, constraint sets —
   checkpointed between phases).
 
-See [[file:../context/arena.org][context/arena.org]] for full details.
+See [[file:../context/arena.org][context/arena.org]] for full details and
+[[file:arena.org][Arena Allocation]] for the user-facing documentation.
 
-* Monomorphization
+*** Key Points
+- O(1) bump allocation — replaces malloc for the hot path
+- Batch free via =arena_reset= — no per-object tracking
+- Two-arena pattern avoids waste across compilation phases
+- Checkpoint/restore controls lifetime for REPL and incremental use
+
+See also: [[file:arena.org][Arena Allocation]]
+
+* 2. Monomorphization
 
 Polymorphic functions (=id x = x=, =const x y = x=) are
 monomorphized: each concrete instantiation generates separate
@@ -70,7 +82,18 @@ bodies.
   =CodegenContext= (context/codegen.org:141) deduplicates: repeated
   =(id 3)= calls reuse the same =id_Int= specialization.
 
-* Three Array Forms
+See [[file:../context/language.org::hm-polymorphism][context/language.org — HM polymorphism]] and
+[[file:type-inference.org][Type Inference]].
+
+*** Key Points
+- Zero-cost polymorphism — no boxing or vtable dispatch
+- Each unique type instantiation generates separate machine code
+- =MonoCache= deduplicates repeated instantiations of the same type
+- Code size grows linearly with distinct type combinations used
+
+See also: [[file:type-inference.org][Type Inference]]
+
+* 3. Three Array Forms
 
 Arrays share one type tag (=TYPE_ARR=) but have three representations
 with different performance characteristics (types.c:493-507):
@@ -89,9 +112,18 @@ LLVM stack allocation decisions are function-level and returned arrays
 must be heap-backed.
 
 Surface syntax: =[1 2 3]= (stack), =~[1 2 3]= (heap), =[16kb I32]=
-(size-annotated). See [[file:types.org][Types]] and [[file:../context/types.org][context/types.org]].
+(size-annotated). See [[file:types.org][Types]], [[file:arrays.org][Arrays]],
+[[file:heap.org][Heap Allocation]], and [[file:../context/types.org][context/types.org]].
 
-* Layout Types for Cache-Friendly Data
+*** Key Points
+- Three representations share one type tag; selection depends on use case
+- Stack arrays: zero-overhead LLVM =[N x T]= when size is known at compile time
+- Fat pointer and heap-growable unify at the LLVM level (=arr.fat*=)
+- Returned arrays must be heap-backed regardless of surface syntax
+
+See also: [[file:arrays.org][Arrays]]
+
+* 4. Layout Types for Cache-Friendly Data
 
 Layout types ([[file:layouts.org]]) are C11-compatible struct types with
 no hidden padding (unless =:packed= is specified), no pointer chasing,
@@ -108,9 +140,18 @@ This makes layout types ideal for:
 - Cache-friendly hot paths (sequential memory access)
 - SIMD-friendly data (aligned, contiguous)
 
-See [[file:layouts.org]] and [[file:../how_to/Layouts.mon]].
+See [[file:layouts.org]], [[file:../how_to/Layouts.mon]], and
+[[file:ffi.org][C FFI]].
 
-* Inline Assembly for Hot Paths
+*** Key Points
+- C-compatible ABI with no hidden padding (unless =:packed=)
+- Contiguous byte blocks — no pointer chasing, no boxing
+- Dot notation compiles to fixed-offset LLVM loads
+- Ideal for FFI, hot paths, and SIMD data
+
+See also: [[file:layouts.org][Layout Types]], [[file:ffi.org][C FFI]]
+
+* 5. Inline Assembly for Hot Paths
 
 Inline assembly ([[file:asm.org]], [[file:../context/asm.org]]) provides
 zero-overhead access to the CPU when the compiler's codegen is not
@@ -143,7 +184,13 @@ inline asm constraints (=r= for ints, =x= for floats). Size suffixes
 operands, multi-instruction splitting, shifts, SSE, conditional moves,
 and more. See [[file:../context/asm.org]].
 
-* Type Annotations Help Codegen
+*** Key Points
+- Naked functions: no prologue/epilogue — full control over register state
+- Parameter mapping follows SysV AMD64 ABI
+- Operand size suffixes inferred from type widths
+- 60+ test fixtures verify correctness across instruction families
+
+* 6. Type Annotations Help Codegen
 
 Explicit type annotations improve codegen quality:
 
@@ -167,9 +214,17 @@ define [x :: Int]
 
 This is especially important for polymorphic code, where the
 annotated instantiation triggers monomorphization earlier and avoids
-speculative type variable overhead.
+speculative type variable overhead. See [[file:types.org][Types]] and
+[[file:type-inference.org][Type Inference]].
 
-* Avoid Unnecessary Consing
+*** Key Points
+- Annotations remove speculation from type inference
+- Earlier monomorphization = better optimization
+- Most impactful on polymorphic code and hot paths
+
+See also: [[file:types.org][Types]]
+
+* 7. Avoid Unnecessary Consing
 
 Each =cons= call allocates (lists are linked cells). For tight loops,
 prefer mutation (=set!=, =<-=) over allocation, and tail recursion
@@ -189,7 +244,16 @@ define range n
     cons n (range (- n 1))
 #+END_SRC
 
-* What the Compiler Does NOT Optimize (Yet)
+See [[file:mutation.org][Mutation]] and [[file:recursion.org][Recursion]] for alternatives.
+
+*** Key Points
+- Each =cons= allocates a new cell on the heap
+- For tight loops: prefer mutation or tail recursion
+- Profile before optimizing — most code does not need micro-optimisation
+
+See also: [[file:mutation.org][Mutation]]
+
+* 8. What the Compiler Does NOT Optimize (Yet)
 
 - Tail-call elimination (not yet implemented)
 - Closure allocation (closures not yet optimized)
@@ -197,7 +261,15 @@ define range n
 - List fusion
 - Automatic vectorization
 
-* Profiling Tips
+See [[file:../context/language.org::codegen-gaps][context/language.org — Known codegen gaps]] for
+the current limitations and planned work.
+
+*** Key Points
+- Tail calls, inlining, and closure optimisation are not yet implemented
+- Manual transformation may be needed for tight loops and HOF patterns
+- Check known gaps before assuming the compiler will optimise
+
+* 9. Profiling Tips
 
 1. **Start simple** — write clear code first, optimize later
 2. **Use =show= to measure** — print timestamps around operations
@@ -205,18 +277,65 @@ define range n
 4. **Check assembly** — use =--emit-asm= for the final output
 5. **Profile at the system level** — use =perf=, =valgrind=, etc.
 
-* Related Pages
+See [[file:show.org][Show and Display]] and [[file:cli.org][CLI Reference]].
+
+*** Key Points
+- Prefer readability first, then measure, then optimize
+- LLVM IR inspection (=--emit-ir=) reveals codegen quality directly
+- System profilers (=perf=) give ground truth for hot spots
+
+See also: [[file:show.org][Show and Display]], [[file:cli.org][CLI Reference]]
+
+* 10. Implementation Notes
+
+Key source locations for performance-critical code:
+
+| Source | Key Symbols / Sections |
+|--------+-----------------------|
+| [[file:../arena.c:72][arena.c:72]] | =arena_alloc= — O(1) bump allocation |
+| [[file:../arena.h:36][arena.h:36]] | =ARENA_DEFAULT_BLOCK= (4 MiB), =ARENA_ALIGN= (8) |
+| [[file:../codegen.c][codegen.c]] | Monomorphization via =MonoCache= |
+| [[file:../types.c:493][types.c:493]] | =TYPE_ARR= — three array representations |
+| [[file:../codegen.c:3763][codegen.c:3763]] | =arr_make_fat= — fat pointer creation |
+| [[file:../runtime.c:99][runtime.c:99]] | Eval arena allocation helpers |
+
+Related context documents:
+
+- [[file:../context/codegen.org][context/codegen.org]] — Monomorphization, MonoCache, codegen pipeline
+- [[file:../context/arena.org][context/arena.org]] — Arena design, two-arena strategy
+- [[file:../context/language.org::hm-polymorphism][context/language.org — HM polymorphism]]
+- [[file:../context/language.org::codegen-gaps][context/language.org — Known codegen gaps]]
+- [[file:../context/asm.org][context/asm.org]] — Inline assembly internals
+- [[file:../context/types.org][context/types.org]] — Type representation
+- [[file:../context/runtime.org][context/runtime.org]] — Runtime memory model
+- [[file:../context/infer.org][context/infer.org]] — Type inference internals
+
+* 11. Related Pages
 
 - [[file:arena.org][Arena Allocation]] -- bump-pointer allocator performance
 - [[file:heap.org][Heap Allocation]] -- heap allocation performance
 - [[file:layouts.org][Layout Types]] -- layout types for memory efficiency
 - [[file:asm.org][Inline Assembly]] -- inline assembly optimization
 - [[file:types.org][Types]] -- type representation overhead
+- [[file:arrays.org][Arrays]] -- array variant performance
+- [[file:data.org][Data Types]] -- ADT allocation performance
+- [[file:collections.org][Collections]] -- collection performance
+- [[file:patterns.org][Pattern Matching]] -- pattern match compilation cost
+- [[file:type-inference.org][Type Inference]] -- inference overhead annotations
+- [[file:mutation.org][Mutation]] -- mutation vs allocation tradeoffs
+- [[file:recursion.org][Recursion]] -- recursion vs iteration performance
 
-* Context Links
+* 12. Further Reading
 
 - [[file:layouts.org][Layout Types]] — zero-overhead C interop
 - [[file:asm.org][Inline Assembly]] — hot path optimization
 - [[file:arena.org][Arena Allocation]] — bump-pointer allocator
+- [[file:heap.org][Heap Allocation]] — runtime heap allocation
 - [[file:../context/codegen.org][context/codegen.org]] — Codegen, monomorphization cache
 - [[file:../context/arena.org][context/arena.org]] — Arena allocator internals
+- [[file:../context/language.org][context/language.org]] — language semantics and gaps
+- [[file:../context/types.org][context/types.org]] — type system internals
+- [[file:../context/asm.org][context/asm.org]] — inline assembly internals
+- [[file:../context/runtime.org][context/runtime.org]] — runtime memory model
+- [[file:../context/infer.org][context/infer.org]] — type inference internals
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — codegen operations

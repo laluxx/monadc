@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-match-guard-clause
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.pattern.match.rt.match.guard.clause
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: pattern-match
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.reader-header-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Pattern codegen coverage for guarded pattern clauses.
+;; TEST-ATOM: A variable pattern with guards should select the first true guard.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/pattern-match branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/pattern-match/atom.codegen.30.control.flow.pattern.match.rt.match.guard.clause
+;; TEST-MENU-PATH: codegen/branches/control-flow/pattern-match/atom.codegen.30.control.flow.pattern.match.rt.match.guard.clause
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.pattern.match.rt.match.guard.clause
+;; TEST-CLI-TARGET: codegen branches control-flow pattern-match
+(module Main)
+(show (match 4 with | x | (> x 3) -> 1 | otherwise -> 2))

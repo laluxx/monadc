@@ -1,0 +1,35 @@
+;; TEST-ID: tests.codegen.type.hm.functions.function.vs.value.000
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: types
+;; TEST-SUBSET: hm/functions/function-vs-value
+;; TEST-QUALITY: type-system-negative-regression
+;; TEST-CODEGEN-ATOM: atom.type.hm.functions.function-vs-value.000
+;; TEST-TYPE-ATOM: atom.type.hm.functions.function-vs-value.000
+;; TEST-CONTEXT: monadc.context.language.codegen-type-system-corpus, monadc.context.language.hm-dependent-type-coverage
+;; TEST-PURPOSE: HM function parameter checker rejects a scalar value passed where a function is expected.
+;; TEST-ATOM: Fn/arrow argument slots require function-like values, not Int literals.
+;; TEST-EXPECT: fail:compile
+;; TEST-MENU: types/hm/functions/function-vs-value/atom.type.hm.functions.function-vs-value.000
+;; TEST-MENU-PATH: codegen/types/hm/functions/function-vs-value/atom.type.hm.functions.function-vs-value.000
+;; TEST-ATOM-LEAF: atom.type.hm.functions.function-vs-value.000
+;; TEST-CLI-TARGET: codegen types hm functions function-vs-value
+;; TEST-TYPE-PATH: env.c:env_hm_check_call/arg_is_fn param_is_fn mismatch
+;; TEST-INFER-PATH: infer.c:TYPE_FN/TYPE_ARROW branch
+;; TEST-ERROR-STAGE: infer
+;; TEST-ERROR-FAMILY: hm.function-vs-value
+;; TEST-ERROR-MESSAGE: Couldn't match expected type
+;; TEST-COVERAGE: env.c:function-vs-value mismatch
+;; TEST-COVERAGE: infer.c:TYPE_FN vs TYPE_ARROW compatibility guard
+;; TEST-USES-ATOM: atom.codegen.category.types
+;; TEST-USES-ATOM: atom.type.system
+;; TEST-USES-ATOM: atom.type.hm.function
+;; TEST-USES-ATOM: atom.type.hm.arrow
+;; TEST-DEPENDS-ON: atom.env.error.call.argument.mismatch
+;; TEST-REFINES: atom.type.hm.fn-vs-value
+
+(module Main)
+(define (hm_apply_int_00 [f : Fn] [x : Int] -> Int) (f x))
+(show (hm_apply_int_00 1 4))

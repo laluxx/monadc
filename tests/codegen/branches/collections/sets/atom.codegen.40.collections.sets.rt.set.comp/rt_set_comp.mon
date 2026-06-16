@@ -1,0 +1,27 @@
+;; TEST-ID: tests.codegen.rt-set-comp
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.sets.rt.set.comp
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: sets
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: All working set operations: Set?, collection?, contains?, conj, disj, set-as-function
+;; TEST-ATOM: (Set? {1 2 3}) = True, (Set? 42) = False, (collection? {1 2 3}) = True, (contains? (conj {1 2} 3) 3) = True, (contains? (disj {1 2 3} 2) 2) = False
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:40-collections/sets branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/sets/atom.codegen.40.collections.sets.rt.set.comp
+;; TEST-MENU-PATH: codegen/branches/collections/sets/atom.codegen.40.collections.sets.rt.set.comp
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.sets.rt.set.comp
+;; TEST-CLI-TARGET: codegen branches collections sets
+(module Main)
+(show (Set? {1 2 3}))
+(show (Set? 42))
+(show (collection? {1 2 3}))
+(show (collection? 42))
+(show (contains? (conj {1 2} 3) 3))
+(show (contains? (disj {1 2 3} 2) 2))
+(show (contains? {1 2 3} 2))
+(show (contains? {1 2 3} 99))

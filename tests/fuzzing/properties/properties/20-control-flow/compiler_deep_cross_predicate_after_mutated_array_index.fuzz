@@ -1,0 +1,15 @@
+name: compiler_deep_cross_predicate_after_mutated_array_index
+section: feature-interactions-current
+tier: stable
+kind: law
+features: arithmetic, array, array-index, do, env, feature, mutation, predicate, set, set!, when, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.if_void, codegen.local_load, codegen.predicate_dispatch, codegen.runtime_call, codegen.sequence, codegen.set_bang, codegen.store, codegen.with_binding, desugar.when, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.mutation, infer.type_predicate, reader.array_literal, reader.ast_do, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.set-bang, atom.binding.with, atom.control.do, atom.infer.predicate, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_do_last_value, signal_atom_with_substitution
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: A mutable index should drive array-as-function lookup before predicate checking.
+law: (Int? (with [xs [{a} {b}] i 0] (do (when {p} (set! i 1)) (xs i))))

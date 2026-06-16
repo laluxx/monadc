@@ -1,0 +1,17 @@
+name: structured_value_nil_coalesce_nil_fallback_int_disabled_duplicate_e74a2810
+section: quote-null-string-current
+tier: experimental
+kind: law
+features: arithmetic, equality, null, path, predicate, quote, string
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.null_coalesce, codegen.path_literal, codegen.predicate_dispatch, codegen.quote, codegen.string_literal, infer.arithmetic, infer.equality, infer.nil, infer.path, infer.type_predicate, reader.path_literal, reader.quote, reader.string_literal, runtime.string
+signal: medium
+corpus-role: merged-duplicate
+uses-atoms: atom.core.equality, atom.infer.predicate, atom.null.nil, atom.quote.quote, atom.runtime.path, atom.runtime.string
+related-properties: signal_atom_equality_reflexive, signal_atom_string_contains_substring
+merged-into: deep_codegen_type_null_coalesce_nil_returns_default_int
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int
+type: Bool
+expect: True
+description: Stress string/char dispatch, null coalescing, nil predicates, quote, quasiquote, and unquote lowering.
+law: (= (?? nil {a}) {a})

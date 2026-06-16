@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-match-float-literal
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.pattern.match.rt.match.float.literal
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: pattern-match
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.reader-header-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Pattern codegen coverage for literal float patterns.
+;; TEST-ATOM: (match 1.5 with | 1.5 -> 15 | _ -> 0) should select the float literal clause.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/pattern-match branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/pattern-match/atom.codegen.30.control.flow.pattern.match.rt.match.float.literal
+;; TEST-MENU-PATH: codegen/branches/control-flow/pattern-match/atom.codegen.30.control.flow.pattern.match.rt.match.float.literal
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.pattern.match.rt.match.float.literal
+;; TEST-CLI-TARGET: codegen branches control-flow pattern-match
+(module Main)
+(show (match 1.5 with | 1.5 -> 15 | _ -> 0))

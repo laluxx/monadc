@@ -1,0 +1,15 @@
+name: structured_loop_for_nested_when_mutates_bool_once
+section: control-loop-mutation-current
+tier: stable
+kind: law
+features: arithmetic, array, array-index, control, do, env, equality, for, logic, mutation, set, set!, when, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.equality_dispatch, codegen.for_loop, codegen.if_void, codegen.local_load, codegen.logic_dispatch, codegen.runtime_call, codegen.sequence, codegen.set_bang, codegen.store, codegen.with_binding, desugar.when, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.equality, infer.logic, infer.loop, infer.mutation, reader.array_literal, reader.ast_do, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.set-bang, atom.binding.with, atom.control.do, atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_do_last_value, signal_atom_equality_reflexive, signal_atom_with_substitution
+args: p:Bool
+type: Bool
+expect: True
+description: Stress lowering of loops, mutable locals, nested blocks, and branch guarded mutation.
+law: (= (with [seen {p}] (do (for 3 (when seen (set! seen False))) seen)) False)

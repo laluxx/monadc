@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-collection-access
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.collection.dispatch.rt.collection.access
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: collection-dispatch
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime collection access helpers compile and return expected values.
+;; TEST-ATOM: head and tail operate on quoted lists.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:40-collections/collection-dispatch branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/collection-dispatch/atom.codegen.40.collections.collection.dispatch.rt.collection.access
+;; TEST-MENU-PATH: codegen/branches/collections/collection-dispatch/atom.codegen.40.collections.collection.dispatch.rt.collection.access
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.collection.dispatch.rt.collection.access
+;; TEST-CLI-TARGET: codegen branches collections collection-dispatch
+(module Main)
+(show (head '(4 5 6)))
+(show (tail '(4 5 6)))

@@ -1,0 +1,15 @@
+name: int_zero_sub_as_negation
+section: arithmetic
+tier: stable
+kind: law
+features: arithmetic, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+args: a:Int
+type: Bool
+expect: True
+description: Subtracting an Int from zero must agree with multiplication by negative one.
+law: (= (fuzz-sub 0 {a}) (fuzz-mul -1 {a}))

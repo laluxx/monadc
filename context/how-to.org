@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -637,7 +637,7 @@
 :CONFIDENCE: high
 :END:
 
-[INF id:inf.how-to.connects-to from:obs.how-to.purpose conf:high]
+[INF id:inf.how-to.connects-to from:obs.how-to.file conf:high]
   connects-to -> `monadc.context.language` (every example exercises surface
   syntax: define, lambda, data, for, match, class, instance, etc.) ·
   `monadc.context.codegen-ops` (each example triggers specific codegen

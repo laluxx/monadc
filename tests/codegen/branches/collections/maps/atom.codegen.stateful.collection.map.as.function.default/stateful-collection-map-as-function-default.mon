@@ -1,0 +1,30 @@
+;; TEST-ID: tests.codegen.stateful.collection.map.as.function.default
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-SUBSET: maps
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.stateful.collection.map.as.function.default
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Map-as-function two-argument default branch.
+;; TEST-ATOM: atom.codegen.stateful.collection.map.as.function.default
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.collection.dispatch
+;; TEST-CODEGEN-PATH: codegen.runtime.collection
+;; TEST-COVERAGE: codegen.c:3934-4016 array/set/map/range literal branches
+;; TEST-COVERAGE: codegen.c:6965-7313 list primitive branches
+;; TEST-COVERAGE: codegen.c:8362-8555 set/map operation branches
+;; TEST-COVERAGE: codegen.c:8555-8905 contains?/starts-with?/ends-with?/count branches
+;; TEST-COVERAGE: codegen.c:9920-10160 collection-as-function indexing branches
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-USES-ATOM: atom.codegen.subset.40.collections.maps
+;; TEST-MENU: branches/collections/maps/atom.codegen.stateful.collection.map.as.function.default
+;; TEST-MENU-PATH: codegen/branches/collections/maps/atom.codegen.stateful.collection.map.as.function.default
+;; TEST-ATOM-LEAF: atom.codegen.stateful.collection.map.as.function.default
+;; TEST-CLI-TARGET: codegen branches collections maps
+
+(module Main)
+(define m #{:a 42})
+(show (m :b 7))

@@ -14,12 +14,13 @@
 Test coverage: collection operations are tested by =rt_list_*.mon=,
 =rt_set_*.mon=, =rt_map_*.mon=, =rt_array_*.mon=, =rt_range_*.mon=
 fixtures in [[file:../tests/codegen/][tests/codegen/]].
+Test architecture reference: [[file:../context/tests-arch.org][context/tests-arch.org]].
 
 Monad provides four core collection families with literal syntax and a
 shared collection-as-function protocol. This page gives an overview;
-each type has a dedicated page.
+each type has a dedicated page with operation tables and known gaps.
 
-* Collection Types
+* 1. Collection Types
 
 | Type    | Literal Syntax     | Semantics                | Page                        |
 |---------+--------------------+--------------------------+-----------------------------|
@@ -28,27 +29,49 @@ each type has a dedicated page.
 | Map     | =#{:a 1}=           | Hash map (open-addressing)| [[file:map.org][Maps]]         |
 | Array   | =[1 2 3]=           | Contiguous fixed-size     | [[file:arrays.org][Arrays]]      |
 | Heap    | =~[1 2 3]=          | Heap-growable arrays      | [[file:heap.org][Heap]]        |
-| Range   | =[0..10]=, =(0..)=  | Eager or lazy sequences   | (below)        |
+| Range   | =[0..10]=, =(0..)=  | Eager or lazy sequences   | [[file:range.org][Ranges]]      |
 | String  | ="hello"=           | UTF-8 character sequence  | [[file:strings.org][Strings]]     |
 
-** Collection-as-Function Protocol
+See [[file:../context/types.org][context/types.org]] for type representation and
+[[file:../context/language.org][context/language.org]] for collection dispatch.
+
+** 1.1 Collection-as-Function Protocol
 
 Every collection supports function-call indexing:
 
 #+BEGIN_SRC monad
-(coll index)            ;; elements are lookupable by position/ke)
+(coll index)            ;; elements are lookupable by position/key
 #+END_SRC
 
 #+BEGIN_SRC wisp
-coll index            ;; elements are lookupable by position/ke)
+coll index            ;; elements are lookupable by position/key
 #+END_SRC
 
-- Lists: =(lst i)= → i-th element or nil
-- Arrays: =([10 20 30] 1)= → 20
-- Sets: =({1 2 3} 2)= → element or nil
-- Maps: =(#{:a 1} :a)= → value or nil; =(m key default)= → value or default
+Specific behaviours:
 
-* Dedicated Pages
+| Collection | Example                   | Result                          |
+|------------+---------------------------+---------------------------------|
+| Lists      | =('(10 20 30) 1)=         | 20 (i-th element)               |
+| Arrays     | =([10 20 30] 1)=          | 20 (i-th element)               |
+| Sets       | =({1 2 3} 2)=             | 2 (element or nil)              |
+| Maps       | =(#{:a 1} :a)=            | 1 (value or nil)                |
+| Maps       | =(m :z -1)=               | -1 (with default on miss)       |
+
+This protocol is implemented at the codegen level via dispatch on the
+runtime type tag. Inference skips =TYPE_ARROW= unification when the
+function position has a collection type
+([[file:../codegen.c::9732]]).
+
+See [[file:../context/codegen-ops.org][context/codegen-ops.org]] for the operation
+dispatch catalogue and [[file:../codegen.c::9732]] for indexing codegen.
+
+Key Points:
+- All collections support function-call syntax for element access
+- Lists and arrays use integer indices; maps use arbitrary keys; sets use elements
+- Maps accept an optional default argument for missing keys
+- The desugaring avoids =TYPE_ARROW= inference for collection types
+
+* 2. Dedicated Pages
 
 Each collection type has its own reference page with full operation
 tables, examples, and known gaps:
@@ -59,8 +82,9 @@ tables, examples, and known gaps:
 - [[file:arrays.org][Arrays]] — stack, heap, and fat-pointer arrays
 - [[file:heap.org][Heap Allocation]] — heap-growable arrays and ADT allocation
 - [[file:strings.org][Strings]] — UTF-8 character sequences
+- [[file:range.org][Ranges]] — eager and lazy numeric sequences
 
-* Arrays
+* 3. Arrays
 
 Three array forms sharing the =TYPE_ARR= type tag:
 
@@ -70,7 +94,9 @@ Three array forms sharing the =TYPE_ARR= type tag:
 | =~[1 2 3]=   | Heap-growable (arr_is_heap)| Heap       | Long-lived out-of-frame |
 | =[16kb I32]= | Fat pointer (arr_is_fat)   | Stack/heap | C-interop sized buffer  |
 
-** Stack arrays (bracket syntax)
+See [[file:arrays.org][Arrays]] for full reference.
+
+** 3.1 Stack arrays (bracket syntax)
 
 #+BEGIN_SRC monad
 [1 2 3]                 ;; Int array, 3 elements
@@ -84,7 +110,7 @@ Three array forms sharing the =TYPE_ARR= type tag:
 [(1 "a") (2 "b")]       ;; Array of pairs
 #+END_SRC
 
-** Heap arrays (tilde prefix)
+** 3.2 Heap arrays (tilde prefix)
 
 #+BEGIN_SRC monad
 ~[1 2 3]                ;; heap-allocated, runtime-sized
@@ -96,7 +122,7 @@ Three array forms sharing the =TYPE_ARR= type tag:
 ~[]                     ;; empty heap array
 #+END_SRC
 
-** Sized buffer syntax
+** 3.3 Sized buffer syntax
 
 #+BEGIN_SRC monad
 [16kb]                  ;; [16384 U8] — 16 KiB buffer
@@ -110,7 +136,11 @@ Three array forms sharing the =TYPE_ARR= type tag:
 
 Accepted suffixes: =kb=, =mb=, =gb=, =tb=.
 
-** Array operations
+See [[file:../context/language.org][context/language.org]] for the full array
+representation and [[file:../context/codegen-ops.org][context/codegen-ops.org]]
+for array operation codegen.
+
+** 3.4 Array operations
 
 | Function | Example                         | Result           |
 |----------+---------------------------------+------------------|
@@ -120,33 +150,41 @@ Accepted suffixes: =kb=, =mb=, =gb=, =tb=.
 | ++       | =(++ [1 2] [3 4])=              | [1 2 3 4]        |
 | Arr?     | =(Arr? [1 2 3])=                | True             |
 
-** Array-as-function indexing
+** 3.5 Array-as-function indexing
 
 #+BEGIN_SRC monad
-[10 20 30] 1)            ;; function-call syntax — returns 2
-(xs[1]                     ;; postfix bracket — desugars to (xs 1))
+([10 20 30] 1)            ;; function-call syntax — returns 20
+(xs[1])                   ;; postfix bracket — desugars to (xs 1)
 #+END_SRC
 
 #+BEGIN_SRC wisp
-[10 20 30] 1)            ;; function-call syntax — returns 2
+[10 20 30] 1            ;; function-call syntax — returns 20
 xs[1]                     ;; postfix bracket — desugars to (xs 1)
 #+END_SRC
 
 Both forms reach the same codegen path ([[file:../codegen.c::9732]]): =(arr i)=
 returns element at index =i= with bounds checking.
 
-** LLVM representation
+** 3.6 LLVM representation
 
 At the type level, three variants are distinguished by boolean flags
 (=arr_is_fat=, =arr_is_heap=, =arr_size=). At the codegen level, all three
 are lowered to the fat-pointer struct ={i8*, i64}= and heap-allocated
 ([[file:../context/language.org::primitive-array][context/language.org]]).
 
-* Ranges
+See [[file:../context/codegen.org][context/codegen.org]] for LLVM IR details.
+
+Key Points:
+- Three array variants share =TYPE_ARR= but differ by allocation strategy
+- Stack arrays: fixed-size, short-lived, no heap allocation
+- Heap arrays: runtime-sized, push/pop support, outlive scope
+- Fat pointers: C-interop buffers with explicit size specifier
+
+* 4. Ranges
 
 Two range syntaxes with different evaluation strategies:
 
-** Bracket syntax — eager array (runtime-evaluated, finite):
+** 4.1 Bracket syntax — eager array (runtime-evaluated, finite):
 
 #+BEGIN_SRC monad
 [0..10]                   ;; [0 1 2 3 4 5 6 7 8 9 10] inclusive
@@ -160,35 +198,110 @@ Two range syntaxes with different evaluation strategies:
 
 Parser rejects =[0..]= (infinite arrays not possible).
 
-** Paren syntax — lazy lists (cons cells, runtime-generated via thunks):
+** 4.2 Paren syntax — lazy lists (cons cells, runtime-generated via thunks):
 
 #+BEGIN_SRC monad
-(0..10)                   ;; Lazy list 0 through 1)
-(0..)                     ;; Infinite lazy list from)
-(0,2..10)                 ;; Lazy list with ste)
-(0,2..)                   ;; Infinite lazy list with ste)
+(0..10)                   ;; Lazy list 0 through 10
+(0..)                     ;; Infinite lazy list from 0
+(0,2..10)                 ;; Lazy list with step
+(0,2..)                   ;; Infinite lazy list with step
 #+END_SRC
 
 #+BEGIN_SRC wisp
-0..10                   ;; Lazy list 0 through 1)
-0..                     ;; Infinite lazy list from)
-0,2..10                 ;; Lazy list with ste)
-0,2..                   ;; Infinite lazy list with ste)
+(0..10)                   ;; Lazy list 0 through 10
+(0..)                     ;; Infinite lazy list from 0
+(0,2..10)                 ;; Lazy list with step
+(0,2..)                   ;; Infinite lazy list with step
 #+END_SRC
 
 Lazy ranges call runtime functions (=list_from=, =list_from_step=) and can be
 infinite. They produce linked cons cells via the thunk system, not arrays.
 
-* Performance
+See [[file:range.org][Ranges]] for full reference and
+[[file:../context/language.org][context/language.org]] for lazy range semantics.
 
-- **Lists** — cons cells, O(1) prepend, O(n) access/index
-- **Arrays** — contiguous, O(1) index, stack-allocated or heap
-- **Sets** — open-addressing hash table, O(1) average, elements boxed
-- **Maps** — open-addressing hash table, O(1) average, keys/vals boxed
-- **Ranges =[...]=** — eager, O(n) memory (evaluated at runtime)
-- **Ranges =(...)=** — lazy, O(1) head, O(n) to force tail
+Key Points:
+- Bracket syntax =[0..10]= produces eager arrays (finite, evaluated at runtime)
+- Paren syntax =(0..)= produces lazy lists (potentially infinite, on-demand)
+- Step syntax: =[0,2..10]= for arithmetic progression
+- Parser rejects infinite eager arrays
 
-* Related Pages
+* 5. Performance
+
+| Type    | Access Pattern       | Memory Layout       | Notes                        |
+|---------+----------------------+---------------------+------------------------------|
+| List    | O(1) prepend, O(n) index | Linked cons cells | Linear traversal for indexing |
+| Array   | O(1) index           | Contiguous          | Stack or heap allocation     |
+| Set     | O(1) average lookup  | Open-addressing hash | Elements boxed               |
+| Map     | O(1) average lookup  | Open-addressing hash | Keys and values boxed        |
+| Range =[...]= | O(1) index | Eager array          | O(n) memory (evaluated)      |
+| Range =(...)= | O(1) head, O(n) force tail | Lazy cons cells | O(1) head, O(n) to force all |
+
+See [[file:performance.org][Performance]] for detailed cost analysis and
+[[file:../context/language.org][context/language.org]] for runtime system details.
+
+Key Points:
+- Lists excel at incremental prepend; arrays excel at indexed access
+- Sets/maps offer O(1) average but box elements (heap allocation per entry)
+- Eager ranges pre-compute all elements; lazy ranges compute on demand
+
+* 6. Runnable Example
+
+#+BEGIN_SRC monad
+;; run with: monadc collections-demo.mon
+
+;; Lists — linked cons cells
+(define lst '(1 2 3))
+(show lst)                     ;; prints (1 2 3)
+(show (count lst))             ;; prints 3
+
+;; Arrays — contiguous storage
+(define arr [10 20 30])
+(show (head arr))              ;; prints 10
+(show (arr 1))                 ;; prints 20 (indexing)
+
+;; Sets — membership test
+(define s :: (Set Int) {1 2 3})
+(show (contains? s 2))         ;; prints True
+
+;; Maps — key-value lookup
+(define m :: (Map :a Int) #{:a 1 :b 2})
+(show (find m :a))             ;; prints (:a 1)
+
+;; Collection-as-function protocol
+(show (lst 0))                 ;; prints 1
+(show (arr 2))                 ;; prints 30
+#+END_SRC
+
+* 7. Gotchas
+
+Common mistakes and surprising behaviours with collections:
+
+- **Untyped map literal =#{}= produces garbage** — always annotate =:: (Map K V)= on map literals to force correct boxing.
+
+- **Untyped set literal ={}= produces garbage** — same root cause as maps; use =:: (Set T)= annotation.
+
+- **List indexing is O(n)** — lists are linked cons cells; random access traverses from head. Use arrays for O(1) indexing.
+
+- **Collection-as-function skips =TYPE_ARROW= unification** — inference treats collection calls differently from function calls, which can produce confusing type errors when the expected type is ambiguous.
+
+- **Infinite lazy ranges cannot be used with =count=** — use =take= to consume a finite prefix before counting.
+
+* 8. Implementation Notes
+
+| Component   | Context File        | Topic                                         |
+|-------------+---------------------+-----------------------------------------------|
+| Types       | types.org           | [[file:../context/types.org::#kind-TYPE_LIST][TYPE_LIST]], [[file:../context/types.org::#kind-TYPE_ARR][TYPE_ARR]], [[file:../context/types.org::#kind-TYPE_SET][TYPE_SET]], [[file:../context/types.org::#kind-TYPE_MAP][TYPE_MAP]] |
+| Dispatch    | codegen-ops.org     | [[file:../context/codegen-ops.org::#dispatch-architecture][Operation dispatch architecture]] |
+| Collections | codegen-ops.org     | [[file:../context/codegen-ops.org::#ops-collection][Collection operation codegen]] |
+| Array       | codegen-ops.org     | [[file:../context/codegen-ops.org::#ops-array][Array operation codegen]] |
+| Range       | codegen-ops.org     | [[file:../context/codegen-ops.org::#ops-range][Range operation codegen]] |
+| Language    | language.org        | [[file:../context/language.org::#primitive-array][Array representation]], [[file:../context/language.org::#primitive-set][Set]], [[file:../context/language.org::#primitive-map][Map]] |
+| Codegen     | codegen.org         | [[file:../context/codegen.org::#codegen-fat-array][Fat pointer array lowering]] |
+| Inference   | infer.org           | [[file:../context/infer.org::#collection-as-function][Collection-as-function inference]] |
+| Core Libs   | core-libs.org       | [[file:../context/core-libs.org::#core-libs-coll][Standard library collection modules]] |
+
+Related Pages
 
 - [[file:list.org][Lists]] -- linked cons cells, quoted lists
 - [[file:set.org][Sets]] -- hash sets, conj/disj, contains?
@@ -196,20 +309,19 @@ infinite. They produce linked cons cells via the thunk system, not arrays.
 - [[file:arrays.org][Arrays]] -- stack, fat pointer, heap-growable variants
 - [[file:range.org][Ranges]] -- eager and lazy numeric sequences
 - [[file:heap.org][Heap Allocation]] -- heap arrays, ADT allocation, arena
+- [[file:strings.org][Strings]] -- UTF-8 character sequences
+- [[file:pair.org][Pairs]] -- product type for key-value entries
+- [[file:patterns.org][Pattern Matching]] -- list/array destructuring
+- [[file:core.org][Core Library]] -- collection builtins
+- [[file:iteration.org][Iteration]] -- for loops over collections
+- [[file:performance.org][Performance]] -- collection cost analysis
 
-* Context Links
+Further Reading
 
 - [[file:../context/language.org][context/language.org]] — dispatch for list/set/map/array ops
 - [[file:../context/language.org::codegen-gaps][context/language.org — Known gaps]]
 - [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]]
-- [[file:list.org][Lists]] — linked cons cells reference
-- [[file:set.org][Sets]] — hash set reference
-- [[file:map.org][Maps]] — hash map reference
-- [[file:arrays.org][Arrays]] — fixed-size, heap, and fat-pointer arrays
-- [[file:range.org][Ranges]] — eager and lazy numeric sequences
-- [[file:strings.org][Strings]] — character sequences
-- [[file:patterns.org][Pattern Matching]] — list/array destructuring
-- [[file:core.org][Core Library]] — collection builtins
-
-
-
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — operation dispatch catalogue
+- [[file:../context/types.org][context/types.org]] — TYPE_ARR, TYPE_LIST, TYPE_SET, TYPE_MAP
+- [[file:../context/core-libs.org][context/core-libs.org]] — stdlib collection modules
+- [[file:../context/infer.org][context/infer.org]] — type inference for collections

@@ -1,0 +1,147 @@
+#+TITLE: Traceability Spine
+#+AUTHOR: GPT-5.5 Thinking
+#+DATE: 2026-06-16
+#+CREATED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-16
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:traceability:tests:source:
+#+PROPERTY: CONTEXT_VERSION 4
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.traceability
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY hideblocks
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* Purpose
+:PROPERTIES:
+:ID: monadc.context.traceability.purpose
+:CUSTOM_ID: traceability-purpose
+:CONTEXT_KIND: workflow
+:CONTEXT_DESCRIPTION: Defines how source facts, context claims, tests, and failures should connect.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/traceability.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.traceability.purpose src:context/traceability.org conf:high]
+  The traceability spine is the path from implementation to living memory to
+  executable regression. It prevents three common failures: tests with no design
+  meaning, documentation with no source anchor, and fixes that do not promote
+  failing witnesses into regression coverage.
+* Canonical Chain
+:PROPERTIES:
+:ID: monadc.context.traceability.canonical-chain
+:CUSTOM_ID: traceability-canonical-chain
+:CONTEXT_KIND: workflow
+:CONTEXT_DESCRIPTION: The preferred source-to-test chain for compiler features.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/traceability.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Preferred traceability chain
+| Step | Artifact | Example question |
+|------+----------+------------------|
+| 1 | Source observation | What does the code actually do? |
+| 2 | Context contract | What should this phase guarantee? |
+| 3 | Test fixture | Which executable witness protects the guarantee? |
+| 4 | Test tier | Is it green regression, known-fail, or future? |
+| 5 | Failure artifact | What changed on the last run? |
+| 6 | Promotion record | When fixed, what moved from known-fail to regression? |
+
+[DEC id:dec.traceability.no-orphan-tests date:2026-06-16 by:llm]
+  New tests should have TEST-CONTEXT whenever they assert a language or compiler
+  contract. Context-free smoke tests are allowed, but they should be marked as
+  smoke, not as semantic coverage.
+
+[DEC id:dec.traceability.no-orphan-context date:2026-06-16 by:llm]
+  New durable context claims about compiler behavior should either cite a source
+  observation or name the tests that protect the claim.
+* Promotion Protocol
+:PROPERTIES:
+:ID: monadc.context.traceability.promotion-protocol
+:CUSTOM_ID: traceability-promotion-protocol
+:CONTEXT_KIND: workflow
+:CONTEXT_DESCRIPTION: How a bug witness becomes a regression test.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/traceability.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Promotion steps
+| State | Action |
+|-------+--------|
+| future | Spec exists but compiler does not claim support. |
+| known-fail | Bug witness captures intended current gap. |
+| fixed locally | Run the specific witness and inspect artifacts. |
+| regression | Remove known-failure marker and keep metadata. |
+| documented | Add FIX/DEC record linking the test to the category. |
+
+[TODO id:todo.traceability.promotion-script owner:llm status:open conf:medium]
+  Add a helper that promotes one TEST-ID from known-fail to regression and
+  updates the tier manifest, context link manifest, and corresponding FIX record.
+* Failure-to-Owner Routing
+:PROPERTIES:
+:ID: monadc.context.traceability.failure-routing
+:CUSTOM_ID: traceability-failure-routing
+:CONTEXT_KIND: triage
+:CONTEXT_DESCRIPTION: Maps failure kinds to likely owning context categories.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/traceability.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Failure routing
+| Failure kind | First owner | Then inspect |
+|--------------+-------------+--------------|
+| emit-json-failed | reader | reader, language, source-map |
+| desugar-mismatch | reader/wisp/macro | wisp, reader, macro |
+| diagnostic-mismatch | infer/main/cli | infer, types, cli, tests |
+| expected-fail-compiled | infer/semantics | infer, typeclass, tests |
+| stdout-mismatch | codegen/runtime | codegen, runtime, core-libs |
+| artifact cleanup | tests-arch | tests, workflow |
+
+[INF id:inf.traceability.failure-routing from:dec.category.contract-required-for-major-files conf:medium]
+  Routing is approximate. The category contract in the destination file is the
+  authority for whether the failure belongs there.

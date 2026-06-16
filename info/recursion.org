@@ -16,12 +16,15 @@ multiple codegen fixtures. Mutual recursion via =letrec= is exercised
 by =rt_letrec_*.mon=.
 
 Monad supports recursive functions at top-level (via =define=) and
-locally (via =letrec=). Recursion is the standard way to iterate when
-closures are unavailable.
+locally (via =letrec=). Since closures have a codegen gap
+([[file:lambda.org][Lambda — Closure Gap]]), recursion is the primary
+iteration pattern in Monad — use it in place of higher-order functions
+like =map= and =filter=.
 
-* Top-Level Recursion
+* 1. Top-Level Recursion
 
-Named =define= can refer to itself:
+Named =define= can refer to itself — the binding is in scope for its
+own body:
 
 #+BEGIN_SRC monad
 (define (fib [n :: Int] -> Int)
@@ -43,11 +46,35 @@ define factorial [n :: Int] -> Int
     * n (factorial (- n 1))
 #+END_SRC
 
-Top-level =define= names are in scope for their own bodies.
+Top-level =define= names are in scope for their own bodies. See
+[[file:define.org][Define]] for the full binding reference and
+[[file:../context/language.org::binding-constructs][context/language.org — Binding Constructs]].
 
-* Local Recursion with letrec
+** 1.1 Mutually Recursive Top-Level Definitions
 
-For local recursive bindings, use =letrec=:
+Multiple top-level =define=s in the same scope can refer to each other:
+
+#+BEGIN_SRC monad
+(define (even? n) (if (= n 0) True (odd? (- n 1))))
+(define (odd? n)  (if (= n 0) False (even? (- n 1))))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define even? n -> if (= n 0) True (odd? (- n 1))
+define odd? n -> if (= n 0) False (even? (- n 1))
+#+END_SRC
+
+#+BEGIN_QUOTE
+Key Points:
+- Top-level =define= binds the name before evaluating the body
+- Direct recursion: function calls itself by name
+- Mutual recursion: multiple functions call each other
+- All definitions must be in the same scope for mutual recursion
+#+END_QUOTE
+
+* 2. Local Recursion with letrec
+
+For local recursive bindings (inside another function), use =letrec=:
 
 #+BEGIN_SRC monad
 (define (fact n)
@@ -65,7 +92,7 @@ define fact n
     fact-iter 1 n
 #+END_SRC
 
-=letrec= supports mutual recursion:
+=letrec= supports mutual recursion locally:
 
 #+BEGIN_SRC monad
 (letrec [even? (lambda [n] (if (= n 0) True (odd? (- n 1))))
@@ -79,11 +106,13 @@ letrec [even? lambda [n] if (= n 0) True (odd? (- n 1))
   even? 42
 #+END_SRC
 
-See [[file:let.org][Let Bindings]] for more on =letrec= semantics.
+See [[file:let.org][Let Bindings]] for more on =letrec= semantics and
+[[file:../context/language.org::binding-constructs][context/language.org — Binding Constructs]].
 
-* Recursion Over Lists
+* 3. Recursion Over Lists
 
-Lists are naturally recursive:
+Lists are naturally recursive data structures — every list is either
+empty (=[]=) or a cons cell (=head|tail=):
 
 #+BEGIN_SRC monad
 (define (sum xs -> Int)
@@ -120,11 +149,47 @@ define length xs -> Int
   reduce (lambda [acc _] + acc 1) 0 xs
 #+END_SRC
 
-The =[x|xs]= cons pattern destructures the head and tail.
+The =[x|xs]= cons pattern destructures the head and tail. See
+[[file:patterns.org][Pattern Matching]] for list pattern syntax and
+[[file:list.org][Lists]] for list operations.
 
-* Tail Recursion
+** 3.1 Additional List Recursion Examples
 
-Tail-recursive functions use an accumulator:
+#+BEGIN_SRC monad
+(define (reverse xs -> [Int])
+  (match xs
+    []       -> []
+    [x|rest] -> (++ (reverse rest) [x])))
+
+(define (append xs ys -> [Int])
+  (match xs
+    []       -> ys
+    [x|rest] -> (++ x (append rest ys))))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define reverse xs -> [Int]
+  match xs
+    []       -> []
+    [x|rest] -> ++ (reverse rest) [x]
+
+define append xs ys -> [Int]
+  match xs
+    []       -> ys
+    [x|rest] -> ++ x (append rest ys)
+#+END_SRC
+
+#+BEGIN_QUOTE
+Key Points:
+- Lists are processed by matching on =[]= (base) and =[x|rest]= (recursive)
+- Each recursive call consumes the tail until the list is empty
+- These are simple recursion (not tail-recursive) — stack grows with input
+#+END_QUOTE
+
+* 4. Tail Recursion
+
+Tail-recursive functions use an accumulator parameter to avoid
+post-recursion work:
 
 #+BEGIN_SRC monad
 (define (fact-tail [n :: Int] -> Int)
@@ -143,12 +208,43 @@ define fact-tail [n :: Int] -> Int
 #+END_SRC
 
 Tail-call optimization is planned but not yet implemented — recursive
-calls currently grow the stack.
+calls currently grow the stack. See
+[[file:../context/language.org::codegen-gaps][context/language.org — Known Gaps (TCO)]]
+for the current status.
 
-* Workaround: No Closures
+** 4.1 Tail-Recursive List Operations
 
-Since closures have a codegen gap, recursion is the primary iteration
-pattern. Write concrete typed helpers instead of passing lambdas:
+#+BEGIN_SRC monad
+(define (reverse-tail xs -> [Int])
+  (letrec [rev (lambda [acc xs]
+                 (match xs
+                   []       -> acc
+                   [x|rest] -> (rev (++ x acc) rest))))]
+    (rev [] xs)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define reverse-tail xs -> [Int]
+  letrec [rev lambda [acc xs]
+           match xs
+             []       -> acc
+             [x|rest] -> rev (++ x acc) rest]
+    rev [] xs
+#+END_SRC
+
+#+BEGIN_QUOTE
+Key Points:
+- Tail recursion uses an accumulator to avoid post-call work
+- TCO is not yet implemented — recursive calls still grow the stack
+- Tail-recursive style is preparation for when TCO lands
+- Write tail-recursive versions for long-running iterations
+#+END_QUOTE
+
+* 5. Workaround: No Closures
+
+Since closures have a codegen gap ([[file:lambda.org][Lambda — Closure Gap]]),
+recursion is the primary iteration pattern. Write concrete typed helpers
+instead of passing lambdas:
 
 #+BEGIN_SRC monad
 ;; Instead of (map f xs), recurse explicitly:
@@ -163,6 +259,77 @@ define map-add1 :: [Int] -> [Int]
   [x|xs] -> ++ (+ x 1) (map-add1 xs)
 #+END_SRC
 
+See [[file:functional-programming.org][Functional Programming]] for the
+full workaround guide and
+[[file:../context/language.org::codegen-gaps][context/language.org — Known Codegen Gaps]].
+
+* 6. Recursion vs Iteration
+
+| Approach     | Mechanism               | Stack Usage    | When to Use                   |
+|--------------+-------------------------+----------------+-------------------------------|
+| Recursion    | Self-calling functions  | Grows (no TCO) | List processing, tree walking |
+| Tail rec     | Accumulator pattern     | Grows (no TCO) | Linear iteration              |
+| =while=      | Loop header + body     | Constant       | Side-effecting loops          |
+| =for=        | Iterator-based loop    | Constant       | Collection iteration          |
+
+See [[file:iteration.org][Iteration]] for loop forms and
+[[file:performance.org][Performance]] for optimization considerations.
+
+* 7. Runnable Example
+
+#+BEGIN_SRC monad
+;; run with: monadc
+(define (fib [n :: Int] -> Int)
+  (if (<= n 2) 1
+    (+ (fib (- n 1)) (fib (- n 2)))))
+
+(define (main)
+  (show (fib 10)))  ;; 55
+
+(main)
+#+END_SRC
+
+* 8. Gotchas
+
+- **No TCO**: Tail-recursive calls still grow the stack. A deep
+  recursion (=fib 100000=) will overflow. Use =while= or =for= for
+  unbounded iteration ([[file:iteration.org]]).
+- **Closure gap affects helpers**: You cannot pass a recursive lambda
+  as a higher-order argument (no closures). Write concrete recursive
+  functions with =define= instead.
+- **Mutual recursion scope**: All mutually recursive =define=s must be
+  in the same top-level scope. A =define= inside a =begin= or inner
+  scope cannot see forward references.
+- **=letrec= has no strcmp**: =(letrec ...)= in paren-mode will not
+  dispatch. Use Wisp syntax as a workaround.
+
+* 9. Implementation Notes
+
+Key source locations for recursion:
+
+| Aspect                | Location                                                              |
+|-----------------------+-----------------------------------------------------------------------|
+| Binding constructs    | [[file:../context/language.org::binding-constructs][context/language.org — Binding Constructs]] |
+| Codegen gaps (TCO)    | [[file:../context/language.org::codegen-gaps][context/language.org — Known Gaps]]           |
+| Function types        | [[file:../context/language.org::primitive-function][context/language.org — Function Types]] |
+| Codegen architecture  | [[file:../context/codegen.org][context/codegen.org]] — codegen architecture           |
+| Function call codegen | [[file:../codegen.c][codegen.c]] — function call codegen                     |
+
+Recursion works because top-level =define= makes the name available in
+its own body at the codegen level. For =letrec=, the reader inserts
+special =AST_LETREC= nodes that the compiler handles specially to
+create recursive environments. TCO will require LLVM tail-call
+annotations (=musttail=) in the codegen.
+
+#+BEGIN_QUOTE
+Key Points:
+- Primary iteration pattern due to closure codegen gap
+- Top-level: direct self-reference in =define= body
+- Local: =letrec= for recursive bindings within functions
+- TCO not yet implemented — stack grows with recursion depth
+- Write concrete recursive helpers instead of =map= / =filter=
+#+END_QUOTE
+
 * Related Pages
 
 - [[file:lambda.org][Lambda]] -- anonymous recursive functions
@@ -170,11 +337,28 @@ define map-add1 :: [Int] -> [Int]
 - [[file:iteration.org][Iteration]] -- iterative vs recursive style
 - [[file:functional-programming.org][Functional Programming]] -- recursion patterns
 - [[file:patterns.org][Pattern Matching]] -- recursive pattern matching
+- [[file:define.org][Define]] -- top-level recursive definitions
+- [[file:performance.org][Performance]] -- TCO and optimization
+- [[file:list.org][Lists]] -- list data type and operations
+
+* Further Reading
+
+- [[file:../context/language.org][context/language.org]] — recursion in codegen
+- [[file:../context/language.org::binding-constructs][context/language.org — Binding Constructs]]
+- [[file:../context/language.org::codegen-gaps][context/language.org — Known gaps (TCO, closures)]]
+- [[file:../context/language.org::primitive-function][context/language.org — Function Types]]
+- [[file:../context/codegen.org][context/codegen.org]] — codegen architecture
+- [[file:../codegen.c][codegen.c]] — function call codegen
+- [[file:../tests/codegen/rt_letrec_nested.mon][rt_letrec_nested.mon]] — letrec test fixtures
+- [[file:../tests/codegen/branches/smoke-legacy/uncategorized-legacy/rt_mutual_recursion_forward.mon][tests/ — mutual recursion test]]
+- [[file:../context/tests-arch.org][context/tests-arch.org]] — test suite architecture
 
 * Context Links
 
 - [[file:../context/language.org][context/language.org]] — recursion in codegen
 - [[file:../context/language.org::codegen-gaps][context/language.org — Known gaps (TCO, closures)]]
+- [[file:../context/language.org::binding-constructs][context/language.org — Binding Constructs]]
+- [[file:../context/language.org::working-dispatch][context/language.org — Working Dispatch]]
 - [[file:let.org][Let Bindings]] — let/let*/letrec
 - [[file:lambda.org][Lambda]] — lambda expressions
 - [[file:functional-programming.org][Functional Programming]] — higher-order functions

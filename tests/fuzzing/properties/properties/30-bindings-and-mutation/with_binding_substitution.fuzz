@@ -1,0 +1,15 @@
+name: with_binding_substitution
+section: binding
+tier: stable
+kind: law
+features: arithmetic, array, array-index, binding, env, equality, set, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.equality_dispatch, codegen.local_load, codegen.runtime_call, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.equality, reader.array_literal, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.with, atom.core.equality, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive, signal_atom_with_substitution
+args: value:Int offset:Int
+type: Bool
+expect: True
+description: A with binding must behave like substituting the bound value in the body.
+law: (= (with [x {value}] (fuzz-add x {offset})) (fuzz-add {value} {offset}))

@@ -1,0 +1,16 @@
+name: predicate_nil_on_scalar_false_disabled_duplicate_d41536ba
+section: predicates-conversions
+tier: experimental
+kind: law
+features: arithmetic, null, predicate, predicates
+compiler-path: codegen.arithmetic_dispatch, codegen.null_coalesce, codegen.predicate_dispatch, infer.arithmetic, infer.nil, infer.type_predicate
+signal: medium
+corpus-role: merged-duplicate
+uses-atoms: atom.infer.predicate, atom.null.nil
+merged-into: deep_codegen_type_nil_pred_int_false
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int
+type: Bool
+expect: False
+description: nil? must reject scalar Int values at compile time.
+law: (nil? {a})

@@ -1,0 +1,17 @@
+name: structured_program_array_index_literal_r07_disabled_duplicate_e0df8994
+section: current-program-kind
+tier: experimental
+kind: program
+features: program, array, array-index, runtime
+compiler-path: codegen.array_index, codegen.array_literal, codegen.module_body, infer.array, infer.callable_array, reader.array_literal, runner.program_kind
+signal: high
+corpus-role: merged-duplicate
+uses-atoms: atom.core.equality, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive
+merged-into: structured_program_array_index_literal_r01
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int@tiny b:Int@tiny c:Int@tiny
+type: Bool
+expect: True
+description: V11 program-kind compiler test program_array_index_literal round 7; exercises full program insertion instead of show-wrapped law mode.
+program: (show (= ([{a} {b} {c}] 1) {b}))

@@ -1,0 +1,15 @@
+name: signal_future_emit_json_heap_array_shape
+section: current-future-runner-roadmap
+tier: experimental
+kind: law
+features: future, runner, atom-web
+compiler-path: reader.heap-array, emit-json.ast
+signal: low
+corpus-role: future-runner-roadmap
+uses-atoms: atom.reader.heap-array, atom.ast.json
+disabled-reason: requires future fuzzer property kind or dialect support
+args: 
+type: Bool
+expect: True
+description: Future AST invariant for heap array JSON is_heap marker.
+law: (emit-json-has "~[1 2 3]" "is_heap")

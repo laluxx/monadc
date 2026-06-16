@@ -1,0 +1,15 @@
+name: structured_program_heap_count_after_do_variant_01
+section: current-program-kind
+tier: stable
+kind: program
+features: program, heap-array, do, count
+compiler-path: codegen.heap_array, codegen.module_body, codegen.sequence, reader.ast_do, reader.heap_array, runner.program_kind
+signal: high
+corpus-role: program-semantics
+uses-atoms: atom.control.do, atom.core.equality, atom.runtime.array, atom.runtime.heap-array
+related-properties: signal_atom_array_index_valid, signal_atom_do_last_value, signal_atom_equality_reflexive
+args: a:Int@edge b:Int@edge c:Int@edge
+type: Bool
+expect: True
+description: V10 program-kind property variant 1 for program_heap_count_after_do, checking full program source handling rather than show-wrapped law handling.
+program: (show (= (do {a} (count ~[{a} {b} {c}])) 3))

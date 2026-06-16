@@ -1,0 +1,27 @@
+;; TEST-ID: tests.codegen.rt-for-collect
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.loops.rt.for.collect
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: loops
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: For comprehension with :collect gathers results into a list.
+;; TEST-ATOM: (for [x [1 2 3]] :collect (* x 2)) returns (2 4 6).
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/loops branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/loops/atom.codegen.30.control.flow.loops.rt.for.collect
+;; TEST-MENU-PATH: codegen/branches/control-flow/loops/atom.codegen.30.control.flow.loops.rt.for.collect
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.loops.rt.for.collect
+;; TEST-CLI-TARGET: codegen branches control-flow loops
+module Main
+(show (for [x '(1 2 3)] :collect (* x 2)))
+
+;; WISP
+
+show for x -> ⌜1 2 3⌝
+ :collect x * 2

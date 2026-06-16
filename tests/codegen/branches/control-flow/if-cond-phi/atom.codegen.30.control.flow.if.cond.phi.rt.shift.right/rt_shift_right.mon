@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-shift-right
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.if.cond.phi.rt.shift.right
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: if-cond-phi
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Arithmetic right shift (>>) catches uncovered dispatch path codegen.c:7407.
+;; TEST-ATOM: (>> 16 2) produces 4, (>> -16 2) produces -4 (sign-preserving).
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/if-cond-phi branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/if-cond-phi/atom.codegen.30.control.flow.if.cond.phi.rt.shift.right
+;; TEST-MENU-PATH: codegen/branches/control-flow/if-cond-phi/atom.codegen.30.control.flow.if.cond.phi.rt.shift.right
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.if.cond.phi.rt.shift.right
+;; TEST-CLI-TARGET: codegen branches control-flow if-cond-phi
+(module Main)
+(show (>> 16 2))
+(show (>> -16 2))

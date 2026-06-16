@@ -1,0 +1,485 @@
+#+TITLE: Catface
+#+FILETAGS: :monadc:category:catface:tui:zig:
+
+#+begin_export html
+<div style="display:flex; align-items:center; gap:18px; margin:16px 0 22px 0;">
+  <img src="./catface.svg" width="80" height="80" alt="Catface logo"
+       style="width:80px;height:80px;image-rendering:auto;flex:0 0 auto;" />
+  <div>
+    <h1 style="margin:0;">Catface</h1>
+    <p style="margin:4px 0 0 0;">
+      A fast Zig terminal interface for exploring the MonadC category/context garden.
+    </p>
+  </div>
+</div>
+#+end_export
+
+Catface is a project-wide category/search surface for MonadC.
+
+It is intentionally not a generic curses-style browser.  It is a small, fast,
+custom terminal interface built around one idea:
+
+#+begin_quote
+One query line should find everything important in the compiler project:
+context records, tests, source code, TODO/DONE work items, info documents,
+scripts, and category-theoretic links between them.
+#+end_quote
+
+Catface lives at:
+
+#+begin_src text
+context/category/catface
+#+end_src
+
+It is written in Zig because the interface should feel instant, direct, and
+native: no Python TUI framework, no generic browser feel, no slow startup.
+
+* Build
+
+From this directory:
+
+#+begin_src sh
+zig build
+#+end_src
+
+Run the tests:
+
+#+begin_src sh
+zig build test
+#+end_src
+
+After building, the binary is available at:
+
+#+begin_src sh
+./zig-out/bin/catface
+#+end_src
+
+* Quick start
+
+From =context/category/catface=, run Catface against the whole MonadC
+repository:
+
+#+begin_src sh
+zig build run -- ../../../
+#+end_src
+
+The path =../../../= points from =context/category/catface= back to the
+repository root.
+
+This gives Catface universal search over:
+ - =context/=
+ - =tests/=
+ - compiler source files
+ - scripts
+ - TODO/DONE headings
+ - info/readme/docs files
+ - category objects and edges
+
+You can also run the built binary directly:
+
+#+begin_src sh
+./zig-out/bin/catface ../../../
+#+end_src
+
+* Help
+
+Show command-line help:
+
+#+begin_src sh
+zig build run -- --help
+#+end_src
+
+or:
+
+#+begin_src sh
+./zig-out/bin/catface --help
+#+end_src
+
+Useful commands:
+
+#+begin_src sh
+zig build run -- --check ../../../
+zig build run -- --query '@tests TODO' ../../../
+zig build run -- --query '@info category' ../../../
+zig build run -- --query '@source reader' ../../../
+zig build run -- --dump-objects ../../../
+#+end_src
+
+* Run modes
+
+** Interactive TUI
+
+#+begin_src sh
+zig build run -- ../../../
+#+end_src
+
+This opens the live interface.
+
+The screen is organized as a dual-pane workspace:
+
+| pane | purpose |
+|------+---------|
+| left | live search results |
+| right | focused object, links, metadata, preview |
+
+Use =Tab= to switch the active pane.  The focused pane is rendered brighter.
+
+** Project check
+
+#+begin_src sh
+zig build run -- --check ../../../
+#+end_src
+
+Checks that Catface can scan and build its project/category model.
+
+** One-shot query
+
+#+begin_src sh
+zig build run -- --query 'wisp define' ../../../
+#+end_src
+
+Runs a search without opening the TUI.
+
+Examples:
+
+#+begin_src sh
+zig build run -- --query '@tests TODO' ../../../
+zig build run -- --query '@info category' ../../../
+zig build run -- --query '@source reader' ../../../
+zig build run -- --query 'typed define :Record @wisp' ../../../
+#+end_src
+
+** Dump objects
+
+#+begin_src sh
+zig build run -- --dump-objects ../../../
+#+end_src
+
+Prints all parsed objects.
+
+** Render one card
+
+#+begin_src sh
+zig build run -- --card 'some.object.id' ../../../
+#+end_src
+
+Prints a single object card by id.
+
+* Query language
+
+Catface has a compact keyboard-first query language.
+
+It is not SQL-like.  It is designed to be fast to type while staying close to
+the category model.
+
+| form | meaning |
+|------+---------|
+| =word= | fuzzy-search id, title, path, tags, and preview |
+| =:Test= | filter by object kind |
+| =:Record= | filter by object kind |
+| =:Source= | filter by object kind |
+| =@tests= | search the tests namespace |
+| =@info= | search info/docs/context namespace |
+| =@source= | search compiler source/scripts namespace |
+| =@todo= | search TODO objects |
+| =@done= | search DONE objects |
+| =@wisp= | path/tag namespace search |
+| =?id= | identity/id filter |
+| =#id= | identity/id filter |
+| =>= | outgoing Hom(object,-) |
+| =<= | incoming Hom(-,object) |
+| =~= | graph neighborhood |
+| =proj= | concept/taxonomy projection |
+
+Examples:
+
+#+begin_src sh
+zig build run -- --query '@tests TODO' ../../../
+zig build run -- --query '@info category proj' ../../../
+zig build run -- --query '@source reader' ../../../
+zig build run -- --query 'reader :Source @source' ../../../
+zig build run -- --query 'typed define :Record @wisp' ../../../
+zig build run -- --query 'wisp define ~' ../../../
+#+end_src
+
+* Interactive keys
+
+| key | action |
+|-----+--------|
+| =C-n= | next result |
+| =C-p= | previous result |
+| =j= | next result |
+| =k= | previous result |
+| =Tab= | switch left/right pane |
+| =Enter= | focus or follow selected object |
+| =C-a= | beginning of query |
+| =C-e= | end of query |
+| =C-d= | delete character under cursor |
+| =C-k= | kill to end of query |
+| =M-d= | kill next word |
+| =C-y= | yank from kill ring |
+| =?= | toggle tutorial overlay |
+| =q= | quit |
+| =Esc= | quit or close overlay |
+
+The query cursor is rendered as a block cursor with Emacs-like timing:
+
+| setting | value |
+|---------+-------|
+| blink delay | 0.5 seconds |
+| blink interval | 0.5 seconds |
+
+Typing or editing the query resets the blink timer, like Emacs.
+
+* Kill ring behavior
+
+Catface implements a small Emacs-style kill ring for the query line.
+
+| command | behavior |
+|---------+----------|
+| =C-k= | kill from cursor to end of query |
+| =M-d= | kill next word |
+| =C-y= | yank latest killed text |
+
+Consecutive kill commands append to the same kill entry, just like Emacs.
+
+Example:
+
+1. Type =typed define reader=.
+2. Move cursor before =reader=.
+3. Press =M-d=.
+4. Press =C-y= to yank =reader= back.
+
+* Tutorial overlay
+
+Press:
+
+#+begin_src text
+?
+#+end_src
+
+to toggle the tutorial overlay.
+
+The overlay explains:
+
+* query forms,
+* navigation keys,
+* category operations,
+* namespaces,
+* how to follow objects,
+* how to use the right pane.
+
+It appears over the full interface and can be closed with =?= or =Esc=.
+
+* Mouse and buttons
+
+Catface supports mouse row selection where the terminal provides mouse input.
+
+Right-pane links are rendered as button-like rows such as:
+
+#+begin_src text
+[edge] -> object.id
+#+end_src
+
+They are meant to feel like Emacs buttons:
+
+* visible as interactive targets,
+* selectable by keyboard,
+* followable with =Enter=,
+* clickable where terminal mouse support is available.
+
+Keyboard navigation remains the primary interface.
+
+* Rendering rules
+
+Catface tries to make the terminal output readable rather than dense.
+
+Objects are rendered as cards/rectangles with:
+
+* kind,
+* id,
+* title,
+* path,
+* tags,
+* preview,
+* incoming/outgoing links where useful.
+
+Special objects are emphasized:
+
+| object | rendering intent |
+|--------+------------------|
+| =TEST= | bold colored test signal |
+| =TODO= | bold colored unfinished work |
+| =DONE= | bold colored completed work |
+| =INFO= | bold colored documentation/info node |
+
+The half-circle projection glyph is intentionally not used anywhere in the
+project.  Projection is spelled as:
+
+#+begin_src text
+proj
+#+end_src
+
+* What Catface scans
+
+When passed the repository root, Catface scans the project as a whole.
+
+| area | examples |
+|------+----------|
+| context | =context/*.org= |
+| category | =context/category/*.org= |
+| tests | =tests/**/*.mon=, TSV corpora, expected outputs |
+| source | compiler C/Zig/source files |
+| scripts | Python/Zig/shell tooling |
+| info | README, docs, notes |
+| work items | TODO/DONE headings and records |
+
+The goal is that one query can answer questions like:
+
+* Where is this concept documented?
+* Which tests mention it?
+* Which source files implement it?
+* Which TODO/DONE nodes track it?
+* Which category objects link to it?
+* What should I inspect next?
+
+- Category model
+
+Catface treats the garden as a typed graph that generates a category.
+
+Informally:
+
+| category concept | Catface representation |
+|------------------+------------------------|
+| object | context node, test, source file, record, info node |
+| morphism | typed link/reference/dependency |
+| identity | object id lookup |
+| composition | path-following through links |
+| Hom(object,-) | outgoing edge view |
+| Hom(-,object) | incoming edge view |
+| neighborhood | local graph expansion |
+| projection | concept/taxonomy view via =proj= |
+
+The interface is not pretending to be a proof assistant.  It is a practical
+explorer for a category-shaped compiler knowledge base.
+
+* Design notes
+
+- Zig owns the interactive surface.
+- Python remains useful for batch reports and validation scripts.
+- The TUI should feel custom, fast, keyboard-native, and project-specific.
+- The UI is dual-pane by default.
+- The focused pane is brighter.
+- The query line is the main command surface.
+- =@tests=, =@info=, and =@source= are first-class search namespaces.
+- TEST/TODO/DONE/INFO results should stand out visually.
+- Catface should be useful even before it is beautiful.
+- Catface should become beautiful without becoming generic.
+
+* Typical workflow
+
+Start from the Catface directory:
+
+#+begin_src sh
+cd context/category/catface
+zig build
+zig build run -- ../../../
+#+end_src
+
+Then type a query:
+
+#+begin_src text
+wisp define
+#+end_src
+
+Move through results:
+
+#+begin_src text
+C-n
+C-p
+#+end_src
+
+Focus one:
+
+#+begin_src text
+Enter
+#+end_src
+
+Explore related nodes:
+
+#+begin_src text
+
+>
+
+<
+~
+proj
+#+end_src
+
+Open help whenever you forget:
+
+#+begin_src text
+?
+#+end_src
+
+* Development
+
+Run tests:
+
+#+begin_src sh
+zig build test
+#+end_src
+
+Run a quick query:
+
+#+begin_src sh
+zig build run -- --query '@tests TODO' ../../../
+#+end_src
+
+Run a check:
+
+#+begin_src sh
+zig build run -- --check ../../../
+#+end_src
+
+Run the interface:
+
+#+begin_src sh
+zig build run -- ../../../
+#+end_src
+
+* Compatibility notes
+
+This package targets the installed Zig 0.14-style standard library used in the
+MonadC development environment.
+
+Important compatibility decisions:
+ - no =std.time.milliTimestamp= dependency,
+ - no Python/curses TUI dependency,
+ - no =openDirAbsolute= assertion path for relative roots,
+ - no =writer().print= dependency on managed array lists,
+ - no reserved Zig identifiers such as =export= or =test= as declarations,
+ - no half-circle projection glyph.
+
+The TUI uses a deterministic frame clock advanced by the input poll cadence.
+Cursor blinking still follows the requested Emacs-like timing.
+
+* Status
+
+Catface currently provides:
+ - project-wide scan,
+ - live search,
+ - compact query language,
+ - dual-pane terminal UI,
+ - Emacs-like query editing,
+ - kill ring,
+ - tutorial overlay,
+ - category operations,
+ - object cards,
+ - color-coded TEST/TODO/DONE/INFO objects,
+ - CLI help,
+ - one-shot queries,
+ - model check command.
+
+It is intended to keep growing as the living interface to the MonadC context
+garden.

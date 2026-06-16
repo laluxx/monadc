@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.asm.int-arithmetic-shift-right
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.70.ffi.asm.inline.asm.asm.int.arithmetic.shift.right
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: inline-asm
+;; TEST-CATEGORY: 70-ffi-asm
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Arithmetic shift with an immediate handles signed negatives.
+;; TEST-ATOM: sar 1 x returns x arithmetic-shifted right by one.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:70-ffi-asm/inline-asm branch family
+;; TEST-USES-ATOM: atom.codegen.category.70.ffi.asm
+;; TEST-MENU: branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.int.arithmetic.shift.right
+;; TEST-MENU-PATH: codegen/branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.int.arithmetic.shift.right
+;; TEST-ATOM-LEAF: atom.codegen.70.ffi.asm.inline.asm.asm.int.arithmetic.shift.right
+;; TEST-CLI-TARGET: codegen branches ffi-asm inline-asm
+module AsmTest
+
+define asm-sar1 :: Int -> Int
+  x -> (asm sar 1 x)
+
+show (asm-sar1 84)

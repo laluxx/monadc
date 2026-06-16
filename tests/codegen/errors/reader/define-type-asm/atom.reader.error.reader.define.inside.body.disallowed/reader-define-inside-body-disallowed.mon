@@ -1,0 +1,34 @@
+;; TEST-ID: tests.codegen.reader-error.reader-define-inside-body-disallowed
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: reader-errors/define-type-asm
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.reader-error-coverage
+;; TEST-PURPOSE: Trigger and pin diagnostic: can't use 'define' inside a function body, use 'def' instead
+;; TEST-ATOM: atom.reader.error.reader.define.inside.body.disallowed
+;; TEST-CODEGEN-ATOM: atom.reader.error.reader.define.inside.body.disallowed
+;; TEST-QUALITY: diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-READER-ERROR: can't use 'define' inside a function body, use 'def' instead
+;; TEST-READER-PATH: reader.c:3491 parser.define
+;; TEST-CODEGEN-PATH: diagnostic.parser.define
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-COVERAGE: reader.c:3491 can't use 'define' inside a function body, use 'def' instead
+;; TEST-USES-ATOM: atom.reader.error.reader.define.inside.body.disallowed
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-USES-ATOM: atom.reader.error.family.parser.define
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-REFINES: atom.reader.error
+;; TEST-MENU: errors/reader/define-type-asm/atom.reader.error.reader.define.inside.body.disallowed
+;; TEST-MENU-PATH: codegen/errors/reader/define-type-asm/atom.reader.error.reader.define.inside.body.disallowed
+;; TEST-ATOM-LEAF: atom.reader.error.reader.define.inside.body.disallowed
+;; TEST-CLI-TARGET: codegen errors reader define-type-asm
+
+(module Main)
+(define (outer [] -> Int)
+  (define x 1)
+  x)

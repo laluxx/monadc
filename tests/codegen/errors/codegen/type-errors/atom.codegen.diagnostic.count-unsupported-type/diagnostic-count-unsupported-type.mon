@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.branch.diagnostic-count-unsupported-type
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SUBSET: type-errors
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise count unsupported type diagnostic.
+;; TEST-ATOM: atom.codegen.diagnostic.count-unsupported-type
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.count-unsupported-type
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-CODEGEN-PATH: diagnostic.count.unsupported-type
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: count
+;; TEST-COVERAGE: codegen.c:8929 count unsupported type diagnostic
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/type-errors/atom.codegen.diagnostic.count-unsupported-type
+;; TEST-MENU-PATH: codegen/errors/codegen/type-errors/atom.codegen.diagnostic.count-unsupported-type
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.count-unsupported-type
+;; TEST-CLI-TARGET: codegen errors codegen type-errors
+(module Main)
+(show (count 42))

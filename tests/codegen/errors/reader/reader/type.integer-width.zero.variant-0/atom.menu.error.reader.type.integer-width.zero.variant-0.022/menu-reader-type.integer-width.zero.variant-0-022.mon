@@ -1,0 +1,40 @@
+;; TEST-ID: tests.codegen.menu.errors.reader.type.integer.width.zero.variant.0.022
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: errors
+;; TEST-SUBSET: reader/type.integer-width.zero.variant-0
+;; TEST-MENU: errors/reader/type.integer-width.zero.variant-0/atom.menu.error.reader.type.integer-width.zero.variant-0.022
+;; TEST-MENU-PATH: codegen/errors/reader/type.integer-width.zero.variant-0/atom.menu.error.reader.type.integer-width.zero.variant-0.022
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.error-menu
+;; TEST-PURPOSE: Pin reader.c diagnostic: invalid integer type 'I0': bit-width must be at least 1
+;; TEST-ATOM: atom.menu.error.reader.type.integer-width.zero.variant-0.022
+;; TEST-CODEGEN-ATOM: atom.menu.error.reader.type.integer-width.zero.variant-0.022
+;; TEST-ATOM-LEAF: atom.menu.error.reader.type.integer-width.zero.variant-0.022
+;; TEST-QUALITY: menu-error-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ERROR-STAGE: reader
+;; TEST-ERROR-FAMILY: type.integer-width.zero.variant-0
+;; TEST-ERROR-MESSAGE: invalid integer type 'I0': bit-width must be at least 1
+;; TEST-ERROR-SOURCE: reader.c
+;; TEST-ERROR-PATH: reader.c:1145
+;; TEST-CODEGEN-PATH: diagnostic.reader.type.integer-width.zero.variant-0
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-TAG: menu
+;; TEST-COVERAGE: reader.c:1145 invalid integer type 'I0': bit-width must be at least 1
+;; TEST-USES-ATOM: atom.menu.error.reader.type.integer-width.zero.variant-0.022
+;; TEST-USES-ATOM: atom.error.reader
+;; TEST-USES-ATOM: atom.error.reader.type.integer-width.zero.variant-0
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-DEPENDS-ON: atom.reader.lex.parse
+;; TEST-REFINES: atom.error.reader
+;; TEST-REFINES: atom.error.reader.type.integer-width.zero.variant-0
+;; TEST-REFINES: atom.reader.error
+;; TEST-RELATED: atom.codegen.error.menu
+;; TEST-CLI-TARGET: codegen errors reader reader
+
+(module Main)
+(define (f [x : I0] -> Int) x)
+(show (f 1))

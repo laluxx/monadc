@@ -1,0 +1,29 @@
+;; TEST-ID: tests.codegen.rt-wisp-return-string
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.basic.values.rt.wisp.return.string
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: basic-values
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Wisp return-typed function compiles and displays.
+;; TEST-ATOM: define return-string -> String "ciao" defines a function returning "ciao".
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:80-wisp-codegen/basic-values branch family
+;; TEST-USES-ATOM: atom.codegen.category.80.wisp.codegen
+;; TEST-MENU: branches/wisp-codegen/basic-values/atom.codegen.80.wisp.codegen.basic.values.rt.wisp.return.string
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/basic-values/atom.codegen.80.wisp.codegen.basic.values.rt.wisp.return.string
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.basic.values.rt.wisp.return.string
+;; TEST-CLI-TARGET: codegen branches wisp-codegen basic-values
+module Main
+
+(define return-string -> String
+  "the")
+
+define return-string-wisp -> String
+  "same"
+
+show return-string
+show return-string-wisp

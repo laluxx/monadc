@@ -1,7 +1,0 @@
-name: structured_v9_future_array_contains_oracle
-section: future-array-oracle-v9
-args: xs:ArrInt x:Int
-type: Bool
-expect-python: x in xs
-description: Array contains? oracle over generated arrays.
-law: (contains? {xs} {x})

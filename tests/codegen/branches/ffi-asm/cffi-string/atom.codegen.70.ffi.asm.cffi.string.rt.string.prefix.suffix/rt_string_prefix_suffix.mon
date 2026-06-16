@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-string-prefix-suffix
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.70.ffi.asm.cffi.string.rt.string.prefix.suffix
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: cffi-string
+;; TEST-CATEGORY: 70-ffi-asm
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime string prefix and suffix predicates check string boundaries.
+;; TEST-ATOM: starts-with? and ends-with? recognize matching string boundaries.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:70-ffi-asm/cffi-string branch family
+;; TEST-USES-ATOM: atom.codegen.category.70.ffi.asm
+;; TEST-MENU: branches/ffi-asm/cffi-string/atom.codegen.70.ffi.asm.cffi.string.rt.string.prefix.suffix
+;; TEST-MENU-PATH: codegen/branches/ffi-asm/cffi-string/atom.codegen.70.ffi.asm.cffi.string.rt.string.prefix.suffix
+;; TEST-ATOM-LEAF: atom.codegen.70.ffi.asm.cffi.string.rt.string.prefix.suffix
+;; TEST-CLI-TARGET: codegen branches ffi-asm cffi-string
+(module Main)
+(show (starts-with? "monadc" "mon"))
+(show (ends-with? "monadc" "adc"))

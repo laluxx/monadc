@@ -1,0 +1,15 @@
+name: extreme_if_compare_common_right_gt
+section: control-if-comparison
+tier: stable
+kind: law
+features: arithmetic, comparison, control, equality, if, phi
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.comparison_dispatch, codegen.equality_dispatch, codegen.if_phi, infer.arithmetic, infer.comparison, infer.equality, infer.if_phi, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.if, atom.core.equality, atom.core.order.gt
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+args: cond:Bool common:Int a:Int b:Int
+type: Bool
+expect: True
+description: Common right comparison operand must move through if for >.
+law: (= (> (if {cond} {a} {b}) {common}) (if {cond} (> {a} {common}) (> {b} {common})))

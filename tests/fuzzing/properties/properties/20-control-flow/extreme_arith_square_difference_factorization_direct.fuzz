@@ -1,0 +1,15 @@
+name: extreme_arith_square_difference_factorization_direct
+section: arithmetic-normalization-deep
+tier: stable
+kind: law
+features: arithmetic, equality, if, logic, phi
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.if_phi, infer.logic, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.if, atom.core.equality, atom.core.minus, atom.core.multiply, atom.core.plus, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates, signal_atom_multiply_associative, signal_atom_multiply_commutative, signal_atom_multiply_identity_one, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Deep arithmetic normalization must preserve integer semantics across direct codegen and helper calls.
+law: (= (- (* {a} {a}) (* {b} {b})) (* (- {a} {b}) (+ {a} {b})))

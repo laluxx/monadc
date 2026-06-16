@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.deep.deep_map_find_contains_count
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-SUBSET: maps
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.collections.maps.deep.map.find.contains.count
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise map literal lookup and count branches.
+;; TEST-ATOM: Map runtime helpers should find keys and preserve size.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:map literal/runtime helper lowering
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/maps/atom.codegen.collections.maps.deep.map.find.contains.count
+;; TEST-MENU-PATH: codegen/branches/collections/maps/atom.codegen.collections.maps.deep.map.find.contains.count
+;; TEST-ATOM-LEAF: atom.codegen.collections.maps.deep.map.find.contains.count
+;; TEST-CLI-TARGET: codegen branches collections maps
+(module Main)
+(define m #{:x 10 :y 20})
+(show (contains? m :x))
+(show (contains? m :z))
+(show (find m :y))
+(show (count m))

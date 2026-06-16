@@ -1,0 +1,32 @@
+;; TEST-ID: tests.codegen.branch.value-literals-symbols-paths
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SUBSET: char-keyword-symbol
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 00-values
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.value.literals.symbols.paths
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover literal value codegen and show dispatch for bool, nil, keyword, symbol, char, and Path.
+;; TEST-ATOM: Primitive runtime values should preserve their printed representation through codegen_show_value.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:3530 AST_SYMBOL nil/True/False
+;; TEST-COVERAGE: codegen.c:3859 AST_STRING/3865 AST_PATH
+;; TEST-COVERAGE: codegen.c:3879 AST_KEYWORD
+;; TEST-COVERAGE: codegen.c:1221-1246 codegen_show_value primitive display
+
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/char-keyword-symbol/atom.codegen.value.literals.symbols.paths
+;; TEST-MENU-PATH: codegen/branches/values/char-keyword-symbol/atom.codegen.value.literals.symbols.paths
+;; TEST-ATOM-LEAF: atom.codegen.value.literals.symbols.paths
+;; TEST-CLI-TARGET: codegen branches values char-keyword-symbol
+(module Main)
+(show True)
+(show False)
+(show nil)
+(show :branch)
+(show 'branch-symbol)
+(show (Char 90))
+(define p ./context)
+(show p)

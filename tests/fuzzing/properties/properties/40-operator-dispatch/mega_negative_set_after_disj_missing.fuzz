@@ -1,0 +1,14 @@
+name: mega_negative_set_after_disj_missing
+section: codegen-negative-runtime
+tier: stable
+kind: law
+features: arithmetic, codegen, predicate, set
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, infer.arithmetic, infer.type_predicate, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate
+args: a:Int
+type: Bool
+expect: False
+description: After disj singleton, generated element should not be present.
+law: (contains? (disj (set {a}) {a}) {a})

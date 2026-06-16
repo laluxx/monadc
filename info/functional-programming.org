@@ -9,41 +9,53 @@
 :CONTEXT:  monadc.context.language, monadc.context.types, monadc.context.infer
 :END:
 
-[[file:index.org][<- Back to Index]] · [[file:purity.org][Purity]] · [[file:pair.org][Pairs]] · [[file:lambda.org][Lambda]] · [[file:recursion.org][Recursion]] · [[file:let.org][Let]] · [[file:show.org][Show]] · [[file:types.org][Types]] · [[file:patterns.org][Pattern Matching]] · [[file:control.org][Control Flow]]
+[[file:index.org][<- Back to Index]] · [[file:purity.org][Purity]] · [[file:pair.org][Pairs]] · [[file:lambda.org][Lambda]] · [[file:recursion.org][Recursion]] · [[file:let.org][Let]] · [[file:show.org][Show]] · [[file:types.org][Types]] · [[file:patterns.org][Pattern Matching]] · [[file:control.org][Control Flow]] · [[file:collections.org][Collections]] · [[file:define.org][Define]] · [[file:conditionals.org][Conditionals]] · [[file:sequencing.org][Sequencing]] · [[file:mutation.org][Mutation]]
 
 Test coverage: polymorphic identity and const functions are verified
 by codegen fixtures (see [[file:../context/language.org::501][context/language.org — HM surface]]).
 Recursion via =fib= is tested in =rt_arith_all.mon=. The closure gap
 is documented at [[file:../context/language.org::codegen-gaps][context/language.org — Known gaps]].
 
-* Pure Functions
+For the purity model, see [[file:purity.org][Purity]]. For the type system, see
+[[file:types.org][Types]] and [[file:../context/types.org][context/types.org]].
 
-Functions in MonadC are pure by default: given the same arguments, they return
+* 1. Pure Functions
+
+Functions in Monad are pure by default: given the same arguments, they return
 the same value and produce no side effects. Mutation via =set!= impurifies the
 containing function for the purposes of the purity tracking system.
 
 #+BEGIN_SRC monad
-(define (square [x :: Int] -> Int))
+(define (square [x :: Int] -> Int)
   (* x x))
 
 (define (multf [x :: Float] -> [y :: Float] -> Float)
   "Multiply X and Y as Floats"
-(* x y)
+  (* x y))
 #+END_SRC
 
 #+BEGIN_SRC wisp
 define (square [x :: Int] -> Int)
-  * x x)
+  * x x
 
-(define (multf [x :: Float] -> [y :: Float] -> Float)
+define (multf [x :: Float] -> [y :: Float] -> Float)
   "Multiply X and Y as Floats"
-* x y
+  * x y
 #+END_SRC
 
 Functions are defined with typed signatures using bracket syntax:
 =[param :: Type]= parameters and =-> ReturnType= return annotation.
 
-* Lambda
+See [[file:purity.org][Purity]], [[file:define.org][Define]], and [[file:types.org][Types]].
+
+*** Key Points
+- Pure by default: same input → same output, no side effects
+- =set!= and =<-= break purity locally
+- Typed signatures use =[param :: Type]= and =-> ReturnType= syntax
+
+See also: [[file:purity.org][Purity]]
+
+* 2. Lambda
 
 #+BEGIN_SRC monad
 (define increment (lambda [x] (+ x 1)))
@@ -61,63 +73,89 @@ forms for functions (=(lambda [x] body)=, =(define (f x) body)=, Wisp
 ([[file:../reader.c::3244]]). The parser does not distinguish between surface
 forms — the distinction is purely syntactic.
 
-* Recursion
+See [[file:lambda.org][Lambda]] for the full reference and [[file:wisp.org][Wisp Syntax]].
+
+*** Key Points
+- =lambda= is the only anonymous function syntax (no =fn= shortcut)
+- All function forms converge to =AST_LAMBDA= in the reader
+- Non-capturing lambdas compile to statically-typed ABI functions
+
+See also: [[file:lambda.org][Lambda]]
+
+* 3. Recursion
 
 Named =define= is the standard form for recursion. For local recursion:
 
 #+BEGIN_SRC monad
-(letrec [fact (lambda [n]))
-                ((if (<= n 1) 1))
-                  ((* n (fact (- n 1)))))])
+(letrec [fact (lambda [n]
+                (if (<= n 1) 1
+                  (* n (fact (- n 1)))))])
   (fact 5))
 
 ;; Top-level recursive function:
 (define (fib [n :: Int] -> Int)
-  ((if (<= n 2) 1))
-    (+ (fib (- n 1)) (fib (- n 2))))
+  (if (<= n 2) 1
+    (+ (fib (- n 1)) (fib (- n 2)))))
 #+END_SRC
 
 #+BEGIN_SRC wisp
-letrec [fact (lambda [n])
-                (if (<= n 1) 1)
-                  (* n (fact (- n 1))))])
-  fact 5)
+letrec [fact (lambda [n]
+               (if (<= n 1) 1
+                 (* n (fact (- n 1)))))])
+  fact 5
 
 ;; Top-level recursive function:
-(define (fib [n :: Int] -> Int)
-  (if (<= n 2) 1)
-    + (fib (- n 1)) (fib (- n 2)))
+define (fib [n :: Int] -> Int)
+  if (<= n 2) 1
+    + (fib (- n 1)) (fib (- n 2))
 #+END_SRC
 
 =letrec= is reader-desugared (no strcmp dispatch handler) — see
-[[file:control.org][Control Flow]] for known gaps.
+[[file:control.org][Control Flow]] for known gaps and [[file:recursion.org][Recursion]]
+for recursion patterns.
 
-* Referential Transparency
+*** Key Points
+- Top-level recursion via =define=; local recursion via =letrec=
+- =letrec= is desugared by the reader, not codegen
+- Tail-call elimination is not yet implemented — recursive calls consume stack
+
+See also: [[file:recursion.org][Recursion]]
+
+* 4. Referential Transparency
 
 Expressions can be replaced with their values without changing program behavior.
 Variables bound with =define= or =let= are immutable unless mutated with =set!=
 or =<-=.
 
-* Hindley-Milner Polymorphism
+See [[file:purity.org][Purity]] and [[file:mutation.org][Mutation]].
+
+*** Key Points
+- Immutable bindings guarantee referential transparency
+- Safe to inline, reorder, cache, or CSE pure expressions
+- Only =set!= and =<-= break transparency
+
+See also: [[file:purity.org][Purity]]
+
+* 5. Hindley-Milner Polymorphism
 
 MonadC uses Hindley-Milner type inference with type variables (= 'a =, ='b=,
 etc.). Polymorphic functions like identity instantiate correctly at multiple
 concrete types via monomorphization:
 
 #+BEGIN_SRC monad
-(define [id :: a -> a])
+(define [id :: a -> a]
   (lambda [x] x))
 
-(show (id 42))          ;; id_Int — specialized to In)
-(show (id "hello"))     ;; id_String — specialized to Strin)
+(show (id 42))          ;; id_Int — specialized to Int
+(show (id "hello"))     ;; id_String — specialized to String
 #+END_SRC
 
 #+BEGIN_SRC wisp
 define [id :: a -> a]
-  lambda [x] x)
+  lambda [x] x
 
-show (id 42)          ;; id_Int — specialized to In)
-show (id "hello")     ;; id_String — specialized to Strin)
+show (id 42)          ;; id_Int — specialized to Int
+show (id "hello")     ;; id_String — specialized to String
 #+END_SRC
 
 The compiler generates a separate LLVM function for each concrete type
@@ -130,7 +168,17 @@ The type system surface supports:
 - Type applications: =Maybe Float=, =Result Int String=
 - Constrained polymorphism via class constraints (aspirational)
 
-* Higher-Order Functions (Aspirational)
+See [[file:type-inference.org][Type Inference]] and [[file:types.org][Types]].
+
+*** Key Points
+- Hindley-Milner inference with monomorphization at codegen
+- Each concrete type instantiation generates separate, optimized machine code
+- No boxing, no vtable dispatch — zero-cost polymorphism
+- Type annotations help inference and trigger earlier monomorphization
+
+See also: [[file:type-inference.org][Type Inference]]
+
+* 6. Higher-Order Functions (Aspirational)
 
 Functions are first-class values at the semantic level. However, closures have
 a known codegen gap: =fn=, =lambda=, and =defn= have no strcmp dispatch handler
@@ -149,7 +197,7 @@ non-capturing lambdas) works: partial application of a typed binary function
 returns a callable closure
 ([[file:../context/language.org::hm-polymorphism][context/language.org]]).
 
-** Closure ABI
+** 6.1 Closure ABI
 
 When closures are implemented, they will use a dual ABI:
 - **Typed ABI** (no captures): passes parameters as unboxed LLVM values — fast,
@@ -161,7 +209,7 @@ The choice is made at compile time: simple top-level lambdas with no captures
 use the typed ABI; nested lambdas that capture variables use the closure ABI
 ([[file:../context/language.org::primitive-function][context/language.org]]).
 
-** Workaround for higher-order patterns
+** 6.2 Workaround for higher-order patterns
 
 Use manual recursion and nested calls for iteration. Define concrete typed
 functions instead of passing lambdas as arguments:
@@ -175,27 +223,84 @@ functions instead of passing lambdas as arguments:
 
 #+BEGIN_SRC wisp
 ;; Instead of (map f xs), recurse explicitly:
-(define map-add1 :: [Int] -> [Int]
+define map-add1 :: [Int] -> [Int]
   []     -> []
-  [x|xs] -> (++ (+ x 1) (map-add1 xs)))
+  [x|xs] -> (++ (+ x 1) (map-add1 xs))
 #+END_SRC
 
-* Related Pages
+See [[file:recursion.org][Recursion]] and [[file:iteration.org][Iteration]] for
+alternative patterns.
+
+*** Key Points
+- Closures are a known codegen gap — no =map=/=filter=/=fold= yet
+- Non-capturing lambdas work correctly via the typed ABI
+- Workaround: manual recursion with concrete typed functions
+- Future closure ABI will use dual dispatch (typed vs environment-based)
+
+See also: [[file:lambda.org][Lambda]]
+
+* 7. Implementation Notes
+
+Key source locations for functional programming features:
+
+| Source                                    | Key Symbols / Sections                             |
+|-------------------------------------------+----------------------------------------------------|
+| [[file:../reader.c:3244][reader.c:3244]]                             | =AST_LAMBDA= — all function forms unify here         |
+| [[file:../codegen.c:1081][codegen.c:1081]]                            | =AST_LAMBDA= codegen — typed ABI function emission   |
+| [[file:../codegen.c:1766][codegen.c:1766]]                            | =AST_LAMBDA= codegen (second pass)                   |
+| [[file:../infer.c][infer.c]]                                   | Hindley-Milner inference for polymorphic functions |
+| [[file:../codegen.c][codegen.c]]                                 | =MonoCache= — monomorphization deduplication         |
+| [[file:../context/language.org::hm-polymorphism][context/language.org — HM polymorphism]]    | Polymorphism and monomorphization                  |
+| [[file:../context/language.org::codegen-gaps][context/language.org — Known codegen gaps]] | Closure gap, tail calls                            |
+| [[file:../context/language.org::primitive-function][context/language.org — Primitive function]] | Typed vs closure ABI                               |
+| [[file:../context/types.org][context/types.org]]                         | =TYPE_FN=, =TYPE_ARROW=, =TYPE_VAR=                      |
+| [[file:../context/infer.org][context/infer.org]]                         | Type inference internals                           |
+| [[file:../context/codegen.org][context/codegen.org]]                       | Codegen internals, MonoCache                       |
+| [[file:../context/codegen-ops.org][context/codegen-ops.org]]                   | Codegen operations for functions                   |
+| [[file:../context/reader.org][context/reader.org]]                        | Reader and parser, AST_LAMBDA construction         |
+
+Related context documents:
+
+- [[file:../context/language.org::primitive-function][context/language.org — Function representation and closure gap]]
+- [[file:../context/language.org::hm-polymorphism][context/language.org — HM polymorphism]]
+- [[file:../context/language.org::codegen-gaps][context/language.org — Known codegen gaps]]
+- [[file:../context/types.org][context/types.org]] — TYPE_FN, TYPE_ARROW, TYPE_VAR
+- [[file:../context/infer.org][context/infer.org]] — type inference internals
+- [[file:../context/codegen.org][context/codegen.org]] — codegen internals
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — codegen operations
+- [[file:../context/reader.org][context/reader.org]] — reader and parser
+- [[file:purity.org][Purity]] — purity and side effects
+- [[file:../Main.mon][Main.mon]] — Real usage examples
+- [[file:../context/philosophy.org][context/philosophy.org]] — design rationale
+
+* 8. Related Pages
 
 - [[file:purity.org][Purity]] -- pure functions, referential transparency
 - [[file:lambda.org][Lambda]] -- anonymous functions, closures
 - [[file:recursion.org][Recursion]] -- recursion patterns
 - [[file:patterns.org][Pattern Matching]] -- pattern matching in FP style
 - [[file:collections.org][Collections]] -- functional collection operations
+- [[file:types.org][Types]] -- type system and polymorphism
+- [[file:type-inference.org][Type Inference]] -- Hindley-Milner inference
+- [[file:define.org][Define]] -- function definition forms
+- [[file:let.org][Let Bindings]] -- local bindings and scoping
+- [[file:conditionals.org][Conditionals]] -- pure conditional expressions
+- [[file:sequencing.org][Sequencing]] -- expression sequencing
+- [[file:mutation.org][Mutation]] -- side effects and impurity
+- [[file:show.org][Show]] -- printing values
+- [[file:control.org][Control Flow]] -- control flow constructs
+- [[file:wisp.org][Wisp Syntax]] -- indentation-aware syntax
 
-* Context Links
+* 9. Further Reading
 
 - [[file:../context/language.org::primitive-function][context/language.org — Function representation and closure gap]]
 - [[file:../context/language.org::hm-polymorphism][context/language.org — HM polymorphism]]
 - [[file:../context/language.org::codegen-gaps][context/language.org — Known codegen gaps]]
+- [[file:../context/types.org][context/types.org]] — TYPE_FN, TYPE_ARROW, TYPE_VAR
+- [[file:../context/infer.org][context/infer.org]] — type inference internals
+- [[file:../context/codegen.org][context/codegen.org]] — codegen internals
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — codegen operations
+- [[file:../context/reader.org][context/reader.org]] — reader and parser
 - [[file:purity.org][Purity]] — purity and side effects
 - [[file:../Main.mon][Main.mon]] — Real usage examples
-- [[file:../context/types.org][context/types.org]] — TYPE_FN, TYPE_ARROW, TYPE_VAR
-
-
-
+- [[file:../context/philosophy.org][context/philosophy.org]] — design rationale

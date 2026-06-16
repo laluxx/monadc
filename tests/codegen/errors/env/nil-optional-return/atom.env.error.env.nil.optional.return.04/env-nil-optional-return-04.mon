@@ -1,0 +1,38 @@
+;; TEST-ID: tests.codegen.env-error.env.nil.optional.return.04
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: env-errors/nil-optional-return
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.env-error-coverage
+;; TEST-PURPOSE: Trigger env.c diagnostic: Function ‘env_nil_return_04’ can return nil but return type 'Char' does not end with ‘?’
+;; TEST-ATOM: atom.env.error.env.nil.optional.return.04
+;; TEST-CODEGEN-ATOM: atom.env.error.env.nil.optional.return.04
+;; TEST-QUALITY: env-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ENV-ERROR: Function ‘env_nil_return_04’ can return nil but return type 'Char' does not end with ‘?’
+;; TEST-ENV-PATH: env.c:742 infer.nil-optional-return
+;; TEST-CODEGEN-PATH: diagnostic.env.infer.nil-optional-return
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: env
+;; TEST-TAG: hm
+;; TEST-COVERAGE: env.c:742 Function ‘env_nil_return_04’ can return nil but return type 'Char' does not end with ‘?’
+;; TEST-USES-ATOM: atom.env.error.env.nil.optional.return.04
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.env.error
+;; TEST-USES-ATOM: atom.env.error.family.nil.optional.return
+;; TEST-DEPENDS-ON: atom.env.hm.optional.return
+;; TEST-DEPENDS-ON: atom.codegen.value.nil
+;; TEST-DEPENDS-ON: atom.codegen.control.if.phi
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-REFINES: atom.env.error
+;; TEST-MENU: errors/env/nil-optional-return/atom.env.error.env.nil.optional.return.04
+;; TEST-MENU-PATH: codegen/errors/env/nil-optional-return/atom.env.error.env.nil.optional.return.04
+;; TEST-ATOM-LEAF: atom.env.error.env.nil.optional.return.04
+;; TEST-CLI-TARGET: codegen errors env nil-optional-return
+
+(module Main)
+(define (env_nil_return_04 [flag : Bool] -> Char) (if flag (Char 65) nil))
+(show (env_nil_return_04 True))

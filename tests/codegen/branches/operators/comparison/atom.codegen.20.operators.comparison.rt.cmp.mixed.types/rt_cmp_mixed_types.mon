@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-cmp-mixed-types
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.20.operators.comparison.rt.cmp.mixed.types
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: comparison
+;; TEST-CATEGORY: 20-operators
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Mixed int/float comparisons
+;; TEST-ATOM: (= 3 3.0) = True, (< 3 3.5) = True, (> 4.5 4) = True, (<= 5.0 5) = True
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:20-operators/comparison branch family
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/comparison/atom.codegen.20.operators.comparison.rt.cmp.mixed.types
+;; TEST-MENU-PATH: codegen/branches/operators/comparison/atom.codegen.20.operators.comparison.rt.cmp.mixed.types
+;; TEST-ATOM-LEAF: atom.codegen.20.operators.comparison.rt.cmp.mixed.types
+;; TEST-CLI-TARGET: codegen branches operators comparison
+(module Main)
+(show (= 3 3.0))
+(show (< 3 3.5))
+(show (> 4.5 4))
+(show (<= 5.0 5))

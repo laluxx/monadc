@@ -1,0 +1,15 @@
+name: deep_codegen_string_string_contains_false
+section: codegen-string-char
+tier: experimental
+kind: law
+features: arithmetic, codegen, predicate, string
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.string_literal, infer.arithmetic, infer.type_predicate, reader.string_literal, runtime.string
+signal: low
+corpus-role: legacy-smoke
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate, atom.runtime.string
+related-properties: signal_atom_string_contains_substring
+args: 
+type: Bool
+expect: False
+description: contains? string path must reject a missing substring.
+law: (contains? "monadc" "xyz")

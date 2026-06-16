@@ -1,0 +1,260 @@
+#+TITLE: Generated Context Inventory
+#+AUTHOR: GPT-5.5 Thinking
+#+DATE: 2026-06-16
+#+CREATED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-16
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:inventory:generated:
+#+PROPERTY: CONTEXT_VERSION 6
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.inventory
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+
+* Inventory Snapshot
+:PROPERTIES:
+:ID: monadc.context.inventory.snapshot
+:CUSTOM_ID: inventory-snapshot
+:CONTEXT_KIND: inventory
+:CONTEXT_DESCRIPTION: Generated inventory of context files, line counts, heading IDs, and bracket records.
+:CONTEXT_VERSION: 2
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/inventory.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.inventory.snapshot src:context/*.org conf:high]
+  Generated on 2026-06-16. The garden currently contains 69 org files,
+  33991 lines, 890 heading IDs, and
+  2598 bracket records.
+
+#+CAPTION: File inventory
+| File | Title | Lines | Headings | IDs | Records |
+|------+-------+-------+----------+-----+---------|
+| README.org | MonadC Context Garden README | 207 | 7 | 7 | 8 |
+| arena.org | Arena Allocator — arena.h | 393 | 11 | 11 | 26 |
+| asm.org | Inline Assembly — asm.h | 234 | 7 | 7 | 14 |
+| build.org | Build and Installation Context | 268 | 6 | 6 | 15 |
+| buildsystem.org | Package Build System | 415 | 10 | 10 | 35 |
+| category/generated-report.org | Generated Category Report | 61 | 3 | 3 | 1 |
+| category/index.org | MonadC Category Context | 140 | 5 | 5 | 7 |
+| category/information-theory.org | Information Theory for Context Quality | 98 | 4 | 4 | 5 |
+| category/interfaces.org | Category Context Interfaces | 105 | 5 | 5 | 4 |
+| category/mathematics.org | Category Mathematics for the MonadC Context | 183 | 7 | 7 | 10 |
+| category/query-language.org | Category Query Language | 166 | 7 | 7 | 7 |
+| category/taxonomy.org | Context Taxonomy as a Thin Category | 110 | 4 | 4 | 5 |
+| category/tui.org | Category TUI | 162 | 7 | 7 | 9 |
+| category/type-system.org | Type System for Context Objects and Morphisms | 127 | 5 | 5 | 4 |
+| category-context.org | Category Context and Semantic Map | 287 | 9 | 9 | 11 |
+| cli.org | CLI Argument Parser | 399 | 8 | 8 | 48 |
+| codegen-ops.org | Codegen Operation Dispatch Catalogue | 1182 | 25 | 25 | 104 |
+| codegen.org | Codegen Context (codegen.h) | 771 | 17 | 16 | 78 |
+| commit-format.org | Commit Message Format | 670 | 18 | 18 | 21 |
+| connections.org | Context Connections and Routing | 110 | 3 | 3 | 2 |
+| context.org | MonadC Context Portal | 402 | 16 | 16 | 3 |
+| core-libs.org | core/ — Standard Library Modules | 646 | 14 | 14 | 84 |
+| coverage-roadmap.org | Coverage Roadmap | 117 | 3 | 3 | 4 |
+| curation.org | Context Curation Playbook | 143 | 4 | 4 | 4 |
+| debug-agenda.org | Current Debug Agenda | 148 | 4 | 4 | 9 |
+| dep.org | Dependent Type Checker — dep.h Reference | 1363 | 28 | 28 | 198 |
+| env.org | Symbol Table Context — env.h | 508 | 14 | 14 | 46 |
+| etc-assets.org | etc/ Assets Directory | 551 | 16 | 16 | 32 |
+| features.org | Conditional Compilation — Feature Detection | 246 | 5 | 5 | 20 |
+| ffi.org | C FFI Context — ffi.h | 393 | 13 | 13 | 22 |
+| garden.org | MonadC Context Garden Charter | 240 | 7 | 7 | 11 |
+| guidelines.org | Project Guidelines: Hard Constraints and Soft Preferences | 274 | 9 | 7 | 16 |
+| how-to.org | how_to/ — Example Programs | 657 | 17 | 17 | 71 |
+| ideas.org | Ideas and Proposals | 277 | 4 | 4 | 15 |
+| index.org | MonadC Context Index | 562 | 16 | 15 | 22 |
+| infer.org | HM Type Inference Engine | 1507 | 26 | 26 | 129 |
+| inventory.org | Generated Context Inventory | 261 | 4 | 4 | 2 |
+| language.org | Language Formalization | 3013 | 59 | 58 | 257 |
+| macro.org | Macro System Context — macro.h | 323 | 9 | 9 | 18 |
+| main-mon.org | Main.mon — Standard Library / Language Demo | 825 | 24 | 24 | 94 |
+| main.org | Compilation Pipeline Orchestrator (main.c) | 714 | 25 | 25 | 37 |
+| makefile.org | Build System (Makefile) | 380 | 9 | 9 | 31 |
+| module-export.org | Module Export Manifests (module_export.h) | 442 | 11 | 11 | 35 |
+| module.org | Module System — module.h + module_export.h | 476 | 12 | 12 | 51 |
+| navigation.org | Context Navigation | 265 | 7 | 5 | 11 |
+| opinions.org | LLM Opinions on the MonadC Context System | 715 | 27 | 13 | 61 |
+| philosophy.org | MonadC Philosophy | 279 | 10 | 4 | 20 |
+| pmatch.org | Pattern Match Compiler | 312 | 7 | 7 | 23 |
+| quality.org | Context Quality Report | 272 | 8 | 8 | 9 |
+| reader.org | Reader and Parser Context | 980 | 41 | 40 | 90 |
+| references.org | Research References | 569 | 10 | 10 | 37 |
+| repl.org | Interactive REPL | 310 | 8 | 8 | 20 |
+| rules.org | Repository Rules (Redirect → guidelines.org) | 16 | 0 | 0 | 2 |
+| runtime.org | Runtime Library Reference | 1120 | 24 | 24 | 104 |
+| scripts.org | Python Helper Scripts | 387 | 13 | 13 | 18 |
+| source-map.org | Source File Map | 737 | 36 | 26 | 51 |
+| style.org | MonadC Code Style Context | 157 | 4 | 4 | 7 |
+| test-contracts.org | Test Contracts and Context Links | 192 | 5 | 5 | 7 |
+| tests-arch.org | Test Suite Architecture | 1002 | 26 | 26 | 56 |
+| tests.org | Test System Context | 1059 | 14 | 13 | 86 |
+| todo-markers.org | Source-Level TODO/FIXME/HACK Tracker | 821 | 14 | 14 | 77 |
+| todo.org | Context System TODOs | 281 | 9 | 9 | 16 |
+| traceability.org | Traceability Spine | 148 | 4 | 4 | 5 |
+| typeclass.org | Type Class System | 384 | 9 | 9 | 28 |
+| types.org | Type System — types.h / types.c | 1772 | 92 | 88 | 98 |
+| typst-emit.org | Typst Document Emission Backend | 472 | 10 | 10 | 50 |
+| visualizer.org | Context Visualizer | 374 | 7 | 7 | 32 |
+| wisp.org | Wisp Syntax Expander | 795 | 32 | 31 | 63 |
+| workflow.org | Agent Workflow Context (Redirect → guidelines.org) | 16 | 0 | 0 | 2 |
+
+* ID Prefix Distribution
+:PROPERTIES:
+:ID: monadc.context.inventory.prefix-distribution
+:CUSTOM_ID: inventory-prefix-distribution
+:CONTEXT_KIND: inventory
+:CONTEXT_DESCRIPTION: Distribution of heading IDs by the first component after monadc.context.
+:CONTEXT_VERSION: 2
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/inventory.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Heading ID prefixes
+| Prefix | Heading IDs |
+|--------+-------------|
+| <topic> | 1 |
+| arena | 11 |
+| asm | 7 |
+| build | 6 |
+| buildsystem | 10 |
+| category | 55 |
+| cli | 8 |
+| codegen | 16 |
+| codegen-ops | 25 |
+| commit | 17 |
+| commit-format | 1 |
+| connections | 3 |
+| core-libs | 14 |
+| coverage | 3 |
+| coverage-expansion | 1 |
+| curation | 4 |
+| current-task | 1 |
+| debug | 4 |
+| dep | 28 |
+| env | 14 |
+| etc-assets | 16 |
+| features | 5 |
+| ffi | 13 |
+| files | 1 |
+| format | 7 |
+| garden | 7 |
+| guidelines | 7 |
+| how-to | 17 |
+| ideas | 4 |
+| index | 4 |
+| infer | 26 |
+| inventory | 4 |
+| language | 56 |
+| macro | 9 |
+| main | 25 |
+| main-mon | 24 |
+| makefile | 9 |
+| module | 12 |
+| module-export | 11 |
+| navigation | 5 |
+| opinions | 13 |
+| philosophy | 4 |
+| philosophy-witness | 1 |
+| pmatch | 7 |
+| portal | 15 |
+| quality | 8 |
+| reader | 40 |
+| readme | 7 |
+| references | 10 |
+| repl | 8 |
+| root | 1 |
+| runtime | 24 |
+| scripts | 13 |
+| source-map | 26 |
+| style | 4 |
+| tests | 18 |
+| tests-arch | 26 |
+| todo | 9 |
+| todo-markers | 14 |
+| traceability | 4 |
+| typeclass | 9 |
+| types | 88 |
+| typst-emit | 10 |
+| visualizer | 7 |
+| wisp | 33 |
+
+* Record Type Distribution
+:PROPERTIES:
+:ID: monadc.context.inventory.record-type-distribution
+:CUSTOM_ID: inventory-record-type-distribution
+:CONTEXT_KIND: inventory
+:CONTEXT_DESCRIPTION: Distribution of bracket record types.
+:CONTEXT_VERSION: 2
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/inventory.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Bracket record types
+| Record type | Count |
+|-------------+-------|
+| OBS | 1767 |
+| THINK | 255 |
+| INF | 215 |
+| DEC | 192 |
+| DOC | 99 |
+| TODO | 57 |
+| FIX | 7 |
+| IDEA | 6 |
+
+* Round 4 Tooling Snapshot
+:PROPERTIES:
+:ID: monadc.context.inventory.round4-tooling
+:CUSTOM_ID: inventory-round4-tooling
+:CONTEXT_KIND: inventory
+:CONTEXT_STATUS: active
+:SOURCE: context/inventory.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.inventory.round4-tooling src:context/inventory.org conf:high]
+  The context/category/scripts directory now contains executable category tooling for live query, TUI exploration, rendering, verification, metrics, and tests.  Scripts are counted as category objects by the parser even when they are not Org files.
+
+| Tool | Role |
+|------+------|
+| [[file:category/scripts/catq.py][catq.py]] | fast CLI wrapper |
+| [[file:category/scripts/context_model.py][context_model.py]] | category model parser |
+| [[file:category/scripts/demo.py][demo.py]] | integrated demo |
+| [[file:category/scripts/info_metrics.py][info_metrics.py]] | information metrics |
+| [[file:category/scripts/query_language.py][query_language.py]] | compact category query language |
+| [[file:category/scripts/render_docs.py][render_docs.py]] | generated report renderer |
+| [[file:category/scripts/search_context.py][search_context.py]] | legacy search CLI |
+| [[file:category/scripts/test_category.py][test_category.py]] | category law tests |
+| [[file:category/scripts/test_query_language.py][test_query_language.py]] | query tests |
+| [[file:category/scripts/verify_category.py][verify_category.py]] | free-category verifier |
+| [[file:category/catface/src/main.zig][catface/main.zig]] | Zig live TUI/CLI entry point |
+| [[file:category/catface/src/terminal.zig][catface/terminal.zig]] | raw terminal backend |
+| [[file:category/catface/src/query.zig][catface/query.zig]] | live query evaluator |

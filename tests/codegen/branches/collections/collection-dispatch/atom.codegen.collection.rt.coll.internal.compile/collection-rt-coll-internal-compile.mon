@@ -1,0 +1,29 @@
+;; TEST-ID: tests.codegen.branch.collection-rt-coll-internal-compile
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SUBSET: collection-dispatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.collection.rt.coll.internal.compile
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover internal rt_coll_* codegen branches as compile-time smoke tests.
+;; TEST-ATOM: The internal collection wrapper/drop/empty/is-empty primitives should lower without crashing codegen.
+;; TEST-EXPECT: compile
+;; TEST-COVERAGE: codegen.c:7286 rt_coll_wrap branch
+;; TEST-COVERAGE: codegen.c:7291 rt_coll_empty branch
+;; TEST-COVERAGE: codegen.c:7296 rt_coll_drop branch
+;; TEST-COVERAGE: codegen.c:7303 rt_coll_is_empty branch
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/collection-dispatch/atom.codegen.collection.rt.coll.internal.compile
+;; TEST-MENU-PATH: codegen/branches/collections/collection-dispatch/atom.codegen.collection.rt.coll.internal.compile
+;; TEST-ATOM-LEAF: atom.codegen.collection.rt.coll.internal.compile
+;; TEST-CLI-TARGET: codegen branches collections collection-dispatch
+(module Main)
+(define xs '(1 2 3))
+(rt_coll_is_empty xs)
+(rt_coll_empty xs)
+(rt_coll_wrap xs 42)
+(rt_coll_drop xs 1)

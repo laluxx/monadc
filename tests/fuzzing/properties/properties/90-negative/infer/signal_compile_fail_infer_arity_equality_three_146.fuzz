@@ -1,0 +1,15 @@
+name: signal_compile_fail_infer_arity_equality_three_146
+section: current-compile-fail
+tier: compile-fail
+kind: compile-fail
+features: infer, arity, equality
+compiler-path: infer.arity.operator-equal
+stage: infer
+signal: high
+corpus-role: negative-diagnostic
+uses-atoms: atom.core.equality
+args: a:Int@edge b:Int@edge c:Int@edge
+type: Bool
+expect-diagnostic: error:
+description: Structured negative property for compiler diagnostics; expected to fail compilation.
+law: (= {a} {b} {c})

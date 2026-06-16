@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.asm.int-imul-then-add-immediate
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.70.ffi.asm.inline.asm.asm.int.imul.then.add.immediate
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: inline-asm
+;; TEST-CATEGORY: 70-ffi-asm
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Immediate add after multiplication preserves instruction order.
+;; TEST-ATOM: imul a b then add a 2 returns a*b + 2.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:70-ffi-asm/inline-asm branch family
+;; TEST-USES-ATOM: atom.codegen.category.70.ffi.asm
+;; TEST-MENU: branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.int.imul.then.add.immediate
+;; TEST-MENU-PATH: codegen/branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.int.imul.then.add.immediate
+;; TEST-ATOM-LEAF: atom.codegen.70.ffi.asm.inline.asm.asm.int.imul.then.add.immediate
+;; TEST-CLI-TARGET: codegen branches ffi-asm inline-asm
+module AsmTest
+
+define asm-mul-add :: Int -> Int -> Int
+  a b -> (asm imul a b add a 2)
+
+show (asm-mul-add 8 5)

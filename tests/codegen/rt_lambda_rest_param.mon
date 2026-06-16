@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-lambda-rest-param
-;; TEST-CONTEXT: monadc.context.language.reader-header-coverage
-;; TEST-PURPOSE: Runtime rest-parameter lambdas are a codegen-backed coverage point.
-;; TEST-ATOM: A function with . xs should accept multiple positional arguments as a rest list.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(define (sum-rest . xs) (count xs))
-(show (sum-rest 1 2 3))

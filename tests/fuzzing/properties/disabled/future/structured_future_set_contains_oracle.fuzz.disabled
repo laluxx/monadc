@@ -1,0 +1,15 @@
+name: structured_future_set_contains_oracle
+section: future-set-oracle-current
+tier: stable
+kind: law
+features: arithmetic, logic, string, set, predicate
+compiler-path: codegen.operator.arithmetic, codegen.operator.logic, runtime.string, runtime.set, infer.predicate, codegen.predicate
+signal: high
+corpus-role: oracle
+uses-atoms: atom.core.arithmetic, atom.core.logic, atom.runtime.string, atom.runtime.set, atom.core.predicate
+disabled-reason: disabled future or merged property; kept for provenance but not loaded by default
+args: xs:SetInt x:Int
+type: Bool
+expect-python: x in xs
+description: Set contains? oracle over generated sets.
+law: (contains? {xs} {x})

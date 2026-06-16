@@ -1,0 +1,30 @@
+;; TEST-ID: tests.codegen.branch200.30.control.flow.if.cond.phi.control.branch.03
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SUBSET: if-cond-phi
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.branch200.30.control.flow.if.cond.phi.control.branch.03
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: if float PHI
+;; TEST-ATOM: atom.codegen.branch200.30.control.flow.if.cond.phi.control.branch.03
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.control.flow
+;; TEST-TAG: control
+;; TEST-COVERAGE: codegen.c:7732 begin branch
+;; TEST-COVERAGE: codegen.c:7743-7977 if PHI branch
+;; TEST-COVERAGE: codegen.c:8001-8050 do/with branches
+;; TEST-COVERAGE: codegen.c:8050-8128 when/unless branches
+;; TEST-COVERAGE: codegen.c:8128-8235 while/for branches
+;; TEST-COVERAGE: codegen.c:7642 set! branch
+
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-USES-ATOM: atom.codegen.subset.30.control.flow.if.cond.phi
+;; TEST-MENU: branches/control-flow/if-cond-phi/atom.codegen.branch200.30.control.flow.if.cond.phi.control.branch.03
+;; TEST-MENU-PATH: codegen/branches/control-flow/if-cond-phi/atom.codegen.branch200.30.control.flow.if.cond.phi.control.branch.03
+;; TEST-ATOM-LEAF: atom.codegen.branch200.30.control.flow.if.cond.phi.control.branch.03
+;; TEST-CLI-TARGET: codegen branches control-flow if-cond-phi
+
+(module Main)
+(show (if False 1.5 2.5))

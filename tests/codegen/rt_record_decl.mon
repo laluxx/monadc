@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-record-decl
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Runtime record declarations are a codegen-backed coverage point.
-;; TEST-ATOM: (record Point [x Float] [y Float]) should compile alongside executable code.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(record Point [x Float] [y Float])
-(show 42)

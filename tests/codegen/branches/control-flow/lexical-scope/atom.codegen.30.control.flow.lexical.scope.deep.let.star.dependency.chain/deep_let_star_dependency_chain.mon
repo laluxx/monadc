@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.deep.deep_let_star_dependency_chain
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SUBSET: lexical-scope
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.lexical.scope.deep.let.star.dependency.chain
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise let* sequential dependency lowering.
+;; TEST-ATOM: Later let* bindings should see earlier generated values.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow, atom.codegen.subset.lexical.scope
+;; TEST-COVERAGE: codegen.c:let*/with sequential env branches
+;; TEST-MENU: branches/control-flow/lexical-scope/atom.codegen.30.control.flow.lexical.scope.deep.let.star.dependency.chain
+;; TEST-MENU-PATH: codegen/branches/control-flow/lexical-scope/atom.codegen.30.control.flow.lexical.scope.deep.let.star.dependency.chain
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.lexical.scope.deep.let.star.dependency.chain
+;; TEST-CLI-TARGET: codegen branches control-flow lexical-scope
+
+(module Main)
+(show (let* ([x 1] [y (+ x 2)] [z (+ y 3)]) z))

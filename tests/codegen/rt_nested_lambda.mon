@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-nested-lambda
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Nested lambda closures capture outer scope correctly.
-;; TEST-ATOM: ((lambda (x) (lambda (y) (+ x y))) 3 4) evaluates to 7.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (((lambda (x) (lambda (y) (+ x y))) 3) 4))

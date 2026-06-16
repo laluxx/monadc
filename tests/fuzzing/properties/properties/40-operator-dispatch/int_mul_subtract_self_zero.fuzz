@@ -1,0 +1,15 @@
+name: int_mul_subtract_self_zero
+section: arithmetic
+tier: stable
+kind: law
+features: arithmetic, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Subtracting identical generated products must produce zero.
+law: (= (fuzz-sub (fuzz-mul {a} {b}) (fuzz-mul {a} {b})) 0)

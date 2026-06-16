@@ -1,0 +1,15 @@
+name: structured_begin_last_value_r08
+section: control-sequence-current
+tier: stable
+kind: law
+features: begin, sequence, arithmetic, strategy
+compiler-path: codegen.arithmetic_dispatch, codegen.sequence, infer.arithmetic, reader.ast_begin, runner.strategy_arg, runner.typed_generator
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.with, atom.control.begin, atom.control.do, atom.core.equality, atom.core.plus, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_do_last_value, signal_atom_equality_reflexive, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero, signal_atom_with_substitution
+args: a:Int@edge b:Int@edge c:Int@edge
+type: Bool
+expect: True
+description: V11 stable compiler-path law begin_last_value variant 8; uses strategy args and explicit compiler-path metadata for feature coverage.
+law: (with [unused 1] (= (begin {a} {b} (+ {a} {c})) (+ {a} {c})))

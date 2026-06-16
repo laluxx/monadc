@@ -1,0 +1,15 @@
+name: signal_program_array_if_index_003
+section: current-program-semantics
+tier: stable
+kind: program
+features: program, array, index, if, dependent-arg, equality
+compiler-path: program.module.body, codegen.array.literal, codegen.call.array-as-function, codegen.expr.if
+signal: high
+corpus-role: program-semantics
+uses-atoms: atom.runtime.array.index.valid, atom.control.if, atom.core.equality
+depends-on: atom.runtime.array.index.valid, atom.control.if.idempotent
+args: xs:NonEmptyArrInt@small i:IndexOf(xs) flag:Bool@logic+if
+type: Bool
+expect: True
+description: Program-kind property: source contains its own show and links real program codegen to foundational atoms.
+program: (show (= (if {flag} ({xs} {i}) ({xs} {i})) ({xs} {i})))

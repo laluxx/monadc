@@ -1,0 +1,15 @@
+name: extreme_direct_mul_with_bound_operands
+section: direct-dispatch-binding
+tier: stable
+kind: law
+features: arithmetic, array, array-index, direct, env, equality, logic, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.equality_dispatch, codegen.local_load, codegen.logic_dispatch, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.equality, infer.logic, reader.array_literal
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.with, atom.codegen.dispatch, atom.core.equality, atom.core.multiply, atom.logic.and, atom.logic.not, atom.logic.or, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive, signal_atom_multiply_associative, signal_atom_multiply_commutative, signal_atom_multiply_identity_one, signal_atom_with_substitution
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Direct * must work through lexically bound operands.
+law: (with [x {a}] (with [y {b}] (= (* x y) (* {a} {b}))))

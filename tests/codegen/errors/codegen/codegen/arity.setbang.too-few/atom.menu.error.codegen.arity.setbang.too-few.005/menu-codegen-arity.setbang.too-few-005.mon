@@ -1,0 +1,40 @@
+;; TEST-ID: tests.codegen.menu.errors.codegen.arity.setbang.too.few.005
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: errors
+;; TEST-SUBSET: codegen/arity.setbang.too-few
+;; TEST-MENU: errors/codegen/arity.setbang.too-few/atom.menu.error.codegen.arity.setbang.too-few.005
+;; TEST-MENU-PATH: codegen/errors/codegen/arity.setbang.too-few/atom.menu.error.codegen.arity.setbang.too-few.005
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.error-menu
+;; TEST-PURPOSE: Pin codegen diagnostic: set!
+;; TEST-ATOM: atom.menu.error.codegen.arity.setbang.too-few.005
+;; TEST-CODEGEN-ATOM: atom.menu.error.codegen.arity.setbang.too-few.005
+;; TEST-ATOM-LEAF: atom.menu.error.codegen.arity.setbang.too-few.005
+;; TEST-QUALITY: menu-error-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ERROR-STAGE: codegen
+;; TEST-ERROR-FAMILY: arity.setbang.too-few
+;; TEST-ERROR-MESSAGE: set!
+;; TEST-ERROR-SOURCE: codegen.c
+;; TEST-ERROR-PATH: codegen.c:diagnostic
+;; TEST-CODEGEN-PATH: diagnostic.codegen.arity.setbang.too-few
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: codegen
+;; TEST-TAG: menu
+;; TEST-COVERAGE: codegen.c diagnostic set!
+;; TEST-USES-ATOM: atom.menu.error.codegen.arity.setbang.too-few.005
+;; TEST-USES-ATOM: atom.error.codegen
+;; TEST-USES-ATOM: atom.error.codegen.arity.setbang.too-few
+;; TEST-USES-ATOM: atom.codegen.error
+;; TEST-DEPENDS-ON: atom.codegen.expr.dispatch
+;; TEST-REFINES: atom.error.codegen
+;; TEST-REFINES: atom.error.codegen.arity.setbang.too-few
+;; TEST-REFINES: atom.codegen.error
+;; TEST-RELATED: atom.codegen.error.menu
+;; TEST-CLI-TARGET: codegen errors codegen codegen
+
+(module Main)
+(show (set! x))
+;; codegen menu variant 5

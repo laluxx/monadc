@@ -1,0 +1,33 @@
+;; TEST-ID: tests.codegen.type.hm.unification.occurs.check.002
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: expected-fail-compiled
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: types
+;; TEST-SUBSET: hm/unification/occurs-check
+;; TEST-QUALITY: type-system-negative-regression
+;; TEST-CODEGEN-ATOM: atom.type.hm.unification.occurs-check.002
+;; TEST-TYPE-ATOM: atom.type.hm.unification.occurs-check.002
+;; TEST-CONTEXT: monadc.context.language.codegen-type-system-corpus, monadc.context.language.hm-dependent-type-coverage
+;; TEST-PURPOSE: HM occurs-check rejects recursive self-application/infinite type construction.
+;; TEST-ATOM: A free type variable cannot be bound to a type containing itself.
+;; TEST-EXPECT: fail:compile
+;; TEST-MENU: types/hm/unification/occurs-check/atom.type.hm.unification.occurs-check.002
+;; TEST-MENU-PATH: codegen/types/hm/unification/occurs-check/atom.type.hm.unification.occurs-check.002
+;; TEST-ATOM-LEAF: atom.type.hm.unification.occurs-check.002
+;; TEST-CLI-TARGET: codegen types hm unification occurs-check
+;; TEST-INFER-PATH: infer.c:370,398 occurs-check branches
+;; TEST-ERROR-STAGE: infer
+;; TEST-ERROR-FAMILY: hm.occurs-check
+;; TEST-ERROR-MESSAGE: infinite type (occurs check failed)
+;; TEST-COVERAGE: infer.c:370-399 infer_unify_one_internal occurs check failed
+;; TEST-USES-ATOM: atom.codegen.category.types
+;; TEST-USES-ATOM: atom.type.system
+;; TEST-USES-ATOM: atom.type.hm.unification
+;; TEST-USES-ATOM: atom.type.hm.occurs-check
+;; TEST-DEPENDS-ON: atom.type.hm.fresh-var
+;; TEST-REFINES: atom.type.hm.infinite-type
+
+(module Main)
+(define (hm_occurs_02 [f : Fn] -> Int) (f f))
+(show (hm_occurs_02 hm_occurs_02))

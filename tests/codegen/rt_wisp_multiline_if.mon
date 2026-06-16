@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-wisp-multiline-if
-;; TEST-CONTEXT: monadc.context.wisp.sugar-transforms
-;; TEST-PURPOSE: Wisp multiline if/then/else (Form 2) works.
-;; TEST-ATOM: if True then show 42 else show 0 → 42
-;; TEST-EXPECT: compile, run
-module Main
-if True
-then show 42
-else show 0

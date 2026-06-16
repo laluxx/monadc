@@ -1,0 +1,291 @@
+#+TITLE: Context Quality Report
+#+AUTHOR: GPT-5.5 Thinking
+#+DATE: 2026-06-16
+#+CREATED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-16
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:quality:lint:validation:
+#+PROPERTY: CONTEXT_VERSION 4
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.quality
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY hideblocks
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* Quality Snapshot
+:PROPERTIES:
+:ID: monadc.context.quality.snapshot
+:CUSTOM_ID: quality-snapshot
+:CONTEXT_KIND: quality
+:CONTEXT_DESCRIPTION: Generated quality snapshot for the context garden after the second enhancement pass.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/quality.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.quality.snapshot src:context/*.org conf:high]
+  Generated on 2026-06-16. The garden contains 60 org files,
+  32485 lines, 827 heading IDs, and
+  2528 bracket records.
+
+#+CAPTION: Health checks
+| Check | Result | Notes |
+|-------+--------+-------|
+| Duplicate heading IDs | 0 | Must stay zero. |
+| Duplicate bracket record IDs | 0 | Must stay zero outside escaped examples. |
+| Files missing common headers | 0 | Must stay zero for context-only tar. |
+| Broken local context file links | 0 | Default linter mode ignores repository-relative links. |
+| Broken id links | 0 | Org id-link targets must resolve. |
+| Broken record refs | 0 | Optional =--check-record-refs= now passes. |
+| Category contracts | 7 major files | reader, wisp, infer, codegen, runtime, types, tests. |
+| Context graph export tool | present | =context/tools/context_graph.py=. |
+| Clean generated artifacts | enforced | Do not include caches or run leftovers. |
+
+* Duplicate Report
+:PROPERTIES:
+:ID: monadc.context.quality.duplicates
+:CUSTOM_ID: quality-duplicates
+:CONTEXT_KIND: quality
+:CONTEXT_DESCRIPTION: Duplicate heading and bracket record report.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/quality.org
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.quality.round2-reference-cleanup date:2026-06-16 by:llm]
+  Added category-context, traceability, curation files, category contracts for
+  major files, and cleaned legacy dangling record references so
+  =context_lint.py --check-record-refs= passes.
+
+#+CAPTION: Duplicate heading IDs
+| ID | Locations |
+|----+-----------|
+| none | none |
+
+#+CAPTION: Duplicate record IDs
+| ID | Locations |
+|----+-----------|
+| none | none |
+
+* Validation Commands
+:PROPERTIES:
+:ID: monadc.context.quality.validation-commands
+:CUSTOM_ID: quality-validation-commands
+:CONTEXT_KIND: workflow
+:CONTEXT_DESCRIPTION: Commands that should pass before distributing a context tar.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/quality.org
+:CONFIDENCE: high
+:END:
+
+#+BEGIN_SRC sh
+python3 context/tools/context_lint.py context
+python3 context/tools/context_lint.py context --check-record-refs
+python3 context/tools/context_graph.py context > /tmp/monadc-context-graph.json
+#+END_SRC
+
+* Quality Conventions
+:PROPERTIES:
+:ID: monadc.context.quality.conventions
+:CUSTOM_ID: quality-conventions
+:CONTEXT_KIND: quality
+:CONTEXT_DESCRIPTION: Operational conventions for keeping the garden healthy.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/quality.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.quality.lint-before-tar date:2026-06-16 by:llm]
+  Before returning a context tar, check duplicate heading IDs, bracket record IDs,
+  local file links, id links, and record references. Also inspect touched topic
+  files for stale =#+LAST_MODIFIED= values.
+
+[DEC id:dec.quality.snapshot-honesty date:2026-06-16 by:llm]
+  A generated quality report is a snapshot, not a proof of future correctness.
+  If source code or tests are not present, validation must be described as
+  context-only validation.
+
+[DEC id:dec.quality.category-contracts date:2026-06-16 by:llm]
+  Major compiler/test categories should have Category Contract sections with
+  owned phase, inputs, outputs, invariants, test hooks, failure symptoms, and
+  context neighbors.
+
+* Header Gaps
+:PROPERTIES:
+:ID: monadc.context.quality.header-gaps
+:CUSTOM_ID: quality-header-gaps
+:CONTEXT_KIND: quality
+:CONTEXT_DESCRIPTION: Files missing common top-level metadata headers.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/quality.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Header gaps
+| File | Missing |
+|------+---------|
+| none | none |
+
+* Round 3 Category Validation
+:PROPERTIES:
+:ID: monadc.context.quality.round3-category-validation
+:CUSTOM_ID: quality-round3-category-validation
+:CONTEXT_KIND: quality
+:CONTEXT_DESCRIPTION: Validation snapshot after promoting context/category into a formal executable category layer.
+:CONTEXT_VERSION: 5
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: snapshot
+:CONTEXT_STATUS: active
+:SOURCE: context/quality.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.quality.round3-category-validation src:context/quality.org conf:high]
+  Round 3 validation treats source files inside context/category/ as context
+  artifacts.  Python scripts, JSON schemas, TSV vocabularies, generated reports,
+  and Org prose are all referentiable objects in the category model.
+
+#+CAPTION: Round 3 validation snapshot
+| Check | Result |
+|-------+--------|
+| Org context files | 67 |
+| Org lines | 33410 |
+| Org headings | 910 |
+| Heading IDs | 866 |
+| Bracket records | 2571 |
+| Duplicate heading IDs | 0 |
+| Duplicate record IDs | 0 |
+| Header gaps | 0 |
+| Broken local file links | 0 |
+| Broken ID links | 0 |
+| Broken record refs | 0 |
+| Category objects | 3539 |
+| Category generating edges | 4331 |
+| Category unresolved edges | 0 |
+| Category verifier status | OK |
+
+#+BEGIN_SRC sh
+python3 context/tools/context_lint.py context --check-record-refs
+python3 context/category/scripts/verify_category.py context --self-test
+python3 context/category/scripts/test_category.py
+python3 context/category/scripts/info_metrics.py context
+python3 context/category/scripts/search_context.py context "typed define wisp" --limit 5
+#+END_SRC
+
+* Round 4 Live Tooling Validation
+:PROPERTIES:
+:ID: monadc.context.quality.live-tooling-validation
+:CUSTOM_ID: quality-live-tooling-validation
+:CONTEXT_KIND: quality-gate
+:CONTEXT_STATUS: active
+:SOURCE: context/quality.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.quality.live-tooling-validation src:context/quality.org conf:high]
+  Live tooling is healthy when the category verifier, category unit tests, query
+  language tests, query CLI, and TUI smoke mode all run without external
+  dependencies.
+
+#+begin_src sh
+python3 context/category/scripts/verify_category.py context --self-test
+python3 context/category/scripts/test_category.py
+python3 context/category/scripts/test_query_language.py
+python3 context/category/scripts/catq.py context 'typed define :Record' --limit 3
+cd context/category/catface && zig build run -- --check ../../
+#+end_src
+
+* Round 4 TUI Portability Fix
+:PROPERTIES:
+:ID: monadc.context.quality.round4-tui-portability-fix
+:CUSTOM_ID: quality-round4-tui-portability-fix
+:CONTEXT_KIND: quality-snapshot
+:CONTEXT_STATUS: active
+:SOURCE: context/quality.org
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.quality.round4.tui-curs-set date:2026-06-16 by:llm]
+  A live terminal run reported =_curses.error: curs_set() returned ERR= from
+  the superseded Python curses prototype.  The TUI now treats cursor
+  visibility as an optional terminal capability and continues when =curs_set=
+  fails.
+
+[DOC id:doc.quality.round4.portability-validation src:context/quality.org conf:high]
+  Validation now includes the historical portability check.  That prototype is now superseded by Catface; future live-interface validation belongs to =zig build test= and Catface CLI checks.
+
+
+* Round 5 Catface Tooling Gate
+:PROPERTIES:
+:ID: monadc.context.quality.catface-round5
+:CUSTOM_ID: quality-catface-round5
+:CONTEXT_KIND: quality-gate
+:CONTEXT_STATUS: active
+:SOURCE: context/quality.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.quality.catface-round5 src:context/quality.org conf:high]
+  Round 5 promotes the live category UI from a Python curses prototype to a Zig
+  project named Catface.  The context-level gate checks that the source is
+  linked, documented, indexed as scripts, and that no canonical documentation
+  points to the removed curses files.
+
+[TODO id:todo.quality.catface-compile src:context/quality.org conf:medium]
+  Run =zig build test= for Catface inside the full repository environment.  The
+  generation environment did not have Zig installed, so compile verification is
+  deliberately left as an explicit follow-up gate rather than falsely reported.

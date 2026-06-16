@@ -1,0 +1,33 @@
+;; TEST-ID: tests.codegen.reader-error.reader-naked-function-needs-asm
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: reader-errors/define-type-asm
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.reader-error-coverage
+;; TEST-PURPOSE: Trigger and pin diagnostic: naked function 'naked_bad' must contain at least one (asm ...) block
+;; TEST-ATOM: atom.reader.error.reader.naked.function.needs.asm
+;; TEST-CODEGEN-ATOM: atom.reader.error.reader.naked.function.needs.asm
+;; TEST-QUALITY: diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-READER-ERROR: naked function 'naked_bad' must contain at least one (asm ...) block
+;; TEST-READER-PATH: reader.c:1 parser.define
+;; TEST-CODEGEN-PATH: diagnostic.parser.define
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-COVERAGE: reader.c:1 naked function 'naked_bad' must contain at least one (asm ...) block
+;; TEST-USES-ATOM: atom.reader.error.reader.naked.function.needs.asm
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-USES-ATOM: atom.reader.error.family.parser.define
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-REFINES: atom.reader.error
+;; TEST-MENU: errors/reader/define-type-asm/atom.reader.error.reader.naked.function.needs.asm
+;; TEST-MENU-PATH: codegen/errors/reader/define-type-asm/atom.reader.error.reader.naked.function.needs.asm
+;; TEST-ATOM-LEAF: atom.reader.error.reader.naked.function.needs.asm
+;; TEST-CLI-TARGET: codegen errors reader define-type-asm
+
+(module Main)
+(define (naked_bad [] -> Int :naked True) 1)

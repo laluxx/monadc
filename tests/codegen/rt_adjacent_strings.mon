@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-adjacent-strings
-;; TEST-CONTEXT: monadc.context.language.adjacent-strings, monadc.context.tests.expected-failures
-;; TEST-PURPOSE: Connected string literals produce a targeted syntax diagnostic instead of a later type error.
-;; TEST-ATOM: "hello""world" is rejected with guidance to write one string literal.
-;; TEST-EXPECT: fail:compile
-
-(module Main)
-(show "hello""world")

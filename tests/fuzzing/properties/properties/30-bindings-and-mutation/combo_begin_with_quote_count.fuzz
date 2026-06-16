@@ -1,0 +1,15 @@
+name: combo_begin_with_quote_count
+section: feature-interactions
+tier: stable
+kind: law
+features: arithmetic, begin, env, equality, feature, quote, with
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.local_load, codegen.quote, codegen.sequence, codegen.with_binding, infer.arithmetic, infer.env_child, infer.env_lookup, infer.equality, reader.ast_begin, reader.quote
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.with, atom.control.begin, atom.core.equality, atom.quote.quote
+related-properties: signal_atom_equality_reflexive, signal_atom_with_substitution
+args: a:Int
+type: Bool
+expect: True
+description: begin must return a quoted-list count after evaluating generated setup.
+law: (= (begin {a} (count (quote (x y z w)))) 4)

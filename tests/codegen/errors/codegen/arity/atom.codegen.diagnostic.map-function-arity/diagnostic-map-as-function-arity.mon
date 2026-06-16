@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.branch.diagnostic-map-as-function-arity
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: arity
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise map-as-function arity diagnostic.
+;; TEST-ATOM: atom.codegen.diagnostic.map-function-arity
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.map-function-arity
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-CODEGEN-PATH: diagnostic.map.function-arity
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: map
+;; TEST-COVERAGE: codegen.c:10107 map used as function arity diagnostic
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/arity/atom.codegen.diagnostic.map-function-arity
+;; TEST-MENU-PATH: codegen/errors/codegen/arity/atom.codegen.diagnostic.map-function-arity
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.map-function-arity
+;; TEST-CLI-TARGET: codegen errors codegen arity
+(module Main)
+(define m #{:a 1})
+(show (m :a 1 2))

@@ -1,0 +1,32 @@
+;; TEST-ID: tests.codegen.type.hm.collections.array.as.function.004
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: types
+;; TEST-SUBSET: hm/collections/array-as-function
+;; TEST-QUALITY: type-system-positive-regression
+;; TEST-CODEGEN-ATOM: atom.type.hm.collections.array-as-function.004
+;; TEST-TYPE-ATOM: atom.type.hm.collections.array-as-function.004
+;; TEST-CONTEXT: monadc.context.language.codegen-type-system-corpus, monadc.context.language.hm-dependent-type-coverage
+;; TEST-PURPOSE: HM accepts collection-as-function indexing where array argument unifies with Int -> element.
+;; TEST-ATOM: TYPE_ARR can act as an Int-indexed function returning its element type.
+;; TEST-EXPECT: compile, run
+;; TEST-MENU: types/hm/collections/array-as-function/atom.type.hm.collections.array-as-function.004
+;; TEST-MENU-PATH: codegen/types/hm/collections/array-as-function/atom.type.hm.collections.array-as-function.004
+;; TEST-ATOM-LEAF: atom.type.hm.collections.array-as-function.004
+;; TEST-CLI-TARGET: codegen types hm collections array-as-function
+;; TEST-TYPE-PATH: codegen.c:array function-call lowering
+;; TEST-INFER-PATH: infer.c:TYPE_ARR ~ TYPE_ARROW collection indexing coercion
+;; TEST-COVERAGE: infer.c:collection acting as function TYPE_ARR ~ TYPE_ARROW
+;; TEST-COVERAGE: codegen.c:collection expression indexing path
+;; TEST-USES-ATOM: atom.codegen.category.types
+;; TEST-USES-ATOM: atom.type.system
+;; TEST-USES-ATOM: atom.type.hm.collection-as-function
+;; TEST-USES-ATOM: atom.codegen.collection.array-index
+;; TEST-DEPENDS-ON: atom.type.hm.collection
+;; TEST-REFINES: atom.type.hm.arr-as-fn
+
+(module Main)
+(define [xs :: Arr] [1 2 3 4])
+(define (hm_arr_04 [arr : Arr] [idx : Int] -> Int) (arr idx))
+(show (hm_arr_04 xs 0))

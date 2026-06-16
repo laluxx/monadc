@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-define-typed-fn
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.05.symbol.env.defines.and.calls.rt.define.typed.fn
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: defines-and-calls
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Typed define function shorthand compiles and returns value.
+;; TEST-ATOM: (define (double [x : Int] -> Int) (* 2 x)) then (show (double 5)) prints 10.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:05-symbol-env/defines-and-calls branch family
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/defines-and-calls/atom.codegen.05.symbol.env.defines.and.calls.rt.define.typed.fn
+;; TEST-MENU-PATH: codegen/branches/symbol-env/defines-and-calls/atom.codegen.05.symbol.env.defines.and.calls.rt.define.typed.fn
+;; TEST-ATOM-LEAF: atom.codegen.05.symbol.env.defines.and.calls.rt.define.typed.fn
+;; TEST-CLI-TARGET: codegen branches symbol-env defines-and-calls
+(module Main)
+(define (double [x : Int] -> Int) (* 2 x))
+(show (double 5))

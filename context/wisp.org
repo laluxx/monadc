@@ -1,8 +1,8 @@
 #+TITLE: Wisp Syntax Expander
 #+AUTHOR: Codex
-#+DATE: 2026-06-12
+#+DATE: 2026-06-16
 #+CREATED: 2026-06-12
-#+LAST_MODIFIED: 2026-06-12
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -531,7 +531,7 @@
   design decision is correct per the philosophy (syntax-is-instrument),
   but it's a bet, not a sure thing.
 
-[INF id:inf.wisp.connects-to from:obs.wisp.purpose conf:high]
+[INF id:inf.wisp.connects-to from:obs.wisp.file conf:high]
   connects-to -> `monadc.context.reader` (wisp_parse_all produces S-exprs
   consumed by reader; wisp_register_arity feeds the reader's arity table) ·
   `monadc.context.language` (Wisp expands to canonical S-expr forms that
@@ -544,3 +544,251 @@
   Wisp's global arity table before parsing) ·
   `monadc.context.tests-arch` (wisp tests exercise Wisp expansion paths;
   arity-dependent parsing is tested extensively in Wisp codegen tests)
+
+* Test Coverage Anchors
+
+* Wisp Comparison Operators
+:PROPERTIES:
+:ID: monadc.context.wisp.comparison-operators
+:CUSTOM_ID: test-anchor-wisp-comparison-operators
+:END:
+[OBS id:obs.wisp.comparison-operators.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Wisp Define Parenthesized Signature
+:PROPERTIES:
+:ID: monadc.context.wisp.define-parenthesized-signature
+:CUSTOM_ID: test-anchor-wisp-define-parenthesized-signature
+:END:
+[OBS id:obs.wisp.define-parenthesized-signature.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Wisp Define Signature Clause
+:PROPERTIES:
+:ID: monadc.context.wisp.define-signature-clause
+:CUSTOM_ID: test-anchor-wisp-define-signature-clause
+:END:
+[OBS id:obs.wisp.define-signature-clause.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Wisp Define Typed Value Sugar
+:PROPERTIES:
+:ID: monadc.context.wisp.define-typed-value-sugar
+:CUSTOM_ID: test-anchor-wisp-define-typed-value-sugar
+:END:
+[OBS id:obs.wisp.define-typed-value-sugar.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Wisp Define Value
+:PROPERTIES:
+:ID: monadc.context.wisp.define-value
+:CUSTOM_ID: test-anchor-wisp-define-value
+:END:
+[OBS id:obs.wisp.define-value.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Wisp If Form
+:PROPERTIES:
+:ID: monadc.context.wisp.if-form
+:CUSTOM_ID: test-anchor-wisp-if-form
+:END:
+[OBS id:obs.wisp.if-form.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Wisp Infix Operators
+:PROPERTIES:
+:ID: monadc.context.wisp.infix-operators
+:CUSTOM_ID: test-anchor-wisp-infix-operators
+:END:
+[OBS id:obs.wisp.infix-operators.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Wisp Lists
+:PROPERTIES:
+:ID: monadc.context.wisp.lists
+:CUSTOM_ID: test-anchor-wisp-lists
+:END:
+[OBS id:obs.wisp.lists.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Wisp Logic Operators
+:PROPERTIES:
+:ID: monadc.context.wisp.logic-operators
+:CUSTOM_ID: test-anchor-wisp-logic-operators
+:END:
+[OBS id:obs.wisp.logic-operators.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Wisp Mutation
+:PROPERTIES:
+:ID: monadc.context.wisp.mutation
+:CUSTOM_ID: test-anchor-wisp-mutation
+:END:
+[OBS id:obs.wisp.mutation.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Wisp Quote
+:PROPERTIES:
+:ID: monadc.context.wisp.quote
+:CUSTOM_ID: test-anchor-wisp-quote
+:END:
+[OBS id:obs.wisp.quote.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Wisp Sexpr Mixing
+:PROPERTIES:
+:ID: monadc.context.wisp.sexpr-mixing
+:CUSTOM_ID: test-anchor-wisp-sexpr-mixing
+:END:
+[OBS id:obs.wisp.sexpr-mixing.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Wisp Sugar Arrow Clause
+:PROPERTIES:
+:ID: monadc.context.wisp.sugar.arrow-clause
+:CUSTOM_ID: test-anchor-wisp-sugar-arrow-clause
+:END:
+[OBS id:obs.wisp.sugar.arrow-clause.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Wisp Sugar Def
+:PROPERTIES:
+:ID: monadc.context.wisp.sugar.def
+:CUSTOM_ID: test-anchor-wisp-sugar-def
+:END:
+[OBS id:obs.wisp.sugar.def.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Wisp Sugar For Sugar
+:PROPERTIES:
+:ID: monadc.context.wisp.sugar.for-sugar
+:CUSTOM_ID: test-anchor-wisp-sugar-for-sugar
+:END:
+[OBS id:obs.wisp.sugar.for-sugar.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Wisp Sugar If Sugar
+:PROPERTIES:
+:ID: monadc.context.wisp.sugar.if-sugar
+:CUSTOM_ID: test-anchor-wisp-sugar-if-sugar
+:END:
+[OBS id:obs.wisp.sugar.if-sugar.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Wisp Sugar Where
+:PROPERTIES:
+:ID: monadc.context.wisp.sugar.where
+:CUSTOM_ID: test-anchor-wisp-sugar-where
+:END:
+[OBS id:obs.wisp.sugar.where.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Wisp Syntax Basic
+:PROPERTIES:
+:ID: monadc.context.wisp.syntax-basic
+:CUSTOM_ID: test-anchor-wisp-syntax-basic
+:END:
+[OBS id:obs.wisp.syntax-basic.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+
+
+* Garden Links — Wisp Risk Surface
+:PROPERTIES:
+:ID: monadc.context.wisp.garden-links
+:CUSTOM_ID: wisp-garden-links
+:CONTEXT_KIND: navigation
+:CONTEXT_DESCRIPTION: Links from Wisp implementation context to active debug and coverage plans.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/wisp.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.wisp.garden-links src:context/wisp.org conf:high]
+  Wisp changes are high impact because they affect source shape before the reader
+  sees it. Pair this file with [[file:reader.org][reader.org]],
+  [[file:debug-agenda.org::*Highest-Leverage Fixes][debug agenda]], and
+  [[file:coverage-roadmap.org::*Priority Coverage Topics][coverage priorities]].
+
+* Wisp Category Contract
+:PROPERTIES:
+:ID: monadc.context.wisp.category-contract
+:CUSTOM_ID: wisp-category-contract
+:CONTEXT_KIND: contract
+:CONTEXT_DESCRIPTION: Category contract for wisp ownership, invariants, tests, and failure routing.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/wisp.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.wisp.category-contract src:context/wisp.org conf:high]
+  This section declares the category contract for =wisp=. It is the
+  routing target for failures and future test/context links touching this area.
+
+#+CAPTION: Wisp Category Contract
+| Field | Contract |
+|-------+----------|
+| Owned phase | Indentation-sensitive Wisp surface syntax and translation into canonical Lisp-like forms. |
+| Inputs | Wisp indentation blocks, define/function sugar, for syntax, typed parameter/value surface forms. |
+| Outputs | Canonical forms consumed by the reader/desugar/inference pipeline. |
+| Invariants | Wisp convenience must preserve canonical semantics; Wisp-only sugar should not silently mutate Lisp-layer expectations. |
+| Test hooks | wisp fixtures, desugar goldens, reader interaction rows involving indentation and method/call layout. |
+| Failure symptoms | desugar-mismatch, expected fail compiled for malformed indentation, function define expansion bugs, for-loop translation drift. |
+| Context neighbors | reader, language, macro, infer, tests |
+
+[DEC id:dec.wisp.category-contract-owner date:2026-06-16 by:llm]
+  Failures matching the symptoms above should start triage in this category, then
+  follow the listed neighbors only when the local contract does not explain the
+  issue.

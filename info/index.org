@@ -15,111 +15,208 @@
 :CONTEXT:  monadc.context.index
 :END:
 
-This is the Monad language reference. It covers the language from the
-user's perspective — syntax, types, standard library, tooling — NOT the
-compiler internals (those live in [[file:../context.org][context/]]).
+This is the Monad language reference — your guide to the language from the
+user's perspective: syntax, types, standard library, and tooling. This is
+NOT the compiler internals documentation (those live in
+[[file:../context.org][context/]]).
 
 Written in Org mode. Export to GNU Info via Emacs: ~C-c C-e i i~.
 Monad version: 0.1.0. Compiler source: [[file:../main.c][main.c]] (1432 lines).
 
+* Quick Reference
+
+Most-accessed pages for day-to-day Monad programming:
+
+| Topic        | Page                                  | Context                                 |
+|--------------+---------------------------------------+-----------------------------------------|
+| Introduction | [[file:intro.org][Language overview & quick start]] | [[file:../context/philosophy.org][Philosophy]] |
+| Tutorial     | [[file:tutorial.org][Step-by-step guide]]               |                                         |
+| Syntax       | [[file:syntax.org][S-expressions & forms overview]]   | [[file:../context/reader.org][Reader & parser]] |
+| Wisp         | [[file:wisp.org][Indentation-aware syntax]]          | [[file:../context/wisp.org][Wisp expander]]  |
+| Types        | [[file:types.org][Type system overview]]              | [[file:../context/types.org][Type system]] |
+| Core lib     | [[file:core.org][Built-in functions]]               | [[file:../context/codegen-ops.org][Codegen ops]] |
+| Lambdas      | [[file:lambda.org][Anonymous functions & closures]]    |                                         |
+| Conditionals | [[file:conditionals.org][if, cond, when, unless]]        |                                         |
+| Let          | [[file:let.org][let, let*, letrec]]                   |                                         |
+| Data types   | [[file:data.org][Algebraic data types]]                | [[file:../context/types.org][Type system]] |
+| Pattern match| [[file:patterns.org][match expressions]]                | [[file:../context/pmatch.org][Pattern compiler]] |
+| Macros       | [[file:macros.org][Compile-time code transformation]] | [[file:../context/macro.org][Macro system]] |
+| Modules      | [[file:modules.org][Module system]]                    | [[file:../context/module.org][Module system]] |
+| FFI          | [[file:ffi.org][C interop]]                           | [[file:../context/ffi.org][C FFI]] |
+| CLI          | [[file:cli.org][Command-line reference]]              | [[file:../context/cli.org][CLI parser]] |
+| REPL         | [[file:repl.org][Interactive REPL]]                   | [[file:../context/repl.org][REPL]] |
+| Testing      | [[file:testing.org][Embedded tests & test runner]]     | [[file:../context/tests.org][Test system]] |
+
+* How to Use This Reference
+
+This reference is organized for different ways of learning:
+
+- *New to Monad?* Start at [[file:intro.org][Introduction]] → [[file:tutorial.org][Tutorial]] → [[file:syntax.org][Syntax]].
+- *Looking for a specific form?* Check the [[Quick Index]] below.
+- *Need type details?* See [[file:types.org][Type System]] → [[file:type-inference.org][Type Inference]].
+- *Writing a library?* See [[file:modules.org][Module System]] → [[file:stdlib.org][Standard Library]].
+- *Calling C code?* See [[file:ffi.org][FFI]] → [[file:layouts.org][Layout Types]].
+- *Curious about internals?* Follow the ~Context~ column links to [[file:../context.org][context/]].
+
+* Implementation Notes
+
+This reference is generated from Org-mode source and exported to GNU Info
+format. Key compiler source files referenced throughout:
+
+| File                  | Purpose                                      | Context link                                              |
+|-----------------------+----------------------------------------------+-----------------------------------------------------------|
+| =reader.c= / =reader.h= | Lexer, parser, AST construction              | [[file:../context/reader.org][context/reader.org]]             |
+| =wisp.c= / =wisp.h=    | Wisp indentation desugaring                  | [[file:../context/wisp.org][context/wisp.org]]               |
+| =infer.c= / =infer.h=  | Hindley-Milner type inference                | [[file:../context/infer.org][context/infer.org]]              |
+| =dep.c= / =dep.h=      | Dependent type checker (ITT/NbE)             | [[file:../context/dep.org][context/dep.org]]                 |
+| =codegen.c=             | LLVM IR code generation                      | [[file:../context/codegen.org][context/codegen.org]]           |
+| =codegen-ops.org=       | strcmp dispatch catalogue                    | [[file:../context/codegen-ops.org][context/codegen-ops.org]]     |
+| =types.c= / =types.h=   | Type representation (TypeKind enum)          | [[file:../context/types.org][context/types.org]]              |
+| =runtime.c=             | Static runtime library (=libmonad.a=)        | [[file:../context/runtime.org][context/runtime.org]]           |
+| =arena.c= / =arena.h=   | Bump-pointer arena allocator                 | [[file:../context/arena.org][context/arena.org]]              |
+| =ffi.c= / =ffi.h=       | C FFI via libclang header parsing            | [[file:../context/ffi.org][context/ffi.org]]                 |
+| =macro.c= / =macro.h=   | Macro expansion and hygiene                  | [[file:../context/macro.org][context/macro.org]]              |
+| =module.c=              | Module system and resolution                 | [[file:../context/module.org][context/module.org]]             |
+| =repl.c=                | REPL / JIT interface                         | [[file:../context/repl.org][context/repl.org]]                |
+| =typeclass.c=           | Type class dictionary-passing                | [[file:../context/typeclass.org][context/typeclass.org]]         |
+| =Main.mon=              | Standard library / compiler test surface     | [[file:../context/main-mon.org][context/main-mon.org]]           |
+| =tests/codegen/=        | 423+ codegen runtime fixtures                | [[file:../context/tests-arch.org][context/tests-arch.org]]       |
+
 * Navigation
 
 ** Getting Started
-   - [[file:intro.org][Introduction]] — philosophy, hello world, quick start
-   - [[file:tutorial.org][Tutorial]] — step-by-step from zero to working programs
 
-** Syntax
-   - [[file:syntax.org][Syntax]] — S-expressions, Wisp, special forms overview
-   - [[file:define.org][Define]] — value/function binding, typed signatures
-   - [[file:quote.org][Quote]] — quote, quasiquote, unquote, splicing
-   - [[file:wisp.org][Wisp Syntax]] — indentation-aware surface language
-   - [[file:advanced-wisp.org][Advanced Wisp]] — Wisp patterns and known bugs
-
-** Primitive Types
-   - [[file:types.org][Types]] — type system overview, all ground types
-   - [[file:numeric.org][Numeric Types]] — Int, Float, Hex, Oct, Bin, fixed-width
-   - [[file:booleans.org][Booleans]] — Bool, True, False, logic operations
-   - [[file:characters.org][Characters]] — Char, codepoints, escape sequences
-   - [[file:strings.org][Strings]] — UTF-8 strings, operations, indexing
-   - [[file:rationals.org][Rationals]] — Ratio, exact arithmetic, percentages
-   - [[file:symbols.org][Symbols & Keywords]] — Symbol, Keyword, interning
-   - [[file:paths.org][Path Literals]] — filesystem path values
-
-** Compound Types
-   - [[file:collections.org][Collections]] — overview of all collection types
-   - [[file:list.org][Lists]] — linked cons cells, quoted lists
-   - [[file:set.org][Sets]] — hash sets, conj/disj, contains?
-   - [[file:map.org][Maps]] — hash maps, assoc/dissoc/find/merge
-   - [[file:arrays.org][Arrays]] — stack, fat pointer, heap-growable variants
-   - [[file:range.org][Ranges]] — eager [0..10], lazy (0..) numeric sequences
-   - [[file:heap.org][Heap Allocation]] — heap arrays, ADT allocation, arena
-   - [[file:data.org][Data Types]] — algebraic data types, sum/product types
-   - [[file:pair.org][Pairs]] — Pair type, fst/snd, tuples
-   - [[file:layouts.org][Layout Types]] — C-compatible memory layouts
-   - [[file:refinements.org][Refinement Types]] — subset types with predicates
+- [[file:intro.org][Introduction]] — philosophy, hello world, quick start with the Monad compiler.
+  [[file:../context/philosophy.org][Context: philosophy]] · [[file:../context/features.org][Context: features]]
+- [[file:tutorial.org][Tutorial]] — step-by-step walkthrough from zero to working programs.
+- [[file:syntax.org][Syntax]] — S-expressions, special forms overview, reader behavior.
+  [[file:../context/reader.org][Context: reader & parser]] · [[file:../context/language.org][Context: language formalization]]
+- [[file:wisp.org][Wisp Syntax]] — indentation-aware surface language for Monad.
+  [[file:../context/wisp.org][Context: wisp expander]]
+- [[file:advanced-wisp.org][Advanced Wisp]] — Wisp patterns, edge cases, and known bugs.
 
 ** Type System
-   - [[file:advanced-types.org][Advanced Types]] — overview of extended type features
-   - [[file:type-classes.org][Type Classes]] — dictionary-passing polymorphism
-   - [[file:dependent-types.org][Dependent Types]] — ITT/NbE, Pi/Sigma, universes
-   - [[file:type-inference.org][Type Inference]] — Hindley-Milner, Algorithm W
-   - [[file:patterns.org][Pattern Matching]] — match expressions, destructuring
 
-** Functions
-    - [[file:functional-programming.org][Functional Programming]] — purity, lambdas, HOFs
-    - [[file:purity.org][Purity]] — pure functions, referential transparency
-    - [[file:lambda.org][Lambda]] — anonymous functions, closures
-   - [[file:recursion.org][Recursion]] — recursive functions, letrec, tail calls
-   - [[file:let.org][Let Bindings]] — let, let*, letrec
+- [[file:types.org][Types]] — type system overview, all ground types (Int, Float, Char, etc.).
+  [[file:../context/types.org][Context: type system]]
+- [[file:type-inference.org][Type Inference]] — Hindley-Milner, Algorithm W, constraint generation, unification.
+  [[file:../context/infer.org][Context: HM inference]]
+- [[file:type-classes.org][Type Classes]] — dictionary-passing polymorphism, class/instance declarations.
+  [[file:../context/typeclass.org][Context: type class system]]
+- [[file:dependent-types.org][Dependent Types]] — ITT/NbE, Pi/Sigma types, universes, bidirectional checking.
+  [[file:../context/dep.org][Context: dependent types]]
+- [[file:refinements.org][Refinement Types]] — subset types with predicates, type-level constraints.
+  [[file:../context/types.org][Context: type system]]
+- [[file:advanced-types.org][Advanced Types]] — extended type features beyond the ground types.
 
-** Control & Error
-   - [[file:control.org][Control Flow]] — overview of all control forms
-   - [[file:conditionals.org][Conditionals]] — if, cond, when, unless, ??
-   - [[file:iteration.org][Iteration]] — for, while, loop forms
-   - [[file:mutation.org][Mutation]] — set!, <-, mutable bindings
-   - [[file:sequencing.org][Sequencing]] — begin, do, with
-   - [[file:error-handling.org][Error Handling]] — error, undefined, assert-eq
-   - [[file:maybe.org][Maybe (Option)]] — optional values, None/Some
-   - [[file:result.org][Result]] — error type with diagnostic messages
+** Data & Collections
 
-** Core Library
-   - [[file:core.org][Core Library]] — overview of all built-in functions
-   - [[file:arithmetic.org][Arithmetic]] — +, -, *, /, %, bitwise operators
-   - [[file:equality.org][Equality]] — =, !=, <, >, <=, >=, eq?
-   - [[file:logic.org][Logic]] — and, or, not, short-circuit
-   - [[file:show.org][Show]] — show, display, assert-eq
-   - [[file:casting.org][Casting]] — type conversions, (Int x), (Float x)
+- [[file:data.org][Data Types]] — algebraic data types, sum types, product types, deriving.
+  [[file:../context/types.org][Context: type system]]
+- [[file:collections.org][Collections]] — overview of all collection types and their operations.
+  [[file:../context/runtime.org][Context: runtime library]]
+- [[file:list.org][Lists]] — linked cons cells, quoted list syntax, car/cdr, nil.
+- [[file:map.org][Maps]] — hash maps, assoc/dissoc/find/merge operations.
+- [[file:set.org][Sets]] — hash sets, conj/disj, contains?, set operations.
+- [[file:arrays.org][Arrays]] — stack arrays, fat pointer arrays, heap-growable variants.
+- [[file:range.org][Ranges]] — eager [0..10], lazy (0..) numeric sequences.
+- [[file:pair.org][Pairs]] — Pair type, fst/snd, tuple syntax.
+- [[file:maybe.org][Maybe (Option)]] — optional values, None/Some, chaining.
+- [[file:result.org][Result]] — error type with diagnostic messages.
 
-** Libraries
-    - [[file:stdlib.org][Standard Library]] — Math, Coll, List, Set, Map modules
-    - [[file:math-module.org][Math Module]] — gcd, sin, factorial, pi, sequences
-    - [[file:coll-module.org][Coll Module]] — take, drop, map, foldl, foldr
+** Functions & Control
 
-** Tooling
-   - [[file:modules.org][Module System]] — declarations, imports, resolution
-   - [[file:macros.org][Macros]] — compile-time code transformation
-   - [[file:macro-patterns.org][Macro Patterns]] — common macro recipes
-   - [[file:asm.org][Inline Assembly]] — x86-64 assembly in Monad
-   - [[file:ffi.org][C FFI]] — calling C libraries directly
-   - [[file:style.org][Style Guide]] — naming, formatting, organization
-    - [[file:arena.org][Arena Allocation]] — bump-pointer allocator, no GC
-    - [[file:performance.org][Performance]] — arena allocation, ADT layout
-   - [[file:testing.org][Testing]] — embedded tests and test runner
-   - [[file:fuzzing.org][Fuzzing]] — property-based testing, algebraic laws
-   - [[file:repl.org][REPL]] — interactive read-eval-print loop
-   - [[file:cli.org][CLI Reference]] — command line options
-   - [[file:errors.org][Debugging]] — error messages and debugging
-   - [[file:build.org][Build System]] — compilation, testing, packaging
-   - [[file:package-dev.org][Package Development]] — module structure, distribution
+- [[file:lambda.org][Lambda]] — anonymous functions, closures, capturing.
+- [[file:define.org][Define]] — value/function binding, typed signatures.
+- [[file:let.org][Let Bindings]] — let, let*, letrec, lexical scoping.
+- [[file:recursion.org][Recursion]] — recursive functions, letrec, tail-call optimization.
+- [[file:control.org][Control Flow]] — overview of all control forms (evaluating and returning values).
+  [[file:../context/codegen.org][Context: codegen]]
+- [[file:conditionals.org][Conditionals]] — if, cond, when, unless, ?? operator.
+- [[file:iteration.org][Iteration]] — for, while, loop forms, for-collect.
+- [[file:sequencing.org][Sequencing]] — begin, do, with, expression sequencing.
+- [[file:mutation.org][Mutation]] — set!, <-, mutable variable bindings.
+- [[file:patterns.org][Pattern Matching]] — match expressions, destructuring, guards.
+  [[file:../context/pmatch.org][Context: pattern match compiler]]
 
-** Migration Guides
-   - [[file:from-c.org][Coming from C/Rust]]
-   - [[file:from-lisp.org][Coming from Lisp/Scheme]]
-   - [[file:from-haskell.org][Coming from Haskell]]
+** Operations
 
-** Reference
-   - [[file:contributing.org][Contributing]]
-   - [[file:faq.org][FAQ]]
+- [[file:arithmetic.org][Arithmetic]] — +, -, *, /, %, bitwise operators, modulo, power.
+- [[file:equality.org][Equality]] — =, !=, <, >, <=, >=, eq?, equality predicates.
+- [[file:logic.org][Logic]] — and, or, not, short-circuit evaluation.
+- [[file:booleans.org][Booleans]] — Bool type, True, False, logic operations.
+- [[file:numeric.org][Numeric Types]] — Int, Float, Hex, Oct, Bin, fixed-width integers.
+  [[file:../context/runtime.org][Context: runtime]]
+- [[file:rationals.org][Rationals]] — Ratio, exact arithmetic, percentage syntax, periodic decimals.
+  [[file:../context/runtime.org][Context: runtime]]
+- [[file:characters.org][Characters]] — Char type, codepoints, escape sequences.
+- [[file:strings.org][Strings]] — UTF-8 strings, concatenation, indexing, interpolation.
+  [[file:../context/runtime.org][Context: runtime]]
+- [[file:casting.org][Casting]] — type conversions via (Int x), (Float x) and cast forms.
+- [[file:quote.org][Quote]] — quote, quasiquote, unquote, splicing.
+
+** Memory & Performance
+
+- [[file:arena.org][Arena Allocation]] — bump-pointer allocator, no GC, arena lifecycle.
+  [[file:../context/arena.org][Context: arena allocator]]
+- [[file:heap.org][Heap Allocation]] — heap arrays, heap-allocated ADTs, allocation strategies.
+- [[file:performance.org][Performance]] — arena allocation, ADT layout, optimization guidance.
+  [[file:../context/arena.org][Context: arena]] · [[file:../context/codegen.org][Context: codegen]]
+
+** Tooling & Environment
+
+- [[file:cli.org][CLI Reference]] — compiler command-line options, subcommands, flags.
+  [[file:../context/cli.org][Context: CLI parser]]
+- [[file:build.org][Build System]] — compilation, testing, packaging workflow.
+  [[file:../context/buildsystem.org][Context: build system]] · [[file:../context/makefile.org][Context: Makefile]]
+- [[file:repl.org][REPL]] — interactive read-eval-print loop, JIT eval, completion.
+  [[file:../context/repl.org][Context: REPL]]
+- [[file:modules.org][Module System]] — declarations, imports, resolution, export manifests.
+  [[file:../context/module.org][Context: module system]] · [[file:../context/module-export.org][Context: export manifests]]
+- [[file:package-dev.org][Package Development]] — module structure, distribution, package.yaml.
+- [[file:testing.org][Testing]] — embedded tests (#+TEST), test runner, assertions.
+  [[file:../context/tests.org][Context: test system]] · [[file:../context/tests-arch.org][Context: test architecture]]
+- [[file:fuzzing.org][Fuzzing]] — property-based testing, algebraic law verification.
+- [[file:errors.org][Debugging]] — error messages, debugging techniques, diagnostics.
+- [[file:error-handling.org][Error Handling]] — error, undefined, assert-eq, runtime errors.
+- [[file:faq.org][FAQ]] — frequently asked questions about the language and compiler.
+- [[file:contributing.org][Contributing]] — how to contribute to the Monad project.
+
+** Interop & Migration
+
+- [[file:ffi.org][C FFI]] — calling C libraries from Monad, include declarations.
+  [[file:../context/ffi.org][Context: C FFI]]
+- [[file:asm.org][Inline Assembly]] — x86-64 assembly embedded in Monad code.
+  [[file:../context/asm.org][Context: inline assembly]]
+- [[file:layouts.org][Layout Types]] — C-compatible memory layout types for interop.
+  [[file:../context/codegen-ops.org][Context: codegen ops]]
+- [[file:from-c.org][Coming from C/Rust]] — migration guide for C and Rust programmers.
+- [[file:from-haskell.org][Coming from Haskell]] — migration guide for Haskell programmers.
+- [[file:from-lisp.org][Coming from Lisp/Scheme]] — migration guide for Lisp/Scheme programmers.
+
+** Standard Library
+
+- [[file:core.org][Core Library]] — overview of all built-in functions with strcmp dispatch.
+  [[file:../context/codegen-ops.org][Context: codegen ops]]
+- [[file:stdlib.org][Standard Library]] — Math, Coll, List, Set, Map module documentation.
+- [[file:math-module.org][Math Module]] — gcd, sin, factorial, pi, sequences, statistical functions.
+  [[file:../context/core-libs.org][Context: core libraries]]
+- [[file:coll-module.org][Coll Module]] — take, drop, map, foldl, foldr, collection combinators.
+  [[file:../context/core-libs.org][Context: core libraries]]
+
+** Advanced Topics
+
+- [[file:macros.org][Macros]] — compile-time code transformation, syntax-rules, hygiene.
+  [[file:../context/macro.org][Context: macro system]]
+- [[file:macro-patterns.org][Macro Patterns]] — common macro recipes and idioms.
+  [[file:../context/macro.org][Context: macro system]]
+- [[file:functional-programming.org][Functional Programming]] — purity, lambdas, higher-order functions, combinators.
+- [[file:purity.org][Purity]] — pure functions, referential transparency, side-effect tracking.
+- [[file:show.org][Show]] — show, display, printing values to output.
+- [[file:symbols.org][Symbols & Keywords]] — Symbol, Keyword, interning, gensym.
+- [[file:paths.org][Path Literals]] — filesystem path values, ~/path, ./file literals.
+- [[file:style.org][Style Guide]] — naming conventions, formatting, code organization.
+  [[file:../context/style.org][Context: code style taxonomy]]
 
 * Conventions
 
@@ -130,6 +227,7 @@ Throughout this reference:
 - =(...)=, =[...]=, ={...}= are literal syntax
 - =(italic text)= denotes metavariables
 - =(type::value)= shows inferred types
+- Code blocks use =#+BEGIN_SRC monad= for S-expression and =#+BEGIN_SRC wisp= for Wisp examples
 
 Cross-references to the compiler context link to [[file:../context.org][context/]] files.
 
@@ -185,3 +283,21 @@ Cross-references to the compiler context link to [[file:../context.org][context/
 | arena alloc             | [[file:arena.org][Arena Allocation]]        |
 | Math module             | [[file:math-module.org][Math Module]]            |
 | Coll module             | [[file:coll-module.org][Coll Module]]            |
+
+* Key Points
+
+- Monad is a compiled Lisp-family language with dual syntax (S-expr + Wisp).
+- The compiler is written in C (~29,000+ lines) and targets x86-64 Linux via LLVM 19+.
+- Memory management uses arena allocation with bump-pointer semantics — no GC.
+- The type system combines Hindley-Milner inference with dependent types (ITT/NbE).
+- Macros are ordinary functions returning =Syntax= values — no separate =macro= keyword.
+- All reference pages link to compiler-internal context docs for cross-referencing.
+
+* See Also
+
+- [[file:intro.org][Introduction]] — language overview, design philosophy, and quick start
+- [[file:tutorial.org][Tutorial]] — step-by-step walkthrough from zero to working programs
+- [[file:syntax.org][Syntax Reference]] — complete grammar, literals, special forms
+- [[file:types.org][Type System]] — full type reference and type system architecture
+- [[file:core.org][Core Library]] — built-in functions and operations
+- [[file:../context.org][context/]] — compiler internals documentation

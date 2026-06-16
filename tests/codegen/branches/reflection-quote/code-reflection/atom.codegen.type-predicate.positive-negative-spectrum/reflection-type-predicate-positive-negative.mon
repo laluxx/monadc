@@ -1,0 +1,41 @@
+;; TEST-ID: tests.codegen.branch.reflection-type-predicate-positive-negative
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: code-reflection
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 60-reflection-quote
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise type predicate dispatch positive and negative branches for scalar and collection values.
+;; TEST-ATOM: atom.codegen.type-predicate.positive-negative-spectrum
+;; TEST-CODEGEN-ATOM: atom.codegen.type-predicate.positive-negative-spectrum
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.type-predicate.scalar
+;; TEST-CODEGEN-PATH: codegen.type-predicate.collection
+;; TEST-CODEGEN-PATH: codegen.nil-predicate
+;; TEST-DEPENDS-ON: atom.codegen.value.scalar-display-spectrum
+;; TEST-DEPENDS-ON: atom.codegen.collection.set-functional-mutating
+;; TEST-TAG: run
+;; TEST-TAG: predicate
+;; TEST-TAG: type
+;; TEST-COVERAGE: codegen.c:5735-5780 type predicate branches
+;; TEST-COVERAGE: codegen.c:1496 nil? branch
+;; TEST-COVERAGE: codegen.c:4181 Set? branch
+;; TEST-COVERAGE: codegen.c:4272 Map? branch
+
+;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote
+;; TEST-MENU: branches/reflection-quote/code-reflection/atom.codegen.type-predicate.positive-negative-spectrum
+;; TEST-MENU-PATH: codegen/branches/reflection-quote/code-reflection/atom.codegen.type-predicate.positive-negative-spectrum
+;; TEST-ATOM-LEAF: atom.codegen.type-predicate.positive-negative-spectrum
+;; TEST-CLI-TARGET: codegen branches reflection-quote code-reflection
+(module Main)
+(show (Int? 42))
+(show (Int? "x"))
+(show (Float? 3.14))
+(show (String? "x"))
+(show (Bool? False))
+(show (List? '(1)))
+(show (Set? {1}))
+(show (Map? #{:a 1}))
+(show (nil? nil))
+(show (nil? 0))

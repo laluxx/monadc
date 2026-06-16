@@ -1,0 +1,14 @@
+name: structured_negative_contains_empty_set_false
+section: negative-compiler-current
+tier: stable
+kind: law
+features: arithmetic, negative, predicate, set
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, infer.arithmetic, infer.type_predicate, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.infer.predicate
+args: a:Int
+type: Bool
+expect: False
+description: Expected-false invariant to make sure the runner checks false laws and not only truthy success paths.
+law: (contains? (set) {a})

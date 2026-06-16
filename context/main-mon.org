@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -801,7 +801,7 @@
 :CONFIDENCE: high
 :END:
 
-[INF id:inf.main-mon.connects-to from:obs.main-mon.purpose conf:high]
+[INF id:inf.main-mon.connects-to from:obs.main-mon.file conf:high]
   connects-to -> `monadc.context.language` (Main.mon exercises every surface
   syntax form: define, lambda, data, class, instance, if, cond, let, for,
   while, match, do, set!, :: annotations) ·

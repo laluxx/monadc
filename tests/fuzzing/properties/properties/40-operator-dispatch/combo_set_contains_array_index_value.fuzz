@@ -1,0 +1,15 @@
+name: combo_set_contains_array_index_value
+section: feature-interactions
+tier: stable
+kind: law
+features: arithmetic, array, array-index, feature, predicate, set
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.predicate_dispatch, codegen.runtime_call, infer.arithmetic, infer.array, infer.callable_array, infer.type_predicate, reader.array_literal, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.infer.predicate, atom.runtime.array
+related-properties: signal_atom_array_index_valid
+args: a:Int b:Int
+type: Bool
+expect: True
+description: set construction must accept inline array-index expressions as elements.
+law: (contains? (set ([{a} {b}] 0) ([{a} {b}] 1)) {b})

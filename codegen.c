@@ -421,8 +421,32 @@ static LLVMValueRef codegen_specialize(CodegenContext *ctx,
     CodegenResult body = {NULL, NULL};
     const char *prev   = ctx->current_function_name;
     ctx->current_function_name = spec_name;
-    for (int i = 0; i < lambda->lambda.body_count; i++)
-        body = codegen_expr(ctx, lambda->lambda.body_exprs[i]);
+    if (lambda->lambda.body->type == AST_ASM) {
+        RegisterAllocator reg_alloc;
+        reg_alloc_init(&reg_alloc);
+        AsmContext asm_ctx = {
+            .params      = env_params,
+            .param_count = total_params,
+            .reg_alloc   = &reg_alloc,
+            .naked       = lambda->lambda.naked
+        };
+        int asm_inst_count;
+        AsmInstruction *asm_instructions = preprocess_asm(
+            lambda->lambda.body, &asm_ctx, &asm_inst_count);
+        LLVMValueRef *param_values = malloc(sizeof(LLVMValueRef) * (total_params ? total_params : 1));
+        for (int i = 0; i < total_params; i++)
+            param_values[i] = LLVMGetParam(func, i);
+        body.value = codegen_inline_asm(
+            ctx->context, ctx->builder, asm_instructions,
+            asm_inst_count, ret_type, param_values,
+            total_params, lambda->lambda.naked);
+        body.type = ret_type;
+        free(param_values);
+        free_asm_instructions(asm_instructions, asm_inst_count);
+    } else {
+        for (int i = 0; i < lambda->lambda.body_count; i++)
+            body = codegen_expr(ctx, lambda->lambda.body_exprs[i]);
+    }
     ctx->current_function_name = prev;
 
     if (!body.value)
@@ -5447,6 +5471,21 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     if (value_expr->type == AST_CHAR)        inferred_type = type_char();
                     else if (value_expr->type == AST_STRING) inferred_type = type_string();
                     else                                     inferred_type = type_float();
+                }
+
+                /* Side-effect-only bindings: (def r (some-call ...)) where r is
+                 * never referenced. The call already ran for its side effect.
+                 * Insert a zero sentinel into env so later lookups do not fail
+                 * with "unbound variable" when the name appears in free-var scans. */
+                if (!value_result.value) {
+                    LLVMTypeRef zero_t = LLVMInt64TypeInContext(ctx->context);
+                    value_result.value = LLVMConstInt(zero_t, 0, 0);
+                    LLVMValueRef dummy_alloca = LLVMBuildAlloca(ctx->builder, zero_t, var_name);
+                    LLVMBuildStore(ctx->builder, value_result.value, dummy_alloca);
+                    env_insert(ctx->env, var_name, type_int(), dummy_alloca);
+                    result.type  = type_int();
+                    result.value = value_result.value;
+                    return result;
                 }
 
                 if (explicit_type && explicit_type->kind == TYPE_UNKNOWN)

@@ -1,0 +1,15 @@
+name: heap_array_count_literal
+section: collections
+tier: experimental
+kind: law
+features: arithmetic, array, array-index, collections, equality, heap-array
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.equality_dispatch, codegen.heap_array, infer.arithmetic, infer.array, infer.callable_array, infer.equality, reader.array_literal, reader.heap_array
+signal: low
+corpus-role: legacy-smoke
+uses-atoms: atom.core.equality, atom.runtime.array, atom.runtime.heap-array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive
+args: 
+type: Bool
+expect: True
+description: count must work on heap array literals using the runtime-sized array path.
+law: (= (count ~[1 2 3]) 3)

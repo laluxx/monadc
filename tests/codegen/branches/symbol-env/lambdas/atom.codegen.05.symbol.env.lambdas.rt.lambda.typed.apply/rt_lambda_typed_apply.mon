@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-lambda-typed-apply
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.05.symbol.env.lambdas.rt.lambda.typed.apply
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: lambdas
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Lambda with typed parameters applies correctly.
+;; TEST-ATOM: ((lambda ([x :: Int] [y :: Int] -> Int) (+ x y)) 3 4) returns 7.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:05-symbol-env/lambdas branch family
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/lambdas/atom.codegen.05.symbol.env.lambdas.rt.lambda.typed.apply
+;; TEST-MENU-PATH: codegen/branches/symbol-env/lambdas/atom.codegen.05.symbol.env.lambdas.rt.lambda.typed.apply
+;; TEST-ATOM-LEAF: atom.codegen.05.symbol.env.lambdas.rt.lambda.typed.apply
+;; TEST-CLI-TARGET: codegen branches symbol-env lambdas
+(module Main)
+(show ((lambda ([x : Int] [y : Int] -> Int) (+ x y)) 3 4))

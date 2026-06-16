@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-define-two-arg
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Two-argument typed define function works.
-;; TEST-ATOM: (define (add [x : Int] [y : Int] -> Int) (+ x y)) then (show (add 3 4)) prints 7.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(define (add [x : Int] [y : Int] -> Int) (+ x y))
-(show (add 3 4))

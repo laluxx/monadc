@@ -1,0 +1,686 @@
+target	count	fail_compile	pass_run	example
+codegen.c AST_PATH/array index	1	0	1	branches/wisp-codegen/collections-quote-path/atom.codegen.wisp.codegen.collections.quote.path.deep.wisp.path.and.array/deep_wisp_path_and_array.mon
+codegen.c diagnostic % expects	8	8	0	errors/codegen/codegen/operator.mod.arity/atom.menu.error.codegen.operator.mod.arity.000/menu-codegen-operator.mod.arity-000.mon
+codegen.c diagnostic if expects	16	16	0	errors/codegen/codegen/arity.if.too-few/atom.menu.error.codegen.arity.if.too-few.000/menu-codegen-arity.if.too-few-000.mon
+codegen.c diagnostic index out of bounds	8	8	0	errors/codegen/codegen/index.array.out-of-bounds/atom.menu.error.codegen.index.array.out-of-bounds.000/menu-codegen-index.array.out-of-bounds-000.mon
+codegen.c diagnostic not expects	8	8	0	errors/codegen/codegen/operator.not.arity/atom.menu.error.codegen.operator.not.arity.000/menu-codegen-operator.not.arity-000.mon
+codegen.c diagnostic set!	8	8	0	errors/codegen/codegen/arity.setbang.too-few/atom.menu.error.codegen.arity.setbang.too-few.000/menu-codegen-arity.setbang.too-few-000.mon
+codegen.c diagnostic undefined symbol	8	8	0	errors/codegen/codegen/symbol.unbound.local/atom.menu.error.codegen.symbol.unbound.local.000/menu-codegen-symbol.unbound.local-000.mon
+codegen.c diagnostic unknown field	8	8	0	errors/codegen/codegen/field.unknown.dot/atom.menu.error.codegen.field.unknown.dot.000/menu-codegen-field.unknown.dot-000.mon
+codegen.c if/boolean dispatch	1	0	1	branches/wisp-codegen/control-and-logic/atom.codegen.wisp.codegen.control.and.logic.deep.wisp.if.logic.phi/deep_wisp_if_logic_phi.mon
+codegen.c pattern constructor lowering	1	0	1	branches/data-layout/layouts-fields/atom.codegen.data.show.adt.and.match/data-show-adt-and-match.mon
+codegen.c typed define/function branches	1	0	1	branches/wisp-codegen/define-and-types/atom.codegen.wisp.codegen.define.and.types.deep.wisp.typed.function.and.value/deep_wisp_typed_function_and_value.mon
+codegen.c:00-values/casts-conversions branch family	5	0	5	branches/values/casts-conversions/atom.codegen.00.values.casts.conversions.rt.char.conversion/rt_char_conversion.mon
+codegen.c:00-values/char-keyword-symbol branch family	1	0	1	branches/values/char-keyword-symbol/atom.codegen.00.values.char.keyword.symbol.rt.keyword.symbol.display/rt_keyword_symbol_display.mon
+codegen.c:00-values/paths branch family	1	0	1	branches/values/paths/atom.codegen.00.values.paths.rt.path.literal.value/rt_path_literal_value.mon
+codegen.c:00-values/scalar-literals branch family	1	0	0	branches/values/scalar-literals/atom.codegen.00.values.scalar.literals.empty.file/empty-file.mon
+codegen.c:00-values/show-dispatch branch family	4	0	4	branches/values/show-dispatch/atom.codegen.00.values.show.dispatch.identity.show/identity_show.mon
+codegen.c:00-values/type-predicates branch family	5	0	5	branches/values/type-predicates/atom.codegen.00.values.type.predicates.rt.char.keyword.symbol.predicates/rt_char_keyword_symbol_predicates.mon
+codegen.c:05-symbol-env/aliases branch family	2	0	2	branches/symbol-env/aliases/atom.codegen.05.symbol.env.aliases.rt.type.alias/rt_type_alias.mon
+codegen.c:05-symbol-env/closures branch family	3	0	3	branches/symbol-env/closures/atom.codegen.05.symbol.env.closures.rt.closure.capture/rt_closure_capture.mon
+codegen.c:05-symbol-env/defines-and-calls branch family	8	0	8	branches/symbol-env/defines-and-calls/atom.codegen.05.symbol.env.defines.and.calls.function.call/function_call.mon
+codegen.c:05-symbol-env/lambdas branch family	11	0	11	branches/symbol-env/lambdas/atom.codegen.05.symbol.env.lambdas.lambda.call/lambda_call.mon
+codegen.c:05-symbol-env/monomorphization branch family	1	0	1	branches/symbol-env/monomorphization/atom.codegen.05.symbol.env.monomorphization.rt.hm.polymorphic.identity/rt_hm_polymorphic_identity.mon
+codegen.c:05-symbol-env/recursion branch family	2	0	2	branches/symbol-env/recursion/atom.codegen.05.symbol.env.recursion.recursive.factorial/recursive_factorial.mon
+codegen.c:05-symbol-env/typeclasses branch family	3	0	3	branches/symbol-env/typeclasses/atom.codegen.05.symbol.env.typeclasses.rt.class.assoc.default/rt_class_assoc_default.mon
+codegen.c:10000-11950 recursive function call path	1	0	1	branches/symbol-env/recursion/atom.codegen.function.recursive-self-call/function-recursive-factorial-phi.mon
+codegen.c:10107 map used as function arity diagnostic	1	1	0	errors/codegen/arity/atom.codegen.diagnostic.map-function-arity/diagnostic-map-as-function-arity.mon
+codegen.c:1020 ast_to_runtime_value	1	0	1	branches/reflection-quote/code-reflection/atom.codegen.reflection.show.value.quote/reflection-show-value-quote.mon
+codegen.c:1025-1070 ast_to_runtime_value branches	15	0	10	branches/reflection-quote/quote-runtime-values/atom.codegen.stateful.reflection.assert.eq.pass/stateful-reflection-assert-eq-pass.mon
+codegen.c:1025-1071 ast_to_runtime_value cases	1	0	0	branches/reflection-quote/code-reflection/atom.codegen.reflection.quote-runtime-value-spectrum/reflection-quote-runtime-value-spectrum.mon
+codegen.c:10900-11950 generic call specialization	1	0	1	branches/symbol-env/defines-and-calls/atom.codegen.monomorph.id.int-string/function-hm-id-two-concrete-types.mon
+codegen.c:11355-11525 lifted closure argument branches	1	0	1	branches/symbol-env/closures/atom.codegen.closure.capture-and-call/function-closure-capture-call.mon
+codegen.c:1190-1270 codegen_show_value primitive display branches	20	0	20	branches/values/show-casts-predicates/atom.codegen.stateful.value.bool.predicate.branches/stateful-value-bool-predicate-branches.mon
+codegen.c:120-168 mono_cache_lookup/insert	1	0	1	branches/symbol-env/defines-and-calls/atom.codegen.monomorph.id.int-string/function-hm-id-two-concrete-types.mon
+codegen.c:12072 color-to-string call-site branch	1	0	1	branches/reflection-quote/code-reflection/atom.codegen.reflection.color.to.string.call.name/reflection-color-to-string-call-name.mon
+codegen.c:1215 codegen_show_value layout/app ADT branch	1	0	1	branches/data-layout/layouts-fields/atom.codegen.data.show.adt.and.match/data-show-adt-and-match.mon
+codegen.c:12152 type conversion constructor dispatch	15	0	15	branches/values/casts-predicates/atom.codegen.branch200.00.values.casts.predicates.value.cast.predicate.00/branch200_value_cast_predicate_00.mon
+codegen.c:12152-12551 cast constructor dispatch	20	0	20	branches/values/show-casts-predicates/atom.codegen.stateful.value.bool.predicate.branches/stateful-value-bool-predicate-branches.mon
+codegen.c:12157-12164 cast dispatch	1	0	1	branches/collections/strings/atom.codegen.cast.string-from-derived-scalars/value-string-cast-derived-scalars.mon
+codegen.c:12164 String cast target	1	0	1	branches/collections/strings/atom.codegen.value.string.cast.family/value-string-cast-family.mon
+codegen.c:12164-12510 String cast target	1	0	1	branches/collections/strings/atom.codegen.cast.string-from-derived-scalars/value-string-cast-derived-scalars.mon
+codegen.c:1219-1255 codegen_show_value primitive branches	1	0	1	branches/smoke-legacy/uncategorized-legacy/atom.codegen.value.scalar-display-spectrum/value-scalar-display-spectrum.mon
+codegen.c:1221 TYPE_PATH show branch	1	0	1	branches/values/paths/atom.codegen.value.path-literal-value/value-path-local-and-global.mon
+codegen.c:1221 string show branch	1	0	1	branches/collections/strings/atom.codegen.value.string.cast.family/value-string-cast-family.mon
+codegen.c:1221-1246 codegen_show_value primitive display	1	0	1	branches/values/char-keyword-symbol/atom.codegen.value.literals.symbols.paths/value-literals-symbols-paths.mon
+codegen.c:1224-1229 Hex/Bin/Oct show branches	1	0	0	branches/operators/radix-printing/atom.codegen.value.radix-nonzero-lowering/value-radix-nonzero-compile.mon
+codegen.c:1224-1230 hex/bin/oct show branches	1	0	1	branches/operators/radix-printing/atom.codegen.value.radix.zero.edge/value-radix-zero-edge.mon
+codegen.c:1230-1236 signed/unsigned show branches	1	0	1	branches/values/casts-conversions/atom.codegen.value.width.casts.signed.unsigned/value-width-casts-signed-unsigned.mon
+codegen.c:1236 TYPE_F32 show branch	2	0	2	branches/values/casts-conversions/atom.codegen.cast.float-int-roundtrip/value-float-int-roundtrip-branch.mon
+codegen.c:1239-1310 codegen_show_value layout/ADT display branches	20	2	17	branches/data-layout/adts/atom.codegen.stateful.adt.enum.deriving.compile/stateful-adt-enum-deriving-compile.mon
+codegen.c:12513-12534 numeric cast targets	1	0	1	branches/values/casts-conversions/atom.codegen.value.f32.and.float.casts/value-f32-and-float-casts.mon
+codegen.c:12513-12535 Int/Float/F32 cast targets	1	0	1	branches/values/casts-conversions/atom.codegen.cast.float-int-roundtrip/value-float-int-roundtrip-branch.mon
+codegen.c:12542-12549 numeric width cast targets	1	0	1	branches/values/casts-conversions/atom.codegen.value.width.casts.signed.unsigned/value-width-casts-signed-unsigned.mon
+codegen.c:12542-12552 numeric width cast targets	1	0	1	branches/values/casts-conversions/atom.codegen.cast.integer-width-signedness/value-width-signedness-cross-check.mon
+codegen.c:12550-12551 I128/U128 cast targets	1	0	0	branches/values/casts-conversions/atom.codegen.value.i128.u128.cast.compile/value-i128-u128-cast-compile.mon
+codegen.c:12660-12675 keyword constructor argument branches	1	0	1	branches/data-layout/layouts-fields/atom.codegen.layout.keyword-constructor-dot-order/layout-keyword-constructor-dot-order.mon
+codegen.c:12669 keyword constructor field initialization	20	2	17	branches/data-layout/adts/atom.codegen.stateful.adt.enum.deriving.compile/stateful-adt-enum-deriving-compile.mon
+codegen.c:12669 keyword layout constructor field matching	1	0	1	branches/data-layout/layouts-fields/atom.codegen.layout.keyword.order.dot.chain/layout-keyword-order-dot-chain.mon
+codegen.c:1267-1395 ADT layout/tag field branches	1	0	1	branches/data-layout/layouts-fields/atom.codegen.adt.match-field-load/data-adt-match-and-field-load.mon
+codegen.c:1267-1395 ADT show/tag paths	1	0	1	branches/data-layout/layouts-fields/atom.codegen.cross.layout-adt-match/cross-layout-adt-match.mon
+codegen.c:1267-1395 codegen_show_value ADT constructor printing	1	0	1	branches/data-layout/layouts-fields/atom.codegen.adt.tag-and-show-two-constructors/data-adt-tag-and-show-two-constructors.mon
+codegen.c:12902 dot diagnostics	15	15	0	errors/codegen/branch-errors/atom.codegen.stateful.diagnostic.append.bang.arity/stateful-diagnostic-append-bang-arity.mon
+codegen.c:12902 explicit dot special form	1	0	1	branches/data-layout/layouts-fields/atom.codegen.layout.dot.special.form/layout-dot-special-form.mon
+codegen.c:12902-12952 dot special form	34	2	30	branches/cross-feature/stateful-integration/atom.codegen.stateful.cross.closure.over.array.index/stateful-cross-closure-over-array-index.mon
+codegen.c:12913 explicit dot no-layout diagnostic	1	1	0	errors/codegen/layout-dot-field/atom.codegen.diagnostic.dot.no.layout.field/diagnostic-dot-no-layout-field.mon
+codegen.c:12919-12930 layout dot lookup branches	1	0	1	branches/data-layout/layouts-fields/atom.codegen.layout.keyword-constructor-dot-order/layout-keyword-constructor-dot-order.mon
+codegen.c:12925 layout field lookup	1	0	1	branches/data-layout/layouts-fields/atom.codegen.layout.dot.special.form/layout-dot-special-form.mon
+codegen.c:12929 explicit dot missing-field diagnostic	1	1	0	errors/codegen/layout-dot-field/atom.codegen.diagnostic.dot.missing.field.on.layout/diagnostic-dot-missing-field-on-layout.mon
+codegen.c:12954 unknown function branch	9	9	0	errors/codegen/branch-arity-symbols/atom.codegen.branch200.90.diagnostics.branch.arity.symbols.diagnostic.branch.00/branch200_diagnostic_branch_00.mon
+codegen.c:12966-13040 collection expression indexing path	46	0	46	branches/collections/arrays-ranges/atom.codegen.branch200.40.collections.arrays.ranges.collection.branch.00/branch200_collection_branch_00.mon
+codegen.c:133-330 monomorphization cache and specialization	20	0	20	branches/symbol-env/definitions-lambdas-monomorphization/atom.codegen.stateful.env.closure.captures.outer.x/stateful-env-closure-captures-outer-x.mon
+codegen.c:13353 AST_LAMBDA codegen branch	20	0	20	branches/symbol-env/definitions-lambdas-monomorphization/atom.codegen.stateful.env.closure.captures.outer.x/stateful-env-closure-captures-outer-x.mon
+codegen.c:1496 nil? branch	1	0	1	branches/reflection-quote/code-reflection/atom.codegen.type-predicate.positive-negative-spectrum/reflection-type-predicate-positive-negative.mon
+codegen.c:1785 codegen_data	1	0	1	branches/data-layout/layouts-fields/atom.codegen.data.show.adt.and.match/data-show-adt-and-match.mon
+codegen.c:1785 codegen_data constructor tags	1	0	1	branches/data-layout/layouts-fields/atom.codegen.data.adt.tag.symbol.and.runtime/data-adt-tag-symbol-and-runtime.mon
+codegen.c:192-215 mono_apply_subst TYPE_VAR/TYPE_ARROW	1	0	1	branches/collections/lists/atom.codegen.monomorph.const.two-specializations/function-hm-const-two-specializations.mon
+codegen.c:20-operators/arithmetic branch family	14	0	14	branches/operators/arithmetic/atom.codegen.20.operators.arithmetic.arithmetic.add/arithmetic_add.mon
+codegen.c:20-operators/bitwise branch family	3	0	3	branches/operators/bitwise/atom.codegen.20.operators.bitwise.rt.bitwise.all/rt_bitwise_all.mon
+codegen.c:20-operators/boolean-logic branch family	7	0	7	branches/operators/boolean-logic/atom.codegen.20.operators.boolean.logic.boolean.and/boolean_and.mon
+codegen.c:20-operators/comparison branch family	17	0	17	branches/operators/comparison/atom.codegen.20.operators.comparison.comparison.eq/comparison_eq.mon
+codegen.c:20-operators/radix-printing branch family	4	0	4	branches/operators/radix-printing/atom.codegen.20.operators.radix.printing.rt.radix.binary.literal/rt_radix_binary_literal.mon
+codegen.c:20-operators/ratio branch family	4	0	4	branches/operators/ratio/atom.codegen.20.operators.ratio.rt.ratio.arithmetic/rt_ratio_arithmetic.mon
+codegen.c:2220 codegen_layout	1	0	1	branches/data-layout/layouts-fields/atom.codegen.layout.keyword.order.dot.chain/layout-keyword-order-dot-chain.mon
+codegen.c:2223 layout uppercase diagnostic	1	1	0	errors/codegen/layout-dot-field/atom.codegen.diagnostic.layout-lowercase-name/diagnostic-layout-lowercase-name.mon
+codegen.c:245-466 codegen_specialize	1	0	1	branches/symbol-env/defines-and-calls/atom.codegen.monomorph.id.int-string/function-hm-id-two-concrete-types.mon
+codegen.c:2678 make-string branch	1	0	1	branches/collections/strings/atom.codegen.collection.string-boundary-index/collection-string-boundary-and-index.mon
+codegen.c:285-466 codegen_specialize param/return substitution	1	0	1	branches/collections/lists/atom.codegen.monomorph.const.two-specializations/function-hm-const-two-specializations.mon
+codegen.c:30-control-flow/begin-do-sequence branch family	7	0	7	branches/control-flow/begin-do-sequence/atom.codegen.30.control.flow.begin.do.sequence.rt.begin.define.inline/rt_begin_define_inline.mon
+codegen.c:30-control-flow/control-core branch family	2	0	2	branches/control-flow/control-core/atom.codegen.30.control.flow.control.core.rt.control.all/rt_control_all.mon
+codegen.c:30-control-flow/if-cond-phi branch family	14	0	14	branches/control-flow/if-cond-phi/atom.codegen.30.control.flow.if.cond.phi.cond.expression/cond_expression.mon
+codegen.c:30-control-flow/lexical-scope branch family	6	0	6	branches/control-flow/lexical-scope/atom.codegen.30.control.flow.lexical.scope.let.binding/let_binding.mon
+codegen.c:30-control-flow/loops branch family	11	0	11	branches/control-flow/loops/atom.codegen.30.control.flow.loops.rt.for.accumulate/rt_for_accumulate.mon
+codegen.c:30-control-flow/mutation branch family	2	0	2	branches/control-flow/mutation/atom.codegen.30.control.flow.mutation.rt.var.mut.comp/rt_var_mut_comp.mon
+codegen.c:30-control-flow/pattern-match branch family	5	0	5	branches/control-flow/pattern-match/atom.codegen.30.control.flow.pattern.match.pattern.match/pattern_match.mon
+codegen.c:30-control-flow/when-unless branch family	3	0	3	branches/control-flow/when-unless/atom.codegen.30.control.flow.when.unless.rt.unless.effect/rt_unless_effect.mon
+codegen.c:3089 codegen_dot_chain	1	0	1	branches/data-layout/layouts-fields/atom.codegen.layout.keyword.order.dot.chain/layout-keyword-order-dot-chain.mon
+codegen.c:3089 codegen_dot_chain nested field branch	1	0	1	branches/data-layout/layouts-fields/atom.codegen.layout.nested.access.and.set/layout-nested-access-and-set.mon
+codegen.c:3315 layout field missing diagnostic	1	1	0	errors/codegen/layout-dot-field/atom.codegen.diagnostic.layout-missing-field/diagnostic-layout-missing-field.mon
+codegen.c:3315-3340 nested dot field branches	1	0	1	branches/data-layout/layouts-fields/atom.codegen.cross.layout-adt-match/cross-layout-adt-match.mon
+codegen.c:3315-3340 nested layout field access branches	1	0	1	branches/data-layout/layouts-fields/atom.codegen.layout.nested-field-access/layout-nested-field-access.mon
+codegen.c:3356 codegen_lvalue dot-field branch	1	0	1	branches/data-layout/layouts-fields/atom.codegen.layout.nested.access.and.set/layout-nested-access-and-set.mon
+codegen.c:3356 codegen_lvalue symbol branch	1	0	0	branches/data-layout/layouts-fields/atom.codegen.layout.address.of.compile.only/layout-address-of-compile-only.mon
+codegen.c:3410-3472 address-of and lvalue pointer branches	1	0	0	branches/data-layout/layouts-fields/atom.codegen.layout.address-of-field/layout-address-of-field-compile.mon
+codegen.c:3476 REQUIRE_ARGS	5	5	0	errors/codegen/arity/atom.codegen.diagnostic.assert.eq.arity/diagnostic-assert-eq-arity.mon
+codegen.c:3494-3860 AST_SYMBOL env lookup/load	1	0	1	branches/collections/sets/atom.codegen.env.global-set-load-sequence/env-global-set-load-sequence.mon
+codegen.c:3494-3890 AST_NUMBER/AST_STRING/AST_CHAR/AST_KEYWORD/AST_SYMBOL	1	0	1	branches/smoke-legacy/uncategorized-legacy/atom.codegen.value.scalar-display-spectrum/value-scalar-display-spectrum.mon
+codegen.c:3530 AST_SYMBOL nil/True/False	1	0	1	branches/values/char-keyword-symbol/atom.codegen.value.literals.symbols.paths/value-literals-symbols-paths.mon
+codegen.c:3550 __adt_tag_ symbol branch	1	0	1	branches/data-layout/layouts-fields/atom.codegen.data.adt.tag.symbol.and.runtime/data-adt-tag-symbol-and-runtime.mon
+codegen.c:3554 ADT constructor lookup	1	0	1	branches/data-layout/layouts-fields/atom.codegen.adt.match-field-load/data-adt-match-and-field-load.mon
+codegen.c:3554 ADT constructor symbol lookup	1	0	1	branches/data-layout/layouts-fields/atom.codegen.adt.tag-and-show-two-constructors/data-adt-tag-and-show-two-constructors.mon
+codegen.c:3775-3776 direct builtin %/mod branch	1	0	1	branches/operators/arithmetic/atom.codegen.operator.mod-aliases/operator-mod-symbol-and-percent.mon
+codegen.c:3859 AST_STRING/3865 AST_PATH	1	0	1	branches/values/char-keyword-symbol/atom.codegen.value.literals.symbols.paths/value-literals-symbols-paths.mon
+codegen.c:3865 AST_PATH literal branch	1	0	1	branches/values/paths/atom.codegen.value.path-literal-value/value-path-local-and-global.mon
+codegen.c:3879 AST_KEYWORD	1	0	1	branches/values/char-keyword-symbol/atom.codegen.value.literals.symbols.paths/value-literals-symbols-paths.mon
+codegen.c:3891 AST_RATIO	1	0	1	branches/operators/ratio/atom.codegen.operator.ratio.as.function/operator-ratio-as-function.mon
+codegen.c:3906 AST_ADDRESS_OF	1	0	0	branches/data-layout/layouts-fields/atom.codegen.layout.address.of.compile.only/layout-address-of-compile-only.mon
+codegen.c:3934-4016 array/set/map/range literal branches	45	1	43	branches/collections/arrays-ranges/atom.codegen.stateful.collection.array.count.after.define.global/stateful-collection-array-count-after-define-global.mon
+codegen.c:3935-4020 AST_ARRAY heap branch	1	0	1	branches/collections/arrays-ranges/atom.codegen.collection.heap-array-fat-pointer-survival/collection-heap-array-fat-pointer-survival.mon
+codegen.c:3935-4020 AST_ARRAY stack array branch	1	0	1	branches/collections/arrays-ranges/atom.codegen.collection.array-count-index-head-tail/collection-array-count-index-head-tail.mon
+codegen.c:40-collections/arrays-ranges branch family	8	0	8	branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.array.full/rt_array_full.mon
+codegen.c:40-collections/collection-dispatch branch family	3	0	3	branches/collections/collection-dispatch/atom.codegen.40.collections.collection.dispatch.rt.collection.access/rt_collection_access.mon
+codegen.c:40-collections/lists branch family	17	0	17	branches/collections/lists/atom.codegen.40.collections.lists.list.ops/list_ops.mon
+codegen.c:40-collections/maps branch family	6	0	6	branches/collections/maps/atom.codegen.40.collections.maps.rt.map.assoc.dissoc/rt_map_assoc_dissoc.mon
+codegen.c:40-collections/sets branch family	14	0	14	branches/collections/sets/atom.codegen.40.collections.sets.rt.set.all/rt_set_all.mon
+codegen.c:40-collections/strings branch family	17	2	15	branches/collections/strings/atom.codegen.40.collections.strings.rt.concat.append/rt_concat_append.mon
+codegen.c:4016-4160 AST_RANGE array/non-array branches	1	0	0	branches/collections/arrays-ranges/atom.codegen.collection.range-array-lowering/collection-range-array-compile.mon
+codegen.c:4093 set literal/function branch	1	0	1	branches/collections/sets/atom.codegen.collection.set-functional-mutating/collection-set-predicate-functional-mutating.mon
+codegen.c:4161 AST_LIST empty list diagnostic	1	1	0	errors/codegen/compile-fail/atom.codegen.diagnostic.begin.empty.list/diagnostic-begin-empty-list.mon
+codegen.c:4161-5688 define/function/lambda/symbol resolution branches	20	0	20	branches/symbol-env/definitions-lambdas-monomorphization/atom.codegen.stateful.env.closure.captures.outer.x/stateful-env-closure-captures-outer-x.mon
+codegen.c:4161-5688 function/lambda branches	4	0	4	branches/cross-feature/stateful-integration/atom.codegen.stateful.cross.closure.over.array.index/stateful-cross-closure-over-array-index.mon
+codegen.c:4168-4193 inline string indexing	1	0	1	branches/reflection-quote/quote-symbols/atom.codegen.collection.array.string.quoted.index/collection-array-string-quoted-index.mon
+codegen.c:4169-4178 conj/disj/conj!/disj! branches	1	0	1	branches/collections/sets/atom.codegen.collection.set-functional-mutating/collection-set-predicate-functional-mutating.mon
+codegen.c:4181 Set? branch	2	0	2	branches/collections/sets/atom.codegen.collection.set-functional-mutating/collection-set-predicate-functional-mutating.mon
+codegen.c:4195-4210 inline array indexing and bounds check	1	0	1	branches/reflection-quote/quote-symbols/atom.codegen.collection.array.string.quoted.index/collection-array-string-quoted-index.mon
+codegen.c:4197 collection? branch	1	0	1	branches/collections/sets/atom.codegen.collection.set-functional-mutating/collection-set-predicate-functional-mutating.mon
+codegen.c:4212 quoted-list compile-time index check	1	1	0	errors/codegen/reflection-address/atom.codegen.diagnostic.quoted.list.negative.index/diagnostic-quoted-list-negative-index.mon
+codegen.c:4212-4255 quoted-list indexing static/dynamic paths	1	0	1	branches/reflection-quote/quote-symbols/atom.codegen.collection.array.string.quoted.index/collection-array-string-quoted-index.mon
+codegen.c:4217-4224 map op branches	1	0	1	branches/collections/maps/atom.codegen.collection.map-count-mutation/collection-map-count-contains-mutation.mon
+codegen.c:4221-4222 keys/vals branches	1	0	1	branches/collections/maps/atom.codegen.collection.map-merge-keys-vals-count/collection-map-merge-count-only.mon
+codegen.c:4237 merge branch	2	0	2	branches/collections/maps/atom.codegen.collection.map-count-mutation/collection-map-count-contains-mutation.mon
+codegen.c:4240 ratio-as-function integer/float branches	1	0	1	branches/operators/ratio/atom.codegen.operator.ratio.as.function/operator-ratio-as-function.mon
+codegen.c:4270-5450 define value branch	1	0	1	branches/collections/sets/atom.codegen.env.global-set-load-sequence/env-global-set-load-sequence.mon
+codegen.c:4272 Map? branch	2	0	2	branches/collections/maps/atom.codegen.collection.map-count-mutation/collection-map-count-contains-mutation.mon
+codegen.c:4286 contains? branch	2	0	2	branches/collections/maps/atom.codegen.collection.map-count-mutation/collection-map-count-contains-mutation.mon
+codegen.c:44-72 emit_type_cast conversion lattice	20	0	20	branches/values/show-casts-predicates/atom.codegen.stateful.value.bool.predicate.branches/stateful-value-bool-predicate-branches.mon
+codegen.c:44-72 emit_type_cast numeric conversions	2	0	2	branches/values/casts-conversions/atom.codegen.cast.float-int-roundtrip/value-float-int-roundtrip-branch.mon
+codegen.c:50-data-layout/address-of branch family	1	0	1	branches/data-layout/address-of/atom.codegen.50.data.layout.address.of.rt.address.of/rt_address_of.mon
+codegen.c:50-data-layout/adt-constructors branch family	7	0	7	branches/data-layout/adt-constructors/atom.codegen.50.data.layout.adt.constructors.rt.char.constructor.aliases/rt_char_constructor_aliases.mon
+codegen.c:50-data-layout/dot-and-field-mutation branch family	1	0	1	branches/data-layout/dot-and-field-mutation/atom.codegen.50.data.layout.dot.and.field.mutation.rt.set.bang.field/rt_set_bang_field.mon
+codegen.c:50-data-layout/layouts-fields branch family	8	1	7	branches/data-layout/layouts-fields/atom.codegen.50.data.layout.layouts.fields.rt.layout.field.mutation/rt_layout_field_mutation.mon
+codegen.c:50-data-layout/records branch family	2	0	2	branches/data-layout/records/atom.codegen.50.data.layout.records.rt.data.record.constructor/rt_data_record_constructor.mon
+codegen.c:515 get_or_declare_print_binary zero branch	1	0	1	branches/operators/radix-printing/atom.codegen.value.radix.zero.edge/value-radix-zero-edge.mon
+codegen.c:516-637 print_binary nonzero loop	1	0	0	branches/operators/radix-printing/atom.codegen.value.radix-nonzero-lowering/value-radix-nonzero-compile.mon
+codegen.c:5734 type predicate arity	15	15	0	errors/codegen/branch-errors/atom.codegen.stateful.diagnostic.append.bang.arity/stateful-diagnostic-append-bang-arity.mon
+codegen.c:5735-5780 type predicate branches	1	0	1	branches/reflection-quote/code-reflection/atom.codegen.type-predicate.positive-negative-spectrum/reflection-type-predicate-positive-negative.mon
+codegen.c:5765 nil? arity	15	15	0	errors/codegen/branch-errors/atom.codegen.stateful.diagnostic.append.bang.arity/stateful-diagnostic-append-bang-arity.mon
+codegen.c:5765-5792 nil? scalar/pointer branches	15	0	15	branches/values/casts-predicates/atom.codegen.branch200.00.values.casts.predicates.value.cast.predicate.00/branch200_value_cast_predicate_00.mon
+codegen.c:5795 quasiquote branch	15	0	10	branches/reflection-quote/quote-runtime-values/atom.codegen.stateful.reflection.assert.eq.pass/stateful-reflection-assert-eq-pass.mon
+codegen.c:5795-5865 quasiquote branch	15	0	15	branches/reflection-quote/quote-coalesce-reflection/atom.codegen.branch200.60.reflection.quote.quote.coalesce.reflection.reflection.branch.00/branch200_reflection_branch_00.mon
+codegen.c:5872 quote branch	31	0	26	branches/reflection-quote/code-reflection/atom.codegen.reflection.show.value.quote/reflection-show-value-quote.mon
+codegen.c:5934 ?? arity	15	15	0	errors/codegen/branch-errors/atom.codegen.stateful.diagnostic.append.bang.arity/stateful-diagnostic-append-bang-arity.mon
+codegen.c:5934 ?? null coalescing branch	15	0	10	branches/reflection-quote/quote-runtime-values/atom.codegen.stateful.reflection.assert.eq.pass/stateful-reflection-assert-eq-pass.mon
+codegen.c:5934-6017 null coalescing branch	15	0	15	branches/reflection-quote/quote-coalesce-reflection/atom.codegen.branch200.60.reflection.quote.quote.coalesce.reflection.reflection.branch.00/branch200_reflection_branch_00.mon
+codegen.c:5936 ?? arity branch and null coalesce lowering	1	0	1	branches/reflection-quote/code-reflection/atom.codegen.null.coalesce-mixed-types/reflection-null-coalesce-mixed-types.mon
+codegen.c:60-reflection-quote/code-reflection branch family	1	0	1	branches/reflection-quote/code-reflection/atom.codegen.60.reflection.quote.code.reflection.rt.code.reflection/rt_code_reflection.mon
+codegen.c:60-reflection-quote/nil-null-coalesce branch family	2	0	2	branches/reflection-quote/nil-null-coalesce/atom.codegen.60.reflection.quote.nil.null.coalesce.rt.null.coalesce/rt_null_coalesce.mon
+codegen.c:60-reflection-quote/quasiquote-unquote branch family	1	0	1	branches/reflection-quote/quasiquote-unquote/atom.codegen.60.reflection.quote.quasiquote.unquote.rt.quasiquote.eval/rt_quasiquote_eval.mon
+codegen.c:60-reflection-quote/quote-symbols branch family	4	0	4	branches/reflection-quote/quote-symbols/atom.codegen.60.reflection.quote.quote.symbols.rt.path.literal.quote.value/rt_path_literal_quote_value.mon
+codegen.c:6024 expand branch	16	0	11	branches/reflection-quote/code-reflection/atom.codegen.reflection.show.value.quote/reflection-show-value-quote.mon
+codegen.c:6047 show branch	15	15	0	errors/codegen/branch-errors/atom.codegen.stateful.diagnostic.append.bang.arity/stateful-diagnostic-append-bang-arity.mon
+codegen.c:6054-6104 variadic show formatter placeholder path	10	0	10	branches/values/show-formatting/atom.codegen.branch200.00.values.show.formatting.show.format.00/branch200_show_format_00.mon
+codegen.c:6114-6127 show quote fast path and codegen_print_ast	5	0	5	branches/values/quote-printing/atom.codegen.branch200.00.values.quote.printing.quote.print.ast.00/branch200_quote_print_ast_00.mon
+codegen.c:6192-6303 show array/fat array branches	46	0	46	branches/collections/arrays-ranges/atom.codegen.branch200.40.collections.arrays.ranges.collection.branch.00/branch200_collection_branch_00.mon
+codegen.c:6332-6532 layout pretty print branch	10	0	9	branches/data-layout/layouts-adts-dot/atom.codegen.branch200.50.data.layout.layouts.adts.dot.data.layout.branch.00/branch200_data_layout_branch_00.mon
+codegen.c:653-656 TYPE_HEX/TYPE_BIN/TYPE_OCT type_to_llvm	1	0	0	branches/operators/radix-printing/atom.codegen.value.radix-nonzero-lowering/value-radix-nonzero-compile.mon
+codegen.c:6537 doc branch	16	0	11	branches/reflection-quote/code-reflection/atom.codegen.reflection.code.doc.assert.eq/reflection-code-doc-assert-eq.mon
+codegen.c:6539 doc branch	1	0	1	branches/reflection-quote/code-reflection/atom.codegen.reflection.doc-code-assert-sequence/reflection-doc-code-assert-sequence.mon
+codegen.c:6545 doc argument diagnostic	1	1	0	errors/codegen/reflection-address/atom.codegen.diagnostic.doc-nonsymbol/diagnostic-doc-nonsymbol.mon
+codegen.c:6566 code branch	31	0	26	branches/reflection-quote/code-reflection/atom.codegen.reflection.code.doc.assert.eq/reflection-code-doc-assert-eq.mon
+codegen.c:6569 code branch	1	0	1	branches/reflection-quote/code-reflection/atom.codegen.reflection.doc-code-assert-sequence/reflection-doc-code-assert-sequence.mon
+codegen.c:6576 code unbound symbol diagnostic	1	1	0	errors/codegen/reflection-address/atom.codegen.diagnostic.code-unbound/diagnostic-code-unbound-symbol.mon
+codegen.c:6602 assert-eq arity diagnostic	1	1	0	errors/codegen/arity/atom.codegen.diagnostic.assert.eq.arity/diagnostic-assert-eq-arity.mon
+codegen.c:6602 assert-eq branch	32	0	27	branches/reflection-quote/code-reflection/atom.codegen.reflection.code.doc.assert.eq/reflection-code-doc-assert-eq.mon
+codegen.c:6860 undefined special form valid only in function body	1	0	0	branches/symbol-env/defines-and-calls/atom.codegen.function.undefined-inside-body/function-undefined-inside-body-compile.mon
+codegen.c:6947 make-string arity diagnostic	1	1	0	errors/codegen/arity/atom.codegen.diagnostic.make.string.arity/diagnostic-make-string-arity.mon
+codegen.c:696-701 type_to_llvm integer widths	1	0	1	branches/values/casts-conversions/atom.codegen.cast.integer-width-signedness/value-width-signedness-cross-check.mon
+codegen.c:6965-7313 list primitive branches	45	1	43	branches/collections/arrays-ranges/atom.codegen.stateful.collection.array.count.after.define.global/stateful-collection-array-count-after-define-global.mon
+codegen.c:6966 list branch	1	0	1	branches/collections/lists/atom.codegen.collection.list-primitive-spectrum/collection-list-primitive-spectrum.mon
+codegen.c:70-ffi-asm/cffi-core branch family	1	0	1	branches/ffi-asm/cffi-core/atom.codegen.70.ffi.asm.cffi.core.rt.cffi.stdlib.atoi/rt_cffi_stdlib_atoi.mon
+codegen.c:70-ffi-asm/cffi-ctype branch family	3	0	3	branches/ffi-asm/cffi-ctype/atom.codegen.70.ffi.asm.cffi.ctype.rt.cffi.ctype.isdigit/rt_cffi_ctype_isdigit.mon
+codegen.c:70-ffi-asm/cffi-limits branch family	2	0	2	branches/ffi-asm/cffi-limits/atom.codegen.70.ffi.asm.cffi.limits.rt.cffi.limits.char.bit/rt_cffi_limits_char_bit.mon
+codegen.c:70-ffi-asm/cffi-math branch family	5	0	5	branches/ffi-asm/cffi-math/atom.codegen.70.ffi.asm.cffi.math.rt.cffi.math.ceil/rt_cffi_math_ceil.mon
+codegen.c:70-ffi-asm/cffi-string branch family	5	0	5	branches/ffi-asm/cffi-string/atom.codegen.70.ffi.asm.cffi.string.rt.cffi.string.strchr.strlen/rt_cffi_string_strchr_strlen.mon
+codegen.c:70-ffi-asm/inline-asm branch family	62	1	61	branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.byte.width.zero.extend/asm-byte-width-zero-extend.mon
+codegen.c:7050 cons/dot branch	1	0	1	branches/collections/lists/atom.codegen.collection.list-primitive-spectrum/collection-list-primitive-spectrum.mon
+codegen.c:7110 pair? branch	1	0	1	branches/collections/lists/atom.codegen.collection.list-primitive-spectrum/collection-list-primitive-spectrum.mon
+codegen.c:7130-7303 head/tail/list collection branches	46	0	46	branches/collections/arrays-ranges/atom.codegen.branch200.40.collections.arrays.ranges.collection.branch.00/branch200_collection_branch_00.mon
+codegen.c:7132 head branch	1	0	1	branches/collections/lists/atom.codegen.collection.list-primitive-spectrum/collection-list-primitive-spectrum.mon
+codegen.c:717-769 TYPE_LAYOUT	1	0	1	branches/data-layout/layouts-fields/atom.codegen.cross.layout-adt-match/cross-layout-adt-match.mon
+codegen.c:717-769 type_to_llvm TYPE_LAYOUT branches	1	0	1	branches/data-layout/layouts-fields/atom.codegen.layout.nested-field-access/layout-nested-field-access.mon
+codegen.c:7193 tail branch	1	0	1	branches/collections/lists/atom.codegen.collection.list-primitive-spectrum/collection-list-primitive-spectrum.mon
+codegen.c:7286 rt_coll_wrap branch	1	0	0	branches/collections/collection-dispatch/atom.codegen.collection.rt.coll.internal.compile/collection-rt-coll-internal-compile.mon
+codegen.c:7291 rt_coll_empty branch	1	0	0	branches/collections/collection-dispatch/atom.codegen.collection.rt.coll.internal.compile/collection-rt-coll-internal-compile.mon
+codegen.c:7296 rt_coll_drop branch	1	0	0	branches/collections/collection-dispatch/atom.codegen.collection.rt.coll.internal.compile/collection-rt-coll-internal-compile.mon
+codegen.c:7303 rt_coll_is_empty branch	1	0	0	branches/collections/collection-dispatch/atom.codegen.collection.rt.coll.internal.compile/collection-rt-coll-internal-compile.mon
+codegen.c:7315 ++ branch	1	0	1	branches/collections/lists/atom.codegen.collection.list-primitive-spectrum/collection-list-primitive-spectrum.mon
+codegen.c:7530 show-value branch	1	0	1	branches/reflection-quote/code-reflection/atom.codegen.reflection.show.value.quote/reflection-show-value-quote.mon
+codegen.c:7543 __adt_tag arity diagnostic	1	1	0	errors/codegen/arity/atom.codegen.diagnostic.adt.tag.arity/diagnostic-adt-tag-arity.mon
+codegen.c:7543 __adt_tag branch	10	0	9	branches/data-layout/layouts-adts-dot/atom.codegen.branch200.50.data.layout.layouts.adts.dot.data.layout.branch.00/branch200_data_layout_branch_00.mon
+codegen.c:7543 __adt_tag runtime branch	1	0	1	branches/data-layout/layouts-fields/atom.codegen.data.adt.tag.symbol.and.runtime/data-adt-tag-symbol-and-runtime.mon
+codegen.c:7545 __adt_tag branch	1	0	1	branches/data-layout/layouts-fields/atom.codegen.adt.tag-and-show-two-constructors/data-adt-tag-and-show-two-constructors.mon
+codegen.c:7572 list-empty? arity diagnostic	1	1	0	errors/codegen/arity/atom.codegen.diagnostic.list.empty.arity/diagnostic-list-empty-arity.mon
+codegen.c:7572 list-empty?/empty? branches	1	0	1	branches/collections/lists/atom.codegen.collection.list.copy.append.empty/collection-list-copy-append-empty.mon
+codegen.c:7580 list-copy arity diagnostic	1	1	0	errors/codegen/arity/atom.codegen.diagnostic.list.copy.arity/diagnostic-list-copy-arity.mon
+codegen.c:7580 list-copy branch	1	0	1	branches/collections/lists/atom.codegen.collection.list.copy.append.empty/collection-list-copy-append-empty.mon
+codegen.c:7587 append! branch	1	0	1	branches/collections/lists/atom.codegen.collection.list.copy.append.empty/collection-list-copy-append-empty.mon
+codegen.c:7595 make-list explicit fill branch	1	0	1	branches/collections/lists/atom.codegen.collection.make.list.fill/collection-make-list-fill.mon
+codegen.c:7642 set! branch	33	0	33	branches/collections/sets/atom.codegen.env.global-set-load-sequence/env-global-set-load-sequence.mon
+codegen.c:7642 set! local lvalue branch	1	0	1	branches/control-flow/lexical-scope/atom.codegen.env.with-shadow-preserves-outer/env-with-shadow-and-outer-preserve.mon
+codegen.c:7642 set! lvalue branch	1	0	1	branches/collections/sets/atom.codegen.control.do.with.set.shadow/control-do-with-set-shadow.mon
+codegen.c:7642 set! lvalue store branch	1	0	1	branches/data-layout/layouts-fields/atom.codegen.layout.nested.access.and.set/layout-nested-access-and-set.mon
+codegen.c:7644 set! arity diagnostic	1	1	0	errors/codegen/arity/atom.codegen.diagnostic.setbang-arity/diagnostic-setbang-arity.mon
+codegen.c:7668 bitwise &, bit-or, bit-xor branches	1	0	1	branches/control-flow/if-cond-phi/atom.codegen.operator.bitnot-shift-family/operator-bitnot-and-shift-family.mon
+codegen.c:7668 bitwise &, bit-or/∨, bit-xor/⊕ branches	1	0	1	branches/operators/bitwise/atom.codegen.operator.bitwise.symbol.family/operator-bitwise-symbol-family.mon
+codegen.c:7668-7714 bitwise/logical operator special forms	35	0	35	branches/operators/arithmetic/atom.codegen.branch200.20.operators.arithmetic.operator.dispatch.00/branch200_operator_dispatch_00.mon
+codegen.c:7689-7731 bitwise/not operator special forms	30	0	30	branches/operators/arithmetic/atom.codegen.stateful.operator.boolean.and.short.expression/stateful-operator-boolean-and-short-expression.mon
+codegen.c:7691 bitnot arity branch	1	0	1	branches/control-flow/if-cond-phi/atom.codegen.operator.bitnot-shift-family/operator-bitnot-and-shift-family.mon
+codegen.c:7703 shift << >> >>> branches	1	0	1	branches/control-flow/if-cond-phi/atom.codegen.operator.bitnot-shift-family/operator-bitnot-and-shift-family.mon
+codegen.c:7703 shift <<, >>, >>> branches	1	0	1	branches/operators/bitwise/atom.codegen.operator.bitwise.symbol.family/operator-bitwise-symbol-family.mon
+codegen.c:7703 shift operator arity diagnostic	1	1	0	errors/codegen/arity/atom.codegen.diagnostic.shift.arity/diagnostic-shift-arity.mon
+codegen.c:7714-7730 and/or bool,float,pointer,int coercion branches	1	0	1	branches/control-flow/control-core/atom.codegen.control.logic.coercions/control-logic-coercions.mon
+codegen.c:7718-7730 and/or branches	1	0	1	branches/operators/boolean-logic/atom.codegen.operator.logic-coercion-family/operator-and-or-coercion-family.mon
+codegen.c:7732 begin branch	30	0	30	branches/control-flow/begin-do-sequence/atom.codegen.branch200.30.control.flow.begin.do.sequence.control.branch.05/branch200_control_branch_05.mon
+codegen.c:7732 begin special form	30	0	30	branches/control-flow/conditionals-phi/atom.codegen.stateful.control.do.inside.if/stateful-control-do-inside-if.mon
+codegen.c:7732-7741 begin branch	1	0	1	branches/control-flow/begin-do-sequence/atom.codegen.control.sequence-return-last/control-begin-do-return-last.mon
+codegen.c:7732-7741 begin empty and sequence branches	1	0	1	branches/control-flow/begin-do-sequence/atom.codegen.control.begin.empty.sequence/control-begin-empty-sequence.mon
+codegen.c:7743-7805 condition coercion helper paths	1	0	1	branches/operators/boolean-logic/atom.codegen.operator.logic-coercion-family/operator-and-or-coercion-family.mon
+codegen.c:7743-7805 if arity and condition coercion branches	1	0	1	branches/control-flow/if-cond-phi/atom.codegen.control.if.condition.coercions/control-if-condition-coercions.mon
+codegen.c:7743-7965 if PHI branch	2	0	2	branches/collections/arrays-ranges/atom.codegen.cross.env-array-loop-phi/cross-env-array-loop-phi.mon
+codegen.c:7743-7965 if PHI branches	1	0	1	branches/symbol-env/recursion/atom.codegen.function.recursive-self-call/function-recursive-factorial-phi.mon
+codegen.c:7743-7965 if condition, branch blocks, and PHI construction	1	0	1	branches/control-flow/if-cond-phi/atom.codegen.control.if-nested-env-phi/control-if-nested-phi-env.mon
+codegen.c:7743-7977 if PHI branch	30	0	30	branches/control-flow/begin-do-sequence/atom.codegen.branch200.30.control.flow.begin.do.sequence.control.branch.05/branch200_control_branch_05.mon
+codegen.c:7743-7977 if/PHI branch lowering	34	0	34	branches/control-flow/conditionals-phi/atom.codegen.stateful.control.do.inside.if/stateful-control-do-inside-if.mon
+codegen.c:7745 if arity diagnostic	1	1	0	errors/codegen/arity/atom.codegen.diagnostic.if-arity/diagnostic-if-too-many-arguments.mon
+codegen.c:7806-7810 no-else/missing-value dummy branch	1	0	1	branches/control-flow/if-cond-phi/atom.codegen.control.if.missing.else.dummy/control-if-missing-else-dummy.mon
+codegen.c:7810-7896 PHI type classification	1	0	1	branches/control-flow/if-cond-phi/atom.codegen.control.if.phi.type.family/control-if-phi-type-family.mon
+codegen.c:7898-7965 branch coercion and PHI construction	1	0	1	branches/control-flow/if-cond-phi/atom.codegen.control.if.phi.type.family/control-if-phi-type-family.mon
+codegen.c:790-873 arr.fat helpers	1	0	1	branches/collections/arrays-ranges/atom.codegen.collection.heap-array-fat-pointer-survival/collection-heap-array-fat-pointer-survival.mon
+codegen.c:7978-7999 not bool/float/int branches	1	0	1	branches/operators/arithmetic/atom.codegen.operator.not.bool.int.float/operator-not-bool-int-float.mon
+codegen.c:7980 not arity diagnostic	1	1	0	errors/codegen/arity/atom.codegen.diagnostic.not-arity/diagnostic-not-arity.mon
+codegen.c:80-wisp-codegen/basic-values branch family	9	0	9	branches/wisp-codegen/basic-values/atom.codegen.80.wisp.codegen.basic.values.asm.wisp.asm.add/asm-wisp-asm-add.mon
+codegen.c:80-wisp-codegen/collections-quote-path branch family	4	0	4	branches/wisp-codegen/collections-quote-path/atom.codegen.80.wisp.codegen.collections.quote.path.rt.wisp.lists/rt_wisp_lists.mon
+codegen.c:80-wisp-codegen/control-and-logic branch family	8	0	8	branches/wisp-codegen/control-and-logic/atom.codegen.80.wisp.codegen.control.and.logic.rt.wisp.comparison/rt_wisp_comparison.mon
+codegen.c:80-wisp-codegen/define-and-types branch family	7	0	7	branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.define.parenthesized.signature/rt_wisp_define_parenthesized_signature.mon
+codegen.c:80-wisp-codegen/operator-sugar branch family	4	0	4	branches/wisp-codegen/operator-sugar/atom.codegen.80.wisp.codegen.operator.sugar.rt.wisp.bang.sugar/rt_wisp_bang_sugar.mon
+codegen.c:8001 do branch	1	0	1	branches/control-flow/begin-do-sequence/atom.codegen.control.sequence-return-last/control-begin-do-return-last.mon
+codegen.c:8001 do sequence branch	1	0	1	branches/collections/sets/atom.codegen.control.do.with.set.shadow/control-do-with-set-shadow.mon
+codegen.c:8001 do special form	30	0	30	branches/control-flow/conditionals-phi/atom.codegen.stateful.control.do.inside.if/stateful-control-do-inside-if.mon
+codegen.c:8001-8050 do/with branches	30	0	30	branches/control-flow/begin-do-sequence/atom.codegen.branch200.30.control.flow.begin.do.sequence.control.branch.05/branch200_control_branch_05.mon
+codegen.c:8012 with binding environment branch	1	0	1	branches/collections/sets/atom.codegen.control.do.with.set.shadow/control-do-with-set-shadow.mon
+codegen.c:8012 with child env	30	0	30	branches/control-flow/conditionals-phi/atom.codegen.stateful.control.do.inside.if/stateful-control-do-inside-if.mon
+codegen.c:8012-8047 with binding environment branch	1	0	1	branches/control-flow/lexical-scope/atom.codegen.env.with-shadow-preserves-outer/env-with-shadow-and-outer-preserve.mon
+codegen.c:8012-8047 with binding loop and child environment	1	0	1	branches/control-flow/lexical-scope/atom.codegen.control.with-binding-order/control-with-multiple-bindings-order.mon
+codegen.c:8019 with binding shape diagnostic	1	1	0	errors/codegen/arity/atom.codegen.diagnostic.with-binding-shape/diagnostic-with-binding-shape.mon
+codegen.c:8050 when branch	31	0	31	branches/control-flow/conditionals-phi/atom.codegen.stateful.control.do.inside.if/stateful-control-do-inside-if.mon
+codegen.c:8050-8128 when/unless branches	30	0	30	branches/control-flow/begin-do-sequence/atom.codegen.branch200.30.control.flow.begin.do.sequence.control.branch.05/branch200_control_branch_05.mon
+codegen.c:8052-8091 when branch blocks	1	0	1	branches/control-flow/if-cond-phi/atom.codegen.control.when-unless-side-effects/control-when-unless-side-effects.mon
+codegen.c:8090 unless branch	31	0	31	branches/control-flow/conditionals-phi/atom.codegen.stateful.control.do.inside.if/stateful-control-do-inside-if.mon
+codegen.c:8092-8129 unless branch blocks	1	0	1	branches/control-flow/if-cond-phi/atom.codegen.control.when-unless-side-effects/control-when-unless-side-effects.mon
+codegen.c:8128 while condition/zero iteration branch	1	0	1	branches/control-flow/loops/atom.codegen.control.when.unless.while.zero/control-when-unless-while-zero.mon
+codegen.c:8128 while loop	30	0	30	branches/control-flow/conditionals-phi/atom.codegen.stateful.control.do.inside.if/stateful-control-do-inside-if.mon
+codegen.c:8128-8235 while/for branches	30	0	30	branches/control-flow/begin-do-sequence/atom.codegen.branch200.30.control.flow.begin.do.sequence.control.branch.05/branch200_control_branch_05.mon
+codegen.c:8130-8175 while condition/body/end blocks	1	0	1	branches/control-flow/loops/atom.codegen.control.while-mutation-countdown/control-while-mutation-countdown.mon
+codegen.c:8175 for loop	30	0	30	branches/control-flow/conditionals-phi/atom.codegen.stateful.control.do.inside.if/stateful-control-do-inside-if.mon
+codegen.c:8177-8282 for binding validation	1	0	1	branches/collections/arrays-ranges/atom.codegen.control.for-range-step/control-for-range-sum-and-step.mon
+codegen.c:8177-8360 for loop branch	1	0	1	branches/collections/arrays-ranges/atom.codegen.cross.env-array-loop-phi/cross-env-array-loop-phi.mon
+codegen.c:826-933 type_to_llvm TYPE_LAYOUT/TYPE_APP branches	20	2	17	branches/data-layout/adts/atom.codegen.stateful.adt.enum.deriving.compile/stateful-adt-enum-deriving-compile.mon
+codegen.c:8283-8360 for range loop blocks	1	0	1	branches/collections/arrays-ranges/atom.codegen.control.for-range-step/control-for-range-sum-and-step.mon
+codegen.c:8358-8565 set/map runtime operations	46	0	46	branches/collections/arrays-ranges/atom.codegen.branch200.40.collections.arrays.ranges.collection.branch.00/branch200_collection_branch_00.mon
+codegen.c:8362 set arity	15	15	0	errors/codegen/branch-errors/atom.codegen.stateful.diagnostic.append.bang.arity/stateful-diagnostic-append-bang-arity.mon
+codegen.c:8362 set literal/function branch	1	0	1	branches/collections/sets/atom.codegen.collection.set.functional.mutating/collection-set-functional-mutating.mon
+codegen.c:8362-8555 set/map operation branches	45	1	43	branches/collections/arrays-ranges/atom.codegen.stateful.collection.array.count.after.define.global/stateful-collection-array-count-after-define-global.mon
+codegen.c:8438-8447 conj/disj/conj!/disj! branches	1	0	1	branches/collections/sets/atom.codegen.collection.set.functional.mutating/collection-set-functional-mutating.mon
+codegen.c:8486-8489 assoc/assoc!/dissoc/dissoc! map branches	1	0	1	branches/collections/maps/atom.codegen.collection.map.assoc.dissoc.counts/collection-map-assoc-dissoc-counts.mon
+codegen.c:8486-8493 map op arity	15	15	0	errors/codegen/branch-errors/atom.codegen.stateful.diagnostic.append.bang.arity/stateful-diagnostic-append-bang-arity.mon
+codegen.c:8490-8508 keys/vals/find/merge map branches	1	0	1	branches/collections/maps/atom.codegen.collection.map.merge.keys.vals/collection-map-merge-keys-vals.mon
+codegen.c:8508 merge arity diagnostic	1	1	0	errors/codegen/arity/atom.codegen.diagnostic.merge-arity/diagnostic-merge-arity.mon
+codegen.c:8541 Map? branch	1	0	1	branches/collections/maps/atom.codegen.collection.map.merge.keys.vals/collection-map-merge-keys-vals.mon
+codegen.c:8555-8905 collection dispatch branches	4	0	4	branches/cross-feature/stateful-integration/atom.codegen.stateful.cross.closure.over.array.index/stateful-cross-closure-over-array-index.mon
+codegen.c:8555-8905 contains?/starts-with?/ends-with?/count branches	45	1	43	branches/collections/arrays-ranges/atom.codegen.stateful.collection.array.count.after.define.global/stateful-collection-array-count-after-define-global.mon
+codegen.c:8620 starts-with?/ends-with? arity diagnostic	1	1	0	errors/codegen/arity/atom.codegen.diagnostic.starts.with.arity/diagnostic-starts-with-arity.mon
+codegen.c:8620 starts-with?/ends-with? diagnostics	15	15	0	errors/codegen/branch-errors/atom.codegen.stateful.diagnostic.append.bang.arity/stateful-diagnostic-append-bang-arity.mon
+codegen.c:8620-8682 starts-with?/ends-with? branches	2	0	2	branches/collections/strings/atom.codegen.collection.string-boundary-index/collection-string-boundary-and-index.mon
+codegen.c:8620-8858 string/count/contains branches	46	0	46	branches/collections/arrays-ranges/atom.codegen.branch200.40.collections.arrays.ranges.collection.branch.00/branch200_collection_branch_00.mon
+codegen.c:8858 count map branch	1	0	1	branches/collections/maps/atom.codegen.collection.map.assoc.dissoc.counts/collection-map-assoc-dissoc-counts.mon
+codegen.c:8858 count map/list branches	1	0	1	branches/collections/maps/atom.codegen.collection.map-merge-keys-vals-count/collection-map-merge-count-only.mon
+codegen.c:8858-8925 count dispatch branches	1	0	1	branches/collections/collection-dispatch/atom.codegen.collection.count.multiple.types/collection-count-multiple-types.mon
+codegen.c:8860 count arity diagnostic	1	1	0	errors/codegen/arity/atom.codegen.diagnostic.count-arity/diagnostic-count-arity.mon
+codegen.c:8860 count array branch	1	0	1	branches/collections/arrays-ranges/atom.codegen.collection.array-count-index-head-tail/collection-array-count-index-head-tail.mon
+codegen.c:8929 count unsupported type diagnostic	1	1	0	errors/codegen/type-errors/atom.codegen.diagnostic.count-unsupported-type/diagnostic-count-unsupported-type.mon
+codegen.c:8932-9453 comparison dispatch branches	65	0	65	branches/operators/arithmetic/atom.codegen.branch200.20.operators.arithmetic.operator.dispatch.00/branch200_operator_dispatch_00.mon
+codegen.c:8985-9018 runtime value equality fallback	1	0	1	branches/operators/comparison/atom.codegen.operator.runtime-equality-spectrum/operator-runtime-equality-spectrum.mon
+codegen.c:90-diagnostics/arity branch family	19	19	0	errors/codegen/arity/atom.codegen.90.diagnostics.arity.rt.codegen.err.append.arity/rt_codegen_err_append_arity.mon
+codegen.c:90-diagnostics/compile-fail branch family	14	14	0	errors/codegen/compile-fail/atom.codegen.90.diagnostics.compile.fail.rt.codegen.err.arithmetic.no.args/rt_codegen_err_arithmetic_no_args.mon
+codegen.c:90-diagnostics/layout-dot-field branch family	3	3	0	errors/codegen/layout-dot-field/atom.codegen.90.diagnostics.layout.dot.field.rt.codegen.err.layout.lowercase.name/rt_codegen_err_layout_lowercase_name.mon
+codegen.c:90-diagnostics/reflection-address branch family	3	3	0	errors/codegen/reflection-address/atom.codegen.90.diagnostics.reflection.address.rt.codegen.err.address.builtin/rt_codegen_err_address_builtin.mon
+codegen.c:90-diagnostics/symbol-resolution branch family	4	4	0	errors/codegen/symbol-resolution/atom.codegen.90.diagnostics.symbol.resolution.rt.codegen.err.code.unbound/rt_codegen_err_code_unbound.mon
+codegen.c:90-diagnostics/type-errors branch family	1	1	0	errors/codegen/type-errors/atom.codegen.90.diagnostics.type.errors.rt.codegen.err.layout.unknown.field.type/rt_codegen_err_layout_unknown_field_type.mon
+codegen.c:9363-9382 string comparison strcmp branch	1	0	1	branches/collections/strings/atom.codegen.operator.string.and.mixed.comparisons/operator-string-and-mixed-comparisons.mon
+codegen.c:9363-9382 string strcmp branch	1	0	1	branches/operators/comparison/atom.codegen.operator.runtime-equality-spectrum/operator-runtime-equality-spectrum.mon
+codegen.c:9432-9436 float comparisons	1	0	1	branches/operators/arithmetic/atom.codegen.operator.float.arithmetic.and.mod/operator-float-arithmetic-and-mod.mon
+codegen.c:9432-9454 float/int comparison branches	2	0	2	branches/collections/strings/atom.codegen.operator.string.and.mixed.comparisons/operator-string-and-mixed-comparisons.mon
+codegen.c:9445 integer width promotion	2	0	2	branches/collections/strings/atom.codegen.operator.string.and.mixed.comparisons/operator-string-and-mixed-comparisons.mon
+codegen.c:9463-9492 float mod branch	1	0	1	branches/operators/arithmetic/atom.codegen.operator.float.arithmetic.and.mod/operator-float-arithmetic-and-mod.mon
+codegen.c:9463-9492 mod/% dispatch branch	1	0	1	branches/operators/arithmetic/atom.codegen.operator.mod-aliases/operator-mod-symbol-and-percent.mon
+codegen.c:9463-9810 arithmetic dispatch branches	65	0	65	branches/operators/arithmetic/atom.codegen.branch200.20.operators.arithmetic.operator.dispatch.00/branch200_operator_dispatch_00.mon
+codegen.c:9494-9810 arithmetic operator branches	2	0	2	branches/operators/arithmetic/atom.codegen.operator.arithmetic.unary.variadic/operator-arithmetic-unary-variadic.mon
+codegen.c:9499 minimum arity check	1	0	1	branches/operators/arithmetic/atom.codegen.operator.arithmetic.unary.variadic/operator-arithmetic-unary-variadic.mon
+codegen.c:9502 arithmetic minimum arity check	1	0	1	branches/operators/arithmetic/atom.codegen.operator.integer-reduction/operator-nested-integer-reduction.mon
+codegen.c:9512 arithmetic type diagnostic	1	1	0	errors/codegen/type-errors/atom.codegen.diagnostic.arithmetic-type/diagnostic-arithmetic-string.mon
+codegen.c:966-1006 codegen_print_ast cases	1	0	0	branches/reflection-quote/code-reflection/atom.codegen.reflection.quote-runtime-value-spectrum/reflection-quote-runtime-value-spectrum.mon
+codegen.c:966-1014 codegen_print_ast branches	15	0	10	branches/reflection-quote/quote-runtime-values/atom.codegen.stateful.reflection.assert.eq.pass/stateful-reflection-assert-eq-pass.mon
+codegen.c:9698-9701 ratio arithmetic runtime dispatch	1	0	0	branches/operators/ratio/atom.codegen.operator.ratio-runtime-dispatch/operator-ratio-arithmetic-compile.mon
+codegen.c:9802-9805 floating arithmetic ops	1	0	1	branches/operators/arithmetic/atom.codegen.operator.float.arithmetic.and.mod/operator-float-arithmetic-and-mod.mon
+codegen.c:99-smoke-legacy/uncategorized-legacy branch family	31	0	31	branches/smoke-legacy/uncategorized-legacy/atom.codegen.99.smoke.legacy.uncategorized.legacy.nested.call/nested_call.mon
+codegen.c:9900 string-as-function index branch	2	0	2	branches/collections/maps/atom.codegen.cross.closure-string-if/cross-closure-map-string.mon
+codegen.c:9900-12100 closure call branches	1	0	1	branches/collections/maps/atom.codegen.cross.closure-string-if/cross-closure-map-string.mon
+codegen.c:9900-12100 closure/lifted call branches	1	0	1	branches/symbol-env/closures/atom.codegen.closure.capture-and-call/function-closure-capture-call.mon
+codegen.c:9920-10160 collection-as-function indexing branches	45	1	43	branches/collections/arrays-ranges/atom.codegen.stateful.collection.array.count.after.define.global/stateful-collection-array-count-after-define-global.mon
+codegen.c:9927 array used as function arity diagnostic	1	1	0	errors/codegen/arity/atom.codegen.diagnostic.array-function-arity/diagnostic-array-as-function-arity.mon
+codegen.c:9927 array used as function branch	2	0	2	branches/collections/arrays-ranges/atom.codegen.collection.array-count-index-head-tail/collection-array-count-index-head-tail.mon
+codegen.c:9927 array-as-function branch	1	0	1	branches/collections/arrays-ranges/atom.codegen.collection.heap-array-fat-pointer-survival/collection-heap-array-fat-pointer-survival.mon
+codegen.c:ADT allocation plus pattern codegen	1	0	1	branches/data-layout/adt-constructors/atom.codegen.50.data.layout.adt.constructors.deep.adt.match.show.roundtrip/deep_adt_match_show_roundtrip.mon
+codegen.c:ADT constructor codegen	1	0	1	branches/data-layout/adt-constructors/atom.codegen.data.layout.adt.constructors.deep.adt.show.two.constructors/deep_adt_show_two_constructors.mon
+codegen.c:ADT match branch	6	0	6	types/dep/adt-layout/constructor-indexing/atom.type.dep.adt-layout.constructor-indexing.000/type-dep-adt-layout-constructor-indexing-000.mon
+codegen.c:AST_BEGIN empty and nested sequence branches	1	0	1	branches/control-flow/begin-do-sequence/atom.codegen.30.control.flow.begin.do.sequence.deep.begin.empty.and.nested/deep_begin_empty_and_nested.mon
+codegen.c:AST_BEGIN/AST_DO sequence branches	1	0	1	branches/control-flow/begin-do-sequence/atom.codegen.control.flow.begin.do.sequence.deep.begin.do.mutation.return/deep_begin_do_mutation_return.mon
+codegen.c:AST_CHAR/AST_KEYWORD/AST_SYMBOL	1	0	1	branches/values/char-keyword-symbol/atom.codegen.values.char.keyword.symbol.deep.char.keyword.symbol.display/deep_char_keyword_symbol_display.mon
+codegen.c:AST_DEFINE top-level globals	1	0	1	branches/symbol-env/defines-and-calls/atom.codegen.symbol.env.defines.and.calls.deep.define.order.and.forward.values/deep_define_order_and_forward_values.mon
+codegen.c:AST_IF branch/PHI construction	1	0	1	branches/control-flow/if-cond-phi/atom.codegen.control.flow.if.cond.phi.deep.if.phi.nested.types/deep_if_phi_nested_types.mon
+codegen.c:AST_LAMBDA function emission	1	0	1	branches/symbol-env/lambdas/atom.codegen.symbol.env.lambdas.deep.lambda.closure.local.call/deep_lambda_closure_local_call.mon
+codegen.c:AST_PATH literal lowering	1	0	1	branches/values/paths/atom.codegen.values.paths.deep.path.define.and.show/deep_path_define_and_show.mon
+codegen.c:CODEGEN_ERROR arity diagnostics	9	9	0	errors/codegen/branch-arity-symbols/atom.codegen.branch200.90.diagnostics.branch.arity.symbols.diagnostic.branch.00/branch200_diagnostic_branch_00.mon
+codegen.c:CODEGEN_ERROR diagnostics	16	16	0	errors/codegen/branch-errors/atom.codegen.stateful.diagnostic.append.bang.arity/stateful-diagnostic-append-bang-arity.mon
+codegen.c:FFI call lowering and external declarations	1	0	1	branches/ffi-asm/cffi-core/atom.codegen.70.ffi.asm.cffi.core.deep.cffi.strlen.and.atoi/deep_cffi_strlen_and_atoi.mon
+codegen.c:Int arithmetic	5	0	5	types/bridge/dep-hm/refinement-to-hm/atom.type.bridge.dep-hm.refinement-to-hm.000/type-bridge-dep-hm-refinement-to-hm-000.mon
+codegen.c:TYPE_RATIO runtime value/show branches	1	0	1	branches/operators/ratio/atom.codegen.operators.ratio.deep.ratio.comparison.and.arith/deep_ratio_comparison_and_arith.mon
+codegen.c:arity checking around builtin call	1	1	0	errors/codegen/arity/atom.codegen.diagnostics.arity.deep.diag.show.wrong.arity/deep_diag_show_wrong_arity.mon
+codegen.c:array bounds/check and load	1	0	1	branches/collections/arrays-ranges/atom.codegen.collections.arrays.ranges.deep.array.index.edges/deep_array_index_edges.mon
+codegen.c:array index expression	1	0	1	branches/collections/arrays-ranges/atom.codegen.collections.arrays.ranges.deep.array.if.index/deep_array_if_index.mon
+codegen.c:array index type checking	1	1	0	errors/codegen/type-errors/atom.codegen.diagnostics.type.errors.deep.diag.array.index.type/deep_diag_array_index_type.mon
+codegen.c:array literal lowering	1	0	1	branches/collections/arrays-ranges/atom.codegen.collections.arrays.ranges.deep.array.index.edges/deep_array_index_edges.mon
+codegen.c:array load -> call argument	1	0	1	branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.deep.array.value.flows.into.function/deep_array_value_flows_into_function.mon
+codegen.c:array-as-function arity branch	9	9	0	errors/codegen/branch-arity-symbols/atom.codegen.branch200.90.diagnostics.branch.arity.symbols.diagnostic.branch.00/branch200_diagnostic_branch_00.mon
+codegen.c:ast_to_runtime_value AST_LIST/AST_SYMBOL/AST_NUMBER	1	0	1	branches/reflection-quote/quote-symbols/atom.codegen.reflection.quote.quote.symbols.deep.quote.nested.print/deep_quote_nested_print.mon
+codegen.c:ast_to_runtime_value mixed AST literal cases	1	0	1	branches/reflection-quote/quote-symbols/atom.codegen.60.reflection.quote.quote.symbols.deep.quote.mixed.literals/deep_quote_mixed_literals.mon
+codegen.c:bitwise operator dispatch	1	0	1	branches/operators/bitwise/atom.codegen.operators.bitwise.deep.bitwise.mask.chain/deep_bitwise_mask_chain.mon
+codegen.c:bitwise output to comparison dispatch	1	0	1	branches/operators/bitwise/atom.codegen.20.operators.bitwise.deep.bitwise.result.feeds.comparison/deep_bitwise_result_feeds_comparison.mon
+codegen.c:boolean logic feeding conditional branch	1	0	1	branches/operators/boolean-logic/atom.codegen.20.operators.boolean.logic.deep.logic.result.feeds.when/deep_logic_result_feeds_when.mon
+codegen.c:boolean operator dispatch and show bool	1	0	1	branches/operators/boolean-logic/atom.codegen.operators.boolean.logic.deep.boolean.logic.phi/deep_boolean_logic_phi.mon
+codegen.c:builtin append arity branch	1	1	0	errors/codegen/arity/atom.codegen.90.diagnostics.arity.deep.diag.append.wrong.arity/deep_diag_append_wrong_arity.mon
+codegen.c:call arity diagnostics	1	1	0	errors/codegen/branch-errors/atom.codegen.stateful.diagnostic.closure.call.arity/stateful-diagnostic-closure-call-arity.mon
+codegen.c:closure ABI/env capture path	25	0	25	branches/symbol-env/definitions-calls-closures/atom.codegen.branch200.05.symbol.env.definitions.calls.closures.symbol.env.00/branch200_symbol_env_00.mon
+codegen.c:closure capture lookup	4	0	4	branches/symbol-env/env-graph-links/atom.env.graph.env.closure.captures.outer.value.03/env-closure-captures-outer-value-03.mon
+codegen.c:closure/lifted env lowering	1	0	1	branches/symbol-env/closures/atom.codegen.symbol.env.closures.deep.closure.captures.shadowing/deep_closure_captures_shadowing.mon
+codegen.c:code reflection/function predicate branches	1	0	1	branches/reflection-quote/code-reflection/atom.codegen.reflection.quote.code.reflection.deep.code.reflection.lambda.and.call/deep_code_reflection_lambda_and_call.mon
+codegen.c:codegen_print_ast symbol path	1	0	1	branches/values/char-keyword-symbol/atom.codegen.values.char.keyword.symbol.deep.char.keyword.symbol.display/deep_char_keyword_symbol_display.mon
+codegen.c:codegen_show_value TYPE_HEX/TYPE_BIN/TYPE_OCT	1	0	1	branches/values/radix-printing/atom.codegen.values.radix.printing.deep.radix.nonzero.edges/deep_radix_nonzero_edges.mon
+codegen.c:codegen_show_value TYPE_INT/TYPE_FLOAT/TYPE_BOOL/TYPE_CHAR/TYPE_STRING	1	0	1	branches/values/show-dispatch/atom.codegen.values.show.dispatch.deep.show.scalar.matrix/deep_show_scalar_matrix.mon
+codegen.c:codegen_show_value TYPE_LAYOUT/TYPE_APP ADT branch	1	0	1	branches/data-layout/adt-constructors/atom.codegen.data.layout.adt.constructors.deep.adt.show.two.constructors/deep_adt_show_two_constructors.mon
+codegen.c:codegen_show_value TYPE_PATH	1	0	1	branches/values/paths/atom.codegen.values.paths.deep.path.define.and.show/deep_path_define_and_show.mon
+codegen.c:codegen_specialize and mono_cache_lookup/insert	1	0	1	branches/symbol-env/monomorphization/atom.codegen.05.symbol.env.monomorphization.deep.poly.identity.three.types/deep_poly_identity_three_types.mon
+codegen.c:collection expression indexing path	10	0	10	types/hm/collections/array-as-function/atom.type.hm.collections.array-as-function.000/type-hm-collections-array-as-function-000.mon
+codegen.c:comparison operator dispatch	1	0	1	branches/operators/comparison/atom.codegen.operators.comparison.deep.comparison.matrix/deep_comparison_matrix.mon
+codegen.c:comparison result consumed by AST_IF	1	0	1	branches/operators/comparison/atom.codegen.20.operators.comparison.deep.comparison.result.feeds.if/deep_comparison_result_feeds_if.mon
+codegen.c:cond branch chain lowering	1	0	1	branches/control-flow/if-cond-phi/atom.codegen.30.control.flow.if.cond.phi.deep.cond.else.and.second.clause/deep_cond_else_and_second_clause.mon
+codegen.c:define/function/lambda codegen branches	25	0	25	branches/symbol-env/definitions-calls-closures/atom.codegen.branch200.05.symbol.env.definitions.calls.closures.symbol.env.00/branch200_symbol_env_00.mon
+codegen.c:dot field GEP/load	1	0	1	branches/data-layout/dot-and-field-mutation/atom.codegen.data.layout.dot.and.field.mutation.deep.layout.field.mutation.chain/deep_layout_field_mutation_chain.mon
+codegen.c:dot field lookup diagnostics	1	1	0	errors/codegen/layout-dot-field/atom.codegen.diagnostics.layout.dot.field.deep.diag.missing.layout.field/deep_diag_missing_layout_field.mon
+codegen.c:emit_type_cast conversion lattice	15	0	15	branches/values/casts-predicates/atom.codegen.branch200.00.values.casts.predicates.value.cast.predicate.00/branch200_value_cast_predicate_00.mon
+codegen.c:emit_type_cast i2f/f2i paths	15	0	15	types/hm/numeric/widening-coercions/atom.type.hm.numeric.widening-coercions.000/type-hm-numeric-widening-coercions-000.mon
+codegen.c:emit_type_cast integer/float/char conversion branches	1	0	1	branches/values/casts-conversions/atom.codegen.values.casts.conversions.deep.cast.int.float.char.string/deep_cast_int_float_char_string.mon
+codegen.c:emit_type_cast return coercion	25	0	25	branches/symbol-env/definitions-calls-closures/atom.codegen.branch200.05.symbol.env.definitions.calls.closures.symbol.env.00/branch200_symbol_env_00.mon
+codegen.c:for collection iteration branch	1	0	1	branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.deep.for.array.iteration.sum/deep_for_array_iteration_sum.mon
+codegen.c:for range loop lowering	1	0	1	branches/control-flow/loops/atom.codegen.control.flow.loops.deep.for.range.accumulate.nested/deep_for_range_accumulate_nested.mon
+codegen.c:function call argument lowering	1	0	1	branches/operators/arithmetic/atom.codegen.operators.arithmetic.deep.arithmetic.function.arguments/deep_arithmetic_function_arguments.mon
+codegen.c:function env insertion before body codegen	1	0	1	branches/symbol-env/recursion/atom.codegen.symbol.env.recursion.deep.recursion.sumdown/deep_recursion_sumdown.mon
+codegen.c:function parameter alloca plus set! store	1	0	1	branches/control-flow/mutation/atom.codegen.30.control.flow.mutation.deep.mutation.inside.function.local/deep_mutation_inside_function_local.mon
+codegen.c:get_or_declare_print_binary nonzero branch	1	0	1	branches/values/radix-printing/atom.codegen.values.radix.printing.deep.radix.nonzero.edges/deep_radix_nonzero_edges.mon
+codegen.c:if PHI feeding GEP/load	1	0	1	branches/collections/arrays-ranges/atom.codegen.collections.arrays.ranges.deep.array.if.index/deep_array_if_index.mon
+codegen.c:layout constructor positional/keyword field lowering	1	0	1	branches/data-layout/layouts-fields/atom.codegen.data.layout.layouts.fields.deep.layout.keyword.and.positional/deep_layout_keyword_and_positional.mon
+codegen.c:layout field store sequence	1	0	1	branches/data-layout/dot-and-field-mutation/atom.codegen.50.data.layout.dot.and.field.mutation.deep.layout.swap.by.field.set/deep_layout_swap_by_field_set.mon
+codegen.c:layout pointer param and dot GEP	1	0	1	branches/data-layout/layouts-fields/atom.codegen.50.data.layout.layouts.fields.deep.layout.field.feeds.function/deep_layout_field_feeds_function.mon
+codegen.c:let*/with sequential env branches	1	0	1	branches/control-flow/lexical-scope/atom.codegen.30.control.flow.lexical.scope.deep.let.star.dependency.chain/deep_let_star_dependency_chain.mon
+codegen.c:list runtime call lowering	1	0	1	branches/collections/lists/atom.codegen.collections.lists.deep.list.car.cdr.cons/deep_list_car_cdr_cons.mon
+codegen.c:list runtime nested access	1	0	1	branches/collections/lists/atom.codegen.40.collections.lists.deep.list.nested.car/deep_list_nested_car.mon
+codegen.c:mangle_unicode_name and symbol env lookup	1	0	1	branches/symbol-env/aliases/atom.codegen.05.symbol.env.aliases.deep.unicode.alias.invocation/deep_unicode_alias_invocation.mon
+codegen.c:map find result feeding arithmetic	1	0	1	branches/collections/maps/atom.codegen.40.collections.maps.deep.map.find.feeds.arithmetic/deep_map_find_feeds_arithmetic.mon
+codegen.c:map literal/runtime helper lowering	1	0	1	branches/collections/maps/atom.codegen.collections.maps.deep.map.find.contains.count/deep_map_find_contains_count.mon
+codegen.c:mono specialization int	4	0	4	branches/symbol-env/env-graph-links/atom.env.graph.env.polymorphic.id.int.specialization.04/env-polymorphic-id-int-specialization-04.mon
+codegen.c:mono specialization string	4	0	4	branches/symbol-env/env-graph-links/atom.env.graph.env.polymorphic.id.string.specialization.05/env-polymorphic-id-string-specialization-05.mon
+codegen.c:nil/coalesce lowering	1	0	1	branches/reflection-quote/nil-null-coalesce/atom.codegen.reflection.quote.nil.null.coalesce.deep.nil.coalesce.paths/deep_nil_coalesce_paths.mon
+codegen.c:null coalesce output to arithmetic	1	0	1	branches/reflection-quote/nil-null-coalesce/atom.codegen.60.reflection.quote.nil.null.coalesce.deep.coalesce.result.feeds.arithmetic/deep_coalesce_result_feeds_arithmetic.mon
+codegen.c:operator dispatch + - * numeric paths	1	0	1	branches/operators/arithmetic/atom.codegen.operators.arithmetic.deep.arithmetic.composed.dispatch/deep_arithmetic_composed_dispatch.mon
+codegen.c:pattern match lowering	1	0	1	branches/control-flow/pattern-match/atom.codegen.control.flow.pattern.match.deep.match.constructor.and.guard/deep_match_constructor_and_guard.mon
+codegen.c:predicate/type conversion dispatch	1	0	1	branches/values/type-predicates/atom.codegen.values.type.predicates.deep.type.predicate.scalars/deep_type_predicate_scalars.mon
+codegen.c:quasiquote/unquote lowering	1	0	1	branches/reflection-quote/quasiquote-unquote/atom.codegen.reflection.quote.quasiquote.unquote.deep.quasiquote.unquote.value/deep_quasiquote_unquote_value.mon
+codegen.c:record/layout declaration branch	1	0	1	branches/data-layout/records/atom.codegen.data.layout.records.deep.record.decl.with.runtime.value/deep_record_decl_with_runtime_value.mon
+codegen.c:resolve_symbol_with_modules unbound path	1	1	0	errors/codegen/symbol-resolution/atom.codegen.diagnostics.symbol.resolution.deep.diag.unbound.call/deep_diag_unbound_call.mon
+codegen.c:resolve_symbol_with_modules unknown prefix	1	1	0	errors/codegen/symbol-resolution/atom.codegen.90.diagnostics.symbol.resolution.deep.diag.qualified.unknown.prefix/deep_diag_qualified_unknown_prefix.mon
+codegen.c:set contains result consumed by AST_IF	1	0	1	branches/collections/sets/atom.codegen.40.collections.sets.deep.set.membership.feeds.if/deep_set_membership_feeds_if.mon
+codegen.c:set runtime helper lowering	1	0	1	branches/collections/sets/atom.codegen.collections.sets.deep.set.conj.disj.contains/deep_set_conj_disj_contains.mon
+codegen.c:set! assignment	1	0	1	branches/control-flow/begin-do-sequence/atom.codegen.control.flow.begin.do.sequence.deep.begin.do.mutation.return/deep_begin_do_mutation_return.mon
+codegen.c:set! dot field diagnostics	1	1	0	errors/codegen/layout-dot-field/atom.codegen.90.diagnostics.layout.dot.field.deep.diag.set.missing.field/deep_diag_set_missing_field.mon
+codegen.c:set! env lookup and store	1	0	1	branches/control-flow/mutation/atom.codegen.control.flow.mutation.deep.mutation.global.and.local/deep_mutation_global_and_local.mon
+codegen.c:set! field store	1	0	1	branches/data-layout/dot-and-field-mutation/atom.codegen.data.layout.dot.and.field.mutation.deep.layout.field.mutation.chain/deep_layout_field_mutation_chain.mon
+codegen.c:set! local store	4	0	4	branches/symbol-env/env-graph-links/atom.env.graph.env.mutation.local.binding.survives.do.02/env-mutation-local-binding-survives-do-02.mon
+codegen.c:shift left/right branches	1	0	1	branches/operators/bitwise/atom.codegen.operators.bitwise.deep.bitwise.mask.chain/deep_bitwise_mask_chain.mon
+codegen.c:string index return type and predicate branch	1	0	1	branches/collections/strings/atom.codegen.40.collections.strings.deep.string.index.feeds.char.predicate/deep_string_index_feeds_char_predicate.mon
+codegen.c:string indexing path	5	0	5	types/hm/collections/string-element-char/atom.type.hm.collections.string-element-char.000/type-hm-collections-string-element-char-000.mon
+codegen.c:string literal/runtime helper lowering	1	0	1	branches/collections/strings/atom.codegen.collections.strings.deep.string.concat.count.index/deep_string_concat_count_index.mon
+codegen.c:subtraction numeric dispatch	1	0	1	branches/operators/arithmetic/atom.codegen.20.operators.arithmetic.deep.arithmetic.unary.and.nested.negation/deep_arithmetic_unary_and_nested_negation.mon
+codegen.c:symbol env lookup and call	1	0	1	branches/symbol-env/defines-and-calls/atom.codegen.symbol.env.defines.and.calls.deep.define.order.and.forward.values/deep_define_order_and_forward_values.mon
+codegen.c:symbol lookup outer environment	1	0	1	branches/symbol-env/defines-and-calls/atom.codegen.05.symbol.env.defines.and.calls.deep.define.function.uses.global/deep_define_function_uses_global.mon
+codegen.c:type_to_llvm TYPE_LAYOUT/TYPE_APP branches	10	0	9	branches/data-layout/layouts-adts-dot/atom.codegen.branch200.50.data.layout.layouts.adts.dot.data.layout.branch.00/branch200_data_layout_branch_00.mon
+codegen.c:typed define codegen	6	0	6	types/dep/refinement/predicate-success/atom.type.dep.refinement.predicate-success.000/type-dep-refinement-predicate-success-000.mon
+codegen.c:typed return coercion	1	0	1	branches/operators/arithmetic/atom.codegen.operators.arithmetic.deep.arithmetic.function.arguments/deep_arithmetic_function_arguments.mon
+codegen.c:when/unless body block lowering	1	0	1	branches/control-flow/when-unless/atom.codegen.30.control.flow.when.unless.deep.when.unless.nested.begin/deep_when_unless_nested_begin.mon
+codegen.c:when/unless conditional branches	1	0	1	branches/control-flow/when-unless/atom.codegen.control.flow.when.unless.deep.when.unless.dual.paths/deep_when_unless_dual_paths.mon
+codegen.c:while loop body multiple stores	1	0	1	branches/control-flow/loops/atom.codegen.30.control.flow.loops.deep.while.mutates.two.slots/deep_while_mutates_two_slots.mon
+codegen.c:while loop cond/body/end branches	1	0	1	branches/control-flow/loops/atom.codegen.control.flow.loops.deep.while.accumulate.and.zero/deep_while_accumulate_and_zero.mon
+codegen.c:with child env creation/lookup	1	0	1	branches/control-flow/lexical-scope/atom.codegen.control.flow.lexical.scope.deep.with.shadowing.chain/deep_with_shadowing_chain.mon
+dep.c:ADT/type declaration bridge	5	5	0	types/bridge/dep-hm/adt-return-mismatch/atom.type.bridge.dep-hm.adt-return-mismatch.000/type-bridge-dep-hm-adt-return-mismatch-000.mon
+dep.c:MetaCtx unsolved metavariable report	5	5	0	types/dep/holes/explicit-hole-report/atom.type.dep.holes.explicit-hole-report.000/type-dep-holes-explicit-hole-report-000.mon
+dep.c:TERM_ANN infer/check branch	5	5	0	types/dep/annotations/annotation-mismatch/atom.type.dep.annotations.annotation-mismatch.000/type-dep-annotations-annotation-mismatch-000.mon
+dep.c:TERM_EMBED ground type bridge	5	0	5	types/bridge/dep-hm/refinement-to-hm/atom.type.bridge.dep-hm.refinement-to-hm.000/type-bridge-dep-hm-refinement-to-hm-000.mon
+dep.c:TERM_EMBED/type bridge	6	0	6	types/dep/adt-layout/constructor-indexing/atom.type.dep.adt-layout.constructor-indexing.000/type-dep-adt-layout-constructor-indexing-000.mon
+dep.c:conversion structural mismatch	5	5	0	types/dep/annotations/annotation-mismatch/atom.type.dep.annotations.annotation-mismatch.000/type-dep-annotations-annotation-mismatch-000.mon
+dep.c:dep_check refinement happy path	6	0	6	types/dep/refinement/predicate-success/atom.type.dep.refinement.predicate-success.000/type-dep-refinement-predicate-success-000.mon
+dep.c:dep_error_set dependent type error path	8	8	0	types/dep/refinement/predicate-failure/atom.type.dep.refinement.predicate-failure.000/type-dep-refinement-predicate-failure-000.mon
+dep.c:dep_report_holes hole has type	5	5	0	types/dep/holes/explicit-hole-report/atom.type.dep.holes.explicit-hole-report.000/type-dep-holes-explicit-hole-report-000.mon
+env.c:1049 Couldn't match collection element type	28	28	0	errors/env/call-collection-domain-mismatch/atom.env.error.env.collection.domain.mismatch.00/env-collection-domain-mismatch-00.mon
+env.c:642 Type inference failed for function	12	12	0	errors/env/env/infer.define.signature.failed/atom.menu.error.env.infer.define.signature.failed.000/menu-env-infer.define.signature.failed-000.mon
+env.c:642 Type inference failed for function ‘env_infer_sig_00’	1	1	0	errors/env/infer-define-signature/atom.env.error.env.infer.signature.failure.00/env-infer-signature-failure-00.mon
+env.c:642 Type inference failed for function ‘env_infer_sig_01’	1	1	0	errors/env/infer-define-signature/atom.env.error.env.infer.signature.failure.01/env-infer-signature-failure-01.mon
+env.c:642 Type inference failed for function ‘env_infer_sig_02’	1	1	0	errors/env/infer-define-signature/atom.env.error.env.infer.signature.failure.02/env-infer-signature-failure-02.mon
+env.c:642 Type inference failed for function ‘env_infer_sig_03’	1	1	0	errors/env/infer-define-signature/atom.env.error.env.infer.signature.failure.03/env-infer-signature-failure-03.mon
+env.c:642 Type inference failed for function ‘env_infer_sig_04’	1	1	0	errors/env/infer-define-signature/atom.env.error.env.infer.signature.failure.04/env-infer-signature-failure-04.mon
+env.c:642 Type inference failed for function ‘env_infer_sig_05’	1	1	0	errors/env/infer-define-signature/atom.env.error.env.infer.signature.failure.05/env-infer-signature-failure-05.mon
+env.c:642 Type inference failed for function ‘env_infer_sig_06’	1	1	0	errors/env/infer-define-signature/atom.env.error.env.infer.signature.failure.06/env-infer-signature-failure-06.mon
+env.c:642 Type inference failed for function ‘env_infer_sig_07’	1	1	0	errors/env/infer-define-signature/atom.env.error.env.infer.signature.failure.07/env-infer-signature-failure-07.mon
+env.c:642 Type inference failed for function ‘env_infer_sig_08’	1	1	0	errors/env/infer-define-signature/atom.env.error.env.infer.signature.failure.08/env-infer-signature-failure-08.mon
+env.c:642 Type inference failed for function ‘env_infer_sig_09’	1	1	0	errors/env/infer-define-signature/atom.env.error.env.infer.signature.failure.09/env-infer-signature-failure-09.mon
+env.c:642 Type inference failed for function ‘env_infer_sig_10’	1	1	0	errors/env/infer-define-signature/atom.env.error.env.infer.signature.failure.10/env-infer-signature-failure-10.mon
+env.c:642 Type inference failed for function ‘env_infer_sig_11’	1	1	0	errors/env/infer-define-signature/atom.env.error.env.infer.signature.failure.11/env-infer-signature-failure-11.mon
+env.c:642 Type inference failed for function ‘env_infer_sig_12’	1	1	0	errors/env/infer-define-signature/atom.env.error.env.infer.signature.failure.12/env-infer-signature-failure-12.mon
+env.c:642 Type inference failed for function ‘env_infer_sig_13’	1	1	0	errors/env/infer-define-signature/atom.env.error.env.infer.signature.failure.13/env-infer-signature-failure-13.mon
+env.c:642 Type inference failed for function ‘env_infer_sig_14’	1	1	0	errors/env/infer-define-signature/atom.env.error.env.infer.signature.failure.14/env-infer-signature-failure-14.mon
+env.c:642 Type inference failed for function ‘env_infer_sig_15’	1	1	0	errors/env/infer-define-signature/atom.env.error.env.infer.signature.failure.15/env-infer-signature-failure-15.mon
+env.c:650 Type inference failed for function	12	12	0	errors/env/env/infer.define.unsignatured.failed/atom.menu.error.env.infer.define.unsignatured.failed.000/menu-env-infer.define.unsignatured.failed-000.mon
+env.c:650 Type inference failed for function ‘env_infer_unsig_00’	1	1	0	errors/env/infer-define-unsignatured/atom.env.error.env.infer.no.signature.failure.00/env-infer-no-signature-failure-00.mon
+env.c:650 Type inference failed for function ‘env_infer_unsig_01’	1	1	0	errors/env/infer-define-unsignatured/atom.env.error.env.infer.no.signature.failure.01/env-infer-no-signature-failure-01.mon
+env.c:650 Type inference failed for function ‘env_infer_unsig_02’	1	1	0	errors/env/infer-define-unsignatured/atom.env.error.env.infer.no.signature.failure.02/env-infer-no-signature-failure-02.mon
+env.c:650 Type inference failed for function ‘env_infer_unsig_03’	1	1	0	errors/env/infer-define-unsignatured/atom.env.error.env.infer.no.signature.failure.03/env-infer-no-signature-failure-03.mon
+env.c:650 Type inference failed for function ‘env_infer_unsig_04’	1	1	0	errors/env/infer-define-unsignatured/atom.env.error.env.infer.no.signature.failure.04/env-infer-no-signature-failure-04.mon
+env.c:650 Type inference failed for function ‘env_infer_unsig_05’	1	1	0	errors/env/infer-define-unsignatured/atom.env.error.env.infer.no.signature.failure.05/env-infer-no-signature-failure-05.mon
+env.c:650 Type inference failed for function ‘env_infer_unsig_06’	1	1	0	errors/env/infer-define-unsignatured/atom.env.error.env.infer.no.signature.failure.06/env-infer-no-signature-failure-06.mon
+env.c:650 Type inference failed for function ‘env_infer_unsig_07’	1	1	0	errors/env/infer-define-unsignatured/atom.env.error.env.infer.no.signature.failure.07/env-infer-no-signature-failure-07.mon
+env.c:650 Type inference failed for function ‘env_infer_unsig_08’	1	1	0	errors/env/infer-define-unsignatured/atom.env.error.env.infer.no.signature.failure.08/env-infer-no-signature-failure-08.mon
+env.c:650 Type inference failed for function ‘env_infer_unsig_09’	1	1	0	errors/env/infer-define-unsignatured/atom.env.error.env.infer.no.signature.failure.09/env-infer-no-signature-failure-09.mon
+env.c:650 Type inference failed for function ‘env_infer_unsig_10’	1	1	0	errors/env/infer-define-unsignatured/atom.env.error.env.infer.no.signature.failure.10/env-infer-no-signature-failure-10.mon
+env.c:650 Type inference failed for function ‘env_infer_unsig_11’	1	1	0	errors/env/infer-define-unsignatured/atom.env.error.env.infer.no.signature.failure.11/env-infer-no-signature-failure-11.mon
+env.c:650 Type inference failed for function ‘env_infer_unsig_12’	1	1	0	errors/env/infer-define-unsignatured/atom.env.error.env.infer.no.signature.failure.12/env-infer-no-signature-failure-12.mon
+env.c:650 Type inference failed for function ‘env_infer_unsig_13’	1	1	0	errors/env/infer-define-unsignatured/atom.env.error.env.infer.no.signature.failure.13/env-infer-no-signature-failure-13.mon
+env.c:650 Type inference failed for function ‘env_infer_unsig_14’	1	1	0	errors/env/infer-define-unsignatured/atom.env.error.env.infer.no.signature.failure.14/env-infer-no-signature-failure-14.mon
+env.c:650 Type inference failed for function ‘env_infer_unsig_15’	1	1	0	errors/env/infer-define-unsignatured/atom.env.error.env.infer.no.signature.failure.15/env-infer-no-signature-failure-15.mon
+env.c:695 Signature mismatch for definition	12	12	0	errors/env/env/define.signature.mismatch/atom.menu.error.env.define.signature.mismatch.000/menu-env-define.signature.mismatch-000.mon
+env.c:695 Signature mismatch for definition 'env_sig_mismatch_00'	1	1	0	errors/env/signature-mismatch/atom.env.error.env.signature.mismatch.00/env-signature-mismatch-00.mon
+env.c:695 Signature mismatch for definition 'env_sig_mismatch_01'	1	1	0	errors/env/signature-mismatch/atom.env.error.env.signature.mismatch.01/env-signature-mismatch-01.mon
+env.c:695 Signature mismatch for definition 'env_sig_mismatch_02'	1	1	0	errors/env/signature-mismatch/atom.env.error.env.signature.mismatch.02/env-signature-mismatch-02.mon
+env.c:695 Signature mismatch for definition 'env_sig_mismatch_03'	1	1	0	errors/env/signature-mismatch/atom.env.error.env.signature.mismatch.03/env-signature-mismatch-03.mon
+env.c:695 Signature mismatch for definition 'env_sig_mismatch_04'	1	1	0	errors/env/signature-mismatch/atom.env.error.env.signature.mismatch.04/env-signature-mismatch-04.mon
+env.c:695 Signature mismatch for definition 'env_sig_mismatch_05'	1	1	0	errors/env/signature-mismatch/atom.env.error.env.signature.mismatch.05/env-signature-mismatch-05.mon
+env.c:695 Signature mismatch for definition 'env_sig_mismatch_06'	1	1	0	errors/env/signature-mismatch/atom.env.error.env.signature.mismatch.06/env-signature-mismatch-06.mon
+env.c:695 Signature mismatch for definition 'env_sig_mismatch_07'	1	1	0	errors/env/signature-mismatch/atom.env.error.env.signature.mismatch.07/env-signature-mismatch-07.mon
+env.c:695 Signature mismatch for definition 'env_sig_mismatch_08'	1	1	0	errors/env/signature-mismatch/atom.env.error.env.signature.mismatch.08/env-signature-mismatch-08.mon
+env.c:695 Signature mismatch for definition 'env_sig_mismatch_09'	1	1	0	errors/env/signature-mismatch/atom.env.error.env.signature.mismatch.09/env-signature-mismatch-09.mon
+env.c:695 Signature mismatch for definition 'env_sig_mismatch_10'	1	1	0	errors/env/signature-mismatch/atom.env.error.env.signature.mismatch.10/env-signature-mismatch-10.mon
+env.c:695 Signature mismatch for definition 'env_sig_mismatch_11'	1	1	0	errors/env/signature-mismatch/atom.env.error.env.signature.mismatch.11/env-signature-mismatch-11.mon
+env.c:695 Signature mismatch for definition 'env_sig_mismatch_12'	1	1	0	errors/env/signature-mismatch/atom.env.error.env.signature.mismatch.12/env-signature-mismatch-12.mon
+env.c:695 Signature mismatch for definition 'env_sig_mismatch_13'	1	1	0	errors/env/signature-mismatch/atom.env.error.env.signature.mismatch.13/env-signature-mismatch-13.mon
+env.c:695 Signature mismatch for definition 'env_sig_mismatch_14'	1	1	0	errors/env/signature-mismatch/atom.env.error.env.signature.mismatch.14/env-signature-mismatch-14.mon
+env.c:695 Signature mismatch for definition 'env_sig_mismatch_15'	1	1	0	errors/env/signature-mismatch/atom.env.error.env.signature.mismatch.15/env-signature-mismatch-15.mon
+env.c:742 Function ‘env_nil_return_00’ can return nil but return type 'Int' does not end with ‘?’	1	1	0	errors/env/nil-optional-return/atom.env.error.env.nil.optional.return.00/env-nil-optional-return-00.mon
+env.c:742 Function ‘env_nil_return_01’ can return nil but return type 'String' does not end with ‘?’	1	1	0	errors/env/nil-optional-return/atom.env.error.env.nil.optional.return.01/env-nil-optional-return-01.mon
+env.c:742 Function ‘env_nil_return_02’ can return nil but return type 'Bool' does not end with ‘?’	1	1	0	errors/env/nil-optional-return/atom.env.error.env.nil.optional.return.02/env-nil-optional-return-02.mon
+env.c:742 Function ‘env_nil_return_03’ can return nil but return type 'Float' does not end with ‘?’	1	1	0	errors/env/nil-optional-return/atom.env.error.env.nil.optional.return.03/env-nil-optional-return-03.mon
+env.c:742 Function ‘env_nil_return_04’ can return nil but return type 'Char' does not end with ‘?’	1	1	0	errors/env/nil-optional-return/atom.env.error.env.nil.optional.return.04/env-nil-optional-return-04.mon
+env.c:742 Function ‘env_nil_return_05’ can return nil but return type 'Path' does not end with ‘?’	1	1	0	errors/env/nil-optional-return/atom.env.error.env.nil.optional.return.05/env-nil-optional-return-05.mon
+env.c:742 Function ‘env_nil_return_06’ can return nil but return type 'Keyword' does not end with ‘?’	1	1	0	errors/env/nil-optional-return/atom.env.error.env.nil.optional.return.06/env-nil-optional-return-06.mon
+env.c:742 Function ‘env_nil_return_07’ can return nil but return type 'List' does not end with ‘?’	1	1	0	errors/env/nil-optional-return/atom.env.error.env.nil.optional.return.07/env-nil-optional-return-07.mon
+env.c:742 Function ‘env_nil_return_08’ can return nil but return type 'Set' does not end with ‘?’	1	1	0	errors/env/nil-optional-return/atom.env.error.env.nil.optional.return.08/env-nil-optional-return-08.mon
+env.c:742 Function ‘env_nil_return_09’ can return nil but return type 'Map' does not end with ‘?’	1	1	0	errors/env/nil-optional-return/atom.env.error.env.nil.optional.return.09/env-nil-optional-return-09.mon
+env.c:742 Function ‘env_nil_return_10’ can return nil but return type 'Int' does not end with ‘?’	1	1	0	errors/env/nil-optional-return/atom.env.error.env.nil.optional.return.10/env-nil-optional-return-10.mon
+env.c:742 Function ‘env_nil_return_11’ can return nil but return type 'Int' does not end with ‘?’	1	1	0	errors/env/nil-optional-return/atom.env.error.env.nil.optional.return.11/env-nil-optional-return-11.mon
+env.c:742 Function ‘env_nil_return_12’ can return nil but return type 'String' does not end with ‘?’	1	1	0	errors/env/nil-optional-return/atom.env.error.env.nil.optional.return.12/env-nil-optional-return-12.mon
+env.c:742 Function ‘env_nil_return_13’ can return nil but return type 'Bool' does not end with ‘?’	1	1	0	errors/env/nil-optional-return/atom.env.error.env.nil.optional.return.13/env-nil-optional-return-13.mon
+env.c:742 Function ‘env_nil_return_14’ can return nil but return type 'Int' does not end with ‘?’	1	1	0	errors/env/nil-optional-return/atom.env.error.env.nil.optional.return.14/env-nil-optional-return-14.mon
+env.c:742 Function ‘env_nil_return_15’ can return nil but return type 'String' does not end with ‘?’	1	1	0	errors/env/nil-optional-return/atom.env.error.env.nil.optional.return.15/env-nil-optional-return-15.mon
+env.c:742 can return nil but return type	12	12	0	errors/env/env/define.nil.optional.return/atom.menu.error.env.define.nil.optional.return.000/menu-env-define.nil.optional.return-000.mon
+env.c:814 Couldn't match expected list size	28	28	0	errors/env/call-fixed-list-size/atom.env.error.env.fixed.list.size.mismatch.00/env-fixed-list-size-mismatch-00.mon
+env.c:857 Couldn't match expected type	28	28	0	errors/env/call-fixed-list-element-type/atom.env.error.env.fixed.list.element.mismatch.00/env-fixed-list-element-mismatch-00.mon
+env.c:975 Couldn't match expected type	28	28	0	errors/env/call-argument-type-mismatch/atom.env.error.env.call.argument.mismatch.00/env-call-argument-mismatch-00.mon
+env.c:Signature mismatch for definition bridge	20	20	0	types/hm/unification/cannot-unify/atom.type.hm.unification.cannot-unify.000/type-hm-unification-cannot-unify-000.mon
+env.c:cross-argument collection element/function domain mismatch	10	10	0	types/bridge/dep-hm/collection-domain/atom.type.bridge.dep-hm.collection-domain.000/type-bridge-dep-hm-collection-domain-000.mon
+env.c:env_hm_infer_define scheme insertion	8	0	8	branches/symbol-env/env-graph-links/atom.env.graph.env.polymorphic.id.int.specialization.04/env-polymorphic-id-int-specialization-04.mon
+env.c:env_insert_layout and env_find_layout_with_field	4	0	4	branches/symbol-env/env-graph-links/atom.env.graph.env.layout.field.registry.positive.07/env-layout-field-registry-positive-07.mon
+env.c:env_is_local detects local value	4	0	4	branches/symbol-env/env-graph-links/atom.env.graph.env.mutation.local.binding.survives.do.02/env-mutation-local-binding-survives-do-02.mon
+env.c:env_is_local local alloca branch	4	0	4	branches/symbol-env/env-graph-links/atom.env.graph.env.lookup.local.shadows.global.00/env-lookup-local-shadows-global-00.mon
+env.c:env_lookup child before parent	4	0	4	branches/symbol-env/env-graph-links/atom.env.graph.env.lookup.local.shadows.global.00/env-lookup-local-shadows-global-00.mon
+env.c:env_lookup closure/env parent path	4	0	4	branches/symbol-env/env-graph-links/atom.env.graph.env.closure.captures.outer.value.03/env-closure-captures-outer-value-03.mon
+env.c:env_lookup parent traversal	4	0	4	branches/symbol-env/env-graph-links/atom.env.graph.env.lookup.parent.falls.through.child.01/env-lookup-parent-falls-through-child-01.mon
+env.c:find local entry before parent	4	0	4	branches/symbol-env/env-graph-links/atom.env.graph.env.shadow.function.with.local.value.06/env-shadow-function-with-local-value-06.mon
+env.c:fixed list element mismatch	12	12	0	types/hm/collections/tuple-element-mismatch/atom.type.hm.collections.tuple-element-mismatch.000/type-hm-collections-tuple-element-mismatch-000.mon
+env.c:fixed list size mismatch	12	12	0	types/hm/collections/tuple-size-mismatch/atom.type.hm.collections.tuple-size-mismatch.000/type-hm-collections-tuple-size-mismatch-000.mon
+env.c:function-vs-value mismatch	12	12	0	types/hm/functions/function-vs-value/atom.type.hm.functions.function-vs-value.000/type-hm-functions-function-vs-value-000.mon
+env.c:nil optional return checker	12	12	0	types/hm/optional/nil-return-without-question/atom.type.hm.optional.nil-return-without-question.000/type-hm-optional-nil-return-without-question-000.mon
+infer.c:370-399 infer_unify_one_internal occurs check failed	12	12	0	types/hm/unification/occurs-check/atom.type.hm.unification.occurs-check.000/type-hm-unification-occurs-check-000.mon
+infer.c:569 TYPE_APP constructor mismatch cannot unify	8	8	0	types/hm/type-app/constructor-mismatch/atom.type.hm.type-app.constructor-mismatch.000/type-hm-type-app-constructor-mismatch-000.mon
+infer.c:569-640 infer_unify_one_internal ground type mismatch	20	20	0	types/hm/unification/cannot-unify/atom.type.hm.unification.cannot-unify.000/type-hm-unification-cannot-unify-000.mon
+infer.c:616 cannot use scalar as a Collection	12	12	0	types/hm/collections/scalar-as-collection/atom.type.hm.collections.scalar-as-collection.000/type-hm-collections-scalar-as-collection-000.mon
+infer.c:663 tuple size mismatch	12	12	0	types/hm/collections/tuple-size-mismatch/atom.type.hm.collections.tuple-size-mismatch.000/type-hm-collections-tuple-size-mismatch-000.mon
+infer.c:AST nodes seeded with inferred_type	5	0	5	types/bridge/dep-hm/refinement-to-hm/atom.type.bridge.dep-hm.refinement-to-hm.000/type-bridge-dep-hm-refinement-to-hm-000.mon
+infer.c:Int/Float widening branches	15	0	15	types/hm/numeric/widening-coercions/atom.type.hm.numeric.widening-coercions.000/type-hm-numeric-widening-coercions-000.mon
+infer.c:TYPE_APP/TYPE_LAYOUT compatibility	14	8	6	types/dep/adt-layout/constructor-indexing/atom.type.dep.adt-layout.constructor-indexing.000/type-dep-adt-layout-constructor-indexing-000.mon
+infer.c:TYPE_FN vs TYPE_ARROW compatibility guard	12	12	0	types/hm/functions/function-vs-value/atom.type.hm.functions.function-vs-value.000/type-hm-functions-function-vs-value-000.mon
+infer.c:TYPE_NIL strictly unifies only with Optional	12	12	0	types/hm/optional/nil-return-without-question/atom.type.hm.optional.nil-return-without-question.000/type-hm-optional-nil-return-without-question-000.mon
+infer.c:collection acting as function TYPE_ARR ~ TYPE_ARROW	10	0	10	types/hm/collections/array-as-function/atom.type.hm.collections.array-as-function.000/type-hm-collections-array-as-function-000.mon
+infer.c:collection compatibility guard	12	12	0	types/hm/collections/scalar-as-collection/atom.type.hm.collections.scalar-as-collection.000/type-hm-collections-scalar-as-collection-000.mon
+infer.c:collection_element_type String -> Char	15	10	5	types/bridge/dep-hm/collection-domain/atom.type.bridge.dep-hm.collection-domain.000/type-bridge-dep-hm-collection-domain-000.mon
+infer.c:ground type mismatch cannot unify	5	5	0	types/bridge/dep-hm/adt-return-mismatch/atom.type.bridge.dep-hm.adt-return-mismatch.000/type-bridge-dep-hm-adt-return-mismatch-000.mon
+infer.c:infer_env_insert/infer_env_lookup	20	0	20	types/hm/polymorphism/identity-and-const/atom.type.hm.polymorphism.identity-and-const.000/type-hm-polymorphism-identity-and-const-000.mon
+infer.c:infer_generalise/infer_instantiate happy path	20	0	20	types/hm/polymorphism/identity-and-const/atom.type.hm.polymorphism.identity-and-const.000/type-hm-polymorphism-identity-and-const-000.mon
+infer.c:list element recursive unification	12	12	0	types/hm/collections/tuple-element-mismatch/atom.type.hm.collections.tuple-element-mismatch.000/type-hm-collections-tuple-element-mismatch-000.mon
+infer/codegen if branch type validation	1	1	0	errors/codegen/type-errors/atom.codegen.90.diagnostics.type.errors.deep.diag.if.branch.type.mismatch/deep_diag_if_branch_type_mismatch.mon
+pmatch constructor/guard branches	1	0	1	branches/control-flow/pattern-match/atom.codegen.control.flow.pattern.match.deep.match.constructor.and.guard/deep_match_constructor_and_guard.mon
+pmatch.c integration through codegen	1	0	1	branches/data-layout/layouts-fields/atom.codegen.adt.match-field-load/data-adt-match-and-field-load.mon
+reader.c:1 Duplicate field ':x' in keyword constructor call for layout 'Point'	1	1	0	errors/reader/keyword-constructors/atom.reader.error.reader.keyword.constructor.duplicate.field/reader-keyword-constructor-duplicate-field.mon
+reader.c:1 Expected ')' to close data 'Maybe'	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.data.missing.close/reader-data-missing-close.mon
+reader.c:1 Expected ')' to close layout 'Point'	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.layout.missing.close/reader-layout-missing-close.mon
+reader.c:1 Expected '::' after method name 'foo'	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.layout.method.missing.type.separator/reader-layout-method-missing-type-separator.mon
+reader.c:1 Missing field ':y' in keyword constructor call for layout 'Point'	1	1	0	errors/reader/keyword-constructors/atom.reader.error.reader.keyword.constructor.missing.field/reader-keyword-constructor-missing-field.mon
+reader.c:1 Unknown field ':z' in keyword constructor call for layout 'Point'	1	1	0	errors/reader/keyword-constructors/atom.reader.error.reader.keyword.constructor.unknown.field/reader-keyword-constructor-unknown-field.mon
+reader.c:1 array used as function requires exactly 1 argument	1	1	0	errors/codegen/precise-arity/atom.codegen.diagnostic.codegen.branch.array.call.too.many.args.connected/codegen-branch-array-call-too-many-args-connected.mon
+reader.c:1 constructor name ‘just’ in ‘data Maybe’ must start with an uppercase letter	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.data.lowercase.constructor/reader-data-lowercase-constructor.mon
+reader.c:1 data type name 'maybe' must start with an uppercase letter	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.data.lowercase.type.name/reader-data-lowercase-type-name.mon
+reader.c:1 invalid integer type 'I0': bit-width must be at least 1	1	1	0	errors/reader/numeric-literals/atom.reader.error.reader.int.type.width.zero/reader-int-type-width-zero.mon
+reader.c:1 invalid integer type 'I129': bit-width 129 exceeds the maximum of 128	1	1	0	errors/reader/numeric-literals/atom.reader.error.reader.int.type.width.overflow.i129/reader-int-type-width-overflow-i129.mon
+reader.c:1 invalid integer type 'I65': bit-widths 65–127 are not supported; valid widths are 1–64 and 128	1	1	0	errors/reader/numeric-literals/atom.reader.error.reader.int.type.width.gap.i65/reader-int-type-width-gap-i65.mon
+reader.c:1 invalid integer type 'U127': bit-widths 65–127 are not supported; valid widths are 1–64 and 128	1	1	0	errors/reader/numeric-literals/atom.reader.error.reader.int.type.width.gap.u127/reader-int-type-width-gap-u127.mon
+reader.c:1 is a number literal and cannot be called as a function	1	1	0	errors/reader/tests-infix-calls/atom.reader.error.reader.literal.call.number/reader-literal-call-number.mon
+reader.c:1 is a string literal and cannot be called as a function	1	1	0	errors/reader/tests-infix-calls/atom.reader.error.reader.literal.call.string/reader-literal-call-string.mon
+reader.c:1 naked function 'naked_bad' must contain at least one (asm ...) block	1	1	0	errors/reader/define-type-asm/atom.reader.error.reader.naked.function.needs.asm/reader-naked-function-needs-asm.mon
+reader.c:1 radix 1 out of range (must be 2–36)	1	1	0	errors/reader/numeric-literals/atom.reader.error.reader.radix.too.low/reader-radix-too-low.mon
+reader.c:1 radix 37 out of range (must be 2–36)	1	1	0	errors/reader/numeric-literals/atom.reader.error.reader.radix.too.high/reader-radix-too-high.mon
+reader.c:1 unbound	1	1	0	errors/codegen/precise-symbols/atom.codegen.diagnostic.codegen.branch.unbound.symbol.connected/codegen-branch-unbound-symbol-connected.mon
+reader.c:1 unexpected character '$'	1	1	0	errors/reader/lexer-tokens/atom.reader.error.reader.unexpected.dollar.character/reader-unexpected-dollar-character.mon
+reader.c:1 unexpected character '@'	1	1	0	errors/reader/lexer-tokens/atom.reader.error.reader.unexpected.at.character/reader-unexpected-at-character.mon
+reader.c:1145 invalid integer type 'I0': bit-width must be at least 1	7	7	0	errors/reader/reader/type.integer-width.zero/atom.menu.error.reader.type.integer-width.zero.006/menu-reader-type.integer-width.zero-006.mon
+reader.c:1148 invalid integer type 'U65': bit-widths 65	7	7	0	errors/reader/reader/type.integer-width.unsupported-gap/atom.menu.error.reader.type.integer-width.unsupported-gap.007/menu-reader-type.integer-width.unsupported-gap-007.mon
+reader.c:1152 invalid integer type 'I129': bit-width 129 exceeds	7	7	0	errors/reader/reader/type.integer-width.too-large/atom.menu.error.reader.type.integer-width.too-large.008/menu-reader-type.integer-width.too-large-008.mon
+reader.c:1387 unterminated character literal	7	7	0	errors/reader/reader/lexer.character.unterminated.escape/atom.menu.error.reader.lexer.character.unterminated.escape.009/menu-reader-lexer.character.unterminated.escape-009.mon
+reader.c:1402 unterminated character literal	7	7	0	errors/reader/reader/lexer.character.unterminated.simple/atom.menu.error.reader.lexer.character.unterminated.simple.010/menu-reader-lexer.character.unterminated.simple-010.mon
+reader.c:1534 radix 1 out of range	7	7	0	errors/reader/reader/numeric.radix.out-of-range.low/atom.menu.error.reader.numeric.radix.out-of-range.low.000/menu-reader-numeric.radix.out-of-range.low-000.mon
+reader.c:1534 radix 37 out of range	7	7	0	errors/reader/reader/numeric.radix.out-of-range.high/atom.menu.error.reader.numeric.radix.out-of-range.high.001/menu-reader-numeric.radix.out-of-range.high-001.mon
+reader.c:1540 expected digits after radix prefix '16r'	7	7	0	errors/reader/reader/numeric.radix.missing-digits.hex/atom.menu.error.reader.numeric.radix.missing-digits.hex.003/menu-reader-numeric.radix.missing-digits.hex-003.mon
+reader.c:1540 expected digits after radix prefix '2r'	7	7	0	errors/reader/reader/numeric.radix.missing-digits/atom.menu.error.reader.numeric.radix.missing-digits.002/menu-reader-numeric.radix.missing-digits-002.mon
+reader.c:1541 expected digits after radix prefix '2r'	1	1	0	errors/reader/numeric-literals/atom.reader.error.reader.radix.missing.digits/reader-radix-missing-digits.mon
+reader.c:1594 Expected ')' to close periodic decimal repeating block	7	7	0	errors/reader/reader/numeric.periodic.missing-close/atom.menu.error.reader.numeric.periodic.missing-close.004/menu-reader-numeric.periodic.missing-close-004.mon
+reader.c:1595 Expected ')'	1	1	0	errors/reader/tests-infix-calls/atom.reader.error.reader.list.missing.close/reader-list-missing-close.mon
+reader.c:1595 Expected ')' to close periodic decimal repeating block	1	1	0	errors/reader/numeric-literals/atom.reader.error.reader.periodic.decimal.missing.close/reader-periodic-decimal-missing-close.mon
+reader.c:1604 Periodic decimal repeating block cannot be empty	7	7	0	errors/reader/reader/numeric.periodic.empty-block/atom.menu.error.reader.numeric.periodic.empty-block.005/menu-reader-numeric.periodic.empty-block-005.mon
+reader.c:1605 Periodic decimal repeating block cannot be empty	1	1	0	errors/reader/numeric-literals/atom.reader.error.reader.periodic.decimal.empty.block/reader-periodic-decimal-empty-block.mon
+reader.c:1645 Invalid ratio: missing denominator	1	1	0	errors/reader/numeric-literals/atom.reader.error.reader.ratio.missing.denominator/reader-ratio-missing-denominator.mon
+reader.c:1712 expected parameter name after λ	7	7	0	errors/reader/reader/lambda.missing-parameter/atom.menu.error.reader.lambda.missing-parameter.012/menu-reader-lambda.missing-parameter-012.mon
+reader.c:1713 expected parameter name after λ	1	1	0	errors/reader/lexer-tokens/atom.reader.error.reader.lambda.missing.param/reader-lambda-missing-param.mon
+reader.c:1762 expected '.' or another parameter after λ parameter name	7	7	0	errors/reader/reader/lambda.missing-dot-after-parameter/atom.menu.error.reader.lambda.missing-dot-after-parameter.013/menu-reader-lambda.missing-dot-after-parameter-013.mon
+reader.c:1763 expected '.' or another parameter after λ parameter name	1	1	0	errors/reader/lexer-tokens/atom.reader.error.reader.lambda.param.missing.dot/reader-lambda-param-missing-dot.mon
+reader.c:1896 unexpected character '@'	7	7	0	errors/reader/reader/lexer.unexpected-character/atom.menu.error.reader.lexer.unexpected-character.011/menu-reader-lexer.unexpected-character-011.mon
+reader.c:1915 use ‘:’ instead of ‘::’ to annotate parameter types	7	7	0	errors/reader/reader/signature.param.double-colon/atom.menu.error.reader.signature.param.double-colon.014/menu-reader-signature.param.double-colon-014.mon
+reader.c:1916 use ‘:’ instead of ‘::’ to annotate parameter types	1	1	0	errors/reader/signatures-params/atom.reader.error.reader.param.double.colon.hint/reader-param-double-colon-hint.mon
+reader.c:2031 Expected ']' after typed rest parameter	7	7	0	errors/reader/reader/signature.rest.typed-missing-bracket/atom.menu.error.reader.signature.rest.typed-missing-bracket.015/menu-reader-signature.rest.typed-missing-bracket-015.mon
+reader.c:2032 Expected ']'	1	1	0	errors/reader/collections-refinements/atom.reader.error.reader.array.missing.close/reader-array-missing-close.mon
+reader.c:2032 Expected ']' after typed rest parameter	1	1	0	errors/reader/signatures-params/atom.reader.error.reader.rest.param.missing.bracket/reader-rest-param-missing-bracket.mon
+reader.c:2123 Expected parameter name or '[name :: Type]' after '.'	1	1	0	errors/reader/signatures-params/atom.reader.error.reader.rest.param.needs.name/reader-rest-param-needs-name.mon
+reader.c:2134 Expected ']' after parameter	1	1	0	errors/reader/signatures-params/atom.reader.error.reader.param.missing.bracket/reader-param-missing-bracket.mon
+reader.c:2285 Expected ')' after parameter	1	1	0	errors/reader/signatures-params/atom.reader.error.reader.param.missing.paren/reader-param-missing-paren.mon
+reader.c:2573 Unexpected token in function signature	1	1	0	errors/reader/signatures-params/atom.reader.error.reader.function.signature.unexpected.token/reader-function-signature-unexpected-token.mon
+reader.c:2661 Expected ')' to close function signature	1	1	0	errors/reader/signatures-params/atom.reader.error.reader.function.signature.missing.close/reader-function-signature-missing-close.mon
+reader.c:2672 Expected '(' after 'lambda'	1	1	0	errors/reader/signatures-params/atom.reader.error.reader.lambda.expected.open.paren/reader-lambda-expected-open-paren.mon
+reader.c:2789 lambda body cannot be empty	1	1	0	errors/reader/signatures-params/atom.reader.error.reader.lambda.empty.body/reader-lambda-empty-body.mon
+reader.c:2943 'cond' requires at least one clause	1	1	0	errors/reader/special-forms/atom.reader.error.reader.cond.empty/reader-cond-empty.mon
+reader.c:2948 'cond' clauses must use bracket syntax [test body...]	1	1	0	errors/reader/special-forms/atom.reader.error.reader.cond.clause.not.bracketed/reader-cond-clause-not-bracketed.mon
+reader.c:2971 Expected ']' to close 'else' clause	1	1	0	errors/reader/special-forms/atom.reader.error.reader.cond.else.missing.bracket/reader-cond-else-missing-bracket.mon
+reader.c:2976 Expected ')' after 'else' clause — 'else' must be last	1	1	0	errors/reader/special-forms/atom.reader.error.reader.cond.else.not.last/reader-cond-else-not-last.mon
+reader.c:2981 'else' clause requires at least one expression	1	1	0	errors/reader/special-forms/atom.reader.error.reader.cond.else.empty/reader-cond-else-empty.mon
+reader.c:3048 Expected ']' after function in '=>' clause	1	1	0	errors/reader/special-forms/atom.reader.error.reader.cond.arrow.missing.function.bracket/reader-cond-arrow-missing-function-bracket.mon
+reader.c:3096 Expected ']' to close cond clause	1	1	0	errors/reader/special-forms/atom.reader.error.reader.cond.clause.missing.bracket/reader-cond-clause-missing-bracket.mon
+reader.c:3288 Expected 'with' after match expression	1	1	0	errors/reader/special-forms/atom.reader.error.reader.match.missing.with/reader-match-missing-with.mon
+reader.c:3326 Expected ')' to close match expression	1	1	0	errors/reader/special-forms/atom.reader.error.reader.match.missing.close/reader-match-missing-close.mon
+reader.c:3347 Expected '(' or '[' after 'let'	1	1	0	errors/reader/special-forms/atom.reader.error.reader.let.missing.binding.form/reader-let-missing-binding-form.mon
+reader.c:3362 Expected '[' in let binding	1	1	0	errors/reader/special-forms/atom.reader.error.reader.let.expected.binding.bracket.list/reader-let-expected-binding-bracket-list.mon
+reader.c:3366 Expected symbol in let binding	1	1	0	errors/reader/special-forms/atom.reader.error.reader.let.expected.binding.symbol/reader-let-expected-binding-symbol.mon
+reader.c:3373 Expected ']' after let binding value	1	1	0	errors/reader/special-forms/atom.reader.error.reader.let.binding.missing.close/reader-let-binding-missing-close.mon
+reader.c:3410 let body cannot be empty	1	1	0	errors/reader/special-forms/atom.reader.error.reader.let.empty.body/reader-let-empty-body.mon
+reader.c:3417 set!	1	1	0	errors/codegen/precise-mutation/atom.codegen.diagnostic.codegen.branch.setbang.non.symbol.connected/codegen-branch-setbang-non-symbol-connected.mon
+reader.c:3479 can't use 'def' for top-level definitions, use 'define' instead	1	1	0	errors/reader/define-type-asm/atom.reader.error.reader.def.top.level.disallowed/reader-def-top-level-disallowed.mon
+reader.c:3491 can't use 'define' inside a function body, use 'def' instead	1	1	0	errors/reader/define-type-asm/atom.reader.error.reader.define.inside.body.disallowed/reader-define-inside-body-disallowed.mon
+reader.c:3530 Expected function name after (define (	1	1	0	errors/reader/define-type-asm/atom.reader.error.reader.define.missing.function.name/reader-define-missing-function-name.mon
+reader.c:3675 function body cannot be empty	1	1	0	errors/reader/define-type-asm/atom.reader.error.reader.define.empty.function.body/reader-define-empty-function-body.mon
+reader.c:3691 Expected ')' after define body	1	1	0	errors/reader/define-type-asm/atom.reader.error.reader.define.missing.close.after.body/reader-define-missing-close-after-body.mon
+reader.c:37 type	1	1	0	errors/codegen/precise-types/atom.codegen.diagnostic.codegen.branch.if.branch.type.mismatch.connected/codegen-branch-if-branch-type-mismatch-connected.mon
+reader.c:3753 Expected variable name in typed define	1	1	0	errors/reader/define-type-asm/atom.reader.error.reader.typed.define.missing.variable/reader-typed-define-missing-variable.mon
+reader.c:3821 Expected ']' to close typed variable binding	1	1	0	errors/reader/define-type-asm/atom.reader.error.reader.typed.define.missing.close/reader-typed-define-missing-close.mon
+reader.c:3832 Expected variable name after define	1	1	0	errors/reader/define-type-asm/atom.reader.error.reader.define.missing.variable.name/reader-define-missing-variable-name.mon
+reader.c:39 field	1	1	0	errors/codegen/precise-fields/atom.codegen.diagnostic.codegen.branch.missing.layout.field.connected/codegen-branch-missing-layout-field-connected.mon
+reader.c:3907 Expected ')' to close define	1	1	0	errors/reader/define-type-asm/atom.reader.error.reader.define.missing.paren/reader-define-missing-paren.mon
+reader.c:3960 Expected ')' to close asm block	1	1	0	errors/reader/define-type-asm/atom.reader.error.reader.asm.missing.close/reader-asm-missing-close.mon
+reader.c:3990 Expected type name after 'type'	1	1	0	errors/reader/define-type-asm/atom.reader.error.reader.type.missing.name/reader-type-missing-name.mon
+reader.c:4002 Expected refinement type { x ∈ T | pred }	1	1	0	errors/reader/define-type-asm/atom.reader.error.reader.refinement.type.expected.body/reader-refinement-type-expected-body.mon
+reader.c:4039 Expected ')' to close type definition	1	1	0	errors/reader/define-type-asm/atom.reader.error.reader.type.definition.missing.close/reader-type-definition-missing-close.mon
+reader.c:4052 Expected target type name or '{' after type name	1	1	0	errors/reader/define-type-asm/atom.reader.error.reader.type.alias.target.missing/reader-type-alias-target-missing.mon
+reader.c:4084 Expected ')' to close type alias	1	1	0	errors/reader/define-type-asm/atom.reader.error.reader.type.alias.missing.close/reader-type-alias-missing-close.mon
+reader.c:4111 Expected class name after 'class'	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.class.missing.name/reader-class-missing-name.mon
+reader.c:4117 Expected type variable after class name	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.class.missing.type.var/reader-class-missing-type-var.mon
+reader.c:4440 Expected ')' to close class definition	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.class.missing.close/reader-class-missing-close.mon
+reader.c:4463 Expected class name after 'instance'	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.instance.missing.class.name/reader-instance-missing-class-name.mon
+reader.c:4469 Expected type name after class name	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.instance.missing.type.name/reader-instance-missing-type-name.mon
+reader.c:4538 Expected '(' to start instance method clause	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.instance.method.clause.open/reader-instance-method-clause-open.mon
+reader.c:4796 Expected type name after ‘data’	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.data.missing.type.name/reader-data-missing-type-name.mon
+reader.c:4924 'deriving' requires at least one typeclass	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.data.empty.deriving/reader-data-empty-deriving.mon
+reader.c:4934 Expected constructor name in ‘data Maybe’	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.data.missing.constructor/reader-data-missing-constructor.mon
+reader.c:5074 Expected layout name after 'layout'	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.layout.missing.name/reader-layout-missing-name.mon
+reader.c:5118 Expected 'method' in layout where block	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.layout.where.expected.method/reader-layout-where-expected-method.mon
+reader.c:5125 Expected method name after 'method'	2	2	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.layout.method.missing.name/reader-layout-method-missing-name.mon
+reader.c:5316 Expected '[' for layout field	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.layout.field.missing.open.bracket/reader-layout-field-missing-open-bracket.mon
+reader.c:5322 Expected field name in layout	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.layout.field.missing.name/reader-layout-field-missing-name.mon
+reader.c:5335 Expected '::' or '->' after layout field name 'x'	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.layout.field.missing.separator/reader-layout-field-missing-separator.mon
+reader.c:5347 Expected element type in array field	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.layout.array.field.missing.element/reader-layout-array-field-missing-element.mon
+reader.c:5357 Expected ']' to close array field type	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.layout.array.field.missing.close/reader-layout-array-field-missing-close.mon
+reader.c:5382 Expected ']' to close layout field	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.layout.field.missing.close/reader-layout-field-missing-close.mon
+reader.c:5442 top-level 'method' is only allowed in type files named Type.mon	1	1	0	errors/reader/typeclass-data-layout/atom.reader.error.reader.top.level.method.wrong.file/reader-top-level-method-wrong-file.mon
+reader.c:5788 Expected ')' to close tests block	1	1	0	errors/reader/tests-infix-calls/atom.reader.error.reader.tests.block.missing.close/reader-tests-block-missing-close.mon
+reader.c:6010 Expected ')' after infix expression	1	1	0	errors/reader/tests-infix-calls/atom.reader.error.reader.list.missing.close.after.infix/reader-list-missing-close-after-infix.mon
+reader.c:6044 Unexpected ',' in list — did you mean a range	1	1	0	errors/reader/tests-infix-calls/atom.reader.error.reader.comma.in.list.range.hint/reader-comma-in-list-range-hint.mon
+reader.c:6080 Expected keyword in keyword constructor call 'Point'	1	1	0	errors/reader/keyword-constructors/atom.reader.error.reader.keyword.constructor.mixing.positional/reader-keyword-constructor-mixing-positional.mon
+reader.c:6213 Expected ']' after size literal	1	1	0	errors/reader/collections-refinements/atom.reader.error.reader.array.size.missing.close/reader-array-size-missing-close.mon
+reader.c:6218 buffer size	1	1	0	errors/reader/collections-refinements/atom.reader.error.reader.array.size.not.divisible/reader-array-size-not-divisible.mon
+reader.c:6263 Can't do infinite arrays. Are you trying to blow up the stack?	1	1	0	errors/reader/collections-refinements/atom.reader.error.reader.array.infinite.disallowed/reader-array-infinite-disallowed.mon
+reader.c:6281 Unexpected ',' — did you mean a range [start,step..end]?	1	1	0	errors/reader/collections-refinements/atom.reader.error.reader.array.comma.range.hint/reader-array-comma-range-hint.mon
+reader.c:6336 Expected variable name in refinement	1	1	0	errors/reader/collections-refinements/atom.reader.error.reader.refinement.missing.variable/reader-refinement-missing-variable.mon
+reader.c:6343 Expected '∈' after variable name	1	1	0	errors/reader/collections-refinements/atom.reader.error.reader.refinement.missing.in/reader-refinement-missing-in.mon
+reader.c:6348 Expected base type after '∈'	1	1	0	errors/reader/collections-refinements/atom.reader.error.reader.refinement.missing.base/reader-refinement-missing-base.mon
+reader.c:6360 Expected '|' after base type	1	1	0	errors/reader/collections-refinements/atom.reader.error.reader.refinement.missing.pipe/reader-refinement-missing-pipe.mon
+reader.c:6379 Expected operator in refinement predicate	1	1	0	errors/reader/collections-refinements/atom.reader.error.reader.refinement.missing.operator/reader-refinement-missing-operator.mon
+reader.c:6476 Expected '}' to close refinement	1	1	0	errors/reader/collections-refinements/atom.reader.error.reader.refinement.missing.close/reader-refinement-missing-close.mon
+reader.c:6518 Expected '}' to close set literal	1	1	0	errors/reader/collections-refinements/atom.reader.error.reader.set.missing.close/reader-set-missing-close.mon
+reader.c:6539 map literal requires an even number of forms	1	1	0	errors/reader/collections-refinements/atom.reader.error.reader.map.odd.forms/reader-map-odd-forms.mon
+reader.c:6557 Expected '}' to close map literal	1	1	0	errors/reader/collections-refinements/atom.reader.error.reader.map.missing.close/reader-map-missing-close.mon
+reader.c:6788 adjacent string literals are not supported	1	1	0	errors/reader/lexer-tokens/atom.reader.error.reader.adjacent.string.literals/reader-adjacent-string-literals.mon
+reader.c:6862 Empty unquote ⌞⌟ — expected an expression inside	1	1	0	errors/reader/quote-feature-postfix/atom.reader.error.reader.empty.unquote/reader-empty-unquote.mon
+reader.c:6865 ⌞(...)⌟ is invalid — do not wrap the expression in parens inside an unquote	1	1	0	errors/reader/quote-feature-postfix/atom.reader.error.reader.unquote.parens.invalid/reader-unquote-parens-invalid.mon
+reader.c:6948 Expected ⌟ to close unquote expression	1	1	0	errors/reader/quote-feature-postfix/atom.reader.error.reader.unquote.missing.close/reader-unquote-missing-close.mon
+reader.c:6968 Expected ⌝ to close quasiquote	1	1	0	errors/reader/quote-feature-postfix/atom.reader.error.reader.quasiquote.missing.close/reader-quasiquote-missing-close.mon
+reader.c:6984 Unquote bracket used outside of a quasiquote block	1	1	0	errors/reader/quote-feature-postfix/atom.reader.error.reader.unquote.outside.quasiquote/reader-unquote-outside-quasiquote.mon
+reader.c:6989 Unexpected closing corner bracket with no matching open	1	1	0	errors/reader/quote-feature-postfix/atom.reader.error.reader.unmatched.quasiquote.close/reader-unmatched-quasiquote-close.mon
+reader.c:7124 Expected ']' to close index expression	1	1	0	errors/reader/quote-feature-postfix/atom.reader.error.reader.index.missing.close/reader-index-missing-close.mon
+reader.c:7148 Expected ')' to close postfix call	1	1	0	errors/reader/quote-feature-postfix/atom.reader.error.reader.postfix.call.missing.close/reader-postfix-call-missing-close.mon
+reader.c:7268 Expected feature name after #+	1	1	0	errors/reader/quote-feature-postfix/atom.reader.error.reader.feature.missing.name/reader-feature-missing-name.mon
+reader.c:7305 Expected #--- to close feature block	1	1	0	errors/reader/quote-feature-postfix/atom.reader.error.reader.feature.missing.end/reader-feature-missing-end.mon
+reader.c:AST_REFINEMENT construction	8	8	0	types/dep/refinement/predicate-failure/atom.type.dep.refinement.predicate-failure.000/type-dep-refinement-predicate-failure-000.mon
+wisp.c define lowering	1	0	1	branches/wisp-codegen/define-and-types/atom.codegen.wisp.codegen.define.and.types.deep.wisp.typed.function.and.value/deep_wisp_typed_function_and_value.mon
+wisp.c if/logic lowering	1	0	1	branches/wisp-codegen/control-and-logic/atom.codegen.wisp.codegen.control.and.logic.deep.wisp.if.logic.phi/deep_wisp_if_logic_phi.mon
+wisp.c infix lowering -> codegen operator dispatch	1	0	1	branches/wisp-codegen/operator-sugar/atom.codegen.80.wisp.codegen.operator.sugar.deep.wisp.pipe.and.infix/deep_wisp_pipe_and_infix.mon
+wisp.c literal lowering	1	0	1	branches/wisp-codegen/collections-quote-path/atom.codegen.wisp.codegen.collections.quote.path.deep.wisp.path.and.array/deep_wisp_path_and_array.mon
+wisp.c scalar lowering -> codegen_show_value	1	0	1	branches/wisp-codegen/basic-values/atom.codegen.80.wisp.codegen.basic.values.deep.wisp.show.scalars/deep_wisp_show_scalars.mon

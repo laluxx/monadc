@@ -11,11 +11,58 @@
 
 [[file:index.org][<- Back to Index]] · [[file:arithmetic.org][Arithmetic]] · [[file:casting.org][Casting]] · [[file:rationals.org][Rationals]] · [[file:math-module.org][Math Module]] · [[file:type-classes.org][Classes]] · [[file:types.org][Types]] · [[file:core.org][Core Library]] · [[file:syntax.org][Syntax]]
 
-Test coverage: arithmetic by =rt_arith_*.mon=, bitwise by =rt_bitwise_*.mon=, comparison by =rt_cmp_*.mon=, conversions by =rt_typeconv_*.mon=.
+Test coverage: arithmetic by [[file:../tests/codegen/branches/operators/][tests/codegen/branches/operators/]]
+(=rt_arith_*.mon=), bitwise by =rt_bitwise_*.mon=, comparison by
+=rt_cmp_*.mon=, conversions by =rt_typeconv_*.mon=. See
+[[file:../context/tests-arch.org][context/tests-arch.org]] for the full test architecture.
 
-Monad provides a comprehensive numeric type hierarchy spanning arbitrary-precision concepts down to fixed-width machine types for C interop.
+MonadC provides a comprehensive numeric type hierarchy spanning arbitrary-precision concepts down to fixed-width machine types for C interop. The hierarchy is organized from most-general to most-specific: =Number= (any numeric) → =Int= / =Float= / =Ratio= (primary types) → fixed-width subtypes.
 
-* Primary Numeric Types
+** Complete example:
+
+#+BEGIN_SRC monad
+;; Save as numeric-demo.mon && monadc numeric-demo.mon && ./numeric-demo
+(module Main)
+
+;; All numeric literal forms
+(define i 42)              ;; Int
+(define f 3.14)            ;; Float
+(define r 1/3)             ;; Ratio
+(define h 0xFF)            ;; Hex (255)
+(define b 0b1010)          ;; Binary (10)
+(define o 0o777)           ;; Octal (511)
+(define p 50%              ;; Percentage (= 1/2)
+
+;; Type predicates
+(show (Int? 42))           ;; True
+(show (Float? 3.14))       ;; True
+(show (Number? 42))        ;; True
+(show (Number? "hi"))      ;; False
+
+;; Type conversions
+(show (Int 3.14))          ;; 3
+(show (Float 42))          ;; 42.0
+(show (Hex 255))           ;; "0xFF"
+(show (Char 65))           ;; 'A'
+#+END_SRC
+
+** Common Pitfalls
+
+- **=Int= defaults to 64-bit, not arbitrary precision**: Integer
+  overflow wraps silently (two's complement on x86-64). For safe
+  arithmetic, validate ranges with [[file:refinements.org][Refinement Types]].
+- **Fixed-width types do NOT auto-promote**: =(+ (I8 3) (I8 4))= is a
+  type error. Use explicit [[file:casting.org][Casting]].
+- **=Hex=, =Bin=, =Oct= are subtypes of Int at the type level**: They
+  are NOT separate types at runtime. =(= 0xFF 255)= is True.
+- **Ratio literals are parsed as single tokens, NOT division**: =1/3=
+  is an =AST_RATIO= token, not sugar for =(/ 1 3)=.
+- **Percentage syntax is reader-only**: =50%= desugars to =1/2= at
+  parse time. There is no runtime percentage operation.
+- **=Int?= checks for Int specifically, NOT for any numeric type**:
+  =(Int? 3.14)= returns False. Use =Number?= to test any numeric type.
+
+* 1. Primary Numeric Types
 
 | Type | Description | Example | Precision |
 |------+-------------+---------+-----------|
@@ -24,8 +71,27 @@ Monad provides a comprehensive numeric type hierarchy spanning arbitrary-precisi
 | =Ratio= | Exact rational | =1/3=, =50%= | Arbitrary (num/den) |
 
 See [[file:rationals.org][Rationals]] for the =Ratio= type.
+See [[file:arithmetic.org][Arithmetic]] for operations on these types.
+See [[file:type-classes.org][Type Classes]] for the =Num=, =Integral=, and =Floating= class hierarchy.
 
-* Literal Notations
+** Key Points
+
+- =Int= is 64-bit on all supported platforms
+- =Float= is IEEE 754 double-precision (binary64)
+- =Ratio= is exact — no floating-point rounding, automatically reduced
+
+* 2. Literal Notations
+
+All numeric literals are read by the tokeniser ([[file:../reader.c][reader.c]]) and assigned their type at parse time.
+
+| Notation | Description | Example |
+|----------+-------------+---------|
+| =42=, =-7= | Decimal Int | =42= |
+| =3.14=, =1e10= | Float | =3.14= |
+| =1/3=, =50%= | Ratio | =1/3= |
+| =0xFF= | Hex | =0xFF= |
+| =0b1010= | Binary | =0b1010= |
+| =0o777= | Octal | =0o777= |
 
 #+BEGIN_SRC monad
 (42                 ;; Int)
@@ -51,9 +117,20 @@ See [[file:rationals.org][Rationals]] for the =Ratio= type.
 0o777              ;; Octal (511)
 #+END_SRC
 
-* Fixed-Width Numeric Types
+See [[file:syntax.org][Syntax]] for the full grammar of numeric literals.
 
-For C interop and bit-level control ([[file:types.org][Types]]):
+** Implementation Notes
+
+- Numeric literal tokenisation in reader
+  ([[file:../reader.c]])
+- Hex, binary, octal are stored as subtypes of Int at the type level
+  ([[file:../context/types.org::107]])
+- Ratio literals parsed as single AST_RATIO tokens (not division)
+  ([[file:../reader.c::265]])
+
+* 3. Fixed-Width Numeric Types
+
+For C interop and bit-level control ([[file:types.org][Types]], [[file:ffi.org][C FFI]]):
 
 | Type | Width | Description |
 |------+-------+-------------|
@@ -72,9 +149,19 @@ For C interop and bit-level control ([[file:types.org][Types]]):
 
 Note: =Int= maps to the machine word (i64 on x86-64). Use fixed-width types for explicit layout control or FFI.
 
-* Type Conversions ([[file:../codegen.c::13144]])
+These types are detailed in [[file:../context/types.org][context/types.org]].
 
-Numeric types are first-class casting functions:
+** Key Points
+
+- =Int= is the default integer type; fixed-width types are for FFI and
+  layout control
+- =F80= provides x86 extended precision (80-bit) for numerical computing
+- Fixed-width types do NOT participate in automatic promotion — use
+  explicit [[file:casting.org][Casting]]
+
+* 4. Type Conversions ([[file:../codegen.c::13144]])
+
+Numeric types are first-class casting functions (see also [[file:casting.org][Casting]]):
 
 #+BEGIN_SRC monad
 (Int   40.3)          ;; 4)
@@ -96,9 +183,11 @@ Char  65            ;; 'A)
 Arr   20            ;; [20)
 #+END_SRC
 
-* Arithmetic Operations ([[file:core.org][Core Library]])
+Conversion dispatch is handled via strcmp in [[file:../context/codegen-ops.org][context/codegen-ops.org]].
 
-All working on Int, Float, and mixed operands:
+* 5. Arithmetic Operations ([[file:core.org][Core Library]])
+
+All working on Int, Float, and mixed operands (see [[file:arithmetic.org][Arithmetic]]):
 
 | Operation | Example | Variadic |
 |-----------+---------+----------|
@@ -108,7 +197,7 @@ All working on Int, Float, and mixed operands:
 | =/= | =(/ 10 3)= | Yes (1..N) |
 | =%= | =(% 10 3)= | No (binary) |
 
-* Bitwise Operations
+* 6. Bitwise Operations
 
 | Operation | Example | Variadic |
 |-----------+---------+----------|
@@ -120,7 +209,11 @@ All working on Int, Float, and mixed operands:
 | =>>= | =(>> 16 2)= | Binary |
 | =>>>= | =(>>> -1 1)= | Binary |
 
-* Comparison Operations
+Bitwise operations only work on integer types (Int and fixed-width integers).
+
+* 7. Comparison Operations
+
+All comparisons return =Bool= (see [[file:booleans.org][Booleans]]):
 
 | Operation | Example | Variadic |
 |-----------+---------+----------|
@@ -131,38 +224,57 @@ All working on Int, Float, and mixed operands:
 | =>= | =(> 3 2 1)= | Yes |
 | =>== | =(>= 3 3)= | Yes |
 
-* Type Predicates
+See also [[file:equality.org][Equality]].
+
+* 8. Type Predicates
 
 #+BEGIN_SRC monad
-(Int?    42)        ;; Tru)
-(Float?  3.14)      ;; Tru)
-(Number? 42)         ;; Tru)
-(Number? 3.14)       ;; Tru)
-(Number? "hello")    ;; Fals)
+(Int?    42)        ;; True
+(Float?  3.14)      ;; True
+(Number? 42)         ;; True
+(Number? 3.14)       ;; True
+(Number? "hello")    ;; False
 #+END_SRC
 
 #+BEGIN_SRC wisp
-Int?    42        ;; Tru)
-Float?  3.14      ;; Tru)
-Number? 42         ;; Tru)
-Number? 3.14       ;; Tru)
-Number? "hello"    ;; Fals)
+Int?    42        ;; True
+Float?  3.14      ;; True
+Number? 42         ;; True
+Number? 3.14       ;; True
+Number? "hello"    ;; False
 #+END_SRC
+
+See [[file:types.org][Types]] for all type predicates.
 
 * Related Pages
 
 - [[file:rationals.org][Rationals]] — exact rational arithmetic
+- [[file:arithmetic.org][Arithmetic]] — operations on numeric types
+- [[file:casting.org][Casting]] — type conversions
 - [[file:types.org][Types]] — type system, ground types
 - [[file:core.org][Core Library]] — arithmetic/bitwise/comparison dispatch
 - [[file:syntax.org][Syntax]] — literal syntax
 - [[file:strings.org][Strings]] — numeric string conversion
 - [[file:ffi.org][C FFI]] — fixed-width types for interop
+- [[file:booleans.org][Booleans]] — Bool type for comparison results
+- [[file:equality.org][Equality]] — comparison details
+- [[file:math-module.org][Math Module]] — extended math functions
+- [[file:type-classes.org][Type Classes]] — Num, Integral, Floating hierarchy
 
 * Context Links
 
 - [[file:../context/types.org][context/types.org]] — Numeric type kinds
 - [[file:../context/language.org::working-dispatch][context/language.org — Arithmetic dispatch]]
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — operation dispatch
 - [[file:../codegen.c::13144][codegen.c]] — Type conversion handlers
+- [[file:../reader.c][reader.c]] — numeric literal tokenisation
 
+* Further Reading
 
-
+- [[file:../context/language.org::working-dispatch][context/language.org]] — full arithmetic dispatch semantics
+- [[file:../context/types.org][context/types.org]] — type system internals
+- [[file:../context/codegen.org][context/codegen.org]] — code generation for numeric operations
+- [[file:../tests/codegen/][tests/codegen/]] — test fixtures for numeric operations
+- [[file:../context/features.org][context/features.org]] — numeric feature tracking
+- [[file:type-inference.org][Type Inference]] — how numeric types are inferred
+- [[file:advanced-types.org][Advanced Types]] — dependent types for numeric constraints

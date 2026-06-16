@@ -1,0 +1,16 @@
+name: negative_call_integer_as_function
+section: negative-atom-web
+tier: compile-fail
+kind: compile-fail
+features: compile-fail, diagnostic
+compiler-path: infer.call, diagnostic.compile_fail, stage.infer
+stage: infer
+signal: high
+corpus-role: negative-diagnostic
+uses-atoms: atom.core.int, atom.diagnostic.call
+depends-on: atom.core.int, atom.diagnostic.call
+args: x:Int@edge y:Int@edge
+type: Bool
+expect-diagnostic: error:
+description: Structured negative property linked to diagnostic atom dependencies.
+law: ({x} {y})

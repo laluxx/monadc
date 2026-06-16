@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-lambda-rest-param
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-CODEGEN-ATOM: atom.codegen.05.symbol.env.lambdas.rt.lambda.rest.param
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: lambdas
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.reader-header-coverage
+;; TEST-PURPOSE: Runtime rest-parameter lambdas are a codegen-backed coverage point.
+;; TEST-ATOM: A function with . xs should accept multiple positional arguments as a rest list.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:05-symbol-env/lambdas branch family
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/lambdas/atom.codegen.05.symbol.env.lambdas.rt.lambda.rest.param
+;; TEST-MENU-PATH: codegen/branches/symbol-env/lambdas/atom.codegen.05.symbol.env.lambdas.rt.lambda.rest.param
+;; TEST-ATOM-LEAF: atom.codegen.05.symbol.env.lambdas.rt.lambda.rest.param
+;; TEST-CLI-TARGET: codegen branches symbol-env lambdas
+(module Main)
+(define (sum-rest . xs) (count xs))
+(show (sum-rest 1 2 3))

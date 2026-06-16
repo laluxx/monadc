@@ -1,0 +1,15 @@
+name: control_for_simple_count_runs_body_count_times
+section: control-binding
+tier: experimental
+kind: law
+features: arithmetic, array, array-index, begin, control, env, equality, for, logic, mutation, set, set!, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.equality_dispatch, codegen.for_loop, codegen.local_load, codegen.logic_dispatch, codegen.runtime_call, codegen.sequence, codegen.set_bang, codegen.store, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.equality, infer.logic, infer.loop, infer.mutation, reader.array_literal, reader.ast_begin, runtime.set
+signal: low
+corpus-role: legacy-smoke
+uses-atoms: atom.binding.set-bang, atom.binding.with, atom.control.begin, atom.core.equality, atom.core.plus, atom.logic.and, atom.logic.not, atom.logic.or, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero, signal_atom_with_substitution
+args: 
+type: Bool
+expect: True
+description: simple count for-loop must execute the body exactly n times.
+law: (with [x 0] (begin (for 5 (set! x (+ x 1))) (= x 5)))

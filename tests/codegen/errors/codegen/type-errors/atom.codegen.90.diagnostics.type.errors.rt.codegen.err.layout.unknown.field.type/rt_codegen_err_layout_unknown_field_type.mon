@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-layout-unknown-field-type
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.90.diagnostics.type.errors.rt.codegen.err.layout.unknown.field.type
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: type-errors
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen rejects layout fields with unknown types.
+;; TEST-ATOM: [x :: Nope] must fail because Nope is not a known type.
+;; TEST-EXPECT: fail:compile
+
+;; TEST-COVERAGE: codegen.c:90-diagnostics/type-errors branch family
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/type-errors/atom.codegen.90.diagnostics.type.errors.rt.codegen.err.layout.unknown.field.type
+;; TEST-MENU-PATH: codegen/errors/codegen/type-errors/atom.codegen.90.diagnostics.type.errors.rt.codegen.err.layout.unknown.field.type
+;; TEST-ATOM-LEAF: atom.codegen.90.diagnostics.type.errors.rt.codegen.err.layout.unknown.field.type
+;; TEST-CLI-TARGET: codegen errors codegen type-errors
+(module Main)
+(layout Point [x :: Nope])

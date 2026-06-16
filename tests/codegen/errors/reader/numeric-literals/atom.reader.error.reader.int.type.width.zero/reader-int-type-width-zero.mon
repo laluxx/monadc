@@ -1,0 +1,35 @@
+;; TEST-ID: tests.codegen.reader-error.reader-int-type-width-zero
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: reader-errors/numeric-literals
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.reader-error-coverage
+;; TEST-PURPOSE: Trigger and pin diagnostic: invalid integer type 'I0': bit-width must be at least 1
+;; TEST-ATOM: atom.reader.error.reader.int.type.width.zero
+;; TEST-CODEGEN-ATOM: atom.reader.error.reader.int.type.width.zero
+;; TEST-QUALITY: diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-READER-ERROR: invalid integer type 'I0': bit-width must be at least 1
+;; TEST-READER-PATH: reader.c:1 parse_int_type
+;; TEST-CODEGEN-PATH: diagnostic.parse_int_type
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-COVERAGE: reader.c:1 invalid integer type 'I0': bit-width must be at least 1
+;; TEST-USES-ATOM: atom.reader.error.reader.int.type.width.zero
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-USES-ATOM: atom.reader.error.family.parse.int.type
+;; TEST-DEPENDS-ON: atom.reader.type.integer-width
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-REFINES: atom.reader.error
+;; TEST-MENU: errors/reader/numeric-literals/atom.reader.error.reader.int.type.width.zero
+;; TEST-MENU-PATH: codegen/errors/reader/numeric-literals/atom.reader.error.reader.int.type.width.zero
+;; TEST-ATOM-LEAF: atom.reader.error.reader.int.type.width.zero
+;; TEST-CLI-TARGET: codegen errors reader numeric-literals
+
+(module Main)
+(define [x : I0] 1)
+(show x)

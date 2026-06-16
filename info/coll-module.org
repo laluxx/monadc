@@ -13,11 +13,14 @@
 
 Test coverage: =make test-core= runs per-module tests via
 =python3 tests/run_core.py=. Coll module tested by =rt_core_coll.mon=.
+The test architecture is documented at
+[[file:../context/tests-arch.org][context/tests-arch.org]].
 
 The =Coll= module ([[file:../core/prelude/Coll.mon]], ~100 lines) provides
-higher-order collection operations. Import with =(import Coll)=.
+higher-order collection operations. Import with =(import Coll)=. See
+[[file:../context/core-libs.org][context/core-libs.org]] for the library architecture.
 
-* Functions
+1. Functions
 
 | Function     | Example                           | Description                   |
 |--------------+-----------------------------------+-------------------------------|
@@ -35,8 +38,8 @@ higher-order collection operations. Import with =(import Coll)=.
 
 (show (take 3 '(1 2 3 4 5)))        ;; (1 2 3)
 (show (drop 2 '(1 2 3 4 5)))        ;; (3 4 5)
-(show (all? even? '(2 4 6)))        ;; Tru)
-(show (foldl + 0 '(1 2 3 4)))       ;; 1)
+(show (all? even? '(2 4 6)))        ;; True
+(show (foldl + 0 '(1 2 3 4)))       ;; 10
 (show (map (lambda [x] (+ x 1)) '(1 2 3))) ;; (2 3 4)
 #+END_SRC
 
@@ -45,12 +48,87 @@ import Coll
 
 show (take 3 '(1 2 3 4 5))        ;; (1 2 3)
 show (drop 2 '(1 2 3 4 5))        ;; (3 4 5)
-show (all? even? '(2 4 6))        ;; Tru)
-show (foldl + 0 '(1 2 3 4))       ;; 1)
+show (all? even? '(2 4 6))        ;; True
+show (foldl + 0 '(1 2 3 4))       ;; 10
 show (map (lambda [x] (+ x 1)) '(1 2 3)) ;; (2 3 4)
 #+END_SRC
 
-* Known Issues
+2. Predicate Usage
+
+The =all?= function works with any predicate returning Bool:
+
+#+BEGIN_SRC monad
+(import Coll)
+(import Math)
+
+(show (all? even? '(2 4 6 8)))        ;; True
+(show (all? prime? '(2 3 5 7 11)))    ;; True
+(show (all? (lambda [x] (> x 0)) '(1 2 3))) ;; True
+#+END_SRC
+
+#+BEGIN_SRC wisp
+import Coll
+import Math
+
+show (all? even? '(2 4 6 8))        ;; True
+show (all? prime? '(2 3 5 7 11))     ;; True
+show (all? (lambda [x] (> x 0)) '(1 2 3)) ;; True
+#+END_SRC
+
+3. Folding Patterns
+
+**3.1 Summing with foldl**
+
+#+BEGIN_SRC monad
+(import Coll)
+(show (foldl + 0 '(1 2 3 4 5)))      ;; 15
+#+END_SRC
+
+#+BEGIN_SRC wisp
+import Coll
+show (foldl + 0 '(1 2 3 4 5))      ;; 15
+#+END_SRC
+
+**3.2 Reversing with foldl**
+
+#+BEGIN_SRC monad
+(import Coll)
+(define (reverse xs)
+  (foldl (lambda [acc x] (cons x acc)) '() xs))
+
+(show (reverse '(1 2 3)))             ;; (3 2 1)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+import Coll
+define (reverse xs)
+  foldl (lambda [acc x] (cons x acc)) '() xs
+
+show (reverse '(1 2 3))             ;; (3 2 1)
+#+END_SRC
+
+**3.3 Mapping with foldr**
+
+#+BEGIN_SRC monad
+(import Coll)
+(define (add1-list xs)
+  (foldr (lambda [x acc] (cons (+ x 1) acc)) '() xs))
+
+(show (add1-list '(1 2 3)))           ;; (2 3 4)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+import Coll
+define (add1-list xs)
+  foldr (lambda [x acc] (cons (+ x 1) acc)) '() xs
+
+show (add1-list '(1 2 3))           ;; (2 3 4)
+#+END_SRC
+
+See [[file:functional-programming.org][Functional Programming]] for more on higher-order functions
+and [[file:recursion.org][Recursion]] for recursive patterns.
+
+4. Known Issues
 
 - =import Coll= fails while compiling =takeWhile=
 - Functions that take function arguments (=map=, =filter=, =all?=,
@@ -58,7 +136,10 @@ show (map (lambda [x] (+ x 1)) '(1 2 3)) ;; (2 3 4)
   cannot be passed as arguments from paren-mode
 - Module requires explicit =import Coll= — not automatic
 
-* Workaround
+See [[file:../context/language.org::287][context/language.org — Known codegen gaps]] for the closure gap
+status and [[file:functional-programming.org][Functional Programming]] for workarounds.
+
+5. Workaround
 
 When the closure gap blocks higher-order use, use manual recursion or
 list-comprehension patterns instead:
@@ -66,7 +147,7 @@ list-comprehension patterns instead:
 #+BEGIN_SRC monad
 ;; Instead of (map f xs):
 (define (add1 xs -> [Int])
-  ((match xs))
+  ((match xs)
     []      -> []
     [x|xs]  -> (++ (+ x 1) (add1 xs))))
 #+END_SRC
@@ -76,23 +157,75 @@ list-comprehension patterns instead:
 (define (add1 xs -> [Int])
   (match xs)
     []      -> []
-    [x|xs]  -> (++ (+ x 1) (add1 xs))))
+    [x|xs]  -> (++ (+ x 1) (add1 xs)))
 #+END_SRC
 
-* Related Pages
+#+BEGIN_SRC monad
+;; Instead of (filter pred xs):
+(define (evens xs -> [Int])
+  ((match xs)
+    []      -> []
+    [x|xs]  -> (if (even? x)
+                 (++ x (evens xs))
+                 (evens xs))))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+;; Instead of (filter pred xs):
+(define (evens xs -> [Int])
+  (match xs)
+    []      -> []
+    [x|xs]  -> (if (even? x)
+                 (++ x (evens xs))
+                 (evens xs)))
+#+END_SRC
+
+See [[file:patterns.org][Pattern Matching]] and [[file:recursion.org][Recursion]] for manual alternatives.
+When closures are implemented, higher-order functions from Coll will work
+directly ([[file:../context/language.org::287][context/language.org — gap: closures]]).
+
+Implementation Notes
+
+- The Coll module lives in =core/prelude/Coll.mon= (~100 lines) and
+  provides higher-order list operations
+  ([[file:../context/core-libs.org][context/core-libs.org — Coll module]]).
+- =map=, =foldl=, =foldr=, and =all?= all take function arguments; their
+  utility is limited by the closure codegen gap — lambdas cannot
+  currently be passed as arguments from paren-mode
+  ([[file:../context/language.org::287][context/language.org — closure gap]]).
+- =takeWhile= fails inference during compilation due to type-level
+  complexity in the recursive predicate signature.
+
+Key Points
+
+- =(import Coll)= provides =take=, =drop=, =map=, =foldl=, =foldr=,
+  =all?=, =takeWhile=, =dropWhile=.
+- Higher-order functions (=map=, =foldl=, =foldr=) are affected by the
+  closure codegen gap — use manual recursion as a workaround.
+- =takeWhile= compilation fails; use =take= with a manual predicate
+  guard instead.
+- Folding patterns work for summing, reversing, and mapping when
+  closures are not required.
+- Module requires explicit =import Coll= — not automatic.
+
+6. Related Pages
 
 - [[file:stdlib.org][Standard Library]] -- library overview
 - [[file:math-module.org][Math Module]] -- Math module
 - [[file:list.org][Lists]] -- list type used by Coll functions
 - [[file:collections.org][Collections]] -- collection types overview
 - [[file:functional-programming.org][Functional Programming]] -- HOFs and closure gap
+- [[file:patterns.org][Pattern Matching]] -- destructuring and case analysis
+- [[file:recursion.org][Recursion]] -- recursive programming
+- [[file:core.org][Core Library]] -- built-in functions
 
-* Context Links
+7. Further Reading
 
 - [[file:../core/prelude/Coll.mon][core/prelude/Coll.mon]] — source (~100 lines)
 - [[file:../context/core-libs.org][context/core-libs.org]] — library architecture
-- [[file:math-module.org][Math Module]] — mathematical functions
-- [[file:stdlib.org][Standard Library]] — library overview
-- [[file:list.org][Lists]] — collection type used by Coll functions
-- [[file:collections.org][Collections]] — collection types overview
-- [[file:functional-programming.org][Functional Programming]] — HOFs and closure gap
+- [[file:../context/language.org][context/language.org]] — codegen dispatch, gaps
+- [[file:math-module.org][info/math-module.org]] — mathematical functions
+- [[file:stdlib.org][info/stdlib.org]] — Library overview
+- [[file:list.org][info/list.org]] — collection type used by Coll functions
+- [[file:collections.org][info/collections.org]] — collection types overview
+- [[file:functional-programming.org][info/functional-programming.org]] — HOFs and closure gap

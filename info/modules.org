@@ -18,14 +18,22 @@ and export manifest (.mexp) files that bridge compilation units
 Implementation: [[file:../module.c][module.c]] (import/decl parser), [[file:../module.h][module.h]]
 (module API), [[file:../module_export.h][module_export.h]] (manifest API).
 Test coverage: module resolution and imports are exercised by =rt_module_*.mon=
-fixtures in [[file:../tests/codegen/][tests/codegen/]].
+fixtures in [[file:../tests/codegen/][tests/codegen/]]. The test architecture is documented at
+[[file:../context/tests-arch.org][context/tests-arch.org]].
 
-* Module Declaration ([[file:../module.c::414]])
+For the build system's role in module compilation, see [[file:build.org][Build System]].
+For packaging modules for distribution, see [[file:package-dev.org][Package Development]].
+
+1. Module Declaration ([[file:../module.c::414]])
+
+S-expression syntax:
 
 #+BEGIN_SRC monad
 (module Name [exports...])
 (module Math [pi e tau square sqrt])
 #+END_SRC
+
+Wisp syntax:
 
 #+BEGIN_SRC wisp
 module Name [exports...]
@@ -41,18 +49,31 @@ Module name validation ([[file:../module.h::84]]): names must start with an
 uppercase ASCII letter and contain only alphanumeric characters or dots (for
 qualified names like ="Std.Math"=).
 
-* Import Syntax ([[file:../module.c::469]])
+2. Import Syntax ([[file:../module.c::469]])
 
-| Form                                | Semantics                        |
+| Form | Semantics |
 |-------------------------------------+----------------------------------|
-| =(import Mod)=                        | Unqualified, all names           |
-| =(import "path/to/file.mon")=         | File path import                 |
-| =(import Mod :as Alias)=              | Unqualified with alias prefix    |
-| =(import qualified Mod)=              | All names, qualified access only |
-| =(import qualified Mod :as A)=        | Qualified with alias prefix      |
-| =(import Mod [sym1 sym2])=            | Selective: only listed names     |
-| =(import Mod hiding [sym1 sym2])=     | Import all except listed         |
-| =(import qualified Mod [syms] :as A)= | Qualified + selective + alias    |
+| =(import Mod)= | Unqualified, all names |
+| =(import "path/to/file.mon")= | File path import |
+| =(import Mod :as Alias)= | Unqualified with alias prefix |
+| =(import qualified Mod)= | All names, qualified access only |
+| =(import qualified Mod :as A)= | Qualified with alias prefix |
+| =(import Mod [sym1 sym2])= | Selective: only listed names |
+| =(import Mod hiding [sym1 sym2])= | Import all except listed |
+| =(import qualified Mod [syms] :as A)= | Qualified + selective + alias |
+
+Wisp equivalents:
+
+#+BEGIN_SRC wisp
+import Mod
+import "path/to/file.mon"
+import Mod :as Alias
+import qualified Mod
+import qualified Mod :as A
+import Mod [sym1 sym2]
+import Mod hiding [sym1 sym2]
+import qualified Mod [syms] :as A
+#+END_SRC
 
 Module and alias names must start with uppercase (enforced, compiler error
 otherwise). Import modes ([[file:../context/module.org::module-import-decl]]):
@@ -62,7 +83,7 @@ otherwise). Import modes ([[file:../context/module.org::module-import-decl]]):
 - =IMPORT_SELECTIVE=: only the listed symbols are imported.
 - =IMPORT_HIDING=: everything except the listed symbols is imported.
 
-* Resolution
+3. Resolution
 
 Module file resolution ([[file:../module.h::110]]):
 
@@ -72,7 +93,10 @@ Module file resolution ([[file:../module.h::110]]):
 3. ~$MONAD_CORE~ recursive search (dev override).
 4. ~/usr/local/lib/monad/core~ recursive search (installed stdlib).
 
-* Symbol Resolution
+For the core path resolution order in the CLI, see [[file:cli.org][CLI Reference # Core Path Resolution]].
+For project-local module resolution in packages, see [[file:package-dev.org][Package Development # Module Resolution]].
+
+4. Symbol Resolution
 
 =module_resolve_symbol= ([[file:../module.h::100]]) searches the module's own
 exports and all imports to find which qualified name a bare symbol refers to.
@@ -82,13 +106,13 @@ resolution is ambiguous — the current implementation returns the first match
 in import order (future work should emit a diagnostic)
 ([[file:../context/module.org::dec.module.symbol-resolution-ambiguity]]).
 
-* Export Control
+5. Export Control
 
-| Mode            | Meaning                     |
+| Mode | Meaning |
 |-----------------+-----------------------------|
-| ~EXPORT_ALL~      | No export list — expose all |
-| ~EXPORT_SELECTED~ | Explicit ~[sym ...]~ list     |
-| ~EXPORT_NONE~     | Empty ~[]~ — export nothing   |
+| ~EXPORT_ALL~ | No export list — expose all |
+| ~EXPORT_SELECTED~ | Explicit ~[sym ...]~ list |
+| ~EXPORT_NONE~ | Empty ~[]~ — export nothing |
 
 =ModuleDecl= ([[file:../module.h::37]]) bundles the module name, an =ExportMode=,
 and an optional =ExportList= for selected exports. =module_decl_is_exported=
@@ -97,7 +121,7 @@ and an optional =ExportList= for selected exports. =module_decl_is_exported=
 - =EXPORT_NONE=: never visible.
 - =EXPORT_SELECTED=: O(n) =strcmp= scan of the export list.
 
-* Module Context and Registry
+6. Module Context and Registry
 
 =ModuleContext= ([[file:../module.h::59]]) holds per-compilation-unit state:
 the current =ModuleDecl=, a dynamic array of =ImportDecl= pointers, and the
@@ -109,7 +133,7 @@ current source file path. Functions: =module_context_create=, =module_context_fr
 modules keyed by name: =module_registry_create=, =module_registry_free=,
 =module_registry_add=, =module_registry_find= (O(n) =strcmp= scan).
 
-* Export Manifest (.mexp)
+7. Export Manifest (.mexp)
 
 When a module is compiled, an export manifest is written as a sidecar =.mexp=
 file ([[file:../context/module-export.org]]). This plain-text record contains
@@ -129,16 +153,16 @@ Records are one per line. =type_kind= is an integer value mirroring the
 
 Key types ([[file:../context/module-export.org::module-export-type-kind-constants]]):
 
-| Constant           | Value | Description       |
+| Constant | Value | Description |
 |--------------------+-------+-------------------|
-| MEXP_TYPE_INT      | 0     | Integer type      |
-| MEXP_TYPE_FLOAT    | 1     | Floating-point    |
-| MEXP_TYPE_CHAR     | 2     | Character         |
-| MEXP_TYPE_STRING   | 3     | String            |
-| MEXP_TYPE_BOOL     | 4     | Boolean           |
-| MEXP_TYPE_LIST     | 8     | List              |
-| MEXP_TYPE_ARR      | 10    | Array             |
-| MEXP_TYPE_FN       | 12    | Function          |
+| MEXP_TYPE_INT | 0 | Integer type |
+| MEXP_TYPE_FLOAT | 1 | Floating-point |
+| MEXP_TYPE_CHAR | 2 | Character |
+| MEXP_TYPE_STRING | 3 | String |
+| MEXP_TYPE_BOOL | 4 | Boolean |
+| MEXP_TYPE_LIST | 8 | List |
+| MEXP_TYPE_ARR | 10 | Array |
+| MEXP_TYPE_FN | 12 | Function |
 
 API functions ([[file:../module_export.h::68]]):
 
@@ -150,7 +174,9 @@ API functions ([[file:../module_export.h::68]]):
   separator (e.g. ="Math" + "phi"= → ="Math__phi"=). This mangled name is used
   for linker symbols and must match the LLVM symbol renaming in main.c Phase 9.
 
-* Known Limitations
+For example usage in the REPL, see [[file:repl.org][REPL]].
+
+8. Known Limitations
 
 - The .mexp manifest is parsed but not yet fully wired into the build
   pipeline (written but not consumed during incremental builds).
@@ -167,6 +193,43 @@ API functions ([[file:../module_export.h::68]]):
   compiler versions would produce stale external declarations
   ([[file:../context/module-export.org::think.module-export.cache-invalidation-missing]]).
 
+Implementation Notes
+
+The module system touches multiple compiler phases. Key implementation
+touchpoints for contributors:
+
+- **Module declaration parsing**: =module.c= around line 414 handles
+  =module_name_to_path= and =parse_module_decl=
+  ([[file:../context/module.org::module-declaration][context/module.org — module declaration]]).
+- **Import resolution**: =module.c= around line 469 parses all import
+  forms and populates the =ModuleContext=
+  ([[file:../context/module.org::module-import-decl][context/module.org — import declaration]]).
+- **Export manifest (.mexp)**: written at codegen time by
+  =manifest_write= and consumed by importing modules
+  ([[file:../context/module-export.org][context/module-export.org — export manifest]]).
+- **Symbol disambiguation**: =module_resolve_symbol= (=module.h:100=)
+  resolves bare names across imports and is the correct place to add
+  ambiguity diagnostics
+  ([[file:../context/module.org::dec.module.symbol-resolution-ambiguity][context/module.org — symbol resolution ambiguity]]).
+- **Module name validation**: enforced by =module_name_is_valid= in
+  =module.h= (line 84); names must match =[A-Z][A-Za-z0-9.]*=.
+- **Registry**: =ModuleRegistry= (=module.h:68=) is a flat array
+  (O(n) lookup); a hash-map or trie is a candidate optimisation.
+
+Key Points
+
+- =(module ...)= sets export mode (=EXPORT_ALL=, =EXPORT_SELECTED=,
+  =EXPORT_NONE=); empty =[]= seals the module.
+- Import forms compose: =(import qualified Mod [syms] :as A)= works.
+- Module resolution follows a 4-step chain: registry → local → MONAD_CORE
+  → installed path.
+- Symbol resolution is O(n) =strcmp= — ambiguous imports return first
+  match (diagnostic planned).
+- The .mexp file is the linker contract between modules, but is not yet
+  consumed during incremental builds.
+- Module names must start with uppercase; dots form qualified paths
+  (="Std.Math"=).
+
 * Related Pages
 
 - [[file:stdlib.org][Standard Library]] -- standard library modules
@@ -174,6 +237,20 @@ API functions ([[file:../module_export.h::68]]):
 - [[file:package-dev.org][Package Development]] -- module structure, distribution
 - [[file:cli.org][CLI Reference]] -- module-related command-line options
 - [[file:syntax.org][Syntax]] -- import and module declarations
+- [[file:repl.org][REPL]] -- importing modules in the REPL
+- [[file:core.org][Core Library]] -- core modules
+- [[file:type-inference.org][Type Inference]] -- type checking across modules
+
+* Further Reading
+
+- [[file:../context/module.org][context/module.org]] — module system implementation
+- [[file:../context/module-export.org][context/module-export.org]] — export manifest handling
+- [[file:../context/buildsystem.org][context/buildsystem.org]] — build system
+- [[file:../module.c][module.c]] — import/decl parser + module_name_to_path
+- [[file:../module.h][module.h]] — module API headers
+- [[file:../module_export.h][module_export.h]] — manifest API headers
+- [[file:../context/cli.org][context/cli.org]] — CLI module resolution
+- [[file:../context/build.org][context/build.org]] — build pipeline
 
 * Context Links
 
@@ -183,3 +260,5 @@ API functions ([[file:../module_export.h::68]]):
 - [[file:../module.c][module.c]] — import/decl parser + module_name_to_path
 - [[file:../module.h][module.h]] — module API headers
 - [[file:../module_export.h][module_export.h]] — manifest API headers
+- [[file:../context/build.org][context/build.org]] — build pipeline
+- [[file:../context/cli.org][context/cli.org]] — CLI module resolution

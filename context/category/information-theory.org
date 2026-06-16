@@ -1,0 +1,97 @@
+#+TITLE: Information Theory for Context Quality
+#+AUTHOR: GPT-5.5 Thinking
+#+DATE: 2026-06-16
+#+CREATED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-16
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:3 num:t
+#+CATEGORY: monadc-category
+#+FILETAGS: :monadc:compiler:context:category:information-theory:entropy:search:coverage:surprise:
+#+PROPERTY: CONTEXT_VERSION 5
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.category.info
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+
+* Entropy of the Garden
+:PROPERTIES:
+:ID: monadc.context.category.info.entropy
+:CUSTOM_ID: category-info-entropy
+:CONTEXT_KIND: metric
+:CONTEXT_STATUS: active
+:SOURCE: context/category/information-theory.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.category.info.entropy src:context/category/information-theory.org conf:high]
+  Shannon entropy measures how distributed a signal is.  In the garden, useful
+  signals include record type distribution, file/tag distribution, and morphism
+  kind distribution.  High entropy can mean broad coverage; low entropy can mean
+  focused specialization or neglected dimensions.  Interpretation requires the
+  category map.
+
+#+BEGIN_EXAMPLE
+H(X) = - Σ_x p(x) log2 p(x)
+#+END_EXAMPLE
+
+* Information Gain for Search
+:PROPERTIES:
+:ID: monadc.context.category.info.search
+:CUSTOM_ID: category-info-search
+:CONTEXT_KIND: metric
+:CONTEXT_STATUS: active
+:SOURCE: context/category/information-theory.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.category.info.search src:context/category/information-theory.org conf:high]
+  Search should prefer nodes that reduce uncertainty about a task.  A query over
+  "Wisp typed define failing desugar" should increase posterior mass on Wisp,
+  reader/desugar, tests, and known failure records.  The simple scripts use term
+  weights and structural bonuses; future scripts can add BM25, embeddings, or
+  probabilistic language models.
+
+| Signal | Search effect |
+|--------+---------------|
+| exact ID match | maximum precision |
+| title/heading match | high precision |
+| record id/type match | high precision for triage |
+| local neighborhood | context expansion bonus |
+| rare term | high information gain |
+| common tag | navigation but low surprise |
+
+* Surprise and Staleness
+:PROPERTIES:
+:ID: monadc.context.category.info.surprise-staleness
+:CUSTOM_ID: category-info-surprise-staleness
+:CONTEXT_KIND: metric
+:CONTEXT_STATUS: active
+:SOURCE: context/category/information-theory.org
+:CONFIDENCE: medium
+:END:
+
+[DOC id:doc.category.info.surprise src:context/category/information-theory.org conf:medium]
+  A record is surprising when it contradicts or supersedes nearby expectations,
+  has low confidence but high centrality, or belongs to a sparsely covered
+  category.  Generated metrics can rank these candidates for gardener review.
+
+[IDEA id:idea.category.info.staleness-score src:context/category/information-theory.org conf:medium]
+  Define staleness as a weighted function of last_modified age, superseded
+  record edges, failing tests linked to a contract, and absence of recent source
+  evidence.  Do not delete stale material automatically; route it to curation.
+
+* Minimum Description Length
+:PROPERTIES:
+:ID: monadc.context.category.info.mdl
+:CUSTOM_ID: category-info-mdl
+:CONTEXT_KIND: metric
+:CONTEXT_STATUS: active
+:SOURCE: context/category/information-theory.org
+:CONFIDENCE: medium
+:END:
+
+[THINK id:think.category.info.mdl src:context/category/information-theory.org conf:medium]
+  MDL is a useful pruning principle: keep the smallest context representation
+  that still predicts failures, explains decisions, and routes future changes.
+  Repetitive prose with no new edge, invariant, or evidence should be merged or
+  replaced by a generated index.

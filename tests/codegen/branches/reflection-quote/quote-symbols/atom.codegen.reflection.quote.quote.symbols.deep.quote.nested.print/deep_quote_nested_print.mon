@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.deep.deep_quote_nested_print
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 60-reflection-quote
+;; TEST-SUBSET: quote-symbols
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.reflection.quote.quote.symbols.deep.quote.nested.print
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise nested quoted list printing.
+;; TEST-ATOM: Quoted nested AST should round-trip through runtime value conversion.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:ast_to_runtime_value AST_LIST/AST_SYMBOL/AST_NUMBER
+
+;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote
+;; TEST-MENU: branches/reflection-quote/quote-symbols/atom.codegen.reflection.quote.quote.symbols.deep.quote.nested.print
+;; TEST-MENU-PATH: codegen/branches/reflection-quote/quote-symbols/atom.codegen.reflection.quote.quote.symbols.deep.quote.nested.print
+;; TEST-ATOM-LEAF: atom.codegen.reflection.quote.quote.symbols.deep.quote.nested.print
+;; TEST-CLI-TARGET: codegen branches reflection-quote quote-symbols
+(module Main)
+(show (quote (a (b c) 3)))

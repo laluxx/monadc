@@ -1,0 +1,32 @@
+;; TEST-ID: tests.codegen.branch200.05.symbol.env.definitions.calls.closures.symbol.env.07
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SUBSET: definitions-calls-closures
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.branch200.05.symbol.env.definitions.calls.closures.symbol.env.07
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: returned closure with no captured vars
+;; TEST-ATOM: atom.codegen.branch200.05.symbol.env.definitions.calls.closures.symbol.env.07
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.define
+;; TEST-CODEGEN-PATH: codegen.lambda
+;; TEST-CODEGEN-PATH: codegen.call
+;; TEST-CODEGEN-PATH: codegen.closure
+;; TEST-COVERAGE: codegen.c:define/function/lambda codegen branches
+;; TEST-COVERAGE: codegen.c:closure ABI/env capture path
+;; TEST-COVERAGE: codegen.c:emit_type_cast return coercion
+
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-USES-ATOM: atom.codegen.subset.05.symbol.env.definitions.calls.closures
+;; TEST-MENU: branches/symbol-env/definitions-calls-closures/atom.codegen.branch200.05.symbol.env.definitions.calls.closures.symbol.env.07
+;; TEST-MENU-PATH: codegen/branches/symbol-env/definitions-calls-closures/atom.codegen.branch200.05.symbol.env.definitions.calls.closures.symbol.env.07
+;; TEST-ATOM-LEAF: atom.codegen.branch200.05.symbol.env.definitions.calls.closures.symbol.env.07
+;; TEST-CLI-TARGET: codegen branches symbol-env definitions-calls-closures
+
+(module Main)
+(define make-inc (lambda ([] -> Fn) (lambda ([x : Int] -> Int) (+ x 1))))
+(define inc (make-inc))
+(show (inc 4))

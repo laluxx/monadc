@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-asm-top-level
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Top-level asm is a codegen-backed coverage point for asm placement rules.
-;; TEST-ATOM: (asm nop) parses but should be rejected outside a function body.
-;; TEST-EXPECT: fail:compile
-
-(module Main)
-(asm nop)
-(show 42)

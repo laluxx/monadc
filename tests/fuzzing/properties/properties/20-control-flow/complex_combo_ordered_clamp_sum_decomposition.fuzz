@@ -1,0 +1,15 @@
+name: complex_combo_ordered_clamp_sum_decomposition
+section: combo
+tier: stable
+kind: law
+features: arithmetic, array, array-index, combo, env, if, logic, phi, predicate, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.branch_phi, codegen.if_phi, codegen.local_load, codegen.logic_dispatch, codegen.predicate_dispatch, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.if_phi, infer.logic, infer.type_predicate, reader.array_literal, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.with, atom.control.if, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_if_same_branch_eliminates, signal_atom_with_substitution
+args: x:Int lo:Int hi:Int
+type: Bool
+expect: True
+description: When bounds are ordered, clamped value should sit between bounds and remain idempotent under with-bound reuse.
+law: (if (fuzz-lte? {lo} {hi}) (with [c (fuzz-min (fuzz-max {x} {lo}) {hi})] (if (fuzz-lte? {lo} c) (fuzz-lte? c {hi}) False)) True)

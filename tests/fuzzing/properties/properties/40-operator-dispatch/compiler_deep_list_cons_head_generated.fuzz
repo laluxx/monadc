@@ -1,0 +1,15 @@
+name: compiler_deep_list_cons_head_generated
+section: runtime-lists-current
+tier: stable
+kind: law
+features: arithmetic, equality, list, runtime
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.runtime_call, infer.arithmetic, infer.equality, runtime.list
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality
+related-properties: signal_atom_equality_reflexive
+args: a:Int b:Int
+type: Bool
+expect: True
+description: cons should put the generated head before an existing list.
+law: (= (head (cons {a} (cons {b} (list)))) {a})

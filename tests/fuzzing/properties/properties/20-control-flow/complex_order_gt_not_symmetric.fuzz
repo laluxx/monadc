@@ -1,0 +1,15 @@
+name: complex_order_gt_not_symmetric
+section: order-negative
+tier: stable
+kind: law
+features: arithmetic, if, logic, order, phi, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.if_phi, codegen.logic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.if_phi, infer.logic, infer.type_predicate, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.if, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_if_same_branch_eliminates
+args: a:Int b:Int
+type: Bool
+expect: False
+description: Both directions of strict greater-than cannot be true simultaneously.
+law: (if (fuzz-gt? {a} {b}) (fuzz-gt? {b} {a}) False)

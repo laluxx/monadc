@@ -1,0 +1,32 @@
+;; TEST-ID: tests.codegen.type.hm.numeric.widening.coercions.003
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: types
+;; TEST-SUBSET: hm/numeric/widening-coercions
+;; TEST-QUALITY: type-system-positive-regression
+;; TEST-CODEGEN-ATOM: atom.type.hm.numeric.widening-coercions.003
+;; TEST-TYPE-ATOM: atom.type.hm.numeric.widening-coercions.003
+;; TEST-CONTEXT: monadc.context.language.codegen-type-system-corpus, monadc.context.language.hm-dependent-type-coverage
+;; TEST-PURPOSE: HM accepts numeric widening across Int/Float paths and codegen casts the result.
+;; TEST-ATOM: Int and Float can unify through numeric widening in infer_unify_one_internal.
+;; TEST-EXPECT: compile, run
+;; TEST-MENU: types/hm/numeric/widening-coercions/atom.type.hm.numeric.widening-coercions.003
+;; TEST-MENU-PATH: codegen/types/hm/numeric/widening-coercions/atom.type.hm.numeric.widening-coercions.003
+;; TEST-ATOM-LEAF: atom.type.hm.numeric.widening-coercions.003
+;; TEST-CLI-TARGET: codegen types hm numeric widening-coercions
+;; TEST-TYPE-PATH: codegen.c:emit_type_cast numeric casts
+;; TEST-INFER-PATH: infer.c:TYPE_INT <-> TYPE_FLOAT compatibility
+;; TEST-COVERAGE: infer.c:Int/Float widening branches
+;; TEST-COVERAGE: codegen.c:emit_type_cast i2f/f2i paths
+;; TEST-USES-ATOM: atom.codegen.category.types
+;; TEST-USES-ATOM: atom.type.system
+;; TEST-USES-ATOM: atom.type.hm.numeric
+;; TEST-USES-ATOM: atom.codegen.cast.numeric
+;; TEST-DEPENDS-ON: atom.type.hm.unification.numeric-widening
+;; TEST-REFINES: atom.type.hm.int-float
+
+(module Main)
+(define (hm_num_03 [x : Float] [y : Int] -> Float) (+ x y))
+(show (hm_num_03 3.5 5))

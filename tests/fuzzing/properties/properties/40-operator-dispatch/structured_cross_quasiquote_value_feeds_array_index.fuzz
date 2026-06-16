@@ -1,0 +1,15 @@
+name: structured_cross_quasiquote_value_feeds_array_index
+section: cross-compiler-current
+tier: stable
+kind: law
+features: arithmetic, array, array-index, cross, equality, path, quasiquote, quote, unquote
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.equality_dispatch, codegen.path_literal, codegen.quote, desugar.quasiquote, infer.arithmetic, infer.array, infer.callable_array, infer.equality, infer.path, reader.array_literal, reader.path_literal, reader.quasiquote, reader.quote, reader.unquote
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.quote.quote, atom.runtime.array, atom.runtime.path
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Stress cross-feature lowering across control flow, env lookup, runtime collections, predicates, quote/null, and operator dispatch.
+law: (= ([{a} {b}] (quasiquote (unquote 1))) {b})

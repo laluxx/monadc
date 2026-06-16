@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-codegen-err-refinement-unknown-base
-;; TEST-SECTION: diagnostic
-;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
-;; TEST-PURPOSE: Codegen rejects refinements whose base type is unknown.
-;; TEST-ATOM: { x ∈ Nope | True } must fail because Nope is undefined.
-;; TEST-EXPECT: fail:compile
-
-(module Main)
-(type Thing { x ∈ Nope | True })

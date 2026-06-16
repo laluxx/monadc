@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-arith-nested
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.20.operators.arithmetic.rt.arith.nested
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: arithmetic
+;; TEST-CATEGORY: 20-operators
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Nested and chained arithmetic expressions
+;; TEST-ATOM: (+ (* 2 3) (* 4 5)) = 26, (* (+ 1 2) (+ 3 4)) = 21, (+ (/ 10 2) (mod 10 3)) = 6
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:20-operators/arithmetic branch family
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/arithmetic/atom.codegen.20.operators.arithmetic.rt.arith.nested
+;; TEST-MENU-PATH: codegen/branches/operators/arithmetic/atom.codegen.20.operators.arithmetic.rt.arith.nested
+;; TEST-ATOM-LEAF: atom.codegen.20.operators.arithmetic.rt.arith.nested
+;; TEST-CLI-TARGET: codegen branches operators arithmetic
+(module Main)
+(show (+ (* 2 3) (* 4 5)))
+(show (* (+ 1 2) (+ 3 4)))
+(show (+ (/ 10 2) (mod 10 3)))

@@ -1,0 +1,20 @@
+;; TEST-ID: tests.codegen.rt-set-empty-ops
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.sets.rt.set.empty.ops
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: sets
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Empty set operations (empty? returns False for sets — runtime bug).
+;; TEST-ATOM: (empty? {}) currently returns False (bug), (s1 1) checks containment
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:40-collections/sets branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/sets/atom.codegen.40.collections.sets.rt.set.empty.ops
+;; TEST-MENU-PATH: codegen/branches/collections/sets/atom.codegen.40.collections.sets.rt.set.empty.ops
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.sets.rt.set.empty.ops
+;; TEST-CLI-TARGET: codegen branches collections sets
+(module Main)
+(show (empty? {}))

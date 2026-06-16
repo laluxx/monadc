@@ -1,0 +1,15 @@
+name: int_mul_negative_one_left
+section: arithmetic
+tier: stable
+kind: law
+features: arithmetic, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+args: a:Int
+type: Bool
+expect: True
+description: Multiplication by negative one on the left must match subtraction from zero.
+law: (= (fuzz-mul -1 {a}) (fuzz-sub 0 {a}))

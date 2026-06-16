@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-let-star-chain
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.lexical.scope.rt.let.star.chain
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: lexical-scope
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Let* allows chained bindings where later ones reference earlier ones.
+;; TEST-ATOM: (let* ([x 1] [y (+ x 1)]) y) evaluates to 2.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/lexical-scope branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/lexical-scope/atom.codegen.30.control.flow.lexical.scope.rt.let.star.chain
+;; TEST-MENU-PATH: codegen/branches/control-flow/lexical-scope/atom.codegen.30.control.flow.lexical.scope.rt.let.star.chain
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.lexical.scope.rt.let.star.chain
+;; TEST-CLI-TARGET: codegen branches control-flow lexical-scope
+(module Main)
+(show (let* ([x 1] [y (+ x 1)]) y))

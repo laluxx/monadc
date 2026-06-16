@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-asm-top-level
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-CODEGEN-ATOM: atom.codegen.70.ffi.asm.inline.asm.rt.asm.top.level
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: inline-asm
+;; TEST-CATEGORY: 70-ffi-asm
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Top-level asm is a codegen-backed coverage point for asm placement rules.
+;; TEST-ATOM: (asm nop) parses but should be rejected outside a function body.
+;; TEST-EXPECT: fail:compile
+
+;; TEST-COVERAGE: codegen.c:70-ffi-asm/inline-asm branch family
+;; TEST-USES-ATOM: atom.codegen.category.70.ffi.asm
+;; TEST-MENU: errors/codegen/inline-asm/atom.codegen.70.ffi.asm.inline.asm.rt.asm.top.level
+;; TEST-MENU-PATH: codegen/errors/codegen/inline-asm/atom.codegen.70.ffi.asm.inline.asm.rt.asm.top.level
+;; TEST-ATOM-LEAF: atom.codegen.70.ffi.asm.inline.asm.rt.asm.top.level
+;; TEST-CLI-TARGET: codegen errors codegen inline-asm
+(module Main)
+(asm nop)
+(show 42)

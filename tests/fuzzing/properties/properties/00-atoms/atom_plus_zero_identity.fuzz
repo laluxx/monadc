@@ -1,0 +1,17 @@
+name: atom_plus_zero_identity
+section: atom-foundation
+tier: stable
+kind: law
+features: arithmetic, comparison
+compiler-path: codegen.operator.arithmetic, codegen.operator.comparison
+signal: high
+corpus-role: atom-foundation
+atom: atom.core.plus.identity
+proves: atom.core.plus.identity.zero
+uses-atoms: atom.core.plus, atom.core.zero, atom.core.equality
+depends-on: atom.core.plus, atom.core.zero, atom.core.equality
+args: a:Int@edge+if
+type: Bool
+expect: True
+description: Foundational atom property proving atom.core.plus.identity.zero.
+law: (= (+ {a} 0) {a})

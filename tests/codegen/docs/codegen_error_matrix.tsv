@@ -1,0 +1,15 @@
+family	message	count	example
+		109	errors/codegen/arity/atom.codegen.90.diagnostics.arity.deep.diag.append.wrong.arity/deep_diag_append_wrong_arity.mon
+arity.if.too-few	if expects	8	errors/codegen/codegen/arity.if.too-few/atom.menu.error.codegen.arity.if.too-few.000/menu-codegen-arity.if.too-few-000.mon
+arity.if.too-many	if expects	8	errors/codegen/codegen/arity.if.too-many/atom.menu.error.codegen.arity.if.too-many.000/menu-codegen-arity.if.too-many-000.mon
+arity.setbang.too-few	set!	8	errors/codegen/codegen/arity.setbang.too-few/atom.menu.error.codegen.arity.setbang.too-few.000/menu-codegen-arity.setbang.too-few-000.mon
+array used as function requires exactly 1 argument	array used as function requires exactly 1 argument	1	errors/codegen/precise-arity/atom.codegen.diagnostic.codegen.branch.array.call.too.many.args.connected/codegen-branch-array-call-too-many-args-connected.mon
+field	field	1	errors/codegen/precise-fields/atom.codegen.diagnostic.codegen.branch.missing.layout.field.connected/codegen-branch-missing-layout-field-connected.mon
+field.unknown.dot	unknown field	8	errors/codegen/codegen/field.unknown.dot/atom.menu.error.codegen.field.unknown.dot.000/menu-codegen-field.unknown.dot-000.mon
+index.array.out-of-bounds	index out of bounds	8	errors/codegen/codegen/index.array.out-of-bounds/atom.menu.error.codegen.index.array.out-of-bounds.000/menu-codegen-index.array.out-of-bounds-000.mon
+operator.mod.arity	% expects	8	errors/codegen/codegen/operator.mod.arity/atom.menu.error.codegen.operator.mod.arity.000/menu-codegen-operator.mod.arity-000.mon
+operator.not.arity	not expects	8	errors/codegen/codegen/operator.not.arity/atom.menu.error.codegen.operator.not.arity.000/menu-codegen-operator.not.arity-000.mon
+set!	set!	1	errors/codegen/precise-mutation/atom.codegen.diagnostic.codegen.branch.setbang.non.symbol.connected/codegen-branch-setbang-non-symbol-connected.mon
+symbol.unbound.local	undefined symbol	8	errors/codegen/codegen/symbol.unbound.local/atom.menu.error.codegen.symbol.unbound.local.000/menu-codegen-symbol.unbound.local-000.mon
+type	type	1	errors/codegen/precise-types/atom.codegen.diagnostic.codegen.branch.if.branch.type.mismatch.connected/codegen-branch-if-branch-type-mismatch-connected.mon
+unbound	unbound	1	errors/codegen/precise-symbols/atom.codegen.diagnostic.codegen.branch.unbound.symbol.connected/codegen-branch-unbound-symbol-connected.mon

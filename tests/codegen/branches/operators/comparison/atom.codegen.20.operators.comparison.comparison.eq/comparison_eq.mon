@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.comparison-eq
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.20.operators.comparison.comparison.eq
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: comparison
+;; TEST-CATEGORY: 20-operators
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Equality comparison evaluates at runtime.
+;; TEST-ATOM: (= 3 3) = True, (= 3 4) = False.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:20-operators/comparison branch family
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/comparison/atom.codegen.20.operators.comparison.comparison.eq
+;; TEST-MENU-PATH: codegen/branches/operators/comparison/atom.codegen.20.operators.comparison.comparison.eq
+;; TEST-ATOM-LEAF: atom.codegen.20.operators.comparison.comparison.eq
+;; TEST-CLI-TARGET: codegen branches operators comparison
+(module Main)
+(show (= 3 3))
+(show (= 3 4))

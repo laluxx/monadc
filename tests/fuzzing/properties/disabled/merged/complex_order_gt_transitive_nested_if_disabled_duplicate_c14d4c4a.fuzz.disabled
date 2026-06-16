@@ -1,0 +1,17 @@
+name: complex_order_gt_transitive_nested_if_disabled_duplicate_c14d4c4a
+section: order-logic
+tier: experimental
+kind: law
+features: arithmetic, if, logic, order, phi, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.if_phi, codegen.logic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.if_phi, infer.logic, infer.type_predicate, reader.ast_if
+signal: medium
+corpus-role: merged-duplicate
+uses-atoms: atom.control.if, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_if_same_branch_eliminates
+merged-into: comparison_gt_transitive
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Strict greater-than transitivity should hold through nested if guards.
+law: (if (fuzz-gt? {a} {b}) (if (fuzz-gt? {b} {c}) (fuzz-gt? {a} {c}) True) True)

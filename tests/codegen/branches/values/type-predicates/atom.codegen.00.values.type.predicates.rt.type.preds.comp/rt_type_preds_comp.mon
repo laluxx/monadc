@@ -1,0 +1,32 @@
+;; TEST-ID: tests.codegen.rt-type-preds-comp
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.00.values.type.predicates.rt.type.preds.comp
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: type-predicates
+;; TEST-CATEGORY: 00-values
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: All type_preds[] array entries + nil? verified working
+;; TEST-ATOM: (Int? 42) = True, (Float? 3.14) = True, (Number? 42) = True, (Number? 3.14) = True, (Char? (Char 65)) = True, (String? "hi") = True, (Bool? True) = True, (Bool? False) = True, (Symbol? (quote foo)) = True, (Keyword? :hello) = True, (List? (list)) = True, (Set? {1 2 3}) = True, (nil? nil) = True
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:00-values/type-predicates branch family
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/type-predicates/atom.codegen.00.values.type.predicates.rt.type.preds.comp
+;; TEST-MENU-PATH: codegen/branches/values/type-predicates/atom.codegen.00.values.type.predicates.rt.type.preds.comp
+;; TEST-ATOM-LEAF: atom.codegen.00.values.type.predicates.rt.type.preds.comp
+;; TEST-CLI-TARGET: codegen branches values type-predicates
+(module Main)
+(show (Int? 42))
+(show (Float? 3.14))
+(show (Number? 42))
+(show (Number? 3.14))
+(show (Char? (Char 65)))
+(show (String? "hi"))
+(show (Bool? True))
+(show (Bool? False))
+(show (Symbol? (quote foo)))
+(show (Keyword? :hello))
+(show (List? (list)))
+(show (Set? {1 2 3}))
+(show (nil? nil))

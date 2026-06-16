@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-codegen-err-while-arity
-;; TEST-SECTION: diagnostic
-;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
-;; TEST-PURPOSE: Codegen enforces while arity.
-;; TEST-ATOM: (while True) must fail because while requires a loop body.
-;; TEST-EXPECT: fail:compile
-
-(module Main)
-(while True)

@@ -1,0 +1,15 @@
+name: signal_compile_fail_infer_bool_and_int_037
+section: current-compile-fail
+tier: compile-fail
+kind: compile-fail
+features: infer, type-error, logic
+compiler-path: infer.operand-type.logic-and
+stage: infer
+signal: high
+corpus-role: negative-diagnostic
+uses-atoms: atom.logic.and
+args: a:Int@edge b:Bool
+type: Bool
+expect-diagnostic: error:
+description: Structured negative property for compiler diagnostics; expected to fail compilation.
+law: (and {a} {b})

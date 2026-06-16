@@ -11,15 +11,15 @@
 
 [[file:index.org][<- Back to Index]] · [[file:cli.org][CLI Reference]] · [[file:build.org][Build System]] · [[file:testing.org][Testing]] · [[file:intro.org][Introduction]] · [[file:tutorial.org][Tutorial]] · [[file:show.org][Show]]
 
-* Quick Reference
+1. Quick Reference
 
-| Command                    | Description                        |
+| Command | Description |
 |----------------------------+------------------------------------|
-| =monad= (no args)          | Enter REPL                         |
-| =monad -i=                 | Explicit REPL flag                 |
-| =monad -i file.mon=        | Compile file then enter REPL       |
-| =(quit)=                   | Exit REPL                          |
-| =Ctrl+D=                   | Exit REPL                          |
+| =monad= (no args) | Enter REPL |
+| =monad -i= | Explicit REPL flag |
+| =monad -i file.mon= | Compile file then enter REPL |
+| =(quit)= | Exit REPL |
+| =Ctrl+D= | Exit REPL |
 
 Test coverage: REPL is tested by =rt_repl_*.mon= fixtures.
 
@@ -29,48 +29,66 @@ on top of LLVM's MCJIT =ExecutionEngine= for in-process JIT compilation
 and GNU Readline for line editing and tab-completion. Implementation:
 [[file:../repl.h][repl.h]] and [[file:../repl.c][repl.c]] (~3000 lines).
 
+This page covers REPL invocation, lifecycle, JIT compilation pipeline,
+readline integration, signal handling, and environment persistence.
+
 For full implementation context, see [[file:../context/repl.org][context/repl.org]].
-The REPL is exercised indirectly by all codegen tests — every runtime
+The REPL is exercised indirectly by all codegen tests -- every runtime
 fixture compiles source through the same pipeline. Error recovery
-(setjmp/longjmp) is tested by =rt_codegen_err_*.mon= diagnostic fixtures.
+(setjmp/longjmp) is tested by =rt_codegen_err_*.mon= diagnostic fixtures
+(see [[file:testing.org][Testing]] and [[file:errors.org][Diagnostics]]).
 
-** Starting the REPL
+*** Key Points
+- =monad= with no args launches the REPL (or =monad -i file.mon=)
+- Uses LLVM MCJIT for JIT compilation and GNU Readline for line editing
+- Tested by dedicated =rt_repl_*.mon= fixtures and indirectly by all codegen tests
 
-| Invocation                    | Description                        |
+2. Starting the REPL
+
+| Invocation | Description |
 |-------------------------------+------------------------------------|
-| =monad= (no arguments)        | Enter REPL                         |
-| =monad -i=                    | Explicit REPL flag                 |
-| =monad -i file.mon=           | Compile file then enter REPL       |
-| =monad file.mon=              | Compile and link (no REPL)         |
+| =monad= (no arguments) | Enter REPL |
+| =monad -i= | Explicit REPL flag |
+| =monad -i file.mon= | Compile file then enter REPL |
+| =monad file.mon= | Compile and link (no REPL) |
 
 The =CMD_REPL= command mode is selected by =parse_flags= (cli.c:197)
 when no arguments are given, or when the =-i= flag is present. See
-[[file:../context/cli.org][context/cli.org]].
+[[file:../context/cli.org][context/cli.org]] and [[file:cli.org][CLI Reference]].
 
-** REPL Lifecycle
+3. REPL Lifecycle
 
 The top-level entry point is =repl_run= (repl.c), which orchestrates:
 
-1. =repl_init= — Initialises a =REPLContext=:
+1. =repl_init= -- Initialises a =REPLContext=:
    - Creates the LLVM execution engine (MCJIT)
    - Initialises a codegen context (module/builder replaced per expr)
    - Seeds the inference environment with builtins (=register_builtins=)
    - Sets up the runtime symbol table and signal handlers
    - Configures readline (history file, =rl_attempted_completion_function=)
 2. Interactive read-compile-eval-print loop with partial-input accumulation
-3. =repl_dispose= — On EOF or =(quit)=:
+3. =repl_dispose= -- On EOF or =(quit)=:
    - Disposes the LLVM engine
    - Frees the codegen context and inference environment
    - Frees accumulated runtime symbol data
 
-** Input Loop
+For the LLVM codegen context, see [[file:../context/codegen-ops.org][context/codegen-ops.org]].
+For type inference in the REPL, see [[file:type-inference.org][Type Inference]].
+For builtin registration, see [[file:core.org][Core Library]].
+
+*** Key Points
+- Three-phase lifecycle: init, interactive loop, dispose
+- =repl_init= sets up LLVM MCJIT, inference environment, readline, and signals
+- =repl_dispose= tears down all state gracefully
+
+4. Input Loop
 
 =repl_run= (repl.c:~2885) reads input line by line:
 
 - When stdin is a terminal (=isatty(STDIN_FILENO)=), it uses readline for
   line editing, history (up/down arrows, Ctrl+R), and tab completion.
-  Prompt is ="Monad λ "= (blue "Monad", green "λ") on success,
-  ="Monad λ "= with red λ on error.
+  Prompt is ="Monad | "= (blue "Monad", green "|") on success,
+  ="Monad | "= with red | on error.
 - When stdin is not a terminal (=piped input=), it uses =fgets= and
   suppresses readline prompts (but still writes prompt to stdout for
   compat).
@@ -81,13 +99,22 @@ The top-level entry point is =repl_run= (repl.c), which orchestrates:
 - Each complete expression is passed to =repl_eval_line= and the result
   is displayed. On failure, the prompt turns red but the session continues.
 
-** JIT Compilation Pipeline
+*** Key Points
+- Terminal input: readline with history, editing, tab completion
+- Piped input: =fgets=, no editing, prompt suppressed
+- =MONAD_NO_PROMPT= env var for external tool integration
+- Partial input accumulates across lines until balanced parens
+
+See also: [[file:cli.org][CLI Reference]]
+
+5. JIT Compilation Pipeline
 
 Each expression goes through this pipeline via =repl_eval_line=:
 
 1. **Parse**: input string parsed into an AST with =REPL_PARSE= macro
    (setjmp/longjmp recovery for parse errors)
 2. **Infer**: =repl_infer= runs Hindley-Milner type inference on the AST
+   (see [[file:type-inference.org][Type Inference]])
 3. **Codegen**: =codegen_expr= compiles the AST to LLVM IR in a fresh
    module created by =fresh_module=
 4. **JIT**: the module is added to the MCJIT execution engine
@@ -97,33 +124,42 @@ Each expression goes through this pipeline via =repl_eval_line=:
 
 Each expression gets a new LLVM module (discarded after execution).
 Function definitions persist in the inference environment's symbol table,
-but LLVM IR modules are ephemeral — previously defined functions are
+but LLVM IR modules are ephemeral -- previously defined functions are
 callable via the execution engine's symbol table.
 
 For details on the individual pipeline stages, see:
-- [[file:../context/reader.org][context/reader.org]] — parsing
-- [[file:../context/infer.org][context/infer.org]] — type inference
-- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — codegen
+- [[file:../context/reader.org][context/reader.org]] -- parsing (see also [[file:syntax.org][Syntax]])
+- [[file:../context/infer.org][context/infer.org]] -- type inference (see also [[file:type-inference.org][Type Inference]])
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] -- codegen
+- [[file:../context/macro.org][context/macro.org]] -- macro expansion (see also [[file:macros.org][Macros]])
 
-** REPLContext
+*** Key Points
+- Six stages per expression: parse, infer, codegen, JIT, execute, print
+- Each expression gets a fresh LLVM module (ephemeral, discarded after execution)
+- Function definitions persist in the inference environment and execution engine symbol table
+- Error recovery via setjmp/longjmp at every stage
+
+See also: [[file:type-inference.org][Type Inference]]
+
+6. REPLContext
 
 The =REPLContext= struct (repl.h:11-16) holds all persistent REPL state:
 
-| Field       | Type                   | Purpose                                          |
+| Field | Type | Purpose |
 |-------------+------------------------+--------------------------------------------------|
-| =engine=      | LLVMExecutionEngineRef | Persistent JIT engine reused across expressions  |
-| =cg=          | CodegenContext         | Codegen state (module/builder replaced per expr)  |
-| =expr_count=  | unsigned int           | Monotonically increasing expression counter       |
-| =infer_env=   | InferEnv *             | Persistent HM type environment (definitions accumulate) |
+| =engine= | LLVMExecutionEngineRef | Persistent JIT engine reused across expressions |
+| =cg= | CodegenContext | Codegen state (module/builder replaced per expr) |
+| =expr_count= | unsigned int | Monotonically increasing expression counter |
+| =infer_env= | InferEnv * | Persistent HM type environment (definitions accumulate) |
 
-** Environment Persistence
+7. Environment Persistence
 
 Definitions made in the REPL accumulate across inputs:
 
 - The =infer_env= field persists the Hindley-Milner type environment,
   so type definitions and function signatures survive across expressions.
 - The LLVM execution engine accumulates JIT-compiled function bodies
-  — previously defined functions can be called from subsequent expressions.
+  -- previously defined functions can be called from subsequent expressions.
 - The =expr_count= counter ensures unique wrapper function names for each
   expression.
 
@@ -133,7 +169,18 @@ exported symbols into the codegen environment via =declare_externals=.
 Object file paths from compiled modules are returned by
 =repl_get_compiled_obj_paths= (main.c) for linker symbol resolution.
 
-** Readline Integration
+For module import syntax and resolution, see [[file:modules.org][Module System]].
+For export manifest (.mexp) format, see [[file:modules.org][Module System # Export Manifest]].
+
+*** Key Points
+- Type environment persists across expressions (infer_env)
+- JIT-compiled function bodies accumulate in the execution engine
+- =import= in REPL compiles modules and injects their symbols
+- Expression counter ensures unique wrapper function names
+
+See also: [[file:modules.org][Module System]]
+
+8. Readline Integration
 
 GNU Readline provides:
 
@@ -146,14 +193,14 @@ GNU Readline provides:
   - REPL meta-commands
   - Symbols from the current inference environment
 
-** Signal Handling
+9. Signal Handling
 
-| Mechanism                  | Purpose                                    |
+| Mechanism | Purpose |
 |----------------------------+--------------------------------------------|
-| =setjmp= / =longjmp=         | Parse error recovery (via =READER_ERROR=)   |
-| =repl_sigint_handler=       | SIGINT (Ctrl+C) → set interrupt flag       |
-| =__monad_assert_fail=       | Runtime assertion failure → longjmp to REPL |
-| =__monad_runtime_error=     | Runtime error → print location, return to prompt |
+| =setjmp= / =longjmp= | Parse error recovery (via =READER_ERROR=) |
+| =repl_sigint_handler= | SIGINT (Ctrl+C) -> set interrupt flag |
+| =__monad_assert_fail= | Runtime assertion failure -> longjmp to REPL |
+| =__monad_runtime_error= | Runtime error -> print location, return to prompt |
 
 Error recovery in =repl_eval_line=: before each evaluation, a =jmp_buf=
 (=g_repl_escape=) is set. If the reader encounters a fatal error (via the
@@ -165,37 +212,111 @@ Runtime crashes in JIT-compiled code (assertion failures via
 =__monad_assert_fail=, runtime errors via =__monad_runtime_error=) also
 return control to the REPL prompt via =g_assert_jmp_ptr=.
 
-** Example Session
+For the full list of error diagnostics, see [[file:errors.org][Diagnostics]].
+For runtime error handling patterns, see [[file:error-handling.org][Error Handling]].
+
+*** Key Points
+- Parse errors: setjmp/longjmp back to REPL prompt (never =exit(1)=)
+- Runtime crashes: return control via =g_assert_jmp_ptr=
+- Ctrl+C: sets interrupt flag, does not terminate the session
+- All errors keep the REPL alive -- the prompt turns red but continues
+
+See also: [[file:errors.org][Diagnostics]]
+
+10. Example Session
 
 #+BEGIN_SRC text
 $ monad
-Monad λ (+ 1 2)
+Monad | (+ 1 2)
 3
-Monad λ define square x -> * x x
+Monad | define square x -> * x x
 square
-Monad λ square 5
+Monad | square 5
 25
-Monad λ (show "hello")
+Monad | (show "hello")
 hello
-Monad λ Ctrl+D
+Monad | Ctrl+D
 #+END_SRC
 
-* See Also
+The equivalent session using Wisp syntax:
 
-- [[file:cli.org][CLI Reference]]
-- [[file:build.org][Build System]]
-- [[file:testing.org][Testing]]
-- [[file:core.org][Core Library]]
-- [[file:errors.org][Diagnostics]]
+#+BEGIN_SRC text
+$ monad
+Monad | + 1 2
+3
+Monad | define square x -> * x x
+square
+Monad | square 5
+25
+Monad | show "hello"
+hello
+Monad | Ctrl+D
+#+END_SRC
+
+* Implementation Notes
+
+Key source locations for the REPL:
+
+| Source | Key Symbols / Sections |
+|--------+-----------------------|
+| [[file:../repl.h:11][repl.h:11]] | =REPLContext= struct -- engine, cg, expr_count, infer_env |
+| [[file:../repl.c][repl.c]] | =repl_run= -- main REPL loop |
+| [[file:../repl.c][repl.c]] | =repl_init= -- engine, readline, builtins, signals |
+| [[file:../repl.c][repl.c]] | =repl_eval_line= -- parse, infer, codegen, JIT, execute |
+| [[file:../repl.c][repl.c]] | =repl_dispose= -- teardown |
+| [[file:../repl.c][repl.c]] | =repl_completion=, =repl_completion_generator= -- tab completion |
+| [[file:../main.c][main.c]] | =repl_compile_module=, =compile_one= -- import handling |
+| [[file:../cli.c:197][cli.c:197]] | =CMD_REPL= mode selection in =parse_flags= |
+
+Related context documents:
+
+- [[file:../context/repl.org][context/repl.org]] -- REPL implementation details
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] -- codegen_expr
+- [[file:../context/infer.org][context/infer.org]] -- type inference
+- [[file:../context/reader.org][context/reader.org]] -- parsing
+- [[file:../context/macro.org][context/macro.org]] -- macro expansion
+- [[file:../context/cli.org][context/cli.org]] -- CMD_REPL flag dispatch
+- [[file:../context/runtime.org][context/runtime.org]] -- runtime symbol table
+- [[file:../repl.c][repl.c]] -- source code
+- [[file:../repl.h][repl.h]] -- REPLContext definition
+- [[file:../main.c][main.c]] -- repl_compile_module, compile_one pipeline
+- [[file:../tests/run.py][tests/run.py]] -- codegen test runner exercises full pipeline
+
+* Related Pages
+
+- [[file:cli.org][CLI Reference]] -- invoking the REPL
+- [[file:build.org][Build System]] -- compilation pipeline
+- [[file:testing.org][Testing]] -- codegen test fixtures
+- [[file:core.org][Core Library]] -- builtins available in REPL
+- [[file:errors.org][Diagnostics]] -- error output format
+- [[file:error-handling.org][Error Handling]] -- REPL error recovery
+- [[file:modules.org][Module System]] -- import in REPL
+- [[file:show.org][Show]] -- output printing
+- [[file:type-inference.org][Type Inference]] -- HM in REPL
+- [[file:wisp.org][Wisp]] -- Wisp syntax in REPL
+
+* Further Reading
+
+- [[file:../context/repl.org][context/repl.org]] -- REPL implementation details
+- [[file:../repl.c][repl.c]] -- source code
+- [[file:../repl.h][repl.h]] -- REPLContext definition
+- [[file:../main.c][main.c]] -- repl_compile_module, compile_one pipeline
+- [[file:../context/cli.org][context/cli.org]] -- CMD_REPL flag dispatch
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] -- codegen_expr
+- [[file:../context/infer.org][context/infer.org]] -- type inference
+- [[file:../context/reader.org][context/reader.org]] -- parsing
+- [[file:../context/runtime.org][context/runtime.org]] -- runtime symbol table
+- [[file:../tests/run.py][tests/run.py]] -- codegen test runner exercises full pipeline
 
 * Context Links
 
-- [[file:../context/repl.org][context/repl.org]] — REPL implementation details
-- [[file:../repl.c][repl.c]] — source code
-- [[file:../repl.h][repl.h]] — REPLContext definition
-- [[file:../main.c][main.c]] — repl_compile_module, compile_one pipeline
-- [[file:../context/cli.org][context/cli.org]] — CMD_REPL flag dispatch
-- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — codegen_expr
-- [[file:../context/infer.org][context/infer.org]] — type inference
-- [[file:../context/reader.org][context/reader.org]] — parsing
-- [[file:../tests/run.py][tests/run.py]] — codegen test runner exercises full pipeline
+- [[file:../context/repl.org][context/repl.org]] -- REPL implementation details
+- [[file:../repl.c][repl.c]] -- source code
+- [[file:../repl.h][repl.h]] -- REPLContext definition
+- [[file:../main.c][main.c]] -- repl_compile_module, compile_one pipeline
+- [[file:../context/cli.org][context/cli.org]] -- CMD_REPL flag dispatch
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] -- codegen_expr
+- [[file:../context/infer.org][context/infer.org]] -- type inference
+- [[file:../context/reader.org][context/reader.org]] -- parsing
+- [[file:../context/macro.org][context/macro.org]] -- macro expansion
+- [[file:../tests/run.py][tests/run.py]] -- codegen test runner exercises full pipeline

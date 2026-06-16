@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-12
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-12
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -1050,7 +1050,7 @@
   Every other primitive follows the same pattern — there is always a
   type-level ideal and a runtime pragmatism, bridged by the codegen.
 
-[INF id:inf.language.array-connects-to-everything from:obs.language.array-three-forms,obs.language.heap-array-runtime-codegen-fixture,obs.language.path-literal-codegen-values conf:high]
+[INF id:inf.language.array-connects-to-everything from:obs.language.array-three-forms,obs.language.heap-array-runtime-codegen-fixture,obs.language.path-literal-value-goldens conf:high]
   connects-to -> `monadc.context.language.primitive-set` (TYPE_SET also uses
   compile-time pred + runtime hash) · `monadc.context.language.primitive-map`
   (TYPE_MAP also has type-level/runtime split) ·
@@ -1246,7 +1246,7 @@
   function is FNV-1a for strings, Knuth multiplicative for integers,
   XOR-aggregate for collections. Structural equality uses `rt_equal_p`.
 
-[INF id:inf.language.map-as-relation from:obs.language.map-ground-type,obs.language.map-as-function,dec.philosophy.sets-are-the-model conf:high]
+[INF id:inf.language.map-as-relation from:obs.language.map-ground-type,inf.language.map-as-relation,dec.philosophy.sets-are-the-model conf:high]
   In the set-theoretic model, a map IS a set of pairs `(key . value)`. The
   `#{}` syntax constructs this set. `(m key)` applies the characteristic
   relation. `keys` and `vals` are projections onto the first and second
@@ -1257,7 +1257,7 @@
   coercion. The surface syntax distinguishes them for readability; the
   semantic model unifies them.
 
-[INF id:inf.language.map-connects-to from:obs.language.map-ground-type,obs.language.map-runtime-representation,obs.language.map-inference-no-params,obs.semantic-model.map-as-relation conf:high]
+[INF id:inf.language.map-connects-to from:obs.language.map-ground-type,obs.language.map-runtime-representation,obs.language.map-inference-no-params,inf.language.map-as-relation conf:high]
   connects-to -> `monadc.context.language.primitive-set` (shared ground type
   design, shared runtime hash table architecture) ·
   `monadc.context.language.primitive-array` (same collection-as-function path) ·
@@ -2897,3 +2897,116 @@
   dispatch table) ·
   `monadc.context.reader.char-escapes` (Wisp char escape handling affects
   AST_CHAR parsing)
+
+* Test Coverage Anchors
+
+* Language Codegen
+:PROPERTIES:
+:ID: monadc.context.language.codegen
+:CUSTOM_ID: test-anchor-language-codegen
+:END:
+[OBS id:obs.language.codegen.test-anchor src:tests/codegen/MANIFEST.md conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Language Codegen Atom Web
+:PROPERTIES:
+:ID: monadc.context.language.codegen-atom-web
+:CUSTOM_ID: test-anchor-language-codegen-atom-web
+:END:
+[OBS id:obs.language.codegen-atom-web.test-anchor src:tests/codegen/MANIFEST.md conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Language Codegen Branch Coverage
+:PROPERTIES:
+:ID: monadc.context.language.codegen-branch-coverage
+:CUSTOM_ID: test-anchor-language-codegen-branch-coverage
+:END:
+[OBS id:obs.language.codegen-branch-coverage.test-anchor src:tests/codegen/MANIFEST.md conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Language Codegen Type System Corpus
+:PROPERTIES:
+:ID: monadc.context.language.codegen-type-system-corpus
+:CUSTOM_ID: test-anchor-language-codegen-type-system-corpus
+:END:
+[OBS id:obs.language.codegen-type-system-corpus.test-anchor src:tests/codegen/MANIFEST.md conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Language Env Error Coverage
+:PROPERTIES:
+:ID: monadc.context.language.env-error-coverage
+:CUSTOM_ID: test-anchor-language-env-error-coverage
+:END:
+[OBS id:obs.language.env-error-coverage.test-anchor src:tests/codegen/MANIFEST.md conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Language Error Menu
+:PROPERTIES:
+:ID: monadc.context.language.error-menu
+:CUSTOM_ID: test-anchor-language-error-menu
+:END:
+[OBS id:obs.language.error-menu.test-anchor src:tests/codegen/MANIFEST.md conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Language Hm Dependent Type Coverage
+:PROPERTIES:
+:ID: monadc.context.language.hm-dependent-type-coverage
+:CUSTOM_ID: test-anchor-language-hm-dependent-type-coverage
+:END:
+[OBS id:obs.language.hm-dependent-type-coverage.test-anchor src:tests/codegen/MANIFEST.md conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Language Layout Records
+:PROPERTIES:
+:ID: monadc.context.language.layout-records
+:CUSTOM_ID: test-anchor-language-layout-records
+:END:
+[OBS id:obs.language.layout-records.test-anchor src:tests/codegen/MANIFEST.md conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Language Path Literal Values
+:PROPERTIES:
+:ID: monadc.context.language.path-literal-values
+:CUSTOM_ID: test-anchor-language-path-literal-values
+:END:
+[OBS id:obs.language.path-literal-values.test-anchor src:tests/codegen/MANIFEST.md conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Language Reader Error Coverage
+:PROPERTIES:
+:ID: monadc.context.language.reader-error-coverage
+:CUSTOM_ID: test-anchor-language-reader-error-coverage
+:END:
+[OBS id:obs.language.reader-error-coverage.test-anchor src:tests/codegen/MANIFEST.md conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+* Language Runtime Codegen Corpus
+:PROPERTIES:
+:ID: monadc.context.language.runtime-codegen-corpus
+:CUSTOM_ID: test-anchor-language-runtime-codegen-corpus
+:END:
+[OBS id:obs.language.runtime-codegen-corpus.test-anchor src:tests/codegen/MANIFEST.md conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+

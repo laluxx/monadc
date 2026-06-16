@@ -11,14 +11,50 @@
 
 [[file:index.org][<- Back to Index]] · [[file:tutorial.org][Tutorial]] · [[file:syntax.org][Syntax]] · [[file:types.org][Types]] · [[file:core.org][Core Library]] · [[file:functional-programming.org][Functional Programming]] · [[file:control.org][Control Flow]]
 
-Test coverage: introductory examples are tested as part of =rt_tutorial_*.mon=.
+The Monad language: a compiled Lisp-family functional language with dual syntax, Hindley-Milner type inference, dependent types, arena allocation, and C FFI. This page covers the language's design, features, quick start, compiler pipeline, and tooling.
 
-Monad is a compiled Lisp-family functional language with a dual-surface
-syntax (S-expressions and indentation-based Wisp). It targets x86-64
-Linux via LLVM 19+ and is written in C (~29,000+ lines across 30+ source
-files, see [[file:../context/build.org][context/build.org]]). The compiler
-produces native binaries linked against a static runtime library
-(=libmonad.a= compiled from [[file:../runtime.c][runtime.c]]).
+Test coverage: introductory examples are tested as part of =rt_tutorial_*.mon= fixtures in [[file:../tests/codegen/branches/][tests/codegen/branches/]]. The reader conformance corpus is at [[file:../tests/reader-atoms.tsv][tests/reader-atoms.tsv]]. See [[file:../context/tests-arch.org][context/tests-arch.org]] for the full test architecture.
+
+* 1. What is Monad?
+
+Monad is a compiled Lisp-family functional language with a /dual-surface
+syntax/: traditional S-expressions (parenthesized prefix notation) and
+indentation-based Wisp (modeled after Python-style block structure). Both
+syntaxes produce identical ASTs and mix freely in the same file.
+
+The compiler targets x86-64 Linux via LLVM 19+ and is written in C
+(~29,000+ lines across 30+ source files, see
+[[file:../context/build.org][context/build.org]]). The compiler produces native binaries
+linked against a static runtime library (=libmonad.a= compiled from
+[[file:../runtime.c][runtime.c]]).
+
+The language draws inspiration from three traditions:
+
+- *From Lisp* ([[file:from-lisp.org][from-lisp.org]]): code-as-data, macros as functions,
+  S-expression syntax, interactive REPL-driven development
+- *From Haskell* ([[file:from-haskell.org][from-haskell.org]]): Hindley-Milner type inference,
+  purity by default, type classes, algebraic data types
+- *From C* ([[file:from-c.org][from-c.org]]): explicit memory management (arenas), inline
+  assembly, C FFI via =#include=, predictable performance
+
+For a deeper look at design motivations, see
+[[file:../context/philosophy.org][context/philosophy.org]].
+
+** 1.1 Core Features
+
+| Feature              | Description                                                      | Compiler Phase    |
+|----------------------+------------------------------------------------------------------+-------------------|
+| Type inference       | Hindley-Milner (constraint-based, generalization, instantiation) | =infer.c=           |
+| Dependent types      | ITT with Normalization by Evaluation, bidirectional checking     | =dep.c=             |
+| Type bridge          | =TERM_EMBED= node connects HM and ITT systems                      | infer/dep interop |
+| Memory management    | Arena allocation, bump-pointer, 4 MiB blocks, checkpoint/restore | =arena.c=           |
+| C FFI                | =(include "header.h")= via libclang header parsing                 | =ffi.c=             |
+| Macros               | Ordinary functions returning =Syntax=, full hygiene                | =macro.c=           |
+| Dual syntax          | S-expr + Wisp, freely mixable, identical ASTs                    | =reader.c= + =wisp.c= |
+| Self-hosting surface | =Main.mon= (1244 lines): stdlib + primary test surface             | [[file:../Main.mon][Main.mon]]          |
+| Test suite           | ~1305 test assets across codegen, parser, property-based fuzzing | [[file:../context/tests-arch.org][tests-arch.org]]    |
+
+** 1.2 Key Design Points
 
 - *Type system*: Hindley-Milner inference (constraint-based, with
   generalization, instantiation, and monomorphization) for ground types,
@@ -50,7 +86,40 @@ produces native binaries linked against a static runtime library
   fuzzing (41 algebraic laws) — see [[file:../context/tests-arch.org][context/tests-arch.org]] and
   [[file:testing.org][Testing]].
 
-* Quick Start
+** 1.3 Implementation Notes
+
+| Component           | Source Files       | Context Link                                |
+|---------------------+--------------------+---------------------------------------------|
+| Reader/Parser       | [[file:../reader.c][reader.c]], [[file:../reader.h][reader.h]] | [[file:../context/reader.org][context/reader.org]]                          |
+| Wisp Expander       | [[file:../wisp.c][wisp.c]], [[file:../wisp.h][wisp.h]]     | [[file:../context/wisp.org::wisp-architecture][context/wisp.org — Architecture]]             |
+| Type Inference (HM) | [[file:../infer.c][infer.c]], [[file:../infer.h][infer.h]]   | [[file:../context/infer.org::constraint-generation][context/infer.org — Constraint Generation]]   |
+| Dependent Checker   | [[file:../dep.c][dep.c]], [[file:../dep.h][dep.h]]       | [[file:../context/dep.org::dep-nbe-kernel][context/dep.org — NbE Kernel]]                |
+| Codegen             | [[file:../codegen.c][codegen.c]]          | [[file:../context/codegen.org::codegen-core][context/codegen.org — Core Codegen]]          |
+| Type System         | [[file:../types.c][types.c]], [[file:../types.h][types.h]]   | [[file:../context/types.org::types-summary-table][context/types.org — TypeKind Enum]]           |
+| Runtime             | [[file:../runtime.c][runtime.c]]          | [[file:../context/runtime.org::runtime-value-types][context/runtime.org — Value Types]]           |
+| Arena Allocator     | [[file:../arena.c][arena.c]], [[file:../arena.h][arena.h]]   | [[file:../context/arena.org::arena-lifecycle][context/arena.org — Arena Lifecycle]]         |
+| C FFI               | [[file:../ffi.c][ffi.c]], [[file:../ffi.h][ffi.h]]       | [[file:../context/ffi.org::ffi-parse-header][context/ffi.org — Header Parsing]]            |
+| Macro System        | [[file:../macro.c][macro.c]], [[file:../macro.h][macro.h]]   | [[file:../context/macro.org::macro-expand-all][context/macro.org — Expansion]]               |
+| Module System       | [[file:../module.c][module.c]]           | [[file:../context/module.org::module-symbol-resolution][context/module.org — Symbol Resolution]]      |
+| Type Classes        | [[file:../typeclass.c][typeclass.c]]        | [[file:../context/typeclass.org::typeclass-dict][context/typeclass.org — Dictionary Dispatch]] |
+| REPL                | [[file:../repl.c][repl.c]]             | [[file:../context/repl.org::repl-evaluation][context/repl.org — REPL Evaluation]]          |
+
+* 2. Getting Started
+
+The fastest way to get Monad running on your machine:
+
+1. *Build the compiler* — see [[file:build.org][build.org]] for dependencies and
+   build instructions (currently Linux x86-64 only, LLVM 19+ required).
+2. *Command-line reference* — see [[file:cli.org][cli.org]] (or [[file:../context/cli.org][context/cli.org]])
+   for all =monad= subcommands and flags.
+3. *Follow the tutorial* — [[file:tutorial.org][tutorial.org]] walks you through your
+   first programs step by step.
+4. *Explore the REPL* — =monad -i= launches a JIT-compiled interactive
+   session (see [[file:repl.org][repl.org]]).
+
+** 2.1 Quick Start: Hello World
+
+The canonical "hello world" in both syntaxes:
 
 #+BEGIN_SRC monad
 (module Main)
@@ -68,54 +137,188 @@ Compile and run:
 make && ./monad hello.mon -o hello && ./hello
 #+END_SRC
 
-Or with the Wisp syntax variant:
+Notice how both syntaxes express the same program. The Wisp version drops
+parentheses and uses indentation to show nesting. Both produce the same
+AST and the same compiled binary.
+
+** 2.2 Key Concepts Introduced
+
+- =(module Main)= declares the entry module — top-level forms execute in order
+- =(show)= prints any value to stdout — see [[file:show.org][Show]]
+- Both S-expression and Wisp syntax are valid, freely mixable — see [[file:syntax.org][Syntax]]
+- Compilation produces native binaries via LLVM — see [[file:../context/codegen.org][context/codegen.org]]
+- The REPL ([[file:repl.org]]) provides interactive experimentation without compiling
+
+* 3. Quick Tour
+
+A brief walk through Monad's surface in both syntaxes. Each example shows
+the S-expression and Wisp form side by side.
+
+** 3.1 Bindings and Functions
+
+Bind a value with =define=, then call a function:
 
 #+BEGIN_SRC monad
-module Main
-show "hello from wisp"
+(define x 42)
+(define (greet name)
+  (++ "hello, " name))
+(show (greet "world"))
 #+END_SRC
 
 #+BEGIN_SRC wisp
-module Main
-show "hello from wisp"
+define x 42
+define greet name
+  ++ "hello, " name
+show greet "world"
 #+END_SRC
 
-* Compiler Pipeline
+The =define= form is the primary binding mechanism. In Wisp, the function
+body is indented under the definition. See [[file:define.org][define.org]] for all binding forms.
 
-The MonadC compiler transforms source to native code through these
-stages:
+** 3.2 Arithmetic
 
-1. *Reader* (reader.c) — Tokenizes and parses source text into an AST.
+Prefix notation for all operators ([[file:arithmetic.org]]), including recursion:
+
+#+BEGIN_SRC monad
+(define (fact n)
+  (if (<= n 1)
+    1
+    (* n (fact (- n 1)))))
+(show (fact 10))  ; 3628800
+#+END_SRC
+
+Wisp uses the same prefix operators without parentheses:
+
+#+BEGIN_SRC wisp
+define fact n
+  if <= n 1
+    1
+    * n (fact (- n 1))
+show fact 10
+#+END_SRC
+
+See [[file:arithmetic.org][arithmetic.org]], [[file:numeric.org][Numeric Types]].
+
+** 3.3 Lists and Collections
+
+Lists are linked cons cells using quoted syntax:
+
+#+BEGIN_SRC monad
+(define xs '(1 2 3 4 5))
+(show (map (lambda (x) (* x x)) xs))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define xs '(1 2 3 4 5)
+show map (lambda (x) (* x x)) xs
+#+END_SRC
+
+The =quote= (='=) prevents evaluation, creating a literal list. See
+[[file:list.org][list.org]], [[file:collections.org][collections.org]].
+
+** 3.4 Pattern Matching
+
+Destructure values with =match=:
+
+#+BEGIN_SRC monad
+(match '(1 2 3)
+  ((list a b c) (show (+ a b c))))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+match '(1 2 3)
+  list a b c -> show + a b c
+#+END_SRC
+
+Pattern matching supports destructuring, guards, and nested patterns.
+See [[file:patterns.org][patterns.org]].
+
+** 3.5 Dependent Types (Advanced)
+
+Monad supports dependent types for compile-time invariant checking.
+A length-indexed vector:
+
+#+BEGIN_SRC monad
+;; A vector of length n
+(data (Vec :type -> Nat -> type)
+  (Nil  (Vec A 0))
+  (Cons A (Vec A n) (Vec A (Succ n))))
+#+END_SRC
+
+This declares =Vec A n= as a vector of element type =A= and length =n=.
+The dependent checker ([[file:../context/dep.org]]) verifies length arithmetic at
+compile time. See [[file:data.org][data.org]], [[file:dependent-types.org][dependent-types.org]], [[file:types.org][types.org]].
+
+** 3.6 Quick Tour Summary
+
+| Concept             | S-expr Form         | Wisp Form                |
+|---------------------+---------------------+--------------------------|
+| Value binding       | =(define x 42)=       | =define x 42=              |
+| Function definition | =(define (f x) body)= | =define f x\n  body=       |
+| Arithmetic          | =(+ 1 2 3)=           | =+ 1 2 3=                  |
+| List literal        | ='(1 2 3)=            | ='(1 2 3)=                 |
+| Lambda              | =(lambda (x) body)=   | =lambda x\n  body=         |
+| Pattern match       | =(match x (p e) ...)= | =match x\n  p -> e\n  ...= |
+| Conditional         | =(if cond t f)=       | =if cond t f=              |
+| Data type           | =(data T (C ...))=    | =data T\n  C\n  ...=       |
+
+** Complete example:
+
+#+BEGIN_SRC monad
+;; Save as hello.mon && monadc hello.mon && ./hello
+(module Main)
+
+(define (greet [name :: String] -> String)
+  (++ "Hello, " name "!"))
+
+(define (fact [n :: Int] -> Int)
+  (if (<= n 1)
+    1
+    (* n (fact (- n 1)))))
+
+(show (greet "Monad"))
+(show "10! = " (fact 10))    ;; 3628800
+#+END_SRC
+
+* 4. Compiler Pipeline
+
+The MonadC compiler transforms source to native code through six stages:
+
+1. *Reader* ([[file:../reader.c][reader.c]]) — Tokenizes and parses source text into an AST.
    Recognizes both S-expression syntax and Wisp indentation, producing
    identical AST nodes regardless of surface syntax. The reader is
-   tested against a conformance corpus (=tests/reader-atoms.tsv=)
+   tested against a conformance corpus (=tests/reader-atoms.tsv=,
+   [[file:../context/language.org::syntax-corpus][context/language.org — Syntax Corpus]])
    covering every grammar production: numeric literals, strings, chars,
    paths, keywords, symbols, arrays (stack/fat/heap), sets, maps,
    ranges, lambdas, data declarations, type annotations, refinements,
    layout types, and inline assembly forms.
 
-2. *Macro expansion* — Macro functions (ordinary =define= returning
-   =Syntax=) are expanded at compile time. Expansion is fixpoint —
-   the compiler re-expands until the term stabilizes. Hygiene is
+2. *Macro expansion* ([[file:../context/macro.org]]) — Macro functions (ordinary
+   =define= returning =Syntax=) are expanded at compile time. Expansion is
+   fixpoint — the compiler re-expands until the term stabilizes
+   ([[file:../context/macro.org::macro-fixpoint][context/macro.org — Fixpoint]]). Hygiene is
    maintained through rename-pair tracking that prevents unintended
-   variable capture.
+   variable capture ([[file:../context/macro.org::macro-hygiene][context/macro.org — Hygiene]]).
 
-3. *Wisp expander* (wisp.c) — If the source uses Wisp syntax, the
-   expander desugars indentation into S-expressions. Wisp !-suffix
-   and ?-suffix sugar are applied at this stage.
+3. *Wisp expander* ([[file:../wisp.c][wisp.c]]) — If the source uses Wisp syntax, the
+   expander desugars indentation into S-expressions
+   ([[file:../context/wisp.org::wisp-architecture][context/wisp.org — Architecture]]).
+   Wisp !-suffix and ?-suffix sugar are applied at this stage.
 
 4. *Type inference / checking* — The dual type system runs:
-   - *HM inference* (=infer.c=, =infer.h=) handles ground types with
+   - *HM inference* (=infer.c=, [[file:../context/infer.org]]) handles ground types with
      constraint generation, unification, generalization, and
      monomorphization. Fast path for non-dependent code.
-   - *ITT dependent checker* (=dep.c=, =dep.h=) handles Pi-types,
+   - *ITT dependent checker* (=dep.c=, [[file:../context/dep.org]]) handles Pi-types,
      Sigma-types, universe levels, equality/refl/subst, Nat and
      Nat-elim, metavariables, and bidirectional infer/check entry
-     points — all normalized via NbE (Normalization by Evaluation).
+     points ([[file:../context/dep.org::dep-nbe-kernel][context/dep.org — NbE Kernel]]) — all normalized via NbE.
 
-5. *Codegen* (=codegen.c=) — Lowers typed AST to LLVM IR. Dispatch
+5. *Codegen* ([[file:../codegen.c][codegen.c]]) — Lowers typed AST to LLVM IR. Dispatch
    uses a three-layer architecture: AST type switch → strcmp dispatch
-   for 83+ known symbols → =register_builtins= for 94 env entries.
+   for 83+ known symbols → =register_builtins= for 94 env entries
+   ([[file:../context/codegen-ops.org::dispatch-architecture][context/codegen-ops.org — Dispatch Architecture]]).
    Polymorphic functions are monomorphized — each concrete type
    instantiation generates separate machine code.
 
@@ -123,7 +326,12 @@ stages:
    object code, and links against =libmonad.a= (the runtime) to produce
    a native executable.
 
-* Key Ideas
+See [[file:../context/codegen.org][context/codegen.org]] and [[file:../context/infer.org][context/infer.org]] for deeper
+compiler internals documentation.
+
+* 5. Key Ideas
+
+Monad's design rests on several foundational concepts:
 
 - *Types are sets* — =Int= is the set of 63-bit integers. A refinement
   type like ={ x ∈ Int | x > 0 }= is a subset. Functions are relations.
@@ -136,7 +344,7 @@ stages:
 - *Code is data* — Macros are just functions that return =Syntax=
   values. The quote operator (= '(...)=) and quasi-quote (= `(...)=)
   construct syntax objects at runtime, and macro expansion transforms
-  them at compile time.
+  them at compile time ([[file:../context/macro.org::macro-syntax-convention][context/macro.org — Syntax Convention]]).
 
 - *No trade-off between safety and control* — The same language gives
   you dependent types AND inline assembly, refinement types AND naked
@@ -149,7 +357,51 @@ stages:
   and write inline assembly for hardware access — all in the same file
   and the same function.
 
-* Tooling
+** 5.1 Key Points
+
+- Monad combines Lisp code-as-data, Haskell-style types, and C-level control
+- Two syntaxes (S-expr + Wisp) produce identical ASTs — freely mixable
+- Memory uses arena allocation: no GC, predictable performance
+- Type system: HM inference + dependent types (ITT/NbE) with a =TERM_EMBED= bridge
+- Macros are ordinary functions, not a separate language
+- All features (dependent types, inline ASM, FFI) work together in one file
+
+* 6. Philosophy
+
+Monad is built on five core principles:
+
+1. *No trade-off between safety and control* — You should not have to
+   choose between dependent types and inline assembly, between
+   mathematical guarantees and hardware control.
+
+2. *Purity is practical* — Mathematical purity enables compile-time
+   predicate checking, exhaustive pattern coverage verification, and
+   zero-cost type abstraction through monomorphization.
+
+3. *Syntax is instrument* — Two syntaxes (S-expressions and Wisp) for
+   two tasks: programmatic generation and macro processing with
+   S-expressions, readability in large codebases with Wisp. Both work
+   for every construct and mix freely.
+
+4. *Zero-to-metal abstraction ladder* — The ladder from =show "Hello!"=
+   to inline assembly must be continuous, with no language boundary,
+   binding layer, or runtime switch.
+
+5. *Sets are the model* — Types are sets. Functions are relations.
+   Refinement types are subsets. Universes are sets of sets. This is
+   not metaphor — it is the compiler's semantic model.
+
+For a full exposition of the design philosophy, see
+[[file:../context/philosophy.org][context/philosophy.org]].
+
+** 6.1 Key Points
+
+- Purity enables compile-time verification and zero-cost abstraction
+- Dual syntax serves different use cases without compromising expressiveness
+- The abstraction ladder from simple to systems-level is continuous
+- Set-theoretic semantics unify the type system from ground types to universes
+
+* 7. Tooling
 
 | Command           | Description                                     |
 |-------------------+-------------------------------------------------|
@@ -185,32 +437,17 @@ The build system is Makefile-based:
 | =make test core=    | Build + run core library per-module tests        |
 | =sudo make install= | Install to /usr/local (bin, lib, include, share) |
 
-* Philosophy
+See [[file:../context/build.org][context/build.org]], [[file:../context/cli.org][context/cli.org]], and
+[[file:cli.org][cli.org]] for full tooling reference.
 
-Monad is built on five core principles:
+** 7.1 Key Points
 
-1. *No trade-off between safety and control* — You should not have to
-   choose between dependent types and inline assembly, between
-   mathematical guarantees and hardware control.
+- The =monad= CLI handles compilation, building, testing, and REPL interaction
+- Emit flags allow inspection at any pipeline stage (AST, IR, ASM)
+- Makefile targets cover debug, release, sanitized, and test builds
+- All tooling references link to context docs for compiler-internal details
 
-2. *Purity is practical* — Mathematical purity enables compile-time
-   predicate checking, exhaustive pattern coverage verification, and
-   zero-cost type abstraction through monomorphization.
-
-3. *Syntax is instrument* — Two syntaxes (S-expressions and Wisp) for
-   two tasks: programmatic generation and macro processing with
-   S-expressions, readability in large codebases with Wisp. Both work
-   for every construct and mix freely.
-
-4. *Zero-to-metal abstraction ladder* — The ladder from =show "Hello!"=
-   to inline assembly must be continuous, with no language boundary,
-   binding layer, or runtime switch.
-
-5. *Sets are the model* — Types are sets. Functions are relations.
-   Refinement types are subsets. Universes are sets of sets. This is
-   not metaphor — it is the compiler's semantic model.
-
-* Project Status
+* 8. Project Status
 
 MonadC is under active development. The compiler core is functional:
 parsing, type inference, and codegen produce working binaries for a
@@ -226,20 +463,125 @@ large subset of the language. Known limitations include:
 
 See [[file:../context/language.org][context/language.org]] for the full codegen gap analysis.
 
-* Related Pages
+* Common Pitfalls
 
-- [[file:tutorial.org][Tutorial]] -- step-by-step from zero to working programs
-- [[file:syntax.org][Syntax]] -- S-expressions, Wisp, special forms
-- [[file:types.org][Types]] -- type system overview, all ground types
-- [[file:core.org][Core Library]] -- built-in functions overview
-- [[file:functional-programming.org][Functional Programming]] -- purity, lambdas, HOFs
+- **Map/set literals need type annotation**: `#{:a 1}` or `{1 2 3}` without a
+  `:: Map` or `:: Set` annotation causes broken runtime construction. Always
+  annotate: `(define [m :: Map] #{:a 1})`.
+- **cond, when, let, let*, letrec have no codegen dispatch**: These are
+  registered as builtins but lack strcmp handlers. They work as special forms
+  but NOT via paren-mode function call.
+- **Closures/fn/lambda/defn lack strcmp handler**: Higher-order functions
+  like =map= and =filter= are blocked until codegen dispatch is added.
+- **Module prelude not auto-imported**: Core prelude modules must be
+  imported explicitly — they are not loaded by default.
+- **Feature conditionals are parsed but inert**: `#+linux` / `#+darwin`
+  blocks parse correctly but have no codegen effect yet.
+- **REPL + inline assembly edge cases**: The REPL JIT pipeline may not
+  handle inline assembly or certain FFI calls correctly.
 
-* Context Links
+See [[file:../context/language.org][context/language.org]] for the full codegen gap analysis.
 
-- [[file:tutorial.org][Tutorial]] — step-by-step guide
-- [[file:syntax.org][Syntax Reference]] — language syntax and grammar
-- [[file:types.org][Type System]] — types, inference, refinement types
+* 9. Further Reading
+
+This section organizes the [[file:index.org][full reference index]] by topic.
+
+** Language fundamentals
+
+- [[file:syntax.org][Syntax]] — S-expressions, Wisp, special forms
+- [[file:types.org][Types]] — type system overview, all ground types
+- [[file:advanced-types.org][Advanced Types]] — refinement types, dependent types,
+  type-level computation
+- [[file:define.org][Define]] — value/function binding, typed signatures
+- [[file:data.org][Data]] — algebraic data type declarations
+- [[file:patterns.org][Patterns]] — pattern matching and destructuring
+- [[file:macros.org][Macros]] — macro system, quote, syntax objects
+- [[file:modules.org][Modules]] — module system, imports, exports
+
+** Standard library
+
+- [[file:core.org][Core Library]] — built-in functions overview
+- [[file:stdlib.org][Stdlib]] — standard library reference
+- [[file:collections.org][Collections]] — overview of all collection types
+- [[file:list.org][List]], [[file:map.org][Map]], [[file:set.org][Set]], [[file:pair.org][Pair]], [[file:maybe.org][Maybe]],
+  [[file:result.org][Result]]
+- [[file:strings.org][Strings]], [[file:characters.org][Characters]]
+- [[file:arrays.org][Arrays]], [[file:range.org][Range]]
+- [[file:math-module.org][Math Module]], [[file:coll-module.org][Coll Module]]
+- [[file:show.org][Show]] — printing and formatting
+- [[file:ffi.org][FFI]] / C interop
+
+** Control and functional programming
+
+- [[file:control.org][Control Flow]]
+- [[file:conditionals.org][Conditionals]]
+- [[file:let.org][Let]] — lexical binding
+- [[file:sequencing.org][Sequencing]]
+- [[file:lambda.org][Lambda]] — anonymous functions
+- [[file:recursion.org][Recursion]]
+- [[file:iteration.org][Iteration]]
+- [[file:functional-programming.org][Functional Programming]]
+- [[file:purity.org][Purity]]
+- [[file:error-handling.org][Error Handling]] / [[file:errors.org][Errors]]
+
+** Advanced topics
+
+- [[file:dependent-types.org][Dependent Types]]
+- [[file:type-classes.org][Type Classes]]
+- [[file:type-inference.org][Type Inference]]
+- [[file:refinements.org][Refinements]]
+- [[file:mutation.org][Mutation]]
+- [[file:heap.org][Heap]]
+- [[file:equality.org][Equality]]
+- [[file:casting.org][Casting]]
+- [[file:asm.org][Inline Assembly]]
+
+** Language comparisons
+
+- [[file:from-lisp.org][From Lisp]]
+- [[file:from-haskell.org][From Haskell]]
+- [[file:from-c.org][From C]]
+
+** Tooling and project
+
+- [[file:build.org][Build]]
+- [[file:cli.org][CLI]]
+- [[file:repl.org][REPL]]
+- [[file:testing.org][Testing]]
+- [[file:performance.org][Performance]]
+- [[file:style.org][Style]]
+- [[file:contributing.org][Contributing]]
+- [[file:faq.org][FAQ]]
+
+** Internal / context documentation
+
+- [[file:../context/philosophy.org][Design Philosophy]]
+- [[file:../context/language.org][Language Formalization]]
+- [[file:../context/features.org][Feature List]]
+- [[file:../context/arena.org][Arena Allocator]]
+- [[file:../context/codegen.org][Codegen Internals]]
+- [[file:../context/infer.org][Type Inference Internals]]
+- [[file:../context/macro.org][Macro Internals]]
+- [[file:../context/repl.org][REPL Internals]]
+- [[file:../context/ffi.org][FFI Internals]]
+- [[file:../context/asm.org][Assembly Internals]]
+- [[file:../context/build.org][Build System]]
+- [[file:../context/cli.org][CLI Parser]]
+- [[file:../context/tests-arch.org][Test Architecture]]
+- [[file:../context/core-libs.org][Core Libraries]]
+- [[file:../context/reader.org][Reader Internals]]
+- [[file:../context/types.org][Type System Internals]]
+- [[file:../context/wisp.org][Wisp Expander Internals]]
+- [[file:../context/runtime.org][Runtime Library]]
+- [[file:../context/main.org][Main.mon Walkthrough]]
+- [[file:../context/main-mon.org][Main.mon Details]]
+- [[file:../context/dep.org][Dependent Checker Internals]]
+- [[file:../context/typeclass.org][Typeclass Internals]]
+
+* See Also
+
+- [[file:tutorial.org][Tutorial]] — step-by-step guide to Monad programming
+- [[file:syntax.org][Syntax Reference]] — complete grammar and special forms
+- [[file:types.org][Type System]] — full type reference and architecture
+- [[file:core.org][Core Library]] — built-in functions overview
 - [[file:../context/philosophy.org][context/philosophy.org]] — design philosophy
-- [[file:../context/language.org][context/language.org]] — language formalization
-- [[file:../context/build.org][context/build.org]] — build and installation
-- [[file:../context/cli.org][context/cli.org]] — CLI argument parser

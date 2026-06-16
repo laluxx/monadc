@@ -1,0 +1,15 @@
+name: deep_codegen_control_if_int_phi_scalar
+section: codegen-control-flow
+tier: stable
+kind: law
+features: arithmetic, codegen, equality, if, phi
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, infer.arithmetic, infer.equality, infer.if_phi, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.control.if, atom.core.equality
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+args: p:Bool a:Int b:Int
+type: Bool
+expect: True
+description: if must construct a scalar PHI for generated Int branches.
+law: (= (if {p} {a} {b}) (if {p} {a} {b}))

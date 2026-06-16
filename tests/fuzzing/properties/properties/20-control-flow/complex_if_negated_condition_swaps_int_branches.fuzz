@@ -1,0 +1,15 @@
+name: complex_if_negated_condition_swaps_int_branches
+section: control-if
+tier: stable
+kind: law
+features: arithmetic, control, equality, if, phi
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, infer.arithmetic, infer.equality, infer.if_phi, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.if, atom.core.equality
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+args: cond:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Encoding logical negation with if must swap the Int branches exactly.
+law: (= (if (if {cond} False True) {a} {b}) (if {cond} {b} {a}))

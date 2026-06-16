@@ -1,0 +1,33 @@
+;; TEST-ID: tests.codegen.branch.collection-map-assoc-dissoc-counts
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: emit-json-failed
+;; TEST-SUBSET: maps
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.collection.map.assoc.dissoc.counts
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover map assoc/dissoc functional and mutating branches through count invariants.
+;; TEST-ATOM: Functional map updates should not mutate the original; mutating variants should update it.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:8486-8489 assoc/assoc!/dissoc/dissoc! map branches
+;; TEST-COVERAGE: codegen.c:8858 count map branch
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/maps/atom.codegen.collection.map.assoc.dissoc.counts
+;; TEST-MENU-PATH: codegen/branches/collections/maps/atom.codegen.collection.map.assoc.dissoc.counts
+;; TEST-ATOM-LEAF: atom.codegen.collection.map.assoc.dissoc.counts
+;; TEST-CLI-TARGET: codegen branches collections maps
+(module Main)
+(define m #{:a 1})
+(define m2 (assoc m :b 2))
+(show (count m))
+(show (count m2))
+(assoc! m :b 2)
+(show (count m))
+(define m3 (dissoc m :a))
+(show (count m))
+(show (count m3))
+(dissoc! m :b)
+(show (count m))

@@ -1,0 +1,15 @@
+name: do_first_does_not_change_comparison
+section: control
+tier: stable
+kind: law
+features: arithmetic, control, do, equality, predicate, set
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.predicate_dispatch, codegen.runtime_call, codegen.sequence, infer.arithmetic, infer.equality, infer.type_predicate, reader.ast_do, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.do, atom.core.equality, atom.infer.predicate
+related-properties: signal_atom_do_last_value, signal_atom_equality_reflexive
+args: setup:Int a:Int b:Int
+type: Bool
+expect: True
+description: The first expression in do must not alter the comparison returned by the final expression.
+law: (= (do {setup} (fuzz-lt? {a} {b})) (fuzz-lt? {a} {b}))

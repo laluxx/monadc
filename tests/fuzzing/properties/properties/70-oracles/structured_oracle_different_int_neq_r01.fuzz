@@ -1,0 +1,14 @@
+name: structured_oracle_different_int_neq_r01
+section: current-oracle-different-int-neq
+tier: oracle
+kind: law
+features: oracle, dependent, comparison
+compiler-path: codegen.comparison_dispatch, infer.comparison, runner.expect_python, runner.oracle_tier, runner.typed_generator
+signal: high
+corpus-role: oracle
+uses-atoms: atom.core.inequality
+args: a:Int@edge b:DifferentFrom(a)
+type: Bool
+expect-python: a != b
+description: V10 oracle property different_int_neq round 1 using expect-python and dependent typed generators.
+law: (!= {a} {b})

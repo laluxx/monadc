@@ -1,0 +1,29 @@
+;; TEST-ID: tests.codegen.stateful.env.function.int.return.from.if
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SUBSET: definitions-lambdas-monomorphization
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.stateful.env.function.int.return.from.if
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: If PHI value is returned from function.
+;; TEST-ATOM: atom.codegen.stateful.env.function.int.return.from.if
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.return.phi
+;; TEST-CODEGEN-PATH: codegen.if.phi
+;; TEST-COVERAGE: codegen.c:4161-5688 define/function/lambda/symbol resolution branches
+;; TEST-COVERAGE: codegen.c:133-330 monomorphization cache and specialization
+;; TEST-COVERAGE: codegen.c:13353 AST_LAMBDA codegen branch
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-USES-ATOM: atom.codegen.subset.05.symbol.env.definitions.lambdas.monomorphization
+;; TEST-MENU: branches/symbol-env/definitions-lambdas-monomorphization/atom.codegen.stateful.env.function.int.return.from.if
+;; TEST-MENU-PATH: codegen/branches/symbol-env/definitions-lambdas-monomorphization/atom.codegen.stateful.env.function.int.return.from.if
+;; TEST-ATOM-LEAF: atom.codegen.stateful.env.function.int.return.from.if
+;; TEST-CLI-TARGET: codegen branches symbol-env definitions-lambdas-monomorphization
+
+(module Main)
+(define (choose [b : Bool] [x : Int] [y : Int] -> Int) (if b x y))
+(show (choose True 1 2))
+(show (choose False 1 2))

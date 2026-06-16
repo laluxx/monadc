@@ -1,0 +1,34 @@
+;; TEST-ID: tests.codegen.branch.control-for-range-sum-and-step
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: arrays-ranges
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise for range loop with explicit start/end and step forms.
+;; TEST-ATOM: atom.codegen.control.for-range-step
+;; TEST-CODEGEN-ATOM: atom.codegen.control.for-range-step
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.for.range
+;; TEST-CODEGEN-PATH: codegen.for.step
+;; TEST-CODEGEN-PATH: codegen.setbang.loop-carried
+;; TEST-DEPENDS-ON: atom.codegen.control.while-mutation-countdown
+;; TEST-TAG: run
+;; TEST-TAG: control
+;; TEST-TAG: for
+;; TEST-COVERAGE: codegen.c:8177-8282 for binding validation
+;; TEST-COVERAGE: codegen.c:8283-8360 for range loop blocks
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/arrays-ranges/atom.codegen.control.for-range-step
+;; TEST-MENU-PATH: codegen/branches/collections/arrays-ranges/atom.codegen.control.for-range-step
+;; TEST-ATOM-LEAF: atom.codegen.control.for-range-step
+;; TEST-CLI-TARGET: codegen branches collections arrays-ranges
+(module Main)
+(define sum1 0)
+(define sum2 0)
+(for [i 0 4] (set! sum1 (+ sum1 i)))
+(for [j 1 6 2] (set! sum2 (+ sum2 j)))
+(show sum1)
+(show sum2)

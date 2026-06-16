@@ -1,0 +1,1 @@
+error: Function ‘env_nil_return_04’ can return nil but return type 'Char' does not end with ‘?’

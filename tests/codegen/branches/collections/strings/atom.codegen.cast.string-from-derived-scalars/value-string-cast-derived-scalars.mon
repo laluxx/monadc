@@ -1,0 +1,34 @@
+;; TEST-ID: tests.codegen.branch.value-string-cast-derived-scalars
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-SUBSET: strings
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise String constructor conversion for computed scalar operands, not only literal operands.
+;; TEST-ATOM: atom.codegen.cast.string-from-derived-scalars
+;; TEST-CODEGEN-ATOM: atom.codegen.cast.string-from-derived-scalars
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.cast.String
+;; TEST-CODEGEN-PATH: emit_type_cast.integer-to-pointer
+;; TEST-CODEGEN-PATH: emit_type_cast.float-to-pointer
+;; TEST-DEPENDS-ON: atom.codegen.value.scalar-display-spectrum
+;; TEST-DEPENDS-ON: atom.codegen.operator.arithmetic
+;; TEST-TAG: run
+;; TEST-TAG: cast
+;; TEST-TAG: string
+;; TEST-COVERAGE: codegen.c:12157-12164 cast dispatch
+;; TEST-COVERAGE: codegen.c:12164-12510 String cast target
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/strings/atom.codegen.cast.string-from-derived-scalars
+;; TEST-MENU-PATH: codegen/branches/collections/strings/atom.codegen.cast.string-from-derived-scalars
+;; TEST-ATOM-LEAF: atom.codegen.cast.string-from-derived-scalars
+;; TEST-CLI-TARGET: codegen branches collections strings
+(module Main)
+(show (String (+ 1 2)))
+(show (String (> 3 2)))
+(show (String (Char (+ 60 5))))
+(show (String (* 1.5 2)))

@@ -11,13 +11,62 @@
 
 [[file:index.org][<- Back to Index]] · [[file:equality.org][Equality]] · [[file:logic.org][Logic]] · [[file:numeric.org][Numeric Types]] · [[file:core.org][Core Library]] · [[file:casting.org][Casting]] · [[file:math-module.org][Math Module]]
 
-Test coverage: arithmetic is exercised by =rt_arith_*.mon= fixtures
-and by =rt_bitwise_*.mon= for bitwise operations.
+Test coverage: arithmetic is exercised by
+[[file:../tests/codegen/branches/operators/][tests/codegen/branches/operators/]] fixtures.
+Bitwise operations by =rt_bitwise_*.mon= in the same directory. See
+[[file:../context/tests-arch.org][context/tests-arch.org]] for the full test architecture.
 
 All arithmetic operators work on Int, Float, and mixed Int/Float
-operands. Most are variadic (1..N arguments).
+operands. Most are variadic (1..N arguments). For comparison operators,
+see [[file:equality.org][Equality]]. For numeric type details, see
+[[file:numeric.org][Numeric Types]].
 
-* Basic Operations
+MonadC's arithmetic follows mathematical convention: operations
+promote "up" the numeric hierarchy (Int → Float) when types are mixed,
+and most operators accept multiple arguments for concise expression.
+
+** Complete example:
+
+#+BEGIN_SRC monad
+;; Save as arithmetic-demo.mon && monadc arithmetic-demo.mon && ./arithmetic-demo
+(module Main)
+
+;; Basic arithmetic
+(show (+ 1 2 3))         ;; 6
+(show (- 10 3 2))        ;; 5
+(show (* 2 3 4))         ;; 24
+(show (/ 17 5))          ;; 3 (integer division)
+(show (% 10 3))          ;; 1
+
+;; Mixed Int/Float promotes to Float
+(show (+ 1 2.5))         ;; 3.5
+(show (* 3 0.5))         ;; 1.5
+
+;; Unary negation
+(show (- 5))             ;; -5
+
+;; Bitwise operations
+(show (& 0xFF 0x0F))     ;; 15
+(show (<< 1 8))          ;; 256
+(show (~ 0))             ;; -1
+#+END_SRC
+
+** Common Pitfalls
+
+- **Integer division truncates**: =(/ 17 5)= yields =3=, not =3.4=.
+  Use float literals or =(Float x)= casting for float division.
+- **Modulo works on Int only**: =(% 3.5 2.0)= is a type error.
+- **Superscript =^= has no codegen**: =x²= desugars at reader time
+  but =^= is not callable from paren-mode. Use explicit =(* x x)= or
+  the [[file:math-module.org][Math Module]].
+- **Bitwise shifts by negative amounts or > bit width are
+  implementation-defined**: The compiler does not guard against
+  undefined behavior in shift operations.
+- **Zero-argument =(+)= returns 0, =(*)= returns 1**: This follows
+  mathematical convention (identity elements), which may surprise
+  users expecting an error.
+
+* 1. Basic Operations
 
 | Operator | Example  | Description    | Arity |
 |----------+----------+----------------+-------|
@@ -60,7 +109,26 @@ Mixed Int/Float promotes to Float:
 * 3 0.5
 #+END_SRC
 
-* Bitwise
+Unary negation =(- x)= works on both Int and Float. Division follows
+the type of the first argument: integer division truncates toward zero.
+For casting between numeric types, see [[file:casting.org][Casting]].
+
+** Implementation Notes
+
+- All arithmetic dispatch via strcmp handlers in codegen
+  ([[file:../context/codegen-ops.org::124]])
+- Promotion rules: Int + Float → Float
+  ([[file:../context/codegen-ops.org::124]])
+- Variadic operations chain left-to-right with the same associativity
+
+** Key Points
+
+- Zero-argument =(+)= returns 0; zero-argument =(*)= returns 1
+- =(/ x)= divides 1 by x (reciprocal)
+- =(/ a b c)= = =(/ (/ a b) c)= (left-associative)
+- Modulo works on Int operands only
+
+* 2. Bitwise Operations
 
 | Operator   | Example           | Description        |
 |------------+-------------------+--------------------|
@@ -76,25 +144,49 @@ Mixed Int/Float promotes to Float:
 (& 0xFF 0x0F)                    ;; 0x0F
 (<< 1 8)                        ;; 256
 (~ 0)                           ;; -1 (all bits set)
+(bit-or 0xF0 0x0F)              ;; 0xFF
+(bit-xor 0xFF 0x0F)             ;; 0xF0
 #+END_SRC
 
 #+BEGIN_SRC wisp
 & 0xFF 0x0F
 << 1 8
 ~ 0
+bit-or 0xF0 0x0F
+bit-xor 0xFF 0x0F
 #+END_SRC
 
-* Superscript Sugar
+Bitwise operators work on Int operands only. For hexadecimal literal
+syntax, see [[file:numeric.org][Numeric Types]].
+
+** Implementation Notes
+
+- Bitwise dispatch via strcmp
+  ([[file:../context/codegen-ops.org::159]])
+- Shifts by negative amounts or beyond bit width produce
+  implementation-defined results
+
+* 3. Superscript Sugar
 
 | Written | Desugars to |
 |---------+-------------|
 | =x²=      | =(^ x 2)=     |
 | =x³=      | =(^ x 3)=     |
+| =xⁿ=      | =(^ x n)=     |
 
 =^= has no strcmp handler — not callable from paren-mode
-([[file:../context/language.org::404]]).
+([[file:../context/language.org::404]]). See
+[[file:../context/language.org][context/language.org]] for the full superscript
+dispatch table.
 
-* Operator Table (Full)
+** Key Points
+
+- Superscript notation is sugar recognised by the reader, not by the
+  codegen dispatch layer
+- Only works in wisp mode; superscript =^= is not available as a
+  paren-mode function call
+
+* 4. Operator Table (Full)
 
 | Operator | Example         | Description     | Variadic |
 |----------+-----------------+-----------------+----------|
@@ -111,6 +203,29 @@ Mixed Int/Float promotes to Float:
 | >>       | =(>> x n)=        | Right shift     | 2        |
 | >>>      | =(>>> x n)=       | Unsigned rshift | 2        |
 
+* 5. Advanced Arithmetic
+
+Beyond the basic operators, MonadC provides advanced arithmetic in the
+[[file:math-module.org][Math Module]]:
+
+#+BEGIN_SRC monad
+(use Math)
+
+(Math/gcd 12 8)                  ;; 4
+(Math/factorial 5)               ;; 120
+(Math/sin 0.0)                   ;; 0.0
+(Math/pi)                        ;; 3.14159...
+#+END_SRC
+
+#+BEGIN_SRC wisp
+use Math
+
+Math/gcd 12 8
+Math/factorial 5
+Math/sin 0.0
+Math/pi
+#+END_SRC
+
 * Related Pages
 
 - [[file:numeric.org][Numeric Types]] -- Int, Float, numeric type hierarchy
@@ -118,12 +233,21 @@ Mixed Int/Float promotes to Float:
 - [[file:equality.org][Equality]] -- comparison and equality
 - [[file:math-module.org][Math Module]] -- gcd, sin, factorial, pi
 - [[file:casting.org][Casting]] -- numeric type conversions
+- [[file:booleans.org][Booleans]] -- boolean operations and predicates
 
 * Context Links
 
 - [[file:../context/codegen-ops.org][context/codegen-ops.org]] — operation dispatch
 - [[file:../context/language.org][context/language.org]] — arithmetic semantics
 - [[file:../codegen.c][codegen.c]] — =strcmp= handlers
+- [[file:../context/types.org][context/types.org]] — numeric type representation
 - [[file:core.org][Core Library]] — built-in function overview
 - [[file:numeric.org][Numeric Types]] — Int, Float, Hex, etc.
 - [[file:type-classes.org][Type Classes]] — Numeric class hierarchy
+
+* Further Reading
+
+- [[file:rationals.org][Rationals]] — rational number arithmetic
+- [[file:casting.org][Casting]] — type-safe numeric conversions
+- [[file:performance.org][Performance]] — arithmetic optimization notes
+- [[file:from-c.org][From C]] — arithmetic for C programmers

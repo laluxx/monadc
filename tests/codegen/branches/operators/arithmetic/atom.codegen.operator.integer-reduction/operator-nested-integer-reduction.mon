@@ -1,0 +1,34 @@
+;; TEST-ID: tests.codegen.branch.operator-nested-integer-reduction
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-SUBSET: arithmetic
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise nested integer arithmetic with unary, variadic, and left-associated reductions.
+;; TEST-ATOM: atom.codegen.operator.integer-reduction
+;; TEST-CODEGEN-ATOM: atom.codegen.operator.integer-reduction
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.operator.plus.variadic
+;; TEST-CODEGEN-PATH: codegen.operator.minus.unary
+;; TEST-CODEGEN-PATH: codegen.operator.div.left-associated
+;; TEST-DEPENDS-ON: atom.codegen.value.scalar-display-spectrum
+;; TEST-TAG: run
+;; TEST-TAG: operator
+;; TEST-TAG: arithmetic
+;; TEST-COVERAGE: codegen.c:9494-9810 arithmetic operator branches
+;; TEST-COVERAGE: codegen.c:9502 arithmetic minimum arity check
+
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/arithmetic/atom.codegen.operator.integer-reduction
+;; TEST-MENU-PATH: codegen/branches/operators/arithmetic/atom.codegen.operator.integer-reduction
+;; TEST-ATOM-LEAF: atom.codegen.operator.integer-reduction
+;; TEST-CLI-TARGET: codegen branches operators arithmetic
+(module Main)
+(show (+ 1 2 3 4))
+(show (- 20 5 3))
+(show (* 2 3 4))
+(show (/ 100 5 2))
+(show (- (+ 10 5)))

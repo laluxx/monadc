@@ -1,0 +1,17 @@
+name: deep_codegen_bitwise_or_idempotent_disabled_duplicate_b78363e9
+section: codegen-bitwise-dispatch
+tier: experimental
+kind: law
+features: arithmetic, bitwise, codegen, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.bitwise_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+signal: medium
+corpus-role: merged-duplicate
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+merged-into: bitwise_or_idempotent
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int
+type: Bool
+expect: True
+description: bit-or idempotence checks generated Int coercion.
+law: (= (bit-or {a} {a}) {a})

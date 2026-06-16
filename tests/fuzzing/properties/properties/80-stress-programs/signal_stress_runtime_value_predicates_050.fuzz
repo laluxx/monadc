@@ -1,0 +1,14 @@
+name: signal_stress_runtime_value_predicates_050
+section: current-stress
+tier: stress
+kind: program
+features: stress, program, path, keyword, char, float, predicate
+compiler-path: stress.program, reader.path-literal, codegen.runtime-values, infer.predicate.path
+signal: high
+corpus-role: stress-program
+uses-atoms: atom.runtime.path, atom.runtime.keyword, atom.runtime.char, atom.runtime.float, atom.infer.predicate
+args: p:Path k:Keyword c:Char f:Float
+type: Bool
+expect: True
+description: Stress program property combining several compiler stages while linked to foundational atoms.
+program: (show (path? {p}))

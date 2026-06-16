@@ -1,6 +1,6 @@
 #+TITLE: Quote and Quasiquote
 #+STARTUP: showeverything
-#+OPTIONS: toc:2 num:t
+#+OPTIONS: toc:3 num:t
 #+TOC: headlines 2
 #+FILETAGS: :monad:language:quote:info:
 
@@ -12,12 +12,14 @@
 [[file:index.org][<- Back to Index]] · [[file:syntax.org][Syntax]] · [[file:define.org][Define]] · [[file:wisp.org][Wisp Syntax]] · [[file:list.org][Lists]] · [[file:patterns.org][Pattern Matching]] · [[file:macros.org][Macros]]
 
 Test coverage: quote and quasiquote are exercised by codegen fixtures
-=rt_quote_*.mon= and =rt_quasiquote_*.mon=.
+=rt_quote_*.mon= and =rt_quasiquote_*.mon=. The test architecture is documented at
+[[file:../context/tests-arch.org][context/tests-arch.org]].
 
 Quote and quasiquote prevent evaluation, treating the expression as
-literal data. They are the foundation of code-as-data macros.
+literal data. They are the foundation of code-as-data macros
+([[file:macros.org][Macros Reference]]).
 
-* quote
+* 1. quote
 
 Prevents evaluation of the following expression:
 
@@ -36,9 +38,11 @@ quote (1 2 3)
 #+END_SRC
 
 The shorthand ='expr= is reader sugar for =(quote expr)=. The reader
-produces =AST_QQUOTE= nodes for quote (reader.h).
+produces =AST_QQUOTE= nodes for quote ([[file:../reader.h][reader.h]],
+[[file:../context/reader.org][context/reader.org]]).
 
-Use cases:
+** 1.1 Use Cases
+
 - Create list literals: ='(a b c)=
 - Refer to symbols as data: ='my-symbol=
 - Prevent macro expansion: ='(if x y z)=
@@ -55,7 +59,10 @@ car my-list
 define s 'hello
 #+END_SRC
 
-* quasiquote
+See [[file:list.org][Lists]] for quoted list literals and [[file:symbols.org][Symbols]]
+for symbol type details.
+
+* 2. quasiquote
 
 Template with unquote holes. Uses corner bracket syntax:
 
@@ -74,7 +81,22 @@ Template with unquote holes. Uses corner bracket syntax:
 
 No backtick syntax — use corner brackets.
 
-* unquote-splicing
+** 2.1 Unquote Semantics
+
+Inside a quasiquote, =⌞expr⌟= evaluates =expr= and substitutes its
+value into the template:
+
+#+BEGIN_SRC monad
+(define x 42)
+⌜1 ⌞x⌟ 3⌝                    ;; (1 42 3)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define x 42
+⌜1 ⌞x⌟ 3⌝
+#+END_SRC
+
+* 3. unquote-splicing
 
 Splice a list into the surrounding template:
 
@@ -89,11 +111,13 @@ define xs '(2 3)
 #+END_SRC
 
 =⌞,@xs⌟ = =(unquote-splicing xs)= — flattens the list into the
-surrounding template.
+surrounding template. The =,@= prefix distinguishes splicing from
+plain unquote.
 
-* Macro usage
+* 4. Macro Usage
 
-Quasiquote is the primary macro output template:
+Quasiquote is the primary macro output template
+([[file:macros.org][Macros Reference]]):
 
 #+BEGIN_SRC monad
 (define (when condition . body -> Syntax)
@@ -106,21 +130,95 @@ define (when condition . body -> Syntax)
 #+END_SRC
 
 Inside the quasiquote, unquoted expressions (=⌞expr⌟=) are evaluated
-at macro-expansion time and spliced into the output.
+at macro-expansion time and spliced into the output. Compare with the
+=#()= quasi-output syntax ([[file:macros.org][Macros — #() Quasi-Output Syntax]]),
+which uses a different mechanism:
+
+- =⌜…⌞expr⌟…⌝= — quasiquote: evaluates at expansion time and substitutes.
+- =#(…)= — quasi-output: marks template region; code outside is future compile-time eval.
+
+#+BEGIN_SRC monad
+(define (greet name -> Syntax)
+  ⌜(string-append "Hello, " ⌞name⌟)⌝)   ;; string-append at runtime
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define greet name -> Syntax
+  ⌜(string-append "Hello, " ⌞name⌟)⌝
+#+END_SRC
+
+See [[file:macro-patterns.org][Macro Patterns]] for more macro templates using quasiquote
+and [[file:../context/macro.org][context/macro.org]] for implementation details.
+
+* 5. Reader Implementation
+
+The reader handles quote and quasiquote in
+[[file:../reader.c][reader.c]] ([[file:../reader.c::1828][reader.c:1828-1839]]):
+
+- Quote shorthand ='x= produces =AST_QQUOTE= nodes.
+- Quasiquote corner brackets =⌜…⌝= produce =AST_QQUOTE= with sub-nodes.
+- Unquote =⌞expr⌟= produces =AST_UNQUOTE=.
+- Unquote-splicing =⌞,@expr⌟= produces =AST_UNQUOTE_SPLICE=.
+
+Reader token types are defined in [[file:../reader.h][reader.h]]. See
+[[file:../context/reader.org][context/reader.org]] for the full reader architecture.
+
+Implementation Notes
+
+Quote and quasiquote are handled primarily in the reader and macro
+expander:
+
+- **Reader nodes**: the shorthand ='x= produces =AST_QQUOTE= with the
+  quoted expression as a child node. Corner brackets =⌜…⌝= produce
+  =AST_QQUOTE= as well, with =AST_UNQUOTE= and =AST_UNQUOTE_SPLICE= for
+  the unquote and splice forms
+  ([[file:../context/reader.org][context/reader.org — quote reader nodes]]).
+- **Reader parsing**: quote is parsed at =reader.c:1828-1839= where the
+  reader recognises ='= and wraps the next expression in a quote node
+  ([[file:../reader.c::1828][reader.c — quote parsing]]).
+- **Quasiquote unicode**: corner brackets =⌜⌝= (U+231C/U+231D) and
+  =⌞⌟= (U+231E/U+231F) are recognised as multi-character delimiters by
+  the reader, not single tokens
+  ([[file:../context/reader.org][context/reader.org — corner bracket handling]]).
+- **Macro integration**: quasiquote templates in macro bodies are
+  expanded by the macro expander which evaluates =⌞expr⌟= forms and
+  substitutes their values into the output
+  ([[file:../context/macro.org][context/macro.org — quasiquote in macros]]).
+- **#() quasi-output difference**: =#(...)= (macro quasi-output) is a
+  separate mechanism from =⌜…⌞…⌟…⌝= (reader quasiquote). The former
+  marks a template region; the latter reconstructs S-expressions with
+  evaluated holes.
+
+Key Points
+
+- ='expr= is reader sugar for =(quote expr)= — prevents evaluation.
+- =⌜template ⌞hole⌟ rest⌝= is quasiquote with unquote holes.
+- =⌞,@list⌟= splices a list into the surrounding template.
+- Corner brackets (=⌜⌝=, =⌞⌟=) are the quasiquote syntax — no backtick.
+- Quasiquote is the primary macro output template mechanism; =#()= is an
+  alternative macro-specific syntax.
+- At runtime, quoted data produces literal symbols, lists, and atoms.
+- Macro integration: unquoted holes in macro templates are evaluated at
+  expansion time.
 
 * Related Pages
 
-- [[file:syntax.org][Syntax]] -- S-expression syntax fundamentals
-- [[file:list.org][Lists]] -- quoted list literals
-- [[file:patterns.org][Pattern Matching]] -- pattern matching and quasiquote patterns
-- [[file:macros.org][Macros]] -- Syntax type, macro templates
-- [[file:wisp.org][Wisp Syntax]] -- quoting in Wisp syntax
+- [[file:syntax.org][Syntax]] — S-expression syntax fundamentals
+- [[file:list.org][Lists]] — quoted list literals and cons cells
+- [[file:patterns.org][Pattern Matching]] — pattern matching and quasiquote patterns
+- [[file:macros.org][Macros]] — Syntax type, macro templates, quasi-output
+- [[file:macro-patterns.org][Macro Patterns]] — quasiquote in macro recipes
+- [[file:wisp.org][Wisp Syntax]] — quoting in indentation-based syntax
+- [[file:symbols.org][Symbols]] — symbol type and quoted symbols
+- [[file:define.org][Define]] — binding quoted values
+- [[file:lambda.org][Lambda]] — function definitions
 
-* Context Links
+* Further Reading
 
-- [[file:../context/reader.org][context/reader.org]] — quote/quasiquote reader handling
-- [[file:../context/language.org][context/language.org]] — quote dispatch
-- [[file:../context/macro.org][context/macro.org]] — macros and template output
-- [[file:syntax.org][Syntax]] — S-expression reference
-- [[file:macros.org][Macros]] — compile-time code transformation
-- [[file:list.org][Lists]] — quoted list literals
+- [[file:../context/reader.org][context/reader.org]] — quote/quasiquote reader handling and AST nodes
+- [[file:../context/language.org][context/language.org]] — quote dispatch and language conventions
+- [[file:../context/macro.org][context/macro.org]] — macros and quasiquote template output
+- [[file:../reader.c][reader.c]] — C source: reader (quote, quasiquote, unquote parsing)
+- [[file:../reader.h][reader.h]] — C header: AST node types (=AST_QQUOTE=, =AST_UNQUOTE=, =AST_UNQUOTE_SPLICE=)
+- [[file:../tests/codegen/rt_quote_*.mon][tests/codegen/rt_quote_*.mon]] — quote codegen test fixtures
+- [[file:../tests/codegen/rt_quasiquote_*.mon][tests/codegen/rt_quasiquote_*.mon]] — quasiquote codegen test fixtures

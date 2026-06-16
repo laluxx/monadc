@@ -1,0 +1,15 @@
+name: deep_codegen_bitwise_xor_cancel_middle
+section: codegen-bitwise-dispatch
+tier: stable
+kind: law
+features: arithmetic, bitwise, codegen, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.bitwise_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+args: a:Int b:Int
+type: Bool
+expect: True
+description: bit-xor cancellation tests nested dispatcher calls.
+law: (= (bit-xor (bit-xor {a} {b}) {b}) {a})

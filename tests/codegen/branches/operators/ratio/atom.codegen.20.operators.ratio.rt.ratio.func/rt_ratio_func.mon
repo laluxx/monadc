@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-ratio-func
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.20.operators.ratio.rt.ratio.func
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: ratio
+;; TEST-CATEGORY: 20-operators
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Ratio literal used as function (1/4 x) multiplies by fraction.
+;; TEST-ATOM: (1/4 100) = 25, (1/2 10) = 5, (3/4 100) = 75, (1/4 2.0) = 0.5
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:20-operators/ratio branch family
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/ratio/atom.codegen.20.operators.ratio.rt.ratio.func
+;; TEST-MENU-PATH: codegen/branches/operators/ratio/atom.codegen.20.operators.ratio.rt.ratio.func
+;; TEST-ATOM-LEAF: atom.codegen.20.operators.ratio.rt.ratio.func
+;; TEST-CLI-TARGET: codegen branches operators ratio
+(module Main)
+(show (1/4 100))
+(show (1/2 10))
+(show (3/4 100))
+(show (1/4 2.0))

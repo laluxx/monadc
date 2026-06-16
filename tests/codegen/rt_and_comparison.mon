@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-and-comparison
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Compound and with comparison operators works at runtime.
-;; TEST-ATOM: (and (< 3 5) (> 10 2)) evaluates to True.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (and (< 3 5) (> 10 2)))

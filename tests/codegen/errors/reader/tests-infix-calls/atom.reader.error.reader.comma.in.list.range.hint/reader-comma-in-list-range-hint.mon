@@ -1,0 +1,33 @@
+;; TEST-ID: tests.codegen.reader-error.reader-comma-in-list-range-hint
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: reader-errors/tests-infix-calls
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.reader-error-coverage
+;; TEST-PURPOSE: Trigger and pin diagnostic: Unexpected ',' in list — did you mean a range
+;; TEST-ATOM: atom.reader.error.reader.comma.in.list.range.hint
+;; TEST-CODEGEN-ATOM: atom.reader.error.reader.comma.in.list.range.hint
+;; TEST-QUALITY: diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-READER-ERROR: Unexpected ',' in list — did you mean a range
+;; TEST-READER-PATH: reader.c:6044 parser.comma
+;; TEST-CODEGEN-PATH: diagnostic.parser.comma
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-COVERAGE: reader.c:6044 Unexpected ',' in list — did you mean a range
+;; TEST-USES-ATOM: atom.reader.error.reader.comma.in.list.range.hint
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-USES-ATOM: atom.reader.error.family.parser.comma
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-REFINES: atom.reader.error
+;; TEST-MENU: errors/reader/tests-infix-calls/atom.reader.error.reader.comma.in.list.range.hint
+;; TEST-MENU-PATH: codegen/errors/reader/tests-infix-calls/atom.reader.error.reader.comma.in.list.range.hint
+;; TEST-ATOM-LEAF: atom.reader.error.reader.comma.in.list.range.hint
+;; TEST-CLI-TARGET: codegen errors reader tests-infix-calls
+
+(module Main)
+(show (1, 2))

@@ -1,0 +1,34 @@
+;; TEST-ID: tests.codegen.branch.layout-nested-field-access
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-SUBSET: layouts-fields
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise nested layout field access and nested layout type handling.
+;; TEST-ATOM: atom.codegen.layout.nested-field-access
+;; TEST-CODEGEN-ATOM: atom.codegen.layout.nested-field-access
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: type_to_llvm.TYPE_LAYOUT.inline
+;; TEST-CODEGEN-PATH: codegen.dot.nested-layout
+;; TEST-DEPENDS-ON: atom.codegen.layout.keyword-constructor-dot-order
+;; TEST-TAG: run
+;; TEST-TAG: layout
+;; TEST-TAG: nested
+;; TEST-COVERAGE: codegen.c:717-769 type_to_llvm TYPE_LAYOUT branches
+;; TEST-COVERAGE: codegen.c:3315-3340 nested layout field access branches
+
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/layouts-fields/atom.codegen.layout.nested-field-access
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts-fields/atom.codegen.layout.nested-field-access
+;; TEST-ATOM-LEAF: atom.codegen.layout.nested-field-access
+;; TEST-CLI-TARGET: codegen branches data-layout layouts-fields
+(module Main)
+(layout Point [x :: Int] [y :: Int])
+(layout Box [name :: String] [p :: Point])
+(define b (Box "b" (Point 4 9)))
+(show b.name)
+(show b.p.x)
+(show b.p.y)

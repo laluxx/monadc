@@ -1,0 +1,16 @@
+name: signal_atom_string_contains_substring
+section: current-atom-foundation
+tier: stable
+kind: law
+features: string, contains, dependent-arg
+compiler-path: runtime.string.contains, codegen.string.literal
+signal: high
+corpus-role: atom-foundation
+atom: atom.runtime.string.contains.substring
+proves: atom.runtime.string.contains.substring
+uses-atoms: atom.dependent.substring-of, atom.infer.predicate, atom.runtime.string
+args: s:NonEmptyString@escape needle:SubstrOf(s)
+type: Bool
+expect: True
+description: Foundation atom proof for atom.runtime.string.contains.substring; derived properties link through uses-atoms/depends-on metadata.
+law: (contains? {s} {needle})

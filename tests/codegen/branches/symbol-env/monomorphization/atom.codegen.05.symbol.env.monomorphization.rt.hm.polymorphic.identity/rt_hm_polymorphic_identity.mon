@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-hm-polymorphic-identity
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.05.symbol.env.monomorphization.rt.hm.polymorphic.identity
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: monomorphization
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.type-system-surface, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: HM generalisation and instantiation allow one identity binding at multiple concrete types.
+;; TEST-ATOM: An unannotated identity function can be used at Int and String call sites.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:05-symbol-env/monomorphization branch family
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/monomorphization/atom.codegen.05.symbol.env.monomorphization.rt.hm.polymorphic.identity
+;; TEST-MENU-PATH: codegen/branches/symbol-env/monomorphization/atom.codegen.05.symbol.env.monomorphization.rt.hm.polymorphic.identity
+;; TEST-ATOM-LEAF: atom.codegen.05.symbol.env.monomorphization.rt.hm.polymorphic.identity
+;; TEST-CLI-TARGET: codegen branches symbol-env monomorphization
+(module Main)
+(define id (lambda (x) x))
+(show (id 42))
+(show (id "ok"))

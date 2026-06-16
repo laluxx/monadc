@@ -1,0 +1,14 @@
+name: comparison_less_than_successor
+section: comparison
+tier: stable
+kind: law
+features: arithmetic, comparison, logic, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.comparison_dispatch, codegen.logic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.comparison, infer.logic, infer.type_predicate
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or
+args: a:Int
+type: Bool
+expect: True
+description: An Int expression must be less than itself plus one.
+law: (fuzz-lt? {a} (fuzz-add {a} 1))

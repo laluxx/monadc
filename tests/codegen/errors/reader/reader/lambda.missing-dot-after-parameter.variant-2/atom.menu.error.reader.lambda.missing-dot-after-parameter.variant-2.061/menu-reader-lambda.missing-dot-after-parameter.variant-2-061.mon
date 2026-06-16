@@ -1,0 +1,40 @@
+;; TEST-ID: tests.codegen.menu.errors.reader.lambda.missing.dot.after.parameter.variant.2.061
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: errors
+;; TEST-SUBSET: reader/lambda.missing-dot-after-parameter.variant-2
+;; TEST-MENU: errors/reader/lambda.missing-dot-after-parameter.variant-2/atom.menu.error.reader.lambda.missing-dot-after-parameter.variant-2.061
+;; TEST-MENU-PATH: codegen/errors/reader/lambda.missing-dot-after-parameter.variant-2/atom.menu.error.reader.lambda.missing-dot-after-parameter.variant-2.061
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.error-menu
+;; TEST-PURPOSE: Pin reader.c diagnostic: expected '.' or another parameter after λ parameter name
+;; TEST-ATOM: atom.menu.error.reader.lambda.missing-dot-after-parameter.variant-2.061
+;; TEST-CODEGEN-ATOM: atom.menu.error.reader.lambda.missing-dot-after-parameter.variant-2.061
+;; TEST-ATOM-LEAF: atom.menu.error.reader.lambda.missing-dot-after-parameter.variant-2.061
+;; TEST-QUALITY: menu-error-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ERROR-STAGE: reader
+;; TEST-ERROR-FAMILY: lambda.missing-dot-after-parameter.variant-2
+;; TEST-ERROR-MESSAGE: expected '.' or another parameter after λ parameter name
+;; TEST-ERROR-SOURCE: reader.c
+;; TEST-ERROR-PATH: reader.c:1762
+;; TEST-CODEGEN-PATH: diagnostic.reader.lambda.missing-dot-after-parameter.variant-2
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-TAG: menu
+;; TEST-COVERAGE: reader.c:1762 expected '.' or another parameter after λ parameter name
+;; TEST-USES-ATOM: atom.menu.error.reader.lambda.missing-dot-after-parameter.variant-2.061
+;; TEST-USES-ATOM: atom.error.reader
+;; TEST-USES-ATOM: atom.error.reader.lambda.missing-dot-after-parameter.variant-2
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-DEPENDS-ON: atom.reader.lex.parse
+;; TEST-REFINES: atom.error.reader
+;; TEST-REFINES: atom.error.reader.lambda.missing-dot-after-parameter.variant-2
+;; TEST-REFINES: atom.reader.error
+;; TEST-RELATED: atom.codegen.error.menu
+;; TEST-CLI-TARGET: codegen errors reader reader
+
+(module Main)
+;; reader menu variant 2
+(show λx 1)

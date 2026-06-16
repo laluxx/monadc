@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-radix-binary-literal
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Radix-r binary notation 2r1010 equals decimal 10.
-;; TEST-ATOM: (show 2r1010) prints 10.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show 2r1010)

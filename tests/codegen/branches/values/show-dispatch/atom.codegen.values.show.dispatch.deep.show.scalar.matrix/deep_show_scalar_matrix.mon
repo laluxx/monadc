@@ -1,0 +1,27 @@
+;; TEST-ID: tests.codegen.deep.deep_show_scalar_matrix
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 00-values
+;; TEST-SUBSET: show-dispatch
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.values.show.dispatch.deep.show.scalar.matrix
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise primitive show dispatch for scalar LLVM values.
+;; TEST-ATOM: Scalar show branches should preserve textual values.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:codegen_show_value TYPE_INT/TYPE_FLOAT/TYPE_BOOL/TYPE_CHAR/TYPE_STRING
+
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/show-dispatch/atom.codegen.values.show.dispatch.deep.show.scalar.matrix
+;; TEST-MENU-PATH: codegen/branches/values/show-dispatch/atom.codegen.values.show.dispatch.deep.show.scalar.matrix
+;; TEST-ATOM-LEAF: atom.codegen.values.show.dispatch.deep.show.scalar.matrix
+;; TEST-CLI-TARGET: codegen branches values show-dispatch
+(module Main)
+(show 1)
+(show 2.5)
+(show True)
+(show False)
+(show (Char 65))
+(show "hello")

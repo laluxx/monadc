@@ -1,0 +1,177 @@
+#+TITLE: Catface Zig Category Interface
+#+AUTHOR: GPT-5.5 Thinking
+#+DATE: 2026-06-16
+#+CREATED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-16
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:3 num:t
+#+CATEGORY: monadc-category
+#+FILETAGS: :monadc:compiler:context:category:zig:tui:search:tooling:catface:
+#+PROPERTY: CONTEXT_VERSION 8
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.category.catface
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+
+* Purpose
+:PROPERTIES:
+:ID: monadc.context.category.catface.purpose
+:CUSTOM_ID: category-catface-purpose
+:CONTEXT_KIND: interface
+:CONTEXT_STATUS: active
+:SOURCE: context/category/catface.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.category.catface.purpose src:context/category/catface.org conf:high]
+  Catface is the canonical live interface for the context category.  It replaces
+  the earlier Python curses prototype with a Zig terminal application designed
+  around the actual category: objects, generating morphisms, Hom-set views,
+  projections, search information, and fast link-following.
+
+[DEC id:dec.category.catface.zig-canonical date:2026-06-16 by:llm]
+  The live TUI should be written in Zig, not Python.  The desired interface has
+  a custom terminal feel, low startup latency, explicit screen buffering,
+  precise ANSI control, and an interaction model closer to a small editor than a
+  generic curses list widget.  Zig matches that design better than Python.
+
+* Source Layout
+:PROPERTIES:
+:ID: monadc.context.category.catface.source-layout
+:CUSTOM_ID: category-catface-source-layout
+:CONTEXT_KIND: source-map
+:CONTEXT_STATUS: active
+:SOURCE: context/category/catface.org
+:CONFIDENCE: high
+:END:
+
+| Path | Responsibility |
+|------+----------------|
+| [[file:catface/build.zig][build.zig]] | package/executable/test build graph |
+| [[file:catface/src/main.zig][main.zig]] | CLI modes and TUI launcher |
+| [[file:catface/src/terminal.zig][terminal.zig]] | raw terminal mode, alternate screen, diff renderer |
+| [[file:catface/src/model.zig][model.zig]] | typed category objects and generating morphisms |
+| [[file:catface/src/org.zig][org.zig]] | context Org/category-table loader |
+| [[file:catface/src/query.zig][query.zig]] | live query evaluator |
+| [[file:catface/src/language.zig][language.zig]] | query language grammar/explainer |
+| [[file:catface/src/fuzzy.zig][fuzzy.zig]] | subsequence scoring |
+| [[file:catface/src/render.zig][render.zig]] | dual-pane UI/card rendering |
+| [[file:catface/src/ui.zig][ui.zig]] | interaction state |
+| [[file:catface/src/app.zig][app.zig]] | event loop |
+| [[file:catface/src/graph.zig][graph.zig]] | adjacency, degree, paths |
+| [[file:catface/src/functor.zig][functor.zig]] | projections/functor-like views |
+| [[file:catface/src/math.zig][math.zig]] | category checks and entropy |
+| [[file:catface/src/diagnostics.zig][diagnostics.zig]] | health diagnostics |
+| [[file:catface/src/export.zig][export.zig]] | JSON/Org/Markdown export helpers |
+| [[file:catface/examples/queries.catq][queries.catq]] | query examples |
+
+* Interface Contract
+:PROPERTIES:
+:ID: monadc.context.category.catface.interface-contract
+:CUSTOM_ID: category-catface-interface-contract
+:CONTEXT_KIND: contract
+:CONTEXT_STATUS: active
+:SOURCE: context/category/catface.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.category.catface.interface-contract src:context/category/catface.org conf:high]
+  The interface is dual-pane.  The left pane is a live fuzzy result stack.  The
+  right pane is the focused object card and Hom-set inspector.  =Tab= switches
+  the active pane; the active pane is rendered brighter.  =Enter= follows the
+  selected object by rewriting the query to =?object-id=.  Category operations
+  append compact glyphs to the query instead of opening modal forms.
+
+[DOC id:doc.category.catface.keys src:context/category/catface.org conf:high]
+  Core keys: =Tab= switch pane, =Enter= focus/follow, =j/k= or arrows move,
+  =o= append outgoing = > =, =i= append incoming = < =, =n= append neighborhood
+  =~=, =p= append projection =◗=, =b= history back, =?= help, =Ctrl-U= clear,
+  =q= quit.
+
+* Query Language
+:PROPERTIES:
+:ID: monadc.context.category.catface.query-language
+:CUSTOM_ID: category-catface-query-language
+:CONTEXT_KIND: language-contract
+:CONTEXT_STATUS: active
+:SOURCE: context/category/catface.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.category.catface.query-language src:context/category/catface.org conf:high]
+  Catface Query Language is keyboard-small and stack/filter-like.  Plain words
+  fuzzy-match objects.  =:Kind= narrows by type, =@path= narrows by source path,
+  =?id= or =#id= narrows by object identity, =>= and =<= follow generating
+  morphisms, =~= computes a neighborhood, and =◗= projects through taxonomy or
+  functor-like conceptual edges.  The expression =(superset) ◗= is intentionally
+  valid: a human-sized fuzzy term followed by a categorical projection.
+
+[DEC id:dec.category.catface.not-sql date:2026-06-16 by:llm]
+  The query language is not SQL-like.  It is optimized for live typing in a
+  terminal: few punctuation keys, no keywords, no mandatory field names, and
+  visible category glyphs for operations.
+
+* Mathematical Contract
+:PROPERTIES:
+:ID: monadc.context.category.catface.mathematical-contract
+:CUSTOM_ID: category-catface-mathematical-contract
+:CONTEXT_KIND: mathematical-contract
+:CONTEXT_STATUS: active
+:SOURCE: context/category/catface.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.category.catface.math src:context/category/catface.org conf:high]
+  Catface does not merely search text.  It loads a typed directed multigraph G
+  and reads the context as the free category =Ctx = Free(G)=.  Every object has
+  an identity path.  Every generating edge has a source and target.  Composition
+  is path concatenation when codomain and domain agree.  The UI exposes outgoing
+  =Hom(A, -)= and incoming =Hom(-, A)= views for the focused object A.
+
+[INF id:inf.category.catface.yoneda-instinct from:doc.category.catface.math conf:medium]
+  The object card follows a Yoneda-like instinct: understand an object through
+  the arrows into and out of it.  Catface does not claim a full Yoneda embedding;
+  it uses representable views as an interface discipline.
+
+* Build and Run
+:PROPERTIES:
+:ID: monadc.context.category.catface.build-run
+:CUSTOM_ID: category-catface-build-run
+:CONTEXT_KIND: executable-contract
+:CONTEXT_STATUS: active
+:SOURCE: context/category/catface.org
+:CONFIDENCE: high
+:END:
+
+#+begin_src sh
+cd context/category/catface
+zig build
+zig build test
+zig build run -- ../../
+zig build run -- --query 'typed define :Record @wisp' ../../
+zig build run -- --query '(superset) ◗' ../../
+zig build run -- --check ../../
+#+end_src
+
+[TODO id:todo.category.catface.compile-verify src:context/category/catface.org conf:medium]
+  Compile Catface in the repository environment and promote compile results into
+  this context.  The current tar was authored in an environment without the Zig
+  compiler available, so source-level and context-level validation were run, but
+  =zig build test= was not executed here.
+
+* Superseded Prototype
+:PROPERTIES:
+:ID: monadc.context.category.catface.superseded-prototype
+:CUSTOM_ID: category-catface-superseded-prototype
+:CONTEXT_KIND: supersession
+:CONTEXT_STATUS: active
+:SOURCE: context/category/catface.org
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.category.catface.remove-python-tui date:2026-06-16 by:llm]
+  The Python curses =category_tui.py= prototype was removed from the canonical
+  interface path.  It was useful for proving the data model but was visually weak
+  and architecturally mismatched with the desired custom terminal experience.
+  Batch Python scripts may remain for reports and validation; the live interface
+  is now Zig-first.

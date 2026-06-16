@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.rt-layout-fields
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.50.data.layout.layouts.fields.rt.layout.fields
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: layouts-fields
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime layout construction and field access work for positional fields.
+;; TEST-ATOM: (Point 3 4) constructs a layout value whose .x and .y fields print 3 and 4.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:50-data-layout/layouts-fields branch family
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/layouts-fields/atom.codegen.50.data.layout.layouts.fields.rt.layout.fields
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts-fields/atom.codegen.50.data.layout.layouts.fields.rt.layout.fields
+;; TEST-ATOM-LEAF: atom.codegen.50.data.layout.layouts.fields.rt.layout.fields
+;; TEST-CLI-TARGET: codegen branches data-layout layouts-fields
+(module Main)
+(layout Point [x :: Int] [y :: Int])
+(define p (Point 3 4))
+(show p.x)
+(show p.y)

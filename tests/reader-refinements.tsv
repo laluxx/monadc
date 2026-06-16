@@ -1,106 +1,107 @@
+# columns: name	context	purpose	source	expected	expected_diagnostic	superset	tier	status
 # Refinement type parser subset. These are parse-json contracts for the type
 # surface, predicates, metadata, aliases, and mixed predicate shapes.
-refine_int_positive	monadc.context.language.refinement-types	Positive integer refinement parses.	(type Positive { x ∈ Int | (> x 0) })
-refine_int_nonnegative	monadc.context.language.refinement-types	Nonnegative integer refinement parses.	(type NonNegative { x ∈ Int | (>= x 0) })
-refine_int_negative	monadc.context.language.refinement-types	Negative integer refinement parses.	(type Negative { x ∈ Int | (< x 0) })
-refine_int_nonzero	monadc.context.language.refinement-types	Nonzero integer refinement parses.	(type NonZero { x ∈ Int | (!= x 0) })
-refine_int_even	monadc.context.language.refinement-types	Even integer refinement parses.	(type Even { n ∈ Int | (= (% n 2) 0) })
-refine_int_odd	monadc.context.language.refinement-types	Odd integer refinement parses.	(type Odd { n ∈ Int | (= (% n 2) 1) })
-refine_int_small	monadc.context.language.refinement-types	Small integer upper-bound refinement parses.	(type SmallInt { n ∈ Int | (< n 128) })
-refine_int_byte_range	monadc.context.language.refinement-types	Byte-range integer refinement parses.	(type ByteRange { n ∈ Int | (and (>= n 0) (< n 256)) })
-refine_int_port_range	monadc.context.language.refinement-types	TCP port integer refinement parses.	(type Port { n ∈ Int | (and (> n 0) (< n 65536)) })
-refine_int_year_range	monadc.context.language.refinement-types	Year range integer refinement parses.	(type Year { y ∈ Int | (and (>= y 1970) (< y 3000)) })
-refine_float_positive	monadc.context.language.refinement-types	Positive float refinement parses.	(type PositiveFloat { x ∈ Float | (> x 0.0) })
-refine_float_unit	monadc.context.language.refinement-types	Unit interval float refinement parses.	(type UnitFloat { x ∈ Float | (and (>= x 0.0) (<= x 1.0)) })
-refine_float_percent	monadc.context.language.refinement-types	Percent float refinement parses.	(type PercentFloat { x ∈ Float | (and (>= x 0.0) (<= x 100.0)) })
-refine_float_normalized	monadc.context.language.refinement-types	Normalized signed float refinement parses.	(type Normalized { x ∈ Float | (and (>= x -1.0) (<= x 1.0)) })
-refine_float_non_nan_shape	monadc.context.language.refinement-types	Float self-equality predicate shape parses.	(type NotNaN { x ∈ Float | (= x x) })
-refine_string_short	monadc.context.language.refinement-types	Short string refinement parses.	(type ShortString { s ∈ String | (< (count s) 10) })
-refine_string_nonempty	monadc.context.language.refinement-types	Nonempty string refinement parses.	(type NonEmptyString { s ∈ String | (> (count s) 0) })
-refine_string_tiny	monadc.context.language.refinement-types	Tiny string refinement parses.	(type TinyString { s ∈ String | (<= (count s) 3) })
-refine_string_pathish	monadc.context.language.refinement-types	Path-like string predicate shape parses.	(type Pathish { s ∈ String | (contains? s "/") })
-refine_string_prefix	monadc.context.language.refinement-types	Prefix string predicate shape parses.	(type HttpUrl { s ∈ String | (starts-with? s "http") })
-refine_string_suffix	monadc.context.language.refinement-types	Suffix string predicate shape parses.	(type MarkdownFile { s ∈ String | (ends-with? s ".md") })
-refine_string_between	monadc.context.language.refinement-types	String count lower and upper bounds parse.	(type MediumString { s ∈ String | (and (> (count s) 3) (< (count s) 80)) })
-refine_string_exact	monadc.context.language.refinement-types	Exact string count refinement parses.	(type ThreeChars { s ∈ String | (= (count s) 3) })
-refine_string_no_space_shape	monadc.context.language.refinement-types	String negated contains predicate parses.	(type NoSpaces { s ∈ String | (not (contains? s " ")) })
-refine_string_identifier_shape	monadc.context.language.refinement-types	Identifier-shaped string predicate parses.	(type IdentifierText { s ∈ String | (and (> (count s) 0) (not (contains? s " "))) })
-refine_list_nonempty	monadc.context.language.refinement-types	Nonempty list refinement parses.	(type NonEmptyList { xs ∈ List | (> (count xs) 0) })
-refine_list_empty	monadc.context.language.refinement-types	Empty list refinement parses.	(type EmptyList { xs ∈ List | (= (count xs) 0) })
-refine_list_small	monadc.context.language.refinement-types	Small list refinement parses.	(type SmallList { xs ∈ List | (< (count xs) 8) })
-refine_list_pair_shape	monadc.context.language.refinement-types	List pair predicate refinement parses.	(type PairList { xs ∈ List | (pair? xs) })
-refine_list_collection_shape	monadc.context.language.refinement-types	Collection predicate refinement parses.	(type CollectionValue { xs ∈ List | (collection? xs) })
-refine_map_nonempty	monadc.context.language.refinement-types	Nonempty map refinement parses.	(type NonEmptyMap { m ∈ Map | (> (count m) 0) })
-refine_map_small	monadc.context.language.refinement-types	Small map refinement parses.	(type SmallMap { m ∈ Map | (< (count m) 16) })
-refine_map_has_key	monadc.context.language.refinement-types	Map contains key refinement parses.	(type HasName { m ∈ Map | (contains? m :name) })
-refine_map_missing_key	monadc.context.language.refinement-types	Map missing key refinement parses.	(type MissingError { m ∈ Map | (not (contains? m :error)) })
-refine_set_nonempty	monadc.context.language.refinement-types	Nonempty set refinement parses.	(type NonEmptySet { s ∈ Set | (> (count s) 0) })
-refine_set_small	monadc.context.language.refinement-types	Small set refinement parses.	(type SmallSet { s ∈ Set | (< (count s) 32) })
-refine_set_contains	monadc.context.language.refinement-types	Set contains value refinement parses.	(type ContainsOne { s ∈ Set | (contains? s 1) })
-refine_bool_true	monadc.context.language.refinement-types	Boolean true refinement parses.	(type IsTrue { b ∈ Bool | (= b True) })
-refine_bool_false	monadc.context.language.refinement-types	Boolean false refinement parses.	(type IsFalse { b ∈ Bool | (= b False) })
-refine_char_upper_a	monadc.context.language.refinement-types	Character equality refinement parses.	(type UpperA { c ∈ Char | (= c 'A') })
-refine_char_not_nul	monadc.context.language.refinement-types	Character nonzero refinement parses.	(type NonNulChar { c ∈ Char | (!= c 0) })
-refine_symbol_named	monadc.context.language.refinement-types	Symbol equality refinement parses.	(type NamedSymbol { s ∈ Symbol | (= s 'name) })
-refine_keyword_id	monadc.context.language.refinement-types	Keyword equality refinement parses.	(type IdKeyword { k ∈ Keyword | (= k :id) })
-refine_path_home	monadc.context.language.refinement-types	Path refinement with home prefix parses.	(type HomePath { p ∈ Path | (starts-with? p "~") })
-refine_path_absolute	monadc.context.language.refinement-types	Path refinement with absolute prefix parses.	(type AbsolutePath { p ∈ Path | (starts-with? p "/") })
-refine_ratio_positive	monadc.context.language.refinement-types	Positive ratio refinement parses.	(type PositiveRatio { r ∈ Ratio | (> r 0/1) })
-refine_ratio_unit	monadc.context.language.refinement-types	Unit ratio refinement parses.	(type UnitRatio { r ∈ Ratio | (and (>= r 0/1) (<= r 1/1)) })
-refine_ratio_half	monadc.context.language.refinement-types	Half ratio equality refinement parses.	(type HalfRatio { r ∈ Ratio | (= r 1/2) })
-refine_hex_small	monadc.context.language.refinement-types	Hex value refinement parses.	(type SmallHex { x ∈ Hex | (< x 0xFF) })
-refine_bin_flag	monadc.context.language.refinement-types	Binary flag refinement parses.	(type BitFlag { x ∈ Bin | (or (= x 0b0) (= x 0b1)) })
-refine_oct_small	monadc.context.language.refinement-types	Octal value refinement parses.	(type SmallOct { x ∈ Oct | (< x 0o77) })
-refine_array_nonempty	monadc.context.language.refinement-types	Array count refinement parses.	(type NonEmptyArr { xs ∈ Arr | (> (count xs) 0) })
-refine_array_small	monadc.context.language.refinement-types	Array upper-bound refinement parses.	(type SmallArr { xs ∈ Arr | (< (count xs) 64) })
-refine_fn_callable	monadc.context.language.refinement-types	Function predicate refinement parses.	(type Callable { f ∈ Fn | (Fn? f) })
-refine_alias_positive	monadc.context.language.refinement-types	Positive refinement with alias metadata parses.	(type PositiveAlias { x ∈ Int | (> x 0) } :alias Natural)
-refine_doc_positive	monadc.context.language.refinement-types	Positive refinement with doc metadata parses.	(type DocumentedPositive { x ∈ Int | (> x 0) } :doc "positive ints")
-refine_doc_alias_positive	monadc.context.language.refinement-types	Positive refinement with doc and alias metadata parses.	(type DocumentedNatural { x ∈ Int | (> x 0) } :doc "natural-ish ints" :alias Natural)
-refine_string_doc_alias	monadc.context.language.refinement-types	String refinement with doc and alias metadata parses.	(type NameText { s ∈ String | (> (count s) 0) } :doc "names" :alias Identifier)
-refine_alias_pure_int	monadc.context.language.refinement-types	Pure type alias syntax parses.	(type UserId Int)
-refine_alias_pure_string	monadc.context.language.refinement-types	Pure string alias syntax parses.	(type UserName String)
-refine_alias_pure_list	monadc.context.language.refinement-types	Pure list alias syntax parses.	(type Rows List)
-refine_alias_pure_map	monadc.context.language.refinement-types	Pure map alias syntax parses.	(type Dict Map)
-refine_alias_doc	monadc.context.language.refinement-types	Pure alias with docstring parses.	(type Count Int "integer count")
-refine_alias_doc_keyword	monadc.context.language.refinement-types	Pure alias with keyword doc parses.	(type Slug String :doc "url slug")
-refine_alias_alias_keyword	monadc.context.language.refinement-types	Pure alias with alias keyword parses.	(type Bytes Arr :alias Buffer)
-refine_alias_doc_alias	monadc.context.language.refinement-types	Pure alias with doc and alias keywords parses.	(type Email String :doc "email text" :alias Contact)
-refine_nested_and_three	monadc.context.language.refinement-types	Three-way and predicate refinement parses.	(type RangedScore { n ∈ Int | (and (>= n 0) (<= n 100) (!= n 13)) })
-refine_nested_or	monadc.context.language.refinement-types	Or predicate refinement parses.	(type ZeroOrOne { n ∈ Int | (or (= n 0) (= n 1)) })
-refine_nested_not	monadc.context.language.refinement-types	Negated predicate refinement parses.	(type NotFortyTwo { n ∈ Int | (not (= n 42)) })
-refine_nested_if_shape	monadc.context.language.refinement-types	If-shaped predicate refinement parses.	(type GuardedInt { n ∈ Int | (if (> n 0) True False) })
-refine_arithmetic_sum	monadc.context.language.refinement-types	Arithmetic expression predicate refinement parses.	(type SumBound { n ∈ Int | (< (+ n 1) 10) })
-refine_arithmetic_product	monadc.context.language.refinement-types	Product expression predicate refinement parses.	(type ProductBound { n ∈ Int | (< (* n 2) 100) })
-refine_arithmetic_difference	monadc.context.language.refinement-types	Difference expression predicate refinement parses.	(type DifferenceBound { n ∈ Int | (> (- n 1) 0) })
-refine_arithmetic_division	monadc.context.language.refinement-types	Division expression predicate refinement parses.	(type DivisionBound { n ∈ Int | (< (/ n 2) 50) })
-refine_mod_three	monadc.context.language.refinement-types	Modulo three predicate refinement parses.	(type MultipleOfThree { n ∈ Int | (= (% n 3) 0) })
-refine_bitwise_mask	monadc.context.language.refinement-types	Bitwise mask predicate refinement parses.	(type Masked { n ∈ Int | (= (& n 1) 1) })
-refine_shift_bound	monadc.context.language.refinement-types	Shift expression predicate refinement parses.	(type ShiftedSmall { n ∈ Int | (< (<< n 1) 256) })
-refine_compare_chain_shape	monadc.context.language.refinement-types	Chained comparison-shaped predicate parses.	(type OrderedSmall { n ∈ Int | (and (< 0 n) (< n 10)) })
-refine_percent_ratio	monadc.context.language.refinement-types	Percent literal predicate refinement parses.	(type Majority { r ∈ Ratio | (> r 50%) })
-refine_periodic_ratio	monadc.context.language.refinement-types	Periodic decimal predicate refinement parses.	(type Thirdish { r ∈ Ratio | (= r 0.(3)) })
-refine_radix_hex	monadc.context.language.refinement-types	Radix literal predicate refinement parses.	(type HexByte { n ∈ Int | (<= n 16rFF) })
-refine_radix_binary	monadc.context.language.refinement-types	Binary radix predicate refinement parses.	(type BinaryNibble { n ∈ Int | (<= n 2r1111) })
-refine_radix_octal	monadc.context.language.refinement-types	Octal radix predicate refinement parses.	(type OctalSmall { n ∈ Int | (<= n 8r77) })
-refine_collection_union_shape	monadc.context.language.refinement-types	Collection predicate with or shape parses.	(type Collectionish { x ∈ Coll | (or (List? x) (Map? x)) })
-refine_number_pred	monadc.context.language.refinement-types	Number predicate refinement parses.	(type Numeric { x ∈ Number | (Number? x) })
-refine_int_pred	monadc.context.language.refinement-types	Int predicate refinement parses.	(type IntValue { x ∈ Int | (Int? x) })
-refine_float_pred	monadc.context.language.refinement-types	Float predicate refinement parses.	(type FloatValue { x ∈ Float | (Float? x) })
-refine_string_pred	monadc.context.language.refinement-types	String predicate refinement parses.	(type StringValue { x ∈ String | (String? x) })
-refine_keyword_pred	monadc.context.language.refinement-types	Keyword predicate refinement parses.	(type KeywordValue { x ∈ Keyword | (Keyword? x) })
-refine_symbol_pred	monadc.context.language.refinement-types	Symbol predicate refinement parses.	(type SymbolValue { x ∈ Symbol | (Symbol? x) })
-refine_list_pred	monadc.context.language.refinement-types	List predicate refinement parses.	(type ListValue { x ∈ List | (List? x) })
-refine_map_pred	monadc.context.language.refinement-types	Map predicate refinement parses.	(type MapValue { x ∈ Map | (Map? x) })
-refine_set_pred	monadc.context.language.refinement-types	Set predicate refinement parses.	(type SetValue { x ∈ Set | (Set? x) })
-refine_arr_pred	monadc.context.language.refinement-types	Array predicate refinement parses.	(type ArrValue { x ∈ Arr | (Arr? x) })
-refine_ratio_pred	monadc.context.language.refinement-types	Ratio predicate refinement parses.	(type RatioValue { x ∈ Ratio | (Ratio? x) })
-refine_bool_pred	monadc.context.language.refinement-types	Bool predicate refinement parses.	(type BoolValue { x ∈ Bool | (Bool? x) })
-refine_char_pred	monadc.context.language.refinement-types	Char predicate refinement parses.	(type CharValue { x ∈ Char | (Char? x) })
-refine_nested_count_arith	monadc.context.language.refinement-types	Nested count arithmetic predicate parses.	(type SizedName { s ∈ String | (= (+ (count s) 1) 5) })
-refine_nested_map_count	monadc.context.language.refinement-types	Nested map count predicate parses.	(type ConfigMap { m ∈ Map | (and (> (count m) 0) (contains? m :config)) })
-refine_nested_list_count	monadc.context.language.refinement-types	Nested list count predicate parses.	(type TupleLike { xs ∈ List | (= (count xs) 2) })
-refine_nested_set_count	monadc.context.language.refinement-types	Nested set count predicate parses.	(type SingletonSet { xs ∈ Set | (= (count xs) 1) })
-refine_nested_array_count	monadc.context.language.refinement-types	Nested array count predicate parses.	(type TripleArr { xs ∈ Arr | (= (count xs) 3) })
-refine_string_complex_logic	monadc.context.language.refinement-types	Complex string logic predicate parses.	(type CleanName { s ∈ String | (and (> (count s) 0) (not (contains? s "/")) (not (contains? s "\\"))) })
-refine_int_complex_logic	monadc.context.language.refinement-types	Complex integer logic predicate parses.	(type SafeIndex { n ∈ Int | (and (>= n 0) (< n 1024) (!= n 666)) })
+refine_int_positive	monadc.context.language.refinement-types	Positive integer refinement parses.	(type Positive { x ∈ Int | (> x 0) })				regression	passing-baseline-2026-06-15
+refine_int_nonnegative	monadc.context.language.refinement-types	Nonnegative integer refinement parses.	(type NonNegative { x ∈ Int | (>= x 0) })				regression	passing-baseline-2026-06-15
+refine_int_negative	monadc.context.language.refinement-types	Negative integer refinement parses.	(type Negative { x ∈ Int | (< x 0) })				regression	passing-baseline-2026-06-15
+refine_int_nonzero	monadc.context.language.refinement-types	Nonzero integer refinement parses.	(type NonZero { x ∈ Int | (!= x 0) })				regression	passing-baseline-2026-06-15
+refine_int_even	monadc.context.language.refinement-types	Even integer refinement parses.	(type Even { n ∈ Int | (= (% n 2) 0) })				regression	passing-baseline-2026-06-15
+refine_int_odd	monadc.context.language.refinement-types	Odd integer refinement parses.	(type Odd { n ∈ Int | (= (% n 2) 1) })				regression	passing-baseline-2026-06-15
+refine_int_small	monadc.context.language.refinement-types	Small integer upper-bound refinement parses.	(type SmallInt { n ∈ Int | (< n 128) })				regression	passing-baseline-2026-06-15
+refine_int_byte_range	monadc.context.language.refinement-types	Byte-range integer refinement parses.	(type ByteRange { n ∈ Int | (and (>= n 0) (< n 256)) })				regression	passing-baseline-2026-06-15
+refine_int_port_range	monadc.context.language.refinement-types	TCP port integer refinement parses.	(type Port { n ∈ Int | (and (> n 0) (< n 65536)) })				regression	passing-baseline-2026-06-15
+refine_int_year_range	monadc.context.language.refinement-types	Year range integer refinement parses.	(type Year { y ∈ Int | (and (>= y 1970) (< y 3000)) })				regression	passing-baseline-2026-06-15
+refine_float_positive	monadc.context.language.refinement-types	Positive float refinement parses.	(type PositiveFloat { x ∈ Float | (> x 0.0) })				regression	passing-baseline-2026-06-15
+refine_float_unit	monadc.context.language.refinement-types	Unit interval float refinement parses.	(type UnitFloat { x ∈ Float | (and (>= x 0.0) (<= x 1.0)) })				regression	passing-baseline-2026-06-15
+refine_float_percent	monadc.context.language.refinement-types	Percent float refinement parses.	(type PercentFloat { x ∈ Float | (and (>= x 0.0) (<= x 100.0)) })				regression	passing-baseline-2026-06-15
+refine_float_normalized	monadc.context.language.refinement-types	Normalized signed float refinement parses.	(type Normalized { x ∈ Float | (and (>= x -1.0) (<= x 1.0)) })				regression	passing-baseline-2026-06-15
+refine_float_non_nan_shape	monadc.context.language.refinement-types	Float self-equality predicate shape parses.	(type NotNaN { x ∈ Float | (= x x) })				regression	passing-baseline-2026-06-15
+refine_string_short	monadc.context.language.refinement-types	Short string refinement parses.	(type ShortString { s ∈ String | (< (count s) 10) })				regression	passing-baseline-2026-06-15
+refine_string_nonempty	monadc.context.language.refinement-types	Nonempty string refinement parses.	(type NonEmptyString { s ∈ String | (> (count s) 0) })				regression	passing-baseline-2026-06-15
+refine_string_tiny	monadc.context.language.refinement-types	Tiny string refinement parses.	(type TinyString { s ∈ String | (<= (count s) 3) })				regression	passing-baseline-2026-06-15
+refine_string_pathish	monadc.context.language.refinement-types	Path-like string predicate shape parses.	(type Pathish { s ∈ String | (contains? s "/") })				regression	passing-baseline-2026-06-15
+refine_string_prefix	monadc.context.language.refinement-types	Prefix string predicate shape parses.	(type HttpUrl { s ∈ String | (starts-with? s "http") })				regression	passing-baseline-2026-06-15
+refine_string_suffix	monadc.context.language.refinement-types	Suffix string predicate shape parses.	(type MarkdownFile { s ∈ String | (ends-with? s ".md") })				regression	passing-baseline-2026-06-15
+refine_string_between	monadc.context.language.refinement-types	String count lower and upper bounds parse.	(type MediumString { s ∈ String | (and (> (count s) 3) (< (count s) 80)) })				regression	passing-baseline-2026-06-15
+refine_string_exact	monadc.context.language.refinement-types	Exact string count refinement parses.	(type ThreeChars { s ∈ String | (= (count s) 3) })				regression	passing-baseline-2026-06-15
+refine_string_no_space_shape	monadc.context.language.refinement-types	String negated contains predicate parses.	(type NoSpaces { s ∈ String | (not (contains? s " ")) })				regression	passing-baseline-2026-06-15
+refine_string_identifier_shape	monadc.context.language.refinement-types	Identifier-shaped string predicate parses.	(type IdentifierText { s ∈ String | (and (> (count s) 0) (not (contains? s " "))) })				regression	passing-baseline-2026-06-15
+refine_list_nonempty	monadc.context.language.refinement-types	Nonempty list refinement parses.	(type NonEmptyList { xs ∈ List | (> (count xs) 0) })				regression	passing-baseline-2026-06-15
+refine_list_empty	monadc.context.language.refinement-types	Empty list refinement parses.	(type EmptyList { xs ∈ List | (= (count xs) 0) })				regression	passing-baseline-2026-06-15
+refine_list_small	monadc.context.language.refinement-types	Small list refinement parses.	(type SmallList { xs ∈ List | (< (count xs) 8) })				regression	passing-baseline-2026-06-15
+refine_list_pair_shape	monadc.context.language.refinement-types	List pair predicate refinement parses.	(type PairList { xs ∈ List | (pair? xs) })				regression	passing-baseline-2026-06-15
+refine_list_collection_shape	monadc.context.language.refinement-types	Collection predicate refinement parses.	(type CollectionValue { xs ∈ List | (collection? xs) })				regression	passing-baseline-2026-06-15
+refine_map_nonempty	monadc.context.language.refinement-types	Nonempty map refinement parses.	(type NonEmptyMap { m ∈ Map | (> (count m) 0) })				regression	passing-baseline-2026-06-15
+refine_map_small	monadc.context.language.refinement-types	Small map refinement parses.	(type SmallMap { m ∈ Map | (< (count m) 16) })				regression	passing-baseline-2026-06-15
+refine_map_has_key	monadc.context.language.refinement-types	Map contains key refinement parses.	(type HasName { m ∈ Map | (contains? m :name) })				regression	passing-baseline-2026-06-15
+refine_map_missing_key	monadc.context.language.refinement-types	Map missing key refinement parses.	(type MissingError { m ∈ Map | (not (contains? m :error)) })				regression	passing-baseline-2026-06-15
+refine_set_nonempty	monadc.context.language.refinement-types	Nonempty set refinement parses.	(type NonEmptySet { s ∈ Set | (> (count s) 0) })				regression	passing-baseline-2026-06-15
+refine_set_small	monadc.context.language.refinement-types	Small set refinement parses.	(type SmallSet { s ∈ Set | (< (count s) 32) })				regression	passing-baseline-2026-06-15
+refine_set_contains	monadc.context.language.refinement-types	Set contains value refinement parses.	(type ContainsOne { s ∈ Set | (contains? s 1) })				regression	passing-baseline-2026-06-15
+refine_bool_true	monadc.context.language.refinement-types	Boolean true refinement parses.	(type IsTrue { b ∈ Bool | (= b True) })				regression	passing-baseline-2026-06-15
+refine_bool_false	monadc.context.language.refinement-types	Boolean false refinement parses.	(type IsFalse { b ∈ Bool | (= b False) })				regression	passing-baseline-2026-06-15
+refine_char_upper_a	monadc.context.language.refinement-types	Character equality refinement parses.	(type UpperA { c ∈ Char | (= c 'A') })				regression	passing-baseline-2026-06-15
+refine_char_not_nul	monadc.context.language.refinement-types	Character nonzero refinement parses.	(type NonNulChar { c ∈ Char | (!= c 0) })				regression	passing-baseline-2026-06-15
+refine_symbol_named	monadc.context.language.refinement-types	Symbol equality refinement parses.	(type NamedSymbol { s ∈ Symbol | (= s 'name) })				regression	passing-baseline-2026-06-15
+refine_keyword_id	monadc.context.language.refinement-types	Keyword equality refinement parses.	(type IdKeyword { k ∈ Keyword | (= k :id) })				regression	passing-baseline-2026-06-15
+refine_path_home	monadc.context.language.refinement-types	Path refinement with home prefix parses.	(type HomePath { p ∈ Path | (starts-with? p "~") })				regression	passing-baseline-2026-06-15
+refine_path_absolute	monadc.context.language.refinement-types	Path refinement with absolute prefix parses.	(type AbsolutePath { p ∈ Path | (starts-with? p "/") })				regression	passing-baseline-2026-06-15
+refine_ratio_positive	monadc.context.language.refinement-types	Positive ratio refinement parses.	(type PositiveRatio { r ∈ Ratio | (> r 0/1) })				regression	passing-baseline-2026-06-15
+refine_ratio_unit	monadc.context.language.refinement-types	Unit ratio refinement parses.	(type UnitRatio { r ∈ Ratio | (and (>= r 0/1) (<= r 1/1)) })				regression	passing-baseline-2026-06-15
+refine_ratio_half	monadc.context.language.refinement-types	Half ratio equality refinement parses.	(type HalfRatio { r ∈ Ratio | (= r 1/2) })				regression	passing-baseline-2026-06-15
+refine_hex_small	monadc.context.language.refinement-types	Hex value refinement parses.	(type SmallHex { x ∈ Hex | (< x 0xFF) })				regression	passing-baseline-2026-06-15
+refine_bin_flag	monadc.context.language.refinement-types	Binary flag refinement parses.	(type BitFlag { x ∈ Bin | (or (= x 0b0) (= x 0b1)) })				regression	passing-baseline-2026-06-15
+refine_oct_small	monadc.context.language.refinement-types	Octal value refinement parses.	(type SmallOct { x ∈ Oct | (< x 0o77) })				regression	passing-baseline-2026-06-15
+refine_array_nonempty	monadc.context.language.refinement-types	Array count refinement parses.	(type NonEmptyArr { xs ∈ Arr | (> (count xs) 0) })				regression	passing-baseline-2026-06-15
+refine_array_small	monadc.context.language.refinement-types	Array upper-bound refinement parses.	(type SmallArr { xs ∈ Arr | (< (count xs) 64) })				regression	passing-baseline-2026-06-15
+refine_fn_callable	monadc.context.language.refinement-types	Function predicate refinement parses.	(type Callable { f ∈ Fn | (Fn? f) })				regression	passing-baseline-2026-06-15
+refine_alias_positive	monadc.context.language.refinement-types	Positive refinement with alias metadata parses.	(type PositiveAlias { x ∈ Int | (> x 0) } :alias Natural)				regression	passing-baseline-2026-06-15
+refine_doc_positive	monadc.context.language.refinement-types	Positive refinement with doc metadata parses.	(type DocumentedPositive { x ∈ Int | (> x 0) } :doc "positive ints")				regression	passing-baseline-2026-06-15
+refine_doc_alias_positive	monadc.context.language.refinement-types	Positive refinement with doc and alias metadata parses.	(type DocumentedNatural { x ∈ Int | (> x 0) } :doc "natural-ish ints" :alias Natural)				regression	passing-baseline-2026-06-15
+refine_string_doc_alias	monadc.context.language.refinement-types	String refinement with doc and alias metadata parses.	(type NameText { s ∈ String | (> (count s) 0) } :doc "names" :alias Identifier)				regression	passing-baseline-2026-06-15
+refine_alias_pure_int	monadc.context.language.refinement-types	Pure type alias syntax parses.	(type UserId Int)				regression	passing-baseline-2026-06-15
+refine_alias_pure_string	monadc.context.language.refinement-types	Pure string alias syntax parses.	(type UserName String)				regression	passing-baseline-2026-06-15
+refine_alias_pure_list	monadc.context.language.refinement-types	Pure list alias syntax parses.	(type Rows List)				regression	passing-baseline-2026-06-15
+refine_alias_pure_map	monadc.context.language.refinement-types	Pure map alias syntax parses.	(type Dict Map)				regression	passing-baseline-2026-06-15
+refine_alias_doc	monadc.context.language.refinement-types	Pure alias with docstring parses.	(type Count Int "integer count")				regression	passing-baseline-2026-06-15
+refine_alias_doc_keyword	monadc.context.language.refinement-types	Pure alias with keyword doc parses.	(type Slug String :doc "url slug")				regression	passing-baseline-2026-06-15
+refine_alias_alias_keyword	monadc.context.language.refinement-types	Pure alias with alias keyword parses.	(type Bytes Arr :alias Buffer)				regression	passing-baseline-2026-06-15
+refine_alias_doc_alias	monadc.context.language.refinement-types	Pure alias with doc and alias keywords parses.	(type Email String :doc "email text" :alias Contact)				regression	passing-baseline-2026-06-15
+refine_nested_and_three	monadc.context.language.refinement-types	Three-way and predicate refinement parses.	(type RangedScore { n ∈ Int | (and (>= n 0) (<= n 100) (!= n 13)) })				regression	passing-baseline-2026-06-15
+refine_nested_or	monadc.context.language.refinement-types	Or predicate refinement parses.	(type ZeroOrOne { n ∈ Int | (or (= n 0) (= n 1)) })				regression	passing-baseline-2026-06-15
+refine_nested_not	monadc.context.language.refinement-types	Negated predicate refinement parses.	(type NotFortyTwo { n ∈ Int | (not (= n 42)) })				regression	passing-baseline-2026-06-15
+refine_nested_if_shape	monadc.context.language.refinement-types	If-shaped predicate refinement parses.	(type GuardedInt { n ∈ Int | (if (> n 0) True False) })				regression	passing-baseline-2026-06-15
+refine_arithmetic_sum	monadc.context.language.refinement-types	Arithmetic expression predicate refinement parses.	(type SumBound { n ∈ Int | (< (+ n 1) 10) })				regression	passing-baseline-2026-06-15
+refine_arithmetic_product	monadc.context.language.refinement-types	Product expression predicate refinement parses.	(type ProductBound { n ∈ Int | (< (* n 2) 100) })				regression	passing-baseline-2026-06-15
+refine_arithmetic_difference	monadc.context.language.refinement-types	Difference expression predicate refinement parses.	(type DifferenceBound { n ∈ Int | (> (- n 1) 0) })				regression	passing-baseline-2026-06-15
+refine_arithmetic_division	monadc.context.language.refinement-types	Division expression predicate refinement parses.	(type DivisionBound { n ∈ Int | (< (/ n 2) 50) })				regression	passing-baseline-2026-06-15
+refine_mod_three	monadc.context.language.refinement-types	Modulo three predicate refinement parses.	(type MultipleOfThree { n ∈ Int | (= (% n 3) 0) })				regression	passing-baseline-2026-06-15
+refine_bitwise_mask	monadc.context.language.refinement-types	Bitwise mask predicate refinement parses.	(type Masked { n ∈ Int | (= (& n 1) 1) })				regression	passing-baseline-2026-06-15
+refine_shift_bound	monadc.context.language.refinement-types	Shift expression predicate refinement parses.	(type ShiftedSmall { n ∈ Int | (< (<< n 1) 256) })				regression	passing-baseline-2026-06-15
+refine_compare_chain_shape	monadc.context.language.refinement-types	Chained comparison-shaped predicate parses.	(type OrderedSmall { n ∈ Int | (and (< 0 n) (< n 10)) })				regression	passing-baseline-2026-06-15
+refine_percent_ratio	monadc.context.language.refinement-types	Percent literal predicate refinement parses.	(type Majority { r ∈ Ratio | (> r 50%) })				regression	passing-baseline-2026-06-15
+refine_periodic_ratio	monadc.context.language.refinement-types	Periodic decimal predicate refinement parses.	(type Thirdish { r ∈ Ratio | (= r 0.(3)) })				regression	passing-baseline-2026-06-15
+refine_radix_hex	monadc.context.language.refinement-types	Radix literal predicate refinement parses.	(type HexByte { n ∈ Int | (<= n 16rFF) })				regression	passing-baseline-2026-06-15
+refine_radix_binary	monadc.context.language.refinement-types	Binary radix predicate refinement parses.	(type BinaryNibble { n ∈ Int | (<= n 2r1111) })				regression	passing-baseline-2026-06-15
+refine_radix_octal	monadc.context.language.refinement-types	Octal radix predicate refinement parses.	(type OctalSmall { n ∈ Int | (<= n 8r77) })				regression	passing-baseline-2026-06-15
+refine_collection_union_shape	monadc.context.language.refinement-types	Collection predicate with or shape parses.	(type Collectionish { x ∈ Coll | (or (List? x) (Map? x)) })				regression	passing-baseline-2026-06-15
+refine_number_pred	monadc.context.language.refinement-types	Number predicate refinement parses.	(type Numeric { x ∈ Number | (Number? x) })				regression	passing-baseline-2026-06-15
+refine_int_pred	monadc.context.language.refinement-types	Int predicate refinement parses.	(type IntValue { x ∈ Int | (Int? x) })				regression	passing-baseline-2026-06-15
+refine_float_pred	monadc.context.language.refinement-types	Float predicate refinement parses.	(type FloatValue { x ∈ Float | (Float? x) })				regression	passing-baseline-2026-06-15
+refine_string_pred	monadc.context.language.refinement-types	String predicate refinement parses.	(type StringValue { x ∈ String | (String? x) })				regression	passing-baseline-2026-06-15
+refine_keyword_pred	monadc.context.language.refinement-types	Keyword predicate refinement parses.	(type KeywordValue { x ∈ Keyword | (Keyword? x) })				regression	passing-baseline-2026-06-15
+refine_symbol_pred	monadc.context.language.refinement-types	Symbol predicate refinement parses.	(type SymbolValue { x ∈ Symbol | (Symbol? x) })				regression	passing-baseline-2026-06-15
+refine_list_pred	monadc.context.language.refinement-types	List predicate refinement parses.	(type ListValue { x ∈ List | (List? x) })				regression	passing-baseline-2026-06-15
+refine_map_pred	monadc.context.language.refinement-types	Map predicate refinement parses.	(type MapValue { x ∈ Map | (Map? x) })				regression	passing-baseline-2026-06-15
+refine_set_pred	monadc.context.language.refinement-types	Set predicate refinement parses.	(type SetValue { x ∈ Set | (Set? x) })				regression	passing-baseline-2026-06-15
+refine_arr_pred	monadc.context.language.refinement-types	Array predicate refinement parses.	(type ArrValue { x ∈ Arr | (Arr? x) })				regression	passing-baseline-2026-06-15
+refine_ratio_pred	monadc.context.language.refinement-types	Ratio predicate refinement parses.	(type RatioValue { x ∈ Ratio | (Ratio? x) })				regression	passing-baseline-2026-06-15
+refine_bool_pred	monadc.context.language.refinement-types	Bool predicate refinement parses.	(type BoolValue { x ∈ Bool | (Bool? x) })				regression	passing-baseline-2026-06-15
+refine_char_pred	monadc.context.language.refinement-types	Char predicate refinement parses.	(type CharValue { x ∈ Char | (Char? x) })				regression	passing-baseline-2026-06-15
+refine_nested_count_arith	monadc.context.language.refinement-types	Nested count arithmetic predicate parses.	(type SizedName { s ∈ String | (= (+ (count s) 1) 5) })				regression	passing-baseline-2026-06-15
+refine_nested_map_count	monadc.context.language.refinement-types	Nested map count predicate parses.	(type ConfigMap { m ∈ Map | (and (> (count m) 0) (contains? m :config)) })				regression	passing-baseline-2026-06-15
+refine_nested_list_count	monadc.context.language.refinement-types	Nested list count predicate parses.	(type TupleLike { xs ∈ List | (= (count xs) 2) })				regression	passing-baseline-2026-06-15
+refine_nested_set_count	monadc.context.language.refinement-types	Nested set count predicate parses.	(type SingletonSet { xs ∈ Set | (= (count xs) 1) })				regression	passing-baseline-2026-06-15
+refine_nested_array_count	monadc.context.language.refinement-types	Nested array count predicate parses.	(type TripleArr { xs ∈ Arr | (= (count xs) 3) })				regression	passing-baseline-2026-06-15
+refine_string_complex_logic	monadc.context.language.refinement-types	Complex string logic predicate parses.	(type CleanName { s ∈ String | (and (> (count s) 0) (not (contains? s "/")) (not (contains? s "\\"))) })				regression	passing-baseline-2026-06-15
+refine_int_complex_logic	monadc.context.language.refinement-types	Complex integer logic predicate parses.	(type SafeIndex { n ∈ Int | (and (>= n 0) (< n 1024) (!= n 666)) })				regression	passing-baseline-2026-06-15

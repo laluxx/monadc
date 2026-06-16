@@ -1,0 +1,15 @@
+name: structured_cross_if_phi_of_list_heads
+section: cross-compiler-current
+tier: stable
+kind: law
+features: arithmetic, cross, equality, if, list, path, phi
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.path_literal, codegen.runtime_call, infer.arithmetic, infer.equality, infer.if_phi, infer.path, reader.ast_if, reader.path_literal, runtime.list
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.if, atom.core.equality, atom.runtime.path
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+args: p:Bool a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Stress cross-feature lowering across control flow, env lookup, runtime collections, predicates, quote/null, and operator dispatch.
+law: (= (head (if {p} (cons {a} (cons {b} (list))) (cons {c} (cons {d} (list))))) (if {p} {a} {c}))

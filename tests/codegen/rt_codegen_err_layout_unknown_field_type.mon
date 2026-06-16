@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-codegen-err-layout-unknown-field-type
-;; TEST-SECTION: diagnostic
-;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
-;; TEST-PURPOSE: Codegen rejects layout fields with unknown types.
-;; TEST-ATOM: [x :: Nope] must fail because Nope is not a known type.
-;; TEST-EXPECT: fail:compile
-
-(module Main)
-(layout Point [x :: Nope])

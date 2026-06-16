@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.nested-if-else
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Nested if-else evaluates the correct branch at runtime.
-;; TEST-ATOM: (if True (if False 1 2) 3) evaluates to 2.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (if True (if False 1 2) 3))

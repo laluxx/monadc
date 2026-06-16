@@ -1,0 +1,15 @@
+name: structured_oracle_array_count_generated_r01
+section: current-oracle-array-count-generated
+tier: oracle
+kind: law
+features: oracle, array, count
+compiler-path: codegen.array_literal, infer.array, reader.array_literal, runner.expect_python, runner.oracle_tier, runner.typed_generator
+signal: high
+corpus-role: oracle
+uses-atoms: atom.runtime.array
+related-properties: signal_atom_array_index_valid
+args: xs:ArrInt@small
+type: Int
+expect-python: len(xs)
+description: V10 oracle property array_count_generated round 1 using expect-python and dependent typed generators.
+law: (count {xs})

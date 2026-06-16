@@ -1,0 +1,14 @@
+name: set_disj_removes_generated
+section: collections
+tier: stable
+kind: law
+features: arithmetic, collections, predicate, set
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, infer.arithmetic, infer.type_predicate, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.infer.predicate, atom.logic.not
+args: a:Int
+type: Bool
+expect: True
+description: disj must remove a previously inserted generated value.
+law: (not (contains? (disj (conj (set) {a}) {a}) {a}))

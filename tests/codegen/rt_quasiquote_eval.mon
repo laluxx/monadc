@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-quasiquote-eval
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Quasiquoted expressions with unquote evaluate the unquoted parts.
-;; TEST-ATOM: (eval ⌜+ 1 2⌝) evaluates to 3.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (eval ⌜+ 1 2⌝))

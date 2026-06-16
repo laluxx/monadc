@@ -1,0 +1,42 @@
+;; TEST-ID: tests.codegen.branch.collection-set-predicate-functional-mutating
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SUBSET: sets
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise set literal, Set?, collection?, contains?, functional conj/disj, and mutating conj!/disj! branches.
+;; TEST-ATOM: atom.codegen.collection.set-functional-mutating
+;; TEST-CODEGEN-ATOM: atom.codegen.collection.set-functional-mutating
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.set.literal
+;; TEST-CODEGEN-PATH: codegen.set.conj
+;; TEST-CODEGEN-PATH: codegen.set.disj
+;; TEST-CODEGEN-PATH: codegen.set.predicate
+;; TEST-DEPENDS-ON: atom.codegen.collection.array-count-index-head-tail
+;; TEST-TAG: run
+;; TEST-TAG: collection
+;; TEST-TAG: set
+;; TEST-COVERAGE: codegen.c:4093 set literal/function branch
+;; TEST-COVERAGE: codegen.c:4169-4178 conj/disj/conj!/disj! branches
+;; TEST-COVERAGE: codegen.c:4181 Set? branch
+;; TEST-COVERAGE: codegen.c:4197 collection? branch
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/sets/atom.codegen.collection.set-functional-mutating
+;; TEST-MENU-PATH: codegen/branches/collections/sets/atom.codegen.collection.set-functional-mutating
+;; TEST-ATOM-LEAF: atom.codegen.collection.set-functional-mutating
+;; TEST-CLI-TARGET: codegen branches collections sets
+(module Main)
+(define s {1 2})
+(show (Set? s))
+(show (collection? s))
+(show (contains? s 1))
+(show (contains? (conj s 3) 3))
+(show (contains? s 3))
+(conj! s 3)
+(show (contains? s 3))
+(disj! s 1)
+(show (contains? s 1))

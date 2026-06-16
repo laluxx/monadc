@@ -1,0 +1,36 @@
+;; TEST-ID: tests.codegen.branch.value-width-signedness-cross-check
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-SUBSET: casts-conversions
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 00-values
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise signed and unsigned integer width casts followed by arithmetic and display.
+;; TEST-ATOM: atom.codegen.cast.integer-width-signedness
+;; TEST-CODEGEN-ATOM: atom.codegen.cast.integer-width-signedness
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: type_to_llvm.TYPE_I8_U8_I16_U16_I32_I64
+;; TEST-CODEGEN-PATH: codegen.cast.integer-width
+;; TEST-CODEGEN-PATH: codegen.compare.integer-width-promotion
+;; TEST-DEPENDS-ON: atom.codegen.operator.plus
+;; TEST-DEPENDS-ON: atom.codegen.operator.compare.equal
+;; TEST-TAG: run
+;; TEST-TAG: cast
+;; TEST-TAG: width
+;; TEST-COVERAGE: codegen.c:696-701 type_to_llvm integer widths
+;; TEST-COVERAGE: codegen.c:12542-12552 numeric width cast targets
+;; TEST-COVERAGE: codegen.c:9445 integer width promotion
+
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/casts-conversions/atom.codegen.cast.integer-width-signedness
+;; TEST-MENU-PATH: codegen/branches/values/casts-conversions/atom.codegen.cast.integer-width-signedness
+;; TEST-ATOM-LEAF: atom.codegen.cast.integer-width-signedness
+;; TEST-CLI-TARGET: codegen branches values casts-conversions
+(module Main)
+(show (+ (I8 127) 1))
+(show (+ (U8 255) 1))
+(show (- (I16 0) 1))
+(show (+ (U16 65535) 1))
+(show (= (I32 42) (I64 42)))

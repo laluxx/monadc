@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.identity-show
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Define an identity function, call it with show.
-;; TEST-ATOM: (define id ...) compiles and (show (id 42)) prints 42
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(define (id [x : Int] -> Int) x)
-(show (id 42))

@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-doc-arg-symbol
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.90.diagnostics.symbol.resolution.rt.codegen.err.doc.arg.symbol
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: symbol-resolution
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen rejects non-symbol doc reflection arguments.
+;; TEST-ATOM: (doc 1) must fail because doc arguments must be symbols.
+;; TEST-EXPECT: fail:compile
+
+;; TEST-COVERAGE: codegen.c:90-diagnostics/symbol-resolution branch family
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/symbol-resolution/atom.codegen.90.diagnostics.symbol.resolution.rt.codegen.err.doc.arg.symbol
+;; TEST-MENU-PATH: codegen/errors/codegen/symbol-resolution/atom.codegen.90.diagnostics.symbol.resolution.rt.codegen.err.doc.arg.symbol
+;; TEST-ATOM-LEAF: atom.codegen.90.diagnostics.symbol.resolution.rt.codegen.err.doc.arg.symbol
+;; TEST-CLI-TARGET: codegen errors codegen symbol-resolution
+(module Main)
+(doc 1)

@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.rt-wisp-sexpr-mix
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.basic.values.rt.wisp.sexpr.mix
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: basic-values
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.wisp.sexpr-mixing
+;; TEST-PURPOSE: Wisp and S-exprs mix freely
+;; TEST-ATOM: s-expr forms can be embedded in wisp code
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:80-wisp-codegen/basic-values branch family
+;; TEST-USES-ATOM: atom.codegen.category.80.wisp.codegen
+;; TEST-MENU: branches/wisp-codegen/basic-values/atom.codegen.80.wisp.codegen.basic.values.rt.wisp.sexpr.mix
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/basic-values/atom.codegen.80.wisp.codegen.basic.values.rt.wisp.sexpr.mix
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.basic.values.rt.wisp.sexpr.mix
+;; TEST-CLI-TARGET: codegen branches wisp-codegen basic-values
+module Main
+show (+ 1 2)
+show (* 3 4)
+show (- 10 5)
+define xs '(1 2 3)
+show car xs
+show car '(10 20 30)

@@ -1,0 +1,147 @@
+#+TITLE: Current Debug Agenda
+#+AUTHOR: GPT-5.5 Thinking
+#+DATE: 2026-06-16
+#+CREATED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-16
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:debug:agenda:wisp:reader:tests:
+#+PROPERTY: CONTEXT_VERSION 3
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.debug
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY hideblocks
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* Purpose
+:PROPERTIES:
+:ID: monadc.context.debug.agenda
+:CUSTOM_ID: debug-agenda-purpose
+:CONTEXT_KIND: agenda
+:CONTEXT_DESCRIPTION: Living bug and priority agenda distilled from recent compiler/test work.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/debug-agenda.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.debug.agenda-purpose src:context/debug-agenda.org conf:high]
+  This file keeps active failures visible without making the whole context noisy.
+  Each item should either point to tests, source areas, or a decision that closes
+  it.
+
+* Highest-Leverage Fixes
+:PROPERTIES:
+:ID: monadc.context.debug.high-leverage
+:CUSTOM_ID: debug-high-leverage
+:CONTEXT_KIND: agenda
+:CONTEXT_DESCRIPTION: Bugs likely to cascade into many test fixes.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/debug-agenda.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Priority map
+| Priority | Area | Why it matters | Likely files |
+|----------+------+----------------+--------------|
+| P0 | Reader/Wisp call-shape transforms | Wrong desugar shape can make many correct programs compile as variable calls | =reader.c=, =wisp.c= |
+| P0 | Diagnostic contract stabilization | 487 diagnostic mismatches were observed in the enhanced test snapshot | =infer.c=, =reader.c=, =tests/run.py= |
+| P1 | Wisp typed/function define forms | User-facing syntax must match documented Wisp style | =wisp.c=, =reader.c= |
+| P1 | Collection/heap literal behavior | Runtime loops over heap/array forms expose collection dispatch bugs | =codegen.c=, runtime collection files |
+| P2 | AST/desugar goldens | Prevents stdout-only tests from missing pipeline regressions | =tests/codegen=, =tests/run.py= |
+
+[TODO id:todo.debug.fix-reader-wisp-call-shape owner:human+llm status:open]
+  Investigate failures where forms like =(rt_coll_wrap xs 42)= desugar into
+  =(xs rt_coll_wrap 42)=. The symptom suggests a sugar/rewrite rule is treating
+  a plain function call as method-call shape.
+
+[TODO id:todo.debug.fix-wisp-define-signature owner:human+llm status:open]
+  Support Wisp function definitions of the form =define square :: Int -> Int=
+  followed by clauses such as =x -> x * x=, without producing malformed Lisp.
+
+[TODO id:todo.debug.fix-wisp-typed-value owner:human+llm status:open]
+  Support Wisp value definitions like =define var :: Int 3= while preserving
+  bracketed typed bindings for Lisp forms such as =define [var :: Int] 3=.
+
+[TODO id:todo.debug.fix-heap-literal-for owner:human+llm status:open]
+  Ensure =for= over heap literals like =~[1 2 3]= iterates correctly instead of
+  behaving like an empty collection.
+
+* Diagnostic Discipline
+:PROPERTIES:
+:ID: monadc.context.debug.diagnostics
+:CUSTOM_ID: debug-diagnostics
+:CONTEXT_KIND: quality
+:CONTEXT_DESCRIPTION: How to handle failing diagnostic expectations.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/debug-agenda.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.debug.diagnostics-should-be-specific date:2026-06-16 by:llm]
+  Diagnostic tests are useful only when they assert stable error classes and
+  source spans. Until diagnostic text stabilizes, quarantine text-sensitive cases
+  as =known-fail= rather than deleting them.
+
+[TODO id:todo.debug.add-error-codes owner:human+llm status:open]
+  Consider stable error codes for reader, infer, and codegen diagnostics so tests
+  can match durable semantics instead of fragile prose.
+
+* Stale/Noise Watchlist
+:PROPERTIES:
+:ID: monadc.context.debug.watchlist
+:CUSTOM_ID: debug-watchlist
+:CONTEXT_KIND: quality
+:CONTEXT_DESCRIPTION: Known patterns that should be removed, fixed, or quarantined in tests/context.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/debug-agenda.org
+:CONFIDENCE: high
+:END:
+
+[TODO id:todo.debug.watch-malformed-fixtures owner:human+llm status:open]
+  Malformed accidental fixtures such as unmatched parens or stray editor text
+  should be removed or marked as explicit parse-fail tests. Do not golden-update
+  accidental behavior.
+
+[TODO id:todo.debug.watch-generated-artifacts owner:human+llm status:open]
+  Keep generated runner artifacts out of clean source tars. Include them only in
+  debug snapshots where the artifact is the point of the tar.

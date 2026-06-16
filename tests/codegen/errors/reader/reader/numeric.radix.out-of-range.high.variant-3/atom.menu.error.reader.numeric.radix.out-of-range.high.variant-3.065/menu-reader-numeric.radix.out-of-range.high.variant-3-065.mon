@@ -1,0 +1,41 @@
+;; TEST-ID: tests.codegen.menu.errors.reader.numeric.radix.out.of.range.high.variant.3.065
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: errors
+;; TEST-SUBSET: reader/numeric.radix.out-of-range.high.variant-3
+;; TEST-MENU: errors/reader/numeric.radix.out-of-range.high.variant-3/atom.menu.error.reader.numeric.radix.out-of-range.high.variant-3.065
+;; TEST-MENU-PATH: codegen/errors/reader/numeric.radix.out-of-range.high.variant-3/atom.menu.error.reader.numeric.radix.out-of-range.high.variant-3.065
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.error-menu
+;; TEST-PURPOSE: Pin reader.c diagnostic: radix 37 out of range
+;; TEST-ATOM: atom.menu.error.reader.numeric.radix.out-of-range.high.variant-3.065
+;; TEST-CODEGEN-ATOM: atom.menu.error.reader.numeric.radix.out-of-range.high.variant-3.065
+;; TEST-ATOM-LEAF: atom.menu.error.reader.numeric.radix.out-of-range.high.variant-3.065
+;; TEST-QUALITY: menu-error-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ERROR-STAGE: reader
+;; TEST-ERROR-FAMILY: numeric.radix.out-of-range.high.variant-3
+;; TEST-ERROR-MESSAGE: radix 37 out of range
+;; TEST-ERROR-SOURCE: reader.c
+;; TEST-ERROR-PATH: reader.c:1534
+;; TEST-CODEGEN-PATH: diagnostic.reader.numeric.radix.out-of-range.high.variant-3
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-TAG: menu
+;; TEST-COVERAGE: reader.c:1534 radix 37 out of range
+;; TEST-USES-ATOM: atom.menu.error.reader.numeric.radix.out-of-range.high.variant-3.065
+;; TEST-USES-ATOM: atom.error.reader
+;; TEST-USES-ATOM: atom.error.reader.numeric.radix.out-of-range.high.variant-3
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-DEPENDS-ON: atom.reader.lex.parse
+;; TEST-REFINES: atom.error.reader
+;; TEST-REFINES: atom.error.reader.numeric.radix.out-of-range.high.variant-3
+;; TEST-REFINES: atom.reader.error
+;; TEST-RELATED: atom.codegen.error.menu
+;; TEST-CLI-TARGET: codegen errors reader reader
+
+(module Main)
+;; reader menu variant 3
+(show 37rZ)

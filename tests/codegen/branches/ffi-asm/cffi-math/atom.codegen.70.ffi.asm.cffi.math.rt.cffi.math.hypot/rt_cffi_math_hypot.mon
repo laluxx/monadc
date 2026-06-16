@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-cffi-math-hypot
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.70.ffi.asm.cffi.math.rt.cffi.math.hypot
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: cffi-math
+;; TEST-CATEGORY: 70-ffi-asm
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.cffi-runtime
+;; TEST-PURPOSE: Runtime C FFI calls a two-argument libm function and prints its result.
+;; TEST-ATOM: (hypot 3.0 4.0) prints 5.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:70-ffi-asm/cffi-math branch family
+;; TEST-USES-ATOM: atom.codegen.category.70.ffi.asm
+;; TEST-MENU: branches/ffi-asm/cffi-math/atom.codegen.70.ffi.asm.cffi.math.rt.cffi.math.hypot
+;; TEST-MENU-PATH: codegen/branches/ffi-asm/cffi-math/atom.codegen.70.ffi.asm.cffi.math.rt.cffi.math.hypot
+;; TEST-ATOM-LEAF: atom.codegen.70.ffi.asm.cffi.math.rt.cffi.math.hypot
+;; TEST-CLI-TARGET: codegen branches ffi-asm cffi-math
+(module Main)
+(include "math.h")
+(show (hypot 3.0 4.0))

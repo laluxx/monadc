@@ -1,0 +1,15 @@
+name: function_add_helper_matches_builtin
+section: function
+tier: stable
+kind: law
+features: arithmetic, equality, function
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, infer.arithmetic, infer.equality
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.core.plus
+related-properties: signal_atom_equality_reflexive, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The typed fuzz-add helper must agree with the builtin addition operator.
+law: (= (fuzz-add {a} {b}) (+ {a} {b}))

@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.cond-expression
-;; TEST-CONTEXT: monadc.context.reader.sugar.cond-to-if
-;; TEST-PURPOSE: Cond expression desugars to nested if and evaluates correctly.
-;; TEST-ATOM: (cond [(> 5 3) 1] [else 0]) evaluates to 1.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (cond [(> 5 3) 1] [else 0]))

@@ -1,0 +1,33 @@
+;; TEST-ID: tests.codegen.reader-error.reader-function-signature-missing-close
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: reader-errors/signatures-params
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.reader-error-coverage
+;; TEST-PURPOSE: Trigger and pin diagnostic: Expected ')' to close function signature
+;; TEST-ATOM: atom.reader.error.reader.function.signature.missing.close
+;; TEST-CODEGEN-ATOM: atom.reader.error.reader.function.signature.missing.close
+;; TEST-QUALITY: diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-READER-ERROR: Expected ')' to close function signature
+;; TEST-READER-PATH: reader.c:2661 parser.function-signature
+;; TEST-CODEGEN-PATH: diagnostic.parser.function-signature
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-COVERAGE: reader.c:2661 Expected ')' to close function signature
+;; TEST-USES-ATOM: atom.reader.error.reader.function.signature.missing.close
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-USES-ATOM: atom.reader.error.family.parser.function.signature
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-REFINES: atom.reader.error
+;; TEST-MENU: errors/reader/signatures-params/atom.reader.error.reader.function.signature.missing.close
+;; TEST-MENU-PATH: codegen/errors/reader/signatures-params/atom.reader.error.reader.function.signature.missing.close
+;; TEST-ATOM-LEAF: atom.reader.error.reader.function.signature.missing.close
+;; TEST-CLI-TARGET: codegen errors reader signatures-params
+
+(module Main)
+(define (bad [x : Int] -> Int x)

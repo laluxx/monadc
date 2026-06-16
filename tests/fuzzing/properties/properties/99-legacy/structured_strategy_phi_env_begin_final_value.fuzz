@@ -1,0 +1,15 @@
+name: structured_strategy_phi_env_begin_final_value
+section: current-strategy-phi-env
+tier: stable
+kind: law
+features: begin, sequence, strategy
+compiler-path: codegen.sequence, reader.ast_begin, runner.strategy_arg, runner.typed_generator
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.begin, atom.control.do, atom.core.equality, atom.core.plus
+related-properties: signal_atom_do_last_value, signal_atom_equality_reflexive, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero
+args: a:Int@if+phi+env b:Int@with+do p:Bool@logic+if
+type: Bool
+expect: True
+description: V10 strategy property begin_final_value generated with phi_env arguments to stress compiler dispatch, envs, and PHI lowering.
+law: (= (begin {p} {a} (+ {a} {b})) (+ {a} {b}))

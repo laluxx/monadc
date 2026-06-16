@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-count-string
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Count function on string literals returns character count.
-;; TEST-ATOM: (count "hello") evaluates to 5.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (count "hello"))

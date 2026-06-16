@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.deep.deep_ratio_comparison_and_arith
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-SUBSET: ratio
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.operators.ratio.deep.ratio.comparison.and.arith
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise ratio runtime arithmetic and comparison.
+;; TEST-ATOM: Ratio runtime values should compose through arithmetic and equality.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:TYPE_RATIO runtime value/show branches
+
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/ratio/atom.codegen.operators.ratio.deep.ratio.comparison.and.arith
+;; TEST-MENU-PATH: codegen/branches/operators/ratio/atom.codegen.operators.ratio.deep.ratio.comparison.and.arith
+;; TEST-ATOM-LEAF: atom.codegen.operators.ratio.deep.ratio.comparison.and.arith
+;; TEST-CLI-TARGET: codegen branches operators ratio
+(module Main)
+(show (+ 1/2 1/3))
+(show (- 1/2 1/3))
+(show (= (* 2/3 3/2) 1))

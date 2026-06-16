@@ -1,0 +1,32 @@
+;; TEST-ID: tests.codegen.reader-error.reader-match-missing-close
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: reader-errors/special-forms
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.reader-error-coverage
+;; TEST-PURPOSE: Trigger and pin diagnostic: Expected ')' to close match expression
+;; TEST-ATOM: atom.reader.error.reader.match.missing.close
+;; TEST-CODEGEN-ATOM: atom.reader.error.reader.match.missing.close
+;; TEST-QUALITY: diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-READER-ERROR: Expected ')' to close match expression
+;; TEST-READER-PATH: reader.c:3326 parser.match
+;; TEST-CODEGEN-PATH: diagnostic.parser.match
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-COVERAGE: reader.c:3326 Expected ')' to close match expression
+;; TEST-USES-ATOM: atom.reader.error.reader.match.missing.close
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-USES-ATOM: atom.reader.error.family.parser.match
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-REFINES: atom.reader.error
+;; TEST-MENU: errors/reader/special-forms/atom.reader.error.reader.match.missing.close
+;; TEST-MENU-PATH: codegen/errors/reader/special-forms/atom.reader.error.reader.match.missing.close
+;; TEST-ATOM-LEAF: atom.reader.error.reader.match.missing.close
+;; TEST-CLI-TARGET: codegen errors reader special-forms
+
+(module Main)
+(match 1 with [1 -> 1]

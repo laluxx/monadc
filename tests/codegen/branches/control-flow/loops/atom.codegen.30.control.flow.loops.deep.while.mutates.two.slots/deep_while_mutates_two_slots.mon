@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.deep.deep_while_mutates_two_slots
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SUBSET: loops
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.loops.deep.while.mutates.two.slots
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise while loop with two mutable variables.
+;; TEST-ATOM: Loop body should preserve updates to multiple slots.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow, atom.codegen.subset.loops
+;; TEST-COVERAGE: codegen.c:while loop body multiple stores
+;; TEST-MENU: branches/control-flow/loops/atom.codegen.30.control.flow.loops.deep.while.mutates.two.slots
+;; TEST-MENU-PATH: codegen/branches/control-flow/loops/atom.codegen.30.control.flow.loops.deep.while.mutates.two.slots
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.loops.deep.while.mutates.two.slots
+;; TEST-CLI-TARGET: codegen branches control-flow loops
+
+(module Main)
+(define i 0)
+(define s 0)
+(while (< i 3) (begin (set! i (+ i 1)) (set! s (+ s i))))
+(show i)
+(show s)

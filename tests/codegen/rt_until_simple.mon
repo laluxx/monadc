@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-until-simple
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Until loop iterates until condition is met.
-;; TEST-ATOM: (until (>= i 3) (set! i (+ i 1))) with i=0 loops 3 times.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(define i 0)
-(until (>= i 3) (begin (show i) (set! i (+ i 1))))

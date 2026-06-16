@@ -16,17 +16,23 @@ Test coverage: the =rt_codegen_err_*.mon= diagnostic fixture pattern
 path. The =??= null-coalescing operator is verified by =rt_null_coalesce.mon=.
 See [[file:../tests/codegen/rt_codegen_err_*.mon][tests/codegen/rt_codegen_err_*.mon]].
 
-MonadC provides several mechanisms for handling and signalling errors, from
+This page covers runtime error handling in Monad: the =Error= type,
+=error= builtin, =undefined=, the =??= operator, Option/Result patterns,
+and =assert-eq=.
+
+Monad provides several mechanisms for handling and signalling errors, from
 compiler diagnostics to runtime error values.
 
-* Compiler Error Diagnostics
+For compiler error message format and diagnostic patterns, see [[file:errors.org][Diagnostics]].
+
+1. Compiler Error Diagnostics
 
 Compiler diagnostics are treated as semantic relations between invalid source
 forms and explicit compiler errors
 ([[file:../context/language.org::codegen-diagnostics][context/language.org]]).
 Each stable codegen error path should have a focused expected-failure fixture.
 
-** Diagnostic fixture pattern
+1.1 Diagnostic fixture pattern
 
 The =tests/codegen/rt_codegen_err_*.mon= files are the diagnostic fixture
 pattern. Each fixture covers one compiler error per file:
@@ -57,32 +63,58 @@ Extended diagnostic coverage also includes codegen guard branches for:
 
 [[file:../tests/codegen/rt_codegen_err_*.mon][tests/codegen/rt_codegen_err_*.mon]]
 
-** Parser error prefix
+For the full list of error patterns by compiler layer, see [[file:errors.org][Diagnostics # Common Error Patterns]].
+
+1.2 Parser error prefix
 
 The parser uses =Error:= prefix for user-facing messages and =[internal]= for
-internal compiler errors. See [[file:errors.org][CLI Errors]] for the full
+internal compiler errors. See [[file:errors.org][Diagnostics]] for the full
 list of error codes.
 
-* Runtime Error Handling
+2. Runtime Error Handling
 
-** Error (type)
+2.1 Error (type)
 
 =(data Error String)= — a simple error type carrying a message string.
 
-** error (builtin)
+2.2 error (builtin)
 
 =(error "message")= — halts the program at runtime. Use for unrecoverable
 errors. Codegen emits a call to =rt_error= which prints the message and calls
 =exit(1)= ([[file:../codegen.c::6604]]).
 
-** undefined
+#+BEGIN_SRC monad
+(error "fatal: disk full")
+#+END_SRC
+
+#+BEGIN_SRC wisp
+error "fatal: disk full"
+#+END_SRC
+
+2.3 undefined
 
 =(undefined)= — placeholder for unimplemented branches. Codegen emits an LLVM
 =unreachable= instruction or a call to =rt_undefined= depending on context
 ([[file:../codegen.c::6685]]). Non-exhaustive pattern matches emit =(undefined)=
 as their fallback.
 
-* ?? (null-coalescing)
+#+BEGIN_SRC monad
+(define (fib n)
+  (match n
+    (0 1)
+    (1 1)
+    (_ (undefined))))  ;; placeholder
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define fib n
+  match n
+    0 1
+    1 1
+    _ undefined  ;; placeholder
+#+END_SRC
+
+3. ?? (null-coalescing)
 
 =(?? expr default)= ([[file:../codegen.c::5763]]) returns =expr= if not =nil=,
 =default= otherwise.
@@ -103,7 +135,19 @@ Implementation: evaluates =lhs=, checks nil via =rt_value_is_nil=, branches to
 =rhs= or returns =lhs= unwrapped. Scalar types (Int, Float, Bool, Char) are
 never nil and skip the check entirely.
 
-* Pattern: Option type with match
+For the conditionals reference (if, unless, etc.), see [[file:conditionals.org][Conditionals]].
+For the ?? operator in the context of optional values, see [[file:maybe.org][Maybe (Option)]].
+
+Key Points:
+- =(error "msg")= halts the program unconditionally = use for unrecoverable failures
+- =(undefined)= is a placeholder for unimplemented branches, emits LLVM =unreachable=
+- =(?? expr default)= returns =expr= if not =nil=, =default= otherwise
+- Debug mode uses fat pointers for nil tracing; release mode is a single null check
+- =(assert-eq expected actual)= is the primary test assertion, used in codegen fixtures
+
+See also: [[file:conditionals.org][Conditionals]]
+
+4. Pattern: Option type with match
 
 The =(Option a)= type provides a safe return type for fallible
 operations. See [[file:maybe.org][Maybe (Option)]] for the full reference.
@@ -120,7 +164,9 @@ define safe-div a b -> (Option Int)
     Some (/ a b)
 #+END_SRC
 
-* Pattern: Result pattern
+For pattern matching syntax, see [[file:patterns.org][Patterns]].
+
+5. Pattern: Result pattern
 
 Use =(Error String)= for operations that need error messages:
 
@@ -136,7 +182,7 @@ define parse-int s -> (Result Int String)
 
 See [[file:result.org][Result]] for the full reference.
 
-* Debug vs Release nil behaviour
+6. Debug vs Release nil behaviour
 
 - **Debug (fat pointer):** raw pointer + static string table baked into the
   binary. =nil= carries a source-location tag, enabling trace output without
@@ -144,7 +190,7 @@ See [[file:result.org][Result]] for the full reference.
 - **Release (thin pointer):** =??= is a single null check; the string table is
   stripped entirely. No trace, no overhead.
 
-** Nil Bubble Tracing (design in progress)
+6.1 Nil Bubble Tracing (design in progress)
 
 In debug mode, a nil value propagating through chained calls carries an origin
 trace. When caught by =??=, the trace can report where the nil came from:
@@ -159,13 +205,44 @@ trace. When caught by =??=, the trace can report where the nil came from:
 
 The trace is recorded via source-location tags in the fat pointer metadata.
 
-* assert-eq (test assertion)
+For debug vs release build modes, see [[file:build.org][Build System # Three Build Modes]].
+For the runtime value system, see [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]].
+
+See also: [[file:build.org][Build System]]
+
+7. assert-eq (test assertion)
 
 =(assert-eq expected actual)= — the primary test assertion primitive. Codegen
 evaluates both arguments and calls =rt_equal_p= to compare them. If comparison
 fails, it prints a diagnostic with =show= of both values and reports the
 failure location ([[file:../codegen.c::6431]]). Used extensively in codegen
 test fixtures.
+
+#+BEGIN_SRC monad
+(assert-eq 4 (* 2 2))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+assert-eq 4 (* 2 2)
+#+END_SRC
+
+For the embedded test block syntax, see [[file:testing.org][Testing # Embedded Tests Blocks]].
+
+See also: [[file:testing.org][Testing]]
+
+* Implementation Notes
+
+Error handling source components:
+
+| Component | Source | Role |
+|-----------+--------+------|
+| =rt_error= | [[file:../codegen.c::6604][codegen.c:6604]] | Fatal runtime error emission |
+| =rt_undefined= | [[file:../codegen.c::6685][codegen.c:6685]] | Unreachable / unimplemented fallback |
+| =??= operator | [[file:../codegen.c::5763][codegen.c:5763]] | Null-coalescing dispatch |
+| =rt_equal_p= | [[file:../codegen.c::6431][codegen.c:6431]] | Equality check for =assert-eq= |
+| =rt_value_is_nil= | [[file:../runtime.c][runtime.c]] | Nil check for =??= |
+| =g_assert_jmp_ptr= | [[file:../signal.c][signal.c]] | Assertion longjmp target |
+| Debug fat pointer | [[file:../context/language.org::runtime-value-system][context/language.org]] | Source-location tagged =nil= |
 
 * Related Pages
 
@@ -174,12 +251,28 @@ test fixtures.
 - [[file:result.org][Result]] -- Result type with diagnostic messages
 - [[file:conditionals.org][Conditionals]] -- ?? null-coalescing operator
 - [[file:testing.org][Testing]] -- assert-eq for test assertions
+- [[file:patterns.org][Patterns]] -- pattern matching for error cases
+- [[file:build.org][Build System]] -- debug vs release mode
+
+* Further Reading
+
+- [[file:../context/language.org::codegen-diagnostics][context/language.org — Codegen Diagnostics]]
+- [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]]
+- [[file:errors.org][Diagnostics]] — error codes and diagnostics
+- [[file:maybe.org][Maybe (Option)]] — optional values
+- [[file:result.org][Result]] — error type with messages
+- [[file:../tests/codegen/rt_codegen_err_*.mon][tests/codegen/rt_codegen_err_*.mon]] — diagnostic fixtures
+- [[file:../context/codegen.org][context/codegen.org]] — codegen implementation
+- [[file:../context/tests.org][context/tests.org]] — test fixture architecture
 
 * Context Links
 
 - [[file:../context/language.org::codegen-diagnostics][context/language.org — Codegen Diagnostics]]
 - [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]]
-- [[file:errors.org][CLI Errors]] — error codes and diagnostics
+- [[file:errors.org][Diagnostics]] — error codes and diagnostics
 - [[file:maybe.org][Maybe (Option)]] — optional values
 - [[file:result.org][Result]] — error type with messages
 - [[file:../tests/codegen/rt_codegen_err_*.mon][tests/codegen/rt_codegen_err_*.mon]] — diagnostic fixtures
+- [[file:../context/codegen.org][context/codegen.org]] — codegen implementation
+- [[file:../context/tests.org][context/tests.org]] — test fixture architecture
+- [[file:../context/repl.org][context/repl.org]] — REPL error recovery

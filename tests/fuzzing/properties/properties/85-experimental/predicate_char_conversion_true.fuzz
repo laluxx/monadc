@@ -1,0 +1,14 @@
+name: predicate_char_conversion_true
+section: predicates-conversions
+tier: experimental
+kind: law
+features: arithmetic, predicate, predicates
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.type_predicate
+signal: low
+corpus-role: legacy-smoke
+uses-atoms: atom.infer.predicate
+args: 
+type: Bool
+expect: True
+description: Char? must accept a Char conversion result.
+law: (Char? (Char 65))

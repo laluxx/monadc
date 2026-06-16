@@ -1,0 +1,40 @@
+;; TEST-ID: tests.codegen.menu.errors.reader.numeric.periodic.empty.block.variant.3.069
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: errors
+;; TEST-SUBSET: reader/numeric.periodic.empty-block.variant-3
+;; TEST-MENU: errors/reader/numeric.periodic.empty-block.variant-3/atom.menu.error.reader.numeric.periodic.empty-block.variant-3.069
+;; TEST-MENU-PATH: codegen/errors/reader/numeric.periodic.empty-block.variant-3/atom.menu.error.reader.numeric.periodic.empty-block.variant-3.069
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.error-menu
+;; TEST-PURPOSE: Pin reader.c diagnostic: Periodic decimal repeating block cannot be empty
+;; TEST-ATOM: atom.menu.error.reader.numeric.periodic.empty-block.variant-3.069
+;; TEST-CODEGEN-ATOM: atom.menu.error.reader.numeric.periodic.empty-block.variant-3.069
+;; TEST-ATOM-LEAF: atom.menu.error.reader.numeric.periodic.empty-block.variant-3.069
+;; TEST-QUALITY: menu-error-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ERROR-STAGE: reader
+;; TEST-ERROR-FAMILY: numeric.periodic.empty-block.variant-3
+;; TEST-ERROR-MESSAGE: Periodic decimal repeating block cannot be empty
+;; TEST-ERROR-SOURCE: reader.c
+;; TEST-ERROR-PATH: reader.c:1604
+;; TEST-CODEGEN-PATH: diagnostic.reader.numeric.periodic.empty-block.variant-3
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-TAG: menu
+;; TEST-COVERAGE: reader.c:1604 Periodic decimal repeating block cannot be empty
+;; TEST-USES-ATOM: atom.menu.error.reader.numeric.periodic.empty-block.variant-3.069
+;; TEST-USES-ATOM: atom.error.reader
+;; TEST-USES-ATOM: atom.error.reader.numeric.periodic.empty-block.variant-3
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-DEPENDS-ON: atom.reader.lex.parse
+;; TEST-REFINES: atom.error.reader
+;; TEST-REFINES: atom.error.reader.numeric.periodic.empty-block.variant-3
+;; TEST-REFINES: atom.reader.error
+;; TEST-RELATED: atom.codegen.error.menu
+;; TEST-CLI-TARGET: codegen errors reader reader
+
+(module Main)
+;; reader menu variant 3
+(show 12.5()

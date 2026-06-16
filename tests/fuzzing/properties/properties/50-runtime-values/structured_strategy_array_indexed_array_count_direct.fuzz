@@ -1,0 +1,15 @@
+name: structured_strategy_array_indexed_array_count_direct
+section: current-strategy-array-indexed
+tier: stable
+kind: law
+features: array, count, strategy
+compiler-path: codegen.array_literal, infer.array, reader.array_literal, runner.strategy_arg, runner.typed_generator
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.core.plus, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero
+args: a:Int@array+edge b:Int@tiny+array p:Bool@logic+if
+type: Bool
+expect: True
+description: V10 strategy property array_count_direct generated with array_indexed arguments to stress compiler dispatch, envs, and PHI lowering.
+law: (= (count [{a} {b} (+ {a} {b})]) 3)

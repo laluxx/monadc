@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.deep.deep_if_phi_nested_types
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SUBSET: if-cond-phi
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.control.flow.if.cond.phi.deep.if.phi.nested.types
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise nested if branch merging for Int and Bool.
+;; TEST-ATOM: if PHI branches should merge same-typed values.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:AST_IF branch/PHI construction
+
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/if-cond-phi/atom.codegen.control.flow.if.cond.phi.deep.if.phi.nested.types
+;; TEST-MENU-PATH: codegen/branches/control-flow/if-cond-phi/atom.codegen.control.flow.if.cond.phi.deep.if.phi.nested.types
+;; TEST-ATOM-LEAF: atom.codegen.control.flow.if.cond.phi.deep.if.phi.nested.types
+;; TEST-CLI-TARGET: codegen branches control-flow if-cond-phi
+(module Main)
+(show (if True (if False 1 12) 0))
+(show (if False 1 (+ 4 5)))
+(show (if (> 4 3) True False))

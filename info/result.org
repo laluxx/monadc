@@ -9,16 +9,22 @@
 :CONTEXT:  monadc.context.language, monadc.context.codegen-ops
 :END:
 
-[[file:index.org][<- Back to Index]] · [[file:maybe.org][Maybe]] · [[file:error-handling.org][Error Handling]] · [[file:patterns.org][Pattern Matching]] · [[file:data.org][Data Types]] · [[file:core.org][Core Library]] · [[file:testing.org][Testing]]
+[[file:index.org][<- Back to Index]] · [[file:maybe.org][Maybe]] · [[file:error-handling.org][Error Handling]] · [[file:patterns.org][Pattern Matching]] · [[file:data.org][Data Types]] · [[file:core.org][Core Library]] · [[file:testing.org][Testing]] · [[file:functional-programming.org][Functional Programming]] · [[file:conditionals.org][Conditionals]]
 
 Test coverage: =(Error String)= is exercised in diagnostic fixture
 patterns (see =rt_codegen_err_*.mon=).
+
+Monad provides the =Error= type and the =Result= pattern for fallible operations.
 
 =Result= represents a computation that can fail with an error message.
 It is the standard pattern for fallible operations where a bare =nil=
 is insufficient — the error carries a =String= message.
 
-* Error Type Definition
+For the optional-value variant (no error message), see
+[[file:maybe.org][Maybe (Option)]]. For runtime error mechanisms, see
+[[file:error-handling.org][Error Handling]].
+
+* 1. Error Type Definition
 
 #+BEGIN_SRC monad
 (data Error String)
@@ -38,7 +44,17 @@ define parse-error (Error "invalid input")
 define file-error  (Error "file not found")
 #+END_SRC
 
-* Usage Pattern: Result
+=Error= wraps a diagnostic =String= message. It is a single-constructor
+ADT with one field. See [[file:data.org][Data Types]] for ADT definition syntax.
+
+*** Key Points
+- =Error= is a simple ADT wrapping a =String= message
+- No special compiler support — standard tagged union
+- Prefer =Error= over bare strings for type-safe error handling
+
+See also: [[file:data.org][Data Types]]
+
+* 2. Usage Pattern: Result
 
 #+BEGIN_SRC monad
 (define (parse-int s -> (Result Int String))
@@ -54,7 +70,16 @@ Where =Result= is used as a general type for "ok or error" returns.
 The ok variant carries the success value; the error variant carries
 a diagnostic message.
 
-* error (Builtin)
+For pattern matching on Result types, see [[file:patterns.org][Pattern Matching]].
+
+*** Key Points
+- =Result a String= is the standard fallible-return pattern
+- =Error String= carries the message, ok variant carries the value
+- Type-safe: the success type and error type are both explicit
+
+See also: [[file:patterns.org][Pattern Matching]]
+
+* 3. error (Builtin)
 
 The =(error "message")= builtin halts the program at runtime:
 
@@ -71,9 +96,17 @@ define assert-nonzero n
 #+END_SRC
 
 Codegen emits a call to =rt_error= which prints the message and calls
-=exit(1)= ([[file:../codegen.c::6604]]).
+=exit(1)= ([[file:../codegen.c::6604]]). See
+[[file:../context/codegen-ops.org][context/codegen-ops.org]] for the error codegen.
 
-* undefined (Builtin)
+*** Key Points
+- =(error msg)= is an unrecoverable halt — like Rust's =panic!= or Python's =raise=
+- Use =Error String= ADT for recoverable errors; =error= for unrecoverable assertions
+- Codegen calls =rt_error= which prints then calls =exit(1)=
+
+See also: [[file:error-handling.org][Error Handling]]
+
+* 4. undefined (Builtin)
 
 =(undefined)= is a placeholder for unimplemented branches:
 
@@ -92,9 +125,16 @@ match x
 Codegen emits an LLVM =unreachable= instruction or a call to
 =rt_undefined= depending on context
 ([[file:../codegen.c::6685]]). Non-exhaustive pattern matches emit
-=(undefined)= as their fallback.
+=(undefined)= as their fallback. See [[file:patterns.org][Pattern Matching]].
 
-* ?? With Result
+*** Key Points
+- =(undefined)= marks unreachable or unimplemented code paths
+- Codegen uses LLVM =unreachable= (UB) or =rt_undefined= (runtime trap)
+- Non-exhaustive =match= uses =(undefined)= as implicit fallback
+
+See also: [[file:patterns.org][Pattern Matching]]
+
+* 5. ?? With Result
 
 The null-coalescing operator =??= provides a default:
 
@@ -106,7 +146,16 @@ The null-coalescing operator =??= provides a default:
 ?? (parse-int "abc") 0
 #+END_SRC
 
-* Related: Result in Other Languages
+See [[file:conditionals.org][Conditionals]] for the =??= operator reference.
+
+*** Key Points
+- =??= unwraps a successful result or returns the default
+- Works identically for =Option= and =Result=
+- Discards the error message — use =match= when you need to inspect the error
+
+See also: [[file:conditionals.org][Conditionals]]
+
+* 6. Related: Result in Other Languages
 
 | Language   | Type                             |
 |------------+----------------------------------|
@@ -114,19 +163,60 @@ The null-coalescing operator =??= provides a default:
 | Rust       | =Result<T, E>=                  |
 | Haskell    | =Either e a=                    |
 | OCaml      | =('a, 'b) result=               |
+| Java       | No direct equivalent             |
 
-* Related Pages
+*** Key Points
+- =(Result a String)= is the Monad equivalent of Rust's =Result<T, E>= or Haskell's =Either e a=
+- Error type is always =String= currently — future versions may generalise the error type
+
+* 7. Implementation Notes
+
+Key source locations for error/result handling:
+
+| Source | Key Symbols / Sections |
+|--------+-----------------------|
+| [[file:../codegen.c:6604][codegen.c:6604]] | =rt_error= — runtime error call generation |
+| [[file:../codegen.c:6685][codegen.c:6685]] | =rt_undefined= — unreachable code generation |
+| [[file:../codegen.c:6431][codegen.c:6431]] | =rt_equal_p= — assert-eq codegen |
+| [[file:../runtime.c][runtime.c]] | =rt_error=, =__monad_runtime_error= implementations |
+| [[file:../infer.c][infer.c]] | Type inference for error and undefined |
+| [[file:../codegen-ops.c][codegen-ops.c]] | Codegen operations for error and assertion |
+| [[file:../context/codegen-ops.org][context/codegen-ops.org]] | Error codegen operations, runtime diagnostics |
+| [[file:../context/language.org][context/language.org]] | Error dispatch, runtime diagnostics semantics |
+| [[file:../context/runtime.org][context/runtime.org]] | Runtime error handling, signal handlers |
+
+Related context documents:
+
+- [[file:../context/language.org][context/language.org]] — error dispatch, runtime diagnostics
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — codegen operations for error and undefined
+- [[file:../context/pmatch.org][context/pmatch.org]] — pattern match compilation (non-exhaustive fallback)
+- [[file:../context/infer.org][context/infer.org]] — type inference
+- [[file:../context/runtime.org][context/runtime.org]] — runtime error handling
+- [[file:../context/types.org][context/types.org]] — type system representation
+
+* 8. Related Pages
 
 - [[file:maybe.org][Maybe]] -- Option type for optional values
 - [[file:error-handling.org][Error Handling]] -- error handling patterns
 - [[file:patterns.org][Pattern Matching]] -- pattern matching on Result
 - [[file:data.org][Data Types]] -- ADT definition of Result
 - [[file:testing.org][Testing]] -- assert-eq with Result
+- [[file:core.org][Core Library]] -- built-in function overview
+- [[file:conditionals.org][Conditionals]] -- ?? null-coalescing operator
+- [[file:functional-programming.org][Functional Programming]] -- functional error handling
+- [[file:purity.org][Purity]] -- purity and error handling
+- [[file:../context/language.org][context/language.org]] -- error dispatch, runtime diagnostics
 
-* Context Links
+* 9. Further Reading
 
 - [[file:maybe.org][Maybe (Option)]] — optional values without error messages
 - [[file:error-handling.org][Error Handling]] — runtime error mechanisms
 - [[file:data.org][Data Types]] — algebraic data type system
 - [[file:patterns.org][Pattern Matching]] — match expressions
 - [[file:../context/language.org][context/language.org]] — error dispatch, runtime diagnostics
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — codegen operations
+- [[file:../context/pmatch.org][context/pmatch.org]] — pattern match compiler
+- [[file:../context/infer.org][context/infer.org]] — type inference
+- [[file:../context/runtime.org][context/runtime.org]] — runtime error handling
+- [[file:../context/types.org][context/types.org]] — type system representation
+- [[file:testing.org][Testing]] — assert-eq and test framework

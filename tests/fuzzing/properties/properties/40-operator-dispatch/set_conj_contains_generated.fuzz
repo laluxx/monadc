@@ -1,0 +1,14 @@
+name: set_conj_contains_generated
+section: collections
+tier: stable
+kind: law
+features: arithmetic, collections, predicate, set
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, infer.arithmetic, infer.type_predicate, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.infer.predicate
+args: a:Int
+type: Bool
+expect: True
+description: conj on an empty set must make the inserted generated value visible to contains?.
+law: (contains? (conj (set) {a}) {a})

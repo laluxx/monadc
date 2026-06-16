@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-let-multi-bind-show
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.lexical.scope.rt.let.multi.bind.show
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: lexical-scope
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Let with multiple bindings shows each value.
+;; TEST-ATOM: (let ([x 1] [y 2]) ...)
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/lexical-scope branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/lexical-scope/atom.codegen.30.control.flow.lexical.scope.rt.let.multi.bind.show
+;; TEST-MENU-PATH: codegen/branches/control-flow/lexical-scope/atom.codegen.30.control.flow.lexical.scope.rt.let.multi.bind.show
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.lexical.scope.rt.let.multi.bind.show
+;; TEST-CLI-TARGET: codegen branches control-flow lexical-scope
+(module Main)
+(let ([x 1] [y 2]) (begin (show x) (show y)))

@@ -1,0 +1,35 @@
+;; TEST-ID: tests.codegen.branch.data-adt-match-and-field-load
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SUBSET: layouts-fields
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise ADT construction with field payload and pattern matching returning field data.
+;; TEST-ATOM: atom.codegen.adt.match-field-load
+;; TEST-CODEGEN-ATOM: atom.codegen.adt.match-field-load
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.adt.constructor.payload
+;; TEST-CODEGEN-PATH: codegen.match.adt
+;; TEST-CODEGEN-PATH: codegen.adt.field-load
+;; TEST-DEPENDS-ON: atom.codegen.adt.tag-and-show-two-constructors
+;; TEST-TAG: run
+;; TEST-TAG: adt
+;; TEST-TAG: match
+;; TEST-COVERAGE: codegen.c:3554 ADT constructor lookup
+;; TEST-COVERAGE: codegen.c:1267-1395 ADT layout/tag field branches
+;; TEST-COVERAGE: pmatch.c integration through codegen
+
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/layouts-fields/atom.codegen.adt.match-field-load
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts-fields/atom.codegen.adt.match-field-load
+;; TEST-ATOM-LEAF: atom.codegen.adt.match-field-load
+;; TEST-CLI-TARGET: codegen branches data-layout layouts-fields
+(module Main)
+(data Maybe Nothing | Just Int)
+(define (getOr [m : Maybe] [d : Int] -> Int)
+  (match m with | Nothing -> d | (Just x) -> x))
+(show (getOr Nothing 9))
+(show (getOr (Just 4) 9))

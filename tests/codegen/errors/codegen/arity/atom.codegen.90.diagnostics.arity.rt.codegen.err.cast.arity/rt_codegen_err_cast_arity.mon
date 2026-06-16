@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-cast-arity
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.90.diagnostics.arity.rt.codegen.err.cast.arity
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: arity
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen enforces type cast arity.
+;; TEST-ATOM: (Int 1 2) must fail because casts take exactly one argument.
+;; TEST-EXPECT: fail:compile
+
+;; TEST-COVERAGE: codegen.c:90-diagnostics/arity branch family
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/arity/atom.codegen.90.diagnostics.arity.rt.codegen.err.cast.arity
+;; TEST-MENU-PATH: codegen/errors/codegen/arity/atom.codegen.90.diagnostics.arity.rt.codegen.err.cast.arity
+;; TEST-ATOM-LEAF: atom.codegen.90.diagnostics.arity.rt.codegen.err.cast.arity
+;; TEST-CLI-TARGET: codegen errors codegen arity
+(module Main)
+(show (Int 1 2))

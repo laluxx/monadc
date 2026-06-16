@@ -1,0 +1,36 @@
+;; TEST-ID: tests.codegen.type.hm.type.app.constructor.mismatch.000
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: types
+;; TEST-SUBSET: hm/type-app/constructor-mismatch
+;; TEST-QUALITY: type-system-negative-regression
+;; TEST-CODEGEN-ATOM: atom.type.hm.type-app.constructor-mismatch.000
+;; TEST-TYPE-ATOM: atom.type.hm.type-app.constructor-mismatch.000
+;; TEST-CONTEXT: monadc.context.language.codegen-type-system-corpus, monadc.context.language.hm-dependent-type-coverage
+;; TEST-PURPOSE: HM type-application checker rejects incompatible ADT/type constructor applications.
+;; TEST-ATOM: TYPE_APP constructor names must agree or explicitly match layout erasure rules.
+;; TEST-EXPECT: fail:compile
+;; TEST-MENU: types/hm/type-app/constructor-mismatch/atom.type.hm.type-app.constructor-mismatch.000
+;; TEST-MENU-PATH: codegen/types/hm/type-app/constructor-mismatch/atom.type.hm.type-app.constructor-mismatch.000
+;; TEST-ATOM-LEAF: atom.type.hm.type-app.constructor-mismatch.000
+;; TEST-CLI-TARGET: codegen types hm type-app constructor-mismatch
+;; TEST-INFER-PATH: infer.c:TYPE_APP ~ TYPE_APP constructor mismatch
+;; TEST-ERROR-STAGE: infer
+;; TEST-ERROR-FAMILY: hm.type-app-mismatch
+;; TEST-ERROR-MESSAGE: type error: cannot unify
+;; TEST-COVERAGE: infer.c:569 TYPE_APP constructor mismatch cannot unify
+;; TEST-COVERAGE: infer.c:TYPE_APP/TYPE_LAYOUT compatibility
+;; TEST-USES-ATOM: atom.codegen.category.types
+;; TEST-USES-ATOM: atom.type.system
+;; TEST-USES-ATOM: atom.type.hm.type-app
+;; TEST-USES-ATOM: atom.codegen.adt.constructor
+;; TEST-DEPENDS-ON: atom.codegen.data.adt
+;; TEST-REFINES: atom.type.hm.type-app-mismatch
+
+(module Main)
+(data Maybe Nothing | Just Int)
+(data Either Lefty String)
+(define (hm_app_mismatch_00 [m : Maybe] -> Int) (__adt_tag m))
+(show (hm_app_mismatch_00 (Lefty "x")))

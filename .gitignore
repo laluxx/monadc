@@ -8,3 +8,5 @@ libmonad.a
 tests/.test-results.json
 tests/codegen/rt_*
 tests/codegen/*.desugar
+__pycache__
+.pytest_cache

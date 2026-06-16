@@ -1,0 +1,27 @@
+;; TEST-ID: tests.codegen.branch.control-with-multiple-bindings-order
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: lexical-scope
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise with binding order where later bindings depend on earlier bindings.
+;; TEST-ATOM: atom.codegen.control.with-binding-order
+;; TEST-CODEGEN-ATOM: atom.codegen.control.with-binding-order
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.with.binding-order
+;; TEST-CODEGEN-PATH: env.child.lookup
+;; TEST-DEPENDS-ON: atom.codegen.operator.plus
+;; TEST-TAG: run
+;; TEST-TAG: control
+;; TEST-TAG: with
+;; TEST-COVERAGE: codegen.c:8012-8047 with binding loop and child environment
+
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/lexical-scope/atom.codegen.control.with-binding-order
+;; TEST-MENU-PATH: codegen/branches/control-flow/lexical-scope/atom.codegen.control.with-binding-order
+;; TEST-ATOM-LEAF: atom.codegen.control.with-binding-order
+;; TEST-CLI-TARGET: codegen branches control-flow lexical-scope
+(module Main)
+(show (with [x 2 y (+ x 3) z (+ y 4)] (+ x (+ y z))))

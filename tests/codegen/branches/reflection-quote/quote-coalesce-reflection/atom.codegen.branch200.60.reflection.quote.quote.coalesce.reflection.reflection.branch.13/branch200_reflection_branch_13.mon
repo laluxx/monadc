@@ -1,0 +1,32 @@
+;; TEST-ID: tests.codegen.branch200.60.reflection.quote.quote.coalesce.reflection.reflection.branch.13
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 60-reflection-quote
+;; TEST-SUBSET: quote-coalesce-reflection
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.branch200.60.reflection.quote.quote.coalesce.reflection.reflection.branch.13
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: coalesce over quoted nil symbol is non-nil value
+;; TEST-ATOM: atom.codegen.branch200.60.reflection.quote.quote.coalesce.reflection.reflection.branch.13
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.quote
+;; TEST-CODEGEN-PATH: codegen.quasiquote
+;; TEST-CODEGEN-PATH: codegen.null-coalesce
+;; TEST-CODEGEN-PATH: codegen.reflection
+;; TEST-COVERAGE: codegen.c:5795-5865 quasiquote branch
+;; TEST-COVERAGE: codegen.c:5872 quote branch
+;; TEST-COVERAGE: codegen.c:5934-6017 null coalescing branch
+;; TEST-COVERAGE: codegen.c:6566 code branch
+;; TEST-COVERAGE: codegen.c:6602 assert-eq branch
+
+;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote
+;; TEST-USES-ATOM: atom.codegen.subset.60.reflection.quote.quote.coalesce.reflection
+;; TEST-MENU: branches/reflection-quote/quote-coalesce-reflection/atom.codegen.branch200.60.reflection.quote.quote.coalesce.reflection.reflection.branch.13
+;; TEST-MENU-PATH: codegen/branches/reflection-quote/quote-coalesce-reflection/atom.codegen.branch200.60.reflection.quote.quote.coalesce.reflection.reflection.branch.13
+;; TEST-ATOM-LEAF: atom.codegen.branch200.60.reflection.quote.quote.coalesce.reflection.reflection.branch.13
+;; TEST-CLI-TARGET: codegen branches reflection-quote quote-coalesce-reflection
+
+(module Main)
+(show (?? (quote nil) "fallback"))

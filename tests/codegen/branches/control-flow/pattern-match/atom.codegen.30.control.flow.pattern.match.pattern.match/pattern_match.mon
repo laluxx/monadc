@@ -1,0 +1,29 @@
+;; TEST-ID: tests.codegen.pattern-match
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.pattern.match.pattern.match
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: pattern-match
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus, monadc.context.reader.match-syntax
+;; TEST-PURPOSE: Pattern matching compiles and evaluates clauses correctly.
+;; TEST-ATOM: (match 1 with | 0 -> 10 | 1 -> 20 | _ -> 30) evaluates to 20.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/pattern-match branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/pattern-match/atom.codegen.30.control.flow.pattern.match.pattern.match
+;; TEST-MENU-PATH: codegen/branches/control-flow/pattern-match/atom.codegen.30.control.flow.pattern.match.pattern.match
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.pattern.match.pattern.match
+;; TEST-CLI-TARGET: codegen branches control-flow pattern-match
+(module Main)
+(show (match 1 with | 0 -> 10 | 1 -> 20 | _ -> 30))
+
+;; WISP:
+
+show match 1
+  with
+    0 -> 10
+    1 -> 20
+    _ -> 30

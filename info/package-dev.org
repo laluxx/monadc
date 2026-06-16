@@ -11,28 +11,33 @@
 
 [[file:index.org][<- Back to Index]] · [[file:build.org][Build System]] · [[file:modules.org][Modules]] · [[file:cli.org][CLI Reference]] · [[file:testing.org][Testing]] · [[file:stdlib.org][Standard Library]] · [[file:style.org][Style Guide]]
 
-* Quick Reference
+1. Quick Reference
 
-| Command                    | Description                        |
-|----------------------------+------------------------------------|
-| =monad new <name>=         | Create new package                 |
-| =monad build=              | Compile and link binary            |
-| =monad run=                | Build and execute                  |
-| =monad test <file>=        | Compile and run tests              |
-| =monad clean=              | Remove build artifacts             |
-| =monad install=            | Install to =~/.local/bin=          |
-| =package.yaml=             | Build manifest (YAML)              |
+| Command | Description |
+|----------------------------+--------------------------------------------|
+| =monad new <name>= | Create new package |
+| =monad build= | Compile and link binary |
+| =monad run= | Build and execute |
+| =monad test <file>= | Compile and run tests |
+| =monad clean= | Remove build artifacts |
+| =monad install= | Install to =~/.local/bin= |
+| =package.yaml= | Build manifest (YAML) |
 
 The scaffold created by =monad new <name>= produces this layout.
 For the build info resolution process (resolve_build_info, do_build),
 see [[file:../context/cli.org][context/cli.org]] and
 [[file:../context/buildsystem.org][context/buildsystem.org]].
 
+This page covers Monad package development: project layout, the
+=package.yaml= manifest, building, testing, and module resolution.
+
 Test coverage: project scaffolding is tested by the =cmd_new= handler
 in [[file:../cli.c::292][cli.c:292]]. Package builds are exercised through
 the =cmd_build= pipeline (cli.c:505).
 
-* Package Layout
+For all CLI subcommands, see [[file:cli.org][CLI Reference]].
+
+2. Package Layout
 
 The scaffold created by =monad new <name>= produces this layout:
 
@@ -45,7 +50,10 @@ The scaffold created by =monad new <name>= produces this layout:
   .gitignore
 #+END_SRC
 
-* The Build Manifest: =package.yaml=
+The entry point file must contain a module declaration. See [[file:modules.org][Module System]]
+for module declaration syntax.
+
+3. The Build Manifest: =package.yaml=
 
 The build system reads =package.yaml= from the project root (searching
 up to 5 parent directories). Format produced by =monad new=:
@@ -78,29 +86,31 @@ executables:
 
 Fields parsed by =resolve_build_info= ([[file:../cli.c::415]]):
 
-| Field                    | Required | Used For                          |
+| Field | Required | Used For |
 |--------------------------+----------+-----------------------------------|
-| =name=                   | Yes      | Package name (printed during build) |
-| =executables=            | Yes      | Defines binary name and entrypoint  |
-| ~  <exe>.main~            | No       | Entry file (=Main.mon= default)   |
-| ~  <exe>.source-dirs~    | No       | Source directory (=src= default)  |
-| =extra-source-files=     | No       | Reserved (currently unused)       |
-| =dependencies=           | No       | Reserved (currently unused)       |
-| =monad-options=          | No       | Extra flags passed to the compiler|
+| =name= | Yes | Package name (printed during build) |
+| =executables= | Yes | Defines binary name and entrypoint |
+| ~ <exe>.main~ | No | Entry file (=Main.mon= default) |
+| ~ <exe>.source-dirs~ | No | Source directory (=src= default) |
+| =extra-source-files= | No | Reserved (currently unused) |
+| =dependencies= | No | Reserved (currently unused) |
+| =monad-options= | No | Extra flags passed to the compiler |
 
 The author and maintainer fields are populated from =git config
 --global user.name= and =user.email= when scaffolding.
 
-* Building
+For the build system architecture and Makefile targets, see [[file:build.org][Build System]].
+
+4. Building
 
 Inside a project directory with =package.yaml=:
 
-| Command          | Behavior                                      |
+| Command | Behavior |
 |------------------+-----------------------------------------------|
-| =monad build=    | Compile sources, link binary to =build/<exe>= |
-| =monad run=      | Build then execute the binary                 |
-| =monad clean=    | Remove =build/=, =*.o=, =*.ll=, =*.s=         |
-| =monad install=  | Build (if needed), copy binary to =~/.local/bin= |
+| =monad build= | Compile sources, link binary to =build/<exe>= |
+| =monad run= | Build then execute the binary |
+| =monad clean= | Remove =build/=, =*.o=, =*.ll=, =*.s= |
+| =monad install= | Build (if needed), copy binary to =~/.local/bin= |
 
 The build pipeline (=cmd_build= → =resolve_build_info= → =do_build=):
 1. Locate =package.yaml= (walk up to 5 parent dirs)
@@ -110,7 +120,16 @@ The build pipeline (=cmd_build= → =resolve_build_info= → =do_build=):
 4. Invoke the compiler (=monad <main_file> -o build/<exe>=)
 5. Link runtime (handled internally by =compile_one= in =main.c=)
 
-* Module Resolution
+For the compilation pipeline stages, see [[file:build.org][Build System # Compilation Pipeline]].
+
+Key Points:
+- =monad build= compiles and links a standalone binary in =build/=
+- The pipeline auto-discovers =package.yaml= up to 5 parent directories
+- Source files found by exact path or recursive module name match
+- =monad run= combines build + execute; =monad clean= removes artifacts
+- =monad install= copies the binary to =~/.local/bin=
+
+5. Module Resolution
 
 Module resolution follows these steps ([[file:../cli.c::358]]):
 
@@ -121,30 +140,44 @@ Module resolution follows these steps ([[file:../cli.c::358]]):
 Only =.mon= files are recognized. Module names must match their
 file names (e.g., module =Foo= must be in =Foo.mon=).
 
-* Testing
+For full module resolution rules, export control, and import syntax,
+see [[file:modules.org][Module System]].
 
-| Command             | Behavior                                       |
+6. Testing
+
+| Command | Behavior |
 |---------------------+------------------------------------------------|
 | =monad test <file>= | Compile with =--test-run=, execute, delete test binary |
-| =monad --test <file>= | Compile with embedded tests, keep binary      |
+| =monad --test <file>= | Compile with embedded tests, keep binary |
 
 The test runner compiles the file, runs the produced test binary, and
 reports failure only on signals (SIGABRT from failed assertions).
 Normal exit with any code counts as a pass.
 
-* Versioning
+For the full test suite architecture and embedded test blocks,
+see [[file:testing.org][Testing]].
+
+7. Versioning
 
 No built-in package manager or version enforcement. Version strings
 in =package.yaml= are advisory. Package distribution is manual via
 git or tarball.
 
-* See Also
+For dependency management with core library constraints, see [[file:core.org][Core Library]].
 
-- [[file:build.org][Build System]]
-- [[file:modules.org][Module System]]
-- [[file:cli.org][CLI Reference]]
-- [[file:testing.org][Testing]]
-- [[file:stdlib.org][Standard Library]]
+* Implementation Notes
+
+Build orchestration and packaging:
+
+| Component | Source | Role |
+|-----------+--------+------|
+| =cmd_new= | [[file:../cli.c::292][cli.c:292]] | Scaffolds new package skeleton |
+| =cmd_build= | [[file:../cli.c::505][cli.c:505]] | Build command entry point |
+| =resolve_build_info= | [[file:../cli.c::415][cli.c:415]] | Parses =package.yaml= fields |
+| =do_build= | [[file:../buildsystem.c][buildsystem.c]] | Compiles and links |
+| =compile_one= | [[file:../main.c][main.c]] | Single-file compilation |
+| Module search | [[file:../cli.c::358][cli.c:358]] | Source-dirs resolution |
+| YAML walk | [[file:../cli.c][cli.c]] | Parent-directory search |
 
 * Related Pages
 
@@ -153,6 +186,16 @@ git or tarball.
 - [[file:cli.org][CLI Reference]] -- packaging commands
 - [[file:stdlib.org][Standard Library]] -- library dependencies
 - [[file:testing.org][Testing]] -- testing packages
+- [[file:style.org][Style Guide]] -- package code conventions
+
+* Further Reading
+
+- [[file:../context/buildsystem.org][context/buildsystem.org]] — build system internals
+- [[file:../context/cli.org][context/cli.org]] — CLI command dispatch
+- [[file:../context/module.org][context/module.org]] — module system implementation
+- [[file:../context/tests-arch.org][context/tests-arch.org]] — test architecture
+- [[file:../cli.c][cli.c]] — implementation of all commands
+- [[file:../buildsystem.c][buildsystem.c]] — build orchestrator
 
 * Context Links
 
@@ -161,3 +204,6 @@ git or tarball.
 - [[file:cli.org][CLI Reference]] — all subcommands and flags
 - [[file:../cli.c][cli.c]] — implementation of all commands above
 - [[file:../context/buildsystem.org][context/buildsystem.org]] — build system internals
+- [[file:../context/cli.org][context/cli.org]] — CLI command dispatch
+- [[file:../context/module.org][context/module.org]] — module resolution details
+- [[file:../buildsystem.c][buildsystem.c]] — build orchestrator

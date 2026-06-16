@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.deep.deep_recursion_sumdown
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SUBSET: recursion
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.symbol.env.recursion.deep.recursion.sumdown
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise recursive function symbol resolution and calls.
+;; TEST-ATOM: Recursive calls should resolve to the function being emitted.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:function env insertion before body codegen
+
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/recursion/atom.codegen.symbol.env.recursion.deep.recursion.sumdown
+;; TEST-MENU-PATH: codegen/branches/symbol-env/recursion/atom.codegen.symbol.env.recursion.deep.recursion.sumdown
+;; TEST-ATOM-LEAF: atom.codegen.symbol.env.recursion.deep.recursion.sumdown
+;; TEST-CLI-TARGET: codegen branches symbol-env recursion
+(module Main)
+(define (sumdown [n : Int] -> Int) (if (= n 0) 0 (+ n (sumdown (- n 1)))))
+(show (sumdown 5))
+(show (sumdown 1))

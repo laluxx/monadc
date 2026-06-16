@@ -1,0 +1,16 @@
+name: structured_compile_fail_helper_arity_fuzz_add_one_arg_r03_disabled_duplicate_ad935537
+section: current-compile-fail
+tier: experimental
+kind: compile-fail
+features: compile-fail, arity, function
+compiler-path: diagnostic.expected_error, infer.arity_check, runner.compile_fail_kind
+signal: high
+corpus-role: merged-duplicate
+uses-atoms: atom.diagnostic.compile_fail, atom.misc
+merged-into: structured_compile_fail_helper_arity_fuzz_add_one_arg_r01
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int@edge
+type: Bool
+expect-diagnostic: error:
+description: V10 compile-fail replacement helper_arity_fuzz_add_one_arg round 3; intentionally invalid and should emit an error.
+law: (fuzz-add {a})

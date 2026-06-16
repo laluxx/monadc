@@ -1,0 +1,15 @@
+name: structured_dispatch_logic_xor_encoded_with_if
+section: dispatch-matrix-current
+tier: stable
+kind: law
+features: arithmetic, dispatch, env, equality, if, logic, phi, with
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.local_load, codegen.logic_dispatch, codegen.with_binding, infer.arithmetic, infer.env_child, infer.env_lookup, infer.equality, infer.if_phi, infer.logic, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.with, atom.codegen.dispatch, atom.control.if, atom.core.equality, atom.core.inequality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates, signal_atom_with_substitution
+args: p:Bool q:Bool
+type: Bool
+expect: True
+description: Stress direct operator and predicate dispatch in expression, branch, and operand positions.
+law: (= (!= {p} {q}) (if {p} (not {q}) {q}))

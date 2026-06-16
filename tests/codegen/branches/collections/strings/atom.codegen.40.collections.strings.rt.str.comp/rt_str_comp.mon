@@ -1,0 +1,31 @@
+;; TEST-ID: tests.codegen.rt-str-comp
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.strings.rt.str.comp
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: strings
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: All working string ops: make-string, count, starts-with?, ends-with?, contains?, string indexing
+;; TEST-ATOM: (count "hello") = 5, (make-string 3 #\A) = "AAA", (starts-with? "hello" "hel") = True, (ends-with? "hello" "llo") = True, (contains? "hello" "ell") = True, ("hello" 0) = #\h, ("hello" 4) = #\o, ("abc" 2) = #\c
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:40-collections/strings branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/strings/atom.codegen.40.collections.strings.rt.str.comp
+;; TEST-MENU-PATH: codegen/branches/collections/strings/atom.codegen.40.collections.strings.rt.str.comp
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.strings.rt.str.comp
+;; TEST-CLI-TARGET: codegen branches collections strings
+(module Main)
+(show (count "hello"))
+(show (make-string 3 (Char 65)))
+(show (make-string 0 (Char 66)))
+(show (starts-with? "hello" "hel"))
+(show (starts-with? "hello" "x"))
+(show (ends-with? "hello" "llo"))
+(show (ends-with? "hello" "x"))
+(show (contains? "hello" "ell"))
+(show (contains? "hello" "x"))
+(show ("hello" 0))
+(show ("hello" 4))
+(show ("abc" 2))

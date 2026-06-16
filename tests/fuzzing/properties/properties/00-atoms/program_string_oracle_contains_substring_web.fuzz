@@ -1,0 +1,16 @@
+name: program_string_oracle_contains_substring_web
+section: program-atom-web
+tier: stable
+kind: program
+features: program, with, do, if, array, string, path, predicate
+compiler-path: reader.module, codegen.program.full_module, infer.env.lookup, codegen.control.if_phi
+signal: high
+corpus-role: program-behavior
+uses-atoms: atom.runtime.string.contains.substring
+depends-on: atom.runtime.string.contains.substring
+related-properties: atom.runtime.string.contains.substring
+args: s:NonEmptyString@escape needle:SubstrOf(s)
+type: Bool
+expect: True
+description: Full program property linked into the atom graph.
+program: (show (contains? {s} {needle}))

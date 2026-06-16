@@ -1,0 +1,17 @@
+name: atom_multiply_commutative
+section: atom-foundation
+tier: stable
+kind: law
+features: arithmetic, comparison
+compiler-path: codegen.operator.arithmetic, codegen.operator.comparison
+signal: high
+corpus-role: atom-foundation
+atom: atom.core.multiply
+proves: atom.core.multiply.commutative
+uses-atoms: atom.core.multiply, atom.core.equality
+depends-on: atom.core.multiply, atom.core.equality
+args: a:Int@edge b:Int@edge
+type: Bool
+expect: True
+description: Foundational atom property proving atom.core.multiply.commutative.
+law: (= (* {a} {b}) (* {b} {a}))

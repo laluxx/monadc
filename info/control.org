@@ -18,21 +18,22 @@ Test coverage: control flow is exercised by =rt_control_all.mon=,
 =rt_control_comp.mon=, and 35+ diagnostic error fixtures.
 
 This page provides an overview of Monad's control flow forms. Each
-group has a dedicated reference page.
+group has a dedicated reference page with detailed documentation.
 
-* Dedicated Pages
+* 1. Dedicated Pages
 
-| Page                          | Covers                                   |
-|-------------------------------+------------------------------------------|
-| [[file:conditionals.org][Conditionals]]         | if, cond, when, unless, ??               |
-| [[file:iteration.org][Iteration]]             | for, while, loop forms                   |
-| [[file:mutation.org][Mutation]]               | set!, <-, mutable bindings               |
-| [[file:sequencing.org][Sequencing]]             | begin, do, with                          |
-| [[file:let.org][Let Bindings]]         | let, let*, letrec                        |
+| Page         | Covers                     |
+|--------------+----------------------------|
+| [[file:conditionals.org][Conditionals]] | if, cond, when, unless, ?? |
+| [[file:iteration.org][Iteration]]    | for, while, loop forms     |
+| [[file:mutation.org][Mutation]]     | set!, <-, mutable bindings |
+| [[file:sequencing.org][Sequencing]]   | begin, do, with            |
+| [[file:let.org][Let Bindings]] | let, let*, letrec          |
 
-* Working Control Forms
+* 2. Working Control Forms
 
-These forms have strcmp dispatch handlers and are callable from paren-mode:
+These forms have strcmp dispatch handlers and are callable from
+paren-mode:
 
 | Form   | Example                 | Codegen source                           |
 |--------+-------------------------+------------------------------------------|
@@ -45,7 +46,43 @@ These forms have strcmp dispatch handlers and are callable from paren-mode:
 | when   | =(when test body ...)=    | [[file:../codegen.c::7879]]                  |
 | with   | =(with [x 1 y 2] body)=   | [[file:../codegen.c::7841]]                  |
 
-* Known Codegen Gaps
+See [[file:../context/language.org::working-dispatch][context/language.org — Working Dispatch]]
+for the full dispatch architecture.
+
+* 3. Expression-Oriented Control
+
+Every control form returns a value, making them composable:
+
+#+BEGIN_SRC monad
+(define result
+  (if (> x 0)
+    (begin (show "positive") x)
+    (begin (show "non-positive") (- x))))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define result
+  if (> x 0)
+    begin
+      show "positive"
+      x
+    begin
+      show "non-positive"
+      - x
+#+END_SRC
+
+This expression orientation is consistent across all forms — see
+[[file:../context/language.org::control-flow-constructs][context/language.org — Control Flow Constructs]].
+
+#+BEGIN_QUOTE
+Key Points:
+- All control forms are expressions (they return values)
+- Forms with strcmp handlers work in paren-mode
+- Composition: nest control forms to build complex logic
+- =if=, =when=, =unless=, =while=, =for=, =begin=, =do=, =with= all have handlers
+#+END_QUOTE
+
+* 4. Known Codegen Gaps
 
 The following forms have no strcmp dispatch handler:
 
@@ -55,10 +92,18 @@ The following forms have no strcmp dispatch handler:
 | let    | =(let [x 1 y 2] (+ x y))=         | No strcmp dispatch — not yet implemented. |
 | let*   | =(let* [x 1 y (+ x 1)] (+ x y))=  | No strcmp dispatch — not yet implemented. |
 | letrec | =(letrec [f (lambda ...)] (f 0))= | No strcmp dispatch — not yet implemented. |
+| lambda | =(lambda (x) body)=               | No strcmp dispatch — not yet implemented. |
 
-These are =register_builtins=-only symbols ([[file:../codegen.c::12960]]).
+These are =register_builtins=-only symbols
+([[file:../codegen.c::12960][codegen.c:12960]]). See
+[[file:../context/language.org::codegen-gaps][context/language.org — Known Codegen Gaps]]
+for details.
 
-* Null-Coalescing
+Workaround: use Wisp syntax (the reader processes these forms before
+codegen sees them) or use the forms that have strcmp handlers (e.g.
+=if= instead of =cond=, =with= instead of =let=).
+
+* 5. Null-Coalescing (??)
 
 =(?? expr default)= ([[file:../codegen.c::5763]]) returns =expr= if not =nil=,
 =default= otherwise. Scalar types skip the nil check.
@@ -73,6 +118,96 @@ These are =register_builtins=-only symbols ([[file:../codegen.c::12960]]).
 ?? (safe-div a b) 0
 #+END_SRC
 
+See [[file:conditionals.org][Conditionals — ??]] for full documentation
+and [[file:maybe.org][Maybe]] for option types.
+
+* 6. Combining Control Forms
+
+Control forms compose naturally thanks to expression orientation:
+
+#+BEGIN_SRC monad
+(define (classify n)
+  (if (< n 0) "negative"
+    (if (= n 0) "zero"
+      (for [i 1 n]
+        (show i))
+      "positive")))
+
+(while (>= n 0)
+  (when (= n 0) (show "hit zero"))
+  (set! n (- n 1)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define classify n
+  if (< n 0) "negative"
+    if (= n 0) "zero"
+      for [i 1 n]
+        show i
+      "positive"
+
+while (>= n 0)
+  when (= n 0)
+    show "hit zero"
+  set! n (- n 1)
+#+END_SRC
+
+* 7. Runnable Example
+
+#+BEGIN_SRC monad
+;; run with: monadc
+(define [x :: Int] -3)
+(define result
+  (if (> x 0)
+    (begin (show "positive") x)
+    (begin (show "non-positive") (- x))))
+(show "result: _" result)
+#+END_SRC
+
+* 8. Gotchas
+
+- **No =cond= dispatch**: =cond= has no strcmp handler in paren-mode.
+  Use nested =if= or Wisp syntax (the reader desugars =cond= to =if=).
+- **=let=, =lambda= also missing**: These 5 forms (=cond=, =let=,
+  =let*=, =letrec=, =lambda=) are =register_builtins=-only. Paren-mode
+  treats them as variable references.
+- **Workaround**: All 8 forms with strcmp handlers work in paren-mode.
+  For the missing 5, use Wisp syntax (reader processes before codegen).
+- **=unless= return**: =unless= return convention is still evolving.
+  Prefer =when= or =if= when the return value matters.
+
+* 9. Implementation Notes
+
+Key source locations for control flow:
+
+| Aspect                | Location                                                              |
+|-----------------------+-----------------------------------------------------------------------|
+| Control dispatch      | [[file:../codegen.c::7471][codegen.c:7471]] — dispatch entry                  |
+| =if= codegen          | [[file:../codegen.c::7572][codegen.c:7572]]                                    |
+| =begin= codegen       | [[file:../codegen.c::7561][codegen.c:7561]]                                    |
+| =with= codegen        | [[file:../codegen.c::7841][codegen.c:7841]]                                    |
+| =when= codegen        | [[file:../codegen.c::7879][codegen.c:7879]]                                    |
+| =unless= codegen      | [[file:../codegen.c::7919][codegen.c:7919]]                                    |
+| =while= codegen       | [[file:../codegen.c::7957][codegen.c:7957]]                                    |
+| =for= codegen         | [[file:../codegen.c::8004][codegen.c:8004]]                                    |
+| =??= codegen          | [[file:../codegen.c::5763][codegen.c:5763]]                                    |
+| Builtins registration | [[file:../codegen.c::12960][codegen.c:12960]] — register_builtins             |
+| Control constructs    | [[file:../context/language.org::control-flow-constructs][context/language.org — Control Flow Constructs]] |
+| Working dispatch      | [[file:../context/language.org::working-dispatch][context/language.org — Working Dispatch]]        |
+| Codegen gaps          | [[file:../context/language.org::codegen-gaps][context/language.org — Known Gaps]]           |
+
+The codegen dispatch scans for strcmp-matched symbol names. Forms with
+handlers emit LLVM IR directly; forms without handlers must be processed
+by the reader first (Wisp syntax) or avoided in paren-mode.
+
+#+BEGIN_QUOTE
+Key Points:
+- 8 forms have working strcmp dispatch (if, when, unless, while, for, begin, do, with)
+- 5 forms lack dispatch (cond, let, let*, letrec, lambda)
+- All forms are expression-oriented — they compose and return values
+- Use Wisp syntax as a workaround for forms without strcmp handlers
+#+END_QUOTE
+
 * Related Pages
 
 - [[file:conditionals.org][Conditionals]] -- if, cond, when, unless
@@ -80,14 +215,33 @@ These are =register_builtins=-only symbols ([[file:../codegen.c::12960]]).
 - [[file:mutation.org][Mutation]] -- set!, <-, mutable bindings
 - [[file:sequencing.org][Sequencing]] -- begin, do, with
 - [[file:let.org][Let Bindings]] -- let bindings
+- [[file:booleans.org][Booleans]] -- Bool type, truthiness
+- [[file:patterns.org][Pattern Matching]] -- match expressions
+- [[file:maybe.org][Maybe]] -- option types and null handling
+
+* Further Reading
+
+- [[file:../context/language.org][context/language.org]] — control flow constructs
+- [[file:../context/language.org::control-flow-constructs][context/language.org — Control Flow Constructs]]
+- [[file:../context/language.org::codegen-gaps][context/language.org — Known Codegen Gaps]]
+- [[file:../context/language.org::working-dispatch][context/language.org — Working Dispatch]]
+- [[file:../context/codegen.org][context/codegen.org]] — Codegen context and dispatch
+- [[file:../codegen.c][codegen.c]] — codegen dispatch implementation
+- [[file:../tests/codegen/rt_control_all.mon][rt_control_all.mon]] — control flow test fixtures
+- [[file:../tests/codegen/branches/control-flow/][tests/ — all control flow test branches]]
+- [[file:../context/tests-arch.org][context/tests-arch.org]] — test suite architecture
 
 * Context Links
 
 - [[file:../context/language.org::control-flow-constructs][context/language.org — Control Flow Constructs]]
 - [[file:../context/language.org::codegen-gaps][context/language.org — Known Codegen Gaps]]
+- [[file:../context/language.org::working-dispatch][context/language.org — Working Dispatch]]
 - [[file:../context/codegen.org][context/codegen.org]] — Codegen context and dispatch
 - [[file:../codegen.c::7572][codegen.c]] — =if= codegen
 - [[file:../codegen.c::8004][codegen.c]] — =for= codegen
+- [[file:../codegen.c::7957][codegen.c]] — =while= codegen
+- [[file:../codegen.c::7561][codegen.c]] — =begin= codegen
+- [[file:../codegen.c::7841][codegen.c]] — =with= codegen
 - [[file:conditionals.org][Conditionals]] — if, cond, when, unless
 - [[file:iteration.org][Iteration]] — for, while
 - [[file:mutation.org][Mutation]] — set!, <-

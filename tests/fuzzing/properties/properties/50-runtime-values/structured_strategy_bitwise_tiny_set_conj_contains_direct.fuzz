@@ -1,0 +1,14 @@
+name: structured_strategy_bitwise_tiny_set_conj_contains_direct
+section: current-strategy-bitwise-tiny
+tier: stable
+kind: law
+features: set, conj, contains, strategy
+compiler-path: codegen.runtime_call, runner.strategy_arg, runner.typed_generator, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.infer.predicate
+args: a:Int@tiny+bitwise b:Int@tiny+bitwise p:Bool@logic+if
+type: Bool
+expect: True
+description: V10 strategy property set_conj_contains_direct generated with bitwise_tiny arguments to stress compiler dispatch, envs, and PHI lowering.
+law: (contains? (conj (set) {a}) {a})

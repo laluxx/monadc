@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.wisp-define
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.define.and.types.wisp.define
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: define-and-types
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus, monadc.context.wisp.typed-define-pattern-params
+;; TEST-PURPOSE: Wisp-style define compiles and runs correctly.
+;; TEST-ATOM: A Wisp-defined function square :: Int -> Int binds the body-clause variable x instead of leaving it unbound.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:80-wisp-codegen/define-and-types branch family
+;; TEST-USES-ATOM: atom.codegen.category.80.wisp.codegen
+;; TEST-MENU: branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.define.and.types.wisp.define
+;; TEST-CLI-TARGET: codegen branches wisp-codegen define-and-types
+(module Main)
+
+define square :: Int -> Int
+  x -> x * x
+
+(show (square 12))

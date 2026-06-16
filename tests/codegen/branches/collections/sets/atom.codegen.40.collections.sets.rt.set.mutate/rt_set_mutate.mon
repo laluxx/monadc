@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-set-mutate
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.sets.rt.set.mutate
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: sets
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Mutable set operations: conj!, disj! on inline sets to avoid wisp !-sugar
+;; TEST-ATOM: (conj! {1 2 3} 4) adds 4, (disj! {1 2 3} 1) removes 1
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:40-collections/sets branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/sets/atom.codegen.40.collections.sets.rt.set.mutate
+;; TEST-MENU-PATH: codegen/branches/collections/sets/atom.codegen.40.collections.sets.rt.set.mutate
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.sets.rt.set.mutate
+;; TEST-CLI-TARGET: codegen branches collections sets
+(module Main)
+(show (contains? (conj! {1 2 3} 4) 4))
+(show (contains? (disj! {1 2 3} 1) 1))

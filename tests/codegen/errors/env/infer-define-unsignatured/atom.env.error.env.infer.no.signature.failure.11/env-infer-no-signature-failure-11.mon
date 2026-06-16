@@ -1,0 +1,37 @@
+;; TEST-ID: tests.codegen.env-error.env.infer.no.signature.failure.11
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: env-errors/infer-define-unsignatured
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.env-error-coverage
+;; TEST-PURPOSE: Trigger env.c diagnostic: Type inference failed for function ‘env_infer_unsig_11’
+;; TEST-ATOM: atom.env.error.env.infer.no.signature.failure.11
+;; TEST-CODEGEN-ATOM: atom.env.error.env.infer.no.signature.failure.11
+;; TEST-QUALITY: env-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ENV-ERROR: Type inference failed for function ‘env_infer_unsig_11’
+;; TEST-ENV-PATH: env.c:650 infer.define.no-signature
+;; TEST-CODEGEN-PATH: diagnostic.env.infer.define.no-signature
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: env
+;; TEST-TAG: hm
+;; TEST-COVERAGE: env.c:650 Type inference failed for function ‘env_infer_unsig_11’
+;; TEST-USES-ATOM: atom.env.error.env.infer.no.signature.failure.11
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.env.error
+;; TEST-USES-ATOM: atom.env.error.family.infer.define.unsignatured
+;; TEST-DEPENDS-ON: atom.env.hm.infer.define
+;; TEST-DEPENDS-ON: atom.codegen.symbol.env.lookup
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-REFINES: atom.env.error
+;; TEST-MENU: errors/env/infer-define-unsignatured/atom.env.error.env.infer.no.signature.failure.11
+;; TEST-MENU-PATH: codegen/errors/env/infer-define-unsignatured/atom.env.error.env.infer.no.signature.failure.11
+;; TEST-ATOM-LEAF: atom.env.error.env.infer.no.signature.failure.11
+;; TEST-CLI-TARGET: codegen errors env infer-define-unsignatured
+
+(module Main)
+(define (env_infer_unsig_11 x) (merge x #{:a 1}))
+(show (env_infer_unsig_11 1))

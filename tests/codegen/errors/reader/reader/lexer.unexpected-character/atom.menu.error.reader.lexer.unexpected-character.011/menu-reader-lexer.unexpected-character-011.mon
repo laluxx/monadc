@@ -1,0 +1,39 @@
+;; TEST-ID: tests.codegen.menu.errors.reader.lexer.unexpected.character.011
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: errors
+;; TEST-SUBSET: reader/lexer.unexpected-character
+;; TEST-MENU: errors/reader/lexer.unexpected-character/atom.menu.error.reader.lexer.unexpected-character.011
+;; TEST-MENU-PATH: codegen/errors/reader/lexer.unexpected-character/atom.menu.error.reader.lexer.unexpected-character.011
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.error-menu
+;; TEST-PURPOSE: Pin reader.c diagnostic: unexpected character '@'
+;; TEST-ATOM: atom.menu.error.reader.lexer.unexpected-character.011
+;; TEST-CODEGEN-ATOM: atom.menu.error.reader.lexer.unexpected-character.011
+;; TEST-ATOM-LEAF: atom.menu.error.reader.lexer.unexpected-character.011
+;; TEST-QUALITY: menu-error-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ERROR-STAGE: reader
+;; TEST-ERROR-FAMILY: lexer.unexpected-character
+;; TEST-ERROR-MESSAGE: unexpected character '@'
+;; TEST-ERROR-SOURCE: reader.c
+;; TEST-ERROR-PATH: reader.c:1896
+;; TEST-CODEGEN-PATH: diagnostic.reader.lexer.unexpected-character
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-TAG: menu
+;; TEST-COVERAGE: reader.c:1896 unexpected character '@'
+;; TEST-USES-ATOM: atom.menu.error.reader.lexer.unexpected-character.011
+;; TEST-USES-ATOM: atom.error.reader
+;; TEST-USES-ATOM: atom.error.reader.lexer.unexpected-character
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-DEPENDS-ON: atom.reader.lex.parse
+;; TEST-REFINES: atom.error.reader
+;; TEST-REFINES: atom.error.reader.lexer.unexpected-character
+;; TEST-REFINES: atom.reader.error
+;; TEST-RELATED: atom.codegen.error.menu
+;; TEST-CLI-TARGET: codegen errors reader reader
+
+(module Main)
+(show @)

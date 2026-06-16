@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.deep.deep_bitwise_mask_chain
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-SUBSET: bitwise
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.operators.bitwise.deep.bitwise.mask.chain
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise bitwise and shift lowering.
+;; TEST-ATOM: Bitwise operators should preserve integer bit semantics.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:bitwise operator dispatch
+;; TEST-COVERAGE: codegen.c:shift left/right branches
+
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/bitwise/atom.codegen.operators.bitwise.deep.bitwise.mask.chain
+;; TEST-MENU-PATH: codegen/branches/operators/bitwise/atom.codegen.operators.bitwise.deep.bitwise.mask.chain
+;; TEST-ATOM-LEAF: atom.codegen.operators.bitwise.deep.bitwise.mask.chain
+;; TEST-CLI-TARGET: codegen branches operators bitwise
+(module Main)
+(show (& 10 5))
+(show (bit-or 2 5))
+(show (bit-xor 3 4))
+(show (<< 1 2))
+(show (>> 8 2))

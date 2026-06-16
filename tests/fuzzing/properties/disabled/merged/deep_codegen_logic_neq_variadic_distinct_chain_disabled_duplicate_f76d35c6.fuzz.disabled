@@ -1,0 +1,17 @@
+name: deep_codegen_logic_neq_variadic_distinct_chain_disabled_duplicate_f76d35c6
+section: codegen-logic-comparison
+tier: experimental
+kind: law
+features: arithmetic, codegen, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, infer.arithmetic, infer.equality
+signal: medium
+corpus-role: merged-duplicate
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.core.inequality, atom.core.plus
+related-properties: signal_atom_equality_reflexive, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero
+merged-into: compare_variadic_not_equal_successor_chain
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int
+type: Bool
+expect: True
+description: Variadic != must accept pairwise distinct generated successor values.
+law: (!= {a} (+ {a} 1) (+ {a} 2))

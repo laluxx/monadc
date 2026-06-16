@@ -11,18 +11,28 @@
 
 [[file:index.org][<- Back to Index]] · [[file:types.org][Types]] · [[file:advanced-types.org][Advanced Types]] · [[file:type-classes.org][Type Classes]] · [[file:refinements.org][Refinement Types]] · [[file:type-inference.org][Type Inference]] · [[file:patterns.org][Pattern Matching]]
 
-Test coverage: the NbE kernel is validated by the codegen test corpus
-(423 fixtures in [[file:../tests/codegen/][tests/codegen/]]). Dependent types
-run as a shadow pass during compilation of all typed programs.
+Test coverage: the NbE kernel is validated by the codegen test corpus in
+[[file:../tests/codegen/types/dep/][tests/codegen/types/dep/]]. The HM/ITT bridge is tested in
+[[file:../tests/codegen/types/bridge/][tests/codegen/types/bridge/]]. Dependent types
+run as a shadow pass during compilation of all typed programs. See
+[[file:../context/tests-arch.org][context/tests-arch.org]] and [[file:../context/dep.org][context/dep.org]].
 
 Monad uses Intensional Type Theory (ITT) with Normalization by
 Evaluation (NbE) as a shadow pass (Phase 6.5) between feature setup
 and LLVM codegen ([[file:../main.c::1025]]). It does not emit code — it
 validates dependent annotations, elaborates surface syntax to core
-terms, and back-propagates ground types to the AST for HM inference
+terms, and back-propagates ground types to the AST for Hindley-Milner (HM) inference
 and LLVM codegen consumption ([[file:../context/dep.org::49]]).
 
-* Terminology
+Think of it as a semantic validator: if your dependent annotations
+pass the NbE checker, the types are guaranteed consistent. The checker
+does not change what code is generated — it only confirms or rejects
+the type-level reasoning in your program.
+
+For an overview of the full type system including dependent types, see
+[[file:advanced-types.org][Advanced Types]].
+
+* 1. Terminology
 
 | Term       | Core syntax  | Meaning                      |
 |------------+--------------+------------------------------|
@@ -33,9 +43,9 @@ and LLVM codegen consumption ([[file:../context/dep.org::49]]).
 | Nat        | =Nat=          | Natural numbers              |
 | Refl       | =refl=         | Reflexivity proof            |
 | Subst      | =subst h P pa= | Transport along equality (J) |
-| Embed      | =TERM_EMBED=   | Ground Type* bridge to ITT   |
+| Embed      | =TERM_EMBED=   | Ground type bridge to ITT    |
 
-* Universes
+* 2. Universes
 
 The universe hierarchy =Type₀, Type₁, Type₂, …= is predicative:
 =Γ ⊢ Type u : Type (u+1)=. =Π=-formation uses =max(u,v)= for the
@@ -43,16 +53,42 @@ result universe. Level expressions support constants, variables, max,
 and successor, with a hard ceiling of =DEP_LEVEL_MAX=64
 ([[file:../dep.h::39]]).
 
-* Pi-types and Sigma-types
+#+BEGIN_SRC monad
+;; Universe examples
+(define (id :: Π (A : Type 0) → A → A) ...)
+(Type 0)      ;; Type₀ — the type of small types
+(Type 1)      ;; Type₁ — the type of Type₀
+#+END_SRC
+
+#+BEGIN_SRC wisp
+;; Universe examples
+define id :: Π (A : Type 0) → A → A ...
+Type 0        ;; Type₀ — the type of small types
+Type 1        ;; Type₁ — the type of Type₀
+#+END_SRC
+
+For the ground type hierarchy without dependent universes, see
+[[file:types.org][Types]].
+
+** Key Points
+
+- Universes prevent the "type of all types" paradox
+- =Type n : Type (n+1)= for every level n
+- =Π=-formation picks the maximum of the argument and result universe
+  levels
+
+* 3. Pi-types and Sigma-types
 
 #+BEGIN_SRC monad
 (define Vec :: Π (n : Nat) → Type → Type ...)
 (define Σ (x : A) × B ...)
+(define (pair :: Π (A : Type) (B : A → Type) → Σ (x : A) × (B x)) ...)
 #+END_SRC
 
 #+BEGIN_SRC wisp
 define Vec :: Π (n : Nat) → Type → Type ...
 define Σ (x : A) × B ...
+define pair :: Π (A : Type) (B : A → Type) → Σ (x : A) × (B x) ...
 #+END_SRC
 
 =TERM_PI= ([[file:../dep.h::121]]) represents dependent function types.
@@ -61,7 +97,28 @@ define Σ (x : A) × B ...
 =TERM_SND= are projection eliminators. Binders carry an =Implicitness=
 tag (explicit, implicit, or instance) for elaboration.
 
-* NbE Kernel
+Non-dependent function types (=→=) are a special case of =Π= where the
+bound variable does not appear in the return type:
+
+#+BEGIN_SRC monad
+(define f :: Π (_ : Int) → Bool ...)     ;; same as Int → Bool
+(define g :: Int → Bool ...)             ;; sugar for Π
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define f :: Π (_ : Int) → Bool ...       ;; same as Int → Bool
+define g :: Int → Bool ...               ;; sugar for Π
+#+END_SRC
+
+** Key Points
+
+- =Π= generalises =→=: the return type can depend on the argument value
+- =Σ= generalises pairs: the type of the second element can depend on
+  the first element's value
+- The =Implicitness= tag on binders controls whether arguments are
+  inferred or must be written explicitly
+
+* 4. NbE Kernel
 
 Normalization by Evaluation is the semantic engine:
 
@@ -74,13 +131,23 @@ Normalization by Evaluation is the semantic engine:
 - =dep_conv= ([[file:../dep.h::559]]) — definitional equality: two
   terms are equal when they evaluate to the same semantic value
 
+| Function | Input | Output | Purpose |
+|----------+-------+--------+---------|
+| =dep_eval= | Term + Env | Value | Semantic evaluation |
+| =dep_quote= | Value + Level | Term | Reification back to syntax |
+| =dep_normalise= | Term + Env | Term | Full normalisation (eval then quote) |
+| =dep_conv= | Term + Term + Ctx | Bool | Definitional equality check |
+
 The =Value= domain ([[file:../dep.h::352]]) supports =VAL_PI=,
 =VAL_LAM=, =VAL_SIGMA=, =VAL_PAIR=, =VAL_UNIVERSE=, =VAL_NEUTRAL=
 (stuck free variables), =VAL_EMBED= (ground types), and =VAL_META=
 (unsolved metavariables). Closures ([[file:../dep.h::321]]) capture an
 environment + unevaluated body for lazy evaluation under binders.
 
-* Bidirectional Checking
+For definitional equality in the HM type system versus ITT, see
+[[file:equality.org][Equality]].
+
+* 5. Bidirectional Checking
 
 Two modes follow Löh/McBride/Swierstra (2010):
 - =dep_infer= ([[file:../dep.h::675]]) — Γ ⊢ t ⇒ A, compute type from term
@@ -92,9 +159,31 @@ Used for =Π= introduction (check mode for lambdas) and =Σ= elimination
 [[file:../dep.h::700]]) translates surface AST into core =Term=s,
 inserting implicit arguments and generating metavariables for holes.
 
-* TERM_EMBED Bridge
+#+BEGIN_SRC monad
+;; Bidirectional example
+(define (id :: Π (A : Type) → A → A)
+  (λ (A : Type) (x : A) → x))      ;; check mode for λ
+#+END_SRC
+
+#+BEGIN_SRC wisp
+;; Bidirectional example
+define id :: Π (A : Type) → A → A
+  λ (A : Type) (x : A) → x          ;; check mode for λ
+#+END_SRC
+
+** Key Points
+
+- =dep_infer= (⇒) synthesises a type; =dep_check= (⇐) verifies against
+  an expected type
+- Lambdas are checked (annotation provides the expected type);
+  applications infer (the function provides the type)
+- Elaboration fills in implicit arguments and generates metavariables
+  for holes
+
+* 6. TERM_EMBED Bridge
 
 The bridge between ITT and the ground-type HM system:
+
 - =term_embed(Type *ground_type)= wraps a types.h =Type*= as a
   =TERM_EMBED= term ([[file:../dep.h::270]])
 - =dep_term_of_ground= ([[file:../dep.h::720]]) wraps existing
@@ -104,7 +193,21 @@ The bridge between ITT and the ground-type HM system:
 - =dep_ground_of_value_env= ([[file:../dep.h::727]]) resolves global
   names through =DepEnv= for back-propagation to =ast->inferred_type=
 
-* Elaboration Pipeline
+This bridge allows incremental dependent typing: ground types (Int,
+Bool, etc.) are embedded as =TERM_EMBED= and checked by HM, while
+dependent terms (Pi, Sigma) are checked by NbE
+([[file:../context/dep.org::1077]]).
+
+** Key Points
+
+- Ground types are opaque to the NbE kernel — they pass through as
+  =TERM_EMBED= values
+- The bridge enables incremental adoption: you can use dependent types
+  only where needed, and HM handles the rest
+- Back-propagation from NbE to the AST means codegen still sees the
+  concrete ground types it needs
+
+* 7. Elaboration Pipeline
 
 1. =dep_term_of_ast= — syntactic AST to pre-elaboration Term
 2. =dep_elab_term= — elaborate with implicit/hole filling
@@ -112,7 +215,20 @@ The bridge between ITT and the ground-type HM system:
 4. =meta_all_solved= — verify all metavariables are solved
 5. =dep_normalise= — normalise result type for display
 
-* Known Soundness Holes
+The pipeline runs as part of the overall compilation. For how it
+interacts with HM inference, see [[file:type-inference.org][Type Inference]].
+For the full compilation pipeline, see [[file:build.org][Build]].
+
+** Implementation Notes
+
+- Top-level pipeline integration
+  ([[file:../context/dep.org::1120]])
+- Elaboration details
+  ([[file:../context/dep.org::1043]])
+- Bidirectional checker internals
+  ([[file:../context/dep.org::1009]])
+
+* 8. Known Soundness Holes
 
 The NbE kernel has deliberate stubs documented in context:
 - =dep_conv= allows implicit Int≡Float and Int≡Char coercions
@@ -123,7 +239,59 @@ The NbE kernel has deliberate stubs documented in context:
 
 These are documented gaps that test the clean-architecture thesis — a
 well-factored NbE kernel can be incrementally filled in without
-architectural rewrites ([[file:../context/dep.org::1352]]).
+architectural rewrites ([[file:../context/dep.org::1352]]). See
+[[file:../context/todo.org][context/todo.org]] for the development roadmap.
+
+** Key Points
+
+- The stubs are intentional: they allow the rest of the pipeline to
+  be tested while the kernel is incrementally hardened
+- None of the soundness holes affect ground-type code or HM inference
+- The architecture supports filling these holes without rewriting the
+  NbE kernel
+
+** Complete example:
+
+#+BEGIN_SRC monad
+;; Save as dep-demo.mon && monadc dep-demo.mon && ./dep-demo
+(module Main)
+
+;; Dependent type annotations — validated by NbE, no codegen
+(define Vec :: Π (n : Nat) → Type → Type
+  ...)
+
+(define (id :: Π (A : Type) → A → A)
+  (λ (A : Type) (x : A) → x))
+
+;; Non-dependent Π (same as →)
+(define (f :: Π (_ : Int) → Bool)
+  (lambda (x) (> x 0)))
+
+;; Universe annotation
+(define (Type0 :: Type 1) (Type 0))
+
+(show "dependent type annotations validated")
+#+END_SRC
+
+** Common Pitfalls
+
+- **Dependent types do NOT generate code**: The ITT/NbE shadow pass
+  (Phase 6.5) only validates annotations and back-propagates types.
+  It does NOT emit LLVM IR or runtime checks. If you need runtime
+  enforcement, use [[file:refinements.org][Refinement Types]] instead.
+- **Soundness holes are deliberate**: The NbE kernel has documented
+  stubs (e.g., implicit Int≡Float coercion, no Miller condition check
+  in pattern unification). These do not affect ground-type code but
+  limit the dependently-typed subset.
+- **TERM_EMBED bridge is opaque**: Ground types embedded via
+  =TERM_EMBED= are black boxes to the NbE kernel. The checker cannot
+  reason about properties of ground-type values.
+- **Bidirectional checking requires annotations**: In check mode (⇐),
+  lambdas need an expected type from the context. Without annotations,
+  =dep_infer= may fail on bare lambdas.
+- **Metavariables (holes) are partially inferred**: The elaborator
+  fills in some implicit arguments but may leave unsolved metavariables
+  that cause the checker to fail.
 
 * Related Pages
 
@@ -132,13 +300,25 @@ architectural rewrites ([[file:../context/dep.org::1352]]).
 - [[file:type-classes.org][Type Classes]] -- type classes and instances
 - [[file:refinements.org][Refinement Types]] -- refinement types
 - [[file:type-inference.org][Type Inference]] -- HM inference with dependent types
+- [[file:equality.org][Equality]] -- propositional equality
+- [[file:patterns.org][Pattern Matching]] -- pattern matching on dependent types
 
 * Context Links
 
 - [[file:../context/dep.org][context/dep.org]] — dependent type checker reference
 - [[file:../dep.h][dep.h]] — ITT kernel API
 - [[file:../context/types.org][context/types.org]] — type representation
+- [[file:../context/language.org][context/language.org]] — dependent type surface syntax
+- [[file:../context/codegen.org][context/codegen.org]] — codegen for dependent annotations
+- [[file:../main.c][main.c]] — compilation pipeline (Phase 6.5)
 - [[file:type-classes.org][Type Classes]] — dictionary-passing polymorphism
 - [[file:type-inference.org][Type Inference]] — HM inference engine
 - [[file:advanced-types.org][Advanced Types]] — overview of advanced type features
 - [[file:refinements.org][Refinement Types]] — subset types with predicates
+
+* Further Reading
+
+- [[file:from-haskell.org][From Haskell]] — dependent types vs GHC extensions
+- [[file:from-lisp.org][From Lisp]] — type-level computation for Lisp users
+- [[file:patterns.org][Pattern Matching]] — dependent pattern matching
+- [[file:equality.org][Equality]] — propositional equality (J axiom)

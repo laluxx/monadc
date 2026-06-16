@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.asm.six-param-reverse-sum
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.70.ffi.asm.inline.asm.asm.six.param.reverse.sum
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: inline-asm
+;; TEST-CATEGORY: 70-ffi-asm
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Six integer parameters cover every SysV register allocator slot.
+;; TEST-ATOM: The first six Int parameters remain callable and addable.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:70-ffi-asm/inline-asm branch family
+;; TEST-USES-ATOM: atom.codegen.category.70.ffi.asm
+;; TEST-MENU: branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.six.param.reverse.sum
+;; TEST-MENU-PATH: codegen/branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.six.param.reverse.sum
+;; TEST-ATOM-LEAF: atom.codegen.70.ffi.asm.inline.asm.asm.six.param.reverse.sum
+;; TEST-CLI-TARGET: codegen branches ffi-asm inline-asm
+module AsmTest
+
+define asm-six-reverse :: Int -> Int -> Int -> Int -> Int -> Int -> Int
+  a b c d e f -> (asm add a f add a e add a d add a c add a b)
+
+show (asm-six-reverse 1 6 5 4 3 23)

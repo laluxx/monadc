@@ -1,8 +1,8 @@
 #+TITLE: MonadC Context Portal
 #+AUTHOR: Codex
-#+DATE: 2026-06-13
+#+DATE: 2026-06-16
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -65,6 +65,37 @@
 :END:
 
 - [[file:index.org][Index, format schemas, file topology, LLM notation reference]]
+
+
+** Garden Governance & Quality
+:PROPERTIES:
+:ID: monadc.context.portal.garden-quality
+:CUSTOM_ID: portal-garden-quality
+:CONTEXT_KIND: link
+:CONTEXT_DESCRIPTION: Links to the garden charter, quality report, generated inventory, and current debug agenda.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/context.org
+:CONFIDENCE: high
+:END:
+
+- [[file:garden.org][Garden charter — conventions, truth ladder, pruning, agent contract]]
+- [[file:quality.org][Quality report — current corpus health and validation notes]]
+- [[file:inventory.org][Generated inventory — files, IDs, records, line counts]]
+- [[file:connections.org][Connections graph — compiler phase routing and impact map]]
+- [[file:test-contracts.org][Test contracts — tiering, metadata, context-link policy]]
+- [[file:coverage-roadmap.org][Coverage roadmap — AST/desugar/runtime coverage priorities]]
+- [[file:debug-agenda.org][Debug agenda — active high-leverage failures and watchlist]]
+- [[file:curation.org][Curation playbook — gardener loop, prune/keep heuristics, split criteria]]
+- [[file:traceability.org][Traceability spine — source/context/test/failure promotion chain]]
+- [[file:category-context.org][Category context — typed semantic map, objects, morphisms, and category contracts]]
 
 ** Language & Types
 :PROPERTIES:
@@ -341,3 +372,30 @@
 - [[file:etc-assets.org][etc/ assets — logo, screenshots, font, docs.html]]
 - [[file:references.org][Research PDF library — 7 papers with DOC records and OBS implementation traces]]
 - [[file:source-map.org::* Research PDFs][PDF reference index (etc/pdfs/) — each paper's source connections]]
+
+* Formal Category Layer
+:PROPERTIES:
+:ID: monadc.context.portal.round3-category-directory
+:CONTEXT_KIND: navigation
+:CONTEXT_STATUS: active
+:SOURCE: context/context.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.context.round3-category-directory src:context/context.org conf:high]
+  See [[file:category/index.org][category/index.org]] for the mathematical category layer and its scripts.
+
+* Live Category Interface
+:PROPERTIES:
+:ID: monadc.context.root.live-category-interface
+:CUSTOM_ID: context-root-live-category-interface
+:CONTEXT_KIND: portal
+:CONTEXT_STATUS: active
+:SOURCE: context/context.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.context.root.live-category-interface src:context/context.org conf:high]
+  The context root delegates interactive exploration to the category subsystem:
+  [[file:category/index.org][category/index.org]], [[file:category/query-language.org][query-language.org]], and
+  [[file:category/tui.org][tui.org]].

@@ -1,0 +1,15 @@
+name: deep_codegen_cross_quasiquote_reads_with_binding
+section: codegen-cross-feature
+tier: stable
+kind: law
+features: arithmetic, array, array-index, codegen, env, predicate, quasiquote, quote, unquote, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.local_load, codegen.predicate_dispatch, codegen.quote, codegen.with_binding, desugar.quasiquote, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.type_predicate, reader.array_literal, reader.quasiquote, reader.quote, reader.unquote
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.with, atom.codegen.dispatch, atom.infer.predicate, atom.quote.quote, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_with_substitution
+args: a:Int
+type: Bool
+expect: True
+description: quasiquote unquote must evaluate with-bound variables.
+law: (equal? (with [x {a}] (quasiquote (value (unquote x)))) (quasiquote (value (unquote {a}))))

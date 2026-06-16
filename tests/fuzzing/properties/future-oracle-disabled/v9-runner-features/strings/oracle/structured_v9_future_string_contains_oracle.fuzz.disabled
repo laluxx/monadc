@@ -1,7 +1,0 @@
-name: structured_v9_future_string_contains_oracle
-section: future-string-oracle-v9
-args: haystack:String needle:String
-type: Bool
-expect-python: needle in haystack
-description: Real string substring oracle over generated strings.
-law: (contains? {haystack} {needle})

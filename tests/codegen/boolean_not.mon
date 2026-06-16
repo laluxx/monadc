@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.boolean-not
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Boolean not evaluates correctly.
-;; TEST-ATOM: (not True) = False, (not False) = True.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (not True))
-(show (not False))

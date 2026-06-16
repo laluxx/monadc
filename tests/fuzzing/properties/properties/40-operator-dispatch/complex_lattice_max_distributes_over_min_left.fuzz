@@ -1,0 +1,15 @@
+name: complex_lattice_max_distributes_over_min_left
+section: lattice
+tier: stable
+kind: law
+features: arithmetic, equality, lattice, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: In a total order, max distributes over min on the left.
+law: (= (fuzz-max {a} (fuzz-min {b} {c})) (fuzz-min (fuzz-max {a} {b}) (fuzz-max {a} {c})))

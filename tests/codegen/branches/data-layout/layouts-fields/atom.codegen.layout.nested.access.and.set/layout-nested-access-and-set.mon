@@ -1,0 +1,30 @@
+;; TEST-ID: tests.codegen.branch.layout-nested-access-and-set
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-SUBSET: layouts-fields
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.layout.nested.access.and.set
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover nested layout field access and field lvalue mutation.
+;; TEST-ATOM: Nested dot access should load fields correctly and set! should update the selected lvalue.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:3089 codegen_dot_chain nested field branch
+;; TEST-COVERAGE: codegen.c:3356 codegen_lvalue dot-field branch
+;; TEST-COVERAGE: codegen.c:7642 set! lvalue store branch
+
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/layouts-fields/atom.codegen.layout.nested.access.and.set
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts-fields/atom.codegen.layout.nested.access.and.set
+;; TEST-ATOM-LEAF: atom.codegen.layout.nested.access.and.set
+;; TEST-CLI-TARGET: codegen branches data-layout layouts-fields
+(module Main)
+(layout Point [x :: Int] [y :: Int])
+(layout Box [p :: Point] [tag :: Int])
+(define b (Box (Point 1 2) 9))
+(show b.p.x)
+(set! b.p.x 77)
+(show b.p.x)
+(show b.tag)

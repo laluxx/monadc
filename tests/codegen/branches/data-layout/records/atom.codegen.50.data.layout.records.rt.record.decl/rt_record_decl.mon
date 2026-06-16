@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-record-decl
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-CODEGEN-ATOM: atom.codegen.50.data.layout.records.rt.record.decl
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: records
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime record declarations are a codegen-backed coverage point.
+;; TEST-ATOM: (record Point [x Float] [y Float]) should compile alongside executable code.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:50-data-layout/records branch family
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/records/atom.codegen.50.data.layout.records.rt.record.decl
+;; TEST-MENU-PATH: codegen/branches/data-layout/records/atom.codegen.50.data.layout.records.rt.record.decl
+;; TEST-ATOM-LEAF: atom.codegen.50.data.layout.records.rt.record.decl
+;; TEST-CLI-TARGET: codegen branches data-layout records
+(module Main)
+(record Point [x Float] [y Float])
+(show 42)

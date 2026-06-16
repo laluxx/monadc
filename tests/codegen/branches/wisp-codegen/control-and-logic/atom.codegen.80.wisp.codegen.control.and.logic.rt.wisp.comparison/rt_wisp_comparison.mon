@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.rt-wisp-comparison
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.control.and.logic.rt.wisp.comparison
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: control-and-logic
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.wisp.comparison-operators
+;; TEST-PURPOSE: Wisp infix comparisons work
+;; TEST-ATOM: 3 < 5 → True, 4 = 4 → True, 5 > 3 → True
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:80-wisp-codegen/control-and-logic branch family
+;; TEST-USES-ATOM: atom.codegen.category.80.wisp.codegen
+;; TEST-MENU: branches/wisp-codegen/control-and-logic/atom.codegen.80.wisp.codegen.control.and.logic.rt.wisp.comparison
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/control-and-logic/atom.codegen.80.wisp.codegen.control.and.logic.rt.wisp.comparison
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.control.and.logic.rt.wisp.comparison
+;; TEST-CLI-TARGET: codegen branches wisp-codegen control-and-logic
+module Main
+show 3 < 5
+show 4 = 4
+show 5 > 3
+show 3 <= 4
+show 5 >= 3
+show 4 != 5

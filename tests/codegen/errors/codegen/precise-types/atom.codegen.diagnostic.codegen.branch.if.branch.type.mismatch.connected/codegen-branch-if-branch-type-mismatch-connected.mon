@@ -1,0 +1,34 @@
+;; TEST-ID: tests.codegen.codegen-error.codegen-branch-if-branch-type-mismatch-connected
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: codegen-errors/precise-types
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.reader-error-coverage
+;; TEST-PURPOSE: Trigger and pin diagnostic: type
+;; TEST-ATOM: atom.codegen.diagnostic.codegen.branch.if.branch.type.mismatch.connected
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.codegen.branch.if.branch.type.mismatch.connected
+;; TEST-QUALITY: diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-READER-ERROR: type
+;; TEST-READER-PATH: reader.c:37 codegen.if.type-mismatch
+;; TEST-CODEGEN-PATH: diagnostic.codegen.if.type-mismatch
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: codegen
+;; TEST-COVERAGE: reader.c:37 type
+;; TEST-USES-ATOM: atom.codegen.diagnostic.codegen.branch.if.branch.type.mismatch.connected
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.codegen.error.precise
+;; TEST-DEPENDS-ON: atom.reader.special.if
+;; TEST-DEPENDS-ON: atom.codegen.if.phi
+;; TEST-REFINES: atom.codegen.diagnostic.if-type
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/precise-types/atom.codegen.diagnostic.codegen.branch.if.branch.type.mismatch.connected
+;; TEST-MENU-PATH: codegen/errors/codegen/precise-types/atom.codegen.diagnostic.codegen.branch.if.branch.type.mismatch.connected
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.codegen.branch.if.branch.type.mismatch.connected
+;; TEST-CLI-TARGET: codegen errors codegen precise-types
+
+(module Main)
+(show (if True 1 "bad"))

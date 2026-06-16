@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-nested-list
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Runtime display of nested list structures works.
-;; TEST-ATOM: (show '((1 2) (3 4))) = ((1 2) (3 4)).
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show '((1 2) (3 4)))

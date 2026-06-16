@@ -1,0 +1,27 @@
+;; TEST-ID: tests.codegen.branch.diagnostic-array-as-function-arity
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SUBSET: arity
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise array-as-function arity diagnostic.
+;; TEST-ATOM: atom.codegen.diagnostic.array-function-arity
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.array-function-arity
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-CODEGEN-PATH: diagnostic.array.function-arity
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: array
+;; TEST-COVERAGE: codegen.c:9927 array used as function arity diagnostic
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/arity/atom.codegen.diagnostic.array-function-arity
+;; TEST-MENU-PATH: codegen/errors/codegen/arity/atom.codegen.diagnostic.array-function-arity
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.array-function-arity
+;; TEST-CLI-TARGET: codegen errors codegen arity
+(module Main)
+(define xs [1 2])
+(show (xs 0 1))

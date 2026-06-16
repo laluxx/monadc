@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.deep.deep_cffi_strlen_and_atoi
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 70-ffi-asm
+;; TEST-SUBSET: cffi-core
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.70.ffi.asm.cffi.core.deep.cffi.strlen.and.atoi
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise C FFI calls returning integer values.
+;; TEST-ATOM: FFI return values should flow through show int dispatch.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.70.ffi.asm, atom.codegen.subset.cffi.core
+;; TEST-COVERAGE: codegen.c:FFI call lowering and external declarations
+;; TEST-MENU: branches/ffi-asm/cffi-core/atom.codegen.70.ffi.asm.cffi.core.deep.cffi.strlen.and.atoi
+;; TEST-MENU-PATH: codegen/branches/ffi-asm/cffi-core/atom.codegen.70.ffi.asm.cffi.core.deep.cffi.strlen.and.atoi
+;; TEST-ATOM-LEAF: atom.codegen.70.ffi.asm.cffi.core.deep.cffi.strlen.and.atoi
+;; TEST-CLI-TARGET: codegen branches ffi-asm cffi-core
+
+(module Main)
+(show (c/strlen "hello"))
+(show (c/atoi "123"))

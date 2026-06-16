@@ -1,0 +1,15 @@
+name: structured_program_quote_count_after_begin_variant_01
+section: current-program-kind
+tier: stable
+kind: program
+features: program, quote, begin, count
+compiler-path: codegen.module_body, codegen.quote, codegen.sequence, reader.ast_begin, reader.quote, runner.program_kind
+signal: high
+corpus-role: program-semantics
+uses-atoms: atom.control.begin, atom.core.equality, atom.quote.quote
+related-properties: signal_atom_equality_reflexive
+args: a:Int@edge
+type: Bool
+expect: True
+description: V10 program-kind property variant 1 for program_quote_count_after_begin, checking full program source handling rather than show-wrapped law handling.
+program: (show (= (begin {a} (count (quote (alpha beta gamma)))) 3))

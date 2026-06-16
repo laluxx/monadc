@@ -1,0 +1,31 @@
+;; TEST-ID: tests.codegen.branch.value-radix-nonzero-compile
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: radix-printing
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise non-zero Hex/Bin/Oct show construction without depending on current extra-newline formatting.
+;; TEST-ATOM: atom.codegen.value.radix-nonzero-lowering
+;; TEST-CODEGEN-ATOM: atom.codegen.value.radix-nonzero-lowering
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile
+;; TEST-CODEGEN-PATH: type_to_llvm.TYPE_HEX_BIN_OCT
+;; TEST-CODEGEN-PATH: codegen_show_value.TYPE_BIN
+;; TEST-CODEGEN-PATH: get_or_declare_print_binary.loop
+;; TEST-TAG: compile
+;; TEST-TAG: radix
+;; TEST-TAG: display
+;; TEST-COVERAGE: codegen.c:653-656 TYPE_HEX/TYPE_BIN/TYPE_OCT type_to_llvm
+;; TEST-COVERAGE: codegen.c:1224-1229 Hex/Bin/Oct show branches
+;; TEST-COVERAGE: codegen.c:516-637 print_binary nonzero loop
+
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/radix-printing/atom.codegen.value.radix-nonzero-lowering
+;; TEST-MENU-PATH: codegen/branches/operators/radix-printing/atom.codegen.value.radix-nonzero-lowering
+;; TEST-ATOM-LEAF: atom.codegen.value.radix-nonzero-lowering
+;; TEST-CLI-TARGET: codegen branches operators radix-printing
+(module Main)
+(show (Hex 255))
+(show (Bin 5))
+(show (Oct 9))

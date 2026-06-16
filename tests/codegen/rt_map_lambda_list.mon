@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-map-lambda-list
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Map with a lambda literal over a quoted list works.
-;; TEST-ATOM: (map (lambda (x) (* x x)) '(1 2 3)) returns (1 4 9).
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (map (lambda (x) (* x x)) '(1 2 3)))

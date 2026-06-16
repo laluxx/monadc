@@ -1,0 +1,15 @@
+name: signal_future_wisp_define_function_equivalence
+section: current-future-runner-roadmap
+tier: experimental
+kind: law
+features: future, runner, atom-web
+compiler-path: reader.wisp.define, desugar.define, function.signature
+signal: low
+corpus-role: future-runner-roadmap
+uses-atoms: atom.wisp.define, atom.desugar.define
+disabled-reason: requires future fuzzer property kind or dialect support
+args: 
+type: Bool
+expect: True
+description: Future Wisp-vs-core define equivalence once fuzzer supports source dialect pairs.
+law: (wisp-eq "define square :: Int -> Int" "(define (square [x : Int] -> Int) (* x x))")

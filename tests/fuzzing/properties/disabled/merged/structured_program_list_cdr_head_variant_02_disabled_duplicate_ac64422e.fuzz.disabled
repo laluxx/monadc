@@ -1,0 +1,17 @@
+name: structured_program_list_cdr_head_variant_02_disabled_duplicate_ac64422e
+section: current-program-kind
+tier: experimental
+kind: program
+features: program, list, cdr, head
+compiler-path: codegen.module_body, codegen.runtime_call, runner.program_kind, runtime.list
+signal: high
+corpus-role: merged-duplicate
+uses-atoms: atom.core.equality
+related-properties: signal_atom_equality_reflexive
+merged-into: structured_program_list_cdr_head_variant_01
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int@edge b:Int@edge c:Int@edge
+type: Bool
+expect: True
+description: V10 program-kind property variant 2 for program_list_cdr_head, checking full program source handling rather than show-wrapped law handling.
+program: (show (= (head (cdr (cons {a} (cons {b} (cons {c} (list)))))) {b}))

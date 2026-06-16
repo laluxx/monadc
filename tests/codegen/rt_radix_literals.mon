@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-radix-literals
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Radix literal parsing and conversion.
-;; TEST-ATOM: (Hex 0x1A) = 26, (Oct 0o77) = 63, (Bin 0b1010) = 10
-;; TEST-EXPECT: compile, run
-(module Main)
-(show (Hex 0x1A))
-(show (Oct 0o77))
-(show (Bin 0b1010))

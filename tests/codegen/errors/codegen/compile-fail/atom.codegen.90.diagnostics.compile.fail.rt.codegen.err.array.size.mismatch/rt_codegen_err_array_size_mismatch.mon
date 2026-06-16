@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-array-size-mismatch
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.90.diagnostics.compile.fail.rt.codegen.err.array.size.mismatch
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: compile-fail
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen rejects array literals that violate explicit sized array annotations.
+;; TEST-ATOM: Arr :: 2 :: Int with three values must fail.
+;; TEST-EXPECT: fail:compile
+
+;; TEST-COVERAGE: codegen.c:90-diagnostics/compile-fail branch family
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/compile-fail/atom.codegen.90.diagnostics.compile.fail.rt.codegen.err.array.size.mismatch
+;; TEST-MENU-PATH: codegen/errors/codegen/compile-fail/atom.codegen.90.diagnostics.compile.fail.rt.codegen.err.array.size.mismatch
+;; TEST-ATOM-LEAF: atom.codegen.90.diagnostics.compile.fail.rt.codegen.err.array.size.mismatch
+;; TEST-CLI-TARGET: codegen errors codegen compile-fail
+(module Main)
+(define [xs :: Arr :: 2 :: Int] [1 2 3])

@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-define-two-arg
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.05.symbol.env.defines.and.calls.rt.define.two.arg
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: defines-and-calls
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Two-argument typed define function works.
+;; TEST-ATOM: (define (add [x : Int] [y : Int] -> Int) (+ x y)) then (show (add 3 4)) prints 7.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:05-symbol-env/defines-and-calls branch family
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/defines-and-calls/atom.codegen.05.symbol.env.defines.and.calls.rt.define.two.arg
+;; TEST-MENU-PATH: codegen/branches/symbol-env/defines-and-calls/atom.codegen.05.symbol.env.defines.and.calls.rt.define.two.arg
+;; TEST-ATOM-LEAF: atom.codegen.05.symbol.env.defines.and.calls.rt.define.two.arg
+;; TEST-CLI-TARGET: codegen branches symbol-env defines-and-calls
+(module Main)
+(define (add [x : Int] [y : Int] -> Int) (+ x y))
+(show (add 3 4))

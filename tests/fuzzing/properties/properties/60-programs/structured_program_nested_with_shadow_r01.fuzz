@@ -1,0 +1,15 @@
+name: structured_program_nested_with_shadow_r01
+section: current-program-kind
+tier: stable
+kind: program
+features: program, with, env, shadow, arithmetic
+compiler-path: codegen.arithmetic_dispatch, codegen.local_load, codegen.module_body, codegen.with_binding, infer.arithmetic, infer.env_child, infer.env_lookup, runner.program_kind
+signal: high
+corpus-role: program-semantics
+uses-atoms: atom.binding.with, atom.core.equality, atom.core.minus, atom.core.plus, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero, signal_atom_with_substitution
+args: a:Int@edge b:Int@edge c:Int@tiny
+type: Bool
+expect: True
+description: V11 program-kind compiler test program_nested_with_shadow round 1; exercises full program insertion instead of show-wrapped law mode.
+program: (show (= (with [x {a}] (with [y (+ x {b})] (with [x {c}] (- y {b})))) {a}))

@@ -1,0 +1,17 @@
+name: deep_codegen_cross_when_set_conj_then_contains_disabled_duplicate_e3e14dd3
+section: codegen-cross-feature
+tier: experimental
+kind: law
+features: arithmetic, array, array-index, codegen, do, env, equality, predicate, set, when, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.equality_dispatch, codegen.if_void, codegen.local_load, codegen.predicate_dispatch, codegen.runtime_call, codegen.sequence, codegen.with_binding, desugar.when, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.equality, infer.type_predicate, reader.array_literal, reader.ast_do, runtime.set
+signal: medium
+corpus-role: merged-duplicate
+uses-atoms: atom.binding.with, atom.codegen.dispatch, atom.control.do, atom.core.equality, atom.infer.predicate, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_do_last_value, signal_atom_equality_reflexive, signal_atom_with_substitution
+merged-into: mega_set_when_conjbang_guarded
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: p:Bool a:Int
+type: Bool
+expect: True
+description: when must guard set mutation and contains? must reflect the mutation.
+law: (= (with [s (set)] (do (when {p} (conj! s {a})) (contains? s {a}))) {p})

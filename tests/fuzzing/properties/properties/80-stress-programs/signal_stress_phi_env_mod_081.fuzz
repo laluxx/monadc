@@ -1,0 +1,15 @@
+name: signal_stress_phi_env_mod_081
+section: current-stress
+tier: stress
+kind: program
+features: stress, program, if, phi, with, do, mod, +, misc, env
+compiler-path: stress.program, codegen.expr.if, codegen.binding.with, codegen.expr.do, codegen.dispatch.mod
+signal: high
+corpus-role: stress-program
+uses-atoms: atom.control.if, atom.binding.with, atom.control.do, atom.core.plus.identity.zero, atom.core.modulo
+depends-on: atom.core.plus.identity.zero, atom.control.do.last-value, atom.binding.with.substitution
+args: a:Int@edge+if+with+do b:Int@edge+if+with c:Int@edge+mod flag:Bool@logic+if
+type: Bool
+expect: True
+description: Stress program property combining several compiler stages while linked to foundational atoms.
+program: (show (= (with [x (if {flag} (+ {a} {b}) (- {a} {b}))] (do (with [y (% {c} 7)] y) (+ x 0))) (if {flag} (+ {a} {b}) (- {a} {b}))))

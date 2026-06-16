@@ -1,8 +1,8 @@
 #+TITLE: Test System Context
 #+AUTHOR: Codex
-#+DATE: 2026-06-11
+#+DATE: 2026-06-16
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-12
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -964,7 +964,7 @@ assertions directly instead of requiring hand-written shell checks per fixture.
   and range would catch some of these, but the fundamental risk remains:
   tests encode expectations, expectations can be wrong.
 
-[INF id:inf.tests.connects-to from:obs.tests.purpose conf:high]
+[INF id:inf.tests.connects-to from:monadc.context.tests.file-metadata conf:high]
   connects-to -> `monadc.context.tests-arch` (tests.org is the metadata/schema
   file; tests-arch.org is the full architecture of 923 test files) ·
   `monadc.context.codegen-ops` (each rt_*.mon test exercises a codegen
@@ -979,3 +979,80 @@ assertions directly instead of requiring hand-written shell checks per fixture.
   generation) ·
   `monadc.context.typeclass` (type class instance dispatch tests) ·
   `monadc.context.module` (module/import resolution tests)
+
+* Test Coverage Anchors
+
+* Tests Expected Failures
+:PROPERTIES:
+:ID: monadc.context.tests.expected-failures
+:CUSTOM_ID: test-anchor-tests-expected-failures
+:END:
+[OBS id:obs.tests.expected-failures.test-anchor src:tests/TIERS.md conf:high]
+  Test-context anchor used by the categorized test suite. The concrete
+  fixtures and TSV rows remain the source of executable truth; this node
+  makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+
+
+* Garden Links — Test Quality Contracts
+:PROPERTIES:
+:ID: monadc.context.tests.garden-links
+:CUSTOM_ID: tests-garden-links
+:CONTEXT_KIND: navigation
+:CONTEXT_DESCRIPTION: Links from the general tests file to the stricter test contract and quality files.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/tests.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.tests.garden-links src:context/tests.org conf:high]
+  For current tier policy, metadata requirements, and promotion rules, read
+  [[file:test-contracts.org][test-contracts.org]]. For active test-system risks,
+  read [[file:debug-agenda.org][debug-agenda.org]] and [[file:coverage-roadmap.org][coverage-roadmap.org]].
+
+* Tests Category Contract
+:PROPERTIES:
+:ID: monadc.context.tests.category-contract
+:CUSTOM_ID: tests-category-contract
+:CONTEXT_KIND: contract
+:CONTEXT_DESCRIPTION: Category contract for tests ownership, invariants, tests, and failure routing.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/tests.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.tests.category-contract src:context/tests.org conf:high]
+  This section declares the category contract for =tests=. It is the
+  routing target for failures and future test/context links touching this area.
+
+#+CAPTION: Tests Category Contract
+| Field | Contract |
+|-------+----------|
+| Owned phase | Executable specification, regression gate, known-fail/future witness management, artifact reporting. |
+| Inputs | Fixture files, TSV corpora, goldens, metadata headers, runner options. |
+| Outputs | Pass/fail reports, first-failure artifacts, tier manifests, context-link coverage. |
+| Invariants | The default gate should be useful and green; red corpora should retain bug witnesses without hiding them. |
+| Test hooks | tests/test_run.py, test_context_refs.py, runner self-tests, metadata validators. |
+| Failure symptoms | runner crash, stale self-test API, missing TSV discovery, dangling TEST-CONTEXT, generated artifact leakage. |
+| Context neighbors | test-contracts, traceability, coverage-roadmap, debug-agenda, workflow |
+
+[DEC id:dec.tests.category-contract-owner date:2026-06-16 by:llm]
+  Failures matching the symptoms above should start triage in this category, then
+  follow the listed neighbors only when the local contract does not explain the
+  issue.

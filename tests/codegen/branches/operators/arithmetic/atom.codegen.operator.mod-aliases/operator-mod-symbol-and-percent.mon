@@ -1,0 +1,30 @@
+;; TEST-ID: tests.codegen.branch.operator-mod-symbol-and-percent
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: arithmetic
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise mod and % aliases for positive and negative integer operands.
+;; TEST-ATOM: atom.codegen.operator.mod-aliases
+;; TEST-CODEGEN-ATOM: atom.codegen.operator.mod-aliases
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.operator.mod
+;; TEST-CODEGEN-PATH: codegen.operator.percent
+;; TEST-DEPENDS-ON: atom.codegen.operator.integer-reduction
+;; TEST-TAG: run
+;; TEST-TAG: operator
+;; TEST-TAG: mod
+;; TEST-COVERAGE: codegen.c:9463-9492 mod/% dispatch branch
+;; TEST-COVERAGE: codegen.c:3775-3776 direct builtin %/mod branch
+
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/arithmetic/atom.codegen.operator.mod-aliases
+;; TEST-MENU-PATH: codegen/branches/operators/arithmetic/atom.codegen.operator.mod-aliases
+;; TEST-ATOM-LEAF: atom.codegen.operator.mod-aliases
+;; TEST-CLI-TARGET: codegen branches operators arithmetic
+(module Main)
+(show (% 17 5))
+(show (mod 17 5))
+(show (% -17 5))

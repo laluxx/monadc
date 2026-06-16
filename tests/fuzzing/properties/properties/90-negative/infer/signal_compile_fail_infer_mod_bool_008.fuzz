@@ -1,0 +1,15 @@
+name: signal_compile_fail_infer_mod_bool_008
+section: current-compile-fail
+tier: compile-fail
+kind: compile-fail
+features: infer, type-error, mod
+compiler-path: infer.operand-type.mod
+stage: infer
+signal: high
+corpus-role: negative-diagnostic
+uses-atoms: atom.core.modulo
+args: a:Int@edge b:Bool
+type: Bool
+expect-diagnostic: error:
+description: Structured negative property for compiler diagnostics; expected to fail compilation.
+law: (% {a} {b})

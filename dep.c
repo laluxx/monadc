@@ -1815,6 +1815,17 @@ static bool dep_conv_vals_internal(ConvCtx *cctx, Value *v1, Value *v2, Value *t
         if ((k1 == TYPE_INT && k2 == TYPE_CHAR) || (k1 == TYPE_CHAR && k2 == TYPE_INT)) return true;
         if ((k1 == TYPE_INT_ARBITRARY && k2 == TYPE_CHAR) || (k1 == TYPE_CHAR && k2 == TYPE_INT_ARBITRARY)) return true;
 
+        /* Pointer :: ? unifies with Pointer :: T when ? is an unknown pointee.
+         * This happens when *U8 on a parameter resolves to Pointer :: unknown
+         * because the inner type annotation was lost. Accept structurally. */
+        if (k1 == TYPE_PTR && k2 == TYPE_PTR) {
+            Type *p1 = v1->embed_type->element_type;
+            Type *p2 = v2->embed_type->element_type;
+            if (!p1 || p1->kind == TYPE_UNKNOWN) return true;
+            if (!p2 || p2->kind == TYPE_UNKNOWN) return true;
+            return types_equal(p1, p2);
+        }
+
         return false;
     }
 
@@ -2979,8 +2990,6 @@ static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
 
         if (ast->lambda.return_type) {
             const char *rname = ast->lambda.return_type;
-            if (strncmp(rname, "Fn :: ", 6) == 0) rname += 6;
-            else if (strncmp(rname, "Pointer :: ", 11) == 0) rname += 11;
 
             AST *ret_ast = parse(rname);
             if (ret_ast) {
@@ -2994,8 +3003,6 @@ static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
             Term *dom = term_hole();
             if (p->type_name) {
                 const char *tname = p->type_name;
-                if (strncmp(tname, "Fn :: ", 6) == 0) tname += 6;
-                else if (strncmp(tname, "Pointer :: ", 11) == 0) tname += 11;
 
                 AST *ty_ast = parse(tname);
                 if (ty_ast) {
@@ -3051,6 +3058,14 @@ Term *dep_term_of_type_ast(DepCtx *ctx, AST *ast) {
     Term *res = NULL;
 
     if (ast->type == AST_SYMBOL) {
+        /* Pointer sugar: *U8 -> Pointer :: U8 */
+        if (ast->symbol[0] == '*' && ast->symbol[1] >= 'A' && ast->symbol[1] <= 'Z') {
+            const char *base = ast->symbol + 1;
+            while (*base == '*') base++;
+            Type *g = type_from_name(base);
+            if (g) return term_embed(type_ptr(g));
+            return term_meta(meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, ast->symbol));
+        }
         /* Explicit hole in type position: (a) -> (? a) or define f :: ? */
         if (strcmp(ast->symbol, "?") == 0) {
             int id = meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, "?");

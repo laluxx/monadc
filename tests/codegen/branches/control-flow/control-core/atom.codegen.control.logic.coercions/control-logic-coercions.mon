@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.branch.control-logic-coercions
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SUBSET: control-core
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.control.logic.coercions
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover and/or condition coercion for bool, int, float, and pointer-like list values.
+;; TEST-ATOM: Logical forms should fold coerced truthiness across all arguments.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:7714-7730 and/or bool,float,pointer,int coercion branches
+
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/control-core/atom.codegen.control.logic.coercions
+;; TEST-MENU-PATH: codegen/branches/control-flow/control-core/atom.codegen.control.logic.coercions
+;; TEST-ATOM-LEAF: atom.codegen.control.logic.coercions
+;; TEST-CLI-TARGET: codegen branches control-flow control-core
+(module Main)
+(show (and True 1 2.0))
+(show (and 1 0 3))
+(show (or False 0 3))
+(show (and '(1) True))
+(show (or (list) False))

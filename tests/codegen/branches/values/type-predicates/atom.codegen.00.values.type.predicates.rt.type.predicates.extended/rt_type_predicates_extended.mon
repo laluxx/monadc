@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.rt-type-predicates-extended
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.00.values.type.predicates.rt.type.predicates.extended
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: type-predicates
+;; TEST-CATEGORY: 00-values
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime type predicates cover collection, boolean, numeric, and function values.
+;; TEST-ATOM: List?, Arr?, Bool?, Number?, and Fn? return expected booleans.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:00-values/type-predicates branch family
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/type-predicates/atom.codegen.00.values.type.predicates.rt.type.predicates.extended
+;; TEST-MENU-PATH: codegen/branches/values/type-predicates/atom.codegen.00.values.type.predicates.rt.type.predicates.extended
+;; TEST-ATOM-LEAF: atom.codegen.00.values.type.predicates.rt.type.predicates.extended
+;; TEST-CLI-TARGET: codegen branches values type-predicates
+(module Main)
+(show (List? '(1 2)))
+(show (Arr? [1 2]))
+(show (Bool? True))
+(show (Number? 42))
+(show (Fn? (lambda (x) x)))

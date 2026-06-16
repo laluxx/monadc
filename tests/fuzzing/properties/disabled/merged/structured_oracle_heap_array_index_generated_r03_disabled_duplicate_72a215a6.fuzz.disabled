@@ -1,0 +1,17 @@
+name: structured_oracle_heap_array_index_generated_r03_disabled_duplicate_72a215a6
+section: current-oracle-heap-array-index-generated
+tier: experimental
+kind: law
+features: oracle, heap-array, index
+compiler-path: codegen.heap_array, reader.heap_array, runner.expect_python, runner.oracle_tier, runner.typed_generator
+signal: high
+corpus-role: merged-duplicate
+uses-atoms: atom.dependent.index-of, atom.runtime.array, atom.runtime.heap-array
+related-properties: signal_atom_array_index_valid
+merged-into: structured_oracle_heap_array_index_generated_r01
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: xs:NonEmptyHeapArrInt@small i:IndexOf(xs)
+type: Int
+expect-python: xs[i]
+description: V10 oracle property heap_array_index_generated round 3 using expect-python and dependent typed generators.
+law: ({xs} {i})

@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.deep.deep_mutation_global_and_local
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SUBSET: mutation
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.control.flow.mutation.deep.mutation.global.and.local
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise local and global set! storage paths.
+;; TEST-ATOM: set! should mutate the nearest binding and preserve outer globals.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:set! env lookup and store
+
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/mutation/atom.codegen.control.flow.mutation.deep.mutation.global.and.local
+;; TEST-MENU-PATH: codegen/branches/control-flow/mutation/atom.codegen.control.flow.mutation.deep.mutation.global.and.local
+;; TEST-ATOM-LEAF: atom.codegen.control.flow.mutation.deep.mutation.global.and.local
+;; TEST-CLI-TARGET: codegen branches control-flow mutation
+(module Main)
+(define x 10)
+(set! x (+ x 1))
+(show x)
+(show (with [x 4] (begin (set! x (+ x 1)) x)))
+(show x)

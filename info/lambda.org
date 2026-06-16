@@ -16,64 +16,69 @@ fixture. The poly identity and const patterns are verified in codegen
 goldens ([[file:../context/language.org::501][context/language.org]]).
 
 Lambda expressions create anonymous functions — values that can be
-passed, stored, and called.
+passed, stored, and called. They are the fundamental building block for
+[[file:functional-programming.org][functional programming]] in Monad.
+Every named function defined with =(define (f ...) ...)= desugars to a
+lambda bound to a name.
 
-* S-Expression lambda
+* 1. S-Expression lambda
 
-** Paren params (classic Lisp style)
+** 1.1 Paren params (classic Lisp style)
 
 #+BEGIN_SRC monad
 (lambda (x) (+ x 1))
 (lambda (x y) (* x y))
-(lambda (x :: Int) (+ x 1))      ;; type)
-(lambda (x :: Int -> Float) body) ;; with return typ)
+(lambda (x :: Int) (+ x 1))      ;; type
+(lambda (x :: Int -> Float) body) ;; with return type
 #+END_SRC
 
 #+BEGIN_SRC wisp
 lambda (x) (+ x 1)
 lambda (x y) (* x y)
-lambda (x :: Int) (+ x 1)      ;; type)
-lambda (x :: Int -> Float) body ;; with return typ)
+lambda (x :: Int) (+ x 1)      ;; type
+lambda (x :: Int -> Float) body ;; with return type
 #+END_SRC
 
 Bare paren params (no brackets) — the classic Scheme style. Supports
 optional type annotations and arrow-separated return type.
 
-** Bracket params (typed-syntax style)
+** 1.2 Bracket params (typed-syntax style)
 
 #+BEGIN_SRC monad
 (lambda [x] (+ x 1))
-(lambda [x :: Int] (+ x 1))      ;; typed paramete)
+(lambda [x :: Int] (+ x 1))      ;; typed parameter
 (lambda [x] [y] body)            ;; curried (multi-param arrow)
 #+END_SRC
 
 #+BEGIN_SRC wisp
 lambda [x] (+ x 1)
-lambda [x :: Int] (+ x 1)      ;; typed paramete)
+lambda [x :: Int] (+ x 1)      ;; typed parameter
 lambda [x] [y] body            ;; curried (multi-param arrow)
 #+END_SRC
 
-Bracket vector parameters. Also supports typed annotations.
+Bracket vector parameters. Also supports typed annotations. See
+[[file:../context/language.org::primitive-function][context/language.org — Function Types]].
 
-** Arrow return type
+** 1.3 Arrow return type
 
 #+BEGIN_SRC monad
-(lambda (x -> Int) (+ x 1))      ;; x: inferred, return: In)
-(lambda (x y -> Int) (+ x y))    ;; multi-param with return typ)
+(lambda (x -> Int) (+ x 1))      ;; x: inferred, return: Int
+(lambda (x y -> Int) (+ x y))    ;; multi-param with return type
 (lambda (x :: Float -> Float -> Float) (* x y))
                                  ;; typed params, typed return
 #+END_SRC
 
 #+BEGIN_SRC wisp
-lambda (x -> Int) (+ x 1)      ;; x: inferred, return: In)
-lambda (x y -> Int) (+ x y)    ;; multi-param with return typ)
+lambda (x -> Int) (+ x 1)      ;; x: inferred, return: Int
+lambda (x y -> Int) (+ x y)    ;; multi-param with return type
 lambda (x :: Float -> Float -> Float) (* x y)
                                  ;; typed params, typed return
 #+END_SRC
 
-The arrow separates parameter list from return type annotation.
+The arrow separates parameter list from return type annotation. See
+[[file:types.org][Types]] for function type syntax.
 
-** Docstring lambdas
+** 1.4 Docstring lambdas
 
 #+BEGIN_SRC monad
 (lambda (x -> Int) "adds 1 to x" (+ x 1))
@@ -83,19 +88,33 @@ The arrow separates parameter list from return type annotation.
 lambda (x -> Int) "adds 1 to x" (+ x 1)
 #+END_SRC
 
-** Rest params (dot)
+** 1.5 Rest params (dot)
+
+Captures excess arguments as a list:
 
 #+BEGIN_SRC monad
-(lambda (. args) body)           ;; variadic, untype)
-(lambda (. [args :: Int]) body)  ;; variadic, type)
+(lambda (. args) body)           ;; variadic, untyped
+(lambda (. [args :: Int]) body)  ;; variadic, typed
 #+END_SRC
 
 #+BEGIN_SRC wisp
-lambda (. args) body           ;; variadic, untype)
-lambda (. [args :: Int]) body  ;; variadic, type)
+lambda (. args) body           ;; variadic, untyped
+lambda (. [args :: Int]) body  ;; variadic, typed
 #+END_SRC
 
-* Unicode lambda literal (λ)
+Variadic lambdas collect excess arguments into a list. See
+[[file:../context/language.org::structural-constructs][context/language.org — Structural Constructs]].
+
+#+BEGIN_QUOTE
+Key Points:
+- Paren params: classic Lisp style =(lambda (x) body)=
+- Bracket params: typed-syntax =(lambda [x] body)=
+- Arrow return type: =(lambda (x -> Int) body)=
+- Docstring as first body expression
+- Rest params: =(lambda (. args) body)= for variadic functions
+#+END_QUOTE
+
+* 2. Unicode lambda literal (λ)
 
 The Greek lambda character introduces a pure lambda calculus literal:
 
@@ -107,7 +126,7 @@ The Greek lambda character introduces a pure lambda calculus literal:
 
 #+BEGIN_SRC wisp
 λx.x                              ;; identity
-λx y.x                            ;; const
+λx.y.x                            ;; const
 λx.λy.x                           ;; curried const
 #+END_SRC
 
@@ -118,16 +137,29 @@ This desugars to =(lambda (x) x)= — supported in both S-expr and wisp
 modes.
 
 #+BEGIN_SRC monad
-(show (λx.x 42))                  ;; 4)
-(show ((λx.λy. + x y) 3 4))      ;;)
+(show (λx.x 42))                  ;; 42
+(show ((λx.λy. + x y) 3 4))      ;; 7
 #+END_SRC
 
 #+BEGIN_SRC wisp
-show (λx.x 42)                  ;; 4)
-show ((λx.λy. + x y) 3 4)      ;;)
+show (λx.x 42)                  ;; 42
+show ((λx.λy. + x y) 3 4)      ;; 7
 #+END_SRC
 
-* Wisp arrow syntax
+The λ desugaring is done in the reader — see
+[[file:../context/reader.org::reader-lambda-params][context/reader.org — Lambda Parameter Syntax]]
+and
+[[file:../context/reader.org::sugar-registry][context/reader.org — Sugar Registry]].
+
+#+BEGIN_QUOTE
+Key Points:
+- =λparams.body= — compact pure lambda syntax
+- No type annotations (fully inferred)
+- Desugars to =(lambda (params) body)=
+- Works in both S-expression and Wisp modes
+#+END_QUOTE
+
+* 3. Wisp arrow syntax
 
 Wisp provides a short arrow form that desugars to =(lambda ...)=:
 
@@ -153,7 +185,11 @@ Wisp also supports bracket sugar with fat arrow:
 [x y] => (+ x y)                ;; [x y] => body → (lambda ([x] [y]) body)
 #+END_SRC
 
-* Unicode mapsto arrow (↦) in Wisp
+The arrow desugaring is handled by the Wisp expander — see
+[[file:wisp.org][Wisp Syntax]] and
+[[file:../context/wisp.org][context/wisp.org]].
+
+* 4. Unicode mapsto arrow (↦) in Wisp
 
 The ↦ character (U+21A6) works as a drop-in replacement for -> in
 Wisp mode:
@@ -170,7 +206,10 @@ define square x ↦ (* x x)
 
 (→, U+2192, is not currently implemented — use -> or ↦ instead.)
 
-* Pattern Matching in Lambda Bodies
+See [[file:../context/reader.org::reader-lambda-params][context/reader.org — Lambda Parameter Syntax]]
+for unicode arrow support details.
+
+* 5. Pattern Matching in Lambda Bodies
 
 When multiple clauses with -> are given, the lambda body is
 automatically a pattern match on the parameters:
@@ -201,15 +240,17 @@ forms (literals, constructors, guards, list destructuring).
 
 #+BEGIN_SRC wisp
 ;; lambda with pattern clauses — implicit match on params
-(lambda (x :: Int -> Int)
+lambda (x :: Int -> Int)
   | 0 -> "zero"
-  | _ -> "non-zero")
+  | _ -> "non-zero"
 ;; same as (lambda (x) (match x with 0 -> "zero" | _ -> "non-zero"))
 #+END_SRC
 
-The leading ~|~ pipe is optional — both forms work.
+The leading ~|~ pipe is optional — both forms work. Pattern clauses in
+lambdas are documented in
+[[file:../context/language.org::pattern-matching][context/language.org — Pattern Matching]].
 
-* Named function short form
+* 6. Named function short form
 
 #+BEGIN_SRC monad
 (define (f x) (+ x 1))           ;; sugar for (define f (lambda (x) (+ x 1)))
@@ -217,43 +258,47 @@ The leading ~|~ pipe is optional — both forms work.
 #+END_SRC
 
 #+BEGIN_SRC wisp
-define (f x) (+ x 1)           ;; sugar for (define f (lambda (x) (+ x 1)))
-define (add x y) (+ x y)
+define f x -> (+ x 1)           ;; sugar for (define f (lambda (x) (+ x 1)))
+define add x y -> (+ x y)
 #+END_SRC
 
-The reader desugars this into a lambda under the =define=.
+The reader desugars this into a lambda under the =define= (see
+[[file:define.org][Define — Function Definition]]).
 
-* Typed vs Untyped
+* 7. Typed vs Untyped
 
 #+BEGIN_SRC monad
-(lambda (x) (+ x 1))             ;; inferred: Int → In)
-(lambda ([x :: Float]) (* x 2.0)) ;; annotated: Float → Floa)
+(lambda (x) (+ x 1))             ;; inferred: Int → Int
+(lambda ([x :: Float]) (* x 2.0)) ;; annotated: Float → Float
 #+END_SRC
 
 #+BEGIN_SRC wisp
-lambda (x) (+ x 1)             ;; inferred: Int → In)
-lambda ([x :: Float]) (* x 2.0) ;; annotated: Float → Floa)
+lambda (x) (+ x 1)             ;; inferred: Int → Int
+lambda ([x :: Float]) (* x 2.0) ;; annotated: Float → Float
 #+END_SRC
 
-Untyped lambdas are inferred via HM. Typed parameters are checked
-against the annotation.
+Untyped lambdas are inferred via Hindley-Milner (see
+[[file:type-inference.org][Type Inference]]). Typed parameters are
+checked against the annotation — see
+[[file:../context/language.org::type-system-surface][context/language.org — Type System Surface]].
 
-* Multi-Parameter (Curried)
+* 8. Multi-Parameter (Curried)
 
 #+BEGIN_SRC monad
 (define add (lambda (x) (y) (+ x y)))
-(show (add 3 4))                 ;;)
+(show (add 3 4))                 ;; 7
 #+END_SRC
 
 #+BEGIN_SRC wisp
 define add (lambda (x) (y) (+ x y))
-show (add 3 4)                 ;;)
+show (add 3 4)                 ;; 7
 #+END_SRC
 
 Each parenthesized group introduces another lambda — curried by
-construction.
+construction. See [[file:functional-programming.org][Functional Programming]]
+for currying and partial application.
 
-* Comparison of Forms
+* 9. Comparison of Forms
 
 | Form                              | Example                    | Where     |
 |-----------------------------------+----------------------------+-----------|
@@ -269,26 +314,54 @@ construction.
 | Pattern clause body               | =0 -> a | _ -> b=           | Both      |
 | Named function short form         | =(define (f x) body)=      | S-expr    |
 
-* Closure Gap
+* 10. Closure Gap
 
 =lambda= has no strcmp dispatch handler — cannot be called from
 paren-mode as a symbol:
 
 #+BEGIN_SRC monad
-(define f (lambda (x) (+ x 1)))   ;; stores correctl)
-(f 42)                             ;; segfault — no strcmp handle)
+(define f (lambda (x) (+ x 1)))   ;; stores correctly
+(f 42)                             ;; segfault — no strcmp handler
 #+END_SRC
 
 #+BEGIN_SRC wisp
-define f (lambda (x) (+ x 1))   ;; stores correctl)
-f 42                             ;; segfault — no strcmp handle)
+define f (lambda (x) (+ x 1))   ;; stores correctly
+f 42                             ;; segfault — no strcmp handler
 #+END_SRC
 
 This is the largest codegen gap. See
 [[file:functional-programming.org][Functional Programming]] for details
-and workarounds.
+and workarounds, and
+[[file:../context/language.org::codegen-gaps][context/language.org — Known Codegen Gaps]]
+for the full list.
 
-* Closures in the Typed ABI
+* 11. Runnable Example
+
+#+BEGIN_SRC monad
+;; run with: monadc
+(define [x :: Int] 42)
+(define f (lambda (y) (+ x y)))
+;; f 10 would segfault — no strcmp handler
+(show "lambda stored, but cannot call from paren-mode")
+;; Use Wisp to work around:
+;;   define f y -> + x y
+;;   show (f 10)        ;; 52
+#+END_SRC
+
+* 12. Gotchas
+
+- **Closure gap (major)**: =(define f (lambda ...))= stores the closure
+  but calling =(f 42)= in paren-mode segfaults — no strcmp dispatch
+  handler for lambda ([[file:functional-programming.org][Functional Programming]]).
+- **Non-capturing only**: Only lambdas with no free variables work in
+  the typed ABI. Lambdas that close over their environment are not yet
+  implemented.
+- **Reader dependency**: Paren-mode =lambda= must be processed by the
+  reader first. Use Wisp arrow syntax (=x -> body=) as a workaround.
+- **λ literal inference**: The =λ= unicode syntax is always fully
+  inferred — you cannot add type annotations.
+
+* 13. Closures in the Typed ABI
 
 For non-capturing lambdas (no free variables), the typed ABI passes
 parameters as unboxed LLVM values. Partial application of a typed
@@ -298,6 +371,38 @@ When closures are fully implemented, a dual ABI will be used:
 - **Typed ABI** (no captures): zero overhead, unboxed parameters
 - **Closure ABI** (captures): =(env*, i64 n, RuntimeValue** args)=
 
+See [[file:../context/language.org::primitive-function][context/language.org — Function Types]]
+for the ABI specification and
+[[file:../context/codegen.org][context/codegen.org]] for codegen
+details.
+
+* 14. Implementation Notes
+
+Key source locations for lambda:
+
+| Aspect                | Location                                                              |
+|-----------------------+-----------------------------------------------------------------------|
+| Lambda param parsing  | [[file:../context/reader.org::reader-lambda-params][context/reader.org — Lambda Param Syntax]] |
+| Sugar registry (λ)    | [[file:../context/reader.org::sugar-registry][context/reader.org — Sugar Registry]]          |
+| Function types        | [[file:../context/language.org::primitive-function][context/language.org — Function Types (TYPE_ARROW / TYPE_FN)]] |
+| Codegen dispatch      | [[file:../codegen.c][codegen.c]] — lambda codegen                          |
+| Closure gap           | [[file:../context/language.org::codegen-gaps][context/language.org — Known Gaps]]           |
+| Type system surface   | [[file:../context/language.org::type-system-surface][context/language.org — Type System Surface]] |
+
+The reader parses all lambda forms (paren-params, bracket-params, λ
+literal, wisp arrows) into uniform =AST_LAMBDA= nodes. Codegen
+currently handles non-capturing lambdas in the typed ABI; closures with
+environment captures are not yet implemented.
+
+#+BEGIN_QUOTE
+Key Points:
+- Lambda is the universal function constructor — named functions desugar to it
+- Multiple syntactic forms for different contexts
+- λ literal for pure lambda calculus style
+- No strcmp dispatch: =(define f (lambda ...)) (f 42)= segfaults
+- Non-capturing lambdas use unboxed ABI; closures are a known gap
+#+END_QUOTE
+
 * Related Pages
 
 - [[file:recursion.org][Recursion]] -- recursive functions
@@ -305,12 +410,34 @@ When closures are fully implemented, a dual ABI will be used:
 - [[file:functional-programming.org][Functional Programming]] -- closures, HOFs, workarounds
 - [[file:purity.org][Purity]] -- pure lambda calculus
 - [[file:patterns.org][Pattern Matching]] -- pattern clause lambdas
+- [[file:define.org][Define]] -- named function short form
+- [[file:wisp.org][Wisp Syntax]] -- arrow forms in Wisp
+- [[file:type-inference.org][Type Inference]] -- HM type inference
+
+* Further Reading
+
+- [[file:../context/language.org][context/language.org]] — function representation, ABI
+- [[file:../context/language.org::primitive-function][context/language.org — Function Types (TYPE_ARROW / TYPE_FN)]]
+- [[file:../context/language.org::codegen-gaps][context/language.org — Known Codegen Gaps]]
+- [[file:../context/reader.org][context/reader.org]] — lambda parameter parsing
+- [[file:../context/reader.org::reader-lambda-params][context/reader.org — Lambda Parameter Syntax]]
+- [[file:../context/reader.org::sugar-registry][context/reader.org — Sugar Registry (lambda lit)]]
+- [[file:../context/codegen.org][context/codegen.org]] — codegen architecture
+- [[file:../codegen.c][codegen.c]] — codegen dispatch implementation
+- [[file:../tests/codegen/branches/symbol-env/defines-and-calls/][tests/ — lambda and define test fixtures]]
+- [[file:../tests/codegen/branches/control-flow/control-core/rt_control_all.mon][tests/ — control + lambda dispatch fixtures]]
+- [[file:../context/tests-arch.org][context/tests-arch.org]] — test suite architecture
 
 * Context Links
 
 - [[file:../context/language.org][context/language.org]] — function representation
 - [[file:../context/language.org::primitive-function][context/language.org — Closures and ABI]]
 - [[file:../context/language.org::codegen-gaps][context/language.org — Known gaps]]
+- [[file:../context/language.org::working-dispatch][context/language.org — Working Dispatch]]
+- [[file:../context/reader.org][context/reader.org]] — lambda parsing internals
+- [[file:../context/reader.org::reader-lambda-params][context/reader.org — Lambda Parameter Syntax]]
+- [[file:../context/codegen.org][context/codegen.org]] — codegen architecture
+- [[file:../codegen.c][codegen.c]] — codegen dispatch
 - [[file:patterns.org][Pattern Matching]] — pattern clauses in lambda bodies
 - [[file:recursion.org][Recursion]] — recursive functions
 - [[file:functional-programming.org][Functional Programming]] — closures, HOFs, workarounds

@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.deep.deep_wisp_path_and_array
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SUBSET: collections-quote-path
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.wisp.codegen.collections.quote.path.deep.wisp.path.and.array
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise Wisp path values and array indexing.
+;; TEST-ATOM: Wisp path and array literals should reach codegen as core AST nodes.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: wisp.c literal lowering
+;; TEST-COVERAGE: codegen.c AST_PATH/array index
+
+;; TEST-USES-ATOM: atom.codegen.category.80.wisp.codegen
+;; TEST-MENU: branches/wisp-codegen/collections-quote-path/atom.codegen.wisp.codegen.collections.quote.path.deep.wisp.path.and.array
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/collections-quote-path/atom.codegen.wisp.codegen.collections.quote.path.deep.wisp.path.and.array
+;; TEST-ATOM-LEAF: atom.codegen.wisp.codegen.collections.quote.path.deep.wisp.path.and.array
+;; TEST-CLI-TARGET: codegen branches wisp-codegen collections-quote-path
+module Main
+define p ./context
+define xs [1 2 3]
+show p
+show (xs 1)

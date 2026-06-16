@@ -1,0 +1,15 @@
+name: function_mul_helper_matches_builtin
+section: function
+tier: stable
+kind: law
+features: arithmetic, equality, function
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, infer.arithmetic, infer.equality
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.core.multiply
+related-properties: signal_atom_equality_reflexive, signal_atom_multiply_associative, signal_atom_multiply_commutative, signal_atom_multiply_identity_one
+args: a:Int b:Int
+type: Bool
+expect: True
+description: The typed fuzz-mul helper must agree with the builtin multiplication operator.
+law: (= (fuzz-mul {a} {b}) (* {a} {b}))

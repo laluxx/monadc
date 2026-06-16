@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-arithmetic-string
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.90.diagnostics.compile.fail.rt.codegen.err.arithmetic.string
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: compile-fail
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen rejects arithmetic on strings.
+;; TEST-ATOM: (+ "a") must fail because String is not an arithmetic operand.
+;; TEST-EXPECT: fail:compile
+
+;; TEST-COVERAGE: codegen.c:90-diagnostics/compile-fail branch family
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/compile-fail/atom.codegen.90.diagnostics.compile.fail.rt.codegen.err.arithmetic.string
+;; TEST-MENU-PATH: codegen/errors/codegen/compile-fail/atom.codegen.90.diagnostics.compile.fail.rt.codegen.err.arithmetic.string
+;; TEST-ATOM-LEAF: atom.codegen.90.diagnostics.compile.fail.rt.codegen.err.arithmetic.string
+;; TEST-CLI-TARGET: codegen errors codegen compile-fail
+(module Main)
+(show (+ "a"))

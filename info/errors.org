@@ -11,6 +11,10 @@
 
 [[file:index.org][<- Back to Index]] · [[file:error-handling.org][Error Handling]] · [[file:testing.org][Testing]] · [[file:build.org][Build System]] · [[file:cli.org][CLI Reference]] · [[file:repl.org][REPL]] · [[file:core.org][Core Library]]
 
+This page covers compiler diagnostics: error format, error layers,
+common error patterns, diagnostic fixtures, emit flags for debugging,
+and REPL error recovery.
+
 Compiler errors are structured as semantic relations between invalid
 source forms and explicit diagnostics. Each error reports the source
 location (=file:line:column=) with a descriptive message and a source
@@ -25,6 +29,9 @@ expected-failure fixture in =tests/codegen/rt_codegen_err_*.mon=
 Emit flags for debugging (--emit-json, --emit-ir, --emit-asm) are
 handled in cli.c:234-269 and main.c:774-1259.
 
+For runtime error handling patterns (error type, ?? operator, etc.),
+see [[file:error-handling.org][Error Handling]].
+
 #+BEGIN_EXAMPLE
 file:line:column: error: <message>
   line_no | <source line>
@@ -37,20 +44,33 @@ positions a caret (^) at the error column. For multi-character spans,
 =compiler_error_range= (reader.c:242-286) uses =^~~= to show the full
 extent.
 
-* Error Layers
+1. Error Layers
 
-| Layer       | Source    | Phase                                    |
+| Layer | Source | Phase |
 |-------------+-----------+------------------------------------------|
-| Reader      | =reader.c=  | S-expression / Wisp tokenization & parse |
-| Wisp        | =wisp.c=    | Indentation → S-expression desugaring    |
-| Inference   | =infer.c=   | HM constraint generation & unification   |
-| Dep checker | =dep.c=     | Bidirectional NbE type checking          |
-| Codegen     | =codegen.c= | LLVM IR generation and lowering          |
-| Runtime     | =repl.c=    | JIT execution (signal handlers)          |
+| Reader | =reader.c= | S-expression / Wisp tokenization & parse |
+| Wisp | =wisp.c= | Indentation → S-expression desugaring |
+| Inference | =infer.c= | HM constraint generation & unification |
+| Dep checker | =dep.c= | Bidirectional NbE type checking |
+| Codegen | =codegen.c= | LLVM IR generation and lowering |
+| Runtime | =repl.c= | JIT execution (signal handlers) |
 
-* Common Error Patterns by Layer
+For the compilation pipeline that produces these errors, see [[file:build.org][Build System # Compilation Pipeline]].
+For type inference error diagnostics, see [[file:type-inference.org][Type Inference]].
+For dependent type checking diagnostics, see [[file:dependent-types.org][Dependent Types]].
 
-** Reader Errors (=reader.c=)
+Key Points:
+- Errors are structured as =file:line:column= with a source pointer (=^= or =^~~=)
+- Six error layers: Reader → Wisp → Inference → Dep checker → Codegen → Runtime
+- Reader errors cover syntax issues (unbalanced parens, unterminated strings)
+- Codegen errors cover semantic issues (unbound variables, arity mismatches)
+- Runtime errors use signal handlers and longjmp for recovery
+
+See also: [[file:error-handling.org][Error Handling]]
+
+2. Common Error Patterns by Layer
+
+2.1 Reader Errors (=reader.c=)
 
 - *"unexpected ')'"* — unbalanced closing parenthesis.
 - *"unterminated string"* — string literal missing closing quote.
@@ -58,7 +78,9 @@ extent.
 - Unknown escape sequence in string/char literal.
 - Invalid numeric literal prefix.
 
-** Wisp Errors (=wisp.c=)
+For reader syntax reference, see [[file:syntax.org][Syntax]].
+
+2.2 Wisp Errors (=wisp.c=)
 
 - Indentation mismatch (inconsistent dedent/indent levels).
 - Empty =@= indexing target.
@@ -66,24 +88,30 @@ extent.
   newline, splitting the literal — use s-expression syntax for char
   literals with escapes).
 
-** Codegen Errors (=codegen.c=)
+For Wisp syntax reference, see [[file:wisp.org][Wisp]].
+
+2.3 Codegen Errors (=codegen.c=)
 
 - *Unbound variable* — reference to a name not in scope:
-  #+BEGIN_SRC monad
-  (show missing)  ; error: unbound variable 'missing'
-  #+END_SRC
 
-  #+BEGIN_SRC wisp
-  show missing  ; error: unbound variable 'missing'
-  #+END_SRC
+#+BEGIN_SRC monad
+(show missing)  ; error: unbound variable 'missing'
+#+END_SRC
+
+#+BEGIN_SRC wisp
+show missing  ; error: unbound variable 'missing'
+#+END_SRC
+
 - *Unknown function* — call to an undefined function:
-  #+BEGIN_SRC monad
-  (missing 1)     ; error: unknown function 'missing'
-  #+END_SRC
 
-  #+BEGIN_SRC wisp
-  missing 1     ; error: unknown function 'missing'
-  #+END_SRC
+#+BEGIN_SRC monad
+(missing 1)     ; error: unknown function 'missing'
+#+END_SRC
+
+#+BEGIN_SRC wisp
+missing 1     ; error: unknown function 'missing'
+#+END_SRC
+
 - *Arity mismatch* — wrong number of arguments to =quote=, =if=,
   =while=, =unless=, =for=, =set!=, =head=, =tail=, etc.
 - *Type mismatch* — arithmetic on strings, array size mismatch.
@@ -98,7 +126,12 @@ extent.
 - *Runtime collection operation arities* — =head=, =tail=, =pair?=,
   =++=, =count= with wrong argument count.
 
-** Runtime Errors (=repl.c=)
+For variables and scope, see [[file:define.org][Define]].
+For type errors, see [[file:types.org][Types]].
+For layout types, see [[file:layouts.org][Layouts]].
+For refinement types, see [[file:refinements.org][Refinements]].
+
+2.4 Runtime Errors (=repl.c=)
 
 - *SIGSEGV* — from bad pointers (e.g., accessing elements of a
   mis-typed array). Caught by =repl_signal_handler= (signal.c:79)
@@ -107,7 +140,10 @@ extent.
 - *Assertion failure* — =(assert ...)= triggers a longjmp through
   =g_assert_jmp_ptr= back to the eval loop.
 
-* Diagnostic Fixture Pattern
+For REPL error recovery, see [[file:repl.org][REPL # Signal Handling]].
+For runtime error handling, see [[file:error-handling.org][Error Handling]].
+
+3. Diagnostic Fixture Pattern
 
 Each stable =codegen.c= error path has a focused expected-failure
 fixture in =tests/codegen/rt_codegen_err_*.mon=. The pattern is one
@@ -133,34 +169,38 @@ show missing
 
 Currently 43 diagnostic fixtures covering:
 
-| Fixture pattern                                     | Error tested                      |
+| Fixture pattern | Error tested |
 |-----------------------------------------------------+-----------------------------------|
-| =rt_codegen_err_unbound_variable.mon=                 | Unbound variable reference        |
-| =rt_codegen_err_unknown_function.mon=                 | Call to undefined function        |
-| =rt_codegen_err_quote_arity.mon=                      | =(quote 1 2)= — wrong arity         |
-| =rt_codegen_err_quasiquote_arity.mon=                 | Quasiquote arity                  |
-| =rt_codegen_err_array_size_mismatch.mon=              | Value vs annotation size mismatch |
-| =rt_codegen_err_layout_no_field.mon=                  | Access to missing layout field    |
-| =rt_codegen_err_layout_lowercase_name.mon=          | Lowercase layout name             |
-| =rt_codegen_err_address_unbound.mon=                  | Address-of on non-lvalue          |
-| =rt_codegen_err_set_arity.mon=                        | =set!= arity                        |
-| =rt_codegen_err_if_arity.mon=                         | =if= arity                          |
-| =rt_codegen_err_cast_arity.mon=                       | Type cast arity                   |
-| =rt_codegen_err_refinement_*.mon=                     | Refinement naming / base type     |
-| =rt_codegen_err_empty_list.mon=                       | =()= in call position               |
-| =rt_codegen_err_callable_number.mon=                  | Number in call position           |
-| =rt_codegen_err_doc_*.mon=, =rt_codegen_err_code_*.mon= | Doc/code reflection               |
+| =rt_codegen_err_unbound_variable.mon= | Unbound variable reference |
+| =rt_codegen_err_unknown_function.mon= | Call to undefined function |
+| =rt_codegen_err_quote_arity.mon= | =(quote 1 2)= — wrong arity |
+| =rt_codegen_err_quasiquote_arity.mon= | Quasiquote arity |
+| =rt_codegen_err_array_size_mismatch.mon= | Value vs annotation size mismatch |
+| =rt_codegen_err_layout_no_field.mon= | Access to missing layout field |
+| =rt_codegen_err_layout_lowercase_name.mon= | Lowercase layout name |
+| =rt_codegen_err_address_unbound.mon= | Address-of on non-lvalue |
+| =rt_codegen_err_set_arity.mon= | =set!= arity |
+| =rt_codegen_err_if_arity.mon= | =if= arity |
+| =rt_codegen_err_cast_arity.mon= | Type cast arity |
+| =rt_codegen_err_refinement_*.mon= | Refinement naming / base type |
+| =rt_codegen_err_empty_list.mon= | =()= in call position |
+| =rt_codegen_err_callable_number.mon= | Number in call position |
+| =rt_codegen_err_doc_*.mon=, =rt_codegen_err_code_*.mon= | Doc/code reflection |
 
-* Emit Flags for Debugging
+For the fixture metadata format, see [[file:testing.org][Testing # Fixture Metadata]].
+
+See also: [[file:testing.org][Testing]]
+
+4. Emit Flags for Debugging
 
 These CLI flags let you inspect intermediate compiler output:
 
-| Flag            | Output                 | Use Case                             |
+| Flag | Output | Use Case |
 |-----------------+------------------------+--------------------------------------|
-| =--emit-json=   | AST as JSON            | Inspect parsed form, verify reader   |
-| =--emit-ir=     | LLVM IR text (.ll)     | Inspect generated LLVM IR            |
-| =--emit-asm=    | Assembly text (.s)     | Inspect generated assembly           |
-| =--emit-bc=     | LLVM bitcode (.bc)     | Pass to =llc=, =opt=, or other tools |
+| =--emit-json= | AST as JSON | Inspect parsed form, verify reader |
+| =--emit-ir= | LLVM IR text (.ll) | Inspect generated LLVM IR |
+| =--emit-asm= | Assembly text (.s) | Inspect generated assembly |
+| =--emit-bc= | LLVM bitcode (.bc) | Pass to =llc=, =opt=, or other tools |
 
 These flags are handled in =cli.c:234-269= and =main.c:774-1259=.
 Usage:
@@ -171,15 +211,35 @@ monadc --emit-ir  program.mon    # dump LLVM IR to stdout
 monadc --emit-asm program.mon    # dump assembly to stdout
 #+END_EXAMPLE
 
-* REPL Recovery
+For the full CLI flag reference, see [[file:cli.org][CLI Reference]].
+
+5. REPL Recovery
 
 The REPL uses three mechanisms to survive errors without crashing:
 
-| Mechanism             | Scope                        |
+| Mechanism | Scope |
 |-----------------------+------------------------------|
-| =setjmp/=longjmp=     | Parse errors in =REPL_PARSE= macro (repl.c:52) |
-| =g_repl_escape=       | Runtime errors / crashes (repl.c:65)     |
+| =setjmp/=longjmp= | Parse errors in =REPL_PARSE= macro (repl.c:52) |
+| =g_repl_escape= | Runtime errors / crashes (repl.c:65) |
 | =repl_signal_handler= | SIGSEGV / SIGBUS from JIT (repl.c:77-88) |
+
+For detailed REPL error recovery, see [[file:repl.org][REPL # Signal Handling]].
+
+See also: [[file:repl.org][REPL]]
+
+* Implementation Notes
+
+Error reporting source components:
+
+| Component | Source | Role |
+|-----------+--------+------|
+| =compiler_error= | [[file:../reader.c::288][reader.c:288]] | Basic error formatting |
+| =compiler_error_range= | [[file:../reader.c::242][reader.c:242]] | Multi-character span caret |
+| =repl_signal_handler= | [[file:../signal.c::79][signal.c:79]] | SIGSEGV/SIGBUS recovery |
+| =g_repl_escape= | [[file:../repl.c::65][repl.c:65]] | Longjmp escape for runtime errors |
+| =REPL_PARSE= macro | [[file:../repl.c::52][repl.c:52]] | Setjmp for parse errors |
+| =--emit-*= flags | [[file:../cli.c::234][cli.c:234]] | Emit flag CLI dispatch |
+| =--emit-*= output | [[file:../main.c::774][main.c:774]] | Emit output handling |
 
 * Related Pages
 
@@ -188,6 +248,16 @@ The REPL uses three mechanisms to survive errors without crashing:
 - [[file:build.org][Build System]] -- compilation error output
 - [[file:cli.org][CLI Reference]] -- command-line error flags
 - [[file:core.org][Core Library]] -- builtin error functions
+- [[file:repl.org][REPL]] -- REPL error recovery
+
+* Further Reading
+
+- [[file:../context/language.org][context/language.org]] — codegen diagnostics, error fixture list,
+  dispatch architecture
+- [[file:../context/tests.org][context/tests.org]] — expected-failure fixture architecture
+- [[file:cli.org][CLI Reference]] — all compiler flags
+- [[file:../context/codegen.org][context/codegen.org]] — codegen error paths
+- [[file:../tests/codegen/rt_codegen_err_*.mon][tests/codegen/rt_codegen_err_*.mon]] — diagnostic fixture source
 
 * Context Links
 
@@ -195,3 +265,6 @@ The REPL uses three mechanisms to survive errors without crashing:
   dispatch architecture
 - [[file:../context/tests.org][context/tests.org]] — expected-failure fixture architecture
 - [[file:cli.org][CLI Reference]] — all compiler flags
+- [[file:../context/codegen.org][context/codegen.org]] — codegen error paths
+- [[file:../tests/codegen/rt_codegen_err_*.mon][tests/codegen/rt_codegen_err_*.mon]] — diagnostic fixture source
+- [[file:../context/repl.org][context/repl.org]] — REPL error recovery

@@ -1,0 +1,27 @@
+;; TEST-ID: tests.codegen.branch200.20.operators.boolean.logic.operator.dispatch.31
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-SUBSET: boolean-logic
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.branch200.20.operators.boolean.logic.operator.dispatch.31
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: boolean logic over comparison results
+;; TEST-ATOM: atom.codegen.branch200.20.operators.boolean.logic.operator.dispatch.31
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.operator.dispatch
+;; TEST-TAG: operator
+;; TEST-COVERAGE: codegen.c:7668-7714 bitwise/logical operator special forms
+;; TEST-COVERAGE: codegen.c:8932-9453 comparison dispatch branches
+;; TEST-COVERAGE: codegen.c:9463-9810 arithmetic dispatch branches
+
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-USES-ATOM: atom.codegen.subset.20.operators.boolean.logic
+;; TEST-MENU: branches/operators/boolean-logic/atom.codegen.branch200.20.operators.boolean.logic.operator.dispatch.31
+;; TEST-MENU-PATH: codegen/branches/operators/boolean-logic/atom.codegen.branch200.20.operators.boolean.logic.operator.dispatch.31
+;; TEST-ATOM-LEAF: atom.codegen.branch200.20.operators.boolean.logic.operator.dispatch.31
+;; TEST-CLI-TARGET: codegen branches operators boolean-logic
+
+(module Main)
+(show (and (< 1 2) (> 5 3)))

@@ -1,0 +1,17 @@
+name: structured_stress_array_phi_index_r03_disabled_duplicate_d8b766c0
+section: current-stress
+tier: experimental
+kind: program
+features: stress, program, array, array-index, if, phi
+compiler-path: codegen.array_index, codegen.array_literal, codegen.branch_phi, codegen.deep_program, codegen.if_phi, codegen.module_body, infer.array, infer.callable_array, infer.if_phi, reader.array_literal, reader.ast_if, runner.program_kind, runner.stress_tier
+signal: high
+corpus-role: merged-duplicate
+uses-atoms: atom.control.if, atom.core.equality, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+merged-into: structured_stress_array_phi_index_r01
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int@tiny b:Int@tiny c:Int@tiny p:Bool@logic
+type: Bool
+expect: True
+description: V11 stress program stress_array_phi_index round 3; combines multiple compiler paths in non-default stress tier.
+program: (show (= ([{a} {b} {c}] (if {p} 1 1)) {b}))

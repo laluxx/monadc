@@ -1,0 +1,15 @@
+name: control_begin_returns_last_int
+section: control-binding
+tier: stable
+kind: law
+features: arithmetic, begin, control, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.sequence, infer.arithmetic, infer.equality, reader.ast_begin
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.begin, atom.core.equality
+related-properties: signal_atom_equality_reflexive
+args: a:Int b:Int
+type: Bool
+expect: True
+description: begin must evaluate a sequence and return the final Int expression.
+law: (= (begin {a} {b}) {b})

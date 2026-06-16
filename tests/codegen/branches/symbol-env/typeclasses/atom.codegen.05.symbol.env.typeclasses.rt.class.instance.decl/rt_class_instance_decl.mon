@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-class-instance-decl
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.05.symbol.env.typeclasses.rt.class.instance.decl
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: typeclasses
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime class and instance declarations compile alongside executable code.
+;; TEST-ATOM: A simple class declaration and empty instance declaration do not block following codegen.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:05-symbol-env/typeclasses branch family
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/typeclasses/atom.codegen.05.symbol.env.typeclasses.rt.class.instance.decl
+;; TEST-MENU-PATH: codegen/branches/symbol-env/typeclasses/atom.codegen.05.symbol.env.typeclasses.rt.class.instance.decl
+;; TEST-ATOM-LEAF: atom.codegen.05.symbol.env.typeclasses.rt.class.instance.decl
+;; TEST-CLI-TARGET: codegen branches symbol-env typeclasses
+(module Main)
+(class Show a where (display) :: a -> String)
+(instance Show Int)
+(show 42)

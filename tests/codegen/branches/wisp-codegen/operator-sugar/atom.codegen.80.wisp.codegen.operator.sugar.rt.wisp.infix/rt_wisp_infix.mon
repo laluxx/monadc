@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.rt-wisp-infix
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.operator.sugar.rt.wisp.infix
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: operator-sugar
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.wisp.infix-operators
+;; TEST-PURPOSE: Wisp infix operators compile and run
+;; TEST-ATOM: 3 + 4 → 7, 10 - 3 → 7, 2 * 5 → 10
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:80-wisp-codegen/operator-sugar branch family
+;; TEST-USES-ATOM: atom.codegen.category.80.wisp.codegen
+;; TEST-MENU: branches/wisp-codegen/operator-sugar/atom.codegen.80.wisp.codegen.operator.sugar.rt.wisp.infix
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/operator-sugar/atom.codegen.80.wisp.codegen.operator.sugar.rt.wisp.infix
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.operator.sugar.rt.wisp.infix
+;; TEST-CLI-TARGET: codegen branches wisp-codegen operator-sugar
+module Main
+show 3 + 4
+show 10 - 3
+show 2 * 5
+show 20 / 4
+show 17 % 5

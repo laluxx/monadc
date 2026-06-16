@@ -1,0 +1,15 @@
+name: conversion_int_identity_constant
+section: predicates-conversions
+tier: experimental
+kind: law
+features: arithmetic, equality, predicates
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, infer.arithmetic, infer.equality
+signal: low
+corpus-role: legacy-smoke
+uses-atoms: atom.core.equality, atom.infer.predicate
+related-properties: signal_atom_equality_reflexive
+args: 
+type: Bool
+expect: True
+description: Int conversion of an Int must be identity.
+law: (= (Int 42) 42)

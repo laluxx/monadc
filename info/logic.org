@@ -14,11 +14,17 @@
 Test coverage: logic operators are exercised by =rt_cmp_*.mon=
 fixtures.
 
+This page covers boolean logic in Monad: =and=, =or=, =not=, truthiness
+rules, and type predicates.
+
 Boolean logic operators combine truth values. =and= and =or= use
 short-circuit evaluation — the second argument is only evaluated if
 needed.
 
-* and
+See [[file:booleans.org][Booleans]] for the Bool type and [[file:conditionals.org][Conditionals]] for control flow
+using boolean conditions.
+
+* 1. and
 
 Logical conjunction — returns =True= if all arguments are true:
 
@@ -39,7 +45,9 @@ and
 Short-circuit: if any argument is =False=, remaining arguments are
 not evaluated. Variadic: 2..N arguments.
 
-* or
+See also: [[file:conditionals.org][Conditionals]]
+
+* 2. or
 
 Logical disjunction — returns =True= if any argument is true:
 
@@ -60,7 +68,7 @@ or
 Short-circuit: if any argument is =True=, remaining arguments are not
 evaluated. Variadic: 2..N arguments.
 
-* not
+* 3. not
 
 Logical negation:
 
@@ -78,7 +86,9 @@ not (= x 0)
 
 =not= takes a single argument.
 
-* Truthiness
+See also: [[file:booleans.org][Booleans]]
+
+* 4. Truthiness
 
 Only =False= and =nil= are considered falsey in condition position. All
 other values are truthy:
@@ -97,7 +107,14 @@ if False "truthy" "falsey"
 if nil "truthy" "falsey"
 #+END_SRC
 
-* Operator Table
+See [[file:conditionals.org][Conditionals]] for =if=, =cond=, =when=, =unless=.
+
+Key Points:
+- Only =False= and =nil= are falsey; all other values are truthy (including 0 and "")
+- =and= and =or= use short-circuit evaluation = second argument evaluated only if needed
+- =not= takes a single argument and returns Boolean
+
+* 5. Operator Table
 
 | Operator | Example        | Description           | Short-circuit |
 |----------+----------------+-----------------------+---------------|
@@ -105,13 +122,48 @@ if nil "truthy" "falsey"
 | or       | =(or a b)=     | Logical OR            | Yes           |
 | not      | =(not a)=      | Logical NOT           | N/A           |
 
+* 6. Type Predicate
+
+#+BEGIN_SRC monad
+(Bool? (and True False))   ;; True
+(Bool? (not True))          ;; True
+(Bool? 42)                  ;; False
+#+END_SRC
+
+#+BEGIN_SRC wisp
+Bool? (and True False)   ;; True
+Bool? (not True)          ;; True
+Bool? 42                  ;; False
+#+END_SRC
+
+See [[file:booleans.org][Booleans — Type Predicates]].
+
+See also: [[file:booleans.org][Booleans]], [[file:conditionals.org][Conditionals]]
+
+* Implementation Notes
+
+Logic operator source components:
+
+| Operator | Source | Mechanism |
+|----------+--------+-----------|
+| =and= | [[file:../codegen.c][codegen.c]] | Short-circuit sequential AND |
+| =or= | [[file:../codegen.c][codegen.c]] | Short-circuit sequential OR |
+| =not= | [[file:../codegen.c][codegen.c]] | Logical negation |
+| Truthiness check | [[file:../codegen.c][codegen.c]] | =False=/=nil= → falsey |
+| =strcmp= dispatch | [[file:../context/codegen-ops.org][context/codegen-ops.org]] | Operation name resolution |
+| Short-circuit semantics | [[file:../context/language.org][context/language.org]] | Evaluation order specification |
+
 * Related Pages
 
-- [[file:booleans.org][Booleans]] -- Bool type, True/False
-- [[file:conditionals.org][Conditionals]] -- if, cond with boolean conditions
-- [[file:equality.org][Equality]] -- comparison returning Bool
-- [[file:core.org][Core Library]] -- logic dispatch builtins
-- [[file:control.org][Control Flow]] -- control flow with boolean conditions
+- [[file:booleans.org][Booleans]] — Bool type, True/False
+- [[file:conditionals.org][Conditionals]] — if, cond with boolean conditions
+- [[file:equality.org][Equality]] — comparison returning Bool
+- [[file:core.org][Core Library]] — logic dispatch builtins
+- [[file:control.org][Control Flow]] — control flow with boolean conditions
+- [[file:types.org][Types]] — Bool ground type
+- [[file:patterns.org][Pattern Matching]] — boolean patterns
+- [[file:maybe.org][Maybe]] — optional values with boolean checks
+- [[file:testing.org][Testing]] — assertion and test logic
 
 * Context Links
 
@@ -121,3 +173,11 @@ if nil "truthy" "falsey"
 - [[file:core.org][Core Library]] — built-in function overview
 - [[file:booleans.org][Booleans]] — Bool type, True/False
 - [[file:conditionals.org][Conditionals]] — if, cond, when, unless
+
+* Further Reading
+
+- [[file:../context/language.org::working-dispatch][context/language.org — Working dispatch]]
+- [[file:../context/codegen.org][context/codegen.org]] — LLVM codegen for logic operators
+- [[file:../context/features.org][context/features.org]] — logic feature tracking
+- [[file:../tests/codegen/][tests/codegen/]] — logic test fixtures
+- [[file:../context/language.org][context/language.org]] — short-circuit evaluation semantics

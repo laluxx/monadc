@@ -1,0 +1,15 @@
+name: if_negated_order_else_branch
+section: control
+tier: stable
+kind: law
+features: arithmetic, control, equality, if, logic, phi, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.logic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.equality, infer.if_phi, infer.logic, infer.type_predicate, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.if, atom.core.equality, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+args: a:Int b:Int fallback:Int
+type: Bool
+expect: True
+description: Choosing on reversed strict order must agree with the equivalent direct conditional expression.
+law: (= (if (fuzz-gt? {a} {b}) {a} {fallback}) (if (fuzz-lt? {b} {a}) {a} {fallback}))

@@ -1,0 +1,15 @@
+name: mega_compare_variadic_lte_if_middle
+section: codegen-compare-variadic
+tier: stable
+kind: law
+features: arithmetic, codegen, comparison, equality, if, phi
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.comparison_dispatch, codegen.equality_dispatch, codegen.if_phi, infer.arithmetic, infer.comparison, infer.equality, infer.if_phi, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.control.if, atom.core.equality, atom.core.order.lt, atom.core.order.lte
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates, signal_atom_lt_transitive
+args: p:Bool a:Int b:Int c:Int d:Int
+type: Bool
+expect: True
+description: Variadic <= must compose with a branch-selected middle operand.
+law: (= (<= {a} (if {p} {b} {c}) {d}) (if {p} (<= {a} {b} {d}) (<= {a} {c} {d})))

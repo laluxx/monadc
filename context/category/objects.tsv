@@ -1,0 +1,9 @@
+kind	constructor	identity	invariant
+File	file:<path>	path	Path exists inside context root.
+Heading	<ID>	org :ID:	ID is globally unique.
+Record	<record-id>	bracket id:	Record ID is globally unique.
+Script	script:<path>	path	Script is importable/executable with stdlib only.
+Report	report:<path>	path	Generated reproducibly from scripts.
+Concept	concept:<name>	name	Belongs to taxonomy preorder.
+Test	test:<TEST-ID>	TEST-ID	Stable in tests manifest when tests are present.
+SourceRegion	src:<path>:<line>	path+range	Precise source anchor when full repo is present.

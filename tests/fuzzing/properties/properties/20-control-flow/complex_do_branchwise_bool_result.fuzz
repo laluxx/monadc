@@ -1,0 +1,15 @@
+name: complex_do_branchwise_bool_result
+section: control-do-if
+tier: stable
+kind: law
+features: arithmetic, control, do, equality, if, phi, set
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.runtime_call, codegen.sequence, infer.arithmetic, infer.equality, infer.if_phi, reader.ast_do, reader.ast_if, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.do, atom.control.if, atom.core.equality
+related-properties: signal_atom_do_last_value, signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+args: setup:Int cond:Bool p:Bool q:Bool
+type: Bool
+expect: True
+description: An if returning Bool through do-wrapped branches must match the direct Bool if.
+law: (= (if {cond} (do {setup} {p}) (do {setup} {q})) (if {cond} {p} {q}))

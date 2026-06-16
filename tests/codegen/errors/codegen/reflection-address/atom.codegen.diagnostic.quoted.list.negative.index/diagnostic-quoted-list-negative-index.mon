@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.branch.diagnostic-quoted-list-negative-index
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: reflection-address
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.quoted.list.negative.index
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover quoted literal list compile-time bounds diagnostics for negative indices.
+;; TEST-ATOM: A static negative quoted-list index should fail at codegen with list length context.
+;; TEST-EXPECT: fail:compile
+;; TEST-COVERAGE: codegen.c:4212 quoted-list compile-time index check
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/reflection-address/atom.codegen.diagnostic.quoted.list.negative.index
+;; TEST-MENU-PATH: codegen/errors/codegen/reflection-address/atom.codegen.diagnostic.quoted.list.negative.index
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.quoted.list.negative.index
+;; TEST-CLI-TARGET: codegen errors codegen reflection-address
+(module Main)
+(show ('(1 2 3) -1))

@@ -1,0 +1,14 @@
+name: deep_codegen_type_int_pred_generated
+section: codegen-predicates-casts-null
+tier: stable
+kind: law
+features: arithmetic, codegen, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.type_predicate
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate, atom.null.nil
+args: a:Int
+type: Bool
+expect: True
+description: Int? must resolve generated Int type at compile time.
+law: (Int? {a})

@@ -1,0 +1,19 @@
+;; TEST-ID: tests.reader.empty-file
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.00.values.scalar.literals.empty.file
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: scalar-literals
+;; TEST-CATEGORY: 00-values
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.tests.metadata-format
+;; TEST-PURPOSE: Preserve an intentionally empty Monad fixture as a metadata-bearing test atom.
+;; TEST-ATOM: A comment-only fixture should be valid test inventory input.
+;; TEST-EXPECT: inventory
+;; TEST-COVERAGE: codegen.c:00-values/scalar-literals branch family
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/scalar-literals/atom.codegen.00.values.scalar.literals.empty.file
+;; TEST-MENU-PATH: codegen/branches/values/scalar-literals/atom.codegen.00.values.scalar.literals.empty.file
+;; TEST-ATOM-LEAF: atom.codegen.00.values.scalar.literals.empty.file
+;; TEST-CLI-TARGET: codegen branches values scalar-literals
+

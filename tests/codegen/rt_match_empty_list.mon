@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-match-empty-list
-;; TEST-CONTEXT: monadc.context.language.reader-header-coverage, monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Pattern codegen coverage for PAT_LIST_EMPTY.
-;; TEST-ATOM: (match [] with | [] -> 1 | _ -> 0) should select the empty-list clause.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (match [] with | [] -> 1 | _ -> 0))

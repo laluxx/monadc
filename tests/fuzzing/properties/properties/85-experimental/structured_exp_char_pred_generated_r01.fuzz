@@ -1,0 +1,14 @@
+name: structured_exp_char_pred_generated_r01
+section: current-experimental
+tier: experimental
+kind: law
+features: experimental, char, predicate
+compiler-path: codegen.predicate_dispatch, infer.type_predicate
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.infer.predicate, atom.runtime.char
+args: c:Char
+type: Bool
+expect: True
+description: V10 experimental generator property exp_char_pred_generated round 1, intended for --tiers experimental/all.
+law: (char? {c})

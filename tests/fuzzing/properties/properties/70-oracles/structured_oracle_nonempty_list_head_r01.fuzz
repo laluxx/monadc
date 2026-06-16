@@ -1,0 +1,14 @@
+name: structured_oracle_nonempty_list_head_r01
+section: current-oracle
+tier: oracle
+kind: law
+features: oracle, list, head
+compiler-path: codegen.runtime_call, runner.expect_python, runner.oracle_tier, runner.typed_generator, runtime.list
+signal: high
+corpus-role: oracle
+uses-atoms: atom.misc, atom.runtime.list
+args: xs:NonEmptyListInt@small
+type: Int
+expect-python: xs[0]
+description: V11 oracle property oracle_nonempty_list_head round 1; validates Python expected-value support with generated rich/dependent arguments.
+law: (head {xs})

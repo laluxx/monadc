@@ -1,0 +1,15 @@
+name: extreme_combo_deep_order_computed_bounds
+section: feature-interactions-deep
+tier: stable
+kind: law
+features: arithmetic, array, array-index, comparison, env, feature, if, logic, phi, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.branch_phi, codegen.comparison_dispatch, codegen.if_phi, codegen.local_load, codegen.logic_dispatch, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.comparison, infer.env_child, infer.env_lookup, infer.if_phi, infer.logic, reader.array_literal, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.with, atom.control.if, atom.core.order.lt, atom.logic.and, atom.logic.not, atom.logic.or, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_if_same_branch_eliminates, signal_atom_lt_transitive, signal_atom_with_substitution
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Mixed helpers, direct dispatch, control flow, and bindings should compose without changing semantics.
+law: (with [lo (fuzz-min {a} {b})] (with [hi (fuzz-max {a} {b})] (if (< {c} lo) (< {c} hi) True)))

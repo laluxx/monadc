@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-codegen-err-doc-arg-symbol
-;; TEST-SECTION: diagnostic
-;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
-;; TEST-PURPOSE: Codegen rejects non-symbol doc reflection arguments.
-;; TEST-ATOM: (doc 1) must fail because doc arguments must be symbols.
-;; TEST-EXPECT: fail:compile
-
-(module Main)
-(doc 1)

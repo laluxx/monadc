@@ -1,0 +1,28 @@
+;; TEST-ID: tests.codegen.branch200.20.operators.comparison.operator.dispatch.11
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-SUBSET: comparison
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.branch200.20.operators.comparison.operator.dispatch.11
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: variadic less-than false middle
+;; TEST-ATOM: atom.codegen.branch200.20.operators.comparison.operator.dispatch.11
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.operator.dispatch
+;; TEST-TAG: operator
+;; TEST-COVERAGE: codegen.c:7668-7714 bitwise/logical operator special forms
+;; TEST-COVERAGE: codegen.c:8932-9453 comparison dispatch branches
+;; TEST-COVERAGE: codegen.c:9463-9810 arithmetic dispatch branches
+
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-USES-ATOM: atom.codegen.subset.20.operators.comparison
+;; TEST-MENU: branches/operators/comparison/atom.codegen.branch200.20.operators.comparison.operator.dispatch.11
+;; TEST-MENU-PATH: codegen/branches/operators/comparison/atom.codegen.branch200.20.operators.comparison.operator.dispatch.11
+;; TEST-ATOM-LEAF: atom.codegen.branch200.20.operators.comparison.operator.dispatch.11
+;; TEST-CLI-TARGET: codegen branches operators comparison
+
+(module Main)
+(show (< 1 3 2 4))

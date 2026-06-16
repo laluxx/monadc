@@ -1,0 +1,41 @@
+;; TEST-ID: tests.codegen.menu.errors.reader.numeric.periodic.missing.close.variant.1.036
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: errors
+;; TEST-SUBSET: reader/numeric.periodic.missing-close.variant-1
+;; TEST-MENU: errors/reader/numeric.periodic.missing-close.variant-1/atom.menu.error.reader.numeric.periodic.missing-close.variant-1.036
+;; TEST-MENU-PATH: codegen/errors/reader/numeric.periodic.missing-close.variant-1/atom.menu.error.reader.numeric.periodic.missing-close.variant-1.036
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.error-menu
+;; TEST-PURPOSE: Pin reader.c diagnostic: Expected ')' to close periodic decimal repeating block
+;; TEST-ATOM: atom.menu.error.reader.numeric.periodic.missing-close.variant-1.036
+;; TEST-CODEGEN-ATOM: atom.menu.error.reader.numeric.periodic.missing-close.variant-1.036
+;; TEST-ATOM-LEAF: atom.menu.error.reader.numeric.periodic.missing-close.variant-1.036
+;; TEST-QUALITY: menu-error-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ERROR-STAGE: reader
+;; TEST-ERROR-FAMILY: numeric.periodic.missing-close.variant-1
+;; TEST-ERROR-MESSAGE: Expected ')' to close periodic decimal repeating block
+;; TEST-ERROR-SOURCE: reader.c
+;; TEST-ERROR-PATH: reader.c:1594
+;; TEST-CODEGEN-PATH: diagnostic.reader.numeric.periodic.missing-close.variant-1
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-TAG: menu
+;; TEST-COVERAGE: reader.c:1594 Expected ')' to close periodic decimal repeating block
+;; TEST-USES-ATOM: atom.menu.error.reader.numeric.periodic.missing-close.variant-1.036
+;; TEST-USES-ATOM: atom.error.reader
+;; TEST-USES-ATOM: atom.error.reader.numeric.periodic.missing-close.variant-1
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-DEPENDS-ON: atom.reader.lex.parse
+;; TEST-REFINES: atom.error.reader
+;; TEST-REFINES: atom.error.reader.numeric.periodic.missing-close.variant-1
+;; TEST-REFINES: atom.reader.error
+;; TEST-RELATED: atom.codegen.error.menu
+;; TEST-CLI-TARGET: codegen errors reader reader
+
+(module Main)
+;; reader menu variant 1
+(show 0.(3)

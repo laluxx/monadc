@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-shift-right
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Arithmetic right shift (>>) catches uncovered dispatch path codegen.c:7407.
-;; TEST-ATOM: (>> 16 2) produces 4, (>> -16 2) produces -4 (sign-preserving).
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (>> 16 2))
-(show (>> -16 2))

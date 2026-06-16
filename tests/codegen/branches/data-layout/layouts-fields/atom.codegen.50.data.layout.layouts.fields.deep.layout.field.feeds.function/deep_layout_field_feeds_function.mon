@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.deep.deep_layout_field_feeds_function
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SUBSET: layouts-fields
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.50.data.layout.layouts.fields.deep.layout.field.feeds.function
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise layout field access inside typed function body.
+;; TEST-ATOM: Layout parameter fields should be loadable inside functions.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout, atom.codegen.subset.layouts.fields
+;; TEST-COVERAGE: codegen.c:layout pointer param and dot GEP
+;; TEST-MENU: branches/data-layout/layouts-fields/atom.codegen.50.data.layout.layouts.fields.deep.layout.field.feeds.function
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts-fields/atom.codegen.50.data.layout.layouts.fields.deep.layout.field.feeds.function
+;; TEST-ATOM-LEAF: atom.codegen.50.data.layout.layouts.fields.deep.layout.field.feeds.function
+;; TEST-CLI-TARGET: codegen branches data-layout layouts-fields
+
+(module Main)
+(layout Point [x :: Int] [y :: Int])
+(define (sum-point [p -> Point] -> Int) (+ p.x p.y))
+(show (sum-point (Point 5 7)))

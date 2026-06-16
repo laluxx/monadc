@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.branch.control-begin-empty-sequence
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: begin-do-sequence
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.control.begin.empty.sequence
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover begin with zero forms and begin with side-effect sequencing.
+;; TEST-ATOM: Empty begin returns zero; non-empty begin returns the last expression after executing earlier forms.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:7732-7741 begin empty and sequence branches
+
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/begin-do-sequence/atom.codegen.control.begin.empty.sequence
+;; TEST-MENU-PATH: codegen/branches/control-flow/begin-do-sequence/atom.codegen.control.begin.empty.sequence
+;; TEST-ATOM-LEAF: atom.codegen.control.begin.empty.sequence
+;; TEST-CLI-TARGET: codegen branches control-flow begin-do-sequence
+(module Main)
+(show (begin))
+(define x 0)
+(show (begin (set! x 3) x))
+(show x)

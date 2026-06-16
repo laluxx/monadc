@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -42,7 +42,7 @@
   instruction representation, preprocessing, and LLVM codegen entry point for
   inline asm in MonadC.
 
-[INF id:inf.context.asm-relation-to-language from:obs.context.asm.file,obs.language.inline-asm conf:high]
+[INF id:inf.context.asm-relation-to-language from:obs.context.asm.file,obs.language.inline-asm-parser,obs.language.inline-asm-codegen conf:high]
   This file is the header-level structural reference for asm.h. The
   language.org inline-asm section documents the user-facing semantics, parser
   integration, and known gaps; this file documents every type and function

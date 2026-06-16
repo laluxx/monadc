@@ -1,0 +1,32 @@
+;; TEST-ID: tests.codegen.reader-error.reader-array-comma-range-hint
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: reader-errors/collections-refinements
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.reader-error-coverage
+;; TEST-PURPOSE: Trigger and pin diagnostic: Unexpected ',' — did you mean a range [start,step..end]?
+;; TEST-ATOM: atom.reader.error.reader.array.comma.range.hint
+;; TEST-CODEGEN-ATOM: atom.reader.error.reader.array.comma.range.hint
+;; TEST-QUALITY: diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-READER-ERROR: Unexpected ',' — did you mean a range [start,step..end]?
+;; TEST-READER-PATH: reader.c:6281 parser.array
+;; TEST-CODEGEN-PATH: diagnostic.parser.array
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-COVERAGE: reader.c:6281 Unexpected ',' — did you mean a range [start,step..end]?
+;; TEST-USES-ATOM: atom.reader.error.reader.array.comma.range.hint
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-USES-ATOM: atom.reader.error.family.parser.array
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-REFINES: atom.reader.error
+;; TEST-MENU: errors/reader/collections-refinements/atom.reader.error.reader.array.comma.range.hint
+;; TEST-MENU-PATH: codegen/errors/reader/collections-refinements/atom.reader.error.reader.array.comma.range.hint
+;; TEST-ATOM-LEAF: atom.reader.error.reader.array.comma.range.hint
+;; TEST-CLI-TARGET: codegen errors reader collections-refinements
+
+(module Main)
+(show [1,2])

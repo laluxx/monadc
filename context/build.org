@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-11
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -256,7 +256,7 @@ may fail if no password is provided.
   would guide first-time users without changing the behavior for
   experienced developers.
 
-[INF id:inf.build.connects-to from:obs.build.purpose conf:high]
+[INF id:inf.build.connects-to from:monadc.context.build.file-metadata conf:high]
   connects-to -> `monadc.context.makefile` (build targets documented in
   makefile.org correspond to Makefile targets listed here) ·
   `monadc.context.buildsystem` (cmd_build from cli.c invokes the programmatic

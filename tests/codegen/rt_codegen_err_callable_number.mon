@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-codegen-err-callable-number
-;; TEST-SECTION: diagnostic
-;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
-;; TEST-PURPOSE: Codegen rejects number literals used as function heads.
-;; TEST-ATOM: ((1) 2) must fail because a number literal cannot be called.
-;; TEST-EXPECT: fail:compile
-
-(module Main)
-((1) 2)

@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-cffi-limits-int-max
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.70.ffi.asm.cffi.limits.rt.cffi.limits.int.max
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: cffi-limits
+;; TEST-CATEGORY: 70-ffi-asm
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.cffi-runtime
+;; TEST-PURPOSE: Runtime C FFI exposes integer constants from included headers.
+;; TEST-ATOM: INT_MAX from limits.h is greater than zero.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:70-ffi-asm/cffi-limits branch family
+;; TEST-USES-ATOM: atom.codegen.category.70.ffi.asm
+;; TEST-MENU: branches/ffi-asm/cffi-limits/atom.codegen.70.ffi.asm.cffi.limits.rt.cffi.limits.int.max
+;; TEST-MENU-PATH: codegen/branches/ffi-asm/cffi-limits/atom.codegen.70.ffi.asm.cffi.limits.rt.cffi.limits.int.max
+;; TEST-ATOM-LEAF: atom.codegen.70.ffi.asm.cffi.limits.rt.cffi.limits.int.max
+;; TEST-CLI-TARGET: codegen branches ffi-asm cffi-limits
+(module Main)
+(include "limits.h")
+(show (> INT_MAX 0))

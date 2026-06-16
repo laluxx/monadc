@@ -1,0 +1,15 @@
+name: compare_variadic_gt_predecessor_chain
+section: comparison-variadic
+tier: stable
+kind: law
+features: arithmetic, comparison, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.comparison_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.comparison, infer.logic
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.order.gt, atom.core.plus, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero
+args: a:Int
+type: Bool
+expect: True
+description: Variadic greater-than must compare every adjacent pair in descending order.
+law: (> (+ {a} 2) (+ {a} 1) {a})

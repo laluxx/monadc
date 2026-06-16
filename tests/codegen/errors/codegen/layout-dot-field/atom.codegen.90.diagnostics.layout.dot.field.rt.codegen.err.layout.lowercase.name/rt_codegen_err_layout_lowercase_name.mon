@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-layout-lowercase-name
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.90.diagnostics.layout.dot.field.rt.codegen.err.layout.lowercase.name
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: layout-dot-field
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen rejects lowercase layout names.
+;; TEST-ATOM: (layout point ...) must fail because layout names are type constructors.
+;; TEST-EXPECT: fail:compile
+
+;; TEST-COVERAGE: codegen.c:90-diagnostics/layout-dot-field branch family
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/layout-dot-field/atom.codegen.90.diagnostics.layout.dot.field.rt.codegen.err.layout.lowercase.name
+;; TEST-MENU-PATH: codegen/errors/codegen/layout-dot-field/atom.codegen.90.diagnostics.layout.dot.field.rt.codegen.err.layout.lowercase.name
+;; TEST-ATOM-LEAF: atom.codegen.90.diagnostics.layout.dot.field.rt.codegen.err.layout.lowercase.name
+;; TEST-CLI-TARGET: codegen errors codegen layout-dot-field
+(module Main)
+(layout point [x :: Int])

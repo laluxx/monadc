@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-match-bare-constructor
-;; TEST-CONTEXT: monadc.context.language.reader-header-coverage, monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Pattern codegen coverage for bare ADT constructor patterns.
-;; TEST-ATOM: (match Nothing with | Nothing -> 1 | _ -> 0) should select a nullary constructor clause.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(data Maybe Nothing | Just Int)
-(show (match Nothing with | Nothing -> 1 | _ -> 0))

@@ -1,0 +1,30 @@
+;; TEST-ID: tests.codegen.branch200.40.collections.strings.collection.branch.26
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-SUBSET: strings
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.branch200.40.collections.strings.collection.branch.26
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: string expression as collection index
+;; TEST-ATOM: atom.codegen.branch200.40.collections.strings.collection.branch.26
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.collection.dispatch
+;; TEST-TAG: collection
+;; TEST-COVERAGE: codegen.c:6192-6303 show array/fat array branches
+;; TEST-COVERAGE: codegen.c:7130-7303 head/tail/list collection branches
+;; TEST-COVERAGE: codegen.c:8358-8565 set/map runtime operations
+;; TEST-COVERAGE: codegen.c:8620-8858 string/count/contains branches
+;; TEST-COVERAGE: codegen.c:12966-13040 collection expression indexing path
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-USES-ATOM: atom.codegen.subset.40.collections.strings
+;; TEST-MENU: branches/collections/strings/atom.codegen.branch200.40.collections.strings.collection.branch.26
+;; TEST-MENU-PATH: codegen/branches/collections/strings/atom.codegen.branch200.40.collections.strings.collection.branch.26
+;; TEST-ATOM-LEAF: atom.codegen.branch200.40.collections.strings.collection.branch.26
+;; TEST-CLI-TARGET: codegen branches collections strings
+
+(module Main)
+(show ("abc" 0))
+(show ("abc" 2))

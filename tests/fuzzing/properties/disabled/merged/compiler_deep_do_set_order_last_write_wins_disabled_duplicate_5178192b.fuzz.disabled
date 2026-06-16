@@ -1,0 +1,17 @@
+name: compiler_deep_do_set_order_last_write_wins_disabled_duplicate_5178192b
+section: control-flow-mutation-current
+tier: experimental
+kind: law
+features: arithmetic, array, array-index, control, do, env, equality, logic, mutation, set, set!, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.equality_dispatch, codegen.local_load, codegen.logic_dispatch, codegen.runtime_call, codegen.sequence, codegen.set_bang, codegen.store, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.equality, infer.logic, infer.mutation, reader.array_literal, reader.ast_do, runtime.set
+signal: medium
+corpus-role: merged-duplicate
+uses-atoms: atom.binding.set-bang, atom.binding.with, atom.control.do, atom.core.equality, atom.core.plus, atom.logic.and, atom.logic.not, atom.logic.or, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_do_last_value, signal_atom_equality_reflexive, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero, signal_atom_with_substitution
+merged-into: mega_control_do_set_twice_reads_last
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: do sequencing must preserve side-effect order and return the final mutated value.
+law: (= (with [x {a}] (do (set! x {b}) (set! x (+ x {c})) x)) (+ {b} {c}))

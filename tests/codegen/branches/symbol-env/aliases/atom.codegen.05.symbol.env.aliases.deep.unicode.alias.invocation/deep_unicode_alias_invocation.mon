@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.deep.deep_unicode_alias_invocation
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SUBSET: aliases
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.05.symbol.env.aliases.deep.unicode.alias.invocation
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise unicode symbol mangling in value lookup.
+;; TEST-ATOM: Unicode aliases should mangle and resolve in LLVM symbols.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env, atom.codegen.subset.aliases
+;; TEST-COVERAGE: codegen.c:mangle_unicode_name and symbol env lookup
+;; TEST-MENU: branches/symbol-env/aliases/atom.codegen.05.symbol.env.aliases.deep.unicode.alias.invocation
+;; TEST-MENU-PATH: codegen/branches/symbol-env/aliases/atom.codegen.05.symbol.env.aliases.deep.unicode.alias.invocation
+;; TEST-ATOM-LEAF: atom.codegen.05.symbol.env.aliases.deep.unicode.alias.invocation
+;; TEST-CLI-TARGET: codegen branches symbol-env aliases
+
+(module Main)
+(define π 3)
+(show (+ π 3))

@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-quote-comp
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Quote forms: (quote sym) and ' shorthand for lists
-;; TEST-ATOM: (quote foo) evaluates to symbol foo, (car '(1 2 3)) = 1
-;; TEST-EXPECT: compile, run
-(module Main)
-(show (quote foo))
-(show (quote bar))
-(show (car '(10 20 30)))

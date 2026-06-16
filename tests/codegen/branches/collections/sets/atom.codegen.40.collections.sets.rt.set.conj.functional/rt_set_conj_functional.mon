@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.rt-set-conj-functional
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.sets.rt.set.conj.functional
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: sets
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: conj (functional) returns a new set with the element added, leaving original unchanged.
+;; TEST-ATOM: (conj s 3) returns new set {1 2 3}; original set {1 2} unchanged.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:40-collections/sets branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/sets/atom.codegen.40.collections.sets.rt.set.conj.functional
+;; TEST-MENU-PATH: codegen/branches/collections/sets/atom.codegen.40.collections.sets.rt.set.conj.functional
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.sets.rt.set.conj.functional
+;; TEST-CLI-TARGET: codegen branches collections sets
+(module Main)
+(define [s :: Set] {1 2})
+(define [s2 :: Set] (conj s 3))
+(show (contains? s2 3))
+(show (contains? s 3))
+(show (count s2))

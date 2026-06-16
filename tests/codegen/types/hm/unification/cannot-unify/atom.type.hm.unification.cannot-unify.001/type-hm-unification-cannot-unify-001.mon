@@ -1,0 +1,34 @@
+;; TEST-ID: tests.codegen.type.hm.unification.cannot.unify.001
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: types
+;; TEST-SUBSET: hm/unification/cannot-unify
+;; TEST-QUALITY: type-system-negative-regression
+;; TEST-CODEGEN-ATOM: atom.type.hm.unification.cannot-unify.001
+;; TEST-TYPE-ATOM: atom.type.hm.unification.cannot-unify.001
+;; TEST-CONTEXT: monadc.context.language.codegen-type-system-corpus, monadc.context.language.hm-dependent-type-coverage
+;; TEST-PURPOSE: HM unification rejects a definition whose declared return type differs from the inferred body type.
+;; TEST-ATOM: Declared Int return unified against String body must report cannot-unify.
+;; TEST-EXPECT: fail:compile
+;; TEST-MENU: types/hm/unification/cannot-unify/atom.type.hm.unification.cannot-unify.001
+;; TEST-MENU-PATH: codegen/types/hm/unification/cannot-unify/atom.type.hm.unification.cannot-unify.001
+;; TEST-ATOM-LEAF: atom.type.hm.unification.cannot-unify.001
+;; TEST-CLI-TARGET: codegen types hm unification cannot-unify
+;; TEST-INFER-PATH: infer.c:infer_unify_one_internal/a->kind != b->kind/cannot unify
+;; TEST-ERROR-STAGE: infer
+;; TEST-ERROR-FAMILY: hm.cannot-unify
+;; TEST-ERROR-MESSAGE: type error: cannot unify
+;; TEST-COVERAGE: infer.c:569-640 infer_unify_one_internal ground type mismatch
+;; TEST-COVERAGE: env.c:Signature mismatch for definition bridge
+;; TEST-USES-ATOM: atom.codegen.category.types
+;; TEST-USES-ATOM: atom.type.system
+;; TEST-USES-ATOM: atom.type.hm.unification
+;; TEST-USES-ATOM: atom.type.hm.error.cannot-unify
+;; TEST-DEPENDS-ON: atom.env.error.signature.mismatch
+;; TEST-REFINES: atom.type.hm.ground.mismatch
+
+(module Main)
+(define (hm_mismatch_01 [x : Int] -> Int) "not-an-int")
+(show (hm_mismatch_01 2))

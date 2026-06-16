@@ -1,0 +1,15 @@
+name: structured_set_set_if_conj_or_disj_contains
+section: collections-set-current
+tier: stable
+kind: law
+features: arithmetic, array, array-index, collections, do, env, equality, if, logic, phi, predicate, set, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.local_load, codegen.logic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, codegen.sequence, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.equality, infer.if_phi, infer.logic, infer.type_predicate, reader.array_literal, reader.ast_do, reader.ast_if, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.with, atom.control.do, atom.control.if, atom.core.equality, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_do_last_value, signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates, signal_atom_with_substitution
+args: p:Bool a:Int
+type: Bool
+expect: True
+description: Stress persistent and mutable set operations, membership, duplicate handling, and branch guarded mutation.
+law: (= (with [s (set {a})] (do (if {p} (disj! s {a}) (conj! s {a})) (contains? s {a}))) (not {p}))

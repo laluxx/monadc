@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.branch.diagnostic-count-arity
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: arity
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise count arity diagnostic.
+;; TEST-ATOM: atom.codegen.diagnostic.count-arity
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.count-arity
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-CODEGEN-PATH: diagnostic.count.arity
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: count
+;; TEST-COVERAGE: codegen.c:8860 count arity diagnostic
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/arity/atom.codegen.diagnostic.count-arity
+;; TEST-MENU-PATH: codegen/errors/codegen/arity/atom.codegen.diagnostic.count-arity
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.count-arity
+;; TEST-CLI-TARGET: codegen errors codegen arity
+(module Main)
+(show (count))

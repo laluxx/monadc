@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.asm.mov-then-add
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.70.ffi.asm.inline.asm.asm.mov.then.add
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: inline-asm
+;; TEST-CATEGORY: 70-ffi-asm
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Parameter mov can be followed by integer arithmetic.
+;; TEST-ATOM: mov x %rax ret-style setup plus add keeps the return value meaningful.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:70-ffi-asm/inline-asm branch family
+;; TEST-USES-ATOM: atom.codegen.category.70.ffi.asm
+;; TEST-MENU: branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.mov.then.add
+;; TEST-MENU-PATH: codegen/branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.mov.then.add
+;; TEST-ATOM-LEAF: atom.codegen.70.ffi.asm.inline.asm.asm.mov.then.add
+;; TEST-CLI-TARGET: codegen branches ffi-asm inline-asm
+module AsmTest
+
+define asm-mov-add :: Int -> Int
+  x -> (asm mov x %rax add x 2)
+
+show (asm-mov-add 40)

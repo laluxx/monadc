@@ -1,8 +1,8 @@
 #+TITLE: Codegen Context (codegen.h)
 #+AUTHOR: Codex
-#+DATE: 2026-06-13
+#+DATE: 2026-06-16
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -704,3 +704,67 @@ LLVM function with no type tags or dispatch overhead.
   connects-to -> =monadc.context.main.twelve-phase-pipeline= (codegen is
   Phase 6) · =monadc.context.main.compile-one= (main.c creates the
   =CodegenContext= and calls =codegen_expr= for each top-level expression)
+
+
+* Garden Links — Codegen Regression Discipline
+:PROPERTIES:
+:ID: monadc.context.codegen.garden-links
+:CUSTOM_ID: codegen-garden-links
+:CONTEXT_KIND: navigation
+:CONTEXT_DESCRIPTION: Links from codegen context to runtime coverage and regression tier policy.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/codegen.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.codegen.garden-links src:context/codegen.org conf:high]
+  Codegen changes must distinguish "compiled" from "correct". Pair stdout
+  goldens with desugar/AST checks where syntax shape is part of the contract.
+  See [[file:coverage-roadmap.org][coverage roadmap]].
+
+* Codegen Category Contract
+:PROPERTIES:
+:ID: monadc.context.codegen.category-contract
+:CUSTOM_ID: codegen-category-contract
+:CONTEXT_KIND: contract
+:CONTEXT_DESCRIPTION: Category contract for codegen ownership, invariants, tests, and failure routing.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/codegen.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.codegen.category-contract src:context/codegen.org conf:high]
+  This section declares the category contract for =codegen=. It is the
+  routing target for failures and future test/context links touching this area.
+
+#+CAPTION: Codegen Category Contract
+| Field | Contract |
+|-------+----------|
+| Owned phase | Lowering typed/desugared AST to C/runtime calls and generated executable behavior. |
+| Inputs | Typed AST, operation nodes, runtime type information, module/export data. |
+| Outputs | C code, runtime calls, compile artifacts, executable stdout/stderr behavior. |
+| Invariants | Never compensate for reader/infer bugs by changing runtime behavior; preserve data representation and call shape. |
+| Test hooks | codegen runtime fixtures, stdout goldens, branch coverage tests, operation dispatch tests. |
+| Failure symptoms | stdout-mismatch, generated C compile errors, wrong call orientation, data constructor representation regressions. |
+| Context neighbors | runtime, codegen-ops, types, infer, tests |
+
+[DEC id:dec.codegen.category-contract-owner date:2026-06-16 by:llm]
+  Failures matching the symptoms above should start triage in this category, then
+  follow the listed neighbors only when the local contract does not explain the
+  issue.

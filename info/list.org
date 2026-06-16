@@ -14,12 +14,17 @@
 Test coverage: =rt_list_*.mon= fixtures in
 [[file:../tests/codegen/][tests/codegen/]]. List destructuring via pattern
 matching tested by =rt_match_*.mon=.
+Test architecture reference: [[file:../context/tests-arch.org][context/tests-arch.org]].
 
 Lists in Monad are linked cons cells at runtime — a chain of pairs where
 each cell holds a value and a pointer to the rest. They are the classic
-Lisp list: O(1) prepend, O(n) random access.
+Lisp list: O(1) prepend, O(n) random access. The empty list is =nil= (also
+written ='()=).
 
-* Literal Syntax
+See [[file:pair.org][Pairs]] for the underlying cons-cell structure and
+[[file:collections.org][Collections]] for comparison with other types.
+
+* 1. Literal Syntax
 
 Quoted S-expression lists are the primary construction form:
 
@@ -36,9 +41,18 @@ quote (1 2 3)
 #+END_SRC
 
 The reader treats =(quote ...)= specially, producing a chain of
-=AST_CONS= nodes terminating in =AST_NIL=.
+=AST_CONS= nodes terminating in =AST_NIL=. The entire list is allocated
+at read time.
 
-* Core Operations
+See [[file:quote.org][Quote]] for the quoting mechanism and
+[[file:../context/reader.org][context/reader.org]] for AST_CONS construction.
+
+Key Points:
+- Lists are chains of cons cells terminated by =nil=
+- Quoted syntax ='(1 2 3)= is the primary constructor
+- Empty list ='()= is equivalent to =nil=
+
+* 2. Core Operations
 
 | Function  | Example                 | Result    |
 |-----------+-------------------------+-----------|
@@ -55,7 +69,10 @@ The reader treats =(quote ...)= specially, producing a chain of
 | make-list | =(make-list 3 'x)=        | (x x x)   |
 | reduce    | =(reduce + 0 '(1 2 3))= | 6         |
 
-* cons
+See [[file:../context/codegen-ops.org][context/codegen-ops.org]] for the
+operation dispatch catalogue and [[file:core.org][Core Library]] for builtins.
+
+** 2.1 cons
 
 Prepend an element to a list:
 
@@ -70,11 +87,13 @@ cons 'x '()
 #+END_SRC
 
 Allocates a new cons cell in the arena. The original list is unchanged
-— the new cell points to it.
+— the new cell points to it (persistent data structure semantics).
 
-* ++ (append/prepend)
+See [[file:arena.org][Arena]] for allocation details.
 
-The =++= operator is overloaded for lists:
+** 2.2 ++ (append/prepend)
+
+The =++= operator work on any collections, even lists:
 
 #+BEGIN_SRC monad
 (++ 1 '(2 3))           ;; (1 2 3) — prepend element
@@ -90,7 +109,7 @@ When the first argument is not a list, it is consed onto the front of
 the second. When both are lists, the first is copied and the last cdr
 points to the second.
 
-* car / cdr
+** 2.3 car / cdr
 
 Destructure a non-empty list:
 
@@ -110,7 +129,7 @@ Known bug: =tail= on lists segfaults due to a runtime list
 implementation issue
 ([[file:../context/language.org::codegen-gaps][context/language.org]]).
 
-* nil? / pair? / empty?
+** 2.4 nil? / pair? / empty?
 
 Predicates for list structure:
 
@@ -134,7 +153,15 @@ empty? '()
 
 =empty?= delegates to =(= count x 0)=.
 
-* Pattern Matching With Cons
+See [[file:booleans.org][Booleans]] for boolean predicate semantics.
+
+Key Points:
+- =cons= allocates a new cell without modifying the original (persistent)
+- =car= and =cdr= are the fundamental list destructors
+- =nil?= tests for the empty list; =pair?= tests for a cons cell
+- =tail= on lists has a known segfault bug (tracked in codegen-gaps)
+
+* 3. Pattern Matching With Cons
 
 List destructuring uses the =[x|xs]= cons-pattern:
 
@@ -161,9 +188,19 @@ define length xs -> Int
 #+END_SRC
 
 The =[x|xs]= pattern binds the head and tail of the list. The empty
-list pattern =[]= matches ='()=.
+list pattern =[]= matches ='()=. List patterns can also be fixed-length:
+=[a b c]= matches a list of exactly three elements.
 
-* List-as-Function Indexing
+See [[file:patterns.org][Pattern Matching]] for full pattern language and
+[[file:recursion.org][Recursion]] for recursive list operations.
+
+Key Points:
+- =[x|xs]= destructures head and tail (cons pattern)
+- =[]= matches the empty list
+- Fixed-length =[a b c]= matches lists of exact length
+- =take= example shows combined pattern + guard usage
+
+* 4. List-as-Function Indexing
 
 Lists can be used as functions for lookup:
 
@@ -178,30 +215,100 @@ my-list 0
 #+END_SRC
 
 Returns the i-th element or =nil= if out of bounds
-([[file:../codegen.c::9880]]).
+([[file:../codegen.c::9880]]). Indexing is O(n) — the list is traversed
+from the head.
 
-* Known Gap: Variadic list
+See [[file:collections.org][Collections]] for the collection-as-function protocol.
+
+Key Points:
+- Lists support O(n) index-based access via function-call syntax
+- Out-of-bounds returns =nil= instead of throwing
+- Prefer pattern matching for idiomatic list destructuring
+
+* 5. Known Gap: Variadic list
 
 =(list 1 2 3)= with multiple arguments is broken — =(car (list 1 2 3))=
 returns =nil=. Only =(list)= (zero-arg) and =(make-list n val)= work
 correctly
 ([[file:../context/language.org::codegen-gaps][context/language.org]]).
 
-* Related Pages
+* 6. Runnable Example
+
+#+BEGIN_SRC monad
+;; run with: monadc list-demo.mon
+
+(define (length [xs :: [a]] -> Int)
+  (match xs with
+    []       -> 0
+    [_|rest] -> (+ 1 (length rest))))
+
+(define (sum [xs :: [Int]] -> Int)
+  (reduce + 0 xs))
+
+(show (car '(10 20 30)))          ;; prints 10
+(show (cdr '(10 20 30)))          ;; prints (20 30)
+(show (length '(1 2 3 4 5)))      ;; prints 5
+(show (sum '(1 2 3 4 5)))         ;; prints 15
+
+(define (take : Int -> [a] -> [a]
+  _ []          -> []
+  n [x|xs]
+    | n > 0     -> (x ++ (take (- n 1) xs))
+    | otherwise -> []))
+
+(show (take 3 '(a b c d e)))      ;; prints (a b c)
+(show (++ '(1 2) '(3 4)))         ;; prints (1 2 3 4)
+#+END_SRC
+
+* 7. Gotchas
+
+Common mistakes and surprising behaviours with lists:
+
+- **=tail= on lists segfaults** — known bug tracked in codegen-gaps ([[file:../context/language.org::codegen-gaps]]).
+
+- **=(list 1 2 3)= is broken** — the variadic =list= function with multiple arguments returns garbage. Use ='(1 2 3)= or =(cons 1 (cons 2 (cons 3 '())))= instead.
+
+- **List indexing is O(n)** — =('(1 2 3 4 5) 3)= traverses from the head. For O(1) random access, use arrays.
+
+- **=++= on lists copies the first list** — when both arguments are lists, the first list is copied and its last cdr is pointed at the second.
+
+- **=empty?= is O(n)** — it delegates to =(= (count x) 0)=, which traverses the entire list. Use =nil?= for O(1) emptiness check.
+
+* 8. Implementation Notes
+
+| Component   | Context File        | Topic                                         |
+|-------------+---------------------+-----------------------------------------------|
+| Types       | types.org           | [[file:../context/types.org::#kind-TYPE_LIST][TYPE_LIST type representation]] |
+| Codegen     | codegen-ops.org     | [[file:../context/codegen-ops.org::#ops-list][List operation codegen]] |
+| Language    | language.org        | [[file:../context/language.org::#primitive-list][List representation and dispatch]] |
+| Reader      | reader.org          | [[file:../context/reader.org::#ast-and-token-header][AST_CONS, AST_NIL parsing]] |
+| Core Libs   | core-libs.org       | [[file:../context/core-libs.org::#core-libs-list][Stdlib list modules]] |
+| Inference   | infer.org           | [[file:../context/infer.org::#expression-inference][Type inference for list operations]] |
+| Source      | codegen.c           | [[file:../codegen.c::9880][List indexing codegen]] |
+
+Related Pages
 
 - [[file:collections.org][Collections]] -- overview of all collection types
 - [[file:set.org][Sets]] -- hash sets
 - [[file:map.org][Maps]] -- hash maps
 - [[file:pair.org][Pairs]] -- Pair type, fst/snd, tuples
 - [[file:patterns.org][Pattern Matching]] -- list pattern matching
+- [[file:range.org][Ranges]] -- lazy lists from ranges
+- [[file:arena.org][Arena]] -- cons cell allocation
+- [[file:quote.org][Quote]] -- quoted list syntax
+- [[file:recursion.org][Recursion]] -- recursive list processing
+- [[file:core.org][Core Library]] -- list builtin operations
+- [[file:iteration.org][Iteration]] -- for loops over lists
 
-* Context Links
+Further Reading
 
 - [[file:../context/language.org][context/language.org]] — list dispatch, cons cell representation
 - [[file:../context/language.org::codegen-gaps][context/language.org — Known gaps]]
 - [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]]
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — list operation codegen
+- [[file:../context/types.org][context/types.org]] — TYPE_LIST, TYPE_PAIR type representation
+- [[file:../context/core-libs.org][context/core-libs.org]] — stdlib list modules
+- [[file:../context/reader.org][context/reader.org]] — AST_CONS, AST_NIL parsing
+- [[file:../context/infer.org][context/infer.org]] — type inference for lists
 - [[file:patterns.org][Pattern Matching]] — [x|xs] destructuring
 - [[file:collections.org][Collections]] — overview of all collection types
-- [[file:set.org][Sets]] — hash set collection
-- [[file:map.org][Maps]] — hash map collection
-- [[file:core.org][Core Library]] — builtin collection operations

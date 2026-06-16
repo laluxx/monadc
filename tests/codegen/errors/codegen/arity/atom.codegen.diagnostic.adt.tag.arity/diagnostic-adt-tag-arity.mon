@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.branch.diagnostic-adt-tag-arity
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: arity
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.adt.tag.arity
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover __adt_tag arity diagnostics.
+;; TEST-ATOM: __adt_tag without exactly one argument should fail during codegen.
+;; TEST-EXPECT: fail:compile
+;; TEST-COVERAGE: codegen.c:7543 __adt_tag arity diagnostic
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/arity/atom.codegen.diagnostic.adt.tag.arity
+;; TEST-MENU-PATH: codegen/errors/codegen/arity/atom.codegen.diagnostic.adt.tag.arity
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.adt.tag.arity
+;; TEST-CLI-TARGET: codegen errors codegen arity
+(module Main)
+(data Maybe Nothing | Just Int)
+(__adt_tag)

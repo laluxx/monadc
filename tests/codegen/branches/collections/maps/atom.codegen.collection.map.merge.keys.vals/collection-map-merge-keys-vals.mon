@@ -1,0 +1,29 @@
+;; TEST-ID: tests.codegen.branch.collection-map-merge-keys-vals
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: failure
+;; TEST-SUBSET: maps
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.collection.map.merge.keys.vals
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover map merge plus keys and vals branches using count as stable oracle.
+;; TEST-ATOM: merge should combine maps and expose its size through count.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:8490-8508 keys/vals/find/merge map branches
+;; TEST-COVERAGE: codegen.c:8541 Map? branch
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/maps/atom.codegen.collection.map.merge.keys.vals
+;; TEST-MENU-PATH: codegen/branches/collections/maps/atom.codegen.collection.map.merge.keys.vals
+;; TEST-ATOM-LEAF: atom.codegen.collection.map.merge.keys.vals
+;; TEST-CLI-TARGET: codegen branches collections maps
+(module Main)
+(define a #{:a 1})
+(define b #{:b 2 :c 3})
+(define c (merge a b))
+(show (Map? c))
+(show (count c))
+(show (count (keys c)))
+(show (count (vals c)))

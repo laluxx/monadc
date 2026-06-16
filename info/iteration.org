@@ -14,12 +14,14 @@
 Test coverage: =while= and =for= are exercised by =rt_control_all.mon=
 and =rt_heap_array_for.mon=.
 
-Iteration in Monad uses explicit loop forms. Recursion
-([[file:recursion.org]]) is the functional alternative.
+Iteration in Monad uses explicit loop forms (=while= and =for=).
+Recursion ([[file:recursion.org]]) is the functional alternative when
+closures are unavailable.
 
-* while
+* 1. while
 
-C-style conditional loop with an exit condition:
+C-style conditional loop with an exit condition
+([[file:../codegen.c::7957][codegen.c:7957]]):
 
 #+BEGIN_SRC monad
 (define [i :: Int] 0)
@@ -36,11 +38,41 @@ while (< i 3)
 #+END_SRC
 
 Emits a loop header block (condition check), a loop body block, and an
-exit block. Returns =nil= ([[file:../codegen.c::7957]]).
+exit block. Returns =nil=.
 
-* for
+** 1.1 while with Multiple Conditions
 
-Iterates over collections or numeric ranges. Four forms:
+#+BEGIN_SRC monad
+(define [i :: Int] 0)
+(define [j :: Int] 10)
+(while (and (< i j) (> j 0))
+  (show i j)
+  (set! i (+ i 1))
+  (set! j (- j 1)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define [i :: Int] 0
+define [j :: Int] 10
+while (and (< i j) (> j 0))
+  show i j
+  set! i (+ i 1)
+  set! j (- j 1)
+#+END_SRC
+
+#+BEGIN_QUOTE
+Key Points:
+- Conditional loop: test condition before each iteration
+- Typically used with mutable counters (=set!= / =<-=)
+- Returns =nil=
+- Has strcmp dispatch handler (works in paren-mode)
+- Body is implicitly sequenced (like =begin=)
+#+END_QUOTE
+
+* 2. for
+
+Iterates over collections or numeric ranges. Four forms
+([[file:../codegen.c::8004][codegen.c:8004]]):
 
 #+BEGIN_SRC monad
 ;; Numeric range
@@ -79,10 +111,37 @@ for [x [1 2 3]]
 #+END_SRC
 
 The =for= compiles to =while=-loop IR with iterator, bounds check, and
-element extraction via the collection-as-function indexing path
-([[file:../codegen.c::8004]]).
+element extraction via the collection-as-function indexing path.
 
-** Collection type iteration
+** 2.1 for with Sets and Maps
+
+#+BEGIN_SRC monad
+(for [k {1 2 3}]
+  (show k))                       ;; iterates set elements
+
+(for [[k v] #{:a 1 :b 2}]
+  (show "key: _" k " val: _" v))  ;; iterates map entries
+#+END_SRC
+
+#+BEGIN_SRC wisp
+for [k {1 2 3}]
+  show k
+
+for [[k v] #{:a 1 :b 2}]
+  show "key: _" k " val: _" v
+#+END_SRC
+
+See [[file:set.org][Sets]] and [[file:map.org][Maps]] for iteration semantics.
+
+#+BEGIN_QUOTE
+Key Points:
+- Four forms: range, range+step, repeat-N, collection
+- Compiles to =while=-loop IR
+- Has strcmp dispatch handler
+- =:collect= keyword (gathering results) is aspirational
+#+END_QUOTE
+
+* 3. Collection type iteration
 
 | Collection | Mechanism                         |
 |------------+-----------------------------------|
@@ -93,7 +152,123 @@ element extraction via the collection-as-function indexing path
 | Strings    | =("str" i)= char-by-char          |
 
 The =:collect= keyword for gathering results into an output collection
-is aspirational.
+is aspirational. See
+[[file:../context/language.org::iteration-constructs][context/language.org — Iteration Constructs]]
+for the iteration architecture.
+
+* 4. Mutating Loop Counters
+
+Iteration often requires mutable counters via [[file:mutation.org][=set!=]]:
+
+#+BEGIN_SRC monad
+(define [acc :: Int] 0)
+(define [i :: Int] 0)
+(while (< i (count items))
+  (set! acc (+ acc (items i)))
+  (set! i (+ i 1)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define [acc :: Int] 0
+define [i :: Int] 0
+while (< i (count items))
+  set! acc (+ acc (items i))
+  set! i (+ i 1)
+#+END_SRC
+
+* 5. Iteration vs Recursion
+
+| Approach   | Mechanism           | State Style      | When to Use                 |
+|------------+---------------------+------------------+-----------------------------|
+| =for=      | Iterator abstraction | No explicit state | Collection iteration        |
+| =while=    | Conditional loop    | Mutable counters  | Side-effecting loops        |
+| Recursion  | Self-call           | Immutable params  | Tree/functional processing  |
+| Tail rec   | Self-call (acc)     | Accumulator param | Linear iteration (no TCO)   |
+
+See [[file:recursion.org][Recursion]] for the functional alternative and
+[[file:functional-programming.org][Functional Programming]] for purity
+considerations.
+
+* 6. Range and Collection Iteration Patterns
+
+#+BEGIN_SRC monad
+;; Nested iteration
+(for [i 0 5]
+  (for [j 0 5]
+    (show "(" i "," j ")")))
+
+;; Conditional iteration
+(for [x xs]
+  (when (> x 0)
+    (show x)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+for [i 0 5]
+  for [j 0 5]
+    show "(" i "," j ")"
+
+for [x xs]
+  when (> x 0)
+    show x
+#+END_SRC
+
+See [[file:range.org][Ranges]] for range literal syntax and
+[[file:collections.org][Collections]] for iterable types.
+
+* 7. Runnable Example
+
+#+BEGIN_SRC monad
+;; run with: monadc
+(define [n :: Int] 0)
+(while (< n 5)
+  (show "while: _" n)
+  (set! n (+ n 1)))
+
+(for [i 0 5]
+  (show "for: _" i))
+
+(for [x [10 20 30]]
+  (show "element: _" x))
+#+END_SRC
+
+* 8. Gotchas
+
+- **=:collect= is aspirational**: The =:collect= keyword for gathering
+  loop results into a collection is not implemented. Use explicit
+  accumulators with =set!= instead.
+- **Mutable counters required**: =while= and =for= have no implicit
+  iteration variable. You must =define= and =set!= loop counters
+  explicitly ([[file:mutation.org]]).
+- **No =break= or =continue=**: Loop control flow is limited to the
+  condition expression. Use =when= with =set!= flags for early exit.
+- **=for= over nil crashes**: Iterating over an unbound or nil
+  collection with =for= will crash at runtime — guard with =when=.
+
+* 9. Implementation Notes
+
+Key source locations for iteration:
+
+| Aspect                | Location                                                              |
+|-----------------------+-----------------------------------------------------------------------|
+| =while= codegen       | [[file:../codegen.c::7957][codegen.c:7957]]                                    |
+| =for= codegen         | [[file:../codegen.c::8004][codegen.c:8004]]                                    |
+| Iteration constructs  | [[file:../context/language.org::iteration-constructs][context/language.org — Iteration Constructs]] |
+| Codegen gaps          | [[file:../context/language.org::codegen-gaps][context/language.org — Known Codegen Gaps]]  |
+
+Both =while= and =for= emit LLVM IR with loop header, body, and exit
+blocks. The =for= iterator uses the collection's indexing interface
+internally. Explicit mutable state (=set!=) is required for
+accumulators in both forms.
+
+#+BEGIN_QUOTE
+Key Points:
+- =while=: conditional loop, mutable counters, constant stack
+- =for=: iterator abstraction, four forms, constant stack
+- Both have strcmp dispatch handlers
+- Prefer =for= for collection iteration, =while= for general loops
+- Recursion is the functional alternative (but grows the stack)
+#+END_QUOTE
 
 * Related Pages
 
@@ -102,6 +277,20 @@ is aspirational.
 - [[file:control.org][Control Flow]] -- overview of control forms
 - [[file:range.org][Ranges]] -- numeric ranges for for loops
 - [[file:collections.org][Collections]] -- iterable types
+- [[file:mutation.org][Mutation]] -- mutable counters with set!
+- [[file:set.org][Sets]] -- set iteration
+- [[file:map.org][Maps]] -- map iteration
+- [[file:arrays.org][Arrays]] -- array iteration
+
+* Further Reading
+
+- [[file:../context/language.org][context/language.org]] — iteration constructs
+- [[file:../context/language.org::iteration-constructs][context/language.org — Iteration Constructs]]
+- [[file:../context/language.org::codegen-gaps][context/language.org — Known Codegen Gaps]]
+- [[file:../codegen.c][codegen.c]] — =while= and =for= codegen
+- [[file:../tests/codegen/rt_control_all.mon][rt_control_all.mon]] — iteration test fixtures
+- [[file:../tests/codegen/rt_heap_array_for.mon][rt_heap_array_for.mon]] — heap array for tests
+- [[file:range.org][Ranges]] — range syntax reference
 
 * Context Links
 

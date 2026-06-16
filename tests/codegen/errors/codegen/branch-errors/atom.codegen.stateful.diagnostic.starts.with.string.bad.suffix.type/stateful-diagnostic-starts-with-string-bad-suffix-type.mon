@@ -1,0 +1,32 @@
+;; TEST-ID: tests.codegen.stateful.diagnostic.starts.with.string.bad.suffix.type
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: branch-errors
+;; TEST-QUALITY: diagnostic-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.stateful.diagnostic.starts.with.string.bad.suffix.type
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: starts-with? String rejects non-string/non-char suffix.
+;; TEST-ATOM: atom.codegen.stateful.diagnostic.starts.with.string.bad.suffix.type
+;; TEST-EXPECT: fail:compile
+;; TEST-CODEGEN-PATH: diagnostic.starts-with-type
+;; TEST-CODEGEN-PATH: codegen.diagnostic
+;; TEST-COVERAGE: codegen.c:CODEGEN_ERROR diagnostics
+;; TEST-COVERAGE: codegen.c:5734 type predicate arity
+;; TEST-COVERAGE: codegen.c:5765 nil? arity
+;; TEST-COVERAGE: codegen.c:5934 ?? arity
+;; TEST-COVERAGE: codegen.c:6047 show branch
+;; TEST-COVERAGE: codegen.c:8362 set arity
+;; TEST-COVERAGE: codegen.c:8486-8493 map op arity
+;; TEST-COVERAGE: codegen.c:8620 starts-with?/ends-with? diagnostics
+;; TEST-COVERAGE: codegen.c:12902 dot diagnostics
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.codegen.subset.90.diagnostics.branch.errors
+;; TEST-MENU: errors/codegen/branch-errors/atom.codegen.stateful.diagnostic.starts.with.string.bad.suffix.type
+;; TEST-MENU-PATH: codegen/errors/codegen/branch-errors/atom.codegen.stateful.diagnostic.starts.with.string.bad.suffix.type
+;; TEST-ATOM-LEAF: atom.codegen.stateful.diagnostic.starts.with.string.bad.suffix.type
+;; TEST-CLI-TARGET: codegen errors codegen branch-errors
+
+(module Main)
+(starts-with? "abc" 1)

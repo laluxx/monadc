@@ -1,0 +1,41 @@
+;; TEST-ID: tests.codegen.menu.errors.reader.signature.param.double.colon.variant.5.110
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: errors
+;; TEST-SUBSET: reader/signature.param.double-colon.variant-5
+;; TEST-MENU: errors/reader/signature.param.double-colon.variant-5/atom.menu.error.reader.signature.param.double-colon.variant-5.110
+;; TEST-MENU-PATH: codegen/errors/reader/signature.param.double-colon.variant-5/atom.menu.error.reader.signature.param.double-colon.variant-5.110
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.error-menu
+;; TEST-PURPOSE: Pin reader.c diagnostic: use ‘:’ instead of ‘::’ to annotate parameter types
+;; TEST-ATOM: atom.menu.error.reader.signature.param.double-colon.variant-5.110
+;; TEST-CODEGEN-ATOM: atom.menu.error.reader.signature.param.double-colon.variant-5.110
+;; TEST-ATOM-LEAF: atom.menu.error.reader.signature.param.double-colon.variant-5.110
+;; TEST-QUALITY: menu-error-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ERROR-STAGE: reader
+;; TEST-ERROR-FAMILY: signature.param.double-colon.variant-5
+;; TEST-ERROR-MESSAGE: use ‘:’ instead of ‘::’ to annotate parameter types
+;; TEST-ERROR-SOURCE: reader.c
+;; TEST-ERROR-PATH: reader.c:1915
+;; TEST-CODEGEN-PATH: diagnostic.reader.signature.param.double-colon.variant-5
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-TAG: menu
+;; TEST-COVERAGE: reader.c:1915 use ‘:’ instead of ‘::’ to annotate parameter types
+;; TEST-USES-ATOM: atom.menu.error.reader.signature.param.double-colon.variant-5.110
+;; TEST-USES-ATOM: atom.error.reader
+;; TEST-USES-ATOM: atom.error.reader.signature.param.double-colon.variant-5
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-DEPENDS-ON: atom.reader.lex.parse
+;; TEST-REFINES: atom.error.reader
+;; TEST-REFINES: atom.error.reader.signature.param.double-colon.variant-5
+;; TEST-REFINES: atom.reader.error
+;; TEST-RELATED: atom.codegen.error.menu
+;; TEST-CLI-TARGET: codegen errors reader reader
+
+(module Main)
+;; reader menu variant 5
+(define (bad [x :: Int] -> Int) x)

@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.deep.deep_mutation_inside_function_local
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SUBSET: mutation
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.mutation.deep.mutation.inside.function.local
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise mutation of function-local alloca.
+;; TEST-ATOM: set! on a parameter should update the local slot.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow, atom.codegen.subset.mutation
+;; TEST-COVERAGE: codegen.c:function parameter alloca plus set! store
+;; TEST-MENU: branches/control-flow/mutation/atom.codegen.30.control.flow.mutation.deep.mutation.inside.function.local
+;; TEST-MENU-PATH: codegen/branches/control-flow/mutation/atom.codegen.30.control.flow.mutation.deep.mutation.inside.function.local
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.mutation.deep.mutation.inside.function.local
+;; TEST-CLI-TARGET: codegen branches control-flow mutation
+
+(module Main)
+(define (bump [x : Int] -> Int) (begin (set! x (+ x 1)) x))
+(show (bump 5))

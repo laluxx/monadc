@@ -1,0 +1,15 @@
+name: extreme_compare_direct_gte_left_do_operand
+section: comparison-dispatch-do
+tier: stable
+kind: law
+features: arithmetic, comparison, do, equality, logic, set
+compiler-path: codegen.arithmetic_dispatch, codegen.comparison_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, codegen.runtime_call, codegen.sequence, infer.arithmetic, infer.comparison, infer.equality, infer.logic, reader.ast_do, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.control.do, atom.core.equality, atom.core.order.gt, atom.core.order.gte, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_do_last_value, signal_atom_equality_reflexive
+args: setup:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Direct >= must ignore do setup in the left operand.
+law: (= (>= (do {setup} {a}) {b}) (>= {a} {b}))

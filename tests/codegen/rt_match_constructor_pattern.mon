@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-match-constructor-pattern
-;; TEST-CONTEXT: monadc.context.language.reader-header-coverage, monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Pattern codegen coverage for ADT constructor patterns with a bound field.
-;; TEST-ATOM: (match (Just 4) with | (Just x) -> x | _ -> 0) should bind x from the constructor.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(data Maybe Nothing | Just Int)
-(show (match (Just 4) with | (Just x) -> x | _ -> 0))

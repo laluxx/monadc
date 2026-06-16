@@ -1,0 +1,15 @@
+name: extreme_lattice_min_max_sum_preserves
+section: lattice-clamp-deep
+tier: stable
+kind: law
+features: arithmetic, equality, lattice, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.core.plus, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Min/max lattice and clamp laws must hold through helper-based branch implementations.
+law: (= (+ (fuzz-min {a} {b}) (fuzz-max {a} {b})) (+ {a} {b}))

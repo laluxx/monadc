@@ -1,0 +1,15 @@
+name: comparison_add_preserves_lt
+section: comparison
+tier: stable
+kind: law
+features: arithmetic, comparison, if, logic, phi, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.comparison_dispatch, codegen.if_phi, codegen.logic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.comparison, infer.if_phi, infer.logic, infer.type_predicate, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.if, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_if_same_branch_eliminates
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Adding the same generated offset must preserve strict less-than ordering.
+law: (if (fuzz-lt? {a} {b}) (fuzz-lt? (fuzz-add {a} {c}) (fuzz-add {b} {c})) True)

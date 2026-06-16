@@ -1,0 +1,15 @@
+name: if_distributes_over_add_left
+section: control
+tier: stable
+kind: law
+features: arithmetic, control, equality, if, phi
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, infer.arithmetic, infer.equality, infer.if_phi, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.if, atom.core.equality
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+args: cond:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Adding a common left operand outside an if must match adding it inside each branch.
+law: (= (fuzz-add {c} (if {cond} {a} {b})) (if {cond} (fuzz-add {c} {a}) (fuzz-add {c} {b})))

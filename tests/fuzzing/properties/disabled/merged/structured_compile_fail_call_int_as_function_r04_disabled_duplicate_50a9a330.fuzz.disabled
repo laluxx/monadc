@@ -1,0 +1,16 @@
+name: structured_compile_fail_call_int_as_function_r04_disabled_duplicate_50a9a330
+section: current-compile-fail
+tier: experimental
+kind: compile-fail
+features: compile-fail, call, type
+compiler-path: diagnostic.expected_error, runner.compile_fail_kind
+signal: high
+corpus-role: merged-duplicate
+uses-atoms: atom.diagnostic.compile_fail, atom.misc
+merged-into: structured_compile_fail_call_int_as_function_r01
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int@edge
+type: Bool
+expect-diagnostic: error:
+description: V10 compile-fail property call_int_as_function round 4; must fail to compile and emit a compiler error.
+law: ({a} 0)

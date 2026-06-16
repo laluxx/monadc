@@ -1,0 +1,15 @@
+name: logic_and_identity_true
+section: logic
+tier: stable
+kind: law
+features: arithmetic, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+args: p:Bool
+type: Bool
+expect: True
+description: True must be the identity element for Bool and.
+law: (= (and True {p}) {p})

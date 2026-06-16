@@ -1,0 +1,15 @@
+name: mega_list_dot_alias_car
+section: codegen-runtime-collections
+tier: stable
+kind: law
+features: arithmetic, codegen, do, equality, list
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.runtime_call, codegen.sequence, infer.arithmetic, infer.equality, reader.ast_do, runtime.list
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.core.equality
+related-properties: signal_atom_equality_reflexive
+args: a:Int
+type: Bool
+expect: True
+description: dot pair alias must behave like cons for car.
+law: (= (car (. {a} (list))) {a})

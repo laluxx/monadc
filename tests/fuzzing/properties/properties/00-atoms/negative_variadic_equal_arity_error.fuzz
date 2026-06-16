@@ -1,0 +1,16 @@
+name: negative_variadic_equal_arity_error
+section: negative-atom-web
+tier: compile-fail
+kind: compile-fail
+features: compile-fail, diagnostic
+compiler-path: infer.arity, diagnostic.compile_fail, stage.infer
+stage: infer
+signal: high
+corpus-role: negative-diagnostic
+uses-atoms: atom.core.equality, atom.diagnostic.arity
+depends-on: atom.core.equality, atom.diagnostic.arity
+args: a:Int@edge b:Int@edge c:Int@edge
+type: Bool
+expect-diagnostic: error:
+description: Structured negative property linked to diagnostic atom dependencies.
+law: (= {a} {b} {c})

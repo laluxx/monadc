@@ -1,0 +1,15 @@
+name: oracle_string_contains_substr_web
+section: oracle-atom-web
+tier: oracle
+kind: law
+features: oracle, arithmetic, comparison, array, string
+compiler-path: oracle.expect_python, codegen.operator.comparison, runtime.array.index, runtime.string.contains
+signal: high
+corpus-role: oracle
+uses-atoms: atom.runtime.string.contains.substring
+depends-on: atom.runtime.string.contains.substring
+args: s:NonEmptyString@escape needle:SubstrOf(s)
+type: Bool
+expect-python: needle in s
+description: Python-oracle property connected to atom dependencies.
+law: (contains? {s} {needle})

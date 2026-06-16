@@ -16,8 +16,12 @@ the primary binding form used across all 423 runtime tests.
 
 =define= binds a name to a value at the top level of a module or REPL.
 It is the standard way to introduce variables, functions, and aliases.
+Bindings are immutable by default and visible from the point of
+definition to the end of the file.
 
-* Simple Value Binding
+* 1. Simple Value Binding
+
+The simplest form gives a name to any expression:
 
 #+BEGIN_SRC monad
 (define pi 3.14159)
@@ -31,11 +35,21 @@ define name "Monad"
 define x 42
 #+END_SRC
 
-Creates a binding visible to all subsequent forms in the module.
+Creates a binding visible to all subsequent forms in the module. Unlike
+[[file:let.org][Let Bindings]], =define= bindings are module-level and cannot appear in
+expression position.
 
-* Typed Value Binding
+#+BEGIN_QUOTE
+Key Points:
+- Module-level scope (not lexical like =let=)
+- Immutable by default (use [[file:mutation.org][=set!=]] to rebind)
+- Cannot appear in expression position
+- Value type is inferred from the expression
+#+END_QUOTE
 
-Bracket syntax for type annotation:
+* 2. Typed Value Binding
+
+Bracket syntax adds an explicit type annotation:
 
 #+BEGIN_SRC monad
 (define [x :: Int] 42)
@@ -49,10 +63,39 @@ define [pi :: Float] 3.14159
 define [name :: String] "hello"
 #+END_SRC
 
-The annotation constrains inference. Without annotation, the type is
-inferred from the value.
+The annotation constrains inference and is checked at compile time.
+Without annotation, the type is inferred from the value (see
+[[file:types.org][Types]] and
+[[file:../context/language.org::type-system-surface][context/language.org — Type System Surface]]).
 
-* Function Definition
+Additional typed examples:
+
+#+BEGIN_SRC monad
+(define [flag :: Bool] False)
+(define [c :: Char] 'z')
+(define [ratio :: Ratio] 1/3)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define [flag :: Bool] False
+define [c :: Char] 'z'
+define [ratio :: Ratio] 1/3
+#+END_SRC
+
+#+BEGIN_QUOTE
+Key Points:
+- Bracket =[name :: Type]= syntax for annotations
+- Type is checked, not just asserted
+- Inference fills in type when annotation is omitted
+- Supports all primitive types: Int, Float, Bool, Char, String, Ratio
+#+END_QUOTE
+
+* 3. Function Definition
+
+The function form =(define (f params) body)= desugars to
+=(define f (lambda params body))= — see
+[[file:../context/reader.org::reader-lambda-params][context/reader.org — Lambda Parameter Syntax]]
+for the reader-level desugaring.
 
 #+BEGIN_SRC monad
 ;; Simple
@@ -66,7 +109,7 @@ inferred from the value.
 (define (square [x :: Int] -> Int)
   (* x x))
 
-;; With documentation
+;; With documentation string
 (define (mult [x :: Float] [y :: Float] -> Float)
   "Multiply X and Y as Floats"
   (* x y))
@@ -90,10 +133,41 @@ define mult [x :: Float] [y :: Float] -> Float
   * x y
 #+END_SRC
 
-The function form =(define (f params) body)= desugars to
-=(define f (lambda params body))=.
+** 3.1 Multi-clause Function Definition
 
-* Metadata Keywords
+Functions can be defined with multiple pattern clauses — the body
+becomes an implicit =match= on the arguments:
+
+#+BEGIN_SRC monad
+(define fact
+  (lambda [n]
+    (match n
+      0 -> 1
+      n -> (* n (fact (- n 1))))))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define fact
+  lambda [n]
+    match n
+      0 -> 1
+      n -> * n (fact (- n 1))
+#+END_SRC
+
+See [[file:recursion.org][Recursion]] for recursive patterns and
+[[file:patterns.org][Pattern Matching]] for clause syntax.
+
+#+BEGIN_QUOTE
+Key Points:
+- =(define (f params) body)= desugars to =(define f (lambda params body))=
+- Type annotations use arrow syntax: =(f :: Int -> Int ...)=
+- Documentation string goes before the body expression
+- Multi-clause bodies use pattern matching on parameters
+#+END_QUOTE
+
+* 4. Metadata Keywords
+
+Keywords attach metadata to bindings:
 
 | Keyword | Example                       | Description              |
 |---------+-------------------------------+--------------------------|
@@ -127,7 +201,33 @@ define addnaked a b
   :naked True
 #+END_SRC
 
-* Wisp Syntax
+The =:naked= keyword suppresses function prologue/epilogue generation,
+used with inline assembly (see [[file:asm.org][Inline Assembly]] and
+[[file:../context/language.org::inline-assembly][context/language.org — Inline Assembly]]).
+
+** 4.1 Metadata in Typed Bindings
+
+#+BEGIN_SRC monad
+(define [x :: Int] 42
+  :doc "The answer"
+  :alias answer)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define [x :: Int] 42
+  :doc "The answer"
+  :alias answer
+#+END_SRC
+
+#+BEGIN_QUOTE
+Key Points:
+- Keywords appear after the value expression
+- =:doc= provides human-readable documentation
+- =:alias= gives an alternative display name (e.g. Greek letters)
+- =:naked= suppresses prologue for raw assembly functions
+#+END_QUOTE
+
+* 5. Wisp Syntax
 
 #+BEGIN_SRC wisp
 define [pi :: Float] 3.14159
@@ -140,14 +240,126 @@ define add :: Int -> Int -> Int
   a b -> + a b
 #+END_SRC
 
-* Scope
+Wisp uses indentation to delimit the body rather than parentheses. See
+[[file:wisp.org][Wisp Syntax]] and
+[[file:../context/wisp.org][context/wisp.org]] for details on how Wisp
+desugars =define= forms.
 
-=define= bindings are module-level (not lexically scoped like =let=).
-They are available from the point of definition to the end of the file,
-including in subsequent definitions.
+* 6. Scope
+
+=define= bindings are module-level (not lexically scoped like =let=
+([[file:let.org]])). They are available from the point of definition to
+the end of the file, including in subsequent definitions.
+
+** 6.1 Shadowing
 
 Multiple =define=s of the same name shadow the previous binding (not
-an error unless the types conflict).
+an error unless the types conflict — see
+[[file:../context/language.org::binding-constructs][context/language.org — Binding Constructs]]).
+
+Variables defined with =define= are immutable by default. Use
+[[file:mutation.org][=set!=]] or [[file:mutation.org][=<-=]] to rebind.
+
+** 6.2 Interaction with Modules
+
+Within a [[file:modules.org][module]] declaration, =define= introduces
+module-level bindings that may be exported or kept private:
+
+#+BEGIN_SRC monad
+(module Math
+  (define pi 3.14159)     ;; private
+  (export (define e 2.71828)))   ;; exported
+#+END_SRC
+
+#+BEGIN_QUOTE
+Key Points:
+- Module-level scope: visible from definition to end of file
+- Shadowing allowed (last definition wins)
+- Immutable unless mutated with =set!= / =<-=
+- Module system controls export visibility
+#+END_QUOTE
+
+* 7. Recursive and Mutually Recursive Definitions
+
+Top-level =define= names are in scope for their own bodies, enabling
+direct recursion. For mutual recursion, all definitions must be in the
+same scope:
+
+#+BEGIN_SRC monad
+(define (even? n) (if (= n 0) True (odd? (- n 1))))
+(define (odd? n)  (if (= n 0) False (even? (- n 1))))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define even? n -> if (= n 0) True (odd? (- n 1))
+define odd? n -> if (= n 0) False (even? (- n 1))
+#+END_SRC
+
+See [[file:recursion.org][Recursion]] for more on recursive patterns and
+[[file:../context/language.org::codegen-gaps][context/language.org — Known Gaps (TCO)]].
+
+* 8. Comparison with Other Binding Forms
+
+| Form       | Scope     | Mutability | Position        | Desugars To            |
+|------------+-----------+------------+-----------------+------------------------|
+| =define=   | Module    | Immutable  | Top-level only  | (none — primitive)     |
+| =let=      | Lexical   | Immutable  | Expression      | =lambda= application   |
+| =let*=     | Lexical   | Immutable  | Expression      | Nested =let=           |
+| =letrec=   | Lexical   | Immutable  | Expression      | =AST_LETREC= node      |
+| =set!=     | Current   | Mutable    | Statement       | (none — primitive)     |
+
+See [[file:let.org][Let Bindings]] for =let=/=let*/=letrec=, and
+[[file:mutation.org][Mutation]] for =set!=.
+
+* 9. Desugaring in the Reader
+
+The reader transforms =define= function forms into the underlying
+lambda representation. See
+[[file:../context/reader.org::reader-lambda-params][context/reader.org — Lambda Parameter Syntax]]
+and
+[[file:../context/reader.org::sugar-registry][context/reader.org — Sugar Registry]].
+
+* 10. Runnable Example
+
+#+BEGIN_SRC monad
+;; run with: monadc
+(define [x :: Int] 7)
+(define [y :: Int] 3)
+(define (add a b) (+ a b))
+(show (add x y))  ;; 10
+#+END_SRC
+
+* 11. Gotchas
+
+- **Top-level only**: =define= cannot appear in expression position.
+  Use =let= ([[file:let.org]]) for local bindings.
+- **Silent shadowing**: Defining the same name twice silently shadows
+  the old binding — no warning unless types conflict.
+- **Reader-dependent dispatch**: =(define ...)= in paren-mode has no
+  strcmp handler; it relies on the reader. Wisp syntax is the primary
+  workaround for cross-form interaction.
+- **Invisible boxing**: The compiler boxes any binding that =set!= can
+  reach. An immutable =define= stays unboxed; a mutated one doesn't.
+  This is invisible unless you inspect LLVM IR.
+
+* 12. Implementation Notes
+
+Key source locations for =define=:
+
+| Aspect                | Location                                                              |
+|-----------------------+-----------------------------------------------------------------------|
+| Reader parsing        | [[file:../reader.c][reader.c]] — =define= parsing dispatch                    |
+| Lambda desugaring     | [[file:../context/reader.org::reader-lambda-params][context/reader.org — Lambda Param Syntax]] |
+| Sugar registry        | [[file:../context/reader.org::sugar-registry][context/reader.org — Sugar Registry]]          |
+| Codegen dispatch      | [[file:../codegen.c][codegen.c]] — codegen for =define=                        |
+| Binding constructs    | [[file:../context/language.org::binding-constructs][context/language.org — Binding Constructs]] |
+| Type system surface   | [[file:../context/language.org::type-system-surface][context/language.org — Type System Surface]] |
+| Codegen gaps          | [[file:../context/language.org::codegen-gaps][context/language.org — Known Codegen Gaps]]  |
+
+=define= is a primitive binding form (not desugared to lambda at the
+codegen level). The reader handles the syntactic sugar of function-form
+=define=, transforming it into combination =define= + =lambda= AST nodes
+before they reach codegen.
 
 * Related Pages
 
@@ -156,11 +368,31 @@ an error unless the types conflict).
 - [[file:let.org][Let Bindings]] -- local bindings
 - [[file:types.org][Types]] -- type annotations and inference
 - [[file:recursion.org][Recursion]] -- recursive function definitions
+- [[file:mutation.org][Mutation]] -- set!, <-
+- [[file:modules.org][Modules]] -- module-level binding and export
+- [[file:patterns.org][Pattern Matching]] -- pattern clauses in define
+- [[file:asm.org][Inline Assembly]] -- :naked keyword and asm forms
+
+* Further Reading
+
+- [[file:../context/language.org][context/language.org]] — binding constructs, type system
+- [[file:../context/language.org::binding-constructs][context/language.org — Binding Constructs]]
+- [[file:../context/language.org::codegen-gaps][context/language.org — Known Codegen Gaps]]
+- [[file:../context/reader.org][context/reader.org]] — reader internals, define parsing
+- [[file:../context/reader.org::sugar-registry][context/reader.org — Sugar Registry]]
+- [[file:../reader.c][reader.c]] — define parsing implementation
+- [[file:../codegen.c][codegen.c]] — codegen dispatch for define
+- [[file:../tests/codegen/branches/symbol-env/defines-and-calls/][tests/ — define test fixtures]]
+- [[file:../context/tests-arch.org][context/tests-arch.org]] — test suite architecture
 
 * Context Links
 
 - [[file:../context/language.org][context/language.org]] — binding representation
+- [[file:../context/language.org::binding-constructs][context/language.org — Binding Constructs]]
+- [[file:../context/language.org::type-system-surface][context/language.org — Type System Surface]]
 - [[file:../context/reader.org][context/reader.org]] — define parsing
+- [[file:../context/reader.org::reader-lambda-params][context/reader.org — Lambda Parameter Syntax]]
+- [[file:../context/reader.org::sugar-registry][context/reader.org — Sugar Registry]]
 - [[file:syntax.org][Syntax]] — full syntax reference
 - [[file:lambda.org][Lambda]] — anonymous function syntax
 - [[file:let.org][Let Bindings]] — local bindings

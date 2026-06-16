@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.branch.diagnostic-dot-no-layout-field
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: layout-dot-field
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.dot.no.layout.field
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover explicit dot diagnostics when no layout provides the requested field.
+;; TEST-ATOM: dot should reject fields that cannot be resolved to any known layout.
+;; TEST-EXPECT: fail:compile
+;; TEST-COVERAGE: codegen.c:12913 explicit dot no-layout diagnostic
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/layout-dot-field/atom.codegen.diagnostic.dot.no.layout.field
+;; TEST-MENU-PATH: codegen/errors/codegen/layout-dot-field/atom.codegen.diagnostic.dot.no.layout.field
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.dot.no.layout.field
+;; TEST-CLI-TARGET: codegen errors codegen layout-dot-field
+(module Main)
+(show (dot 42 missing))

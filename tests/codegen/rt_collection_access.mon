@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-collection-access
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Runtime collection access helpers compile and return expected values.
-;; TEST-ATOM: head and tail operate on quoted lists.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (head '(4 5 6)))
-(show (tail '(4 5 6)))

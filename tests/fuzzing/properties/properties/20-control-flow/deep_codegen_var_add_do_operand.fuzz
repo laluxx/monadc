@@ -1,0 +1,15 @@
+name: deep_codegen_var_add_do_operand
+section: codegen-arithmetic-dispatch
+tier: stable
+kind: law
+features: arithmetic, codegen, do, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, codegen.sequence, infer.arithmetic, infer.equality, infer.logic, reader.ast_do
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.control.do, atom.core.equality, atom.core.plus, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_do_last_value, signal_atom_equality_reflexive, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: do inside arithmetic must sequence and return the last operand.
+law: (= (+ (do {a} {b}) {c}) (+ {b} {c}))

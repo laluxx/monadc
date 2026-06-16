@@ -1,0 +1,15 @@
+name: oracle_string_missing_after_suffix_marker
+section: oracle-string
+tier: stable
+kind: law
+features: arithmetic, logic, string, set, predicate
+compiler-path: codegen.operator.arithmetic, codegen.operator.logic, runtime.string, runtime.set, infer.predicate, codegen.predicate
+signal: high
+corpus-role: oracle
+uses-atoms: atom.core.arithmetic, atom.core.logic, atom.runtime.string, atom.runtime.set, atom.core.predicate
+disabled-reason: disabled future or merged property; kept for provenance but not loaded by default
+args: s:String
+type: Bool
+expect-python: False
+description: Generated string should not contain a sentinel substring outside generator alphabet.
+law: (contains? {s} "␀-not-generated")

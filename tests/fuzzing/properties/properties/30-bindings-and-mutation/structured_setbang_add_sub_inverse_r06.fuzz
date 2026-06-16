@@ -1,0 +1,15 @@
+name: structured_setbang_add_sub_inverse_r06
+section: binding-mutation-current
+tier: stable
+kind: law
+features: with, set!, mutation, begin, arithmetic, strategy
+compiler-path: codegen.arithmetic_dispatch, codegen.sequence, codegen.set_bang, codegen.store, codegen.with_binding, infer.arithmetic, infer.env_child, infer.mutation, reader.ast_begin, runner.strategy_arg, runner.typed_generator
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.set-bang, atom.binding.with, atom.control.begin, atom.control.if, atom.core.equality, atom.core.minus, atom.core.plus, atom.logic.not, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero, signal_atom_with_substitution
+args: a:Int@edge b:Int@tiny
+type: Bool
+expect: True
+description: V11 stable compiler-path law setbang_add_sub_inverse variant 6; uses strategy args and explicit compiler-path metadata for feature coverage.
+law: (if (not False) (= (with [x {a}] (begin (set! x (+ x {b})) (- x {b}))) {a}) False)

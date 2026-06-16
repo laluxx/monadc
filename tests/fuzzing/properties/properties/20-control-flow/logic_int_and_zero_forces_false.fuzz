@@ -1,0 +1,15 @@
+name: logic_int_and_zero_forces_false
+section: logic-coercion
+tier: stable
+kind: law
+features: arithmetic, equality, for, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.for_loop, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic, infer.loop
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+args: a:Int
+type: Bool
+expect: True
+description: Integer zero must coerce to False in and.
+law: (= (and {a} 0) False)

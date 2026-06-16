@@ -1,0 +1,31 @@
+;; TEST-ID: tests.codegen.rt-asm-function-naked
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.70.ffi.asm.inline.asm.rt.asm.function.naked
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: inline-asm
+;; TEST-CATEGORY: 70-ffi-asm
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Inline asm in a naked function body — raw register manipulation.
+;;   Currently returns first param only; the add instruction result is not propagated.
+;; TEST-ATOM: (asm ...) inside naked function — documents naked asm gap.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:70-ffi-asm/inline-asm branch family
+;; TEST-USES-ATOM: atom.codegen.category.70.ffi.asm
+;; TEST-MENU: branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.rt.asm.function.naked
+;; TEST-MENU-PATH: codegen/branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.rt.asm.function.naked
+;; TEST-ATOM-LEAF: atom.codegen.70.ffi.asm.inline.asm.rt.asm.function.naked
+;; TEST-CLI-TARGET: codegen branches ffi-asm inline-asm
+(module Main)
+(define (add [x : Int] [y : Int] -> Int)
+  :naked True
+  (asm
+    push %rbp
+    mov  %rsp %rbp
+    mov  x    %rax
+    add  y    %rax
+    pop  %rbp
+    ret))
+(show (add 60 70))

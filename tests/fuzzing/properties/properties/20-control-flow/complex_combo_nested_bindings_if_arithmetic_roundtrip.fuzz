@@ -1,0 +1,15 @@
+name: complex_combo_nested_bindings_if_arithmetic_roundtrip
+section: combo
+tier: stable
+kind: law
+features: arithmetic, array, array-index, combo, env, equality, if, phi, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.local_load, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.equality, infer.if_phi, reader.array_literal, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.with, atom.control.if, atom.core.equality, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates, signal_atom_with_substitution
+args: cond:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Nested bindings and an if-selected offset should roundtrip through add/sub cancellation.
+law: (= (with [x {a} y (if {cond} {b} {c})] (fuzz-sub (fuzz-add x y) y)) {a})

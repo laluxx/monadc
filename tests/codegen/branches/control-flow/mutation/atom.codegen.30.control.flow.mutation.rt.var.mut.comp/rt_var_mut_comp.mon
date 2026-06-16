@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.rt-var-mut-comp
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.mutation.rt.var.mut.comp
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: mutation
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Variable mutation with set! and define
+;; TEST-ATOM: (define x 1) then (set! x 2) then x = 2
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:30-control-flow/mutation branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/mutation/atom.codegen.30.control.flow.mutation.rt.var.mut.comp
+;; TEST-MENU-PATH: codegen/branches/control-flow/mutation/atom.codegen.30.control.flow.mutation.rt.var.mut.comp
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.mutation.rt.var.mut.comp
+;; TEST-CLI-TARGET: codegen branches control-flow mutation
+(module Main)
+(define x 1)
+(set! x 2)
+(show x)
+(define y 42)
+(set! y 100)
+(show y)

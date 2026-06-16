@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-set-map-predicates
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.sets.rt.set.map.predicates
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: sets
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime set and map predicates observe literal values.
+;; TEST-ATOM: Set? recognizes a set literal and Map? recognizes a map literal.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:40-collections/sets branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/sets/atom.codegen.40.collections.sets.rt.set.map.predicates
+;; TEST-MENU-PATH: codegen/branches/collections/sets/atom.codegen.40.collections.sets.rt.set.map.predicates
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.sets.rt.set.map.predicates
+;; TEST-CLI-TARGET: codegen branches collections sets
+(module Main)
+(show (Set? {1 2}))
+(show (Map? #{:a 1}))

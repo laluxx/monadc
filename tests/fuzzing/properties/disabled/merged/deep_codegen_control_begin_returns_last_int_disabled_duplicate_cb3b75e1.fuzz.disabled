@@ -1,0 +1,17 @@
+name: deep_codegen_control_begin_returns_last_int_disabled_duplicate_cb3b75e1
+section: codegen-control-flow
+tier: experimental
+kind: law
+features: arithmetic, begin, codegen, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.sequence, infer.arithmetic, infer.equality, reader.ast_begin
+signal: medium
+corpus-role: merged-duplicate
+uses-atoms: atom.codegen.dispatch, atom.control.begin, atom.core.equality
+related-properties: signal_atom_equality_reflexive
+merged-into: control_begin_returns_last_int
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int b:Int
+type: Bool
+expect: True
+description: begin must evaluate forms and return the final Int value.
+law: (= (begin {a} {b}) {b})

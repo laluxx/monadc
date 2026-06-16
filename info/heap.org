@@ -9,13 +9,18 @@
 :CONTEXT:  monadc.context.language, monadc.context.runtime, monadc.context.codegen
 :END:
 
-[[file:index.org][<- Back to Index]] · [[file:collections.org][Collections]] · [[file:arrays.org][Arrays]] · [[file:arena.org][Arena Allocation]] · [[file:performance.org][Performance]] · [[file:data.org][Data Types]] · [[file:layouts.org][Layout Types]]
+[[file:index.org][<- Back to Index]] · [[file:collections.org][Collections]] · [[file:arrays.org][Arrays]] · [[file:arena.org][Arena Allocation]] · [[file:performance.org][Performance]] · [[file:data.org][Data Types]] · [[file:layouts.org][Layout Types]] · [[file:patterns.org][Pattern Matching]] · [[file:error-handling.org][Error Handling]]
 
 Test coverage: heap array operations verified by =rt_heap_array_*.mon= fixtures. Heap allocation in ADTs exercised by =rt_match_*.mon=.
 
 Monad uses heap allocation for data that outlives its defining scope or has runtime-determined size. Heap-allocated objects use bump allocation (arena) or =malloc= depending on context.
 
-* Heap Array Syntax
+For the runtime allocator implementation, see [[file:../context/runtime.org][context/runtime.org]]. For the arena-based compiler allocator, see [[file:arena.org][Arena Allocation]].
+
+This page covers heap allocation in Monad: heap arrays, ADT allocation,
+the runtime memory model, and the tradeoffs between heap and stack storage.
+
+* 1. Heap Array Syntax
 
 Heap arrays use the =~= tilde prefix:
 
@@ -31,9 +36,18 @@ Heap arrays use the =~= tilde prefix:
 define heap-arr ~[1 2 3]
 #+END_SRC
 
-See [[file:arrays.org][Arrays]] for the full array variant reference.
+See [[file:arrays.org][Arrays]] for the full array variant reference, and
+[[file:performance.org][Performance Guide]] for the three array forms and their
+performance characteristics.
 
-* When Heap Allocation Happens
+*** Key Points
+- =~[~ prefix distinguishes heap arrays from stack arrays
+- Heap arrays support dynamic resizing (push/pop)
+- Same element-type system as stack arrays
+
+See also: [[file:arrays.org][Arrays]]
+
+* 2. When Heap Allocation Happens
 
 | Construct             | Allocation    | Reason                     |
 |-----------------------+---------------+----------------------------|
@@ -44,9 +58,19 @@ See [[file:arrays.org][Arrays]] for the full array variant reference.
 | =[16kb I32]= (fat)      | Stack or heap | Depends on size            |
 | =[1 2 3]= (stack)       | Stack frame   | Known size at compile time |
 
-* Runtime Memory Model
+For ADT heap allocation, see [[file:data.org][Data Types]]. For cons cells and
+lists, see [[file:list.org][Lists]].
 
-** Arena Allocator ([[file:../arena.c]])
+*** Key Points
+- Stack allocation: compile-time-known size, scope-bound lifetime
+- Heap allocation: dynamic size or data that outlives its scope
+- ADTs and cons cells always heap-allocate — their size is dynamic
+
+See also: [[file:data.org][Data Types]], [[file:list.org][Lists]]
+
+* 3. Runtime Memory Model
+
+** 3.1 Arena Allocator ([[file:../arena.c]])
 
 The compiler uses a bump allocator for internal allocations:
 
@@ -56,19 +80,36 @@ arena_alloc(&arena, size);       // bump-allocate
 arena_reset(&arena);             // free all at once
 #+END_SRC
 
-** Runtime Allocator ([[file:../runtime.c]])
+Full details in [[file:arena.org][Arena Allocation]] and
+[[file:../context/arena.org][context/arena.org]].
 
-Runtime heap allocations go through the runtime's allocation layer:
+*** Key Points
+- Compiler-internal allocations are arena-managed, not malloc
+- Batch free via =arena_reset= — no per-object tracking
+- Separate arena for permanent vs scratch data
 
-| Function           | Purpose                    |
-|--------------------+----------------------------|
-| =runtime_alloc=      | General heap allocation    |
-| =runtime_alloc_cons= | Cons cell allocation       |
-| =runtime_alloc_adt=  | ADT constructor allocation |
+** 3.2 Runtime Allocator ([[file:../runtime.c]])
 
-See [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]].
+Runtime heap allocations go through the runtime's allocation layer,
+which uses a dedicated eval arena and direct =malloc= for some types:
 
-* Heap Arrays vs Stack Arrays
+| Function / Helper       | Allocation Source | Purpose                    |
+|-------------------------+-------------------+----------------------------|
+| =alloc_cons_cell=       | Eval arena        | Cons cell allocation       |
+| =alloc_list_wrapper=    | Eval arena        | List wrapper header        |
+| =alloc_value=           | Eval arena        | RuntimeValue struct        |
+| =rt_value_closure=      | =malloc=          | Closure environment        |
+| =heap_cons_cell= (cold) | =malloc=          | Cold-path cons allocation  |
+
+Internally, the runtime uses =g_eval_arena= (an =Arena= instance) for
+the hot allocation path — same bump-pointer strategy as the compiler.
+See [[file:../runtime.c:99][runtime.c:99 — Internal allocation helpers]] and
+[[file:../context/runtime.org][context/runtime.org]].
+
+See [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]] and
+[[file:../context/runtime.org][context/runtime.org]].
+
+* 4. Heap Arrays vs Stack Arrays
 
 | Aspect     | Stack Array =[1 2 3]= | Heap Array =~[1 2 3]=   |
 |------------+---------------------+-----------------------|
@@ -78,7 +119,18 @@ See [[file:../context/language.org::runtime-value-system][context/language.org �
 | C-interop  | Yes (decays to ptr) | Yes (decays to ptr)   |
 | Overhead   | None                | Allocation + capacity |
 
-* ADT Heap Allocation
+For the fat-pointer array variant, see [[file:arrays.org][Arrays]]. For
+C-interop considerations, see [[file:layouts.org][Layout Types]] and
+[[file:ffi.org][C FFI]].
+
+*** Key Points
+- Stack arrays: zero overhead, fixed size, scope-bound lifetime
+- Heap arrays: dynamic size, explicit allocation cost
+- Both decay to pointers for C interop
+
+See also: [[file:arrays.org][Arrays]], [[file:layouts.org][Layout Types]]
+
+* 5. ADT Heap Allocation
 
 Algebraic data types ([[file:data.org][Data Types]]) are heap-allocated tagged unions:
 
@@ -96,19 +148,63 @@ data Tree a Leaf (Node Tree a a Tree)
 Node Leaf 42 Leaf
 #+END_SRC
 
-The tag byte is followed by constructor fields. Pattern matching ([[file:patterns.org][Pattern Matching]]) reads the tag to dispatch.
+The tag byte is followed by constructor fields. Pattern matching
+([[file:patterns.org][Pattern Matching]]) reads the tag to dispatch. See
+[[file:../context/pmatch.org][context/pmatch.org]] for the pattern match compiler.
 
-* Related Pages
+*** Key Points
+- ADTs are heap-allocated as tag + fields in a contiguous block
+- Tag byte enables O(1) constructor dispatch in pattern matching
+- Size varies per constructor — allocation via eval arena
+
+See also: [[file:patterns.org][Pattern Matching]]
+
+* 6. Implementation Notes
+
+Key source locations for heap allocation:
+
+| Source | Key Symbols |
+|--------+-------------|
+| [[file:../runtime.c:99][runtime.c:99]] | Internal allocation helpers (=alloc_cons_cell=, =alloc_value=) |
+| [[file:../runtime.c:101][runtime.c:101]] | =alloc_cons_cell= — cons cell from eval arena |
+| [[file:../runtime.c:109][runtime.c:109]] | =alloc_value= — RuntimeValue from eval arena |
+| [[file:../runtime.c:115][runtime.c:115]] | =rt_value_closure= — closure via malloc (cold path) |
+| [[file:../runtime.c:312][runtime.c:312]] | =rt_list_cons= — public cons API |
+| [[file:../runtime.c:346][runtime.c:346]] | =rt_list_nth= — indexed list access |
+| [[file:../runtime.c:388][runtime.c:388]] | =rt_list_append= — mutable list append |
+| [[file:../arena.c:72][arena.c:72]] | =arena_alloc= — backing bump allocator for eval arena |
+
+Related context documents:
+
+- [[file:../context/runtime.org][context/runtime.org]] — runtime memory model, eval arena lifecycle
+- [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]]
+- [[file:../context/codegen.org][context/codegen.org]] — codegen allocation strategies
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — codegen operations for heap data
+- [[file:../context/pmatch.org][context/pmatch.org]] — pattern match compilation
+- [[file:../context/arena.org][context/arena.org]] — arena allocator design
+
+* 7. Related Pages
 
 - [[file:arrays.org][Arrays]] — stack, fat, and heap array variants
-- [[file:data.org][Data Types]] — ADT heap allocation
+- [[file:data.org][Data Types]] — ADT heap allocation and tagged unions
 - [[file:performance.org][Performance]] — allocation costs and optimization
 - [[file:collections.org][Collections]] — list/set/map memory model
 - [[file:error-handling.org][Error Handling]] — heap allocation in error paths
+- [[file:patterns.org][Pattern Matching]] — pattern matching on heap data
+- [[file:layouts.org][Layout Types]] — C-compatible memory layout
+- [[file:arena.org][Arena Allocation]] — compiler-internal arena allocation
+- [[file:list.org][Lists]] — linked list cons cell allocation
+- [[file:ffi.org][C FFI]] — C interop and memory sharing
 
-* Context Links
+* 8. Further Reading
 
 - [[file:../context/language.org::runtime-value-system][context/language.org — Runtime Value System]]
-- [[file:../context/runtime.org][context/runtime.org]] — GC and memory
+- [[file:../context/runtime.org][context/runtime.org]] — GC and memory management
+- [[file:../context/codegen.org][context/codegen.org]] — codegen allocation strategies
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — codegen operations
+- [[file:../context/arena.org][context/arena.org]] — arena allocator design
+- [[file:../context/pmatch.org][context/pmatch.org]] — pattern match compilation
 - [[file:../arena.c][arena.c]] — Bump allocator implementation
 - [[file:../runtime.c][runtime.c]] — Runtime allocator
+- [[file:../context/types.org][context/types.org]] — type system representation
+- [[file:../context/infer.org][context/infer.org]] — type inference and allocation

@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.deep.deep_diag_missing_layout_field
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: layout-dot-field
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostics.layout.dot.field.deep.diag.missing.layout.field
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Expected diagnostic for missing layout field access.
+;; TEST-ATOM: Dot access should reject unknown layout fields.
+;; TEST-EXPECT: fail:compile
+;; TEST-COVERAGE: codegen.c:dot field lookup diagnostics
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/layout-dot-field/atom.codegen.diagnostics.layout.dot.field.deep.diag.missing.layout.field
+;; TEST-MENU-PATH: codegen/errors/codegen/layout-dot-field/atom.codegen.diagnostics.layout.dot.field.deep.diag.missing.layout.field
+;; TEST-ATOM-LEAF: atom.codegen.diagnostics.layout.dot.field.deep.diag.missing.layout.field
+;; TEST-CLI-TARGET: codegen errors codegen layout-dot-field
+(module Main)
+(layout Point [x :: Int])
+(define p (Point 1))
+(show p.y)

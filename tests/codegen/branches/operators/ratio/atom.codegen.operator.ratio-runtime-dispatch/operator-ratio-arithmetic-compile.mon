@@ -1,0 +1,32 @@
+;; TEST-ID: tests.codegen.branch.operator-ratio-arithmetic-compile
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: ratio
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise ratio arithmetic runtime dispatch for +, -, *, and / without relying on current ratio display format.
+;; TEST-ATOM: atom.codegen.operator.ratio-runtime-dispatch
+;; TEST-CODEGEN-ATOM: atom.codegen.operator.ratio-runtime-dispatch
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile
+;; TEST-CODEGEN-PATH: codegen.operator.ratio.add
+;; TEST-CODEGEN-PATH: codegen.operator.ratio.sub
+;; TEST-CODEGEN-PATH: codegen.operator.ratio.mul
+;; TEST-CODEGEN-PATH: codegen.operator.ratio.div
+;; TEST-DEPENDS-ON: atom.codegen.operator.runtime-equality-spectrum
+;; TEST-TAG: compile
+;; TEST-TAG: operator
+;; TEST-TAG: ratio
+;; TEST-COVERAGE: codegen.c:9698-9701 ratio arithmetic runtime dispatch
+
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/ratio/atom.codegen.operator.ratio-runtime-dispatch
+;; TEST-MENU-PATH: codegen/branches/operators/ratio/atom.codegen.operator.ratio-runtime-dispatch
+;; TEST-ATOM-LEAF: atom.codegen.operator.ratio-runtime-dispatch
+;; TEST-CLI-TARGET: codegen branches operators ratio
+(module Main)
+(+ 1/2 1/3)
+(- 1/2 1/3)
+(* 2/3 3/4)
+(/ 1/2 3/4)

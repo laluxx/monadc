@@ -1,0 +1,39 @@
+;; TEST-ID: tests.codegen.menu.errors.reader.lambda.missing.parameter.variant.0.028
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: errors
+;; TEST-SUBSET: reader/lambda.missing-parameter.variant-0
+;; TEST-MENU: errors/reader/lambda.missing-parameter.variant-0/atom.menu.error.reader.lambda.missing-parameter.variant-0.028
+;; TEST-MENU-PATH: codegen/errors/reader/lambda.missing-parameter.variant-0/atom.menu.error.reader.lambda.missing-parameter.variant-0.028
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.error-menu
+;; TEST-PURPOSE: Pin reader.c diagnostic: expected parameter name after λ
+;; TEST-ATOM: atom.menu.error.reader.lambda.missing-parameter.variant-0.028
+;; TEST-CODEGEN-ATOM: atom.menu.error.reader.lambda.missing-parameter.variant-0.028
+;; TEST-ATOM-LEAF: atom.menu.error.reader.lambda.missing-parameter.variant-0.028
+;; TEST-QUALITY: menu-error-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ERROR-STAGE: reader
+;; TEST-ERROR-FAMILY: lambda.missing-parameter.variant-0
+;; TEST-ERROR-MESSAGE: expected parameter name after λ
+;; TEST-ERROR-SOURCE: reader.c
+;; TEST-ERROR-PATH: reader.c:1712
+;; TEST-CODEGEN-PATH: diagnostic.reader.lambda.missing-parameter.variant-0
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-TAG: menu
+;; TEST-COVERAGE: reader.c:1712 expected parameter name after λ
+;; TEST-USES-ATOM: atom.menu.error.reader.lambda.missing-parameter.variant-0.028
+;; TEST-USES-ATOM: atom.error.reader
+;; TEST-USES-ATOM: atom.error.reader.lambda.missing-parameter.variant-0
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-DEPENDS-ON: atom.reader.lex.parse
+;; TEST-REFINES: atom.error.reader
+;; TEST-REFINES: atom.error.reader.lambda.missing-parameter.variant-0
+;; TEST-REFINES: atom.reader.error
+;; TEST-RELATED: atom.codegen.error.menu
+;; TEST-CLI-TARGET: codegen errors reader reader
+
+(module Main)
+(show λ.1)

@@ -11,29 +11,44 @@
 
 [[file:index.org][<- Back to Index]] · [[file:strings.org][Strings]] · [[file:types.org][Types]] · [[file:quote.org][Quote]] · [[file:syntax.org][Syntax]] · [[file:macros.org][Macros]] · [[file:paths.org][Path Literals]]
 
-Test coverage: symbol/keyword parsing by reader atoms in [[file:../tests/reader-atoms.tsv]].
+Test coverage: symbol/keyword parsing by reader atoms in
+[[file:../tests/reader-atoms.tsv]]. The test architecture is documented at
+[[file:../context/tests-arch.org][context/tests-arch.org]].
 
-Monad has two symbol-like types: =Symbol= (interned identifiers) and =Keyword= (colon-prefixed self-evaluating constants). Both are primitive ground types at the type level.
+Monad has two symbol-like types: =Symbol= (interned identifiers) and
+=Keyword= (colon-prefixed self-evaluating constants). Both are primitive
+ground types at the type level. See [[file:types.org][Types → Primitive Types]]
+for the ground type overview.
 
-* Symbols (=TYPE_SYMBOL=)
+* 1. Symbols (=TYPE_SYMBOL=)
 
-Symbols are interned names used for identifiers, variable references, and quoted data:
+Symbols are interned names used for identifiers, variable references,
+and quoted data:
 
 #+BEGIN_SRC monad
 'x                ;; symbol x (quoted)
 'my-function      ;; symbol my-function
 'π                ;; unicode symbol
+'hello-world      ;; dashed symbol
+'*env*            ;; earmuff convention symbol
 #+END_SRC
 
 #+BEGIN_SRC wisp
 'x                ;; symbol x (quoted)
 'my-function      ;; symbol my-function
 'π                ;; unicode symbol
+'hello-world      ;; dashed symbol
+'*env*            ;; earmuff convention symbol
 #+END_SRC
 
-Symbols are interned: two symbols with the same name share the same runtime object. This enables efficient equality comparison via pointer identity.
+Symbols are interned: two symbols with the same name share the same
+runtime object. This enables efficient equality comparison via pointer
+identity.
 
-** Symbol Intern Table ([[file:../env.c]])
+See [[file:quote.org][Quote]] for the quoting mechanism and
+[[file:syntax.org][Syntax]] for the reader's symbol tokenization rules.
+
+** 1.1 Symbol Intern Table ([[file:../env.c]])
 
 The compiler maintains a symbol intern table for fast lookup:
 
@@ -44,21 +59,43 @@ The compiler maintains a symbol intern table for fast lookup:
 | Value    | =Symbol= pointer    |
 | Lifetime | Compiler lifetime |
 
-** Runtime Representation
+Symbol interning is handled by the =env= module
+([[file:../context/env.org][context/env.org]]). The table is populated
+during reader parsing and consulted at codegen time.
+
+** 1.2 Runtime Representation
 
 | Tag  | =RT_SYMBOL=                    |
 |------+------------------------------|
 | Data | =char*= (interned name string) |
 
-* Keywords (=TYPE_KEYWORD=)
+Symbols at runtime are tagged pointers into the intern table. See
+[[file:../context/types.org][context/types.org]] for the runtime type
+tagging scheme.
 
-Keywords are colon-prefixed self-evaluating constants used for named parameters, map keys, and metadata:
+** 1.3 Symbol Uses
+
+Beyond identifiers, symbols are used in:
+
+- Quoted data: ='(a b c)= produces a list of symbols
+  ([[file:collections.org][Collections]]).
+- Macro metaprogramming: symbols are manipulated at compile time
+  ([[file:macros.org][Macros]]).
+- Pattern matching: symbols as pattern variables
+  ([[file:patterns.org][Pattern Matching]]).
+- Enumeration values: ='red 'green 'blue=.
+
+* 2. Keywords (=TYPE_KEYWORD=)
+
+Keywords are colon-prefixed self-evaluating constants used for named
+parameters, map keys, and metadata:
 
 #+BEGIN_SRC monad
 :key              ;; keyword :key
 :alias            ;; keyword :alias
 :x-y              ;; keyword :x-y
 :monadc           ;; keyword :monadc
+:2d               ;; keyword with numeric prefix
 #+END_SRC
 
 #+BEGIN_SRC wisp
@@ -66,36 +103,67 @@ Keywords are colon-prefixed self-evaluating constants used for named parameters,
 :alias            ;; keyword :alias
 :x-y              ;; keyword :x-y
 :monadc           ;; keyword :monadc
+:2d               ;; keyword with numeric prefix
 #+END_SRC
 
 Keywords evaluate to themselves — they do not need quoting:
 
 #+BEGIN_SRC monad
 :hello            ;; => :hello
-(= :key :key)     ;; Tru)
+(= :key :key)     ;; True
 #+END_SRC
 
 #+BEGIN_SRC wisp
 :hello            ;; => :hello
-= :key :key     ;; Tru)
+= :key :key     ;; True
 #+END_SRC
 
-** Runtime Representation
+** 2.1 Runtime Representation
 
 | Tag  | =RT_KEYWORD=                          |
 |------+-------------------------------------|
 | Data | =char*= (keyword name, without colon) |
 
-** Keyword Usage Patterns
+Like symbols, keywords are interned at the compiler level. The runtime
+representation stores the name string without the colon prefix.
+
+** 2.2 Keyword Usage Patterns
 
 Keywords are commonly used for:
 
 - Map keys: =#{"key1" val1 :key2 val2}=
-- Named arguments (planned): =(fn x :verbose True)=
-- Metadata annotations: =:doc "description"=
-- Enum-like constants: =:red :green :blue=
+  ([[file:map.org][Maps]]).
+- Named arguments (planned): =(fn x :verbose True)=.
+- Metadata annotations: =:doc "description"=, =:deprecated=.
+- Enum-like constants: =:red :green :blue=.
+- Flag options: =:naked True= ([[file:asm.org][Inline Assembly]]),
+  =:packed= ([[file:layouts.org][Layout Types]]).
 
-* Quoting
+#+BEGIN_SRC monad
+;; Map keys
+(define config #{:host "localhost" :port 8080 :ssl True})
+(show (find :host config))   ;; prints "localhost"
+
+;; Field options
+(layout Packet [flags :: U8 :packed])
+
+;; Function options (planned)
+; (connect :host "example.com" :port 443)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+;; Map keys
+define config #{:host "localhost" :port 8080 :ssl True}
+show (find :host config)
+
+;; Field options
+layout Packet [flags :: U8 :packed]
+
+;; Function options (planned)
+; connect :host "example.com" :port 443
+#+END_SRC
+
+* 3. Quoting
 
 Symbols require quoting to prevent evaluation:
 
@@ -111,21 +179,94 @@ x                 ;; evaluates to the value bound to x
 :key              ;; evaluates to itself (no quote needed)
 #+END_SRC
 
-See [[file:collections.org][Collections]] for quoted list syntax.
+See [[file:quote.org][Quote]] for quote, quasiquote, unquote, and
+splicing. See [[file:collections.org][Collections]] for quoted list
+syntax ='(a b c)=.
+
+Implementation Notes
+
+- **Intern table**: symbols are interned via =env_intern= (=env.c=) into a
+  hash map keyed by string name, enabling O(1) pointer-identity comparison
+  ([[file:../context/env.org][context/env.org — symbol intern table]]).
+- **Runtime tag**: both =Symbol= and =Keyword= are tagged pointers
+  (=RT_SYMBOL= / =RT_KEYWORD=) pointing into the intern table
+  ([[file:../context/types.org][context/types.org — runtime type tags]]).
+- **Reader tokenization**: the reader (=reader.c=) classifies tokens
+  beginning with =:= as keywords and all other valid identifiers as
+  symbols ([[file:../context/reader.org][context/reader.org — atom classification]]).
+- **Keyword constant folding**: keywords are self-evaluating at read time;
+  the reader sets the =IS_KEYWORD= flag and produces =AST_ATOM= nodes
+  with =TYPE_KEYWORD=.
+
+Key Points
+
+- =Symbols= are interned identifiers; use ='name= to refer to the symbol
+  itself rather than the variable it names.
+- =Keywords= (=:name=) are self-evaluating — no quote needed.
+- Both are primitive ground types (=TYPE_SYMBOL=, =TYPE_KEYWORD=) at the
+  type level.
+- Symbols are used in quoted data, macro metaprogramming, and pattern
+  matching.
+- Keywords are used for map keys, named parameters, field options, and
+  enum-like constants.
+
+* Gotchas
+
+- **=Symbol= and =Keyword= are distinct types**: ='key= (symbol) is NOT the same as =:key= (keyword). They have different runtime tags and evaluation rules.
+- **No implicit string conversion**: symbols and keywords are not strings. Compare or convert explicitly with casting functions.
+- **Dashed symbols**: =hello-world= is a single symbol, not a subtraction. In Wisp, the arity table determines whether =-= is a minus or part of a name.
+- **Earmuff convention**: =*env*=, =*db*= are valid symbols by convention for globals, but the compiler does not enforce this — it is a naming convention only.
+- **=:keyword= with numeric prefix**: =:2d= is a keyword, not =: 2d= — the reader consumes the entire token after =:=.
+
+* Complete Example
+
+#+BEGIN_SRC monad
+(module Main)
+
+;; Symbols: quoted identifiers
+(define my-sym 'hello)
+(show (= my-sym 'hello))    ;; True
+(show my-sym)               ;; hello
+
+;; Keywords: self-evaluating
+(show :world)               ;; :world
+(show (= :key :key))        ;; True
+
+;; Map with keyword keys
+(define config #{:host "localhost" :port 8080})
+(show (find :host config))  ;; "localhost"
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define my-sym 'hello
+show (= my-sym 'hello)    ;; True
+show my-sym               ;; hello
+show :world               ;; :world
+show (= :key :key)        ;; True
+
+define config #{:host "localhost" :port 8080}
+show (find :host config)  ;; "localhost"
+#+END_SRC
 
 * Related Pages
 
 - [[file:types.org][Types]] — ground types: Symbol, Keyword
-- [[file:syntax.org][Syntax]] — literal syntax
-- [[file:macros.org][Macros]] — symbol manipulation in macro expansions
+- [[file:syntax.org][Syntax]] — literal syntax for all atom types
+- [[file:macros.org][Macros]] — symbol manipulation in macro expansion
 - [[file:collections.org][Collections]] — quoted lists, keyword map keys
-- [[file:core.org][Core Library]] — symbol-related operations
+- [[file:core.org][Core Library]] — symbol-related built-in operations
+- [[file:quote.org][Quote]] — quoting, quasiquote, unquote
+- [[file:patterns.org][Pattern Matching]] — symbols as pattern variables
+- [[file:map.org][Maps]] — keyword keys in hash maps
+- [[file:strings.org][Strings]] — string vs symbol/keyword conversion
+- [[file:paths.org][Path Literals]] — path vs symbol distinction
 
-* Context Links
+* Further Reading
 
-- [[file:../context/types.org][context/types.org]] — TYPE_SYMBOL, TYPE_KEYWORD
-- [[file:../context/reader.org][context/reader.org]] — Symbol/keyword tokenization
-- [[file:../env.c][env.c]] — Symbol intern table
-
-
-
+- [[file:../context/types.org][context/types.org]] — TYPE_SYMBOL, TYPE_KEYWORD runtime tags
+- [[file:../context/reader.org][context/reader.org]] — Symbol/keyword tokenization in the reader
+- [[file:../context/language.org][context/language.org]] — language formalization, symbol resolution
+- [[file:../context/env.org][context/env.org]] — symbol intern table in =Env=
+- [[file:../env.c][env.c]] — =env_intern= implementation
+- [[file:../reader.c][reader.c]] — symbol and keyword tokenization
+- [[file:../tests/reader-atoms.tsv][tests/reader-atoms.tsv]] — reader atom test cases

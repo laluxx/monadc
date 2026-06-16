@@ -1,0 +1,14 @@
+name: signal_oracle_different_from_030
+section: current-oracle
+tier: oracle
+kind: law
+features: oracle, comparison, dependent-arg
+compiler-path: oracle.expected-python, codegen.expr.not-equal
+signal: high
+corpus-role: oracle
+uses-atoms: atom.core.inequality
+args: a:Int@edge b:DifferentFrom(a)
+type: Bool
+expect-python: a != b
+description: Oracle property with generated Python expected value and explicit atom links.
+law: (!= {a} {b})

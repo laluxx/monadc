@@ -13,12 +13,19 @@
 
 Test coverage: pairs are exercised by =rt_match_*.mon= and
 =rt_adt_*.mon= fixtures.
+Test architecture reference: [[file:../context/tests-arch.org][context/tests-arch.org]].
 
 A =Pair= is a product type holding two values of possibly different
 types. It is the simplest compound data structure, analogous to tuples
-in other languages.
+in other languages. Pairs form the foundation of lists (cons cells)
+and map entries (key-value pairs).
 
-* Type
+See [[file:data.org][Algebraic Data Types]] for the ADT system and
+[[file:types.org][Types]] for the type system.
+
+* 1. Type
+
+=Pair= is defined as a regular algebraic data type:
 
 #+BEGIN_SRC monad
 (data Pair a b
@@ -30,10 +37,19 @@ data Pair a b
   Pair a b
 #+END_SRC
 
-=Pair= is a regular algebraic data type. The constructor shares the
-type name.
+The constructor shares the type name. The type parameters =a= and =b=
+allow pairs of any two types: =(Pair Int String)=, =(Pair Float (List
+Bool))=, etc.
 
-* Construction
+See [[file:../context/types.org][context/types.org]] for TYPE_APP representation
+and [[file:../context/codegen.org][context/codegen.org]] for Pair lowering.
+
+Key Points:
+- =Pair= is a regular ADT with two type parameters
+- Constructor name matches the type name
+- Fully polymorphic: =(Pair a b)= for any types =a=, =b=
+
+* 2. Construction
 
 #+BEGIN_SRC monad
 (Pair 1 "one")                  ;; Pair Int String
@@ -48,9 +64,18 @@ Pair x y
 #+END_SRC
 
 Pairs are created with the =Pair= constructor in both S-expression and
-Wisp syntax.
+Wisp syntax. There is no special literal syntax — pairs use the standard
+ADT constructor call.
 
-* fst / snd
+See [[file:wisp.org][Wisp]] for Wisp syntax reference and
+[[file:data.org][Data Types]] for constructor semantics.
+
+Key Points:
+- Construction uses standard ADT constructor syntax: =(Pair val1 val2)=
+- No special literal syntax (unlike lists ='()= or maps =#{}=)
+- Type is inferred from the values
+
+* 3. fst / snd
 
 #+BEGIN_SRC monad
 (define p (Pair 1 "one"))
@@ -78,7 +103,19 @@ define swap [p :: (Pair a b)] -> (Pair b a)
     (Pair x y) -> Pair y x
 #+END_SRC
 
-* Nesting
+The =fst= and =snd= functions are builtins that extract the first and
+second fields respectively. Pattern matching is the idiomatic
+alternative for destructuring.
+
+See [[file:patterns.org][Pattern Matching]] for Pair destructuring patterns
+and [[file:../context/language.org][context/language.org]] for fst/snd dispatch.
+
+Key Points:
+- =fst= extracts the first element; =snd= extracts the second
+- Pattern matching =(Pair x y)= is the idiomatic destructuring form
+- =swap= reorders the two fields
+
+* 4. Nesting
 
 Pairs can be nested for multi-field structures:
 
@@ -94,9 +131,18 @@ Pair (Pair "a" 1) (Pair "b" 2)
 
 For more than two fields, consider =data= types
 ([[file:data.org][Data Types]]) or =layout= types
-([[file:layouts.org][Layout Types]]).
+([[file:layouts.org][Layout Types]]). Nested pairs become unwieldy
+beyond two levels.
 
-* Pair vs Layout vs Data
+See [[file:layouts.org][Layout Types]] for named-field alternatives and
+[[file:ffi.org][FFI]] for C-interop struct layouts.
+
+Key Points:
+- Pairs nest naturally for multi-value structures
+- Beyond 2-3 levels, prefer =data= or =layout= types
+- Nested pairs still O(1) access via chained =fst=/=snd=
+
+* 5. Pair vs Layout vs Data
 
 | Aspect    | Pair                       | data                    | layout          |
 |-----------+----------------------------+-------------------------+-----------------|
@@ -105,19 +151,142 @@ For more than two fields, consider =data= types
 | C compat  | No                          | No                      | Yes             |
 | Pattern   | =(Pair x y)=                | =(Ctor x y)=            | =(=struct= f v)= |
 
-* Related Pages
+See [[file:data.org][Data Types]] for ADTs,
+[[file:layouts.org][Layout Types]] for C-interop types, and
+[[file:../context/types.org][context/types.org]] for type representation.
+
+Key Points:
+- Pair: 2 positional fields, no tag, no C compat
+- data: 0..N positional fields, automatic tag
+- layout: named fields, no tag, C-compatible
+
+* 6. Examples
+
+** 6.1 Zip two lists into pairs
+
+#+BEGIN_SRC monad
+(define (zip [xs :: [a]] [ys :: [b]] -> [(Pair a b)])
+  (match (Pair xs ys) with
+    ((Pair [] _))          -> []
+    ((Pair _ []))          -> []
+    ((Pair [x|xs] [y|ys])) -> (cons (Pair x y) (zip xs ys))))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define zip [xs :: [a]] [ys :: [b]] -> [(Pair a b)]
+  match (Pair xs ys) with
+    (Pair [] _)          -> []
+    (Pair _ [])          -> []
+    (Pair [x|xs] [y|ys]) -> cons (Pair x y) (zip xs ys)
+#+END_SRC
+
+** 6.2 Unzip pairs into two lists
+
+#+BEGIN_SRC monad
+(define (unzip [ps :: [(Pair a b)]] -> (Pair [a] [b]))
+  (reduce (lambda [(Pair acc-a acc-b) (Pair a b)]
+            (Pair (cons a acc-a) (cons b acc-b)))
+          (Pair [] [])
+          ps))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define unzip [ps :: [(Pair a b)]] -> (Pair [a] [b])
+  reduce (lambda [(Pair acc-a acc-b) (Pair a b)]
+            Pair (cons a acc-a) (cons b acc-b))
+          (Pair [] [])
+          ps
+#+END_SRC
+
+See [[file:list.org][Lists]] for list operations and
+[[file:recursion.org][Recursion]] for recursive patterns.
+
+Key Points:
+- =zip= combines two lists into a list of pairs, truncating to the shorter input
+- =unzip= separates a list of pairs into two lists using =reduce=
+- Both are standard functional programming idioms
+
+* 7. Runnable Example
+
+#+BEGIN_SRC monad
+;; run with: monadc pair-demo.mon
+
+;; Construction
+(define p (Pair "hello" 42))
+(show p)                          ;; prints (Pair "hello" 42)
+
+;; Accessors
+(show (fst p))                    ;; prints "hello"
+(show (snd p))                    ;; prints 42
+
+;; Pattern matching
+(define (swap [p :: (Pair a b)] -> (Pair b a))
+  (match p with
+    (Pair x y) -> (Pair y x)))
+
+(show (swap p))                   ;; prints (Pair 42 "hello")
+
+;; Nested pairs
+(define nested (Pair 1 (Pair 2 3)))
+(show (fst nested))               ;; prints 1
+(show (fst (snd nested)))         ;; prints 2
+
+;; Zip two lists into pairs
+(define (zip [xs :: [a]] [ys :: [b]] -> [(Pair a b)])
+  (match (Pair xs ys) with
+    ((Pair [] _))          -> []
+    ((Pair _ []))          -> []
+    ((Pair [x|xs] [y|ys])) -> (cons (Pair x y) (zip xs ys))))
+
+(show (zip '(1 2 3) '("a" "b" "c")))  ;; prints ((Pair 1 "a") (Pair 2 "b") (Pair 3 "c"))
+#+END_SRC
+
+* 8. Gotchas
+
+Common mistakes and surprising behaviours with pairs:
+
+- **No special literal syntax** — use =(Pair a b)= constructor. Unlike lists (='()=) and maps (=#{}=), there is no dedicated pair literal.
+
+- **Pattern syntax is =(Pair x y)=, not =[x y]=** — the constructor must match the ADT pattern syntax, not list/vector destructuring.
+
+- **=fst=/=snd= on non-pair crashes** — these are untyped builtins; applying them to a non-pair value causes a runtime crash rather than a type error.
+
+- **Nested pairs beyond 2-3 levels are unwieldy** — for structured data with more fields, use =data= or =layout= types instead.
+
+- **Pairs are heap-allocated** — like all ADT constructors, =(Pair a b)= allocates on the heap. There is no stack-allocated tuple.
+
+- **Lists ARE pairs** — a cons cell =(Pair x xs)= is a list cell. Operations that work on pairs also work on list cells (and vice versa), which can cause confusion when =fst= returns the head and =snd= returns the tail.
+
+* 9. Implementation Notes
+
+| Component   | Context File        | Topic                                       |
+|-------------+---------------------+---------------------------------------------|
+| Types       | types.org           | [[file:../context/types.org::#kind-TYPE_APP][TYPE_APP for Pair type representation]] |
+| Codegen     | codegen.org         | [[file:../context/codegen.org::#codegen-adt-tag][Pair constructor lowering]] |
+| Language    | language.org        | [[file:../context/language.org::#primitive-list][Pair dispatch and cons-cell representation]] |
+| Codegen     | codegen-ops.org     | [[file:../context/codegen-ops.org::#ops-collection][fst/snd operation codegen]] |
+| Inference   | infer.org           | [[file:../context/infer.org::#constraint-generation][Type inference for Pair construction]] |
+| Source      | codegen.c           | =fst=, =snd= builtin implementation |
+
+Related Pages
 
 - [[file:data.org][Data Types]] -- algebraic data types
 - [[file:list.org][Lists]] -- lists built from pairs
 - [[file:map.org][Maps]] -- maps with key-value pairs
 - [[file:patterns.org][Pattern Matching]] -- pattern matching on pairs
 - [[file:collections.org][Collections]] -- collection types overview
+- [[file:layouts.org][Layout Types]] -- named-field alternatives
+- [[file:types.org][Types]] -- type system
+- [[file:ffi.org][FFI]] -- C-interop struct compatibility
+- [[file:recursion.org][Recursion]] -- recursive pair processing
 
-* Context Links
+Further Reading
 
 - [[file:../context/types.org][context/types.org]] — TYPE_APP, Pair representation
 - [[file:../context/codegen.org][context/codegen.org]] — Pair lowering
 - [[file:../context/language.org][context/language.org]] — Pair dispatch
+- [[file:../context/infer.org][context/infer.org]] — type inference for pairs
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — fst/snd codegen
 - [[file:data.org][Data Types]] — algebraic data type reference
 - [[file:list.org][Lists]] — linked cons cells (pairs of head + tail)
 - [[file:patterns.org][Pattern Matching]] — Pair destructuring

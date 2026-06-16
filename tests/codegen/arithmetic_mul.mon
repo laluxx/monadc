@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.arithmetic-mul
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Integer multiplication evaluates at runtime.
-;; TEST-ATOM: (* 6 7) evaluates to 42.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (* 6 7))

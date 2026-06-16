@@ -1,0 +1,15 @@
+name: combo_for_and_set_contains_after_loop
+section: feature-interactions
+tier: experimental
+kind: law
+features: arithmetic, array, array-index, begin, env, feature, for, logic, mutation, predicate, set, set!, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.for_loop, codegen.local_load, codegen.logic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, codegen.sequence, codegen.set_bang, codegen.store, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.logic, infer.loop, infer.mutation, infer.type_predicate, reader.array_literal, reader.ast_begin, runtime.set
+signal: low
+corpus-role: legacy-smoke
+uses-atoms: atom.binding.set-bang, atom.binding.with, atom.control.begin, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_with_substitution
+args: 
+type: Bool
+expect: True
+description: for loops must support repeated mutation of a set value via conj.
+law: (with [s (set)] (begin (for 3 (set! s (conj s 7))) (contains? s 7)))

@@ -1,0 +1,15 @@
+name: structured_phi_if_begin_branch_phi_int
+section: control-phi-current
+tier: stable
+kind: law
+features: arithmetic, begin, control, equality, if, phi, set
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.runtime_call, codegen.sequence, infer.arithmetic, infer.equality, infer.if_phi, reader.ast_begin, reader.ast_if, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.begin, atom.control.if, atom.core.equality
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+args: p:Bool a:Int b:Int setup:Int
+type: Bool
+expect: True
+description: Stress branch PHI lowering and nested conditional codegen.
+law: (= (if {p} (begin {setup} {a}) (begin {setup} {b})) (if {p} {a} {b}))

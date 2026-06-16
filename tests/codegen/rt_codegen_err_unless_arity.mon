@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-codegen-err-unless-arity
-;; TEST-SECTION: diagnostic
-;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
-;; TEST-PURPOSE: Codegen enforces unless arity.
-;; TEST-ATOM: (unless True) must fail because unless requires at least one body expression.
-;; TEST-EXPECT: fail:compile
-
-(module Main)
-(unless True)

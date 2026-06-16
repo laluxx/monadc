@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-and-comparison-false
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.20.operators.comparison.rt.and.comparison.false
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: comparison
+;; TEST-CATEGORY: 20-operators
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: And with a false comparison returns False.
+;; TEST-ATOM: (and (< 5 3) (> 10 2)) evaluates to False.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:20-operators/comparison branch family
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/comparison/atom.codegen.20.operators.comparison.rt.and.comparison.false
+;; TEST-MENU-PATH: codegen/branches/operators/comparison/atom.codegen.20.operators.comparison.rt.and.comparison.false
+;; TEST-ATOM-LEAF: atom.codegen.20.operators.comparison.rt.and.comparison.false
+;; TEST-CLI-TARGET: codegen branches operators comparison
+(module Main)
+(show (and (< 5 3) (> 10 2)))

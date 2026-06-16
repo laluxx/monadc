@@ -1,0 +1,16 @@
+name: signal_derived_plus_if_with_comm_link_009
+section: current-atom-derived
+tier: stable
+kind: law
+features: if, phi, +, comparison, with, do, equality
+compiler-path: codegen.expr.if, codegen.expr.binary-add, codegen.phi.int, infer.branch.join
+signal: medium
+corpus-role: derived-atom-linked
+uses-atoms: atom.core.plus, atom.core.plus.commutative, atom.control.if, atom.core.order.lt, atom.core.equality
+depends-on: atom.core.plus.commutative, atom.control.if.idempotent
+related-properties: signal_atom_plus_commutative, signal_atom_if_same_branch_eliminates
+args: a:Int@edge+if+with b:Int@edge+do c:Int@edge+if
+type: Bool
+expect: True
+description: Derived property that explicitly links a real language/compiler path to foundational atom properties.
+law: (= (+ (if (< {a} {b}) {a} {b}) {c}) (+ {c} (if (< {a} {b}) {a} {b})))

@@ -1,0 +1,15 @@
+name: extreme_do_do_inside_arith_nested
+section: control-do-deep
+tier: stable
+kind: law
+features: arithmetic, control, do, equality, set
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.runtime_call, codegen.sequence, infer.arithmetic, infer.equality, reader.ast_do, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.do, atom.core.equality, atom.core.plus
+related-properties: signal_atom_do_last_value, signal_atom_equality_reflexive, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero
+args: setup:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Sequencing must return the last expression and compose inside branches, comparisons, and bindings.
+law: (= (+ (do {setup} {a}) (+ {b} {c})) (+ {a} (+ {b} {c})))

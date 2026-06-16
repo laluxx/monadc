@@ -1,0 +1,14 @@
+name: set_variadic_contains_right
+section: collections
+tier: stable
+kind: law
+features: arithmetic, collections, predicate, set
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, infer.arithmetic, infer.type_predicate, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.infer.predicate
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Variadic set construction must contain its right generated element.
+law: (contains? (set {a} {b}) {b})

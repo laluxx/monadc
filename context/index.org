@@ -1,8 +1,8 @@
 #+TITLE: MonadC Context Index
 #+AUTHOR: Codex
-#+DATE: 2026-06-11
+#+DATE: 2026-06-16
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -133,7 +133,7 @@ Each significant heading may use this property drawer:
 #+BEGIN_EXAMPLE
 * Heading
 :PROPERTIES:
-:ID: monadc.context.<domain>.<stable-name>
+  :ID: monadc.context.<domain>.<stable-name>
 :CUSTOM_ID: <kebab-name>
 :CONTEXT_KIND: component|format|observation|decision|task
 :CONTEXT_VERSION: 1
@@ -178,9 +178,9 @@ Every context file should include these file-level Org keywords when applicable:
 #+BEGIN_EXAMPLE
 #+TITLE: <human title>
 #+AUTHOR: Codex
-#+DATE: YYYY-MM-DD
+#+DATE: 2026-06-16
 #+CREATED: YYYY-MM-DD
-#+LAST_MODIFIED: YYYY-MM-DD
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: showeverything
 #+OPTIONS: toc:<depth> num:t
@@ -253,13 +253,13 @@ Every context file should include these file-level Org keywords when applicable:
 LLM-oriented statements use bracketed records with fixed keys:
 
 #+BEGIN_EXAMPLE
-[DOC id:<id> src:<file:line> conf:<high|medium|low>] <documentation, bibliographic reference>
-[OBS id:<id> src:<file:line> conf:<high|medium|low>] <direct observation>
-[INF id:<id> from:<obs-id[,obs-id...]> conf:<high|medium|low>] <inference>
-[DEC id:<id> date:<YYYY-MM-DD> by:<human|codex>] <decision>
-[TODO id:<id> owner:<human|codex|unknown> status:open>] <task>
-[THINK id:<id> conf:<high|medium|low>] <speculative reasoning, exploration note, chain-of-thought>
-[IDEA id:<id> author:<human|llm|human+llm> date:<YYYY-MM-DD>] <design idea, language proposal, feature concept>
+  [DOC id:<id> src:<file:line> conf:<high|medium|low>] <documentation, bibliographic reference>
+  [OBS id:<id> src:<file:line> conf:<high|medium|low>] <direct observation>
+[INF id:inf.context.index.record-format-example from:obs.context.index.file conf:high] <inference>
+  [DEC id:<id> date:<YYYY-MM-DD> by:<human|codex>] <decision>
+  [TODO id:<id> owner:<human|codex|unknown> status:open>] <task>
+  [THINK id:<id> conf:<high|medium|low>] <speculative reasoning, exploration note, chain-of-thought>
+  [IDEA id:<id> author:<human|llm|human+llm> date:<YYYY-MM-DD>] <design idea, language proposal, feature concept>
 #+END_EXAMPLE
 
 Rules:
@@ -478,3 +478,84 @@ Compiling =tests/path_heap_literals.mon= defines =path :: Path= and
   - Context system with all 4 category theory screenshots
   - Package format (package.yaml) documentation
   - Comprehensive language feature sections
+
+
+* Garden Governance Addendum
+:PROPERTIES:
+:ID: monadc.context.index.garden-addendum
+:CUSTOM_ID: index-garden-addendum
+:CONTEXT_KIND: format
+:CONTEXT_DESCRIPTION: Index links to governance, generated inventory, quality report, and routing files added during the garden enhancement pass.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/index.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.index.garden-addendum src:context/index.org conf:high]
+  The formal schema remains in this file. Day-to-day maintenance rules are now
+  split into focused files so the index does not become a dumping ground.
+
+#+CAPTION: Governance and quality files
+| File | Role |
+|------+------|
+| [[file:garden.org][garden.org]] | Garden charter, truth ladder, mutation/pruning rules |
+| [[file:quality.org][quality.org]] | Corpus health report and validation commands |
+| [[file:inventory.org][inventory.org]] | Generated inventory of files, IDs, records, titles |
+| [[file:connections.org][connections.org]] | Human-readable graph and impact routing |
+| [[file:test-contracts.org][test-contracts.org]] | Test metadata, tiering, promotion, context-link rules |
+| [[file:coverage-roadmap.org][coverage-roadmap.org]] | Coverage strategy beyond raw test counts |
+| [[file:debug-agenda.org][debug-agenda.org]] | Current bug agenda and watchlist |
+
+[DEC id:dec.index.split-governance date:2026-06-16 by:llm]
+  Keep =index.org= as schema and map. Put mutable quality reports, active bugs,
+  and coverage strategy into their own files.
+
+* Category Context Round 2
+:PROPERTIES:
+:ID: monadc.context.index.category-context-round2
+:CUSTOM_ID: index-category-context-round2
+:CONTEXT_KIND: navigation
+:CONTEXT_DESCRIPTION: Index entry for the second garden enhancement pass: category context, traceability, and curation.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/index.org
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.index.category-context-round2 date:2026-06-16 by:llm]
+  Added category-context routing and conventions to make the corpus a typed
+  semantic map instead of only a collection of topic files.
+
+#+CAPTION: New round-2 files
+| File | Purpose |
+|------+---------|
+| [[file:category-context.org][category-context.org]] | Object/morphism vocabulary, composition rules, category contract template. |
+| [[file:traceability.org][traceability.org]] | Source/context/test/failure promotion spine. |
+| [[file:curation.org][curation.org]] | Gardener loop, pruning heuristics, split criteria. |
+
+* Formal Category Layer
+:PROPERTIES:
+:ID: monadc.context.index.round3-category-directory
+:CONTEXT_KIND: navigation
+:CONTEXT_STATUS: active
+:SOURCE: context/index.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.index.round3-category-directory src:context/index.org conf:high]
+  The formal category implementation is indexed at [[file:category/index.org][category/index.org]].

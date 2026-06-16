@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.deep.deep_set_membership_feeds_if
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: emit-json-failed
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-SUBSET: sets
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.sets.deep.set.membership.feeds.if
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise set membership Bool feeding if.
+;; TEST-ATOM: contains? should produce branchable Bool values.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.40.collections, atom.codegen.subset.sets
+;; TEST-COVERAGE: codegen.c:set contains result consumed by AST_IF
+;; TEST-MENU: branches/collections/sets/atom.codegen.40.collections.sets.deep.set.membership.feeds.if
+;; TEST-MENU-PATH: codegen/branches/collections/sets/atom.codegen.40.collections.sets.deep.set.membership.feeds.if
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.sets.deep.set.membership.feeds.if
+;; TEST-CLI-TARGET: codegen branches collections sets
+
+(module Main)
+(define s #{1 2 3})
+(show (if (contains? s 2) 1 0))
+(show (if (contains? s 9) 1 0))

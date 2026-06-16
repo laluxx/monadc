@@ -11,13 +11,66 @@
 
 [[file:index.org][<- Back to Index]] · [[file:arithmetic.org][Arithmetic]] · [[file:logic.org][Logic]] · [[file:booleans.org][Booleans]] · [[file:fuzzing.org][Fuzzing]] · [[file:core.org][Core Library]] · [[file:type-classes.org][Type Classes]]
 
+Monad provides three families of equality and comparison: structural (=, !=), ordering (<, <=, >, >=), and identity (eq?). This page covers all comparison operators, type class equality, and variadic chaining.
+
 Test coverage: comparison operators are exercised by =rt_cmp_*.mon=
-fixtures in [[file:../tests/codegen/][tests/codegen/]].
+fixtures in [[file:../tests/codegen/branches/operators/][tests/codegen/branches/operators/]].
+See [[file:../context/tests-arch.org][context/tests-arch.org]] for the full test architecture.
 
 All comparison operators work on Int, Float, and mixed Int/Float
-operands. Most are variadic (2..N arguments).
+operands. Most are variadic (2..N arguments). For boolean logic
+operators, see [[file:booleans.org][Booleans]]. For the type class =Eq=, see
+[[file:type-classes.org][Type Classes]].
 
-* Equality: = / !=
+MonadC provides three families of equality/comparison: structural,
+identity, and type-class-based. Each serves a different purpose.
+
+** Complete example:
+
+#+BEGIN_SRC monad
+;; Save as equality-demo.mon && monadc equality-demo.mon && ./equality-demo
+(module Main)
+
+;; Structural equality
+(show (= 1 1))             ;; True
+(show (= 1 2 3))           ;; False — variadic, all must match
+(show (!= 1 2))            ;; True
+
+;; Ordering
+(show (< 1 2 3))           ;; True — chained comparison
+(show (< 1 3 2))           ;; False — 3 >= 2
+(show (<= 2 2))            ;; True
+
+;; Mixed Int/Float
+(show (= 3 3.0))           ;; True
+(show (< 2 3.5))           ;; True
+
+;; Pointer identity
+(define x 42)
+(show (eq? x x))           ;; True — same object
+
+;; Type class equality (with deriving)
+(data Color Red Green Blue deriving Eq)
+(show (= Red Red))         ;; True — structural
+(show (= Red Green))       ;; False
+#+END_SRC
+
+** Common Pitfalls
+
+- **== and = are the same operator**: The type class =Eq= uses =====
+  for its method name, which is the same as the built-in structural
+  equality. There is no separate =equal?= vs === distinction beyond
+  the dispatch mechanism.
+- **=eq?= behavior on small literals is implementation-defined**:
+  String interning may cause =(eq? "a" "a")= to return True in some
+  builds and False in others. Use === for structural string equality.
+- **Variadic chaining is pairwise, not transitive**: =(< 1 2 3)= is
+  =(and (< 1 2) (< 2 3))=. It does NOT check that =1 < 3= directly.
+- **Comparing different numeric types promotes Int to Float**: =(=
+  3 3.0)= works but =(= (I32 3) 3)= is a type error — fixed-width
+  types do not auto-promote.
+
+* 1. Equality: = / !=
 
 #+BEGIN_SRC monad
 (= 2 2)                        ;; True
@@ -43,7 +96,24 @@ operands. Most are variadic (2..N arguments).
 = 1 2 1
 #+END_SRC
 
-* Ordering: < <= > >=
+The =!= operator is the negation of ===. Both support variadic
+invocation: =(= a b c)= checks =a = b ∧ b = c=.
+
+** Implementation Notes
+
+- =/!= dispatch is handled via strcmp in codegen
+  ([[file:../context/codegen-ops.org::124]])
+- Mixed Int/Float comparison promotes Int to Float
+  ([[file:../context/codegen-ops.org::124]])
+- Variadic comparison chains left-to-right
+
+** Key Points
+
+- = and != work on Int, Float, String, and other ground types
+- Variadic form checks pairwise equality of consecutive elements
+- Returns =Bool= — suitable for use in =if=, =cond=, =match=
+
+* 2. Ordering: < <= > >=
 
 #+BEGIN_SRC monad
 (< 2 3)                        ;; True
@@ -76,22 +146,41 @@ operands. Most are variadic (2..N arguments).
 Chained comparison evaluates left-to-right: =(< a b c)= checks
 =a < b= and =b < c=.
 
-* eq? (Identity)
+All ordering operators promote Int to Float when mixed operand types
+are used. For numeric promotion rules, see [[file:arithmetic.org][Arithmetic]].
+
+** Key Points
+
+- Chained comparisons are a syntactic convenience for =a < b ∧ b < c=
+- Mixed Int/Float arithmetic promotes Int → Float
+- All ordering operators are variadic (3+ arguments for chaining)
+
+* 3. eq? (Identity)
 
 #+BEGIN_SRC monad
 (eq? x x)                      ;; True — same object
 (eq? "a" "a")                  ;; implementation-defined
+(eq? (list 1 2) (list 1 2))   ;; False — different objects
 #+END_SRC
 
 #+BEGIN_SRC wisp
 eq? x x
 eq? "a" "a"
+eq? (list 1 2) (list 1 2)
 #+END_SRC
 
 =eq?= tests object identity (pointer equality), not structural
 equality. For type class ==, see [[file:type-classes.org][Type Classes]].
 
-* = (Type Class ==)
+** Key Points
+
+- =eq?= is pointer equality — use it for object identity checks
+- For structural equality of data types, use the =Eq= type class or
+  the =equal?= function
+- =eq?= on small literals (like strings) is implementation-defined due
+  to interning
+
+* 4. = (Type Class ==)
 
 The =Eq= type class provides structural equality:
 
@@ -106,19 +195,35 @@ class Eq a
 #+END_SRC
 
 Deriving =Eq= for a data type auto-generates =(Ctor x) == (Ctor y)=
-by comparing constructor tags and fields structurally.
+by comparing constructor tags and fields structurally:
 
-* Operator Table
+#+BEGIN_SRC monad
+(data Color Red Green Blue deriving Eq)
 
-| Operator | Example      | Description       | Variadic |
-|----------+--------------+-------------------+----------|
-| =        | =(= a b)=    | Equal             | Yes (2+) |
-| !=       | =(!= a b)=   | Not equal         | Yes (2+) |
-| <        | =(< a b)=    | Less than         | Yes (3+) |
-| <=       | =(<= a b)=   | Less or equal     | Yes (3+) |
-| >        | =(> a b)=    | Greater than      | Yes (3+) |
-| >=       | =(>= a b)=   | Greater or equal  | Yes (3+) |
-| eq?      | =(eq? a b)=  | Object identity   | No       |
+(= Red Red)                    ;; True — structural
+(= Red Green)                  ;; False
+#+END_SRC
+
+#+BEGIN_SRC wisp
+data Color Red Green Blue deriving Eq
+
+= Red Red                      ;; True — structural
+= Red Green                    ;; False
+#+END_SRC
+
+See [[file:type-classes.org#deriving][Type Class Deriving]] for details on deriving Eq.
+
+* 5. Operator Table
+
+| Operator | Example   | Description      | Variadic |
+|----------+-----------+------------------+----------|
+| =        | =(= a b)=   | Equal            | Yes (2+) |
+| !=       | =(!= a b)=  | Not equal        | Yes (2+) |
+| <        | =(< a b)=   | Less than        | Yes (3+) |
+| <=       | =(<= a b)=  | Less or equal    | Yes (3+) |
+| >        | =(> a b)=   | Greater than     | Yes (3+) |
+| >=       | =(>= a b)=  | Greater or equal | Yes (3+) |
+| eq?      | =(eq? a b)= | Object identity  | No       |
 
 * Related Pages
 
@@ -127,12 +232,23 @@ by comparing constructor tags and fields structurally.
 - [[file:core.org][Core Library]] -- built-in function overview
 - [[file:types.org][Types]] -- type equality and identity
 - [[file:conditionals.org][Conditionals]] -- if, cond with comparisons
+- [[file:type-classes.org][Type Classes]] -- Eq, Ord classes
+- [[file:dependent-types.org][Dependent Types]] -- propositional equality (NbE)
 
 * Context Links
 
 - [[file:../context/codegen-ops.org][context/codegen-ops.org]] — operation dispatch
 - [[file:../context/language.org][context/language.org]] — comparison semantics
 - [[file:../codegen.c][codegen.c]] — =strcmp= handlers for =/!</=>
+- [[file:../context/types.org][context/types.org]] — type representation for comparison
 - [[file:core.org][Core Library]] — built-in function overview
 - [[file:booleans.org][Booleans]] — Bool type
 - [[file:type-classes.org][Type Classes]] — Eq class
+
+* Further Reading
+
+- [[file:logic.org][Logic]] — logical connectives, compound conditions
+- [[file:numeric.org][Numeric Types]] — numeric type promotion rules
+- [[file:conditionals.org][Conditionals]] — using comparisons in control flow
+- [[file:testing.org][Testing]] — writing test assertions with equality
+- [[file:fuzzing.org][Fuzzing]] — fuzzing comparison operators

@@ -1,0 +1,15 @@
+name: structured_cross_nil_predicate_controls_branch_after_coalesce
+section: cross-compiler-current
+tier: stable
+kind: law
+features: arithmetic, cross, equality, if, null, path, phi, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.null_coalesce, codegen.path_literal, codegen.predicate_dispatch, infer.arithmetic, infer.equality, infer.if_phi, infer.nil, infer.path, infer.type_predicate, reader.ast_if, reader.path_literal
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.if, atom.core.equality, atom.infer.predicate, atom.null.nil, atom.runtime.path
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Stress cross-feature lowering across control flow, env lookup, runtime collections, predicates, quote/null, and operator dispatch.
+law: (= (if (nil? nil) (?? nil {a}) {b}) {a})

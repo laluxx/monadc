@@ -1,0 +1,17 @@
+name: structured_compile_fail_type_error_add_bool_r04_disabled_duplicate_c5e76772
+section: current-compile-fail
+tier: experimental
+kind: compile-fail
+features: compile-fail, type, arithmetic
+compiler-path: codegen.arithmetic_dispatch, diagnostic.expected_error, infer.arithmetic, runner.compile_fail_kind
+signal: high
+corpus-role: merged-duplicate
+uses-atoms: atom.core.plus
+related-properties: signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero
+merged-into: structured_compile_fail_type_error_add_bool_r01
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int@edge p:Bool@logic
+type: Bool
+expect-diagnostic: error:
+description: V10 compile-fail property type_error_add_bool round 4; must fail to compile and emit a compiler error.
+law: (+ {a} {p})

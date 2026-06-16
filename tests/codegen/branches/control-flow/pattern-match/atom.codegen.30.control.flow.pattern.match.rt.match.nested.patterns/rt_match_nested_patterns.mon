@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-match-nested-patterns
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.pattern.match.rt.match.nested.patterns
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: pattern-match
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Nested match patterns destructure nested lists.
+;; TEST-ATOM: (match '(1 2 3) with [x|xs] -> (show x) (show xs))
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/pattern-match branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/pattern-match/atom.codegen.30.control.flow.pattern.match.rt.match.nested.patterns
+;; TEST-MENU-PATH: codegen/branches/control-flow/pattern-match/atom.codegen.30.control.flow.pattern.match.rt.match.nested.patterns
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.pattern.match.rt.match.nested.patterns
+;; TEST-CLI-TARGET: codegen branches control-flow pattern-match
+(module Main)
+(match '(1 2 3) with
+  [x|xs] -> (begin (show x) (show xs))
+  []     -> (show 0))

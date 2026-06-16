@@ -1,0 +1,29 @@
+;; TEST-ID: tests.codegen.branch200.90.diagnostics.branch.arity.symbols.diagnostic.branch.01
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: branch-arity-symbols
+;; TEST-QUALITY: negative-branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.branch200.90.diagnostics.branch.arity.symbols.diagnostic.branch.01
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: if too many operands arity diagnostic
+;; TEST-ATOM: atom.codegen.branch200.90.diagnostics.branch.arity.symbols.diagnostic.branch.01
+;; TEST-EXPECT: fail:compile
+;; TEST-CODEGEN-PATH: codegen.diagnostic
+;; TEST-TAG: diagnostic
+;; TEST-TAG: fail
+;; TEST-COVERAGE: codegen.c:CODEGEN_ERROR arity diagnostics
+;; TEST-COVERAGE: codegen.c:12954 unknown function branch
+;; TEST-COVERAGE: codegen.c:array-as-function arity branch
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.codegen.subset.90.diagnostics.branch.arity.symbols
+;; TEST-MENU: errors/codegen/branch-arity-symbols/atom.codegen.branch200.90.diagnostics.branch.arity.symbols.diagnostic.branch.01
+;; TEST-MENU-PATH: codegen/errors/codegen/branch-arity-symbols/atom.codegen.branch200.90.diagnostics.branch.arity.symbols.diagnostic.branch.01
+;; TEST-ATOM-LEAF: atom.codegen.branch200.90.diagnostics.branch.arity.symbols.diagnostic.branch.01
+;; TEST-CLI-TARGET: codegen errors codegen branch-arity-symbols
+
+(module Main)
+(show (if True 1 2 3))

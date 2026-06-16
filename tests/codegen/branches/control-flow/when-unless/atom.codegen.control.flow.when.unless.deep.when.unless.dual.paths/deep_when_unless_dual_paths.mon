@@ -1,0 +1,27 @@
+;; TEST-ID: tests.codegen.deep.deep_when_unless_dual_paths
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SUBSET: when-unless
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.control.flow.when.unless.deep.when.unless.dual.paths
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise both executing and skipped branches for when/unless.
+;; TEST-ATOM: when/unless should only execute side effects on the correct condition.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:when/unless conditional branches
+
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/when-unless/atom.codegen.control.flow.when.unless.deep.when.unless.dual.paths
+;; TEST-MENU-PATH: codegen/branches/control-flow/when-unless/atom.codegen.control.flow.when.unless.deep.when.unless.dual.paths
+;; TEST-ATOM-LEAF: atom.codegen.control.flow.when.unless.deep.when.unless.dual.paths
+;; TEST-CLI-TARGET: codegen branches control-flow when-unless
+(module Main)
+(define x 0)
+(when True (set! x (+ x 1)))
+(when False (set! x 99))
+(show x)
+(unless False (set! x (+ x 2)))
+(unless True (set! x 99))
+(show x)

@@ -12,6 +12,8 @@
 [[file:index.org][<- Back to Index]] · [[file:type-classes.org][Type Classes]] · [[file:maybe.org][Maybe]] · [[file:result.org][Result]] · [[file:equality.org][Equality]] · [[file:numeric.org][Numeric]] · [[file:booleans.org][Booleans]] · [[file:from-c.org][From C]] · [[file:from-lisp.org][From Lisp]] · [[file:types.org][Types]] · [[file:functional-programming.org][FP]] · [[file:advanced-types.org][Advanced Types]]
 
 Test coverage: Haskell-compatibility forms are exercised by =rt_haskell_*.mon= fixtures.
+The test architecture is documented at
+[[file:../context/tests-arch.org][context/tests-arch.org]].
 
 This guide maps Haskell concepts to Monad equivalents. Key differences:
 strict evaluation (not lazy), S-expression syntax (optional Wisp), arena
@@ -31,7 +33,7 @@ Working Haskell-like operations are verified by =rt_arith_*.mon=,
 fold, closures, TCO, laziness) are documented at
 [[file:../context/language.org::287][context/language.org — Known codegen gaps]].
 
-* Syntax Differences
+1. Syntax Differences
 
 | Haskell                       | Monad                                |
 |-------------------------------+--------------------------------------|
@@ -45,7 +47,11 @@ fold, closures, TCO, laziness) are documented at
 | =instance Show Int where ...= | =(instance Show Int (show ...))=      |
 | =deriving (Show, Eq)=         | =(data Suit ... deriving Eq Show)=    |
 
-* Evaluation: Strict, Not Lazy
+Wisp syntax ([[file:wisp.org]]) provides an indentation-based alternative at
+the same AST level. See [[file:syntax.org][Syntax]] for the full reader grammar and
+[[file:../context/language.org::693][context/language.org — Wisp sugar]] for the desugaring pass.
+
+2. Evaluation: Strict, Not Lazy
 
 Monad is strict (call-by-value) — unlike Haskell's lazy evaluation. No
 implicit thunks. Create explicit delayed computation with =(lambda () ...)=
@@ -58,7 +64,25 @@ and force with =(f)=.
 | =let xs = [1..]= | No built-in lazy ranges — use lambda |
 | =seq a b=        | Always strict — no seq needed |
 
-* Type System: Dual HM + ITT
+For building lazy patterns explicitly, use thunks:
+#+BEGIN_SRC monad
+;; Explicit thunk
+(define (make-thunk val) (lambda () val))
+(define thunk (make-thunk 42))
+(show (thunk))   ;; forces evaluation -> 42
+#+END_SRC
+
+#+BEGIN_SRC wisp
+# Explicit thunk
+define (make-thunk val) (lambda () val)
+define thunk (make-thunk 42)
+show (thunk)   # forces evaluation -> 42
+#+END_SRC
+
+Strict evaluation also means no space leak from unevaluated thunks
+([[file:../context/philosophy.org::73][context/philosophy.org — strict evaluation]]).
+
+3. Type System: Dual HM + ITT
 
 Haskell uses Hindley-Milner type inference with type classes. Monad uses a
 dual type system ([[file:../context/language.org::501][context/language.org — type system surface]]):
@@ -76,7 +100,7 @@ annotations as a shadow pass (Phase 6.5) without slowing ground-type code
 **Refinement Types**
 
 Monad supports refinement types — subset predicates on ground types
-([[file:../context/language.org::597][context/language.org — refinement types]]):
+([[file:../context/language.org::597][context/language.org — refinement types]], [[file:refinements.org]]):
 
 #+BEGIN_SRC monad
 (type Pos { x ∈ Int | (> x 0) })
@@ -116,10 +140,13 @@ Type class constraints use bracket syntax:
 ∀ t. [Enum t, Bounded t] => Int -> (Maybe t)
 #+END_SRC
 
-* Type Classes (Dictionary Passing)
+See [[file:types.org][Types]], [[file:advanced-types.org][Advanced Types]], and
+[[file:dependent-types.org][Dependent Types]] for more on the type system.
+
+4. Type Classes (Dictionary Passing)
 
 Monad has type classes with =(class ...)= and =(instance ...)= declarations
-([[file:../context/typeclass.org]]). Instances compile to dictionary structs
+([[file:../context/typeclass.org]], [[file:type-classes.org]]). Instances compile to dictionary structs
 passed at call sites — monomorphization specializes concrete instances, so
 dispatch overhead is eliminated at monomorphization time.
 
@@ -132,7 +159,38 @@ dispatch overhead is eliminated at monomorphization time.
 Deriving ([[file:../context/typeclass.org]]) auto-generates type class instances
 for algebraic data types and layout types.
 
-* Monomorphization, Not Boxed Polymorphism
+Example of defining and using a type class:
+
+#+BEGIN_SRC monad
+(class Eq a
+  (== [a -> a -> Bool]))
+
+(instance Eq Int
+  (== [x y -> (Int (== x y))]))
+
+(define (member? [a :: (Eq a)] item list -> Bool)
+  ((match list)
+    []      -> False
+    [x|xs]  -> (if (== x item) True (member? item xs))))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+class Eq a
+  == [a -> a -> Bool]
+
+instance Eq Int
+  == [x y -> (Int (== x y))]
+
+define (member? [a :: (Eq a)] item list -> Bool)
+  (match list)
+    []      -> False
+    [x|xs]  -> (if (== x item) True (member? item xs))
+#+END_SRC
+
+Deriving declarations auto-generate instances for =Eq=, =Show=, =Ord=, and
+=Enum= ([[file:../context/typeclass.org][context/typeclass.org — deriving]]).
+
+5. Monomorphization, Not Boxed Polymorphism
 
 Haskell implements polymorphism through boxing: polymorphic functions operate
 on boxed values (pointer + info table). Monad monomorphizes ([[file:../context/codegen.org]]):
@@ -148,7 +206,23 @@ The =mono_cache= ([[file:../context/codegen.org]]) caches specialized versions b
 function name + concrete type args. Each concrete instantiation generates
 separate, maximally-optimized machine code ([[file:../context/philosophy.org::162]]).
 
-* Memory Management: Arena Allocation, Not GC
+Example:
+
+#+BEGIN_SRC monad
+(define (id x) x)           ;; monomorphized per call site
+(id 42)                     ;; generates id_Int specialized for Int
+(id "hello")                ;; generates id_String specialized for String
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define (id x) x           # monomorphized per call site
+(id 42)                     # generates id_Int specialized for Int
+(id "hello")                # generates id_String specialized for String
+#+END_SRC
+
+See [[file:../context/philosophy.org::162][context/philosophy.org — monomorphization]] for the design rationale.
+
+6. Memory Management: Arena Allocation, Not GC
 
 | Haskell             | Monad                          |
 +---------------------+--------------------------------+
@@ -160,9 +234,13 @@ separate, maximally-optimized machine code ([[file:../context/philosophy.org::16
 Monad does not have a garbage collector. Values are allocated in compiler-managed
 arena regions. The arena model replaces GC with deterministic bump-pointer
 allocation — allocation is fast, and entire regions are freed at once
-([[file:../context/philosophy.org::99]]).
+([[file:../context/philosophy.org::99]], [[file:../context/arena.org][context/arena.org]]).
 
-* Types with Kinds
+For mutable state, use =(set! ...)= on layout fields or heap cells. For the
+arena API, see [[file:arena.org][Arena Allocation]]. Heap arrays ([[file:heap.org]]) provide
+dynamic allocation within the current arena.
+
+7. Types with Kinds
 
 | Haskell kind | Monad equivalent                  |
 +--------------+-----------------------------------+
@@ -171,9 +249,10 @@ allocation — allocation is fast, and entire regions are freed at once
 | =Constraint= | Type class constraint contexts    |
 
 Monad uses a universe hierarchy ([[file:../context/types.org]]) rather than
-Haskell's =*=/=Constraint= split.
+Haskell's =*=/=Constraint= split. See [[file:types.org][Types]] and
+[[file:advanced-types.org][Advanced Types]] for the universe level system.
 
-* Inline Assembly
+8. Inline Assembly
 
 | Haskell                         | Monad ([[file:asm.org]])               |
 +---------------------------------+---------------------------------------|
@@ -183,7 +262,24 @@ Haskell's =*=/=Constraint= split.
 Inline assembly ([[file:../context/asm.org]]) is a first-class language feature,
 not a FFI escape hatch. Use inside typed function bodies for low-level control.
 
-* FFI: Include vs Foreign Import
+#+BEGIN_SRC monad
+;; Naked syscall (Linux write syscall)
+(define (syscall-write fd buf len -> Int Naked)
+  (asm mov 1 %rax)   ;; syscall number: write
+  (asm syscall))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+# Naked syscall (Linux write syscall)
+define (syscall-write fd buf len -> Int Naked)
+  asm mov 1 %rax   # syscall number: write
+  asm syscall
+#+END_SRC
+
+See [[file:asm.org][Inline Assembly]] for full documentation, and
+[[file:../context/asm.org][context/asm.org]] for implementation details.
+
+9. FFI: Include vs Foreign Import
 
 | Haskell                           | Monad ([[file:ffi.org]])              |
 +-----------------------------------+---------------------------------------|
@@ -195,7 +291,22 @@ not a FFI escape hatch. Use inside typed function bodies for low-level control.
 Monad's FFI ([[file:../context/ffi.org]]) parses C headers via libclang and
 injects typed wrappers directly — no manual bindings.
 
-* Working Haskell-like Operations
+#+BEGIN_SRC monad
+(include "math.h")
+(show (sqrt 144.0))        ;; direct C call
+(show (floor 3.14))        ;; direct C call
+#+END_SRC
+
+#+BEGIN_SRC wisp
+include "math.h"
+show (sqrt 144.0)        # direct C call
+show (floor 3.14)        # direct C call
+#+END_SRC
+
+See [[file:ffi.org][C FFI]] for the full FFI reference, and
+[[file:layouts.org][Layout Types]] for C-compatible structs.
+
+10. Working Haskell-like Operations
 
 From the codegen dispatch table ([[file:../context/language.org::209]]):
 
@@ -213,7 +324,10 @@ From the codegen dispatch table ([[file:../context/language.org::209]]):
 For an up-to-date list of working dispatch handlers, see
 [[file:../context/language.org::176][context/language.org — codegen dispatch]].
 
-* Known Gaps vs Haskell
+See also [[file:functional-programming.org][Functional Programming]] for the composition
+and higher-order function reference.
+
+11. Known Gaps vs Haskell
 
 | Feature          | Status ([[file:../context/language.org::287][context/language.org — gaps]])           |
 |------------------+--------------------------------------------------|
@@ -226,7 +340,74 @@ For an up-to-date list of working dispatch handlers, see
 | Closures         | Partially implemented (closure ABI exists, =fn=/=lambda= strcmp dispatch missing) |
 | Pipe operator =|>= | Reader parses, codegen does not dispatch          |
 
-* Related Pages
+Workarounds for common gaps:
+
+#+BEGIN_SRC monad
+;; Instead of map: use recursion
+(define (add1 xs -> [Int])
+  ((match xs)
+    []     -> []
+    [x|xs] -> (++ (+ x 1) (add1 xs))))
+
+;; Instead of foldl: use recursion
+(define (sum xs -> Int)
+  ((match xs)
+    []     -> 0
+    [x|xs] -> (+ x (sum xs))))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+# Instead of map: use recursion
+define (add1 xs -> [Int])
+  (match xs)
+    []     -> []
+    [x|xs] -> (++ (+ x 1) (add1 xs))
+
+# Instead of foldl: use recursion
+define (sum xs -> Int)
+  (match xs)
+    []     -> 0
+    [x|xs] -> (+ x (sum xs))
+#+END_SRC
+
+See [[file:recursion.org][Recursion]] for recursive programming patterns.
+
+Implementation Notes
+
+Key implementation details behind the Haskell-Monad mapping:
+
+- **Strict evaluation**: call-by-value throughout — no implicit thunks.
+  The codegen emits direct LLVM calls without lazy suspension wrappers
+  ([[file:../context/codegen.org][context/codegen.org]]).
+- **Dual type system**: HM inference (=infer.c=) handles ground types;
+  ITT/NbE kernel (=language.c=) validates dependent annotations as a
+  shadow pass ([[file:../context/language.org::501][context/language.org — type system surface]]).
+- **Type class dispatch**: instances compile to dictionary structs;
+  monomorphization eliminates dispatch overhead at specialization time
+  ([[file:../context/typeclass.org][context/typeclass.org — dictionary passing]]).
+- **Monomorphization cache**: =mono_cache= in codegen caches specialized
+  versions by function name + concrete type args; calls are direct, not
+  virtual ([[file:../context/codegen.org][context/codegen.org — monomorphization]]).
+- **Arena allocation**: bump-pointer allocator replaces GC entirely
+  ([[file:../context/arena.org][context/arena.org]]).
+
+Key Points
+
+- Monad is **strict** (call-by-value), not lazy. Use =(lambda () ...)=
+  for explicit thunks.
+- Type system is **dual**: HM for ground types, ITT/NbE for dependent
+  types. Refinements add subset predicates.
+- **Monomorphization**, not boxing — specialises functions per concrete
+  type at each call site.
+- **Arena allocation** replaces GC — deterministic bump-pointer, no
+  pauses.
+- Type classes compile to dictionary structs with monomorphization
+  eliminating dispatch overhead.
+- Many Haskell-like operations work (=car=, =cons=, =show=, =++=, ====);
+  =map=, =fold=, closures, and TCO are planned gaps.
+- Inline assembly is a first-class feature, not an FFI escape hatch.
+
+12. Related Pages
 
 - [[file:from-c.org][From C]] -- migration guide for C programmers
 - [[file:from-lisp.org][From Lisp]] -- migration guide for Lisp programmers
@@ -234,17 +415,27 @@ For an up-to-date list of working dispatch handlers, see
 - [[file:functional-programming.org][Functional Programming]] -- functional style
 - [[file:purity.org][Purity]] -- purity and effects
 - [[file:type-classes.org][Type Classes]] -- type class system
+- [[file:maybe.org][Maybe]] -- optional values
+- [[file:result.org][Result]] -- error handling with Result
+- [[file:equality.org][Equality]] -- equality comparison
+- [[file:numeric.org][Numeric]] -- numeric types
+- [[file:booleans.org][Booleans]] -- boolean values and logic
+- [[file:advanced-types.org][Advanced Types]] -- dependent and quantified types
 
-* Context Links
+13. Further Reading
 
-- [[file:../context/language.org]] — language formalization, dispatch, gaps
-- [[file:../context/types.org]] — type system reference
-- [[file:../context/typeclass.org]] — type class system
-- [[file:../context/codegen.org]] — monomorphization and codegen
-- [[file:../context/philosophy.org]] — design philosophy
-- [[file:../context/ffi.org]] — C FFI internals
-- [[file:../context/asm.org]] — inline assembly internals
-- [[file:functional-programming.org]] — functional programming in Monad
-- [[file:types.org]] — type system reference
-- [[file:ffi.org]] — C FFI user guide
-- [[file:layouts.org]] — C-compatible layout types
+- [[file:../context/language.org][context/language.org]] — language formalization, dispatch, gaps
+- [[file:../context/types.org][context/types.org]] — type system reference
+- [[file:../context/typeclass.org][context/typeclass.org]] — type class system
+- [[file:../context/codegen.org][context/codegen.org]] — monomorphization and codegen
+- [[file:../context/philosophy.org][context/philosophy.org]] — design philosophy
+- [[file:../context/ffi.org][context/ffi.org]] — C FFI internals
+- [[file:../context/asm.org][context/asm.org]] — inline assembly internals
+- [[file:../context/arena.org][context/arena.org]] — arena allocator internals
+- [[file:../context/tests.org][context/tests.org]] — test architecture
+- [[file:functional-programming.org][info/functional-programming.org]] — functional programming in Monad
+- [[file:types.org][info/types.org]] — type system reference
+- [[file:ffi.org][info/ffi.org]] — C FFI user guide
+- [[file:layouts.org][info/layouts.org]] — C-compatible layout types
+- [[file:asm.org][info/asm.org]] — inline assembly
+- [[file:recursion.org][info/recursion.org]] — recursion patterns

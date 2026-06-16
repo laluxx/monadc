@@ -1,0 +1,15 @@
+name: deep_codegen_logic_if_bool_phi_to_logic
+section: codegen-logic-comparison
+tier: stable
+kind: law
+features: arithmetic, codegen, equality, if, logic, phi
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.if_phi, infer.logic, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.control.if, atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+args: p:Bool q:Bool r:Bool
+type: Bool
+expect: True
+description: Bool PHI results from if must feed logic dispatch.
+law: (= (and (if {p} {q} {r}) True) (if {p} {q} {r}))

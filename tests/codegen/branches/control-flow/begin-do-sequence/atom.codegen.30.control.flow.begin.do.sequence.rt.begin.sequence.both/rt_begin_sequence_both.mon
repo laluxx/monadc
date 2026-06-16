@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-begin-sequence-both
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.begin.do.sequence.rt.begin.sequence.both
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: begin-do-sequence
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Begin sequence with both side effects and final value.
+;; TEST-ATOM: (begin (show 1) (show 2) 42) prints 1, 2 and returns 42.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/begin-do-sequence branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/begin-do-sequence/atom.codegen.30.control.flow.begin.do.sequence.rt.begin.sequence.both
+;; TEST-MENU-PATH: codegen/branches/control-flow/begin-do-sequence/atom.codegen.30.control.flow.begin.do.sequence.rt.begin.sequence.both
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.begin.do.sequence.rt.begin.sequence.both
+;; TEST-CLI-TARGET: codegen branches control-flow begin-do-sequence
+(module Main)
+(define x (begin (show 1) (show 2) 42))
+(show x)

@@ -1,0 +1,29 @@
+;; TEST-ID: tests.codegen.stateful.env.lambda.inside.with.captures.shadow
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SUBSET: definitions-lambdas-monomorphization
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.stateful.env.lambda.inside.with.captures.shadow
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Lambda inside with captures shadow child env value.
+;; TEST-ATOM: atom.codegen.stateful.env.lambda.inside.with.captures.shadow
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.with
+;; TEST-CODEGEN-PATH: codegen.lambda.capture
+;; TEST-COVERAGE: codegen.c:4161-5688 define/function/lambda/symbol resolution branches
+;; TEST-COVERAGE: codegen.c:133-330 monomorphization cache and specialization
+;; TEST-COVERAGE: codegen.c:13353 AST_LAMBDA codegen branch
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-USES-ATOM: atom.codegen.subset.05.symbol.env.definitions.lambdas.monomorphization
+;; TEST-MENU: branches/symbol-env/definitions-lambdas-monomorphization/atom.codegen.stateful.env.lambda.inside.with.captures.shadow
+;; TEST-MENU-PATH: codegen/branches/symbol-env/definitions-lambdas-monomorphization/atom.codegen.stateful.env.lambda.inside.with.captures.shadow
+;; TEST-ATOM-LEAF: atom.codegen.stateful.env.lambda.inside.with.captures.shadow
+;; TEST-CLI-TARGET: codegen branches symbol-env definitions-lambdas-monomorphization
+
+(module Main)
+(define f (with [x 40] (lambda (y) (+ x y))))
+(show (f 2))

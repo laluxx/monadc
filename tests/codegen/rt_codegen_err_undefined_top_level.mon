@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-codegen-err-undefined-top-level
-;; TEST-SECTION: diagnostic
-;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
-;; TEST-PURPOSE: Codegen rejects undefined outside generated fallback function bodies.
-;; TEST-ATOM: (undefined) at top level must fail.
-;; TEST-EXPECT: fail:compile
-
-(module Main)
-(undefined)

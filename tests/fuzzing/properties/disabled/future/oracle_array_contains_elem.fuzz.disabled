@@ -1,0 +1,15 @@
+name: oracle_array_contains_elem
+section: oracle-array
+tier: stable
+kind: law
+features: arithmetic, logic, array, string, set, predicate
+compiler-path: codegen.operator.arithmetic, codegen.operator.logic, runtime.array.index, codegen.array.literal, runtime.string, runtime.set, infer.predicate, codegen.predicate
+signal: high
+corpus-role: oracle
+uses-atoms: atom.core.arithmetic, atom.core.logic, atom.runtime.array, atom.runtime.string, atom.runtime.set, atom.core.predicate
+disabled-reason: disabled future or merged property; kept for provenance but not loaded by default
+args: xs:ArrInt x:ElemOf(xs)
+type: Bool
+expect-python: True
+description: Generated array/collection contains? should find generated element.
+law: (contains? {xs} {x})

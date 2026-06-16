@@ -1,0 +1,37 @@
+;; TEST-ID: tests.codegen.env-error.env.signature.mismatch.14
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: env-errors/signature-mismatch
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.env-error-coverage
+;; TEST-PURPOSE: Trigger env.c diagnostic: Signature mismatch for definition 'env_sig_mismatch_14'
+;; TEST-ATOM: atom.env.error.env.signature.mismatch.14
+;; TEST-CODEGEN-ATOM: atom.env.error.env.signature.mismatch.14
+;; TEST-QUALITY: env-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ENV-ERROR: Signature mismatch for definition 'env_sig_mismatch_14'
+;; TEST-ENV-PATH: env.c:695 infer.signature-mismatch
+;; TEST-CODEGEN-PATH: diagnostic.env.infer.signature-mismatch
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: env
+;; TEST-TAG: hm
+;; TEST-COVERAGE: env.c:695 Signature mismatch for definition 'env_sig_mismatch_14'
+;; TEST-USES-ATOM: atom.env.error.env.signature.mismatch.14
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.env.error
+;; TEST-USES-ATOM: atom.env.error.family.signature.mismatch
+;; TEST-DEPENDS-ON: atom.env.hm.signature.check
+;; TEST-DEPENDS-ON: atom.codegen.env.with
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-REFINES: atom.env.error
+;; TEST-MENU: errors/env/signature-mismatch/atom.env.error.env.signature.mismatch.14
+;; TEST-MENU-PATH: codegen/errors/env/signature-mismatch/atom.env.error.env.signature.mismatch.14
+;; TEST-ATOM-LEAF: atom.env.error.env.signature.mismatch.14
+;; TEST-CLI-TARGET: codegen errors env signature-mismatch
+
+(module Main)
+(define (env_sig_mismatch_14 [x : Int] -> Bool) (with [y 1] y))
+(show (env_sig_mismatch_14 True))

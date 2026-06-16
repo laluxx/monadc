@@ -1,0 +1,17 @@
+name: complex_arith_nested_add_sub_cancels_middle_disabled_duplicate_92dd6d1f
+section: arithmetic-normalization
+tier: experimental
+kind: law
+features: arithmetic, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+signal: medium
+corpus-role: merged-duplicate
+uses-atoms: atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+merged-into: int_add_sub_roundtrip_left_nested
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: A deeply nested add/sub expression should cancel the middle addend.
+law: (= (fuzz-sub (fuzz-add (fuzz-add {a} {b}) {c}) (fuzz-add {b} {c})) {a})

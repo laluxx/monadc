@@ -1,0 +1,17 @@
+name: atom_do_last_value
+section: atom-foundation
+tier: stable
+kind: law
+features: do, comparison
+compiler-path: codegen.control.sequence, codegen.operator.comparison
+signal: high
+corpus-role: atom-foundation
+atom: atom.control.do
+proves: atom.control.do.last_value
+uses-atoms: atom.control.sequence, atom.core.equality
+depends-on: atom.control.sequence, atom.core.equality
+args: x:Int@edge+do y:Int@edge+if
+type: Bool
+expect: True
+description: Foundational atom property proving atom.control.do.last_value.
+law: (= (do {x} {y}) {y})

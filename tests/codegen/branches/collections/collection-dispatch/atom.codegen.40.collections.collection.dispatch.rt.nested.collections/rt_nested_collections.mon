@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-nested-collections
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.collection.dispatch.rt.nested.collections
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: collection-dispatch
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime set with list elements (2-element).
+;; TEST-ATOM: Set containing two lists displays as a set of list values.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:40-collections/collection-dispatch branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/collection-dispatch/atom.codegen.40.collections.collection.dispatch.rt.nested.collections
+;; TEST-MENU-PATH: codegen/branches/collections/collection-dispatch/atom.codegen.40.collections.collection.dispatch.rt.nested.collections
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.collection.dispatch.rt.nested.collections
+;; TEST-CLI-TARGET: codegen branches collections collection-dispatch
+(module Main)
+(show {(list 1 2) (list 3 4)})

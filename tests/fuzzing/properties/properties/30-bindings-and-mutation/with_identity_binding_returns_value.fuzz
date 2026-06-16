@@ -1,0 +1,15 @@
+name: with_identity_binding_returns_value
+section: binding
+tier: stable
+kind: law
+features: arithmetic, array, array-index, binding, env, equality, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.equality_dispatch, codegen.local_load, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.equality, reader.array_literal
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.with, atom.core.equality, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive, signal_atom_with_substitution
+args: value:Int
+type: Bool
+expect: True
+description: A simple with binding must expose its bound Int value in the body.
+law: (= (with [x {value}] x) {value})

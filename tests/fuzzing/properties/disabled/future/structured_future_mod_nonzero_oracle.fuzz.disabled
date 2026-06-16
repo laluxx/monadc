@@ -1,0 +1,15 @@
+name: structured_future_mod_nonzero_oracle
+section: future-number-oracle-current
+tier: stable
+kind: law
+features: arithmetic, logic, with
+compiler-path: codegen.operator.arithmetic, codegen.operator.logic, infer.env.lookup, codegen.env.binding
+signal: high
+corpus-role: oracle
+uses-atoms: atom.core.arithmetic, atom.core.logic, atom.binding.with
+disabled-reason: disabled future or merged property; kept for provenance but not loaded by default
+args: a:Int b:PositiveInt
+type: Int
+expect-python: a % b
+description: Modulo oracle with generated positive divisor.
+law: (% {a} {b})

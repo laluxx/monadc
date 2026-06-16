@@ -1,0 +1,14 @@
+name: predicate_collection_set_true
+section: predicates-conversions
+tier: experimental
+kind: law
+features: arithmetic, predicate, predicates, set
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, infer.arithmetic, infer.type_predicate, runtime.set
+signal: low
+corpus-role: legacy-smoke
+uses-atoms: atom.infer.predicate
+args: 
+type: Bool
+expect: True
+description: collection? must accept sets created through the set dispatcher.
+law: (collection? (set 1 2 3))

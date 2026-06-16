@@ -1,0 +1,33 @@
+;; TEST-ID: tests.codegen.reader-error.reader-array-size-missing-close
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: reader-errors/collections-refinements
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.reader-error-coverage
+;; TEST-PURPOSE: Trigger and pin diagnostic: Expected ']' after size literal
+;; TEST-ATOM: atom.reader.error.reader.array.size.missing.close
+;; TEST-CODEGEN-ATOM: atom.reader.error.reader.array.size.missing.close
+;; TEST-QUALITY: diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-READER-ERROR: Expected ']' after size literal
+;; TEST-READER-PATH: reader.c:6213 parser.array
+;; TEST-CODEGEN-PATH: diagnostic.parser.array
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-COVERAGE: reader.c:6213 Expected ']' after size literal
+;; TEST-USES-ATOM: atom.reader.error.reader.array.size.missing.close
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-USES-ATOM: atom.reader.error.family.parser.array
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-REFINES: atom.reader.error
+;; TEST-MENU: errors/reader/collections-refinements/atom.reader.error.reader.array.size.missing.close
+;; TEST-MENU-PATH: codegen/errors/reader/collections-refinements/atom.reader.error.reader.array.size.missing.close
+;; TEST-ATOM-LEAF: atom.reader.error.reader.array.size.missing.close
+;; TEST-CLI-TARGET: codegen errors reader collections-refinements
+
+(module Main)
+(show [U8 4 1 2)

@@ -1,0 +1,15 @@
+name: logic_and_absorbs_false
+section: logic
+tier: stable
+kind: law
+features: arithmetic, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+args: p:Bool q:Bool
+type: Bool
+expect: True
+description: A False operand must force variadic and to False.
+law: (= (and {p} False {q}) False)

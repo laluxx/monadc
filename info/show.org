@@ -9,7 +9,7 @@
 :CONTEXT:  monadc.context.codegen-ops, monadc.context.language
 :END:
 
-[[file:index.org][<- Back to Index]] · [[file:arithmetic.org][Arithmetic]] · [[file:equality.org][Equality]] · [[file:core.org][Core Library]] · [[file:strings.org][Strings]] · [[file:paths.org][Paths]] · [[file:testing.org][Testing]]
+[[file:index.org][<- Back to Index]] · [[file:arithmetic.org][Arithmetic]] · [[file:equality.org][Equality]] · [[file:core.org][Core Library]] · [[file:strings.org][Strings]] · [[file:paths.org][Paths]] · [[file:testing.org][Testing]] · [[file:data.org][Data Types]] · [[file:layouts.org][Layout Types]] · [[file:maybe.org][Maybe]] · [[file:result.org][Result]] · [[file:type-classes.org][Type Classes]] · [[file:error-handling.org][Error Handling]] · [[file:collections.org][Collections]]
 
 Test coverage: =show= is exercised by every runtime test fixture — it
 is the standard output mechanism used across the 423 codegen tests.
@@ -18,7 +18,13 @@ is the standard output mechanism used across the 423 codegen tests.
 type — builtin, ADT, layout, or function — has a canonical string
 representation. You can literally show anything.
 
-* show (universal)
+For the =Show= typeclass internals, see [[file:../context/codegen-ops.org][context/codegen-ops.org]].
+For the output semantics, see [[file:../context/language.org][context/language.org]].
+
+This page covers the =show= function, the =Show= typeclass, =assert-eq=,
+and display behavior for all Monad types including ADTs, layouts, and paths.
+
+* 1. show (universal)
 
 Print one or more values to stdout, separated by spaces:
 
@@ -39,7 +45,14 @@ show x y z
 Variadic — takes 1..N arguments of any types. Prints each followed by
 a space, then a newline.
 
-* All types are showable
+*** Key Points
+- Universal: works on every type with no manual instance required
+- Variadic: accepts any number of arguments
+- Prints each value followed by a space, then a trailing newline
+
+See also: [[file:strings.org][Strings]]
+
+* 2. All types are showable
 
 =show= dispatches through the =Show= typeclass, which every type
 satisfies. This covers every value in the language:
@@ -65,7 +78,10 @@ satisfies. This covers every value in the language:
 | Data/ADT | =(Just 42)=, =Nothing=    |
 | Layout   | =(Point 3.0 4.0)=         |
 
-** ADTs print in constructor syntax
+See [[file:types.org][Types]], [[file:collections.org][Collections]],
+[[file:numeric.org][Numeric Types]], and [[file:paths.org][Path Literals]].
+
+** 2.1 ADTs print in constructor syntax
 
 Algebraic data types display their constructor name and fields:
 
@@ -86,9 +102,14 @@ show (Node Leaf 1 Leaf)
 #+END_SRC
 
 Every constructor and every field is included — no manual show
-instance needed.
+instance needed. See [[file:data.org][Data Types]] and [[file:maybe.org][Maybe]].
 
-** Layouts show field names
+*** Key Points
+- ADTs print as =(ConstructorName field1 field2 ...)=
+- =Nothing= (no fields) prints without parentheses
+- No manual show instances required — derived automatically from the ADT definition
+
+** 2.2 Layouts show field names
 
 Layout types display their type name and field values:
 
@@ -108,14 +129,18 @@ define r (Rect (Point 0 0) (Point 10 10))
 show r
 #+END_SRC
 
-** Functions show their type
+See [[file:layouts.org][Layout Types]].
+
+** 2.3 Functions show their type
 
 #+BEGIN_SRC monad
 (show +)                         ;; "<function: +>"
 (show id)                        ;; "<function: id>"
 #+END_SRC
 
-** Paths show file contents or directory listing
+See [[file:lambda.org][Lambda]] and [[file:core.org][Core Library]].
+
+** 2.4 Paths show file contents or directory listing
 
 Calling =show= on a =Path= value reads the filesystem:
 
@@ -133,9 +158,15 @@ For a regular file, =show= writes its contents verbatim to stdout. For
 a directory, it prints an =ls -la=-style listing with permissions,
 size, and modification time for each entry.
 
-Non-existent paths print an error diagnostic.
+Non-existent paths print an error diagnostic. See [[file:paths.org][Path Literals]]
+and [[file:error-handling.org][Error Handling]].
 
-* assert-eq
+*** Key Points
+- =show= on a file path =cat=s the content to stdout
+- =show= on a directory path produces an =ls -la= style listing
+- Non-existent paths produce an error diagnostic
+
+* 3. assert-eq
 
 Test assertion that prints both values on failure via =show=:
 
@@ -150,23 +181,69 @@ assert-eq (+ 1 1) 2 "1+1=2"
 #+END_SRC
 
 Codegen evaluates both arguments and calls =rt_equal_p=. On failure,
-prints both values via =show= ([[file:../codegen.c::6431]]).
+prints both values via =show= ([[file:../codegen.c::6431]]). See
+[[file:testing.org][Testing]].
 
-* Related Pages
+*** Key Points
+- =assert-eq= compares two values; prints both via =show= on failure
+- Equivalent to xUnit assertEqual
+- =show= is the backbone of the testing infrastructure
+
+See also: [[file:testing.org][Testing]]
+
+* 4. Implementation Notes
+
+Key source locations for =show= and display:
+
+| Source | Key Symbols / Sections |
+|--------+-----------------------|
+| [[file:../codegen.c][codegen.c]] | =show= codegen — =AST_SHOW= dispatch at ~5876 |
+| [[file:../codegen.c:6431][codegen.c:6431]] | =assert-eq= codegen via =rt_equal_p= |
+| [[file:../runtime.c][runtime.c]] | Runtime value printing functions |
+| [[file:../codegen-ops.c][codegen-ops.c]] | =Show= typeclass codegen operations |
+| [[file:../context/codegen-ops.org][context/codegen-ops.org]] | Show dispatch internals |
+| [[file:../context/language.org][context/language.org]] | Output semantics |
+| [[file:../context/runtime.org][context/runtime.org]] | Runtime value representation |
+
+Related context documents:
+
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — show dispatch internals
+- [[file:../context/language.org][context/language.org]] — output semantics
+- [[file:../context/runtime.org][context/runtime.org]] — runtime value representation
+- [[file:../context/types.org][context/types.org]] — type system internals
+- [[file:../context/reader.org][context/reader.org]] — reader and parser
+- [[file:../codegen.c][codegen.c]] — show codegen at ~5876
+- [[file:../tests/codegen/][tests/codegen/]] — all fixtures use show
+
+* 5. Related Pages
 
 - [[file:strings.org][Strings]] -- string representation
 - [[file:core.org][Core Library]] -- built-in function overview
 - [[file:testing.org][Testing]] -- assert-eq and test output
 - [[file:types.org][Types]] -- show for all types
 - [[file:repl.org][REPL]] -- REPL output with show
+- [[file:data.org][Data Types]] -- ADT show representation
+- [[file:layouts.org][Layout Types]] -- layout show representation
+- [[file:paths.org][Path Literals]] -- path display behavior
+- [[file:type-classes.org][Type Classes]] -- Show typeclass
+- [[file:maybe.org][Maybe]] -- Maybe show representation
+- [[file:result.org][Result]] -- Result show representation
+- [[file:collections.org][Collections]] -- collection show representation
+- [[file:numeric.org][Numeric Types]] -- numeric show representation
+- [[file:error-handling.org][Error Handling]] -- error and undefined
+- [[file:lambda.org][Lambda]] -- function show representation
+- [[file:equality.org][Equality]] -- equality and comparison
 
-* Context Links
+* 6. Further Reading
 
-- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — show dispatch
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — show dispatch internals
 - [[file:../context/language.org][context/language.org]] — output semantics
+- [[file:../context/runtime.org][context/runtime.org]] — runtime value representation
 - [[file:../codegen.c][codegen.c]] — show codegen at ~5876
 - [[file:../tests/codegen/][tests/codegen/]] — all fixtures use show
+- [[file:../context/types.org][context/types.org]] — type system internals
 - [[file:core.org][Core Library]] — built-in function overview
 - [[file:testing.org][Testing]] — assert-eq and test framework
 - [[file:paths.org][Path Literals]] — path display behavior
 - [[file:type-classes.org][Type Classes]] — Show typeclass
+- [[file:../context/reader.org][context/reader.org]] — reader and parser

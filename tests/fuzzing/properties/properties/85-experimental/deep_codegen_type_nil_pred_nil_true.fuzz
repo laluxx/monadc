@@ -1,0 +1,14 @@
+name: deep_codegen_type_nil_pred_nil_true
+section: codegen-predicates-casts-null
+tier: experimental
+kind: law
+features: arithmetic, codegen, null, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.null_coalesce, codegen.predicate_dispatch, infer.arithmetic, infer.nil, infer.type_predicate
+signal: low
+corpus-role: legacy-smoke
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate, atom.null.nil
+args: 
+type: Bool
+expect: True
+description: nil? must recognize nil literal.
+law: (nil? nil)

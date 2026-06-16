@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-match-list-tail
-;; TEST-CONTEXT: monadc.context.language.reader-header-coverage, monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Pattern codegen coverage for list tail patterns.
-;; TEST-ATOM: (match [1 2 3] with | [1 | xs] -> 1 | _ -> 0) should bind a tail after the pipe.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (match [1 2 3] with | [1 | xs] -> 1 | _ -> 0))

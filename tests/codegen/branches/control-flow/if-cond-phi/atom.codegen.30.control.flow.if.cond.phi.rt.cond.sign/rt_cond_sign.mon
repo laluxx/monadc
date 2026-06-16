@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.rt-cond-sign
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.if.cond.phi.rt.cond.sign
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: if-cond-phi
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cond with three clauses matches sign of integer.
+;; TEST-ATOM: (cond [(> x 0) 1] [(< x 0) -1] [else 0])
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/if-cond-phi branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/if-cond-phi/atom.codegen.30.control.flow.if.cond.phi.rt.cond.sign
+;; TEST-MENU-PATH: codegen/branches/control-flow/if-cond-phi/atom.codegen.30.control.flow.if.cond.phi.rt.cond.sign
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.if.cond.phi.rt.cond.sign
+;; TEST-CLI-TARGET: codegen branches control-flow if-cond-phi
+(module Main)
+(define (sign [x : Int] -> Int)
+  (cond [(> x 0) 1] [(< x 0) -1] [else 0]))
+(show (sign 42))
+(show (sign -1))
+(show (sign 0))

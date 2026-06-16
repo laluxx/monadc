@@ -1,0 +1,28 @@
+;; TEST-ID: tests.codegen.branch.collection-range-array-compile
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: arrays-ranges
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise AST_RANGE lowering for array ranges with and without explicit steps.
+;; TEST-ATOM: atom.codegen.collection.range-array-lowering
+;; TEST-CODEGEN-ATOM: atom.codegen.collection.range-array-lowering
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile
+;; TEST-CODEGEN-PATH: codegen.range.array.no-step
+;; TEST-CODEGEN-PATH: codegen.range.array.step
+;; TEST-DEPENDS-ON: atom.codegen.collection.array-count-index-head-tail
+;; TEST-TAG: compile
+;; TEST-TAG: collection
+;; TEST-TAG: range
+;; TEST-COVERAGE: codegen.c:4016-4160 AST_RANGE array/non-array branches
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/arrays-ranges/atom.codegen.collection.range-array-lowering
+;; TEST-MENU-PATH: codegen/branches/collections/arrays-ranges/atom.codegen.collection.range-array-lowering
+;; TEST-ATOM-LEAF: atom.codegen.collection.range-array-lowering
+;; TEST-CLI-TARGET: codegen branches collections arrays-ranges
+(module Main)
+(show [0..3])
+(show [1,3..7])

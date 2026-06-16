@@ -1,0 +1,15 @@
+name: structured_list_cdr_head_second_after_nested_cons
+section: collections-list-current
+tier: stable
+kind: law
+features: arithmetic, collections, equality, list
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.runtime_call, infer.arithmetic, infer.equality, runtime.list
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality
+related-properties: signal_atom_equality_reflexive
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Stress list constructors, pair accessors, head/cdr chains, make-list, and list-copy.
+law: (= (head (cdr (cons {a} (cons {b} (cons {c} (list)))))) {b})

@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.deep.deep_arithmetic_composed_dispatch
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-SUBSET: arithmetic
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.operators.arithmetic.deep.arithmetic.composed.dispatch
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise nested arithmetic dispatch and variadic addition.
+;; TEST-ATOM: Arithmetic dispatch should preserve nested expression order.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:operator dispatch + - * numeric paths
+
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/arithmetic/atom.codegen.operators.arithmetic.deep.arithmetic.composed.dispatch
+;; TEST-MENU-PATH: codegen/branches/operators/arithmetic/atom.codegen.operators.arithmetic.deep.arithmetic.composed.dispatch
+;; TEST-ATOM-LEAF: atom.codegen.operators.arithmetic.deep.arithmetic.composed.dispatch
+;; TEST-CLI-TARGET: codegen branches operators arithmetic
+(module Main)
+(show (+ (* 6 7) (- 10 10)))
+(show (- (+ 1 2 3) 6))
+(show (* (+ 8 4) (- 15 3)))

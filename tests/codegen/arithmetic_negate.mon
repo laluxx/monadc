@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.arithmetic-negate
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Negation via (- 0 n) evaluates at runtime.
-;; TEST-ATOM: (- 0 5) evaluates to -5.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (- 0 5))

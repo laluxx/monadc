@@ -1,0 +1,17 @@
+name: atom_path_literal_is_value
+section: atom-foundation
+tier: stable
+kind: law
+features: path, predicate
+compiler-path: reader.path_literal, runtime.path, infer.predicate, codegen.predicate
+signal: high
+corpus-role: atom-foundation
+atom: atom.frontend.path.literal
+proves: atom.frontend.path.literal.value
+uses-atoms: atom.frontend.path, atom.core.predicate
+depends-on: atom.frontend.path, atom.core.predicate
+args: p:Path
+type: Bool
+expect: True
+description: Foundational atom property proving atom.frontend.path.literal.value.
+law: (path? {p})

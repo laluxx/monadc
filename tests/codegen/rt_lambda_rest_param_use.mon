@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-lambda-rest-param-use
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Lambda with rest parameter collects extra args.
-;; TEST-ATOM: ((lambda (x . xs) (show x) (show xs)) 1 2 3) shows 1, (2 3).
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show ((lambda (x . xs) (list x xs)) 1 2 3))

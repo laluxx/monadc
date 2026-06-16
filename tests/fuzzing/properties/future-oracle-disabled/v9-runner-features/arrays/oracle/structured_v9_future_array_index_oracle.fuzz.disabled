@@ -1,7 +1,0 @@
-name: structured_v9_future_array_index_oracle
-section: future-array-oracle-v9
-args: xs:ArrInt i:IndexOf(xs)
-type: Int
-expect-python: xs[i]
-description: Array indexing oracle with generated arrays and valid generated indices.
-law: ({xs} {i})

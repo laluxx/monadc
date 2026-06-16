@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-ratio-show
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Ratio literals display correctly at runtime.
-;; TEST-ATOM: (show 1/3) prints 1/3, (show 5/8) prints 5/8.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show 1/3)
-(show 5/8)

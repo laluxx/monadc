@@ -12,6 +12,8 @@
 [[file:index.org][<- Back to Index]] · [[file:macros.org][Macros]] · [[file:syntax.org][Syntax]] · [[file:quote.org][Quote]] · [[file:patterns.org][Pattern Matching]] · [[file:define.org][Define]] · [[file:lambda.org][Lambda]]
 
 Test coverage: macro expansion is exercised by =rt_macro_*.mon= fixtures.
+The test architecture is documented at
+[[file:../context/tests-arch.org][context/tests-arch.org]].
 
 Monad macros are functions that return =Syntax= ([[file:../macro.c::765][macro.c:765]]).
 They receive their arguments unevaluated and produce a new s-expression
@@ -25,7 +27,7 @@ All examples below use syntax patterns tested by the compiler's own
 codegen fixtures. The =swap!= macro pattern, for instance, is verified
 in =rt_macro_swap.mon=.
 
-* Basics
+* 1. Basics
 
 #+BEGIN_SRC monad
 ;; A macro that always expands to 42
@@ -47,7 +49,10 @@ define identity-macro x -> Syntax
   x
 #+END_SRC
 
-* Conditional Expansion
+See [[file:macros.org][Macros — Defining Macros]] for the definition syntax and
+[[file:lambda.org][Lambda]] for the =-> Syntax= return type convention.
+
+* 2. Conditional Expansion
 
 #+BEGIN_SRC monad
 (define when :: condition . body -> Syntax
@@ -60,9 +65,10 @@ define when :: condition . body -> Syntax
 #+END_SRC
 
 The =. body= captures all remaining arguments as a list. =when= wraps
-them in =begin= inside an =if=.
+them in =begin= inside an =if=. See [[file:conditionals.org][Conditionals — when]] for
+the non-macro =when= form.
 
-* Negated Condition
+* 3. Negated Condition
 
 #+BEGIN_SRC monad
 (define (macro-unless condition . body -> Syntax)
@@ -74,7 +80,9 @@ define macro-unless condition . body -> Syntax
   if condition (begin) (begin . body)
 #+END_SRC
 
-* Mutation Helper
+This is the macro version of =unless= ([[file:conditionals.org][Conditionals — unless]]).
+
+* 4. Mutation Helper
 
 #+BEGIN_SRC monad
 (define (swap! a b -> Syntax)
@@ -110,7 +118,9 @@ show x  ;; 99
 show y  ;; 1
 #+END_SRC
 
-* Variadic Recursion
+See [[file:mutation.org][Mutation]] for the =set!= form and [[file:let.org][Let Bindings]] for =let=.
+
+* 5. Variadic Recursion
 
 #+BEGIN_SRC monad
 (define (my-and . args -> Syntax)
@@ -127,9 +137,10 @@ define my-and . args -> Syntax
 #+END_SRC
 
 Pattern-matches on the argument list: empty =True=, single =x=, or
-recurse.
+recurse. See [[file:recursion.org][Recursion]] for recursive patterns and
+[[file:patterns.org][Pattern Matching]] for the destructuring syntax.
 
-* Variadic Macro Semantics
+* 6. Variadic Macro Semantics
 
 A rest parameter (=. name=) captures all remaining arguments as a list.
 When spliced back with =. name= inside the macro body (e.g., =(begin . body)=),
@@ -141,17 +152,20 @@ list value:
 (define (example . args -> Syntax)
   (list . args))    ;; splices: (list 1 2 3)
 (define (example . args -> Syntax)
-  (list args))     ;; wraps: (list (1 2 3))
+  (list args))      ;; wraps: (list (1 2 3))
 #+END_SRC
 
 #+BEGIN_SRC wisp
 define example . args -> Syntax
   list . args    ;; splices: (list 1 2 3)
 define example . args -> Syntax
-  list args     ;; wraps: (list (1 2 3))
+  list args      ;; wraps: (list (1 2 3))
 #+END_SRC
 
-* Assertion Macro
+See [[file:macros.org][Macros — Variadic Splicing]] for the mechanics and
+[[file:../context/macro.org::macro-variadic-splicing][context/macro.org]] for implementation details.
+
+* 7. Assertion Macro
 
 #+BEGIN_SRC monad
 (define (assert condition . body -> Syntax)
@@ -165,12 +179,15 @@ define assert condition . body -> Syntax
     begin . body
 #+END_SRC
 
-* #() Quasi-Output Syntax
+See [[file:testing.org][Testing]] for the built-in =assert= form and
+[[file:error-handling.org][Error Handling]] for error-reporting patterns.
+
+* 8. #() Quasi-Output Syntax
 
 Macro bodies can use =#(...)= to delimit the template output region.
 Code outside =#()= is intended for compile-time computation (future work);
 currently =#()= is stripped and only the inner subtree becomes output
-([[file:../context/macro.org::marco-quasi-output][context/macro.org]]).
+([[file:../context/macro.org::marco-quasi-output][context/macro.org]]):
 
 #+BEGIN_SRC monad
 (define (assert condition message -> Syntax)
@@ -186,9 +203,9 @@ define assert condition message -> Syntax
     #(begin)
 #+END_SRC
 
-See [[file:macros.org][Macros Reference — #() Quasi-Output Syntax]] for details.
+See [[file:macros.org][Macros — #() Quasi-Output Syntax]] for full details.
 
-* Hygiene
+* 9. Hygiene
 
 Macros are unhygienic. Variables in the expansion can capture
 bindings at the call site:
@@ -208,31 +225,27 @@ define swap x y -> Syntax
 #+END_SRC
 
 If the caller has a =tmp= binding, it gets captured. Use gensymmed
-names to avoid this in complex macros.
+names or rely on the compiler's hygiene ([[file:macros.org][Macros — Hygiene]])
+to avoid this in complex macros.
 
-* Wisp Form
-
-Macros can be defined with Wisp syntax too:
-
-#+BEGIN_SRC monad
-define when :: condition . body -> Syntax
-  if condition (begin . body)
-#+END_SRC
-
-#+BEGIN_SRC wisp
-define when :: condition . body -> Syntax
-  if condition (begin . body)
-#+END_SRC
-
-* Fixpoint Expansion
+* 10. Fixpoint Expansion
 
 Macro expansion runs to a fixpoint (capped at 1024 rounds). A macro that
 produces another macro call is expanded again in a subsequent round.
 This enables recursive macros but requires caution: an infinite expansion
 loop hits the cap and produces a compiler error
-([[file:../context/macro.org::macro-fixpoint][context/macro.org]]).
+([[file:../context/macro.org::macro-fixpoint][context/macro.org]]):
 
-* Key Points
+#+BEGIN_EXAMPLE
+Round 1: (my-macro x) → (another-macro x)
+Round 2: (another-macro x) → (my-macro x)
+... cap at 1024 → compiler error
+#+END_EXAMPLE
+
+See [[file:macros.org][Macros — How Macros Work]] for the expansion step details and
+[[file:recursion.org][Recursion]] for general recursion patterns.
+
+* 11. Key Points
 
 - Macros are just functions returning =Syntax=
 - No separate =macro= keyword, no quasiquotation
@@ -240,18 +253,63 @@ loop hits the cap and produces a compiler error
 - Arguments are received unevaluated
 - Return value must be a valid s-expression
 - Rest params splice in list position, wrap in non-list position
-- Expansion is fixpoint (1024 round cap)
+- Expansion is fixpoint with a 1024-round cap
+- Unhygienic by default; compiler hygiene available via rename
+- =#()= marks quasi-output template regions
+
+Implementation Notes
+
+Macro patterns compile through the same expander infrastructure as macros
+(=macro.c=, 765+ lines). Key implementation details for writers:
+
+- **Variadic splicing**: a rest parameter (=. name=) in the macro's lambda
+  captures trailing arguments as a list. When re-inserted with =. name=
+  inside a list, the nodes are spliced flat; outside a list they wrap
+  ([[file:../context/macro.org::macro-variadic-splicing][context/macro.org — variadic splicing]]).
+- **Pattern matching on args**: =match= destructures the captured syntax
+  list; the pattern-match compiler (=pmatch.c=) generates the case
+  analysis ([[file:../context/pmatch.org][context/pmatch.org]]).
+- **Fixpoint caution**: recursive macros that produce other macro calls
+  are expanded in subsequent fixpoint rounds; infinite loops hit the
+  1024-round cap and abort
+  ([[file:../context/macro.org::macro-fixpoint][context/macro.org — fixpoint]]).
+- **Hygiene**: by default macros are unhygienic (names can capture).
+  The compiler's hygienic rename (=macroname__varname__N=) must be
+  explicitly relied on or worked around with gensymmed names
+  ([[file:../context/macro.org::macro-hygiene][context/macro.org — hygiene]]).
+
+Key Points
+
+- All patterns are =define= forms returning =Syntax= — no special macro
+  keyword.
+- Variadic macros use =. name= for rest args; =. name= splices in list
+  position, wraps otherwise.
+- =#()= quasi-output delimits the output template region.
+- =match= destructures captured syntax lists for conditional expansion.
+- Guard clauses (=| condition=) work inside =match= patterns.
+- Fixpoint expansion enables recursive macros but requires termination
+  guarantees.
+- Unhygienic by default; compiler hygiene uses =__= separator.
 
 * Related Pages
 
-- [[file:macros.org][Macros]] -- macro system fundamentals
-- [[file:syntax.org][Syntax]] -- Syntax type details
-- [[file:patterns.org][Pattern Matching]] -- pattern matching in macros
-- [[file:quote.org][Quote]] -- quasiquote patterns
-- [[file:define.org][Define]] -- macro definition syntax
+- [[file:macros.org][Macros]] — macro system fundamentals and API
+- [[file:syntax.org][Syntax]] — Syntax type and S-expression grammar
+- [[file:quote.org][Quote]] — quotation and quasiquotation patterns
+- [[file:patterns.org][Pattern Matching]] — destructuring macro arguments
+- [[file:define.org][Define]] — defining macros with =define=
+- [[file:lambda.org][Lambda]] — function type annotations
+- [[file:conditionals.org][Conditionals]] — =when=, =unless=, =if= forms
+- [[file:recursion.org][Recursion]] — recursive macro patterns
+- [[file:mutation.org][Mutation]] — =set!=, swap patterns
+- [[file:wisp.org][Wisp Syntax]] — defining macros in Wisp
+- [[file:testing.org][Testing]] — =assert= and test forms
 
-* Context Links
+* Further Reading
 
-- [[file:macros.org][Macros Reference]] — full macro system API
-- [[file:wisp.org][Wisp Syntax]] — defining macros with Wisp
-- [[file:../context/macro.org][context/macro.org]] — macro expander implementation
+- [[file:../context/macro.org][context/macro.org]] — macro expander architecture and implementation
+- [[file:../context/reader.org][context/reader.org]] — reader and AST internals
+- [[file:../context/pmatch.org][context/pmatch.org]] — pattern-match compiler internals
+- [[file:../context/language.org][context/language.org]] — language conventions
+- [[file:../macro.c][macro.c]] — C source: macro expander (765+ lines)
+- [[file:../tests/codegen/][tests/codegen/]] — macro codegen fixtures (=rt_macro_*.mon=)

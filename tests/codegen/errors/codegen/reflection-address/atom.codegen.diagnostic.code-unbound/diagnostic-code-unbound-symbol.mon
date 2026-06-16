@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.branch.diagnostic-code-unbound-symbol
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: reflection-address
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise code unbound symbol diagnostic.
+;; TEST-ATOM: atom.codegen.diagnostic.code-unbound
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.code-unbound
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-CODEGEN-PATH: diagnostic.reflection.code-unbound
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reflection
+;; TEST-COVERAGE: codegen.c:6576 code unbound symbol diagnostic
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/reflection-address/atom.codegen.diagnostic.code-unbound
+;; TEST-MENU-PATH: codegen/errors/codegen/reflection-address/atom.codegen.diagnostic.code-unbound
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.code-unbound
+;; TEST-CLI-TARGET: codegen errors codegen reflection-address
+(module Main)
+(show (code missingFunction))

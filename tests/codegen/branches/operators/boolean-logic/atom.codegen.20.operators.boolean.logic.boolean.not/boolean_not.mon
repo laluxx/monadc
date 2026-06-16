@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.boolean-not
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.20.operators.boolean.logic.boolean.not
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: boolean-logic
+;; TEST-CATEGORY: 20-operators
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Boolean not evaluates correctly.
+;; TEST-ATOM: (not True) = False, (not False) = True.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:20-operators/boolean-logic branch family
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/boolean-logic/atom.codegen.20.operators.boolean.logic.boolean.not
+;; TEST-MENU-PATH: codegen/branches/operators/boolean-logic/atom.codegen.20.operators.boolean.logic.boolean.not
+;; TEST-ATOM-LEAF: atom.codegen.20.operators.boolean.logic.boolean.not
+;; TEST-CLI-TARGET: codegen branches operators boolean-logic
+(module Main)
+(show (not True))
+(show (not False))

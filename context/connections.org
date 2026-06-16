@@ -1,0 +1,109 @@
+#+TITLE: Context Connections and Routing
+#+AUTHOR: GPT-5.5 Thinking
+#+DATE: 2026-06-16
+#+CREATED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-16
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:connections:graph:navigation:
+#+PROPERTY: CONTEXT_VERSION 3
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.connections
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY hideblocks
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* Purpose
+:PROPERTIES:
+:ID: monadc.context.connections.purpose
+:CUSTOM_ID: connections-purpose
+:CONTEXT_KIND: navigation
+:CONTEXT_DESCRIPTION: Cross-file routing and relationship conventions for the context garden.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/connections.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.connections.purpose src:context/connections.org conf:high]
+  This file is the human-readable graph layer. It does not replace stable IDs;
+  it explains how areas relate so humans and agents know what to open together.
+
+* Compiler Phase Route
+:PROPERTIES:
+:ID: monadc.context.connections.compiler-route
+:CUSTOM_ID: connections-compiler-route
+:CONTEXT_KIND: navigation
+:CONTEXT_DESCRIPTION: Which context files to read for each compiler phase.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/connections.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Phase-to-context route
+| Phase / concern | Primary file | Also read |
+|-----------------+--------------+-----------|
+| CLI flags | [[file:cli.org][cli.org]] | [[file:build.org][build.org]], [[file:main.org][main.org]] |
+| Wisp pre-parse | [[file:wisp.org][wisp.org]] | [[file:reader.org][reader.org]], [[file:test-contracts.org][test-contracts.org]] |
+| Reader/AST | [[file:reader.org][reader.org]] | [[file:language.org][language.org]], [[file:coverage-roadmap.org][coverage-roadmap.org]] |
+| Inference/types | [[file:infer.org][infer.org]] | [[file:types.org][types.org]], [[file:typeclass.org][typeclass.org]] |
+| Pattern matching | [[file:pmatch.org][pmatch.org]] | [[file:reader.org][reader.org]], [[file:codegen.org][codegen.org]] |
+| Code generation | [[file:codegen.org][codegen.org]] | [[file:codegen-ops.org][codegen-ops.org]], [[file:runtime.org][runtime.org]] |
+| Modules/build | [[file:module.org][module.org]] | [[file:dep.org][dep.org]], [[file:buildsystem.org][buildsystem.org]] |
+| Tests | [[file:tests.org][tests.org]] | [[file:tests-arch.org][tests-arch.org]], [[file:test-contracts.org][test-contracts.org]] |
+
+* Change Impact Map
+:PROPERTIES:
+:ID: monadc.context.connections.impact-map
+:CUSTOM_ID: connections-impact-map
+:CONTEXT_KIND: navigation
+:CONTEXT_DESCRIPTION: Common change types and the context/test areas they affect.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/connections.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Impact map
+| Change | Open first | Test focus |
+|--------+------------+------------|
+| New syntax sugar | [[file:wisp.org][wisp.org]] + [[file:reader.org][reader.org]] | reader TSV + desugar goldens |
+| New AST node | [[file:reader.org][reader.org]] + [[file:language.org][language.org]] | JSON AST + infer negative tests |
+| New runtime type | [[file:types.org][types.org]] + [[file:runtime.org][runtime.org]] | run stdout + type predicates |
+| New diagnostic | [[file:debug-agenda.org][debug-agenda.org]] + [[file:test-contracts.org][test-contracts.org]] | fail:compile with stable error class |
+| Runner change | [[file:tests.org][tests.org]] + [[file:test-contracts.org][test-contracts.org]] | runner unit tests + inventory validation |
+
+[DEC id:dec.connections.change-impact-required date:2026-06-16 by:llm]
+  A change is not fully understood until its context route and test focus are
+  known. When adding a new feature, add both a topic record and at least one test
+  contract pointer.

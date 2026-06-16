@@ -1,0 +1,15 @@
+name: structured_program_set_disj_removes_variant_01
+section: current-program-kind
+tier: stable
+kind: program
+features: program, set, conj, disj, contains
+compiler-path: codegen.module_body, codegen.runtime_call, runner.program_kind, runtime.set
+signal: high
+corpus-role: program-semantics
+uses-atoms: atom.core.equality, atom.infer.predicate
+related-properties: signal_atom_equality_reflexive
+args: a:Int@tiny
+type: Bool
+expect: True
+description: V10 program-kind property variant 1 for program_set_disj_removes, checking full program source handling rather than show-wrapped law handling.
+program: (show (= (contains? (disj (conj (set) {a}) {a}) {a}) False))

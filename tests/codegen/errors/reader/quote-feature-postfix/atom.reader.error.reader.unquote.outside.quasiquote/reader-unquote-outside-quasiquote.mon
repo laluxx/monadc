@@ -1,0 +1,32 @@
+;; TEST-ID: tests.codegen.reader-error.reader-unquote-outside-quasiquote
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: reader-errors/quote-feature-postfix
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.reader-error-coverage
+;; TEST-PURPOSE: Trigger and pin diagnostic: Unquote bracket used outside of a quasiquote block
+;; TEST-ATOM: atom.reader.error.reader.unquote.outside.quasiquote
+;; TEST-CODEGEN-ATOM: atom.reader.error.reader.unquote.outside.quasiquote
+;; TEST-QUALITY: diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-READER-ERROR: Unquote bracket used outside of a quasiquote block
+;; TEST-READER-PATH: reader.c:6984 parser.quasiquote
+;; TEST-CODEGEN-PATH: diagnostic.parser.quasiquote
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-COVERAGE: reader.c:6984 Unquote bracket used outside of a quasiquote block
+;; TEST-USES-ATOM: atom.reader.error.reader.unquote.outside.quasiquote
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-USES-ATOM: atom.reader.error.family.parser.quasiquote
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-REFINES: atom.reader.error
+;; TEST-MENU: errors/reader/quote-feature-postfix/atom.reader.error.reader.unquote.outside.quasiquote
+;; TEST-MENU-PATH: codegen/errors/reader/quote-feature-postfix/atom.reader.error.reader.unquote.outside.quasiquote
+;; TEST-ATOM-LEAF: atom.reader.error.reader.unquote.outside.quasiquote
+;; TEST-CLI-TARGET: codegen errors reader quote-feature-postfix
+
+(module Main)
+(show ⌞1⌟)

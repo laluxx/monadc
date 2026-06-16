@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.rt-ratio-arithmetic
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.20.operators.ratio.rt.ratio.arithmetic
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: ratio
+;; TEST-CATEGORY: 20-operators
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime ratio literal arithmetic.
+;; TEST-ATOM: Addition and multiplication of ratios produces correct exact results.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:20-operators/ratio branch family
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/ratio/atom.codegen.20.operators.ratio.rt.ratio.arithmetic
+;; TEST-MENU-PATH: codegen/branches/operators/ratio/atom.codegen.20.operators.ratio.rt.ratio.arithmetic
+;; TEST-ATOM-LEAF: atom.codegen.20.operators.ratio.rt.ratio.arithmetic
+;; TEST-CLI-TARGET: codegen branches operators ratio
+(module Main)
+(show (+ 1/2 1/3))
+(show (- 3/4 1/4))
+(show (* 2/3 3/4))
+(show (/ 5/6 5/6))

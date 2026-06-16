@@ -1,0 +1,15 @@
+name: mega_cross_null_coalesce_array_index
+section: codegen-cross-layer-stress
+tier: stable
+kind: law
+features: arithmetic, array, array-index, codegen, env, equality, predicate, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.equality_dispatch, codegen.local_load, codegen.predicate_dispatch, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.equality, infer.type_predicate, reader.array_literal
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.with, atom.codegen.dispatch, atom.core.equality, atom.infer.predicate, atom.null.nil, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive, signal_atom_with_substitution
+args: a:Int b:Int
+type: Bool
+expect: True
+description: ?? on scalar array-index result must return index value, not default.
+law: (= (with [xs [{a} {b}]] (?? (xs 0) {b})) {a})

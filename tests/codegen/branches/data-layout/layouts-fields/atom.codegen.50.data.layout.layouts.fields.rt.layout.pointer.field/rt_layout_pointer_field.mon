@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-layout-pointer-field
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-CODEGEN-ATOM: atom.codegen.50.data.layout.layouts.fields.rt.layout.pointer.field
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: layouts-fields
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.reader-header-coverage
+;; TEST-PURPOSE: Runtime layout declarations cover pointer fields from reader.h.
+;; TEST-ATOM: (layout Node [value :: Int] [next -> Node]) compiles before executable code.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:50-data-layout/layouts-fields branch family
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/layouts-fields/atom.codegen.50.data.layout.layouts.fields.rt.layout.pointer.field
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts-fields/atom.codegen.50.data.layout.layouts.fields.rt.layout.pointer.field
+;; TEST-ATOM-LEAF: atom.codegen.50.data.layout.layouts.fields.rt.layout.pointer.field
+;; TEST-CLI-TARGET: codegen branches data-layout layouts-fields
+(module Main)
+(layout Node [value :: Int] [next -> Node])
+(show 42)

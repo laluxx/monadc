@@ -1,0 +1,32 @@
+;; TEST-ID: tests.codegen.reader-error.reader-ratio-missing-denominator
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: reader-errors/numeric-literals
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.reader-error-coverage
+;; TEST-PURPOSE: Trigger and pin diagnostic: Invalid ratio: missing denominator
+;; TEST-ATOM: atom.reader.error.reader.ratio.missing.denominator
+;; TEST-CODEGEN-ATOM: atom.reader.error.reader.ratio.missing.denominator
+;; TEST-QUALITY: diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-READER-ERROR: Invalid ratio: missing denominator
+;; TEST-READER-PATH: reader.c:1645 lexer.ratio
+;; TEST-CODEGEN-PATH: diagnostic.lexer.ratio
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-COVERAGE: reader.c:1645 Invalid ratio: missing denominator
+;; TEST-USES-ATOM: atom.reader.error.reader.ratio.missing.denominator
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-USES-ATOM: atom.reader.error.family.lexer.ratio
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-REFINES: atom.reader.error
+;; TEST-MENU: errors/reader/numeric-literals/atom.reader.error.reader.ratio.missing.denominator
+;; TEST-MENU-PATH: codegen/errors/reader/numeric-literals/atom.reader.error.reader.ratio.missing.denominator
+;; TEST-ATOM-LEAF: atom.reader.error.reader.ratio.missing.denominator
+;; TEST-CLI-TARGET: codegen errors reader numeric-literals
+
+(module Main)
+(show 1/)

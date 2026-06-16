@@ -1,0 +1,14 @@
+name: structured_experimental_keyword_predicate_r01
+section: current-experimental
+tier: experimental
+kind: law
+features: experimental, keyword, predicate
+compiler-path: codegen.predicate_dispatch, infer.type_predicate
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.infer.predicate, atom.runtime.keyword
+args: k:Keyword
+type: Bool
+expect: True
+description: V11 experimental rich-feature property experimental_keyword_predicate round 1; non-default tier for parser/runtime features that may still be maturing.
+law: (keyword? {k})

@@ -1,0 +1,7 @@
+name	domain	codomain	forgets	preserves
+U	Ctx	DirectedGraph	identity/composite path structure	nodes and generating edges
+File	Ctx	File preorder	record/heading internals	owning file
+Phase	Ctx	CompilerPhase preorder	local prose	phase ownership
+Evidence	Ctx	Trust lattice	file layout	confidence/provenance ordering
+Info	Ctx	WeightedGraph	proof obligations	information weights and adjacency
+Search	Ctx	RankedList	most edges and identities	query-relevant nodes plus citations

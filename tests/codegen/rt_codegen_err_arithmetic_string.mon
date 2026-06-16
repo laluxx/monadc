@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-codegen-err-arithmetic-string
-;; TEST-SECTION: diagnostic
-;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
-;; TEST-PURPOSE: Codegen rejects arithmetic on strings.
-;; TEST-ATOM: (+ "a") must fail because String is not an arithmetic operand.
-;; TEST-EXPECT: fail:compile
-
-(module Main)
-(show (+ "a"))

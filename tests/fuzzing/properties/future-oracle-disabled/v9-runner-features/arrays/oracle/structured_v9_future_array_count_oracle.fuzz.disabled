@@ -1,7 +1,0 @@
-name: structured_v9_future_array_count_oracle
-section: future-array-oracle-v9
-args: xs:ArrInt
-type: Int
-expect-python: len(xs)
-description: Array count oracle over generated arrays.
-law: (count {xs})

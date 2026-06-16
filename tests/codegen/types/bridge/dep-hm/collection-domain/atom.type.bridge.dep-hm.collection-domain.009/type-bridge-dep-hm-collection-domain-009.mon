@@ -1,0 +1,35 @@
+;; TEST-ID: tests.codegen.type.bridge.dep.hm.collection.domain.009
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: types
+;; TEST-SUBSET: bridge/dep-hm/collection-domain
+;; TEST-QUALITY: type-system-negative-regression
+;; TEST-CODEGEN-ATOM: atom.type.bridge.dep-hm.collection-domain.009
+;; TEST-TYPE-ATOM: atom.type.bridge.dep-hm.collection-domain.009
+;; TEST-CONTEXT: monadc.context.language.codegen-type-system-corpus, monadc.context.language.hm-dependent-type-coverage
+;; TEST-PURPOSE: Cross-argument HM check rejects mapping an Int-domain function over a String/Char collection.
+;; TEST-ATOM: Function domain and collection element type must match across arguments.
+;; TEST-EXPECT: fail:compile
+;; TEST-MENU: types/bridge/dep-hm/collection-domain/atom.type.bridge.dep-hm.collection-domain.009
+;; TEST-MENU-PATH: codegen/types/bridge/dep-hm/collection-domain/atom.type.bridge.dep-hm.collection-domain.009
+;; TEST-ATOM-LEAF: atom.type.bridge.dep-hm.collection-domain.009
+;; TEST-CLI-TARGET: codegen types bridge dep-hm collection-domain
+;; TEST-TYPE-PATH: env.c:env_hm_check_call cross-argument check
+;; TEST-INFER-PATH: infer.c:collection_element_type/TYPE_STRING Char
+;; TEST-ERROR-STAGE: infer
+;; TEST-ERROR-FAMILY: hm.collection-domain-mismatch
+;; TEST-ERROR-MESSAGE: Couldn't match collection element type
+;; TEST-COVERAGE: env.c:cross-argument collection element/function domain mismatch
+;; TEST-COVERAGE: infer.c:collection_element_type String -> Char
+;; TEST-USES-ATOM: atom.codegen.category.types
+;; TEST-USES-ATOM: atom.type.system
+;; TEST-USES-ATOM: atom.type.bridge.dep-hm
+;; TEST-USES-ATOM: atom.type.hm.collection-domain
+;; TEST-DEPENDS-ON: atom.env.error.collection-domain-mismatch
+;; TEST-REFINES: atom.type.hm.cross-arg-domain
+
+(module Main)
+(define (bridge_map_09 [f : Fn] [xs : String] -> String) (f xs))
+(show (bridge_map_09 (lambda ([n : Int]) (+ n 1)) "abc"))

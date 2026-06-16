@@ -1,0 +1,15 @@
+name: structured_compile_fail_with_missing_binding_value_r01
+section: current-compile-fail
+tier: compile-fail
+kind: compile-fail
+features: compile-fail, arity, with
+compiler-path: codegen.with_binding, diagnostic.expected_error, infer.arity_check, infer.env_child, runner.compile_fail_kind
+signal: high
+corpus-role: negative-diagnostic
+uses-atoms: atom.binding.with, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_with_substitution
+args: a:Int@edge
+type: Bool
+expect-diagnostic: error:
+description: V11 expected compiler diagnostic test with_missing_binding_value round 1; checks compile-fail tier, diagnostics, and failure clustering.
+law: (with [x] x)

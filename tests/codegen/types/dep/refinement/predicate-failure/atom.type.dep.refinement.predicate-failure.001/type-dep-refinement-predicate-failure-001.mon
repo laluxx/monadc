@@ -1,0 +1,36 @@
+;; TEST-ID: tests.codegen.type.dep.refinement.predicate.failure.001
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: expected-fail-compiled
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: types
+;; TEST-SUBSET: dep/refinement/predicate-failure
+;; TEST-QUALITY: type-system-negative-regression
+;; TEST-CODEGEN-ATOM: atom.type.dep.refinement.predicate-failure.001
+;; TEST-TYPE-ATOM: atom.type.dep.refinement.predicate-failure.001
+;; TEST-CONTEXT: monadc.context.language.codegen-type-system-corpus, monadc.context.language.hm-dependent-type-coverage
+;; TEST-PURPOSE: Dependent/refinement checker rejects a value that does not satisfy its predicate.
+;; TEST-ATOM: Refinement predicate failure should surface as a dependent type error.
+;; TEST-EXPECT: fail:compile
+;; TEST-MENU: types/dep/refinement/predicate-failure/atom.type.dep.refinement.predicate-failure.001
+;; TEST-MENU-PATH: codegen/types/dep/refinement/predicate-failure/atom.type.dep.refinement.predicate-failure.001
+;; TEST-ATOM-LEAF: atom.type.dep.refinement.predicate-failure.001
+;; TEST-CLI-TARGET: codegen types dep refinement predicate-failure
+;; TEST-INFER-PATH: infer.c:AST_REFINEMENT bridge
+;; TEST-DEP-PATH: dep.c:dep_error_set/refinement predicate check
+;; TEST-ERROR-STAGE: dep
+;; TEST-ERROR-FAMILY: dep.refinement
+;; TEST-ERROR-MESSAGE: Dependent Type Error
+;; TEST-COVERAGE: dep.c:dep_error_set dependent type error path
+;; TEST-COVERAGE: reader.c:AST_REFINEMENT construction
+;; TEST-USES-ATOM: atom.codegen.category.types
+;; TEST-USES-ATOM: atom.type.system
+;; TEST-USES-ATOM: atom.type.dep.refinement
+;; TEST-USES-ATOM: atom.type.dep.check
+;; TEST-DEPENDS-ON: atom.type.hm.refinement-bridge
+;; TEST-REFINES: atom.type.dep.predicate-failure
+
+(module Main)
+(type DepPos01 { x ∈ Int | (> x 1) })
+(define [bad :: DepPos01] -2)
+(show bad)

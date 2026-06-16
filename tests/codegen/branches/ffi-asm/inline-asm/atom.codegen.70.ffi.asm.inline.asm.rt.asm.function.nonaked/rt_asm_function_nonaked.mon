@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.rt-asm-function-nonaked
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.70.ffi.asm.inline.asm.rt.asm.function.nonaked
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: inline-asm
+;; TEST-CATEGORY: 70-ffi-asm
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Inline asm in a non-naked function body — size-suffix inference
+;;   currently generates 32-bit (l) suffix for Int parameters, causing LLVM error.
+;; TEST-ATOM: (asm add x y) inside non-naked function — documents size-suffix gap.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:70-ffi-asm/inline-asm branch family
+;; TEST-USES-ATOM: atom.codegen.category.70.ffi.asm
+;; TEST-MENU: branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.rt.asm.function.nonaked
+;; TEST-MENU-PATH: codegen/branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.rt.asm.function.nonaked
+;; TEST-ATOM-LEAF: atom.codegen.70.ffi.asm.inline.asm.rt.asm.function.nonaked
+;; TEST-CLI-TARGET: codegen branches ffi-asm inline-asm
+(module Main)
+(define (add [x : Int] [y : Int] -> Int)
+  :naked False
+  (asm add x y))
+(show (add 10 20))

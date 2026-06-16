@@ -1,0 +1,34 @@
+;; TEST-ID: tests.codegen.reader-error.reader-keyword-constructor-duplicate-field
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: reader-errors/keyword-constructors
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.reader-error-coverage
+;; TEST-PURPOSE: Trigger and pin diagnostic: Duplicate field ':x' in keyword constructor call for layout 'Point'
+;; TEST-ATOM: atom.reader.error.reader.keyword.constructor.duplicate.field
+;; TEST-CODEGEN-ATOM: atom.reader.error.reader.keyword.constructor.duplicate.field
+;; TEST-QUALITY: diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-READER-ERROR: Duplicate field ':x' in keyword constructor call for layout 'Point'
+;; TEST-READER-PATH: reader.c:1 parser.keyword-constructor
+;; TEST-CODEGEN-PATH: diagnostic.parser.keyword-constructor
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-COVERAGE: reader.c:1 Duplicate field ':x' in keyword constructor call for layout 'Point'
+;; TEST-USES-ATOM: atom.reader.error.reader.keyword.constructor.duplicate.field
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-USES-ATOM: atom.reader.error.family.parser.keyword.constructor
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-REFINES: atom.reader.error
+;; TEST-MENU: errors/reader/keyword-constructors/atom.reader.error.reader.keyword.constructor.duplicate.field
+;; TEST-MENU-PATH: codegen/errors/reader/keyword-constructors/atom.reader.error.reader.keyword.constructor.duplicate.field
+;; TEST-ATOM-LEAF: atom.reader.error.reader.keyword.constructor.duplicate.field
+;; TEST-CLI-TARGET: codegen errors reader keyword-constructors
+
+(module Main)
+(layout Point [x :: Int] [y :: Int])
+(show (Point (:x 1) (:x 2) (:y 3)))

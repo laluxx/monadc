@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.branch.control-if-phi-type-family
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: if-cond-phi
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.control.if.phi.type.family
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover PHI type selection for string, char, float/int, and bool branches.
+;; TEST-ATOM: if should preserve pointer-like same-type branches and coerce scalar branches into a common type.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:7810-7896 PHI type classification
+;; TEST-COVERAGE: codegen.c:7898-7965 branch coercion and PHI construction
+
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/if-cond-phi/atom.codegen.control.if.phi.type.family
+;; TEST-MENU-PATH: codegen/branches/control-flow/if-cond-phi/atom.codegen.control.if.phi.type.family
+;; TEST-ATOM-LEAF: atom.codegen.control.if.phi.type.family
+;; TEST-CLI-TARGET: codegen branches control-flow if-cond-phi
+(module Main)
+(show (if True "yes" "no"))
+(show (if False (Char 65) (Char 66)))
+(show (if True 1 2.5))
+(show (if False True False))

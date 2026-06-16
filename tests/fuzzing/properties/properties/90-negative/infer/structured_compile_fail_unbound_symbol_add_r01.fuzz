@@ -1,0 +1,15 @@
+name: structured_compile_fail_unbound_symbol_add_r01
+section: current-compile-fail
+tier: compile-fail
+kind: compile-fail
+features: compile-fail, unbound, arithmetic
+compiler-path: codegen.arithmetic_dispatch, diagnostic.expected_error, infer.arithmetic, infer.unbound_symbol, runner.compile_fail_kind
+signal: high
+corpus-role: negative-diagnostic
+uses-atoms: atom.core.plus
+related-properties: signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero
+args: a:Int@edge
+type: Bool
+expect-diagnostic: error:
+description: V11 expected compiler diagnostic test unbound_symbol_add round 1; checks compile-fail tier, diagnostics, and failure clustering.
+law: (+ {a} structured_v11_missing_symbol)

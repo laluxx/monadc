@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.deep.deep_boolean_logic_phi
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-SUBSET: boolean-logic
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.operators.boolean.logic.deep.boolean.logic.phi
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise boolean logic dispatch.
+;; TEST-ATOM: Boolean operators should compose and print as Bool.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:boolean operator dispatch and show bool
+
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/boolean-logic/atom.codegen.operators.boolean.logic.deep.boolean.logic.phi
+;; TEST-MENU-PATH: codegen/branches/operators/boolean-logic/atom.codegen.operators.boolean.logic.deep.boolean.logic.phi
+;; TEST-ATOM-LEAF: atom.codegen.operators.boolean.logic.deep.boolean.logic.phi
+;; TEST-CLI-TARGET: codegen branches operators boolean-logic
+(module Main)
+(show (and True True))
+(show (and True False))
+(show (or False True))
+(show (not True))

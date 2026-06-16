@@ -11,28 +11,60 @@
 
 [[file:index.org][<- Back to Index]] · [[file:define.org][Define]] · [[file:quote.org][Quote]] · [[file:lambda.org][Lambda]] · [[file:wisp.org][Wisp Syntax]] · [[file:advanced-wisp.org][Advanced Wisp]] · [[file:let.org][Let Bindings]] · [[file:types.org][Types]]
 
+Monad supports two surface syntaxes — S-expressions and Wisp — that produce identical ASTs and mix freely in the same file. This page covers atoms, lists, literals, comments, identifiers, operators, and all special forms.
+
+* Syntax Overview
+
+Monad supports /two surface syntaxes/ that produce identical ASTs and can be
+mixed freely in the same file. The table below summarizes the top-level
+distinction; detailed references follow in the numbered sections below.
+
+| Aspect               | S-Expressions (Section 1)           | Wisp (Section 2)                           |
+|----------------------+-------------------------------------+--------------------------------------------|
+| **Notation**         | Parenthesized prefix (Lisp-style)   | Indentation-aware (Python-style)           |
+| **Parser**           | [[file:../reader.c][reader.c]] (7465+ lines)                | [[file:../wisp.c][wisp.c]] (4785+ lines)                     |
+| **Context**          | [[file:../context/reader.org][context/reader.org]]                    | [[file:../context/wisp.org][context/wisp.org]]                        |
+| **Combining**        | Nests inside Wisp                   | Wisp blocks desugar to S-exprs             |
+| **AST equivalence**  | Direct parse                        | Desugars to S-exprs → same AST             |
+| **Side-by-side**     | =(define x 42)=                     | =define x 42=                                |
+
+Both syntaxes are tested against the same [[file:../tests/reader-atoms.tsv][reader-atoms.tsv]] conformance
+corpus covering 650+ grammar productions — each row is one language atom
+that must parse and serialize through =--emit-json=.
+
+** Implementation Notes
+
+| Aspect              | Source File                   | Context Link                                                                |
+|---------------------+-------------------------------+-----------------------------------------------------------------------------|
+| AST type enum       | [[file:../reader.h][reader.h]]:39                   | [[file:../context/reader.org::ast-and-token-header][context/reader.org — AST and Token Header]]                      |
+| Token type enum     | [[file:../reader.h][reader.h]]:357                  | [[file:../context/reader.org::ast-and-token-header][context/reader.org — AST and Token Header]]                      |
+| Tokenizer           | [[file:../reader.c][reader.c]]                       | [[file:../context/reader.org::reader-tokenizer][context/reader.org — Tokenizer]] (search for =CUSTOM_ID= anchor in file) |
+| Wisp pipeline       | [[file:../wisp.c][wisp.c]]                         | [[file:../context/wisp.org::wisp-architecture][context/wisp.org — Architecture]]                                        |
+| Conformance corpus  | [[file:../tests/reader-atoms.tsv][tests/reader-atoms.tsv]]          | [[file:../context/language.org::syntax-corpus][context/language.org — Syntax Corpus]]                                 |
+
 * Quick Reference
 
-| Form                    | Description                    |
-|-------------------------+--------------------------------|
-| =(define x 42)=         | Value binding                  |
-| =(lambda (x) body)=     | Anonymous function             |
-| =(if cond then else)=   | Conditional                    |
-| =(data T (A ...))=      | Algebraic data type            |
-| =(type Name Base)=      | Type alias                     |
-| =(module M ...)=        | Module declaration             |
-| =(import M)=            | Module import                  |
+| Form                    | Description                    | Page                              |
+|-------------------------+--------------------------------+-----------------------------------|
+| =(define x 42)=         | Value binding                  | [[file:define.org]]                   |
+| =(lambda (x) body)=     | Anonymous function             | [[file:lambda.org]]                  |
+| =(if cond then else)=   | Conditional                    | [[file:conditionals.org]]            |
+| =(data T (A ...))=      | Algebraic data type            | [[file:data.org]]                    |
+| =(type Name Base)=      | Type alias                     | [[file:types.org]]                   |
+| =(match expr pat body)= | Pattern matching               | [[file:patterns.org]]                |
+| =(let [x v] body)=      | Local binding                  | [[file:let.org]]                     |
+| =(quote expr)=          | Literal data / code-as-data    | [[file:quote.org]]                   |
+| =(module M ...)=        | Module declaration             | [[file:modules.org]]                 |
+| =(import M)=            | Module import                  | [[file:modules.org]]                 |
+| =(begin ...)=           | Sequencing                     | [[file:sequencing.org]]              |
+| =(set! x v)=            | Mutation                       | [[file:mutation.org]]                |
+| =(while cond body)=     | Iteration                      | [[file:iteration.org]]               |
 
-Test coverage: all parser forms are exercised by =rt_*.mon= fixtures in =tests/codegen/=.
+#+BEGIN_SRC monad
+;; S-expr and Wisp produce identical ASTs for every form above.
+#+END_SRC
 
-Monad supports two surface syntaxes: S-expressions (parenthesized
-prefix, [[file:../reader.c]], 7465+ lines) and Wisp (indentation-aware,
-[[file:../wisp.c]], 4785+ lines). They can be mixed freely in the same
-file. Both desugar to the same AST (verified by parser conformance
-corpus in [[file:../tests/reader-atoms.tsv][tests/reader-atoms.tsv]] covering 650+ grammar
-productions).
-
-* Dedicated Pages
+** Dedicated Pages
 
 | Page                      | Covers                                         |
 |---------------------------+------------------------------------------------|
@@ -41,43 +73,331 @@ productions).
 | [[file:lambda.org][Lambda]]           | Anonymous functions, closures, ABIs            |
 | [[file:let.org][Let Bindings]]     | let, let*, letrec                              |
 | [[file:wisp.org][Wisp Syntax]]       | Indentation-aware surface language             |
+| [[file:conditionals.org][Conditionals]]   | if, cond, when, unless                          |
+| [[file:control.org][Control Flow]]    | while, for, loop, set!, begin, do              |
+| [[file:data.org][Data Types]]       | Algebraic data types                           |
+| [[file:patterns.org][Pattern Matching]]| match, pattern -> expr clauses                 |
+| [[file:types.org][Types]]            | Type system reference                          |
+| [[file:macros.org][Macros]]          | Compile-time metaprogramming                   |
 
-* S-expressions
+Test coverage: all parser forms are exercised by =rt_*.mon= fixtures in
+[[file:../tests/codegen/branches/][tests/codegen/branches/]]. The reader conformance corpus is at
+[[file:../tests/reader-atoms.tsv][tests/reader-atoms.tsv]] (650+ grammar productions). See
+[[file:../context/tests-arch.org][context/tests-arch.org]] for the full test architecture.
+
+* 1. S-Expressions
 
 S-expressions are Lisp-style parenthesized prefix notation. Every form
-is either an atom or a list.
+is either an /atom/ (a single value) or a /list/ (a sequence of atoms or
+sublists enclosed in parentheses). The reader
+([[file:../context/reader.org][context/reader.org]]) tokenizes and parses S-expr
+source directly into the AST.
 
-** Atoms
+** 1.1 Atoms
 
-| Atom       | Example              | Description                      |
-|------------+----------------------+----------------------------------|
-| Integer    | =42=, =-7=, =1_000=        | 63-bit signed ([[file:numeric.org]])          |
-| Float      | =3.14=, =1e10=, =-0.5=     | 64-bit IEEE 754 ([[file:numeric.org]])        |
-| Hex        | =0xFF=                 | Hexadecimal ([[file:numeric.org]])             |
-| Binary     | =0b1010=               | Binary ([[file:numeric.org]])                  |
-| Octal      | =0o777=                | Octal ([[file:numeric.org]])                   |
-| Ratio      | =1/2=, =3/4=             | Exact rational ([[file:rationals.org]])      |
-| Percentage | =50%=                  | =50%= desugars to =1/2= ([[file:rationals.org]]) |
-| String     | ="hello\nworld"=       | C-escaped string ([[file:strings.org]])       |
-| Char       | ='a'=, ='\n'=            | Single character ([[file:characters.org]])    |
-| Symbol     | =x=, =my-fn?=, =π=         | Identifier ([[file:symbols.org]])             |
-| Keyword    | =:key=, =:alias=         | Keyword ([[file:symbols.org]])                |
-| Path       | =/tmp/file=, =~/.config= | File path ([[file:paths.org]])                |
-| Boolean    | =True=, =False=          | Boolean literals ([[file:booleans.org]])      |
-| Nil        | =nil=                  | Empty list / null                |
+Atoms are the atomic building blocks of the language — indivisible values
+that cannot be broken into smaller expressions:
 
-** Strings
+| Atom       | Example              | Description                      | Page                      |
+|------------+----------------------+----------------------------------+---------------------------|
+| Integer    | =42=, =-7=, =1_000=        | 63-bit signed                   | [[file:numeric.org]]          |
+| Float      | =3.14=, =1e10=, =-0.5=     | 64-bit IEEE 754                 | [[file:numeric.org]]          |
+| Hex        | =0xFF=                 | Hexadecimal                     | [[file:numeric.org]]          |
+| Binary     | =0b1010=               | Binary                          | [[file:numeric.org]]          |
+| Octal      | =0o777=                | Octal                           | [[file:numeric.org]]          |
+| Ratio      | =1/2=, =3/4=             | Exact rational                  | [[file:rationals.org]]      |
+| Percentage | =50%=                  | =50%= desugars to =1/2=         | [[file:rationals.org]]      |
+| String     | ="hello\nworld"=       | C-escaped string                | [[file:strings.org]]        |
+| Char       | ='a'=, ='\n'=            | Single character                | [[file:characters.org]]     |
+| Symbol     | =x=, =my-fn?=, =π=         | Identifier                      | [[file:symbols.org]]         |
+| Keyword    | =:key=, =:alias=         | Keyword                         | [[file:symbols.org]]         |
+| Path       | =/tmp/file=, =~/.config= | File path                       | [[file:paths.org]]           |
+| Boolean    | =True=, =False=          | Boolean literals                | [[file:booleans.org]]       |
+| Nil        | =nil=                  | Empty list / null               | —                         |
 
-Strings use C-style escape sequences: =\n=, =\t=, =\"=, =\\=, =\0=,
-=\xNN=, =\uNNNN=.
+The reader tokenizes atoms in =reader_tokenize= — see
+[[file:../context/reader.org][context/reader.org — Tokenizer]] for the full grammar.
+
+** 1.2 Lists
+
+A list is a sequence of atoms or sub-lists enclosed in parentheses.
+Lists form the backbone of S-expression syntax — function calls,
+special forms, and data structures are all represented as lists:
+
+#+BEGIN_SRC monad
+(+ 1 2)                        ;; function call
+(define x 42)                  ;; special form
+(lambda (x) (+ x 1))           ;; nested lists
+'((1 2) (3 4))                 ;; nested quoted list
+#+END_SRC
+
+Lists are the fundamental compound structure in S-expr syntax. The reader
+produces =AST_LIST= nodes for parenthesized forms
+([[file:../context/reader.org][context/reader.org — List Parsing]]).
+
+** 1.3 Strings
+
+Strings use C-style escape sequences:
+
+#+BEGIN_SRC monad
+"hello\nworld"                   ;; newline inside string
+"tab\there"                      ;; tab character
+"quote: \"hello\""               ;; escaped double quote
+"\x41"                           ;; ASCII 65 = "A"
+"\u03C0"                         ;; Unicode π
+#+END_SRC
+
+| Escape | Meaning     | Notes              |
+|--------+-------------+--------------------|
+| =\n=     | Newline     | Line feed (0x0A)   |
+| =\t=     | Tab         | Horizontal tab     |
+| =\"=     | Double quote| String delimiter   |
+| =\\=     | Backslash   | Literal backslash  |
+| =\0=     | Null        | Zero byte          |
+| =\xNN=   | Hex byte    | 2-digit hex        |
+| =\uNNNN= | Unicode     | 4-digit codepoint  |
 
 Adjacent string literals are NOT concatenated (unlike C).
 
-* Wisp Syntax
+** 1.4 S-Expression Key Points
 
-Wisp is an indentation-aware surface syntax (see [[file:wisp.org]]).
+- S-expressions are parenthesized prefix notation: =(operator operand ...)=
+- Atoms are indivisible values (numbers, strings, symbols, etc.)
+- Lists are compound structures enclosing atoms or sublists
+- The reader directly parses S-expr into AST nodes
 
-* Declarations
+* 2. Wisp Syntax
+
+Wisp is an indentation-aware surface syntax
+([[file:../wisp.c][wisp.c]], 4785+ lines) — see the dedicated page at
+[[file:wisp.org][Wisp Syntax]] and
+[[file:advanced-wisp.org][Advanced Wisp]].
+
+It expands to standard S-expressions in a pre-pass before the reader (see
+[[file:../context/wisp.org][context/wisp.org]]). Both produce identical ASTs and
+mix freely in the same file.
+
+** 2.1 Side-by-Side Comparison
+
+| S-Expression                          | Wisp                              |
+|---------------------------------------+-----------------------------------|
+| =(define x 42)=                       | =define x 42=                        |
+| =(lambda (x) (+ x 1))=               | =lambda x\n  + x 1=                  |
+| =(if (> x 0) "pos" "neg")=           | =if\n  > x 0\n  "pos"\n  "neg"=    |
+| =(let [x 1 y 2] (+ x y))=            | =let\n  x 1\n  y 2\n  + x y=        |
+| =(data Option a None (Some a))=       | =data Option a\n  None\n  Some a=  |
+| =(module Math [pi e])=                | =module Math [pi e]=                |
+| =(begin (show "a") (show "b"))=       | =begin\n  show "a"\n  show "b"=    |
+| =(match x (Some v) v None -1)=        | =match x\n  Some v -> v\n  None -> -1= |
+
+** 2.2 How It Works
+
+The wisp expander runs as a two-pass pre-pass before the reader
+([[file:../context/wisp.org::wisp-architecture][context/wisp.org — Architecture]]):
+
+1. Tokenization: split source into tokens (parens, brackets, symbols, strings,
+   numbers, etc.). Balanced brackets are preserved as single tokens.
+2. Layout expansion: use indentation and arity tables to insert parentheses
+   where needed, converting indentation-driven blocks into S-expression trees.
+
+Pipeline details at [[file:../context/wisp.org::wisp-pipeline][context/wisp.org — Pipeline]].
+
+** 2.3 Wisp Key Points
+
+- Wisp uses indentation instead of parentheses to show structure
+- The Wisp expander runs as a pre-pass, converting to S-exprs before the reader
+- Both syntaxes produce identical ASTs and mix freely
+- The arity table tells the expander how many arguments each form expects
+
+* 3. Literals
+
+Monad supports the following literal forms. Each links to its dedicated
+reference page.
+
+** 3.1 Literal Quick Reference
+
+| Literal    | Example(s)                         | Page                  |
+|------------+------------------------------------+-----------------------|
+| Integer    | =42=, =-7=, =1_000=                     | [[file:numeric.org]]      |
+| Float      | =3.14=, =1e10=, =-0.5=                  | [[file:numeric.org]]      |
+| Hex        | =0xFF=                              | [[file:numeric.org]]      |
+| Binary     | =0b1010=                            | [[file:numeric.org]]      |
+| Octal      | =0o777=                             | [[file:numeric.org]]      |
+| Ratio      | =1/2=, =3/4=                          | [[file:rationals.org]]  |
+| Percentage | =50%=                               | [[file:rationals.org]]  |
+| String     | ="hello"=                            | [[file:strings.org]]    |
+| Char       | ='a'=, ='\n'=                         | [[file:characters.org]] |
+| Boolean    | =True=, =False=                       | [[file:booleans.org]]   |
+| Nil        | =nil=                               | —                      |
+| Keyword    | =:key=                              | [[file:symbols.org]]    |
+| Path       | =/tmp/file=                          | [[file:paths.org]]       |
+
+** 3.2 Literal Examples
+
+#+BEGIN_SRC monad
+42            ;; integer
+3.14          ;; float
+0xFF          ;; hex
+0b1010        ;; binary
+0o777         ;; octal
+1/2           ;; ratio
+50%           ;; percentage (desugars to 1/2)
+"hello"       ;; string
+'a'           ;; character
+True          ;; boolean
+:key          ;; keyword
+/tmp/file     ;; path
+#+END_SRC
+
+#+BEGIN_SRC wisp
+42            ;; integer
+3.14          ;; float
+0xFF          ;; hex
+0b1010        ;; binary
+0o777         ;; octal
+1/2           ;; ratio
+50%           ;; percentage
+"hello"       ;; string
+'a'           ;; character
+True          ;; boolean
+:key          ;; keyword
+/tmp/file     ;; path
+#+END_SRC
+
+* 4. Comments
+
+Comments are identical in both S-expr and Wisp syntax:
+
+#+BEGIN_SRC monad
+;; Line comment
+
+;|
+Block comment
+spanning multiple
+lines
+|;
+#+END_SRC
+
+#+BEGIN_SRC wisp
+;; Line comment
+
+;|
+Block comment
+spanning multiple
+lines
+|;
+#+END_SRC
+
+| Comment Type  | Syntax    | Behavior                          |
+|---------------+-----------+-----------------------------------|
+| Line          | =;; ...=  | Runs from =;;= to end of line      |
+| Block         | =;| ... |;=| | Delimited, can span multiple lines |
+
+Comments are stripped during tokenization before parsing
+([[file:../context/reader.org][context/reader.org — Comment Handling]]).
+
+* 5. Identifiers
+
+Identifiers in Monad follow Lisp conventions with Unicode support.
+
+| Category      | Pattern                       | Examples                   | Page               |
+|---------------+-------------------------------+----------------------------+--------------------|
+| Symbol        | Alpha, digits, =?=, =!=, =-=      | =x=, =my-fn?=, =π=, =a-b=      | [[file:symbols.org]]  |
+| Keyword       | Colon prefix                  | =:key=, =:alias=            | [[file:symbols.org]]  |
+| Constructor   | Uppercase start               | =True=, =Some=, =Nil=        | [[file:data.org]]   |
+| Type variable | Lowercase or ='= prefix        | =a=, ='a=, =t=               | [[file:types.org]]  |
+| Operator      | Punctuation chars             | =+=, =*=, =<=, =>>=            | [[file:numeric.org]]|
+
+The reader identifies symbols via =reader_read_symbol= in
+[[file:../context/reader.org][context/reader.org — Symbol Parsing]].
+
+* 6. Operators
+
+Monad allows operator symbols as ordinary function identifiers. Operators are
+not a separate syntactic class — they are symbols that happen to consist of
+punctuation characters and are used in prefix position.
+
+| Category       | Operators                              | Page                  |
+|----------------+----------------------------------------+-----------------------|
+| Arithmetic     | =+=, =-=, =*=, =/=, =%=, =^=                | [[file:numeric.org]]     |
+| Comparison     | ===, =/=, =<=, =>=, =<, =>                 | [[file:equality.org]] |
+| Logical        | =and=, =or=, =not=                         | [[file:logic.org]]    |
+| Bitwise        | =&, |=, =^=, =~=, =<<=, =>>=                  | [[file:numeric.org]]     |
+| Composition    | =..=, =||>=, =<$>=, =>=>=                    | [[file:functional-programming.org]] |
+
+All operators are prefix (S-expr) or prefix with arity (Wisp):
+
+#+BEGIN_SRC monad
+(+ 1 2)                  ;; arithmetic
+(= x 42)                 ;; equality
+(and p q)                ;; logical
+(& flags 0xFF)           ;; bitwise
+(|= x f)                  ;; pipeline
+#+END_SRC
+
+#+BEGIN_SRC wisp
++ 1 2                     ;; arithmetic
+= x 42                    ;; equality
+and p q                   ;; logical
+& flags 0xFF              ;; bitwise
+|= x f                    ;; pipeline
+#+END_SRC
+
+* 7. Special Forms
+
+Special forms are built-in syntactic constructs recognized by the reader and
+compiler. They are listed below with links to dedicated reference pages.
+
+** 7.1 Binding Forms
+
+| Form         | Description                    | S-expr Example                    | Page               |
+|--------------+--------------------------------+-----------------------------------+--------------------|
+| =define=     | Value / function binding       | =(define x 42)=                   | [[file:define.org]]   |
+| =lambda=     | Anonymous function             | =(lambda (x) (+ x 1))=            | [[file:lambda.org]]  |
+| =let=        | Parallel local bindings        | =(let [x 1 y 2] (+ x y))=        | [[file:let.org]]     |
+| =let*=       | Sequential local bindings      | =(let* [x 1 y (+ x 1)] y)=       | [[file:let.org]]     |
+| =letrec=     | Recursive local bindings       | =(letrec [f (lambda (n) ...)])=  | [[file:let.org]]     |
+
+** 7.2 Conditional Forms
+
+| Form         | Description                    | S-expr Example                    | Page                  |
+|--------------+--------------------------------+-----------------------------------+-----------------------|
+| =if=         | Two-branch conditional         | =(if (> x 0) "pos" "neg")=       | [[file:conditionals.org]] |
+| =cond=       | Multi-branch conditional       | =(cond ((> x 0) "pos") (else "neg"))= | [[file:conditionals.org]] |
+| =when=       | One-branch side-effect guard   | =(when debug (show x))=           | [[file:conditionals.org]] |
+| =unless=     | Negated one-branch guard       | =(unless (nil? x) (show x))=     | [[file:conditionals.org]] |
+| =match=      | Pattern matching               | =(match x (Some v) v None -1)=   | [[file:patterns.org]]   |
+
+** 7.3 Type Forms
+
+| Form         | Description                    | S-expr Example                    | Page               |
+|--------------+--------------------------------+-----------------------------------+--------------------|
+| =data=       | Algebraic data type            | =(data Option a None (Some a))=   | [[file:data.org]]     |
+| =type=       | Type alias                     | =(type Name String)=              | [[file:types.org]]    |
+| =class=      | Type class declaration         | =(class Eq a (== (a a -> Bool)))= | [[file:type-classes.org]] |
+| =instance=   | Type class instance            | =(instance Eq Int (define ...))=  | [[file:type-classes.org]] |
+
+** 7.4 Module Forms
+
+| Form         | Description                    | S-expr Example                    | Page               |
+|--------------+--------------------------------+-----------------------------------+--------------------|
+| =module=     | Module declaration             | =(module Math [pi e])=            | [[file:modules.org]]  |
+| =import=     | Module import                  | =(import Math)=                   | [[file:modules.org]]  |
+| =include=    | C FFI include                  | =(include "math.h")=              | [[file:ffi.org]]      |
+
+** 7.5 Control Forms
+
+| Form         | Description                    | S-expr Example                    | Page                  |
+|--------------+--------------------------------+-----------------------------------+-----------------------|
+| =begin=      | Sequencing (returns last expr) | =(begin (show "a") (show "b"))=  | [[file:sequencing.org]] |
+| =do=         | Sequencing with bindings       | =(do [x 1] (show x))=             | [[file:sequencing.org]] |
+| =while=      | Conditional loop               | =(while (< i 3) (set! i (+ i 1)))= | [[file:iteration.org]] |
+| =for=        | Iteration over collection      | =(for x xs (show x))=             | [[file:iteration.org]] |
+| =set!=       | Variable rebinding             | =(set! x 42)=                     | [[file:mutation.org]]   |
+| =quote=      | Literal data (no eval)         | =(quote (1 2 3))=                 | [[file:quote.org]]     |
+| =quasiquote= | Quasiquotation (with escape)   | =`(1 ,(+ 1 2) 3)=                 | [[file:quote.org]]     |
+
+** 7.6 Declarations Table (Combined)
 
 | Form         | Example                                | Page               |
 |--------------+----------------------------------------+--------------------|
@@ -90,7 +410,9 @@ Wisp is an indentation-aware surface syntax (see [[file:wisp.org]]).
 | =import=     | =(import Math)=                        | [[file:modules.org]]   |
 | =include=    | =(include "math.h")=                   | [[file:ffi.org]]      |
 
-* Feature Conditionals
+** 7.7 Feature Conditionals
+
+Feature conditionals (parsed but have no codegen effect yet):
 
 #+BEGIN_SRC monad
 #+linux
@@ -112,29 +434,67 @@ define fd 0
 #---  ;; End feature block
 #+END_SRC
 
-Feature conditionals are parsed but have no codegen effect yet.
-
-* Comments
+** Complete example:
 
 #+BEGIN_SRC monad
-;; Line comment
+;; Save as syntax-demo.mon && monadc syntax-demo.mon && ./syntax-demo
+(module Main)
 
-;|
-Block comment
-spanning multiple
-lines
-|;
+;; All major special forms in one program
+(define (greet [name :: String] -> String)
+  (++ "Hello, " name "!"))
+
+(define [x :: Int] 42)
+(let [y (+ x 1)]
+  (show (greet "World"))
+  (show "x = " x ", y = " y))
+
+(data Option a None (Some a))
+(match (Some 10)
+  (Some v) -> (show "Got: " v)
+  None     -> (show "Nothing"))
+
+(show "Done")
 #+END_SRC
 
-#+BEGIN_SRC wisp
-;; Line comment
+** Common Pitfalls
 
-;|
-Block comment
-spanning multiple
-lines
-|;
-#+END_SRC
+- **S-expr and Wisp cannot be in the same top-level form**: You cannot
+  start a list with `(` in S-expr mode and close it with Wisp indentation.
+  Each top-level form is exclusively one syntax.
+- **Adjacent string literals are NOT concatenated**: Unlike C, `"hello"
+  "world"` is a syntax error, not string concatenation. Use `++`.
+- **Feature conditionals are parsed but inert**: `#+linux` / `#+darwin`
+  blocks parse correctly but have no codegen effect yet.
+- **Block comments cannot nest**: `;| ... |;` does not support nesting.
+- **Operator symbols are just identifiers**: `+`, `*` etc. are symbols,
+  not a separate operator class. They cannot be used in infix position
+  (except through Wisp arity tables).
+
+** 7.8 Special Forms Summary
+
+- All special forms work identically in S-expr and Wisp syntax
+- Binding forms (=define=, =lambda=, =let=) create variable scopes
+- Conditional forms (=if=, =cond=, =match=) branch on values
+- Type forms (=data=, =type=, =class=, =instance=) define types
+- Module forms (=module=, =import=, =include=) organize namespaces
+- Control forms (=begin=, =while=, =for=, =set!=) manage execution
+
+* Further Reading
+
+| Resource              | Description                                          |
+|-----------------------+------------------------------------------------------|
+| [[file:../context/reader.org][context/reader.org]]   | Reader/parser internals: tokenization, AST building   |
+| [[file:../context/wisp.org][context/wisp.org]]     | Wisp expander internals: indentation, arity, pipeline |
+| [[file:../context/language.org][context/language.org]] | Language formalization and grammar reference          |
+| [[file:wisp.org][Wisp Syntax]]           | Detailed Wisp syntax guide with examples              |
+| [[file:advanced-wisp.org][Advanced Wisp]]           | Edge cases, arity tables, sugar types                 |
+| [[file:syntax.org][This file]]              | (you are here)                                       |
+
+The reader implementation: [[file:../reader.h][reader.h]] + [[file:../reader.c][reader.c]].
+The Wisp expander implementation: [[file:../wisp.h][wisp.h]] + [[file:../wisp.c][wisp.c]].
+
+Conformance test corpus: [[file:../tests/reader-atoms.tsv][tests/reader-atoms.tsv]].
 
 * See Also
 
@@ -143,9 +503,16 @@ lines
 - [[file:lambda.org][Lambda]]
 - [[file:let.org][Let Bindings]]
 - [[file:wisp.org][Wisp Syntax]]
+- [[file:patterns.org][Pattern Matching]]
+- [[file:data.org][Data Types]]
+- [[file:types.org][Type System]]
+- [[file:macros.org][Macros]]
+- [[file:symbols.org][Symbols and Keywords]]
+- [[file:index.org][Info Index]]
 
 * Context Links
 
-- [[file:../context/reader.org][context/reader.org]] — Reader/parser internals
-- [[file:../context/wisp.org][context/wisp.org]] — Wisp expander internals
-- [[file:../context/language.org][context/language.org]] — Language formalization
+- [[file:../context/reader.org][context/reader.org]] — Reader/parser internals (tokenizer, AST builder, source maps)
+- [[file:../context/wisp.org][context/wisp.org]] — Wisp expander internals (indentation, arity tables, pipeline)
+- [[file:../context/language.org][context/language.org]] — Language formalization (grammar productions, type system embedding)
+- [[file:../context/macro.org][context/macro.org]] — Macro system internals

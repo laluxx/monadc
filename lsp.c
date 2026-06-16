@@ -1,6 +1,7 @@
 /// lsp.c — Language Server Protocol implementation for Monad
 //
 //  Implements the complete LSP 3.17 surface described in lsp.h.
+//  https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/
 //
 //  Source layout:
 //
@@ -132,7 +133,7 @@ static char *lsp_xstrndup(const char *s, size_t n)
     } while (0)
 
 
-///   §3  String / JSON helpers
+/// §3  String / JSON helpers
 
 //// String builder
  //

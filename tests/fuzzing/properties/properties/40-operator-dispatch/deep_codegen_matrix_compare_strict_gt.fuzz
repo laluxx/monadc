@@ -1,0 +1,15 @@
+name: deep_codegen_matrix_compare_strict_gt
+section: codegen-comparison-dispatch
+tier: stable
+kind: law
+features: arithmetic, codegen, comparison
+compiler-path: codegen.arithmetic_dispatch, codegen.comparison_dispatch, infer.arithmetic, infer.comparison
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.core.order.gt, atom.core.plus
+related-properties: signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero
+args: a:Int
+type: Bool
+expect: True
+description: > comparison dispatcher targeted matrix probe.
+law: (> (+ {a} 1) {a})

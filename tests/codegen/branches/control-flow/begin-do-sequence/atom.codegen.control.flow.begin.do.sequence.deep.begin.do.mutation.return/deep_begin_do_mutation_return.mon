@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.deep.deep_begin_do_mutation_return
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SUBSET: begin-do-sequence
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.control.flow.begin.do.sequence.deep.begin.do.mutation.return
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise begin/do sequencing with mutation and returned values.
+;; TEST-ATOM: Sequencing forms should evaluate in order and return the last value.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:AST_BEGIN/AST_DO sequence branches
+;; TEST-COVERAGE: codegen.c:set! assignment
+
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/begin-do-sequence/atom.codegen.control.flow.begin.do.sequence.deep.begin.do.mutation.return
+;; TEST-MENU-PATH: codegen/branches/control-flow/begin-do-sequence/atom.codegen.control.flow.begin.do.sequence.deep.begin.do.mutation.return
+;; TEST-ATOM-LEAF: atom.codegen.control.flow.begin.do.sequence.deep.begin.do.mutation.return
+;; TEST-CLI-TARGET: codegen branches control-flow begin-do-sequence
+(module Main)
+(define x 0)
+(show (begin (set! x (+ x 1)) x))
+(show (do (set! x (+ x 1)) x))
+(show (begin (set! x (+ x 2)) x))

@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-heap-array-for
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.arrays.ranges.rt.heap.array.for
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: arrays-ranges
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.heap-arrays, monadc.context.reader.wisp-heap-array-preservation, monadc.context.language.runtime-sized-arrays, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime codegen supports Wisp for iteration over heap array literals.
+;; TEST-ATOM: for i -> heap must expand through count/indexing and print each heap array element.
+;; TEST-EXPECT: json:ast, compile, run
+
+;; TEST-COVERAGE: codegen.c:40-collections/arrays-ranges branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.heap.array.for
+;; TEST-MENU-PATH: codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.heap.array.for
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.arrays.ranges.rt.heap.array.for
+;; TEST-CLI-TARGET: codegen branches collections arrays-ranges
+(module Main)
+(define heap ~[1 2 3])
+for i -> heap
+  show i

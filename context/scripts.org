@@ -337,3 +337,65 @@
   `monadc.context.codegen-ops` (fuzz tests exercise codegen dispatch) ·
   `monadc.context.context` (visualizer consumes context files) ·
   `monadc.context.codegen` (fuzz properties test codegen correctness)
+
+* Category Scripts
+:PROPERTIES:
+:ID: monadc.context.scripts.round3-category-scripts
+:CONTEXT_KIND: navigation
+:CONTEXT_STATUS: active
+:SOURCE: context/scripts.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.scripts.round3-category-scripts src:context/scripts.org conf:high]
+  The category layer includes executable documentation under [[file:category/scripts/context_model.py][category/scripts/]].
+  These scripts parse Org context, verify the free-category structure, run search
+  projections, compute information metrics, and render generated reports.
+
+* Category Live Tooling — context/category/scripts
+:PROPERTIES:
+:ID: monadc.context.scripts.category-live-tools
+:CUSTOM_ID: scripts-category-live-tools
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: llm
+:CONTEXT_MAINTAINER: llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/category/scripts
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.scripts.category-live-tools src:context/category/scripts conf:high]
+  The category directory owns executable context interfaces: batch query scripts, metrics, verification, documentation rendering, tests, and the Zig Catface live TUI.  Source code is treated as part of the
+  context category because scripts are referentiable files and therefore objects
+  with incoming and outgoing documentation links.
+
+| Script | Purpose |
+|--------+---------|
+| [[file:category/scripts/query_language.py][query_language.py]] | compact glyph query language |
+| [[file:category/scripts/catq.py][catq.py]] | fast CLI entry point |
+| [[file:category/scripts/test_query_language.py][test_query_language.py]] | tests for legacy/batch query language |
+| [[file:category/catface/src/main.zig][catface/main.zig]] | Zig live category explorer |
+
+
+* Catface Zig Tooling
+:PROPERTIES:
+:ID: monadc.context.scripts.catface-zig
+:CUSTOM_ID: scripts-catface-zig
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_STATUS: active
+:SOURCE: context/category/catface
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.scripts.catface-zig.purpose src:context/category/catface conf:high]
+  The live category search/browser interface now lives in Zig under
+  [[file:category/catface/README.org][context/category/catface]].  Python scripts remain useful for batch validation
+  and report generation, but the custom TUI is no longer Python/curses.

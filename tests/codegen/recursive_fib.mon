@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.recursive-fib
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Recursive function definition compiles and runs.
-;; TEST-ATOM: (define (fib [n : Int] -> Int) (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2))))) with (show (fib 10)) prints 55.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(define (fib [n : Int] -> Int) (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))
-(show (fib 10))

@@ -1,0 +1,15 @@
+name: structured_strategy_bitwise_tiny_comparison_branch_consistency
+section: current-strategy-bitwise-tiny
+tier: stable
+kind: law
+features: comparison, if, phi, strategy
+compiler-path: codegen.branch_phi, codegen.comparison_dispatch, codegen.if_phi, infer.comparison, infer.if_phi, reader.ast_if, runner.strategy_arg, runner.typed_generator
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.if, atom.core.equality, atom.core.order.lt, atom.core.plus
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates, signal_atom_lt_transitive, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero
+args: a:Int@tiny+bitwise b:Int@tiny+bitwise p:Bool@logic+if
+type: Bool
+expect: True
+description: V10 strategy property comparison_branch_consistency generated with bitwise_tiny arguments to stress compiler dispatch, envs, and PHI lowering.
+law: (= (< (if {p} {a} {b}) (if {p} (+ {a} 1) (+ {b} 1))) True)

@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-quote-comp
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.60.reflection.quote.quote.symbols.rt.quote.comp
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: quote-symbols
+;; TEST-CATEGORY: 60-reflection-quote
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Quote forms: (quote sym) and ' shorthand for lists
+;; TEST-ATOM: (quote foo) evaluates to symbol foo, (car '(1 2 3)) = 1
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:60-reflection-quote/quote-symbols branch family
+;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote
+;; TEST-MENU: branches/reflection-quote/quote-symbols/atom.codegen.60.reflection.quote.quote.symbols.rt.quote.comp
+;; TEST-MENU-PATH: codegen/branches/reflection-quote/quote-symbols/atom.codegen.60.reflection.quote.quote.symbols.rt.quote.comp
+;; TEST-ATOM-LEAF: atom.codegen.60.reflection.quote.quote.symbols.rt.quote.comp
+;; TEST-CLI-TARGET: codegen branches reflection-quote quote-symbols
+(module Main)
+(show (quote foo))
+(show (quote bar))
+(show (car '(10 20 30)))

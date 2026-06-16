@@ -1,0 +1,45 @@
+;; TEST-ID: tests.codegen.branch.collection-list-primitive-spectrum
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: lists
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise list, empty?, nil?, car/cdr/head/tail/cons/dot/++/pair? branches in one deterministic fixture.
+;; TEST-ATOM: atom.codegen.collection.list-primitive-spectrum
+;; TEST-CODEGEN-ATOM: atom.codegen.collection.list-primitive-spectrum
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.list.new
+;; TEST-CODEGEN-PATH: codegen.list.cons
+;; TEST-CODEGEN-PATH: codegen.list.head
+;; TEST-CODEGEN-PATH: codegen.list.tail
+;; TEST-CODEGEN-PATH: codegen.list.concat
+;; TEST-DEPENDS-ON: atom.codegen.value.scalar-display-spectrum
+;; TEST-TAG: run
+;; TEST-TAG: collection
+;; TEST-TAG: list
+;; TEST-COVERAGE: codegen.c:6966 list branch
+;; TEST-COVERAGE: codegen.c:7050 cons/dot branch
+;; TEST-COVERAGE: codegen.c:7110 pair? branch
+;; TEST-COVERAGE: codegen.c:7132 head branch
+;; TEST-COVERAGE: codegen.c:7193 tail branch
+;; TEST-COVERAGE: codegen.c:7315 ++ branch
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/lists/atom.codegen.collection.list-primitive-spectrum
+;; TEST-MENU-PATH: codegen/branches/collections/lists/atom.codegen.collection.list-primitive-spectrum
+;; TEST-ATOM-LEAF: atom.codegen.collection.list-primitive-spectrum
+;; TEST-CLI-TARGET: codegen branches collections lists
+(module Main)
+(show (list))
+(show (empty? (list)))
+(show (nil? nil))
+(show (car '(1 2 3)))
+(show (cdr '(1 2 3)))
+(show (head '(4 5 6)))
+(show (tail '(4 5 6)))
+(show (cons 1 '(2 3)))
+(show (. 1 '(2 3)))
+(show (++ '(1 2) '(3 4)))
+(show (pair? '(1 . 2)))

@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.rt-type-casts
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.00.values.casts.conversions.rt.type.casts
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: casts-conversions
+;; TEST-CATEGORY: 00-values
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Runtime type conversion functions work.
+;; TEST-ATOM: (Int 3.14) = 3, (Float 42) = 42.0, (Char 65) = 'A', (String 42) = "42".
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:00-values/casts-conversions branch family
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/casts-conversions/atom.codegen.00.values.casts.conversions.rt.type.casts
+;; TEST-MENU-PATH: codegen/branches/values/casts-conversions/atom.codegen.00.values.casts.conversions.rt.type.casts
+;; TEST-ATOM-LEAF: atom.codegen.00.values.casts.conversions.rt.type.casts
+;; TEST-CLI-TARGET: codegen branches values casts-conversions
+(module Main)
+(show (Int 3.14))
+(show (Float 42))
+(show (Char 65))
+(show (String 42))

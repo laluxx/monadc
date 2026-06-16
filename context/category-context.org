@@ -1,0 +1,286 @@
+#+TITLE: Category Context and Semantic Map
+#+AUTHOR: GPT-5.5 Thinking
+#+DATE: 2026-06-16
+#+CREATED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-16
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:category:graph:ontology:links:
+#+PROPERTY: CONTEXT_VERSION 4
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.category
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY hideblocks
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* Purpose
+:PROPERTIES:
+:ID: monadc.context.category.purpose
+:CUSTOM_ID: category-context-purpose
+:CONTEXT_KIND: format
+:CONTEXT_DESCRIPTION: Defines category context as the typed semantic map for the MonadC knowledge garden.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/category-context.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.category.purpose src:context/category-context.org conf:high]
+  Category context is the rule that every context topic is not just a document:
+  it is an object in a typed graph. Objects have contracts. Morphisms have
+  meanings. Composition must preserve meaning. A test can verify a language
+  contract; a source observation can support an inference; a decision can
+  supersede an opinion. These edges should be explicit enough for humans and
+  LLMs to traverse safely.
+
+[THINK id:think.category.context-as-garden-map src:user-request conf:high]
+  The user called this garden. The category-context layer is the trellis: it
+  decides what counts as a plant, what counts as a path, what counts as a weed,
+  and how future gardeners can extend without turning the corpus into mulch.
+* Object Types
+:PROPERTIES:
+:ID: monadc.context.category.objects
+:CUSTOM_ID: category-objects
+:CONTEXT_KIND: schema
+:CONTEXT_DESCRIPTION: Canonical object classes in the context garden.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/category-context.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Context category objects
+| Object | Concrete form | Identity | Must answer |
+|--------+---------------+----------+-------------|
+| File | =context/*.org= | path + title | What domain does this file own? |
+| Category | durable heading | =:ID:= | What contract or concept does this node own? |
+| Record | bracket block | =id:= | What atomic claim/task/decision is recorded? |
+| Source region | =src:path:line= | path + line/range | What evidence anchors the claim? |
+| Test fixture | =TEST-ID= | test ID | What behavior or failure does this protect? |
+| Run artifact | result JSON/log | timestamp + run config | What happened in one execution? |
+| External reference | paper/link/manual | citation key/link | What outside theory informs the project? |
+
+[DEC id:dec.category.objects-stable date:2026-06-16 by:llm]
+  File, category, record, source region, test fixture, run artifact, and external
+  reference are the canonical object types. New object types must justify what
+  identity they add that these do not cover.
+* Morphism Types
+:PROPERTIES:
+:ID: monadc.context.category.morphisms
+:CUSTOM_ID: category-morphisms
+:CONTEXT_KIND: schema
+:CONTEXT_DESCRIPTION: Canonical edge meanings used to connect context, tests, and source.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/category-context.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Context morphisms
+| Morphism | From | To | Meaning |
+|----------+------+----+---------|
+| =describes= | heading/record | source region | Text explains implementation facts. |
+| =supports= | OBS/DOC | INF/THINK/DEC | Evidence backs a derived claim. |
+| =decides= | DEC | contract/category | Decision binds future work. |
+| =supersedes= | DEC/FIX | record/heading | New record replaces older guidance. |
+| =verifies= | test fixture | context heading | Test protects the named contract. |
+| =exercises= | test fixture | source phase | Test drives code through phase behavior. |
+| =depends-on= | category | category | Category cannot be reasoned about alone. |
+| =routes-to= | navigation entry | file | Prefix or need maps to file. |
+| =owns= | category | failures/tests | Category is responsible for triage. |
+| =blocks= | TODO/bug | contract | Task prevents contract from being true. |
+
+[DEC id:dec.category.edge-vocabulary date:2026-06-16 by:llm]
+  Prefer these edge names in prose, tables, and future generated graph exports.
+  Do not invent vague edge names like =related= when a stronger relation fits.
+* Composition Rules
+:PROPERTIES:
+:ID: monadc.context.category.composition
+:CUSTOM_ID: category-composition-rules
+:CONTEXT_KIND: schema
+:CONTEXT_DESCRIPTION: Rules for composing context links without losing semantic meaning.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/category-context.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Useful compositions
+| Composition | Valid reading |
+|-------------+---------------|
+| test =verifies= heading, heading =describes= source | test indirectly guards source behavior |
+| OBS =supports= INF, INF =supports= DEC | decision is only as strong as the evidence chain |
+| TODO =blocks= contract, test =verifies= contract | failing test is expected until TODO closes |
+| DEC =supersedes= THINK | opinion becomes binding project direction |
+| navigation =routes-to= file, file contains heading | ID prefix lookup reaches durable node |
+
+[DEC id:dec.category.no-untyped-composition date:2026-06-16 by:llm]
+  A chain of links should not be treated as evidence unless each edge has a
+  meaningful morphism. =file link + similar words= is not enough to infer a
+  verified relationship.
+
+[INF id:inf.category.failure-triage from:dec.category.edge-vocabulary,dec.category.no-untyped-composition conf:high]
+  The fastest triage path is: failing TEST-ID → TEST-CONTEXT heading → category
+  contract → owned compiler phase → source observations and known TODOs.
+* Category Contract Template
+:PROPERTIES:
+:ID: monadc.context.category.contract-template
+:CUSTOM_ID: category-contract-template
+:CONTEXT_KIND: template
+:CONTEXT_DESCRIPTION: Template every major topic should eventually implement.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/category-context.org
+:CONFIDENCE: high
+:END:
+
+Use this template when a context file owns a real compiler category:
+
+#+BEGIN_EXAMPLE
+* Category Contract
+:PROPERTIES:
+:ID: monadc.context.<topic>.category-contract
+:CUSTOM_ID: <topic>-category-contract
+:CONTEXT_KIND: contract
+:END:
+
+| Field | Contract |
+|-------+----------|
+| Owned phase | ... |
+| Inputs | ... |
+| Outputs | ... |
+| Invariants | ... |
+| Test hooks | ... |
+| Failure symptoms | ... |
+| Context neighbors | ... |
+#+END_EXAMPLE
+
+[DEC id:dec.category.contract-required-for-major-files date:2026-06-16 by:llm]
+  Major compiler and test files should include a Category Contract section. It
+  is the minimum useful summary for a future agent deciding where a failure
+  belongs.
+* Anti-Patterns
+:PROPERTIES:
+:ID: monadc.context.category.antipatterns
+:CUSTOM_ID: category-antipatterns
+:CONTEXT_KIND: quality
+:CONTEXT_DESCRIPTION: Things that make the category context weaker or misleading.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/category-context.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Anti-patterns
+| Anti-pattern | Why it hurts | Fix |
+|--------------+--------------+-----|
+| Decorative category labels | Looks structured but cannot guide work | Add owned phase and failure symptoms. |
+| Dangling TEST-CONTEXT | Test claims to verify a nonexistent contract | Create heading or correct reference. |
+| Vague links | =related to= cannot compose safely | Use typed morphism. |
+| Opinion as OBS | Confuses judgment with evidence | Use THINK or IDEA. |
+| Stale source lines | False confidence after refactors | Revalidate =src:= anchors. |
+| Giant catch-all file | Breaks routing and ownership | Split or add subcontracts. |
+
+[TODO id:todo.category.src-anchor-validator owner:llm status:open conf:medium]
+  Add a repository-aware validator that checks =src:path:line= anchors against
+  the actual source tree when the full compiler checkout is available.
+* Graph Export Contract
+:PROPERTIES:
+:ID: monadc.context.category.graph-export
+:CUSTOM_ID: category-graph-export
+:CONTEXT_KIND: tooling
+:CONTEXT_DESCRIPTION: Contract for generated graph exports from context files.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/category-context.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.category.graph-export-json date:2026-06-16 by:llm]
+  A generated graph export should include nodes for files, headings, and records,
+  and edges for containment, file links, ID links, and record-level =from:= /
+  =supersedes:= references. The export is diagnostic data, not authoritative
+  hand-written context.
+
+#+BEGIN_SRC sh
+python3 context/tools/context_graph.py context > context/.generated-context-graph.json
+#+END_SRC
+
+Generated graph outputs should not be committed unless intentionally used as a
+snapshot. Prefer regenerating them for analysis.
+
+* Round 3: Promoted Category Directory
+:PROPERTIES:
+:ID: monadc.context.category.round3-directory
+:CUSTOM_ID: category-round3-directory
+:CONTEXT_KIND: navigation
+:CONTEXT_STATUS: active
+:SOURCE: context/category-context.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.category-context.round3-directory src:context/category-context.org conf:high]
+  The original category-context.org remains as a compatibility portal.  The
+  fuller mathematical and executable system now lives in [[file:category/index.org][context/category/]].
+
+[DEC id:dec.category-context.round3-promote-directory date:2026-06-16 by:llm supersedes:dec.category.objects-stable,dec.category.edge-vocabulary]
+  Category concepts, morphism vocabulary, scripts, schemas, and metrics should
+  now be added under context/category/ when they are about the formal context
+  category itself.  Topic-local category contracts stay inside their topic files.

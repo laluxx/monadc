@@ -1,0 +1,33 @@
+;; TEST-ID: tests.codegen.branch.value-float-int-roundtrip-branch
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: casts-conversions
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 00-values
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise Int/Float/F32 conversion branches through both expression and show paths.
+;; TEST-ATOM: atom.codegen.cast.float-int-roundtrip
+;; TEST-CODEGEN-ATOM: atom.codegen.cast.float-int-roundtrip
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: emit_type_cast.float-to-int
+;; TEST-CODEGEN-PATH: emit_type_cast.int-to-float
+;; TEST-CODEGEN-PATH: codegen_show_value.TYPE_F32
+;; TEST-DEPENDS-ON: atom.codegen.cast.integer-width-signedness
+;; TEST-TAG: run
+;; TEST-TAG: cast
+;; TEST-TAG: float
+;; TEST-COVERAGE: codegen.c:44-72 emit_type_cast numeric conversions
+;; TEST-COVERAGE: codegen.c:1236 TYPE_F32 show branch
+;; TEST-COVERAGE: codegen.c:12513-12535 Int/Float/F32 cast targets
+
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/casts-conversions/atom.codegen.cast.float-int-roundtrip
+;; TEST-MENU-PATH: codegen/branches/values/casts-conversions/atom.codegen.cast.float-int-roundtrip
+;; TEST-ATOM-LEAF: atom.codegen.cast.float-int-roundtrip
+;; TEST-CLI-TARGET: codegen branches values casts-conversions
+(module Main)
+(show (Int 8.75))
+(show (Float (Int 8.75)))
+(show (F32 (Float 2)))
+(show (+ (Float 2) 0.5))

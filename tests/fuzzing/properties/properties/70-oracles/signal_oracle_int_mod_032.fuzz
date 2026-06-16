@@ -1,0 +1,14 @@
+name: signal_oracle_int_mod_032
+section: current-oracle
+tier: oracle
+kind: law
+features: oracle, mod, operator-dispatch
+compiler-path: oracle.expected-python, codegen.dispatch.mod
+signal: high
+corpus-role: oracle
+uses-atoms: atom.core.modulo
+args: a:Int@edge+mod
+type: Int
+expect-python: a % 7
+description: Oracle property with generated Python expected value and explicit atom links.
+law: (% {a} 7)

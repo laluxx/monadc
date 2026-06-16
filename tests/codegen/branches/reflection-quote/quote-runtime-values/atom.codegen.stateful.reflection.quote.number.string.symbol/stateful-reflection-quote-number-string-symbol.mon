@@ -1,0 +1,35 @@
+;; TEST-ID: tests.codegen.stateful.reflection.quote.number.string.symbol
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: emit-json-failed
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 60-reflection-quote
+;; TEST-SUBSET: quote-runtime-values
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.stateful.reflection.quote.number.string.symbol
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: quote printing number/string/symbol AST branches.
+;; TEST-ATOM: atom.codegen.stateful.reflection.quote.number.string.symbol
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.quote
+;; TEST-CODEGEN-PATH: codegen.runtime-value
+;; TEST-CODEGEN-PATH: codegen.reflection
+;; TEST-COVERAGE: codegen.c:966-1014 codegen_print_ast branches
+;; TEST-COVERAGE: codegen.c:1025-1070 ast_to_runtime_value branches
+;; TEST-COVERAGE: codegen.c:5795 quasiquote branch
+;; TEST-COVERAGE: codegen.c:5872 quote branch
+;; TEST-COVERAGE: codegen.c:5934 ?? null coalescing branch
+;; TEST-COVERAGE: codegen.c:6024 expand branch
+;; TEST-COVERAGE: codegen.c:6537 doc branch
+;; TEST-COVERAGE: codegen.c:6566 code branch
+;; TEST-COVERAGE: codegen.c:6602 assert-eq branch
+;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-USES-ATOM: atom.codegen.subset.60.reflection.quote.quote.runtime.values
+;; TEST-MENU: branches/reflection-quote/quote-runtime-values/atom.codegen.stateful.reflection.quote.number.string.symbol
+;; TEST-MENU-PATH: codegen/branches/reflection-quote/quote-runtime-values/atom.codegen.stateful.reflection.quote.number.string.symbol
+;; TEST-ATOM-LEAF: atom.codegen.stateful.reflection.quote.number.string.symbol
+;; TEST-CLI-TARGET: codegen branches reflection-quote quote-runtime-values
+
+(module Main)
+(show (quote (1 "x" y)))

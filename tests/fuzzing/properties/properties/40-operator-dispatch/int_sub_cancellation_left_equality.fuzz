@@ -1,0 +1,15 @@
+name: int_sub_cancellation_left_equality
+section: arithmetic
+tier: stable
+kind: law
+features: arithmetic, equality, logic, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.equality, infer.logic, infer.type_predicate
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Subtracting two values from the same left operand must preserve equality of the right operands.
+law: (= (fuzz-eq-int? (fuzz-sub {a} {b}) (fuzz-sub {a} {c})) (fuzz-eq-int? {b} {c}))

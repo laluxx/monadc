@@ -1,0 +1,15 @@
+name: structured_future_string_suffix_oracle
+section: future-string-oracle-current
+tier: stable
+kind: law
+features: arithmetic, logic, with, string, predicate
+compiler-path: codegen.operator.arithmetic, codegen.operator.logic, infer.env.lookup, codegen.env.binding, runtime.string, infer.predicate, codegen.predicate
+signal: high
+corpus-role: oracle
+uses-atoms: atom.core.arithmetic, atom.core.logic, atom.binding.with, atom.runtime.string, atom.core.predicate
+disabled-reason: disabled future or merged property; kept for provenance but not loaded by default
+args: s:String suffix:SuffixOf(s)
+type: Bool
+expect-python: s.endswith(suffix)
+description: Generated suffix should be recognized by ends-with?.
+law: (ends-with? {s} {suffix})

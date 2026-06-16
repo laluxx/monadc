@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.rt-map-key-family-lookup
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.maps.rt.map.merge.lookup
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: maps
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Map query syntax supports keyword, string, and integer key families in one literal.
+;; TEST-ATOM: find observes keys from different token families through current runtime display semantics.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:40-collections/maps branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/maps/atom.codegen.40.collections.maps.rt.map.merge.lookup
+;; TEST-MENU-PATH: codegen/branches/collections/maps/atom.codegen.40.collections.maps.rt.map.merge.lookup
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.maps.rt.map.merge.lookup
+;; TEST-CLI-TARGET: codegen branches collections maps
+(module Main)
+(define m #{:k 10 "s" 20 7 "seven"})
+(show (Map? m))
+(show (count m))
+(show (find m :k))
+(show (find m "s"))
+(show (find m 7))

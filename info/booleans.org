@@ -11,20 +11,93 @@
 
 [[file:index.org][<- Back to Index]] · [[file:logic.org][Logic]] · [[file:conditionals.org][Conditionals]] · [[file:maybe.org][Maybe]] · [[file:numeric.org][Numeric Types]] · [[file:control.org][Control Flow]] · [[file:core.org][Core Library]] · [[file:fuzzing.org][Fuzzing]] · [[file:types.org][Types]]
 
-Test coverage: boolean operations verified by =rt_bool_*.mon= fixtures. Comparison operations by =rt_cmp_*.mon=. Logic operations by =rt_logic_*.mon=. All in [[file:../tests/codegen/][tests/codegen/]].
+The Bool type represents truth values with two constructors: True and False. This page covers boolean literals, short-circuit logic operations, type predicates, and boolean usage in control flow and pattern matching.
 
-The =Bool= type represents truth values. It is a primitive ground type (=TYPE_BOOL=) with two values: =True= and =False=.
+Test coverage: boolean operations verified by =rt_bool_*.mon= fixtures in
+[[file:../tests/codegen/branches/operators/][tests/codegen/branches/operators/]].
+Comparison operations by =rt_cmp_*.mon= and logic operations by
+=rt_logic_*.mon= in the same directory. See
+[[file:../context/tests-arch.org][context/tests-arch.org]] for the full test architecture.
 
-* Boolean Literals
+The =Bool= type represents truth values. It is a primitive ground type
+(=TYPE_BOOL=) with two values: =True= and =False=. For the =Bool= type
+in pattern matching, see [[file:patterns.org][Pattern Matching]]. For control
+flow based on booleans, see [[file:conditionals.org][Conditionals]] and
+[[file:control.org][Control Flow]].
+
+Booleans in MonadC are explicit: there is no truthy/falsy coercion.
+Only =Bool= values can be used as conditions — =if=, =when=, =unless=,
+=while=, and =cond= all require a =Bool= expression.
+
+** Complete example:
+
+#+BEGIN_SRC monad
+;; Save as bool-demo.mon && monadc bool-demo.mon && ./bool-demo
+(module Main)
+
+;; Boolean literals
+(show True)              ;; True
+(show False)             ;; False
+
+;; Short-circuit logic
+(show (and True False True))    ;; False
+(show (or False True False))    ;; True
+(show (not True))               ;; False
+
+;; Comparisons return Bool
+(show (= 1 1))           ;; True
+(show (< 1 2 3))         ;; True
+
+;; Type predicates
+(show (Int? 42))         ;; True
+(show (Bool? True))      ;; True
+(show (String? 42))      ;; False
+
+;; Boolean in control flow
+(if True
+  (show "yes")
+  (show "no"))
+
+;; Boolean in pattern matching
+(match True
+  True  -> (show "it's true")
+  False -> (show "it's false"))
+#+END_SRC
+
+** Common Pitfalls
+
+- **No truthy/falsy coercion**: Only =Bool= values work in conditions.
+  =nil=, =0=, =""= etc. are NOT implicitly false. Use =(nil? x)=,
+  =(= x 0)=, or =(= (count s) 0)= explicitly.
+- **Case sensitivity**: =true=, =TRUE=, =false=, =FALSE= are regular
+  symbols, not booleans. Only =True= and =False= (capitalized) are
+  boolean literals.
+- **=and= and =or= are variadic but NOT callable via =apply=**: They
+  are special forms with short-circuit semantics and cannot be passed
+  as function values.
+- **=equal?= is not the same as type class ===**: =equal?= is a
+  separate built-in; type class === dispatches through the strcmp
+  layer. They may diverge for complex data types.
+- **Boolean predicates (Int?, String? etc.) return Bool, not inferred
+  propositions**: They are runtime checks, not compile-time proofs.
+  For compile-time type evidence, use [[file:dependent-types.org][Dependent Types]].
+
+* 1. Boolean Literals
 
 #+BEGIN_SRC monad
 True               ;; Boolean true
 False              ;; Boolean false
 #+END_SRC
 
-Bools are case-sensitive. =true=, =TRUE=, =false=, =FALSE= are not valid — they are treated as regular symbols.
+#+BEGIN_SRC wisp
+True               ;; Boolean true
+False              ;; Boolean false
+#+END_SRC
 
-* Logical Operations (short-circuit)
+Bools are case-sensitive. =true=, =TRUE=, =false=, =FALSE= are not
+valid — they are treated as regular symbols.
+
+* 2. Logical Operations (short-circuit)
 
 | Operation | Arity | Example               | Result |
 |-----------+-------+-----------------------+--------|
@@ -32,21 +105,45 @@ Bools are case-sensitive. =true=, =TRUE=, =false=, =FALSE= are not valid — the
 | =or=        | 2..N  | =(or False True False)= | True   |
 | =not=       | 1..N  | =(not True)=            | False  |
 
-=and= and =or= short-circuit: they evaluate left to right and stop at the first determining value.
+=and= and =or= short-circuit: they evaluate left to right and stop at
+the first determining value.
 
 #+BEGIN_SRC monad
 (and True False True)             ;; False (short-circuits at False)
 (or False True False)             ;; True  (short-circuits at True)
 (not (> 3 5))                     ;; True
+(and True True True)              ;; True — all True
+(or False False)                  ;; False — none True
+(not (and True False))            ;; True — De Morgan
 #+END_SRC
 
 #+BEGIN_SRC wisp
 and True False True
 or False True False
 not (> 3 5)
+and True True True
+or False False
+not (and True False)
 #+END_SRC
 
-* Comparison Operations ([[file:numeric.org][Numeric Types]])
+For compound boolean expressions, see [[file:logic.org][Logic]].
+
+** Implementation Notes
+
+- Short-circuit logic dispatch via strcmp
+  ([[file:../context/codegen-ops.org::224]])
+- =and= evaluates left to right, stops at first =False=
+  ([[file:../codegen.c]])
+- =or= evaluates left to right, stops at first =True=
+
+** Key Points
+
+- Short-circuit semantics: expensive or side-effecting predicates go
+  on the right
+- =and= with no arguments returns =True= (vacuously true)
+- =or= with no arguments returns =False= (vacuously false)
+
+* 3. Comparison Operations ([[file:numeric.org][Numeric Types]])
 
 Comparisons return =Bool=:
 
@@ -70,7 +167,10 @@ Comparisons return =Bool=:
 equal? '(1 2) '(1 2)
 #+END_SRC
 
-* Type Predicates
+For the full comparison operator reference, see
+[[file:equality.org][Equality]].
+
+* 4. Type Predicates
 
 All type predicates return =Bool=:
 
@@ -82,6 +182,9 @@ All type predicates return =Bool=:
 (Bool? 42)                        ;; False
 (nil? nil)                        ;; True
 (empty? [])                       ;; True
+(Number? 3.14)                    ;; True
+(List? '(1 2 3))                  ;; True
+(Map? {:key "val"})               ;; True
 #+END_SRC
 
 #+BEGIN_SRC wisp
@@ -92,9 +195,21 @@ Bool? True
 Bool? 42
 nil? nil
 empty? []
+Number? 3.14
+List? '(1 2 3)
+Map? {:key "val"}
 #+END_SRC
 
-* Boolean in Control Flow
+For the full type predicate reference, see [[file:types.org][Types]] and
+[[file:core.org][Core Library]].
+
+** Implementation Notes
+
+- Type predicates dispatch via strcmp
+  ([[file:../context/codegen-ops.org::255]])
+- Predicates are generated from the =TYPE_KIND= — no reflection
+
+* 5. Boolean in Control Flow
 
 =Bool= is the condition type for all control flow constructs:
 
@@ -106,6 +221,10 @@ empty? []
 
 (unless (empty? xs)
   (process xs))
+
+(cond ((< x 0) "negative")
+      ((= x 0) "zero")
+      (else "positive"))
 #+END_SRC
 
 #+BEGIN_SRC wisp
@@ -116,11 +235,16 @@ while (not (done? state))
 
 unless (empty? xs)
   process xs
+
+cond
+  (< x 0) -> "negative"
+  (= x 0) -> "zero"
+  else -> "positive"
 #+END_SRC
 
-See [[file:control.org][Control Flow]].
+See [[file:control.org][Control Flow]] and [[file:conditionals.org][Conditionals]].
 
-* Boolean in Pattern Matching
+* 6. Boolean in Pattern Matching
 
 Booleans can be matched literally:
 
@@ -128,13 +252,53 @@ Booleans can be matched literally:
 (match b
   True  -> "yes"
   False -> "no")
+
+;; With guards
+(match (list x y)
+  (True True) -> "both"
+  (True _)    -> "first"
+  (_ True)    -> "second"
+  (_ _)       -> "neither")
 #+END_SRC
 
 #+BEGIN_SRC wisp
 match b
   True  -> "yes"
   False -> "no"
+
+match (list x y)
+  True True -> "both"
+  True _    -> "first"
+  _ True    -> "second"
+  _ _       -> "neither"
 #+END_SRC
+
+See [[file:patterns.org][Pattern Matching]] for detailed pattern syntax.
+
+* 7. Boolean as a Data Type
+
+While =Bool= is a primitive, it behaves like a two-constructor sum type:
+
+#+BEGIN_SRC monad
+;; Desugared form — equivalent to:
+(data Bool True False)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+;; Desugared form — equivalent to:
+data Bool True False
+#+END_SRC
+
+This means =Bool= works with all data type features: deriving,
+pattern matching, and type class instances. For data type declarations,
+see [[file:data.org][Data Types]].
+
+** Key Points
+
+- =Bool= is both a primitive and behaves like a two-constructor ADT
+- =True= and =False= are the only constructors; there is no =nil=
+  truthiness
+- Deriving =Eq= for =Bool= is equivalent to the built-in =/!=
 
 * Related Pages
 
@@ -143,9 +307,22 @@ match b
 - [[file:core.org][Core Library]] — logic and comparison dispatch
 - [[file:patterns.org][Pattern Matching]] — boolean patterns
 - [[file:types.org][Types]] — Bool ground type
+- [[file:logic.org][Logic]] — logical connectives
+- [[file:conditionals.org][Conditionals]] — if/cond expressions
+- [[file:equality.org][Equality]] — comparison operators
 
 * Context Links
 
 - [[file:../context/types.org][context/types.org]] — TYPE_BOOL
 - [[file:../context/language.org::working-dispatch][context/language.org — Logic dispatch]]
 - [[file:../codegen.c][codegen.c]] — Boolean codegen
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — operation dispatch for booleans
+- [[file:../context/language.org][context/language.org]] — boolean surface syntax
+
+* Further Reading
+
+- [[file:logic.org][Logic]] — compound boolean expressions, De Morgan's laws
+- [[file:maybe.org][Maybe]] — optional values, complement to booleans
+- [[file:error-handling.org][Error Handling]] — boolean success/failure patterns
+- [[file:from-c.org][From C]] — booleans for C programmers
+- [[file:from-lisp.org][From Lisp]] — boolean conventions, nil vs false

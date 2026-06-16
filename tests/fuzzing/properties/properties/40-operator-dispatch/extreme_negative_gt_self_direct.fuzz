@@ -1,0 +1,14 @@
+name: extreme_negative_gt_self_direct
+section: negative-always-false
+tier: stable
+kind: law
+features: arithmetic, comparison, negative
+compiler-path: codegen.arithmetic_dispatch, codegen.comparison_dispatch, infer.arithmetic, infer.comparison
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.order.gt
+args: a:Int
+type: Bool
+expect: False
+description: This deliberately false law should remain false for every generated input.
+law: (> {a} {a})

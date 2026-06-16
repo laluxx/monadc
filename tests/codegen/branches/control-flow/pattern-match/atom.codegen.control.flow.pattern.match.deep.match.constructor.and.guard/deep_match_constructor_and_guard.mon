@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.deep.deep_match_constructor_and_guard
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SUBSET: pattern-match
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.control.flow.pattern.match.deep.match.constructor.and.guard
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise ADT pattern and guarded fallback match codegen.
+;; TEST-ATOM: match should bind constructor fields and evaluate guards.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:pattern match lowering
+;; TEST-COVERAGE: pmatch constructor/guard branches
+
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/pattern-match/atom.codegen.control.flow.pattern.match.deep.match.constructor.and.guard
+;; TEST-MENU-PATH: codegen/branches/control-flow/pattern-match/atom.codegen.control.flow.pattern.match.deep.match.constructor.and.guard
+;; TEST-ATOM-LEAF: atom.codegen.control.flow.pattern.match.deep.match.constructor.and.guard
+;; TEST-CLI-TARGET: codegen branches control-flow pattern-match
+(module Main)
+(data Maybe Nothing | Just Int)
+(show (match (Just 4) with | (Just x) -> x | _ -> 0))
+(show (match 8 with | x | (> x 10) -> 10 | _ -> 20))

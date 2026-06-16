@@ -1,0 +1,31 @@
+;; TEST-ID: tests.codegen.branch200.50.data.layout.layouts.adts.dot.data.layout.branch.08
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SUBSET: layouts-adts-dot
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.branch200.50.data.layout.layouts.adts.dot.data.layout.branch.08
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: __adt_tag over ADT value
+;; TEST-ATOM: atom.codegen.branch200.50.data.layout.layouts.adts.dot.data.layout.branch.08
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.layout
+;; TEST-CODEGEN-PATH: codegen.adt
+;; TEST-CODEGEN-PATH: codegen.dot
+;; TEST-COVERAGE: codegen.c:type_to_llvm TYPE_LAYOUT/TYPE_APP branches
+;; TEST-COVERAGE: codegen.c:6332-6532 layout pretty print branch
+;; TEST-COVERAGE: codegen.c:7543 __adt_tag branch
+;; TEST-COVERAGE: codegen.c:12902-12952 dot special form
+
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-USES-ATOM: atom.codegen.subset.50.data.layout.layouts.adts.dot
+;; TEST-MENU: branches/data-layout/layouts-adts-dot/atom.codegen.branch200.50.data.layout.layouts.adts.dot.data.layout.branch.08
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts-adts-dot/atom.codegen.branch200.50.data.layout.layouts.adts.dot.data.layout.branch.08
+;; TEST-ATOM-LEAF: atom.codegen.branch200.50.data.layout.layouts.adts.dot.data.layout.branch.08
+;; TEST-CLI-TARGET: codegen branches data-layout layouts-adts-dot
+
+(module Main)
+(data Color Red Green Blue)
+(show (__adt_tag Red))

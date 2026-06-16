@@ -1,0 +1,15 @@
+name: comparison_neq_self_false
+section: negative
+tier: stable
+kind: law
+features: arithmetic, equality, negative
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, infer.arithmetic, infer.equality
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.core.inequality
+related-properties: signal_atom_equality_reflexive
+args: a:Int
+type: Bool
+expect: False
+description: Integer inequality of an expression against itself must be false.
+law: (!= {a} {a})

@@ -1,0 +1,33 @@
+;; TEST-ID: tests.codegen.branch.function-closure-capture-call
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: closures
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise closure construction, lifted capture storage, and call through returned closure.
+;; TEST-ATOM: atom.codegen.closure.capture-and-call
+;; TEST-CODEGEN-ATOM: atom.codegen.closure.capture-and-call
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.lambda.closure
+;; TEST-CODEGEN-PATH: codegen.call.closure-abi
+;; TEST-CODEGEN-PATH: env.lifted-captures
+;; TEST-DEPENDS-ON: atom.codegen.operator.plus
+;; TEST-DEPENDS-ON: atom.codegen.monomorph.id.int-string
+;; TEST-TAG: run
+;; TEST-TAG: closure
+;; TEST-TAG: function
+;; TEST-COVERAGE: codegen.c:9900-12100 closure/lifted call branches
+;; TEST-COVERAGE: codegen.c:11355-11525 lifted closure argument branches
+
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/closures/atom.codegen.closure.capture-and-call
+;; TEST-MENU-PATH: codegen/branches/symbol-env/closures/atom.codegen.closure.capture-and-call
+;; TEST-ATOM-LEAF: atom.codegen.closure.capture-and-call
+;; TEST-CLI-TARGET: codegen branches symbol-env closures
+(module Main)
+(define make-adder (lambda ([x : Int] -> Fn) (lambda ([y : Int] -> Int) (+ x y))))
+(define add5 (make-adder 5))
+(show (add5 7))
+(show ((make-adder 2) 8))

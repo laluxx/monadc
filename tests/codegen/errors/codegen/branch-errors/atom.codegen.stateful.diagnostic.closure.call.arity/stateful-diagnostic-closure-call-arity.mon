@@ -1,0 +1,28 @@
+;; TEST-ID: tests.codegen.stateful.diagnostic.closure.call.arity
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: expected-fail-compiled
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: branch-errors
+;; TEST-QUALITY: diagnostic-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.stateful.diagnostic.closure.call.arity
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Calling a unary lambda with too many args should diagnose through call arity path.
+;; TEST-ATOM: atom.codegen.stateful.diagnostic.closure.call.arity
+;; TEST-EXPECT: fail:compile
+;; TEST-CODEGEN-PATH: diagnostic.call-arity
+;; TEST-CODEGEN-PATH: codegen.diagnostic
+;; TEST-COVERAGE: codegen.c:call arity diagnostics
+;; TEST-COVERAGE: codegen.c:CODEGEN_ERROR diagnostics
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-USES-ATOM: atom.codegen.subset.90.diagnostics.branch.errors
+;; TEST-MENU: errors/codegen/branch-errors/atom.codegen.stateful.diagnostic.closure.call.arity
+;; TEST-MENU-PATH: codegen/errors/codegen/branch-errors/atom.codegen.stateful.diagnostic.closure.call.arity
+;; TEST-ATOM-LEAF: atom.codegen.stateful.diagnostic.closure.call.arity
+;; TEST-CLI-TARGET: codegen errors codegen branch-errors
+
+(module Main)
+(define f (lambda (x) x))
+(show (f 1 2))

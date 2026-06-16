@@ -1,0 +1,14 @@
+name: structured_set_set_conj_preserves_existing_generated
+section: collections-set-current
+tier: stable
+kind: law
+features: arithmetic, collections, predicate, set
+compiler-path: codegen.arithmetic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, infer.arithmetic, infer.type_predicate, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.infer.predicate
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Stress persistent and mutable set operations, membership, duplicate handling, and branch guarded mutation.
+law: (contains? (conj (set {a}) {b}) {a})

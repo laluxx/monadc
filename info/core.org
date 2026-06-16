@@ -9,30 +9,148 @@
 :CONTEXT:  monadc.context.codegen-ops, monadc.context.language
 :END:
 
-[[file:index.org][<- Back to Index]] · [[file:arithmetic.org][Arithmetic]] · [[file:equality.org][Equality]] · [[file:logic.org][Logic]] · [[file:show.org][Show]] · [[file:casting.org][Casting]] · [[file:list.org][Lists]] · [[file:set.org][Sets]] · [[file:map.org][Maps]] · [[file:math-module.org][Math]] · [[file:coll-module.org][Coll]]
+[[file:index.org][<- Back to Index]] · [[file:arithmetic.org][Arithmetic]] · [[file:equality.org][Equality]] · [[file:logic.org][Logic]] · [[file:booleans.org][Booleans]] · [[file:show.org][Show]] · [[file:casting.org][Casting]] · [[file:list.org][Lists]] · [[file:set.org][Sets]] · [[file:map.org][Maps]] · [[file:arrays.org][Arrays]] · [[file:strings.org][Strings]] · [[file:collections.org][Collections]] · [[file:conditionals.org][Conditionals]] · [[file:control.org][Control]] · [[file:define.org][Define]] · [[file:lambda.org][Lambda]] · [[file:let.org][Let]] · [[file:error-handling.org][Errors]] · [[file:math-module.org][Math]] · [[file:coll-module.org][Coll]]
 
 Built-in functions with =strcmp= dispatch in codegen. Always available
 without import. This page provides an overview; each category has a
 dedicated reference page.
 
-Test coverage: exercised by 423 codegen runtime fixtures in
-[[file:../tests/codegen/][tests/codegen/]] and =Main.mon=
-(1244 lines).
+Test coverage: exercised by codegen runtime fixtures in
+[[file:../tests/codegen/branches/][tests/codegen/branches/]] and =Main.mon=
+(1244 lines). See [[file:../context/tests-arch.org][context/tests-arch.org]] for the full test architecture
+and [[file:testing.org][Testing]] for the test runner.
+
+* Table of Contents
+
+- [[#dedicated-pages][Dedicated Pages]]
+- [[#implementation-notes][Implementation Notes]]
+- [[#arithmetic][1 Arithmetic]]
+- [[#comparison--equality][2 Comparison & Equality]]
+- [[#logic--booleans][3 Logic & Booleans]]
+- [[#collections][4 Collections]]
+  - [[#maps][4.1 Maps]]
+  - [[#sets][4.2 Sets]]
+  - [[#lists][4.3 Lists]]
+  - [[#arrays][4.4 Arrays]]
+  - [[#strings][4.5 Strings]]
+- [[#type-predicates][5 Type Predicates]]
+- [[#conversion--casting][6 Conversion & Casting]]
+- [[#control-flow][7 Control Flow]]
+- [[#binding][8 Binding]]
+- [[#io--display][9 I/O & Display]]
+- [[#not-callable-summary][NOT Callable Summary]]
+- [[#usage-examples][Usage Examples]]
+- [[#further-reading][Further Reading]]
+- [[#context-links][Context Links]]
 
 * Dedicated Pages
 
-| Page                          | Covers                                          |
-|-------------------------------+-------------------------------------------------|
-| [[file:arithmetic.org][Arithmetic]]           | +, -, *, /, %, bitwise, superscript sugars       |
-| [[file:equality.org][Equality]]             | =, !=, <, >, <=, >=, eq?                        |
-| [[file:logic.org][Logic]]                 | and, or, not, short-circuit evaluation           |
-| [[file:show.org][Show]]                   | show, print, assert-eq, display formats          |
-| [[file:casting.org][Casting]]               | (Int x), (Float x), fixed-width conversions      |
-| [[file:list.org][Lists]]                 | cons, car, cdr, nil, ++, count, make-list        |
-| [[file:set.org][Sets]]                  | conj, disj, contains?, set literals              |
-| [[file:map.org][Maps]]                  | assoc, dissoc, find, merge, keys, vals           |
+| Page                          | Covers                                                |
+|-------------------------------+-------------------------------------------------------|
+| [[file:arithmetic.org][Arithmetic]]           | +, -, *, /, %, bitwise, superscript sugars             |
+| [[file:equality.org][Equality]]             | =, !=, <, >, <=, >=, eq?                              |
+| [[file:logic.org][Logic]]                 | and, or, not, short-circuit evaluation                 |
+| [[file:booleans.org][Booleans]]             | True, False, boolean type system                       |
+| [[file:show.org][Show]]                   | show, print, assert-eq, display formats                |
+| [[file:casting.org][Casting]]               | (Int x), (Float x), fixed-width conversions            |
+| [[file:list.org][Lists]]                 | cons, car, cdr, nil, ++, count, make-list              |
+| [[file:set.org][Sets]]                  | conj, disj, contains?, set literals                    |
+| [[file:map.org][Maps]]                  | assoc, dissoc, find, merge, keys, vals                 |
+| [[file:arrays.org][Arrays]]               | Stack, fat-pointer, heap-growable arrays               |
+| [[file:strings.org][Strings]]              | UTF-8, count, starts-with?, ends-with?, contains?      |
+| [[file:conditionals.org][Conditionals]]         | if, cond, when, unless                                 |
+| [[file:control.org][Control Flow]]          | while, for, begin, do, sequencing                      |
+| [[file:define.org][Define]]               | Variable and function binding                          |
+| [[file:lambda.org][Lambda]]               | Anonymous functions, closures                          |
+| [[file:let.org][Let]]                   | let, let*, letrec                                      |
+| [[file:error-handling.org][Error Handling]]       | error, ??, diagnostics                                 |
+| [[file:math-module.org][Math Module]]          | Mathematical functions and constants                   |
+| [[file:coll-module.org][Coll Module]]           | Higher-order collection operations                     |
 
-* Map Operations
+* Implementation Notes
+
+The core library is implemented through a three-layer dispatch
+architecture in =codegen_expr=
+([[file:../context/codegen-ops.org::dispatch-architecture][context/codegen-ops.org — Dispatch Architecture]]):
+
+1. *AST type switch* — handles leaf nodes (literals, symbols, booleans)
+2. *strcmp dispatch* — compares the head symbol string against 83+ known
+   operations; this is how most core functions are reached from paren-mode
+3. *register_builtins* — 94 env entries for wisp-mode symbol resolution
+
+| Layer            | Code Location               | Purpose                        |
+|------------------+-----------------------------+--------------------------------|
+| AST type switch  | [[file:../codegen.c][codegen.c]]:3382-3988        | Leaf AST nodes                 |
+| strcmp dispatch  | [[file:../codegen.c][codegen.c]]:3889+            | 83+ known operations           |
+| register_builtins| [[file:../codegen.c][codegen.c]]:13144            | 94 env entries                 |
+
+Functions listed as "NOT callable" are only in =register_builtins= and are
+reachable only from wisp-mode (env lookup), not from paren-mode (strcmp).
+
+* 1 Arithmetic
+
+See [[file:arithmetic.org][Arithmetic]].
+
+| Name | Arity | Description        | Codegen context                                              |
+|------+-------+--------------------+--------------------------------------------------------------|
+| =+ = | 0..N  | Addition           | [[file:../context/codegen-ops.org][context/codegen-ops.org]]                   |
+| =- = | 1..N  | Subtraction        | —                                                            |
+| =*= | 0..N  | Multiplication     | —                                                            |
+| =/= | 1..N  | Division           | —                                                            |
+| =%= | 2     | Modulo             | —                                                            |
+
+Bitwise operators (see [[file:arithmetic.org][Arithmetic]]):
+
+| Name    | Arity | Description        |
+|---------+-------+--------------------|
+| =& =    | 2     | Bitwise AND        |
+| =| =    | 2     | Bitwise OR         |
+| =^=     | 2     | Bitwise XOR        |
+| =~=     | 1     | Bitwise NOT        |
+| =<<=    | 2     | Left shift         |
+| =>>=    | 2     | Right shift        |
+
+Superscript sugar: =x²= desugars to =(^ x 2)=
+([[file:../context/codegen-ops.org][context/codegen-ops.org]]).
+
+* 2 Comparison & Equality
+
+See [[file:equality.org][Equality]].
+
+| Name  | Arity | Description                          | Context                               |
+|-------+-------+--------------------------------------+---------------------------------------|
+| == =  | 2..N  | Numeric/string equality              | [[file:../context/runtime.org::runtime-equality][context/runtime.org — Equality]] |
+| =!= = | 2..N  | Numeric/string inequality            | —                                     |
+| =<= = | 2..N  | Less than or equal                   | —                                     |
+| =<! = | 2..N  | Less than                            | —                                     |
+| =>=   | 2..N  | Greater than                         | —                                     |
+| => =  | 2..N  | Greater than or equal                | —                                     |
+| =eq?= | 2     | Pointer/reference identity           | —                                     |
+
+All work on Int, Float, and mixed Int/Float operands. String
+comparison uses =strcmp= under the hood. The =eq?= operator checks
+pointer identity (same object, not structural equality).
+
+* 3 Logic & Booleans
+
+See [[file:logic.org][Logic]] and [[file:booleans.org][Booleans]].
+
+| Name   | Arity | Description                        |
+|--------+-------+------------------------------------|
+| =and=  | 2..N  | Short-circuit conjunction          |
+| =or=   | 2..N  | Short-circuit disjunction          |
+| =not=  | 1     | Logical negation                   |
+
+Boolean literals: =True=, =False= (case-sensitive).
+See [[file:booleans.org][Booleans]] for type details and [[file:conditionals.org][Conditionals]] for branching forms.
+
+* 4 Collections
+
+See [[file:collections.org][Collections]] for the overview, and each type's dedicated page.
+
+** 4.1 Maps
+
+See [[file:map.org][Maps]].
 
 | Name       | Arity | Description                      |
 |------------+-------+----------------------------------|
@@ -51,82 +169,215 @@ Test coverage: exercised by 423 codegen runtime fixtures in
 Map literal: =#{:a 1}=. Runtime construction broken without =:: Map=
 annotation ([[file:../context/language.org::303]]).
 
-* Set Operations
+** 4.2 Sets
 
-| Name      | Arity | Description                      |
-|-----------+-------+----------------------------------|
-| =set=     | 0..N  | Create a set                     |
-| =conj=    | 2     | Add element (immutable)          |
-| =disj=    | 2     | Remove element (immutable)       |
-| =conj!=   | 2     | Add element (in place)           |
-| =disj!=   | 2     | Remove element (in place)        |
-| =contains?=| 2     | Element membership               |
-| =Set?=    | 1     | Type predicate                   |
+See [[file:set.org][Sets]].
+
+| Name       | Arity | Description                      | Context Link                                                |
+|------------+-------+----------------------------------+-------------------------------------------------------------|
+| =set=      | 0..N  | Create a set                     | [[file:../context/runtime.org::runtime-set-ops][context/runtime.org — Set Ops]]          |
+| =conj=     | 2     | Add element (immutable)          | —                                                           |
+| =disj=     | 2     | Remove element (immutable)       | —                                                           |
+| =conj!=    | 2     | Add element (in place)           | —                                                           |
+| =disj!=    | 2     | Remove element (in place)        | —                                                           |
+| =contains?=| 2     | Element membership               | —                                                           |
+| =Set?=     | 1     | Type predicate                   | —                                                           |
 
 Set literal: ={1 2 3}=. Requires =:: Set= annotation.
 
-* List Operations
+** 4.3 Lists
 
-| Name      | Arity | Callable? | Description                    |
-|-----------+-------+-----------+--------------------------------|
-| =nil=     | 0     | Yes       | Empty list / null               |
-| =list=    | 0..N  | Partial   | Zero-arg works; variadic broken |
-| =cons=    | 2     | Yes       | Prepend element                |
-| =.=       | 2     | Yes       | Alias for =cons=               |
-| =car=     | 1     | Yes       | First element                  |
-| =cdr=     | 1     | Yes       | Rest                           |
-| =head=    | 1     | Yes       | First (List, Array, String)    |
-| =tail=    | 1     | Partial   | Segfaults on lists             |
-| =++=      | 2     | Yes       | Concatenate                    |
-| =count=   | 1     | Yes       | Length                         |
-| =empty?=  | 1     | Yes       | Empty check                    |
-| =pair?=   | 1     | Yes       | Non-empty check                |
-| =nil?=    | 1     | Yes       | Nil check                      |
-| =append!= | 2     | Yes       | Mutable append                 |
+See [[file:list.org][Lists]].
+
+| Name       | Arity | Callable? | Description                    | Context Link                                                |
+|------------+-------+-----------+--------------------------------+-------------------------------------------------------------|
+| =nil=      | 0     | Yes       | Empty list / null               | [[file:../context/runtime.org::runtime-list-ops][context/runtime.org — List Ops]]          |
+| =list=     | 0..N  | Partial   | Zero-arg works; variadic broken | —                                                           |
+| =cons=     | 2     | Yes       | Prepend element                 | —                                                           |
+| =.=        | 2     | Yes       | Alias for =cons=                | —                                                           |
+| =car=      | 1     | Yes       | First element                   | —                                                           |
+| =cdr=      | 1     | Yes       | Rest                            | —                                                           |
+| =head=     | 1     | Yes       | First (List, Array, String)     | —                                                           |
+| =tail=     | 1     | Partial   | Segfaults on lists              | —                                                           |
+| =++=       | 2     | Yes       | Concatenate                     | —                                                           |
+| =count=    | 1     | Yes       | Length                          | —                                                           |
+| =empty?=   | 1     | Yes       | Empty check                     | —                                                           |
+| =pair?=    | 1     | Yes       | Non-empty check                 | —                                                           |
+| =nil?=     | 1     | Yes       | Nil check                       | —                                                           |
+| =append!=  | 2     | Yes       | Mutable append                  | —                                                           |
 
 NOT callable (register_builtins only): =length=, =reverse=, =nth=,
 =reduce=, =concat=, =substring=.
 
-* String Operations
+** 4.4 Arrays
 
-| Name           | Arity | Notes                          |
-|----------------+-------+--------------------------------|
-| =show=         | 1..N  | Prints to stdout               |
-| =make-string=  | 2     | Works                          |
-| =count=        | 1     | Works                          |
-| =starts-with?= | 2     | Works                          |
-| =ends-with?=   | 2     | Works                          |
-| =contains?=    | 2     | Works                          |
+See [[file:arrays.org][Arrays]].
 
-* Other Builtins
+| Variant      | Syntax    | Memory      | Size              | Use Case                      |
+|--------------+-----------+-------------+-------------------+-------------------------------|
+| Stack        | =[1 2 3]= | Stack frame | Fixed at compile  | Small, known-size data        |
+| Fat pointer  | =[16kb I32]= | Stack/heap | Runtime-sized     | Medium, runtime-sized data    |
+| Heap-growable| =~[1 2 3]= | Heap        | Runtime-sized     | Large, dynamically-sized data |
 
-| Name         | Arity | Notes                          |
-|--------------+-------+--------------------------------|
-| =quote=      | 1     | See [[file:quote.org][Quote]]                     |
-| =define=     | 2..N  | See [[file:define.org][Define]]                   |
-| =lambda=     | 2..N  | See [[file:lambda.org][Lambda]]                   |
-| =include=    | 1     | C FFI: =(include "math.h")=     |
-| =import=     | 1..N  | Module import                   |
-| =type=       | 1..N  | Type alias/refinement           |
-| =error=      | 1     | Abort with message              |
-| =code=       | 1     | Return source AST of function   |
-| =expand=     | 1     | Expand macros in expression     |
-| =assert-eq=  | 3     | Test assertion                  |
+Built-in array operations: =head=, =tail=, =count=, =empty?=, =++=.
 
-* NOT callable (summary)
+See [[file:arrays.org][Arrays]] and [[file:collections.org][Collections]].
 
-=map=, =fn=, =defn=, =concat=, =substring=, =reverse=, =nth=,
-=length=, =reduce=, =cond=, =let=, =let*=, =letrec=, =^= (superscript).
+** 4.5 Strings
+
+See [[file:strings.org][Strings]].
+
+| Name            | Arity | Notes                          | Context Link                                                    |
+|-----------------+-------+--------------------------------+-----------------------------------------------------------------|
+| =show=          | 1..N  | Prints to stdout               | —                                                               |
+| =make-string=   | 2     | Works                          | —                                                               |
+| =count=         | 1     | Works                          | —                                                               |
+| =starts-with?=  | 2     | Works                          | [[file:../context/runtime.org::runtime-string][context/runtime.org — String]] (search anchor) |
+| =ends-with?=    | 2     | Works                          | —                                                               |
+| =contains?=     | 2     | Works                          | —                                                               |
+
+Strings are UTF-8 encoded and immutable. =head= and =tail= work on
+strings; string indexing via =("str" 0)= is covered by
+=rt_string_index.mon=.
+
+** 4.6 Collections Key Points
+
+- Lists are immutable linked cons cells
+- Arrays come in 3 variants: stack, fat-pointer, heap-growable
+- Sets and maps are hash-based with O(1) average operations
+- Mutable variants use =!=-suffixed names (=conj!=, =assoc!=)
+- String operations are UTF-8 aware
+
+* 5 Type Predicates
+
+| Name     | Arity | Description          |
+|----------+-------+----------------------|
+| =nil?=   | 1     | Nil check            |
+| =pair?=  | 1     | Non-empty list check |
+| =empty?= | 1     | Empty check (list/array/string) |
+| =Map?=   | 1     | Map type predicate   |
+| =Set?=   | 1     | Set type predicate   |
+| =type=   | 1..N  | Type alias/refinement|
+
+See [[file:types.org][Types]] and [[file:refinements.org][Refinements]].
+
+* 6 Conversion & Casting
+
+See [[file:casting.org][Casting]].
+
+| Name    | Arity | Description                |
+|---------+-------+----------------------------|
+| =(Int)= | 1     | Convert to Int             |
+| =(Float)= | 1   | Convert to Float           |
+
+Fixed-width integer conversions and pointer casts are also available.
+See [[file:casting.org][Casting]] for the full reference.
+
+* 7 Control Flow
+
+See [[file:control.org][Control Flow]] and [[file:conditionals.org][Conditionals]].
+
+| Name      | Arity | Description                        | Context                                                |
+|-----------+-------+------------------------------------+--------------------------------------------------------|
+| =if=      | 3     | Conditional branching              | —                                                      |
+| =cond=    | 1..N  | Multi-branch conditional           | —                                                      |
+| =when=    | 1..N  | Side-effect conditional (no else)  | —                                                      |
+| =unless=  | 1..N  | Negated side-effect conditional    | —                                                      |
+| =while=   | 1..N  | C-style loop                       | —                                                      |
+| =for=     | 1..N  | Iteration over range/collection    | —                                                      |
+| =begin=   | 0..N  | Sequencing (returns last expr)     | —                                                      |
+| =do=      | 0..N  | Sequencing (returns last expr)     | —                                                      |
+| =??=      | 2     | Null-coalescing (unwrap or default)| [[file:../context/runtime.org::runtime-error-handling][context/runtime.org — Error Handling]] |
+| =error=   | 1     | Abort with message                 | [[file:../context/runtime.org::runtime-error-handling][context/runtime.org — Error Handling]] |
+
+All control forms are expressions — they return values. Codegen
+dispatch for control forms begins at [[file:../codegen.c::7471][codegen.c:7471]].
+
+See [[file:error-handling.org][Error Handling]] for =error=, =??=, and diagnostic patterns.
+
+* 8 Binding
+
+| Name       | Arity | Description                        |
+|------------+-------+------------------------------------|
+| =define=   | 2..N  | Top-level variable/function binding|
+| =lambda=   | 2..N  | Anonymous function creation        |
+| =let=      | 2..N  | Local parallel bindings            |
+| =let*=     | 2..N  | Local sequential bindings          |
+| =letrec=   | 2..N  | Local recursive bindings           |
+| =defn=     | 3..N  | Function definition sugar          |
+| =fn=       | 2..N  | Short-form lambda                  |
+
+See [[file:define.org][Define]], [[file:lambda.org][Lambda]], and [[file:let.org][Let Bindings]].
+
+* 9 I/O & Display
+
+See [[file:show.org][Show]].
+
+| Name        | Arity | Description                        |
+|-------------+-------+------------------------------------|
+| =show=      | 1..N  | Print to stdout                    |
+| =print=     | 1..N  | Alias for =show=                   |
+| =assert-eq= | 3     | Test assertion (expected actual name) |
+
+See [[file:testing.org][Testing]] for the test framework and =assert-eq= usage.
+
+* Common Pitfalls
+
+- **cond, let, let*, letrec are special forms, not callable functions**:
+  They are handled by the reader/compiler and have no strcmp dispatch.
+  They work as syntactic forms but NOT via =(apply cond ...)=.
+- **map, fn, defn, concat live in Coll Module, not core**: These are
+  NOT strcmp dispatachable from paren-mode. Import them from the
+  [[file:coll-module.org][Coll Module]] or use the prelude.
+- **tail is partially broken on lists**: =tail= segfaults on some list
+  inputs. Prefer =cdr= for list tail access.
+- **list is partially broken as a variadic constructor**: =(list 1 2 3)=
+  works in zero-arg case but the variadic form is unreliable. Use
+  =cons= or quoted syntax ='(1 2 3)=.
+- **Runtime construction of maps/sets broken without annotation**:
+  =(#{:a 1})= without =:: Map= annotation fails. Always annotate.
+- **Superscript sugar (=^=) has no strcmp handler**: =x²= desugars at
+  reader time but =^= is not callable from paren-mode. Use =(pow x 2)=
+  from the [[file:math-module.org][Math Module]] instead.
+
+* NOT Callable Summary
+
+The following are recognized by the compiler but are /not/ callable via
+strcmp dispatch from paren-mode (they are =register_builtins=-only or
+handled as special forms):
+
+| Name        | Reason                                                          |
+|-------------+-----------------------------------------------------------------|
+| =map=         | Lives in Coll Module or prelude                                  |
+| =fn=          | Short-form lambda (reader sugar, not strcmp)                     |
+| =defn=        | Function definition sugar                                        |
+| =concat=      | Lives in Coll Module or prelude                                  |
+| =substring=   | Lives in Coll Module or prelude                                  |
+| =reverse=     | Lives in Coll Module or prelude                                  |
+| =nth=         | Lives in Coll Module or prelude                                  |
+| =length=      | Lives in Coll Module or prelude                                  |
+| =reduce=      | Lives in Coll Module or prelude                                  |
+| =cond=        | Special form handled by reader/compiler                          |
+| =let=         | Special form handled by reader/compiler                          |
+| =let*=        | Special form handled by reader/compiler                          |
+| =letrec=      | Special form handled by reader/compiler                          |
+| =^=           | Superscript desugaring only                                      |
+
+Note: =cond=, =let=, =let*=, =letrec= are handled as special forms by
+the reader/compiler (not via register_builtins or strcmp). =map=, =fn=,
+=defn=, =concat=, =substring=, =reverse=, =nth=, =length=, =reduce= live in
+[[file:coll-module.org][Coll Module]] or the prelude / core library.
 
 * Usage Examples
 
-Arithmetic:
+** Arithmetic
 
 #+BEGIN_SRC monad
 (+ 1 2 3)          ;; => 6
 (* 2 5)            ;; => 10
 (- 10 4 3)         ;; => 3
 (/ 12 4)           ;; => 3
+(% 10 3)           ;; => 1
 #+END_SRC
 
 #+BEGIN_SRC wisp
@@ -134,9 +385,40 @@ Arithmetic:
 * 2 5              # => 10
 - 10 4 3           # => 3
 / 12 4             # => 3
+% 10 3             # => 1
 #+END_SRC
 
-Printing with =show=:
+** Comparison
+
+#+BEGIN_SRC monad
+(= 2 2)            ;; => True
+(!= 2 3)           ;; => True
+(< 1 2 3)          ;; => True
+(>= 5 3)           ;; => True
+#+END_SRC
+
+#+BEGIN_SRC wisp
+= 2 2              # => True
+!= 2 3             # => True
+< 1 2 3            # => True
+>= 5 3             # => True
+#+END_SRC
+
+** Logic
+
+#+BEGIN_SRC monad
+(and True False)   ;; => False
+(or True False)    ;; => True
+(not False)        ;; => True
+#+END_SRC
+
+#+BEGIN_SRC wisp
+and True False     # => False
+or True False      # => True
+not False          # => True
+#+END_SRC
+
+** Printing with =show=
 
 #+BEGIN_SRC monad
 (show "hello, world")
@@ -148,7 +430,7 @@ show "hello, world"
 show "the sum is " + 1 2
 #+END_SRC
 
-Assertions:
+** Assertions
 
 #+BEGIN_SRC monad
 (assert-eq (+ 2 2) 4 "two plus two")
@@ -160,7 +442,7 @@ assert-eq (+ 2 2) 4 "two plus two"
 assert-eq (* 3 3) 9 "three squared"
 #+END_SRC
 
-Type conversion:
+** Type conversion
 
 #+BEGIN_SRC monad
 (Int 3.14)       ;; => 3
@@ -172,7 +454,7 @@ Int 3.14         # => 3
 Float 42         # => 42.0
 #+END_SRC
 
-Aborting with an error:
+** Aborting with an error
 
 #+BEGIN_SRC monad
 (error "something went wrong")
@@ -182,7 +464,7 @@ Aborting with an error:
 error "something went wrong"
 #+END_SRC
 
-List operations:
+** List operations
 
 #+BEGIN_SRC monad
 (define lst (cons 1 (cons 2 nil)))
@@ -202,7 +484,7 @@ head lst              # => 1
 empty? nil            # => #t
 #+END_SRC
 
-Map operations:
+** Map operations
 
 #+BEGIN_SRC monad
 (define m #{:a 1 :b 2})
@@ -210,6 +492,7 @@ Map operations:
 (keys m)          ;; => (:a :b)
 (vals m)          ;; => (1 2)
 (count m)         ;; => 2
+(assoc m :c 3)    ;; => #{:a 1 :b 2 :c 3}
 #+END_SRC
 
 #+BEGIN_SRC wisp
@@ -218,9 +501,26 @@ find m :a         # => (:a 1)
 keys m            # => (:a :b)
 vals m            # => (1 2)
 count m           # => 2
+assoc m :c 3      # => #{:a 1 :b 2 :c 3}
 #+END_SRC
 
-String operations:
+** Set operations
+
+#+BEGIN_SRC monad
+(define s {1 2 3} :: Set)
+(conj s 4)            ;; => {1 2 3 4}
+(disj s 2)            ;; => {1 3}
+(contains? s 2)       ;; => True
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define s {1 2 3} :: Set
+conj s 4              # => {1 2 3 4}
+disj s 2              # => {1 3}
+contains? s 2         # => True
+#+END_SRC
+
+** String operations
 
 #+BEGIN_SRC monad
 (count "hello")         ;; => 5
@@ -236,18 +536,107 @@ ends-with? "hello" "lo"     # => #t
 contains? "hello" "ll"      # => #t
 #+END_SRC
 
-* Related Pages
+** Control flow
 
-- [[file:arithmetic.org][Arithmetic]] -- + -, *, /, %, bitwise operators
-- [[file:equality.org][Equality]] -- =, !=, <, >, <=, >=, eq?
-- [[file:logic.org][Logic]] -- and, or, not, short-circuit
-- [[file:show.org][Show]] -- show, display, assert-eq
-- [[file:casting.org][Casting]] -- type conversions
+#+BEGIN_SRC monad
+(if True "yes" "no")        ;; => "yes"
+(cond [(> x 0) "pos"] [(< x 0) "neg"] [True "zero"])
+(while (< i 3) (show i) (set! i (+ i 1)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+if True "yes" "no"          # => "yes"
+cond (> x 0) "pos" (< x 0) "neg" True "zero"
+while (< i 3) show i set! i (+ i 1)
+#+END_SRC
+
+** Binding
+
+#+BEGIN_SRC monad
+(define square (lambda (x) (* x x)))
+(define (square x) (* x x))         ;; defn sugar
+(let [x 1 y 2] (+ x y))             ;; => 3
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define square lambda (x) (* x x)
+define (square x) (* x x)           # defn sugar
+let [x 1 y 2] + x y                 # => 3
+#+END_SRC
+
+** Core Library Summary
+
+| Category         | Key Functions                    | Always Available |
+|------------------+----------------------------------+------------------|
+| Arithmetic       | =+ = -= *= /= %= &= |= ^= <<= >>= | Yes              |
+| Comparison       | === =!= =<= =>= =< => =eq?=         | Yes              |
+| Logic            | =and= =or= =not=                 | Yes              |
+| Collections      | =cons= =car= =cdr= =conj= =assoc= | Yes              |
+| Control          | =if= =while= =for= =begin=       | Yes              |
+| I/O              | =show= =print= =assert-eq=        | Yes              |
+| Binding          | =define= =lambda= =let=          | Yes              |
+| Type predicates  | =nil?= =pair?= =empty?= =type=   | Yes              |
+
+** Complete example:
+
+#+BEGIN_SRC monad
+;; Save as core-demo.mon && monadc core-demo.mon && ./core-demo
+(module Main)
+
+;; Core library functions — always available without import
+(define [x :: Int] 42)
+(define [y :: Int] 10)
+
+;; Arithmetic
+(show (+ x y 3))     ;; 55
+(show (* 2 3 4))     ;; 24
+(show (/ 17 5))      ;; 3 (integer division)
+
+;; Comparison
+(show (= x 42))      ;; True
+(show (< y x))       ;; True
+
+;; Logic
+(show (and True (< y x)))    ;; True
+(show (or False (= x 0)))    ;; False
+
+;; List operations
+(define xs '(1 2 3 4 5))
+(show (car xs))      ;; 1
+(show (cdr xs))      ;; (2 3 4 5)
+(show (count xs))    ;; 5
+
+;; String operations
+(show (++ "hello" " " "world"))
+(show (count "hello"))
+#+END_SRC
+
+* Further Reading
+
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — Full operation dispatch catalogue
+- [[file:../context/language.org][context/language.org]] — Working dispatch + known gaps
+- [[file:../context/runtime.org][context/runtime.org]] — Runtime library internals
+- [[file:../context/tests-arch.org][context/tests-arch.org]] — Test architecture and fixture catalogue
+- [[file:testing.org][Testing]] — Test runner, fixtures, and fuzzing
+- [[file:collections.org][Collections]] — Collection protocol overview
+- [[file:types.org][Types]] — Type system reference
+- [[file:type-classes.org][Type Classes]] — Ad-hoc polymorphism
+- [[file:tutorial.org][Tutorial]] — Getting started guide
 
 * Context Links
 
 - [[file:../context/codegen-ops.org][context/codegen-ops.org]] — Operation dispatch
 - [[file:../context/language.org][context/language.org]] — Working dispatch + known gaps
+- [[file:../context/runtime.org][context/runtime.org]] — Runtime library reference
 - [[file:../codegen.c][codegen.c]] — ~register_builtins~ at line 13144
+- [[file:../context/core-libs.org][context/core-libs.org]] — Core library context
 - [[file:math-module.org][Math Module]] — mathematical functions and constants
 - [[file:coll-module.org][Coll Module]] — collection operations
+
+* See Also
+
+- [[file:arithmetic.org][Arithmetic]] — arithmetic operations reference
+- [[file:equality.org][Equality]] — comparison and equality operators
+- [[file:booleans.org][Booleans]] — Bool type and logic operations
+- [[file:types.org][Types]] — type system reference
+- [[file:tutorial.org][Tutorial]] — getting started guide

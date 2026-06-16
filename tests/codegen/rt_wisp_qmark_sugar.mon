@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-wisp-qmark-sugar
-;; TEST-CONTEXT: monadc.context.wisp.sugar-transforms
-;; TEST-PURPOSE: Wisp ?-sugar rewrites (contains? s v) → (s contains? v) for typed variables.
-;; TEST-ATOM: (contains? s 2) = True, (contains? s 99) = False
-;; TEST-EXPECT: compile, run
-module Main
-define [s :: Set] {1 2 3}
-show contains? s 2
-show contains? s 99

@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-cffi-math-ceil
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.70.ffi.asm.cffi.math.rt.cffi.math.ceil
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: cffi-math
+;; TEST-CATEGORY: 70-ffi-asm
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.cffi-runtime
+;; TEST-PURPOSE: Runtime C FFI calls a libm rounding function.
+;; TEST-ATOM: (ceil 3.1) prints 4.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:70-ffi-asm/cffi-math branch family
+;; TEST-USES-ATOM: atom.codegen.category.70.ffi.asm
+;; TEST-MENU: branches/ffi-asm/cffi-math/atom.codegen.70.ffi.asm.cffi.math.rt.cffi.math.ceil
+;; TEST-MENU-PATH: codegen/branches/ffi-asm/cffi-math/atom.codegen.70.ffi.asm.cffi.math.rt.cffi.math.ceil
+;; TEST-ATOM-LEAF: atom.codegen.70.ffi.asm.cffi.math.rt.cffi.math.ceil
+;; TEST-CLI-TARGET: codegen branches ffi-asm cffi-math
+(module Main)
+(include "math.h")
+(show (ceil 3.1))

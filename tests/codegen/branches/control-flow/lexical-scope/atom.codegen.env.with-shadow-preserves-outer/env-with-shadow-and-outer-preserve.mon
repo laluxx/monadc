@@ -1,0 +1,31 @@
+;; TEST-ID: tests.codegen.branch.env-with-shadow-and-outer-preserve
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: lexical-scope
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise with environment creation, local shadowing, local mutation, and outer value preservation.
+;; TEST-ATOM: atom.codegen.env.with-shadow-preserves-outer
+;; TEST-CODEGEN-ATOM: atom.codegen.env.with-shadow-preserves-outer
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.with.child-env
+;; TEST-CODEGEN-PATH: env.shadow.lookup
+;; TEST-CODEGEN-PATH: codegen.setbang.local
+;; TEST-DEPENDS-ON: atom.codegen.env.global-set-load-sequence
+;; TEST-TAG: run
+;; TEST-TAG: env
+;; TEST-TAG: with
+;; TEST-COVERAGE: codegen.c:8012-8047 with binding environment branch
+;; TEST-COVERAGE: codegen.c:7642 set! local lvalue branch
+
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/lexical-scope/atom.codegen.env.with-shadow-preserves-outer
+;; TEST-MENU-PATH: codegen/branches/control-flow/lexical-scope/atom.codegen.env.with-shadow-preserves-outer
+;; TEST-ATOM-LEAF: atom.codegen.env.with-shadow-preserves-outer
+;; TEST-CLI-TARGET: codegen branches control-flow lexical-scope
+(module Main)
+(define x 10)
+(show (with [x 1 y 2] (do (set! x (+ x y)) x)))
+(show x)

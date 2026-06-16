@@ -1,0 +1,15 @@
+name: structured_future_array_index_oracle
+section: future-array-oracle-current
+tier: stable
+kind: law
+features: arithmetic, logic, with, array
+compiler-path: codegen.operator.arithmetic, codegen.operator.logic, infer.env.lookup, codegen.env.binding, runtime.array.index, codegen.array.literal
+signal: high
+corpus-role: oracle
+uses-atoms: atom.core.arithmetic, atom.core.logic, atom.binding.with, atom.runtime.array
+disabled-reason: disabled future or merged property; kept for provenance but not loaded by default
+args: xs:ArrInt i:IndexOf(xs)
+type: Int
+expect-python: xs[i]
+description: Array indexing oracle with generated arrays and valid generated indices.
+law: ({xs} {i})

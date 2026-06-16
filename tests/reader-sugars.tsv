@@ -1,192 +1,193 @@
+# columns: name	context	purpose	source	expected	expected_diagnostic	superset	tier	status
 # name	context	purpose	source	expected
 # ── Implicit Multiplication ──────────────────────────────────────────────────
-mul_implicit_number_var	monadc.context.reader.sugar.implicit-mul	Number adjacent to variable becomes (* N var).	3x	(* 3 x)
-mul_implicit_number_single	monadc.context.reader.sugar.implicit-mul	Single digit adjacent to variable becomes multiplication.	2a	(* 2 a)
-mul_implicit_hex_var	monadc.context.reader.sugar.implicit-mul	Hex literal adjacent to variable becomes multiplication.	0xFFx	(* 0xFF x)
-mul_implicit_hex_single	monadc.context.reader.sugar.implicit-mul	Single hex digit adjacent to variable becomes multiplication.	0xAx	(* 0xA x)
-mul_implicit_negative_var	monadc.context.reader.sugar.implicit-mul	Negative number adjacent to variable becomes multiplication.	-3y	(* -3 y)
-mul_implicit_binary_var	monadc.context.reader.sugar.implicit-mul	Binary literal adjacent to variable becomes multiplication.	0b1x	(* 0b1 x)
-mul_implicit_octal_var	monadc.context.reader.sugar.implicit-mul	Octal literal adjacent to variable becomes multiplication.	0o7x	(* 0o7 x)
+mul_implicit_number_var	monadc.context.reader.sugar.implicit-mul	Number adjacent to variable becomes (* N var).	3x	(* 3 x)			regression	passing-baseline-2026-06-15
+mul_implicit_number_single	monadc.context.reader.sugar.implicit-mul	Single digit adjacent to variable becomes multiplication.	2a	(* 2 a)			regression	passing-baseline-2026-06-15
+mul_implicit_hex_var	monadc.context.reader.sugar.implicit-mul	Hex literal adjacent to variable becomes multiplication.	0xFFx	(* 0xFF x)			regression	passing-baseline-2026-06-15
+mul_implicit_hex_single	monadc.context.reader.sugar.implicit-mul	Single hex digit adjacent to variable becomes multiplication.	0xAx	(* 0xA x)			regression	passing-baseline-2026-06-15
+mul_implicit_negative_var	monadc.context.reader.sugar.implicit-mul	Negative number adjacent to variable becomes multiplication.	-3y	(* -3 y)			regression	passing-baseline-2026-06-15
+mul_implicit_binary_var	monadc.context.reader.sugar.implicit-mul	Binary literal adjacent to variable becomes multiplication.	0b1x	(* 0b1 x)			regression	passing-baseline-2026-06-15
+mul_implicit_octal_var	monadc.context.reader.sugar.implicit-mul	Octal literal adjacent to variable becomes multiplication.	0o7x	(* 0o7 x)			regression	passing-baseline-2026-06-15
 # ── Percentage Sugar ─────────────────────────────────────────────────────────
-percent_integer	monadc.context.reader.sugar.percent	Integer percentage becomes ratio over 100.	33%	33/100
-percent_fifty	monadc.context.reader.sugar.percent	50 percent becomes 50/100.	50%	50/100
-percent_float	monadc.context.reader.sugar.percent	Float percentage becomes ratio over 1000.	12.5%	125/1000
-percent_high_precision	monadc.context.reader.sugar.percent	High-precision float percentage.	99.9%	999/1000
-percent_small_decimal	monadc.context.reader.sugar.percent	Small decimal percentage.	0.5%	5/1000
-percent_negative	monadc.context.reader.sugar.percent	Negative percentage becomes negative ratio.	-33%	-33/100
+percent_integer	monadc.context.reader.sugar.percent	Integer percentage becomes ratio over 100.	33%	33/100			regression	passing-baseline-2026-06-15
+percent_fifty	monadc.context.reader.sugar.percent	50 percent becomes 50/100.	50%	50/100			regression	passing-baseline-2026-06-15
+percent_float	monadc.context.reader.sugar.percent	Float percentage becomes ratio over 1000.	12.5%	125/1000			regression	passing-baseline-2026-06-15
+percent_high_precision	monadc.context.reader.sugar.percent	High-precision float percentage.	99.9%	999/1000			regression	passing-baseline-2026-06-15
+percent_small_decimal	monadc.context.reader.sugar.percent	Small decimal percentage.	0.5%	5/1000			regression	passing-baseline-2026-06-15
+percent_negative	monadc.context.reader.sugar.percent	Negative percentage becomes negative ratio.	-33%	-33/100			regression	passing-baseline-2026-06-15
 # ── Periodic Decimal Sugar ───────────────────────────────────────────────────
-periodic_repeating_single	monadc.context.reader.sugar.periodic	Repeating single digit decimal becomes exact ratio.	0.(3)	3/9
-periodic_repeating_nine	monadc.context.reader.sugar.periodic	Repeating 9 decimal becomes exact ratio.	0.(9)	9/9
-periodic_repeating_multi	monadc.context.reader.sugar.periodic	Repeating multi-digit decimal becomes exact ratio.	0.(142857)	142857/999999
-periodic_repeating_two_digit	monadc.context.reader.sugar.periodic	Repeating two-digit decimal becomes exact ratio.	0.(01)	1/99
-periodic_integer_part	monadc.context.reader.sugar.periodic	Integer part with repeating decimal becomes exact ratio.	1.08(3)	975/900
-periodic_mixed_repeating	monadc.context.reader.sugar.periodic	Mixed non-repeating and repeating parts.	3.14(159)	313845/99900
+periodic_repeating_single	monadc.context.reader.sugar.periodic	Repeating single digit decimal becomes exact ratio.	0.(3)	3/9			regression	passing-baseline-2026-06-15
+periodic_repeating_nine	monadc.context.reader.sugar.periodic	Repeating 9 decimal becomes exact ratio.	0.(9)	9/9			regression	passing-baseline-2026-06-15
+periodic_repeating_multi	monadc.context.reader.sugar.periodic	Repeating multi-digit decimal becomes exact ratio.	0.(142857)	142857/999999			regression	passing-baseline-2026-06-15
+periodic_repeating_two_digit	monadc.context.reader.sugar.periodic	Repeating two-digit decimal becomes exact ratio.	0.(01)	1/99			regression	passing-baseline-2026-06-15
+periodic_integer_part	monadc.context.reader.sugar.periodic	Integer part with repeating decimal becomes exact ratio.	1.08(3)	975/900			regression	passing-baseline-2026-06-15
+periodic_mixed_repeating	monadc.context.reader.sugar.periodic	Mixed non-repeating and repeating parts.	3.14(159)	313845/99900			regression	passing-baseline-2026-06-15
 # ── Superscript Sugar ────────────────────────────────────────────────────────
-superscript_square	monadc.context.reader.sugar.superscript	Superscript ² becomes (^ x 2).	x²	(^ x 2)
-superscript_cube	monadc.context.reader.sugar.superscript	Superscript ³ becomes (^ x 3).	x³	(^ x 3)
-superscript_multi_digit	monadc.context.reader.sugar.superscript	Multi-digit superscript becomes (^ x 23).	x²³	(^ x 23)
+superscript_square	monadc.context.reader.sugar.superscript	Superscript ² becomes (^ x 2).	x²	(^ x 2)			regression	passing-baseline-2026-06-15
+superscript_cube	monadc.context.reader.sugar.superscript	Superscript ³ becomes (^ x 3).	x³	(^ x 3)			regression	passing-baseline-2026-06-15
+superscript_multi_digit	monadc.context.reader.sugar.superscript	Multi-digit superscript becomes (^ x 23).	x²³	(^ x 23)			regression	passing-baseline-2026-06-15
 # ── Postfix Index Sugar ─────────────────────────────────────────────────────
-postfix_index_array	monadc.context.reader.sugar.postfix-index	Postfix brackets become function call (arr index).	arr[0]	(arr 0)
-postfix_index_multi	monadc.context.reader.sugar.postfix-index	Postfix multi-index becomes multi-arg call.	mat[1 2]	(mat 1 2)
-postfix_index_three	monadc.context.reader.sugar.postfix-index	Postfix three-index becomes three-arg call.	arr[i j k]	(arr i j k)
-postfix_index_two	monadc.context.reader.sugar.postfix-index	Postfix two-index becomes two-arg call on symbol.	xs[0 1]	(xs 0 1)
+postfix_index_array	monadc.context.reader.sugar.postfix-index	Postfix brackets become function call (arr index).	arr[0]	(arr 0)			regression	passing-baseline-2026-06-15
+postfix_index_multi	monadc.context.reader.sugar.postfix-index	Postfix multi-index becomes multi-arg call.	mat[1 2]	(mat 1 2)			regression	passing-baseline-2026-06-15
+postfix_index_three	monadc.context.reader.sugar.postfix-index	Postfix three-index becomes three-arg call.	arr[i j k]	(arr i j k)			regression	passing-baseline-2026-06-15
+postfix_index_two	monadc.context.reader.sugar.postfix-index	Postfix two-index becomes two-arg call on symbol.	xs[0 1]	(xs 0 1)			regression	passing-baseline-2026-06-15
 # ── Postfix Call Sugar ──────────────────────────────────────────────────────
-postfix_call_unary	monadc.context.reader.sugar.postfix-call	Postfix parenthesized args become function call.	f(x)	(f x)
-postfix_call_binary	monadc.context.reader.sugar.postfix-call	Postfix with multiple args.	add(1 2)	(add 1 2)
-postfix_call_chained	monadc.context.reader.sugar.postfix-call	Chained postfix calls ((f a)(b)).	(f a)(b)	((f a) b)
-postfix_call_chained_multi	monadc.context.reader.sugar.postfix-call	Chained postfix calls with multi-args.	(g x)(y z)	((g x) y z)
+postfix_call_unary	monadc.context.reader.sugar.postfix-call	Postfix parenthesized args become function call.	f(x)	(f x)			regression	passing-baseline-2026-06-15
+postfix_call_binary	monadc.context.reader.sugar.postfix-call	Postfix with multiple args.	add(1 2)	(add 1 2)			regression	passing-baseline-2026-06-15
+postfix_call_chained	monadc.context.reader.sugar.postfix-call	Chained postfix calls ((f a)(b)).	(f a)(b)	((f a) b)			regression	passing-baseline-2026-06-15
+postfix_call_chained_multi	monadc.context.reader.sugar.postfix-call	Chained postfix calls with multi-args.	(g x)(y z)	((g x) y z)			regression	passing-baseline-2026-06-15
 # ── Dot Field Access Sugar ──────────────────────────────────────────────────
-dot_field_simple	monadc.context.reader.sugar.dot-access	Dot field access on expression parses.	obj.field	obj.field
-dot_field_chain	monadc.context.reader.sugar.dot-access	Chained dot field access parses.	obj.field.sub	obj.field.sub
+dot_field_simple	monadc.context.reader.sugar.dot-access	Dot field access on expression parses.	obj.field	obj.field			regression	passing-baseline-2026-06-15
+dot_field_chain	monadc.context.reader.sugar.dot-access	Chained dot field access parses.	obj.field.sub	obj.field.sub			regression	passing-baseline-2026-06-15
 # ── Assignment Sugar ────────────────────────────────────────────────────────
-assign_arrow	monadc.context.reader.sugar.assign-arrow	Left arrow becomes set! and returns value.	x <- 5	(set! x 5)
-assign_compound	monadc.context.reader.sugar.assign-arrow	Left arrow with compound expression.	x <- x + 1	(set! x (+ x 1))
+assign_arrow	monadc.context.reader.sugar.assign-arrow	Left arrow becomes set! and returns value.	x <- 5	(set! x 5)			regression	passing-baseline-2026-06-15
+assign_compound	monadc.context.reader.sugar.assign-arrow	Left arrow with compound expression.	x <- x + 1	(set! x (+ x 1))			regression	passing-baseline-2026-06-15
 # ── Pointer Type Sugar ──────────────────────────────────────────────────────
-ptr_type_single	monadc.context.reader.sugar.ptr-type	Single star expands to Pointer :: Type.	*Int	(Pointer :: Int)
-ptr_type_double	monadc.context.reader.sugar.ptr-type	Double star expands to Pointer :: Pointer :: Type.	**Int	
+ptr_type_single	monadc.context.reader.sugar.ptr-type	Single star expands to Pointer :: Type.	*Int	(Pointer :: Int)			regression	passing-baseline-2026-06-15
+ptr_type_double	monadc.context.reader.sugar.ptr-type	Double star expands to Pointer :: Pointer :: Type.	**Int				regression	passing-baseline-2026-06-15
 # ── Unicode Prefix Call Sugar ────────────────────────────────────────────────
-unicode_prefix_sqrt	monadc.context.reader.sugar.unicode-prefix	Unicode char adjacent to arg becomes prefix call.	√9	(√ 9)
-unicode_prefix_sin	monadc.context.reader.sugar.unicode-prefix	Greek prefix adjacent to arg is prefix call.	πx	(π x)
+unicode_prefix_sqrt	monadc.context.reader.sugar.unicode-prefix	Unicode char adjacent to arg becomes prefix call.	√9	(√ 9)			known-fail	quarantined-baseline-2026-06-15
+unicode_prefix_sin	monadc.context.reader.sugar.unicode-prefix	Greek prefix adjacent to arg is prefix call.	πx	(π x)			known-fail	quarantined-baseline-2026-06-15
 # ── Lambda Literal Sugar ────────────────────────────────────────────────────
-lambda_lit_identity	monadc.context.reader.sugar.lambda-lit	Lambda literal desugars to lambda expression.	λx.x	
-lambda_lit_curried	monadc.context.reader.sugar.lambda-lit	Curried lambda literal desugars.	λx.λy.+ x y	
+lambda_lit_identity	monadc.context.reader.sugar.lambda-lit	Lambda literal desugars to lambda expression.	λx.x				regression	passing-baseline-2026-06-15
+lambda_lit_curried	monadc.context.reader.sugar.lambda-lit	Curried lambda literal desugars.	λx.λy.+ x y				regression	passing-baseline-2026-06-15
 # ── Corner-Bracket Quasiquote Sugar ─────────────────────────────────────────
-quasiquote_corner_empty	monadc.context.reader.sugar.quasiquote-corner	Empty corner-bracket quasiquote.	⌜⌝	(quote ())
-quasiquote_corner_atoms	monadc.context.reader.sugar.quasiquote-corner	Quasiquote with multiple atoms.	⌜1 2 3⌝	(quote (1 2 3))
-quasiquote_corner_unquote	monadc.context.reader.sugar.quasiquote-corner	Quasiquote with unquote hole.	⌜1 2 ⌞+ 1 2⌟ 5⌝	
+quasiquote_corner_empty	monadc.context.reader.sugar.quasiquote-corner	Empty corner-bracket quasiquote.	⌜⌝	(quote ())			regression	passing-baseline-2026-06-15
+quasiquote_corner_atoms	monadc.context.reader.sugar.quasiquote-corner	Quasiquote with multiple atoms.	⌜1 2 3⌝	(quote (1 2 3))			regression	passing-baseline-2026-06-15
+quasiquote_corner_unquote	monadc.context.reader.sugar.quasiquote-corner	Quasiquote with unquote hole.	⌜1 2 ⌞+ 1 2⌟ 5⌝				regression	passing-baseline-2026-06-15
 # ── Cond-to-If Sugar ────────────────────────────────────────────────────────
-cond_simple_bracket	monadc.context.reader.sugar.cond-to-if	Cond with bracket syntax desugars to nested if.	(cond [(> 3 2) 1] [else 0])	(if (> 3 2) 1 0)
-cond_multi_body	monadc.context.reader.sugar.cond-to-if	Cond clause with multi body wraps in begin.	(cond [(> 3 2) 1 2] [else 0])	(if (> 3 2) (begin 1 2) 0)
-cond_arrow_fn	monadc.context.reader.sugar.cond-to-if	Cond with => calls test as function and applies.	(cond [even? => "even"] [else "odd"])	
+cond_simple_bracket	monadc.context.reader.sugar.cond-to-if	Cond with bracket syntax desugars to nested if.	(cond [(> 3 2) 1] [else 0])	(if (> 3 2) 1 0)			regression	passing-baseline-2026-06-15
+cond_multi_body	monadc.context.reader.sugar.cond-to-if	Cond clause with multi body wraps in begin.	(cond [(> 3 2) 1 2] [else 0])	(if (> 3 2) (begin 1 2) 0)			regression	passing-baseline-2026-06-15
+cond_arrow_fn	monadc.context.reader.sugar.cond-to-if	Cond with => calls test as function and applies.	(cond [even? => "even"] [else "odd"])				regression	passing-baseline-2026-06-15
 # ── Let Desugaring Sugar ────────────────────────────────────────────────────
-let_simple	monadc.context.reader.sugar.let-desugar	Let desugars to immediately-invoked lambda.	(let [x 1] x)	((lambda ([x]) x) 1)
-let_star	monadc.context.reader.sugar.let-desugar	Let* desugars to nested single-binding lets.	(let* [x 1] x)	((lambda ([x]) x) 1)
-let_rec	monadc.context.reader.sugar.let-desugar	Letrec desugars to defined bindings.	(letrec [even? (lambda (n) (if (= n 0) True (odd? (- n 1))))] (even? 10))	
+let_simple	monadc.context.reader.sugar.let-desugar	Let desugars to immediately-invoked lambda.	(let [x 1] x)	((lambda ([x]) x) 1)			regression	passing-baseline-2026-06-15
+let_star	monadc.context.reader.sugar.let-desugar	Let* desugars to nested single-binding lets.	(let* [x 1] x)	((lambda ([x]) x) 1)			regression	passing-baseline-2026-06-15
+let_rec	monadc.context.reader.sugar.let-desugar	Letrec desugars to defined bindings.	(letrec [even? (lambda (n) (if (= n 0) True (odd? (- n 1))))] (even? 10))				regression	passing-baseline-2026-06-15
 # ── Heap Array Sugar ────────────────────────────────────────────────────────
-heap_array_empty	monadc.context.reader.sugar.heap-array	Empty heap array literal marked with is_heap flag.	~[]	[]
-heap_array_numbers	monadc.context.reader.sugar.heap-array	Heap array literal with elements.	~[1 2 3]	[1 2 3]
-heap_array_nested	monadc.context.reader.sugar.heap-array	Nested heap array literal.	~[[1 2] [3 4]]	[[1 2] [3 4]]
+heap_array_empty	monadc.context.reader.sugar.heap-array	Empty heap array literal marked with is_heap flag.	~[]	[]			regression	passing-baseline-2026-06-15
+heap_array_numbers	monadc.context.reader.sugar.heap-array	Heap array literal with elements.	~[1 2 3]	[1 2 3]			regression	passing-baseline-2026-06-15
+heap_array_nested	monadc.context.reader.sugar.heap-array	Nested heap array literal.	~[[1 2] [3 4]]	[[1 2] [3 4]]			regression	passing-baseline-2026-06-15
 # ── Range Sugar ─────────────────────────────────────────────────────────────
-range_array_closed	monadc.context.reader.sugar.range-sugar	Closed array range.	[0..10]	[0..10]
-range_array_step	monadc.context.reader.sugar.range-sugar	Stepped array range.	[1,3..9]	[1,3..9]
-range_list_infinite	monadc.context.reader.sugar.range-sugar	Infinite list range.	(0..)	(0..)
+range_array_closed	monadc.context.reader.sugar.range-sugar	Closed array range.	[0..10]	[0..10]			regression	passing-baseline-2026-06-15
+range_array_step	monadc.context.reader.sugar.range-sugar	Stepped array range.	[1,3..9]	[1,3..9]			regression	passing-baseline-2026-06-15
+range_list_infinite	monadc.context.reader.sugar.range-sugar	Infinite list range.	(0..)	(0..)			regression	passing-baseline-2026-06-15
 # ── Quote Sugar ──────────────────────────────────────────────────────────────
-quote_short_symbol	monadc.context.reader.sugar.quote	Quote shorthand desugars to (quote symbol).	'x	(quote x)
-quote_short_list	monadc.context.reader.sugar.quote	Quote shorthand for list.	'(1 2 3)	(quote (1 2 3))
+quote_short_symbol	monadc.context.reader.sugar.quote	Quote shorthand desugars to (quote symbol).	'x	(quote x)			regression	passing-baseline-2026-06-15
+quote_short_list	monadc.context.reader.sugar.quote	Quote shorthand for list.	'(1 2 3)	(quote (1 2 3))			regression	passing-baseline-2026-06-15
 # ── Address-Of Sugar ────────────────────────────────────────────────────────
-address_of_var	monadc.context.reader.sugar.address-of	Ampersand adjacent to symbol is address-of.	&x	&x
-address_of_field	monadc.context.reader.sugar.address-of	Address-of layout field.	&obj.field	&obj.field
-address_of_field_dotted	monadc.context.reader.sugar.address-of	Address-of dotted layout field.	&f.x	&f.x
+address_of_var	monadc.context.reader.sugar.address-of	Ampersand adjacent to symbol is address-of.	&x	&x			regression	passing-baseline-2026-06-15
+address_of_field	monadc.context.reader.sugar.address-of	Address-of layout field.	&obj.field	&obj.field			regression	passing-baseline-2026-06-15
+address_of_field_dotted	monadc.context.reader.sugar.address-of	Address-of dotted layout field.	&f.x	&f.x			regression	passing-baseline-2026-06-15
 # ── Path Literal Sugar ──────────────────────────────────────────────────────
 # NOTE: ../parent/dir paths are not supported -- the lexer parses '..' as
 # TOK_DOTDOT (range operator). Only ~/, /, and ./ prefixes trigger path literals.
-path_home_relative	monadc.context.reader.sugar.path-literal	Home-relative path literal.	~/projects/code	~/projects/code
-path_deep_home	monadc.context.reader.sugar.path-literal	Deep home-relative path literal.	~/path/with/many/parts	~/path/with/many/parts
-path_absolute	monadc.context.reader.sugar.path-literal	Absolute path literal.	/tmp/file	/tmp/file
-path_dot_relative	monadc.context.reader.sugar.path-literal	Dot-relative path literal.	./relative/path	./relative/path
-path_deep_dot	monadc.context.reader.sugar.path-literal	Deep dot-relative path literal.	./path/to/file	./path/to/file
-path_deep_relative	monadc.context.reader.sugar.path-literal	Nested relative path literal.	./deep/relative/path	./deep/relative/path
+path_home_relative	monadc.context.reader.sugar.path-literal	Home-relative path literal.	~/projects/code	~/projects/code			regression	passing-baseline-2026-06-15
+path_deep_home	monadc.context.reader.sugar.path-literal	Deep home-relative path literal.	~/path/with/many/parts	~/path/with/many/parts			regression	passing-baseline-2026-06-15
+path_absolute	monadc.context.reader.sugar.path-literal	Absolute path literal.	/tmp/file	/tmp/file			regression	passing-baseline-2026-06-15
+path_dot_relative	monadc.context.reader.sugar.path-literal	Dot-relative path literal.	./relative/path	./relative/path			regression	passing-baseline-2026-06-15
+path_deep_dot	monadc.context.reader.sugar.path-literal	Deep dot-relative path literal.	./path/to/file	./path/to/file			regression	passing-baseline-2026-06-15
+path_deep_relative	monadc.context.reader.sugar.path-literal	Nested relative path literal.	./deep/relative/path	./deep/relative/path			regression	passing-baseline-2026-06-15
 # ── Size-Literal Array Sugar ────────────────────────────────────────────────
-size_array_kb	monadc.context.reader.sugar.size-array	[16kb] desugars to [16384 U8] array.	define buf :: [16kb]	(define (buf :: Arr :: 16384 :: U8) [])
-size_array_mb	monadc.context.reader.sugar.size-array	[16mb] desugars to size with multiplier.	define buf :: [16mb]	(define (buf :: Arr :: 16777216 :: U8) [])
-size_array_typed	monadc.context.reader.sugar.size-array	[16kb I32] desugars to sized I32 array.	define buf :: [16kb I32]	(define (buf :: Arr :: 4096 :: I32) [])
-size_array_kb_I64	monadc.context.reader.sugar.size-array	[16kb I64] desugars to sized I64 array.	define buf :: [16kb I64]	(define (buf :: Arr :: 2048 :: I64) [])
-size_array_1kb	monadc.context.reader.sugar.size-array	[1kb] desugars to [1024 U8] array.	define buf :: [1kb]	(define (buf :: Arr :: 1024 :: U8) [])
-size_array_4kb_I16	monadc.context.reader.sugar.size-array	[4kb I16] desugars to sized I16 array.	define buf :: [4kb I16]	(define (buf :: Arr :: 2048 :: I16) [])
+size_array_kb	monadc.context.reader.sugar.size-array	[16kb] desugars to [16384 U8] array.	define buf :: [16kb]	(define (buf :: Arr :: 16384 :: U8) [])			regression	passing-baseline-2026-06-15
+size_array_mb	monadc.context.reader.sugar.size-array	[16mb] desugars to size with multiplier.	define buf :: [16mb]	(define (buf :: Arr :: 16777216 :: U8) [])			regression	passing-baseline-2026-06-15
+size_array_typed	monadc.context.reader.sugar.size-array	[16kb I32] desugars to sized I32 array.	define buf :: [16kb I32]	(define (buf :: Arr :: 4096 :: I32) [])			regression	passing-baseline-2026-06-15
+size_array_kb_I64	monadc.context.reader.sugar.size-array	[16kb I64] desugars to sized I64 array.	define buf :: [16kb I64]	(define (buf :: Arr :: 2048 :: I64) [])			regression	passing-baseline-2026-06-15
+size_array_1kb	monadc.context.reader.sugar.size-array	[1kb] desugars to [1024 U8] array.	define buf :: [1kb]	(define (buf :: Arr :: 1024 :: U8) [])			regression	passing-baseline-2026-06-15
+size_array_4kb_I16	monadc.context.reader.sugar.size-array	[4kb I16] desugars to sized I16 array.	define buf :: [4kb I16]	(define (buf :: Arr :: 2048 :: I16) [])			regression	passing-baseline-2026-06-15
 # ── Wisp For Sugar ──────────────────────────────────────────────────────────
-wisp_for_forward	monadc.context.wisp.sugar.for-sugar	Wisp for with -> forward iteration desugars.	for c -> "hello"\n  show c	
-wisp_for_backward	monadc.context.wisp.sugar.for-sugar	Wisp for with <- backward iteration desugars.	for c <- "olleh"\n  show c	
+wisp_for_forward	monadc.context.wisp.sugar.for-sugar	Wisp for with -> forward iteration desugars.	for c -> "hello"\n  show c				regression	passing-baseline-2026-06-15
+wisp_for_backward	monadc.context.wisp.sugar.for-sugar	Wisp for with <- backward iteration desugars.	for c <- "olleh"\n  show c				regression	passing-baseline-2026-06-15
 # ── Wisp If Sugar ───────────────────────────────────────────────────────────
-wisp_if_indented	monadc.context.wisp.sugar.if-sugar	Wisp indented if/then/else desugars.	if cond\n  then-branch\nelse\n  else-branch	
-wisp_if_inline	monadc.context.wisp.sugar.if-sugar	Wisp inline if/then/else desugars.	if cond then then-branch else else-branch	
+wisp_if_indented	monadc.context.wisp.sugar.if-sugar	Wisp indented if/then/else desugars.	if cond\n  then-branch\nelse\n  else-branch				regression	passing-baseline-2026-06-15
+wisp_if_inline	monadc.context.wisp.sugar.if-sugar	Wisp inline if/then/else desugars.	if cond then then-branch else else-branch				regression	passing-baseline-2026-06-15
 # ── Wisp Where Clause Sugar ─────────────────────────────────────────────────
-wisp_where_value	monadc.context.wisp.sugar.where	Wisp where clause binds local values.	define f x -> result where result = x + 1	
-wisp_where_fn	monadc.context.wisp.sugar.where	Wisp where clause with function binding.	define sqrt x -> good x / 2 where good g = g * g	
+wisp_where_value	monadc.context.wisp.sugar.where	Wisp where clause binds local values.	define f x -> result where result = x + 1				regression	passing-baseline-2026-06-15
+wisp_where_fn	monadc.context.wisp.sugar.where	Wisp where clause with function binding.	define sqrt x -> good x / 2 where good g = g * g				regression	passing-baseline-2026-06-15
 # ── Wisp Arrow-Clause Sugar ──────────────────────────────────────────────────
-wisp_arrow_single	monadc.context.wisp.sugar.arrow-clause	Wisp arrow clause desugars to lambda.	x -> x + 1	
-wisp_arrow_pattern	monadc.context.wisp.sugar.arrow-clause	Wisp arrow clause with pattern matching.	[] -> nil | [x] -> x	
+wisp_arrow_single	monadc.context.wisp.sugar.arrow-clause	Wisp arrow clause desugars to lambda.	x -> x + 1				regression	passing-baseline-2026-06-15
+wisp_arrow_pattern	monadc.context.wisp.sugar.arrow-clause	Wisp arrow clause with pattern matching.	[] -> nil | [x] -> x				regression	passing-baseline-2026-06-15
 # ── Wisp Def Sugar ──────────────────────────────────────────────────────────
-wisp_def_simple	monadc.context.wisp.sugar.def	Wisp def shorthand desugars to define.	define x 42	(define x 42)
+wisp_def_simple	monadc.context.wisp.sugar.def	Wisp def shorthand desugars to define.	define x 42	(define x 42)			regression	passing-baseline-2026-06-15
 # ── Wisp Guard Sugar ────────────────────────────────────────────────────────
 # NOTE: Guard syntax (define f x | cond -> body) is defined in the reader but
 # the wisp expander does not yet handle | as a guard separator in define forms.
 # These entries are reserved for when guard support lands in wisp output.
 # ── Infix Sugar ──────────────────────────────────────────────────────────────
-infix_arithmetic	monadc.context.reader.sugar.infix	Infix a + b rewrites to (+ a b).	3 + 4	(+ 3 4)
-infix_subtract	monadc.context.reader.sugar.infix	Infix a - b rewrites to (- a b).	3 - 1	(- 3 1)
-infix_divide	monadc.context.reader.sugar.infix	Infix a / b rewrites to (/ a b).	10 / 2	(/ 10 2)
-infix_chain	monadc.context.reader.sugar.infix	Infix operator chaining with precedence.	3 + 4 * 5	(+ 3 (* 4 5))
-infix_comparison	monadc.context.reader.sugar.infix	Infix comparison operators.	x >= 0	(>= x 0)
-infix_function	monadc.context.reader.sugar.infix	Infix backtick-like function call.	newcomers into players	
+infix_arithmetic	monadc.context.reader.sugar.infix	Infix a + b rewrites to (+ a b).	3 + 4	(+ 3 4)			regression	passing-baseline-2026-06-15
+infix_subtract	monadc.context.reader.sugar.infix	Infix a - b rewrites to (- a b).	3 - 1	(- 3 1)			regression	passing-baseline-2026-06-15
+infix_divide	monadc.context.reader.sugar.infix	Infix a / b rewrites to (/ a b).	10 / 2	(/ 10 2)			regression	passing-baseline-2026-06-15
+infix_chain	monadc.context.reader.sugar.infix	Infix operator chaining with precedence.	3 + 4 * 5	(+ 3 (* 4 5))			regression	passing-baseline-2026-06-15
+infix_comparison	monadc.context.reader.sugar.infix	Infix comparison operators.	x >= 0	(>= x 0)			regression	passing-baseline-2026-06-15
+infix_function	monadc.context.reader.sugar.infix	Infix backtick-like function call.	newcomers into players				regression	passing-baseline-2026-06-15
 # ── Pipe and Dot Expression Sugar ───────────────────────────────────────────
-pipe_cons	monadc.context.reader.sugar.pipe	Pipe cons desugars to (cons x xs).	x | xs	
-pipe_app	monadc.context.reader.sugar.pipe	Pipe app desugars to (f x).	x |> f	
-pipe_rev_cons	monadc.context.reader.sugar.pipe	Reverse pipe cons parses.	| x xs	
-dot_field_expr	monadc.context.reader.sugar.dot-access	Dot field as expression parses.	obj.field	obj.field
+pipe_cons	monadc.context.reader.sugar.pipe	Pipe cons desugars to (cons x xs).	x | xs				regression	passing-baseline-2026-06-15
+pipe_app	monadc.context.reader.sugar.pipe	Pipe app desugars to (f x).	x |> f				regression	passing-baseline-2026-06-15
+pipe_rev_cons	monadc.context.reader.sugar.pipe	Reverse pipe cons parses.	| x xs				regression	passing-baseline-2026-06-15
+dot_field_expr	monadc.context.reader.sugar.dot-access	Dot field as expression parses.	obj.field	obj.field			regression	passing-baseline-2026-06-15
 # ── Feature Conditional Sugar ────────────────────────────────────────────────
-feature_cond_active	monadc.context.reader.sugar.feature-cond	Active #+ feature conditional keeps inner expr.	#+LINUX\n42\n#---	42
-feature_cond_inactive	monadc.context.reader.sugar.feature-cond	Inactive #+ feature conditional strips inner expr.	#+WINDOWS\n99\n#---\n42	42
+feature_cond_active	monadc.context.reader.sugar.feature-cond	Active #+ feature conditional keeps inner expr.	#+LINUX\n42\n#---	42			regression	passing-baseline-2026-06-15
+feature_cond_inactive	monadc.context.reader.sugar.feature-cond	Inactive #+ feature conditional strips inner expr.	#+WINDOWS\n99\n#---\n42	42			regression	passing-baseline-2026-06-15
 # ── Additional Infix Sugar ──────────────────────────────────────────────────
 # NOTE: Infix operators at reader level are handled by the wisp transformer,
 # not by the reader desugarer. These tests verify parsing succeeds (parse-json).
-infix_modulo	monadc.context.reader.sugar.infix	Infix modulo parses correctly.	10 % 3	
-infix_power	monadc.context.reader.sugar.infix	Infix power parses correctly.	2 ^ 10	
-infix_compare_eq	monadc.context.reader.sugar.infix	Infix == parses correctly.	3 == 3	
-infix_compare_ne	monadc.context.reader.sugar.infix	Infix != parses correctly.	3 != 4	
-infix_compare_lte	monadc.context.reader.sugar.infix	Infix <= parses correctly.	x <= 5	
-infix_compare_gte	monadc.context.reader.sugar.infix	Infix >= parses correctly.	x >= 0	
-infix_compare_lt	monadc.context.reader.sugar.infix	Infix < parses correctly.	x < 10	
-infix_compare_gt	monadc.context.reader.sugar.infix	Infix > parses correctly.	x > 0	
-infix_and	monadc.context.reader.sugar.infix	Infix && parses correctly.	True && False	
-infix_or	monadc.context.reader.sugar.infix	Infix || parses correctly.	True || False	
+infix_modulo	monadc.context.reader.sugar.infix	Infix modulo parses correctly.	10 % 3				regression	passing-baseline-2026-06-15
+infix_power	monadc.context.reader.sugar.infix	Infix power parses correctly.	2 ^ 10				regression	passing-baseline-2026-06-15
+infix_compare_eq	monadc.context.reader.sugar.infix	Infix == parses correctly.	3 == 3				regression	passing-baseline-2026-06-15
+infix_compare_ne	monadc.context.reader.sugar.infix	Infix != parses correctly.	3 != 4				regression	passing-baseline-2026-06-15
+infix_compare_lte	monadc.context.reader.sugar.infix	Infix <= parses correctly.	x <= 5				regression	passing-baseline-2026-06-15
+infix_compare_gte	monadc.context.reader.sugar.infix	Infix >= parses correctly.	x >= 0				regression	passing-baseline-2026-06-15
+infix_compare_lt	monadc.context.reader.sugar.infix	Infix < parses correctly.	x < 10				regression	passing-baseline-2026-06-15
+infix_compare_gt	monadc.context.reader.sugar.infix	Infix > parses correctly.	x > 0				regression	passing-baseline-2026-06-15
+infix_and	monadc.context.reader.sugar.infix	Infix && parses correctly.	True && False				regression	passing-baseline-2026-06-15
+infix_or	monadc.context.reader.sugar.infix	Infix || parses correctly.	True || False				regression	passing-baseline-2026-06-15
 # ── More Implicit Multiplication ────────────────────────────────────────────
 # NOTE: Greek-letter implicit multiplication (πx → (* π x)) is not yet supported
 # by the reader. These parse as prefix calls instead. Keep as parse-json.
-mul_implicit_pi	monadc.context.reader.sugar.implicit-mul	Unicode pi prefix parses.	πx	
-mul_implicit_greek_var	monadc.context.reader.sugar.implicit-mul	Greek letter prefix parses.	αx	
-mul_implicit_sci_float	monadc.context.reader.sugar.implicit-mul	Float with variable prefix becomes multiplication.	2.5x	(* 2.5 x)
+mul_implicit_pi	monadc.context.reader.sugar.implicit-mul	Unicode pi prefix parses.	πx				regression	passing-baseline-2026-06-15
+mul_implicit_greek_var	monadc.context.reader.sugar.implicit-mul	Greek letter prefix parses.	αx				regression	passing-baseline-2026-06-15
+mul_implicit_sci_float	monadc.context.reader.sugar.implicit-mul	Float with variable prefix becomes multiplication.	2.5x	(* 2.5 x)			regression	passing-baseline-2026-06-15
 # ── More Superscript Sugar ─────────────────────────────────────────────────
-superscript_power_mixed	monadc.context.reader.sugar.superscript	Mixed digit superscripts become chain.	x²⁰	(^ x 20)
-superscript_var_square	monadc.context.reader.sugar.superscript	Variable superscript with identifier.	y²	(^ y 2)
+superscript_power_mixed	monadc.context.reader.sugar.superscript	Mixed digit superscripts become chain.	x²⁰	(^ x 20)			regression	passing-baseline-2026-06-15
+superscript_var_square	monadc.context.reader.sugar.superscript	Variable superscript with identifier.	y²	(^ y 2)			regression	passing-baseline-2026-06-15
 # ── More Pointer Type Sugar ─────────────────────────────────────────────────
-ptr_type_triple	monadc.context.reader.sugar.ptr-type	Triple star expands to Pointer :: Pointer :: Pointer :: Type.	***Int	
-ptr_type_mixed	monadc.context.reader.sugar.ptr-type	Pointer to U8 sugar.	*U8	
+ptr_type_triple	monadc.context.reader.sugar.ptr-type	Triple star expands to Pointer :: Pointer :: Pointer :: Type.	***Int				regression	passing-baseline-2026-06-15
+ptr_type_mixed	monadc.context.reader.sugar.ptr-type	Pointer to U8 sugar.	*U8				regression	passing-baseline-2026-06-15
 # ── More Unicode Prefix Call Sugar ──────────────────────────────────────────
-unicode_prefix_delta	monadc.context.reader.sugar.unicode-prefix	Delta prefix becomes prefix call.	δx	(δ x)
-unicode_prefix_gamma	monadc.context.reader.sugar.unicode-prefix	Gamma prefix becomes prefix call.	γx	(γ x)
-unicode_prefix_omega	monadc.context.reader.sugar.unicode-prefix	Omega prefix becomes prefix call.	ωx	(ω x)
-unicode_prefix_sigma	monadc.context.reader.sugar.unicode-prefix	Sigma prefix becomes prefix call.	Σx	(Σ x)
+unicode_prefix_delta	monadc.context.reader.sugar.unicode-prefix	Delta prefix becomes prefix call.	δx	(δ x)			known-fail	quarantined-baseline-2026-06-15
+unicode_prefix_gamma	monadc.context.reader.sugar.unicode-prefix	Gamma prefix becomes prefix call.	γx	(γ x)			known-fail	quarantined-baseline-2026-06-15
+unicode_prefix_omega	monadc.context.reader.sugar.unicode-prefix	Omega prefix becomes prefix call.	ωx	(ω x)			known-fail	quarantined-baseline-2026-06-15
+unicode_prefix_sigma	monadc.context.reader.sugar.unicode-prefix	Sigma prefix becomes prefix call.	Σx	(Σ x)			known-fail	quarantined-baseline-2026-06-15
 # ── More Percentage Sugar ──────────────────────────────────────────────────
-percent_one_hundred	monadc.context.reader.sugar.percent	100 percent becomes 100/100.	100%	100/100
-percent_zero	monadc.context.reader.sugar.percent	0 percent becomes 0/100.	0%	0/100
-percent_large_number	monadc.context.reader.sugar.percent	Large number percentage.	999%	999/100
+percent_one_hundred	monadc.context.reader.sugar.percent	100 percent becomes 100/100.	100%	100/100			regression	passing-baseline-2026-06-15
+percent_zero	monadc.context.reader.sugar.percent	0 percent becomes 0/100.	0%	0/100			regression	passing-baseline-2026-06-15
+percent_large_number	monadc.context.reader.sugar.percent	Large number percentage.	999%	999/100			regression	passing-baseline-2026-06-15
 # ── More Periodic Decimal Sugar ────────────────────────────────────────────
-periodic_zero_repeating	monadc.context.reader.sugar.periodic	0 with repeating digit becomes exact ratio.	0.(0)	0/9
-periodic_one_repeating	monadc.context.reader.sugar.periodic	0 with repeating 1 becomes exact ratio.	0.(1)	1/9
-periodic_two_digit_repeat	monadc.context.reader.sugar.periodic	Two-digit repeating block.	0.(12)	12/99
+periodic_zero_repeating	monadc.context.reader.sugar.periodic	0 with repeating digit becomes exact ratio.	0.(0)	0/9			regression	passing-baseline-2026-06-15
+periodic_one_repeating	monadc.context.reader.sugar.periodic	0 with repeating 1 becomes exact ratio.	0.(1)	1/9			regression	passing-baseline-2026-06-15
+periodic_two_digit_repeat	monadc.context.reader.sugar.periodic	Two-digit repeating block.	0.(12)	12/99			regression	passing-baseline-2026-06-15
 # ── More Pipe Sugar ────────────────────────────────────────────────────────
 # NOTE: Pipe chains are wisp-level sugar, not reader desugaring.
 # These tests verify parsing succeeds (parse-json).
-pipe_chain_three	monadc.context.reader.sugar.pipe	Three-stage pipe chain parses.	x |> f |> g |> h	
-pipe_chain_map_filter	monadc.context.reader.sugar.pipe	Pipe through map and filter parses.	xs |> map f |> filter p	
+pipe_chain_three	monadc.context.reader.sugar.pipe	Three-stage pipe chain parses.	x |> f |> g |> h				regression	passing-baseline-2026-06-15
+pipe_chain_map_filter	monadc.context.reader.sugar.pipe	Pipe through map and filter parses.	xs |> map f |> filter p				regression	passing-baseline-2026-06-15
 # ── More Assignment Arrow ───────────────────────────────────────────────────
-assign_arrow_self	monadc.context.reader.sugar.assign-arrow	Set! self-increment.	x <- x + 1	(set! x (+ x 1))
-assign_arrow_field	monadc.context.reader.sugar.assign-arrow	Set! struct field uses dot notation.	p.x <- 5	(set! p.x 5)
+assign_arrow_self	monadc.context.reader.sugar.assign-arrow	Set! self-increment.	x <- x + 1	(set! x (+ x 1))			regression	passing-baseline-2026-06-15
+assign_arrow_field	monadc.context.reader.sugar.assign-arrow	Set! struct field uses dot notation.	p.x <- 5	(set! p.x 5)			regression	passing-baseline-2026-06-15
 # ── More Dot Field Access ──────────────────────────────────────────────────
-dot_field_nested_expr	monadc.context.reader.sugar.dot-access	Nested field access on result of call.	get-obj().field	
-dot_field_parenthesized	monadc.context.reader.sugar.dot-access	Field access on parenthesized expr.	(obj.expr).field	
+dot_field_nested_expr	monadc.context.reader.sugar.dot-access	Nested field access on result of call.	get-obj().field				regression	passing-baseline-2026-06-15
+dot_field_parenthesized	monadc.context.reader.sugar.dot-access	Field access on parenthesized expr.	(obj.expr).field				regression	passing-baseline-2026-06-15
 # ── More Quasiquote Corner Sugar ────────────────────────────────────────────
-quasiquote_unquote_splicing_var	monadc.context.reader.sugar.quasiquote-corner	Unquote bracket outside quasiquote is rejected.	⌞xs⌟	fail:compile	Unquote bracket used outside of a quasiquote block
-quasiquote_nested_unquote	monadc.context.reader.sugar.quasiquote-corner	Quasiquote with nested unquote.	⌜⌞x⌟⌝	
+quasiquote_unquote_splicing_var	monadc.context.reader.sugar.quasiquote-corner	Unquote bracket outside quasiquote is rejected.	⌞xs⌟	fail:compile	Unquote bracket used outside of a quasiquote block		regression	passing-baseline-2026-06-15
+quasiquote_nested_unquote	monadc.context.reader.sugar.quasiquote-corner	Quasiquote with nested unquote.	⌜⌞x⌟⌝				regression	passing-baseline-2026-06-15
 # ── More Cond Desugaring ───────────────────────────────────────────────────
-cond_three_ifs	monadc.context.reader.sugar.cond-to-if	Cond with three clauses desugars to nested if.	(cond [(> x 0) 1] [(< x 0) -1] [else 0])	
-cond_mixed_bodies	monadc.context.reader.sugar.cond-to-if	Cond with mixed single and multi-body clauses.	(cond [a 1] [b 2 3] [else 0])	
+cond_three_ifs	monadc.context.reader.sugar.cond-to-if	Cond with three clauses desugars to nested if.	(cond [(> x 0) 1] [(< x 0) -1] [else 0])				regression	passing-baseline-2026-06-15
+cond_mixed_bodies	monadc.context.reader.sugar.cond-to-if	Cond with mixed single and multi-body clauses.	(cond [a 1] [b 2 3] [else 0])				regression	passing-baseline-2026-06-15
 # ── More Let Desugaring ────────────────────────────────────────────────────
-let_multi_binding	monadc.context.reader.sugar.let-desugar	Let with multiple bindings desugars.	(let [x 1 y 2] (+ x y))	
-let_star_chain	monadc.context.reader.sugar.let-desugar	Let* with chained bindings using previous.	(let* [x 1 y (+ x 1)] (+ x y))	
-let_rec_mutual	monadc.context.reader.sugar.let-desugar	Letrec with mutually recursive bindings.	(letrec [even? (lambda (n) (if (= n 0) True (odd? (- n 1)))) odd? (lambda (n) (= n 0) False (even? (- n 1)))] (even? 10))	
+let_multi_binding	monadc.context.reader.sugar.let-desugar	Let with multiple bindings desugars.	(let [x 1 y 2] (+ x y))				known-fail	quarantined-baseline-2026-06-15
+let_star_chain	monadc.context.reader.sugar.let-desugar	Let* with chained bindings using previous.	(let* [x 1 y (+ x 1)] (+ x y))				known-fail	quarantined-baseline-2026-06-15
+let_rec_mutual	monadc.context.reader.sugar.let-desugar	Letrec with mutually recursive bindings.	(letrec [even? (lambda (n) (if (= n 0) True (odd? (- n 1)))) odd? (lambda (n) (= n 0) False (even? (- n 1)))] (even? 10))				known-fail	quarantined-baseline-2026-06-15
 # ── More Size-Array Sugar ──────────────────────────────────────────────────
-size_array_1mb_U32	monadc.context.reader.sugar.size-array	[1mb U32] desugars to sized array.	define buf :: [1mb U32]	
-size_array_512_U16	monadc.context.reader.sugar.size-array	[512 U16] desugars via size literal.	define buf :: [512 U16]	
-size_array_gb_approx	monadc.context.reader.sugar.size-array	[1gb] is rejected as too large for static x86-64 allocation.	define buf :: [1gb]	fail:compile	Static array 'buf' is too large to allocate on x86-64
-size_array_tb_approx	monadc.context.reader.sugar.size-array	[1tb] is rejected as too large for static x86-64 allocation.	define buf :: [1tb]	fail:compile	Static array 'buf' is too large to allocate on x86-64
+size_array_1mb_U32	monadc.context.reader.sugar.size-array	[1mb U32] desugars to sized array.	define buf :: [1mb U32]				regression	passing-baseline-2026-06-15
+size_array_512_U16	monadc.context.reader.sugar.size-array	[512 U16] desugars via size literal.	define buf :: [512 U16]				regression	passing-baseline-2026-06-15
+size_array_gb_approx	monadc.context.reader.sugar.size-array	[1gb] is rejected as too large for static x86-64 allocation.	define buf :: [1gb]	fail:compile	Static array 'buf' is too large to allocate on x86-64		regression	passing-baseline-2026-06-15
+size_array_tb_approx	monadc.context.reader.sugar.size-array	[1tb] is rejected as too large for static x86-64 allocation.	define buf :: [1tb]	fail:compile	Static array 'buf' is too large to allocate on x86-64		regression	passing-baseline-2026-06-15

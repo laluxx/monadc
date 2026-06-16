@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.deep.deep_bitwise_result_feeds_comparison
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-SUBSET: bitwise
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.20.operators.bitwise.deep.bitwise.result.feeds.comparison
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise bitwise operations consumed by equality comparisons.
+;; TEST-ATOM: Bitwise integer results should remain comparable.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.20.operators, atom.codegen.subset.bitwise
+;; TEST-COVERAGE: codegen.c:bitwise output to comparison dispatch
+;; TEST-MENU: branches/operators/bitwise/atom.codegen.20.operators.bitwise.deep.bitwise.result.feeds.comparison
+;; TEST-MENU-PATH: codegen/branches/operators/bitwise/atom.codegen.20.operators.bitwise.deep.bitwise.result.feeds.comparison
+;; TEST-ATOM-LEAF: atom.codegen.20.operators.bitwise.deep.bitwise.result.feeds.comparison
+;; TEST-CLI-TARGET: codegen branches operators bitwise
+
+(module Main)
+(show (= (& 15 3) 3))
+(show (= (bit-xor 6 3) 5))

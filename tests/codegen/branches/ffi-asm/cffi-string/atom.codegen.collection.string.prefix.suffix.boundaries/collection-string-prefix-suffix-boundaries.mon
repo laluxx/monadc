@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.branch.collection-string-prefix-suffix-boundaries
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: cffi-string
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 70-ffi-asm
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.collection.string.prefix.suffix.boundaries
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover starts-with? and ends-with? positive, negative, and empty-boundary branches.
+;; TEST-ATOM: String boundary predicates should use strncmp with correct offsets and lengths.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:8620-8682 starts-with?/ends-with? branches
+
+;; TEST-USES-ATOM: atom.codegen.category.70.ffi.asm
+;; TEST-MENU: branches/ffi-asm/cffi-string/atom.codegen.collection.string.prefix.suffix.boundaries
+;; TEST-MENU-PATH: codegen/branches/ffi-asm/cffi-string/atom.codegen.collection.string.prefix.suffix.boundaries
+;; TEST-ATOM-LEAF: atom.codegen.collection.string.prefix.suffix.boundaries
+;; TEST-CLI-TARGET: codegen branches ffi-asm cffi-string
+(module Main)
+(show (starts-with? "monadc" "mon"))
+(show (starts-with? "monadc" "adc"))
+(show (ends-with? "monadc" "adc"))
+(show (ends-with? "monadc" "mon"))
+(show (starts-with? "" ""))
+(show (ends-with? "" ""))

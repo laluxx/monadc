@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-not-comparison
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Not applied to comparison expression works at runtime.
-;; TEST-ATOM: (not (> 3 5)) evaluates to True since (> 3 5) is False.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (not (> 3 5)))

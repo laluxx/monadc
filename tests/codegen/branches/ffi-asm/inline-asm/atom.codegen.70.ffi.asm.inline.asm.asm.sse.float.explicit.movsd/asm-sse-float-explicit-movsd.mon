@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.asm.sse-float-explicit-movsd
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.70.ffi.asm.inline.asm.asm.sse.float.explicit.movsd
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: inline-asm
+;; TEST-CATEGORY: 70-ffi-asm
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Float identity with explicit movsd covers SSE operand formatting.
+;; TEST-ATOM: movsd x %xmm0 ret returns the original float.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:70-ffi-asm/inline-asm branch family
+;; TEST-USES-ATOM: atom.codegen.category.70.ffi.asm
+;; TEST-MENU: branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.sse.float.explicit.movsd
+;; TEST-MENU-PATH: codegen/branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.sse.float.explicit.movsd
+;; TEST-ATOM-LEAF: atom.codegen.70.ffi.asm.inline.asm.asm.sse.float.explicit.movsd
+;; TEST-CLI-TARGET: codegen branches ffi-asm inline-asm
+module AsmTest
+
+define asm-float-mov :: Float -> Float
+  x -> (asm movsd x %xmm0 ret)
+
+show (asm-float-mov 3.25)

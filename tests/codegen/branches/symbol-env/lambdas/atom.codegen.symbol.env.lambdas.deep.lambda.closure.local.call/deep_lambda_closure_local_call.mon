@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.deep.deep_lambda_closure_local_call
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SUBSET: lambdas
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.symbol.env.lambdas.deep.lambda.closure.local.call
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise lambda literal lowering and immediate typed lambda call.
+;; TEST-ATOM: Lambda values should compile to callable functions with typed params.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:AST_LAMBDA function emission
+
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/lambdas/atom.codegen.symbol.env.lambdas.deep.lambda.closure.local.call
+;; TEST-MENU-PATH: codegen/branches/symbol-env/lambdas/atom.codegen.symbol.env.lambdas.deep.lambda.closure.local.call
+;; TEST-ATOM-LEAF: atom.codegen.symbol.env.lambdas.deep.lambda.closure.local.call
+;; TEST-CLI-TARGET: codegen branches symbol-env lambdas
+(module Main)
+(define inc (lambda ([x : Int] -> Int) (+ x 1)))
+(show (inc 41))
+(show ((lambda ([x : Int] [y : Int] -> Int) (+ x y)) 4 5))

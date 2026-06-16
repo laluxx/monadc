@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-codegen-err-empty-list
-;; TEST-SECTION: diagnostic
-;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
-;; TEST-PURPOSE: Codegen rejects empty list forms.
-;; TEST-ATOM: () must fail with empty list not supported.
-;; TEST-EXPECT: fail:compile
-
-(module Main)
-()

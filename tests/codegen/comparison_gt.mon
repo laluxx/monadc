@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.comparison-gt
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Greater-than operator evaluates at runtime.
-;; TEST-ATOM: (> 5 3) evaluates to True.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (> 5 3))

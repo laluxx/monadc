@@ -1,0 +1,34 @@
+;; TEST-ID: tests.codegen.branch.operator-runtime-equality-spectrum
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: comparison
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise runtime equality fallback for non-scalar values plus scalar direct comparisons.
+;; TEST-ATOM: atom.codegen.operator.runtime-equality-spectrum
+;; TEST-CODEGEN-ATOM: atom.codegen.operator.runtime-equality-spectrum
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.compare.runtime-equal
+;; TEST-CODEGEN-PATH: codegen.compare.string
+;; TEST-CODEGEN-PATH: codegen.compare.float
+;; TEST-DEPENDS-ON: atom.codegen.value.scalar-display-spectrum
+;; TEST-TAG: run
+;; TEST-TAG: operator
+;; TEST-TAG: comparison
+;; TEST-COVERAGE: codegen.c:8985-9018 runtime value equality fallback
+;; TEST-COVERAGE: codegen.c:9363-9382 string strcmp branch
+;; TEST-COVERAGE: codegen.c:9432-9454 float/int comparison branches
+
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/comparison/atom.codegen.operator.runtime-equality-spectrum
+;; TEST-MENU-PATH: codegen/branches/operators/comparison/atom.codegen.operator.runtime-equality-spectrum
+;; TEST-ATOM-LEAF: atom.codegen.operator.runtime-equality-spectrum
+;; TEST-CLI-TARGET: codegen branches operators comparison
+(module Main)
+(show (= '(1 2) '(1 2)))
+(show (!= '(1 2) '(2 1)))
+(show (= :x :x))
+(show (= "a" "a"))
+(show (< 1.25 2.5))

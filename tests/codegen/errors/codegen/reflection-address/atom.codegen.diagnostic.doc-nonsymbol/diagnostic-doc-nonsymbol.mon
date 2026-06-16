@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.branch.diagnostic-doc-nonsymbol
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: reflection-address
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise doc argument shape diagnostic.
+;; TEST-ATOM: atom.codegen.diagnostic.doc-nonsymbol
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.doc-nonsymbol
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-CODEGEN-PATH: diagnostic.reflection.doc-nonsymbol
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reflection
+;; TEST-COVERAGE: codegen.c:6545 doc argument diagnostic
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/reflection-address/atom.codegen.diagnostic.doc-nonsymbol
+;; TEST-MENU-PATH: codegen/errors/codegen/reflection-address/atom.codegen.diagnostic.doc-nonsymbol
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.doc-nonsymbol
+;; TEST-CLI-TARGET: codegen errors codegen reflection-address
+(module Main)
+(show (doc 42))

@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-wisp-path-value
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.collections.quote.path.rt.wisp.path.value
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: collections-quote-path
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.wisp.define-value, monadc.context.language.path-literal-values
+;; TEST-PURPOSE: Wisp defines syntactically valid Unix path literals as first-class Path values.
+;; TEST-ATOM: define path ~/... infers Path and show prints the path text.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:80-wisp-codegen/collections-quote-path branch family
+;; TEST-USES-ATOM: atom.codegen.category.80.wisp.codegen
+;; TEST-MENU: branches/wisp-codegen/collections-quote-path/atom.codegen.80.wisp.codegen.collections.quote.path.rt.wisp.path.value
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/collections-quote-path/atom.codegen.80.wisp.codegen.collections.quote.path.rt.wisp.path.value
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.collections.quote.path.rt.wisp.path.value
+;; TEST-CLI-TARGET: codegen branches wisp-codegen collections-quote-path
+module Main
+define path ~/xos/projects/c/monadc/context/
+show path

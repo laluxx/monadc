@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-unless-skip
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.when.unless.rt.unless.skip
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: when-unless
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime unless skips its body when the condition is true.
+;; TEST-ATOM: (unless True (set! x 7)) leaves x unchanged.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/when-unless branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/when-unless/atom.codegen.30.control.flow.when.unless.rt.unless.skip
+;; TEST-MENU-PATH: codegen/branches/control-flow/when-unless/atom.codegen.30.control.flow.when.unless.rt.unless.skip
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.when.unless.rt.unless.skip
+;; TEST-CLI-TARGET: codegen branches control-flow when-unless
+(module Main)
+(define x 0)
+(unless True (set! x 7))
+(show x)

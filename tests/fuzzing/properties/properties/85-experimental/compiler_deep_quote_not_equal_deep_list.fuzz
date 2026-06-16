@@ -1,0 +1,15 @@
+name: compiler_deep_quote_not_equal_deep_list
+section: quote-runtime-current
+tier: experimental
+kind: law
+features: arithmetic, equality, list, path, predicate, quote
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.path_literal, codegen.predicate_dispatch, codegen.quote, codegen.runtime_call, infer.arithmetic, infer.equality, infer.path, infer.type_predicate, reader.path_literal, reader.quote, runtime.list
+signal: low
+corpus-role: legacy-smoke
+uses-atoms: atom.core.equality, atom.infer.predicate, atom.quote.quote, atom.runtime.path
+related-properties: signal_atom_equality_reflexive
+args: 
+type: Bool
+expect: True
+description: equal? should reject different quoted nested literals.
+law: (= (equal? (quote (a (b c) d)) (quote (a (b x) d))) False)

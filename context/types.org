@@ -2,7 +2,7 @@
 #+AUTHOR: codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -89,14 +89,14 @@ collection-type specialisation. The enum is deliberately sparse so that new
 kinds can be added without renumbering downstream switch statements.
 
 [OBS id:obs.types.kind-table src:types.h:8-49 conf:high]
-| Category       | Count | Values |
-|----------------+-------+--------|
-| Ground         |    13 | TYPE_INT, FLOAT, CHAR, STRING, SYMBOL, BOOL, HEX, BIN, OCT, KEYWORD, RATIO, NIL, PATH |
-| Numeric        |    13 | F32, F80, I8, U8, I16, U16, I32, U32, I64, U64, I128, U128, INT_ARBITRARY |
-| Compound       |     9 | LIST, ARR, FN, LAYOUT, SET, MAP, PTR, OPTIONAL, COLL |
-| Meta           |     5 | UNKNOWN, VAR, ARROW, VARIADIC, APP |
-|----------------+-------+--------|
-| Total          |    40 | |
+| Category | Count | Values                                                                                |
+|----------+-------+---------------------------------------------------------------------------------------|
+| Ground   |    13 | TYPE_INT, FLOAT, CHAR, STRING, SYMBOL, BOOL, HEX, BIN, OCT, KEYWORD, RATIO, NIL, PATH |
+| Numeric  |    13 | F32, F80, I8, U8, I16, U16, I32, U32, I64, U64, I128, U128, INT_ARBITRARY             |
+| Compound |     9 | LIST, ARR, FN, LAYOUT, SET, MAP, PTR, OPTIONAL, COLL                                  |
+| Meta     |     5 | UNKNOWN, VAR, ARROW, VARIADIC, APP                                                    |
+|----------+-------+---------------------------------------------------------------------------------------|
+| Total    |    40 |                                                                                       |
 
 [INF id:inf.types.kind-table-connect from:obs.types.kind-table conf:high]
 connects-to ->
@@ -1730,3 +1730,42 @@ connects-to ->
 | Global registries   |       2 |       2 |
 | Static helpers      |       0 |       3 |
 | Annotation parsing  |       0 |       2 |
+
+* Types Category Contract
+:PROPERTIES:
+:ID: monadc.context.types.category-contract
+:CUSTOM_ID: types-category-contract
+:CONTEXT_KIND: contract
+:CONTEXT_DESCRIPTION: Category contract for types ownership, invariants, tests, and failure routing.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/types.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.types.category-contract src:context/types.org conf:high]
+  This section declares the category contract for =types=. It is the
+  routing target for failures and future test/context links touching this area.
+
+#+CAPTION: Types Category Contract
+| Field | Contract |
+|-------+----------|
+| Owned phase | TypeKind universe, type representation, equality/unification support, named type structures. |
+| Inputs | Type syntax, declarations, inference constraints, runtime/codegen type needs. |
+| Outputs | Canonical Type values and semantic operations used by inference/codegen/runtime. |
+| Invariants | A TypeKind addition must be represented in parser/infer/codegen/test context or explicitly marked unsupported. |
+| Test hooks | types corpus, infer diagnostics, typeclass and codegen tests involving typed values. |
+| Failure symptoms | diagnostic-mismatch, expected-fail-compiled, missing TypeKind handler, codegen fallback for unknown type. |
+| Context neighbors | infer, env, typeclass, codegen, runtime |
+
+[DEC id:dec.types.category-contract-owner date:2026-06-16 by:llm]
+  Failures matching the symptoms above should start triage in this category, then
+  follow the listed neighbors only when the local contract does not explain the
+  issue.

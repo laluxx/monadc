@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.deep.deep_path_define_and_show
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 00-values
+;; TEST-SUBSET: paths
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.values.paths.deep.path.define.and.show
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise AST_PATH lowering through define and show.
+;; TEST-ATOM: Path values should be storable definitions and print as strings.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:AST_PATH literal lowering
+;; TEST-COVERAGE: codegen.c:codegen_show_value TYPE_PATH
+
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/paths/atom.codegen.values.paths.deep.path.define.and.show
+;; TEST-MENU-PATH: codegen/branches/values/paths/atom.codegen.values.paths.deep.path.define.and.show
+;; TEST-ATOM-LEAF: atom.codegen.values.paths.deep.path.define.and.show
+;; TEST-CLI-TARGET: codegen branches values paths
+(module Main)
+(define p ./context)
+(define q /tmp/monadc-codegen)
+(show p)
+(show q)

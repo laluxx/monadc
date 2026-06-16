@@ -11,7 +11,9 @@
 
 [[file:index.org][<- Back to Index]] · [[file:types.org][Types]] · [[file:advanced-types.org][Advanced Types]] · [[file:dependent-types.org][Dependent Types]] · [[file:type-inference.org][Type Inference]] · [[file:data.org][Data Types]] · [[file:core.org][Core Library]]
 
-* Quick Reference
+Type classes provide ad-hoc polymorphism via dictionary-passing — similar to Haskell type classes or Rust traits. This page covers class/instance declarations, deriving, dispatch, constraints, and built-in classes.
+
+* 1. Quick Reference
 
 | Form                        | Description                  |
 |-----------------------------+------------------------------|
@@ -21,7 +23,10 @@
 | =∀ t. [C t] => type=           | Constrained polymorphic type |
 
 Test coverage: type class deriving is tested by =rt_derive_*.mon=
-fixtures in [[file:../tests/codegen/][tests/codegen/]].
+fixtures in [[file:../tests/codegen/branches/symbol-env/][tests/codegen/branches/symbol-env/]].
+The type class system is implemented in [[file:../typeclass.c][typeclass.c]]
+and documented at [[file:../context/typeclass.org][context/typeclass.org]]. See
+[[file:../context/tests-arch.org][context/tests-arch.org]] for the full test architecture.
 
 Monad provides a type class system with dictionary-passing
 implementation ([[file:../typeclass.c]], [[file:../typeclass.h]]). A class
@@ -30,7 +35,14 @@ implementations for a specific type. The compiler compiles each
 instance into an LLVM global dictionary struct of function pointers
 named =__dict_ClassName_TypeName= ([[file:../typeclass.c::438]]).
 
-* Class Declaration
+Think of type classes as interfaces with automatic dispatch: you
+declare what operations a type supports, and the compiler wires up the
+correct implementation at each call site.
+
+For an overview of all advanced type features, see
+[[file:advanced-types.org][Advanced Types]].
+
+* 2. Class Declaration
 
 #+BEGIN_SRC monad
 (class Eq a where
@@ -48,7 +60,32 @@ Internally stored as a =TCClass= ([[file:../typeclass.h::27]]) with
 default implementations). Associated type names are stored in
 =assoc_types= ([[file:../typeclass.h::30]]).
 
-* Instance Declaration
+Methods can include default implementations in the class declaration:
+
+#+BEGIN_SRC monad
+(class Eq a where
+  ((==) (a a -> Bool))
+  (default (== a b) (not (!= a b))))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+class Eq a where
+  (==) (a a -> Bool)
+  default == a b
+    not (!= a b)
+#+END_SRC
+
+See [[file:../context/typeclass.org][context/typeclass.org]] for class declaration internals.
+
+** Key Points
+
+- A class declaration creates no code — it just registers method
+  signatures and (optionally) default implementations
+- Multiple methods per class are allowed
+- Associated types (type families in the class) are declared but
+  type-level computation is incomplete
+
+* 3. Instance Declaration
 
 #+BEGIN_SRC monad
 (instance Eq Int
@@ -73,7 +110,29 @@ which:
 3. Registers compiled methods in the environment as =ENV_FUNC= entries
    for direct dispatch.
 
-* Dictionary Dispatch
+Multiple methods in one instance:
+
+#+BEGIN_SRC monad
+(instance Eq TrafficLight
+  (define (== a b -> Bool)
+    (and (= (tag a) (tag b)) ...)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+instance Eq TrafficLight
+  define == a b -> Bool
+    and (= (tag a) (tag b)) ...
+#+END_SRC
+
+** Key Points
+
+- Instance compilation is eager: all methods are compiled at
+  instance-registration time
+- Default implementations are used only when the instance omits a method
+- The dictionary is a flat struct of function pointers — calling a
+  class method is an indirect call through the dictionary
+
+* 4. Dictionary Dispatch
 
 Each instance produces a named global =__dict_Eq_TrafficLight=
 ([[file:../typeclass.c::64]]). Method calls are resolved at compile
@@ -86,9 +145,20 @@ arguments, and emits a direct call to the matching function pointer via
 This is the standard dictionary-passing strategy used by GHC and Rust
 trait objects. Instance resolution happens at codegen time (not type-
 checking time), within a single compilation unit where all instances
-are known ([[file:../context/typeclass.org::312]]).
+are known ([[file:../context/typeclass.org::251]]). For the difference
+between inference-time and codegen-time resolution, see
+[[file:type-inference.org][Type Inference]].
 
-* Deriving
+** Key Points
+
+- Dispatch is resolved entirely at compile time — no runtime
+  dictionary lookups
+- The strcmp dispatch checks symbol name against registered methods,
+  then emits a direct function pointer call
+- Resolution is single-compilation-unit: all instances must be visible
+  at the point of use
+
+* 5. Deriving
 
 #+BEGIN_SRC monad
 (data Suit Hearts Diamonds Clubs Spades deriving Eq)
@@ -116,7 +186,9 @@ supports a single class or a list: =deriving [Eq Enum]=
 ([[file:../codegen.c::13144]]). The class must be defined before use
 or a warning is emitted.
 
-* Constraints with =~>=
+See [[file:data.org][Data Types]] for data type declaration syntax.
+
+* 6. Constraints with =~>=
 
 #+BEGIN_SRC monad
 (define toEnumSafe :: ∀ t. [Enum t, Bounded t] => Int -> (Option t)
@@ -133,9 +205,75 @@ define toEnumSafe :: ∀ t. [Enum t, Bounded t] => Int -> Option t
 Universal quantifier =∀= (or =forall=) with multi-class constraints in
 brackets. Type variables are implicitly universally quantified in
 surface syntax; explicit =∀= is required for constraint-bearing
-polymorphism.
+polymorphism. For type variable inference without constraints, see
+[[file:type-inference.org#type-variables][Type Variables]].
 
-* Known Gaps
+** Key Points
+
+- Constraints are written =[Class1 a, Class2 a]= in brackets before =→=
+- The =∀= quantifier is required when constraints are present
+- Multiple constraints are combined in a single bracket expression
+
+** Complete example:
+
+#+BEGIN_SRC monad
+;; Save as classes-demo.mon && monadc classes-demo.mon && ./classes-demo
+(module Main)
+
+(class Eq a (== (a a -> Bool)))
+
+(instance Eq Int
+  (define (== a b -> Bool) (builtin-== a b)))
+
+(instance Eq String
+  (define (== a b -> Bool) (builtin-str= a b)))
+
+(data Color Red Green Blue deriving Eq)
+
+(define (check [a :: Eq] [b :: Eq] -> Bool)
+  (== a b))
+
+(show (== 5 5))           ;; True — Eq Int
+(show (== Red Red))       ;; True — derived Eq Color
+(show (== "hi" "hi"))     ;; True — Eq String
+#+END_SRC
+
+** Common Pitfalls
+
+- **Instance resolution is local, not global**: All instances must be
+  visible at the point of use. There is no global coherence check
+  across compilation units.
+- **Deriving requires the class to be defined first**: Attempting
+  =(data T ... deriving Eq)= before =Eq= is declared emits a warning
+  and may produce broken codegen.
+- **Method dispatch is via strcmp, not dictionary lookup at
+  inference-time**: The compiler resolves methods at codegen time by
+  checking the symbol name against registered methods. This means
+  the method name must exactly match the class declaration.
+- **No superclass constraints yet**: =(class Eq a => Ord a)= is
+  parsed but not implemented. You must manually include all required
+  methods in each class.
+- **Associated types are declared but incomplete**: Type-level
+  computation during instance resolution is a stub.
+
+* 7. Superclass Constraints (Future Direction)
+
+While not yet implemented, superclass constraints are the planned
+next extension:
+
+#+BEGIN_SRC monad
+;; Not yet implemented
+(class Eq a => Ord a where
+  ((<) (a a -> Bool)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+;; Not yet implemented
+class Eq a => Ord a where
+  (<) (a a -> Bool)
+#+END_SRC
+
+* 8. Known Gaps
 
 - No superclass constraints (e.g. =(class Eq a => Ord a)=)
 - No higher-kinded types (WIP)
@@ -145,22 +283,54 @@ polymorphism.
 - Instance resolution is local (visible instances at point of use)
   rather than global (all instances in scope)
 
-See [[file:../context/typeclass.org::337]] for full details.
+See [[file:../context/typeclass.org::337]] for full details and
+[[file:../context/todo.org][context/todo.org]] for the development roadmap.
 
-* See Also
+* 9. Built-in Type Classes
+
+Monad provides several built-in type classes in the
+[[file:core.org][Core Library]]:
+
+| Class    | Methods                        | Default deriving |
+|----------+--------------------------------+------------------|
+| =Eq=     | ====                           | Yes              |
+| =Ord=    | =<=, =<, =>=, =>=               | Yes              |
+| =Show=   | =show=                         | Yes              |
+| =Enum=   | =fromEnum=, =toEnum=            | Yes              |
+| =Num=    | =+=, =-=, =*=, =/=              | No               |
+
+** Key Points
+
+- Classes with default deriving (=Eq=, =Ord=, =Show=, =Enum=) require
+  no manual instance writing for data types
+- =Num= is not derivable — it depends on the numeric representation
+- Built-in classes are registered in the initial environment bootstrap
+
+* Related Pages
 
 - [[file:dependent-types.org][Dependent Types]]
 - [[file:type-inference.org][Type Inference]]
 - [[file:advanced-types.org][Advanced Types]]
 - [[file:types.org][Types]]
 - [[file:data.org][Data Types]]
+- [[file:core.org][Core Library]]
+- [[file:equality.org][Equality]]
 
 * Context Links
 
 - [[file:../context/typeclass.org][context/typeclass.org]] — type class implementation
 - [[file:../typeclass.c][typeclass.c]] — class/instance registration and dispatch
 - [[file:../codegen.c][codegen.c]] — method dispatch via strcmp layer
+- [[file:../context/codegen.org][context/codegen.org]] — codegen for derived instances
+- [[file:../context/language.org][context/language.org]] — type class surface syntax
 - [[file:dependent-types.org][Dependent Types]] — ITT/NbE shadow pass
 - [[file:type-inference.org][Type Inference]] — HM inference engine
 - [[file:advanced-types.org][Advanced Types]] — type class overview
 - [[file:data.org][Data Types]] — algebraic data types with deriving
+
+* Further Reading
+
+- [[file:from-haskell.org][From Haskell]] — type class vs Haskell class comparison
+- [[file:from-rust.org][From Rust]] — trait-like polymorphism for Rust users
+- [[file:patterns.org][Pattern Matching]] — pattern matching with derived Eq
+- [[file:refinements.org][Refinement Types]] — predicate-based type constraints

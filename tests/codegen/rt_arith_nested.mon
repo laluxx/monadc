@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-arith-nested
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Nested and chained arithmetic expressions
-;; TEST-ATOM: (+ (* 2 3) (* 4 5)) = 26, (* (+ 1 2) (+ 3 4)) = 21, (+ (/ 10 2) (mod 10 3)) = 6
-;; TEST-EXPECT: compile, run
-(module Main)
-(show (+ (* 2 3) (* 4 5)))
-(show (* (+ 1 2) (+ 3 4)))
-(show (+ (/ 10 2) (mod 10 3)))

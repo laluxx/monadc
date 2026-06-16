@@ -1,0 +1,17 @@
+name: structured_compile_fail_array_called_with_bool_index_r04_disabled_duplicate_8d84f92e
+section: current-compile-fail
+tier: experimental
+kind: compile-fail
+features: compile-fail, type, array-index
+compiler-path: codegen.array_index, diagnostic.expected_error, infer.callable_array, runner.compile_fail_kind
+signal: high
+corpus-role: merged-duplicate
+uses-atoms: atom.runtime.array
+related-properties: signal_atom_array_index_valid
+merged-into: structured_compile_fail_array_called_with_bool_index_r01
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int@tiny b:Int@tiny p:Bool@logic
+type: Bool
+expect-diagnostic: error:
+description: V11 expected compiler diagnostic test array_called_with_bool_index round 4; checks compile-fail tier, diagnostics, and failure clustering.
+law: ([{a} {b}] {p})

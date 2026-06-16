@@ -1,0 +1,17 @@
+name: structured_set_set_disj_removes_generated_disabled_duplicate_9aa3b8b3
+section: collections-set-current
+tier: experimental
+kind: law
+features: arithmetic, collections, equality, predicate, set
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.predicate_dispatch, codegen.runtime_call, infer.arithmetic, infer.equality, infer.type_predicate, runtime.set
+signal: medium
+corpus-role: merged-duplicate
+uses-atoms: atom.core.equality, atom.infer.predicate
+related-properties: signal_atom_equality_reflexive
+merged-into: mega_set_disj_removes_single
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int
+type: Bool
+expect: True
+description: Stress persistent and mutable set operations, membership, duplicate handling, and branch guarded mutation.
+law: (= (contains? (disj (set {a}) {a}) {a}) False)

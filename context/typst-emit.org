@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -380,7 +380,7 @@
   =monadc.context.reader.header= (=AST=, =SB=, =ASTPattern= types come from
   =reader.h=)
 
-[INF id:inf.typst-emit.cli from:obs.typst-emit.main-integration conf:high]
+[INF id:inf.typst-emit.cli from:obs.typst-emit.main-invocation conf:high]
   connects-to -> =monadc.context.cli.flags= (=--emit-typst= flag triggers
   the emitter) · =monadc.context.cli.output= (=--output= flag controls the
   .typ and .pdf output filename)

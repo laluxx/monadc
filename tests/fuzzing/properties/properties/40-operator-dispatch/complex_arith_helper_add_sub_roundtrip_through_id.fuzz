@@ -1,0 +1,15 @@
+name: complex_arith_helper_add_sub_roundtrip_through_id
+section: arithmetic-function
+tier: stable
+kind: law
+features: arithmetic, equality
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, infer.arithmetic, infer.equality
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality
+related-properties: signal_atom_equality_reflexive
+args: a:Int b:Int
+type: Bool
+expect: True
+description: A value passed through identity after add/sub roundtrip should preserve the original expression.
+law: (= (fuzz-id-int (fuzz-sub (fuzz-add (fuzz-id-int {a}) {b}) {b})) {a})

@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.rt-keyword-symbol-display
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.00.values.char.keyword.symbol.rt.keyword.symbol.display
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: char-keyword-symbol
+;; TEST-CATEGORY: 00-values
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime display of keyword and symbol values.
+;; TEST-ATOM: Keywords print with colon prefix; quoted symbols print as words.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:00-values/char-keyword-symbol branch family
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/char-keyword-symbol/atom.codegen.00.values.char.keyword.symbol.rt.keyword.symbol.display
+;; TEST-MENU-PATH: codegen/branches/values/char-keyword-symbol/atom.codegen.00.values.char.keyword.symbol.rt.keyword.symbol.display
+;; TEST-ATOM-LEAF: atom.codegen.00.values.char.keyword.symbol.rt.keyword.symbol.display
+;; TEST-CLI-TARGET: codegen branches values char-keyword-symbol
+(module Main)
+(show :hello)
+(show :foo-bar)
+(show 'hello)
+(show 'foo-bar)

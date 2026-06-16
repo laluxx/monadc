@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-address-of
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.50.data.layout.address.of.rt.address.of
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: address-of
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.reader-header-coverage
+;; TEST-PURPOSE: Runtime address-of expressions compile and produce an address-like value.
+;; TEST-ATOM: &x on a bound integer value reaches codegen and prints a pointer representation.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:50-data-layout/address-of branch family
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/address-of/atom.codegen.50.data.layout.address.of.rt.address.of
+;; TEST-MENU-PATH: codegen/branches/data-layout/address-of/atom.codegen.50.data.layout.address.of.rt.address.of
+;; TEST-ATOM-LEAF: atom.codegen.50.data.layout.address.of.rt.address.of
+;; TEST-CLI-TARGET: codegen branches data-layout address-of
+(module Main)
+(define x 42)
+(show &x)

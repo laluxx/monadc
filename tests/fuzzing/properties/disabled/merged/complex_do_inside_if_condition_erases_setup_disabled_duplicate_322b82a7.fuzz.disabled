@@ -1,0 +1,17 @@
+name: complex_do_inside_if_condition_erases_setup_disabled_duplicate_322b82a7
+section: control-do-if
+tier: experimental
+kind: law
+features: arithmetic, control, do, equality, if, phi, set
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.runtime_call, codegen.sequence, infer.arithmetic, infer.equality, infer.if_phi, reader.ast_do, reader.ast_if, runtime.set
+signal: medium
+corpus-role: merged-duplicate
+uses-atoms: atom.control.do, atom.control.if, atom.core.equality
+related-properties: signal_atom_do_last_value, signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+merged-into: extreme_do_do_inside_if_condition
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: setup:Int cond:Bool a:Int b:Int
+type: Bool
+expect: True
+description: Sequencing an Int setup before an if condition must not change the selected branch.
+law: (= (if (do {setup} {cond}) {a} {b}) (if {cond} {a} {b}))

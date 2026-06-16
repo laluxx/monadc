@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.deep.deep_define_function_uses_global
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SUBSET: defines-and-calls
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.05.symbol.env.defines.and.calls.deep.define.function.uses.global
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise function body lookup of a global binding.
+;; TEST-ATOM: Function codegen should resolve globals from outer env.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env, atom.codegen.subset.defines.and.calls
+;; TEST-COVERAGE: codegen.c:symbol lookup outer environment
+;; TEST-MENU: branches/symbol-env/defines-and-calls/atom.codegen.05.symbol.env.defines.and.calls.deep.define.function.uses.global
+;; TEST-MENU-PATH: codegen/branches/symbol-env/defines-and-calls/atom.codegen.05.symbol.env.defines.and.calls.deep.define.function.uses.global
+;; TEST-ATOM-LEAF: atom.codegen.05.symbol.env.defines.and.calls.deep.define.function.uses.global
+;; TEST-CLI-TARGET: codegen branches symbol-env defines-and-calls
+
+(module Main)
+(define base 10)
+(define (plus-base [x : Int] -> Int) (+ base x))
+(show (plus-base 5))

@@ -1,0 +1,15 @@
+name: mega_arith_variadic_mul_if_operands
+section: codegen-arith-variadic
+tier: stable
+kind: law
+features: arithmetic, codegen, equality, if, logic, phi
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.if_phi, infer.logic, reader.ast_if
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.control.if, atom.core.equality, atom.core.multiply, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates, signal_atom_multiply_associative, signal_atom_multiply_commutative, signal_atom_multiply_identity_one
+args: p:Bool a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Variadic multiplication must see branch-selected operands and remain commutative around them.
+law: (= (* (if {p} {a} {b}) (if {p} {b} {a}) {c}) (* {a} {b} {c}))

@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-11
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -360,7 +360,7 @@ pointer anchor instead of applying immediate linear zoom jumps.
   context-visualizer.py --validate && context-visualizer.py --render
   would catch context format errors before they accumulate.
 
-[INF id:inf.visualizer.connects-to from:obs.visualizer.purpose conf:high]
+[INF id:inf.visualizer.connects-to from:monadc.context.visualizer.file-metadata conf:high]
   connects-to -> `monadc.context.scripts` (context-visualizer.py is the Python
   script that generates the visualizer HTML/JS; documented in scripts.org) ·
   `monadc.context.index` (the visualizer consumes index.org format spec for

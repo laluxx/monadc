@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.rt-wisp-define-value
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.define.value
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: define-and-types
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.wisp.define-value
+;; TEST-PURPOSE: Wisp define with values works
+;; TEST-ATOM: define x 42 creates binding
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:80-wisp-codegen/define-and-types branch family
+;; TEST-USES-ATOM: atom.codegen.category.80.wisp.codegen
+;; TEST-MENU: branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.define.value
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.define.value
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.define.value
+;; TEST-CLI-TARGET: codegen branches wisp-codegen define-and-types
+module Main
+define name "Alice"
+define age 30
+define pi 3.14159
+show name
+show age
+show pi

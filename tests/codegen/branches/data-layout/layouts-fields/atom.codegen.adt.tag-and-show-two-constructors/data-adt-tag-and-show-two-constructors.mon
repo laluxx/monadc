@@ -1,0 +1,34 @@
+;; TEST-ID: tests.codegen.branch.data-adt-tag-and-show-two-constructors
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: layouts-fields
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise ADT constructor lowering, tag access, and canonical show branches for multiple constructors.
+;; TEST-ATOM: atom.codegen.adt.tag-and-show-two-constructors
+;; TEST-CODEGEN-ATOM: atom.codegen.adt.tag-and-show-two-constructors
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.adt.constructor
+;; TEST-CODEGEN-PATH: codegen.adt.tag
+;; TEST-CODEGEN-PATH: codegen_show_value.TYPE_LAYOUT.adt
+;; TEST-DEPENDS-ON: atom.codegen.value.scalar-display-spectrum
+;; TEST-TAG: run
+;; TEST-TAG: adt
+;; TEST-TAG: show
+;; TEST-COVERAGE: codegen.c:1267-1395 codegen_show_value ADT constructor printing
+;; TEST-COVERAGE: codegen.c:7545 __adt_tag branch
+;; TEST-COVERAGE: codegen.c:3554 ADT constructor symbol lookup
+
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/layouts-fields/atom.codegen.adt.tag-and-show-two-constructors
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts-fields/atom.codegen.adt.tag-and-show-two-constructors
+;; TEST-ATOM-LEAF: atom.codegen.adt.tag-and-show-two-constructors
+;; TEST-CLI-TARGET: codegen branches data-layout layouts-fields
+(module Main)
+(data Maybe Nothing | Just Int)
+(show (__adt_tag Nothing))
+(show (__adt_tag (Just 5)))
+(show Nothing)
+(show (Just 5))

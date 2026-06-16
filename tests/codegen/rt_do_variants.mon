@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-do-variants
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Runtime do forms are a codegen-backed coverage point for do sequencing.
-;; TEST-ATOM: (do 42) and (do 1 2 3) should evaluate to their final values.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (do 42))
-(show (do 1 2 3))

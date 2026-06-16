@@ -1,0 +1,30 @@
+;; TEST-ID: tests.codegen.rt-layout-swap-components
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-CODEGEN-ATOM: atom.codegen.50.data.layout.layouts.fields.rt.layout.swap.components
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: layouts-fields
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Function swapping two layout fields via set! on fields.
+;; TEST-ATOM: swap-components v exchanges v.x and v.y.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:50-data-layout/layouts-fields branch family
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/layouts-fields/atom.codegen.50.data.layout.layouts.fields.rt.layout.swap.components
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts-fields/atom.codegen.50.data.layout.layouts.fields.rt.layout.swap.components
+;; TEST-ATOM-LEAF: atom.codegen.50.data.layout.layouts.fields.rt.layout.swap.components
+;; TEST-CLI-TARGET: codegen branches data-layout layouts-fields
+(module Main)
+(layout Vec2 [x :: Int] [y :: Int])
+(define (swap-components [v -> Vec2])
+  (let [tmp v.x]
+    (set! v.x v.y)
+    (set! v.y tmp)))
+(define v (Vec2 10 20))
+(swap-components v)
+(show v.x)
+(show v.y)

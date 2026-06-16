@@ -1,0 +1,39 @@
+;; TEST-ID: tests.codegen.branch.value-scalar-display-spectrum
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SUBSET: uncategorized-legacy
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 99-smoke-legacy
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise scalar AST lowering and codegen_show_value dispatch for primitive printable values.
+;; TEST-ATOM: atom.codegen.value.scalar-display-spectrum
+;; TEST-CODEGEN-ATOM: atom.codegen.value.scalar-display-spectrum
+;; TEST-QUALITY: legacy-smoke
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen_expr.AST_NUMBER
+;; TEST-CODEGEN-PATH: codegen_expr.AST_STRING
+;; TEST-CODEGEN-PATH: codegen_expr.AST_CHAR
+;; TEST-CODEGEN-PATH: codegen_expr.AST_KEYWORD
+;; TEST-CODEGEN-PATH: codegen_show_value
+;; TEST-TAG: run
+;; TEST-TAG: value
+;; TEST-TAG: show
+;; TEST-COVERAGE: codegen.c:3494-3890 AST_NUMBER/AST_STRING/AST_CHAR/AST_KEYWORD/AST_SYMBOL
+;; TEST-COVERAGE: codegen.c:1219-1255 codegen_show_value primitive branches
+
+;; TEST-USES-ATOM: atom.codegen.category.99.smoke.legacy
+;; TEST-MENU: branches/smoke-legacy/uncategorized-legacy/atom.codegen.value.scalar-display-spectrum
+;; TEST-MENU-PATH: codegen/branches/smoke-legacy/uncategorized-legacy/atom.codegen.value.scalar-display-spectrum
+;; TEST-ATOM-LEAF: atom.codegen.value.scalar-display-spectrum
+;; TEST-CLI-TARGET: codegen branches smoke-legacy uncategorized-legacy
+(module Main)
+(show 0)
+(show -7)
+(show 3.25)
+(show "branch")
+(show (Char 65))
+(show :kw)
+(show True)
+(show False)
+(show nil)

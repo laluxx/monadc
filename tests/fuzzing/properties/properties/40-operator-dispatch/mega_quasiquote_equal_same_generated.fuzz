@@ -1,0 +1,14 @@
+name: mega_quasiquote_equal_same_generated
+section: codegen-quote-runtime
+tier: stable
+kind: law
+features: arithmetic, codegen, path, predicate, quasiquote, quote, unquote
+compiler-path: codegen.arithmetic_dispatch, codegen.path_literal, codegen.predicate_dispatch, codegen.quote, desugar.quasiquote, infer.arithmetic, infer.path, infer.type_predicate, reader.path_literal, reader.quasiquote, reader.quote, reader.unquote
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.infer.predicate, atom.quote.quote, atom.runtime.path
+args: a:Int
+type: Bool
+expect: True
+description: equal? must compare quasiquoted values containing generated unquote holes.
+law: (equal? (quasiquote ((unquote {a}) b)) (quasiquote ((unquote {a}) b)))

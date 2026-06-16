@@ -1,0 +1,31 @@
+;; TEST-ID: tests.codegen.env-graph.env.shadow.function.with.local.value.06
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SUBSET: env-graph-links
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.env-error-coverage
+;; TEST-PURPOSE: Positive env graph bridge: env shadow function with local value 06.
+;; TEST-ATOM: atom.env.graph.env.shadow.function.with.local.value.06
+;; TEST-CODEGEN-ATOM: atom.env.graph.env.shadow.function.with.local.value.06
+;; TEST-QUALITY: env-positive-branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: env.lookup.positive
+;; TEST-TAG: env
+;; TEST-TAG: positive
+;; TEST-COVERAGE: env.c:find local entry before parent
+;; TEST-USES-ATOM: atom.env.graph.env.shadow.function.with.local.value.06
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-USES-ATOM: atom.env.lookup
+;; TEST-DEPENDS-ON: atom.env.shadowing
+;; TEST-DEPENDS-ON: atom.env.lookup.local
+;; TEST-REFINES: atom.env.error
+;; TEST-MENU: branches/symbol-env/env-graph-links/atom.env.graph.env.shadow.function.with.local.value.06
+;; TEST-MENU-PATH: codegen/branches/symbol-env/env-graph-links/atom.env.graph.env.shadow.function.with.local.value.06
+;; TEST-ATOM-LEAF: atom.env.graph.env.shadow.function.with.local.value.06
+;; TEST-CLI-TARGET: codegen branches symbol-env env-graph-links
+
+(module Main)
+(define (x [n : Int] -> Int) (+ n 1))
+(define (f [x : Int] -> Int) x)
+(show (f 8))

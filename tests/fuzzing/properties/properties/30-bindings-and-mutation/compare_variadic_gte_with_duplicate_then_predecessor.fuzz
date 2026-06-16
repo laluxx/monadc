@@ -1,0 +1,15 @@
+name: compare_variadic_gte_with_duplicate_then_predecessor
+section: comparison-variadic
+tier: stable
+kind: law
+features: arithmetic, comparison, env, equality, logic, with
+compiler-path: codegen.arithmetic_dispatch, codegen.comparison_dispatch, codegen.equality_dispatch, codegen.local_load, codegen.logic_dispatch, codegen.with_binding, infer.arithmetic, infer.comparison, infer.env_child, infer.env_lookup, infer.equality, infer.logic
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.with, atom.core.equality, atom.core.minus, atom.core.order.gt, atom.core.order.gte, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive, signal_atom_with_substitution
+args: a:Int
+type: Bool
+expect: True
+description: Variadic >= must allow equality before a smaller predecessor.
+law: (>= {a} {a} (- {a} 1))

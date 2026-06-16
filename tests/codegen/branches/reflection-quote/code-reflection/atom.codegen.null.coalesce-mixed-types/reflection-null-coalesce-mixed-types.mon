@@ -1,0 +1,30 @@
+;; TEST-ID: tests.codegen.branch.reflection-null-coalesce-mixed-types
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: code-reflection
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 60-reflection-quote
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise ?? null coalescing over nil and non-nil alternatives of different printable types.
+;; TEST-ATOM: atom.codegen.null.coalesce-mixed-types
+;; TEST-CODEGEN-ATOM: atom.codegen.null.coalesce-mixed-types
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.null-coalesce.nil
+;; TEST-CODEGEN-PATH: codegen.null-coalesce.non-nil
+;; TEST-DEPENDS-ON: atom.codegen.value.scalar-display-spectrum
+;; TEST-TAG: run
+;; TEST-TAG: null
+;; TEST-TAG: reflection
+;; TEST-COVERAGE: codegen.c:5936 ?? arity branch and null coalesce lowering
+
+;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote
+;; TEST-MENU: branches/reflection-quote/code-reflection/atom.codegen.null.coalesce-mixed-types
+;; TEST-MENU-PATH: codegen/branches/reflection-quote/code-reflection/atom.codegen.null.coalesce-mixed-types
+;; TEST-ATOM-LEAF: atom.codegen.null.coalesce-mixed-types
+;; TEST-CLI-TARGET: codegen branches reflection-quote code-reflection
+(module Main)
+(show (?? nil 42))
+(show (?? 0 99))
+(show (?? nil "fallback"))
+(show (?? "value" "fallback"))

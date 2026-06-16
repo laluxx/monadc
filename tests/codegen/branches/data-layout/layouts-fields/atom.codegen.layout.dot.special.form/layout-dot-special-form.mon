@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.branch.layout-dot-special-form
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: layouts-fields
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.layout.dot.special.form
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover explicit (dot base field) access on a freshly constructed layout value.
+;; TEST-ATOM: The dot special form should find the layout field and load it from the constructor result.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:12902 explicit dot special form
+;; TEST-COVERAGE: codegen.c:12925 layout field lookup
+
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/layouts-fields/atom.codegen.layout.dot.special.form
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts-fields/atom.codegen.layout.dot.special.form
+;; TEST-ATOM-LEAF: atom.codegen.layout.dot.special.form
+;; TEST-CLI-TARGET: codegen branches data-layout layouts-fields
+(module Main)
+(layout Point [x :: Int] [y :: Int])
+(show (dot (Point 5 6) x))
+(show (dot (Point 5 6) y))

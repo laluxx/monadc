@@ -1,0 +1,34 @@
+;; TEST-ID: tests.codegen.type.bridge.dep.hm.refinement.to.hm.004
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: types
+;; TEST-SUBSET: bridge/dep-hm/refinement-to-hm
+;; TEST-QUALITY: type-system-positive-regression
+;; TEST-CODEGEN-ATOM: atom.type.bridge.dep-hm.refinement-to-hm.004
+;; TEST-TYPE-ATOM: atom.type.bridge.dep-hm.refinement-to-hm.004
+;; TEST-CONTEXT: monadc.context.language.codegen-type-system-corpus, monadc.context.language.hm-dependent-type-coverage
+;; TEST-PURPOSE: Dependent refinement result is usable by HM/codegen as its ground embedded type.
+;; TEST-ATOM: Refinement BridgeNat flows through HM as Int while preserving dependent atom metadata.
+;; TEST-EXPECT: compile, run
+;; TEST-MENU: types/bridge/dep-hm/refinement-to-hm/atom.type.bridge.dep-hm.refinement-to-hm.004
+;; TEST-MENU-PATH: codegen/types/bridge/dep-hm/refinement-to-hm/atom.type.bridge.dep-hm.refinement-to-hm.004
+;; TEST-ATOM-LEAF: atom.type.bridge.dep-hm.refinement-to-hm.004
+;; TEST-CLI-TARGET: codegen types bridge dep-hm refinement-to-hm
+;; TEST-INFER-PATH: infer.c:Interop HM unifies with prior Dependent Type check
+;; TEST-DEP-PATH: dep.c:TERM_EMBED/type_to_term bridge
+;; TEST-COVERAGE: dep.c:TERM_EMBED ground type bridge
+;; TEST-COVERAGE: infer.c:AST nodes seeded with inferred_type
+;; TEST-COVERAGE: codegen.c:Int arithmetic
+;; TEST-USES-ATOM: atom.codegen.category.types
+;; TEST-USES-ATOM: atom.type.system
+;; TEST-USES-ATOM: atom.type.bridge.dep-hm
+;; TEST-USES-ATOM: atom.type.dep.refinement
+;; TEST-USES-ATOM: atom.type.hm.numeric
+;; TEST-DEPENDS-ON: atom.type.dep.embed
+;; TEST-REFINES: atom.type.bridge.refinement-int
+
+(module Main)
+(type BridgeNat04 { x ∈ Int | (>= x 0) })
+(define (bridge_use_04 [x : BridgeNat04] -> Int) (+ x 4))
+(show (bridge_use_04 5))

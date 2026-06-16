@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-radix-binary-literal
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.20.operators.radix.printing.rt.radix.binary.literal
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: radix-printing
+;; TEST-CATEGORY: 20-operators
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Radix-r binary notation 2r1010 equals decimal 10.
+;; TEST-ATOM: (show 2r1010) prints 10.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:20-operators/radix-printing branch family
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/radix-printing/atom.codegen.20.operators.radix.printing.rt.radix.binary.literal
+;; TEST-MENU-PATH: codegen/branches/operators/radix-printing/atom.codegen.20.operators.radix.printing.rt.radix.binary.literal
+;; TEST-ATOM-LEAF: atom.codegen.20.operators.radix.printing.rt.radix.binary.literal
+;; TEST-CLI-TARGET: codegen branches operators radix-printing
+(module Main)
+(show 2r1010)

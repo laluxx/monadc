@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.deep.deep_record_decl_with_runtime_value
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SUBSET: records
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.data.layout.records.deep.record.decl.with.runtime.value
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise record declaration before executable code.
+;; TEST-ATOM: Record declarations should register layout-like metadata without breaking codegen.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:record/layout declaration branch
+
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/records/atom.codegen.data.layout.records.deep.record.decl.with.runtime.value
+;; TEST-MENU-PATH: codegen/branches/data-layout/records/atom.codegen.data.layout.records.deep.record.decl.with.runtime.value
+;; TEST-ATOM-LEAF: atom.codegen.data.layout.records.deep.record.decl.with.runtime.value
+;; TEST-CLI-TARGET: codegen branches data-layout records
+(module Main)
+(record Pair [left Int] [right Int])
+(show 42)

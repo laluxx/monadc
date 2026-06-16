@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.deep.deep_list_nested_car
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-SUBSET: lists
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.lists.deep.list.nested.car
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise nested list values and repeated car/cdr calls.
+;; TEST-ATOM: Nested list runtime values should be navigable.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.40.collections, atom.codegen.subset.lists
+;; TEST-COVERAGE: codegen.c:list runtime nested access
+;; TEST-MENU: branches/collections/lists/atom.codegen.40.collections.lists.deep.list.nested.car
+;; TEST-MENU-PATH: codegen/branches/collections/lists/atom.codegen.40.collections.lists.deep.list.nested.car
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.lists.deep.list.nested.car
+;; TEST-CLI-TARGET: codegen branches collections lists
+
+(module Main)
+(define xs (list (list 1 2) (list 3 4)))
+(show (car (cdr (car xs))))

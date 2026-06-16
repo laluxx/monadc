@@ -12,6 +12,8 @@
 [[file:index.org][<- Back to Index]] · [[file:casting.org][Casting]] · [[file:arithmetic.org][Arithmetic]] · [[file:numeric.org][Numeric]] · [[file:arrays.org][Arrays]] · [[file:heap.org][Heap]] · [[file:from-haskell.org][From Haskell]] · [[file:from-lisp.org][From Lisp]] · [[file:syntax.org][Syntax]] · [[file:ffi.org][C FFI]] · [[file:layouts.org][Layouts]]
 
 Test coverage: C FFI bindings are exercised by =rt_cffi_*.mon= fixtures.
+The test architecture is documented at
+[[file:../context/tests-arch.org][context/tests-arch.org]].
 
 This guide maps C concepts to Monad equivalents for C/C++/Rust
 programmers. For the C FFI internals (libclang parsing, type mapping,
@@ -25,13 +27,13 @@ Working FFI targets with =rt_cffi_*.mon= test coverage: math.h
 =strcmp=), ctype.h (=toupper=, =isdigit=) — all verified by codegen
 runtime fixtures in [[file:../tests/codegen/][tests/codegen/]].
 
-* Quick Examples
+1. Quick Examples
 
 Variable declaration in C vs Monad:
 
 #+BEGIN_SRC monad
-(define x 5)                      ;; int x = 5;
-(define pi 3.14)                  ;; double pi = 3.14;
+(define x 5)                     ;; const int x = 5;
+(define pi 3.14)                 ;; const double pi = 3.14;
 (define name "Alice")            ;; const char *name = "Alice";
 #+END_SRC
 
@@ -81,60 +83,73 @@ include "math.h"
 show (sqrt 144.0)     # printf("%f\n", sqrt(144.0));
 #+END_SRC
 
-* Memory Management
+2. Memory Management
 
-| C                    | Monad                              |
-|----------------------+------------------------------------|
-| =malloc(N)=           | Arena allocation (automatic)        |
-| =free(ptr)=           | No manual free — arena reset        |
+| C                      | Monad                              |
+|------------------------+------------------------------------|
+| =malloc(N)=              | Arena allocation (automatic)       |
+| =free(ptr)=              | No manual free — arena reset       |
 | =int *arr = malloc(...)= | =(define arr ~[1 2 3])= (heap array) |
-| =struct X {int a;}=   | =(layout X [a :: Int])= + allocation |
+| =struct X {int a;}=      | =(layout X [a :: Int])= + allocation |
 
 Monad does not require manual =malloc/=free. Values live in compiler-managed
 arena regions. Arena allocation replaces garbage collection and manual memory
 management — allocation is bump-pointer fast, and entire regions are freed at
-once ([[file:../context/philosophy.org::99][context/philosophy.org — zero-to-metal]]).
+once ([[file:../context/philosophy.org::99][context/philosophy.org — zero-to-metal]],
+[[file:../context/arena.org][context/arena.org]]).
 
 For explicit stack or static allocation, layout types ([[file:layouts.org]]) provide
-C-compatible memory layouts with direct field access.
+C-compatible memory layouts with direct field access. Heap arrays ([[file:heap.org]])
+use arena-backed dynamic allocation. See also [[file:arena.org][Arena Allocation]].
 
-* Type System
+3. Type System
 
-| C concept                      | Monad equivalent                      |
-|--------------------------------+---------------------------------------|
-| =int x = 5;=                    | =(define x 5)= (HM infers Int)         |
-| =int add(int a, int b)=         | =(define (add a b -> Int) (+ a b))=    |
-| =struct Point {int x; float y;}=| =(layout Point [x :: Int] [y :: Float])= |
-| =typedef int MyInt;=            | =(type MyInt Int)=                     |
-| =enum Color {R,G,B};=           | =(data Color Red Green Blue)=          |
-| =double x=                      | =(define x 3.14) — Float               |
-| =unsigned char buf[256]=        | =(define buf [256 U8]) — sized array   |
-| =const char *s=                 | =(define s "hello") — String           |
+| C concept                        | Monad equivalent                       |
+|----------------------------------+----------------------------------------|
+| =int x = 5;=                       | =(define x 5)= (HM infers Int)           |
+| =int add(int a, int b)=            | =(define (add a b -> Int) (+ a b))=      |
+| =struct Point {int x; float y;}= | =(layout Point [x :: Int] [y :: Float])= |
+| =typedef int MyInt;=               | =(type MyInt Int)=                       |
+| =enum Color {R,G,B};=              | =(data Color Red Green Blue)=            |
+| =double x=                         | =(define x 3.14) — Float               |
+| =unsigned char buf[256]=           | =(define buf [256 U8]) — sized array   |
+| =const char *s=                    | =(define s "hello") — String           |
 
 HM type inference ([[file:../context/language.org::489][context/language.org — HM surface]]) means type annotations
 are optional — the compiler infers types from usage. Add annotations with
-=::= when you want explicit signatures.
+=::= when you want explicit signatures. For more detail on types, see
+[[file:types.org][Types]] and [[file:type-inference.org][Type Inference]].
 
-* Control Flow
+Algebraic data types ([[file:data.org][Data Types]]) provide tagged unions analogous to C
+enums, while layout types ([[file:layouts.org]]) match C struct layout exactly.
+Refinement types ([[file:refinements.org]]) add subset predicates on ground types.
 
-| C                      | Monad                          |
-|------------------------+--------------------------------|
-| =if (x) {a} else {b}=   | =(if x a b)=                    |
-| =while (x) {body}=      | =(while x body ...)=            |
-| =for (i=0; i<n; i++)=  | =(for i -> 0 n ...)=            |
-| =switch (x) {...}=      | =(match x with ...)=            |
-| =x = a > b ? a : b=    | =(if (> a b) a b)=              |
-| =;// comment=           | =;; comment=                    |
+4. Control Flow
+
+| C                   | Monad              |
+|---------------------+--------------------|
+| =if (x) {a} else {b}= | =(if x a b)=         |
+| =while (x) {body}=    | =(while x body ...)= |
+| =for (i=0; i<n; i++)= | =(for i -> 0 n ...)= |
+| =switch (x) {...}=    | =(match x with ...)= |
+| =x = a > b ? a : b=   | =(if (> a b) a b)=   |
+| =;// comment=         | =;; comment=         |
 
 Everything is an expression in Monad — no statement terminators, no
 blocks that return void. =(if x a b)= returns the value of the chosen branch.
+See [[file:conditionals.org][Conditionals]], [[file:iteration.org][Iteration]], and
+[[file:recursion.org][Recursion]] for detailed coverage.
 
-* Macros
+Pattern matching ([[file:patterns.org]][Pattern Matching]]) replaces switch statements
+with destructuring and guards. See [[file:../context/pmatch.org][context/pmatch.org]] for the
+implementation.
 
-| C preprocessor                  | Monad macro                               |
-|---------------------------------+-------------------------------------------|
-| =#define MAX(a,b) ((a)>(b)?(a):(b))= | =(define (max a b -> Syntax)             |
-|                                 |     #((if (> a b) a b)))=                  |
+5. Macros
+
+| C preprocessor                     | Monad macro                  |
+|------------------------------------+------------------------------|
+| =#define MAX(a,b) ((a)>(b)?(a):(b))= | =(define (max a b -> Syntax) |
+|                                    | #((if (> a b) a b)))=        |
 
 Monad macros are compile-time functions that return Syntax types
 ([[file:../context/macro.org::56][context/macro.org — Syntax convention]]). They are ordinary =define= forms
@@ -145,13 +160,15 @@ the template output region ([[file:../context/macro.org::88][context/macro.org �
 Hygienic renaming prevents capture between macro-generated code and the
 surrounding scope ([[file:../context/macro.org::123][context/macro.org — hygiene]]).
 
-* FFI (C Interop)
+See [[file:macros.org][Macros]] and [[file:macro-patterns.org][Macro Patterns]] for the full macro reference.
 
-| C                         | Monad                                |
-|---------------------------+--------------------------------------|
-| =#include <math.h>=        | =(include "math.h")=                   |
-| =double sqrt(double)=      | Call =sqrt= directly after include     |
-| =struct timespec ts;=      | Layout type via FFI or =(layout ...)= |
+6. FFI (C Interop)
+
+| C                   | Monad                               |
+|---------------------+-------------------------------------|
+| =#include <math.h>=   | =(include "math.h")=                  |
+| =double sqrt(double)= | Call =sqrt= directly after include    |
+| =struct timespec ts;= | Layout type via FFI or =(layout ...)= |
 
 Monad calls C functions directly — no binding generators. The =include=
 directive ([[file:ffi.org]]) parses C headers via libclang and registers typed
@@ -164,17 +181,21 @@ Proven working FFI targets ([[file:../context/language.org::542][context/languag
 - =ctype.h=: =toupper=, =tolower=, =isdigit=
 - =limits.h=: =INT_MAX=, =CHAR_BIT=
 
-* Layout Types vs C Structs
+For the full FFI reference, see [[file:ffi.org][C FFI]]. For using C structs, see
+[[file:layouts.org][Layout Types]].
 
-| C struct          | Monad layout ([[file:layouts.org]])          |
-|-------------------+------------------------------------------|
-| =struct Point {   | =(layout Point                             |
-|   int x;          |   [x :: Int] [y :: Float])=                |
-|   float y;        |                                          |
-| };=               |                                          |
-| =.x= field access | =(p.x)= — dot notation                     |
-| Packed attribute  | =:packed= option                           |
-| Alignment         | =:align N= option                          |
+7. Layout Types vs C Structs
+
+| C struct         | Monad layout ([[file:layouts.org]]) |
+|------------------+---------------------------------|
+| =struct Point {  | =(layout Point                  |
+| int x;           | [x :: Int] [y :: Float])=       |
+| float y;         |                                 |
+| };=              |                                 |
+| =.x= field access  | #ERROR                          |
+| Packed attribute | =:packed= option                  |
+| Alignment        | =:align N= option                 |
+#+TBLFM: $2=(p.x)= — dot notation
 
 Layout types ([[file:../context/types.org::587]]) compile to C-compatible memory
 layouts. Fields are accessed with dot notation (=(p.x)=) and mutated with
@@ -183,7 +204,9 @@ layouts. Fields are accessed with dot notation (=(p.x)=) and mutated with
 Comparison: =data= types (ADTs) use heap allocation; =layout= types use
 stack/inline allocation and match C struct memory layout.
 
-* Inline Assembly
+See also [[file:casting.org][Casting]] for type conversion between C-compatible types.
+
+8. Inline Assembly
 
 | C (GCC asm)           | Monad ([[file:asm.org]])                   |
 +-----------------------+------------------------------------------|
@@ -199,7 +222,10 @@ Two modes:
 - Non-naked: LLVM constraint wiring, portable, size-suffix inference
 - Naked: direct register naming, no prologue/epilogue (syscall-shaped)
 
-* Syntax
+For the asm implementation, see [[file:../context/asm.org][context/asm.org]]. For the
+naked function pattern, see [[file:asm.org][Inline Assembly]].
+
+9. Syntax
 
 | C              | Monad S-expression       | Monad Wisp ([[file:wisp.org]]) |
 |----------------+--------------------------+-------------------------------|
@@ -215,7 +241,10 @@ excel for programmatic generation and macro processing; Wisp excels for
 readability in large codebases. Both mix freely within a single file
 ([[file:../context/language.org::693][context/language.org — Wisp sugar effects]]).
 
-* Putting It All Together
+See [[file:syntax.org][Syntax Reference]] for the full reader grammar, and
+[[file:wisp.org][Wisp Syntax]] for indentation-based syntax.
+
+10. Putting It All Together
 
 A short Monad program showing variables, functions, FFI, and control flow:
 
@@ -247,7 +276,42 @@ show (greet "monad")        # prints hello, monad
 show (distance 3.0 4.0)    # prints 5.0
 #+END_SRC
 
-* Compilation Model
+Implementation Notes
+
+The C-to-Monad mapping is implemented across multiple subsystems:
+
+- **Type equivalence**: =ffi_map_c_type= (=ffi.h:119=) converts C type
+  spellings to Monad =Type *= pointers
+  ([[file:../context/ffi.org::ffi-map-type][context/ffi.org — type mapping]]).
+- **Layout compatibility**: =layout_compute_offsets= (=types.c=) produces
+  offsets matching C ABI rules (alignment, packing)
+  ([[file:../context/types.org][context/types.org — offset computation]]).
+- **Inline assembly**: =preprocess_asm= (=asm.h:41=) maps parameter
+  symbols to SysV registers or LLVM placeholders
+  ([[file:../context/asm.org][context/asm.org — preprocessing]]).
+- **Macro system**: macros are functions returning =Syntax=, expanded in a
+  fixpoint pass before type inference
+  ([[file:../context/macro.org][context/macro.org — syntax convention]]).
+- **Arena allocation**: bump-pointer allocation across compiler-managed
+  regions — no =malloc= / =free= needed
+  ([[file:../context/arena.org][context/arena.org — arena allocator]]).
+
+Key Points
+
+- Variable declaration is =(define name value)= — no type keyword, no
+  semicolon. HM inference deduces the type.
+- Function definition: =(define (fn-name params -> RetType) body)=.
+  Type annotations optional.
+- Struct equivalent: =(layout Name [field :: Type] ...)= with dot access.
+- Memory is arena-managed — no manual =malloc/=free.
+- Macros are compile-time functions returning =Syntax=, not textual
+  substitution.
+- FFI via =(include "header.h")= — call C functions directly after
+  including the header.
+- Two syntaxes: S-expression (prefix) and Wisp (indentation). Mix freely.
+- Everything is an expression (=if= returns a value, no statements).
+
+11. Compilation Model
 
 | C              | Monad                        |
 |----------------+------------------------------|
@@ -263,18 +327,34 @@ Monad compiles to native code via LLVM. The compilation pipeline is:
 5. Monomorphization (specialized copies per concrete type)
 6. LLVM codegen → native
 
-* Related Pages
+See [[file:../context/codegen.org][context/codegen.org]] for the codegen architecture. For the reader,
+see [[file:../context/reader.org][context/reader.org]]. For the build system, see [[file:build.org][Build]]
+and [[file:../context/build.org][context/build.org]].
+
+12. Related Pages
 
 - [[file:from-haskell.org][From Haskell]] -- migration guide for Haskell programmers
 - [[file:from-lisp.org][From Lisp]] -- migration guide for Lisp programmers
 - [[file:ffi.org][C FFI]] -- C interop details
 - [[file:layouts.org][Layout Types]] -- C-compatible layout types
 - [[file:asm.org][Inline Assembly]] -- inline assembly
+- [[file:casting.org][Casting]] -- type casting and conversion
+- [[file:heap.org][Heap]] -- heap allocation
+- [[file:arrays.org][Arrays]] -- fixed-size and heap arrays
 
-* Context Links
-- [[file:../context/language.org]] — full language formalization
-- [[file:../context/philosophy.org]] — design philosophy
-- [[file:../context/types.org]] — type representation
-- [[file:../context/codegen.org]] — codegen architecture
-- [[file:../context/ffi.org]] — C FFI internals
-- [[file:../context/asm.org]] — inline assembly internals
+13. Further Reading
+
+- [[file:../context/language.org][context/language.org]] — full language formalization
+- [[file:../context/philosophy.org][context/philosophy.org]] — design philosophy
+- [[file:../context/types.org][context/types.org]] — type representation
+- [[file:../context/codegen.org][context/codegen.org]] — codegen architecture
+- [[file:../context/ffi.org][context/ffi.org]] — C FFI internals
+- [[file:../context/asm.org][context/asm.org]] — inline assembly internals
+- [[file:../context/arena.org][context/arena.org]] — arena allocator internals
+- [[file:../context/reader.org][context/reader.org]] — reader architecture
+- [[file:../context/build.org][context/build.org]] — build system
+- [[file:../context/tests.org][context/tests.org]] — test architecture
+- [[file:info/core.org][Core Library]] — built-in functions
+- [[file:info/stdlib.org][Standard Library]] — standard library reference
+- [[file:info/types.org][Types]] — type system reference
+- [[file:info/syntax.org][Syntax]] — reader and parser rules

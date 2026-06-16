@@ -1,0 +1,158 @@
+{
+  "laws": [
+    "identity-left",
+    "identity-right",
+    "associativity-by-path-concat",
+    "typed-endpoints"
+  ],
+  "model": "Ctx = Free(G)",
+  "morphism_kinds": {
+    "blocks": {
+      "codomain": [
+        "Heading",
+        "Record"
+      ],
+      "domain": [
+        "Record"
+      ]
+    },
+    "classifies-as": {
+      "codomain": [
+        "Concept"
+      ],
+      "domain": [
+        "File",
+        "Heading",
+        "Record",
+        "Test",
+        "Script",
+        "Report"
+      ]
+    },
+    "contains": {
+      "codomain": [
+        "Heading",
+        "Record",
+        "Script",
+        "Report"
+      ],
+      "domain": [
+        "File",
+        "Script",
+        "Report"
+      ]
+    },
+    "file-link": {
+      "codomain": [
+        "File"
+      ],
+      "domain": [
+        "File",
+        "Heading",
+        "Record"
+      ]
+    },
+    "forgets-to": {
+      "codomain": [
+        "Concept"
+      ],
+      "domain": [
+        "File",
+        "Heading",
+        "Record",
+        "Script",
+        "Report",
+        "Concept"
+      ]
+    },
+    "id-link": {
+      "codomain": [
+        "Heading"
+      ],
+      "domain": [
+        "File",
+        "Heading",
+        "Record"
+      ]
+    },
+    "refines": {
+      "codomain": [
+        "Concept"
+      ],
+      "domain": [
+        "Concept"
+      ]
+    },
+    "supersedes": {
+      "codomain": [
+        "Record",
+        "Heading"
+      ],
+      "domain": [
+        "Record"
+      ]
+    },
+    "supports": {
+      "codomain": [
+        "Record",
+        "Heading"
+      ],
+      "domain": [
+        "Record"
+      ]
+    },
+    "verifies": {
+      "codomain": [
+        "Heading",
+        "Record"
+      ],
+      "domain": [
+        "Test",
+        "Record"
+      ]
+    }
+  },
+  "object_kinds": {
+    "Concept": {
+      "id_pattern": "concept:<name>",
+      "invariant": "taxonomy concept"
+    },
+    "File": {
+      "id_pattern": "file:<path>",
+      "invariant": "exists under context root"
+    },
+    "Heading": {
+      "id_pattern": "monadc.context.*",
+      "invariant": "unique org :ID:"
+    },
+    "Record": {
+      "id_pattern": "doc|obs|inf|dec|todo|think|idea|fix.*",
+      "invariant": "unique bracket id"
+    },
+    "Report": {
+      "id_pattern": "report:<path>",
+      "invariant": "reproducible generated file"
+    },
+    "Script": {
+      "id_pattern": "script:<path>",
+      "invariant": "stdlib-only executable/importable"
+    },
+    "SourceRegion": {
+      "id_pattern": "src:<path>:<range>",
+      "invariant": "precise region when repo present"
+    },
+    "Test": {
+      "id_pattern": "test:<TEST-ID>",
+      "invariant": "stable test manifest entry"
+    }
+  },
+  "scripts": [
+    "scripts/context_model.py",
+    "scripts/verify_category.py",
+    "scripts/search_context.py",
+    "scripts/info_metrics.py",
+    "scripts/render_docs.py",
+    "scripts/demo.py"
+  ],
+  "version": 5
+}

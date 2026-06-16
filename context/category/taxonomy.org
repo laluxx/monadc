@@ -1,0 +1,109 @@
+#+TITLE: Context Taxonomy as a Thin Category
+#+AUTHOR: GPT-5.5 Thinking
+#+DATE: 2026-06-16
+#+CREATED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-16
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:3 num:t
+#+CATEGORY: monadc-category
+#+FILETAGS: :monadc:compiler:context:category:taxonomy:concept-lattice:preorder:fca:
+#+PROPERTY: CONTEXT_VERSION 5
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.category.taxonomy
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+
+* Taxonomy as Preorder
+:PROPERTIES:
+:ID: monadc.context.category.taxonomy.preorder
+:CUSTOM_ID: category-taxonomy-preorder
+:CONTEXT_KIND: taxonomy
+:CONTEXT_STATUS: active
+:SOURCE: context/category/taxonomy.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.category.taxonomy.preorder src:context/category/taxonomy.org conf:high]
+  The concept taxonomy is a thin category: there is at most one morphism A -> B,
+  read as "A refines B" or "A is a specialization of B".  Reflexivity gives
+  identities.  Transitivity gives composition.
+
+#+BEGIN_EXAMPLE
+reader.tokenization -> reader
+reader -> frontend
+frontend -> compiler-phase
+therefore reader.tokenization -> compiler-phase
+#+END_EXAMPLE
+
+[DEC id:dec.category.taxonomy.thin-category date:2026-06-16 by:llm]
+  Taxonomy edges are preorder edges.  They must be acyclic unless an explicit
+  equivalence class is declared.
+
+* Compiler Phase Taxonomy
+:PROPERTIES:
+:ID: monadc.context.category.taxonomy.compiler-phases
+:CUSTOM_ID: category-taxonomy-compiler-phases
+:CONTEXT_KIND: taxonomy
+:CONTEXT_STATUS: active
+:SOURCE: context/category/taxonomy.org
+:CONFIDENCE: high
+:END:
+
+| Concept | Refines | Owns |
+|---------+---------+------|
+| compiler-phase | root | any phase-local contract |
+| frontend | compiler-phase | syntax and source-shape preservation |
+| reader | frontend | tokens, AST construction, source spans |
+| wisp | frontend | indentation sugar, Wisp-to-Lisp shape |
+| macro | frontend | expansion before type/codegen contracts |
+| middle-end | compiler-phase | inference, desugar, dependency analysis |
+| infer | middle-end | type constraints and diagnostics |
+| dep | middle-end | dependent checking and NBE |
+| module | middle-end | imports, exports, symbol visibility |
+| backend | compiler-phase | lowering to executable target |
+| codegen | backend | LLVM/value lowering and runtime calls |
+| runtime | backend | heap objects, printing, collections, FFI boundary |
+| test-system | meta | verification artifacts and triage |
+| context-system | meta | durable design memory and navigation |
+
+* Formal Concept Analysis Hook
+:PROPERTIES:
+:ID: monadc.context.category.taxonomy.fca
+:CUSTOM_ID: category-taxonomy-fca
+:CONTEXT_KIND: taxonomy
+:CONTEXT_STATUS: active
+:SOURCE: context/category/taxonomy.org
+:CONFIDENCE: medium
+:END:
+
+[DOC id:doc.category.taxonomy.fca src:context/category/taxonomy.org conf:medium]
+  A future formal concept analysis (FCA) view can treat context files/tests as
+  objects and tags/record types/failure kinds as attributes.  A formal concept
+  is a maximal pair (extent, intent): all objects sharing all attributes in the
+  intent, and all attributes common to the extent.
+
+#+BEGIN_EXAMPLE
+extent  = {reader.org, wisp.org, tests/reader-atoms.tsv}
+intent  = {frontend, syntax, parse, TEST-CONTEXT}
+concept = syntax-front-end-regression-surface
+#+END_EXAMPLE
+
+[IDEA id:idea.category.taxonomy.fca-script src:context/category/taxonomy.org conf:medium]
+  Extend info_metrics.py to emit candidate formal concepts by grouping files by
+  tag sets and record-type distributions.
+
+* Naming Discipline
+:PROPERTIES:
+:ID: monadc.context.category.taxonomy.naming
+:CUSTOM_ID: category-taxonomy-naming
+:CONTEXT_KIND: convention
+:CONTEXT_STATUS: active
+:SOURCE: context/category/taxonomy.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.category.taxonomy.prefixes date:2026-06-16 by:llm]
+  Category IDs should use stable prefixes: monadc.context.category.* for theory,
+  monadc.context.<phase>.* for phase contracts, and record IDs with lower-case
+  type prefixes such as doc.*, obs.*, inf.*, dec.*, todo.*, think.*, idea.*,
+  fix.*.

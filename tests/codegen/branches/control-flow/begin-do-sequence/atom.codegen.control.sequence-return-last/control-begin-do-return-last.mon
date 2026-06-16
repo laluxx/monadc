@@ -1,0 +1,33 @@
+;; TEST-ID: tests.codegen.branch.control-begin-do-return-last
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: begin-do-sequence
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise begin/do sequencing and last-expression value return with side effects.
+;; TEST-ATOM: atom.codegen.control.sequence-return-last
+;; TEST-CODEGEN-ATOM: atom.codegen.control.sequence-return-last
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.begin.sequence
+;; TEST-CODEGEN-PATH: codegen.do.sequence
+;; TEST-CODEGEN-PATH: codegen.setbang
+;; TEST-DEPENDS-ON: atom.codegen.env.global-set-load-sequence
+;; TEST-TAG: run
+;; TEST-TAG: control
+;; TEST-TAG: sequence
+;; TEST-COVERAGE: codegen.c:7732-7741 begin branch
+;; TEST-COVERAGE: codegen.c:8001 do branch
+;; TEST-COVERAGE: codegen.c:7642 set! branch
+
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/begin-do-sequence/atom.codegen.control.sequence-return-last
+;; TEST-MENU-PATH: codegen/branches/control-flow/begin-do-sequence/atom.codegen.control.sequence-return-last
+;; TEST-ATOM-LEAF: atom.codegen.control.sequence-return-last
+;; TEST-CLI-TARGET: codegen branches control-flow begin-do-sequence
+(module Main)
+(define x 0)
+(show (begin (set! x 1) (set! x (+ x 2)) x))
+(show (do (set! x (+ x 4)) x))
+(show x)

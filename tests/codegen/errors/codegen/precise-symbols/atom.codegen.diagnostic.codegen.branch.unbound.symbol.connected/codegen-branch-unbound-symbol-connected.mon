@@ -1,0 +1,34 @@
+;; TEST-ID: tests.codegen.codegen-error.codegen-branch-unbound-symbol-connected
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: codegen-errors/precise-symbols
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.reader-error-coverage
+;; TEST-PURPOSE: Trigger and pin diagnostic: unbound
+;; TEST-ATOM: atom.codegen.diagnostic.codegen.branch.unbound.symbol.connected
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.codegen.branch.unbound.symbol.connected
+;; TEST-QUALITY: diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-READER-ERROR: unbound
+;; TEST-READER-PATH: reader.c:1 codegen.symbol-resolution
+;; TEST-CODEGEN-PATH: diagnostic.codegen.symbol-resolution
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: codegen
+;; TEST-COVERAGE: reader.c:1 unbound
+;; TEST-USES-ATOM: atom.codegen.diagnostic.codegen.branch.unbound.symbol.connected
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-USES-ATOM: atom.codegen.error.precise
+;; TEST-DEPENDS-ON: atom.reader.symbol.token
+;; TEST-DEPENDS-ON: atom.codegen.env.lookup
+;; TEST-REFINES: atom.codegen.diagnostic.unbound-symbol
+;; TEST-REFINES: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/precise-symbols/atom.codegen.diagnostic.codegen.branch.unbound.symbol.connected
+;; TEST-MENU-PATH: codegen/errors/codegen/precise-symbols/atom.codegen.diagnostic.codegen.branch.unbound.symbol.connected
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.codegen.branch.unbound.symbol.connected
+;; TEST-CLI-TARGET: codegen errors codegen precise-symbols
+
+(module Main)
+(show missing_symbol_for_codegen_diagnostic)

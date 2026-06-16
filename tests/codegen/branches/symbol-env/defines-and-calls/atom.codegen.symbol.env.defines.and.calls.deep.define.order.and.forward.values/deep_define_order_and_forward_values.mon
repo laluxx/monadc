@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.deep.deep_define_order_and_forward_values
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SUBSET: defines-and-calls
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.symbol.env.defines.and.calls.deep.define.order.and.forward.values
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise global definitions, symbol lookup, and typed function call lowering.
+;; TEST-ATOM: Definitions should be visible to later codegen expressions.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:AST_DEFINE top-level globals
+;; TEST-COVERAGE: codegen.c:symbol env lookup and call
+
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/defines-and-calls/atom.codegen.symbol.env.defines.and.calls.deep.define.order.and.forward.values
+;; TEST-MENU-PATH: codegen/branches/symbol-env/defines-and-calls/atom.codegen.symbol.env.defines.and.calls.deep.define.order.and.forward.values
+;; TEST-ATOM-LEAF: atom.codegen.symbol.env.defines.and.calls.deep.define.order.and.forward.values
+;; TEST-CLI-TARGET: codegen branches symbol-env defines-and-calls
+(module Main)
+(define a 1)
+(define b 2)
+(define (add2 [x : Int] [y : Int] -> Int) (+ x y))
+(show (add2 a b))
+(show (add2 3 4))

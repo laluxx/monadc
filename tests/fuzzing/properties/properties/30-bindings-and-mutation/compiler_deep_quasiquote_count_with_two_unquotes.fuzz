@@ -1,0 +1,15 @@
+name: compiler_deep_quasiquote_count_with_two_unquotes
+section: quote-runtime-current
+tier: stable
+kind: law
+features: arithmetic, env, equality, path, quasiquote, quote, unquote, with
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.local_load, codegen.path_literal, codegen.quote, codegen.with_binding, desugar.quasiquote, infer.arithmetic, infer.env_child, infer.env_lookup, infer.equality, infer.path, reader.path_literal, reader.quasiquote, reader.quote, reader.unquote
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.with, atom.core.equality, atom.quote.quote, atom.runtime.path
+related-properties: signal_atom_equality_reflexive, signal_atom_with_substitution
+args: a:Int b:Int
+type: Bool
+expect: True
+description: quasiquote list with unquotes should preserve list length.
+law: (= (count (quasiquote ((unquote {a}) mid (unquote {b}) end))) 4)

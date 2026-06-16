@@ -1,0 +1,17 @@
+name: structured_exp_string_index_self_equal_r03_disabled_duplicate_36f376b0
+section: current-experimental
+tier: experimental
+kind: law
+features: experimental, string, dependent-index
+compiler-path: codegen.string_literal, reader.string_literal, runtime.string
+signal: high
+corpus-role: merged-duplicate
+uses-atoms: atom.core.equality, atom.dependent.index-of, atom.runtime.string
+related-properties: signal_atom_equality_reflexive, signal_atom_string_contains_substring
+merged-into: structured_exp_string_index_self_equal_r01
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: s:NonEmptyString@escape i:IndexOf(s)
+type: Bool
+expect: True
+description: V10 experimental generator property exp_string_index_self_equal round 3, intended for --tiers experimental/all.
+law: (= ({s} {i}) ({s} {i}))

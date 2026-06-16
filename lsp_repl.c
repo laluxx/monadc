@@ -14,7 +14,6 @@
 //  notifications arrive between commands, responses are matched
 //  to the request that triggered them.
 //
-
 #include "lsp_repl.h"
 #include "completion.h"
 
@@ -28,12 +27,10 @@
 #include <sys/types.h>
 #include <pthread.h>
 #include <termios.h>
-#include <signal.h>
 #include <time.h>
 
-/* ------------------------------------------------------------------ */
-/*  ANSI                                                               */
-/* ------------------------------------------------------------------ */
+/// ANSI
+
 #define RESET    "\x1b[0m"
 #define BOLD     "\x1b[1m"
 #define DIM      "\x1b[2m"
@@ -55,10 +52,8 @@
 #define SAVE_CURSOR     "\x1b[s"
 #define RESTORE_CURSOR  "\x1b[u"
 
-/* ------------------------------------------------------------------ */
-/*  Message queue (lock-free single-producer single-consumer via      */
-/*  mutex + condvar — simple and correct for our throughput)          */
-/* ------------------------------------------------------------------ */
+//  Message queue (lock-free single-producer single-consumer via      */
+//  mutex + condvar — simple and correct for our throughput)          */
 
 #define QUEUE_CAP 64
 
@@ -131,9 +126,7 @@ static char *queue_pop_timeout(MsgQueue *q, int timeout_ms)
     return msg;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Global REPL state                                                  */
-/* ------------------------------------------------------------------ */
+/// Global REPL state
 
 typedef struct {
     /* Server process */
@@ -167,9 +160,7 @@ typedef struct {
 
 static ReplState G;
 
-/* ------------------------------------------------------------------ */
-/*  JSON-RPC framing                                                   */
-/* ------------------------------------------------------------------ */
+/// JSON-RPC framing
 
 static void rpc_send(const char *json)
 {
@@ -231,9 +222,7 @@ static char *rpc_recv_raw(int fd)
     return buf;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Tiny JSON field extractors (same approach as lsp.c)               */
-/* ------------------------------------------------------------------ */
+/// Tiny JSON field extractors (same approach as lsp.c)
 
 static int json_has_field(const char *json, const char *field)
 {
@@ -262,9 +251,7 @@ static char *json_get_str(const char *json, const char *field)
     return strndup(p, (size_t)(end - p));
 }
 
-/* ------------------------------------------------------------------ */
-/*  Pretty printer (depth-colored JSON)                               */
-/* ------------------------------------------------------------------ */
+/// Pretty printer (depth-colored JSON)
 
 static void pretty_print(const char *json)
 {
@@ -341,9 +328,7 @@ static void pretty_print(const char *json)
     putchar('\n');
 }
 
-/* ------------------------------------------------------------------ */
-/*  Diagnostic pretty-printer                                          */
-/* ------------------------------------------------------------------ */
+/// Diagnostic pretty-printer
 
 /* Extract array items from a JSON array string (shallow, bracket-aware). */
 static void print_diagnostics_json(const char *diag_json, const char *uri)
@@ -415,9 +400,7 @@ static void print_diagnostics_json(const char *diag_json, const char *uri)
             "  " GREEN "no diagnostics" RESET " for %s\n", fname);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Notification handler (called from background thread)              */
-/* ------------------------------------------------------------------ */
+/// Notification handler (called from background thread)
 
 static void store_diagnostics(const char *params_json)
 {
@@ -525,9 +508,7 @@ static void handle_notification(const char *method, const char *json)
     pthread_mutex_unlock(&G.print_mu);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Background reader thread                                           */
-/* ------------------------------------------------------------------ */
+/// Background reader thread
 
 static void *reader_thread(void *arg)
 {
@@ -563,9 +544,7 @@ static void *reader_thread(void *arg)
     return NULL;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Send a request and wait for its response (with timeout)           */
-/* ------------------------------------------------------------------ */
+/// Send a request and wait for its response (with timeout)
 
 static char *send_request(const char *json)
 {
@@ -601,9 +580,7 @@ static void send_notif(const char *json)
     rpc_send(json);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Command implementations                                            */
-/* ------------------------------------------------------------------ */
+/// Command implementations
 
 static void cmd_init(void)
 {
@@ -870,9 +847,7 @@ static void cmd_shutdown(void)
     G.server_alive = 0;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Scripted test suite                                                */
-/* ------------------------------------------------------------------ */
+/// Scripted test suite
 
 static int test_pass = 0;
 static int test_fail = 0;
@@ -944,9 +919,7 @@ static void cmd_test(void)
         test_pass, test_fail);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Help                                                               */
-/* ------------------------------------------------------------------ */
+/// Help
 
 static void print_repl_help(void)
 {
@@ -991,9 +964,7 @@ static void print_repl_help(void)
     fflush(stdout);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Prompt                                                             */
-/* ------------------------------------------------------------------ */
+/// Prompt
 
 static void print_prompt(void)
 {
@@ -1006,9 +977,7 @@ static void print_prompt(void)
     fflush(stderr);
 }
 
-/* ------------------------------------------------------------------ */
-/*  REPL entry point                                                   */
-/* ------------------------------------------------------------------ */
+/// REPL entry point
 
 int lsp_repl_run(void)
 {

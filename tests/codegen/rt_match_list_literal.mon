@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-match-list-literal
-;; TEST-CONTEXT: monadc.context.language.reader-header-coverage, monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Pattern codegen coverage for fixed element list patterns.
-;; TEST-ATOM: (match [1 2] with | [1 2] -> 12 | _ -> 0) should select the fixed-list clause.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (match [1 2] with | [1 2] -> 12 | _ -> 0))

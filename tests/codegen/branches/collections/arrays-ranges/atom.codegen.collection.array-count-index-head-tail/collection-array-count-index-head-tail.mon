@@ -1,0 +1,37 @@
+;; TEST-ID: tests.codegen.branch.collection-array-count-index-head-tail
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: arrays-ranges
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise stack array literal count, function-call indexing, head, and tail paths.
+;; TEST-ATOM: atom.codegen.collection.array-count-index-head-tail
+;; TEST-CODEGEN-ATOM: atom.codegen.collection.array-count-index-head-tail
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.array.literal.stack
+;; TEST-CODEGEN-PATH: codegen.array.count
+;; TEST-CODEGEN-PATH: codegen.array.index
+;; TEST-CODEGEN-PATH: codegen.array.head-tail
+;; TEST-DEPENDS-ON: atom.codegen.operator.integer-reduction
+;; TEST-TAG: run
+;; TEST-TAG: collection
+;; TEST-TAG: array
+;; TEST-COVERAGE: codegen.c:3935-4020 AST_ARRAY stack array branch
+;; TEST-COVERAGE: codegen.c:8860 count array branch
+;; TEST-COVERAGE: codegen.c:9927 array used as function branch
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/arrays-ranges/atom.codegen.collection.array-count-index-head-tail
+;; TEST-MENU-PATH: codegen/branches/collections/arrays-ranges/atom.codegen.collection.array-count-index-head-tail
+;; TEST-ATOM-LEAF: atom.codegen.collection.array-count-index-head-tail
+;; TEST-CLI-TARGET: codegen branches collections arrays-ranges
+(module Main)
+(define xs [10 20 30])
+(show xs)
+(show (count xs))
+(show (xs 0))
+(show (xs 2))
+(show (head xs))
+(show (tail xs))

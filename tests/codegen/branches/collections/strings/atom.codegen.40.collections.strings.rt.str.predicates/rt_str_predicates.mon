@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.rt-str-predicates
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.strings.rt.str.predicates
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: strings
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: String predicate functions starts-with?, ends-with?, contains?.
+;; TEST-ATOM: (starts-with? "hello world" "hello") = True,
+;;           (ends-with? "hello world" "world") = True,
+;;           (contains? "hello world" "lo wo") = True
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:40-collections/strings branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/strings/atom.codegen.40.collections.strings.rt.str.predicates
+;; TEST-MENU-PATH: codegen/branches/collections/strings/atom.codegen.40.collections.strings.rt.str.predicates
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.strings.rt.str.predicates
+;; TEST-CLI-TARGET: codegen branches collections strings
+(module Main)
+(show (starts-with? "hello world" "hello"))
+(show (ends-with? "hello world" "world"))
+(show (contains? "hello world" "lo wo"))
+(show (starts-with? "hello" "x"))
+(show (contains? "abc" "xyz"))

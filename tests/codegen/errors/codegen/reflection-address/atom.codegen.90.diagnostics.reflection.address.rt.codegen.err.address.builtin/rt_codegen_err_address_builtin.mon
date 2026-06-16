@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-address-builtin
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.90.diagnostics.reflection.address.rt.codegen.err.address.builtin
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: reflection-address
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen rejects address-of on builtins.
+;; TEST-ATOM: &show must fail because builtins are not lvalues.
+;; TEST-EXPECT: fail:compile
+
+;; TEST-COVERAGE: codegen.c:90-diagnostics/reflection-address branch family
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/reflection-address/atom.codegen.90.diagnostics.reflection.address.rt.codegen.err.address.builtin
+;; TEST-MENU-PATH: codegen/errors/codegen/reflection-address/atom.codegen.90.diagnostics.reflection.address.rt.codegen.err.address.builtin
+;; TEST-ATOM-LEAF: atom.codegen.90.diagnostics.reflection.address.rt.codegen.err.address.builtin
+;; TEST-CLI-TARGET: codegen errors codegen reflection-address
+(module Main)
+(show &show)

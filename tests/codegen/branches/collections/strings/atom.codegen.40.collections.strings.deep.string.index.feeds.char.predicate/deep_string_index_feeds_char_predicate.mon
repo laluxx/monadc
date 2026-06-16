@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.deep.deep_string_index_feeds_char_predicate
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-SUBSET: strings
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.strings.deep.string.index.feeds.char.predicate
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise string indexing into Char predicate.
+;; TEST-ATOM: String index result should be a Char runtime/scalar value.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.40.collections, atom.codegen.subset.strings
+;; TEST-COVERAGE: codegen.c:string index return type and predicate branch
+;; TEST-MENU: branches/collections/strings/atom.codegen.40.collections.strings.deep.string.index.feeds.char.predicate
+;; TEST-MENU-PATH: codegen/branches/collections/strings/atom.codegen.40.collections.strings.deep.string.index.feeds.char.predicate
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.strings.deep.string.index.feeds.char.predicate
+;; TEST-CLI-TARGET: codegen branches collections strings
+
+(module Main)
+(define s "abc")
+(show (char? (s 1)))

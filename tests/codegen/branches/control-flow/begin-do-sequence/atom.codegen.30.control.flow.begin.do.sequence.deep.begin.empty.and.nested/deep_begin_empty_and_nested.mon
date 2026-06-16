@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.deep.deep_begin_empty_and_nested
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SUBSET: begin-do-sequence
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.begin.do.sequence.deep.begin.empty.and.nested
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise empty begin and nested begin value selection.
+;; TEST-ATOM: begin should lower empty/nested sequences deterministically.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow, atom.codegen.subset.begin.do.sequence
+;; TEST-COVERAGE: codegen.c:AST_BEGIN empty and nested sequence branches
+;; TEST-MENU: branches/control-flow/begin-do-sequence/atom.codegen.30.control.flow.begin.do.sequence.deep.begin.empty.and.nested
+;; TEST-MENU-PATH: codegen/branches/control-flow/begin-do-sequence/atom.codegen.30.control.flow.begin.do.sequence.deep.begin.empty.and.nested
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.begin.do.sequence.deep.begin.empty.and.nested
+;; TEST-CLI-TARGET: codegen branches control-flow begin-do-sequence
+
+(module Main)
+(show (begin))
+(show (begin (begin 1 2) (+ 3 3)))

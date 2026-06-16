@@ -13,8 +13,11 @@
 
 Test coverage: style is enforced by code review; no automated test target.
 
-This file documents MonadC source-code style conventions. It is about
-how valid MonadC programs are written and read, not about compiler
+This page covers Monad code style: naming, formatting, comments, module
+structure, pattern alignment, and workflow conventions.
+
+This file documents Monad source-code style conventions. It is about
+how valid Monad programs are written and read, not about compiler
 implementation style. For the full style taxonomy with examples and
 rationale, see [[file:../context/style.org][context/style.org]].
 
@@ -25,7 +28,7 @@ lowercase) and by project conventions documented in
 [[file:../Main.mon][Main.mon]] (1244 lines) and [[file:../core/][core/]] modules
 demonstrate real usage of these conventions.
 
-* Naming
+1. Naming
 
 - **Types**: =PascalCase= (must start with uppercase — enforced by reader
   constructor name check in [[file:../reader.c]])
@@ -36,12 +39,61 @@ demonstrate real usage of these conventions.
   =conj!=, =disj!=)
 - **Type variables**: lowercase single letter (e.g. =a=, =b=)
 
-* Formatting
+See [[file:data.org][Data Types]] for ADT naming conventions and
+[[file:../context/types.org][context/types.org]] for the type system design.
+
+Key Points:
+- Types: PascalCase (enforced by reader constructor name check)
+- Values: camelCase or kebab-case (kebab preferred)
+- Predicates: suffix with =?= (e.g. =zero?=, =empty?=)
+- Mutations: suffix with =!= (e.g. =set!=, =reset!=)
+- Type variables: lowercase single letter (=a=, =b=)
+
+#+BEGIN_SRC monad
+;; Types in PascalCase
+(define Color Int)
+(define Vec3 [Float Float Float])
+
+;; Values in camelCase or kebab-case (kebab preferred)
+(define myVar 42)
+(define my-var 42)
+
+;; Predicates suffix with ?
+(define (zero? n) (== n 0))
+(define (empty? xs) (null xs))
+
+;; Mutating operations suffix with !
+(define (set! target value) ...)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+# Types in PascalCase
+define Color Int
+define Vec3 [Float Float Float]
+
+# Values in camelCase or kebab-case (kebab preferred)
+define myVar 42
+define my-var 42
+
+# Predicates suffix with ?
+define zero? n
+  == n 0
+define empty? xs
+  null xs
+
+# Mutating operations suffix with !
+define set! target value ...
+#+END_SRC
+
+2. Formatting
 
 - Indent 2 spaces for body. No tabs.
 - Close parens at end of line (not on their own line).
 - One =define= per binding. No comma-separated definitions.
 - =match= clauses: arrows aligned, body on same line:
+
+See [[file:syntax.org][Syntax]] for basic syntax rules and
+[[file:wisp.org][Wisp]] for the indentation-based surface syntax.
 
 #+BEGIN_SRC monad
 (match x with
@@ -81,7 +133,9 @@ cond
 data |> process |> transform |> show
 #+END_SRC
 
-* Comments
+For pipe operator details, see [[file:../context/codegen-ops.org][context/codegen-ops.org]].
+
+3. Comments
 
 - =;;= (double semicolon) for line comments
 - =;| |;= for block comments
@@ -90,39 +144,107 @@ data |> process |> transform |> show
   =match= forms
 - Document macro syntax in a =;;= comment before =define-macro=
 
-* Hybrid C-Signature Lisp-Body Style
-
-Function signatures use C-like parameter declarations with =[param ::
-Type]= syntax while bodies remain Lisp-like S-expressions. This style is
-common in low-level graphics and runtime code where field types and
-mutation are prominent:
+See [[file:macros.org][Macros]] and [[file:macro-patterns.org][Macro Patterns]] for macro
+documentation conventions. See [[file:../context/macro.org][context/macro.org]] for the macro
+system design.
 
 #+BEGIN_SRC monad
-(define (push-vertex [x :: F32] [y :: F32]
-                     [u :: F32] [v :: F32]
-                     [c :: Color])
-  (unless (g-vertex-count >= MAX-VERTICES)
-    (define [vtx -> Vertex]
-      (g-vertices g-vertex-count))
-    (set! vtx.x x)
-    (set! vtx.y y)
-    (set! g-vertex-count (g-vertex-count + 1))))
+;; This is a line comment
+
+;| This is a
+   block comment |;
+
+(let ((x 5))  ; alignment comment
+  (show x))
+
+;; Document macro syntax before define-macro
+;; (my-macro arg1 arg2) -> expands to ...
+(define-macro (my-macro ...) ...)
 #+END_SRC
 
 #+BEGIN_SRC wisp
-define push-vertex [x :: F32] [y :: F32]
-                   [u :: F32] [v :: F32]
-                   [c :: Color]
-  unless (g-vertex-count >= MAX-VERTICES)
-    define [vtx -> Vertex]
-      g-vertices g-vertex-count
-    set! vtx.x x
-    set! vtx.y y
-    set! g-vertex-count
-      g-vertex-count + 1
+;; This is a line comment
+
+;| This is a
+   block comment |;
+
+let (x 5)     ; alignment comment
+  show x
+
+;; Document macro syntax before define-macro
+;; (my-macro arg1 arg2) -> expands to ...
+define-macro my-macro ...
+  ...
 #+END_SRC
 
-* Pattern Clause Alignment
+4. Module Structure
+
+- Every file begins with =(module <Name>)= declaration.
+- Imports follow immediately after module declaration.
+- Type and data declarations come before function definitions.
+- Function definitions are grouped by subsystem, separated by blank lines.
+- =main= function (when present) is the last definition in the file.
+
+See [[file:modules.org][Modules]] for module system reference and
+[[file:../context/module.org][context/module.org]] for module system internals.
+
+#+BEGIN_SRC monad
+module MyModule
+import Prelude
+import Coll
+
+data Color = Red | Green | Blue
+
+(define (greet name)
+  (show "Hello, " ++ name))
+
+(define (main)
+  (greet "World"))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+module MyModule
+import Prelude
+import Coll
+
+data Color = Red | Green | Blue
+
+define greet name
+  show "Hello, " ++ name
+
+define main
+  greet "World"
+#+END_SRC
+
+  4.1 Import Organization
+
+- One =import= per line. No comma-separated imports.
+- Standard library imports first, then project modules, then external
+  FFI bindings.
+- Each import group separated by a blank line.
+
+For FFI import conventions, see [[file:ffi.org][FFI]] and
+[[file:../context/ffi.org][context/ffi.org]].
+
+#+BEGIN_SRC monad
+module Main
+import Prelude
+import Coll
+
+import <math.h>  [sqrt]
+import <stdio.h> [printf]
+#+END_SRC
+
+#+BEGIN_SRC wisp
+module Main
+import Prelude
+import Coll
+
+import <math.h>  [sqrt]
+import <stdio.h> [printf]
+#+END_SRC
+
+5. Pattern Clause Alignment
 
 When a function has multiple clauses with patterns and guards, the
 arrows (=->=) should be aligned vertically, and guard pipes (=|=)
@@ -163,57 +285,97 @@ match x with
   Nothing   -> (show "none")
 #+END_SRC
 
-* Module Structure
+See [[file:patterns.org][Pattern Matching]] for full pattern syntax and
+[[file:../context/pmatch.org][context/pmatch.org]] for pattern compilation internals.
 
-- Every file begins with =(module <Name>)= declaration.
-- Imports follow immediately after module declaration.
-- Type and data declarations come before function definitions.
-- Function definitions are grouped by subsystem, separated by blank lines.
-- =main= function (when present) is the last definition in the file.
+See also: [[file:patterns.org][Pattern Matching]]
 
-* Import Organization
+6. Hybrid C-Signature Lisp-Body Style
 
-- One =import= per line. No comma-separated imports.
-- Standard library imports first, then project modules, then external
-  FFI bindings.
-- Each import group separated by a blank line.
+Function signatures use C-like parameter declarations with =[param ::
+Type]= syntax while bodies remain Lisp-like S-expressions. This style is
+common in low-level graphics and runtime code where field types and
+mutation are prominent:
 
 #+BEGIN_SRC monad
-module Main
-import Prelude
-import Coll
-
-import <math.h>  [sqrt]
-import <stdio.h> [printf]
+(define (push-vertex [x :: F32] [y :: F32]
+                     [u :: F32] [v :: F32]
+                     [c :: Color])
+  (unless (g-vertex-count >= MAX-VERTICES)
+    (define [vtx -> Vertex]
+      (g-vertices g-vertex-count))
+    (set! vtx.x x)
+    (set! vtx.y y)
+    (set! g-vertex-count (g-vertex-count + 1))))
 #+END_SRC
 
 #+BEGIN_SRC wisp
-module Main
-import Prelude
-import Coll
-
-import <math.h>  [sqrt]
-import <stdio.h> [printf]
+define push-vertex [x :: F32] [y :: F32]
+                   [u :: F32] [v :: F32]
+                   [c :: Color]
+  unless (g-vertex-count >= MAX-VERTICES)
+    define [vtx -> Vertex]
+      g-vertices g-vertex-count
+    set! vtx.x x
+    set! vtx.y y
+    set! g-vertex-count
+      g-vertex-count + 1
 #+END_SRC
 
-* Context-First Workflow Rule
+For FFI and C interop patterns, see [[file:from-c.org][From C]],
+[[file:ffi.org][FFI]], and [[file:../context/ffi.org][context/ffi.org]].
+
+7. Context-First Workflow Rule
 
 Before making style-related changes, read [[file:../context/style.org][context/style.org]] for the
 complete style taxonomy, including the hybrid C-signature and Pure Wisp
 styles. After making changes, extend the context with new observations.
 
-* Related Pages
+See [[file:../context/guidelines.org][context/guidelines.org]] for the full context-first workflow
+rules and [[file:../context/workflow.org][context/workflow.org]] for workflow patterns.
+For the Pure Wisp style specifically, see
+[[file:../context/wisp.org][context/wisp.org]].
+
+See also: [[file:wisp.org][Wisp]]
+
+* Implementation Notes
+
+Style enforcement source components:
+
+| Component | Source | Role |
+|-----------+--------+------|
+| Constructor name check | [[file:../reader.c][reader.c]] | Uppercase/lowercase enforcement |
+| Real usage examples | [[file:../Main.mon][Main.mon]] | ~1244 lines of idiomatic code |
+| Core library conventions | [[file:../core/][core/]] | Standard library style patterns |
+| Complete style taxonomy | [[file:../context/style.org][context/style.org]] | Full style reference with rationale |
+| Project guidelines | [[file:../context/guidelines.org][context/guidelines.org]] | Hard constraints and soft preferences |
+
+8. Related Pages
 
 - [[file:syntax.org][Syntax]] -- syntax conventions
 - [[file:functional-programming.org][Functional Programming]] -- functional style guide
 - [[file:data.org][Data Types]] -- ADT naming conventions
 - [[file:patterns.org][Pattern Matching]] -- pattern style
+- [[file:types.org][Types]] -- type annotations in signatures
+- [[file:wisp.org][Wisp]] -- indentation-based surface syntax
+- [[file:modules.org][Modules]] -- module structure
+- [[file:ffi.org][FFI]] -- foreign function interface conventions
+- [[file:let.org][Let]] -- let-binding style
+- [[file:define.org][Define]] -- definition forms
+- [[file:mutation.org][Mutation]] -- mutation conventions
 - [[file:contributing.org][Contributing]] -- contribution conventions
 
-* Context Links
+9. Further Reading
 
 - [[file:../context/style.org][context/style.org]] — Full style taxonomy with examples and rationale
-- [[file:../context/guidelines.org][context/guidelines.org]] — Project guidelines including context-first
-  workflow
+- [[file:../context/guidelines.org][context/guidelines.org]] — Project guidelines including context-first workflow
+- [[file:../context/wisp.org][context/wisp.org]] — Wisp syntax conventions and design
+- [[file:../context/reader.org][context/reader.org]] — Reader internals (naming enforcement)
+- [[file:../context/module.org][context/module.org]] — Module system design
+- [[file:../context/types.org][context/types.org]] — Type system design
+- [[file:../context/pmatch.org][context/pmatch.org]] — Pattern matching compilation
+- [[file:../context/ffi.org][context/ffi.org]] — FFI conventions
+- [[file:../context/macro.org][context/macro.org]] — Macro system design
+- [[file:../context/codegen-ops.org][context/codegen-ops.org]] — Code generation for operators
 - [[file:syntax.org][Syntax Reference]] — Language syntax reference
 - [[file:../context/][context/]] — Compiler internals

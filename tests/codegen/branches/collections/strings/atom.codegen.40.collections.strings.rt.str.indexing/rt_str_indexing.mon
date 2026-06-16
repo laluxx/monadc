@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.rt-str-indexing
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.strings.rt.str.indexing
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: strings
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: String indexing with integer index (codegen handle_atom pattern).
+;; TEST-ATOM: ("hello" 0) = #\h, ("hello" 1) = #\e, ("hello" 4) = #\o,
+;;           (define s "abc") then (s 2) = #\c
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:40-collections/strings branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/strings/atom.codegen.40.collections.strings.rt.str.indexing
+;; TEST-MENU-PATH: codegen/branches/collections/strings/atom.codegen.40.collections.strings.rt.str.indexing
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.strings.rt.str.indexing
+;; TEST-CLI-TARGET: codegen branches collections strings
+(module Main)
+(show ("hello" 0))
+(show ("hello" 4))
+(define s "abc")
+(show (s 2))

@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.asm.six-param-forward-sum
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.70.ffi.asm.inline.asm.asm.six.param.forward.sum
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: inline-asm
+;; TEST-CATEGORY: 70-ffi-asm
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Five input operands remain addressable through LLVM placeholders.
+;; TEST-ATOM: a plus b/c/d/e/f returns the sum of six Int parameters.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:70-ffi-asm/inline-asm branch family
+;; TEST-USES-ATOM: atom.codegen.category.70.ffi.asm
+;; TEST-MENU: branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.six.param.forward.sum
+;; TEST-MENU-PATH: codegen/branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.six.param.forward.sum
+;; TEST-ATOM-LEAF: atom.codegen.70.ffi.asm.inline.asm.asm.six.param.forward.sum
+;; TEST-CLI-TARGET: codegen branches ffi-asm inline-asm
+module AsmTest
+
+define asm-six :: Int -> Int -> Int -> Int -> Int -> Int -> Int
+  a b c d e f -> (asm add a b add a c add a d add a e add a f)
+
+show (asm-six 1 2 3 4 5 6)

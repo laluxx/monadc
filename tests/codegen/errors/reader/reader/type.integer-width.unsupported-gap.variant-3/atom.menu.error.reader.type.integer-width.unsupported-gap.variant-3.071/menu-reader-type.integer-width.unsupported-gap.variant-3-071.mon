@@ -1,0 +1,42 @@
+;; TEST-ID: tests.codegen.menu.errors.reader.type.integer.width.unsupported.gap.variant.3.071
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: errors
+;; TEST-SUBSET: reader/type.integer-width.unsupported-gap.variant-3
+;; TEST-MENU: errors/reader/type.integer-width.unsupported-gap.variant-3/atom.menu.error.reader.type.integer-width.unsupported-gap.variant-3.071
+;; TEST-MENU-PATH: codegen/errors/reader/type.integer-width.unsupported-gap.variant-3/atom.menu.error.reader.type.integer-width.unsupported-gap.variant-3.071
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.error-menu
+;; TEST-PURPOSE: Pin reader.c diagnostic: invalid integer type 'U65': bit-widths 65
+;; TEST-ATOM: atom.menu.error.reader.type.integer-width.unsupported-gap.variant-3.071
+;; TEST-CODEGEN-ATOM: atom.menu.error.reader.type.integer-width.unsupported-gap.variant-3.071
+;; TEST-ATOM-LEAF: atom.menu.error.reader.type.integer-width.unsupported-gap.variant-3.071
+;; TEST-QUALITY: menu-error-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ERROR-STAGE: reader
+;; TEST-ERROR-FAMILY: type.integer-width.unsupported-gap.variant-3
+;; TEST-ERROR-MESSAGE: invalid integer type 'U65': bit-widths 65
+;; TEST-ERROR-SOURCE: reader.c
+;; TEST-ERROR-PATH: reader.c:1148
+;; TEST-CODEGEN-PATH: diagnostic.reader.type.integer-width.unsupported-gap.variant-3
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: reader
+;; TEST-TAG: menu
+;; TEST-COVERAGE: reader.c:1148 invalid integer type 'U65': bit-widths 65
+;; TEST-USES-ATOM: atom.menu.error.reader.type.integer-width.unsupported-gap.variant-3.071
+;; TEST-USES-ATOM: atom.error.reader
+;; TEST-USES-ATOM: atom.error.reader.type.integer-width.unsupported-gap.variant-3
+;; TEST-USES-ATOM: atom.reader.error
+;; TEST-DEPENDS-ON: atom.reader.lex.parse
+;; TEST-REFINES: atom.error.reader
+;; TEST-REFINES: atom.error.reader.type.integer-width.unsupported-gap.variant-3
+;; TEST-REFINES: atom.reader.error
+;; TEST-RELATED: atom.codegen.error.menu
+;; TEST-CLI-TARGET: codegen errors reader reader
+
+(module Main)
+;; reader menu variant 3
+(define (f [x : U65] -> U65) x)
+(show (f 1))

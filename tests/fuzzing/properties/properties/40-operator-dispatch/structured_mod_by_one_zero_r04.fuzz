@@ -1,0 +1,15 @@
+name: structured_mod_by_one_zero_r04
+section: dispatch-operator-current
+tier: stable
+kind: law
+features: mod, arithmetic, dispatch, strategy
+compiler-path: codegen.arithmetic_dispatch, codegen.mod_dispatch, infer.arithmetic, runner.strategy_arg, runner.typed_generator
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.with, atom.codegen.dispatch, atom.control.if, atom.core.equality, atom.core.modulo, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates, signal_atom_with_substitution
+args: a:Int@edge+mod
+type: Bool
+expect: True
+description: V11 stable compiler-path law mod_by_one_zero variant 4; uses strategy args and explicit compiler-path metadata for feature coverage.
+law: (with [guard True] (if guard (= (% {a} 1) 0) False))

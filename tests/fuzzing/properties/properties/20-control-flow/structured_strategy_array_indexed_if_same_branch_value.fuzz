@@ -1,0 +1,15 @@
+name: structured_strategy_array_indexed_if_same_branch_value
+section: current-strategy-array-indexed
+tier: stable
+kind: law
+features: if, phi, arithmetic, strategy
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.if_phi, infer.arithmetic, infer.if_phi, reader.ast_if, runner.strategy_arg, runner.typed_generator
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.if, atom.core.equality, atom.core.plus
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates, signal_atom_plus_associative, signal_atom_plus_commutative, signal_atom_plus_identity_zero
+args: a:Int@array+edge b:Int@tiny+array p:Bool@logic+if
+type: Bool
+expect: True
+description: V10 strategy property if_same_branch_value generated with array_indexed arguments to stress compiler dispatch, envs, and PHI lowering.
+law: (= (if {p} (+ {a} {b}) (+ {a} {b})) (+ {a} {b}))

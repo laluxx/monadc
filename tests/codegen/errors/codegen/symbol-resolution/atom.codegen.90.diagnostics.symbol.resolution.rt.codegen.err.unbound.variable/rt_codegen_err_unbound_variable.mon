@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-codegen-err-unbound-variable
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.90.diagnostics.symbol.resolution.rt.codegen.err.unbound.variable
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: symbol-resolution
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
+;; TEST-PURPOSE: Codegen reports an unbound variable used as a value.
+;; TEST-ATOM: (show missing) must fail with an unbound variable diagnostic.
+;; TEST-EXPECT: fail:compile
+
+;; TEST-COVERAGE: codegen.c:90-diagnostics/symbol-resolution branch family
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/symbol-resolution/atom.codegen.90.diagnostics.symbol.resolution.rt.codegen.err.unbound.variable
+;; TEST-MENU-PATH: codegen/errors/codegen/symbol-resolution/atom.codegen.90.diagnostics.symbol.resolution.rt.codegen.err.unbound.variable
+;; TEST-ATOM-LEAF: atom.codegen.90.diagnostics.symbol.resolution.rt.codegen.err.unbound.variable
+;; TEST-CLI-TARGET: codegen errors codegen symbol-resolution
+(module Main)
+(show missing)

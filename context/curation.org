@@ -1,0 +1,142 @@
+#+TITLE: Context Curation Playbook
+#+AUTHOR: GPT-5.5 Thinking
+#+DATE: 2026-06-16
+#+CREATED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-16
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:curation:garden:workflow:
+#+PROPERTY: CONTEXT_VERSION 4
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.curation
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY hideblocks
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* Purpose
+:PROPERTIES:
+:ID: monadc.context.curation.purpose
+:CUSTOM_ID: curation-purpose
+:CONTEXT_KIND: workflow
+:CONTEXT_DESCRIPTION: Operational playbook for maintaining the context garden over time.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/curation.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.curation.purpose src:context/curation.org conf:high]
+  This playbook describes how to prune, promote, split, and refresh context.
+  It is intentionally operational: a gardener should be able to run through it
+  after a compiler change or after importing a new test corpus.
+* Gardener Loop
+:PROPERTIES:
+:ID: monadc.context.curation.gardener-loop
+:CUSTOM_ID: curation-gardener-loop
+:CONTEXT_KIND: workflow
+:CONTEXT_DESCRIPTION: Repeatable loop for improving the garden without destabilizing it.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/curation.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Gardener loop
+| Step | Action | Output |
+|------+--------+--------|
+| Survey | Run linter and inspect inventory | quality snapshot |
+| Route | Identify changed categories | touched files list |
+| Prune | Remove generated/stale/noisy context | smaller signal |
+| Strengthen | Add contracts, sources, tests, links | better graph |
+| Validate | Re-run lint and spot-check links | distributable tar |
+| Record | Add FIX/THINK/DEC summary | audit trail |
+
+[DEC id:dec.curation.modify-with-audit-trail date:2026-06-16 by:llm]
+  Every broad curation pass should leave at least one record saying what changed
+  and why. Silent large edits make the garden harder to trust.
+* Prune or Keep Heuristics
+:PROPERTIES:
+:ID: monadc.context.curation.prune-keep
+:CUSTOM_ID: curation-prune-keep
+:CONTEXT_KIND: quality
+:CONTEXT_DESCRIPTION: Heuristics for deciding whether context content is useful.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/curation.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Prune/keep heuristic
+| Content | Keep when | Prune/supersede when |
+|---------+-----------+----------------------|
+| OBS | still source-grounded | source changed or claim was wrong |
+| INF | evidence chain still valid | inputs changed or confidence was inflated |
+| THINK | useful judgment remains | duplicated by stronger DEC/FIX |
+| TODO | actionable and owned | stale, impossible, or already done |
+| File | owns a domain | only duplicates another file |
+| Generated table | reproducible and labeled | stale snapshot with no generator |
+
+[DEC id:dec.curation.generated-snapshots-labeled date:2026-06-16 by:llm]
+  Generated snapshots must say they are generated snapshots. They should never
+  masquerade as hand-curated authority.
+* Split Criteria
+:PROPERTIES:
+:ID: monadc.context.curation.split-criteria
+:CUSTOM_ID: curation-split-criteria
+:CONTEXT_KIND: quality
+:CONTEXT_DESCRIPTION: When a context file should be split into smaller categories.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/curation.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Split triggers
+| Trigger | Suggested action |
+|---------+------------------|
+| File exceeds ~900 lines and mixes phases | split by compiler phase |
+| One file owns unrelated failure types | split or add subcontracts |
+| Navigation table needs multiple descriptions for one file | split prefixes |
+| Tests link to very broad headings only | add narrower headings |
+| Repeated TODOs name the same subtopic | create subtopic file |
+
+[THINK id:think.curation.source-map-demotion conf:medium]
+  =source-map.org= may eventually become generated inventory rather than
+  hand-written architecture. It currently remains useful as a broad map, but the
+  richer per-topic files should be treated as more authoritative.

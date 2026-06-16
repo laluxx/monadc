@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-type-alias
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.05.symbol.env.aliases.rt.type.alias
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: aliases
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime type aliases can annotate values that reach codegen.
+;; TEST-ATOM: Str aliases String for a typed define.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:05-symbol-env/aliases branch family
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/aliases/atom.codegen.05.symbol.env.aliases.rt.type.alias
+;; TEST-MENU-PATH: codegen/branches/symbol-env/aliases/atom.codegen.05.symbol.env.aliases.rt.type.alias
+;; TEST-ATOM-LEAF: atom.codegen.05.symbol.env.aliases.rt.type.alias
+;; TEST-CLI-TARGET: codegen branches symbol-env aliases
+(module Main)
+(type Str String)
+(define [name :: Str] "monad")
+(show name)

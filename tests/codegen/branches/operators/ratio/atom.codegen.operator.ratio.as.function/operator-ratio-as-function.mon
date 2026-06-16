@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.branch.operator-ratio-as-function
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: ratio
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.operator.ratio.as.function
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover ratio literal application as an integer and floating scaling function.
+;; TEST-ATOM: A ratio used in callee position should scale its argument through integer or float branches.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:3891 AST_RATIO
+;; TEST-COVERAGE: codegen.c:4240 ratio-as-function integer/float branches
+
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-MENU: branches/operators/ratio/atom.codegen.operator.ratio.as.function
+;; TEST-MENU-PATH: codegen/branches/operators/ratio/atom.codegen.operator.ratio.as.function
+;; TEST-ATOM-LEAF: atom.codegen.operator.ratio.as.function
+;; TEST-CLI-TARGET: codegen branches operators ratio
+(module Main)
+(show (1/4 8))
+(show (1/2 3.0))
+(show (3/2 4))

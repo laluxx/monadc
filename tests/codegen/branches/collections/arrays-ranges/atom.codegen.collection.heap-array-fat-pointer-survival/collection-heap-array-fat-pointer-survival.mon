@@ -1,0 +1,36 @@
+;; TEST-ID: tests.codegen.branch.collection-heap-array-fat-pointer-survival
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SUBSET: arrays-ranges
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise heap array/fat pointer construction across a global binding and repeated indexing.
+;; TEST-ATOM: atom.codegen.collection.heap-array-fat-pointer-survival
+;; TEST-CODEGEN-ATOM: atom.codegen.collection.heap-array-fat-pointer-survival
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: arr_make_fat
+;; TEST-CODEGEN-PATH: arr_fat_data
+;; TEST-CODEGEN-PATH: arr_fat_size
+;; TEST-CODEGEN-PATH: codegen.array.literal.heap
+;; TEST-DEPENDS-ON: atom.codegen.collection.array-count-index-head-tail
+;; TEST-TAG: run
+;; TEST-TAG: collection
+;; TEST-TAG: heap-array
+;; TEST-COVERAGE: codegen.c:790-873 arr.fat helpers
+;; TEST-COVERAGE: codegen.c:3935-4020 AST_ARRAY heap branch
+;; TEST-COVERAGE: codegen.c:9927 array-as-function branch
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/arrays-ranges/atom.codegen.collection.heap-array-fat-pointer-survival
+;; TEST-MENU-PATH: codegen/branches/collections/arrays-ranges/atom.codegen.collection.heap-array-fat-pointer-survival
+;; TEST-ATOM-LEAF: atom.codegen.collection.heap-array-fat-pointer-survival
+;; TEST-CLI-TARGET: codegen branches collections arrays-ranges
+(module Main)
+(define heap ~[1 2 3 4])
+(show heap)
+(show (count heap))
+(show (heap 1))
+(show (heap 3))
+(show (tail heap))

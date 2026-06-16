@@ -1,0 +1,29 @@
+;; TEST-ID: tests.codegen.stateful.operator.boolean.and.short.expression
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 20-operators
+;; TEST-SUBSET: arithmetic
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.stateful.operator.boolean.and.short.expression
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: and operator lowering with boolean branches.
+;; TEST-ATOM: atom.codegen.stateful.operator.boolean.and.short.expression
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.operator.dispatch
+;; TEST-CODEGEN-PATH: codegen.numeric-dispatch
+;; TEST-DEPENDS-ON: atom.codegen.primitive.integer
+;; TEST-DEPENDS-ON: atom.codegen.primitive.bool
+;; TEST-COVERAGE: codegen.c:8932-9453 comparison dispatch branches
+;; TEST-COVERAGE: codegen.c:9463-9810 arithmetic dispatch branches
+;; TEST-COVERAGE: codegen.c:7689-7731 bitwise/not operator special forms
+;; TEST-USES-ATOM: atom.codegen.category.20.operators
+;; TEST-USES-ATOM: atom.codegen.subset.20.operators.arithmetic
+;; TEST-MENU: branches/operators/arithmetic/atom.codegen.stateful.operator.boolean.and.short.expression
+;; TEST-MENU-PATH: codegen/branches/operators/arithmetic/atom.codegen.stateful.operator.boolean.and.short.expression
+;; TEST-ATOM-LEAF: atom.codegen.stateful.operator.boolean.and.short.expression
+;; TEST-CLI-TARGET: codegen branches operators arithmetic
+
+(module Main)
+(show (and True True))
+(show (and True False))

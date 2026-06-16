@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-char-conversion
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Char constructor and char to int conversion work.
-;; TEST-ATOM: (Char 65) produces 'A', (Int (Char 65)) produces 65.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (Char 65))
-(show (Int (Char 65)))

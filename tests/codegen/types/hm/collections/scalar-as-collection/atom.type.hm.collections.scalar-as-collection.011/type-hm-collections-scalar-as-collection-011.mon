@@ -1,0 +1,34 @@
+;; TEST-ID: tests.codegen.type.hm.collections.scalar.as.collection.011
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: types
+;; TEST-SUBSET: hm/collections/scalar-as-collection
+;; TEST-QUALITY: type-system-negative-regression
+;; TEST-CODEGEN-ATOM: atom.type.hm.collections.scalar-as-collection.011
+;; TEST-TYPE-ATOM: atom.type.hm.collections.scalar-as-collection.011
+;; TEST-CONTEXT: monadc.context.language.codegen-type-system-corpus, monadc.context.language.hm-dependent-type-coverage
+;; TEST-PURPOSE: HM collection compatibility rejects scalar primitives where collection arguments are required.
+;; TEST-ATOM: A scalar Int cannot satisfy a Coll parameter.
+;; TEST-EXPECT: fail:compile
+;; TEST-MENU: types/hm/collections/scalar-as-collection/atom.type.hm.collections.scalar-as-collection.011
+;; TEST-MENU-PATH: codegen/types/hm/collections/scalar-as-collection/atom.type.hm.collections.scalar-as-collection.011
+;; TEST-ATOM-LEAF: atom.type.hm.collections.scalar-as-collection.011
+;; TEST-CLI-TARGET: codegen types hm collections scalar-as-collection
+;; TEST-INFER-PATH: infer.c:616 TYPE_COLL scalar hard error
+;; TEST-ERROR-STAGE: infer
+;; TEST-ERROR-FAMILY: hm.scalar-as-collection
+;; TEST-ERROR-MESSAGE: cannot use
+;; TEST-COVERAGE: infer.c:616 cannot use scalar as a Collection
+;; TEST-COVERAGE: infer.c:collection compatibility guard
+;; TEST-USES-ATOM: atom.codegen.category.types
+;; TEST-USES-ATOM: atom.type.system
+;; TEST-USES-ATOM: atom.type.hm.collection
+;; TEST-USES-ATOM: atom.type.hm.error.scalar-as-collection
+;; TEST-DEPENDS-ON: atom.codegen.collection.count
+;; TEST-REFINES: atom.type.hm.coll-scalar-hard-error
+
+(module Main)
+(define (hm_coll_scalar_11 [xs : Coll] -> Int) (count xs))
+(show (hm_coll_scalar_11 12))

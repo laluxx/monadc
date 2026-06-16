@@ -1,0 +1,15 @@
+name: complex_do_inside_comparison_right_operand_erases_setup
+section: control-do
+tier: stable
+kind: law
+features: arithmetic, control, do, equality, logic, predicate, set
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, codegen.predicate_dispatch, codegen.runtime_call, codegen.sequence, infer.arithmetic, infer.equality, infer.logic, infer.type_predicate, reader.ast_do, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.do, atom.core.equality, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_do_last_value, signal_atom_equality_reflexive
+args: setup:Int a:Int b:Int
+type: Bool
+expect: True
+description: Sequencing before the right comparison operand must not affect less-than.
+law: (= (fuzz-lt? {a} (do {setup} {b})) (fuzz-lt? {a} {b}))

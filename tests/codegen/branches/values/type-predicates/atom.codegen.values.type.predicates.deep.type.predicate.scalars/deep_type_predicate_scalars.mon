@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.deep.deep_type_predicate_scalars
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 00-values
+;; TEST-SUBSET: type-predicates
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.values.type.predicates.deep.type.predicate.scalars
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise runtime predicate dispatch for scalar values.
+;; TEST-ATOM: Scalar predicates should discriminate runtime representations.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:predicate/type conversion dispatch
+
+;; TEST-USES-ATOM: atom.codegen.category.00.values
+;; TEST-MENU: branches/values/type-predicates/atom.codegen.values.type.predicates.deep.type.predicate.scalars
+;; TEST-MENU-PATH: codegen/branches/values/type-predicates/atom.codegen.values.type.predicates.deep.type.predicate.scalars
+;; TEST-ATOM-LEAF: atom.codegen.values.type.predicates.deep.type.predicate.scalars
+;; TEST-CLI-TARGET: codegen branches values type-predicates
+(module Main)
+(show (int? 42))
+(show (float? 1.5))
+(show (bool? True))
+(show (string? "x"))
+(show (int? "x"))

@@ -1,0 +1,43 @@
+;; TEST-ID: tests.codegen.menu.errors.codegen.field.unknown.dot.002
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: errors
+;; TEST-SUBSET: codegen/field.unknown.dot
+;; TEST-MENU: errors/codegen/field.unknown.dot/atom.menu.error.codegen.field.unknown.dot.002
+;; TEST-MENU-PATH: codegen/errors/codegen/field.unknown.dot/atom.menu.error.codegen.field.unknown.dot.002
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.codegen-atom-web, monadc.context.language.error-menu
+;; TEST-PURPOSE: Pin codegen diagnostic: unknown field
+;; TEST-ATOM: atom.menu.error.codegen.field.unknown.dot.002
+;; TEST-CODEGEN-ATOM: atom.menu.error.codegen.field.unknown.dot.002
+;; TEST-ATOM-LEAF: atom.menu.error.codegen.field.unknown.dot.002
+;; TEST-QUALITY: menu-error-diagnostic-branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-ERROR-STAGE: codegen
+;; TEST-ERROR-FAMILY: field.unknown.dot
+;; TEST-ERROR-MESSAGE: unknown field
+;; TEST-ERROR-SOURCE: codegen.c
+;; TEST-ERROR-PATH: codegen.c:diagnostic
+;; TEST-CODEGEN-PATH: diagnostic.codegen.field.unknown.dot
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: codegen
+;; TEST-TAG: menu
+;; TEST-COVERAGE: codegen.c diagnostic unknown field
+;; TEST-USES-ATOM: atom.menu.error.codegen.field.unknown.dot.002
+;; TEST-USES-ATOM: atom.error.codegen
+;; TEST-USES-ATOM: atom.error.codegen.field.unknown.dot
+;; TEST-USES-ATOM: atom.codegen.error
+;; TEST-DEPENDS-ON: atom.codegen.expr.dispatch
+;; TEST-REFINES: atom.error.codegen
+;; TEST-REFINES: atom.error.codegen.field.unknown.dot
+;; TEST-REFINES: atom.codegen.error
+;; TEST-RELATED: atom.codegen.error.menu
+;; TEST-CLI-TARGET: codegen errors codegen codegen
+
+(module Main)
+(layout MenuPoint [x :: Int])
+(define p (MenuPoint 1))
+(show p.y)
+;; codegen menu variant 2

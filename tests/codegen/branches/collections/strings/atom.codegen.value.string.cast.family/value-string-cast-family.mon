@@ -1,0 +1,27 @@
+;; TEST-ID: tests.codegen.branch.value-string-cast-family
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-SUBSET: strings
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.value.string.cast.family
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover String cast branches for integers, floats, bools, chars, and existing strings.
+;; TEST-ATOM: String conversion should produce printable runtime strings for scalar sources.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:12164 String cast target
+;; TEST-COVERAGE: codegen.c:1221 string show branch
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/strings/atom.codegen.value.string.cast.family
+;; TEST-MENU-PATH: codegen/branches/collections/strings/atom.codegen.value.string.cast.family
+;; TEST-ATOM-LEAF: atom.codegen.value.string.cast.family
+;; TEST-CLI-TARGET: codegen branches collections strings
+(module Main)
+(show (String 42))
+(show (String 3.5))
+(show (String True))
+(show (String (Char 65)))
+(show (String "kept"))

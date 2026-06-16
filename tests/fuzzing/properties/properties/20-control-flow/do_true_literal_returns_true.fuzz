@@ -1,0 +1,15 @@
+name: do_true_literal_returns_true
+section: control
+tier: stable
+kind: law
+features: arithmetic, control, do, set
+compiler-path: codegen.arithmetic_dispatch, codegen.runtime_call, codegen.sequence, infer.arithmetic, reader.ast_do, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.do
+related-properties: signal_atom_do_last_value
+args: setup:Int
+type: Bool
+expect: True
+description: A do expression ending in literal True must return True even after evaluating an Int first expression.
+law: (do {setup} True)

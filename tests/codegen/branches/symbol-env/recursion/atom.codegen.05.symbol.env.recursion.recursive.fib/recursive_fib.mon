@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.recursive-fib
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.05.symbol.env.recursion.recursive.fib
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: recursion
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus
+;; TEST-PURPOSE: Recursive function definition compiles and runs.
+;; TEST-ATOM: (define (fib [n : Int] -> Int) (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2))))) with (show (fib 10)) prints 55.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:05-symbol-env/recursion branch family
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/recursion/atom.codegen.05.symbol.env.recursion.recursive.fib
+;; TEST-MENU-PATH: codegen/branches/symbol-env/recursion/atom.codegen.05.symbol.env.recursion.recursive.fib
+;; TEST-ATOM-LEAF: atom.codegen.05.symbol.env.recursion.recursive.fib
+;; TEST-CLI-TARGET: codegen branches symbol-env recursion
+(module Main)
+(define (fib [n : Int] -> Int) (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))
+(show (fib 10))

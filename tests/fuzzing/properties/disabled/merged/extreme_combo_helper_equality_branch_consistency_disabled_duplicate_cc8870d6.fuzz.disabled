@@ -1,0 +1,17 @@
+name: extreme_combo_helper_equality_branch_consistency_disabled_duplicate_cc8870d6
+section: feature-interactions-deep
+tier: experimental
+kind: law
+features: arithmetic, equality, feature, if, phi, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.predicate_dispatch, infer.arithmetic, infer.equality, infer.if_phi, infer.type_predicate, reader.ast_if
+signal: medium
+corpus-role: merged-duplicate
+uses-atoms: atom.control.if, atom.core.equality, atom.infer.predicate
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates
+merged-into: complex_function_equality_helper_branch_consistency
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int b:Int yes:Int no:Int
+type: Bool
+expect: True
+description: Mixed helpers, direct dispatch, control flow, and bindings should compose without changing semantics.
+law: (= (if (fuzz-eq-int? {a} {b}) {yes} {no}) (if (= {a} {b}) {yes} {no}))

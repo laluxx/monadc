@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.deep.deep_cond_else_and_second_clause
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SUBSET: if-cond-phi
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.if.cond.phi.deep.cond.else.and.second.clause
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Exercise cond fallback and second-clause branches.
+;; TEST-ATOM: cond should select the first true branch or else fallback.
+;; TEST-EXPECT: compile, run
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow, atom.codegen.subset.if.cond.phi
+;; TEST-COVERAGE: codegen.c:cond branch chain lowering
+;; TEST-MENU: branches/control-flow/if-cond-phi/atom.codegen.30.control.flow.if.cond.phi.deep.cond.else.and.second.clause
+;; TEST-MENU-PATH: codegen/branches/control-flow/if-cond-phi/atom.codegen.30.control.flow.if.cond.phi.deep.cond.else.and.second.clause
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.if.cond.phi.deep.cond.else.and.second.clause
+;; TEST-CLI-TARGET: codegen branches control-flow if-cond-phi
+
+(module Main)
+(show (cond [(> 1 2) 1] [(< 1 2) 2] [else 3]))
+(show (cond [(> 1 2) 1] [else 9]))

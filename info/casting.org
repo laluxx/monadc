@@ -17,7 +17,16 @@ Test coverage: type conversions are exercised comprehensively in
 Type names are callable as conversion functions. =(TargetType value)=
 converts =value= to the target type.
 
-* Numeric Conversions
+This page covers type casting in Monad: numeric conversions, fixed-width
+conversions, Char/String conversions, and type predicates.
+
+See [[file:numeric.org][Numeric Types]] for the type hierarchy and [[file:core.org][Core Library]] for the
+built-in function dispatch mechanism.
+
+* 1. Numeric Conversions
+
+Conversion between numeric types is explicit. No implicit coercions
+beyond the Int/Float mixed-operation promotion.
 
 #+BEGIN_SRC monad
 (Int 3.14)                       ;; 3 — truncation
@@ -35,10 +44,20 @@ Oct 64
 Bin 7
 #+END_SRC
 
-Conversion between numeric types is explicit. No implicit coercions
-beyond the Int/Float mixed-operation promotion.
+See [[file:arithmetic.org][Arithmetic — Mixed Int/Float]] for promotion rules.
 
-* Fixed-Width Conversions
+Key Points:
+- All numeric conversions are explicit = no implicit coercions beyond Int/Float mixed ops
+- =(Int 3.14)= truncates toward zero; =(Float 42)= promotes to 64-bit float
+- =(Hex 255)=, =(Oct 64)=, =(Bin 7)= format as string representations
+- Type names double as conversion functions: =(TargetType value)=
+
+See also: [[file:arithmetic.org][Arithmetic]]
+
+* 2. Fixed-Width Conversions
+
+Fixed-width types have the same size as their LLVM counterparts and
+wrap on overflow (two's complement). See [[file:types.org][Types]] and [[file:ffi.org][C FFI]].
 
 #+BEGIN_SRC monad
 (I8 128)                         ;; -128 (wraps)
@@ -68,10 +87,12 @@ U128 x
 F32 3.14159265358979
 #+END_SRC
 
-Fixed-width types have the same size as their LLVM counterparts and
-wrap on overflow (two's complement).
+All fixed-width conversions dispatch through strcmp handlers
+in [[file:../context/codegen-ops.org][context/codegen-ops.org]].
 
-* Char Conversions
+* 3. Char Conversions
+
+=Char= converts between codepoint integer and character. See [[file:characters.org][Characters]].
 
 #+BEGIN_SRC monad
 (Char 65)                        ;; 'A'
@@ -85,9 +106,9 @@ Char 0x3C0
 Int 'A'
 #+END_SRC
 
-=Char= converts between codepoint integer and character.
+* 4. String Conversions
 
-* String Conversions
+=String= produces the display representation of any value. See [[file:strings.org][Strings]].
 
 #+BEGIN_SRC monad
 (String 42)                      ;; "42"
@@ -101,9 +122,7 @@ String 3.14
 String 'A'
 #+END_SRC
 
-=String= produces the display representation of any value.
-
-* Conversion Table
+* 5. Conversion Table
 
 | Syntax          | Description                  |
 |-----------------+------------------------------|
@@ -121,19 +140,69 @@ String 'A'
 | =(I128/U128 x)= | 128-bit conversion           |
 | =(F32 x)=         | 32-bit float conversion      |
 
+Key Points:
+- Every type name is callable as a conversion function: =(TargetType value)=
+- Fixed-width types wrap on overflow (two's complement)
+- =Char= converts between codepoint integer and character
+- =String= produces the display representation of any value
+- =Hex=, =Oct=, =Bin= format as string representations of the numeric value
+
+See also: [[file:ffi.org][C FFI]]
+
+* 6. Type Predicates for Convertibility
+
+#+BEGIN_SRC monad
+(Int? (Int 3.14))     ;; True
+(Char? (Char 65))     ;; True
+(String? (String 42)) ;; True
+#+END_SRC
+
+#+BEGIN_SRC wisp
+Int? (Int 3.14)     ;; True
+Char? (Char 65)     ;; True
+String? (String 42) ;; True
+#+END_SRC
+
+See also: [[file:show.org][Show and Display]]
+
+* Implementation Notes
+
+Conversion dispatch source components:
+
+| Conversion | Source | Mechanism |
+|-----------+--------+-----------|
+| Type-name dispatch | [[file:../codegen.c::13144][codegen.c:13144]] | =strcmp= handler resolution |
+| Fixed-width types | [[file:../codegen.c][codegen.c]] | LLVM trunc/zext/sext |
+| =Int= / =Float= | [[file:../context/codegen-ops.org][context/codegen-ops.org]] | Numeric conversion dispatch |
+| =Char= / =String= | [[file:../codegen.c][codegen.c]] | Codepoint / display conversion |
+| =Hex= / =Oct= / =Bin= | [[file:../codegen.c][codegen.c]] | Format string generation |
+| Type predicates | [[file:../codegen.c][codegen.c]] | =Int?=, =Char?=, =String?= checks |
+
 * Related Pages
 
-- [[file:numeric.org][Numeric Types]] -- numeric type hierarchy and conversions
-- [[file:types.org][Types]] -- type system, ground types
-- [[file:core.org][Core Library]] -- built-in conversion functions
-- [[file:strings.org][Strings]] -- string to/from numeric conversion
-- [[file:characters.org][Characters]] -- Char conversion operations
+- [[file:numeric.org][Numeric Types]] — numeric type hierarchy and conversions
+- [[file:types.org][Types]] — type system, ground types
+- [[file:core.org][Core Library]] — built-in conversion functions
+- [[file:strings.org][Strings]] — string to/from numeric conversion
+- [[file:characters.org][Characters]] — Char conversion operations
+- [[file:arithmetic.org][Arithmetic]] — mixed-type promotion rules
+- [[file:ffi.org][C FFI]] — fixed-width types for interop
+- [[file:show.org][Show]] — display representation conversion
+- [[file:type-classes.org][Type Classes]] — conversion type class hierarchy
 
 * Context Links
 
 - [[file:../context/codegen-ops.org][context/codegen-ops.org]] — conversion dispatch
 - [[file:../context/language.org][context/language.org]] — casting semantics
-- [[file:../codegen.c][codegen.c]] — conversion codegen at ~13144
+- [[file:../context/types.org][context/types.org]] — type system internals
+- [[file:../codegen.c::13144][codegen.c]] — conversion codegen
 - [[file:core.org][Core Library]] — built-in function overview
-- [[file:types.org][Types]] — ground type system
-- [[file:numeric.org][Numeric Types]] — Int, Float, fixed-width types
+- [[file:../context/language.org::working-dispatch][context/language.org — Working dispatch]]
+
+* Further Reading
+
+- [[file:../context/codegen.org][context/codegen.org]] — LLVM code generation for conversions
+- [[file:../context/features.org][context/features.org]] — casting feature tracking
+- [[file:../tests/codegen/][tests/codegen/]] — conversion test fixtures
+- [[file:../Main.mon][Main.mon]] — conversion example usage (lines 1103-1215)
+- [[file:../context/runtime.org][context/runtime.org]] — runtime representation of converted values

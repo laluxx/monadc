@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.deep.deep_diag_show_wrong_arity
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-SUBSET: arity
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostics.arity.deep.diag.show.wrong.arity
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Expected diagnostic for show with missing argument.
+;; TEST-ATOM: Wrong arity should be rejected before invalid codegen.
+;; TEST-EXPECT: fail:compile
+;; TEST-COVERAGE: codegen.c:arity checking around builtin call
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/arity/atom.codegen.diagnostics.arity.deep.diag.show.wrong.arity
+;; TEST-MENU-PATH: codegen/errors/codegen/arity/atom.codegen.diagnostics.arity.deep.diag.show.wrong.arity
+;; TEST-ATOM-LEAF: atom.codegen.diagnostics.arity.deep.diag.show.wrong.arity
+;; TEST-CLI-TARGET: codegen errors codegen arity
+(module Main)
+(show)

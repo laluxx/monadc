@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-codegen-err-empty-array-infer
-;; TEST-SECTION: diagnostic
-;; TEST-CONTEXT: monadc.context.language.codegen-diagnostics
-;; TEST-PURPOSE: Codegen rejects empty arrays without an explicit element type.
-;; TEST-ATOM: (define xs []) must fail because an empty array has no inferred element type.
-;; TEST-EXPECT: fail:compile
-
-(module Main)
-(define xs [])

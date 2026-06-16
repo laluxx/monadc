@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.rt-for-loop-nested
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.loops.rt.for.loop.nested
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: loops
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime nested for loops produce correct product sum.
+;; TEST-ATOM: Two nested loops summing i*j over i=[0,3), j=[0,2) = 0+0+0+1+0+2 = 3? Actually 0*0+0*1+1*0+1*1+2*0+2*1 = 0+0+0+1+0+2 = 3.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/loops branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/loops/atom.codegen.30.control.flow.loops.rt.for.loop.nested
+;; TEST-MENU-PATH: codegen/branches/control-flow/loops/atom.codegen.30.control.flow.loops.rt.for.loop.nested
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.loops.rt.for.loop.nested
+;; TEST-CLI-TARGET: codegen branches control-flow loops
+(module Main)
+(define total 0)
+(for [i 0 3]
+  (for [j 0 2]
+    (set! total (+ total (* i j)))))
+(show total)

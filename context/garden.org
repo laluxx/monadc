@@ -1,0 +1,239 @@
+#+TITLE: MonadC Context Garden Charter
+#+AUTHOR: GPT-5.5 Thinking
+#+DATE: 2026-06-16
+#+CREATED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-16
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:garden:governance:
+#+PROPERTY: CONTEXT_VERSION 3
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.garden
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY hideblocks
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* Garden Charter
+:PROPERTIES:
+:ID: monadc.context.garden.charter
+:CUSTOM_ID: garden-charter
+:CONTEXT_KIND: governance
+:CONTEXT_DESCRIPTION: The governing contract for maintaining the MonadC context corpus.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/garden.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.garden.charter src:context/garden.org conf:high]
+  The garden exists to make compiler work safer: a reader can move from a test
+  failure to a language contract, from a source file to its design pressure, and
+  from a decision to the tests that protect it.
+
+[DEC id:dec.garden.no-decorative-context date:2026-06-16 by:llm]
+  Context that is not connected to source, tests, decisions, or active design
+  questions should be pruned or moved to an explicit archive. Decorative context
+  is worse than no context because it creates false confidence.
+
+* Truth Ladder
+:PROPERTIES:
+:ID: monadc.context.garden.truth-ladder
+:CUSTOM_ID: garden-truth-ladder
+:CONTEXT_KIND: schema
+:CONTEXT_DESCRIPTION: Confidence and evidence rules for durable records.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/garden.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Evidence classes
+| Level | Record | Meaning | May use high confidence? |
+|-------+--------+---------+--------------------------|
+| Source observation | =OBS= | Read directly from source, test output, or command output | yes |
+| User decision | =DEC= | Explicit project direction from the user | yes |
+| Derived inference | =INF= | Reasoned consequence of observations/decisions | only with source links |
+| Task | =TODO= | Work that should happen | yes for existence, not outcome |
+| Opinion | =THINK= | Judgment, risk, or interpretation | usually medium |
+| Proposal | =IDEA= | Not accepted unless promoted to =DEC= | medium/low |
+
+[DEC id:dec.garden.obs-is-not-opinion date:2026-06-16 by:llm]
+  Never put an opinion into =OBS=. If a record says what code does, cite the file
+  and line range when known. If it says what code should do, use =DEC=, =TODO=,
+  or =IDEA=.
+
+* Mutation Rules
+:PROPERTIES:
+:ID: monadc.context.garden.mutation-rules
+:CUSTOM_ID: garden-mutation-rules
+:CONTEXT_KIND: workflow
+:CONTEXT_DESCRIPTION: Rules for adding, editing, deleting, and superseding context records.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/garden.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Mutation policy
+| Operation | Rule |
+|-----------+------|
+| Add | Use stable IDs and put the node in the nearest topic file. |
+| Modify | Update =#+LAST_MODIFIED= and =:CONTEXT_UPDATED:= on touched nodes. |
+| Delete | Delete only stale/generated/noisy content or records superseded elsewhere. |
+| Supersede | Prefer a new =DEC= or =FIX= record naming the superseded record. |
+| Move | Preserve the ID when moving a durable heading. |
+| Split | Add a bridge link in the old file to the new file. |
+
+[DEC id:dec.garden.append-or-supersede date:2026-06-16 by:human+llm]
+  For architectural decisions, prefer append-or-supersede over in-place rewrite.
+  For factual source observations that were simply wrong or stale, rewrite and
+  mark the correction with a =FIX= record.
+
+* Link Grammar
+:PROPERTIES:
+:ID: monadc.context.garden.link-grammar
+:CUSTOM_ID: garden-link-grammar
+:CONTEXT_KIND: schema
+:CONTEXT_DESCRIPTION: The accepted link and reference grammar for context files.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/garden.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Link forms
+| Link kind | Syntax | Use |
+|-----------+--------+-----|
+| File | =[[file:reader.org][reader]]= | Human navigation |
+| Heading | =[[file:reader.org::*Path Literals][Path Literals]]= | Nearby topic jump |
+| Stable ID | =:ID: monadc.context.reader.path-literals= | Durable graph identity |
+| Record source | =src:reader.c:123= | Evidence pointer |
+| Test context | =TEST-CONTEXT: monadc.context...= | Fixture-to-contract link |
+
+[DEC id:dec.garden.context-id-prefix date:2026-06-16 by:llm]
+  New heading IDs must use =monadc.context.<topic>.<stable-name>=. Test records
+  may point to any active heading ID. Avoid invented TEST-CONTEXT strings that
+  do not resolve to an actual heading.
+
+* Pruning Rules
+:PROPERTIES:
+:ID: monadc.context.garden.pruning
+:CUSTOM_ID: garden-pruning
+:CONTEXT_KIND: quality
+:CONTEXT_DESCRIPTION: How to remove or quarantine low-quality context.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/garden.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.garden.prune-generated-noise date:2026-06-16 by:llm]
+  Generated run artifacts, local caches, and one-off debug transcripts should not
+  live in the clean context tar. Summaries may live in =quality.org= or
+  =debug-agenda.org= when they influence future work.
+
+[TODO id:todo.garden.archive-policy owner:codex status:open]
+  Add an =archive/= policy only when the context has enough superseded material
+  to justify keeping history separate from active design guidance.
+
+* Agent Contract
+:PROPERTIES:
+:ID: monadc.context.garden.agent-contract
+:CUSTOM_ID: garden-agent-contract
+:CONTEXT_KIND: workflow
+:CONTEXT_DESCRIPTION: Behavior expected from LLM agents working inside the garden.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/garden.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.garden.agent-must-leave-trail date:2026-06-16 by:human+llm]
+  An agent that changes tests, compiler behavior, or project conventions must
+  leave a trail: updated context links, a decision or fix record, and an honest
+  validation note. The trail is part of the deliverable.
+
+[DEC id:dec.garden.partial-truth-labels date:2026-06-16 by:llm]
+  If validation is partial because the compiler binary or full repository is not
+  present, say that in the context and in the user-facing answer. Do not convert
+  partial validation into a green claim.
+
+* Category Context Rule
+:PROPERTIES:
+:ID: monadc.context.garden.category-context-rule
+:CUSTOM_ID: garden-category-context-rule
+:CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: Makes category context a governing rule for future garden additions.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/garden.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.garden.category-contracts-for-major-topics date:2026-06-16 by:llm]
+  Major topics should declare category contracts. A topic without an owned phase,
+  invariants, test hooks, and failure symptoms is not yet a mature category.
+
+[INF id:inf.garden.category-context-trellis from:dec.garden.category-contracts-for-major-topics conf:high]
+  The category-context layer lets the garden scale: it gives every major file a
+  local contract and makes cross-file navigation semantic rather than merely
+  alphabetical.
+
+See [[file:category-context.org][category-context.org]] for the canonical object and morphism vocabulary.

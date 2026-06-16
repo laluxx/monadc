@@ -1,0 +1,33 @@
+;; TEST-ID: tests.codegen.stateful.layout.nested.layout.compile
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: stdout-mismatch
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SUBSET: layouts
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.stateful.layout.nested.layout.compile
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Inline/nested layout field load path.
+;; TEST-ATOM: atom.codegen.stateful.layout.nested.layout.compile
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.layout
+;; TEST-CODEGEN-PATH: codegen.adt
+;; TEST-CODEGEN-PATH: codegen.dot
+;; TEST-COVERAGE: codegen.c:826-933 type_to_llvm TYPE_LAYOUT/TYPE_APP branches
+;; TEST-COVERAGE: codegen.c:1239-1310 codegen_show_value layout/ADT display branches
+;; TEST-COVERAGE: codegen.c:12669 keyword constructor field initialization
+;; TEST-COVERAGE: codegen.c:12902-12952 dot special form
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-USES-ATOM: atom.codegen.subset.50.data.layout.layouts
+;; TEST-MENU: branches/data-layout/layouts/atom.codegen.stateful.layout.nested.layout.compile
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts/atom.codegen.stateful.layout.nested.layout.compile
+;; TEST-ATOM-LEAF: atom.codegen.stateful.layout.nested.layout.compile
+;; TEST-CLI-TARGET: codegen branches data-layout layouts
+
+(module Main)
+(layout Inner [x :: Int])
+(layout Outer [inner :: Inner] [y :: Int])
+(define o (Outer (Inner 40) 2))
+(show (+ o.inner.x o.y))

@@ -1,0 +1,15 @@
+name: with_two_bindings_multiplication
+section: binding
+tier: stable
+kind: law
+features: arithmetic, array, array-index, binding, env, equality, with
+compiler-path: codegen.arithmetic_dispatch, codegen.array_index, codegen.array_literal, codegen.equality_dispatch, codegen.local_load, codegen.with_binding, infer.arithmetic, infer.array, infer.callable_array, infer.env_child, infer.env_lookup, infer.equality, reader.array_literal
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.with, atom.core.equality, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_equality_reflexive, signal_atom_with_substitution
+args: a:Int b:Int
+type: Bool
+expect: True
+description: Two with-bound Int values must preserve multiplication semantics.
+law: (= (with [x {a} y {b}] (fuzz-mul x y)) (fuzz-mul {a} {b}))

@@ -1,0 +1,27 @@
+;; TEST-ID: tests.codegen.rt-data-bounded-enum
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-CODEGEN-ATOM: atom.codegen.50.data.layout.adt.constructors.rt.data.bounded.enum
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: adt-constructors
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Data deriving Bounded and Enum supports fromEnum and maxBound.
+;; TEST-ATOM: (data T A | B | C deriving [Bounded Enum]) should enumerate.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:50-data-layout/adt-constructors branch family
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/adt-constructors/atom.codegen.50.data.layout.adt.constructors.rt.data.bounded.enum
+;; TEST-MENU-PATH: codegen/branches/data-layout/adt-constructors/atom.codegen.50.data.layout.adt.constructors.rt.data.bounded.enum
+;; TEST-ATOM-LEAF: atom.codegen.50.data.layout.adt.constructors.rt.data.bounded.enum
+;; TEST-CLI-TARGET: codegen branches data-layout adt-constructors
+(module Main)
+(data T A | B | C deriving [Bounded Enum Show])
+(show (fromEnum A))
+(show (fromEnum B))
+(show (fromEnum C))
+(show (fromEnum (maxBound :: T)))
+(show (fromEnum (minBound :: T)))

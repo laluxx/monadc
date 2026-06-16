@@ -1,0 +1,16 @@
+name: program_with_do_if_plus_web
+section: program-atom-web
+tier: stable
+kind: program
+features: program, with, do, if, array, string, path, predicate
+compiler-path: reader.module, codegen.program.full_module, infer.env.lookup, codegen.control.if_phi
+signal: high
+corpus-role: program-behavior
+uses-atoms: atom.core.plus.commutative, atom.binding.with, atom.control.sequence, atom.control.if
+depends-on: atom.core.plus.commutative, atom.binding.with, atom.control.sequence, atom.control.if
+related-properties: atom.core.plus.commutative, atom.binding.with, atom.control.sequence, atom.control.if
+args: x:Int@edge+if y:Int@edge+with c:Bool@logic
+type: Bool
+expect: True
+description: Full program property linked into the atom graph.
+program: (show (= (with [a {x}] (do {y} (if {c} (+ a {y}) (+ {y} a)))) (+ {x} {y})))

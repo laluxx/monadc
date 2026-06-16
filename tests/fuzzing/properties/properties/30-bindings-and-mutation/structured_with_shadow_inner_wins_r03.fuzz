@@ -1,0 +1,15 @@
+name: structured_with_shadow_inner_wins_r03
+section: binding-env-current
+tier: stable
+kind: law
+features: with, env, shadow, strategy
+compiler-path: codegen.local_load, codegen.with_binding, infer.env_child, infer.env_lookup, runner.strategy_arg, runner.typed_generator
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.binding.with, atom.control.do, atom.core.equality, atom.runtime.array
+related-properties: signal_atom_array_index_valid, signal_atom_do_last_value, signal_atom_equality_reflexive, signal_atom_with_substitution
+args: a:Int@edge+with b:Int@edge+with
+type: Bool
+expect: True
+description: V11 stable compiler-path law with_shadow_inner_wins variant 3; uses strategy args and explicit compiler-path metadata for feature coverage.
+law: (do 0 (= (with [x {a}] (with [x {b}] x)) {b}))

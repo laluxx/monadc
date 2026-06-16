@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.rt-wisp-basic
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.basic.values.rt.wisp.basic
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: basic-values
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.wisp.syntax-basic
+;; TEST-PURPOSE: Basic wisp forms compile and run
+;; TEST-ATOM: module/show/define all work in wisp syntax
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:80-wisp-codegen/basic-values branch family
+;; TEST-USES-ATOM: atom.codegen.category.80.wisp.codegen
+;; TEST-MENU: branches/wisp-codegen/basic-values/atom.codegen.80.wisp.codegen.basic.values.rt.wisp.basic
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/basic-values/atom.codegen.80.wisp.codegen.basic.values.rt.wisp.basic
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.basic.values.rt.wisp.basic
+;; TEST-CLI-TARGET: codegen branches wisp-codegen basic-values
+module Main
+show 42
+show 3.14
+show "hello"
+define x 10
+show x

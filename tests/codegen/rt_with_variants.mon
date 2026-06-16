@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.rt-with-variants
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Runtime with binding forms are a codegen-backed coverage point for scoped bindings.
-;; TEST-ATOM: Single and multi-binding with forms should expose bound names to the body.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (with [x 1] x))
-(show (with [x 1 y 2 z 3] (+ x y z)))

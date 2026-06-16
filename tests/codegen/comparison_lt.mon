@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.comparison-lt
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Less-than operator evaluates at runtime.
-;; TEST-ATOM: (< 3 5) evaluates to True.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (< 3 5))

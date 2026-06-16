@@ -1,0 +1,16 @@
+name: string_substring_contains_under_if
+section: atom-derived-language
+tier: stable
+kind: law
+features: if, string
+compiler-path: codegen.control.if_phi, runtime.string.contains
+signal: high
+corpus-role: derived-property
+uses-atoms: atom.control.if.same_branch, atom.runtime.string.contains.substring
+depends-on: atom.control.if.same_branch, atom.runtime.string.contains.substring
+related-properties: if_same_branch, contains_substring
+args: c:Bool@logic needle:SubstrOf(s) s:NonEmptyString@escape
+type: Bool
+expect: True
+description: Derived language property connected to foundational atom graph dependencies.
+law: (if {c} (contains? {s} {needle}) (contains? {s} {needle}))

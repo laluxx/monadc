@@ -11,9 +11,13 @@
 
 [[file:index.org][<- Back to Index]] · [[file:collections.org][Collections]] · [[file:list.org][Lists]] · [[file:map.org][Maps]] · [[file:range.org][Ranges]] · [[file:heap.org][Heap Allocation]] · [[file:layouts.org][Layout Types]] · [[file:types.org][Types]]
 
-Test coverage: array operations verified by =rt_array_*.mon= fixtures in [[file:../tests/codegen/][tests/codegen/]]. Heap array iteration via =rt_heap_array_for.mon=. Array indexing via =rt_array_index.mon=.
+Test coverage: array operations verified by =rt_array_*.mon= fixtures in
+[[file:../tests/codegen/][tests/codegen/]]. Heap array iteration via
+=rt_heap_array_for.mon=. Array indexing via =rt_array_index.mon=.
+Test architecture reference: [[file:../context/tests-arch.org][context/tests-arch.org]].
 
-Monad provides three array variants with different memory and performance characteristics ([[file:../types.c::493]][types.c]):
+Monad provides three array variants with different memory and performance
+characteristics ([[file:../types.c::493]][types.c]):
 
 | Variant | Syntax | Memory | Size | Use Case |
 |---------+--------+--------+------+----------|
@@ -21,7 +25,11 @@ Monad provides three array variants with different memory and performance charac
 | Fat pointer | =[16kb I32]= | Stack/heap | Runtime-sized, fixed cap | C-interop sized buffers |
 | Heap-growable | =~[1 2 3]= | Heap | Runtime-sized, mutable | Long-lived out-of-frame data |
 
-* Stack Arrays ([[file:../reader.c::5821]])
+See [[file:collections.org][Collections]] for an overview of all collection
+types and [[file:../context/codegen-ops.org][context/codegen-ops.org]] for
+operation dispatch.
+
+* 1. Stack Arrays ([[file:../reader.c::5821]])
 
 Stack arrays are fixed-size arrays allocated in the current stack frame:
 
@@ -41,11 +49,22 @@ define typed [x :: Arr :: Int :: 5] [1 2 3 4 5]
 []
 #+END_SRC
 
-Size is inferred from the literal element count. For type-annotated declarations, the declared size must match.
+Size is inferred from the literal element count. For type-annotated
+declarations, the declared size must match the literal count.
 
-* Heap Arrays (tilde prefix, [[file:../reader.c::5898]])
+See [[file:types.org][Types]] for =Arr= type syntax and
+[[file:../context/infer.org][context/infer.org]] for size inference.
 
-Heap arrays use the =~= prefix and are allocated on the heap with runtime-determined size:
+Key Points:
+- Stack arrays are fixed-size, allocated on the stack
+- Size is inferred from literal element count
+- Empty array =[]= has zero elements
+- Best for small, short-lived data
+
+* 2. Heap Arrays (tilde prefix, [[file:../reader.c::5898]])
+
+Heap arrays use the =~= prefix and are allocated on the heap with
+runtime-determined size:
 
 #+BEGIN_SRC monad
 ~[1 2 3]                          ;; heap-allocated, runtime-sized
@@ -61,9 +80,20 @@ Heap arrays use the =~= prefix and are allocated on the heap with runtime-determ
 define heap-arr ~[1 2 3]
 #+END_SRC
 
-Heap arrays support push/pop semantics and can outlive their defining scope. See [[file:heap.org][Heap Allocation]].
+Heap arrays support push/pop semantics and can outlive their defining
+scope. They carry a capacity field separate from their length, allowing
+append without reallocation on every operation.
 
-* Fat Pointer Arrays ([[file:../reader.c::5933]])
+See [[file:heap.org][Heap Allocation]] for heap array semantics and
+[[file:arena.org][Arena]] for arena-based allocation.
+
+Key Points:
+- Heap arrays are heap-allocated with runtime-determined size
+- Support push/pop and outlive their defining scope
+- Carry separate length and capacity fields
+- Prefix =~= distinguishes from stack arrays
+
+* 3. Fat Pointer Arrays ([[file:../reader.c::5933]])
 
 Fat pointer arrays carry a size tag alongside the data pointer:
 
@@ -71,9 +101,20 @@ Fat pointer arrays carry a size tag alongside the data pointer:
 [16kb I32]                        ;; fat pointer: {i8*, i64}
 #+END_SRC
 
-The size specifier can use =kb=, =mb=, or raw byte counts. The backing allocation may be stack or heap depending on size.
+The size specifier can use =kb=, =mb=, or raw byte counts. The backing
+allocation may be stack or heap depending on size. Default element type
+is =U8= when not specified.
 
-* Array Indexing
+See [[file:ffi.org][FFI]] for C-interop use cases and
+[[file:layouts.org][Layout Types]] for struct-compatible layouts.
+
+Key Points:
+- Fat pointer ={data, length}= is the universal LLVM lowering for all arrays
+- Syntax: =[16kb I32]= creates a 4096-element I32 array
+- Default element type is =U8= when omitted
+- Primarily used for C-interop buffers
+
+* 4. Array Indexing
 
 Arrays support collection-as-function semantics:
 
@@ -91,9 +132,21 @@ Arrays support collection-as-function semantics:
 (~[1 2 3] 0)
 #+END_SRC
 
-Postfix bracket syntax also works: =arr[0]= ([[file:../reader.c::6621]]). Bounds checking is performed at runtime.
+Postfix bracket syntax also works: =arr[0]= ([[file:../reader.c::6621]]).
+Bounds checking is performed at runtime — out-of-bounds access returns
+=nil= rather than crashing.
 
-* Array Operations
+See [[file:collections.org][Collections]] for the collection-as-function
+protocol and [[file:../context/codegen-ops.org][context/codegen-ops.org]]
+for indexing codegen.
+
+Key Points:
+- Function-call syntax =(arr i)= for index access
+- Postfix syntax =arr[i]= desugars to function call
+- Out-of-bounds returns =nil= (bounded)
+- Bounds checking is performed at runtime
+
+* 5. Array Operations
 
 | Operation | Example | Returns |
 |-----------+---------+---------|
@@ -106,7 +159,15 @@ Postfix bracket syntax also works: =arr[0]= ([[file:../reader.c::6621]]). Bounds
 
 Type conversion creates single-element arrays: =(Arr 20)= → =[20]=.
 
-* Iteration
+See [[file:core.org][Core Library]] for builtin array operations and
+[[file:../context/language.org][context/language.org]] for array dispatch.
+
+Key Points:
+- =count=, =head=, =tail=, =take=, =drop= work on all array variants
+- =++= concatenates arrays (copies both into a new array)
+- =(Arr val)= creates a single-element array
+
+* 6. Iteration
 
 Arrays support =for= iteration:
 
@@ -126,9 +187,22 @@ for [i -> [1 2 3]]
   show i
 #+END_SRC
 
-* Internal Representation
+The arrow syntax =i -> arr= provides index-based iteration, useful when
+the index is needed alongside the element.
 
-All three array variants are lowered to a fat-pointer struct ={i8*, i64}= at the LLVM level:
+See [[file:iteration.org][Iteration]] for for-loop semantics and
+[[file:../context/language.org][context/language.org]] for iteration
+dispatch.
+
+Key Points:
+- =for [x arr]= iterates over elements
+- =for [i -> arr]= iterates with index
+- Index iteration starts at 0
+
+* 7. Internal Representation
+
+All three array variants are lowered to a fat-pointer struct ={i8*, i64}=
+at the LLVM level:
 
 | Field | Type | Purpose |
 |-------+------+---------|
@@ -137,9 +211,77 @@ All three array variants are lowered to a fat-pointer struct ={i8*, i64}= at the
 
 Heap arrays add a third field for capacity (=i64=) to support push/pop.
 
-The type system distinguishes them via flags: =arr_is_fat=, =arr_is_heap=, =arr_size=.
+The type system distinguishes them via flags: =arr_is_fat=, =arr_is_heap=,
+=arr_size=.
 
-* Related Pages
+See [[file:../context/language.org][context/language.org]] for the LLVM
+lowering and [[file:../context/codegen.org][context/codegen.org]] for code
+generation.
+
+Key Points:
+- LLVM lowering is ={i8*, i64}= for all variants
+- Heap arrays add a capacity field for push/pop
+- Type-level flags =arr_is_fat=, =arr_is_heap=, =arr_size= distinguish variants
+
+* 8. Runnable Example
+
+#+BEGIN_SRC monad
+;; run with: monadc arrays-demo.mon
+
+;; Stack array (fixed-size, stack-allocated)
+(define arr [1 2 3 4 5])
+(show arr)                        ;; prints [1 2 3 4 5]
+(show (head arr))                 ;; prints 1
+(show (tail arr))                 ;; prints [2 3 4 5]
+(show (count arr))                ;; prints 5
+(show (arr 0))                    ;; prints 1 (indexing)
+(show (arr 10))                   ;; prints nil (bounds check)
+
+;; Heap array (runtime-sized, heap-allocated)
+(define harr ~[10 20 30])
+(show (harr 1))                   ;; prints 20
+
+;; Array concatenation
+(define combined (++ [1 2] [3 4]))
+(show combined)                   ;; prints [1 2 3 4]
+
+;; Iteration
+(for [x [100 200 300]] (show x))  ;; prints 100 200 300
+
+;; Indexed iteration
+(for [i -> [10 20 30]] (show i))  ;; prints 0 1 2
+#+END_SRC
+
+* 9. Gotchas
+
+Common mistakes and surprising behaviours with arrays:
+
+- **Stack arrays are fixed-size** — no push/pop support. Use heap arrays =(~[])= if you need dynamic sizing.
+
+- **Heap arrays need the tilde prefix** — forgetting =~= creates a stack array instead. =(~[1 2 3])= not =[1 2 3]= for heap allocation.
+
+- **Fat pointer default element type is =U8=** — =[16kb]= creates 16384 U8 elements. Specify the type explicitly: =[16kb I32]=.
+
+- **Array =++= copies both arrays** — concatenation allocates a new array and copies all elements, O(n+m). Not a view or splice.
+
+- **Out-of-bounds returns =nil=, not error** — bounds checking prevents crashes but makes it easy to silently propagate =nil= through a computation.
+
+- **Array size annotation must match literal count** — declaring =[x :: Arr :: Int :: 5]= with a 3-element literal is a compile error.
+
+* 10. Implementation Notes
+
+| Component   | Context File        | Topic                                          |
+|-------------+---------------------+------------------------------------------------|
+| Types       | types.org           | [[file:../context/types.org::#kind-TYPE_ARR][TYPE_ARR type representation]] |
+| Codegen     | codegen-ops.org     | [[file:../context/codegen-ops.org::#ops-array][Array operation codegen]] |
+| Language    | language.org        | [[file:../context/language.org::#primitive-array][Array representation and dispatch]] |
+| Reader      | reader.org          | [[file:../context/reader.org::#heap-array-literals][Heap array literal parsing]] |
+| Codegen     | codegen.org         | [[file:../context/codegen.org::#codegen-fat-array][Fat pointer lowering]] |
+| Inference   | infer.org           | [[file:../context/infer.org::#expression-inference][Array size inference]] |
+| Source      | types.c             | [[file:../types.c::493][Array type variants]] |
+| Source      | reader.c            | [[file:../reader.c::5821][Stack array parsing]], [[file:../reader.c::5898][Heap array]], [[file:../reader.c::5933][Fat pointer]] |
+
+Related Pages
 
 - [[file:heap.org][Heap Allocation]] — heap array semantics, when to use =~[]=
 - [[file:collections.org][Collections]] — lists, sets, maps comparison
@@ -147,9 +289,18 @@ The type system distinguishes them via flags: =arr_is_fat=, =arr_is_heap=, =arr_
 - [[file:core.org][Core Library]] — array operations dispatch
 - [[file:types.org][Types]] — Arr, HeapArr type kinds
 - [[file:control.org][Control Flow]] — =for= iteration over arrays
+- [[file:range.org][Ranges]] — array generation from ranges
+- [[file:ffi.org][FFI]] — C-interop with fat pointer arrays
+- [[file:layouts.org][Layout Types]] — struct-compatible memory layout
+- [[file:iteration.org][Iteration]] — for-loop iteration
+- [[file:arena.org][Arena]] — arena-based allocation
 
-* Context Links
+Further Reading
 
 - [[file:../context/language.org::collections][context/language.org — Collections]]
 - [[file:../context/codegen-ops.org][context/codegen-ops.org]] — Array codegen
+- [[file:../context/types.org][context/types.org]] — TYPE_ARR, array type variants
+- [[file:../context/codegen.org][context/codegen.org]] — LLVM IR lowering
+- [[file:../context/infer.org][context/infer.org]] — size inference for arrays
+- [[file:../context/reader.org][context/reader.org]] — array literal parsing
 - [[file:../types.c::493][types.c]] — Array type variants

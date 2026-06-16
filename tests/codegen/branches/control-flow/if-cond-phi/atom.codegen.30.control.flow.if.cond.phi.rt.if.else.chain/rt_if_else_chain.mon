@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.rt-if-else-chain
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.if.cond.phi.rt.if.else.chain
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: if-cond-phi
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Chained if-else-if-else pattern works.
+;; TEST-ATOM: (if (> x 0) 1 (if (< x 0) -1 0)) returns sign.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/if-cond-phi branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/if-cond-phi/atom.codegen.30.control.flow.if.cond.phi.rt.if.else.chain
+;; TEST-MENU-PATH: codegen/branches/control-flow/if-cond-phi/atom.codegen.30.control.flow.if.cond.phi.rt.if.else.chain
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.if.cond.phi.rt.if.else.chain
+;; TEST-CLI-TARGET: codegen branches control-flow if-cond-phi
+(module Main)
+(define (sign [x : Int] -> Int)
+  (if (> x 0) 1 (if (< x 0) -1 0)))
+(show (sign 5))
+(show (sign -3))
+(show (sign 0))

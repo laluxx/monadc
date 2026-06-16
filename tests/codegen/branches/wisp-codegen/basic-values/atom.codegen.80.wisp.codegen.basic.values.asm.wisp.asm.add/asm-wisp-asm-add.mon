@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.asm.wisp-asm-add
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.basic.values.asm.wisp.asm.add
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: basic-values
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm, monadc.context.language.codegen
+;; TEST-PURPOSE: Integer addition remains valid in Wisp-style asm functions.
+;; TEST-ATOM: add a b returns a + b in a fixture replacing the old top-level for-loop asm snippet.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:80-wisp-codegen/basic-values branch family
+;; TEST-USES-ATOM: atom.codegen.category.80.wisp.codegen
+;; TEST-MENU: branches/wisp-codegen/basic-values/atom.codegen.80.wisp.codegen.basic.values.asm.wisp.asm.add
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/basic-values/atom.codegen.80.wisp.codegen.basic.values.asm.wisp.asm.add
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.basic.values.asm.wisp.asm.add
+;; TEST-CLI-TARGET: codegen branches wisp-codegen basic-values
+module AsmTest
+
+define asm-for-loop :: Int -> Int -> Int
+  a b -> (asm add a b)
+
+show (asm-for-loop 19 23)

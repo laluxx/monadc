@@ -1,8 +1,0 @@
-;; TEST-ID: tests.codegen.rt-begin-value
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Begin block returns the value of the last expression.
-;; TEST-ATOM: (begin 1 2 3) evaluates to 3.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(show (begin 1 2 3))

@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.rt-data-constructors
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.50.data.layout.adt.constructors.rt.data.constructors
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: adt-constructors
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime ADT declarations and constructors compile and execute.
+;; TEST-ATOM: Nullary and fielded ADT constructors can be referenced and called in a program.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:50-data-layout/adt-constructors branch family
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/adt-constructors/atom.codegen.50.data.layout.adt.constructors.rt.data.constructors
+;; TEST-MENU-PATH: codegen/branches/data-layout/adt-constructors/atom.codegen.50.data.layout.adt.constructors.rt.data.constructors
+;; TEST-ATOM-LEAF: atom.codegen.50.data.layout.adt.constructors.rt.data.constructors
+;; TEST-CLI-TARGET: codegen branches data-layout adt-constructors
+(module Main)
+(data Color Red | Green | Blue)
+(data Maybe Nothing | Just Int)
+(define c Red)
+(define m (Just 42))

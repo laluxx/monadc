@@ -1,0 +1,44 @@
+;; TEST-ID: tests.codegen.rt-layout-methods
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.50.data.layout.layouts.fields.rt.layout.methods
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: layouts-fields
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Layout methods with where syntax dispatch correctly.
+;; TEST-ATOM: Vec3 layout with ->array method returns [x y z].
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:50-data-layout/layouts-fields branch family
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/layouts-fields/atom.codegen.50.data.layout.layouts.fields.rt.layout.methods
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts-fields/atom.codegen.50.data.layout.layouts.fields.rt.layout.methods
+;; TEST-ATOM-LEAF: atom.codegen.50.data.layout.layouts.fields.rt.layout.methods
+;; TEST-CLI-TARGET: codegen branches data-layout layouts-fields
+module Main
+
+layout Color
+  [r :: U8]
+  [g :: U8]
+  [b :: U8]
+  where
+    method fromRGB :: U8 -> U8 -> U8 -> Color
+      r g b -> (Color r g b)
+
+    method eql? :: Self -> Color -> Bool
+      s o -> and s.r = o.r
+                 s.g = o.g
+                 s.b = o.b
+
+define red   (Color 255 0 0)
+define black (Color 0   0 0)
+
+;; NOTE All 3 should work
+define red (Color.fromRGB 255 0 0)
+;; define red Color.fromRGB 255 0 0
+;; define red Color.fromRGB(255 0 0)
+
+show (red.eql? red)
+show (red.eql? black)

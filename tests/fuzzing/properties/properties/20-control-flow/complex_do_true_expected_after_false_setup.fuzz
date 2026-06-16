@@ -1,0 +1,15 @@
+name: complex_do_true_expected_after_false_setup
+section: control-do
+tier: stable
+kind: law
+features: arithmetic, control, do, set
+compiler-path: codegen.arithmetic_dispatch, codegen.runtime_call, codegen.sequence, infer.arithmetic, reader.ast_do, runtime.set
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.control.do
+related-properties: signal_atom_do_last_value
+args: setup:Int
+type: Bool
+expect: True
+description: A do form that ends in True must print True even after a False middle expression.
+law: (do {setup} False True)

@@ -1,0 +1,63 @@
+#+TITLE: Catface Static Report
+#+AUTHOR: GPT-5.5 Thinking
+#+DATE: 2026-06-16
+#+CREATED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-16
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-category
+#+FILETAGS: :monadc:compiler:context:category:catface:zig:generated:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.category.catface.static-report
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+
+* Summary
+:PROPERTIES:
+:ID: monadc.context.category.catface.static-report.summary
+:CUSTOM_ID: category-catface-static-report-summary
+:CONTEXT_KIND: generated-report
+:CONTEXT_STATUS: active
+:SOURCE: context/category/catface-static-report.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.category.catface.static-report.summary src:context/category/catface-static-report.org conf:high]
+  Catface currently contains 30 Zig source/build files and 3363 Zig lines.
+  This report is generated from file contents and is useful as a quick inventory
+  for the live category tooling layer.
+
+* Files
+| File | Lines |
+|------+-------|
+| [[file:catface/build.zig][build.zig]] | 37 |
+| [[file:catface/src/app.zig][src/app.zig]] | 74 |
+| [[file:catface/src/cards.zig][src/cards.zig]] | 80 |
+| [[file:catface/src/command_palette.zig][src/command_palette.zig]] | 91 |
+| [[file:catface/src/diagnostics.zig][src/diagnostics.zig]] | 77 |
+| [[file:catface/src/export.zig][src/export.zig]] | 40 |
+| [[file:catface/src/functor.zig][src/functor.zig]] | 98 |
+| [[file:catface/src/fuzzy.zig][src/fuzzy.zig]] | 56 |
+| [[file:catface/src/glyphs.zig][src/glyphs.zig]] | 43 |
+| [[file:catface/src/graph.zig][src/graph.zig]] | 114 |
+| [[file:catface/src/index.zig][src/index.zig]] | 100 |
+| [[file:catface/src/inspector.zig][src/inspector.zig]] | 72 |
+| [[file:catface/src/keymap.zig][src/keymap.zig]] | 88 |
+| [[file:catface/src/language.zig][src/language.zig]] | 171 |
+| [[file:catface/src/law_tests.zig][src/law_tests.zig]] | 59 |
+| [[file:catface/src/main.zig][src/main.zig]] | 133 |
+| [[file:catface/src/manual.zig][src/manual.zig]] | 52 |
+| [[file:catface/src/math.zig][src/math.zig]] | 118 |
+| [[file:catface/src/model.zig][src/model.zig]] | 248 |
+| [[file:catface/src/org.zig][src/org.zig]] | 247 |
+| [[file:catface/src/palette.zig][src/palette.zig]] | 82 |
+| [[file:catface/src/query.zig][src/query.zig]] | 207 |
+| [[file:catface/src/relation.zig][src/relation.zig]] | 143 |
+| [[file:catface/src/render.zig][src/render.zig]] | 212 |
+| [[file:catface/src/root.zig][src/root.zig]] | 63 |
+| [[file:catface/src/session.zig][src/session.zig]] | 67 |
+| [[file:catface/src/surface.zig][src/surface.zig]] | 77 |
+| [[file:catface/src/terminal.zig][src/terminal.zig]] | 280 |
+| [[file:catface/src/text.zig][src/text.zig]] | 111 |
+| [[file:catface/src/ui.zig][src/ui.zig]] | 123 |

@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.rt-make-string
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.strings.rt.make.string
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: strings
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: make-string edge cases.
+;; TEST-ATOM: (make-string 5 (Char 65)) has length 5 and all #\A
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:40-collections/strings branch family
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/strings/atom.codegen.40.collections.strings.rt.make.string
+;; TEST-MENU-PATH: codegen/branches/collections/strings/atom.codegen.40.collections.strings.rt.make.string
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.strings.rt.make.string
+;; TEST-CLI-TARGET: codegen branches collections strings
+(module Main)
+(show (make-string 5 (Char 65)))
+(show (make-string 0 (Char 66)))

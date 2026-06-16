@@ -1,0 +1,15 @@
+name: mega_string_index_dynamic_branch
+section: codegen-preds-strings-null
+tier: stable
+kind: law
+features: arithmetic, codegen, equality, if, phi, string
+compiler-path: codegen.arithmetic_dispatch, codegen.branch_phi, codegen.equality_dispatch, codegen.if_phi, codegen.string_literal, infer.arithmetic, infer.equality, infer.if_phi, reader.ast_if, reader.string_literal, runtime.string
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.control.if, atom.core.equality, atom.null.nil, atom.runtime.string
+related-properties: signal_atom_equality_reflexive, signal_atom_if_same_branch_eliminates, signal_atom_string_contains_substring
+args: p:Bool
+type: Bool
+expect: True
+description: string indexing must accept branch-selected index.
+law: (= ("ab" (if {p} 0 1)) (if {p} (Char 97) (Char 98)))

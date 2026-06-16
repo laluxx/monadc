@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.branch.diagnostic-layout-lowercase-name
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: diagnostic-mismatch
+;; TEST-SUBSET: layout-dot-field
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 90-diagnostics
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: Exercise layout name capitalization diagnostic.
+;; TEST-ATOM: atom.codegen.diagnostic.layout-lowercase-name
+;; TEST-CODEGEN-ATOM: atom.codegen.diagnostic.layout-lowercase-name
+;; TEST-QUALITY: branch-regression
+;; TEST-EXPECT: fail:compile
+;; TEST-CODEGEN-PATH: diagnostic.layout.name-uppercase
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-TAG: layout
+;; TEST-COVERAGE: codegen.c:2223 layout uppercase diagnostic
+
+;; TEST-USES-ATOM: atom.codegen.category.90.diagnostics
+;; TEST-MENU: errors/codegen/layout-dot-field/atom.codegen.diagnostic.layout-lowercase-name
+;; TEST-MENU-PATH: codegen/errors/codegen/layout-dot-field/atom.codegen.diagnostic.layout-lowercase-name
+;; TEST-ATOM-LEAF: atom.codegen.diagnostic.layout-lowercase-name
+;; TEST-CLI-TARGET: codegen errors codegen layout-dot-field
+(module Main)
+(layout point [x :: Int])

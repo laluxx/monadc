@@ -1,0 +1,17 @@
+name: deep_codegen_bitwise_and_zero_absorbs_disabled_duplicate_e3619a4c
+section: codegen-bitwise-dispatch
+tier: experimental
+kind: law
+features: arithmetic, bitwise, codegen, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.bitwise_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.equality, infer.logic
+signal: medium
+corpus-role: merged-duplicate
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+merged-into: bitwise_and_zero_absorbs
+disabled-reason: exact duplicate source/args/expect merged by signal-current
+args: a:Int
+type: Bool
+expect: True
+description: Bitwise AND dispatcher must absorb zero.
+law: (= (& {a} 0) 0)

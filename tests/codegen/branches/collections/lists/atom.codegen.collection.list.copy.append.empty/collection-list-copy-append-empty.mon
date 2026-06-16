@@ -1,0 +1,30 @@
+;; TEST-ID: tests.codegen.branch.collection-list-copy-append-empty
+;; TEST-TIER: known-fail
+;; TEST-STATUS: quarantined-baseline-2026-06-15
+;; TEST-KNOWN-FAILURE: desugar-mismatch
+;; TEST-SUBSET: lists
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 40-collections
+;; TEST-QUALITY: branch-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.collection.list.copy.append.empty
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Cover list-empty?, empty?, list-copy, and append! runtime branches.
+;; TEST-ATOM: List copy should be independent and append! should mutate the copied list.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:7572 list-empty?/empty? branches
+;; TEST-COVERAGE: codegen.c:7580 list-copy branch
+;; TEST-COVERAGE: codegen.c:7587 append! branch
+
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/lists/atom.codegen.collection.list.copy.append.empty
+;; TEST-MENU-PATH: codegen/branches/collections/lists/atom.codegen.collection.list.copy.append.empty
+;; TEST-ATOM-LEAF: atom.codegen.collection.list.copy.append.empty
+;; TEST-CLI-TARGET: codegen branches collections lists
+(module Main)
+(define xs (list))
+(show (list-empty? xs))
+(show (empty? '(1)))
+(define ys (list-copy '(1 2)))
+(show ys)
+(append! ys 3)
+(show ys)

@@ -1,9 +1,0 @@
-;; TEST-ID: tests.codegen.define-and-show
-;; TEST-CONTEXT: monadc.context.language.syntax-corpus
-;; TEST-PURPOSE: Define a variable and show its value.
-;; TEST-ATOM: (define x 5) then (show x) prints 5.
-;; TEST-EXPECT: compile, run
-
-(module Main)
-(define x 5)
-(show x)

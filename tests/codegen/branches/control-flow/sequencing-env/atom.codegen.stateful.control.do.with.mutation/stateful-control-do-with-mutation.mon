@@ -1,0 +1,34 @@
+;; TEST-ID: tests.codegen.stateful.control.do.with.mutation
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SUBSET: sequencing-env
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.stateful.control.do.with.mutation
+;; TEST-CONTEXT: monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus, monadc.context.language.codegen-atom-web
+;; TEST-PURPOSE: do sequenced mutation updates cell.
+;; TEST-ATOM: atom.codegen.stateful.control.do.with.mutation
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.control-flow
+;; TEST-CODEGEN-PATH: codegen.phi
+;; TEST-CODEGEN-PATH: codegen.env-mutation
+;; TEST-COVERAGE: codegen.c:7732 begin special form
+;; TEST-COVERAGE: codegen.c:7743-7977 if/PHI branch lowering
+;; TEST-COVERAGE: codegen.c:8001 do special form
+;; TEST-COVERAGE: codegen.c:8012 with child env
+;; TEST-COVERAGE: codegen.c:8050 when branch
+;; TEST-COVERAGE: codegen.c:8090 unless branch
+;; TEST-COVERAGE: codegen.c:8128 while loop
+;; TEST-COVERAGE: codegen.c:8175 for loop
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-USES-ATOM: atom.codegen.subset.30.control.flow.sequencing.env
+;; TEST-MENU: branches/control-flow/sequencing-env/atom.codegen.stateful.control.do.with.mutation
+;; TEST-MENU-PATH: codegen/branches/control-flow/sequencing-env/atom.codegen.stateful.control.do.with.mutation
+;; TEST-ATOM-LEAF: atom.codegen.stateful.control.do.with.mutation
+;; TEST-CLI-TARGET: codegen branches control-flow sequencing-env
+
+(module Main)
+(define x 0)
+(do (set! x 40) (set! x (+ x 2)) (show x))

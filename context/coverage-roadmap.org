@@ -1,0 +1,116 @@
+#+TITLE: Coverage Roadmap
+#+AUTHOR: GPT-5.5 Thinking
+#+DATE: 2026-06-16
+#+CREATED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-16
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:coverage:roadmap:tests:
+#+PROPERTY: CONTEXT_VERSION 3
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.coverage
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY hideblocks
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* Purpose
+:PROPERTIES:
+:ID: monadc.context.coverage.roadmap
+:CUSTOM_ID: coverage-roadmap-purpose
+:CONTEXT_KIND: tests
+:CONTEXT_DESCRIPTION: Roadmap for moving from broad test count to meaningful semantic coverage.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/coverage-roadmap.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.coverage.roadmap-purpose src:context/coverage-roadmap.org conf:high]
+  Test quantity is not enough. MonadC needs coverage by compiler phase,
+  language contract, artifact type, and failure class.
+
+* Coverage Axes
+:PROPERTIES:
+:ID: monadc.context.coverage.axes
+:CUSTOM_ID: coverage-axes
+:CONTEXT_KIND: schema
+:CONTEXT_DESCRIPTION: The axes used to judge whether test coverage is meaningful.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/coverage-roadmap.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Coverage dimensions
+| Axis | Examples | Required artifact |
+|------+----------+-------------------|
+| Reader shape | path, quote, arrays, maps, Wisp layout | JSON AST golden |
+| Desugar shape | define, match, for, pipes, method sugar | desugar golden |
+| Inference | typed binds, dependent claims, bad arity | diagnostic + error class |
+| Codegen | runtime value, collections, functions | stdout/run golden |
+| Runtime | array/heap/list/map/set mutation | stdout + memory-safe execution |
+| CLI/build | command flags, module builds | command output golden |
+
+[DEC id:dec.coverage.stdout-is-not-enough date:2026-06-16 by:llm]
+  Stdout-only tests are valid for runtime behavior but insufficient for reader
+  and desugar contracts. High-risk syntax changes should include AST and desugar
+  goldens.
+
+* Priority Coverage Topics
+:PROPERTIES:
+:ID: monadc.context.coverage.priority-topics
+:CUSTOM_ID: coverage-priority-topics
+:CONTEXT_KIND: tests
+:CONTEXT_DESCRIPTION: Areas that should receive richer test coverage first.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/coverage-roadmap.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Next coverage investments
+| Topic | Why | Minimal new assertions |
+|-------+-----+------------------------|
+| Wisp =define= | User-facing syntax, high churn | Wisp source + desugar + run |
+| Path literals | Reader/infer/runtime value boundary | AST path node + runtime show/use |
+| Collection dispatch | Many sugar and runtime paths converge | desugar + run + negative misuse |
+| Pattern matching | Clause shape and argument order are fragile | desugar + run |
+| Diagnostics | Many red tests are diagnostic mismatch | stable error code/span |
+| Test runner tiers | Protects daily workflow | unit tests + inventory validation |
+
+[TODO id:todo.coverage.add-wisp-define-matrix owner:human+llm status:open]
+  Add a Wisp define matrix covering value define, typed value define, function
+  signature define, multi-clause define, and the equivalent Lisp forms.
+
+[TODO id:todo.coverage.add-artifact-ratio owner:codex status:open]
+  Add an inventory metric that reports what percentage of fixtures have stdout,
+  JSON, and desugar goldens by section.

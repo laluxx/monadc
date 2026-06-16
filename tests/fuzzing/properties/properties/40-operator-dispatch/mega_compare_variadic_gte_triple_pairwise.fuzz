@@ -1,0 +1,15 @@
+name: mega_compare_variadic_gte_triple_pairwise
+section: codegen-compare-variadic
+tier: stable
+kind: law
+features: arithmetic, codegen, comparison, equality, logic
+compiler-path: codegen.arithmetic_dispatch, codegen.comparison_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, infer.arithmetic, infer.comparison, infer.equality, infer.logic
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.codegen.dispatch, atom.core.equality, atom.core.order.gt, atom.core.order.gte, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+args: a:Int b:Int c:Int
+type: Bool
+expect: True
+description: Variadic >= must be equivalent to adjacent pairwise comparisons.
+law: (= (>= {a} {b} {c}) (and (>= {a} {b}) (>= {b} {c})))

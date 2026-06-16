@@ -1,0 +1,15 @@
+name: structured_strategy_phi_env_null_coalesce_int_identity
+section: current-strategy-phi-env
+tier: stable
+kind: law
+features: null, coalesce, strategy
+compiler-path: codegen.null_coalesce, infer.nil, runner.strategy_arg, runner.typed_generator
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.infer.predicate, atom.null.nil
+related-properties: signal_atom_equality_reflexive
+args: a:Int@if+phi+env b:Int@with+do p:Bool@logic+if
+type: Bool
+expect: True
+description: V10 strategy property null_coalesce_int_identity generated with phi_env arguments to stress compiler dispatch, envs, and PHI lowering.
+law: (= (?? {a} {b}) {a})

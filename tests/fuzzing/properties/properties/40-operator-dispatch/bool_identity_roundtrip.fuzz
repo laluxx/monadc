@@ -1,0 +1,15 @@
+name: bool_identity_roundtrip
+section: bool
+tier: stable
+kind: law
+features: arithmetic, bool, equality, logic, predicate
+compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch, codegen.logic_dispatch, codegen.predicate_dispatch, infer.arithmetic, infer.equality, infer.logic, infer.type_predicate
+signal: medium
+corpus-role: semantic-law
+uses-atoms: atom.core.equality, atom.infer.predicate, atom.logic.and, atom.logic.not, atom.logic.or
+related-properties: signal_atom_equality_reflexive
+args: cond:Bool
+type: Bool
+expect: True
+description: A typed Bool predicate helper must preserve generated Bool expressions.
+law: (= (fuzz-bool-id? (fuzz-bool-id? {cond})) {cond})

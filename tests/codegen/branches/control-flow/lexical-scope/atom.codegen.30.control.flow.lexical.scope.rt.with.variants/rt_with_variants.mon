@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-with-variants
+;; TEST-TIER: regression
+;; TEST-STATUS: passing-baseline-2026-06-15
+;; TEST-CODEGEN-ATOM: atom.codegen.30.control.flow.lexical.scope.rt.with.variants
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: lexical-scope
+;; TEST-CATEGORY: 30-control-flow
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Runtime with binding forms are a codegen-backed coverage point for scoped bindings.
+;; TEST-ATOM: Single and multi-binding with forms should expose bound names to the body.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:30-control-flow/lexical-scope branch family
+;; TEST-USES-ATOM: atom.codegen.category.30.control.flow
+;; TEST-MENU: branches/control-flow/lexical-scope/atom.codegen.30.control.flow.lexical.scope.rt.with.variants
+;; TEST-MENU-PATH: codegen/branches/control-flow/lexical-scope/atom.codegen.30.control.flow.lexical.scope.rt.with.variants
+;; TEST-ATOM-LEAF: atom.codegen.30.control.flow.lexical.scope.rt.with.variants
+;; TEST-CLI-TARGET: codegen branches control-flow lexical-scope
+(module Main)
+(show (with [x 1] x))
+(show (with [x 1 y 2 z 3] (+ x y z)))
