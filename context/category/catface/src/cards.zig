@@ -16,8 +16,12 @@ pub fn writeHelpCard(buf: *std.array_list.Managed(u8), width: usize) !void {
     try sep(buf, width);
     try row(buf, width, "word       fuzzy object/title/path/preview search");
     try row(buf, width, ":Record    filter object kind");
-    try row(buf, width, "@wisp      filter source path");
+    try row(buf, width, "@wisp/@reader/@codegen focused namespaces");
+    try row(buf, width, "@todo/@bugs/@notes/@tests work/search lanes");
     try row(buf, width, "?id #id    filter object identity");
+    try row(buf, width, "%verifies  filter by edge kind");
+    try row(buf, width, "a -> b     relation search through arrows");
+    try row(buf, width, "a <- b     reverse relation search");
     try row(buf, width, "> < ~      outgoing / incoming / neighborhood");
     try row(buf, width, "proj         project through taxonomy/functor edges");
     try row(buf, width, "(term) proj   human-friendly superset/concept projection");
@@ -33,6 +37,7 @@ pub fn writeLawCard(buf: *std.array_list.Managed(u8), width: usize) !void {
     try row(buf, width, "identity: empty path id_A for every object A");
     try row(buf, width, "composition: path concatenation when codomain/domain match");
     try row(buf, width, "query > and < inspect representable Hom-views");
+    try row(buf, width, "query a -> b searches generator arrows between sets");
     try border(buf, width, '╰', '╯');
 }
 

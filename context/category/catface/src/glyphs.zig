@@ -10,6 +10,7 @@ pub fn kind(k: model.ObjectKind) []const u8 {
         .concept => "◯",
         .test_kind => "T",
         .source => "S",
+        .function_kind => "λ",
         .info => "I",
         .todo => "!",
         .done => "✓",
@@ -35,8 +36,8 @@ pub fn edge(k: model.EdgeKind) []const u8 {
     };
 }
 
-pub const logo = "Catface Ctx";
-pub const query_prompt = "λ ";
+pub const logo = "󰄛 Catface";
+pub const query_prompt = "❯ ";
 pub const focus = "*";
 pub const inactive = "o";
 pub const compose = "∘";

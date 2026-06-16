@@ -1,6 +1,116 @@
-typed define :Record @wisp
-@tests TODO
-@info category proj
+# 󰄛 Catface query cookbook
+# Lines beginning with # are comments. Paste a query into Catface or run:
+#   zig build run -- --query '<query>' ../../../
+
+# Daily triage
+@todo
+@todo reader
+@todo wisp
+@todo codegen
+@bugs
+@bugs reader
+@bugs codegen
+@fix
+
+# Notes and trust levels
+@notes
+@obs
+@dec
+@inf
+@obs reader
+@dec syntax
+@inf type inference
+:Record reader
+:Record path literal
+
+# Tests and coverage
+@tests
+@Test reader
+@Test wisp
+@Test codegen
+@tests -> reader
+reader <- @tests
+%verifies @tests -> reader
+%verifies @tests -> codegen
+%blocks @tests
+
+# Category relation queries
+@todo -> @source
+@notes -> @todo
+@obs -> @tests
+@dec -> @source
+%supports @notes -> reader
+%blocks @todo -> @source
+%refines @notes -> @notes
+
+# Source-specific surfaces
+@reader
+@wisp
+@codegen
 @source reader
-?monadc.context.category.index.purpose ~
-superset proj
+@source wisp
+@source codegen
+@reports
+
+# Graph operators
+reader >
+reader <
+reader ~
+wisp define ~
+codegen proj
+reader layout proj
+
+# Object-card workflow
+# First find an id, then run:
+#   zig build run -- --card '<object-id>' ../../../
+monadc.context.category.index.purpose
+
+# v0.7 indexed search features
+@hot
+@triage
+@blocked
+@blockers
+@roots
+@leaves
+@orphans
+title:reader
+path:reader
+id:monadc.context
+preview:TODO
+tag:tests
+@hot reader
+@blocked -> @source
+@roots -> @leaves
+
+# Exact token probes
+=reader
+=TODO
+=needlefast
+
+# v0.7.4 report commands to run outside the TUI:
+# zig build query-report
+# zig build test-report
+# zig build perf
+
+# Info pages added in context/info/*.org
+@info
+@info advanced-types
+@info wisp
+@info type-inference
+@info performance
+@info paths
+=monadc.info.advanced-types
+
+# v0.7.6 function/type queries
+@functions
+@functions id
+:Function
+function:id
+sig:a
+signature:a
+# Plain type arrows are interpreted as function signature search, not relation search:
+a -> a
+Int -> Int
+# Relation arrows still work when the sides are object expressions:
+@tests -> reader
+reader <- @tests

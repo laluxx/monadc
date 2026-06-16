@@ -30,7 +30,7 @@ pub fn score(haystack: []const u8, needle: []const u8) Score {
         }
     }
     if (n_i != needle.len) return .{ .matched = false, .value = -999999 };
-    value -= @intCast(haystack.len / 12);
+    value -= @intCast(@divTrunc(haystack.len, 12));
     return .{ .matched = true, .value = value };
 }
 

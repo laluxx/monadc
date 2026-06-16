@@ -1,6 +1,6 @@
 .{
     .name = .catface,
-    .version = "0.1.0",
+    .version = "0.7.6",
     .fingerprint = 0xcc98b78d52b16d9d,
     .minimum_zig_version = "0.14.0",
     .dependencies = .{},
@@ -9,6 +9,7 @@
         "build.zig.zon",
         "src",
         "examples",
-        "README.org",
+        "README.md",
+        "catface.svg",
     },
 }

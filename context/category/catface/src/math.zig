@@ -33,7 +33,9 @@ pub const CategoryReport = struct {
 pub fn checkCategory(ctx: *const model.Context) CategoryReport {
     var r = CategoryReport{};
     for (ctx.edges.items) |e| {
-        if (ctx.findObject(e.src) == null or ctx.findObject(e.dst) == null) r.unresolved_edges += 1;
+        if (ctx.findObject(e.src) == null or ctx.findObject(e.dst) == null) {
+            r.unresolved_edges += 1;
+        }
     }
     var samples: usize = 0;
     for (ctx.edges.items) |a| {
@@ -42,7 +44,9 @@ pub fn checkCategory(ctx: *const model.Context) CategoryReport {
             if (std.mem.eql(u8, a.dst, b.src)) {
                 samples += 1;
                 r.composable_samples += 1;
-                if (ctx.findObject(a.src) == null or ctx.findObject(b.dst) == null) r.bad_composition_samples += 1;
+                if (ctx.findObject(a.src) == null or ctx.findObject(b.dst) == null) {
+                    r.bad_composition_samples += 1;
+                }
                 break;
             }
         }
@@ -59,6 +63,7 @@ pub const Distribution = struct {
     concept: usize = 0,
     test_count: usize = 0,
     source: usize = 0,
+    function_count: usize = 0,
     info: usize = 0,
     todo: usize = 0,
     done: usize = 0,
@@ -74,6 +79,7 @@ pub const Distribution = struct {
             .concept => { self.concept += 1; },
             .test_kind => { self.test_count += 1; },
             .source => { self.source += 1; },
+            .function_kind => { self.function_count += 1; },
             .info => { self.info += 1; },
             .todo => { self.todo += 1; },
             .done => { self.done += 1; },
@@ -82,7 +88,7 @@ pub const Distribution = struct {
     }
 
     pub fn total(self: Distribution) usize {
-        return self.file + self.heading + self.record + self.script + self.report + self.concept + self.test_count + self.source + self.info + self.todo + self.done + self.unknown;
+        return self.file + self.heading + self.record + self.script + self.report + self.concept + self.test_count + self.source + self.function_count + self.info + self.todo + self.done + self.unknown;
     }
 };
 
@@ -94,7 +100,9 @@ pub fn distribution(ctx: *const model.Context) Distribution {
 
 pub fn entropyBits(counts: []const usize) f64 {
     var sum: usize = 0;
-    for (counts) |c| sum += c;
+    for (counts) |c| {
+        sum += c;
+    }
     if (sum == 0) return 0;
     var h: f64 = 0;
     for (counts) |c| {

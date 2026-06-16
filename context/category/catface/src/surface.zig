@@ -25,7 +25,7 @@ pub const Surface = struct {
 
     pub fn meter(self: Surface, x: u16, y: u16, width: u16, value: usize, max: usize, label_text: []const u8) void {
         if (width == 0) return;
-        const fill: u16 = if (max == 0) 0 else @min(width, @as(u16, @intCast((value * @as(usize, width)) / max)));
+        const fill: u16 = if (max == 0) 0 else @min(width, @as(u16, @intCast(@divTrunc(value * @as(usize, width), max))));
         var i: u16 = 0;
         while (i < width) : (i += 1) {
             self.tty.set(x + i, y, if (i < fill) '━' else '─', .{ .fg = if (i < fill) self.theme.accent2 else self.theme.edge, .bg = self.theme.panel });

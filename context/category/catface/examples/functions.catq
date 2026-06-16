@@ -1,0 +1,11 @@
+# Catface function catalogue probes
+# These work when Catface is launched from the MonadC repository root.
+@functions
+@functions id
+:Function
+a -> a
+Int -> Int
+function:map
+function:fold
+path:core @functions
+path:prelude @functions

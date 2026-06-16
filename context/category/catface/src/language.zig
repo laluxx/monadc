@@ -5,17 +5,20 @@ const fmtbuf = @import("fmtbuf.zig");
 /// It is not SQL-shaped. It is a live stack/filter language for terminal search.
 ///
 /// Grammar sketch:
-///   expr     := item*
+///   expr     := relation | item*
+///   relation := expr '->' expr | expr '<-' expr
 ///   item     := atom | filter | op | group
 ///   group    := '(' expr ')'
 ///   atom     := bare-text
-///   filter   := ':' kind | '@' path | '?' identity | '#' identity | '%' relation
+///   filter   := ':' kind | '@' lane | '?' identity | '#' identity | '%' relation | field ':' term
 ///   op       := '>' | '<' | '~' | 'proj' | '!' | '⊔' | '∩' | '∘'
+///   relation operators use spaces: lhs -> rhs, lhs <- rhs
 ///
 /// Semantics are intentionally set-oriented:
 ///   words narrow by fuzzy predicate
 ///   filters narrow by typed predicate
 ///   arrows expand through generating morphisms
+///   relation queries match morphisms between two object sets
 ///   proj projects through taxonomy/functor-like edges
 pub const Op = enum {
     outgoing,
@@ -113,11 +116,19 @@ pub fn formatCheatsheet(buf: *std.array_list.Managed(u8)) !void {
         \\Catface query mini-language
         \\  word        fuzzy search
         \\  :Record     kind filter
-        \\  @wisp       path filter
+        \\  @wisp       namespace/lane filter
+        \\  @info       context/info Org reference pages
+        \\  @functions  first-class core/prelude functions
+        \\  title:x     field filter: title/path/id/preview/tag/function/sig
+        \\  path:context/info  info-page path filter
+        \\  @hot        structural/triage lane
         \\  ?id #id     identity filter
-        \\  %supports   relation filter
+        \\  %supports   edge-kind filter
+        \\  a -> a      type-signature search when both sides are type-like
+        \\  a -> b      objects connected by morphisms a→b
+        \\  a <- b      objects connected by morphisms b→a
         \\  > < ~       outgoing / incoming / neighborhood
-        \\  proj           taxonomy/functor projection
+        \\  proj        taxonomy/functor projection
         \\  !           reset to all objects
         \\  ⊔ ∩ ∘       planned union/intersection/composition glyphs
         \\
@@ -164,12 +175,20 @@ pub const examples = [_]Example{
     .{ .query = "?monadc.context.category.index.purpose ~", .meaning = "neighborhood of a known heading" },
     .{ .query = "superset proj", .meaning = "fuzzy superset term then concept projection" },
     .{ .query = "script :Script @catface", .meaning = "Catface source scripts" },
+    .{ .query = "@todo -> @source", .meaning = "open work items connected to implementation surfaces" },
+    .{ .query = "title:reader @hot", .meaning = "indexed title field search inside urgent work" },
+    .{ .query = "=reader @source", .meaning = "exact token search, then source lane filter" },
+    .{ .query = "@roots -> @leaves", .meaning = "shape diagnostic over category roots and leaves" },
+    .{ .query = "@tests -> reader", .meaning = "objects in arrows from tests to reader matches" },
+    .{ .query = "reader <- @tests", .meaning = "reverse question: tests pointing at reader objects" },
+    .{ .query = "%verifies @tests -> codegen", .meaning = "verified codegen targets and participating tests" },
 };
 
 test "language parse" {
-    var p = try parse(std.testing.allocator, "typed :Record @wisp > proj");
+    var p = try parse(std.testing.allocator, "typed :Record @wisp %supports > proj");
     defer p.deinit();
-    try std.testing.expect(p.atoms.len == 5);
+    try std.testing.expect(p.atoms.len == 6);
     try std.testing.expect(p.atoms[1].kind == .kind);
-    try std.testing.expect(p.atoms[3].op.? == .outgoing);
+    try std.testing.expect(p.atoms[3].kind == .relation);
+    try std.testing.expect(p.atoms[4].op.? == .outgoing);
 }

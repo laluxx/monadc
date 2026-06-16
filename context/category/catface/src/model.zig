@@ -9,6 +9,7 @@ pub const ObjectKind = enum {
     concept,
     test_kind,
     source,
+    function_kind,
     info,
     todo,
     done,
@@ -180,6 +181,7 @@ pub const Context = struct {
             .concept => "Concept",
             .test_kind => "Test",
             .source => "Source",
+            .function_kind => "Function",
             .info => "Info",
             .todo => "Todo",
             .done => "Done",
@@ -214,6 +216,7 @@ pub const Context = struct {
         if (eqlIgnoreCase(s, "Concept")) return .concept;
         if (eqlIgnoreCase(s, "Test") or eqlIgnoreCase(s, "Tests")) return .test_kind;
         if (eqlIgnoreCase(s, "Source")) return .source;
+        if (eqlIgnoreCase(s, "Function") or eqlIgnoreCase(s, "Fn") or eqlIgnoreCase(s, "Method")) return .function_kind;
         if (eqlIgnoreCase(s, "Info")) return .info;
         if (eqlIgnoreCase(s, "Todo")) return .todo;
         if (eqlIgnoreCase(s, "Done")) return .done;

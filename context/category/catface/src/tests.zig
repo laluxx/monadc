@@ -4,6 +4,9 @@ const fmtbuf = @import("fmtbuf.zig");
 const terminal = @import("terminal.zig");
 const palette = @import("palette.zig");
 const glyphs = @import("glyphs.zig");
+const version = @import("version.zig");
+const tree = @import("tree.zig");
+const perf = @import("perf.zig");
 const model = @import("model.zig");
 const org = @import("org.zig");
 const fuzzy = @import("fuzzy.zig");
@@ -28,6 +31,9 @@ const command_palette = @import("command_palette.zig");
 const law_tests = @import("law_tests.zig");
 const manual = @import("manual.zig");
 const app = @import("app.zig");
+const file_cache = @import("file_cache.zig");
+const perf_report = @import("perf_report.zig");
+const context_cache = @import("context_cache.zig");
 
 // This file is intentionally a test harness, not a library root. The shipped
 // tool is an executable; tests import every module so Zig type-checks them and
@@ -38,6 +44,9 @@ test "catface module graph type-checks" {
     _ = terminal;
     _ = palette;
     _ = glyphs;
+    _ = version;
+    _ = tree;
+    _ = perf;
     _ = model;
     _ = org;
     _ = fuzzy;
@@ -62,4 +71,7 @@ test "catface module graph type-checks" {
     _ = law_tests;
     _ = manual;
     _ = app;
+    _ = file_cache;
+    _ = perf_report;
+    _ = context_cache;
 }

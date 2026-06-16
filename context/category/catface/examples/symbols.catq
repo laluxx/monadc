@@ -1,0 +1,14 @@
+# Catface symbol algebra cookbook
+# Object symbols: T test, S source, ▣ record, I note/info, ! TODO, ✓ done, ◯ concept.
+# Edge symbols: ✓ verifies, ⊢ supports, ⊣ blocks, ≤ refines, ⇢ id-link, ⊃ contains.
+
+@tests -> reader
+reader <- @tests
+%verifies @tests -> codegen
+@obs -> @dec
+@todo -> @source
+@blocked <- @todo
+@notes reader
+@obs reader
+@dec syntax
+@inf inference

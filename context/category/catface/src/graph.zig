@@ -28,8 +28,16 @@ pub fn adjacent(allocator: std.mem.Allocator, ctx: *const model.Context, object_
                 }
             },
             .both => {
-                if (std.mem.eql(u8, e.src, id)) if (ctx.findObject(e.dst)) |di| try out.append(.{ .edge_index = i, .object_index = di });
-                if (std.mem.eql(u8, e.dst, id)) if (ctx.findObject(e.src)) |si| try out.append(.{ .edge_index = i, .object_index = si });
+                if (std.mem.eql(u8, e.src, id)) {
+                    if (ctx.findObject(e.dst)) |di| {
+                        try out.append(.{ .edge_index = i, .object_index = di });
+                    }
+                }
+                if (std.mem.eql(u8, e.dst, id)) {
+                    if (ctx.findObject(e.src)) |si| {
+                        try out.append(.{ .edge_index = i, .object_index = si });
+                    }
+                }
             },
         }
     }
@@ -59,8 +67,12 @@ pub fn shortestPath(allocator: std.mem.Allocator, ctx: *const model.Context, sta
     defer allocator.free(prev_obj);
     var prev_edge = try allocator.alloc(?usize, n);
     defer allocator.free(prev_edge);
-    for (prev_obj) |*p| p.* = null;
-    for (prev_edge) |*p| p.* = null;
+    for (prev_obj) |*p| {
+        p.* = null;
+    }
+    for (prev_edge) |*p| {
+        p.* = null;
+    }
 
     var q = std.array_list.Managed(usize).init(allocator);
     defer q.deinit();
@@ -91,7 +103,9 @@ pub fn shortestPath(allocator: std.mem.Allocator, ctx: *const model.Context, sta
     var cur = goal;
     while (cur != start) {
         try path.objects.append(cur);
-        if (prev_edge[cur]) |e| try path.edges.append(e);
+        if (prev_edge[cur]) |e| {
+            try path.edges.append(e);
+        }
         cur = prev_obj[cur] orelse break;
     }
     try path.objects.append(start);
@@ -105,8 +119,12 @@ pub fn degree(ctx: *const model.Context, object_index: usize) struct { incoming:
     var inc: usize = 0;
     var out: usize = 0;
     for (ctx.edges.items) |e| {
-        if (std.mem.eql(u8, e.src, id)) out += 1;
-        if (std.mem.eql(u8, e.dst, id)) inc += 1;
+        if (std.mem.eql(u8, e.src, id)) {
+            out += 1;
+        }
+        if (std.mem.eql(u8, e.dst, id)) {
+            inc += 1;
+        }
     }
     return .{ .incoming = inc, .outgoing = out };
 }

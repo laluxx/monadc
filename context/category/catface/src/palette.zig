@@ -11,9 +11,9 @@ pub const Color = struct {
 
     pub fn scale(self: Color, numerator: u16, denominator: u16) Color {
         return .{
-            .r = @intCast(@min(255, (@as(u16, self.r) * numerator) / denominator)),
-            .g = @intCast(@min(255, (@as(u16, self.g) * numerator) / denominator)),
-            .b = @intCast(@min(255, (@as(u16, self.b) * numerator) / denominator)),
+            .r = @intCast(@min(255, @divTrunc(@as(u16, self.r) * numerator, denominator))),
+            .g = @intCast(@min(255, @divTrunc(@as(u16, self.g) * numerator, denominator))),
+            .b = @intCast(@min(255, @divTrunc(@as(u16, self.b) * numerator, denominator))),
         };
     }
 };
@@ -43,25 +43,27 @@ pub const Style = struct {
 };
 
 pub const Theme = struct {
-    bg: Color = Color.rgb(0x10, 0x10, 0x16),
-    panel: Color = Color.rgb(0x17, 0x17, 0x22),
-    panel_alt: Color = Color.rgb(0x1e, 0x1e, 0x2d),
-    ink: Color = Color.rgb(0xe8, 0xe6, 0xf2),
-    mute: Color = Color.rgb(0x7e, 0x7a, 0x91),
-    edge: Color = Color.rgb(0x55, 0x50, 0x6e),
-    accent: Color = Color.rgb(0x95, 0x87, 0xdd),
-    accent2: Color = Color.rgb(0x49, 0xbd, 0xb0),
-    warn: Color = Color.rgb(0xea, 0xe4, 0x6a),
-    bad: Color = Color.rgb(0xe8, 0x4c, 0x58),
-    good: Color = Color.rgb(0x65, 0xe6, 0xa7),
-    record: Color = Color.rgb(0xc6, 0xe8, 0x7a),
-    heading: Color = Color.rgb(0x42, 0xa5, 0xf5),
-    script: Color = Color.rgb(0xff, 0xa5, 0x00),
-    concept: Color = Color.rgb(0xeb, 0x59, 0x5a),
-    test_color: Color = Color.rgb(0x65, 0xe6, 0xa7),
-    todo: Color = Color.rgb(0xea, 0xe4, 0x6a),
-    done: Color = Color.rgb(0x72, 0xe0, 0x9b),
-    info: Color = Color.rgb(0x8b, 0xc8, 0xff),
+    bg: Color = Color.rgb(0x08, 0x0a, 0x12),
+    panel: Color = Color.rgb(0x10, 0x14, 0x20),
+    panel_alt: Color = Color.rgb(0x18, 0x20, 0x32),
+    ink: Color = Color.rgb(0xec, 0xf2, 0xff),
+    mute: Color = Color.rgb(0x86, 0x90, 0xa8),
+    edge: Color = Color.rgb(0x34, 0x3d, 0x55),
+    accent: Color = Color.rgb(0x8b, 0x7c, 0xff),
+    accent2: Color = Color.rgb(0x28, 0xd4, 0xbe),
+    warn: Color = Color.rgb(0xf0, 0xd9, 0x62),
+    bad: Color = Color.rgb(0xff, 0x5d, 0x73),
+    good: Color = Color.rgb(0x55, 0xe6, 0xa5),
+    record: Color = Color.rgb(0xd2, 0xf7, 0x79),
+    obs: Color = Color.rgb(0x52, 0xd6, 0xff),
+    function_color: Color = Color.rgb(0xd0, 0xbc, 0xff),
+    heading: Color = Color.rgb(0x5e, 0xa7, 0xff),
+    script: Color = Color.rgb(0xff, 0xb8, 0x5c),
+    concept: Color = Color.rgb(0xff, 0x7a, 0xa8),
+    test_color: Color = Color.rgb(0x55, 0xe6, 0xa5),
+    todo: Color = Color.rgb(0xf0, 0xd9, 0x62),
+    done: Color = Color.rgb(0x75, 0xe6, 0x95),
+    info: Color = Color.rgb(0x85, 0xca, 0xff),
 
     pub fn kindColor(self: Theme, kind: anytype) Color {
         const name = @tagName(kind);
@@ -73,6 +75,7 @@ pub const Theme = struct {
         if (std.mem.eql(u8, name, "todo")) return self.todo;
         if (std.mem.eql(u8, name, "done")) return self.done;
         if (std.mem.eql(u8, name, "info")) return self.info;
+        if (std.mem.eql(u8, name, "function_kind")) return self.function_color;
         if (std.mem.eql(u8, name, "report")) return self.warn;
         return self.ink;
     }
