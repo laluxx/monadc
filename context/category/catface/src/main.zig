@@ -26,12 +26,16 @@ const Help = "catface v" ++ version.version ++ " " ++ version.codename ++ " — 
     \\  catface --query-report [project-or-context-root]
     \\  catface --test-report [project-or-context-root]
     \\  catface --cache-report [project-or-context-root]
+    \\  catface --perf-self-test [project-or-context-root]
     \\  catface --help
     \\
     \\examples:
     \\  catface ../../../
     \\  catface --query '@todo' ../../../
     \\  catface --query '@bugs' ../../../
+    \\  catface --query '@failures' ../../../
+    \\  catface --query '@performance' ../../../
+    \\  catface --query '@coverage' ../../../
     \\  catface --query '@notes reader' ../../../
     \\  catface --query 'title:reader path:src' ../../../
     \\  catface --query '=reader @source' ../../../
@@ -52,12 +56,21 @@ const Help = "catface v" ++ version.version ++ " " ++ version.codename ++ " — 
     \\  :Kind     filters kind, e.g. :Test :Info :Source :Todo :Done :Record
     \\  @todo     TODO queue
     \\  @bugs     BUG/FAIL/error surface
+    \\  @failures failed tests, FAIL records, broken artifacts
+    \\  @regressions stale goldens and behavior drift
+    \\  @performance cache/index/allocation/perf surface
+    \\  @coverage test completeness and coverage notes
+    \\  @examples/@tutorials examples, catalogues, manuals
+    \\  @api/@cli/@cache/@diagnostics/@design interface, command, cache, error, architecture lanes
     \\  @notes    notes/context/records namespace
     \\  @tests    tests namespace
     \\  @info     info/docs context namespace
+    \\  @contracts contracts and explicit CONTEXT_KIND contract records
+    \\  @quality  confidence/status/risk/anti-pattern metadata
+    \\  @metadata Org properties, CONTEXT_* headers, ids, and filetags
     \\  @source   compiler source/scripts namespace
     \\  @functions first-class functions from core/prelude/source
-    \\  a -> a    type-signature search when both sides are type-like
+    \\  Int -> Int type-signature search when both sides are type-like
     \\  @reader/@wisp/@codegen focused compiler surfaces; @reports/@fix for generated reports and repair notes
     \\  ?id/#id   identity filter
     \\  %verifies edge-kind filter; also %supports %blocks %refines
@@ -68,12 +81,18 @@ const Help = "catface v" ++ version.version ++ " " ++ version.codename ++ " — 
     \\
     \\interactive keys:
     \\  Type in left pane; right pane captures tree navigation
-    \\  C-n/C-p always move results; arrows move active pane
+    \\  C-n/C-p move results in search and candidates in palette; arrows move active pane
     \\  C-k kill line, M-d kill word, C-y yank, C-l clear, ? tutorial
+    \\  TAB flat Vertico/orderless completion; C-i/Alt-i @info when terminal distinguishes C-i
     \\  Alt-t TODO, Alt-n notes, Alt-e tests, Alt-s source, Alt-i info
     \\  Alt-u bugs, Alt-w wisp, Alt-m reader, Alt-c codegen, Alt-f functions
+    \\  Alt-k contracts, Alt-y quality/trust/risk, Alt-a metadata/properties, Alt-l links
     \\  Alt-v %verifies, Alt-x %blocks, Alt-o >, Alt-< <, Alt-g ~, Alt-p proj, Alt-b back
-    \\  Tab switches panes; in right pane n/p/j/k move relation tree, RET/l opens, h backs up
+    \\  RET enters right content mode; C-o or Shift-Tab switches panes; right n/p/j/k, RET/l opens, h backs up
+    \\  C-c d edits recursive root in the minibuffer; C-h c describes the next key
+    \\  C-h/C-c/C-x show delayed which-key-style continuation help; C-h ? forces it
+    \\  C-x C-c quits Catface
+    \\  right pane renders raw context body as Org with clickable metadata chips
     \\
 ;
 pub fn main() !void {
@@ -85,7 +104,7 @@ pub fn main() !void {
     defer args.deinit();
     _ = args.next();
 
-    var mode: enum { tui, query, card, check, dump, perf, query_report, test_report, cache_report, help } = .tui;
+    var mode: enum { tui, query, card, check, dump, perf, query_report, test_report, cache_report, perf_self_test, help } = .tui;
     var query_text: ?[]const u8 = null;
     var card_id: ?[]const u8 = null;
     var root_arg: ?[]const u8 = null;
@@ -113,6 +132,8 @@ pub fn main() !void {
             mode = .test_report;
         } else if (std.mem.eql(u8, arg, "--cache-report")) {
             mode = .cache_report;
+        } else if (std.mem.eql(u8, arg, "--perf-self-test")) {
+            mode = .perf_self_test;
         } else {
             root_arg = arg;
         }
@@ -129,7 +150,9 @@ pub fn main() !void {
 
     const cwd = try std.process.getCwdAlloc(allocator);
     defer allocator.free(cwd);
-    const root_path = root_arg orelse cwd;
+    const root_input = root_arg orelse cwd;
+    const root_path = try normalizeRoot(allocator, root_input);
+    defer allocator.free(root_path);
 
     if (mode == .cache_report) {
         try runCacheReport(allocator, root_path);
@@ -148,9 +171,15 @@ pub fn main() !void {
         .query_report => try runQueryReport(allocator, &ctx),
         .test_report => try runTestReport(allocator, &ctx),
         .cache_report => unreachable,
+        .perf_self_test => try runPerfSelfTest(allocator, &ctx),
         .tui => try app.run(allocator, &ctx),
         .help => unreachable,
     }
+}
+
+
+fn normalizeRoot(allocator: std.mem.Allocator, root_input: []const u8) ![]u8 {
+    return std.fs.cwd().realpathAlloc(allocator, root_input) catch try allocator.dupe(u8, root_input);
 }
 
 fn runQuery(allocator: std.mem.Allocator, ctx: *model.Context, text: []const u8) !void {
@@ -242,6 +271,26 @@ fn runTestReport(allocator: std.mem.Allocator, ctx: *model.Context) !void {
     defer out_buf_list.deinit();
     try perf_report.writeTestReport(allocator, &out_buf_list, ctx);
     try writeStdout(out_buf_list.items);
+}
+
+
+fn runPerfSelfTest(allocator: std.mem.Allocator, ctx: *model.Context) !void {
+    var out_buf: [8192]u8 = undefined;
+    var out_file = std.fs.File.stdout().writer(&out_buf);
+    const out = &out_file.interface;
+    const index_start = perf.nowNs();
+    var idx = try search_index.SearchIndex.build(allocator, ctx);
+    defer idx.deinit();
+    const index_ns = perf.nanosSince(index_start);
+    const queries = [_][]const u8{ "@todo", "@todo @tests", "@functions Int -> Int", "@metadata", "@bugs" };
+    try out.print("{{\"perf_self_test\":true,\"objects\":{d},\"edges\":{d},\"index_ns\":{d}}}\n", .{ ctx.objects.items.len, ctx.edges.items.len, index_ns });
+    for (queries) |q| {
+        const q_start = perf.nowNs();
+        var res = try query.evaluateIndexed(allocator, ctx, &idx, q, .{ .limit = 40 });
+        defer res.deinit();
+        try out.print("{{\"query\":\"{s}\",\"matches\":{d},\"ns\":{d}}}\n", .{ q, res.items.len, perf.nanosSince(q_start) });
+    }
+    try out.flush();
 }
 
 fn writeStdout(bytes: []const u8) !void {

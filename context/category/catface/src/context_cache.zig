@@ -2,7 +2,7 @@ const std = @import("std");
 const model = @import("model.zig");
 const file_cache = @import("file_cache.zig");
 
-const Magic = "catface-context-cache-v3";
+const Magic = "catface-context-cache-v4-subtree";
 
 pub const Status = enum { disabled, hit, miss, stale, saved, failed };
 
@@ -29,8 +29,10 @@ pub fn load(allocator: std.mem.Allocator, root_path: []const u8, sig: u64) !?mod
     const magic = cols.next() orelse return null;
     if (!std.mem.eql(u8, magic, Magic)) return null;
     const sig_text = cols.next() orelse return null;
+    const root_text = cols.next() orelse return null;
     const stored_sig = std.fmt.parseUnsigned(u64, sig_text, 16) catch return null;
     if (stored_sig != sig) return null;
+    if (!std.mem.eql(u8, root_text, root_path)) return null;
     var ctx = try model.Context.init(allocator, root_path);
     errdefer ctx.deinit();
     while (lines.next()) |line| {
@@ -85,7 +87,7 @@ pub fn save(allocator: std.mem.Allocator, root_path: []const u8, sig: u64, ctx: 
     var buf: [32768]u8 = undefined;
     var writer = file.writer(&buf);
     const out = &writer.interface;
-    try out.print("{s}\t{x}\t{d}\t{d}\n", .{ Magic, sig, ctx.objects.items.len, ctx.edges.items.len });
+    try out.print("{s}\t{x}\t{s}\t{d}\t{d}\n", .{ Magic, sig, root_path, ctx.objects.items.len, ctx.edges.items.len });
     for (ctx.objects.items) |obj| {
         try out.writeAll("O\t");
         try out.writeAll(model.Context.kindName(obj.kind));
@@ -133,6 +135,7 @@ fn cacheDir(allocator: std.mem.Allocator) ![]u8 {
 fn rootHash(root_path: []const u8) u64 {
     var h = std.hash.Wyhash.init(0x4341544641434552);
     h.update(root_path);
+    h.update("\nsubtree-only-v4");
     return h.final();
 }
 
@@ -165,6 +168,13 @@ fn unescape(allocator: std.mem.Allocator, s: []const u8) ![]u8 {
         }
     }
     return allocator.dupe(u8, out.items);
+}
+
+
+test "context cache root hash is subtree scoped" {
+    const a = rootHash("/repo/context");
+    const b = rootHash("/repo/context/category/catface");
+    try std.testing.expect(a != b);
 }
 
 test "context cache unescapes fields" {

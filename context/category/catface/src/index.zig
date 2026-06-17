@@ -118,7 +118,7 @@ fn isTokenByte(c: u8) bool {
 
 pub const KindSlotCount = 13;
 pub const EdgeSlotCount = 13;
-pub const LaneSlotCount = 19;
+pub const LaneSlotCount = 36;
 pub const MissingObjectIndex = std.math.maxInt(usize);
 
 pub const SearchIndex = struct {
@@ -381,6 +381,23 @@ pub fn laneIndex(ns: []const u8) ?usize {
     if (eql(ns, "info")) return 4;
     if (eql(ns, "source") or eql(ns, "src")) return 5;
     if (eql(ns, "functions") or eql(ns, "function") or eql(ns, "fn") or eql(ns, "methods") or eql(ns, "method")) return 18;
+    if (eql(ns, "contracts") or eql(ns, "contract")) return 19;
+    if (eql(ns, "quality") or eql(ns, "trust") or eql(ns, "risk")) return 20;
+    if (eql(ns, "metadata") or eql(ns, "meta") or eql(ns, "properties")) return 21;
+    if (eql(ns, "links") or eql(ns, "link") or eql(ns, "buttons") or eql(ns, "button")) return 22;
+    if (eql(ns, "tables") or eql(ns, "table") or eql(ns, "orgtables")) return 23;
+    if (eql(ns, "docs") or eql(ns, "doc") or eql(ns, "manual")) return 24;
+    if (eql(ns, "failures") or eql(ns, "failure") or eql(ns, "fails") or eql(ns, "fail")) return 25;
+    if (eql(ns, "regressions") or eql(ns, "regression")) return 26;
+    if (eql(ns, "performance") or eql(ns, "perf") or eql(ns, "speed")) return 27;
+    if (eql(ns, "coverage") or eql(ns, "cover")) return 28;
+    if (eql(ns, "examples") or eql(ns, "example")) return 29;
+    if (eql(ns, "tutorials") or eql(ns, "tutorial") or eql(ns, "manuals")) return 30;
+    if (eql(ns, "api") or eql(ns, "apis") or eql(ns, "interface") or eql(ns, "interfaces")) return 31;
+    if (eql(ns, "cli") or eql(ns, "commands") or eql(ns, "flags")) return 32;
+    if (eql(ns, "cache") or eql(ns, "caches") or eql(ns, "index") or eql(ns, "indices")) return 33;
+    if (eql(ns, "diagnostics") or eql(ns, "diagnostic") or eql(ns, "errors") or eql(ns, "warnings")) return 34;
+    if (eql(ns, "design") or eql(ns, "architecture") or eql(ns, "arch")) return 35;
     if (eql(ns, "records") or eql(ns, "record")) return 6;
     if (eql(ns, "obs") or eql(ns, "observations")) return 7;
     if (eql(ns, "dec") or eql(ns, "decisions")) return 8;
@@ -400,7 +417,7 @@ fn matchesLane(obj: model.Object, li: usize) bool {
     return switch (li) {
         0 => obj.kind == .todo or contains(obj.title, "TODO") or contains(obj.preview, "TODO"),
         1 => obj.kind == .todo or contains(obj.title, "TODO") or contains(obj.title, "FAIL") or contains(obj.preview, "error:") or contains(obj.preview, "regression") or contains(obj.preview, "blocks"),
-        2 => obj.kind == .record or obj.kind == .heading or obj.kind == .concept or obj.kind == .info or contains(obj.tags, "@records") or contains(obj.tags, "@info") or contains(obj.path, "context/") or contains(obj.path, "category/") or contains(obj.path, "notes") or contains(obj.title, "OBS") or contains(obj.title, "DEC") or contains(obj.title, "INF") or contains(obj.preview, "[OBS") or contains(obj.preview, "[DEC") or contains(obj.preview, "[INF"),
+        2 => obj.kind != .info and (obj.kind == .record or obj.kind == .heading or obj.kind == .concept or contains(obj.tags, "@records") or contains(obj.path, "context/") or contains(obj.path, "category/") or contains(obj.path, "notes") or contains(obj.title, "OBS") or contains(obj.title, "DEC") or contains(obj.title, "INF") or contains(obj.preview, "[OBS") or contains(obj.preview, "[DEC") or contains(obj.preview, "[INF")),
         3 => obj.kind == .test_kind or contains(obj.path, "tests/") or contains(obj.tags, "@tests") or contains(obj.preview, "TEST-"),
         4 => obj.kind == .info or contains(obj.tags, "@info") or contains(obj.path, "info") or contains(obj.path, "docs") or contains(obj.title, "Info"),
         5 => obj.kind == .source or obj.kind == .script or contains(obj.tags, "@source") or contains(obj.path, "src/") or contains(obj.path, ".c") or contains(obj.path, ".h") or contains(obj.path, ".zig"),
@@ -413,6 +430,23 @@ fn matchesLane(obj: model.Object, li: usize) bool {
         12 => contains(obj.path, "reader") or contains(obj.title, "reader") or contains(obj.preview, "reader") or contains(obj.id, "reader"),
         13 => contains(obj.path, "codegen") or contains(obj.title, "codegen") or contains(obj.preview, "codegen") or contains(obj.id, "codegen"),
         18 => obj.kind == .function_kind or contains(obj.tags, "@functions") or contains(obj.tags, "@function"),
+        19 => contains(obj.preview, "CONTEXT_KIND: contract") or contains(obj.preview, "CONTRACT") or contains(obj.title, "Contract") or contains(obj.title, "contract") or contains(obj.id, ".contract") or contains(obj.path, "contract"),
+        20 => contains(obj.path, "quality") or contains(obj.title, "Anti-Pattern") or contains(obj.preview, "anti-pattern") or contains(obj.preview, "CONFIDENCE:") or contains(obj.preview, "CONTEXT_STATUS") or contains(obj.preview, "risk") or contains(obj.preview, "trust") or contains(obj.preview, "stale"),
+        21 => contains(obj.preview, "#+PROPERTY") or contains(obj.preview, "#+FILETAGS") or contains(obj.preview, "CONTEXT_") or contains(obj.preview, ":ID:") or contains(obj.tags, "monadc") or contains(obj.id, "context."),
+        22 => obj.kind == .file or contains(obj.preview, "[[") or contains(obj.preview, "file:") or contains(obj.preview, "id:") or contains(obj.preview, "http") or contains(obj.tags, "@links"),
+        23 => contains(obj.preview, "\n|") or contains(obj.preview, "|---") or contains(obj.preview, "|-") or contains(obj.tags, "@tables"),
+        24 => obj.kind == .info or obj.kind == .file or obj.kind == .report or contains(obj.path, ".org") or contains(obj.path, ".md") or contains(obj.tags, "@docs"),
+        25 => contains(obj.title, "FAIL") or contains(obj.preview, "FAIL") or contains(obj.preview, "failed") or contains(obj.preview, "failure") or contains(obj.preview, "error:") or contains(obj.tags, "@failures"),
+        26 => contains(obj.title, "regression") or contains(obj.preview, "regression") or contains(obj.preview, "stale golden") or contains(obj.preview, "behavior drift") or contains(obj.tags, "@regressions"),
+        27 => contains(obj.path, "perf") or contains(obj.title, "perf") or contains(obj.preview, "performance") or contains(obj.preview, "fast") or contains(obj.preview, "cache") or contains(obj.preview, "allocation") or contains(obj.tags, "@performance"),
+        28 => contains(obj.title, "coverage") or contains(obj.preview, "coverage") or contains(obj.preview, "TEST-COVERAGE") or contains(obj.preview, "complete coverage") or contains(obj.tags, "@coverage"),
+        29 => contains(obj.path, "examples") or contains(obj.title, "example") or contains(obj.preview, "example") or contains(obj.tags, "@examples"),
+        30 => contains(obj.title, "tutorial") or contains(obj.preview, "tutorial") or contains(obj.path, "README") or contains(obj.path, "manual") or contains(obj.tags, "@tutorials"),
+        31 => contains(obj.title, "API") or contains(obj.preview, "API") or contains(obj.preview, "interface") or contains(obj.preview, "signature") or contains(obj.tags, "@api"),
+        32 => contains(obj.path, "cli") or contains(obj.title, "CLI") or contains(obj.preview, "--") or contains(obj.preview, "command") or contains(obj.preview, "flag") or contains(obj.tags, "@cli"),
+        33 => contains(obj.path, "cache") or contains(obj.title, "cache") or contains(obj.preview, "cache") or contains(obj.preview, "index") or contains(obj.preview, "persist") or contains(obj.tags, "@cache"),
+        34 => contains(obj.path, "diagnostic") or contains(obj.title, "diagnostic") or contains(obj.preview, "diagnostic") or contains(obj.preview, "warning") or contains(obj.preview, "error:") or contains(obj.tags, "@diagnostics"),
+        35 => contains(obj.title, "design") or contains(obj.preview, "design") or contains(obj.preview, "architecture") or contains(obj.preview, "decision") or contains(obj.preview, "intent") or contains(obj.tags, "@design"),
         else => false,
     };
 }
@@ -490,6 +524,7 @@ test "search index builds adjacency, kinds, and term candidates" {
     try std.testing.expect(!idx.isOrphan(0));
     try std.testing.expect(idx.objectsOfLane("tests").?.len == 1);
     try std.testing.expect(idx.objectsOfLane("reader").?.len >= 2);
+    try std.testing.expect(idx.objectsOfLane("contracts").?.len == 0);
     const rare_count = try idx.candidateCountForWord(std.testing.allocator, "rareneedle");
     try std.testing.expect(rare_count == 2);
 }

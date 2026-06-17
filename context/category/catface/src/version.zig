@@ -1,8 +1,8 @@
-pub const version = "0.7.6";
-pub const codename = "Function Cache";
+pub const version = "0.11.6";
+pub const codename = "Subtree Org Editor Cockpit";
 
-pub fn banner() []const u8 {
-    return "Catface 0.7.6 Function Cache";
+pub fn label() []const u8 {
+    return "Catface 0.11.6 Subtree Org Editor Cockpit";
 }
 
 test "version exists" {

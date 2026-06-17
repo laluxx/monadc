@@ -28,6 +28,7 @@ const exporter = @import("export.zig");
 const relation = @import("relation.zig");
 const surface = @import("surface.zig");
 const command_palette = @import("command_palette.zig");
+const which_key = @import("which_key.zig");
 const law_tests = @import("law_tests.zig");
 const manual = @import("manual.zig");
 const app = @import("app.zig");
@@ -68,6 +69,7 @@ test "catface module graph type-checks" {
     _ = relation;
     _ = surface;
     _ = command_palette;
+    _ = which_key;
     _ = law_tests;
     _ = manual;
     _ = app;

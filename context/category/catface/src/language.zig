@@ -124,7 +124,7 @@ pub fn formatCheatsheet(buf: *std.array_list.Managed(u8)) !void {
         \\  @hot        structural/triage lane
         \\  ?id #id     identity filter
         \\  %supports   edge-kind filter
-        \\  a -> a      type-signature search when both sides are type-like
+        \\  Int -> Int  function type-signature search; also a -> a
         \\  a -> b      objects connected by morphisms a→b
         \\  a <- b      objects connected by morphisms b→a
         \\  > < ~       outgoing / incoming / neighborhood

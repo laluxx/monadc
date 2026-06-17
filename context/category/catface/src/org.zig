@@ -149,8 +149,8 @@ fn parseTestFile(allocator: std.mem.Allocator, ctx: *model.Context, abs_root: []
         const trimmed = std.mem.trim(u8, line, " \t;");
         if (std.mem.startsWith(u8, trimmed, "TEST-ID:")) id = std.mem.trim(u8, trimmed[8..], " \t");
         if (std.mem.startsWith(u8, trimmed, "TEST-PURPOSE:")) title = std.mem.trim(u8, trimmed[13..], " \t");
-        if (preview.items.len < 420 and line.len != 0) {
-            if (preview.items.len != 0) try preview.append(' ');
+        if (preview.items.len < 2048 and line.len != 0) {
+            if (preview.items.len != 0) try preview.append('\n');
             try preview.appendSlice(std.mem.trim(u8, line, " \t;"));
         }
         if (line_no > 40) break;
@@ -263,20 +263,20 @@ fn namespaceTags(rel: []const u8, kind: model.ObjectKind) []const u8 {
 }
 
 fn readPreview(allocator: std.mem.Allocator, abs: []const u8, fallback: []const u8) ![]const u8 {
-    const bytes = std.fs.cwd().readFileAlloc(abs, allocator, @enumFromInt(256 * 1024)) catch return allocator.dupe(u8, fallback);
+    const bytes = std.fs.cwd().readFileAlloc(abs, allocator, @enumFromInt(512 * 1024)) catch return allocator.dupe(u8, fallback);
     defer allocator.free(bytes);
     var out = std.array_list.Managed(u8).init(allocator);
     defer out.deinit();
     var lines = std.mem.splitScalar(u8, bytes, '\n');
     while (lines.next()) |raw| {
-        const t = std.mem.trim(u8, raw, " \t\r;");
-        if (t.len == 0) continue;
-        if (out.items.len != 0) try out.append(' ');
-        try out.appendSlice(t);
-        if (out.items.len > 420) break;
+        const line = std.mem.trimRight(u8, raw, "\r");
+        if (line.len == 0 and out.items.len == 0) continue;
+        if (out.items.len != 0) try out.append('\n');
+        try out.appendSlice(line);
+        if (out.items.len > 4096) break;
     }
     if (out.items.len == 0) return allocator.dupe(u8, fallback);
-    return allocator.dupe(u8, out.items[0..@min(out.items.len, 420)]);
+    return allocator.dupe(u8, out.items[0..@min(out.items.len, 4096)]);
 }
 
 fn parseOrgFile(allocator: std.mem.Allocator, ctx: *model.Context, pending: *std.array_list.Managed(PendingLink), abs_root: []const u8, rel: []const u8) !void {
@@ -293,6 +293,7 @@ fn parseOrgFile(allocator: std.mem.Allocator, ctx: *model.Context, pending: *std
     const file_preview = try extractCleanPreview(allocator, bytes, if (file_kind == .info) "info reference page" else "org file");
     defer allocator.free(file_preview);
     _ = try ctx.addObject(.{ .id = file_id, .kind = file_kind, .title = file_title, .path = rel, .line = 1, .tags = extractTags(bytes) orelse namespaceTags(rel, file_kind), .preview = file_preview });
+    try parseRecordBlocks(ctx, pending, file_id, rel, bytes);
 
     var current_heading_title: []const u8 = "";
     var current_heading_line: usize = 1;
@@ -322,11 +323,10 @@ fn parseOrgFile(allocator: std.mem.Allocator, ctx: *model.Context, pending: *std
             const id = std.mem.trim(u8, line[4..], " \t");
             current_heading_id = id;
         }
-        if (line.len != 0 and current_preview.items.len < 360 and !std.mem.startsWith(u8, line, ":") and !std.mem.startsWith(u8, line, "#+")) {
-            if (current_preview.items.len != 0) try current_preview.append(' ');
-            try current_preview.appendSlice(std.mem.trim(u8, line, " \t"));
+        if (line.len != 0 and current_preview.items.len < 4096 and !isPropertyDrawerLine(line)) {
+            if (current_preview.items.len != 0) try current_preview.append('\n');
+            try current_preview.appendSlice(std.mem.trimRight(u8, line, "\r"));
         }
-        try parseRecordLine(ctx, pending, file_id, rel, line, line_no);
         try parseLinks(allocator, pending, file_id, rel, line, line_no);
     }
     if (current_heading_id) |hid| {
@@ -366,6 +366,72 @@ fn inferHeadingKind(id: []const u8, title: []const u8, rel: []const u8) model.Ob
     if (std.mem.indexOf(u8, title, "Test") != null or std.mem.indexOf(u8, rel, "test") != null) return .test_kind;
     if (std.mem.indexOf(u8, rel, "info") != null or std.mem.indexOf(u8, rel, "docs") != null) return .info;
     return .heading;
+}
+
+
+fn parseRecordBlocks(ctx: *model.Context, pending: *std.array_list.Managed(PendingLink), file_id: []const u8, rel: []const u8, bytes: []const u8) !void {
+    var active = false;
+    var active_line: usize = 0;
+    var body = std.array_list.Managed(u8).init(ctx.allocator);
+    defer body.deinit();
+    var line_no: usize = 0;
+    var lines = std.mem.splitScalar(u8, bytes, '\n');
+    while (lines.next()) |raw| {
+        line_no += 1;
+        const line = std.mem.trimRight(u8, raw, "\r");
+        const trimmed = std.mem.trim(u8, line, " \t");
+        const starts_record = isRecordHeaderLine(trimmed);
+        if (starts_record or isHeading(line)) {
+            if (active) {
+                try addRecordBlock(ctx, pending, file_id, rel, body.items, active_line);
+                body.clearRetainingCapacity();
+                active = false;
+            }
+            if (starts_record) {
+                active = true;
+                active_line = line_no;
+                try body.appendSlice(trimmed);
+            }
+            continue;
+        }
+        if (active and body.items.len < 4096) {
+            if (body.items.len != 0) try body.append('\n');
+            try body.appendSlice(line);
+        }
+    }
+    if (active) try addRecordBlock(ctx, pending, file_id, rel, body.items, active_line);
+}
+
+fn isRecordHeaderLine(trimmed: []const u8) bool {
+    return std.mem.startsWith(u8, trimmed, "[") and std.mem.indexOf(u8, trimmed, " id:") != null;
+}
+
+fn addRecordBlock(ctx: *model.Context, pending: *std.array_list.Managed(PendingLink), file_id: []const u8, rel: []const u8, preview: []const u8, line_no: usize) !void {
+    const trimmed = std.mem.trim(u8, preview, " \t\r\n");
+    if (!isRecordHeaderLine(trimmed)) return;
+    const rb = std.mem.indexOfScalar(u8, trimmed, ']') orelse return;
+    const header = trimmed[1..rb];
+    var parts = std.mem.splitScalar(u8, header, ' ');
+    const typ = parts.next() orelse "DOC";
+    var id: ?[]const u8 = null;
+    var refs = std.array_list.Managed([]const u8).init(ctx.allocator);
+    defer refs.deinit();
+    while (parts.next()) |p| {
+        if (std.mem.startsWith(u8, p, "id:")) id = p[3..];
+        if (std.mem.startsWith(u8, p, "from:") or std.mem.startsWith(u8, p, "supports:") or std.mem.startsWith(u8, p, "verifies:") or std.mem.startsWith(u8, p, "blocks:") or std.mem.startsWith(u8, p, "supersedes:")) {
+            const colon = std.mem.indexOfScalar(u8, p, ':') orelse continue;
+            var rs = std.mem.splitScalar(u8, p[colon + 1 ..], ',');
+            while (rs.next()) |r| if (r.len != 0) try refs.append(std.mem.trim(u8, r, ",.;"));
+        }
+    }
+    const rid = id orelse return;
+    _ = try ctx.addObject(.{ .id = rid, .kind = .record, .title = typ, .path = rel, .line = line_no, .tags = "@records", .preview = trimmed });
+    var edge_id_buf: [8192]u8 = undefined;
+    const eid = try std.fmt.bufPrint(&edge_id_buf, "contains:{s}:{s}", .{ file_id, rid });
+    _ = try ctx.addEdge(.{ .id = eid, .kind = .contains, .src = file_id, .dst = rid, .label = typ, .path = rel, .line = line_no });
+    for (refs.items) |r| {
+        try pending.append(.{ .src = try ctx.allocator.dupe(u8, rid), .dst = try ctx.allocator.dupe(u8, r), .kind = .supports, .path = try ctx.allocator.dupe(u8, rel), .line = line_no });
+    }
 }
 
 fn parseRecordLine(ctx: *model.Context, pending: *std.array_list.Managed(PendingLink), file_id: []const u8, rel: []const u8, line: []const u8, line_no: usize) !void {
@@ -490,24 +556,35 @@ fn extractRootId(bytes: []const u8) ?[]const u8 {
 fn extractCleanPreview(allocator: std.mem.Allocator, bytes: []const u8, fallback: []const u8) ![]const u8 {
     var out = std.array_list.Managed(u8).init(allocator);
     defer out.deinit();
-    var in_src = false;
+    var in_drawer = false;
     var lines = std.mem.splitScalar(u8, bytes, '\n');
     while (lines.next()) |raw| {
-        var line = std.mem.trim(u8, raw, " \t\r");
-        if (line.len == 0) continue;
-        if (std.mem.startsWith(u8, line, "#+BEGIN_SRC") or std.mem.startsWith(u8, line, "#+begin_src")) { in_src = true; continue; }
-        if (std.mem.startsWith(u8, line, "#+END_SRC") or std.mem.startsWith(u8, line, "#+end_src")) { in_src = false; continue; }
-        if (in_src) continue;
-        if (line[0] == ':' or std.mem.startsWith(u8, line, "#+") or std.mem.startsWith(u8, line, "[[file:")) continue;
-        if (line[0] == '|' or line[0] == '-' or line[0] == '*') continue;
-        line = stripOrgMarkup(line);
-        if (line.len == 0) continue;
-        if (out.items.len != 0) try out.append(' ');
+        const line = std.mem.trimRight(u8, raw, "\r");
+        const trimmed = std.mem.trim(u8, line, " \t");
+        if (trimmed.len == 0 and out.items.len == 0) continue;
+        if (std.mem.startsWith(u8, trimmed, "#+")) continue;
+        if (std.mem.eql(u8, trimmed, ":PROPERTIES:")) { in_drawer = true; continue; }
+        if (in_drawer) {
+            if (std.mem.eql(u8, trimmed, ":END:")) in_drawer = false;
+            continue;
+        }
+        if (out.items.len != 0) try out.append('\n');
         try out.appendSlice(line);
-        if (out.items.len > 520) break;
+        if (out.items.len > 4096) break;
     }
     if (out.items.len == 0) return allocator.dupe(u8, fallback);
-    return allocator.dupe(u8, out.items[0..@min(out.items.len, 520)]);
+    return allocator.dupe(u8, out.items[0..@min(out.items.len, 4096)]);
+}
+
+fn isPropertyDrawerLine(line: []const u8) bool {
+    const trimmed = std.mem.trim(u8, line, " \t");
+    return std.mem.eql(u8, trimmed, ":PROPERTIES:") or
+        std.mem.eql(u8, trimmed, ":END:") or
+        std.mem.startsWith(u8, trimmed, ":ID:") or
+        std.mem.startsWith(u8, trimmed, ":CUSTOM_ID:") or
+        std.mem.startsWith(u8, trimmed, ":ROAM_") or
+        std.mem.startsWith(u8, trimmed, ":CREATED:") or
+        std.mem.startsWith(u8, trimmed, ":MODIFIED:");
 }
 
 fn stripOrgMarkup(line: []const u8) []const u8 {
@@ -532,6 +609,23 @@ fn extractTags(bytes: []const u8) ?[]const u8 {
     return null;
 }
 
+
+
+test "record blocks keep observation prose" {
+    var ctx = try model.Context.init(std.testing.allocator, ".");
+    defer ctx.deinit();
+    var pending = std.array_list.Managed(PendingLink).init(std.testing.allocator);
+    defer {
+        for (pending.items) |p| { std.testing.allocator.free(p.src); std.testing.allocator.free(p.dst); std.testing.allocator.free(p.path); }
+        pending.deinit();
+    }
+    const bytes = "[OBS id:obs.reader supports:reader] Reader observation.\nThe actual prose must render.\n* Next";
+    _ = try ctx.addObject(.{ .id = "file:a.org", .kind = .file, .title = "a", .path = "a.org" });
+    try parseRecordBlocks(&ctx, &pending, "file:a.org", "a.org", bytes);
+    const idx = ctx.findObject("obs.reader") orelse return error.ExpectedRecord;
+    try std.testing.expect(std.mem.indexOf(u8, ctx.objects.items[idx].preview, "actual prose") != null);
+}
+
 test "function define lines expose first-class signatures" {
     const a = parseWispDefine("id :: a -> a").?;
     try std.testing.expect(std.mem.eql(u8, a.name, "id"));
@@ -553,5 +647,5 @@ test "info org root id and clean preview are extracted" {
     const prev = try extractCleanPreview(std.testing.allocator, bytes, "fallback");
     defer std.testing.allocator.free(prev);
     try std.testing.expect(std.mem.indexOf(u8, prev, "MonadC type system overview") != null);
-    try std.testing.expect(std.mem.indexOf(u8, prev, "#+") == null);
+    try std.testing.expect(std.mem.indexOf(u8, prev, "#+TITLE:") == null);
 }

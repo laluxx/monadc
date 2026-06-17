@@ -18,6 +18,7 @@ const default_queries = [_]BenchQuery{
     .{ .name = "info_advanced_types", .expr = "@info advanced-types" },
     .{ .name = "functions_lane", .expr = "@functions" },
     .{ .name = "type_identity", .expr = "a -> a" },
+    .{ .name = "type_int_to_int", .expr = "Int -> Int" },
     .{ .name = "exact_reader", .expr = "=reader" },
     .{ .name = "title_reader", .expr = "title:reader" },
     .{ .name = "verifies_reader", .expr = "@tests -> reader", .rounds = 16 },
@@ -67,6 +68,7 @@ fn writeSyntheticReport(allocator: std.mem.Allocator, out: *std.array_list.Manag
         .{ .name = "synthetic_blocked", .expr = "@blocked", .rounds = 96 },
         .{ .name = "synthetic_functions", .expr = "@functions", .rounds = 96 },
         .{ .name = "synthetic_type_arrow", .expr = "a -> a", .rounds = 96 },
+        .{ .name = "synthetic_type_int", .expr = "Int -> Int", .rounds = 96 },
     };
     for (synthetic_queries) |b| try runQueryBench(allocator, out, &ctx, &idx, b);
 }
@@ -81,7 +83,7 @@ fn syntheticContext(allocator: std.mem.Allocator, n: usize) !model.Context {
         const id = try std.fmt.bufPrint(&id_buf, "synthetic.{d}", .{i});
         const title = try std.fmt.bufPrint(&title_buf, "synthetic object {d}", .{i});
         const kind: model.ObjectKind = if (i % 17 == 0) .function_kind else if (i % 11 == 0) .test_kind else if (i % 13 == 0) .todo else if (i % 7 == 0) .source else .record;
-        const preview = if (kind == .function_kind) "function id :: a -> a" else if (i % 60 == 0) "needlefast structured performance target" else if (i % 37 == 0) "BLOCKED perf blocker surface" else "ordinary compiler context object";
+        const preview = if (kind == .function_kind) if (i % 34 == 0) "function inc :: Int -> Int" else "function id :: a -> a" else if (i % 60 == 0) "needlefast structured performance target" else if (i % 37 == 0) "BLOCKED perf blocker surface" else "ordinary compiler context object";
         _ = try ctx.addObject(.{ .id = id, .kind = kind, .title = title, .path = "context/synthetic.org", .line = i + 1, .preview = preview });
     }
     i = 0;

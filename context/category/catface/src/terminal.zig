@@ -19,6 +19,7 @@ pub const Key = union(enum) {
     delete,
     enter,
     tab,
+    shift_tab,
     esc,
     resize,
 };
@@ -101,15 +102,15 @@ pub const Tty = struct {
             .original = try std.posix.tcgetattr(std.posix.STDIN_FILENO),
         };
         try tty.enableRaw();
-        // Alternate screen, hide cursor, disable wrap, enable SGR mouse. 1002
-        // gives clicks + drags without the expensive all-motion flood of 1003.
-        try tty.stdout.writeAll("\x1b[?1049h\x1b[?25l\x1b[?7l\x1b[?1000h\x1b[?1002h\x1b[?1006h\x1b[?1004h\x1b[0m");
+        // Alternate screen, hide cursor, disable wrap, enable SGR mouse. 1003 gives hover/motion events for live links;
+        // dirty-region rendering keeps the extra mouse traffic cheap.
+        try tty.stdout.writeAll("\x1b[?1049h\x1b[?25l\x1b[?7l\x1b[?1000h\x1b[?1002h\x1b[?1003h\x1b[?1006h\x1b[?1004h\x1b[0m");
         try tty.resize();
         return tty;
     }
 
     pub fn deinit(self: *Tty) void {
-        self.stdout.writeAll("\x1b[0m\x1b[?1004l\x1b[?1006l\x1b[?1002l\x1b[?1000l\x1b[?7h\x1b[?25h\x1b[?1049l") catch {};
+        self.stdout.writeAll("\x1b[0m\x1b[?1004l\x1b[?1006l\x1b[?1003l\x1b[?1002l\x1b[?1000l\x1b[?7h\x1b[?25h\x1b[?1049l") catch {};
         std.posix.tcsetattr(std.posix.STDIN_FILENO, .FLUSH, self.original) catch {};
         if (self.front.len != 0) self.allocator.free(self.front);
         if (self.back.len != 0) self.allocator.free(self.back);
@@ -316,11 +317,38 @@ pub const Tty = struct {
         var fds = [_]std.posix.pollfd{.{ .fd = self.stdin.handle, .events = std.posix.POLL.IN, .revents = 0 }};
         if (try std.posix.poll(&fds, @intCast(timeout_ms)) == 0) return .none;
         var buf: [128]u8 = undefined;
-        const n = try self.stdin.read(&buf);
+        var n = try self.stdin.read(&buf);
         if (n == 0) return .none;
+
+        // SGR mouse packets are escape sequences and terminals may split them
+        // across reads.  If we drop a partial packet, the tail (for example
+        // `64;10;5M`) is later interpreted as normal text and pollutes the
+        // minibuffer.  Coalesce short escape packets before parseKey.
+        var spins: usize = 0;
+        while (isIncompleteEscape(buf[0..n]) and n < buf.len and spins < 8) : (spins += 1) {
+            var more_fds = [_]std.posix.pollfd{.{ .fd = self.stdin.handle, .events = std.posix.POLL.IN, .revents = 0 }};
+            if (try std.posix.poll(&more_fds, 2) == 0) break;
+            const m = try self.stdin.read(buf[n..]);
+            if (m == 0) break;
+            n += m;
+        }
+        if (isIncompleteEscape(buf[0..n])) return .none;
         return parseKey(buf[0..n]);
     }
 };
+
+fn isIncompleteEscape(bytes: []const u8) bool {
+    if (bytes.len == 0 or bytes[0] != 0x1b) return false;
+    if (bytes.len == 1) return true;
+    if (bytes[1] != '[') return false;
+    if (bytes.len == 2) return true;
+    if (bytes[2] == '<') {
+        const last = bytes[bytes.len - 1];
+        return last != 'M' and last != 'm';
+    }
+    const last = bytes[bytes.len - 1];
+    return !(last >= '@' and last <= '~');
+}
 
 pub fn clippedWouldTruncate(bytes: []const u8, width: u16) bool {
     if (width == 0) return bytes.len != 0;
@@ -332,6 +360,13 @@ pub fn clippedWouldTruncate(bytes: []const u8, width: u16) bool {
         used += 1;
     }
     return false;
+}
+
+test "escape coalescing detects partial sgr mouse packets" {
+    try std.testing.expect(isIncompleteEscape("\x1b"));
+    try std.testing.expect(isIncompleteEscape("\x1b[<64;10"));
+    try std.testing.expect(!isIncompleteEscape("\x1b[<64;10;5M"));
+    try std.testing.expect(!isIncompleteEscape("a"));
 }
 
 test "text clipping does not ellipsize exact-width tags" {
@@ -361,7 +396,7 @@ pub fn parseKey(bytes: []const u8) Key {
     }
     if (b == 9) return .tab;
     if (b == 10 or b == 13) return .enter;
-    if (b == 127 or b == 8) return .backspace;
+    if (b == 127) return .backspace;
     if (b < 32) return .{ .ctrl = b };
     var view = std.unicode.Utf8View.init(bytes) catch return .none;
     var it = view.iterator();
@@ -370,6 +405,7 @@ pub fn parseKey(bytes: []const u8) Key {
 
 fn parseCsi(bytes: []const u8) Key {
     if (bytes.len == 0) return .none;
+    if (bytes[bytes.len - 1] == 'u') return parseCsiU(bytes);
     return switch (bytes[0]) {
         'A' => .up,
         'B' => .down,
@@ -377,11 +413,39 @@ fn parseCsi(bytes: []const u8) Key {
         'D' => .left,
         'H' => .home,
         'F' => .end,
+        'Z' => .shift_tab,
         '3' => .delete,
         '5' => .page_up,
         '6' => .page_down,
         else => .none,
     };
+}
+
+
+fn parseCsiU(bytes: []const u8) Key {
+    // Kitty/xterm modifyOtherKeys style: CSI codepoint ; modifier u.
+    // This lets terminals that support enhanced keyboard reporting distinguish
+    // physical TAB from C-i, so TAB can be completion and C-i can stay @info.
+    if (bytes.len < 2 or bytes[bytes.len - 1] != 'u') return .none;
+    const body = bytes[0 .. bytes.len - 1];
+    var parts = std.mem.splitScalar(u8, body, ';');
+    const cp_text = parts.next() orelse return .none;
+    const cp = std.fmt.parseInt(u21, cp_text, 10) catch return .none;
+    const mod_text = parts.next() orelse "1";
+    const mod_value = std.fmt.parseInt(u8, mod_text, 10) catch 1;
+    const flags: u8 = if (mod_value == 0) 0 else mod_value - 1;
+    const has_shift = (flags & 1) != 0;
+    const has_alt = (flags & 2) != 0;
+    const has_ctrl = (flags & 4) != 0;
+    if (has_ctrl and cp >= 'a' and cp <= 'z') return .{ .ctrl = @as(u8, @intCast(cp - 'a' + 1)) };
+    if (has_ctrl and cp >= 'A' and cp <= 'Z') return .{ .ctrl = @as(u8, @intCast(cp - 'A' + 1)) };
+    if (has_ctrl and cp == 'i') return .{ .ctrl = 9 };
+    if (has_ctrl and cp == 9) return .{ .ctrl = 9 };
+    if (has_alt) return .{ .alt = cp };
+    if (cp == 9) return if (has_shift) .shift_tab else .tab;
+    if (cp == 13 or cp == 10) return .enter;
+    if (cp == 127) return .backspace;
+    return .{ .char = cp };
 }
 
 fn parseSgrMouse(bytes: []const u8) ?MouseEvent {
@@ -431,6 +495,15 @@ test "key parser" {
     try std.testing.expect(parseKey("\x1b[A") == .up);
     try std.testing.expect(parseKey("\t") == .tab);
     try std.testing.expect(parseKey("\r") == .enter);
+    try std.testing.expect(parseKey("\x1b[Z") == .shift_tab);
+    switch (parseKey("\x08")) {
+        .ctrl => |c| try std.testing.expect(c == 8),
+        else => return error.ExpectedCtrlH,
+    }
+    switch (parseKey("\x1b[105;5u")) {
+        .ctrl => |c| try std.testing.expect(c == 9),
+        else => return error.ExpectedCtrlI,
+    }
 }
 
 test "sgr mouse parser accepts press release and scroll without escaping" {

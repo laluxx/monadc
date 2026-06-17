@@ -45,7 +45,7 @@ pub const Style = struct {
 pub const Theme = struct {
     bg: Color = Color.rgb(0x08, 0x0a, 0x12),
     panel: Color = Color.rgb(0x10, 0x14, 0x20),
-    panel_alt: Color = Color.rgb(0x18, 0x20, 0x32),
+    panel_alt: Color = Color.rgb(0x1c, 0x25, 0x39),
     ink: Color = Color.rgb(0xec, 0xf2, 0xff),
     mute: Color = Color.rgb(0x86, 0x90, 0xa8),
     edge: Color = Color.rgb(0x34, 0x3d, 0x55),
@@ -54,7 +54,9 @@ pub const Theme = struct {
     warn: Color = Color.rgb(0xf0, 0xd9, 0x62),
     bad: Color = Color.rgb(0xff, 0x5d, 0x73),
     good: Color = Color.rgb(0x55, 0xe6, 0xa5),
-    record: Color = Color.rgb(0xd2, 0xf7, 0x79),
+    // Generic records are deliberately neutral; OBS has its own cyan lane so it
+    // never collides with the green used for tests/done evidence.
+    record: Color = Color.rgb(0xba, 0xc4, 0xd8),
     obs: Color = Color.rgb(0x52, 0xd6, 0xff),
     function_color: Color = Color.rgb(0xd0, 0xbc, 0xff),
     heading: Color = Color.rgb(0x5e, 0xa7, 0xff),

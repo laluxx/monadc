@@ -9,3 +9,8 @@ function:map
 function:fold
 path:core @functions
 path:prelude @functions
+
+# exact type signature queries
+:: Int -> Int
+type:Int -> Int
+sig:Int -> Int

@@ -17,9 +17,11 @@ pub fn writeHelpCard(buf: *std.array_list.Managed(u8), width: usize) !void {
     try row(buf, width, "word       fuzzy object/title/path/preview search");
     try row(buf, width, ":Record    filter object kind");
     try row(buf, width, "@wisp/@reader/@codegen focused namespaces");
-    try row(buf, width, "@todo/@bugs/@notes/@tests work/search lanes");
+    try row(buf, width, "@todo/@bugs/@notes/@info/@tests/@functions lanes");
+    try row(buf, width, "@contracts/@quality/@metadata indexed metadata lanes");
     try row(buf, width, "?id #id    filter object identity");
     try row(buf, width, "%verifies  filter by edge kind");
+    try row(buf, width, "Int -> Int search function signatures by type");
     try row(buf, width, "a -> b     relation search through arrows");
     try row(buf, width, "a <- b     reverse relation search");
     try row(buf, width, "> < ~      outgoing / incoming / neighborhood");
