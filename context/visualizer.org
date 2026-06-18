@@ -351,7 +351,7 @@ pointer anchor instead of applying immediate linear zoom jumps.
   The visualizer has untapped potential as a CI check tool. In --validate
   mode (proposed in opinions.org), it could check:
   1. All context IDs referenced in TSV tests resolve to real nodes
-  2. All source anchors (src:file.c:123) point to existing lines
+  2.    All source anchors (src:...) point to existing lines
   3. All INF from: fields reference existing record IDs
   4. No duplicate IDs across the corpus
   5. All context files have valid metadata headers

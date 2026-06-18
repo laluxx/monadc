@@ -29,6 +29,7 @@ MON_ALIASES = {
 NON_FILE_SOURCES = frozenset({
     "user-request", "command-output", "user-report", "user-feedback",
     "user-observation", "llm-inference", "discussion",
+    "...",
 })
 
 SOURCE_EXTENSIONS = frozenset({

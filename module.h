@@ -187,6 +187,7 @@ void module_context_free(ModuleContext *ctx);
 void module_context_set_file(ModuleContext *ctx, const char *filename);
 void module_context_set_decl(ModuleContext *ctx, ModuleDecl *decl);
 void module_context_add_import(ModuleContext *ctx, ImportDecl *import);
+void module_context_add_prelude_imports(ModuleContext *ctx);
 ImportDecl *module_context_find_import(ModuleContext *ctx, const char *prefix);
 
 /// §6  Module registry (global, content-addressed)

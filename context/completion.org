@@ -1,0 +1,127 @@
+#+TITLE: Tab Completion — completion.h / completion.c
+#+AUTHOR: big-pickle
+#+DATE: 2026-06-18
+#+CREATED: 2026-06-18
+#+LAST_MODIFIED: 2026-06-18
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:completion:cli:usage:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.completion
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.completion.file-metadata
+:CUSTOM_ID: completion-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-18
+:CONTEXT_UPDATED: 2026-06-18
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/completion.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.completion.file src:context/completion.org conf:high]
+  This file documents the tab completion and usage printing utilities
+  (completion.h, completion.c). A small module providing print_usage
+  and print_subcommand_menu for the CLI.
+
+* Functions
+:PROPERTIES:
+:ID: monadc.context.completion.functions
+:CUSTOM_ID: completion-functions
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-18
+:CONTEXT_UPDATED: 2026-06-18
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: completion.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.completion.print-usage src:completion.h:5 conf:high]
+  print_usage(prog) — prints the top-level usage menu with available
+  subcommands. Replaces the old inline print_usage in main.c.
+
+[OBS id:obs.completion.print-subcommand src:completion.h:8 conf:high]
+  print_subcommand_menu(subcmd) — prints a detailed per-subcommand help
+  menu explaining options and behavior for the given subcommand.
+
+* Category Contract
+:PROPERTIES:
+:ID: monadc.context.completion.category-contract
+:CUSTOM_ID: completion-category-contract
+:CONTEXT_KIND: governance
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-18
+:CONTEXT_UPDATED: 2026-06-18
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/completion.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Tab Completion & Usage Category Contract
+| Field | Contract |
+|-------+----------|
+| Owned phase | CLI help text generation and tab-completion infrastructure — print_usage, print_subcommand_menu, and future shell-completion generators. |
+| Inputs | CLI subcommand name, program name from argv[0]. |
+| Outputs | Formatted help text printed to stdout. |
+| Invariants | Output must remain in sync with cli.h subcommand enum; never crash on invalid subcommand input. |
+| Test hooks | CLI integration tests, help text golden-file comparisons. |
+| Failure symptoms | Wrong subcommand listed, missing option, garbled help text, crash on --help. |
+| Context neighbors | cli, main |
+
+[DEC id:dec.completion.category-contract-owner date:2026-06-18 by:big-pickle]
+  Failures matching the symptoms above should start triage in this category, then
+  follow the listed neighbors only when the local contract does not explain the
+  issue.
+
+* Connections
+:PROPERTIES:
+:ID: monadc.context.completion.connections
+:CUSTOM_ID: completion-connections
+:CONTEXT_KIND: inference
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-18
+:CONTEXT_UPDATED: 2026-06-18
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/completion.org
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.completion.connects-to from:obs.completion.print-usage,obs.completion.print-subcommand conf:high]
+  connects-to ->
+  `monadc.context.cli` (usage printing is invoked by CLI argument parsing) ·
+  `monadc.context.main` (main.c calls print_usage for --help)

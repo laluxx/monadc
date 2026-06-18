@@ -101,6 +101,27 @@ test-runner:
 test-context-visualizer:
 	$(PYTHON) tests/test_context_visualizer.py
 
+test-context-lint:
+	$(PYTHON) tests/test_context_lint.py
+
+test-context-refs:
+	$(PYTHON) tests/test_context_refs.py
+
+test-context-graph:
+	$(PYTHON) tests/test_context_graph.py
+
+verify-context:
+	$(PYTHON) tests/test_context_lint.py --verbose
+	$(PYTHON) tests/test_context_refs.py
+	$(PYTHON) tests/test_context_visualizer.py
+	$(PYTHON) tests/test_context_graph.py
+	$(PYTHON) context/tools/context_lint.py --skip-info --check-src-refs --check-test-contexts --check-record-refs
+
+verify-context-strict:
+	$(PYTHON) context/tools/context_lint.py --skip-info --all --check-src-refs --check-test-contexts --check-orphaned --check-empty-headings --check-description; \
+	echo "---"; \
+	echo "NOTE: empty headings, missing descriptions, and orphans are quality metrics, not gate failures"
+
 test-fuzzing: all
 	$(PYTHON) tests/fuzzing/fuzz_codegen.py
 
@@ -109,4 +130,4 @@ fuzzing: test-fuzzing
 context-visualizer:
 	$(PYTHON) context-visualizer.py
 
-.PHONY: all clean release install uninstall asan test core test-core generate-asm-tests generate-asm-tests-extra test-runner test-context-visualizer test-fuzzing fuzzing context-visualizer
+.PHONY: all clean release install uninstall asan test core test-core generate-asm-tests generate-asm-tests-extra test-runner test-context-visualizer test-context-lint test-context-refs test-context-graph verify-context verify-context-strict test-fuzzing fuzzing context-visualizer

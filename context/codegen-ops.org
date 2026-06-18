@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -1179,3 +1179,31 @@
 [OBS id:obs.codegen-ops.counts.gap src:codegen.c conf:high]
   ~15 operations are =register_builtins=-only with no strcmp handler,
   unreachable from paren-mode.
+
+* Category Contract
+:PROPERTIES:
+:ID: monadc.context.codegen-ops.category-contract
+:CUSTOM_ID: codegen-ops-category-contract
+:CONTEXT_KIND: contract
+:END:
+
+[DOC id:doc.codegen-ops.category-contract src:context/codegen-ops.org conf:high]
+  This section declares the category contract for =codegen-ops=. It is the
+  routing target for failures and future test/context links touching the
+  strcmp-based operation dispatch and builtin registration.
+
+#+CAPTION: Codegen Operation Dispatch Category Contract
+| Field | Contract |
+|-------+----------|
+| Owned phase | strcmp-based operation dispatch, builtin registration, codegen_expr routing to per-operation handlers, three-layer dispatch architecture (strcmp, builtins, C fallback). |
+| Inputs | AST with typed/desugared operations, EnvEntry for symbol resolution, CodegenContext. |
+| Outputs | LLVM IR generated for each dispatched operation, RuntimeValue construction and field access, inline cache entries. |
+| Invariants | Every registered builtin has a corresponding handler; strcmp dispatch covers all operations reachable from paren-mode; ~15 operations with only register_builtins and no strcmp handler are documented gaps. |
+| Test hooks | Codegen test corpus (all .mon fixtures), operation coverage metrics, strcmp dispatch fuzz testing. |
+| Failure symptoms | Missing handler for operation, wrong argument count in dispatch, type mismatch between builtin signature and call site, unreachable operation in paren-mode. |
+| Context neighbors | codegen, types, runtime, infer, language |
+
+[DEC id:dec.codegen-ops.category-contract-owner date:2026-06-18 by:big-pickle]
+  Failures matching the symptoms above should start triage in this category, then
+  follow the listed neighbors only when the local contract does not explain the
+  issue.

@@ -152,7 +152,7 @@ def line_of(text: str, off: int) -> int:
     return text[:off].count("\n") + 1
 
 def org_files(root: Path) -> list[Path]:
-    return sorted(p for p in root.rglob("*.org") if ".git" not in p.parts)
+    return sorted(p for p in root.rglob("*.org") if ".git" not in p.parts and not p.name.startswith(".#"))
 
 def context_files(root: Path) -> list[Path]:
     """All regular files that should be addressable as File/Script/Report objects."""

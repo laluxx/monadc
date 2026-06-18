@@ -298,6 +298,75 @@ void module_context_add_import(ModuleContext *ctx, ImportDecl *import)
     ctx->imports[ctx->import_count++] = import;
 }
 
+static bool module_context_has_import(ModuleContext *ctx, const char *module_name)
+{
+    for (size_t i = 0; i < ctx->import_count; i++) {
+        if (strcmp(ctx->imports[i]->module_name, module_name) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool module_context_is_prelude_file(ModuleContext *ctx)
+{
+    return ctx->current_file && strstr(ctx->current_file, "/prelude/");
+}
+
+static bool mon_file_stem(const char *filename, char *out, size_t out_size)
+{
+    size_t len = strlen(filename);
+    if (len <= 4 || strcmp(filename + len - 4, ".mon") != 0)
+        return false;
+    if (len - 4 >= out_size)
+        return false;
+    memcpy(out, filename, len - 4);
+    out[len - 4] = '\0';
+    return true;
+}
+
+static void module_context_add_prelude_dir(ModuleContext *ctx, const char *dir)
+{
+    DIR *d = opendir(dir);
+    if (!d) return;
+
+    struct dirent *ent;
+    while ((ent = readdir(d)) != NULL) {
+        char module_name[256];
+        if (!mon_file_stem(ent->d_name, module_name, sizeof(module_name)))
+            continue;
+        if (!module_name_is_valid(module_name))
+            continue;
+        if (ctx->decl && strcmp(ctx->decl->name, module_name) == 0)
+            continue;
+        if (module_context_has_import(ctx, module_name))
+            continue;
+        module_context_add_import(ctx,
+            import_decl_create(module_name, NULL, IMPORT_UNQUALIFIED));
+    }
+
+    closedir(d);
+}
+
+void module_context_add_prelude_imports(ModuleContext *ctx)
+{
+    if (!ctx) return;
+
+    /* Prelude modules define the always-available surface. Avoid injecting
+       the whole prelude into itself while those files are being compiled. */
+    if (module_context_is_prelude_file(ctx))
+        return;
+
+    const char *env_core = getenv("MONAD_CORE");
+    if (env_core) {
+        char path[1024];
+        snprintf(path, sizeof(path), "%s/prelude", env_core);
+        module_context_add_prelude_dir(ctx, path);
+        return;
+    }
+
+    module_context_add_prelude_dir(ctx, "/usr/local/lib/monad/core/prelude");
+}
+
 /* Find an import by prefix.  The prefix is matched against:
      1. The alias (`:as Name`) if one was given, OR
      2. The last component of the module name when no alias was given.
@@ -741,11 +810,19 @@ char *module_name_to_path(const char *module_name)
     /* 2. $MONAD_CORE (development without installing) */
     const char *env_core = getenv("MONAD_CORE");
     if (env_core) {
+        snprintf(candidate, sizeof(candidate), "%s/%s.mon", env_core, rel);
+        if (access(candidate, F_OK) == 0) return mod_xstrdup(candidate);
+        snprintf(candidate, sizeof(candidate), "%s/%s.monad", env_core, rel);
+        if (access(candidate, F_OK) == 0) return mod_xstrdup(candidate);
         char *found = find_mon_recursive(env_core, module_name);
         if (found) return found;
     }
 
     /* 3. Installed core */
+    snprintf(candidate, sizeof(candidate), "/usr/local/lib/monad/core/%s.mon", rel);
+    if (access(candidate, F_OK) == 0) return mod_xstrdup(candidate);
+    snprintf(candidate, sizeof(candidate), "/usr/local/lib/monad/core/%s.monad", rel);
+    if (access(candidate, F_OK) == 0) return mod_xstrdup(candidate);
     {
         char *found = find_mon_recursive("/usr/local/lib/monad/core", module_name);
         if (found) return found;

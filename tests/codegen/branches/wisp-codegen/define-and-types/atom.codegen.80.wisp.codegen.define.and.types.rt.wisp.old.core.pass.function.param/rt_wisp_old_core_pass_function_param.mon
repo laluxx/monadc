@@ -1,0 +1,22 @@
+;; TEST-CATEGORY: codegen
+;; TEST-KIND: runtime
+;; TEST-FEATURES: wisp, define, typed-signature, higher-order, function-parameter
+;; TEST-EXPECT: pass
+;; TEST-STDOUT-FILE: rt_wisp_old_core_pass_function_param.stdout
+;; TEST-WORKFLOW: core-prelude
+;; TEST-ATOM: old-core style functions can pass a function parameter to another call.
+;; TEST-CONTEXT: monadc.context.wisp.old-core-prelude-compat
+
+module Main
+
+define positive? :: Int -> Bool
+  n -> n > 0
+
+define apply-once? :: (Int -> Bool) -> Int -> Bool
+  p n -> p n
+
+define pass-through? :: (Int -> Bool) -> Int -> Bool
+  p n -> apply-once? p n
+
+show (pass-through? positive? 7)
+show (pass-through? positive? -7)

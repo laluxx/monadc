@@ -2,7 +2,7 @@
 #+AUTHOR: GPT-5.5 Thinking
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-16
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-17
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -26,7 +26,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-16
-:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-17
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
 :SOURCE: context/inventory.org
@@ -34,9 +34,9 @@
 :END:
 
 [OBS id:obs.inventory.snapshot src:context/*.org conf:high]
-  Generated on 2026-06-16. The garden currently contains 69 org files,
-  33991 lines, 890 heading IDs, and
-  2598 bracket records.
+  Generated on 2026-06-18. The garden currently contains 73 org files (excluding info/),
+  35211 lines, 930 heading IDs, and
+  2671 bracket records.
 
 #+CAPTION: File inventory
 | File | Title | Lines | Headings | IDs | Records |
@@ -55,9 +55,12 @@
 | category/taxonomy.org | Context Taxonomy as a Thin Category | 110 | 4 | 4 | 5 |
 | category/tui.org | Category TUI | 162 | 7 | 7 | 9 |
 | category/type-system.org | Type System for Context Objects and Morphisms | 127 | 5 | 5 | 4 |
+| category/catface-static-report.org | Catface Static Report | 68 | 3 | 2 | 2 |
+| category/catface.org | Catface Zig Category Interface | 182 | 7 | 7 | 11 |
 | category-context.org | Category Context and Semantic Map | 287 | 9 | 9 | 11 |
 | cli.org | CLI Argument Parser | 399 | 8 | 8 | 48 |
 | codegen-ops.org | Codegen Operation Dispatch Catalogue | 1182 | 25 | 25 | 104 |
+| completion.org | Tab Completion — completion.h | 38 | 3 | 3 | 4 |
 | codegen.org | Codegen Context (codegen.h) | 771 | 17 | 16 | 78 |
 | commit-format.org | Commit Message Format | 670 | 18 | 18 | 21 |
 | connections.org | Context Connections and Routing | 110 | 3 | 3 | 2 |
@@ -79,6 +82,7 @@
 | infer.org | HM Type Inference Engine | 1507 | 26 | 26 | 129 |
 | inventory.org | Generated Context Inventory | 261 | 4 | 4 | 2 |
 | language.org | Language Formalization | 3013 | 59 | 58 | 257 |
+| lsp.org | LSP Implementation — lsp.h | 168 | 10 | 10 | 17 |
 | macro.org | Macro System Context — macro.h | 323 | 9 | 9 | 18 |
 | main-mon.org | Main.mon — Standard Library / Language Demo | 825 | 24 | 24 | 94 |
 | main.org | Compilation Pipeline Orchestrator (main.c) | 714 | 25 | 25 | 37 |
@@ -123,7 +127,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-16
-:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-17
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
 :SOURCE: context/inventory.org
@@ -141,6 +145,7 @@
 | category | 55 |
 | cli | 8 |
 | codegen | 16 |
+| completion | 3 |
 | codegen-ops | 25 |
 | commit | 17 |
 | commit-format | 1 |
@@ -166,6 +171,7 @@
 | infer | 26 |
 | inventory | 4 |
 | language | 56 |
+| lsp | 10 |
 | macro | 9 |
 | main | 25 |
 | main-mon | 24 |
@@ -211,7 +217,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-16
-:CONTEXT_UPDATED: 2026-06-16
+:CONTEXT_UPDATED: 2026-06-17
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
 :SOURCE: context/inventory.org
@@ -221,13 +227,13 @@
 #+CAPTION: Bracket record types
 | Record type | Count |
 |-------------+-------|
-| OBS | 1767 |
-| THINK | 255 |
-| INF | 215 |
-| DEC | 192 |
-| DOC | 99 |
+| OBS | 1785 |
+| THINK | 257 |
+| INF | 219 |
+| DEC | 196 |
+| DOC | 101 |
 | TODO | 57 |
-| FIX | 7 |
+| FIX | 9 |
 | IDEA | 6 |
 
 * Round 4 Tooling Snapshot
@@ -258,3 +264,31 @@
 | [[file:category/catface/src/main.zig][catface/main.zig]] | Zig live TUI/CLI entry point |
 | [[file:category/catface/src/terminal.zig][catface/terminal.zig]] | raw terminal backend |
 | [[file:category/catface/src/query.zig][catface/query.zig]] | live query evaluator |
+
+* Round 6: Language Reference Zone (info/)
+:PROPERTIES:
+:ID: monadc.context.inventory.round6-info-zone
+:CUSTOM_ID: inventory-round6-info-zone
+:CONTEXT_KIND: inventory
+:CONTEXT_STATUS: active
+:SOURCE: context/inventory.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.inventory.round6-info-zone src:context/info/*.org conf:high]
+  The =info/= directory contains 74 user-facing language reference files (23604
+  lines, 1015 headings) using =monadc.info.*= IDs. These are NOT part of the
+  compiler context garden and use a different metadata convention (no CONTEXT_*
+  properties, no bracket records).
+
+#+CAPTION: Info zone file inventory (top-level pages)
+| File | Title | Lines | Headings |
+|------+-------+-------+----------|
+| [[file:info/index.org][info/index.org]] | Monad Language Reference | 304 | 18 |
+| [[file:info/intro.org][info/intro.org]] | Introduction | 588 | 33 |
+| [[file:info/tutorial.org][info/tutorial.org]] | Tutorial | 868 | 50 |
+| [[file:info/syntax.org][info/syntax.org]] | Monad Syntax Reference | 519 | 33 |
+| [[file:info/types.org][info/types.org]] | Monad Type System | 643 | 36 |
+| [[file:info/core.org][info/core.org]] | Core Library | 643 | 40 |
+| [[file:info/wisp.org][info/wisp.org]] | Wisp Syntax | 461 | 29 |
+| [[file:info/ffi.org][info/ffi.org]] | C FFI | 462 | 19 |

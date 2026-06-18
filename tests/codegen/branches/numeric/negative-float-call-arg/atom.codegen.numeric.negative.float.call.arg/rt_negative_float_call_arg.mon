@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.rt-negative-float-call-arg
+;; TEST-TIER: regression
+;; TEST-STATUS: core-regression-2026-06-17
+;; TEST-CODEGEN-ATOM: atom.codegen.numeric.negative.float.call.arg
+;; TEST-QUALITY: core-regression
+;; TEST-SUBSET: negative-float
+;; TEST-CATEGORY: numeric
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus, monadc.context.core-libs.math
+;; TEST-PURPOSE: Negative float literals inside grouped multiline call arguments remain values, not call heads.
+;; TEST-ATOM: (2.0 * (-1.0) * 3.0) inside a nested multiline call compiles and runs.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: reader/wisp/codegen numeric call-argument handling
+;; TEST-USES-ATOM: atom.codegen.numeric.negative.float.call.arg
+;; TEST-MENU: branches/numeric/negative-float-call-arg/atom.codegen.numeric.negative.float.call.arg
+;; TEST-MENU-PATH: codegen/branches/numeric/negative-float-call-arg/atom.codegen.numeric.negative.float.call.arg
+;; TEST-ATOM-LEAF: atom.codegen.numeric.negative.float.call.arg
+;; TEST-CLI-TARGET: codegen branches numeric negative-float-call-arg
+(module Main)
+
+(show
+  (2.0 * (-1.0) * 3.0))

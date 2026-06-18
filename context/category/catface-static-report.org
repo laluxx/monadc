@@ -2,7 +2,7 @@
 #+AUTHOR: GPT-5.5 Thinking
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-16
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-17
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -27,6 +27,13 @@
   Catface currently contains 30 Zig source/build files and 3363 Zig lines.
   This report is generated from file contents and is useful as a quick inventory
   for the live category tooling layer.
+
+[FIX id:fix.category.catface.static-report.stale date:2026-06-17 by:llm]
+  This static report is stale: =root.zig= was removed in catface evolution and
+  new files (=context_cache.zig=, =file_cache.zig=, =fmtbuf.zig=, =perf.zig=,
+  =perf_report.zig=, =tests.zig=, =tree.zig=, =version.zig=, =which_key.zig=)
+  exist in =catface/src/=.  Regenerate with a fresh scan when Zig environment
+  is available.
 
 * Files
 | File | Lines |
@@ -55,7 +62,7 @@
 | [[file:catface/src/query.zig][src/query.zig]] | 207 |
 | [[file:catface/src/relation.zig][src/relation.zig]] | 143 |
 | [[file:catface/src/render.zig][src/render.zig]] | 212 |
-| [[file:catface/src/root.zig][src/root.zig]] | 63 |
+| ~~src/root.zig (removed)~~ | 0 |
 | [[file:catface/src/session.zig][src/session.zig]] | 67 |
 | [[file:catface/src/surface.zig][src/surface.zig]] | 77 |
 | [[file:catface/src/terminal.zig][src/terminal.zig]] | 280 |

@@ -1,0 +1,28 @@
+;; TEST-ID: tests.codegen.rt-known-call-parenthesized-infix-arg
+;; TEST-TIER: regression
+;; TEST-STATUS: core-regression-2026-06-17
+;; TEST-CODEGEN-ATOM: atom.codegen.functions.known.call.parenthesized.infix.arg
+;; TEST-QUALITY: core-regression
+;; TEST-SUBSET: function-call-infix-argument
+;; TEST-CATEGORY: functions
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus, monadc.context.core-libs.math
+;; TEST-PURPOSE: A known function call accepts a parenthesized infix expression as a later argument.
+;; TEST-ATOM: gcd2 b (a mod b) parses as (gcd2 b (mod a b)), not as an infix rewrite around b.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: reader function-call versus infix promotion slot handling
+;; TEST-USES-ATOM: atom.codegen.functions.known.call.parenthesized.infix.arg
+;; TEST-MENU: branches/functions/known-call-parenthesized-infix-arg/atom.codegen.functions.known.call.parenthesized.infix.arg
+;; TEST-MENU-PATH: codegen/branches/functions/known-call-parenthesized-infix-arg/atom.codegen.functions.known.call.parenthesized.infix.arg
+;; TEST-ATOM-LEAF: atom.codegen.functions.known.call.parenthesized.infix.arg
+;; TEST-CLI-TARGET: codegen branches functions known-call-parenthesized-infix-arg
+
+module Main
+
+define step :: Int -> Int -> Int
+  x y -> x + y
+
+define use-step :: Int -> Int -> Int
+  a b -> step b (a mod b)
+
+show (use-step 14 5)

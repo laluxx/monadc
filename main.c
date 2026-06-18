@@ -484,6 +484,85 @@ static FFIContext *get_global_ffi(void) {
 
 static CompiledModule *compile_one(const char *source_path,
                                     CompilerFlags *flags,
+                                    bool is_main_module);
+
+static bool source_is_prelude_file(const char *path)
+{
+    return path && strstr(path, "/prelude/");
+}
+
+static bool path_is_current_source(const char *path, const char *current)
+{
+    if (!path || !current) return false;
+    if (strcmp(path, current) == 0) return true;
+
+    char path_real[1024];
+    char current_real[1024];
+    if (realpath(path, path_real) && realpath(current, current_real))
+        return strcmp(path_real, current_real) == 0;
+    return false;
+}
+
+static bool mon_file_stem(const char *filename, char *out, size_t out_size)
+{
+    size_t len = strlen(filename);
+    if (len <= 4 || strcmp(filename + len - 4, ".mon") != 0)
+        return false;
+    if (len - 4 >= out_size)
+        return false;
+    memcpy(out, filename, len - 4);
+    out[len - 4] = '\0';
+    return true;
+}
+
+static void compile_prelude_dir(const char *dir, const char *current_source,
+                                CompilerFlags *flags, const char *source)
+{
+    DIR *d = opendir(dir);
+    if (!d) return;
+
+    struct dirent *ent;
+    while ((ent = readdir(d)) != NULL) {
+        char module_name[256];
+        if (!mon_file_stem(ent->d_name, module_name, sizeof(module_name)))
+            continue;
+        if (!module_name_is_valid(module_name))
+            continue;
+        if (registry_find(module_name))
+            continue;
+
+        char path[1024];
+        snprintf(path, sizeof(path), "%s/%s", dir, ent->d_name);
+        if (!file_exists(path) || path_is_current_source(path, current_source))
+            continue;
+
+        compile_one(path, flags, false);
+        parser_set_context(current_source, source);
+    }
+
+    closedir(d);
+}
+
+static void compile_prelude_modules(const char *current_source,
+                                    CompilerFlags *flags, const char *source)
+{
+    if (source_is_prelude_file(current_source))
+        return;
+
+    const char *env_core = getenv("MONAD_CORE");
+    if (env_core) {
+        char path[1024];
+        snprintf(path, sizeof(path), "%s/prelude", env_core);
+        compile_prelude_dir(path, current_source, flags, source);
+        return;
+    }
+
+    compile_prelude_dir("/usr/local/lib/monad/core/prelude",
+                        current_source, flags, source);
+}
+
+static CompiledModule *compile_one(const char *source_path,
+                                    CompilerFlags *flags,
                                     bool is_main_module) {
 
     struct timespec _phase_t0, _phase_t1;
@@ -723,6 +802,8 @@ static CompiledModule *compile_one(const char *source_path,
     /* Pre-scan imports and compile dependencies BEFORE wisp expansion
      * so their FFI arities are available when we expand this module. */
     {
+        compile_prelude_modules(my_source_path, flags, source);
+
         const char *p = source;
         while (*p) {
             while (*p == ' ' || *p == '\t') p++;
@@ -989,6 +1070,7 @@ static CompiledModule *compile_one(const char *source_path,
         }
         module_context_set_decl(mod_ctx, module_decl);
     }
+    module_context_add_prelude_imports(mod_ctx);
     const char *mod_name = module_decl->name;
     printf("  module: %s\n", mod_name);
 
@@ -1592,4 +1674,3 @@ int main(int argc, char **argv) {
         return 0;
     }
 }
-

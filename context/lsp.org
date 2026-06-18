@@ -1,0 +1,255 @@
+#+TITLE: LSP Implementation — lsp.h / lsp.c
+#+AUTHOR: big-pickle
+#+DATE: 2026-06-18
+#+CREATED: 2026-06-18
+#+LAST_MODIFIED: 2026-06-18
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:lsp:editor:protocol:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.lsp
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.lsp.file-metadata
+:CUSTOM_ID: lsp-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-18
+:CONTEXT_UPDATED: 2026-06-18
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/lsp.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.lsp.file src:context/lsp.org conf:high]
+  This file documents the Language Server Protocol (LSP 3.17) implementation
+  for the Monad compiler (lsp.h, lsp.c, lsp_repl.h, lsp_repl.c). It provides
+  real-time editor feedback including diagnostics, completion, hover,
+  go-to-definition, references, rename, semantic tokens, and more.
+
+* Architecture
+:PROPERTIES:
+:ID: monadc.context.lsp.architecture
+:CUSTOM_ID: lsp-architecture
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-18
+:CONTEXT_UPDATED: 2026-06-18
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: lsp.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.lsp.arch-overview src:lsp.h:25-30 conf:high]
+  The LSP subsystem has five main structs:
+  - LspServer — main server, owns transport, workspace, config, lifecycle
+  - LspTransport — stdin/stdout JSON-RPC 2.0 framing
+  - LspDocument — per-file state: source, AST, diagnostics, symbols, tokens
+  - LspWorkspace — project-wide index, open documents, compile cache
+  - LspIndex — symbol table for fast lookup (4096-bucket hash map)
+
+[OBS id:obs.lsp.threading src:lsp.h:32-37 conf:high]
+  Three-thread model:
+  - Main thread: JSON-RPC I/O loop (read -> dispatch -> write)
+  - Analysis thread: background reanalysis on document change
+  - Index thread: workspace-wide symbol indexing
+  All public functions are thread-safe unless noted otherwise.
+
+* Structures
+:PROPERTIES:
+:ID: monadc.context.lsp.structures
+:CUSTOM_ID: lsp-structures
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-18
+:CONTEXT_UPDATED: 2026-06-18
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: lsp.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.lsp.position-range src:lsp.h:74-87 conf:high]
+  LspPosition (line, character) and LspRange (start, end) use 0-based
+  line/character offsets (UTF-16 code units per LSP spec). LspLocation adds
+  a file:// URI.
+
+[OBS id:obs.lsp.diagnostics src:lsp.h:92-124 conf:high]
+  LspDiagnostic carries range, severity (error/warning/info/hint), code,
+  source ("monad"), message, optional detail, and related locations.
+  Tags include unnecessary and deprecated.
+
+[OBS id:obs.lsp.completion src:lsp.h:129-177 conf:high]
+  LspCompletion supports label, detail, documentation (markdown), sort/filter
+  text, insert text (plain or snippet), text edit range, commit characters,
+  deprecated flag, and 25 completion item kinds from the LSP spec.
+
+[OBS id:obs.lsp.semantic-tokens src:lsp.h:240-289 conf:high]
+  Full LSP 3.16+ semantic token encoding with delta-encoded 5-tuples
+  (deltaLine, deltaStart, length, tokenType, tokenModifiers). Supports 22
+  token types and 10 modifier flags.
+
+[OBS id:obs.lsp.document-state src:lsp.h:397-438 conf:high]
+  LspDocument tracks URI, path, source text, version (monotonic counter),
+  state machine (CLEAN/DRTY/ANALYZING/ERROR), and cached analysis results:
+  diagnostics, document symbols, semantic tokens, inlay hints, folding
+  ranges, and a line offset index for fast position conversion.
+
+[OBS id:obs.lsp.workspace-index src:lsp.h:446-476 conf:high]
+  LspIndexEntry stores fully-qualified name, short name, module, URI,
+  definition range, kind, type signature, documentation, and lazily-populated
+  reference locations. Backed by a 4096-bucket hash map with sorted prefix
+  array for fuzzy search.
+
+[OBS id:obs.lsp.config src:lsp.h:566-593 conf:high]
+  LspConfig controls analysis timing (check-on-save vs check-on-change,
+  debounce), feature toggles (inlay hints, semantic tokens, completions,
+  call/type hierarchy), completion limits, diagnostic caps, and logging.
+
+[OBS id:obs.lsp.analysis-bridge src:lsp.h:906-947 conf:high]
+  The analysis bridge (lsp_analyze_file) connects the LSP layer to the
+  Monad compiler pipeline. It produces LspAnalysisResult containing
+  diagnostics, symbols, inlay hints, semantic tokens, and folding ranges
+  from one compilation pass.
+
+* Language Features
+:PROPERTIES:
+:ID: monadc.context.lsp.features
+:CUSTOM_ID: lsp-features
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-18
+:CONTEXT_UPDATED: 2026-06-18
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: lsp.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.lsp.features-list src:lsp.h:759-811 conf:high]
+  Implemented LSP features:
+  - textDocument/completion (with dot-trigger, snippets)
+  - textDocument/hover (type signatures, documentation)
+  - textDocument/definition (go-to-def across modules)
+  - textDocument/references (with declaration inclusion)
+  - textDocument/documentSymbol (outline)
+  - workspace/symbol (cross-project search)
+  - textDocument/semanticTokens/full
+  - textDocument/inlayHint (inferred types inline)
+  - textDocument/signatureHelp (parameter info)
+  - textDocument/codeAction (quick fixes)
+  - textDocument/rename (with prepareRename)
+  - textDocument/foldingRange
+  - textDocument/formatting and rangeFormatting
+  - Call hierarchy and type hierarchy
+
+* LSP REPL Adapter
+:PROPERTIES:
+:ID: monadc.context.lsp.repl-adapter
+:CUSTOM_ID: lsp-repl-adapter
+:CONTEXT_KIND: observation
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-18
+:CONTEXT_UPDATED: 2026-06-18
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: lsp_repl.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.lsp.repl-adapter src:lsp_repl.h:1-10 conf:high]
+  lsp_repl_run() provides an interactive LSP REPL — it forks a child
+  running the LSP server, connects via pipes, prints a menu, and drops
+  into a command loop until the user types "exit" or Ctrl-D. This allows
+  interactive LSP testing without an editor client.
+
+* Connections
+:PROPERTIES:
+:ID: monadc.context.lsp.connections
+:CUSTOM_ID: lsp-connections
+:CONTEXT_KIND: inference
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-18
+:CONTEXT_UPDATED: 2026-06-18
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/lsp.org
+:CONFIDENCE: high
+:END:
+
+[INF id:inf.lsp.connects-to from:obs.lsp.arch-overview,obs.lsp.analysis-bridge conf:high]
+  connects-to ->
+  `monadc.context.main` (LSP analysis drives compile_one for diagnostics) ·
+  `monadc.context.infer` (LSP uses HM inference for hover types and diagnostics) ·
+  `monadc.context.reader` (LSP uses parser for document symbols and syntax errors) ·
+  `monadc.context.codegen-ops` (LSP completion uses codegen builtin registry) ·
+  `monadc.context.env` (LSP symbol index mirrors EnvEntry structure) ·
+  `monadc.context.cli` (LSP REPL is launched from CLI commands) ·
+  `monadc.context.repl` (lsp_repl_run extends the REPL concept to LSP)
+
+* Category Contract
+:PROPERTIES:
+:ID: monadc.context.lsp.category-contract
+:CUSTOM_ID: lsp-category-contract
+:CONTEXT_KIND: contract
+:END:
+
+[DOC id:doc.lsp.category-contract src:context/lsp.org conf:high]
+  This section declares the category contract for =lsp=. It is the
+  routing target for failures and future test/context links touching the
+  Language Server Protocol implementation.
+
+#+CAPTION: LSP Category Contract
+| Field | Contract |
+|-------+----------|
+| Owned phase | Language Server Protocol (LSP 3.17) — JSON-RPC transport, document management, workspace indexing, background analysis, editor feature implementation. |
+| Inputs | JSON-RPC 2.0 messages over stdin/stdout, source text from editor, compiler pipeline results from analysis thread. |
+| Outputs | JSON-RPC responses and notifications, diagnostics, completions, hover info, semantic tokens, inlay hints, symbol listings, edits. |
+| Invariants | Three-thread model (I/O, analysis, index) is deadlock-free; all public functions thread-safe; LspAnalysisResult integrates compiler diagnostics without blocking I/O; document state machine transitions correctly. |
+| Test hooks | LSP integration tests, JSON-RPC message round-trip tests, analysis result apply tests, REPL adapter smoke tests. |
+| Failure symptoms | JSON-RPC parse error, document state corruption, analysis thread crash, LSP capability negotiation failure, transport hang, background analysis livelock. |
+| Context neighbors | main, infer, reader, codegen-ops, env, cli, repl |
+
+[DEC id:dec.lsp.category-contract-owner date:2026-06-18 by:big-pickle]
+  Failures matching the symptoms above should start triage in this category, then
+  follow the listed neighbors only when the local contract does not explain the
+  issue.

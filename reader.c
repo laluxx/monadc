@@ -72,28 +72,40 @@ const char *layout_get_field_name(const char *layout_name, int index) {
 
 /// Local function tracking for the parser
 
-static char **g_local_funcs = NULL;
+typedef struct {
+    char *name;
+    int arity;
+} LocalFuncEntry;
+
+static LocalFuncEntry *g_local_funcs = NULL;
 static int g_local_func_count = 0;
 static int g_local_func_cap = 0;
 
-static void register_local_func(const char *name) {
+static void register_local_func_arity(const char *name, int arity) {
     if (!name) return;
     for (int i = 0; i < g_local_func_count; i++) {
-        if (strcmp(g_local_funcs[i], name) == 0) return;
+        if (strcmp(g_local_funcs[i].name, name) == 0) {
+            if (arity > g_local_funcs[i].arity)
+                g_local_funcs[i].arity = arity;
+            return;
+        }
     }
     if (g_local_func_count >= g_local_func_cap) {
         g_local_func_cap = g_local_func_cap == 0 ? 8 : g_local_func_cap * 2;
-        g_local_funcs = realloc(g_local_funcs, sizeof(char*) * g_local_func_cap);
+        g_local_funcs = realloc(g_local_funcs,
+                                sizeof(LocalFuncEntry) * g_local_func_cap);
     }
-    g_local_funcs[g_local_func_count] = malloc(strlen(name) + 1);
-    strcpy(g_local_funcs[g_local_func_count], name);
+    g_local_funcs[g_local_func_count].name = malloc(strlen(name) + 1);
+    strcpy(g_local_funcs[g_local_func_count].name, name);
+    g_local_funcs[g_local_func_count].arity = arity;
     g_local_func_count++;
 }
 
-static bool is_local_func(const char *name) {
+static bool is_local_callable(const char *name) {
     if (!name) return false;
     for (int i = 0; i < g_local_func_count; i++) {
-        if (strcmp(g_local_funcs[i], name) == 0) return true;
+        if (strcmp(g_local_funcs[i].name, name) == 0)
+            return g_local_funcs[i].arity > 0;
     }
     return false;
 }
@@ -233,7 +245,8 @@ void parser_set_context(const char *filename, const char *source) {
     g_srcmap_col_bias  = 0;
     g_srcmap_abs_line  = 0;
     if (g_local_funcs) {
-        for (int i = 0; i < g_local_func_count; i++) free(g_local_funcs[i]);
+        for (int i = 0; i < g_local_func_count; i++)
+            free(g_local_funcs[i].name);
         g_local_func_count = 0;
     }
     if (source) comment_map_build(source);
@@ -1210,6 +1223,52 @@ static bool is_hex_digit(char c) {
     return is_digit(c) || (c>='a'&&c<='f') || (c>='A'&&c<='F');
 }
 
+static int hex_value(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return 0;
+}
+
+static char *decode_string_literal(const char *start, size_t len) {
+    char *out = malloc(len + 1);
+    size_t w = 0;
+    for (size_t r = 0; r < len; r++) {
+        if (start[r] != '\\' || r + 1 >= len) {
+            out[w++] = start[r];
+            continue;
+        }
+
+        char esc = start[++r];
+        switch (esc) {
+        case 'n': out[w++] = '\n'; break;
+        case 't': out[w++] = '\t'; break;
+        case 'r': out[w++] = '\r'; break;
+        case '\\': out[w++] = '\\'; break;
+        case '"': out[w++] = '"'; break;
+        case '\'': out[w++] = '\''; break;
+        case '0': out[w++] = '\0'; break;
+        case 'x':
+            if (r + 2 < len &&
+                is_hex_digit(start[r + 1]) &&
+                is_hex_digit(start[r + 2])) {
+                out[w++] = (char)((hex_value(start[r + 1]) << 4) |
+                                  hex_value(start[r + 2]));
+                r += 2;
+            } else {
+                out[w++] = '\\';
+                out[w++] = esc;
+            }
+            break;
+        default:
+            out[w++] = esc;
+            break;
+        }
+    }
+    out[w] = '\0';
+    return out;
+}
+
 /* A '.' is allowed INSIDE a symbol (for module-qualified access like M.phi
    or multi-part module names like Std.Math) but only when it is followed by
    a letter or digit – this prevents it from being mistaken for a decimal
@@ -1422,7 +1481,7 @@ Token lexer_next_token(Lexer *lex) {
             if (peek(lex) == '\\') advance(lex);
             advance(lex);
         }
-        tok.value = my_strndup(lex->source + start, lex->pos - start);
+        tok.value = decode_string_literal(lex->source + start, lex->pos - start);
         advance(lex);
         tok.type  = TOK_STRING;
         return tok;
@@ -1688,6 +1747,16 @@ Token lexer_next_token(Lexer *lex) {
         tok.value = strip_underscores(raw, strlen(raw));
         free(raw);
         tok.type  = TOK_NUMBER;
+        return tok;
+    }
+
+    // && — Arrow-style fanout operator symbol. Keep single & available for
+    // address-of and bitwise-and handling below.
+    if (c == '&' && peek_ahead(lex, 1) == '&') {
+        advance(lex);
+        advance(lex);
+        tok.type  = TOK_SYMBOL;
+        tok.value = my_strdup("&&");
         return tok;
     }
 
@@ -2394,7 +2463,8 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                 if (peek_tok.type == TOK_SYMBOL) {
                     Lexer tmp_lex = peek_lex;
                     Token tmp_tok = lexer_next_token(&tmp_lex);
-                    if (tmp_tok.type == TOK_SYMBOL && tmp_tok.value && strcmp(tmp_tok.value, "::") == 0) is_explicit_param = true;
+                    if ((tmp_tok.type == TOK_SYMBOL && tmp_tok.value && strcmp(tmp_tok.value, "::") == 0) ||
+                        tmp_tok.type == TOK_COLON) is_explicit_param = true;
                     if (tmp_tok.type == TOK_ARROW) is_explicit_param = true;
                     free(tmp_tok.value);
                 }
@@ -2476,7 +2546,8 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                 Token tmp_tok = lexer_next_token(&tmp_lex);
                 if (tmp_tok.type == TOK_SYMBOL) {
                     Token tmp_tok2 = lexer_next_token(&tmp_lex);
-                    if (tmp_tok2.type == TOK_SYMBOL && tmp_tok2.value && strcmp(tmp_tok2.value, "::") == 0) is_explicit_param = true;
+                    if ((tmp_tok2.type == TOK_SYMBOL && tmp_tok2.value && strcmp(tmp_tok2.value, "::") == 0) ||
+                        tmp_tok2.type == TOK_COLON) is_explicit_param = true;
                     if (tmp_tok2.type == TOK_ARROW) is_explicit_param = true;
                     free(tmp_tok2.value);
                 }
@@ -3278,6 +3349,25 @@ AST *desugar_let_ast(AST *let_list) {
     return build_let(params, param_count, inits, body_exprs, body_count, line, col);
 }
 
+static bool is_infix_operator_symbol(const char *s) {
+    return s &&
+           (strcmp(s, "*") == 0 ||
+            strcmp(s, "/") == 0 ||
+            strcmp(s, "%") == 0 ||
+            strcmp(s, "+") == 0 ||
+            strcmp(s, "-") == 0 ||
+            strcmp(s, "=") == 0 ||
+            strcmp(s, "!=") == 0 ||
+            strcmp(s, "<") == 0 ||
+            strcmp(s, ">") == 0 ||
+            strcmp(s, "<=") == 0 ||
+            strcmp(s, ">=") == 0 ||
+            strcmp(s, "&&") == 0 ||
+            strcmp(s, "mod") == 0 ||
+            strcmp(s, "and") == 0 ||
+            strcmp(s, "or") == 0);
+}
+
 static AST *parse_list(Parser *p) {
     int start_line = p->current.line;
     int start_column = p->current.column;
@@ -3403,7 +3493,7 @@ static AST *parse_list(Parser *p) {
                 compiler_error(p->current.line, p->current.column,
                                "Expected symbol in let binding");
             char *bname = strdup(p->current.value);
-            register_local_func(bname);
+            register_local_func_arity(bname, 0);
             p->current = lexer_next_token(p->lexer);
             AST *init_expr = parse_expr(p);
             if (p->current.type != TOK_RBRACKET)
@@ -3423,7 +3513,7 @@ static AST *parse_list(Parser *p) {
                     compiler_error(p->current.line, p->current.column,
                                    "Expected symbol in let binding");
                 char *bname = strdup(p->current.value);
-                register_local_func(bname);
+                register_local_func_arity(bname, 0);
                 p->current = lexer_next_token(p->lexer);
                 AST *init_expr = parse_expr(p);
                 if (p->current.type != TOK_RBRACKET)
@@ -3508,6 +3598,122 @@ static AST *parse_list(Parser *p) {
 
 ///// Define
 
+    // Detect (var name value) / (var [name :: Type] value) — mutable
+    // top-level or local variable declaration. Mirrors the existing
+    // "define name value" / "define [name :: Type] value" value-path
+    // below, but is recorded under the head symbol "var" instead of
+    // "define" so semantic analysis can tell mutable bindings apart
+    // from immutable ones without any new AST struct fields.
+    if (p->current.type == TOK_SYMBOL &&
+        strcmp(p->current.value, "var") == 0) {
+        p->current = lexer_next_token(p->lexer); // consume 'var'
+
+        AST *var_name_ast;
+
+        if (p->current.type == TOK_LBRACKET) {
+            int bracket_line = p->current.line;
+            int bracket_col  = p->current.column;
+            p->current = lexer_next_token(p->lexer); // consume '['
+            if (p->current.type != TOK_SYMBOL)
+                compiler_error(p->current.line, p->current.column,
+                               "Expected variable name in typed var binding");
+            AST *bracket_list = ast_new_list();
+            bracket_list->line   = bracket_line;
+            bracket_list->column = bracket_col;
+            AST *nm = ast_new_symbol(p->current.value);
+            nm->line   = p->current.line;
+            nm->column = p->current.column;
+            ast_list_append(bracket_list, nm);
+            p->current = lexer_next_token(p->lexer); // consume name
+
+            if ((p->current.type == TOK_SYMBOL &&
+                 (strcmp(p->current.value, "::") == 0 ||
+                  strcmp(p->current.value, ":") == 0)) ||
+                p->current.type == TOK_ARROW) {
+                bool is_arrow = (p->current.type == TOK_ARROW);
+                ast_list_append(bracket_list, ast_new_symbol(is_arrow ? "->" : "::"));
+                p->current = lexer_next_token(p->lexer); // consume ':', '::', or '->'
+                if (is_arrow) {
+                    while (p->current.type != TOK_RBRACKET &&
+                           p->current.type != TOK_EOF) {
+                        const char *tv = p->current.value
+                            ? p->current.value
+                            : (p->current.type == TOK_ARROW ? "->" : NULL);
+                        if (tv) ast_list_append(bracket_list, ast_new_symbol(tv));
+                        p->current = lexer_next_token(p->lexer);
+                    }
+                } else {
+                    while (p->current.type != TOK_RBRACKET &&
+                           p->current.type != TOK_EOF) {
+                        if (p->current.type == TOK_SYMBOL) {
+                            ast_list_append(bracket_list, ast_new_symbol(p->current.value));
+                        } else if (p->current.type == TOK_NUMBER) {
+                            AST *num = ast_new_number(0.0, p->current.value);
+                            const char *v = p->current.value;
+                            if (v[0] == '0' && (v[1] == 'x' || v[1] == 'X')) {
+                                num->raw_int = strtoull(v, NULL, 16);
+                                num->has_raw_int = true;
+                                num->number = (double)(uint64_t)num->raw_int;
+                            } else if (strchr(v, '.') || strchr(v, 'e')) {
+                                num->number = atof(v);
+                            } else {
+                                num->raw_int = strtoull(v, NULL, 10);
+                                num->has_raw_int = true;
+                                num->number = (double)num->raw_int;
+                            }
+                            ast_list_append(bracket_list, num);
+                        } else {
+                            break;
+                        }
+                        p->current = lexer_next_token(p->lexer);
+                        if (p->current.type == TOK_SYMBOL &&
+                            (strcmp(p->current.value, "::") == 0 ||
+                             strcmp(p->current.value, ":") == 0)) {
+                            ast_list_append(bracket_list, ast_new_symbol("::"));
+                            p->current = lexer_next_token(p->lexer);
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+            if (p->current.type != TOK_RBRACKET)
+                compiler_error(p->current.line, p->current.column,
+                               "Expected ']' to close typed var binding");
+            p->current = lexer_next_token(p->lexer); // consume ']'
+            var_name_ast = bracket_list;
+        } else if (p->current.type == TOK_SYMBOL) {
+            var_name_ast = ast_new_symbol(p->current.value);
+            var_name_ast->line   = p->current.line;
+            var_name_ast->column = p->current.column;
+            register_local_func_arity(p->current.value, 0);
+            p->current = lexer_next_token(p->lexer);
+        } else {
+            compiler_error(p->current.line, p->current.column,
+                           "Expected variable name after 'var'");
+        }
+
+        AST *var_value_ast = parse_expr(p);
+
+        if (p->current.type != TOK_RPAREN) {
+            compiler_error(p->current.line, p->current.column,
+                           "Expected ')' to close var");
+        }
+        int var_end_col = p->current.column + 1;
+        p->current = lexer_next_token(p->lexer);
+
+        AST *var_result = ast_new_list();
+        ast_list_append(var_result, ast_new_symbol("define"));
+        ast_list_append(var_result, var_name_ast);
+        ast_list_append(var_result, var_value_ast);
+
+        ast_free(list);
+        var_result->line       = start_line;
+        var_result->column     = start_column;
+        var_result->end_column = var_end_col;
+        return var_result;
+    }
+
     // Detect (def ...) inside functions — local binding
     bool _came_from_def = false;
     if (p->current.type == TOK_SYMBOL &&
@@ -3578,7 +3784,6 @@ static AST *parse_list(Parser *p) {
                 compiler_error(p->current.line, p->current.column,
                                "Expected function name after (define (");
             }
-            register_local_func(p->current.value);
             AST *fname = ast_new_symbol(p->current.value);
             fname->line       = p->current.line;
             fname->column     = p->current.column;
@@ -3590,6 +3795,7 @@ static AST *parse_list(Parser *p) {
             int       count  = 0;
             char     *ret_type = NULL;
             parse_fn_signature(p, &params, &count, &ret_type);
+            register_local_func_arity(fname->symbol, count);
 
             // Parse optional metadata BEFORE body
             // Skip metadata scan when zero params — the next expression
@@ -3874,7 +4080,7 @@ static AST *parse_list(Parser *p) {
                 name_ast = ast_new_symbol(p->current.value);
                 name_ast->line   = p->current.line;
                 name_ast->column = p->current.column;
-                register_local_func(p->current.value);
+                register_local_func_arity(p->current.value, 0);
                 p->current = lexer_next_token(p->lexer);
             } else {
                 compiler_error(p->current.line, p->current.column,
@@ -4292,7 +4498,7 @@ static AST *parse_list(Parser *p) {
                                            sizeof(char*) * (method_count + 1));
                     method_names[method_count] = peek_name;
                     method_types[method_count] = my_strdup(type_buf);
-                    register_local_func(peek_name);
+                    register_local_func_arity(peek_name, 1);
                     method_count++;
                     continue;
                 }
@@ -5890,28 +6096,28 @@ static AST *parse_list(Parser *p) {
              *   - first is NOT a known callable (already a prefix call head)
              *   - the head `first` does NOT expect a function at the next slot
              * Chains left-to-right: (a f b g c) => (g (f a b) c)          */
-            bool first_is_known_fn = false;
-            if (first->type == AST_SYMBOL) {
-                if (g_is_known_function)
-                    first_is_known_fn = g_is_known_function(first->symbol);
-                if (!first_is_known_fn)
-                    first_is_known_fn = is_local_func(first->symbol);
-            }
-
             bool candidate_is_known_fn = true;
             if (p->current.type == TOK_SYMBOL && p->current.value) {
                 if (g_is_known_function)
                     candidate_is_known_fn = g_is_known_function(p->current.value);
-                if (!candidate_is_known_fn && is_local_func(p->current.value))
+                if (!candidate_is_known_fn && is_local_callable(p->current.value))
                     candidate_is_known_fn = true;
             }
 
-            if (!first_is_known_fn && p->current.type == TOK_SYMBOL && p->current.value && candidate_is_known_fn) {
+            bool first_is_infix_operator =
+                first->type == AST_SYMBOL &&
+                is_infix_operator_symbol(first->symbol);
+            bool candidate_is_infix_operator =
+                p->current.type == TOK_SYMBOL &&
+                is_infix_operator_symbol(p->current.value);
+
+            if (!first_is_infix_operator &&
+                p->current.type == TOK_SYMBOL && p->current.value &&
+                (candidate_is_known_fn || candidate_is_infix_operator)) {
                 /* peek: is there a rhs after the candidate? */
                 /* We need at least one more token that isn't ')' */
                 /* Strategy: tentatively check using saved lexer state */
                 Lexer saved_lex = *p->lexer;
-                Token candidate  = p->current;
                 Token after      = lexer_next_token(p->lexer);
                 *p->lexer        = saved_lex; /* restore — we only peeked */
 
@@ -5953,9 +6159,12 @@ static AST *parse_list(Parser *p) {
                         bool chain_is_known_fn = true;
                         if (g_is_known_function)
                             chain_is_known_fn = g_is_known_function(p->current.value);
-                        if (!chain_is_known_fn && is_local_func(p->current.value))
+                        if (!chain_is_known_fn && is_local_callable(p->current.value))
                             chain_is_known_fn = true;
-                        if (!chain_is_known_fn) break;
+                        bool chain_is_infix_operator =
+                            is_infix_operator_symbol(p->current.value);
+                        if (!chain_is_known_fn && !chain_is_infix_operator)
+                            break;
 
                         /* peek again to confirm rhs exists */
                         Lexer sl2   = *p->lexer;
@@ -6067,6 +6276,22 @@ static AST *parse_list(Parser *p) {
                     acc->end_column = end_col;
                     return acc;
                 }
+            }
+
+            /* A single parenthesized literal is grouping, not a call:
+             * (-1.0) must remain a numeric value inside infix expressions. */
+            if (p->current.type == TOK_RPAREN &&
+                (first->type == AST_NUMBER ||
+                 first->type == AST_CHAR ||
+                 first->type == AST_KEYWORD)) {
+                int end_col = p->current.column + 1;
+                p->current = lexer_next_token(p->lexer);
+                free(list->list.items);
+                free(list);
+                first->line = start_line;
+                first->column = start_column;
+                first->end_column = end_col;
+                return first;
             }
 
             /* Guard: literals cannot appear in function position
@@ -7008,7 +7233,32 @@ static AST *parse_expr_base(Parser *p) {
                 has_unquote = true;
             } else {
                 g_quote_depth++;
-                ast_list_append(inner, parse_expr(p));
+                AST *item = parse_expr(p);
+
+                AST *step = NULL;
+                if (p->current.type == TOK_SYMBOL &&
+                    p->current.value &&
+                    strcmp(p->current.value, ",") == 0) {
+                    p->current = lexer_next_token(p->lexer);
+                    step = parse_expr(p);
+                }
+
+                if (p->current.type == TOK_DOTDOT) {
+                    p->current = lexer_next_token(p->lexer);
+                    AST *end = NULL;
+                    if (p->current.type != TOK_QUASI_CLOSE &&
+                        p->current.type != TOK_EOF) {
+                        end = parse_expr(p);
+                    }
+                    item = ast_new_range(item, step, end, false);
+                    item->line = ql;
+                    item->column = qc;
+                } else if (step) {
+                    compiler_error(p->current.line, p->current.column,
+                                   "Unexpected ',' — did you mean a range start,step..end?");
+                }
+
+                ast_list_append(inner, item);
                 g_quote_depth--;
             }
         }
@@ -7019,9 +7269,16 @@ static AST *parse_expr_base(Parser *p) {
         p->current = lexer_next_token(p->lexer); /* consume ⌝ */
         inner->end_column = qe;
 
+        AST *quoted_arg = inner;
+        if (!has_unquote &&
+            inner->list.count == 1 &&
+            inner->list.items[0]->type == AST_RANGE) {
+            quoted_arg = inner->list.items[0];
+        }
+
         AST *result = ast_new_list();
         ast_list_append(result, ast_new_symbol(has_unquote ? "quasiquote" : "quote"));
-        ast_list_append(result, inner);
+        ast_list_append(result, quoted_arg);
         result->line       = ql;
         result->column     = qc;
         result->end_column = qe;
@@ -7432,7 +7689,15 @@ static void json_escape(SB *b, const char *s) {
         case '\n': sb_puts(b, "\\n");  break;
         case '\r': sb_puts(b, "\\r");  break;
         case '\t': sb_puts(b, "\\t");  break;
-        default:   sb_putc(b, *s);     break;
+        default:
+            if ((unsigned char)*s < 0x20) {
+                char buf[7];
+                snprintf(buf, sizeof(buf), "\\u%04x", (unsigned char)*s);
+                sb_puts(b, buf);
+            } else {
+                sb_putc(b, *s);
+            }
+            break;
         }
     }
     sb_putc(b, '"');

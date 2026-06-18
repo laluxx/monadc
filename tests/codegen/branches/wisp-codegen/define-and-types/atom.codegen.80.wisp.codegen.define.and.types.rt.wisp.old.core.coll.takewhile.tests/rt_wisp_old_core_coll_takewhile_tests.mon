@@ -1,0 +1,25 @@
+module Coll
+  [take drop takeWhile]
+
+define take :: Int -> [a] -> [a]
+  _ []            -> []
+  n [x|xs]
+      | n > 0     -> (x ++ (take (n - 1) xs))
+      | otherwise -> []
+
+define drop :: Int -> [a] -> [a]
+  _ []            -> []
+  n [x|xs]
+      | n > 0     -> (drop (n - 1) xs)
+      | otherwise -> (x ++ xs)
+
+define takeWhile :: (a -> Bool) -> [a] -> [a]
+  _ []            -> []
+  p [x|xs]
+      | p x       -> (x ++ (takeWhile p xs))
+      | otherwise -> []
+
+(tests
+  (assert-eq (takeWhile (< 3) [1 2 3 4 1]) [1 2] "takeWhile Array stops at 3")
+  (assert-eq (takeWhile (< 3) []) [] "takeWhile empty")
+)

@@ -346,55 +346,43 @@
 :ID: monadc.context.todo-markers.buildsystem
 :CUSTOM_ID: todo-buildsystem
 :CONTEXT_KIND: component
-:CONTEXT_DESCRIPTION: Two TODOs in buildsystem.c: dependency graph stubbed and compile function stubbed.
+:CONTEXT_DESCRIPTION: One TODO in buildsystem.c: wire to real compiler backend via main.c compilation pipeline (line 574).
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: codex
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-13
-:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-18
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
 :SOURCE: buildsystem.c
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.todo-markers.buildsystem.dep-graph src:buildsystem.c:244 conf:high]
-  Lines 243-244:
-  =// Simple approach: return imports in order (no topological sort yet)= newline =
-  =// TODO: Implement proper dependency graph with cycle detection=
-  In =build_resolve_dependencies=, the function returns imports in
-  declaration order without topological sorting or cycle detection.
-  This works for acyclic dependency trees but will loop infinitely
-  on circular imports.
-
-[THINK id:think.todo-markers.buildsystem.dep-graph conf:high]
-  Impact: Circular module imports cause infinite loops or incorrect
-  compilation order. Simple projects are unaffected, but as the
-  module system grows, this will become a hard blocker. Priority:
-  medium — works for current usage but must be fixed before the
-  module system is used for larger projects. Depends on: topological
-  sort algorithm, cycle detection via DFS. Connected to:
-  [[file:buildsystem.org][buildsystem.org]] (module compilation, dependency resolution).
-
-[OBS id:obs.todo-markers.buildsystem.compile-stub src:buildsystem.c:334 conf:high]
-  Lines 334-336:
-  =// TODO: Call actual compile function= newline =
-  =// For now, this is a placeholder=
-  =printf("%*s[%s] Compiled to %s\n"...);=
-  In =build_compile_module=, instead of invoking the real compilation
-  pipeline, the function prints a message and returns. This is a
-  placeholder that does not actually compile anything.
+[OBS id:obs.todo-markers.buildsystem.compile-stub src:buildsystem.c:574 conf:high]
+  Lines 574-577:
+  =/* TODO: wire to the real compiler backend via=
+  =   main_compile_to_bitcode_and_verify(m, ctx, mod->name,=
+  =                                     an, &mod->bitcode) */=
+  In =build_compile_module=, the real compilation call is commented
+  out. Instead of invoking the actual compilation pipeline, the
+  function skips compilation. The old =printf= placeholder (which
+  existed at line 334 in an earlier version) has been replaced by a
+  commented-out call to =main_compile_to_bitcode_and_verify=, meaning
+  the intent to wire the build system to real compilation is explicit
+  but still not active.
 
 [THINK id:think.todo-markers.buildsystem.compile-stub conf:critical]
-  Impact: The entire build system module compilation path is a no-op.
+  Impact: The build system module compilation path is still a no-op.
   =build_compile_module= reports success without producing any object
-  file. This means the build system cannot actually compile multi-
-  module projects. Priority: high — this must be wired to the real
-  compilation pipeline (=main.c= entry point or =codegen_compile=)
-  before the build system is usable. Depends on: the compilation
-  pipeline interface, output path management. Connected to:
+  file. The previous hard-coded =printf= placeholder has evolved into
+  a commented-out real call, but the result is the same — the build
+  system cannot actually compile multi-module projects. The correct
+  function and signature are known; it just needs to be uncommented
+  and wired. Priority: high — this blocks the build system from
+  being usable. Depends on: the compilation pipeline interface,
+  output path management. Connected to:
   [[file:buildsystem.org][buildsystem.org]] (module compilation flow).
 
 * runtime.h — Runtime Header
@@ -470,6 +458,55 @@
   substitution) but advanced macro features are stubbed. Depends on:
   macro expander redesign to separate compile-time from template code.
   Connected to: [[file:macro.org][macro.org]] (macro architecture, expansion algorithm).
+
+* lsp.c — Language Server Protocol
+:PROPERTIES:
+:ID: monadc.context.todo-markers.lsp
+:CUSTOM_ID: todo-lsp
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Two TODO markers in lsp.c: call graph traversal stubs for goto-definition and find-references (lines 2451, 2460).
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-18
+:CONTEXT_UPDATED: 2026-06-18
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: lsp.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.todo-markers.lsp.call-graph-reverse src:lsp.c:2451 conf:high]
+  Line 2451: =return NULL;   /* TODO: traverse reverse call graph */=
+  In =lsp_goto_definition=, when a function call site is selected, the
+  LSP should navigate to the callee's definition. The current
+  implementation returns NULL for any call-site position because
+  reverse call graph traversal is not implemented.
+
+[THINK id:think.todo-markers.lsp.call-graph-reverse conf:high]
+  Impact: The "Go to Definition" feature does not work for function
+  call sites — only for variable references and type names that are
+  directly resolvable via the symbol table. Priority: high — this is a
+  core LSP feature expected by every editor. Depends on: call graph
+  construction (forward edges from calls to callees), symbol table
+  improvements. Connected to: [[file:lsp.org][lsp.org]] (LSP architecture,
+  goto-definition flow).
+
+[OBS id:obs.todo-markers.lsp.call-graph-forward src:lsp.c:2460 conf:high]
+  Line 2460: =return NULL;   /* TODO: traverse forward call graph */=
+  In =lsp_find_references=, the LSP should find all references to a
+  function across the codebase. The current implementation returns
+  NULL because forward call graph traversal is not implemented.
+
+[THINK id:think.todo-markers.lsp.call-graph-forward conf:high]
+  Impact: The "Find References" feature does not work for functions —
+  only for variable references that are directly in scope. Priority:
+  high — find-references is a core LSP navigation feature. Depends on:
+  call graph construction (reverse edges from callees to call sites),
+  project-wide symbol index. Connected to: [[file:lsp.org][lsp.org]] (LSP
+  architecture, find-references flow).
 
 * Main.mon — Main Playground File
 :PROPERTIES:
@@ -651,22 +688,25 @@
   how_to/Test.mon: 2 TODOs — general placeholder (line 48) and
   matrix literals (line 70).
 
-[OBS id:obs.todo-markers.additional.math-mon src:core/Math.mon:141 conf:high]
-  core/Math.mon line 141: =;; TODO Find a way to get rid of this i only want mod=
-  The =mod= function's implementation has an unwanted intermediate value.
+[OBS id:obs.todo-markers.additional.math-mon src:core/Math.mon:134,281 conf:high]
+  core/Math.mon: 2 TODOs — Float modulo cleanup (line 134:
+  =TODO Find a way to get rid of this i only want mod=) and
+  restore Math runtime assertions after assertion/codegen verifier
+  issues (line 281: =TODO: restore Math runtime assertions after
+  assertion/codegen verifier issues=).
 
 [OBS id:obs.todo-markers.additional.coll-mon src:core/prelude/Coll.mon:56,95,107 conf:high]
   core/prelude/Coll.mon: 3 TODOs — test this (line 56), unit type ()
   pointer and Wisp fix (line 95), move into Applicative and make
   variadic (line 107).
 
-[OBS id:obs.todo-markers.additional.string-mon src:core/text/String.mon:80 conf:high]
-  core/text/String.mon line 80: =;; TODO It should be able to take String or Character as `b'=
+[OBS id:obs.todo-markers.additional.string-mon src:old-core/text/String.mon:80 conf:high]
+  old-core/text/String.mon line 80: =;; TODO It should be able to take String or Character as `b'=
   The =replace= or similar function should accept both String and
   Character as argument.
 
-[OBS id:obs.todo-markers.additional.assert-mon src:core/Assert.mon:1,5,9 conf:high]
-  core/Assert.mon: 3 TODOs — write description (line 1), keywords
+[OBS id:obs.todo-markers.additional.assert-mon src:old-core/Assert.mon:1,5,9 conf:high]
+  old-core/Assert.mon: 3 TODOs — write description (line 1), keywords
   (line 5), write commentary (line 9). The file is essentially a
   stub.
 
@@ -689,8 +729,8 @@
   how_to/SdlSpeedrun.mon line 18: TODO about ADTs that can map to C
   enums for FFI interop.
 
-[OBS id:obs.todo-markers.additional.prelude-test-mon src:core/prelude/Test.mon:21,40,51 conf:high]
-  core/prelude/Test.mon: 3 TODOs — Wisp fix (line 21), general (line 40),
+[OBS id:obs.todo-markers.additional.prelude-test-mon src:old-core/prelude/Test.mon:21,40,51 conf:high]
+  old-core/prelude/Test.mon: 3 TODOs — Wisp fix (line 21), general (line 40),
   general (line 51).
 
 * Priority Summary
@@ -708,16 +748,16 @@
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
-:SOURCE: codegen.c,runtime.c,reader.c,dep.c,ffi.c,env.c,buildsystem.c,runtime.h,macro.h,Main.mon
+:SOURCE: codegen.c,runtime.c,reader.c,dep.c,ffi.c,env.c,buildsystem.c,runtime.h,macro.h,lsp.c,Main.mon
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.todo-markers.priority.critical src:buildsystem.c:334 conf:high]
-  **Critical**: buildsystem.c:334 — compile function is a no-op stub.
+[OBS id:obs.todo-markers.priority.critical src:buildsystem.c:574 conf:high]
+  **Critical**: buildsystem.c:574 — compile function is a no-op stub.
   The build system cannot compile anything. Blocks multi-module
   compilation.
 
-[OBS id:obs.todo-markers.priority.high src:dep.c:2232,dep.c:3529,dep.c:1607,Main.mon:210,Main.mon:1100,Main.mon:909,Main.mon:860,Main.mon:992,Main.mon:1009,env.c:59,codegen.c:4102,reader.c:4813,macro.h:50,Main.mon:365,Main.mon:374,Main.mon:427,Main.mon:568,Main.mon:672,Main.mon:755 conf:high]
+[OBS id:obs.todo-markers.priority.high src:dep.c:2232,dep.c:3529,dep.c:1607,Main.mon:210,Main.mon:1100,Main.mon:909,Main.mon:860,Main.mon:992,Main.mon:1009,env.c:59,codegen.c:4102,reader.c:4813,macro.h:50,lsp.c:2451,lsp.c:2460,Main.mon:365,Main.mon:374,Main.mon:427,Main.mon:568,Main.mon:672,Main.mon:755 conf:high]
   **High**:
   - dep.c:2232 — Shadow pass invents holes for unbound globals (unsound)
   - dep.c:3529 — Intentional term leak in dep_env_init
@@ -727,14 +767,15 @@
   - codegen.c:4102 — Purity checking disabled
   - reader.c:4813 — No lookahead for data type field shorthand
   - macro.h:50 — =#()= quasi-output substitution incomplete
+  - lsp.c:2451 — Reverse call graph traversal stub (goto-definition fails for calls)
+  - lsp.c:2460 — Forward call graph traversal stub (find-references fails for functions)
   - Main.mon:365,374,427,568,672,755 — Dynamic arrays, Vector, Matrix,
     Map, Set, Relation features planned but not implemented
   - Main.mon:860,909,992,1009,1100 — Infix calls, parametric
     polymorphism, list comprehensions, types-as-types, typed expressions
 
-[OBS id:obs.todo-markers.priority.medium src:buildsystem.c:244,runtime.c:1559,Main.mon:49,Main.mon:64,Main.mon:281,Main.mon:563,Main.mon:651,Main.mon:668,Main.mon:710,Main.mon:874,Main.mon:933,Main.mon:1060 conf:high]
+[OBS id:obs.todo-markers.priority.medium src:runtime.c:1559,Main.mon:49,Main.mon:64,Main.mon:281,Main.mon:563,Main.mon:651,Main.mon:668,Main.mon:710,Main.mon:874,Main.mon:933,Main.mon:1060 conf:high]
   **Medium**:
-  - buildsystem.c:244 — Dependency graph needs topological sort
   - runtime.c:1559 — Bignum unboxing missing (latent)
   - Main.mon:49 — Format-string show with multiple args
   - Main.mon:64 — IF/PURE/REC annotations for recursion
@@ -796,13 +837,19 @@
   connects-to -> `monadc.context.env.environment-lifecycle` (entry
   freeing and memory management)
 
-[INF id:inf.todo-markers.buildsystem from:obs.todo-markers.buildsystem.dep-graph,obs.todo-markers.buildsystem.compile-stub conf:high]
+[INF id:inf.todo-markers.buildsystem from:obs.todo-markers.buildsystem.compile-stub conf:high]
   connects-to -> `monadc.context.buildsystem.module-compilation`
-  (dependency resolution and compilation pipeline)
+  (compilation pipeline wiring)
 
 [INF id:inf.todo-markers.macro from:obs.todo-markers.macro-h.hash-paren-substitution conf:high]
   connects-to -> `monadc.context.macro.substitution` (macro expansion
   and quasi-output)
+
+[INF id:inf.todo-markers.lsp from:obs.todo-markers.lsp.call-graph-reverse,obs.todo-markers.lsp.call-graph-forward conf:high]
+  connects-to -> `monadc.context.lsp.goto-definition` (call graph
+  reverse traversal for goto-definition) ·
+  `monadc.context.lsp.find-references` (call graph forward traversal
+  for find-references)
 
 [INF id:inf.todo-markers.main-mon from:obs.todo-markers.main-mon.show-formatting,obs.todo-markers.main-mon.if-pure-rec,obs.todo-markers.main-mon.type-check-fail,obs.todo-markers.main-mon.symbol-define,obs.todo-markers.main-mon.array-show,obs.todo-markers.main-mon.dynamic-arrays,obs.todo-markers.main-mon.vector,obs.todo-markers.main-mon.matrix,obs.todo-markers.main-mon.filling,obs.todo-markers.main-mon.map-todo,obs.todo-markers.main-mon.zipmap,obs.todo-markers.main-mon.merge-with,obs.todo-markers.main-mon.set-todo,obs.todo-markers.main-mon.set-operations,obs.todo-markers.main-mon.relation,obs.todo-markers.main-mon.infix-fn-call,obs.todo-markers.main-mon.optional-params,obs.todo-markers.main-mon.parametric-polymorphism,obs.todo-markers.main-mon.asm-arm,obs.todo-markers.main-mon.list-comprehension,obs.todo-markers.main-mon.types-as-types,obs.todo-markers.main-mon.typed-expressions,obs.todo-markers.main-mon.todo-dotdot conf:high]
   connects-to -> `monadc.context.language` (every Main.mon TODO

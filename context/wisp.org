@@ -48,7 +48,7 @@
   pre-parse transform — it runs before the reader.
 
 [INF id:inf.wisp.info-ref from:obs.wisp.file conf:high]
-  User-facing Wisp documentation: [[file:../info/wisp.org][info/wisp.org]] covers indentation
+  User-facing Wisp documentation: [[file:info/wisp.org][info/wisp.org]] covers indentation
   rules, !-sugar, ?-sugar, metadata keywords, and mixing with S-expressions.
 
 * Architecture
@@ -778,17 +778,60 @@
   routing target for failures and future test/context links touching this area.
 
 #+CAPTION: Wisp Category Contract
-| Field | Contract |
-|-------+----------|
-| Owned phase | Indentation-sensitive Wisp surface syntax and translation into canonical Lisp-like forms. |
-| Inputs | Wisp indentation blocks, define/function sugar, for syntax, typed parameter/value surface forms. |
-| Outputs | Canonical forms consumed by the reader/desugar/inference pipeline. |
-| Invariants | Wisp convenience must preserve canonical semantics; Wisp-only sugar should not silently mutate Lisp-layer expectations. |
-| Test hooks | wisp fixtures, desugar goldens, reader interaction rows involving indentation and method/call layout. |
-| Failure symptoms | desugar-mismatch, expected fail compiled for malformed indentation, function define expansion bugs, for-loop translation drift. |
-| Context neighbors | reader, language, macro, infer, tests |
+| Field             | Contract                                                                                                                        |
+|-------------------+---------------------------------------------------------------------------------------------------------------------------------|
+| Owned phase       | Indentation-sensitive Wisp surface syntax and translation into canonical Lisp-like forms.                                       |
+| Inputs            | Wisp indentation blocks, define/function sugar, for syntax, typed parameter/value surface forms.                                |
+| Outputs           | Canonical forms consumed by the reader/desugar/inference pipeline.                                                              |
+| Invariants        | Wisp convenience must preserve canonical semantics; Wisp-only sugar should not silently mutate Lisp-layer expectations.         |
+| Test hooks        | wisp fixtures, desugar goldens, reader interaction rows involving indentation and method/call layout.                           |
+| Failure symptoms  | desugar-mismatch, expected fail compiled for malformed indentation, function define expansion bugs, for-loop translation drift. |
+| Context neighbors | reader, language, macro, infer, tests                                                                                           |
 
 [DEC id:dec.wisp.category-contract-owner date:2026-06-16 by:llm]
   Failures matching the symptoms above should start triage in this category, then
   follow the listed neighbors only when the local contract does not explain the
   issue.
+
+* Wisp Old Core Prelude Compatibility
+:PROPERTIES:
+:ID: monadc.context.wisp.old-core-prelude-compat
+:CUSTOM_ID: wisp-old-core-prelude-compat
+:CONTEXT_KIND: implementation-note
+:CONTEXT_DESCRIPTION: Wisp lowering constraints needed by old-core style prelude modules.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-17
+:CONTEXT_UPDATED: 2026-06-17
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: wisp.c
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.wisp.old-core-coll-signatures src:wisp.c conf:high]
+  Old-core style collection signatures such as [a], [Int], and [b] lower to
+  boxed Coll in Wisp-generated function headers. Runtime collection helpers
+  such as rt_coll_drop, rt_coll_empty, rt_coll_concat, and rt_coll_wrap operate
+  on RuntimeValue*, so lowering these signatures to raw Arr creates boxed/raw
+  ABI mismatches in recursive collection functions.
+
+[OBS id:obs.wisp.old-core-function-types src:wisp.c conf:high]
+  Function parameter and function return positions lower to Fn when Wisp emits
+  the canonical signature. This is required for higher-order definitions such
+  as predicate-based takeWhile/dropWhile/any?/all? and returned-function
+  definitions.
+
+[OBS id:obs.wisp.guard-head-tokenization src:wisp.c conf:high]
+  A Wisp pattern head followed by indented guard lines beginning with `|` must
+  be emitted raw as a pattern clause head. Otherwise the arity pre-scan can see
+  a later expression like `p x` and incorrectly expand an earlier head
+  `p [x|xs]` as a call expression.
+
+[OBS id:obs.wisp.guard-comment-preservation src:wisp.c conf:high]
+  Guard lines beginning with `|` are source syntax, not comments. The Wisp
+  token stream must preserve them so old-core pattern clauses with guards
+  compile.

@@ -3342,9 +3342,18 @@ Term *dep_toplevel(DepCtx *ctx, AST *ast, Term **out_type) {
         AST *val_ast  = ast->list.items[2];
 
         /* Support typed variable binding: (define [name :: Type] value)
-         * The bracket list has the name at position 0. */
+         * The bracket list has the name at position 0 and, when present,
+         * an explicit "::"-chain type annotation (e.g. Arr :: 16384 :: U8)
+         * in the remaining positions. Capture that annotation BEFORE we
+         * collapse name_ast down to the bare symbol, otherwise the type
+         * is silently discarded and the variable's type gets inferred
+         * from the value expression instead (e.g. [] becomes a zero-size
+         * array of an unconstrained element type, which later collapses
+         * to Int — breaking 'count' and any other Arr-specific codegen). */
+        Type *declared_type = NULL;
         if (name_ast->type == AST_LIST && name_ast->list.count >= 1 &&
             name_ast->list.items[0]->type == AST_SYMBOL) {
+            declared_type = parse_type_annotation(name_ast);
             name_ast = name_ast->list.items[0];
         }
 
@@ -3356,10 +3365,20 @@ Term *dep_toplevel(DepCtx *ctx, AST *ast, Term **out_type) {
         Term *val_term = dep_term_of_ast(ctx, val_ast);
         if (!val_term) return NULL;
 
-        Value *ty = dep_infer(ctx, val_term);
-        if (!ty || ctx->had_error) {
-            term_free(val_term);
-            return NULL;
+        Value *ty;
+        if (declared_type) {
+            Value *declared_val = val_embed(declared_type);
+            if (!dep_check(ctx, val_term, declared_val) || ctx->had_error) {
+                term_free(val_term);
+                return NULL;
+            }
+            ty = declared_val;
+        } else {
+            ty = dep_infer(ctx, val_term);
+            if (!ty || ctx->had_error) {
+                term_free(val_term);
+                return NULL;
+            }
         }
 
         /* Evaluate to resolve metas, then quote to get the fully elaborated core term */

@@ -1,0 +1,22 @@
+;;; Arrow.mon --- Arrow-style functional combinators
+
+;; Author: Laluxx
+;; Version: 0.1.0
+;; Keywords: Control.Arrow function combinator fanout
+
+;;; Commentary:
+
+;; Haskell Control.Arrow-inspired helpers. Monad names Arrow's fanout
+;; combinator && instead of Haskell's &&&.
+
+;;; Code:
+
+(module Control.Arrow
+  [&&])
+
+define && :: (Int -> Int) -> (Int -> Int) -> Int -> [Int]
+  f g x -> [(f x) (g x)]
+
+
+tests
+  assert-eq ((&& (+ 1) (* 2)) 3) [4 6] "Control.Arrow && fanout"

@@ -231,3 +231,31 @@
   connects-to -> `monadc.context.codegen-ops` (codegen_inline_asm is called from
   the codegen expression dispatch for AST_ASM nodes; the constraint wiring and
   LLVMGetInlineAsm call fit into the general codegen IR emission pipeline)
+
+* Category Contract
+:PROPERTIES:
+:ID: monadc.context.asm.category-contract
+:CUSTOM_ID: asm-category-contract
+:CONTEXT_KIND: contract
+:END:
+
+[DOC id:doc.asm.category-contract src:context/asm.org conf:high]
+  This section declares the category contract for =asm=. It is the
+  routing target for failures and future test/context links touching inline
+  assembly processing and LLVM integration.
+
+#+CAPTION: Inline Assembly Category Contract
+| Field | Contract |
+|-------+----------|
+| Owned phase | ASM string preprocessing, constraint parsing, register allocation for inline asm operands, LLVM inline asm CallInst generation. |
+| Inputs | AST_ASM nodes with asm string, constraint lists (input/output/clobber), operand expressions, naked flag. |
+| Outputs | LLVM inline assembly CallInst with constraint wiring, LLVMGetInlineAsm handle, side-effect marker for non-naked asm. |
+| Invariants | Register constraints parsed correctly from LLVM constraint syntax; input/output operands matched 1:1 to constraints; naked asm emits no prologue/epilogue; size suffixes propagate correctly for non-naked asm. |
+| Test hooks | Inline assembly codegen tests, constraint parsing tests, naked vs non-naked emission tests, LLVM IR verification for asm blocks. |
+| Failure symptoms | LLVM constraint violation at codegen, operand count mismatch, naked asm register conflict with compiler-generated prologue, size suffix inference failure. |
+| Context neighbors | codegen-ops, language, codegen, tests |
+
+[DEC id:dec.asm.category-contract-owner date:2026-06-18 by:big-pickle]
+  Failures matching the symptoms above should start triage in this category, then
+  follow the listed neighbors only when the local contract does not explain the
+  issue.

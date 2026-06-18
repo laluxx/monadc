@@ -30,6 +30,7 @@ def discover_modules() -> list[Path]:
     return [
         path
         for path in sorted(CORE_ROOT.rglob("*.mon"))
+        if path.is_file()
         if has_active_tests_block(path)
     ]
 

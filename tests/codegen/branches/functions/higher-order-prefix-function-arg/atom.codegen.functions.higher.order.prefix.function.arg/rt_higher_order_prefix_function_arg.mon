@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.rt-higher-order-prefix-function-arg
+;; TEST-TIER: regression
+;; TEST-STATUS: core-regression-2026-06-17
+;; TEST-CODEGEN-ATOM: atom.codegen.functions.higher.order.prefix.function.arg
+;; TEST-QUALITY: core-regression
+;; TEST-SUBSET: higher-order-prefix
+;; TEST-CATEGORY: functions
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus, monadc.context.core-libs.coll
+;; TEST-PURPOSE: A known higher-order function call keeps a function argument in prefix position.
+;; TEST-ATOM: (apply2 + 4 5) compiles as a higher-order call, not an infix expression.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: reader higher-order function argument parsing
+;; TEST-USES-ATOM: atom.codegen.functions.higher.order.prefix.function.arg
+;; TEST-MENU: branches/functions/higher-order-prefix-function-arg/atom.codegen.functions.higher.order.prefix.function.arg
+;; TEST-MENU-PATH: codegen/branches/functions/higher-order-prefix-function-arg/atom.codegen.functions.higher.order.prefix.function.arg
+;; TEST-ATOM-LEAF: atom.codegen.functions.higher.order.prefix.function.arg
+;; TEST-CLI-TARGET: codegen branches functions higher-order-prefix-function-arg
+
+module Main
+
+define apply2 :: (Int -> Int -> Int) -> Int -> Int -> Int
+  f x y -> (f x y)
+
+show (apply2 + 4 5)

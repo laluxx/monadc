@@ -164,14 +164,14 @@
   downstream type errors.
 
 [INF id:inf.language.info-pages from:monadc.context.language.file-metadata conf:high]
-  User-facing language reference pages live in [[file:../info/index.org][info/]]. They cover
+  User-facing language reference pages live in [[file:info/index.org][info/]]. They cover
   the language from the user's perspective, while this file covers compiler
   internals. See:
-  - [[file:../info/intro.org][info/intro.org]] — language intro and philosophy
-  - [[file:../info/syntax.org][info/syntax.org]] — full syntax reference
-  - [[file:../info/types.org][info/types.org]] — type system reference
-  - [[file:../info/core.org][info/core.org]] — built-in functions
-  - [[file:../info/tutorial.org][info/tutorial.org]] — step-by-step tutorial
+  - [[file:info/intro.org][info/intro.org]] — language intro and philosophy
+  - [[file:info/syntax.org][info/syntax.org]] — full syntax reference
+  - [[file:info/types.org][info/types.org]] — type system reference
+  - [[file:info/core.org][info/core.org]] — built-in functions
+  - [[file:info/tutorial.org][info/tutorial.org]] — step-by-step tutorial
 
 * Codegen Dispatch Architecture
 :PROPERTIES:
@@ -379,7 +379,7 @@
   arithmetic/logical instructions with placeholder destinations are reordered
   for AT&T syntax.
 
-[OBS id:obs.language.inline-asm-tests src:tests/codegen/asm conf:high]
+[OBS id:obs.language.inline-asm-tests src:tests/codegen/branches/ffi-asm/inline-asm/ conf:high]
   =tests/codegen/asm= contains 60 Wisp-style function-body asm fixtures. They
   cover syscall-shaped String operands, Int placeholder arithmetic, immediate
   escaping, multi-instruction splitting, unary inc/dec/neg/not, shifts and
@@ -389,7 +389,7 @@
   generated top-level asm fixtures were replaced because they did not exercise
   the supported backend path.
 
-[OBS id:obs.language.inline-asm-pointer-gap src:tests/codegen/asm/asm-syscall-write-string.mon conf:medium]
+[OBS id:obs.language.inline-asm-pointer-gap src:tests/codegen/branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.asm.syscall.write.string/asm-syscall-write-string.mon conf:medium]
   Superseded by =obs.language.inline-asm-pointer-sugar-codegen=. The original
   gap was that the syscall example wanted =*U8= for buffers but codegen rejected
   pointer-sugar parameter types.
@@ -801,12 +801,12 @@
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.language.heap-array-runtime-codegen-fixture src:tests/codegen/rt_heap_array_runtime.mon conf:high]
+[OBS id:obs.language.heap-array-runtime-codegen-fixture src:tests/codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.heap.array.runtime/rt_heap_array_runtime.mon conf:high]
   =tests/codegen/rt_heap_array_runtime.mon= is the focused runtime-codegen
   fixture for heap array value operations. It covers =show=, =count=,
   array-as-function indexing, =head=, and =tail= on =~[1 2 3]=.
 
-[OBS id:obs.language.heap-array-for-codegen-fixture src:tests/codegen/rt_heap_array_for.mon conf:high]
+[OBS id:obs.language.heap-array-for-codegen-fixture src:tests/codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.heap.array.for/rt_heap_array_for.mon conf:high]
   =tests/codegen/rt_heap_array_for.mon= is the focused runtime-codegen fixture
   for Wisp =for i -> heap= over a heap array. The loop exercises the same
   =count= and array-as-function indexing path used by collection iteration.
@@ -829,21 +829,21 @@
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.language.path-literal-direct-codegen-fixture src:tests/codegen/rt_path_literal_value.mon conf:high]
+[OBS id:obs.language.path-literal-direct-codegen-fixture src:tests/codegen/branches/values/paths/atom.codegen.00.values.paths.rt.path.literal.value/rt_path_literal_value.mon conf:high]
   =tests/codegen/rt_path_literal_value.mon= covers direct definition and =show= of a parsed Unix path literal as a =Path= value.
 
-[OBS id:obs.language.path-literal-quoted-codegen-fixture src:tests/codegen/rt_path_literal_quote_value.mon conf:high]
+[OBS id:obs.language.path-literal-quoted-codegen-fixture src:tests/codegen/branches/reflection-quote/quote-symbols/atom.codegen.60.reflection.quote.quote.symbols.rt.path.literal.quote.value/rt_path_literal_quote_value.mon conf:high]
   =tests/codegen/rt_path_literal_quote_value.mon= covers a path literal nested under =quote= so AST-to-runtime reflection preserves valid path syntax.
 
-[OBS id:obs.language.path-literal-array-codegen-fixture src:tests/codegen/rt_path_literal_array_value.mon conf:high]
+[OBS id:obs.language.path-literal-array-codegen-fixture src:tests/codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.path.literal.array.value/rt_path_literal_array_value.mon conf:high]
   =tests/codegen/rt_path_literal_array_value.mon= covers a path literal nested inside an array literal so aggregate inference/codegen preserve =TYPE_PATH= elements.
 
-[OBS id:obs.language.path-literal-value-goldens src:tests/codegen/rt_path_literal_value.json,tests/codegen/rt_path_literal_quote_value.json,tests/codegen/rt_path_literal_array_value.json conf:high]
+[OBS id:obs.language.path-literal-value-goldens src:tests/codegen/branches/values/paths/atom.codegen.00.values.paths.rt.path.literal.value/rt_path_literal_value.json,tests/codegen/branches/reflection-quote/quote-symbols/atom.codegen.60.reflection.quote.quote.symbols.rt.path.literal.quote.value/rt_path_literal_quote_value.json,tests/codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.path.literal.array.value/rt_path_literal_array_value.json conf:high]
   Path literal fixtures assert both layers: =--emit-json= keeps the syntactic
   =AST_PATH= shape, while normal compilation accepts valid path tokens as
   =Path= values. This keeps syntax recognition and value-level typing aligned.
 
-[OBS id:obs.language.heap-array-codegen-goldens src:tests/codegen/rt_heap_array_runtime.json,tests/codegen/rt_heap_array_runtime.stdout conf:high]
+[OBS id:obs.language.heap-array-codegen-goldens src:tests/codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.heap.array.runtime/rt_heap_array_runtime.json,tests/codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.heap.array.runtime/rt_heap_array_runtime.stdout conf:high]
   Heap array codegen coverage now checks the AST sidecar before the runtime
   stdout golden. This links =arr_is_heap= preservation to the runtime-sized array
   operations =show=, =count=, indexing, =head=, and =tail=.
@@ -872,7 +872,7 @@
   so =(show (if True "yes" "no"))= prints =yes= rather than handing a raw C
   string pointer to the opaque RuntimeValue printer and producing blank output.
 
-[OBS id:obs.language.control-goldens-cover-string-if src:tests/codegen/rt_control_all.mon conf:medium]
+[OBS id:obs.language.control-goldens-cover-string-if src:tests/codegen/branches/control-flow/control-core/atom.codegen.30.control.flow.control.core.rt.control.all/rt_control_all.mon conf:medium]
   =tests/codegen/rt_control_all.mon= and =tests/codegen/rt_control_comp.mon=
   intentionally include =if= expressions whose then/else arms are both strings.
   Their stdout goldens start with =yes= and =no= to catch regressions in the
@@ -884,7 +884,7 @@
   effect, e.g. =(unless False (show "executed"))=, rather than pretending that
   =(show (unless False "executed"))= returns the body string.
 
-[OBS id:obs.language.adt-show-golden-must-not-mask-pointer src:tests/codegen/rt_data_single_constructor.stdout conf:high]
+[OBS id:obs.language.adt-show-golden-must-not-mask-pointer src:tests/codegen/branches/data-layout/adt-constructors/atom.codegen.50.data.layout.adt.constructors.rt.data.single.constructor/rt_data_single_constructor.stdout conf:high]
   The single-constructor ADT stdout golden must remain =(Point 3.0 4.0)=. A raw
   floating pointer-looking value is a codegen/display regression and must not be
   accepted as an expected output update.

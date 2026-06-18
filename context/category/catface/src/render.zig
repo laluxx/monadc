@@ -399,7 +399,7 @@ fn drawIdentity(t: *terminal.Tty, r: terminal.Rect, y0: u16, ctx: *const model.C
     if (y >= r.bottom()) return y;
     const bx = drawKindBubble(t, r.x, y, obj, theme.panel, theme);
     if (bx + 2 < r.right()) t.textClipped(bx + 2, y, r.right() - bx - 2, model.Context.kindName(obj.kind), .{ .fg = theme.mute, .bg = theme.panel, .bold = true });
-    if (r.w > 58) t.textClipped(r.right() - 56, y, 55, "Org: wheel/TAB/n/p · tree: h/j/k/l", .{ .fg = theme.mute.scale(78, 100), .bg = theme.panel });
+    if (r.w > 58) t.textClipped(r.right() - 56, y, 55, "Org: / C-s isearch · n/p/TAB targets · tree h/j/k/l", .{ .fg = theme.mute.scale(78, 100), .bg = theme.panel });
     y += 1;
 
     y = drawFocusChain(t, r, y, ctx, focus_stack, current_idx, theme);
@@ -557,7 +557,7 @@ fn drawPrimaryOrgContent(t: *terminal.Tty, r: terminal.Rect, y0: u16, obj: model
     var y = y0;
     const body = objectDocumentBody(obj);
     if (body.len == 0 or y >= r.bottom()) return y;
-    y = drawSection(t, r, y, "ORG CONTENT", objectBadgeColor(obj, theme), theme);
+    y = drawSection(t, r, y, "RICH ORG PREVIEW", objectBadgeColor(obj, theme), theme);
     if (y >= r.bottom()) return y;
     return drawRichDocumentLines(t, r, y, body, hover, scroll, cursor_line, theme);
 }
@@ -605,14 +605,14 @@ fn drawInfoObjectText(t: *terminal.Tty, r: terminal.Rect, y0: u16, ctx: *const m
 
 fn drawFunctionObjectText(t: *terminal.Tty, r: terminal.Rect, y0: u16, ctx: *const model.Context, sidx_opt: ?*const search_index.SearchIndex, obj: model.Object, theme: palette.Theme, hover: ?Point) u16 {
     var y = y0;
-    y = drawSection(t, r, y, "FUNCTION TYPE", theme.function_color, theme);
+    y = drawSection(t, r, y, "LAMBDA PREVIEW", theme.function_color, theme);
     y = drawSignalRow(t, r, y, ctx, sidx_opt, obj, theme);
     y = drawKV(t, r, y, "name", if (obj.title.len != 0) obj.title else obj.id, theme);
     y = drawKV(t, r, y, "type", functionSignatureOnly(obj), theme);
     y = drawKV(t, r, y, "search", functionTypeQueryHint(obj), theme);
     y = drawActionKV(t, r, y, "where", obj.path, theme, hover);
     y = drawKV(t, r, y, "tags", obj.tags, theme);
-    y = drawPreviewBlock(t, r, y, obj, theme, hover);
+    y = drawFunctionSourceBlock(t, r, y, obj, theme);
     return y;
 }
 
@@ -861,6 +861,21 @@ fn drawActionKV(t: *terminal.Tty, r: terminal.Rect, y0: u16, key: []const u8, va
     return y;
 }
 
+fn drawFunctionSourceBlock(t: *terminal.Tty, r: terminal.Rect, y0: u16, obj: model.Object, theme: palette.Theme) u16 {
+    var y = y0;
+    const src = std.mem.trim(u8, obj.preview, " \t\r\n");
+    if (src.len == 0 or y + 2 >= r.bottom()) return y;
+    y += 1;
+    y = drawSection(t, r, y, "FUNCTION SOURCE", theme.function_color, theme);
+    var it = std.mem.splitScalar(u8, src, '\n');
+    while (it.next()) |line| {
+        if (y >= r.bottom()) break;
+        drawOrgCodeLine(t, r, y, line, theme);
+        y += 1;
+    }
+    return y;
+}
+
 fn drawPreviewBlock(t: *terminal.Tty, r: terminal.Rect, y0: u16, obj: model.Object, theme: palette.Theme, hover: ?Point) u16 {
     var y = y0;
     const preview = std.mem.trim(u8, obj.preview, " \t\r\n");
@@ -918,7 +933,7 @@ fn skipOrgRenderLine(trimmed: []const u8, mode: *OrgLineMode) bool {
         return true;
     }
     if (isDrawerStart(trimmed)) { mode.* = .drawer; return true; }
-    if (isOrgMetadataLine(trimmed)) return true;
+    if (isOrgMetadataLine(trimmed) or isOrgMetadataDrawerLine(trimmed)) return true;
     if (isBeginSrc(trimmed)) { mode.* = .source; return true; }
     if (isBeginExample(trimmed)) { mode.* = .example; return true; }
     if (isBeginQuote(trimmed)) { mode.* = .quote; return true; }
@@ -984,29 +999,38 @@ fn isOrgTableLine(line: []const u8) bool {
 fn drawOrgTableLine(t: *terminal.Tty, r: terminal.Rect, y: u16, line: []const u8, theme: palette.Theme) void {
     if (y >= r.bottom()) return;
     const trimmed = std.mem.trim(u8, line, " \t");
-    if (trimmed.len >= 2 and trimmed[1] == '-') {
-        t.fill(.{ .x = r.x, .y = y, .w = r.w, .h = 1 }, '─', .{ .fg = theme.edge, .bg = theme.panel });
+    const bg = theme.panel_alt.scale(92, 100);
+    if (isOrgTableRule(trimmed)) {
+        t.fill(.{ .x = r.x, .y = y, .w = r.w, .h = 1 }, '─', .{ .fg = theme.edge, .bg = bg });
         return;
     }
-    t.fill(.{ .x = r.x, .y = y, .w = r.w, .h = 1 }, ' ', .{ .fg = theme.ink, .bg = theme.panel_alt });
+    t.fill(.{ .x = r.x, .y = y, .w = r.w, .h = 1 }, ' ', .{ .fg = theme.ink, .bg = bg });
     var x = r.x;
     var cells = std.mem.splitScalar(u8, trimmed, '|');
     var cell_no: usize = 0;
     while (cells.next()) |cell_raw| {
-        if (cell_no == 0 and cell_raw.len == 0) { cell_no += 1; continue; }
-        if (x >= r.right()) break;
-        t.text(x, y, "│", .{ .fg = theme.edge, .bg = theme.panel_alt });
-        x += 1;
         const cell = std.mem.trim(u8, cell_raw, " \t");
-        const remain = if (r.right() > x) r.right() - x else 0;
-        if (remain == 0) break;
-        const width: u16 = @intCast(@min(@max(cell.len + 2, 8), @as(usize, remain)));
-        const is_headerish = cell_no == 1 or std.mem.indexOf(u8, cell, "TEST") != null or std.mem.indexOf(u8, cell, "key") != null;
-        t.textClipped(x + 1, y, if (width > 1) width - 1 else width, cell, .{ .fg = if (is_headerish) theme.accent2 else theme.ink, .bg = theme.panel_alt, .bold = is_headerish });
+        if (cell_no == 0 and cell.len == 0) { cell_no += 1; continue; }
+        if (cell.len == 0 and x + 1 >= r.right()) break;
+        if (x < r.right()) { t.text(x, y, "│", .{ .fg = theme.edge, .bg = bg }); x += 1; }
+        if (x >= r.right()) break;
+        const remain = r.right() - x;
+        const width: u16 = @intCast(@min(@max(cell.len + 2, 6), @as(usize, remain)));
+        const is_headerish = cell_no <= 1 or startsFold(cell, "key") or startsFold(cell, "form") or startsFold(cell, "meaning");
+        if (width > 1) t.textClipped(x + 1, y, width - 1, cell, .{ .fg = if (is_headerish) theme.accent2 else theme.ink, .bg = bg, .bold = is_headerish });
         x += width;
         cell_no += 1;
     }
-    if (x < r.right()) t.text(x, y, "│", .{ .fg = theme.edge, .bg = theme.panel_alt });
+    if (x < r.right()) t.text(x, y, "│", .{ .fg = theme.edge, .bg = bg });
+}
+
+fn isOrgTableRule(line: []const u8) bool {
+    if (line.len < 2 or line[0] != '|') return false;
+    for (line[1..]) |c| {
+        if (c == '|' or c == '-' or c == '+' or c == ':' or std.ascii.isWhitespace(c)) continue;
+        return false;
+    }
+    return true;
 }
 
 fn drawOrgHeadingLine(t: *terminal.Tty, r: terminal.Rect, y: u16, line: []const u8, hover: ?Point, theme: palette.Theme) void {
@@ -1025,8 +1049,10 @@ fn drawOrgHeadingLine(t: *terminal.Tty, r: terminal.Rect, y: u16, line: []const 
         4 => "○",
         else => "·",
     };
-    t.textClipped(r.x, y, @min(@as(u16, 3), r.w), bullet, .{ .fg = color, .bg = theme.panel, .bold = true });
-    const text_x = r.x + @min(@as(u16, 3), r.w);
+    const indent: u16 = @intCast(@min(@as(usize, 24), if (level > 0) (level - 1) * 2 else 0));
+    const bx = r.x + @min(indent, r.w);
+    t.textClipped(bx, y, @min(@as(u16, 3), if (r.right() > bx) r.right() - bx else 0), bullet, .{ .fg = color, .bg = theme.panel, .bold = true });
+    const text_x = bx + @min(@as(u16, 3), if (r.right() > bx) r.right() - bx else 0);
     if (text_x >= r.right()) return;
     const remain_for_tags: u16 = r.right() - text_x;
     const tag_w: u16 = @intCast(@min(tags.len + 2, @as(usize, remain_for_tags)));
@@ -1171,52 +1197,74 @@ fn drawOrgInlineLine(t: *terminal.Tty, r: terminal.Rect, y: u16, line_raw: []con
     const line = if (tag_start) |ts| std.mem.trimRight(u8, line_raw[0..ts], " \t") else line_raw;
     const tags = if (tag_start) |ts| line_raw[ts..] else "";
     if (priorityColor(line, theme)) |pc| {
-        t.textClipped(r.x, y, r.w, line, .{ .fg = pc, .bg = theme.panel, .bold = true });
+        _ = drawInlineStyled(t, r, y, line, hover, theme, .{ .fg = pc, .bg = theme.panel, .bold = true });
         if (tags.len != 0 and r.w > line.len + 2) _ = drawOrgTagButtons(t, r.x + @as(u16, @intCast(@min(line.len + 2, @as(usize, r.w)))), y, r.right(), tags, theme, hover);
         return;
     }
+    const x = drawInlineStyled(t, r, y, line, hover, theme, .{ .fg = theme.ink, .bg = theme.panel });
+    if (tags.len != 0 and x + 1 < r.right()) _ = drawOrgTagButtons(t, x + 1, y, r.right(), tags, theme, hover);
+}
+
+fn drawInlineStyled(t: *terminal.Tty, r: terminal.Rect, y: u16, line: []const u8, hover: ?Point, theme: palette.Theme, base_style: palette.Style) u16 {
     var x = r.x;
     var pos: usize = 0;
     while (pos < line.len and x < r.right()) {
         const next_link = std.mem.indexOfPos(u8, line, pos, "[[");
         const next_file = std.mem.indexOfPos(u8, line, pos, "file:");
         const next_id = std.mem.indexOfPos(u8, line, pos, "id:");
-        const next = minOptional(next_link, minOptional(next_file, next_id));
+        const next_eq = indexOfScalarFrom(line, pos, '=');
+        const next_tick = indexOfScalarFrom(line, pos, '`');
+        const next = minOptional(minOptional(next_link, next_file), minOptional(next_id, minOptional(next_eq, next_tick)));
         if (next) |open| {
             if (open > pos) {
                 const before = line[pos..open];
-                t.textClipped(x, y, r.right() - x, before, .{ .fg = theme.ink, .bg = theme.panel });
+                t.textClipped(x, y, r.right() - x, before, base_style);
                 x += @intCast(@min(before.len, @as(usize, r.right() - x)));
             }
             if (x >= r.right()) break;
             if (std.mem.startsWith(u8, line[open..], "[[")) {
-                if (std.mem.indexOfPos(u8, line, open + 2, "]]")) |close| {
+                if (std.mem.indexOfPos(u8, line, open + 2, "]]") ) |close| {
                     const raw = line[open..close + 2];
                     const label = orgLinkLabel(raw);
                     const w: u16 = @intCast(@min(label.len, @as(usize, r.right() - x)));
                     const hovered = if (hover) |pnt| pnt.y == y and pnt.x >= x and pnt.x < x + w else false;
-                    const bg = if (hovered) theme.panel_alt.scale(120, 100) else theme.panel;
+                    const bg = if (hovered) theme.panel_alt.scale(128, 100) else theme.panel;
                     t.textClipped(x, y, w, label, .{ .fg = theme.info, .bg = bg, .underline = hovered, .bold = true });
                     x += w;
                     pos = close + 2;
                     continue;
                 }
             }
-            const prefix = if (std.mem.startsWith(u8, line[open..], "file:")) "file:" else "id:";
-            const target = wordAfterPrefix(line[open..], prefix);
-            const w: u16 = @intCast(@min(target.len, @as(usize, r.right() - x)));
-            const hovered = if (hover) |pnt| pnt.y == y and pnt.x >= x and pnt.x < x + w else false;
-            const bg = if (hovered) theme.panel_alt.scale(120, 100) else theme.panel;
-            t.textClipped(x, y, w, target, .{ .fg = theme.info, .bg = bg, .underline = hovered, .bold = true });
-            x += w;
-            pos = open + target.len;
+            if (line[open] == '=' or line[open] == '`') {
+                const delim = line[open];
+                if (indexOfScalarFrom(line, open + 1, delim)) |close| {
+                    const code = line[open + 1 .. close];
+                    const w: u16 = @intCast(@min(code.len, @as(usize, r.right() - x)));
+                    t.textClipped(x, y, w, code, .{ .fg = theme.accent2, .bg = theme.bg.scale(118, 100), .bold = true });
+                    x += w;
+                    pos = close + 1;
+                    continue;
+                }
+            }
+            const prefix = if (std.mem.startsWith(u8, line[open..], "file:")) "file:" else if (std.mem.startsWith(u8, line[open..], "id:")) "id:" else "";
+            if (prefix.len != 0) {
+                const target = wordAfterPrefix(line[open..], prefix);
+                const w: u16 = @intCast(@min(target.len, @as(usize, r.right() - x)));
+                const hovered = if (hover) |pnt| pnt.y == y and pnt.x >= x and pnt.x < x + w else false;
+                const bg = if (hovered) theme.panel_alt.scale(128, 100) else theme.panel;
+                t.textClipped(x, y, w, target, .{ .fg = theme.info, .bg = bg, .underline = hovered, .bold = true });
+                x += w;
+                pos = open + target.len;
+                continue;
+            }
+            pos = open + 1;
             continue;
         }
-        t.textClipped(x, y, r.right() - x, line[pos..], .{ .fg = theme.ink, .bg = theme.panel });
+        t.textClipped(x, y, r.right() - x, line[pos..], base_style);
         x += @intCast(@min(line.len - pos, @as(usize, r.right() - x)));
         break;
     }
-    if (tags.len != 0 and x + 1 < r.right()) _ = drawOrgTagButtons(t, x + 1, y, r.right(), tags, theme, hover);
+    return x;
 }
 
 fn drawOrgTagButtons(t: *terminal.Tty, x0: u16, y: u16, right: u16, tags: []const u8, theme: palette.Theme, hover: ?Point) u16 {
@@ -1261,6 +1309,12 @@ fn priorityColor(line: []const u8, theme: palette.Theme) ?palette.Color {
     if (std.mem.indexOf(u8, line, "[#B]") != null) return theme.warn;
     if (std.mem.indexOf(u8, line, "[#C]") != null) return theme.accent2;
     if (std.mem.indexOf(u8, line, "[#D]") != null) return theme.info;
+    return null;
+}
+
+fn indexOfScalarFrom(text_value: []const u8, start: usize, needle: u8) ?usize {
+    if (start >= text_value.len) return null;
+    if (std.mem.indexOfScalar(u8, text_value[start..], needle)) |rel| return start + rel;
     return null;
 }
 
@@ -1400,6 +1454,44 @@ pub fn documentBodyLineCount(obj: model.Object) usize {
         n += 1;
     }
     return n;
+}
+
+pub fn findDocumentSearchLine(obj: model.Object, needle: []const u8, current: usize, dir: isize) ?usize {
+    const body = objectDocumentBody(obj);
+    var best_after: ?usize = null;
+    var best_before: ?usize = null;
+    var first: ?usize = null;
+    var last: ?usize = null;
+    var line_no: usize = 0;
+    var mode: OrgLineMode = .normal;
+    var it = std.mem.splitScalar(u8, body, '\n');
+    while (it.next()) |line| {
+        const trimmed = std.mem.trim(u8, line, " \t\r\n");
+        if (skipOrgRenderLine(trimmed, &mode)) continue;
+        if (containsFold(line, needle)) {
+            if (first == null) first = line_no;
+            last = line_no;
+            if (line_no > current and best_after == null) best_after = line_no;
+            if (line_no < current) best_before = line_no;
+        }
+        line_no += 1;
+    }
+    if (dir >= 0) return best_after orelse first;
+    return best_before orelse last;
+}
+
+fn containsFold(haystack: []const u8, needle: []const u8) bool {
+    if (needle.len == 0) return true;
+    if (haystack.len < needle.len) return false;
+    var i: usize = 0;
+    while (i + needle.len <= haystack.len) : (i += 1) {
+        var ok = true;
+        for (needle, 0..) |c, j| {
+            if (std.ascii.toLower(haystack[i + j]) != std.ascii.toLower(c)) { ok = false; break; }
+        }
+        if (ok) return true;
+    }
+    return false;
 }
 
 pub fn nextDocumentTargetLine(obj: model.Object, current: usize, dir: isize) ?usize {
@@ -1579,7 +1671,7 @@ fn stripLeadingOrgMetadata(doc: []const u8) []const u8 {
             if (isDrawerEnd(line)) in_properties = false;
             continue;
         }
-        if (isOrgMetadataLine(line)) { saw_metadata = true; pos = next_pos; continue; }
+            if (isOrgMetadataLine(line) or isOrgMetadataDrawerLine(line)) { saw_metadata = true; pos = next_pos; continue; }
         break;
     }
     const body = std.mem.trim(u8, doc[pos..], " \t\r\n");
@@ -1590,6 +1682,13 @@ fn isOrgMetadataLine(line: []const u8) bool {
     if (!std.mem.startsWith(u8, line, "#+")) return false;
     if (isBeginSrc(line) or isBeginExample(line) or isBeginQuote(line) or isEndBlock(line)) return false;
     return true;
+}
+
+fn isOrgMetadataDrawerLine(line: []const u8) bool {
+    if (line.len == 0) return false;
+    if (std.mem.eql(u8, line, ":PROPERTIES:") or std.mem.eql(u8, line, ":LOGBOOK:") or std.mem.eql(u8, line, ":END:")) return true;
+    if (line[0] == ':' and std.mem.indexOfPos(u8, line, 1, ":") != null) return true;
+    return false;
 }
 
 fn objectDisplayText(obj: model.Object) []const u8 {
@@ -2097,6 +2196,24 @@ fn tutorialLineStyle(tutorial_text: []const u8, theme: palette.Theme, bg: palett
 }
 
 
+
+pub fn drawIsearchPrompt(t: *terminal.Tty, lay: Layout, filter: []const u8, cursor: usize, cursor_visible: bool, theme: palette.Theme) void {
+    const h: u16 = 1;
+    const y = if (lay.footer.y > h) lay.footer.y - h else lay.footer.y;
+    const r = terminal.Rect{ .x = 0, .y = y, .w = lay.footer.w, .h = h };
+    t.fill(r, ' ', .{ .fg = theme.ink, .bg = theme.bg.scale(120, 100) });
+    const prompt = "isearch Org+tree: ";
+    t.textClipped(2, y, @min(@as(u16, prompt.len), r.w), prompt, .{ .fg = theme.accent2, .bg = theme.bg.scale(120, 100), .bold = true });
+    const qx: u16 = @min(@as(u16, 2 + prompt.len), r.w);
+    const qw: u16 = if (r.right() > qx + 2) r.right() - qx - 2 else 0;
+    t.textClipped(qx, y, qw, filter, .{ .fg = theme.ink, .bg = theme.bg.scale(120, 100), .bold = true });
+    if (cursor_visible and qw > 0) {
+        const cx: u16 = @intCast(@min(@as(usize, qx + qw - 1), @as(usize, qx) + cursor));
+        const cp: u21 = if (cursor < filter.len) @as(u21, filter[cursor]) else ' ';
+        t.set(cx, y, cp, .{ .fg = theme.bg, .bg = theme.ink, .bold = true });
+    }
+}
+
 pub fn drawCommandPalette(t: *terminal.Tty, lay: Layout, ctx: *const model.Context, filter: []const u8, cursor: usize, matches: []const command_palette.Match, selected: usize, cursor_visible: bool, theme: palette.Theme) void {
     const rows: usize = 10;
     const h: u16 = @min(@as(u16, 12), lay.footer.y);
@@ -2422,6 +2539,12 @@ test "org headings and trailing tags are navigable buttons" {
     const body = objectDocumentBody(obj);
     try std.testing.expect(std.mem.indexOf(u8, body, "#+TITLE") == null);
     try std.testing.expect(firstOrgTag("* TODO Heading :reader:wisp:").?.len > 0);
+}
+
+test "org body skips metadata anywhere and inline markup hides delimiters" {
+    const obj = model.Object{ .id = "doc", .kind = .info, .title = "Doc", .preview = "#+TITLE: Doc\n* H\n#+FILETAGS: :bad:\n:ID: hidden\nBody =code= and `tick`" };
+    try std.testing.expect(documentBodyLineCount(obj) == 2);
+    try std.testing.expect(findDocumentSearchLine(obj, "code", 0, 1) != null);
 }
 
 test "org line action maps heading and tag to semantic actions" {

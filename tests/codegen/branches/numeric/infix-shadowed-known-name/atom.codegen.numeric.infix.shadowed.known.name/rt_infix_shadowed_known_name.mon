@@ -1,0 +1,31 @@
+;; TEST-ID: tests.codegen.rt-infix-shadowed-known-name
+;; TEST-TIER: regression
+;; TEST-STATUS: core-regression-2026-06-17
+;; TEST-CODEGEN-ATOM: atom.codegen.numeric.infix.shadowed.known.name
+;; TEST-QUALITY: core-regression
+;; TEST-SUBSET: infix-shadowing
+;; TEST-CATEGORY: numeric
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus, monadc.context.core-libs.math
+;; TEST-PURPOSE: Local variables shadowing known function names still parse as infix operands.
+;; TEST-ATOM: use (sum + term) 0 compiles when a parameter shadows a known top-level function.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: reader infix shadowing
+;; TEST-USES-ATOM: atom.codegen.numeric.infix.shadowed.known.name
+;; TEST-MENU: branches/numeric/infix-shadowed-known-name/atom.codegen.numeric.infix.shadowed.known.name
+;; TEST-MENU-PATH: codegen/branches/numeric/infix-shadowed-known-name/atom.codegen.numeric.infix.shadowed.known.name
+;; TEST-ATOM-LEAF: atom.codegen.numeric.infix.shadowed.known.name
+;; TEST-CLI-TARGET: codegen branches numeric infix-shadowed-known-name
+
+module Main
+
+define sum :: Int -> Int
+  x -> x
+
+define use :: Int -> Int -> Int
+  x _ -> x
+
+define add-shadow :: Int -> Int -> Int
+  sum term -> use (sum + term) 0
+
+show (add-shadow 4 5)

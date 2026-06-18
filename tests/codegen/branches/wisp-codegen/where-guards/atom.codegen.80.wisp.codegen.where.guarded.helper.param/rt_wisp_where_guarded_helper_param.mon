@@ -1,0 +1,27 @@
+;; TEST-ID: tests.codegen.rt-wisp-where-guarded-helper-param
+;; TEST-TIER: regression
+;; TEST-STATUS: core-regression-2026-06-17
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.where.guarded.helper.param
+;; TEST-QUALITY: core-regression
+;; TEST-SUBSET: where-guards
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.wisp.file-metadata, monadc.context.core-libs.math
+;; TEST-PURPOSE: Wisp where helpers with guarded clauses bind their explicit parameter.
+;; TEST-ATOM: where go i | i = x -> i can reference i in both guard and body.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: wisp.c where guarded helper parameter lowering
+;; TEST-USES-ATOM: atom.codegen.80.wisp.codegen.where.guarded.helper.param
+;; TEST-MENU: branches/wisp-codegen/where-guards/atom.codegen.80.wisp.codegen.where.guarded.helper.param
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/where-guards/atom.codegen.80.wisp.codegen.where.guarded.helper.param
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.where.guarded.helper.param
+;; TEST-CLI-TARGET: codegen branches wisp-codegen where-guards guarded-helper-param
+module Main
+
+define same :: Int -> Int
+  x -> go x
+  where
+    go i | i = x     -> i
+         | otherwise -> 0
+
+show (same 7)

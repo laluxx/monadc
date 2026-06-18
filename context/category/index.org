@@ -58,7 +58,7 @@
 | [[file:information-theory.org][information-theory.org]]     | Entropy, information gain, coverage, surprise, and search scoring.      |
 | [[file:interfaces.org][interfaces.org]]             | CLI/search/reporting interfaces exposed by scripts.                     |
 | [[file:catface.org][catface.org]]                | Zig live terminal interface and category explorer.                      |
-| [[file:catface/README.org][catface/README.org]]         | Zig package build/run guide.                                            |
+| [[file:catface/README.md][catface/README.md]]         | Zig package build/run guide.                                            |
 | [[file:schema.json][schema.json]]                | Machine-readable object and morphism vocabulary.                        |
 | [[file:objects.tsv][objects.tsv]]                | Canonical object kinds and invariants.                                  |
 | [[file:morphisms.tsv][morphisms.tsv]]              | Canonical generating morphism kinds and typing rules.                   |

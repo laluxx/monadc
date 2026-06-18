@@ -1,0 +1,9 @@
+;;; PreludeProbe.mon --- automatic prelude import probe
+
+;;; Code:
+
+(module PreludeProbe [])
+
+tests
+  assert-eq (map (* 2) [1 2 3]) [2 4 6] "prelude Coll map is automatic"
+  assert-eq (id 42) 42 "prelude Function id is automatic"

@@ -70,16 +70,16 @@
 :END:
 
 #+CAPTION: Recommended entry points
-| Need | Open |
-|------+------|
-| Root portal | [[file:context.org][context.org]] |
-| Formal schema and notation | [[file:index.org][index.org]] |
-| Garden rules and pruning conventions | [[file:garden.org][garden.org]] |
-| Generated inventory and corpus health | [[file:inventory.org][inventory.org]] |
-| Quality gates and validation commands | [[file:quality.org][quality.org]] |
-| Test-suite contracts and tier policy | [[file:test-contracts.org][test-contracts.org]] |
-| Current bug agenda | [[file:debug-agenda.org][debug-agenda.org]] |
-| Source-file routing | [[file:navigation.org][navigation.org]] |
+| Need                                  | Open               |
+|---------------------------------------+--------------------|
+| Root portal                           | [[file:context.org][context.org]]        |
+| Formal schema and notation            | [[file:index.org][index.org]]          |
+| Garden rules and pruning conventions  | [[file:garden.org][garden.org]]         |
+| Generated inventory and corpus health | [[file:inventory.org][inventory.org]]      |
+| Quality gates and validation commands | [[file:quality.org][quality.org]]        |
+| Test-suite contracts and tier policy  | [[file:test-contracts.org][test-contracts.org]] |
+| Current bug agenda                    | [[file:debug-agenda.org][debug-agenda.org]]   |
+| Source-file routing                   | [[file:navigation.org][navigation.org]]     |
 
 * Operating Rule For Agents
 :PROPERTIES:

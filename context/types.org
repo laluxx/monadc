@@ -48,10 +48,10 @@ parsing, and layout offset computation. This is the central type description
 used by every compiler phase: reader, infer, codegen, and dep.
 
 [INF id:inf.types.info-ref from:obs.context.types.file conf:high]
-  User-facing type docs: [[file:../info/types.org][info/types.org]] (type system overview),
-  [[file:../info/data.org][info/data.org]] (algebraic data types),
-  [[file:../info/layouts.org][info/layouts.org]] (layout types),
-  [[file:../info/refinements.org][info/refinements.org]] (refinement types).
+  User-facing type docs: [[file:info/types.org][info/types.org]] (type system overview),
+  [[file:info/data.org][info/data.org]] (algebraic data types),
+  [[file:info/layouts.org][info/layouts.org]] (layout types),
+  [[file:info/refinements.org][info/refinements.org]] (refinement types).
 
 [INF id:inf.context.types.file-connect from:obs.context.types.file conf:high]
 connects-to ->

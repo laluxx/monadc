@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-12
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-17
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:nil num:nil
@@ -48,14 +48,16 @@ file in =context/*.org=:
 | =style=                               | [[file:style.org][context/style.org]]      | MonadC code styles      |
 | =commit=                              | [[file:commit-format.org][context/commit-format.org]] | Commit message format and conventions |
 | =dep=                                 | [[file:dep.org][context/dep.org]]          | Dependent type checker (ITT/NbE kernel)   |
-| =infer=                               | [[file:infer.org][context/infer.org]]        | HM type inference engine                  |
+| =infer=                             | [[file:infer.org][context/infer.org]]        | HM type inference engine                  |
+| =lsp=                               | [[file:lsp.org][context/lsp.org]]          | LSP 3.17 Language Server Protocol         |
 | =runtime=                             | [[file:runtime.org][context/runtime.org]]      | Runtime library (values, collections)     |
 | =codegen-ops=                         | [[file:codegen-ops.org][context/codegen-ops.org]]  | Codegen operation dispatch (83+ handlers) |
 | =ideas=                               | [[file:ideas.org][context/ideas.org]]        | Design ideas, feature proposals           |
 | =arena=                               | [[file:arena.org][context/arena.org]]        | Arena bump allocator                      |
 | =asm=                                 | [[file:asm.org][context/asm.org]]          | Inline assembly, register allocator       |
 | =buildsystem=                         | [[file:buildsystem.org][context/buildsystem.org]]  | Package build system                      |
-| =cli=                                 | [[file:cli.org][context/cli.org]]          | CLI argument parser                       |
+| =cli=                               | [[file:cli.org][context/cli.org]]          | CLI argument parser                       |
+| =completion=                        | [[file:completion.org][context/completion.org]]  | Tab completion, usage menus               |
 | =codegen=                             | [[file:codegen.org][context/codegen.org]]      | Codegen context struct, MonoCache         |
 | =env=                                 | [[file:env.org][context/env.org]]          | Symbol table, scopes, HM integration      |
 | =features=                            | [[file:features.org][context/features.org]]    | Platform feature detection                |
@@ -248,6 +250,19 @@ file in =context/*.org=:
 [DOC id:doc.navigation.round3-category-directory src:context/navigation.org conf:high]
   Category theory, taxonomy, type-system, and information-theory material now starts at [[file:category/index.org][category/index.org]].
 
+| ID prefix (monadc.context.category.<segment>) | File | Contents |
+|------------------------------------------------+------+----------|
+| =index=                                          | [[file:category/index.org][category/index.org]] | Portal, map, free-category model |
+| =math=                                           | [[file:category/mathematics.org][category/mathematics.org]] | Category-theoretic model, laws |
+| =taxonomy=                                       | [[file:category/taxonomy.org][category/taxonomy.org]] | Concept taxonomy / preorder |
+| =types= (category.types)                         | [[file:category/type-system.org][category/type-system.org]] | Context node and morphism type system |
+| =info= (category.info)                           | [[file:category/information-theory.org][category/information-theory.org]] | Entropy, coverage, search scoring |
+| =interfaces=                                     | [[file:category/interfaces.org][category/interfaces.org]] | Script CLI/search/reporting interfaces |
+| =query-language=                                 | [[file:category/query-language.org][category/query-language.org]] | Keyboard-native category query language |
+| =tui=                                            | [[file:category/tui.org][category/tui.org]] | Terminal interface contract |
+| =catface=                                        | [[file:category/catface.org][category/catface.org]] | Zig live TUI/CLI category explorer |
+| =catface.static-report=                          | [[file:category/catface-static-report.org][category/catface-static-report.org]] | Catface generated file inventory |
+
 * Live Category Tooling
 :PROPERTIES:
 :ID: monadc.context.navigation.live-category-tooling
@@ -262,3 +277,27 @@ file in =context/*.org=:
   Use [[file:category/query-language.org][query-language.org]] for the compact language and
   [[file:category/tui.org][tui.org]] for the interactive explorer.  The fastest CLI is
   [[file:category/scripts/catq.py][catq.py]].
+
+* Language Reference Zone (info/)
+:PROPERTIES:
+:ID: monadc.context.navigation.info-zone
+:CUSTOM_ID: navigation-info-zone
+:CONTEXT_KIND: navigation
+:CONTEXT_STATUS: active
+:SOURCE: context/navigation.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.navigation.info-zone src:context/navigation.org conf:high]
+  The =info/= directory holds user-facing language documentation with
+  =monadc.info.*= IDs. These are NOT compiler context records — they are
+  a separate documentation reference for Monad language users.
+
+| ID prefix | File | Contents |
+|-----------+------+----------|
+| =monadc.info.*= | [[file:info/index.org][info/index.org]] | Language reference portal (all =info/= topics) |
+| =monadc.info.index.*= | [[file:info/index.org][info/index.org]] | Reference index and quick-reference tables |
+| =monadc.info.intro.*= | [[file:info/intro.org][info/intro.org]] | Language introduction and overview |
+| =monadc.info.tutorial.*= | [[file:info/tutorial.org][info/tutorial.org]] | Step-by-step tutorial |
+| =monadc.info.syntax.*= | [[file:info/syntax.org][info/syntax.org]] | S-expression syntax and forms |
+| =monadc.info.types.*= | [[file:info/types.org][info/types.org]] | Type system overview |

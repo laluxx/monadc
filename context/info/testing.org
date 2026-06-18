@@ -1,0 +1,296 @@
+#+TITLE: Testing
+#+STARTUP: showeverything
+#+OPTIONS: toc:nil
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:testing:info:
+
+:PROPERTIES:
+:ID:       monadc.info.testing
+:CONTEXT:  monadc.context.tests-arch, monadc.context.tests, monadc.context.language
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:show.org][Show]] · [[file:equality.org][Equality]] · [[file:fuzzing.org][Fuzzing]] · [[file:core.org][Core Library]] · [[file:booleans.org][Booleans]] · [[file:build.org][Build System]] · [[file:contributing.org][Contributing]] · [[file:errors.org][Diagnostics]]
+
+1. Quick Reference
+
+| Operation            | Description            |
+|----------------------+------------------------|
+| =tests (assert-eq...)= | Embedded test block    |
+| =TEST-EXPECT: compile= | Fixture assertion mode |
+| =python3 tests/run.py= | Primary test runner    |
+| =make fuzzing=         | Property-based fuzzing |
+| =./monad test <file>=  | Compile and run tests  |
+
+This page covers the Monad test suite: codegen fixtures, TSV reader
+corpora, inline ASM tests, embedded test blocks, and the test runner.
+
+The Monad test suite comprises ~1305 test assets across four major
+categories: codegen runtime fixtures, TSV-driven parser corpora, inline
+ASM behavior tests, and property-based fuzzing. The primary test runner
+is =tests/run.py=, written in Python.
+
+For the full test architecture, per-category fixture listings, and runner
+internals, see [[file:../context/tests-arch.org][context/tests-arch.org]].
+For per-module tests: =python3 tests/run_core.py=.
+For fuzzing: =make fuzzing= (41 algebraic laws, 96 seeds, 960 generated programs).
+For the CLI =monad test= command, see [[file:cli.org][CLI Reference]].
+
+2. Suite Overview
+
+| Category                | Count | Description                              |
+|-------------------------+-------+------------------------------------------|
+| codegen/*.mon           | ~363  | Runtime compile-and-execute fixtures     |
+| codegen/asm/*.mon       | 60    | Inline ASM named behavior tests          |
+| reader-atoms.tsv        | ~650  | Parser atom conformance rows             |
+| reader-sugars.tsv       | ~128  | Reader sugar transform rows              |
+| reader-interactions.tsv | ~30   | Cross-feature interaction rows           |
+| reader-supersets.tsv    | ~15   | Atom superset tests                      |
+| reader-refinements.tsv  | ~10   | Refinement type parser rows              |
+| fuzzing properties      | 41    | Algebraic property .fuzz files           |
+| top-level harnesses     | 5     | run.py, run_core.py, test_*.py, fixtures |
+| TOTAL (~)               | ~1305 | Combined test atoms including TSV rows   |
+
+For build system test targets, see [[file:build.org][Build System # Test Targets]].
+
+3. Codegen Runtime Fixtures
+
+Codegen fixtures live under =tests/codegen/= and are the primary
+compile-and-execute test mechanism. Each =.mon= file is discovered
+recursively by the runner and registered as a single test.
+
+3.1 Fixture Metadata
+
+Every fixture carries mandatory header comments:
+
+#+BEGIN_SRC monad
+;; TEST-ID: tests.codegen.rt-arith-all
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Complete arithmetic operator coverage
+;; TEST-ATOM: (+ 1 2) = 3, (- 10 3) = 7
+;; TEST-EXPECT: compile, run
+(module Main)
+(show (+ 1 2))
+#+END_SRC
+
+#+BEGIN_SRC monad
+;; TEST-ID: tests.codegen.rt-arith-all
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Complete arithmetic operator coverage
+;; TEST-ATOM: (+ 1 2) = 3, (- 10 3) = 7
+;; TEST-EXPECT: compile, run
+module Main
+show (+ 1 2)
+#+END_SRC
+
+The =TEST-EXPECT= field drives the assertion mode: =compile=, =run=,
+or =fail:compile=.
+
+3.2 Naming Convention
+
+Runtime test fixtures follow =rt_<category>_<atom>.mon=. Some categories
+use descriptive prefixes instead:
+
+- =rt_arith_*.mon=, =rt_bitwise_*.mon=, =rt_cmp_*.mon= — arithmetic,
+  bitwise, comparison (see [[file:arithmetic.org][Arithmetic]])
+- =rt_match_*.mon= — pattern matching (see [[file:patterns.org][Patterns]])
+- =rt_closure_*.mon=, =rt_lambda_*.mon= — functions and closures (see [[file:lambda.org][Lambda]])
+- =rt_set_*.mon=, =rt_map_*.mon=, =rt_array_*.mon= — collections (see [[file:collections.org][Collections]])
+- =rt_wisp_*.mon=, =wisp_*.mon= — Wisp indentation syntax (see [[file:wisp.org][Wisp]])
+- =rt_cffi_*.mon= — C FFI bindings (see [[file:ffi.org][FFI]])
+- =rt_codegen_err_*.mon= — expected compiler diagnostic failures (see [[file:errors.org][Diagnostics]])
+- =rt_tests_block.mon= — embedded =(tests ...)= block fixture
+- Descriptive: =arithmetic_add.mon=, =comparison_eq.mon=,
+  =cond_expression.mon=, =lambda_call.mon=, =pattern_match.mon=
+
+3.3 Golden Sidecar Files
+
+Sibling files alongside =.mon= fixtures serve as golden expectations:
+
+- =.stdout= — expected program output (362 files). The runner compiles
+  and executes the fixture, then diffs stdout against this golden.
+- =.json= — expected AST JSON emission (5 files). Compared after
+  stripping =line=/=col= fields for portability.
+- =.desugar= — expected desugar pass output (5 files). Compared against
+  the result of =--emit-json=.
+
+Execution order per fixture: (1) emit AST JSON, compare against =.json=;
+(2) emit desugar, compare against =.desugar=; (3) compile via =./monad=,
+run executable, compare stdout against =.stdout=.
+
+For the JSON AST format, see [[file:../context/codegen-ops.org][context/codegen-ops.org]].
+
+Key Points:
+- Each fixture has =TEST-ID=, =TEST-CONTEXT=, =TEST-PURPOSE=, =TEST-EXPECT= headers
+- =TEST-EXPECT= controls assertion mode: =compile=, =run=, or =fail:compile=
+- Golden sidecars (=.stdout=, =.json=, =.desugar=) compared automatically
+- Naming: =rt_<category>_<atom>.mon= with descriptive prefixes for categories
+
+See also: [[file:errors.org][Diagnostics]]
+
+3.4 Error Diagnostic Fixtures
+
+The =rt_codegen_err_*.mon= pattern tests expected compiler diagnostic
+output. These fixtures carry =TEST-EXPECT: fail:compile= and are
+verified to produce the correct error message and exit code instead of
+successful execution. Over 35 such fixtures cover arity mismatches, type
+errors, unbound variables, malformed forms, and more.
+
+For the complete diagnostic fixture list, see [[file:errors.org][Diagnostics # Diagnostic Fixture Pattern]].
+
+4. Inline ASM Tests
+
+60 generated inline assembly fixtures live under =tests/codegen/asm/=,
+each with a corresponding =.stdout= golden. Generated by
+=create_asm_tests.py= and =create_asm_tests_extra.py=, these cover:
+int arithmetic, bitwise ops, conditional moves (cmov), SSE float
+operations, char return, NOP placement, multi-parameter constraints,
+syscall-shaped String operands, and Wisp-ASM mixing.
+
+The generator deletes stale =asm-*.mon= and =asm-*.stdout= files before
+writing current fixtures, ensuring a clean corpus on each run.
+
+For inline assembly language reference, see [[file:asm.org][Assembly]].
+
+5. TSV Reader Corpora
+
+Table-driven parser tests live in =tests/reader-*.tsv= files. Each row
+registers as a separate test in the runner. Required columns per row:
+=name=, =context=, =purpose=, =source= (Monad source text). The sugars
+TSV adds an =expected= field for desugared output.
+
+- =reader-atoms.tsv= (~650 rows): one row per parser atom — numeric
+  literals, strings, chars, paths, keywords, symbols, arrays, sets, maps,
+  ranges, wisp, comments, quotes, quasiquotes, lambda/let/case/match/cond,
+  do/begin, with/set!, pipe/dot, for comprehensions, data/type/class/
+  instance/module/import, buffer and refinement types, address-of, feature
+  conditionals, quantifiers, annotations, import renaming, layout forms.
+  Paired with =reader-atoms.golden.jsonl= for AST shape verification.
+
+- =reader-sugars.tsv= (~128 rows): reader sugar transforms — implicit
+  multiplication, percentage sugar (=33% → 33/100=), periodic decimals
+  (=0.(3) → 3/9=), superscript (=x² → (^ x 2)=), postfix index and call,
+  dot/pipe/arrow transforms, infix operator placement. Some rows carry
+  =fail:compile= as expected failure.
+
+- =reader-interactions.tsv= (~30 rows): cross-feature interaction tests
+  covering parser combinations (typed arrays, refinement-constrained
+  collections, Wisp + C FFI headers).
+
+- =reader-supersets.tsv= (~15 rows): superset language feature detection.
+
+- =reader-refinements.tsv= (~10 rows): refinement type parser coverage
+  with =where= clauses and predicate constraints.
+
+For the reader and syntax reference, see [[file:syntax.org][Syntax]].
+For refinement types, see [[file:refinements.org][Refinements]].
+
+Key Points:
+- TSV corpora cover ~833 rows across 5 files (atoms, sugars, interactions, supersets, refinements)
+- Each TSV row registers as an independent test in the runner
+- =reader-atoms.tsv= (~650 rows) is the largest, covering every parser atom type
+- =reader-sugars.tsv= includes implicit multiplication, percentage, superscript transforms
+- Golden JSON sidecars (=.golden.jsonl=) verify AST shape for atom tests
+
+See also: [[file:syntax.org][Syntax]]
+
+6. Embedded Tests Blocks
+
+Source files can embed test assertions directly using =(tests ...)= blocks,
+which compile alongside executable code without blocking runtime output:
+
+#+BEGIN_SRC monad
+(module Main)
+(tests
+  (assert-eq (square 2)  4   "square of 2")
+  (assert-eq (square 0)  0   "square of 0"))
+(show 42)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+module Main
+tests
+  assert-eq (square 2)  4   "square of 2"
+  assert-eq (square 0)  0   "square of 0"
+show 42
+#+END_SRC
+
+The =(tests ...)= form is itself exercised by the dedicated fixture
+=rt_tests_block.mon=.
+
+For the =assert-eq= primitive, see [[file:error-handling.org][Error Handling # assert-eq]].
+For test blocks in the context of the CLI, see [[file:cli.org][CLI Reference]].
+
+7. Fuzzing
+
+Property-based fuzzing is driven by =tests/fuzzing/fuzz_codegen.py=,
+which discovers 41 =.fuzz= property files under
+=tests/fuzzing/properties/=, generates typed Int/Bool programs, compiles
+with =./monad=, runs the executable, and checks stdout against algebraic
+laws. Run via =make fuzzing=.
+
+Property categories: commutativity, associativity, identity,
+distributivity, absorption, arithmetic, comparison, control flow, and
+min/max laws. Verified at 96 deterministic seeds / 960 generated laws.
+
+For full fuzzing documentation, see [[file:fuzzing.org][Fuzzing]].
+
+8. Test Runners
+
+| Script                    | Description                                        |
+|---------------------------+----------------------------------------------------|
+| =python3 tests/run.py=      | Primary runner. Discovers all .mon fixtures, TSV   |
+|                           | rows, groups output into named sections, generates |
+|                           | =.last-first-failure.org= on failure.                |
+| =python3 tests/run_core.py= | Runs core/prelude module tests sequentially via    |
+|                           | =./monad test <file>=, sets =MONAD_CORE= to =core/=.     |
+| =make fuzzing=              | Runs property-based fuzzing harness                |
+
+Runner output sections (from =SECTION_ORDER=): interaction, superset,
+cffi, refinement, wisp, layout, map, ratio, diagnostic, codegen,
+language, sugar. Each section has a color-coded header and per-section
+stats.
+
+For the test runner implementation, see [[file:../context/tests-arch.org][context/tests-arch.org]].
+
+* Implementation Notes
+
+Test infrastructure source files:
+
+| Component         | Source              | Role                            |
+|-------------------+---------------------+---------------------------------|
+| =run.py=            | [[file:../tests/run.py][tests/run.py]]        | Primary test runner             |
+| =run_core.py=       | [[file:../tests/run_core.py][tests/run_core.py]]   | Core/prelude module tests       |
+| Fixture discovery | [[file:../tests/run.py][tests/run.py]]        | Recursive =.mon= file search      |
+| TSV parsing       | [[file:../tests/run.py][tests/run.py]]        | Reader corpus row dispatch      |
+| Golden comparison | [[file:../tests/run.py][tests/run.py]]        | =.stdout= / =.json= / =.desugar= diff |
+| ASM generator     | [[file:../tests/codegen/create_asm_tests.py][create_asm_tests.py]] | Inline assembly fixture gen     |
+| Fuzzing driver    | [[file:../tests/fuzzing/fuzz_codegen.py][fuzz_codegen.py]]     | Property-based test harness     |
+
+* Related Pages
+
+- [[file:fuzzing.org][Fuzzing]] -- property-based testing
+- [[file:build.org][Build System]] -- build and test targets
+- [[file:contributing.org][Contributing]] -- contribution guidelines
+- [[file:errors.org][Diagnostics]] -- error diagnostic fixtures
+- [[file:error-handling.org][Error Handling]] -- assert-eq, runtime assertions
+- [[file:cli.org][CLI Reference]] -- =monad test= command
+
+* Further Reading
+
+- [[file:../context/tests-arch.org][context/tests-arch.org]] — Full test architecture, per-category
+  fixture listings, runner internals
+- [[file:fuzzing.org][Fuzzing]] — property-based testing
+- [[file:build.org][Build System]] — Build and test commands
+- [[file:../tests/run.py][tests/run.py]] — Primary test runner script
+- [[file:../tests/fuzzing/][tests/fuzzing/]] — Fuzzing infrastructure
+- [[file:../context/codegen.org][context/codegen.org]] — Codegen test fixtures
+
+* Context Links
+
+- [[file:../context/tests-arch.org][context/tests-arch.org]] — Full test architecture, per-category
+  fixture listings, runner internals
+- [[file:fuzzing.org][Fuzzing]] — property-based testing
+- [[file:build.org][Build System]] — Build and test commands
+- [[file:../tests/run.py][tests/run.py]] — Primary test runner script
+- [[file:../context/language.org][context/language.org]] — Runtime codegen corpus
+- [[file:../context/codegen.org][context/codegen.org]] — Codegen tests

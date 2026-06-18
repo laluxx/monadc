@@ -762,9 +762,43 @@ static Type *collection_element_type(Type *t) {
     if (!t) return NULL;
     if (t->kind == TYPE_STRING)  return type_char();
     if (t->kind == TYPE_LIST  && t->list_elem)          return t->list_elem;
+    if (t->kind == TYPE_LIST  && t->list_count == 1 &&
+        t->list_types)                                  return t->list_types[0];
     if (t->kind == TYPE_ARR   && t->arr_element_type)   return t->arr_element_type;
     /* untyped Coll — element type unknown */
     return NULL;
+}
+
+static bool call_types_compatible(Type *param, Type *arg) {
+    if (!param || !arg) return true;
+    if (param->kind == TYPE_VAR || param->kind == TYPE_UNKNOWN ||
+        arg->kind   == TYPE_VAR || arg->kind   == TYPE_UNKNOWN)
+        return true;
+    if (param->kind == arg->kind) return true;
+    if ((arg->kind == TYPE_NIL && param->kind == TYPE_OPTIONAL) ||
+        (arg->kind == TYPE_OPTIONAL && param->kind == TYPE_NIL))
+        return true;
+
+    bool arg_is_int   = (arg->kind == TYPE_INT || arg->kind == TYPE_HEX ||
+                         arg->kind == TYPE_BIN || arg->kind == TYPE_OCT ||
+                         arg->kind == TYPE_INT_ARBITRARY);
+    bool param_is_int = (param->kind == TYPE_INT ||
+                         param->kind == TYPE_INT_ARBITRARY);
+    bool arg_is_float = (arg->kind == TYPE_FLOAT || arg->kind == TYPE_F32 ||
+                         arg->kind == TYPE_F80);
+    bool param_is_float = (param->kind == TYPE_FLOAT || param->kind == TYPE_F32 ||
+                           param->kind == TYPE_F80);
+    if ((arg_is_int && param_is_int) || (arg_is_float && param_is_float) ||
+        (arg_is_int && param_is_float))
+        return true;
+
+    bool arg_is_coll  = (arg->kind == TYPE_LIST || arg->kind == TYPE_ARR ||
+                         arg->kind == TYPE_SET  || arg->kind == TYPE_MAP ||
+                         arg->kind == TYPE_COLL || arg->kind == TYPE_STRING);
+    bool param_is_coll = (param->kind == TYPE_LIST || param->kind == TYPE_ARR ||
+                          param->kind == TYPE_SET  || param->kind == TYPE_MAP ||
+                          param->kind == TYPE_COLL || param->kind == TYPE_STRING);
+    return arg_is_coll && param_is_coll;
 }
 
 bool env_hm_check_call(Env *env, const char *name, Type **arg_types, int n,
@@ -795,6 +829,43 @@ bool env_hm_check_call(Env *env, const char *name, Type **arg_types, int n,
         Type *arg       = arg_types[i];
         Type *orig_param = param;
         Type *orig_arg   = arg;
+
+        bool is_rest_slot = ee && i == ee->param_count - 1 &&
+            ee->source_ast &&
+            ee->source_ast->type == AST_LAMBDA &&
+            ee->source_ast->lambda.param_count > 0 &&
+            ee->source_ast->lambda.params[
+                ee->source_ast->lambda.param_count - 1
+            ].is_rest;
+
+        if (is_rest_slot) {
+            Type *rest_elem = collection_element_type(ee->params[i].type);
+            if (!rest_elem && param && param->kind == TYPE_LIST)
+                rest_elem = collection_element_type(param);
+            if (!rest_elem)
+                rest_elem = type_unknown();
+
+            for (int j = i; j < n; j++) {
+                Type *rest_arg = arg_types[j];
+                if (!call_types_compatible(rest_elem, rest_arg)) {
+                    char param_str[256];
+                    char arg_str[256];
+                    strncpy(param_str, type_to_string(rest_elem), sizeof(param_str) - 1);
+                    param_str[sizeof(param_str) - 1] = '\0';
+                    strncpy(arg_str, type_to_string(rest_arg), sizeof(arg_str) - 1);
+                    arg_str[sizeof(arg_str) - 1] = '\0';
+                    READER_ERROR(line, col,
+                        "\n"
+                        "    • Couldn't match expected type '%s' with actual type '%s'\n"
+                        "    • In argument %d of a call to ‘%s’\n"
+                        "  - Hint: variadic argument %d must be %s, but you passed %s",
+                        param_str, arg_str,
+                        j + 1, name,
+                        j + 1, param_str, arg_str);
+                }
+            }
+            break;
+        }
 
         if (ee && i < ee->param_count && ee->params[i].type && arg) {
             Type *decl_param = ee->params[i].type;
@@ -941,7 +1012,13 @@ bool env_hm_check_call(Env *env, const char *name, Type **arg_types, int n,
                     bool param_is_coll = (param->kind == TYPE_LIST || param->kind == TYPE_ARR ||
                                           param->kind == TYPE_SET  || param->kind == TYPE_MAP  ||
                                           param->kind == TYPE_COLL || param->kind == TYPE_STRING);
+                    bool arg_is_float = (arg->kind == TYPE_FLOAT || arg->kind == TYPE_F32 ||
+                                         arg->kind == TYPE_F80);
+                    bool param_is_float = (param->kind == TYPE_FLOAT || param->kind == TYPE_F32 ||
+                                           param->kind == TYPE_F80);
                     if (!(arg_is_int && param_is_int) &&
+                        !(arg_is_float && param_is_float) &&
+                        !(arg_is_int && param_is_float) &&
                         !(arg_is_coll && param_is_coll))
                         mismatch = true;
                 }

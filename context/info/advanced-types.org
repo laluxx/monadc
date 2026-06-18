@@ -1,0 +1,291 @@
+#+TITLE: Advanced Types
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+TOC: headlines 2
+#+FILETAGS: :monad:language:advanced-types:info:
+
+:PROPERTIES:
+:ID:       monadc.info.advanced-types
+:CONTEXT:  monadc.context.typeclass, monadc.context.dep, monadc.context.types
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:types.org][Types]] · [[file:type-classes.org][Type Classes]] · [[file:dependent-types.org][Dependent Types]] · [[file:refinements.org][Refinement Types]] · [[file:type-inference.org][Type Inference]] · [[file:data.org][Data Types]]
+
+Test coverage: the type class deriving system is tested by
+=rt_derive_*.mon= fixtures in [[file:../tests/codegen/branches/][tests/codegen/branches/]].
+The NbE kernel is validated by the codegen test corpus in
+[[file:../tests/codegen/types/dep/][tests/codegen/types/dep/]]. Hindley-Milner (HM) inference
+is exercised by every typed codegen fixture in
+[[file:../tests/codegen/types/hm/][tests/codegen/types/hm/]] and
+[[file:../tests/codegen/types/bridge/][tests/codegen/types/bridge/]]. See
+[[file:../context/tests-arch.org][context/tests-arch.org]] for the full test architecture.
+
+MonadC's type system goes beyond simple ground types with four
+advanced subsystems, each addressing a different dimension of type
+safety. This page provides an overview and navigation hub. For the
+ground type system, see [[file:types.org][Types]]. For algebraic data types,
+see [[file:data.org][Data Types]].
+
+* Dedicated Pages
+
+| Page                  | Covers                                           |
+|-----------------------+--------------------------------------------------|
+| [[file:type-classes.org][Type Classes]]           | class/instance declarations, deriving, dispatch   |
+| [[file:dependent-types.org][Dependent Types]]        | ITT/NbE shadow pass, Pi/Sigma, universes, NbE     |
+| [[file:type-inference.org][Type Inference]]         | Hindley-Milner Algorithm W, unification, let-poly |
+| [[file:refinements.org][Refinement Types]]       | subset types with predicates, compile-time checks |
+
+* 1. Type Classes
+
+Monad provides dictionary-passing type classes ([[file:../typeclass.c]]).
+A =class= declaration defines method signatures; an =instance= provides
+concrete implementations. Each instance compiles to an LLVM global
+dictionary struct. See [[file:../context/typeclass.org][context/typeclass.org]] for the full
+implementation reference.
+
+#+BEGIN_SRC monad
+(class Eq a (== (a a -> Bool)))
+(instance Eq Int
+  (define (== a b -> Bool) (builtin-== a b)))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+class Eq a
+  == (a a -> Bool)
+instance Eq Int
+  define == a b -> Bool
+    builtin-== a b
+#+END_SRC
+
+Deriving auto-generates instances for algebraic data types:
+
+#+BEGIN_SRC monad
+(data Suit Hearts Diamonds Clubs Spades deriving Eq)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+data Suit Hearts Diamonds Clubs Spades deriving Eq
+#+END_SRC
+
+Multiple classes can be derived with a list: =deriving [Eq Enum Show]=.
+See [[file:data.org][Data Types]] for data type declarations.
+
+** Implementation Notes
+
+- Instance dictionaries are LLVM globals named =__dict_ClassName_TypeName=
+  ([[file:../typeclass.c::438]])
+- Method dispatch via strcmp layer in codegen
+  ([[file:../codegen.c::8905]])
+- Instance resolution at codegen time, not inference time
+  ([[file:../context/typeclass.org::312]])
+
+** Key Points
+
+- Type classes use dictionary-passing (not type-class elaboration or
+  coherent resolution) — simple, predictable, single-compilation-unit
+- Each instance produces an LLVM global struct of function pointers
+- Deriving is built-in for =Eq=, =Ord=, =Show=, =Enum=
+
+→ [[file:type-classes.org][Full Type Classes Reference]]
+
+* 2. Dependent Types (ITT/NbE)
+
+Intensional Type Theory with Normalization by Evaluation runs as a
+shadow pass (Phase 6.5) between feature setup and LLVM codegen. It
+validates dependent annotations and back-propagates ground types to
+the AST. See [[file:../context/dep.org][context/dep.org]] for the implementation
+reference and [[file:../dep.h][dep.h]] for the kernel API.
+
+#+BEGIN_SRC monad
+(define Vec :: Π (n : Nat) → Type → Type ...)
+(define (id :: Π (A : Type) → A → A) ...)
+(define Σ (x : A) × B ...)
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define Vec :: Π (n : Nat) → Type → Type ...
+define id :: Π (A : Type) → A → A ...
+define Σ (x : A) × B ...
+#+END_SRC
+
+The NbE kernel provides =dep_eval=, =dep_quote=, =dep_normalise=, and
+=dep_conv= (definitional equality). Bidirectional checking follows
+Löh/McBride/Swierstra (2010). For propositional equality, see
+[[file:equality.org][Equality]].
+
+** Implementation Notes
+
+- NbE is Phase 6.5 of the compilation pipeline
+  ([[file:../main.c::1025]])
+- =dep_eval= / =dep_quote= / =dep_normalise= / =dep_conv=
+  ([[file:../dep.h::473]])
+- TERM_EMBED bridge connects ITT values to ground types for HM and
+  codegen ([[file:../context/dep.org::72]])
+- Bidirectional checking: =dep_infer= (⇒) and =dep_check= (⇐)
+  ([[file:../dep.h::675]])
+
+** Key Points
+
+- Dependent types do not emit code — they validate annotations and
+  back-propagate types
+- NbE evaluates to a semantic =Value= domain, then quotes back to
+  =β=-normal =η=-long form
+- Many soundness holes are documented and deliberate (stubs for
+  future work)
+
+→ [[file:dependent-types.org][Full Dependent Types Reference]]
+
+* 3. Type Inference (Hindley-Milner)
+
+Algorithm W with let-polymorphism and monomorphization (see
+[[file:../context/infer.org][context/infer.org]]). Type variables are implicitly quantified:
+
+#+BEGIN_SRC monad
+(define (id x -> a) x)             ;; ∀a. a → a
+(define (const x y -> a) x)        ;; ∀a b. a → b → a
+(define (swap [x :: a] [y :: b] -> (Pair b a))
+  (Pair y x))
+#+END_SRC
+
+#+BEGIN_SRC wisp
+define id x -> a
+  x                                ;; ∀a. a → a
+define const x y -> a
+  x                                ;; ∀a b. a → b → a
+define swap x :: a  y :: b -> Pair b a
+  Pair y x
+#+END_SRC
+
+Polymorphic functions specialize at each use site via the
+=mono_cache=, generating zero-overhead native code
+([[file:../codegen.c::109]]).
+
+** Key Points
+
+- HM is O(n) for ground types, running before codegen
+- Let-polymorphism only — lambda-bound parameters are monomorphic
+- Monomorphization generates separate LLVM functions per concrete type
+  instantiation (zero-cost abstraction)
+
+→ [[file:type-inference.org][Full Type Inference Reference]]
+
+* 4. Refinement Types
+
+Subset types with predicate constraints. See
+[[file:../context/types.org][context/types.org]] for internal representation and
+[[file:../context/types.org::1321][refinement internals]].
+
+#+BEGIN_SRC monad
+(type Pos { x ∈ Int | (> x 0) })
+(type Even { x ∈ Int | (= (mod x 2) 0) })
+(type NonEmptyString { s ∈ String | (> (count s) 0) })
+(type Port { n ∈ Int | (and (> n 0) (< n 65536)) })
+#+END_SRC
+
+#+BEGIN_SRC wisp
+type Pos { x ∈ Int | > x 0 }
+type Even { x ∈ Int | = (mod x 2) 0 }
+type NonEmptyString { s ∈ String | > (count s) 0 }
+type Port { n ∈ Int | and (> n 0) (< n 65536) }
+#+END_SRC
+
+Checked at compile time for literal arguments, deferred to runtime
+otherwise. Each refinement type =T= generates a predicate function
+=T?= (e.g., =Pos?= :: Int → Bool). For boolean operations in
+predicates, see [[file:booleans.org][Booleans]].
+
+** Implementation Notes
+
+- =RefinementEntry= struct stores name, base_type, predicate_ast
+  ([[file:../context/types.org::849]])
+- =refinement_check_literal= static evaluation
+  ([[file:../context/types.org::1367]])
+- =refinement_register= registration
+  ([[file:../types.c::45]])
+
+** Key Points
+
+- Lightweight static contract system — compile-time for literals,
+  runtime otherwise
+- Each refinement emits a predicate function =T?= automatically
+- Predicates compose via =and=/=or=/=not= and can reference other
+  refinement predicates
+
+→ [[file:refinements.org][Full Refinements Reference]]
+
+** Complete example:
+
+#+BEGIN_SRC monad
+;; Save as advanced-demo.mon && monadc advanced-demo.mon && ./advanced-demo
+(module Main)
+
+;; Type classes
+(class Eq a (== (a a -> Bool)))
+(instance Eq Int
+  (define (== a b -> Bool) (builtin-== a b)))
+
+;; Refinement types
+(type Positive { n :: Int | (> n 0) })
+(define [x :: Positive] 5)
+
+;; Type alias
+(type Count Int)
+
+;; Polymorphic identity (HM inference)
+(define [id :: a -> a] x -> x)
+
+(show (id 42))
+(show (== x 5))
+(show "advanced types demo")
+#+END_SRC
+
+** Common Pitfalls
+
+- **Dependent types do NOT emit code**: The ITT/NbE shadow pass
+  (Phase 6.5) validates annotations and back-propagates types, but
+  does NOT generate any runtime code. Dependent annotations only
+  constrain what the HM+codegen pipeline produces.
+- **Type class resolution is single-compilation-unit**: All instances
+  must be visible at the point of use. There is no cross-module
+  instance resolution yet.
+- **Deriving requires the class to be defined first**: =(data T ...
+  deriving Eq)= will emit a warning if =Eq= is not already declared.
+- **Refinement predicates with non-literal args defer to runtime**:
+  Compile-time checking only works for literal values. Variables pass
+  through with a runtime check (or silently if the predicate cannot be
+  evaluated).
+- **HM type variables are implicitly quantified**: Surface syntax
+  =(define (id x) x)= gives a polymorphic identity, but ∀ is only
+  explicit when constraints are present.
+
+* Related Pages
+
+- [[file:types.org][Types]] -- ground types, type system overview
+- [[file:type-classes.org][Type Classes]] -- dictionary-passing polymorphism
+- [[file:dependent-types.org][Dependent Types]] -- ITT/NbE, Pi/Sigma, universes
+- [[file:refinements.org][Refinement Types]] -- subset types with predicates
+- [[file:type-inference.org][Type Inference]] -- Hindley-Milner, Algorithm W
+- [[file:data.org][Data Types]] -- algebraic data types
+- [[file:equality.org][Equality]] -- propositional and structural equality
+
+* Context Links
+
+- [[file:../context/typeclass.org][context/typeclass.org]] — type class implementation
+- [[file:../context/dep.org][context/dep.org]] — dependent type checker reference
+- [[file:../context/infer.org][context/infer.org]] — type inference internals
+- [[file:../context/types.org][context/types.org]] — type representation
+- [[file:../context/language.org][context/language.org]] — type system surface syntax
+- [[file:../context/codegen.org][context/codegen.org]] — codegen for typed constructs
+- [[file:../typeclass.c][typeclass.c]] — class/instance registration and dispatch
+- [[file:../dep.h][dep.h]] — ITT kernel API
+- [[file:../infer.c][infer.c]] — Algorithm W implementation
+- [[file:../codegen.c][codegen.c]] — monomorphization cache (mono_cache)
+- [[file:types.org][Types]] — ground type system overview
+- [[file:data.org][Data Types]] — algebraic data types
+
+* Further Reading
+
+- [[file:from-haskell.org][From Haskell]] — comparison of type class systems
+- [[file:from-lisp.org][From Lisp]] — type annotations for Lisp users
+- [[file:patterns.org][Pattern Matching]] — pattern matching on algebraic types
+- [[file:type-classes.org::*5. Deriving][Type Class Deriving]] — auto-deriving for data types

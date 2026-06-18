@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-11
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-12
+#+LAST_MODIFIED: 2026-06-13
 #+FILETAGS: :monadc:compiler:context:todos:visualizer:performance:
 #+LANGUAGE: en
 #+STARTUP: hideblocks

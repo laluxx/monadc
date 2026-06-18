@@ -45,8 +45,8 @@
 This file records build, verification, and installation context.
 
 [INF id:inf.build.info-ref from:obs.context.build.file conf:high]
-  User-facing build and CLI docs: [[file:../info/build.org][info/build.org]] and
-  [[file:../info/cli.org][info/cli.org]].
+  User-facing build and CLI docs: [[file:info/build.org][info/build.org]] and
+  [[file:info/cli.org][info/cli.org]].
 
 #+CAPTION: Build Verification Ladder
 | Step    | Command           | Privilege | Required Before |

@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-14
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -280,6 +280,23 @@
   module_name_to_path converts "Std.Math" to "Std/Math.monad" by replacing dots
   with path separators and appending the .monad extension.
 
+[FIX id:fix.module.core-dotted-path-resolution-2026-06-18 date:2026-06-18 by:codex]
+  =module_name_to_path= now checks path-shaped dotted module names under
+  =$MONAD_CORE= and the installed core directory before falling back to recursive
+  basename search. This makes =(import Data.List)= resolve
+  =core/Data/List.mon= in the core test harness and installed layout.
+
+[FIX id:fix.module.auto-core-prelude-dir-2026-06-18 date:2026-06-18 by:codex]
+  Automatic prelude import is directory-driven, not hardcoded to =Coll=.
+  =module_context_add_prelude_imports= scans every valid =*.mon= stem in
+  =$MONAD_CORE/prelude= as unqualified imports for non-prelude modules. If
+  =$MONAD_CORE= is not set it falls back to the installed
+  =/usr/local/lib/monad/core/prelude= directory. The main compiler pre-scan uses
+  the same priority to compile those prelude modules before Wisp expansion, so
+  modules such as =Coll= and =Function= are available automatically while
+  non-prelude core modules, including =Data.List= and =Control.Arrow=, still
+  require explicit imports.
+
 * Parse Module/Import from AST
 :PROPERTIES:
 :ID: monadc.context.module.parse-ast
@@ -473,3 +490,31 @@
   feeds into codegen name lookup) ·
   `monadc.context.codegen-ops.object-file-emission` (mangled names become linker
   symbols in the emitted .o; manifests are sidecar outputs)
+
+* Category Contract
+:PROPERTIES:
+:ID: monadc.context.module.category-contract
+:CUSTOM_ID: module-category-contract
+:CONTEXT_KIND: contract
+:END:
+
+[DOC id:doc.module.category-contract src:context/module.org conf:high]
+  This section declares the category contract for =module=. It is the
+  routing target for failures and future test/context links touching module
+  declarations, import resolution, name mangling, and .mexp manifest management.
+
+#+CAPTION: Module System Category Contract
+| Field | Contract |
+|-------+----------|
+| Owned phase | Module/import declaration parsing (Phase 1 in compile_one), dependency resolution (Phase 2), name mangling (Phase 9), .mexp manifest I/O and export tracking. |
+| Inputs | Source text with (module ...) and (import ...) forms, compiled dependency registry (g_compiled), .mexp manifest files. |
+| Outputs | ModuleContext with parsed exports and imports, mangled symbol names (module_name::local_name), .mexp manifest sidecar files, dependency resolution triggers for recursive compile_one. |
+| Invariants | Import graph is acyclic (cycle detection in Phase 2); module names are unique across the compilation; mangled names are linker-safe and match the import resolution scheme; .mexp files are treated as regenerable caches. |
+| Test hooks | Module system tests, import resolution tests, .mexp manifest round-trip and staleness detection tests. |
+| Failure symptoms | Import resolution failure, cyclic dependency detection, name collision in mangled symbols, stale .mexp manifest diverging from source, module context missing required exports. |
+| Context neighbors | main, codegen, buildsystem, module-export, codegen-ops |
+
+[DEC id:dec.module.category-contract-owner date:2026-06-18 by:big-pickle]
+  Failures matching the symptoms above should start triage in this category, then
+  follow the listed neighbors only when the local contract does not explain the
+  issue.

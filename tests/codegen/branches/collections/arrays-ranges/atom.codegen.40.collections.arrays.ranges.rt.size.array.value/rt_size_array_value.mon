@@ -17,7 +17,7 @@
 ;; TEST-MENU-PATH: codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.size.array.value
 ;; TEST-ATOM-LEAF: atom.codegen.40.collections.arrays.ranges.rt.size.array.value
 ;; TEST-CLI-TARGET: codegen branches collections arrays-ranges
-(module Main)
+module Main
 define buffer :: [16kb]
-(show (Arr? buffer))
-(show (count buffer))
+show (Arr? buffer)
+show (count buffer)

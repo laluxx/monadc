@@ -1,0 +1,120 @@
+;;; Ascii.mon --- ASCII character class constants
+
+;; Author: Laluxx
+;; Version: 0.0.1
+;; Keywords: text ascii rfc20 string constants
+;; Reference:
+;; - https://www.rfc-editor.org/rfc/rfc20.html
+
+;;; Commentary:
+
+;; ASCII character class constants following RFC 20.
+;; Provides string constants for common character classes.
+
+;;; Code:
+
+module Ascii
+ [nul            bel               bs
+  tab            lf                cr
+  esc            space             del
+  lowercase      uppercase         letters
+  digits         hexdigits         octdigits
+  punctuation    whitespace        printable
+  char-downcase  case-delta        char-upcase
+  char-lower?    char-upper?       char-alphabetic?
+  char-numeric?  char-whitespace?  char-alphanumeric?]
+
+define [lowercase   :: String] "abcdefghijklmnopqrstuvwxyz"
+define [uppercase   :: String] "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+define [letters     :: String] "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+define [digits      :: String] "0123456789"
+define [hexdigits   :: String] "0123456789abcdefABCDEF"
+define [octdigits   :: String] "01234567"
+define [punctuation :: String] "!\"#$%&'()*+,-./:\x3B<=>?@[\\]^_`{|}~"
+define [whitespace  :: String] " \t\n\r\x0B\x0C"
+define [printable   :: String] "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#$%&'()*+,-./:\x3B<=>?@[\\]^_`{|}~ \t\n\r\x0B\x0C"
+
+
+define nul   0    | \0
+define bel   7    | \a bell
+define bs    8    | \b backspace
+define tab   9    | \t
+define lf    10   | \n line feed
+define cr    13   | \r carriage return
+define esc   27   | escape
+define space 32   | space
+define del   127  | delete/rubout
+
+define case-delta (- 'a' 'A')
+ :doc "Delta needed to go from
+       one case to the other."
+
+define char-upcase :: Char -> Char
+  c | c >= 'a' and c <= 'z' -> c - case-delta
+    | otherwise             -> c
+  :doc "Convert C to upper case."
+
+
+define char-downcase :: Char -> Char
+  c | c >= 'A' and c <= 'Z' -> c + case-delta
+    | otherwise         -> c
+  :doc "Convert C to lower case."
+
+
+define char-lower? :: Char -> Bool
+  c -> c >= 'a' and c <= 'z'
+  :doc "Return True if C is a lowercase letter."
+
+
+define char-upper? :: Char -> Bool
+  c -> c >= 'A' and c <= 'Z'
+  :doc "Return True if C is an uppercase letter."
+
+
+define char-alphabetic? :: Char -> Bool
+  c -> char-lower? c or char-upper? c
+  :doc "Return True if C is a letter."
+
+
+define char-numeric? :: Char -> Bool
+  c -> c >= '0' and c <= '9'
+  :doc "Return True if C is a digit."
+
+
+define char-alphanumeric? :: Char -> Bool
+  c -> char-alphabetic? c or char-numeric? c
+  :doc "Return True if C is a letter or digit."
+
+
+define char-whitespace? :: Char -> Bool
+  :doc "Return True if C is a whitespace character."
+  c -> (or (= c ' ') (= c '\t') (= c '\n') (= c '\r'))
+
+
+(tests
+  (assert-eq lowercase "abcdefghijklmnopqrstuvwxyz" "lowercase")
+  (assert-eq uppercase "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "uppercase")
+  (assert-eq letters "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" "letters")
+  (assert-eq digits "0123456789" "digits")
+  (assert-eq hexdigits "0123456789abcdefABCDEF" "hexdigits")
+  (assert-eq octdigits "01234567" "octdigits")
+  (assert-eq (+ case-delta 0) 32 "case-delta")
+  (assert-eq (char-upcase 'a') 'A' "char-upcase a")
+  (assert-eq (char-upcase 'z') 'Z' "char-upcase z")
+  (assert-eq (char-upcase 'A') 'A' "char-upcase noop")
+  (assert-eq (char-downcase 'A') 'a' "char-downcase A")
+  (assert-eq (char-downcase 'Z') 'z' "char-downcase Z")
+  (assert-eq (char-downcase 'a') 'a' "char-downcase noop")
+  (assert-eq (char-lower? 'a') True "char-lower? a")
+  (assert-eq (char-lower? 'A') False "char-lower? A")
+  (assert-eq (char-upper? 'A') True "char-upper? A")
+  (assert-eq (char-upper? 'a') False "char-upper? a")
+  (assert-eq (char-alphabetic? 'a') True "char-alphabetic? a")
+  (assert-eq (char-alphabetic? '0') False "char-alphabetic? 0")
+  (assert-eq (char-numeric? '5') True "char-numeric? 5")
+  (assert-eq (char-numeric? 'a') False "char-numeric? a")
+  (assert-eq (char-alphanumeric? 'a') True "char-alphanumeric? a")
+  (assert-eq (char-alphanumeric? '5') True "char-alphanumeric? 5")
+  (assert-eq (char-alphanumeric? '!') False "char-alphanumeric? !")
+  (assert-eq (char-whitespace? ' ') True "char-whitespace? space")
+  (assert-eq (char-whitespace? 'a') False "char-whitespace? a"))

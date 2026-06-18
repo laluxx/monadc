@@ -2,7 +2,7 @@
 #+AUTHOR: GPT-5.5 Thinking
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-16
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -41,9 +41,9 @@
 :END:
 
 [OBS id:obs.quality.snapshot src:context/*.org conf:high]
-  Generated on 2026-06-16. The garden contains 60 org files,
-  32485 lines, 827 heading IDs, and
-  2528 bracket records.
+  Generated on 2026-06-18. The garden contains 73 org files (excluding info/),
+  35350 lines, 932 heading IDs, and
+  2673 bracket records.
 
 #+CAPTION: Health checks
 | Check | Result | Notes |
@@ -54,7 +54,8 @@
 | Broken local context file links | 0 | Default linter mode ignores repository-relative links. |
 | Broken id links | 0 | Org id-link targets must resolve. |
 | Broken record refs | 0 | Optional =--check-record-refs= now passes. |
-| Category contracts | 7 major files | reader, wisp, infer, codegen, runtime, types, tests. |
+| Category contracts | 24 files | Full coverage: reader, wisp, infer, codegen, runtime, types, tests, dep, codegen-ops, module, ffi, macro, pmatch, arena, asm, env, repl, typeclass, lsp, completion + governance: category-context, garden, quality, catface. |
+| Context source coverage | 100% | All 27 .h/.c source pairs have corresponding context/*.org files. |
 | Context graph export tool | present | =context/tools/context_graph.py=. |
 | Clean generated artifacts | enforced | Do not include caches or run leftovers. |
 
@@ -112,8 +113,9 @@
 :END:
 
 #+BEGIN_SRC sh
-python3 context/tools/context_lint.py context
-python3 context/tools/context_lint.py context --check-record-refs
+python3 context/tools/context_lint.py context --skip-info
+python3 context/tools/context_lint.py context --skip-info --check-record-refs
+python3 context/tools/context_lint.py context                         # full corpus including info/
 python3 context/tools/context_graph.py context > /tmp/monadc-context-graph.json
 #+END_SRC
 
@@ -150,6 +152,21 @@ python3 context/tools/context_graph.py context > /tmp/monadc-context-graph.json
   Major compiler/test categories should have Category Contract sections with
   owned phase, inputs, outputs, invariants, test hooks, failure symptoms, and
   context neighbors.
+
+[FIX id:fix.quality.missing-category-contracts-resolved date:2026-06-18 by:big-pickle]
+  All 11 missing category contracts have been added: =dep.org= (dependent type
+  checker), =codegen-ops.org= (operation dispatch), =module.org= (module system),
+  =ffi.org= (C FFI), =macro.org= (macro system), =pmatch.org= (pattern match
+  compiler), =arena.org= (arena allocator), =asm.org= (inline assembly),
+  =env.org= (symbol table), =repl.org= (REPL), =typeclass.org= (type class
+  dispatch). Each includes owned phase, inputs/outputs, invariants, test hooks,
+  failure symptoms, and context neighbors.
+
+[FIX id:fix.quality.source-coverage-closed date:2026-06-18 by:big-pickle]
+  Added context files for =lsp.org= (LSP 3.17 implementation, 953-line header)
+  and =completion.org= (tab completion/usage utilities). Updated navigation.org,
+  source-map.org, and quality/inventory snapshots. Every .h/.c source pair now
+  has a corresponding context file. Linter passes clean.
 
 * Header Gaps
 :PROPERTIES:
@@ -199,24 +216,26 @@ python3 context/tools/context_graph.py context > /tmp/monadc-context-graph.json
   artifacts.  Python scripts, JSON schemas, TSV vocabularies, generated reports,
   and Org prose are all referentiable objects in the category model.
 
-#+CAPTION: Round 3 validation snapshot
+#+CAPTION: Round 3 validation snapshot (garden proper, excl info/)
 | Check | Result |
 |-------+--------|
-| Org context files | 67 |
-| Org lines | 33410 |
-| Org headings | 910 |
-| Heading IDs | 866 |
-| Bracket records | 2571 |
+| Org context files | 73 |
+| Org lines | 35211 |
+| Org headings | 975 |
+| Heading IDs | 930 |
+| Bracket records | 2671 |
 | Duplicate heading IDs | 0 |
 | Duplicate record IDs | 0 |
 | Header gaps | 0 |
 | Broken local file links | 0 |
 | Broken ID links | 0 |
 | Broken record refs | 0 |
-| Category objects | 3539 |
-| Category generating edges | 4331 |
-| Category unresolved edges | 0 |
-| Category verifier status | OK |
+| Category objects | 3834 |
+| Category generating edges | 9509 |
+| Category unresolved edges (garden only) | 0 |
+| Category unresolved edges (with info/) | 2172 |
+| Category verifier status (garden only) | OK |
+| Category verifier status (with info/) | FAIL — expected (info/ files link to source files not in model) |
 
 #+BEGIN_SRC sh
 python3 context/tools/context_lint.py context --check-record-refs
@@ -289,3 +308,62 @@ cd context/category/catface && zig build run -- --check ../../
   Run =zig build test= for Catface inside the full repository environment.  The
   generation environment did not have Zig installed, so compile verification is
   deliberately left as an explicit follow-up gate rather than falsely reported.
+
+* Round 6: Language Reference Zone (info/)
+:PROPERTIES:
+:ID: monadc.context.quality.round6-info-zone
+:CUSTOM_ID: quality-round6-info-zone
+:CONTEXT_KIND: quality
+:CONTEXT_STATUS: active
+:SOURCE: context/quality.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.quality.round6-info-zone src:context/info/*.org conf:high]
+  The =info/= directory contains 74 user-facing language reference files (23604
+  lines, 1015 headings, 74 heading IDs). These files use the =monadc.info.*= ID
+  prefix and follow a different metadata convention (no CONTEXT_* properties,
+  no bracket records). They are NOT part of the compiler context garden but
+  live alongside it in the same tree.
+
+[DEC id:dec.quality.info-zone-exempt-from-header-gaps date:2026-06-17 by:llm]
+  =info/= files are exempt from garden header gap checks. They are user-facing
+  language documentation authored with a different Org mode convention. The
+  linter's =--skip-info= flag may be used to exclude them.
+
+[DEC id:dec.quality.info-zone-lint-scope date:2026-06-17 by:llm]
+  When linting the garden proper, exclude =info/= to avoid false header-gap
+  warnings. The full corpus lint (including =info/=) should still be run to
+  check for duplicate IDs and broken links across both zones.
+
+#+CAPTION: Info zone validation
+| Check | Result |
+|-------+--------|
+| Info files | 74 |
+| Info lines | 23604 |
+| Info headings | 1015 |
+| Heading IDs | 74 |
+| Bracket records | 0 |
+| Duplicate heading IDs | 0 |
+| Duplicate record IDs | 0 |
+| Broken local file links | 0 |
+| Broken ID links | 0 |
+
+* Round 7: Link & Date Maintenance
+:PROPERTIES:
+:ID: monadc.context.quality.round7-link-maintenance
+:CUSTOM_ID: quality-round7-link-maintenance
+:CONTEXT_KIND: quality-snapshot
+:CONTEXT_STATUS: active
+:SOURCE: context/quality.org
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.quality.round7-broken-links date:2026-06-18 by:big-pickle]
+  Fixed 14 broken local file links across 9 info/ files. Issues included:
+  nonexistent target files (from-rust.org → from-c.org, from-ml.org →
+  from-haskell.org, iterate.org → iteration.org), wrong-path self-references
+  (info/core.org → core.org etc. in from-c.org), and bare #anchor links
+  converted to Org heading links (::*Heading). Added category contract to
+  completion.org and garden.org to close the 24-file contract target. Updated
+  16 stale #+LAST_MODIFIED values that had drifted behind git commit dates.

@@ -1,0 +1,22 @@
+;; TEST-CATEGORY: codegen
+;; TEST-KIND: runtime
+;; TEST-FEATURES: wisp, define, typed-signature, pattern-clause, guard, higher-order, collection
+;; TEST-EXPECT: pass
+;; TEST-STDOUT-FILE: rt_wisp_old_core_higher_order_collection.stdout
+;; TEST-WORKFLOW: core-prelude
+;; TEST-ATOM: old-core style higher-order collection signatures lower to executable pattern clauses.
+;; TEST-CONTEXT: monadc.context.wisp.old-core-prelude-compat
+
+module Main
+
+define positive? :: Int -> Bool
+  n -> n > 0
+
+define take-positive :: (Int -> Bool) -> [Int] -> [Int]
+  _ []            -> []
+  p [x|xs]
+      | p x       -> (x ++ (take-positive p xs))
+      | otherwise -> []
+
+show (take-positive positive? [7 8 -1 9])
+show (take-positive positive? [-1 9])

@@ -71,50 +71,50 @@
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.adt.class-decl src:AlgebraicDataTypes.mon:1-19 conf:high]
+[OBS id:obs.adt.class-decl src:how_to/AlgebraicDataTypes.mon:1-19 conf:high]
   Type class designs: (class Eq a), (class Enum a) with default
   implementations. =(deriving [Eq Enum])= syntax for automatic instance
   derivation. Commented out — type class system is in development.
 
-[OBS id:obs.adt.data-traffic-light src:AlgebraicDataTypes.mon:21-22 conf:high]
+[OBS id:obs.adt.data-traffic-light src:how_to/AlgebraicDataTypes.mon:21-22 conf:high]
   Data type: =(data TrafficLight Red | Yellow | Green)= with deriving.
   Shows fromEnum/succ/pred operations on ADT constructors as enum values.
 
-[OBS id:obs.adt.lambda-syntax src:AlgebraicDataTypes.mon:44-51 conf:high]
+[OBS id:obs.adt.lambda-syntax src:how_to/AlgebraicDataTypes.mon:44-51 conf:high]
   Lambda definition syntax experiments: =(define square λx.x²)=,
   =(define f :: Enum => a -> a)= with guards.
 
-[OBS id:obs.adt.pattern-matching src:AlgebraicDataTypes.mon:59-63,114-118 conf:high]
+[OBS id:obs.adt.pattern-matching src:how_to/AlgebraicDataTypes.mon:59-63,114-118 conf:high]
   Pattern matching in define: =foldl _ acc [] -> acc ...= and =until=
   with guard clauses =go x | p x -> x | otherwise -> ...=.
 
-[OBS id:obs.adt.data-constructors src:AlgebraicDataTypes.mon:266-273,278-288 conf:high]
+[OBS id:obs.adt.data-constructors src:how_to/AlgebraicDataTypes.mon:266-273,278-288 conf:high]
   Data constructors: =(data Color Red | Green | Blue)= (nullary) and
   =(data Point Float Float)= (product type). Pattern matching on
   constructors via =(define color-to-string :: Color -> String) ...=.
 
-[OBS id:obs.adt.shape-area src:AlgebraicDataTypes.mon:286-337 conf:high]
+[OBS id:obs.adt.shape-area src:how_to/AlgebraicDataTypes.mon:286-337 conf:high]
   Shape hierarchy: Circle, Rectangle, Triangle with area function using
   nested pattern matching. Triangle uses three Point constructors.
   All commented-out.
 
-[OBS id:obs.adt.monad src:AlgebraicDataTypes.mon:211-230 conf:high]
+[OBS id:obs.adt.monad src:how_to/AlgebraicDataTypes.mon:211-230 conf:high]
   Monad type class: (class Monad m) with (>>=) and return. Maybe instance.
   safe-last using Maybe. Commented out.
 
-[OBS id:obs.adt.until-sqrt src:AlgebraicDataTypes.mon:114-151 conf:high]
+[OBS id:obs.adt.until-sqrt src:how_to/AlgebraicDataTypes.mon:114-151 conf:high]
   Working examples: =(until p f x)= with guard clause, =(sqrt x)= using
   Newton-Raphson via until. Uses where clause for local definitions.
 
-[OBS id:obs.adt.vec3-layout src:AlgebraicDataTypes.mon:154-195 conf:high]
+[OBS id:obs.adt.vec3-layout src:how_to/AlgebraicDataTypes.mon:154-195 conf:high]
   Layout Vec3 with type class Pow instance, normalize function.
   Demonstrates C-compatible struct layout with method-like functions.
 
-[THINK id:think.adt.constraint-propagate src:AlgebraicDataTypes.mon:3-4 conf:high]
+[THINK id:think.adt.constraint-propagate src:how_to/AlgebraicDataTypes.mon:3-4 conf:high]
   Lines 3-4: Type class constraint propagation and deriving Eq for
   non-nullary data types are not yet implemented.
 
-[THINK id:think.adt.pmatch-bug src:AlgebraicDataTypes.mon:394-397 conf:high]
+[THINK id:think.adt.pmatch-bug src:how_to/AlgebraicDataTypes.mon:394-397 conf:high]
   Lines 394-397: Pattern matching bug — extra show statements are
   required as workaround to avoid the pmatch code path.
 
@@ -134,21 +134,21 @@
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.syntax.paren-vs-wisp src:Syntax.mon:2-16 conf:high]
+[OBS id:obs.syntax.paren-vs-wisp src:how_to/Syntax.mon:2-16 conf:high]
   Side-by-side comparisons of paren-mode and wisp-mode for defines:
   =(define [var :: Int] 3)= vs =define var :: Int 3=,
   =(define [arr :: Arr :: 3 :: Int] ...)= vs =define arr :: Arr :: 3 :: Int ...=,
   =(define (my-count String -> Int) x -> ...)= vs =define (my-count String -> Int) x -> count x=.
 
-[OBS id:obs.syntax.return-type src:Syntax.mon:19-20 conf:high]
+[OBS id:obs.syntax.return-type src:how_to/Syntax.mon:19-20 conf:high]
   =(define return-string -> String) "ciao"= — function with return type
   annotation only (no parameters).
 
-[OBS id:obs.syntax.square-fn src:Syntax.mon:23-27 conf:high]
+[OBS id:obs.syntax.square-fn src:how_to/Syntax.mon:23-27 conf:high]
   =(define square :: Int -> Int) x -> x * x= — wisp-form type-annotated
   function with single parameter.
 
-[OBS id:obs.syntax.last-fn src:Syntax.mon:71-74 conf:high]
+[OBS id:obs.syntax.last-fn src:how_to/Syntax.mon:71-74 conf:high]
   =(define (last List -> a) ...)= — parenthesized define with pattern
   matching: =[] -> nil=, =[x] -> x=, =[_|xs] -> (last xs)=.
 
@@ -168,16 +168,16 @@
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.iter.simple src:Iter.mon:4,13 conf:high]
+[OBS id:obs.iter.simple src:how_to/Iter.mon:4,13 conf:high]
   Simple iteration: =(for 10 (show "10 times!"))= and
   =(for i 0 10 2 (show "iterazione _" i))= with step.
 
-[OBS id:obs.iter.forward-reverse src:Iter.mon:19-23 conf:high]
+[OBS id:obs.iter.forward-reverse src:how_to/Iter.mon:19-23 conf:high]
   Arrow-direction iteration: =for c -> "forward"= (left-to-right) and
   =for c <- "sdrawkcab"= (right-to-left). Demonstrates iter variable
   binding with direction arrows.
 
-[OBS id:obs.iter.nested src:Iter.mon:32-38 conf:high]
+[OBS id:obs.iter.nested src:how_to/Iter.mon:32-38 conf:high]
   Nested for loops: three-level iteration over fruits/nuts/pieces with
   scoped iter variables (iter, iter2, iter3).
 
@@ -197,31 +197,31 @@
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.macros.when src:Macros.mon:18-19 conf:high]
+[OBS id:obs.macros.when src:how_to/Macros.mon:18-19 conf:high]
   Macro: =(define when :: condition . body -> Syntax) (if condition (begin . body))=.
   Demonstrates variadic rest parameters (. body) and Syntax return type.
 
-[OBS id:obs.macros.unless src:Macros.mon:39-40 conf:high]
+[OBS id:obs.macros.unless src:how_to/Macros.mon:39-40 conf:high]
   Macro: =(define (macro-unless condition . body -> Syntax) (if condition (begin) (begin . body)))=.
   Negated version of when.
 
-[OBS id:obs.macros.swap src:Macros.mon:51-54 conf:high]
+[OBS id:obs.macros.swap src:how_to/Macros.mon:51-54 conf:high]
   Macro: =(define (swap! a b -> Syntax) (let [tmp a] (set! a b) (set! b tmp)))=.
   Demonstrates multiple statements and scoped temp variable.
 
-[OBS id:obs.macros.my-and src:Macros.mon:65-68 conf:high]
+[OBS id:obs.macros.my-and src:how_to/Macros.mon:65-68 conf:high]
   Macro (commented): =(define (my-and . args -> Syntax) [x|rest] -> (if x (my-and . rest) False))=.
   Recursive variadic macro — possibly blocked by expansion mechanics.
 
-[OBS id:obs.macros.assert src:Macros.mon:78-80 conf:high]
+[OBS id:obs.macros.assert src:how_to/Macros.mon:78-80 conf:high]
   Macro: =(define (assert condition . body -> Syntax) (when condition (begin . body)))=.
   Composes the previously defined `when` macro.
 
-[OBS id:obs.macros.hygiene src:Macros.mon:109-121 conf:high]
+[OBS id:obs.macros.hygiene src:how_to/Macros.mon:109-121 conf:high]
   Hygiene test (commented): =(define (swap x y -> Syntax) (let [tmp x] ...))= with
   outer =(let ([tmp 999] ...)= — tests that macro's tmp doesn't shadow outer.
 
-[OBS id:obs.macros.vec2-layout src:Macros.mon:89-103 conf:high]
+[OBS id:obs.macros.vec2-layout src:how_to/Macros.mon:89-103 conf:high]
   Layout Vec2 with swap-components function using mutation arrows (v.x <- v.y).
   Demonstrates layout field mutation with C-like syntax.
 
@@ -241,21 +241,21 @@
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.refinement.type-alias src:RefinementType.mon:2-9 conf:high]
+[OBS id:obs.refinement.type-alias src:how_to/RefinementType.mon:2-9 conf:high]
   Type alias: =(type Code List :doc "doc" :alias C)= — types with
   documentation and Unicode aliases. Types must start with capital.
 
-[OBS id:obs.refinement.natural src:RefinementType.mon:11-13,25-35 conf:high]
+[OBS id:obs.refinement.natural src:how_to/RefinementType.mon:11-13,25-35 conf:high]
   Natural refinement type: =(type Natural { x ∈ Int | x >= 0 })= with
   runtime error on violation and predicate =(Natural? x)=.
 
-[OBS id:obs.refinement.even-positive src:RefinementType.mon:17-21,38-60 conf:high]
+[OBS id:obs.refinement.even-positive src:how_to/RefinementType.mon:17-21,38-60 conf:high]
   Even refinement: =(type Even { x ∈ Int | x % 2 = 0 })=.
   Positive refinement: =(type Positive { x ∈ Int | x > 0 })=.
   Intersection: =(type PositiveEven { n ∈ Int | Positive? n and Even? n })=.
   Uses set-builder style syntax with existential quantifier comments.
 
-[OBS id:obs.refinement.email src:RefinementType.mon:62-77 conf:high]
+[OBS id:obs.refinement.email src:how_to/RefinementType.mon:62-77 conf:high]
   Email refinement: =(type Email { s ∈ String | and s contains? "@" ... })=.
   CompanyEmail refines Email further: =(type CompanyEmail { s ∈ Email | s ends-with? "@company.com" })=.
 
@@ -280,11 +280,11 @@
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.layouts.matrix3x3 src:Layouts.mon:4-7 conf:high]
+[OBS id:obs.layouts.matrix3x3 src:how_to/Layouts.mon:4-7 conf:high]
   Layout Matrix3x3: 9 Float fields in row-major order. C-compatible
   memory layout with fixed field names.
 
-[OBS id:obs.layouts.vec3 src:Layouts.mon:11-22 conf:high]
+[OBS id:obs.layouts.vec3 src:how_to/Layouts.mon:11-22 conf:high]
   Layout Vec3 with methods block: =(method ->array :: Self -> Array)=
   converts layout to runtime array via field reference syntax s.x.
   Construction: =(define v Vec3 1.0 2.0 3.0)=, access: =(show v->array)=.
@@ -305,18 +305,18 @@
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.ffi.glfw src:GlfwSpeedrun.mon:1-13 conf:high]
+[OBS id:obs.ffi.glfw src:how_to/GlfwSpeedrun.mon:1-13 conf:high]
   GLFW speedrun: =(include <GLFW/glfw3.h>)= — direct C header include.
   Calls glfwInit, glfwCreateWindow, until-loop for event loop,
   glfwSwapBuffers/glfwPollEvents inside, glfwDestroyWindow/glfwTerminate.
   Demonstrates C function calls without explicit FFI declarations.
 
-[OBS id:obs.ffi.raylib src:RaylibSpeedrun.mon:1-13 conf:high]
+[OBS id:obs.ffi.raylib src:how_to/RaylibSpeedrun.mon:1-13 conf:high]
   Raylib speedrun: InitWindow, Color construction, until-loop with
   BeginDrawing/ClearBackground/DrawFPS/EndDrawing. Shows C struct
   creation: =(define color Color 33 33 33 0)= with docstring.
 
-[OBS id:obs.ffi.sdl src:SdlSpeedrun.mon:1-35 conf:high]
+[OBS id:obs.ffi.sdl src:how_to/SdlSpeedrun.mon:1-35 conf:high]
   SDL speedrun: SDL_Init, SDL_CreateWindow/Renderer, while True loop
   with SDL_SetRenderDrawColor/SDL_RenderClear/SDL_RenderPresent/SDL_Delay.
   Includes commented-out version with SDL_Event and event loop pattern.
@@ -342,7 +342,7 @@
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.experiment.contents src:experiment.mon:1-15 conf:high]
+[OBS id:obs.experiment.contents src:how_to/experiment.mon:1-15 conf:high]
   Quick scratch: =(data T = A | B | C deriving [Bounded Enum Show])= with
   =(toEnumSafe :: ∀ t. [Enum t, Bounded t] => Int -> Maybe t)= using
   explicit forall syntax and type class constraints. Demonstrates modern
@@ -364,13 +364,13 @@
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.test.layout-color src:Test.mon:2-18 conf:high]
+[OBS id:obs.test.layout-color src:how_to/Test.mon:2-18 conf:high]
   Layout Color with U8 fields and methods: fromRGB (constructor) and
   eql (equality comparison with field access). Construction via
   =(Color 255 0 0)= and =(Color.fromRGB 255 0 0)= with dot-notation
   static method call. Method call: =(red.eql red)=.
 
-[OBS id:obs.test.experiments src:how_to/Test.mon:24-146 conf:high]
+[OBS id:obs.test.experiments src:how_to/Test.mon:24-145 conf:high]
   Commented-out experiments: Unicode lambda (λx.x²), implicit
   multiplication (2x), matrix box-drawing syntax (╭─ ... ─╯), Unicode
   quote markers (⌜...⌝), foldl, atoi, Fn-id, string->int with
@@ -414,57 +414,57 @@
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.term.term.vulkan-init src:Term/Term.mon:14-47 conf:high]
+[OBS id:obs.term.term.vulkan-init src:how_to/Term/Term.mon:14-47 conf:high]
   Vulkan initialization: GLFW window, VkInstance with debug layers,
   VkSurfaceKHR via GLFW. Uses =:unprefix GLFW_= on include to avoid
   prefix pollution.
 
-[OBS id:obs.term.term.phys-device src:Term/Term.mon:50-62 conf:high]
+[OBS id:obs.term.term.phys-device src:how_to/Term/Term.mon:50-62 conf:high]
   Physical device selection: enumerate devices, pick first, get queue
   family properties. Uses =VkQueueFamilyProperties= layout from FFI.
 
-[OBS id:obs.term.term.logical-device src:Term/Term.mon:65-90 conf:high]
+[OBS id:obs.term.term.logical-device src:how_to/Term/Term.mon:65-90 conf:high]
   Logical device creation: queue info with priority, swapchain extension,
   VkDeviceCreateInfo, VkQueue retrieval. Bootstraps font system.
 
-[OBS id:obs.term.term.swapchain src:Term/Term.mon:93-117 conf:high]
+[OBS id:obs.term.term.swapchain src:how_to/Term/Term.mon:93-117 conf:high]
   Swapchain setup: surface capabilities, format/color space, extent,
   image usage, pre/post transform, present mode.
 
-[OBS id:obs.term.term.image-views src:Term/Term.mon:120-140 conf:high]
+[OBS id:obs.term.term.image-views src:how_to/Term/Term.mon:120-140 conf:high]
   Swapchain image views: for-loop creating VkImageViewCreateInfo for
   each image. Demonstrates Vulkan handle arrays in Monad.
 
-[OBS id:obs.term.term.render-pass src:Term/Term.mon:143-171 conf:high]
+[OBS id:obs.term.term.render-pass src:how_to/Term/Term.mon:143-171 conf:high]
   Render pass: color attachment description, subpass with color reference,
   VkRenderPass creation.
 
-[OBS id:obs.term.term.framebuffers src:Term/Term.mon:175-188 conf:high]
+[OBS id:obs.term.term.framebuffers src:how_to/Term/Term.mon:175-188 conf:high]
   Framebuffers: for-loop creating one framebuffer per image view.
 
-[OBS id:obs.term.term.cmd-pool src:Term/Term.mon:192-205 conf:high]
+[OBS id:obs.term.term.cmd-pool src:how_to/Term/Term.mon:192-205 conf:high]
   Command pool and buffer allocation: VkCommandPoolCreateInfo with
   reset flag, VkCommandBufferAllocateInfo for multiple buffers.
 
-[OBS id:obs.term.term.sync src:Term/Term.mon:209-221 conf:high]
+[OBS id:obs.term.term.sync src:how_to/Term/Term.mon:209-221 conf:high]
   Synchronization: VkSemaphore (image available, render done), VkFence
   (in-flight tracking), all with signaled initial state.
 
-[OBS id:obs.term.term.renderer-setup src:Term/Term.mon:225-232 conf:high]
+[OBS id:obs.term.term.renderer-setup src:how_to/Term/Term.mon:225-232 conf:high]
   Renderer and font setup: global device/queue assignment, pipeline
   creation, font loading from TTF file at 18px.
 
-[OBS id:obs.term.term.input src:Term/Term.mon:236-258 conf:high]
+[OBS id:obs.term.term.input src:how_to/Term/Term.mon:236-258 conf:high]
   Input handling: glfwSetCharCallback for text input, glfwSetKeyCallback
   for backspace and escape. Demonstrates Monad lambda callbacks with
   foreign function pointer types (GLFWwindow*, I32).
 
-[OBS id:obs.term.term.main-loop src:Term/Term.mon:264-353 conf:high]
+[OBS id:obs.term.term.main-loop src:how_to/Term/Term.mon:264-353 conf:high]
   Main loop: delta time, cursor blink, acquire image, record command
   buffer with clear color, draw text and cursor, submit, present.
   Full Vulkan frame lifecycle in Monad.
 
-[OBS id:obs.term.term.cleanup src:Term/Term.mon:357-371 conf:high]
+[OBS id:obs.term.term.cleanup src:how_to/Term/Term.mon:357-371 conf:high]
   Cleanup: vkDeviceWaitIdle, renderer shutdown, destroy all Vulkan
   objects in reverse order.
 
@@ -484,27 +484,27 @@
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.term.font.layouts src:Term/Font.mon:7-33 conf:high]
+[OBS id:obs.term.font.layouts src:how_to/Term/Font.mon:7-33 conf:high]
   Layout definitions: Character (advance, bitmap metrics, UV coords),
   Texture2D (VkImage/Memory/View/Sampler/descSet), Font (texture atlas
   + metrics + character array). Layouts match C struct layout precisely.
 
-[OBS id:obs.term.font.init src:Term/Font.mon:36-57 conf:high]
+[OBS id:obs.term.font.init src:how_to/Term/Font.mon:36-57 conf:high]
   Global state: ft-lib, Vulkan handles, command pool. init-font-system
   stores globals and creates command pool.
 
-[OBS id:obs.term.font.load src:Term/Font.mon:60-122 conf:high]
+[OBS id:obs.term.font.load src:how_to/Term/Font.mon:60-122 conf:high]
   load-font: FT_New_Face, FT_Set_Pixel_Sizes, iterate chars 32-127,
   fill Character metrics, build RGBA atlas buffer from grayscale bitmaps,
   handle atlas row wrapping.
 
-[OBS id:obs.term.font.vulkan-upload src:Term/Font.mon:124-273 conf:high]
+[OBS id:obs.term.font.vulkan-upload src:how_to/Term/Font.mon:124-273 conf:high]
   Vulkan texture upload: VkImage creation with device-local memory,
   staging buffer with host-visible memory, memcpy atlas data, one-time
   command buffer with pipeline barriers (UNDEFINED→TRANSFER_DST, copy,
   TRANSFER_DST→SHADER_READ_ONLY), submit and wait.
 
-[OBS id:obs.term.font.image-view-sampler src:Term/Font.mon:279-350 conf:high]
+[OBS id:obs.term.font.image-view-sampler src:how_to/Term/Font.mon:279-350 conf:high]
   Image view, sampler (linear filter), descriptor pool/set allocation,
   write descriptor set with combined image sampler. Store everything
   into Font struct.
@@ -525,24 +525,24 @@
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.term.renderer.spv-embedded src:Term/Renderer.mon:38-218 conf:high]
+[OBS id:obs.term.renderer.spv-embedded src:how_to/Term/Renderer.mon:38-218 conf:high]
   GLSL shader SPIR-V bytecode embedded as Monad array literals:
   text-frag-spv (732 bytes) and text-vert-spv (1324 bytes). These are
   compiled offline and inlined as integer array constants.
 
-[OBS id:obs.term.renderer.layouts src:Term/Renderer.mon:227-274 conf:high]
+[OBS id:obs.term.renderer.layouts src:how_to/Term/Renderer.mon:227-274 conf:high]
   Renderer layouts: Texture2D, Character, Font, Color (rgba float),
   Vertex (pos+uv+color), TextureBatch (texture pointer + vertex range).
 
-[OBS id:obs.term.renderer.globals src:Term/Renderer.mon:280-297 conf:high]
+[OBS id:obs.term.renderer.globals src:how_to/Term/Renderer.mon:280-297 conf:high]
   Global state: vertex buffer, batch array, counts, screen dimensions,
   Vulkan handles (pipeline, pipeline layout, descriptor set layout,
   vertex buffer/memory). All allocated at import time via =(calloc)=.
 
-[OBS id:obs.term.renderer.colors src:Term/Renderer.mon:301-305 conf:high]
+[OBS id:obs.term.renderer.colors src:how_to/Term/Renderer.mon:301-305 conf:high]
   Predefined colors: WHITE, BLACK, RED, GREEN, BLUE as Color layout values.
 
-[OBS id:obs.term.renderer.pipeline src:Term/Renderer.mon:354-519 conf:high]
+[OBS id:obs.term.renderer.pipeline src:how_to/Term/Renderer.mon:354-519 conf:high]
   Pipeline creation: descriptor set layout, shader modules, vertex
   binding (stride 32), attributes (pos+uv+color), input assembly
   (triangle list), rasterization, multisampling, alpha blending,
@@ -550,20 +550,20 @@
   pipeline layout, graphics pipeline creation, vertex buffer creation
   with host-visible memory.
 
-[OBS id:obs.term.renderer.frame src:Term/Renderer.mon:523-577 conf:high]
+[OBS id:obs.term.renderer.frame src:how_to/Term/Renderer.mon:523-577 conf:high]
   Frame lifecycle: renderer-begin-frame (reset counts), renderer-end-frame
   (upload vertices, set viewport/scissor, bind pipeline, push screen size,
   bind vertex buffer, draw each batch). Demonstrates immediate-mode
   pattern through batch-based draw submission.
 
-[OBS id:obs.term.renderer.primitives src:Term/Renderer.mon:581-724 conf:high]
+[OBS id:obs.term.renderer.primitives src:how_to/Term/Renderer.mon:581-724 conf:high]
   Drawing primitives: push-vertex (write Vertex struct fields),
   get-batch (texture batch management), texture2D (textured quad with
   6 vertices), draw-char (character glyph quad with UV coords),
   draw-text (iterate chars, accumulate advance), draw-cursor (block
   cursor at position using font metrics).
 
-[OBS id:obs.term.renderer.shutdown src:Term/Renderer.mon:728-735 conf:high]
+[OBS id:obs.term.renderer.shutdown src:how_to/Term/Renderer.mon:728-735 conf:high]
   renderer-shutdown: destroy Vulkan pipeline objects and free CPU buffers.
 
 ** Term/ Shaders
@@ -582,12 +582,12 @@
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.term.shaders.frag src:Term/Renderer.mon:38-100 conf:high]
+[OBS id:obs.term.shaders.frag src:how_to/Term/Renderer.mon:38-100 conf:high]
   Fragment shader (text.frag): samples font atlas with alpha channel,
   applies uniform color. Embedded as SPIR-V bytecode array at
   Renderer.mon:38-100.
 
-[OBS id:obs.term.shaders.vert src:Term/Renderer.mon:104-218 conf:high]
+[OBS id:obs.term.shaders.vert src:how_to/Term/Renderer.mon:104-218 conf:high]
   Vertex shader (text.vert): transforms NDC coordinates with screen
   size push constant, passes UV coordinates to fragment stage.
   Embedded as SPIR-V bytecode array at Renderer.mon:104-218.

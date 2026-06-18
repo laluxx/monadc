@@ -133,6 +133,36 @@
   the arrows into and out of it.  Catface does not claim a full Yoneda embedding;
   it uses representable views as an interface discipline.
 
+* Category Contract
+:PROPERTIES:
+:ID: monadc.context.category.catface.category-contract
+:CUSTOM_ID: category-catface-category-contract
+:CONTEXT_KIND: contract
+:CONTEXT_STATUS: active
+:SOURCE: context/category/catface.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.category.catface.contract src:context/category/catface.org conf:high]
+  Catface is the live terminal interface for the context category layer.
+  It loads Org files, builds the free category graph, and exposes Hom-set
+  views through fuzzy search and categorical projections.
+
+- *Owned Phase*: Context navigation and query (post-parse, not a compiler phase)
+- *Inputs*: Org files and category/ TSV tables (objects.tsv, morphisms.tsv)
+- *Outputs*: Terminal UI frames, JSON/Org/Markdown exports, --check exit code
+- *Invariants*:
+  - Query language is stack/filter-based with visible category glyphs
+  - All generating morphisms have typed source/target in the model
+  - Dual-pane layout: left = fuzzy result stack, right = object card + Hom-sets
+  - No file writes outside explicit --export mode
+- *Test Hooks*: =zig build test= runs law_tests; =--check= parses garden and verifies no unresolved edges
+- *Failure Symptoms*:
+  - Segfault on malformed Org: the org loader must handle all valid garden files
+  - Missing objects.tsv entries: the parser will fail silently or skip
+  - Cursor errors: =curs_set= failures are silently caught
+- *Context Neighbors*: [[file:../category/query-language.org][query-language.org]], [[file:../category/tui.org][tui.org]], [[file:../category/mathematics.org][mathematics.org]], [[file:../category/type-system.org][type-system.org]]
+
 * Build and Run
 :PROPERTIES:
 :ID: monadc.context.category.catface.build-run

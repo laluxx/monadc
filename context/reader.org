@@ -211,11 +211,11 @@
   AST JSON emission includes =is_heap= for array nodes, making =~[]= behavior
   visible in focused fixtures.
 
-[OBS id:obs.reader.heap-fixture src:tests/path_heap_literals.mon conf:high]
+[OBS id:obs.reader.heap-fixture src:user-report conf:high]
   =tests/path_heap_literals.mon= now focuses on heap array literals and their
   runtime behavior: =show=, =count=, and Wisp =for i -> heap= iteration.
 
-[OBS id:obs.reader.path-value-fixture src:tests/codegen/rt_path_literal_value.mon conf:high]
+[OBS id:obs.reader.path-value-fixture src:tests/codegen/branches/values/paths/atom.codegen.00.values.paths.rt.path.literal.value/rt_path_literal_value.mon conf:high]
   =tests/codegen/rt_path_literal_value.mon= records that a syntactically valid
   home-relative Unix path literal such as =~/xos/projects/c/monadc/context/= is
   a definable =Path= value.
@@ -244,7 +244,7 @@
   tokens until the closing paren into one flat instruction list. The backend,
   not the reader, decides which tokens are mnemonics and operands.
 
-[OBS id:obs.reader.inline-asm-wisp src:tests/codegen/asm conf:high]
+[OBS id:obs.reader.inline-asm-wisp src:tests/codegen/branches/ffi-asm/inline-asm/ conf:high]
   Wisp function bodies such as =x -> (asm add x 5)= expand to the same
   parenthesized =AST_ASM= form. The asm corpus therefore uses Wisp syntax for
   user-facing examples while still testing the exact reader/codegen path.
@@ -529,13 +529,13 @@ Expected Wisp shape:
   bindings. =x -> body= in lambda position creates a lambda with parameter =x=.
   In define position, =define f x -> body= creates (define (f x) body).
 
-[OBS id:obs.reader.heap-array-golden-json src:tests/codegen/rt_heap_array_runtime.json,tests/codegen/rt_heap_array_for.json,tests/path_heap_literals.json conf:high]
+[OBS id:obs.reader.heap-array-golden-json src:tests/codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.heap.array.runtime/rt_heap_array_runtime.json,tests/codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.heap.array.for/rt_heap_array_for.json conf:high]
   Heap array regressions now carry expected AST JSON sidecars. These goldens make
   the =AST_ARRAY.array.is_heap=true= contract observable alongside runtime stdout
   so a future change cannot pass only by printing the right values while erasing
   heap literal identity in the AST.
 
-[OBS id:obs.reader.heap-array-for-desugar-golden src:tests/codegen/rt_heap_array_for.desugar,tests/path_heap_literals.desugar conf:high]
+[OBS id:obs.reader.heap-array-for-desugar-golden src:tests/codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.heap.array.for/rt_heap_array_for.desugar conf:high]
   Wisp heap-array =for= coverage now carries desugar goldens. The expected shape
   is a =for= form over =[iter 0 (count heap)]= with a binding that indexes the
   heap array as =(heap iter)= before executing the body.

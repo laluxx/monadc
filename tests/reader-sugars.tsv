@@ -55,6 +55,8 @@ lambda_lit_curried	monadc.context.reader.sugar.lambda-lit	Curried lambda literal
 quasiquote_corner_empty	monadc.context.reader.sugar.quasiquote-corner	Empty corner-bracket quasiquote.	⌜⌝	(quote ())			regression	passing-baseline-2026-06-15
 quasiquote_corner_atoms	monadc.context.reader.sugar.quasiquote-corner	Quasiquote with multiple atoms.	⌜1 2 3⌝	(quote (1 2 3))			regression	passing-baseline-2026-06-15
 quasiquote_corner_unquote	monadc.context.reader.sugar.quasiquote-corner	Quasiquote with unquote hole.	⌜1 2 ⌞+ 1 2⌟ 5⌝				regression	passing-baseline-2026-06-15
+quasiquote_corner_infinite_range	monadc.context.reader.sugar.quasiquote-corner, monadc.context.reader.sugar.range-sugar	Corner-bracket quote accepts infinite list range sugar.	⌜0..  ⌝	(quote (0..))			regression	passing-baseline-2026-06-18
+quasiquote_corner_step_range	monadc.context.reader.sugar.quasiquote-corner, monadc.context.reader.sugar.range-sugar	Corner-bracket quote accepts stepped infinite list range sugar.	⌜0,2..⌝	(quote (0,2..))			regression	passing-baseline-2026-06-18
 # ── Cond-to-If Sugar ────────────────────────────────────────────────────────
 cond_simple_bracket	monadc.context.reader.sugar.cond-to-if	Cond with bracket syntax desugars to nested if.	(cond [(> 3 2) 1] [else 0])	(if (> 3 2) 1 0)			regression	passing-baseline-2026-06-15
 cond_multi_body	monadc.context.reader.sugar.cond-to-if	Cond clause with multi body wraps in begin.	(cond [(> 3 2) 1 2] [else 0])	(if (> 3 2) (begin 1 2) 0)			regression	passing-baseline-2026-06-15
@@ -103,6 +105,8 @@ wisp_if_inline	monadc.context.wisp.sugar.if-sugar	Wisp inline if/then/else desug
 # ── Wisp Where Clause Sugar ─────────────────────────────────────────────────
 wisp_where_value	monadc.context.wisp.sugar.where	Wisp where clause binds local values.	define f x -> result where result = x + 1				regression	passing-baseline-2026-06-15
 wisp_where_fn	monadc.context.wisp.sugar.where	Wisp where clause with function binding.	define sqrt x -> good x / 2 where good g = g * g				regression	passing-baseline-2026-06-15
+wisp_define_corner_range	monadc.context.wisp.sugar.def, monadc.context.reader.sugar.quasiquote-corner, monadc.context.reader.sugar.range-sugar	Wisp define preserves corner-quoted range with interior spaces.	define [xs :: List] ⌜0..  ⌝	(define (xs :: List) (quote (0..)))			regression	passing-baseline-2026-06-18
+wisp_define_variadic_signature	monadc.context.wisp.sugar.def, monadc.context.core-libs.math	Wisp define keeps . Type signatures as rest parameters.	define gcd :: . Int -> Int\n  [] -> 0	(define gcd (lambda ([__pm_args :: Int] -> (Int)) (if (rt_coll_is_empty __pm_args) 0 (undefined))))			regression	passing-baseline-2026-06-18
 # ── Wisp Arrow-Clause Sugar ──────────────────────────────────────────────────
 wisp_arrow_single	monadc.context.wisp.sugar.arrow-clause	Wisp arrow clause desugars to lambda.	x -> x + 1				regression	passing-baseline-2026-06-15
 wisp_arrow_pattern	monadc.context.wisp.sugar.arrow-clause	Wisp arrow clause with pattern matching.	[] -> nil | [x] -> x				regression	passing-baseline-2026-06-15

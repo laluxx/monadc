@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-14
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -390,3 +390,31 @@
   connects-to -> `monadc.context.source-map` (source location data is arena-
   allocated during parsing; the source map entries live in arena memory for the
   lifetime of the compilation unit)
+
+* Category Contract
+:PROPERTIES:
+:ID: monadc.context.arena.category-contract
+:CUSTOM_ID: arena-category-contract
+:CONTEXT_KIND: contract
+:END:
+
+[DOC id:doc.arena.category-contract src:context/arena.org conf:high]
+  This section declares the category contract for =arena=. It is the
+  routing target for failures and future test/context links touching the arena
+  bump allocator and memory management strategy.
+
+#+CAPTION: Arena Allocator Category Contract
+| Field | Contract |
+|-------+----------|
+| Owned phase | Bump-pointer allocation for compiler data structures, scratch/permanent arena separation, checkpoint/restore for speculative work (e.g. HM inference). |
+| Inputs | Allocation requests (size, alignment), arena selection (scratch vs permanent), checkpoint token. |
+| Outputs | Allocated memory regions, arena checkpoint tokens for restore, freed pages on arena reset. |
+| Invariants | Permanent arena is never freed during a compilation unit; scratch arena page-aligned; checkpoint/restore is LIFO; scratch arena may be reset between inference passes; runtime GC objects use a separate non-moving mark-sweep heap, not the compiler arena. |
+| Test hooks | Arena stress tests (large/frequent allocations), alignment tests, checkpoint/restore round-trip tests, leak detection across reset boundaries. |
+| Failure symptoms | Arena exhaustion (OOM), checkpoint mismatch (restore called without matching checkpoint), use-after-free across checkpoint boundary, accidental allocation in wrong arena. |
+| Context neighbors | runtime, source-map, infer, types, reader |
+
+[DEC id:dec.arena.category-contract-owner date:2026-06-18 by:big-pickle]
+  Failures matching the symptoms above should start triage in this category, then
+  follow the listed neighbors only when the local contract does not explain the
+  issue.

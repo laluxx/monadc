@@ -307,3 +307,31 @@
   `monadc.context.codegen-ops` (codegen_expr compiles each expression) ·
   `monadc.context.infer` (HM inference, register_builtins, InferEnv) ·
   `monadc.context.reader` (parse, READER_ERROR, longjmp recovery)
+
+* Category Contract
+:PROPERTIES:
+:ID: monadc.context.repl.category-contract
+:CUSTOM_ID: repl-category-contract
+:CONTEXT_KIND: contract
+:END:
+
+[DOC id:doc.repl.category-contract src:context/repl.org conf:high]
+  This section declares the category contract for =repl=. It is the
+  routing target for failures and future test/context links touching the
+  interactive read-eval-print loop.
+
+#+CAPTION: REPL Category Contract
+| Field | Contract |
+|-------+----------|
+| Owned phase | Interactive read-eval-print loop, expression-at-a-time compilation and execution, REPL state and environment persistence across inputs. |
+| Inputs | User input lines, interactive meta-commands, ReaderEnv and InferEnv seeded with builtins. |
+| Outputs | Evaluated expression results via runtime printing, persistent environment across REPL expressions, error recovery without process termination. |
+| Invariants | Each expression is parsed, inferred, and codegen'd independently; environment persists across expressions within a REPL session; parse errors (READER_ERROR via longjmp) are caught and reported without terminating the session. |
+| Test hooks | REPL interaction test fixtures, input/output round-trip tests, error recovery tests, environment persistence tests across multiple expressions. |
+| Failure symptoms | Expression parse failure in REPL context, state corruption across evaluations, longjmp crash on read error, builtin environment not seeded correctly, codegen crash on REPL-compiled expression. |
+| Context neighbors | main, cli, codegen-ops, infer, reader, runtime |
+
+[DEC id:dec.repl.category-contract-owner date:2026-06-18 by:big-pickle]
+  Failures matching the symptoms above should start triage in this category, then
+  follow the listed neighbors only when the local contract does not explain the
+  issue.

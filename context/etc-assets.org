@@ -61,15 +61,14 @@
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
-:SOURCE: etc/docs.html
+:SOURCE: etc/
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.etc-assets.docs-html.file src:etc/docs.html conf:high]
-  Standalone HTML documentation page for the MonadC compiler.
-  Contains language reference material, type system overview, and
-  compiler usage guides. Rendered from Org sources or hand-authored.
-  Served as the primary documentation target for web-based access.
+[OBS id:obs.etc-assets.docs-html.file src:user-report conf:medium]
+  Aspirational standalone HTML documentation page for the MonadC compiler.
+  Currently does not exist in etc/. The docs/ directory is planned to
+  hold HTML documentation generated from Org sources. 
 
 [INF id:inf.etc-assets.docs-html from:obs.etc-assets.docs-html.file conf:high]
   connects-to -> `monadc.context.philosophy.human-witness` (the docs

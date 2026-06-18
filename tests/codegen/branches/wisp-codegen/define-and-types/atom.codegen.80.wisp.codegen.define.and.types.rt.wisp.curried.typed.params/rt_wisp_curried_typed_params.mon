@@ -1,0 +1,9 @@
+module Main
+
+(define (divisible? [x : Int] -> [y : Int] -> Bool)
+  (= (mod x y) 0))
+
+(tests
+  (assert-eq (divisible? 10 5) True "curried typed params true")
+  (assert-eq (divisible? 10 3) False "curried typed params false")
+)

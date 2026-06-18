@@ -1,0 +1,11 @@
+;;; ListImport.mon --- Data.List import resolution probe
+
+;;; Code:
+
+(module Data.ListImport [])
+
+import Data.List
+
+tests
+  assert-eq (length [10 20 30]) 3 "Data.List import length"
+  assert-eq (append [1] [2 3]) [1 2 3] "Data.List import append"

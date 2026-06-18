@@ -1,0 +1,103 @@
+;;; Donut.mon --- The spinning donut
+
+;; Author: Laluxx
+;; Version: 0.0.1
+;; Keywords: cli terminal donut example
+
+;;; Commentary:
+
+;         may the donut always spin.
+;
+;                 @@@@@@@@@@
+;            $$$$$$$########$$$$$
+;         $$$####*****!!!!!****####
+;       #####****!!*!!!!!=!!!!*!****#
+;     *###*****!!!===;;;;;;;====!!!!!**
+;    *****!!*!!==;:::~~~~~~~~::;;==!!!!!
+;   !***!*!!!==;::~-,,.....,,-~~:;;===!!=
+;  !!!!!!!!==;;~~-,...........,--::;===!=
+;  !!!!!!!==;::~-......   ......-~:;;;===;
+;  =!!!!===;;:~-,...         ...,-~::;;===;
+;  ==!!===;;::~-,..           .,-~:;;;===;;
+;  ;=======;;:~~-.,          :;;::;;=====;:
+;  ;;=======;;;:::::       ;!***!!======;:
+;  ~;;;===========!!***#$$$$$##***!!!==;~
+;   ~:;;=======!!!**##$$@@@@$$$#**!!!=;~
+;    -::;;=====!!!**##$$$$$$###**!!=;;-
+;     ,~:;;;;==!!!!***######*****!=;~.
+;       ,-~::;;===!!!*!!!!!!*!!=;:~.
+;         .-~~:;:;;===!!!!==;;:~,
+;            ..,--~~~~~~~~--,.
+
+
+;;; Code:
+
+import Math
+
+define shades ".,-~:;=!*#$@"
+
+define L :: Float -> ((Float, Float))
+  s -> map (sin && cos) [0.0, s .. τ]
+
+;; TODO
+out a = [] 0.0
+
+
+
+;; Not converted
+
+fn sweep(step) {
+ mut out,a = [],p0.0
+ while a < TAU { out = out.append([sin(a), cos(a)]) a += step }
+ out
+}
+
+fn shade(light) {
+ def i = int(light * 8.0)
+ SHADES[i < 0 ? 0 : i > 11 ? 11 : i]
+}
+
+fn draw(c, depth, tube, ring, w, h, rx, ry) {
+ mut i = 0
+ while i < depth.len { depth[i] = 0.0 i += 1 }
+ canvas_clear(c)
+
+ def sx, cx, sy, cy = sin(rx), cos(rx), sin(ry), cos(ry)
+ def ox, oy, kx, ky = w / 2, h / 2, w * 0.38, h * 0.72
+
+ for t in tube {
+  def st, ct, r = t[0], t[1], t[1] + 2.0
+
+  for p in ring {
+   def sp, cp = p[0], p[1]
+   def z = 1.0 / (5.0 + cx * r * sp + st * sx)
+
+   def x = int(ox + kx * z * (r * (cy * cp + sx * sy * sp) - st * cx * sy))
+   def y = int(oy - ky * z * (r * (sy * cp - sx * cy * sp) + st * cx * cy))
+   def o = x + y * w
+
+   if x > 0 && x < w && y > 0 && y < h && z > depth[o] {
+    def light = cp * ct * sy - cx * ct * sp - sx * st + cy * (cx * st - ct * sx * sp)
+
+    if light > 0.0 {
+     depth[o] = z
+     def _ = canvas_set(c, x, y, shade(light), 6, 0)
+    }
+   }
+  }
+ }
+
+ canvas_refresh(c)
+}
+
+def tube = sweep(0.07)
+def ring = sweep(0.02)
+
+mut rx = 0.0
+mut ry = 0.0
+
+tui_canvas_loop(fn(c, depth, w, h) {
+ draw(c, depth, tube, ring, w, h, rx, ry)
+ rx += 0.04
+ ry += 0.02
+})

@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-14
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -381,3 +381,31 @@
   implementations) ·
   `monadc.context.env.type` (method names are registered as =ENV_FUNC= entries
   during instance registration, enabling direct symbol-based dispatch)
+
+* Category Contract
+:PROPERTIES:
+:ID: monadc.context.typeclass.category-contract
+:CUSTOM_ID: typeclass-category-contract
+:CONTEXT_KIND: contract
+:END:
+
+[DOC id:doc.typeclass.category-contract src:context/typeclass.org conf:high]
+  This section declares the category contract for =typeclass=. It is the
+  routing target for failures and future test/context links touching the type
+  class system, instance resolution, and method dispatch.
+
+#+CAPTION: Type Class System Category Contract
+| Field | Contract |
+|-------+----------|
+| Owned phase | Class declaration registration, instance declaration registration, method dispatch via tc_is_method hook in strcmp dispatch, dictionary pass construction for polymorphic method calls. |
+| Inputs | Type class definitions (class name, method signatures), instance declarations (type, method implementations), method call sites in codegen dispatch. |
+| Outputs | Instance method resolution, dispatched calls through tc_is_method hook, zero-cost abstraction via monomorphization (codegen already specializes by type). |
+| Invariants | At most one instance per class+type combination; instance resolution terminates; tc_is_method hook checked before each comparison operation; monomorphization provides zero-cost dispatch without runtime dictionary overhead. |
+| Test hooks | Type class test suite, method dispatch correctness tests, instance resolution tests, overlap detection tests, performance overhead benchmarks for tc_is_method path. |
+| Failure symptoms | Ambiguous instance detection, missing instance for required method call, method dispatch routed to wrong instance, tc_is_method overhead on hot comparison loops, instance registration collision. |
+| Context neighbors | codegen-ops, infer, env, language, tests |
+
+[DEC id:dec.typeclass.category-contract-owner date:2026-06-18 by:big-pickle]
+  Failures matching the symptoms above should start triage in this category, then
+  follow the listed neighbors only when the local contract does not explain the
+  issue.

@@ -399,7 +399,7 @@ assertions directly instead of requiring hand-written shell checks per fixture.
    =dep_refl=, =dep_succ=, =dep_nat_symbol=, =dep_ann_term=,
    =dep_lambda_paren=, and =dep_if_term=.
 
-[OBS id:obs.tests.closure-capture-2026-06-12 src:tests/codegen/rt_closure_capture.mon conf:high]
+[OBS id:obs.tests.closure-capture-2026-06-12 src:tests/codegen/branches/symbol-env/closures/atom.codegen.05.symbol.env.closures.rt.closure.capture/rt_closure_capture.mon conf:high]
    =rt_closure_capture= now passes as a dependent-checker and runtime closure
    regression. Its outer lambda annotates the return as bare =Fn=; =dep.c=
    treats that annotation as a fresh callable type meta, solves it to the
@@ -430,17 +430,17 @@ assertions directly instead of requiring hand-written shell checks per fixture.
      documented the old size-suffix bug; it now passes and proves =q= suffix
      inference for =Int=/i64 params.
 
-[OBS id:obs.tests.asm-nonaked-2026-06-12 src:tests/codegen/rt_asm_function_nonaked.mon conf:high]
+[OBS id:obs.tests.asm-nonaked-2026-06-12 src:tests/codegen/branches/ffi-asm/inline-asm/atom.codegen.70.ffi.asm.inline.asm.rt.asm.function.nonaked/rt_asm_function_nonaked.mon conf:high]
    =rt_asm_function_nonaked.mon= now passes. The fixture proves that non-naked
    inline asm infers =q= for =Int= placeholder operands and swaps two-operand
    arithmetic placeholders correctly under LLVM's =r,0,r= constraint scheme.
 
-[OBS id:obs.tests.asm-top-level-expected-failure-2026-06-12 src:tests/codegen/rt_asm_top_level.mon conf:high]
+[OBS id:obs.tests.asm-top-level-expected-failure-2026-06-12 src:tests/codegen/errors/codegen/inline-asm/atom.codegen.70.ffi.asm.inline.asm.rt.asm.top.level/rt_asm_top_level.mon conf:high]
    =rt_asm_top_level.mon= is an expected compile failure. Top-level =asm= may
    parse and type-check as an opaque hole during bootstrap, but codegen rejects
    it because inline asm is only valid as a function body.
 
-[OBS id:obs.tests.asm-corpus-rewritten-2026-06-13 src:tests/codegen/asm,create_asm_tests.py conf:high]
+[OBS id:obs.tests.asm-corpus-rewritten-2026-06-13 src:tests/codegen/branches/ffi-asm/inline-asm/,create_asm_tests.py conf:high]
    The generated =tests/codegen/asm= subset has been rewritten from top-level
    =(inline asm "...")= snippets into targeted function-body Wisp fixtures.
    The corpus now covers =asm.c=/=asm.h= behavior: mnemonic splitting,
@@ -448,7 +448,7 @@ assertions directly instead of requiring hand-written shell checks per fixture.
    AT&T operand reordering, multi-parameter constraints, Float/Char return
    types, no-op placement, and syscall-shaped String operands.
 
-[OBS id:obs.tests.asm-corpus-behavior-names-2026-06-13 src:tests/codegen/asm,create_asm_tests.py conf:high]
+[OBS id:obs.tests.asm-corpus-behavior-names-2026-06-13 src:tests/codegen/branches/ffi-asm/inline-asm/,create_asm_tests.py conf:high]
    The asm corpus is generated as 60 behavior-named fixtures such as
    =asm-int-add-two-params.mon=, =asm-sse-float-add.mon=,
    =asm-cmov-max.mon=, and =asm-syscall-write-string.mon=. The generator deletes
@@ -576,6 +576,25 @@ assertions directly instead of requiring hand-written shell checks per fixture.
    Active core/prelude test sections should use Wisp block syntax:
    =tests= followed by indented =assert-eq(...)= assertions. Avoid introducing
    new Lisp-style =(tests ...)= test sections in core modules.
+
+[FIX id:fix.tests.core-runner-ignore-lock-files-2026-06-18 date:2026-06-18 by:codex]
+   =tests/run_core.py= filters discovery candidates with =Path.is_file()= before
+   reading active test blocks. This prevents dangling editor lock symlinks such
+   as =core/.#Math.mon= from crashing =make test core=. Regression coverage:
+   =python3 tests/test_run_core.py=.
+
+[FIX id:fix.tests.core-prelude-probes-2026-06-18 date:2026-06-18 by:codex]
+   Added active core module probes for =Control.Arrow.&&= and automatic prelude
+   availability. =core/PreludeProbe.mon= verifies both =Coll.map= and
+   =Function.id= work without explicit imports, proving prelude discovery scans
+   every =core/prelude/*.mon= file instead of a hardcoded =Coll= name.
+   =core/Control/Arrow.mon= verifies fanout. Both run through =make test core=.
+
+[OBS id:obs.tests.core-suite-count-2026-06-18 src:command-output conf:high]
+   Latest observed =make test core= result after making =Function= prelude-only:
+   9 modules with active test blocks, 157 assertions, all passing. Focused
+   module command used for the single owner: =HOME=/tmp/monad-home MONAD_CORE=core
+   ./monad test core/prelude/Function.mon=.
 
 [OBS id:obs.tests.make-test-core-core-only-2026-06-12 src:command-output conf:high]
    Latest observed =make test core= result after correction: the command did not
@@ -718,7 +737,7 @@ assertions directly instead of requiring hand-written shell checks per fixture.
     - Wisp !-sugar transforms (fn! var args) → (var fn! args) when var is identifier
     - Wisp ?-sugar transforms (contains? var arg) → (var contains? arg) for method-call style
 
-[OBS id:obs.tests.code-reflection-2026-06-12 src:tests/codegen/rt_code_reflection.mon conf:high]
+[OBS id:obs.tests.code-reflection-2026-06-12 src:tests/codegen/branches/reflection-quote/code-reflection/atom.codegen.60.reflection.quote.code.reflection.rt.code.reflection/rt_code_reflection.mon conf:high]
     =tests.codegen.rt-code-reflection= is a compile-and-run fixture for
     function source retention. The expected stdout is now:
     =True= followed by =(lambda (x) (+ x 1))=. The fix uses retained
@@ -739,7 +758,7 @@ assertions directly instead of requiring hand-written shell checks per fixture.
     =tsv=), expectation mode, and context-link count. This preserves pass/fail
     semantics and the generated last-first-failure record.
 
-[OBS id:obs.tests.collection-access-tail-2026-06-12 src:tests/codegen/rt_collection_access.mon conf:high]
+[OBS id:obs.tests.collection-access-tail-2026-06-12 src:tests/codegen/branches/collections/collection-dispatch/atom.codegen.40.collections.collection.dispatch.rt.collection.access/rt_collection_access.mon conf:high]
     =tests.codegen.rt-collection-access= now passes. The failure was a codegen
     boxed/raw list mismatch in =tail=: the known-list branch passed a boxed
     =RuntimeValue*= to =rt_list_cdr= and returned the raw =RuntimeList*= to
@@ -850,20 +869,20 @@ assertions directly instead of requiring hand-written shell checks per fixture.
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.tests.wisp-path-value src:tests/codegen/rt_wisp_path_value.mon conf:high]
+[OBS id:obs.tests.wisp-path-value src:tests/codegen/branches/wisp-codegen/collections-quote-path/atom.codegen.80.wisp.codegen.collections.quote.path.rt.wisp.path.value/rt_wisp_path_value.mon conf:high]
   =tests.codegen.rt-wisp-path-value= witnesses that a valid Unix path token in a
   Wisp =define= is a definable =Path= value and prints through =show=.
 
-[OBS id:obs.tests.wisp-typed-value-sugar src:tests/codegen/rt_wisp_define_typed_value_sugar.mon conf:high]
+[OBS id:obs.tests.wisp-typed-value-sugar src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.define.typed.value.sugar/rt_wisp_define_typed_value_sugar.mon conf:high]
   =tests.codegen.rt-wisp-define-typed-value-sugar= witnesses all supported Wisp
   typed value binding spellings, including the unbracketed sugar
   =define c :: Int 3=.
 
-[OBS id:obs.tests.wisp-signature-clause src:tests/codegen/rt_wisp_define_signature_clause.mon conf:high]
+[OBS id:obs.tests.wisp-signature-clause src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.define.signature.clause/rt_wisp_define_signature_clause.mon conf:high]
   =tests.codegen.rt-wisp-define-signature-clause= prevents regression of
   =define square :: Int -> Int= followed by a simple =x -> body= clause.
 
-[OBS id:obs.tests.wisp-parenthesized-signature src:tests/codegen/rt_wisp_define_parenthesized_signature.mon conf:high]
+[OBS id:obs.tests.wisp-parenthesized-signature src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.define.parenthesized.signature/rt_wisp_define_parenthesized_signature.mon conf:high]
   =tests.codegen.rt-wisp-define-parenthesized-signature= prevents regression of
   bare Wisp =define (name [p : T] -> R)= headers with indented pattern clauses.
 
@@ -1056,3 +1075,35 @@ assertions directly instead of requiring hand-written shell checks per fixture.
   Failures matching the symptoms above should start triage in this category, then
   follow the listed neighbors only when the local contract does not explain the
   issue.
+
+* Old Core Wisp Regression Fixtures
+:PROPERTIES:
+:ID: monadc.context.tests.old-core-wisp-regressions
+:CUSTOM_ID: tests-old-core-wisp-regressions
+:CONTEXT_KIND: test-coverage
+:CONTEXT_DESCRIPTION: Regression fixtures added while bringing up core/prelude/Coll.mon in old-core Wisp syntax.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-17
+:CONTEXT_UPDATED: 2026-06-17
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: tests/codegen/branches/wisp-codegen/define-and-types
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.tests.old-core-wisp.pass-fixtures src:tests/codegen/branches/wisp-codegen/define-and-types conf:high]
+  Passing regression fixtures cover guarded pattern clauses, predicate guards,
+  generic and concrete higher-order collection signatures, passing function
+  parameters through Wisp direct bodies, take/drop/takeWhile interactions,
+  module export lists containing takeWhile, module-local tests blocks, late
+  parameter arity contamination, guarded any?, and Lisp-style curried typed
+  parameters using `[x : Int] -> [y : Int] -> Bool`.
+
+[OBS id:obs.tests.old-core-return-function-witness src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.old.core.return.function conf:high]
+  The return-function fixture is a bug witness for returned closures. It
+  compiles after Wisp lowers function returns to Fn, but the runtime behavior is
+  still wrong for a false predicate combination.

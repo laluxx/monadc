@@ -1,0 +1,16 @@
+define x 30 | comment
+
+-| paragraph comment
+   blah blah blah
+   bleh bleh bleh
+
+-| Multi line
+    comment. |-
+
+;
+;;
+
+;;; H1
+;;;; H2
+;;;;; H3
+

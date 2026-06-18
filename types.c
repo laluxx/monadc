@@ -485,6 +485,8 @@ Type *type_list(Type **types, int count) {
         for (int i = 0; i < count; i++) {
             t->list_types[i] = types[i] ? type_clone(types[i]) : type_unknown();
         }
+        if (count == 1)
+            t->list_elem = types[0] ? type_clone(types[0]) : type_unknown();
     }
     t->list_count = count;
     return t;
@@ -672,6 +674,8 @@ Type *type_clone(Type *t) {
                     c->list_types[i] = type_clone(t->list_types[i]);
                 }
             }
+            if (t->list_elem)
+                c->list_elem = type_clone(t->list_elem);
             return c;
         }
         case TYPE_COLL: {
@@ -739,6 +743,7 @@ void type_free(Type *t) {
             type_free(t->list_types[i]);
         }
         free(t->list_types);
+        type_free(t->list_elem);
     }
     if (t->kind == TYPE_PTR || t->kind == TYPE_OPTIONAL || t->kind == TYPE_COLL) {
         type_free(t->element_type);

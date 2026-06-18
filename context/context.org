@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-17
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -372,6 +372,19 @@
 - [[file:etc-assets.org][etc/ assets — logo, screenshots, font, docs.html]]
 - [[file:references.org][Research PDF library — 7 papers with DOC records and OBS implementation traces]]
 - [[file:source-map.org::* Research PDFs][PDF reference index (etc/pdfs/) — each paper's source connections]]
+
+** Language Reference (info/)
+:PROPERTIES:
+:ID: monadc.context.portal.info-zone
+:CUSTOM_ID: portal-info-zone
+:CONTEXT_KIND: link
+:CONTEXT_STATUS: active
+:SOURCE: context/context.org
+:CONFIDENCE: high
+:END:
+
+- [[file:info/index.org][info/index.org]] — user-facing Monad language reference (74 files, 23604 lines)
+- [[file:navigation.org::* Language Reference Zone (info/)][navigation.org → info/ routing table]]
 
 * Formal Category Layer
 :PROPERTIES:

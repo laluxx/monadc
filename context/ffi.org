@@ -390,3 +390,31 @@
   CallInst with ExternalLinkage for FFI functions) ·
   `monadc.context.env.insert-func` (FFI functions are injected via
   =env_insert_func= with =is_ffi=true=)
+
+* Category Contract
+:PROPERTIES:
+:ID: monadc.context.ffi.category-contract
+:CUSTOM_ID: ffi-category-contract
+:CONTEXT_KIND: contract
+:END:
+
+[DOC id:doc.ffi.category-contract src:context/ffi.org conf:high]
+  This section declares the category contract for =ffi=. It is the
+  routing target for failures and future test/context links touching C FFI
+  header parsing, type mapping, arity registration, and cache management.
+
+#+CAPTION: C FFI Category Contract
+| Field | Contract |
+|-------+----------|
+| Owned phase | C header parsing and FFIContext construction (Phase 0 pre-pass), FFI type mapping from C types to Monad types, function arity registration for Wisp, cache serialization/deserialization. |
+| Inputs | C header files via (include ...) directives, FFIContext for parsed header state, header file modification times for cache invalidation. |
+| Outputs | EnvEntry for FFI functions/constants/structs, arity table entries registered with wisp_register_arity, g_ffi_link_libs accumulated for final link step, cached FFIContext snapshots. |
+| Invariants | FFI cache is invalidated when header mtime changes; arity registration completes before Wisp expansion begins; FFI functions are injected with is_ffi=true marker; header parse errors are reported but non-fatal. |
+| Test hooks | FFI header parse fixtures, include/parse round-trip tests, cache invalidation tests, arity registration coverage. |
+| Failure symptoms | Header parse failure, C type to Monad type mapping mismatch, cache staleness (header newer than cache), arity registration collision, missing link library. |
+| Context neighbors | wisp, reader, codegen-ops, language, env, buildsystem |
+
+[DEC id:dec.ffi.category-contract-owner date:2026-06-18 by:big-pickle]
+  Failures matching the symptoms above should start triage in this category, then
+  follow the listed neighbors only when the local contract does not explain the
+  issue.

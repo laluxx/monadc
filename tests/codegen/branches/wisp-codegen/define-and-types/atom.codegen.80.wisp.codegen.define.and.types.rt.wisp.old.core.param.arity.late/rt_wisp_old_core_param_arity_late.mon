@@ -1,0 +1,28 @@
+module Coll
+  [take drop takeWhile all?]
+
+define take :: Int -> [a] -> [a]
+  _ []            -> []
+  n [x|xs]
+      | n > 0     -> (x ++ (take (n - 1) xs))
+      | otherwise -> []
+
+define drop :: Int -> [a] -> [a]
+  _ []            -> []
+  n [x|xs]
+      | n > 0     -> (drop (n - 1) xs)
+      | otherwise -> (x ++ xs)
+
+define takeWhile :: (a -> Bool) -> [a] -> [a]
+  _ []            -> []
+  p [x|xs]
+      | p x       -> (x ++ (takeWhile p xs))
+      | otherwise -> []
+
+define all? :: (a -> Bool) -> [a] -> Bool
+  _ []     -> True
+  p [x|xs] -> p x
+
+(tests
+  (assert-eq (takeWhile (< 3) [1 2 3 4 1]) [1 2] "takeWhile remains polymorphic")
+)

@@ -1,0 +1,13 @@
+module Main
+
+define any? :: (a -> Bool) -> [a] -> Bool
+  _ []            -> False
+  p [x|xs]
+      | p x       -> True
+      | otherwise -> any? p xs
+
+(tests
+  (assert-eq (any? (> 0) [2 -5 6]) True "any? finds matching element")
+  (assert-eq (any? (> 0) [-1 -5 -6]) False "any? returns false when no element matches")
+  (assert-eq (any? (> 0) []) False "any? empty collection")
+)

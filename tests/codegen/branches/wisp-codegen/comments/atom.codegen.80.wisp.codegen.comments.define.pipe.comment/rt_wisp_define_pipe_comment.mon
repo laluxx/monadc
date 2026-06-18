@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.rt-wisp-define-pipe-comment
+;; TEST-TIER: regression
+;; TEST-STATUS: core-regression-2026-06-17
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.comments.define.pipe.comment
+;; TEST-QUALITY: core-regression
+;; TEST-SUBSET: comments
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.wisp.file-metadata, monadc.context.core-libs.ascii
+;; TEST-PURPOSE: Wisp define-line pipe comments are stripped before parsing the value.
+;; TEST-ATOM: define x 30 | \0 compiles as define x 30.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: wisp.c define-line comment stripping
+;; TEST-USES-ATOM: atom.codegen.80.wisp.codegen.comments.define.pipe.comment
+;; TEST-MENU: branches/wisp-codegen/comments/atom.codegen.80.wisp.codegen.comments.define.pipe.comment
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/comments/atom.codegen.80.wisp.codegen.comments.define.pipe.comment
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.comments.define.pipe.comment
+;; TEST-CLI-TARGET: codegen branches wisp-codegen comments define-pipe-comment
+module Main
+ [x]
+
+define x 30 | \0
+
+show x

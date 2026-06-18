@@ -54,6 +54,7 @@ fn draw(tty: *terminal.Tty, ctx: *const model.Context, search: *const search_ind
     if (state.show_tutorial) render.drawTutorial(tty, lay, theme);
     if (state.prompt_mode == .command_palette) render.drawCommandPalette(tty, lay, ctx, state.palette_buffer.items, state.palette_cursor, state.palette_matches.items, state.palette_selected, state.cursorVisible(state.frame_ms), theme);
     if (state.prompt_mode == .directory) render.drawDirectoryPrompt(tty, lay, ctx.root, state.directory_buffer.items, state.directory_cursor, state.cursorVisible(state.frame_ms), theme);
+    if (state.prompt_mode == .isearch) render.drawIsearchPrompt(tty, lay, state.isearch_buffer.items, state.isearch_cursor, state.cursorVisible(state.frame_ms), theme);
     which_key.draw(tty, .{ .x = 0, .y = 0, .w = tty.width, .h = tty.height }, state.pending_chord, state.frame_ms, state.prefix_started_ms, state.which_key_forced, theme);
     const flush_start = perf.nowNs();
     try tty.flush();
@@ -169,13 +170,15 @@ fn handleKey(state: *ui.State, allocator: std.mem.Allocator, ctx: *model.Context
             1 => state.beginningOfLine(),
             4 => state.deleteForward(),
             5 => state.endOfLine(),
-            7 => { state.clearKeyPrefix(); state.closePalette(); state.closeDirectoryPrompt(); state.message = "keyboard quit"; state.markScreenDirty(); },
+            7 => { state.clearKeyPrefix(); state.closePalette(); state.closeDirectoryPrompt(); state.closeIsearch(); state.message = "keyboard quit"; state.markScreenDirty(); },
             9 => try state.quickQuery("@info", "info/docs namespace"),
             11 => try state.killToEnd(),
             12 => { try state.setQuery(""); state.message = "cleared query"; },
             14 => state.move(1),
             15 => switchPane(state),
             16 => state.move(-1),
+            18 => if (state.active == .right) { state.openIsearch(); } else {},
+            19 => if (state.active == .right) { state.openIsearch(); } else {},
             20 => try state.quickQuery("@todo", "TODO work queue"),
             21 => { try state.setQuery(""); state.message = "cleared query"; },
             25 => try state.yank(),
@@ -256,6 +259,7 @@ fn handleChar(state: *ui.State, ctx: *model.Context, search: *search_index.Searc
                 'h' => { if (!state.goBackFocus()) { state.message = "no relation back target"; state.markScreenDirty(); } },
                 'o', 'l' => try openTreeCursor(state, ctx, search),
                 'v' => state.openViewer(),
+                '/' => state.openIsearch(),
                 '?' => state.toggleTutorial(),
                 else => { state.message = "right pane: n/p next/previous Org link/tag, TAB next link, h/j/k/l relation tree, v viewer"; state.markScreenDirty(); },
             }
@@ -311,6 +315,26 @@ fn handlePromptKey(state: *ui.State, allocator: std.mem.Allocator, ctx: *model.C
                 else => {},
             },
             .char => |cp| try state.directoryInsertUtf8(cp),
+            else => {},
+        },
+
+        .isearch => switch (key) {
+            .esc => state.closeIsearch(),
+            .enter => state.closeIsearch(),
+            .backspace => { state.isearchBackspace(); applyIsearch(state, ctx, search, 1); },
+            .left => state.isearchCursorLeft(),
+            .right => state.isearchCursorRight(),
+            .home => state.isearchBeginningOfLine(),
+            .end => state.isearchEndOfLine(),
+            .ctrl => |c| switch (c) {
+                1 => state.isearchBeginningOfLine(),
+                5 => state.isearchEndOfLine(),
+                7 => state.closeIsearch(),
+                18 => applyIsearch(state, ctx, search, -1),
+                19 => applyIsearch(state, ctx, search, 1),
+                else => {},
+            },
+            .char => |cp| { try state.isearchInsertUtf8(cp); applyIsearch(state, ctx, search, 1); },
             else => {},
         },
         .search => {},
@@ -464,6 +488,19 @@ fn handleMouse(state: *ui.State, ctx: *const model.Context, search: *const searc
 
     if (m.kind == .unknown) return;
 
+    if (m.kind == .press and isBrowserBackButton(m.button)) {
+        if (!state.goBackFocus()) try state.goBack();
+        state.message = "mouse back: previous Catface jump";
+        state.markScreenDirty();
+        return;
+    }
+    if (m.kind == .press and isBrowserForwardButton(m.button)) {
+        if (!state.goForwardFocus()) try state.goForward();
+        state.message = "mouse forward: next Catface jump";
+        state.markScreenDirty();
+        return;
+    }
+
     if (m.kind == .scroll_up or m.kind == .scroll_down) {
         const delta: isize = if (m.kind == .scroll_up) -3 else 3;
         if (in_right) {
@@ -561,6 +598,14 @@ fn handleMouse(state: *ui.State, ctx: *const model.Context, search: *const searc
     }
 }
 
+fn isBrowserBackButton(button: u16) bool {
+    return button == 8 or button == 128 or button == 130;
+}
+
+fn isBrowserForwardButton(button: u16) bool {
+    return button == 9 or button == 129 or button == 131;
+}
+
 fn performTreeAction(state: *ui.State, _: *const model.Context, action: tree.Action) !void {
     switch (action) {
         .select => |target| {
@@ -639,6 +684,101 @@ fn performDetailTextAction(state: *ui.State, ctx: *const model.Context, action: 
         },
         .none => return false,
     }
+}
+
+fn applyIsearch(state: *ui.State, ctx: *const model.Context, search: *const search_index.SearchIndex, dir: isize) void {
+    const needle = std.mem.trim(u8, state.isearch_buffer.items, " \t\r\n");
+    if (needle.len == 0) {
+        state.message = "isearch: empty";
+        state.markScreenDirty();
+        return;
+    }
+    if (state.focus) |f| {
+        const obj = ctx.objects.items[f];
+        if (render.findDocumentSearchLine(obj, needle, state.org_cursor, dir)) |line| {
+            state.setOrgCursor(line);
+            state.isearch_last_line = line;
+            state.message = "isearch Org match";
+            return;
+        }
+        if (findRelationSearchRow(ctx, search, obj.id, needle, &state.relation_tree, dir)) |row| {
+            state.relation_tree.cursor = row;
+            state.relation_tree.ensureCursorVisible();
+            state.message = "isearch relation-tree match";
+            state.markScreenDirty();
+            return;
+        }
+    }
+    state.message = "isearch failed";
+    state.markScreenDirty();
+}
+
+fn findRelationSearchRow(ctx: *const model.Context, search: *const search_index.SearchIndex, id: []const u8, needle: []const u8, tree_state: *const tree.State, dir: isize) ?usize {
+    var first: ?usize = null;
+    var best_after: ?usize = null;
+    var best_before: ?usize = null;
+    var row: usize = 0;
+    scanRelationDirection(ctx, search, id, needle, tree_state, .out, &row, &first, &best_after, &best_before);
+    scanRelationDirection(ctx, search, id, needle, tree_state, .in, &row, &first, &best_after, &best_before);
+    if (dir >= 0) return best_after orelse first;
+    return best_before orelse first;
+}
+
+fn scanRelationDirection(ctx: *const model.Context, search: *const search_index.SearchIndex, id: []const u8, needle: []const u8, tree_state: *const tree.State, dir: tree.Direction, row: *usize, first: *?usize, best_after: *?usize, best_before: *?usize) void {
+    if (containsFold(tree.directionName(dir), needle)) rememberRelationSearchRow(row.*, tree_state.cursor, first, best_after, best_before);
+    row.* += 1;
+    if (!tree_state.dirOpen(dir)) return;
+    for (tree.edge_kinds) |kind| {
+        var group_total: usize = 0;
+        for (edgeIndicesForSearch(search, id, dir)) |edge_idx| {
+            if (ctx.edges.items[edge_idx].kind == kind) group_total += 1;
+        }
+        if (group_total == 0) continue;
+        if (containsFold(@tagName(kind), needle)) rememberRelationSearchRow(row.*, tree_state.cursor, first, best_after, best_before);
+        row.* += 1;
+        if (!tree_state.groupOpen(dir, kind)) continue;
+        var shown: usize = 0;
+        for (edgeIndicesForSearch(search, id, dir)) |edge_idx| {
+            const e = ctx.edges.items[edge_idx];
+            if (e.kind != kind) continue;
+            if (shown >= 32) break;
+            const other_id = switch (dir) { .out => e.dst, .in => e.src };
+            var hit = containsFold(other_id, needle) or containsFold(e.label, needle);
+            if (!hit) {
+                if (ctx.findObject(other_id)) |oi| {
+                    hit = containsFold(ctx.objects.items[oi].title, needle) or containsFold(ctx.objects.items[oi].preview, needle);
+                }
+            }
+            if (hit) rememberRelationSearchRow(row.*, tree_state.cursor, first, best_after, best_before);
+            row.* += 1;
+            shown += 1;
+        }
+        if (group_total > shown) row.* += 1;
+    }
+}
+
+fn edgeIndicesForSearch(search: *const search_index.SearchIndex, id: []const u8, dir: tree.Direction) []const usize {
+    return switch (dir) { .out => search.outgoing(id), .in => search.incoming(id) };
+}
+
+fn rememberRelationSearchRow(row: usize, current: usize, first: *?usize, best_after: *?usize, best_before: *?usize) void {
+    if (first.* == null) first.* = row;
+    if (row > current and best_after.* == null) best_after.* = row;
+    if (row < current) best_before.* = row;
+}
+
+fn containsFold(haystack: []const u8, needle: []const u8) bool {
+    if (needle.len == 0) return true;
+    if (haystack.len < needle.len) return false;
+    var i: usize = 0;
+    while (i + needle.len <= haystack.len) : (i += 1) {
+        var ok = true;
+        for (needle, 0..) |c, j| {
+            if (std.ascii.toLower(haystack[i + j]) != std.ascii.toLower(c)) { ok = false; break; }
+        }
+        if (ok) return true;
+    }
+    return false;
 }
 
 fn detailActionMessage(action: render.DetailAction) []const u8 {
@@ -878,4 +1018,42 @@ test "C-x C-c quits like Emacs" {
     try std.testing.expect(state.pending_chord == .ctrl_x);
     const second = try handleKey(&state, std.testing.allocator, &ctx, &search, .{ .ctrl = 3 }, 80, 24);
     try std.testing.expect(second);
+}
+
+test "browser mouse buttons navigate focus history" {
+    var state = try ui.State.init(std.testing.allocator);
+    defer state.deinit();
+    var ctx = try model.Context.init(std.testing.allocator, ".");
+    defer ctx.deinit();
+    _ = try ctx.addObject(.{ .id = "a", .kind = .record, .title = "A" });
+    _ = try ctx.addObject(.{ .id = "b", .kind = .record, .title = "B" });
+    var search = try search_index.SearchIndex.build(std.testing.allocator, &ctx);
+    defer search.deinit();
+    try state.setQuery(":Record");
+    try state.refreshIndexed(&ctx, &search);
+    state.focus = 1;
+    try state.pushFocusBack(0);
+    try handleMouse(&state, &ctx, &search, .{ .x = 1, .y = 1, .button = 8, .kind = .press }, 80, 24);
+    try std.testing.expect(state.focus.? == 0);
+    try handleMouse(&state, &ctx, &search, .{ .x = 1, .y = 1, .button = 9, .kind = .press }, 80, 24);
+    try std.testing.expect(state.focus.? == 1);
+}
+
+test "right pane slash starts isearch and C-s repeats" {
+    var state = try ui.State.init(std.testing.allocator);
+    defer state.deinit();
+    var ctx = try model.Context.init(std.testing.allocator, ".");
+    defer ctx.deinit();
+    _ = try ctx.addObject(.{ .id = "doc", .kind = .info, .title = "Doc", .preview = "* One\nbody\n* Two target" });
+    var search = try search_index.SearchIndex.build(std.testing.allocator, &ctx);
+    defer search.deinit();
+    try state.setQuery("?doc");
+    try state.refreshIndexed(&ctx, &search);
+    state.active = .right;
+    _ = try handleKey(&state, std.testing.allocator, &ctx, &search, .{ .char = '/' }, 80, 24);
+    try std.testing.expect(state.prompt_mode == .isearch);
+    _ = try handleKey(&state, std.testing.allocator, &ctx, &search, .{ .char = 't' }, 80, 24);
+    _ = try handleKey(&state, std.testing.allocator, &ctx, &search, .{ .char = 'a' }, 80, 24);
+    _ = try handleKey(&state, std.testing.allocator, &ctx, &search, .{ .char = 'r' }, 80, 24);
+    try std.testing.expect(state.org_cursor > 0);
 }

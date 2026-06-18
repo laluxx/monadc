@@ -1,7 +1,7 @@
 #+TITLE: Repository Rules (Redirect → guidelines.org)
 #+AUTHOR: Codex
 #+DATE: 2026-06-12
-#+LAST_MODIFIED: 2026-06-12
+#+LAST_MODIFIED: 2026-06-13
 #+STARTUP: hideblocks
 #+FILETAGS: :monadc:compiler:context:rules:redirect:
 

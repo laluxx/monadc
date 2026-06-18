@@ -21,6 +21,7 @@
 #include "types.h"
 #include "module.h"
 #include "infer.h"
+#include "typeclass.h"
 #include "ffi.h"
 #include "features.h"
 
@@ -43,6 +44,10 @@
 #include <llvm-c/Target.h>
 #include <llvm-c/Analysis.h>
 #include <llvm-c/TargetMachine.h>
+#include <llvm-c/Support.h>
+
+ASTList wisp_parse_all(const char *source, const char *filename);
+void wisp_register_arity(const char *name, int arity);
 
 /* Arm the reader escape point. Usage:
  *   REPL_PARSE(var, source)  — sets var to the parsed AST or NULL on error */
@@ -305,8 +310,19 @@ static ImportedSym g_imported[MAX_IMPORTED];
 static int         g_imported_count = 0;
 
 static void register_imported_sym(const char *name, void *addr) {
+    if (!name || !*name || !addr) return;
+
+    for (int i = 0; i < g_imported_count; i++) {
+        if (strcmp(g_imported[i].name, name) == 0) {
+            g_imported[i].addr = addr;
+            return;
+        }
+    }
+
     if (g_imported_count >= MAX_IMPORTED) return;
+
     strncpy(g_imported[g_imported_count].name, name, 255);
+    g_imported[g_imported_count].name[255] = '\0';
     g_imported[g_imported_count].addr = addr;
     g_imported_count++;
 }
@@ -317,6 +333,16 @@ static void *lookup_imported_sym(const char *name) {
         if (strcmp(g_imported[i].name, name) == 0)
             return g_imported[i].addr;
     return NULL;
+}
+
+static bool repl_name_needs_unicode_mangle(const char *name) {
+    if (!name) return false;
+
+    for (const unsigned char *p = (const unsigned char *)name; *p; p++) {
+        if (*p >= 128) return true;
+    }
+
+    return false;
 }
 
 static void redeclare_env_symbols(REPLContext *ctx) {
@@ -350,10 +376,15 @@ static void redeclare_env_symbols(REPLContext *ctx) {
                 const char *name = (e->llvm_name && e->llvm_name[0])
                                    ? e->llvm_name : e->name;
 
-                /* For non-ASCII names, use the mangled name for LLVM */
-                char *mangled_name = mangle_unicode_name(name);
-                if (mangled_name) {
-                    name = mangled_name;
+                /* Only real non-ASCII names need alias mangling here.
+                 * ASCII names such as char-upcase are legal LLVM names and
+                 * must keep their typed ABI across REPL modules. */
+                char *mangled_name = NULL;
+                if (repl_name_needs_unicode_mangle(name)) {
+                    mangled_name = mangle_unicode_name(name);
+                    if (mangled_name) {
+                        name = mangled_name;
+                    }
                 }
 
                 LLVMValueRef existing = LLVMGetNamedFunction(ctx->cg.module, name);
@@ -411,7 +442,24 @@ static void redeclare_env_symbols(REPLContext *ctx) {
                         ft = LLVMFunctionType(ret_t, pt, e->param_count, 0);
                         if (pt) free(pt);
                     } else {
-                        ft = LLVMGlobalGetValueType(e->func_ref);
+                        LLVMTypeRef *pt = e->param_count > 0
+                            ? malloc(sizeof(LLVMTypeRef) * e->param_count)
+                            : NULL;
+
+                        for (int i = 0; i < e->param_count; i++) {
+                            Type *ptype = e->params[i].type;
+                            pt[i] = ptype
+                                ? type_to_llvm(&ctx->cg, ptype)
+                                : LLVMPointerType(LLVMInt8TypeInContext(ctx->cg.context), 0);
+                        }
+
+                        LLVMTypeRef ret_t = e->return_type
+                            ? type_to_llvm(&ctx->cg, e->return_type)
+                            : LLVMVoidTypeInContext(ctx->cg.context);
+
+                        ft = LLVMFunctionType(ret_t, pt, e->param_count, 0);
+
+                        if (pt) free(pt);
                     }
                 }
 
@@ -442,28 +490,31 @@ static void redeclare_env_symbols(REPLContext *ctx) {
  */
 static void map_imported_in_module(LLVMExecutionEngineRef engine,
                                    LLVMModuleRef mod) {
-    /* Closure runtime functions */
-    static const struct { const char *name; void *addr; } closure_syms[] = {
-        {"rt_closure_calln", (void*)rt_closure_calln},
-        {"rt_value_closure", (void*)rt_value_closure},
-        {NULL, NULL}
-    };
-    for (int i = 0; closure_syms[i].name; i++) {
-        LLVMValueRef ref = LLVMGetNamedFunction(mod, closure_syms[i].name);
-        if (ref) LLVMAddGlobalMapping(engine, ref, closure_syms[i].addr);
+    for (LLVMValueRef fn = LLVMGetFirstFunction(mod);
+         fn;
+         fn = LLVMGetNextFunction(fn)) {
+        const char *name = LLVMGetValueName(fn);
+        if (!name || !*name) continue;
+        if (strncmp(name, "__repl_wrap_", 12) == 0) continue;
+
+        if (LLVMCountBasicBlocks(fn) != 0) continue;
+
+        void *addr = lookup_imported_sym(name);
+        if (addr)
+            LLVMAddGlobalMapping(engine, fn, addr);
     }
 
-    for (int i = 0; i < g_imported_count; i++) {
-        const char *name = g_imported[i].name;
-        void       *addr = g_imported[i].addr;
-        if (!addr) continue;
+    for (LLVMValueRef gv = LLVMGetFirstGlobal(mod);
+         gv;
+         gv = LLVMGetNextGlobal(gv)) {
+        const char *name = LLVMGetValueName(gv);
+        if (!name || !*name) continue;
 
-        /* Try function first, then global variable */
-        LLVMValueRef ref = LLVMGetNamedFunction(mod, name);
-        if (!ref) ref = LLVMGetNamedGlobal(mod, name);
-        if (ref) {
-            LLVMAddGlobalMapping(engine, ref, addr);
-        }
+        if (LLVMGetInitializer(gv)) continue;
+
+        void *addr = lookup_imported_sym(name);
+        if (addr)
+            LLVMAddGlobalMapping(engine, gv, addr);
     }
 }
 
@@ -475,11 +526,45 @@ static void map_ffi_in_module(LLVMExecutionEngineRef engine,
         const char *name = ffi->functions[i].name;
         LLVMValueRef fn  = LLVMGetNamedFunction(mod, name);
         if (!fn) continue;
-        /* Look up the symbol in the process — works if the .so was
+        /* Look up the symbol in the process - works if the .so was
          * dlopen'd with RTLD_GLOBAL or the binary was linked with it */
         void *addr = dlsym(RTLD_DEFAULT, name);
         if (addr)
             LLVMAddGlobalMapping(engine, fn, addr);
+    }
+}
+
+static void register_repl_defined_symbols(REPLContext *ctx,
+                                          LLVMModuleRef mod) {
+    for (LLVMValueRef fn = LLVMGetFirstFunction(mod);
+         fn;
+         fn = LLVMGetNextFunction(fn)) {
+        const char *name = LLVMGetValueName(fn);
+        if (!name || !*name) continue;
+        if (strncmp(name, "__repl_wrap_", 12) == 0) continue;
+
+        /* Declarations have no basic blocks. Only record real definitions. */
+        if (LLVMCountBasicBlocks(fn) == 0) continue;
+
+        uint64_t addr = LLVMGetFunctionAddress(ctx->engine, name);
+        if (addr) {
+            register_imported_sym(name, (void *)(uintptr_t)addr);
+        }
+    }
+
+    for (LLVMValueRef gv = LLVMGetFirstGlobal(mod);
+         gv;
+         gv = LLVMGetNextGlobal(gv)) {
+        const char *name = LLVMGetValueName(gv);
+        if (!name || !*name) continue;
+
+        /* External declarations have no initializer. Only record real globals. */
+        if (!LLVMGetInitializer(gv)) continue;
+
+        uint64_t addr = LLVMGetGlobalValueAddress(ctx->engine, name);
+        if (addr) {
+            register_imported_sym(name, (void *)(uintptr_t)addr);
+        }
     }
 }
 
@@ -1367,70 +1452,10 @@ static bool close_and_run(REPLContext *ctx) {
     /* Map FFI symbols (raylib, SDL, etc.) */
     map_ffi_in_module(ctx->engine, mod, ctx->cg.ffi);
 
-    /* Map REPL-defined globals from previous expressions.
-     *
-     * CRITICAL: Only map ENV_VAR globals that were defined in the REPL
-     * itself (no module_name), not imported symbols — those are already
-     * handled by map_imported_in_module above and calling
-     * LLVMGetGlobalValueAddress on them triggers spurious re-finalization
-     * of the MCJIT engine which corrupts relocation state.
-     */
-    Env *env = ctx->cg.env;
-    for (size_t bi = 0; bi < env->size; bi++) {
-        for (EnvEntry *e = env->buckets[bi]; e; e = e->next) {
-            if (e->kind == ENV_FUNC && e->func_ref && !e->module_name) {
-                /* Map mangled alias names to the same address as the original */
-                char *alias_mangled = mangle_unicode_name(e->name);
-                if (alias_mangled) {
-                    LLVMValueRef in_mod_alias = LLVMGetNamedFunction(mod, alias_mangled);
-                    if (in_mod_alias) {
-                        uint64_t orig_addr = LLVMGetFunctionAddress(ctx->engine,
-                                                LLVMGetValueName(e->func_ref));
-                        if (orig_addr)
-                            LLVMAddGlobalMapping(ctx->engine, in_mod_alias,
-                                                 (void*)(uintptr_t)orig_addr);
-                    }
-                    free(alias_mangled);
-                }
-                /* For non-ASCII function names, map the mangled declaration */
-                const char *fname = (e->llvm_name && e->llvm_name[0])
-                                    ? e->llvm_name : e->name;
-                char *mangled = mangle_unicode_name(fname);
-                if (mangled) {
-                    LLVMValueRef in_mod = LLVMGetNamedFunction(mod, mangled);
-                    if (in_mod && e->func_ref) {
-                        /* Get address of the real function (ASCII name) */
-                        uint64_t addr = LLVMGetFunctionAddress(ctx->engine, fname);
-                        if (!addr) {
-                            /* Try the underlying function name via env lookup */
-                            /* The func_ref points to the real function */
-                            addr = (uint64_t)(uintptr_t)LLVMGetPointerToGlobal(
-                                ctx->engine, e->func_ref);
-                        }
-                        if (addr)
-                            LLVMAddGlobalMapping(ctx->engine, in_mod,
-                                                 (void*)(uintptr_t)addr);
-                    }
-                    free(mangled);
-                }
-            }
-
-            /* Only REPL-defined (non-imported) variables */
-            if (e->kind != ENV_VAR) continue;
-            if (!e->value) continue;
-            if (LLVMGetValueKind(e->value) != LLVMGlobalVariableValueKind) continue;
-            if (e->module_name) continue;
-
-            const char *gname = (e->llvm_name && e->llvm_name[0])
-                                ? e->llvm_name : e->name;
-            LLVMValueRef in_mod = LLVMGetNamedGlobal(mod, gname);
-            if (!in_mod) continue;
-
-            uint64_t addr = LLVMGetGlobalValueAddress(ctx->engine, gname);
-            if (addr)
-                LLVMAddGlobalMapping(ctx->engine, in_mod, (void*)(uintptr_t)addr);
-        }
-    }
+    /* Previous REPL definitions and imported module symbols were already
+     * handled by map_imported_in_module().  That pass scans only the
+     * unresolved declarations in this module, so we do not need to walk the
+     * whole persistent environment on every expression. */
 
     void (*fn)(void) = (void(*)(void))
         LLVMGetFunctionAddress(ctx->engine, g_wrapper_name);
@@ -1441,6 +1466,8 @@ static bool close_and_run(REPLContext *ctx) {
     }
 
     fn();
+
+    register_repl_defined_symbols(ctx, mod);
 
     arena_reset(&g_eval_arena);
     return true;
@@ -1880,6 +1907,7 @@ void repl_init(REPLContext *ctx) {
     ctx->cg.error_jmp_set = false;
     memset(ctx->cg.error_msg, 0, sizeof(ctx->cg.error_msg));
     ctx->cg.current_function_name = NULL;
+    ctx->cg.tc_registry = tc_registry_create();
 
     /* Bootstrap engine from an empty module */
     LLVMModuleRef boot = LLVMModuleCreateWithNameInContext(
@@ -1954,6 +1982,10 @@ void repl_dispose(REPLContext *ctx) {
     if (ctx->cg.builder) LLVMDisposeBuilder(ctx->cg.builder);
     if (ctx->cg.module)  LLVMDisposeModule(ctx->cg.module);
     LLVMDisposeExecutionEngine(ctx->engine);
+    if (ctx->cg.tc_registry) {
+        tc_registry_free(ctx->cg.tc_registry);
+        ctx->cg.tc_registry = NULL;
+    }
     env_free(ctx->cg.env);
 }
 
@@ -2004,6 +2036,61 @@ static char *strip_comments(const char *src) {
     return out;
 }
 
+
+static void repl_seed_wisp_arities(REPLContext *ctx) {
+    if (!ctx || !ctx->cg.env) return;
+
+    /* Core forms and operators that Wisp needs before parsing a REPL snippet.
+     * File compilation usually has these from the normal frontend setup, but
+     * the REPL parses small chunks, so it must seed them explicitly. */
+    wisp_register_arity("define", -1);
+    wisp_register_arity("show", 1);
+
+    wisp_register_arity("+", 2);
+    wisp_register_arity("-", 2);
+    wisp_register_arity("*", 2);
+    wisp_register_arity("/", 2);
+    wisp_register_arity("%", 2);
+
+    wisp_register_arity("=", 2);
+    wisp_register_arity("!=", 2);
+    wisp_register_arity("<", 2);
+    wisp_register_arity(">", 2);
+    wisp_register_arity("<=", 2);
+    wisp_register_arity(">=", 2);
+
+    wisp_register_arity("and", 2);
+    wisp_register_arity("or", 2);
+    wisp_register_arity("not", 1);
+
+    Env *env = ctx->cg.env;
+    for (size_t bi = 0; bi < env->size; bi++) {
+        for (EnvEntry *e = env->buckets[bi]; e; e = e->next) {
+            if (!e || !e->name) continue;
+
+            switch (e->kind) {
+            case ENV_VAR:
+                wisp_register_arity(e->name, 0);
+                break;
+
+            case ENV_FUNC:
+                wisp_register_arity(e->name, e->param_count);
+                break;
+
+            case ENV_BUILTIN:
+                if (e->arity_min >= 0 && e->arity_max == e->arity_min) {
+                    wisp_register_arity(e->name, e->arity_min);
+                } else {
+                    wisp_register_arity(e->name, -1);
+                }
+                break;
+
+            default:
+                break;
+            }
+        }
+    }
+}
 
 static bool repl_infer(REPLContext *ctx, AST *ast) {
     InferEnv *ienv = env_get_infer(ctx->cg.env);
@@ -2220,13 +2307,22 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                 if (form) repl_infer(ctx, form);
                 CodegenResult res = codegen_expr(&ctx->cg, form);
                 ctx->cg.error_jmp_set = false;
+
+                if (is_define && harvested_name[0]) {
+                    EnvEntry *e = env_lookup(ctx->cg.env, harvested_name);
+                    if (e && e->kind == ENV_FUNC && e->source_text) {
+                        free(e->source_text);
+                        e->source_text = NULL;
+                    }
+                }
+
                 ast_free(form);
 
                 /* ---- patch env entry with source_text + docstring ---- */
                 if (is_define && harvested_name[0]) {
                     EnvEntry *e = env_lookup(ctx->cg.env, harvested_name);
                     if (e) {
-                        if (!e->source_text)
+                        if (e->kind != ENV_FUNC && !e->source_text)
                             e->source_text = strndup(form_start, form_end - form_start);
                         if (!e->docstring && harvested_doc) {
                             e->docstring = harvested_doc;
@@ -2429,77 +2525,42 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
 
 ///// Parse
 
-    char *clean = strip_comments(line);
-    if (!clean) return false;
-
-    const char *chk = clean;
+    const char *chk = line;
     while (*chk && isspace((unsigned char)*chk)) chk++;
-    if (!*chk) { free(clean); return true; }
+    if (!*chk) return true;
 
-    /* Auto-wrap: if the input is more than one token, wrap in (...).
-     * We skip the first complete token (respecting nested brackets and
-     * strings) and check if anything non-whitespace follows.
-     * Examples:
-     *   {1 2 3} `∪` {1 2 3 4}   =>  ({1 2 3} `∪` {1 2 3 4})
-     *   sum '(1 2 3)             =>  (sum '(1 2 3))
-     *   var                      =>  var   (unchanged)
-     *   (define x 1)             =>  (define x 1)  (unchanged)
-     */
-    {
-        const char *p = chk;
-        /* Skip first token — respecting brackets and strings */
-        if (*p == '(' || *p == '[' || *p == '{') {
-            char open  = *p;
-            char close = (*p == '(') ? ')' : (*p == '[') ? ']' : '}';
-            int  depth = 0;
-            bool in_str = false;
-            while (*p) {
-                if (in_str) {
-                    if (*p == '\\') { p++; if (*p) p++; continue; }
-                    if (*p == '"')  { in_str = false; }
-                    p++;
-                } else {
-                    if (*p == '"')        { in_str = true; p++; }
-                    else if (*p == open)  { depth++; p++; }
-                    else if (*p == close) { depth--; p++; if (depth == 0) break; }
-                    else                  p++;
-                }
-            }
-        } else if (*p == '"') {
-            p++; /* skip string */
-            while (*p && *p != '"') {
-                if (*p == '\\') { p++; if (*p) p++; } else p++;
-            }
-            if (*p) p++;
-        } else if (*p == '\'') {
-            p++; /* skip quote char, next token handled separately */
-        } else {
-            /* bare symbol / number — skip non-whitespace chars */
-            while (*p && !isspace((unsigned char)*p)) p++;
-        }
+    ASTList forms = {0};
 
-        /* Skip whitespace after first token */
-        while (*p && isspace((unsigned char)*p)) p++;
-
-        /* If something follows, wrap the whole input */
-        if (*p) {
-            size_t len = strlen(clean);
-            char *autowrapped = malloc(len + 3);
-            autowrapped[0] = '(';
-            memcpy(autowrapped + 1, clean, len);
-            autowrapped[len + 1] = ')';
-            autowrapped[len + 2] = '\0';
-            free(clean);
-            clean = autowrapped;
-            chk = clean + 1;
-        }
+    g_reader_escape_set = true;
+    if (setjmp(g_reader_escape) != 0) {
+        g_reader_escape_set = false;
+        return false;
     }
 
-    parser_set_context("<input>", clean);
-    AST *ast = NULL;
-    REPL_PARSE(ast, clean);
-    free(clean);
-    if (!ast) return false;
+    repl_seed_wisp_arities(ctx);
+    forms = wisp_parse_all(line, "<input>");
+    g_reader_escape_set = false;
+
+    if (forms.count == 0) {
+        free(forms.exprs);
+        return true;
+    }
+
+    if (forms.count != 1) {
+        fprintf(stderr,
+                "<input>:1:1: error: REPL expected one complete form, got %zu\n",
+                forms.count);
+        fprintf(stderr,
+                "  - Hint: terminate multiline Wisp forms with a blank line, or send one top-level form at a time.\n");
+        for (size_t i = 0; i < forms.count; i++) {
+            ast_free(forms.exprs[i]);
+        }
+        free(forms.exprs);
+        return false;
+    }
+
+    AST *ast = forms.exprs[0];
+    free(forms.exprs);
 
     /* Special: (import ...) */
     if (ast->type == AST_LIST && ast->list.count >= 1 &&
@@ -2522,11 +2583,11 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
             for (int i = 0; i < lay->layout_field_count; i++) {
                 LayoutField *f = &lay->layout_fields[i];
                 if (f->type && f->type->kind == TYPE_ARR) {
-                    printf("  [%s :: [%s %d]]",
+                    printf("  [%s :: [%s %ld]]",
                            f->name,
                            f->type->arr_element_type
                                ? type_to_string(f->type->arr_element_type) : "?",
-                           f->type->arr_size);
+                           (long)f->type->arr_size);
                 } else {
                     printf("  [%s :: %s]",
                            f->name,
@@ -2600,12 +2661,16 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
     if (ast_was_layout)
         strncpy(layout_name_buf, ast->layout.name, sizeof(layout_name_buf) - 1);
 
-    // Store source text for (code fn) reflection
+    // Store source text for value defines only.
+    // Do not attach source_text to typed functions: codegen uses source_text
+    // as a dynamic/source-backed call hint, which corrupts the REPL ABI path.
     char *source_copy = NULL;
     if (ast->type == AST_LIST && ast->list.count >= 3 &&
         ast->list.items[0]->type == AST_SYMBOL &&
         strcmp(ast->list.items[0]->symbol, "define") == 0) {
-        source_copy = strdup(line);  // raw input line
+        AST *name_expr = ast->list.items[1];
+        if (name_expr->type == AST_SYMBOL)
+            source_copy = strdup(line);
     }
 
     /* Run HM type inference — annotates ast->inferred_type on every node.
@@ -2621,6 +2686,26 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
     CodegenResult res = codegen_expr(&ctx->cg, ast);
     ctx->cg.error_jmp_set = false;
 
+    if (ast && ast->type == AST_LIST && ast->list.count >= 3 &&
+        ast->list.items[0]->type == AST_SYMBOL &&
+        strcmp(ast->list.items[0]->symbol, "define") == 0) {
+        AST *name_expr = ast->list.items[1];
+        const char *fn_name = NULL;
+
+        if (name_expr->type == AST_LIST &&
+            name_expr->list.count > 0 &&
+            name_expr->list.items[0]->type == AST_SYMBOL)
+            fn_name = name_expr->list.items[0]->symbol;
+
+        if (fn_name) {
+            EnvEntry *e = env_lookup(ctx->cg.env, fn_name);
+            if (e && e->kind == ENV_FUNC && e->source_text) {
+                free(e->source_text);
+                e->source_text = NULL;
+            }
+        }
+    }
+
     if (source_copy && ast && ast->type == AST_LIST && ast->list.count >= 3) {
         AST *name_expr = ast->list.items[1];
         const char *fn_name = NULL;
@@ -2631,7 +2716,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
             fn_name = name_expr->list.items[0]->symbol;
         if (fn_name) {
             EnvEntry *e = env_lookup(ctx->cg.env, fn_name);
-            if (e) {
+            if (e && e->kind != ENV_FUNC) {
                 free(e->source_text);
                 e->source_text = source_copy;
                 source_copy = NULL;
@@ -2882,6 +2967,38 @@ static int paren_depth(const char *s) {
     return depth;
 }
 
+static bool repl_line_is_blank_or_comment(const char *line) {
+    const char *p = line;
+    while (*p == ' ' || *p == '\t') p++;
+    return *p == '\0' || *p == ';';
+}
+
+static bool repl_starts_word(const char *line, const char *word) {
+    const char *p = line;
+    while (*p == ' ' || *p == '\t') p++;
+
+    size_t n = strlen(word);
+    if (strncmp(p, word, n) != 0) return false;
+
+    return p[n] == '\0' ||
+           p[n] == ' '  ||
+           p[n] == '\t' ||
+           p[n] == ';';
+}
+
+static bool repl_line_starts_wisp_block(const char *line) {
+    const char *p = line;
+    while (*p == ' ' || *p == '\t') p++;
+
+    if (repl_starts_word(p, "define") &&
+        strstr(p, "::") &&
+        strstr(p, "->")) {
+        return true;
+    }
+
+    return false;
+}
+
 void repl_run(void) {
     REPLContext ctx;
     repl_init(&ctx);
@@ -2917,6 +3034,7 @@ void repl_run(void) {
     int   accum_len = 0;
     int   depth     = 0;
     bool  multiline = false;
+    bool  wisp_multiline = false;
     bool  in_string = false;
 
     char *line;
@@ -2938,8 +3056,13 @@ void repl_run(void) {
             line = strdup(buf);
         }
 
+        bool line_blank = repl_line_is_blank_or_comment(line);
+        bool starts_wisp_block = (!multiline &&
+                                  !line_blank &&
+                                  repl_line_starts_wisp_block(line));
+
         /* Skip blank lines when not mid-expression */
-        if (!multiline && !*line) {
+        if (!multiline && line_blank) {
             free(line);
             continue;
         }
@@ -2973,6 +3096,21 @@ void repl_run(void) {
         if (depth > 0 || in_string) {
             multiline = true;
             continue;
+        }
+
+        if (starts_wisp_block) {
+            multiline = true;
+            wisp_multiline = true;
+            continue;
+        }
+
+        if (wisp_multiline && !line_blank) {
+            multiline = true;
+            continue;
+        }
+
+        if (wisp_multiline && line_blank) {
+            wisp_multiline = false;
         }
 
         multiline = false;

@@ -1123,8 +1123,13 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             ASTParam *p = &ast->lambda.params[i];
             Type *pt;
             if (p->is_rest) {
-                // Rest param gets type List 'a — body sees it as a list
-                Type *elem = infer_fresh(ctx);
+                Type *elem = NULL;
+                if (p->type_name) {
+                    elem = type_from_name(p->type_name);
+                    if (!elem && p->type_name[0] >= 'A' && p->type_name[0] <= 'Z')
+                        elem = type_layout(p->type_name, NULL, 0, 0, false, 0);
+                }
+                if (!elem) elem = infer_fresh(ctx);
                 pt = type_list(&elem, 1);
             } else if (p->type_name) {
                 /* Strip surrounding parens from type names like "(Float)"
@@ -1437,7 +1442,6 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                 if (last_is_list && (int)ast->list.count - 1 > arrow_count - 1) {
                     // Variadic call — infer non-rest args normally,
                     // constrain all rest args to the list element type
-                    Type *list_elem = infer_fresh(ctx);
                     // re-walk to get param types
                     Type *ft = t;
                     int regular = arrow_count - 1;
@@ -1451,6 +1455,15 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                         }
                     }
                     // Rest args
+                    Type *list_elem = infer_fresh(ctx);
+                    if (ft && ft->kind == TYPE_ARROW &&
+                        ft->arrow_param && ft->arrow_param->kind == TYPE_LIST) {
+                        Type *rest_list = ft->arrow_param;
+                        if (rest_list->list_elem)
+                            list_elem = rest_list->list_elem;
+                        else if (rest_list->list_count == 1 && rest_list->list_types)
+                            list_elem = rest_list->list_types[0];
+                    }
                     for (int i = regular; i < (int)ast->list.count - 1; i++) {
                         Type *at = infer_expr(ctx, ast->list.items[i + 1]);
                         infer_constrain(ctx, at, list_elem,

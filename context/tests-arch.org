@@ -626,7 +626,7 @@
   multi-parameter constraints, Float/Char return, no-op placement,
   syscall-shaped String operands.
 
-[OBS id:obs.tests-arch.asm.topics src:tests/codegen/asm/ conf:high]
+[OBS id:obs.tests-arch.asm.topics src:tests/codegen/branches/ffi-asm/inline-asm/ conf:high]
   Covers: int add/sub/mul/imul (immediate, two-param, three-param, neg,
   inc/dec, large-immediate), and/or/xor/not/shift/rol/ror, cmov
   (max/min), idiv quotient, byte-width zero-extend, sse-float (add,

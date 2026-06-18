@@ -1,0 +1,27 @@
+;; TEST-ID: tests.codegen.wisp-variadic-signature-call
+;; TEST-TIER: regression
+;; TEST-STATUS: core-regression-2026-06-18
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.define.and.types.wisp.variadic.signature.call
+;; TEST-QUALITY: core-regression
+;; TEST-SUBSET: wisp-variadic-signature
+;; TEST-CATEGORY: wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.core-libs.math, monadc.context.core-libs.math
+;; TEST-PURPOSE: Wisp variadic signatures accept repeated scalar call arguments.
+;; TEST-ATOM: define first :: . Int -> Int compiles and runs when called as first 12 8.
+;; TEST-EXPECT: compile
+;; TEST-COVERAGE: Wisp . Type signature lowering, HM variadic call validation
+;; TEST-USES-ATOM: atom.codegen.80.wisp.codegen.define.and.types.wisp.variadic.signature.call
+;; TEST-MENU: branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.variadic.signature.call
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.variadic.signature.call
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.define.and.types.wisp.variadic.signature.call
+;; TEST-CLI-TARGET: codegen branches wisp-codegen define-and-types
+
+module Main
+
+define first :: . Int -> Int
+  [] -> 0
+  [x] -> x
+  [x|xs] -> x
+
+show (first 12 8)

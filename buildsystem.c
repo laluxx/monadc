@@ -440,6 +440,8 @@ ModuleContext *build_extract_module_context(const char *source_path)
     free(exprs.exprs);
     free(source);
 
+    module_context_add_prelude_imports(mod_ctx);
+
     return mod_ctx;
 }
 

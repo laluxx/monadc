@@ -1,8 +1,8 @@
-pub const version = "0.11.6";
-pub const codename = "Subtree Org Editor Cockpit";
+pub const version = "0.11.8";
+pub const codename = "Interactive Org Isearch Cockpit";
 
 pub fn label() []const u8 {
-    return "Catface 0.11.6 Subtree Org Editor Cockpit";
+    return "Catface 0.11.8 Interactive Org Isearch Hotfix";
 }
 
 test "version exists" {

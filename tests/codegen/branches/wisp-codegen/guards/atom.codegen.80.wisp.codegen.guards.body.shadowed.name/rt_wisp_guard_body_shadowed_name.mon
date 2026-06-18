@@ -1,0 +1,29 @@
+;; TEST-ID: tests.codegen.rt-wisp-guard-body-shadowed-name
+;; TEST-TIER: regression
+;; TEST-STATUS: core-regression-2026-06-17
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.guards.body.shadowed.name
+;; TEST-QUALITY: core-regression
+;; TEST-SUBSET: wisp-guards
+;; TEST-CATEGORY: wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus, monadc.context.core-libs.math
+;; TEST-PURPOSE: A guarded Wisp body returning a parameter that shadows a known function remains a value.
+;; TEST-ATOM: sum | sum = 0 -> sum lowers the body to the parameter, not (sum).
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: wisp guard body shadowing
+;; TEST-USES-ATOM: atom.codegen.80.wisp.codegen.guards.body.shadowed.name
+;; TEST-MENU: branches/wisp-codegen/guards/atom.codegen.80.wisp.codegen.guards.body.shadowed.name
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/guards/atom.codegen.80.wisp.codegen.guards.body.shadowed.name
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.guards.body.shadowed.name
+;; TEST-CLI-TARGET: codegen branches wisp-codegen guards body-shadowed-name
+
+module Main
+
+define sum :: Int -> Int
+  x -> x
+
+define pick :: Int -> Int
+  sum | sum = 0 -> sum
+      | otherwise -> 1
+
+show (pick 0)

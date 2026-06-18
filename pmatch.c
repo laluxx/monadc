@@ -5,6 +5,9 @@
 #include <string.h>
 #include <stdbool.h>
 
+/// TODO [0/1]
+// - [ ] pmatch should always produce jump tables when appropriate
+
 extern const char *layout_get_field_name(const char *layout_name, int index);
 
 static char *my_strdup(const char *s) {
@@ -1114,7 +1117,8 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
                     const char *coll_param = (param_count > 0) ? params[0].name : "a";
                     for (int _pi = 0; _pi < param_count; _pi++) {
                         const char *tn = params[_pi].type_name;
-                        if (tn && (strcmp(tn, "Coll") == 0 ||
+                        if (tn && (strcmp(tn, "Arr") == 0  ||
+                                   strcmp(tn, "Coll") == 0 ||
                                    strcmp(tn, "List") == 0 ||
                                    strcmp(tn, "[a]") == 0  ||
                                    tn[0] == '[')) {
@@ -1161,7 +1165,8 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
                 const char *coll_param = (param_count > 0) ? params[0].name : "a";
                 for (int _pi = 0; _pi < param_count; _pi++) {
                     const char *tn = params[_pi].type_name;
-                    if (tn && (strcmp(tn, "Coll") == 0 ||
+                    if (tn && (strcmp(tn, "Arr") == 0  ||
+                               strcmp(tn, "Coll") == 0 ||
                                strcmp(tn, "List") == 0 ||
                                strcmp(tn, "[a]") == 0  ||
                                tn[0] == '[')) {
@@ -1184,7 +1189,8 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
                 const char *coll_param = (param_count > 0) ? params[0].name : "a";
                 for (int _pi = 0; _pi < param_count; _pi++) {
                     const char *tn = params[_pi].type_name;
-                    if (tn && (strcmp(tn, "Coll") == 0 ||
+                    if (tn && (strcmp(tn, "Arr") == 0  ||
+                               strcmp(tn, "Coll") == 0 ||
                                strcmp(tn, "List") == 0 ||
                                strcmp(tn, "[a]") == 0  ||
                                tn[0] == '[')) {

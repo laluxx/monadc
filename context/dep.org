@@ -1356,7 +1356,35 @@
   production-quality dependently typed implementations (Coq, Agda, Idris).
 
 [THINK id:think.dep.why-spine-form conf:high]
-  TERM_APP uses a flat spine form (function + array of arguments) instead of
+  The TERM_APP uses a flat spine form (function + array of arguments) instead of
   nested left-associative applications. This speeds up WHNF reduction (no need
   to traverse a chain to find the head) and simplifies the evaluator's handling
   of neutrals (a single spine push vs. nested app eliminations).
+
+* Category Contract
+:PROPERTIES:
+:ID: monadc.context.dep.category-contract
+:CUSTOM_ID: dep-category-contract
+:CONTEXT_KIND: contract
+:END:
+
+[DOC id:doc.dep.category-contract src:context/dep.org conf:high]
+  This section declares the category contract for =dep=. It is the
+  routing target for failures and future test/context links touching dependent
+  type checking, the NbE kernel, and the TERM_EMBED bridge.
+
+#+CAPTION: Dependent Type Checker Category Contract
+| Field | Contract |
+|-------+----------|
+| Owned phase | Dependent type checking, NbE kernel, elaboration, definitional equality, propositional equality, TERM_EMBED bridge from HM to ITT. |
+| Inputs | Typed AST with dependent annotations, DepCtx from dep_infer_program, environment with HM-inferred types. |
+| Outputs | Type-checked dependent terms, WHNF values via NbE, shadow-pass constraints back-propagated to HM, equality/reduction judgments. |
+| Invariants | HM and ITT paths coexist without interference; NbE produces WHNF for all well-scoped terms; locally nameless representation eliminates α-equivalence bugs; shadow pass reports but does not block codegen. |
+| Test hooks | dep-type-tests, shadow-pass tests, NbE law tests, TERM_EMBED round-trip tests. |
+| Failure symptoms | Type mismatch in dependent annotations, NbE non-termination or stack overflow, TERM_EMBED bridge assertion failures, definitional equality divergence, pattern unification stub failures. |
+| Context neighbors | infer, types, language, runtime, tests |
+
+[DEC id:dec.dep.category-contract-owner date:2026-06-18 by:big-pickle]
+  Failures matching the symptoms above should start triage in this category, then
+  follow the listed neighbors only when the local contract does not explain the
+  issue.

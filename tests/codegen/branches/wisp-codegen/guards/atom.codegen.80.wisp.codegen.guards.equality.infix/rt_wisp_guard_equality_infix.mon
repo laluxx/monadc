@@ -1,0 +1,29 @@
+;; TEST-ID: tests.codegen.rt-wisp-guard-equality-infix
+;; TEST-TIER: regression
+;; TEST-STATUS: core-regression-2026-06-17
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.guards.equality.infix
+;; TEST-QUALITY: core-regression
+;; TEST-SUBSET: wisp-guards
+;; TEST-CATEGORY: wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus, monadc.context.core-libs.math
+;; TEST-PURPOSE: Equality in Wisp guards parses as an infix operator when a parameter shadows a known function.
+;; TEST-ATOM: exp | exp = 0.0 -> ... lowers to (= exp 0.0), not (exp = 0.0).
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: wisp guard infix reader builtin operator recognition
+;; TEST-USES-ATOM: atom.codegen.80.wisp.codegen.guards.equality.infix
+;; TEST-MENU: branches/wisp-codegen/guards/atom.codegen.80.wisp.codegen.guards.equality.infix
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/guards/atom.codegen.80.wisp.codegen.guards.equality.infix
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.guards.equality.infix
+;; TEST-CLI-TARGET: codegen branches wisp-codegen guards equality-infix
+
+module Main
+
+define exp :: Float -> Float
+  x -> x
+
+define is-zero :: Float -> Int
+  exp | exp = 0.0 -> 1
+      | otherwise -> 0
+
+show (is-zero 0.0)

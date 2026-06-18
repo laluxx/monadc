@@ -2,7 +2,7 @@
 #+AUTHOR: GPT-5.5 Thinking
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-16
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -70,14 +70,14 @@
 :END:
 
 #+CAPTION: Evidence classes
-| Level | Record | Meaning | May use high confidence? |
-|-------+--------+---------+--------------------------|
-| Source observation | =OBS= | Read directly from source, test output, or command output | yes |
-| User decision | =DEC= | Explicit project direction from the user | yes |
-| Derived inference | =INF= | Reasoned consequence of observations/decisions | only with source links |
-| Task | =TODO= | Work that should happen | yes for existence, not outcome |
-| Opinion | =THINK= | Judgment, risk, or interpretation | usually medium |
-| Proposal | =IDEA= | Not accepted unless promoted to =DEC= | medium/low |
+| Level              | Record | Meaning                                                   | May use high confidence?       |
+|--------------------+--------+-----------------------------------------------------------+--------------------------------|
+| Source observation | =OBS=    | Read directly from source, test output, or command output | yes                            |
+| User decision      | =DEC=    | Explicit project direction from the user                  | yes                            |
+| Derived inference  | =INF=    | Reasoned consequence of observations/decisions            | only with source links         |
+| Task               | =TODO=   | Work that should happen                                   | yes for existence, not outcome |
+| Opinion            | =THINK=  | Judgment, risk, or interpretation                         | usually medium                 |
+| Proposal           | =IDEA=   | Not accepted unless promoted to =DEC=                       | medium/low                     |
 
 [DEC id:dec.garden.obs-is-not-opinion date:2026-06-16 by:llm]
   Never put an opinion into =OBS=. If a record says what code does, cite the file
@@ -104,14 +104,14 @@
 :END:
 
 #+CAPTION: Mutation policy
-| Operation | Rule |
-|-----------+------|
-| Add | Use stable IDs and put the node in the nearest topic file. |
-| Modify | Update =#+LAST_MODIFIED= and =:CONTEXT_UPDATED:= on touched nodes. |
-| Delete | Delete only stale/generated/noisy content or records superseded elsewhere. |
-| Supersede | Prefer a new =DEC= or =FIX= record naming the superseded record. |
-| Move | Preserve the ID when moving a durable heading. |
-| Split | Add a bridge link in the old file to the new file. |
+| Operation | Rule                                                                       |
+|-----------+----------------------------------------------------------------------------|
+| Add       | Use stable IDs and put the node in the nearest topic file.                 |
+| Modify    | Update =#+LAST_MODIFIED= and =:CONTEXT_UPDATED:= on touched nodes.             |
+| Delete    | Delete only stale/generated/noisy content or records superseded elsewhere. |
+| Supersede | Prefer a new =DEC= or =FIX= record naming the superseded record.               |
+| Move      | Preserve the ID when moving a durable heading.                             |
+| Split     | Add a bridge link in the old file to the new file.                         |
 
 [DEC id:dec.garden.append-or-supersede date:2026-06-16 by:human+llm]
   For architectural decisions, prefer append-or-supersede over in-place rewrite.
@@ -138,13 +138,13 @@
 :END:
 
 #+CAPTION: Link forms
-| Link kind | Syntax | Use |
-|-----------+--------+-----|
-| File | =[[file:reader.org][reader]]= | Human navigation |
-| Heading | =[[file:reader.org::*Path Literals][Path Literals]]= | Nearby topic jump |
-| Stable ID | =:ID: monadc.context.reader.path-literals= | Durable graph identity |
-| Record source | =src:reader.c:123= | Evidence pointer |
-| Test context | =TEST-CONTEXT: monadc.context...= | Fixture-to-contract link |
+| Link kind     | Syntax                                             | Use                      |
+|---------------+----------------------------------------------------+--------------------------|
+| File          | =[[file:reader.org][reader]]=                        | Human navigation         |
+| Heading       | =[[file:reader.org::*Path Literals][Path Literals]]= | Nearby topic jump        |
+| Stable ID     | =:ID: monadc.context.reader.path-literals=           | Durable graph identity   |
+| Record source | =src:reader.c:123=                                   | Evidence pointer         |
+| Test context  | =TEST-CONTEXT: monadc.context...=                    | Fixture-to-contract link |
 
 [DEC id:dec.garden.context-id-prefix date:2026-06-16 by:llm]
   New heading IDs must use =monadc.context.<topic>.<stable-name>=. Test records
@@ -235,5 +235,38 @@
   The category-context layer lets the garden scale: it gives every major file a
   local contract and makes cross-file navigation semantic rather than merely
   alphabetical.
+
+* Category Contract
+:PROPERTIES:
+:ID: monadc.context.garden.category-contract
+:CUSTOM_ID: garden-category-contract
+:CONTEXT_KIND: governance
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-18
+:CONTEXT_UPDATED: 2026-06-18
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: context/garden.org
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Garden Governance Category Contract
+| Field | Contract |
+|-------+----------|
+| Owned phase | Context garden governance — truth ladder, mutation rules, pruning heuristics, agent contract, link grammar. Sets the rules that all other context files follow. |
+| Inputs | Linter output, quality reports, inventory snapshots, curator observations. |
+| Outputs | Governing decisions (DEC records), pruning rules, agent behavior contracts. |
+| Invariants | Every rule must be self-consistent; rules may conflict only when superseding is explicit; no rule should reference a context node that does not exist. |
+| Test hooks | context_lint.py, context_graph.py, verify_category.py. |
+| Failure symptoms | Linter or verifier reports broken links, duplicate IDs, header gaps, or unresolved record refs. |
+| Context neighbors | quality, curation, category-context, index, todo |
+
+[DEC id:dec.garden.category-contract-owner date:2026-06-18 by:big-pickle]
+  Failures matching the symptoms above should start triage in this category, then
+  follow the listed neighbors only when the local contract does not explain the
+  issue.
 
 See [[file:category-context.org][category-context.org]] for the canonical object and morphism vocabulary.

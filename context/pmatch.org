@@ -309,3 +309,31 @@
   `monadc.context.language.pattern-matching` (surface syntax spec) ·
   `monadc.context.codegen-ops` (codegen dispatch, cond lowering, tag checks) ·
   `monadc.context.infer` (type inference for desugared cond/empty?/nth)
+
+* Category Contract
+:PROPERTIES:
+:ID: monadc.context.pmatch.category-contract
+:CUSTOM_ID: pmatch-category-contract
+:CONTEXT_KIND: contract
+:END:
+
+[DOC id:doc.pmatch.category-contract src:context/pmatch.org conf:high]
+  This section declares the category contract for =pmatch=. It is the
+  routing target for failures and future test/context links touching pattern
+  match compilation and desugaring.
+
+#+CAPTION: Pattern Match Compiler Category Contract
+| Field | Contract |
+|-------+----------|
+| Owned phase | Pattern match desugaring from AST_PMATCH into nested cond/empty?/nth/car chains, pattern coverage and exhaustiveness checking. |
+| Inputs | AST_PMATCH nodes with ASTPattern trees, typed scrutinee expression. |
+| Outputs | Desugared cond expressions with nested empty?/nth/car guard chains, exhaustive coverage verification result. |
+| Invariants | Desugaring preserves match semantics (first-match-wins); nested patterns decompose correctly into guard chains; exhaustiveness check covers all constructors; non-exhaustive matches produce a diagnostic. |
+| Test hooks | Pattern match test fixtures, coverage checking tests, nested pattern decomposition tests. |
+| Failure symptoms | Wrong branch taken at runtime, incomplete pattern match not detected, nested pattern desugar error, guard chain ordering inverted. |
+| Context neighbors | reader, codegen-ops, infer, language, tests |
+
+[DEC id:dec.pmatch.category-contract-owner date:2026-06-18 by:big-pickle]
+  Failures matching the symptoms above should start triage in this category, then
+  follow the listed neighbors only when the local contract does not explain the
+  issue.

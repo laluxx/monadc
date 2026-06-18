@@ -25,7 +25,7 @@
 
 [DOC id:doc.category.tui.canonical-interface src:context/category/tui.org conf:high]
   The canonical terminal interface is now [[file:catface.org][Catface]], implemented as a Zig
-  package in [[file:catface/README.org][context/category/catface]].  The previous curses prototype is no longer the
+  package in [[file:catface/README.md][context/category/catface]].  The previous curses prototype is no longer the
   canonical UI.  This file exists as a stable navigation node for terminal UI
   policy and now points to the Zig implementation.
 

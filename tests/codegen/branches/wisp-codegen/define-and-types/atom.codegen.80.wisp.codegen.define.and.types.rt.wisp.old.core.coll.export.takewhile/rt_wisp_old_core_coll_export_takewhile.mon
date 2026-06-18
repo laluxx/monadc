@@ -1,0 +1,26 @@
+module Coll
+  [take drop takeWhile]
+
+define take :: Int -> [a] -> [a]
+  _ []            -> []
+  n [x|xs]
+      | n > 0     -> (x ++ (take (n - 1) xs))
+      | otherwise -> []
+
+define drop :: Int -> [a] -> [a]
+  _ []            -> []
+  n [x|xs]
+      | n > 0     -> (drop (n - 1) xs)
+      | otherwise -> (x ++ xs)
+
+define positive? :: Int -> Bool
+  n -> n > 0
+
+define takeWhile :: (a -> Bool) -> [a] -> [a]
+  _ []            -> []
+  p [x|xs]
+      | p x       -> (x ++ (takeWhile p xs))
+      | otherwise -> []
+
+show (takeWhile positive? [7 8 -1 9])
+show (takeWhile positive? [-1 9])

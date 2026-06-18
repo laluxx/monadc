@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-12
 #+CREATED: 2026-06-12
-#+LAST_MODIFIED: 2026-06-12
+#+LAST_MODIFIED: 2026-06-14
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -309,7 +309,7 @@
   (return and parameter type widths drive suffix/constraints) · runtime.c/h
   (syscall/string pointer effects in tests)
 
-[OBS id:obs.source-map.asm-tests src:tests/codegen/asm,create_asm_tests.py conf:high]
+[OBS id:obs.source-map.asm-tests src:tests/codegen/branches/ffi-asm/inline-asm/,create_asm_tests.py conf:high]
   =create_asm_tests.py= generates the 50-file asm subset. The subset is no
   longer arbitrary CPU-instruction fluff; each fixture is a typed function-body
   asm program that compiles, runs, and checks stdout while targeting a specific
@@ -492,6 +492,46 @@
 [OBS id:obs.source-map.cli.purpose src:cli.c,cli.h conf:high]
   CLI flags/modes: compile, REPL, new, build, run, clean, install, test. All
   emit flags.
+
+** completion.c/h — Tab Completion / Usage Menus
+:PROPERTIES:
+:ID: monadc.context.source-map.completion
+:CUSTOM_ID: source-completion
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-18
+:CONTEXT_UPDATED: 2026-06-18
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: completion.c, completion.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.completion.purpose src:completion.c,completion.h conf:high]
+  Tab completion and usage menu printing. print_usage() for top-level help,
+  print_subcommand_menu() for per-subcommand details.
+
+** lsp.c/h — Language Server Protocol (LSP 3.17)
+:PROPERTIES:
+:ID: monadc.context.source-map.lsp
+:CUSTOM_ID: source-lsp
+:CONTEXT_KIND: component
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-18
+:CONTEXT_UPDATED: 2026-06-18
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: lsp.c, lsp.h, lsp_repl.c, lsp_repl.h
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.source-map.lsp.purpose src:lsp.h, context/lsp.org conf:high]
+  Full LSP 3.17 implementation: diagnostics, completion, hover, goto-def,
+  references, rename, semantic tokens, inlay hints, code actions, folding,
+  signature help, call/type hierarchy. Three-thread model (I/O, analysis,
+  index). Includes an interactive REPL adapter for testing.
 
 ** repl.c/h — Interactive REPL
 :PROPERTIES:

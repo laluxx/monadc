@@ -320,3 +320,32 @@
   expands the outer list first, then recurses into the result.  This means
   a macro that produces another macro call will have that call expanded
   in a subsequent fixpoint round, not inline during the same walk.
+
+* Category Contract
+:PROPERTIES:
+:ID: monadc.context.macro.category-contract
+:CUSTOM_ID: macro-category-contract
+:CONTEXT_KIND: contract
+:END:
+
+[DOC id:doc.macro.category-contract src:context/macro.org conf:high]
+  This section declares the category contract for =macro=. It is the
+  routing target for failures and future test/context links touching macro
+  registration, pattern matching, template expansion, and the fixpoint
+  expansion loop.
+
+#+CAPTION: Macro System Category Contract
+| Field | Contract |
+|-------+----------|
+| Owned phase | Macro registration (macro_register), pattern matching and template substitution, fixpoint expansion loop (macro_expand_all), Syntax type detection for macro-producing macros. |
+| Inputs | AST with define-macro forms and macro call sites, macro registry populated during parsing. |
+| Outputs | Expanded AST with no remaining macro calls, hygienically renamed non-pattern variables, fixpoint convergence signal. |
+| Invariants | Expansion terminates (fixpoint bound enforced); pattern variables are substituted, non-pattern variables are hygienically renamed; Syntax-typed macros return AST nodes, not runtime values; expansion is outermost-first. |
+| Test hooks | Macro expansion test fixtures, fixpoint convergence tests, hygiene tests, Syntax type round-trip tests. |
+| Failure symptoms | Non-terminating expansion (fixpoint bound hit), pattern variable mismatch, hygiene violation (variable capture), Syntax type detection failure, macro-not-found errors. |
+| Context neighbors | reader, codegen-ops, language, env, wisp |
+
+[DEC id:dec.macro.category-contract-owner date:2026-06-18 by:big-pickle]
+  Failures matching the symptoms above should start triage in this category, then
+  follow the listed neighbors only when the local contract does not explain the
+  issue.

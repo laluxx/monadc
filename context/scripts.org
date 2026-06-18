@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-16
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -397,5 +397,5 @@
 
 [OBS id:obs.scripts.catface-zig.purpose src:context/category/catface conf:high]
   The live category search/browser interface now lives in Zig under
-  [[file:category/catface/README.org][context/category/catface]].  Python scripts remain useful for batch validation
+  [[file:category/catface/README.md][context/category/catface]].  Python scripts remain useful for batch validation
   and report generation, but the custom TUI is no longer Python/curses.

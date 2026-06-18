@@ -9,7 +9,7 @@ const which_key = @import("which_key.zig");
 
 pub const Pane = enum { left, right };
 pub const ViewMode = enum { search, outgoing, incoming, neighborhood, projection };
-pub const PromptMode = enum { search, command_palette, directory };
+pub const PromptMode = enum { search, command_palette, directory, isearch };
 pub const PendingChord = enum { none, ctrl_h, ctrl_c, ctrl_x, describe_key };
 pub const ContentMode = enum { none, test_contract, info_page, function_type, source_file, record_card, org_doc };
 
@@ -41,6 +41,7 @@ pub const State = struct {
     history: std.array_list.Managed(HistoryEntry),
     query_cache: std.StringHashMap(QueryCacheEntry),
     focus_stack: std.array_list.Managed(usize),
+    focus_forward_stack: std.array_list.Managed(usize),
     history_index: usize = 0,
     cursor: usize = 0,
     frame_ms: i64 = 0,
@@ -65,6 +66,9 @@ pub const State = struct {
     palette_selected: usize = 0,
     directory_buffer: std.array_list.Managed(u8),
     directory_cursor: usize = 0,
+    isearch_buffer: std.array_list.Managed(u8),
+    isearch_cursor: usize = 0,
+    isearch_last_line: usize = 0,
     right_hover: bool = false,
     right_hover_x: u16 = 0,
     right_hover_y: u16 = 0,
@@ -85,9 +89,11 @@ pub const State = struct {
             .history = std.array_list.Managed(HistoryEntry).init(allocator),
             .query_cache = std.StringHashMap(QueryCacheEntry).init(allocator),
             .focus_stack = std.array_list.Managed(usize).init(allocator),
+            .focus_forward_stack = std.array_list.Managed(usize).init(allocator),
             .palette_buffer = std.array_list.Managed(u8).init(allocator),
             .palette_matches = std.array_list.Managed(command_palette.Match).init(allocator),
             .directory_buffer = std.array_list.Managed(u8).init(allocator),
+            .isearch_buffer = std.array_list.Managed(u8).init(allocator),
             .last_input_ms = 0,
         };
     }
@@ -104,9 +110,11 @@ pub const State = struct {
         self.clearQueryCache();
         self.query_cache.deinit();
         self.focus_stack.deinit();
+        self.focus_forward_stack.deinit();
         self.palette_buffer.deinit();
         self.palette_matches.deinit();
         self.directory_buffer.deinit();
+        self.isearch_buffer.deinit();
     }
 
     pub fn refresh(self: *State, ctx: *const model.Context) !void {
@@ -374,13 +382,24 @@ pub const State = struct {
         self.screen_dirty = true;
     }
 
+    fn truncateForwardHistory(self: *State) void {
+        while (self.history.items.len > self.history_index) {
+            const h = self.history.items[self.history.items.len - 1];
+            _ = self.history.pop();
+            self.allocator.free(h.query);
+            self.allocator.free(h.focus_id);
+        }
+    }
+
     pub fn pushHistory(self: *State, ctx: *const model.Context) !void {
+        self.truncateForwardHistory();
         const focus_id = if (self.focus) |f| ctx.objects.items[f].id else "";
         try self.history.append(.{ .query = try self.allocator.dupe(u8, self.query_buffer.items), .focus_id = try self.allocator.dupe(u8, focus_id) });
         self.history_index = self.history.items.len;
     }
 
     fn pushRawHistory(self: *State) !void {
+        self.truncateForwardHistory();
         try self.history.append(.{ .query = try self.allocator.dupe(u8, self.query_buffer.items), .focus_id = try self.allocator.dupe(u8, "") });
         self.history_index = self.history.items.len;
     }
@@ -391,6 +410,16 @@ pub const State = struct {
         const h = self.history.items[self.history_index];
         try self.setQuery(h.query);
         self.message = "history back";
+        self.query_dirty = true;
+        self.screen_dirty = true;
+    }
+
+    pub fn goForward(self: *State) !void {
+        if (self.history_index + 1 >= self.history.items.len) return;
+        self.history_index += 1;
+        const h = self.history.items[self.history_index];
+        try self.setQuery(h.query);
+        self.message = "history forward";
         self.query_dirty = true;
         self.screen_dirty = true;
     }
@@ -674,6 +703,45 @@ pub const State = struct {
         self.screen_dirty = true;
     }
 
+    pub fn openIsearch(self: *State) void {
+        self.prompt_mode = .isearch;
+        self.major_mode_name = "catface-isearch-mode";
+        self.isearch_buffer.clearRetainingCapacity();
+        self.isearch_cursor = 0;
+        self.isearch_last_line = self.org_cursor;
+        self.pending_chord = .none;
+        self.active = .right;
+        self.message = "isearch: type to search Org+relation tree, C-s next, C-r previous, RET accept, C-g cancel";
+        self.screen_dirty = true;
+    }
+
+    pub fn closeIsearch(self: *State) void {
+        self.prompt_mode = .search;
+        self.major_mode_name = if (self.active == .right) "catface-org-view-mode" else "catface-search-mode";
+        self.message = "isearch closed";
+        self.screen_dirty = true;
+    }
+
+    pub fn isearchInsertUtf8(self: *State, cp: u21) !void {
+        var tmp: [4]u8 = undefined;
+        const n = try std.unicode.utf8Encode(cp, &tmp);
+        try insertInto(&self.isearch_buffer, &self.isearch_cursor, tmp[0..n]);
+        self.resetBlink();
+        self.screen_dirty = true;
+    }
+
+    pub fn isearchBackspace(self: *State) void {
+        if (self.isearch_cursor == 0 or self.isearch_buffer.items.len == 0) return;
+        deleteBefore(&self.isearch_buffer, &self.isearch_cursor);
+        self.resetBlink();
+        self.screen_dirty = true;
+    }
+
+    pub fn isearchCursorLeft(self: *State) void { if (self.isearch_cursor > 0) self.isearch_cursor -= 1; self.resetBlink(); self.screen_dirty = true; }
+    pub fn isearchCursorRight(self: *State) void { if (self.isearch_cursor < self.isearch_buffer.items.len) self.isearch_cursor += 1; self.resetBlink(); self.screen_dirty = true; }
+    pub fn isearchBeginningOfLine(self: *State) void { self.isearch_cursor = 0; self.resetBlink(); self.screen_dirty = true; }
+    pub fn isearchEndOfLine(self: *State) void { self.isearch_cursor = self.isearch_buffer.items.len; self.resetBlink(); self.screen_dirty = true; }
+
     pub fn directoryInsertUtf8(self: *State, cp: u21) !void {
         var tmp: [4]u8 = undefined;
         const n = try std.unicode.utf8Encode(cp, &tmp);
@@ -705,6 +773,7 @@ pub const State = struct {
         self.clearQueryCache();
         self.results.clearRetainingCapacity();
         self.focus_stack.clearRetainingCapacity();
+        self.focus_forward_stack.clearRetainingCapacity();
         self.selected = 0;
         self.scroll = 0;
         self.focus = null;
@@ -722,13 +791,11 @@ pub const State = struct {
             if (self.focus_stack.items.len == 0 or self.focus_stack.items[self.focus_stack.items.len - 1] != value) {
                 try self.focus_stack.append(value);
             }
+            self.focus_forward_stack.clearRetainingCapacity();
         }
     }
 
-    pub fn goBackFocus(self: *State) bool {
-        if (self.focus_stack.items.len == 0) return false;
-        const value = self.focus_stack.items[self.focus_stack.items.len - 1];
-        _ = self.focus_stack.pop();
+    fn applyFocusValue(self: *State, value: usize, msg: []const u8) void {
         self.focus = value;
         self.org_scroll = 0;
         self.org_cursor = 0;
@@ -739,8 +806,25 @@ pub const State = struct {
             }
         }
         self.ensureVisible(self.result_view_rows);
-        self.message = "relation back";
+        self.message = msg;
         self.screen_dirty = true;
+    }
+
+    pub fn goBackFocus(self: *State) bool {
+        if (self.focus_stack.items.len == 0) return false;
+        if (self.focus) |cur| self.focus_forward_stack.append(cur) catch {};
+        const value = self.focus_stack.items[self.focus_stack.items.len - 1];
+        _ = self.focus_stack.pop();
+        self.applyFocusValue(value, "relation back");
+        return true;
+    }
+
+    pub fn goForwardFocus(self: *State) bool {
+        if (self.focus_forward_stack.items.len == 0) return false;
+        if (self.focus) |cur| self.focus_stack.append(cur) catch {};
+        const value = self.focus_forward_stack.items[self.focus_forward_stack.items.len - 1];
+        _ = self.focus_forward_stack.pop();
+        self.applyFocusValue(value, "relation forward");
         return true;
     }
 

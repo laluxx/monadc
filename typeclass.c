@@ -75,6 +75,8 @@ void tc_method_name(const char *class_name, const char *type_name,
 /// Lookup
 
 TCClass *tc_find_class(TypeClassRegistry *reg, const char *class_name) {
+    if (!reg || !class_name) return NULL;
+
     for (int i = 0; i < reg->class_count; i++)
         if (strcmp(reg->classes[i].name, class_name) == 0)
             return &reg->classes[i];
@@ -83,6 +85,8 @@ TCClass *tc_find_class(TypeClassRegistry *reg, const char *class_name) {
 
 TCInstance *tc_find_instance(TypeClassRegistry *reg, const char *class_name,
                              const char *type_name) {
+    if (!reg || !class_name || !type_name) return NULL;
+
     for (int i = 0; i < reg->instance_count; i++) {
         TCInstance *inst = &reg->instances[i];
         if (strcmp(inst->class_name, class_name) == 0 &&
@@ -93,10 +97,12 @@ TCInstance *tc_find_instance(TypeClassRegistry *reg, const char *class_name,
 }
 
 bool tc_is_method(TypeClassRegistry *reg, const char *method_name) {
-    return tc_method_class(reg, method_name) != NULL;
+    return reg && method_name && tc_method_class(reg, method_name) != NULL;
 }
 
 const char *tc_method_class(TypeClassRegistry *reg, const char *method_name) {
+    if (!reg || !method_name) return NULL;
+
     for (int i = 0; i < reg->class_count; i++) {
         TCClass *c = &reg->classes[i];
         for (int j = 0; j < c->method_count; j++)

@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-string-hex-escape-typed-define
+;; TEST-TIER: regression
+;; TEST-STATUS: core-regression-2026-06-17
+;; TEST-CODEGEN-ATOM: atom.codegen.collections.strings.hex.escape.typed.define
+;; TEST-QUALITY: core-regression
+;; TEST-SUBSET: strings
+;; TEST-CATEGORY: collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.language.syntax-corpus, monadc.context.core-libs.ascii
+;; TEST-PURPOSE: Typed string defines accept hex byte escape sequences used by core Ascii constants.
+;; TEST-ATOM: A punctuation string followed by define [s :: String] " \t\n\r\x0B\x0C" keeps both typed defines closed.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: reader/wisp typed define string literal handling
+;; TEST-USES-ATOM: atom.codegen.collections.strings.hex.escape.typed.define
+;; TEST-MENU: branches/collections/strings/atom.codegen.collections.strings.hex.escape.typed.define
+;; TEST-MENU-PATH: codegen/branches/collections/strings/atom.codegen.collections.strings.hex.escape.typed.define
+;; TEST-ATOM-LEAF: atom.codegen.collections.strings.hex.escape.typed.define
+;; TEST-CLI-TARGET: codegen branches collections strings hex-escape-typed-define
+module Main
+
+define [punctuation :: String] "!\"#$%&'()*+,-./:\x3B<=>?@[\\]^_`{|}~"
+define [s :: String] " \t\n\r\x0B\x0C"
+show (count s)
