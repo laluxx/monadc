@@ -1,0 +1,5 @@
+import Char
+
+show (upcase 'a')
+show (Char.upcase 'a')
+show ('a'.upcase)

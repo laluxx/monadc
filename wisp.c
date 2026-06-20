@@ -2632,6 +2632,23 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
             int quote_count = 0;
             bool in_escape = false;
             for (const char *q = raw; *q; q++) {
+                if (*q == '\'' && q[1]) {
+                    const char *r = q + 1;
+
+                    if (*r == '\\' && r[1] == 'x' && r[2] && r[3]) {
+                        r += 4;
+                    } else if (*r == '\\' && r[1]) {
+                        r += 2;
+                    } else {
+                        r++;
+                    }
+
+                    if (*r == '\'') {
+                        q = r;
+                        continue;
+                    }
+                }
+
                 if (in_escape) { in_escape = false; continue; }
                 if (*q == '\\') { in_escape = true; continue; }
                 if (*q == ';') break; /* line comment ends string scan */
@@ -2663,6 +2680,23 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     int qc2 = 0;
                     bool ie2 = false;
                     for (const char *q = acc; *q; q++) {
+                        if (*q == '\'' && q[1]) {
+                            const char *r = q + 1;
+
+                            if (*r == '\\' && r[1] == 'x' && r[2] && r[3]) {
+                                r += 4;
+                            } else if (*r == '\\' && r[1]) {
+                                r += 2;
+                            } else {
+                                r++;
+                            }
+
+                            if (*r == '\'') {
+                                q = r;
+                                continue;
+                            }
+                        }
+
                         if (ie2) { ie2 = false; continue; }
                         if (*q == '\\') { ie2 = true; continue; }
                         if (*q == ';') {

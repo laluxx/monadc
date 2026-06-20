@@ -156,8 +156,31 @@ static void ffi_libs_add(FFIContext *ffi) {
 }
 
 static CompiledModule *registry_find(const char *name) {
-    for (CompiledModule *m = g_compiled; m; m = m->next)
-        if (strcmp(m->module_name, name) == 0) return m;
+    if (!name) return NULL;
+
+    const char *name_dot = strrchr(name, '.');
+    const char *name_slash = strrchr(name, '/');
+    const char *name_tail_dot = name_dot ? name_dot + 1 : name;
+    const char *name_tail_slash = name_slash ? name_slash + 1 : name;
+
+    for (CompiledModule *m = g_compiled; m; m = m->next) {
+        if (!m->module_name) continue;
+
+        const char *mn = m->module_name;
+        const char *mn_dot = strrchr(mn, '.');
+        const char *mn_slash = strrchr(mn, '/');
+        const char *mn_tail_dot = mn_dot ? mn_dot + 1 : mn;
+        const char *mn_tail_slash = mn_slash ? mn_slash + 1 : mn;
+
+        if (strcmp(mn, name) == 0) return m;
+        if (strcmp(mn_tail_dot, name) == 0) return m;
+        if (strcmp(mn_tail_slash, name) == 0) return m;
+        if (strcmp(mn, name_tail_dot) == 0) return m;
+        if (strcmp(mn, name_tail_slash) == 0) return m;
+        if (strcmp(mn_tail_dot, name_tail_dot) == 0) return m;
+        if (strcmp(mn_tail_slash, name_tail_slash) == 0) return m;
+    }
+
     return NULL;
 }
 
@@ -442,7 +465,7 @@ static void declare_externals(CodegenContext *ctx,
     }
 }
 
-static char *get_obj_path(const char *source_path) {
+static char *get_obj_path(const char *source_path, bool is_main_module) {
     const char *home = getenv("HOME");
 
     // Check system core
@@ -470,15 +493,20 @@ static char *get_obj_path(const char *source_path) {
         system(mkdir_cmd);
 
         char obj[1024];
-        snprintf(obj, sizeof(obj), "%s/%s.o", cache_dir, base);
+        if (is_main_module) {
+            snprintf(obj, sizeof(obj), "%s/%s.o", cache_dir, base);
+        } else {
+            snprintf(obj, sizeof(obj), "%s/%s.module.o", cache_dir, base);
+        }
         free(base);
         return strdup(obj);
     }
 
     // Normal case
     char *base = base_no_ext(source_path);
-    char *obj  = malloc(strlen(base) + 3);
-    sprintf(obj, "%s.o", base);
+    const char *suffix = is_main_module ? ".o" : ".module.o";
+    char *obj = malloc(strlen(base) + strlen(suffix) + 1);
+    sprintf(obj, "%s%s", base, suffix);
     free(base);
     return obj;
 }
@@ -623,7 +651,7 @@ static CompiledModule *compile_one(const char *source_path,
     char *base     = base_no_ext(my_source_path);
     /* char *obj_path = malloc(strlen(base) + 3); */
     /* sprintf(obj_path, "%s.o", base); */
-    char *obj_path = get_obj_path(my_source_path);
+    char *obj_path = get_obj_path(my_source_path, is_main_module);
 
 
     // Incremental check for library modules
@@ -1449,6 +1477,30 @@ skip_primitive_type_autoload:
         LLVMBuildRet(ctx.builder, rc);
     } else {
         LLVMBuildRetVoid(ctx.builder);
+
+        const char *tail = strrchr(mod_name, '.');
+        if (tail && tail[1]) {
+            char tail_init_name[256];
+            snprintf(tail_init_name, sizeof(tail_init_name), "__init_%s", tail + 1);
+            for (char *p = tail_init_name; *p; p++) {
+                if (*p == '.') *p = '_';
+            }
+
+            if (strcmp(tail_init_name, init_name) != 0 &&
+                !LLVMGetNamedFunction(ctx.module, tail_init_name)) {
+                LLVMTypeRef vt = LLVMFunctionType(
+                    LLVMVoidTypeInContext(ctx.context), NULL, 0, 0);
+                LLVMValueRef alias_fn = LLVMAddFunction(ctx.module, tail_init_name, vt);
+                LLVMSetLinkage(alias_fn, LLVMExternalLinkage);
+
+                LLVMBasicBlockRef alias_entry =
+                    LLVMAppendBasicBlockInContext(ctx.context, alias_fn, "entry");
+                LLVMPositionBuilderAtEnd(ctx.builder, alias_entry);
+
+                LLVMBuildCall2(ctx.builder, vt, init_fn, NULL, 0, "");
+                LLVMBuildRetVoid(ctx.builder);
+            }
+        }
     }
 
 /// Phase 9: Build registry entry + rename LLVM symbols to mangled names

@@ -54,9 +54,9 @@ static char *mod_xstrdup(const char *s)
 }
 
 /* Grow a heap array to at least (count + 1) slots. */
-#define MOD_GROW(ptr, count, cap, type)                        \
-    do {                                                       \
-        if ((count) >= (cap)) {                                \
+#define MOD_GROW(ptr, count, cap, type)                         \
+    do {                                                        \
+        if ((count) >= (cap)) {                                 \
             (cap) = (cap) ? (cap) * 2 : 8;                      \
             (ptr) = mod_xrealloc((ptr), (cap) * sizeof(type));  \
         }                                                       \

@@ -1432,12 +1432,21 @@ Token lexer_next_token(Lexer *lex) {
         if (lp < strlen(lex->source)) {
             char next = lex->source[lp];
             if (next == '\\') {
-                size_t end = lp + 1;
-                while (end < strlen(lex->source) && lex->source[end] != '\'')
-                    end++;
-                if (end < strlen(lex->source)) {
+                size_t src_len = strlen(lex->source);
+                size_t esc_start = lp + 1;
+                size_t end = esc_start;
+
+                if (end < src_len) {
+                    if (lex->source[end] == 'x') {
+                        end += 3;
+                    } else {
+                        end += 1;
+                    }
+                }
+
+                if (end < src_len && lex->source[end] == '\'') {
                     char ch = '\0';
-                    size_t esc_len = end - (lp + 1);
+                    size_t esc_len = end - esc_start;
                     if (esc_len == 1) {
                         ch = lex->source[lp + 1];
                         switch (ch) {
@@ -8044,16 +8053,34 @@ AST *parse_expr(Parser *p) {
             ast_free(expr_result);
             expr_result = merged;
         } else {
-            /* Non-symbol base (call result, etc.) — wrap as AST_LIST
-             * (dot expr field) for codegen to pattern-match on */
-            AST *dot_node = ast_new_list();
-            ast_list_append(dot_node, ast_new_symbol("dot"));
-            ast_list_append(dot_node, expr_result);
-            ast_list_append(dot_node, ast_new_symbol(field));
-            dot_node->line       = dot_line;
-            dot_node->column     = dot_col;
-            dot_node->end_column = dot_col + (int)strlen(field) + 1;
-            expr_result = dot_node;
+            /* Non-symbol base with postfix dot is method-call sugar:
+             *
+             *   'a'.upcase
+             *
+             * lowers to:
+             *
+             *   (upcase 'a')
+             *
+             * Field access on symbol bases is still represented as a fused
+             * symbol above, e.g. point.x, and continues through the normal
+             * dot-chain/layout path. This keeps "dot" out of the runtime
+             * function namespace entirely.
+             */
+            AST *method_call = ast_new_list();
+            AST *method_sym = ast_new_symbol(field);
+
+            method_sym->line = dot_line;
+            method_sym->column = dot_col + 1;
+            method_sym->end_column = dot_col + (int)strlen(field) + 1;
+
+            ast_list_append(method_call, method_sym);
+            ast_list_append(method_call, expr_result);
+
+            method_call->line = dot_line;
+            method_call->column = dot_col;
+            method_call->end_column = dot_col + (int)strlen(field) + 1;
+
+            expr_result = method_call;
         }
     }
 

@@ -1,51 +1,113 @@
-;;; Char.mon --- Everything that lives inside the Char type
+;;; Char.mon --- ASCII character predicates and conversions
 
 ;; Author: Me :)
-;; Version: 0.5.0
-;; Keywords: ascii char character text
+;; Version: 0.6.0
+;; Keywords: ascii char character text classification case conversion
 
 ;;; Commentary:
 
-;; These intentionally use Monad's guard shorthand: when
-;; a guarded clause has one left-hand binder, bare predicate/operator sections
-;; are applied to that binder.
+;; Everything here is intentionally ASCII-only.
+;;
+;; This module is also a stress test for type-module methods:
+;;
+;;   upcase 'a'
+;;   'a'.upcase
+;;   c | lower?
+;;   c | >= 'a' and <= 'z'
+;;
+;; The important rule is:
+;;
+;;   When a guarded clause has one left-hand binder, bare predicates,
+;;   comparison sections, and operator sections in the guard are applied
+;;   to that binder.
+;;
+;; Examples:
+;;
+;;   c | lower?              -> ...
+;;   c | >= 'a' and <= 'z'   -> ...
+;;   c | = '\n'              -> ...
+;;
+;; This file keeps value metadata as comments for now because plain value
+;; define metadata is not yet attached by the reader. Method metadata is
+;; attached correctly and uses :doc / :alias below.
 
 ;;; Code:
 
 module Data.Char where
 
-  :ascii       nul tab lf cr space del delta
-  :predicates  lower? upper? alpha? digit? alnum?
-               space? whitespace? control? printable?
-               hex? oct? binary?
-  :case        upcase downcase toggle-case
-  :morphimsm   digit->int int->digit hex-digit->int int->hex-digit
+  :ascii
+    nul soh stx etx eot enq ack bel bs tab lf vt ff cr
+    so si dle dc1 dc2 dc3 dc4 nak syn etb can em sub esc fs gs rs us
+    space del delta
+
+  :predicates
+    ascii? non-ascii?
+    lower? upper? alpha? digit? alnum?
+    space? whitespace? blank? newline? linebreak?
+    control? printable? graph?
+    hex? oct? binary?
+    quote? apostrophe? backslash?
+
+  :case
+    upcase downcase toggle-case
+
+  :conversion
+    digit->int int->digit
+    hex-digit->int int->hex-digit
 
 
-;; Since we are inside a Type all the definitions will be inside the type
-;; You'll be able to access it only through Char.delta or c | delta in a guard
-
-
-define [delta :: Int] 'a' - 'A'
- :doc "Distance between lowercase and uppercase letters."
+;; ASCII control constants.
 
 define [nul :: Char] '\0'
-  :doc "ASCII NUL."
-
+define [soh :: Char] '\x01'
+define [stx :: Char] '\x02'
+define [etx :: Char] '\x03'
+define [eot :: Char] '\x04'
+define [enq :: Char] '\x05'
+define [ack :: Char] '\x06'
+define [bel :: Char] '\x07'
+define [bs  :: Char] '\x08'
 define [tab :: Char] '\t'
-  :doc "ASCII horizontal tab."
-
-define [lf :: Char] '\n'
-  :doc "ASCII line feed."
-
-define [cr :: Char] '\r'
-  :doc "ASCII carriage return."
+define [lf  :: Char] '\n'
+define [vt  :: Char] '\v'
+define [ff  :: Char] '\f'
+define [cr  :: Char] '\r'
+define [so  :: Char] '\x0e'
+define [si  :: Char] '\x0f'
+define [dle :: Char] '\x10'
+define [dc1 :: Char] '\x11'
+define [dc2 :: Char] '\x12'
+define [dc3 :: Char] '\x13'
+define [dc4 :: Char] '\x14'
+define [nak :: Char] '\x15'
+define [syn :: Char] '\x16'
+define [etb :: Char] '\x17'
+define [can :: Char] '\x18'
+define [em  :: Char] '\x19'
+define [sub :: Char] '\x1a'
+define [esc :: Char] '\x1b'
+define [fs  :: Char] '\x1c'
+define [gs  :: Char] '\x1d'
+define [rs  :: Char] '\x1e'
+define [us  :: Char] '\x1f'
 
 define [space :: Char] ' '
-  :doc "ASCII space."
+define [del   :: Char] '\x7f'
 
-define [del :: Char] '\x7f'
-  :doc "ASCII DEL."
+;; Distance between lowercase and uppercase ASCII letters.
+define [delta :: Int] 'a' - 'A'
+
+
+method ascii? :: Char -> Bool
+  c | >= '\0' and <= '\x7f' -> True
+    | otherwise             -> False
+  :doc "Return True if C is in the ASCII range 0..127."
+
+
+method non-ascii? :: Char -> Bool
+  c | ascii?    -> False
+    | otherwise -> True
+  :doc "Return True if C is outside the ASCII range."
 
 
 method lower? :: Char -> Bool
@@ -87,26 +149,52 @@ method space? :: Char -> Bool
     | = '\r'     -> True
     | = '\v'     -> True
     | = '\f'     -> True
-    | otherwise -> False
+    | otherwise  -> False
   :alias whitespace?
   :doc "Return True if C is ASCII whitespace."
+
+
+method blank? :: Char -> Bool
+  c | = ' '      -> True
+    | = '\t'     -> True
+    | otherwise  -> False
+  :doc "Return True if C is a horizontal ASCII blank: space or tab."
+
+
+method newline? :: Char -> Bool
+  c | = '\n'     -> True
+    | otherwise  -> False
+  :doc "Return True if C is ASCII line feed."
+
+
+method linebreak? :: Char -> Bool
+  c | = '\n'     -> True
+    | = '\r'     -> True
+    | otherwise  -> False
+  :doc "Return True if C is an ASCII line break character."
 
 
 method control? :: Char -> Bool
   c | < ' '      -> True
     | = '\x7f'   -> True
-    | otherwise -> False
+    | otherwise  -> False
   :doc "Return True if C is an ASCII control character."
 
 
 method printable? :: Char -> Bool
   c | >= ' ' and < '\x7f' -> True
     | otherwise           -> False
-  :doc "Return True if C is printable ASCII."
+  :doc "Return True if C is printable ASCII, including space."
+
+
+method graph? :: Char -> Bool
+  c | > ' ' and < '\x7f' -> True
+    | otherwise          -> False
+  :doc "Return True if C is printable ASCII excluding space."
 
 
 method hex? :: Char -> Bool
-  c | digit? c          -> True
+  c | digit?            -> True
     | >= 'a' and <= 'f' -> True
     | >= 'A' and <= 'F' -> True
     | otherwise         -> False
@@ -126,22 +214,40 @@ method binary? :: Char -> Bool
   :doc "Return True if C is an ASCII binary digit."
 
 
+method quote? :: Char -> Bool
+  c | = '\x22'   -> True
+    | otherwise  -> False
+  :doc "Return True if C is a double quote."
+
+
+method apostrophe? :: Char -> Bool
+  c | = '\x27'   -> True
+    | otherwise  -> False
+  :doc "Return True if C is a single quote."
+
+
+method backslash? :: Char -> Bool
+  c | = '\x5c'   -> True
+    | otherwise  -> False
+  :doc "Return True if C is a backslash."
+
+
 method upcase :: Char -> Char
-  c | >= 'a' and <= 'z' -> c - delta
-    | otherwise         -> c
+  c | lower?    -> c - delta
+    | otherwise -> c
   :doc "Convert C to uppercase if it is ASCII lowercase."
 
 
 method downcase :: Char -> Char
-  c | >= 'A' and <= 'Z' -> c + delta
-    | otherwise         -> c
+  c | upper?    -> c + delta
+    | otherwise -> c
   :doc "Convert C to lowercase if it is ASCII uppercase."
 
 
 method toggle-case :: Char -> Char
-  c | lower? -> upcase   c
-    | upper? -> downcase c
-    | otherwise       -> c
+  c | lower?    -> upcase c
+    | upper?    -> downcase c
+    | otherwise -> c
   :doc "Toggle ASCII letter case; leave non-letters unchanged."
 
 
@@ -172,9 +278,171 @@ method int->hex-digit :: Int -> Char
   :doc "Convert an integer 0..15 to a lowercase ASCII hexadecimal digit."
 
 
-tests [1/5]
-  assert-eq (upcase    'a') 'A'  "Ascii upcase"
-  assert-eq (downcase  'Z') 'z'  "Ascii downcase"
-  assert-eq (digit?    '7') True "Ascii digit?"
-  assert-eq (alpha?    'Q') True "Ascii alpha?"
-  assert-eq (hex-digit->int 'f') 15   "Ascii hex-digit->int"
+tests [1/96]
+
+  ;; Constants.
+  assert-eq nul '\0' "Char nul constant"
+  assert-eq tab '\t' "Char tab constant"
+  assert-eq lf '\n' "Char lf constant"
+  assert-eq cr '\r' "Char cr constant"
+  assert-eq space ' ' "Char space constant"
+  assert-eq del '\x7f' "Char del constant"
+  assert-eq delta 32 "Char case delta"
+
+  ;; ASCII range.
+  assert-eq (ascii? '\0') True "ASCII includes NUL"
+  assert-eq (ascii? '\x7f') True "ASCII includes DEL"
+  assert-eq (ascii? 'A') True "ASCII includes letters"
+  assert-eq (non-ascii? 'A') False "non-ascii? rejects ASCII"
+
+  ;; Lowercase.
+  assert-eq (lower? 'a') True "lower? accepts a"
+  assert-eq (lower? 'm') True "lower? accepts m"
+  assert-eq (lower? 'z') True "lower? accepts z"
+  assert-eq (lower? '`') False "lower? rejects before a"
+  assert-eq (lower? '\x7b') False "lower? rejects after z"
+  assert-eq (lower? 'A') False "lower? rejects uppercase"
+
+  ;; Uppercase.
+  assert-eq (upper? 'A') True "upper? accepts A"
+  assert-eq (upper? 'M') True "upper? accepts M"
+  assert-eq (upper? 'Z') True "upper? accepts Z"
+  assert-eq (upper? '@') False "upper? rejects before A"
+  assert-eq (upper? '[') False "upper? rejects after Z"
+  assert-eq (upper? 'a') False "upper? rejects lowercase"
+
+  ;; Alpha.
+  assert-eq (alpha? 'a') True "alpha? accepts lowercase"
+  assert-eq (alpha? 'Z') True "alpha? accepts uppercase"
+  assert-eq (alpha? '0') False "alpha? rejects digit"
+  assert-eq (alpha? '_') False "alpha? rejects underscore"
+
+  ;; Digits.
+  assert-eq (digit? '0') True "digit? accepts 0"
+  assert-eq (digit? '5') True "digit? accepts 5"
+  assert-eq (digit? '9') True "digit? accepts 9"
+  assert-eq (digit? '/') False "digit? rejects before 0"
+  assert-eq (digit? ':') False "digit? rejects after 9"
+  assert-eq (digit? 'a') False "digit? rejects letter"
+
+  ;; Alnum.
+  assert-eq (alnum? 'a') True "alnum? accepts lower"
+  assert-eq (alnum? 'A') True "alnum? accepts upper"
+  assert-eq (alnum? '7') True "alnum? accepts digit"
+  assert-eq (alnum? '_') False "alnum? rejects underscore"
+  assert-eq (alnum? ' ') False "alnum? rejects space"
+
+  ;; Whitespace.
+  assert-eq (space? ' ') True "space? accepts space"
+  assert-eq (space? '\t') True "space? accepts tab"
+  assert-eq (space? '\n') True "space? accepts lf"
+  assert-eq (space? '\r') True "space? accepts cr"
+  assert-eq (space? '\v') True "space? accepts vt"
+  assert-eq (space? '\f') True "space? accepts ff"
+  assert-eq (space? 'A') False "space? rejects A"
+
+  ;; Blanks and line breaks.
+  assert-eq (blank? ' ') True "blank? accepts space"
+  assert-eq (blank? '\t') True "blank? accepts tab"
+  assert-eq (blank? '\n') False "blank? rejects lf"
+  assert-eq (newline? '\n') True "newline? accepts lf"
+  assert-eq (newline? '\r') False "newline? rejects cr"
+  assert-eq (linebreak? '\n') True "linebreak? accepts lf"
+  assert-eq (linebreak? '\r') True "linebreak? accepts cr"
+  assert-eq (linebreak? '\t') False "linebreak? rejects tab"
+
+  ;; Control / printable / graph.
+  assert-eq (control? '\0') True "control? accepts NUL"
+  assert-eq (control? '\x1f') True "control? accepts US"
+  assert-eq (control? '\x7f') True "control? accepts DEL"
+  assert-eq (control? ' ') False "control? rejects space"
+  assert-eq (control? 'A') False "control? rejects printable"
+
+  assert-eq (printable? ' ') True "printable? includes space"
+  assert-eq (printable? '~') True "printable? includes tilde"
+  assert-eq (printable? '\x7f') False "printable? rejects DEL"
+  assert-eq (printable? '\0') False "printable? rejects NUL"
+
+  assert-eq (graph? '!') True "graph? accepts bang"
+  assert-eq (graph? '~') True "graph? accepts tilde"
+  assert-eq (graph? ' ') False "graph? rejects space"
+  assert-eq (graph? '\n') False "graph? rejects newline"
+
+  ;; Radix predicates.
+  assert-eq (binary? '0') True "binary? accepts 0"
+  assert-eq (binary? '1') True "binary? accepts 1"
+  assert-eq (binary? '2') False "binary? rejects 2"
+
+  assert-eq (oct? '0') True "oct? accepts 0"
+  assert-eq (oct? '7') True "oct? accepts 7"
+  assert-eq (oct? '8') False "oct? rejects 8"
+
+  assert-eq (hex? '0') True "hex? accepts 0"
+  assert-eq (hex? '9') True "hex? accepts 9"
+  assert-eq (hex? 'a') True "hex? accepts a"
+  assert-eq (hex? 'f') True "hex? accepts f"
+  assert-eq (hex? 'A') True "hex? accepts A"
+  assert-eq (hex? 'F') True "hex? accepts F"
+  assert-eq (hex? 'g') False "hex? rejects g"
+  assert-eq (hex? 'G') False "hex? rejects G"
+
+  ;; Punctuation helpers.
+  assert-eq (quote? '\x22') True "quote? accepts double quote"
+  assert-eq (quote? '\x27') False "quote? rejects apostrophe"
+  assert-eq (apostrophe? '\x27') True "apostrophe? accepts apostrophe"
+  assert-eq (backslash? '\x5c') True "backslash? accepts backslash"
+
+  ;; Case conversion.
+  assert-eq (upcase 'a') 'A' "upcase a"
+  assert-eq (upcase 'z') 'Z' "upcase z"
+  assert-eq (upcase 'A') 'A' "upcase keeps A"
+  assert-eq (upcase '7') '7' "upcase keeps digit"
+
+  assert-eq (downcase 'A') 'a' "downcase A"
+  assert-eq (downcase 'Z') 'z' "downcase Z"
+  assert-eq (downcase 'a') 'a' "downcase keeps a"
+  assert-eq (downcase '7') '7' "downcase keeps digit"
+
+  assert-eq (toggle-case 'a') 'A' "toggle-case lower"
+  assert-eq (toggle-case 'A') 'a' "toggle-case upper"
+  assert-eq (toggle-case '7') '7' "toggle-case digit"
+  assert-eq (toggle-case ' ') ' ' "toggle-case space"
+
+  ;; Decimal conversion.
+  assert-eq (digit->int '0') 0 "digit->int 0"
+  assert-eq (digit->int '5') 5 "digit->int 5"
+  assert-eq (digit->int '9') 9 "digit->int 9"
+
+  assert-eq (int->digit 0) '0' "int->digit 0"
+  assert-eq (int->digit 5) '5' "int->digit 5"
+  assert-eq (int->digit 9) '9' "int->digit 9"
+
+  ;; Hex conversion.
+  assert-eq (hex-digit->int '0') 0 "hex-digit->int 0"
+  assert-eq (hex-digit->int '9') 9 "hex-digit->int 9"
+  assert-eq (hex-digit->int 'a') 10 "hex-digit->int a"
+  assert-eq (hex-digit->int 'f') 15 "hex-digit->int f"
+  assert-eq (hex-digit->int 'A') 10 "hex-digit->int A"
+  assert-eq (hex-digit->int 'F') 15 "hex-digit->int F"
+
+  assert-eq (int->hex-digit 0) '0' "int->hex-digit 0"
+  assert-eq (int->hex-digit 9) '9' "int->hex-digit 9"
+  assert-eq (int->hex-digit 10) 'a' "int->hex-digit 10"
+  assert-eq (int->hex-digit 15) 'f' "int->hex-digit 15"
+
+  ;; Round trips.
+  assert-eq (int->digit (digit->int '0')) '0' "decimal roundtrip 0"
+  assert-eq (int->digit (digit->int '9')) '9' "decimal roundtrip 9"
+  assert-eq (int->hex-digit (hex-digit->int '0')) '0' "hex roundtrip 0"
+  assert-eq (int->hex-digit (hex-digit->int 'a')) 'a' "hex roundtrip a"
+  assert-eq (int->hex-digit (hex-digit->int 'f')) 'f' "hex roundtrip f"
+  assert-eq (hex-digit->int (int->hex-digit 15)) 15 "hex int roundtrip 15"
+
+  ;; Method-call sugar. These are intentionally here to force the compiler
+  ;; to support Char methods as real methods, not just plain functions.
+  assert-eq ('a'.upcase) 'A' "dot upcase"
+  assert-eq ('Z'.downcase) 'z' "dot downcase"
+  assert-eq ('a'.toggle-case) 'A' "dot toggle lower"
+  assert-eq ('A'.toggle-case) 'a' "dot toggle upper"
+  assert-eq ('7'.digit?) True "dot digit?"
+  assert-eq ('Q'.alpha?) True "dot alpha?"
